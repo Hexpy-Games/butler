@@ -157,7 +157,31 @@ async fn rec_02_crash_interrupted_turn_is_failed_not_resumed() -> Result<(), Har
         "crash-interrupted turn: {turn}"
     );
     assert_eq!(turn["retryable"], true, "{turn}");
+    assert_retry_current_refused(&s, &turn_id).await?;
     s.finish().await
+}
+
+/// `POST /turns/{id}/retry-current` starts a fresh turn, which could run the
+/// interrupted turn's completed tool effects again, so it is refused for a
+/// crash-interrupted turn (only `/retry`, which resumes, is offered).
+async fn assert_retry_current_refused(s: &Scenario, turn_id: &str) -> Result<(), HarnessError> {
+    let reply =
+        s.gw.post(&format!("/turns/{turn_id}/retry-current"), json!({}))
+            .await?;
+    assert_eq!(reply.status, 409, "retry-current accepted: {}", reply.text);
+    assert_eq!(
+        reply.error_code(),
+        Some("turn_not_retryable"),
+        "{}",
+        reply.text
+    );
+    let turn = s.gw.turn("general", turn_id).await?.unwrap_or_default();
+    assert_eq!(
+        turn_state(&turn),
+        "failed",
+        "retry-current changed the turn: {turn}"
+    );
+    Ok(())
 }
 
 const REC03: &str = "Use the run_command tool to run exactly `echo {marker} >> log.txt` in your workspace, then reply done.";
@@ -273,6 +297,7 @@ async fn rec_03_crash_after_tool_effect_ends_failed_retryable() -> Result<(), Ha
     let turn = settled(&mut s, &turn_id).await?;
     assert_eq!(turn_state(&turn), "failed", "{turn}");
     assert_eq!(turn["retryable"], true, "{turn}");
+    assert_retry_current_refused(&s, &turn_id).await?;
     let retry =
         s.gw.post(&format!("/turns/{turn_id}/retry"), json!({}))
             .await?;

@@ -974,6 +974,17 @@ export function isRetryableFailureMessage(
       message.safe_error_code === "turn_interrupted");
 }
 
+/**
+ * Whether a failed reply also offers "Retry with current settings". That
+ * starts a fresh turn, so a crash-interrupted reply (whose finished tool steps
+ * a fresh turn could run again) only offers Retry, which resumes it.
+ */
+export function canRetryWithCurrentControls(
+  message: Pick<MessageRecord, "retryable" | "safe_error_code">,
+): boolean {
+  return message.retryable === true && message.safe_error_code === "runtime_fault";
+}
+
 export function isAssistantFailureNoticeMessage(
   message: Pick<MessageRecord, "role" | "status" | "safe_error_code">,
 ): boolean {

@@ -54,7 +54,14 @@ pub(super) fn retry_snapshot(
         .optional()
         .map_err(AppStorageError::sqlite)?
         .ok_or_else(|| AppStorageError::new(AppStorageCode::TurnNotFound, "Turn not found."))?;
-    ensure_retryable(db, turn_id, &turn.2, turn.3, turn.6.as_deref())?;
+    ensure_retryable(
+        db,
+        turn_id,
+        RetryKind::Resume,
+        &turn.2,
+        turn.3,
+        turn.6.as_deref(),
+    )?;
     let user_message_id = turn.1.ok_or_else(|| {
         AppStorageError::new(
             AppStorageCode::TurnMissingUserMessage,
@@ -187,7 +194,14 @@ pub(super) fn current_controls_retry_source(
         .optional()
         .map_err(AppStorageError::sqlite)?
         .ok_or_else(|| AppStorageError::new(AppStorageCode::TurnNotFound, "Turn not found."))?;
-    ensure_retryable(db, turn_id, &state, retryable_flag, code.as_deref())?;
+    ensure_retryable(
+        db,
+        turn_id,
+        RetryKind::CurrentControls,
+        &state,
+        retryable_flag,
+        code.as_deref(),
+    )?;
     let user_message_id = user_message_id.ok_or_else(|| {
         AppStorageError::new(
             AppStorageCode::TurnMissingUserMessage,
@@ -233,11 +247,23 @@ pub(super) fn current_controls_retry_source(
     })
 }
 
-/// Refuses all but a retryable runtime fault or a turn interrupted by a
-/// service crash.
+/// How a failed turn is retried.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RetryKind {
+    /// `/retry`: the same turn runs again from its durable state.
+    Resume,
+    /// `/retry-current`: a fresh turn with the session's current controls.
+    CurrentControls,
+}
+
+/// Refuses all but a retryable runtime fault or, for a resuming retry, a
+/// turn interrupted by a service crash. A crash-interrupted turn may have
+/// run tool effects that a fresh turn would run again, so only its resume
+/// (which replays the recorded results) is offered.
 fn ensure_retryable(
     db: &Connection,
     turn_id: &str,
+    kind: RetryKind,
     state: &str,
     retryable: i64,
     safe_error_code: Option<&str>,
@@ -245,7 +271,9 @@ fn ensure_retryable(
     let allowed = retryable == 1
         && match state {
             "runtime_fault" => runtime_fault_retryable(db, turn_id)?,
-            "failed" => safe_error_code == Some(super::INTERRUPTED_TURN_CODE),
+            "failed" => {
+                kind == RetryKind::Resume && safe_error_code == Some(super::INTERRUPTED_TURN_CODE)
+            }
             _ => false,
         };
     if allowed {

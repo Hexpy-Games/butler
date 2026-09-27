@@ -5,6 +5,7 @@ import {
   applyTimelineEvents,
   applyTimelineEventsToViewState,
   activeTurnProgressSnapshot,
+  canRetryWithCurrentControls,
   clientTurnIdFromMessageId,
   firstCancellableWorker,
   groupWorkerActivities,
@@ -3361,6 +3362,21 @@ test("retry eligibility requires a runtime fault or crash interruption code", ()
       safe_error_code: "runtime_fault",
     }),
   ).toBe(false);
+});
+
+test("retry with current settings is offered only for a runtime fault", () => {
+  const cases: Array<[boolean, string | undefined, boolean]> = [
+    [true, "runtime_fault", true],
+    [true, "turn_interrupted", false],
+    [true, "tool_invalid_arguments", false],
+    [true, undefined, false],
+    [false, "runtime_fault", false],
+  ];
+  for (const [retryable, code, expected] of cases) {
+    expect(
+      canRetryWithCurrentControls({ retryable, safe_error_code: code }),
+    ).toBe(expected);
+  }
 });
 
 test("production work block projection keeps mixed tool row decisions out of block semantics", () => {

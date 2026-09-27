@@ -5,6 +5,7 @@ import { appCopy } from "@/app/copy.ts";
 import { visibleSystemMessageText } from "@/app/system-event-message.ts";
 import { Stack, Tag } from "@/butler-ds";
 import {
+  canRetryWithCurrentControls,
   isAssistantFailureNoticeMessage,
   isRetryableFailureMessage,
 } from "@/app/utils.ts";
@@ -124,7 +125,10 @@ function MessageContentComponent({
         message.status === "failed" &&
         isRetryableFailureMessage(message) &&
         message.turn_id && (
-          <MessageRetryActionsContainer turnId={message.turn_id} />
+          <MessageRetryActionsContainer
+            turnId={message.turn_id}
+            withCurrentControls={canRetryWithCurrentControls(message)}
+          />
         )}
     </>
   );

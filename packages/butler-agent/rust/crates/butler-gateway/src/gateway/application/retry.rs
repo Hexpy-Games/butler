@@ -15,8 +15,9 @@ use butler_turn::btcc::SubsessionResultContext;
 use source::{current_controls_retry_source, retry_snapshot, verified_execution_controls};
 
 /// Safe error code of a turn a crashed service process was running. Such a
-/// turn is failed and retryable; the retry resumes it (owner decision: never
-/// resumed automatically).
+/// turn is failed and retryable; `/retry` resumes it (owner decision: never
+/// resumed automatically). `/retry-current` refuses it: a fresh turn could
+/// run the interrupted turn's completed tool effects again.
 pub(super) const INTERRUPTED_TURN_CODE: &str = "turn_interrupted";
 
 impl AppApplication {
