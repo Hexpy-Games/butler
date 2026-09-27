@@ -111,55 +111,91 @@ pub(super) fn render(
     let replayed = marker
         .as_ref()
         .is_some_and(|marker| existing.contains(marker));
-
     let staged = match (candidate_block.as_deref(), replayed) {
         (Some(_), true) | (None, _) => existing.to_owned(),
         (Some(block), false) => append_block(existing, block),
     };
+    let sorted = partition_blocks(&staged, valid_entry_ids, now_epoch_ms);
+    let admitted = admit_within_budget(sorted.valid);
+    let mut excluded = sorted.excluded;
+    excluded.extend(admitted.excluded);
+    let body = serialize_blocks(&admitted.blocks);
+    let audit = if sorted.audit.is_empty() {
+        String::new()
+    } else {
+        format!("{}\n", sorted.audit.join("\n\n"))
+    };
+    Ok(RenderedCache {
+        compacted: body != staged,
+        admitted: candidate_id.is_none_or(|id| admitted.ids.contains(&id)),
+        replayed,
+        body,
+        audit,
+        excluded,
+    })
+}
 
-    let blocks = scan_semantic_blocks(&staged);
+/// A staged cache split into audit text, excluded entries, and the valid
+/// blocks in retention order.
+struct Partitioned {
+    audit: Vec<String>,
+    excluded: Vec<ExcludedEntry>,
+    valid: Vec<ParsedBlock>,
+}
+
+/// Separates legacy text and unparseable blocks (kept for audit), expired
+/// and invalidated entries, and valid entries sorted by salience, recency,
+/// then id, with duplicates dropped.
+fn partition_blocks(
+    staged: &str,
+    valid_entry_ids: &HashSet<String>,
+    now_epoch_ms: i64,
+) -> Partitioned {
+    let blocks = scan_semantic_blocks(staged);
     let mut legacy_parts = Vec::new();
     let mut cursor = 0;
     for block in &blocks {
-        legacy_parts.push(&staged[cursor..block.start]);
+        legacy_parts.push(staged.get(cursor..block.start).unwrap_or_default());
         cursor = block.end;
     }
-    legacy_parts.push(&staged[cursor..]);
+    legacy_parts.push(staged.get(cursor..).unwrap_or_default());
     let joined_legacy = legacy_parts.concat();
     let legacy = trim_js_whitespace(&joined_legacy);
-
-    let mut audit_parts = Vec::new();
+    let mut partitioned = Partitioned {
+        audit: Vec::new(),
+        excluded: Vec::new(),
+        valid: Vec::new(),
+    };
     if !legacy.is_empty() {
-        audit_parts.push(legacy.to_owned());
+        partitioned.audit.push(legacy.to_owned());
     }
-
-    let mut valid_blocks = Vec::new();
-    let mut excluded = Vec::new();
     for block in blocks {
-        let body = &staged[block.start..block.end];
+        let body = staged.get(block.start..block.end).unwrap_or_default();
         let Some(entry) = parse_structured_entry(body) else {
-            audit_parts.push(trim_js_whitespace_end(body).to_owned());
+            partitioned
+                .audit
+                .push(trim_js_whitespace_end(body).to_owned());
             continue;
         };
-        if is_expired(entry.valid_until.as_deref(), now_epoch_ms) {
-            excluded.push(ExcludedEntry {
-                id: entry.entry_id,
-                reason: ExclusionReason::Expired,
-            });
+        let reason = if is_expired(entry.valid_until.as_deref(), now_epoch_ms) {
+            Some(ExclusionReason::Expired)
         } else if !valid_entry_ids.contains(&entry.entry_id) {
-            excluded.push(ExcludedEntry {
-                id: entry.entry_id,
-                reason: ExclusionReason::Invalidated,
-            });
+            Some(ExclusionReason::Invalidated)
         } else {
-            valid_blocks.push(ParsedBlock {
+            None
+        };
+        match reason {
+            Some(reason) => partitioned.excluded.push(ExcludedEntry {
+                id: entry.entry_id,
+                reason,
+            }),
+            None => partitioned.valid.push(ParsedBlock {
                 body: trim_js_whitespace_end(body).to_owned(),
                 entry,
-            });
+            }),
         }
     }
-
-    valid_blocks.sort_by(|left, right| {
+    partitioned.valid.sort_by(|left, right| {
         left.entry
             .salience
             .rank()
@@ -178,52 +214,48 @@ pub(super) fn render(
                     .cmp(right.entry.entry_id.as_bytes())
             })
     });
-
-    let mut deduped = Vec::new();
     let mut seen = HashSet::new();
-    for block in valid_blocks {
-        if seen.insert(block.entry.entry_id.clone()) {
-            deduped.push(block);
-        }
-    }
+    partitioned
+        .valid
+        .retain(|block| seen.insert(block.entry.entry_id.clone()));
+    partitioned
+}
 
-    let mut admitted_blocks = Vec::new();
-    let mut admitted_ids = HashSet::new();
-    for block in deduped {
+/// Blocks kept within the byte budget, in order.
+struct Admitted {
+    blocks: Vec<String>,
+    ids: HashSet<String>,
+    excluded: Vec<ExcludedEntry>,
+}
+
+/// Keeps blocks in order while the serialized cache fits the budget; a block
+/// that alone exceeds it is oversized, one that no longer fits is over budget.
+fn admit_within_budget(valid: Vec<ParsedBlock>) -> Admitted {
+    let mut admitted = Admitted {
+        blocks: Vec::new(),
+        ids: HashSet::new(),
+        excluded: Vec::new(),
+    };
+    for block in valid {
         let single_bytes = serialize_blocks(std::slice::from_ref(&block.body)).len();
-        let mut candidate_blocks = admitted_blocks.clone();
+        let mut candidate_blocks = admitted.blocks.clone();
         candidate_blocks.push(block.body.clone());
         if single_bytes > DEFAULT_MAX_BYTES {
-            excluded.push(ExcludedEntry {
+            admitted.excluded.push(ExcludedEntry {
                 id: block.entry.entry_id,
                 reason: ExclusionReason::Oversized,
             });
         } else if serialize_blocks(&candidate_blocks).len() > DEFAULT_MAX_BYTES {
-            excluded.push(ExcludedEntry {
+            admitted.excluded.push(ExcludedEntry {
                 id: block.entry.entry_id,
                 reason: ExclusionReason::Budget,
             });
         } else {
-            admitted_ids.insert(block.entry.entry_id);
-            admitted_blocks.push(block.body);
+            admitted.ids.insert(block.entry.entry_id);
+            admitted.blocks.push(block.body);
         }
     }
-
-    let body = serialize_blocks(&admitted_blocks);
-    let audit = if audit_parts.is_empty() {
-        String::new()
-    } else {
-        format!("{}\n", audit_parts.join("\n\n"))
-    };
-
-    Ok(RenderedCache {
-        compacted: body != staged,
-        admitted: candidate_id.is_none_or(|id| admitted_ids.contains(&id)),
-        replayed,
-        body,
-        audit,
-        excluded,
-    })
+    admitted
 }
 
 /// One window summary as written into the cache file's entry metadata.
@@ -482,38 +514,42 @@ fn append_block(existing: &str, block: &str) -> String {
     format!("{trimmed_end}{separator}{block}\n")
 }
 
+/// Every `butler-semantic` block with a matching end marker, in order. A
+/// block's span includes one trailing newline.
 fn scan_semantic_blocks(body: &str) -> Vec<SemanticBlock> {
     let mut blocks = Vec::new();
     let mut cursor = 0;
-    while let Some(relative_start) = body[cursor..].find(SEMANTIC_PREFIX) {
-        let start = cursor + relative_start;
+    while let Some(start) = body
+        .get(cursor..)
+        .and_then(|rest| rest.find(SEMANTIC_PREFIX))
+        .map(|relative| cursor + relative)
+    {
         let marker_start = start + SEMANTIC_PREFIX.len();
-        let Some(relative_open_end) = body[marker_start..].find(":start -->") else {
-            cursor = marker_start;
-            continue;
-        };
-        let id_end = marker_start + relative_open_end;
-        let id = &body[marker_start..id_end];
-        if id.is_empty() || id.contains(':') || id.contains('>') {
-            cursor = marker_start;
-            continue;
+        match block_end(body, marker_start) {
+            Some(end) => {
+                blocks.push(SemanticBlock { start, end });
+                cursor = end;
+            }
+            None => cursor = marker_start,
         }
-        let content_start = id_end + ":start -->".len();
-        let end_marker = format!("<!-- butler-semantic:{id}:end -->");
-        let Some(relative_end) = body[content_start..].find(&end_marker) else {
-            cursor = marker_start;
-            continue;
-        };
-        let marker_end = content_start + relative_end + end_marker.len();
-        let end = if body[marker_end..].starts_with('\n') {
-            marker_end + 1
-        } else {
-            marker_end
-        };
-        blocks.push(SemanticBlock { start, end });
-        cursor = end;
     }
     blocks
+}
+
+/// The end of a block whose id starts at `marker_start`, or `None` when the
+/// id is malformed or never closed.
+fn block_end(body: &str, marker_start: usize) -> Option<usize> {
+    let rest = body.get(marker_start..)?;
+    let id = rest.get(..rest.find(":start -->")?)?;
+    if id.is_empty() || id.contains(':') || id.contains('>') {
+        return None;
+    }
+    let content_start = marker_start + id.len() + ":start -->".len();
+    let end_marker = format!("<!-- butler-semantic:{id}:end -->");
+    let marker_end =
+        content_start + body.get(content_start..)?.find(&end_marker)? + end_marker.len();
+    let trailing_newline = body.get(marker_end..)?.starts_with('\n');
+    Some(marker_end + usize::from(trailing_newline))
 }
 
 fn is_expired(valid_until: Option<&str>, now_epoch_ms: i64) -> bool {

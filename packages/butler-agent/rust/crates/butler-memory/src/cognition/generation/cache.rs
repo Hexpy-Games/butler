@@ -6,6 +6,8 @@
 //! requeues complete jobs whose retained entries went missing.
 
 mod format;
+#[cfg(test)]
+mod format_pin;
 mod health;
 pub(in crate::cognition) mod receipt;
 pub(in crate::cognition) use format::{
