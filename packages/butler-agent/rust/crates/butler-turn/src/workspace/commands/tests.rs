@@ -10,7 +10,7 @@ use tokio::process::{Child, Command};
 use tokio::sync::{Notify, watch};
 use tokio_util::sync::CancellationToken;
 
-use super::process::{CaptureSink, ProcessFuture, ProcessHost, signal_pid};
+use super::process::{CaptureSink, GroupSignal, ProcessFuture, ProcessHost, signal_pid};
 use super::{
     CommandError, CommandStep, Commands, GuidedAccess, GuidedCommandInput, StructuredCommandInput,
 };
@@ -58,11 +58,11 @@ impl ProcessHost for ScriptedProcesses {
         })
     }
 
-    fn signal_group(&self, pid: u32, force: bool) -> Result<(), CommandError> {
-        if self.ignore_term && !force {
+    fn signal_group(&self, pid: u32, signal: GroupSignal) -> Result<(), CommandError> {
+        if self.ignore_term && signal == GroupSignal::Terminate {
             return Ok(());
         }
-        signal_pid(pid, force)
+        signal_pid(pid, signal)
     }
 
     fn wait<'a>(
@@ -366,6 +366,6 @@ async fn signalling_a_group_of_only_zombies_succeeds() {
         ),
         Err(Errno::EPERM)
     );
-    assert_eq!(signal_pid(pid, true), Ok(()));
+    assert_eq!(signal_pid(pid, GroupSignal::Kill), Ok(()));
     leader.wait().unwrap();
 }

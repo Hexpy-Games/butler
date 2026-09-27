@@ -98,6 +98,15 @@ impl Spool {
     }
 }
 
+/// How output capture ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum CaptureEnd {
+    /// The streams reached end of file.
+    Drained,
+    /// Capture was stopped; cancelled reader tasks are not failures.
+    Stopped,
+}
+
 pub(super) struct SpoolPaths {
     stdout: PathBuf,
     stderr: PathBuf,
@@ -114,7 +123,8 @@ impl Capture {
     pub(super) fn stop(&self) {
         self.stop.cancel();
     }
-    pub(super) async fn finish(self, stopped: bool) -> Result<(), CommandError> {
+    pub(super) async fn finish(self, end: CaptureEnd) -> Result<(), CommandError> {
+        let stopped = end == CaptureEnd::Stopped;
         let mut first_error = None;
         for task in [self.stdout, self.stderr] {
             match task.await {
@@ -144,9 +154,9 @@ impl SpoolPaths {
         self,
         capture: Capture,
         summary: &GuidedSummary,
-        stopped: bool,
+        end: CaptureEnd,
     ) -> Result<SpooledPayload, CommandError> {
-        if let Err(error) = capture.finish(stopped).await {
+        if let Err(error) = capture.finish(end).await {
             self.discard().await;
             return Err(error);
         }
