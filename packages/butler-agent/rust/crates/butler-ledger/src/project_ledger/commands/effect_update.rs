@@ -22,7 +22,7 @@ pub(in crate::project_ledger) fn apply(
     let current = show::resolve_record(
         root,
         &update.id,
-        update.kind.as_ref().map(ProjectLedgerRecordKind::as_str),
+        update.kind.map(ProjectLedgerRecordKind::as_str),
     )
     .map_err(|_| ())?;
     let kind = current

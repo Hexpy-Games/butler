@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// The kind of a Project Ledger record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ProjectLedgerRecordKind {
     Initiative,
@@ -18,7 +19,55 @@ pub enum ProjectLedgerRecordKind {
 }
 
 impl ProjectLedgerRecordKind {
-    pub(in crate::project_ledger) fn as_str(&self) -> &'static str {
+    const ALL: [Self; 12] = [
+        Self::Initiative,
+        Self::Decision,
+        Self::Risk,
+        Self::Spec,
+        Self::Report,
+        Self::Work,
+        Self::Task,
+        Self::Attempt,
+        Self::Plan,
+        Self::Handoff,
+        Self::Reference,
+        Self::Roadmap,
+    ];
+
+    /// The kind named `name`, if it is one.
+    pub(in crate::project_ledger) fn parse(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.as_str() == name)
+    }
+
+    /// The directory a top-level record of this kind lives in; Work, Task
+    /// and Attempt records live under `work/` instead.
+    pub(in crate::project_ledger) fn top_level_directory(self) -> Option<&'static str> {
+        Some(match self {
+            Self::Initiative => "initiatives",
+            Self::Decision => "decisions",
+            Self::Risk => "risks",
+            Self::Spec => "specs",
+            Self::Report => "reports",
+            Self::Plan => "plans",
+            Self::Handoff => "handoffs",
+            Self::Reference => "references",
+            Self::Roadmap => "roadmaps",
+            Self::Work | Self::Task | Self::Attempt => return None,
+        })
+    }
+
+    /// The status a new top-level record of this kind starts in.
+    pub(in crate::project_ledger) fn initial_status(self) -> &'static str {
+        match self {
+            Self::Decision => "accepted",
+            Self::Risk => "open",
+            Self::Report => "done",
+            _ => "active",
+        }
+    }
+
+    /// The kind's name in records and tool input.
+    pub(in crate::project_ledger) fn as_str(self) -> &'static str {
         match self {
             Self::Initiative => "initiative",
             Self::Decision => "decision",

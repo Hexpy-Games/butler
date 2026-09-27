@@ -22,7 +22,7 @@ pub(super) fn apply(
     update: &ProjectLedgerRecordUpdate,
 ) -> Result<(), ProjectWorkPublicationError> {
     let path = record_path(candidate, relative)?;
-    let kind = update.kind.as_ref().ok_or_else(invalid)?;
+    let kind = update.kind.ok_or_else(invalid)?;
     let create = matches!(update.operation, Some(ProjectLedgerRecordOperation::Create));
     let existing = match fs::read_to_string(&path) {
         Ok(raw) => Some(raw),
@@ -47,7 +47,7 @@ pub(super) fn apply(
     {
         return Err(invalid());
     }
-    if kind == &ProjectLedgerRecordKind::Work {
+    if kind == ProjectLedgerRecordKind::Work {
         let (current, target) = work_statuses(&metadata, update)?;
         if existing.is_some() {
             check_work_move(current, target)?;
@@ -72,7 +72,7 @@ pub(super) fn apply(
 
 /// The frontmatter of a record being created.
 fn new_metadata(
-    kind: &ProjectLedgerRecordKind,
+    kind: ProjectLedgerRecordKind,
     update: &ProjectLedgerRecordUpdate,
 ) -> Result<Map<String, Value>, ProjectWorkPublicationError> {
     let mut map = Map::new();
@@ -201,10 +201,10 @@ fn required(value: Option<&str>) -> Result<&str, ProjectWorkPublicationError> {
         .ok_or_else(invalid)
 }
 
-fn create_status<'a>(
-    kind: &ProjectLedgerRecordKind,
-    status: Option<&'a str>,
-) -> Result<&'a str, ProjectWorkPublicationError> {
+fn create_status(
+    kind: ProjectLedgerRecordKind,
+    status: Option<&str>,
+) -> Result<&str, ProjectWorkPublicationError> {
     match kind {
         ProjectLedgerRecordKind::Work => status.ok_or_else(invalid),
         ProjectLedgerRecordKind::Plan | ProjectLedgerRecordKind::Reference => {

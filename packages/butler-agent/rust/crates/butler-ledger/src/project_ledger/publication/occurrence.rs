@@ -189,7 +189,7 @@ fn validate(
         let mut expected_paths = vec!["project.json".to_owned()];
         for target in &attempt.target_preconditions {
             let mut update = ProjectLedgerRecordUpdate::new(target.id.clone());
-            update.kind = Some(target.kind.clone());
+            update.kind = Some(target.kind);
             update.parent_id = target.parent_id.clone();
             if record::target(scope, &update)?.path != target.path
                 || (target.state == ProjectWorkTargetState::Present)

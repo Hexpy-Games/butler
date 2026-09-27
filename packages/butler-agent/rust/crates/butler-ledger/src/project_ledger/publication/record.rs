@@ -147,12 +147,9 @@ pub(super) fn target(
     scope: &ResolvedProjectWorkScope,
     update: &ProjectLedgerRecordUpdate,
 ) -> Result<ProjectWorkTarget, ProjectWorkPublicationError> {
-    let kind = update
-        .kind
-        .clone()
-        .ok_or(ProjectWorkPublicationError::adapter(
-            "project_work_publication_kind_invalid",
-        ))?;
+    let kind = update.kind.ok_or(ProjectWorkPublicationError::adapter(
+        "project_work_publication_kind_invalid",
+    ))?;
     let id = safe_id(&update.id)?;
     let path = match kind {
         ProjectLedgerRecordKind::Work => {
