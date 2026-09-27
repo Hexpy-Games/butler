@@ -15,6 +15,8 @@ use std::{
     time::SystemTime,
 };
 
+/// The newest stored briefing for `scope` (and project) in `locale`, on
+/// `date` or the latest day that has one.
 pub fn read_new_chat_briefing(
     data_root: &Path,
     date: Option<&str>,
@@ -130,6 +132,8 @@ fn valid_date(date: &str) -> bool {
         })
 }
 
+/// Whether a stored artifact matches the requested briefing. Passthrough: the
+/// artifact is handed to the caller verbatim once it passes.
 fn valid_artifact(value: &Value, scope: &str, project_id: Option<&str>, locale: &str) -> bool {
     value["schema"] == "butler.cognition.new-chat-briefing.v1"
         && value["scope"] == scope
