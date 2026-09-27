@@ -17,6 +17,8 @@ use crate::host::service::configuration::AppServiceConfiguration;
 const COMMAND: &str = "butler open";
 const USAGE: &str = "open [--no-browser] [--json] [--quiet] [--data PATH]";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
+/// How long `butler open` waits for a service that is still starting.
+const STARTUP_PATIENCE: Duration = Duration::from_secs(30);
 
 #[expect(
     clippy::struct_excessive_bools,
@@ -70,7 +72,8 @@ async fn open(
 ) -> Result<(Value, String), CliError> {
     let data_root = super::gateway::resolve_data(options.data.as_deref(), installation)
         .map_err(|error| CliError::failed("butler_data_unavailable", error.message()))?;
-    let endpoint = super::gateway::running_app_endpoint(&data_root, installation)
+    let endpoint = super::gateway::running_app_endpoint(&data_root, installation, STARTUP_PATIENCE)
+        .await
         .map_err(|error| CliError::failed("butler_status_unavailable", error.message()))?
         .ok_or_else(|| {
             CliError::failed(

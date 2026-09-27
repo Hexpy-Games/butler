@@ -262,14 +262,25 @@ async fn status_value(
 }
 
 /// The App gateway URL of the ready service that owns `data_root`, if any.
-pub(crate) fn running_app_endpoint(
+/// A service that is still starting is waited for, up to `patience`.
+pub(crate) async fn running_app_endpoint(
     data_root: &std::path::Path,
     installation: &ResolvedInstallation,
+    patience: std::time::Duration,
 ) -> Result<Option<String>, crate::host::HostError> {
-    Ok(control::verified_instance(data_root, installation)?
-        .filter(|record| record.state == "ready" && record.app_enabled)
-        .and_then(|record| record.app_endpoint)
-        .filter(|endpoint| !endpoint.is_empty()))
+    let deadline = std::time::Instant::now() + patience;
+    loop {
+        let Some(record) = control::verified_instance(data_root, installation)? else {
+            return Ok(None);
+        };
+        if record.state == "ready" || std::time::Instant::now() >= deadline {
+            return Ok((record.state == "ready" && record.app_enabled)
+                .then_some(record.app_endpoint)
+                .flatten()
+                .filter(|endpoint| !endpoint.is_empty()));
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
 }
 
 async fn start_service(
