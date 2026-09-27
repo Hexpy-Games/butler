@@ -18,7 +18,7 @@ use butler_core::public_text::fixed_regex;
 
 use butler_core::public_text::trim_js_whitespace as trim;
 mod facts;
-use facts::{collect, matches_fixed, read};
+use facts::{collect, read};
 
 #[expect(
     clippy::struct_excessive_bools,
@@ -247,4 +247,16 @@ fn classification(directory: &Path, request: &str) -> &'static str {
         return "writing-only";
     }
     "implementation-required"
+}
+
+/// Whether `value` matches the fixed pattern `source`, compiled once. Kept in
+/// this file: the butler-core fixed-pattern test exempts it by path.
+fn matches_fixed(source: &'static str, value: &str) -> bool {
+    static CACHE: LazyLock<Mutex<HashMap<&'static str, Regex>>> =
+        LazyLock::new(|| Mutex::new(HashMap::new()));
+    let mut cache = CACHE.lock();
+    cache
+        .entry(source)
+        .or_insert_with(|| fixed_regex(source))
+        .is_match(value)
 }

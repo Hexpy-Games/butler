@@ -269,15 +269,6 @@ pub(super) fn json_lines(path: &Path) -> impl Iterator<Item = Value> {
         .flat_map(|file| BufReader::new(file).lines())
         .filter_map(|line| line.ok().and_then(|line| serde_json::from_str(&line).ok()))
 }
-pub(super) fn matches_fixed(source: &'static str, value: &str) -> bool {
-    static CACHE: LazyLock<Mutex<HashMap<&'static str, Regex>>> =
-        LazyLock::new(|| Mutex::new(HashMap::new()));
-    let mut cache = CACHE.lock();
-    cache
-        .entry(source)
-        .or_insert_with(|| fixed_regex(source))
-        .is_match(value)
-}
 pub(super) fn environment_blocker(value: &str) -> bool {
     matches_fixed(
         r"(?is)\b(tsc|typescript|bun|npm|pnpm|yarn|node_modules|dependency|dependencies)\b.{0,120}\b(command not found|not found|missing|not installed)\b",
