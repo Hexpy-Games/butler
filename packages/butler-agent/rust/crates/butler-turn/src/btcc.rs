@@ -1,4 +1,4 @@
-//! Public BTCC message lifecycle boundary.
+//! BTCC, the turn engine: one message in, one durable assistant turn out.
 //!
 //! Gateway and host composition may run or stop a Turn. Durable state, model
 //! execution, delivery, and supervision remain private children of this module.

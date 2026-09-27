@@ -1,6 +1,12 @@
-//! Native host adapters shared by the composed domain owners.
+//! Composition of the agent process: the host wires every domain crate together.
 //!
-//! The system clock and UUID generator retain no Turn/session state. Domain
+//! [`cli`] parses the command line into a [`cli::command::Command`]; [`runtime`]
+//! builds the long-lived domain services; [`app`] serves the App gateway over
+//! them; [`guided`] assembles guided turns (tools, prompts, journals); [`service`]
+//! manages the background service; [`memory_jobs`] and [`embedding`] run memory
+//! maintenance and the embedding worker; [`automation`] runs scheduled work.
+//!
+//! The shared system clock and UUID generator here retain no Turn/session state. Domain
 //! ports remain explicit; domains do not depend on this composition module.
 
 mod error;

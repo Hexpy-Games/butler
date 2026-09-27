@@ -1,4 +1,4 @@
-//! Native committed Project Ledger record reads for Guided Turns.
+//! Committed Project Ledger records and project-scoped Work for guided turns.
 
 mod active_reference;
 mod briefing_signals;

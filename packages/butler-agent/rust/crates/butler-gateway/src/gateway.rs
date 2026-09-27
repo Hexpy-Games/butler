@@ -1,4 +1,4 @@
-//! Native App HTTP boundary.
+//! The App HTTP and WebSocket boundary.
 //!
 //! This module owns protocol validation, authentication, cursor projection, and
 //! connection lifetimes. Durable message, Turn, and event state remains owned by

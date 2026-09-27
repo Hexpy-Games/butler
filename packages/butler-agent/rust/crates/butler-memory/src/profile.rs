@@ -1,4 +1,5 @@
-//! Native personalization state and prompt projection boundary.
+//! The user profile: candidate facts extracted from conversations, their
+//! review state, and the profile section projected into prompts.
 
 mod candidates;
 mod contracts;

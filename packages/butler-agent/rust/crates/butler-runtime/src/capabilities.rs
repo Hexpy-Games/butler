@@ -1,4 +1,5 @@
-//! Native named capability lookup and public read-file projection.
+//! The built-in file tools (read, list, grep, write, edit) and the tool catalog
+//! that validates their model-facing definitions.
 mod arguments;
 mod catalog;
 mod cursor;

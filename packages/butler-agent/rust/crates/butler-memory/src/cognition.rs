@@ -1,4 +1,6 @@
-//! Native Cognition domain primitives.
+//! Cognition: extraction of memories from conversations into the memory graph
+//! (SQLite) and vectors (LanceDB), recall for turn context, consolidation, and
+//! the memory generations that rebuilds produce and cut over.
 
 use std::{future::Future, pin::Pin};
 
