@@ -325,7 +325,6 @@ async fn turn_03_stop_mid_stream() -> Result<(), HarnessError> {
 
 /// TURN-03 (partial text) — owner decision: keep the partial text, marked stopped.
 #[tokio::test]
-#[ignore = "product gap: TURN-03-PARTIAL — after Stop mid-stream no partial assistant text is kept; the owner decided partial text stays, marked stopped"]
 async fn turn_03_stop_keeps_partial_text_marked_stopped() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("TURN-03-PARTIAL")?

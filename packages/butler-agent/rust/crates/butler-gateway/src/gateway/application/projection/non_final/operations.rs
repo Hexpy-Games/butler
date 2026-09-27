@@ -95,6 +95,7 @@ pub(super) fn project_cancelled(
     _event_id: &str,
 ) -> Result<(), AppStorageError> {
     db.execute("UPDATE app_turn_cancel_outbox SET state='completed',accepted_at=COALESCE(accepted_at,?1),completed_at=?1,safe_error_code=NULL WHERE turn_id=?2 AND state IN ('pending','accepted')",params![now,turn]).map_err(AppStorageError::sqlite)?;
+    super::stream_message::stop(db, subscribers, chat, turn, now)?;
     db.execute("UPDATE turns SET state='cancelled',safe_status_label='Cancelled',safe_error_code='turn_cancelled',retryable=0,cancellable=0,updated_at=?1 WHERE id=?2 AND state<>'cancelled'",params![now,turn]).map_err(AppStorageError::sqlite)?;
     events::append(
         db,
