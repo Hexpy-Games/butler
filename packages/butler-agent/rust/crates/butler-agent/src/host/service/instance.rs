@@ -22,6 +22,7 @@ mod gateway_state;
 mod probe;
 mod record;
 mod restart;
+mod stop_intent;
 pub(crate) use gateway_state::mark_gateway_state;
 pub(crate) use probe::instance_lock_is_held_read_only;
 use record::{
@@ -29,6 +30,10 @@ use record::{
     write_record,
 };
 pub(crate) use restart::RestartIdentity;
+pub(crate) use stop_intent::{
+    StopIntent, StopReason, StopRequest, StopRequester, clear_stop_intent, withdraw_stop_intent,
+    write_stop_intent,
+};
 
 #[derive(Clone, Deserialize, Serialize)]
 pub(crate) struct InstanceRecord {
@@ -166,6 +171,11 @@ impl InstanceGuard {
         if current.state != "starting" {
             return Err("native_service_instance_ambiguous: invalid startup transition".into());
         }
+        // A new instance reaching ready ends any earlier stop or restart intent.
+        clear_stop_intent(data_root).map_err(|source| {
+            crate::host::HostError::new("native_service_instance_state_unavailable")
+                .with_source(source)
+        })?;
         current.state = "ready".into();
         current.app_enabled = app_enabled;
         current.app_endpoint = app_endpoint;

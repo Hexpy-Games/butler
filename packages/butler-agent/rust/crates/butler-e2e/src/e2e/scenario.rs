@@ -48,6 +48,7 @@ pub struct Setup {
     model: Option<ModelChoice>,
     stub_credential: bool,
     record_into: Option<std::path::PathBuf>,
+    app_local_auth: bool,
 }
 
 /// A running scenario. Field order is drop order: agent before sandbox.
@@ -77,6 +78,7 @@ impl Setup {
             model: None,
             stub_credential: true,
             record_into: None,
+            app_local_auth: false,
         })
     }
 
@@ -120,6 +122,13 @@ impl Setup {
         self
     }
 
+    /// Keeps the gateway token in the data dir's App local-auth file, the
+    /// layout of an agent the Butler App started.
+    pub fn app_local_auth(mut self) -> Self {
+        self.app_local_auth = true;
+        self
+    }
+
     pub fn placeholder(mut self, name: &str, value: impl Into<String>) -> Self {
         self.placeholders.add(name, value);
         self
@@ -136,8 +145,12 @@ impl Setup {
             model,
             stub_credential,
             record_into,
+            app_local_auth,
         } = self;
         let mut launch = Launch::new(&sandbox)?;
+        if app_local_auth {
+            launch.use_app_local_auth_file()?;
+        }
         let default_model = ModelChoice {
             model: "openai/gpt-6-sol".into(),
             effort: Some("low".into()),

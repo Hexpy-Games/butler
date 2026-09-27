@@ -23,6 +23,11 @@ use crate::host::service::instance as service_instance;
 use service_instance::{InstanceRecord, RestartIdentity};
 
 const INTENT_ID_MAX_LEN: usize = 128;
+/// The service asked for its own restart; the detached CLI helper carries it out.
+const HANDOFF_STOP: service_instance::StopRequest = service_instance::StopRequest {
+    reason: service_instance::StopReason::Restart,
+    requested_by: service_instance::StopRequester::Cli,
+};
 const MAX_HANDOFF_INPUT_BYTES: usize = 4096;
 
 #[derive(Deserialize, Serialize)]
@@ -177,21 +182,15 @@ async fn restart_once(
     validate_target(installation, expected, &active)
         .map_err(|error| ("target_changed", error.to_string()))?;
 
-    let (stopped, admission) =
-        match stop_service_admitted(data_root, installation, admission, Some(expected)).await {
-            Ok(result) => result,
-            Err(error) => {
-                let state = if error
-                    .message()
-                    .starts_with("native_service_instance_changed")
-                {
-                    "target_changed"
-                } else {
-                    "stop_failed"
-                };
-                return Err((state, error.to_string()));
-            }
-        };
+    let (stopped, admission) = stop_service_admitted(
+        data_root,
+        installation,
+        admission,
+        Some(expected),
+        HANDOFF_STOP,
+    )
+    .await
+    .map_err(|error| (stop_failure_state(&error), error.to_string()))?;
     if stopped["alreadyStopped"] == true {
         drop(admission);
         return Err((
@@ -223,6 +222,17 @@ async fn restart_once(
         ));
     }
     Ok(started)
+}
+
+fn stop_failure_state(error: &crate::host::HostError) -> &'static str {
+    if error
+        .message()
+        .starts_with("native_service_instance_changed")
+    {
+        "target_changed"
+    } else {
+        "stop_failed"
+    }
 }
 
 fn precondition_failure(error: impl std::fmt::Display) -> (&'static str, String) {

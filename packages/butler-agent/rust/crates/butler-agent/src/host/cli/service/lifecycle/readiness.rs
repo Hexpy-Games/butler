@@ -6,8 +6,9 @@ use std::time::{Duration, Instant};
 
 use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
-use serde_json::Value;
+use serde::Deserialize;
 
+use super::probe_auth::{is_loopback_endpoint, probe_tokens};
 use super::{INSTANCE_PUBLISH_TIMEOUT, POLL_INTERVAL, START_TIMEOUT, active_service};
 use crate::host::ServiceConfiguration;
 use crate::host::service::instance::{InstanceRecord, instance_is_locked, read_record};
@@ -63,7 +64,7 @@ pub(super) async fn wait_until_ready(
             }
             if record.state == "ready"
                 && record.ready_at.is_some()
-                && app_health_ready(&client, config, &record).await?
+                && app_health_ready(&client, config, &record).await
             {
                 return Ok(record);
             }
@@ -112,41 +113,77 @@ pub(super) async fn wait_until_registered(
     }
 }
 
+/// Whether the App gateway the ready record names answers its readiness probe.
+///
+/// A gateway that requires local auth is probed with the tokens this CLI can
+/// find ([`probe_tokens`]). When none is available, or the gateway is not on
+/// loopback, the ready record is authoritative: the service marks itself ready
+/// only after its App gateway is listening, and the caller has already checked
+/// the DATA lock and the process identity.
 async fn app_health_ready(
     client: &reqwest::Client,
     config: &ServiceConfiguration,
     record: &InstanceRecord,
-) -> Result<bool, crate::host::HostError> {
+) -> bool {
     if !record.app_enabled {
-        return Ok(true);
+        return true;
     }
     let Some(endpoint) = &record.app_endpoint else {
-        return Ok(false);
+        return false;
     };
-    let auth = config.app.gateway_config().local_auth;
-    if record.app_auth_required && (!auth.required || auth.token().is_none()) {
-        return Err("native_service_app_health_auth_unavailable".into());
+    let url = format!("{endpoint}/runtime-readiness");
+    if !record.app_auth_required {
+        return readiness_probe(client, &url, None).await;
     }
-    let mut request = client.get(format!("{endpoint}/runtime-readiness"));
-    if auth.required {
-        let Some(token) = auth.token() else {
-            return Err("native_service_app_health_auth_unavailable".into());
-        };
+    let tokens = if is_loopback_endpoint(endpoint) {
+        probe_tokens(config)
+    } else {
+        Vec::new()
+    };
+    if tokens.is_empty() {
+        return true;
+    }
+    for token in &tokens {
+        if readiness_probe(client, &url, Some(token)).await {
+            return true;
+        }
+    }
+    false
+}
+
+/// Envelope of `GET /runtime-readiness`.
+#[derive(Deserialize)]
+struct ReadinessEnvelope {
+    data: ReadinessView,
+}
+
+/// The readiness fields the CLI waits for.
+#[derive(Deserialize)]
+struct ReadinessView {
+    authenticated_gateway_ready: bool,
+    btcc_executor_ready: bool,
+    raw_text_included: bool,
+}
+
+async fn readiness_probe(client: &reqwest::Client, url: &str, token: Option<&str>) -> bool {
+    let mut request = client.get(url);
+    if let Some(token) = token {
         request = request.bearer_auth(token);
     }
     let Ok(response) = request.send().await else {
-        return Ok(false);
+        return false;
     };
     if !response.status().is_success() {
-        return Ok(false);
+        return false;
     }
-    let value: Value = match response.json().await {
-        Ok(value) => value,
-        Err(_) => return Ok(false),
-    };
-    Ok(value["data"]["authenticated_gateway_ready"] == true
-        && value["data"]["btcc_executor_ready"] == true
-        && value["data"]["raw_text_included"] == false)
+    response
+        .json::<ReadinessEnvelope>()
+        .await
+        .is_ok_and(|envelope| {
+            envelope.data.authenticated_gateway_ready
+                && envelope.data.btcc_executor_ready
+                && !envelope.data.raw_text_included
+        })
 }
 
 pub(super) async fn wait_for_stop(

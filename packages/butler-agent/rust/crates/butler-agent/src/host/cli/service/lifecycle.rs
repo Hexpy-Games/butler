@@ -12,12 +12,14 @@ use serde_json::{Value, json};
 
 use super::Action;
 use crate::host::service::instance::{
-    AdmissionLock, InstanceRecord, RestartIdentity, instance_is_locked, mark_stopping,
-    process_matches, read_record, refuse_live_legacy_process, send_signal,
-    validate_write_destinations,
+    AdmissionLock, InstanceRecord, RestartIdentity, StopIntent, StopReason, StopRequest,
+    StopRequester, instance_is_locked, mark_stopping, process_matches, read_record,
+    refuse_live_legacy_process, send_signal, validate_write_destinations, withdraw_stop_intent,
+    write_stop_intent,
 };
 use crate::host::{ResolvedInstallation, ServiceConfiguration};
 
+mod probe_auth;
 mod readiness;
 mod restart_handoff;
 use readiness::{cleanup_spawned, wait_for_stop, wait_until_ready, wait_until_registered};
@@ -28,13 +30,29 @@ const INSTANCE_PUBLISH_TIMEOUT: Duration = Duration::from_secs(10);
 const STOP_TIMEOUT: Duration = Duration::from_secs(8);
 const FORCE_STOP_TIMEOUT: Duration = Duration::from_secs(3);
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
+/// The line `butler stop` adds after a stop: schedules run inside the service.
+const SCHEDULES_STOPPED_NOTICE: &str =
+    "Schedules stop too; they do not run until Butler starts again (butler start).";
+
+/// How a lifecycle command runs.
+#[derive(Clone, Copy)]
+pub(super) struct ControlOptions {
+    /// Report what would happen without doing it.
+    pub(super) dry_run: bool,
+    /// The controller recorded in the stop intent of `stop` and `restart`.
+    pub(super) requested_by: StopRequester,
+}
 
 pub(super) async fn execute(
     action: Action,
     installation: ResolvedInstallation,
     requested_data: Option<&str>,
-    dry_run: bool,
+    control: ControlOptions,
 ) -> Result<Value, crate::host::HostError> {
+    let ControlOptions {
+        dry_run,
+        requested_by,
+    } = control;
     let data_root = resolve_data_root(requested_data, &installation)?;
     validate_write_destinations(&data_root, &installation)?;
     match action {
@@ -42,7 +60,13 @@ pub(super) async fn execute(
             let config = service_configuration(&installation, &data_root)?;
             start_service(&installation, &config, dry_run).await
         }
-        Action::Stop => stop_service(&data_root, &installation, dry_run).await,
+        Action::Stop => {
+            let request = StopRequest {
+                reason: StopReason::Stop,
+                requested_by,
+            };
+            stop_service(&data_root, &installation, dry_run, request).await
+        }
         Action::Restart => {
             let config = service_configuration(&installation, &data_root)?;
             if dry_run {
@@ -55,8 +79,12 @@ pub(super) async fn execute(
                 }));
             }
             let admission = acquire_admission(&data_root, &installation).await?;
+            let request = StopRequest {
+                reason: StopReason::Restart,
+                requested_by,
+            };
             let (_, admission) =
-                stop_service_admitted(&data_root, &installation, admission, None).await?;
+                stop_service_admitted(&data_root, &installation, admission, None, request).await?;
             start_service_admitted(&installation, &config, admission).await
         }
         Action::Run => Err("service run is dispatched by the native service entrypoint".into()),
@@ -81,7 +109,7 @@ pub(super) fn summary(action: Action, value: &Value) -> String {
             "Butler native service is not running".into()
         }
         Action::Stop if value["wouldStop"] == true => "Butler native service stop planned".into(),
-        Action::Stop => "Butler native service stopped".into(),
+        Action::Stop => format!("Butler native service stopped\n{SCHEDULES_STOPPED_NOTICE}"),
         Action::Restart => "Butler native service restarted".into(),
         Action::Run => "Butler native service run".into(),
         Action::RestartHandoff => "Butler native service restart handoff".into(),
@@ -163,6 +191,7 @@ async fn stop_service(
     data_root: &Path,
     installation: &ResolvedInstallation,
     dry_run: bool,
+    request: StopRequest,
 ) -> Result<Value, crate::host::HostError> {
     if dry_run {
         refuse_live_legacy_process(data_root)?;
@@ -180,7 +209,7 @@ async fn stop_service(
     }
     let admission = acquire_admission(data_root, installation).await?;
     let (result, _admission) =
-        stop_service_admitted(data_root, installation, admission, None).await?;
+        stop_service_admitted(data_root, installation, admission, None, request).await?;
     Ok(result)
 }
 
@@ -189,6 +218,7 @@ async fn stop_service_admitted(
     installation: &ResolvedInstallation,
     admission: AdmissionLock,
     expected: Option<&RestartIdentity>,
+    request: StopRequest,
 ) -> Result<(Value, AdmissionLock), crate::host::HostError> {
     refuse_live_legacy_process(data_root)?;
     let Some(record) = active_service(data_root)? else {
@@ -203,36 +233,63 @@ async fn stop_service_admitted(
     mark_stopping(data_root, &record.nonce, installation)?;
     let current =
         active_service(data_root)?.ok_or_else(|| "native_service_instance_changed".to_owned())?;
-    if current.nonce != record.nonce
-        || current.pid != record.pid
-        || expected.is_some_and(|identity| !identity.matches(&current))
-    {
+    if !same_instance(&current, &record, expected) {
         return Err("native_service_instance_changed".into());
     }
     if !instance_is_locked(data_root)? || !process_matches(&current)? {
         return Err("native_service_instance_ambiguous: refusing signal".into());
     }
-    if let Err(error) = send_signal(&current, Signal::SIGTERM)
-        && error.message() != "native_service_process_exited"
-    {
-        return Err(error);
+    signal_intended_stop(data_root, &current, request)?;
+    let stopped = wait_or_force_stop(data_root, &record, expected).await?;
+    Ok((stopped, admission))
+}
+
+fn same_instance(
+    current: &InstanceRecord,
+    record: &InstanceRecord,
+    expected: Option<&RestartIdentity>,
+) -> bool {
+    current.nonce == record.nonce
+        && current.pid == record.pid
+        && expected.is_none_or(|identity| identity.matches(current))
+}
+
+/// Announces the stop to supervisors, then sends SIGTERM. The intent is
+/// written before the signal so it is on disk when the process exits; a
+/// signal that could not be delivered withdraws it again.
+fn signal_intended_stop(
+    data_root: &Path,
+    current: &InstanceRecord,
+    request: StopRequest,
+) -> Result<(), crate::host::HostError> {
+    write_stop_intent(data_root, &StopIntent::new(request, current)).map_err(|source| {
+        crate::host::HostError::new("native_service_stop_intent_unavailable").with_source(source)
+    })?;
+    match send_signal(current, Signal::SIGTERM) {
+        Ok(()) => Ok(()),
+        Err(error) if error.message() == "native_service_process_exited" => Ok(()),
+        Err(error) => match withdraw_stop_intent(data_root, &current.nonce) {
+            Ok(()) => Err(error),
+            Err(withdraw) => Err(error.with_source(withdraw)),
+        },
     }
+}
+
+/// Waits for the signalled instance to exit, force-killing it after
+/// [`STOP_TIMEOUT`] when it is still the same process.
+async fn wait_or_force_stop(
+    data_root: &Path,
+    record: &InstanceRecord,
+    expected: Option<&RestartIdentity>,
+) -> Result<Value, crate::host::HostError> {
+    let stopped = json!({"service":"butler-agent-native","stopped":true,"pid":record.pid});
     if wait_for_stop(data_root, &record.nonce, STOP_TIMEOUT).await? {
-        return Ok((
-            json!({"service":"butler-agent-native","stopped":true,"pid":record.pid}),
-            admission,
-        ));
+        return Ok(stopped);
     }
     let current =
         active_service(data_root)?.ok_or_else(|| "native_service_instance_changed".to_owned())?;
-    if current.nonce != record.nonce
-        || current.pid != record.pid
-        || expected.is_some_and(|identity| !identity.matches(&current))
-    {
-        return Ok((
-            json!({"service":"butler-agent-native","stopped":true,"pid":record.pid}),
-            admission,
-        ));
+    if !same_instance(&current, record, expected) {
+        return Ok(stopped);
     }
     // Re-read the lock, nonce, PID, OS start identity, and executable directly
     // before force-killing the recorded service process.
@@ -243,10 +300,7 @@ async fn stop_service_admitted(
     if !wait_for_stop(data_root, &record.nonce, FORCE_STOP_TIMEOUT).await? {
         return Err("native_service_stop_timeout".into());
     }
-    Ok((
-        json!({"service":"butler-agent-native","stopped":true,"forced":true,"pid":record.pid}),
-        admission,
-    ))
+    Ok(json!({"service":"butler-agent-native","stopped":true,"forced":true,"pid":record.pid}))
 }
 
 async fn acquire_admission(

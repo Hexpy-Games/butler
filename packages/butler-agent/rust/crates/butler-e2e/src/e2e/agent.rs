@@ -65,6 +65,37 @@ impl Launch {
         self.env.retain(|(existing, _)| existing != key);
     }
 
+    /// Keeps the gateway token where the Butler App keeps it: in the data
+    /// dir's App local-auth file, which the agent is pointed at. A CLI run
+    /// without the local-auth variables then has only that file to go by.
+    pub fn use_app_local_auth_file(&mut self) -> Result<PathBuf, HarnessError> {
+        let path = self.data.join("app/runtime/auth/local-agent-auth.json");
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let file = serde_json::json!({
+            "schema": "butler.app-local-agent-auth.v1",
+            "product": "butler-app",
+            "purpose": "bundled-agent-local-auth",
+            "token": self.token,
+            "created_at": "2026-09-28T00:00:00.000Z",
+            "raw_text_included": false,
+        });
+        fs::write(&path, file.to_string())?;
+        self.set_env("BUTLER_APP_LOCAL_AUTH_FILE", path.display().to_string());
+        Ok(path)
+    }
+
+    /// A command without the local-auth variables, as a user's terminal runs
+    /// `butler` next to an App-started agent.
+    pub fn command_without_local_auth(&self) -> Command {
+        let mut command = self.command();
+        command
+            .env_remove("BUTLER_APP_LOCAL_AUTH_REQUIRED")
+            .env_remove("BUTLER_APP_LOCAL_AUTH_FILE");
+        command
+    }
+
     /// A command for the agent binary with the scenario's isolated environment.
     pub fn command(&self) -> Command {
         let mut command = Command::new(&self.binary);
@@ -231,9 +262,39 @@ impl Agent {
     /// read.
     pub async fn cli_reaping(&mut self, args: &[&str]) -> Result<CliOutput, HarnessError> {
         let mut command = self.launch.command();
-        command.args(args).stdin(Stdio::null());
-        let task = tokio::task::spawn_blocking(move || command.output());
+        command.args(args);
+        self.command_reaping(command, || {}).await
+    }
+
+    /// [`Agent::cli_reaping`] for a prepared command (for example one with a
+    /// changed environment); `observe` runs on every poll while it runs.
+    pub async fn command_reaping(
+        &mut self,
+        mut command: Command,
+        observe: impl FnMut(),
+    ) -> Result<CliOutput, HarnessError> {
+        command.stdin(Stdio::null());
+        let output = self
+            .while_reaping(move || command.output(), observe)
+            .await??;
+        Ok(CliOutput {
+            code: output.status.code(),
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        })
+    }
+
+    /// Runs blocking `work` to completion while reaping the service child
+    /// when it exits, as a supervisor would; `observe` runs about every 25 ms
+    /// while `work` runs.
+    pub async fn while_reaping<T: Send + 'static>(
+        &mut self,
+        work: impl FnOnce() -> T + Send + 'static,
+        mut observe: impl FnMut(),
+    ) -> Result<T, HarnessError> {
+        let task = tokio::task::spawn_blocking(work);
         loop {
+            observe();
             if let Some(child) = self.child.as_mut()
                 && matches!(child.try_wait(), Ok(Some(_)))
             {
@@ -244,14 +305,7 @@ impl Agent {
             }
             tokio::time::sleep(Duration::from_millis(25)).await;
         }
-        let output = task
-            .await
-            .map_err(|error| harness_error(error.to_string()))??;
-        Ok(CliOutput {
-            code: output.status.code(),
-            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        })
+        task.await.map_err(|error| harness_error(error.to_string()))
     }
 
     /// Runs `butler-agent <args>` (the `butler` CLI) against the same data dir.
