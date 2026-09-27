@@ -1,0 +1,19 @@
+//! Durable reviewed effects over accepted session Work.
+
+mod blockers;
+pub mod contracts;
+mod execution;
+mod identity;
+mod outcomes;
+pub(in crate::btcc) mod recovery;
+mod service;
+pub(crate) mod workspace_edit;
+pub mod workspace_file;
+
+pub use identity::{accepted_plan_effect_id, effect_input_sha256, reviewed_effect_action_key};
+pub use service::EffectService;
+
+#[cfg(any(test, feature = "test-support"))]
+pub mod testing;
+#[cfg(test)]
+mod tests;

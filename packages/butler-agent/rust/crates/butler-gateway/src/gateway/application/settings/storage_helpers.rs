@@ -1,0 +1,39 @@
+use serde_json::Value;
+
+use crate::gateway::application::storage::{AppStorageCode, AppStorageError};
+use butler_turn::btcc::AccessMode;
+
+pub(super) fn parse_access(value: &str) -> Option<AccessMode> {
+    match value {
+        "ask_first" => Some(AccessMode::AskFirst),
+        "read_only" => Some(AccessMode::ReadOnly),
+        "full_access" => Some(AccessMode::FullAccess),
+        _ => None,
+    }
+}
+
+pub(super) fn json_type(value: Option<&Value>) -> &'static str {
+    match value {
+        None => "undefined",
+        Some(Value::Null | Value::Array(_) | Value::Object(_)) => "object",
+        Some(Value::Bool(_)) => "boolean",
+        Some(Value::Number(_)) => "number",
+        Some(Value::String(_)) => "string",
+    }
+}
+
+pub(super) fn safe_integer(value: &Value) -> Option<u64> {
+    let number = value.as_f64()?;
+    (number.is_finite()
+        && number >= 0.0
+        && number.fract() == 0.0
+        && number <= 9_007_199_254_740_991.0)
+        .then_some(butler_core::json::saturating_u64(number))
+}
+
+pub(super) fn invalid_resolution() -> AppStorageError {
+    AppStorageError::new(
+        AppStorageCode::TurnControlResolutionInvalid,
+        "Turn controls are unavailable.",
+    )
+}

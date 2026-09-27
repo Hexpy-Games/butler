@@ -1,0 +1,25 @@
+pub(super) mod active_plan;
+pub(super) mod activity;
+pub(super) mod authority_handoff;
+pub(super) mod catalog;
+pub(super) mod cognition_prompt;
+pub(super) mod command;
+pub(super) mod factory;
+pub(super) mod file_effects;
+pub(super) mod journal;
+pub(super) mod preparation;
+pub(super) mod project_tools;
+pub(super) mod project_work_provider;
+pub(super) mod prompt;
+pub(super) mod registered_edit;
+pub(super) mod scope_selected_work;
+pub(super) mod steering;
+pub(super) mod tool_artifact;
+pub(super) mod tool_output;
+pub(super) mod tools;
+pub(super) mod vision;
+pub(super) mod work;
+pub(super) mod work_streams;
+pub(super) mod work_tools;
+#[cfg(unix)]
+pub(super) mod worker_profiles;

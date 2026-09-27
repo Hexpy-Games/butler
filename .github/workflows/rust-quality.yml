@@ -90,6 +90,11 @@ jobs:
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
+      # Test builds enable the crates' test-support features, which relax
+      # fixture lints; the libraries alone are linted without them.
+      - name: Run Clippy on libraries without test features
+        run: cargo clippy --workspace --lib --locked -- -D warnings
+
       - name: Check Rust source sizes and architecture
         run: cargo run --locked -p butler-source-check -- .
 
