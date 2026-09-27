@@ -130,55 +130,7 @@ fn suspend(
         ));
     }
     if reason == SuspensionReason::AuthorityPending {
-        let continuation = continuation.ok_or_else(|| {
-            error(
-                StorageCode::AuthorityContinuationMissing,
-                "authority_continuation_missing",
-            )
-        })?;
-        let request_ref = continuation
-            .get("requestRef")
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                error(
-                    StorageCode::AuthorityContinuationInvalid,
-                    "authority requestRef missing",
-                )
-            })?;
-        let call_id = continuation
-            .get("callId")
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                error(
-                    StorageCode::AuthorityContinuationInvalid,
-                    "authority callId missing",
-                )
-            })?;
-        let bound = connection
-            .execute(
-                "UPDATE btcc_authority_requests SET source_call_id = ?1 WHERE request_ref = ?2 \
-             AND source_turn_id = ?3 AND decision = 'pending' AND close_reason IS NULL \
-             AND (source_call_id IS NULL OR source_call_id = ?1)",
-                params![call_id, request_ref, turn.turn_id],
-            )
-            .map_err(StorageError::sqlite)?;
-        if bound != 1 {
-            return Err(error(
-                StorageCode::AuthoritySourceCallMismatch,
-                "authority_source_call_mismatch",
-            ));
-        }
-        let pending = connection.execute(
-            "UPDATE btcc_guided_tool_calls SET status = 'awaiting_authority' WHERE call_id = ?1 \
-             AND turn_id = ?2 AND status IN ('started','awaiting_authority')",
-            params![call_id, turn.turn_id],
-        ).map_err(StorageError::sqlite)?;
-        if pending != 1 {
-            return Err(error(
-                StorageCode::AuthoritySourceCallNotPending,
-                "authority_source_call_not_pending",
-            ));
-        }
+        park_authority_call(connection, turn, continuation)?;
     }
     let continuation_json = continuation.map(stringify).transpose()?;
     let changed = connection
@@ -207,6 +159,55 @@ fn suspend(
         return Err(error(
             StorageCode::TransitionContention,
             "BTCC suspension commit lost Turn CAS",
+        ));
+    }
+    Ok(())
+}
+
+/// Binds the pending authority request to the continuation's source call
+/// and parks that call as awaiting authority.
+fn park_authority_call(
+    connection: &Connection,
+    turn: &TurnVersion,
+    continuation: Option<&Value>,
+) -> StorageResult<()> {
+    let continuation = continuation.ok_or_else(|| {
+        error(
+            StorageCode::AuthorityContinuationMissing,
+            "authority_continuation_missing",
+        )
+    })?;
+    let field = |name: &str, message: &str| {
+        continuation
+            .get(name)
+            .and_then(Value::as_str)
+            .ok_or_else(|| error(StorageCode::AuthorityContinuationInvalid, message))
+    };
+    let request_ref = field("requestRef", "authority requestRef missing")?;
+    let call_id = field("callId", "authority callId missing")?;
+    let bound = connection
+        .execute(
+            "UPDATE btcc_authority_requests SET source_call_id = ?1 WHERE request_ref = ?2 \
+         AND source_turn_id = ?3 AND decision = 'pending' AND close_reason IS NULL \
+         AND (source_call_id IS NULL OR source_call_id = ?1)",
+            params![call_id, request_ref, turn.turn_id],
+        )
+        .map_err(StorageError::sqlite)?;
+    if bound != 1 {
+        return Err(error(
+            StorageCode::AuthoritySourceCallMismatch,
+            "authority_source_call_mismatch",
+        ));
+    }
+    let pending = connection.execute(
+        "UPDATE btcc_guided_tool_calls SET status = 'awaiting_authority' WHERE call_id = ?1 \
+         AND turn_id = ?2 AND status IN ('started','awaiting_authority')",
+        params![call_id, turn.turn_id],
+    ).map_err(StorageError::sqlite)?;
+    if pending != 1 {
+        return Err(error(
+            StorageCode::AuthoritySourceCallNotPending,
+            "authority_source_call_not_pending",
         ));
     }
     Ok(())

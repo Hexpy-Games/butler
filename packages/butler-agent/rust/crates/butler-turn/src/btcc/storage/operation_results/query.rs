@@ -310,62 +310,16 @@ fn payload(db: &Connection, turn: &str, call: &str) -> StorageResult<Option<Payl
     .optional()
     .map_err(StorageError::sqlite)
 }
+/// Reads a byte range of an exact tool request or result after verifying
+/// its Work binding (or turn ownership) and both body digests.
 pub(super) fn read_exact(
     db: &Connection,
     authority: Option<&dyn ExactProjectWorkResultAuthority>,
     input: &ExactResultRangeInput,
 ) -> StorageResult<ExactResultRange> {
-    let payload = if let Some(work) = work(db, "result.result_ref=?1", &input.result_ref)? {
-        if input.revision != Some(work.sequence) {
-            return Err(error(StorageCode::OperationResultRevisionMismatch));
-        }
-        if input.work_id.as_deref() != Some(&work.work_id) {
-            return Err(error(StorageCode::OperationResultWorkMismatch));
-        }
-        if input.session_id.as_deref() != Some(&work.session_id) {
-            return Err(error(StorageCode::OperationResultSessionMismatch));
-        }
-        if (work.scope_kind == "session"
-            && (input.session_id.as_deref() != Some(&work.scope_ref)
-                || input.project_ref.is_some()))
-            || (work.scope_kind == "project"
-                && input.project_ref.as_deref() != Some(&work.scope_ref))
-        {
-            return Err(error(StorageCode::OperationResultScopeMismatch));
-        }
-        if managed(&work) {
-            verify(authority, &work, &input.result_sha256)?;
-        }
-        let payload = payload(db, &work.origin_turn_id, &work.call_id)?
-            .ok_or_else(|| error(StorageCode::OperationResultMissingOrScopeMismatch))?;
-        if payload.tool != work.tool_name {
-            return Err(error(StorageCode::OperationResultProjectReferenceMismatch));
-        }
-        payload
-    } else {
-        if input
-            .project_ref
-            .as_deref()
-            .is_some_and(|value| !value.is_empty())
-            && authority
-                .map(|authority| {
-                    authority.resolve(&OperationResultReferenceInput {
-                        turn_id: input.turn_id.clone(),
-                        call_id: input.result_ref.clone(),
-                    })
-                })
-                .transpose()?
-                .flatten()
-                .is_some()
-        {
-            return Err(error(StorageCode::OperationResultProjectProjectionMismatch));
-        }
-        let payload = payload(db, &input.turn_id, &input.result_ref)?
-            .ok_or_else(|| error(StorageCode::OperationResultMissingOrScopeMismatch))?;
-        if input.revision.is_some() {
-            return Err(error(StorageCode::OperationResultRevisionMismatch));
-        }
-        payload
+    let payload = match work(db, "result.result_ref=?1", &input.result_ref)? {
+        Some(work) => work_payload(db, authority, input, &work)?,
+        None => turn_payload(db, authority, input)?,
     };
     let result = payload
         .result
@@ -388,13 +342,13 @@ pub(super) fn read_exact(
         ExactResultSource::Request => payload.raw.as_bytes(),
         ExactResultSource::Result => result.as_bytes(),
     };
-    if input.offset >= bytes.len() {
-        return Err(error(StorageCode::OperationResultRangeOutOfBounds));
-    }
     let end = input.offset.saturating_add(input.length).min(bytes.len());
+    let Some(range) = bytes.get(input.offset..end).filter(|_| input.offset < bytes.len()) else {
+        return Err(error(StorageCode::OperationResultRangeOutOfBounds));
+    };
     Ok(ExactResultRange {
         encoding: "base64",
-        data: base64::engine::general_purpose::STANDARD.encode(&bytes[input.offset..end]),
+        data: base64::engine::general_purpose::STANDARD.encode(range),
         offset: input.offset,
         length: end - input.offset,
         total_bytes: bytes.len(),
@@ -402,4 +356,71 @@ pub(super) fn read_exact(
         result_sha256: hash.to_owned(),
         complete: input.offset == 0 && end == bytes.len(),
     })
+}
+
+/// The payload of a Work-attached result: the request must name its exact
+/// revision, Work, session and scope; managed Work is verified with the
+/// project authority.
+fn work_payload(
+    db: &Connection,
+    authority: Option<&dyn ExactProjectWorkResultAuthority>,
+    input: &ExactResultRangeInput,
+    work: &Work,
+) -> StorageResult<Payload> {
+    if input.revision != Some(work.sequence) {
+        return Err(error(StorageCode::OperationResultRevisionMismatch));
+    }
+    if input.work_id.as_deref() != Some(&work.work_id) {
+        return Err(error(StorageCode::OperationResultWorkMismatch));
+    }
+    if input.session_id.as_deref() != Some(&work.session_id) {
+        return Err(error(StorageCode::OperationResultSessionMismatch));
+    }
+    if (work.scope_kind == "session"
+        && (input.session_id.as_deref() != Some(&work.scope_ref) || input.project_ref.is_some()))
+        || (work.scope_kind == "project" && input.project_ref.as_deref() != Some(&work.scope_ref))
+    {
+        return Err(error(StorageCode::OperationResultScopeMismatch));
+    }
+    if managed(work) {
+        verify(authority, work, &input.result_sha256)?;
+    }
+    let payload = payload(db, &work.origin_turn_id, &work.call_id)?
+        .ok_or_else(|| error(StorageCode::OperationResultMissingOrScopeMismatch))?;
+    if payload.tool != work.tool_name {
+        return Err(error(StorageCode::OperationResultProjectReferenceMismatch));
+    }
+    Ok(payload)
+}
+
+/// The payload of a result owned by the turn itself; a project request for
+/// a result the project authority projects must go through its Work.
+fn turn_payload(
+    db: &Connection,
+    authority: Option<&dyn ExactProjectWorkResultAuthority>,
+    input: &ExactResultRangeInput,
+) -> StorageResult<Payload> {
+    let projected = input
+        .project_ref
+        .as_deref()
+        .is_some_and(|value| !value.is_empty())
+        && authority
+            .map(|authority| {
+                authority.resolve(&OperationResultReferenceInput {
+                    turn_id: input.turn_id.clone(),
+                    call_id: input.result_ref.clone(),
+                })
+            })
+            .transpose()?
+            .flatten()
+            .is_some();
+    if projected {
+        return Err(error(StorageCode::OperationResultProjectProjectionMismatch));
+    }
+    let payload = payload(db, &input.turn_id, &input.result_ref)?
+        .ok_or_else(|| error(StorageCode::OperationResultMissingOrScopeMismatch))?;
+    if input.revision.is_some() {
+        return Err(error(StorageCode::OperationResultRevisionMismatch));
+    }
+    Ok(payload)
 }
