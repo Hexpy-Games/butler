@@ -55,22 +55,24 @@ impl GenerationVectorRow {
         text: &str,
         version: &str,
     ) -> (String, String) {
-        let chunk = digest(&json!(["embedding-chunk", revision, 0, text]));
-        let key = digest(&json!([
+        let chunk = digest(&("embedding-chunk", revision, 0, text));
+        let key = digest(&(
             "memory-vector",
             generation,
             kind,
             owner,
             revision,
-            chunk,
-            version
-        ]));
+            &chunk,
+            version,
+        ));
         (chunk, key)
     }
 }
 
-fn digest(value: &serde_json::Value) -> String {
-    format!("{:x}", Sha256::digest(value.to_string().as_bytes()))
+/// SHA-256 of the compact JSON array of `parts`.
+fn digest(parts: &impl serde::Serialize) -> String {
+    let json = serde_json::to_string(parts).unwrap_or_default();
+    format!("{:x}", Sha256::digest(json.as_bytes()))
 }
 
 pub(crate) struct GenerationVectorStore {

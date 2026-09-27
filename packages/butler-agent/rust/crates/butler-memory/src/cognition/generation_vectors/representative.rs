@@ -9,7 +9,7 @@ use arrow_array::{Array, FixedSizeListArray, Float32Array};
 use chrono::{DateTime, SecondsFormat, Utc};
 use futures_util::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase, Select};
-use serde_json::Value;
+use serde::Deserialize;
 use tokio_util::sync::CancellationToken;
 
 use super::rows::{COLUMNS, GenerationVectorRow, optional_text, text};
@@ -26,6 +26,12 @@ pub(crate) struct PreparedRepresentative {
     pub affected_unit_ids: Vec<String>,
 }
 
+/// Units of one vector key with their embedding chunk ids.
+type Groups<'a> = BTreeMap<String, Vec<(&'a VectorReadinessRow, String)>>;
+
+/// Finds node vectors whose stable identity is unchanged but whose source
+/// membership moved from a superseded unit to current units, so the stored
+/// vector can be reused with the current membership.
 pub(crate) async fn prepare_representatives(
     data_root: &Path,
     generation: &MemoryGenerationHandle,
@@ -43,28 +49,13 @@ pub(crate) async fn prepare_representatives(
     else {
         return Ok(Vec::new());
     };
-    let mut current_groups: BTreeMap<String, Vec<(&VectorReadinessRow, String)>> = BTreeMap::new();
-    let mut superseded_groups: BTreeMap<String, Vec<(&VectorReadinessRow, String)>> =
-        BTreeMap::new();
-    for unit in current {
-        if let Some((chunk, key)) = valid_identity(unit, generation, version) {
-            current_groups.entry(key).or_default().push((unit, chunk));
-        }
-    }
-    for unit in superseded {
-        if let Some((chunk, key)) = valid_identity(unit, generation, version) {
-            superseded_groups
-                .entry(key)
-                .or_default()
-                .push((unit, chunk));
-        }
-    }
-    let keys = current_groups
-        .keys()
-        .filter(|key| superseded_groups.contains_key(*key))
-        .cloned()
+    let current_groups = group_units(current, generation, version);
+    let superseded_groups = group_units(superseded, generation, version);
+    let shared = current_groups
+        .iter()
+        .filter_map(|(key, units)| Some((key, units, superseded_groups.get(key)?)))
         .collect::<Vec<_>>();
-    if keys.is_empty() {
+    if shared.is_empty() {
         return Ok(Vec::new());
     }
     let root = generation.root.join("butler.lance");
@@ -72,99 +63,149 @@ pub(crate) async fn prepare_representatives(
         data_root,
         &[&generation.root, &root, &root.join("butler_memory.lance")],
     )?;
-    if !root.exists() {
-        return Ok(Vec::new());
-    }
-    let Ok(connection) = lance_store::connect(&root).await else {
-        return Ok(Vec::new());
-    };
-    let Ok(table) = lance_store::open(&connection, TABLE).await else {
+    let Some(table) = open_table(&root).await else {
         return Ok(Vec::new());
     };
     let mut prepared = Vec::new();
-    for key in &keys {
+    for (key, current_units, superseded_units) in shared {
         if cancellation.is_cancelled() {
             return Err(aborted());
         }
-        // A two-row limit establishes exact physical uniqueness without collecting
-        // an unbounded corrupted table or masking a duplicate behind another key.
-        let predicate = format!("vector_key = '{key}'");
-        let batches = match table
-            .query()
-            .only_if(predicate)
-            .select(Select::columns(&COLUMNS))
-            .limit(2)
-            .execute()
-            .await
-        {
-            Ok(stream) => match stream.try_collect::<Vec<_>>().await {
-                Ok(batches) => batches,
-                Err(_) => return Ok(Vec::new()),
-            },
-            Err(_) => return Ok(Vec::new()),
+        let persisted = match unique_persisted_row(&table, key).await {
+            Lookup::Unreadable => return Ok(Vec::new()),
+            Lookup::NotUnique => continue,
+            Lookup::Found(row) => *row,
         };
-        let mut physical = Vec::new();
-        for batch in batches {
-            for index in 0..batch.num_rows() {
-                match decode(&batch, index) {
-                    Ok(row) => physical.push(row),
-                    Err(_) => return Ok(Vec::new()),
-                }
+        let context = Representation {
+            persisted: &persisted,
+            generation,
+            version,
+        };
+        if let Some(representative) = context.prepare(current_units, superseded_units) {
+            prepared.push(representative);
+        }
+    }
+    Ok(prepared)
+}
+
+fn group_units<'a>(
+    units: &'a [VectorReadinessRow],
+    generation: &MemoryGenerationHandle,
+    version: &str,
+) -> Groups<'a> {
+    let mut groups: Groups<'a> = BTreeMap::new();
+    for unit in units {
+        if let Some((chunk, key)) = valid_identity(unit, generation, version) {
+            groups.entry(key).or_default().push((unit, chunk));
+        }
+    }
+    groups
+}
+
+async fn open_table(root: &Path) -> Option<lancedb::Table> {
+    if !root.exists() {
+        return None;
+    }
+    let connection = lance_store::connect(root).await.ok()?;
+    lance_store::open(&connection, TABLE).await.ok()
+}
+
+/// The outcome of reading the stored row of one vector key.
+enum Lookup {
+    /// Lance or a row could not be read; nothing can be reused.
+    Unreadable,
+    /// Zero, several, or an unusable row: skip this key.
+    NotUnique,
+    /// Exactly one decodable row.
+    Found(Box<GenerationVectorRow>),
+}
+
+/// A two-row limit establishes exact physical uniqueness without collecting
+/// an unbounded corrupted table or masking a duplicate behind another key.
+async fn unique_persisted_row(table: &lancedb::Table, key: &str) -> Lookup {
+    let Ok(stream) = table
+        .query()
+        .only_if(format!("vector_key = '{key}'"))
+        .select(Select::columns(&COLUMNS))
+        .limit(2)
+        .execute()
+        .await
+    else {
+        return Lookup::Unreadable;
+    };
+    let Ok(batches) = stream.try_collect::<Vec<_>>().await else {
+        return Lookup::Unreadable;
+    };
+    let mut physical = Vec::new();
+    for batch in batches {
+        for index in 0..batch.num_rows() {
+            match decode(&batch, index) {
+                Ok(row) => physical.push(row),
+                Err(_) => return Lookup::Unreadable,
             }
         }
-        let Some(Some(persisted)) = physical.first().filter(|_| physical.len() == 1) else {
-            continue;
-        };
-        let candidates = &current_groups[key];
-        let valid = candidates
+    }
+    match physical.pop() {
+        Some(Some(row)) if physical.is_empty() => Lookup::Found(Box::new(row)),
+        _ => Lookup::NotUnique,
+    }
+}
+
+/// One stored vector and the generation it could be reused in.
+struct Representation<'a> {
+    persisted: &'a GenerationVectorRow,
+    generation: &'a MemoryGenerationHandle,
+    version: &'a str,
+}
+
+impl Representation<'_> {
+    fn stable(&self, unit: &VectorReadinessRow, chunk: &str) -> bool {
+        stable_matches(self.persisted, self.generation, unit, chunk, self.version)
+    }
+
+    /// Reuses the stored vector for the current units when none of them
+    /// already matches its membership but a superseded unit does.
+    fn prepare(
+        &self,
+        current: &[(&VectorReadinessRow, String)],
+        superseded: &[(&VectorReadinessRow, String)],
+    ) -> Option<PreparedRepresentative> {
+        let valid = current
             .iter()
-            .filter(|(unit, chunk)| stable_matches(persisted, generation, unit, chunk, version))
+            .filter(|(unit, chunk)| self.stable(unit, chunk))
+            .map(|(unit, _)| *unit)
             .collect::<Vec<_>>();
         if valid.is_empty()
             || valid
                 .iter()
-                .any(|(unit, _)| membership_matches(persisted, unit))
+                .any(|unit| membership_matches(self.persisted, unit))
         {
-            continue;
+            return None;
         }
-        let stale = superseded_groups[key].iter().any(|(unit, chunk)| {
-            stable_matches(persisted, generation, unit, chunk, version)
-                && membership_matches(persisted, unit)
+        let stale = superseded.iter().any(|(unit, chunk)| {
+            self.stable(unit, chunk) && membership_matches(self.persisted, unit)
         });
         if !stale {
-            continue;
+            return None;
         }
         let mut affected_unit_ids = valid
             .iter()
-            .map(|(unit, _)| unit.unit_id.clone())
+            .map(|unit| unit.unit_id.clone())
             .collect::<Vec<_>>();
         affected_unit_ids.sort();
-        let Some((representative, _)) = valid
-            .iter()
-            .min_by(|(a, _), (b, _)| a.unit_id.cmp(&b.unit_id))
-        else {
-            continue;
-        };
+        let representative = valid.iter().min_by(|a, b| a.unit_id.cmp(&b.unit_id))?;
         // stable_matches admitted only units with these source fields.
-        let (Some(source_kind), Some(source_observed_at), Some(source_refs_json)) = (
-            representative.source_kind.clone(),
-            normalized_time(representative.source_observed_at.as_deref()),
-            representative.source_ids_json.clone(),
-        ) else {
-            continue;
-        };
-        let mut row = persisted.clone();
+        let mut row = self.persisted.clone();
         row.source_revision = representative.source_revision.clone();
-        row.source_kind = source_kind;
+        row.source_kind = representative.source_kind.clone()?;
         row.conversation_session_id = representative.conversation_session_id.clone();
-        row.source_observed_at = source_observed_at;
-        row.source_refs_json = source_refs_json;
-        prepared.push(PreparedRepresentative {
+        row.source_observed_at = normalized_time(representative.source_observed_at.as_deref())?;
+        row.source_refs_json = representative.source_ids_json.clone()?;
+        Some(PreparedRepresentative {
             row,
             affected_unit_ids,
-        });
+        })
     }
-    Ok(prepared)
 }
 
 fn aborted() -> crate::cognition::CognitionError {
@@ -174,6 +215,21 @@ fn aborted() -> crate::cognition::CognitionError {
     )
 }
 
+/// The receipt fields a node vector's identity depends on.
+#[derive(Deserialize)]
+struct NodeVectorReceipt {
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    generation: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    embedding_version: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    vector_keys: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    row_count: Option<u64>,
+}
+
+/// The chunk id and vector key of a node unit whose receipt names exactly
+/// its own vector keys.
 fn valid_identity(
     unit: &VectorReadinessRow,
     generation: &MemoryGenerationHandle,
@@ -198,18 +254,13 @@ fn valid_identity(
         &unit.projection_text,
         version,
     );
-    let receipt: Value = serde_json::from_str(unit.receipt_json.as_deref()?).ok()?;
-    let keys = receipt["vector_keys"].as_array()?;
-    let unique = keys
-        .iter()
-        .map(|item| item.as_str())
-        .collect::<Option<HashSet<_>>>()?;
-    if receipt["generation"] != generation.generation_id
-        || receipt["embedding_version"] != version
-        || keys
-            .iter()
-            .any(|item| item.as_str().is_none_or(str::is_empty))
-        || usize::try_from(receipt["row_count"].as_u64()?).unwrap_or(usize::MAX) != unique.len()
+    let receipt: NodeVectorReceipt = crate::lenient::object(unit.receipt_json.as_deref()?)?;
+    let keys = receipt.vector_keys?;
+    let unique = keys.iter().map(String::as_str).collect::<HashSet<_>>();
+    if receipt.generation.as_deref() != Some(generation.generation_id.as_str())
+        || receipt.embedding_version.as_deref() != Some(version)
+        || keys.iter().any(String::is_empty)
+        || usize::try_from(receipt.row_count?).unwrap_or(usize::MAX) != unique.len()
         || !unique.contains(key.as_str())
     {
         return None;
