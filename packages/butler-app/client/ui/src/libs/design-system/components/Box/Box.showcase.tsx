@@ -43,7 +43,7 @@ export const stories: ShowcaseStory[] = [
     name: "Surfaces and borders",
     widths: ["375", "app", "wide"],
     render: (context) => (
-      <Grid columns="3" gap="sm">
+      <Grid columns="auto-fill" gap="sm">
         {surfaces.flatMap((surface) => borders.map((border) => (
           <Box key={`${surface}-${border}`} surface={surface} border={border} radius="panel" padding="md">
             <Typo.Caption tone="secondary">{`${text(context).surface}=${surface}`}</Typo.Caption>

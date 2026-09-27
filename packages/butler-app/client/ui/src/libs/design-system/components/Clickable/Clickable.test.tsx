@@ -13,3 +13,12 @@ test("the text variant is a bare text target: no row padding or fill, a quieter 
   expect(css).toMatch(/\.clickable\[data-variant="text"\] \{[^}]*padding: 0;[^}]*min-height: 0;/u);
   expect(css).toMatch(/\.clickable\[data-variant="text"\]:hover:not\(\[data-disabled="true"\]\)[^{]*\{[^}]*background: transparent;[^}]*color: var\(--text-secondary\);/u);
 });
+
+test("a row shrinks with its container: children may shrink below their text, icons keep their size", () => {
+  expect(css).toMatch(/\.clickable > \* \{[^}]*min-width: 0;/u);
+  expect(css).toMatch(/\.clickable > svg \{[^}]*flex: none;/u);
+});
+
+test("the text variant's focus ring sits off the text", () => {
+  expect(css).toMatch(/\.clickable\[data-variant="text"\]:focus-visible \{[^}]*outline: var\(--focus-ring-width\) solid var\(--focus-ring-color\);[^}]*outline-offset: var\(--space-xs\);/u);
+});

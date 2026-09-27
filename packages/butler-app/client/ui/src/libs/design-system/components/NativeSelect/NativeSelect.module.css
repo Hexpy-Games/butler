@@ -1,9 +1,10 @@
 .wrapper {
   position: relative;
   display: inline-grid;
+  grid-template-columns: minmax(0, 1fr);
   width: max-content;
   max-width: 100%;
-  min-width: 160px;
+  min-width: min(160px, 100%);
 }
 
 .wrapper[data-stretch="true"] {

@@ -947,6 +947,15 @@
   --interactive-disabled-fg: var(--color-text-disabled);
   --color-text-inverse: var(--neutral-white);
 
+  /* Re-declared so a light scope inside a dark one resolves light values. */
+  --color-action-primary: var(--blue-06);
+  --color-border-default: var(--grayscale-03);
+  --color-border-strong: var(--grayscale-04);
+  --color-border-interactive: var(--blue-06);
+  --color-surface-base: var(--grayscale-01);
+  --color-disabled-bg: var(--grayscale-02);
+  --color-disabled-fg: var(--grayscale-05);
+
   --focus-ring-color: var(--color-action-primary);
   --focus-ring: 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
   --color-focus-ring: var(--focus-ring-color);
@@ -1015,6 +1024,15 @@
   --danger-line: rgba(190, 56, 54, 0.24);
   --danger-line-strong: rgba(210, 64, 58, 0.28);
   --context-track-bg: rgba(0, 0, 0, 0.12);
+  --shadow-card: 0 10px 28px rgba(0, 0, 0, 0.08);
+  --shadow-drag-lift:
+    0 10px 24px rgba(0, 0, 0, 0.14), 0 2px 6px rgba(0, 0, 0, 0.1);
+  --shadow-window: 0 18px 48px rgba(0, 0, 0, 0.14);
+  --shadow-control: 0 1px 3px rgba(0, 0, 0, 0.22);
+  --shadow-switch: 0 1px 3px rgba(0, 0, 0, 0.18);
+  --secondary: rgba(32, 35, 39, 0.08);
+  --secondary-border: transparent;
+  --muted: rgba(32, 35, 39, 0.06);
   --color-mix-light: var(--neutral-white);
   --background: var(--surface-raised);
   --foreground: var(--text-primary);

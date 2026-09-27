@@ -14,6 +14,16 @@
   transition: scale var(--motion-fast) var(--motion-ease-standard);
 }
 
+/* A row narrower than its content shrinks its text (truncating children such
+   as Typo truncate or ListRow), never its icons. */
+.clickable > * {
+  min-width: 0;
+}
+
+.clickable > svg {
+  flex: none;
+}
+
 .clickable[data-disabled="true"] {
   color: var(--interactive-disabled-fg);
   cursor: var(--interactive-disabled-cursor);
@@ -56,6 +66,13 @@
 
 .clickable:focus-visible {
   box-shadow: var(--focus-ring);
+}
+
+/* Bare text has no padding to hold the ring: it sits off the text instead. */
+.clickable[data-variant="text"]:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--space-xs);
+  box-shadow: none;
 }
 
 .clickable [data-slot="button"][data-size^="icon"] {

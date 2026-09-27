@@ -1,5 +1,5 @@
 import React from "react";
-import { Circle, Clickable, EmptyLine, FileText, ListRow } from "@/butler-ds";
+import { Circle, Clickable, EmptyLine, FileText, ListRow, Typo } from "@/butler-ds";
 import type { IconElement, SessionArtifactSummary } from "@/app/types.ts";
 
 export function EmptyPanelLine({ label }: { label: string }) {
@@ -20,7 +20,7 @@ export function Suggestion({
   return (
     <Clickable disabled={disabled} onClick={onClick} aria-label={text}>
       {React.cloneElement(icon, { size: "md" })}
-      <span>{text}</span>
+      <Typo.Text truncate>{text}</Typo.Text>
     </Clickable>
   );
 }
