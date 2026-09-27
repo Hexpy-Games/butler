@@ -30,7 +30,7 @@ tests/.env.test
 __pycache__/
 node_modules/
 dist/
-dist-ds-site/
+dist-ds-site*/
 app-client/ui/.*/skills/
 app-client/ui/.*/**/skills/
 app-client/ui/skills/

@@ -97,7 +97,6 @@ export const useComposerStore = create<ComposerStore>((set, get) => ({
   handleModelChoice: noop,
   handleReasoningChange: noop,
   onStop: noop,
-  onOpenContext: noop,
   openAttachmentPicker: (pickerKind = "files") => {
     // Render the picker's accept filter before the native dialog opens.
     flushSync(() => set({ pickerKind }));

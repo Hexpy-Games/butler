@@ -86,7 +86,6 @@ export interface ComposerStore {
   handleModelChoice: (model: AppModelSummary) => void;
   handleReasoningChange: (effort: ReasoningEffort) => void;
   onStop: () => void;
-  onOpenContext: () => void;
   openAttachmentPicker: (kind?: AttachmentPickerKind) => void;
   setSnapshot: (snapshot: Partial<ComposerStore>) => void;
 }
