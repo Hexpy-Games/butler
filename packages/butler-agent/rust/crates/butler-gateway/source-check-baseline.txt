@@ -49,7 +49,7 @@ src/gateway/application/session_views.rs	AppApplication::session_view_owned	132
 src/gateway/application/sessions/tests.rs	local_and_project_session_rows_follow_app_source	118
 src/gateway/application/settings/update/patch/project.rs	project	223
 src/gateway/application/settings/update/patch/sanitize.rs	sanitize	223
-src/gateway/application/settings/view.rs	read	272
+src/gateway/application/settings/view.rs	read	269
 src/gateway/application/shell.rs	command_palette	169
 src/gateway/application/snapshot_input.rs	claimed_snapshot	120
 src/gateway/application/space/commands.rs	execute	125
