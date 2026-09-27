@@ -452,7 +452,6 @@ async fn q_02_cancel_pauses_the_queue() -> Result<(), HarnessError> {
 /// ATT-01 (image) — a PNG attached for a model whose catalog entry says
 /// `image_input_support: supported` is admitted (checked before any model call).
 #[tokio::test]
-#[ignore = "product gap: ATT-01-IMAGE — POST /messages with a PNG attachment for openai/gpt-6-sol (catalog: image input supported) answers 409 image_model_unsupported; the public error does not say which admission check failed"]
 async fn att_01_image_attachment_admitted_for_image_model() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("ATT-01-IMAGE")?.start().await?;
