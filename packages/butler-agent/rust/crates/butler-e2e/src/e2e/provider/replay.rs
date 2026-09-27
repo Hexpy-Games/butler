@@ -11,31 +11,48 @@ use super::super::cassette::{self, ResponseRecord};
 use super::super::faults::{Transform, mutate_chunk};
 use super::{State, lock};
 
-/// Product-generated ids the model must echo back verbatim (the Work id in
-/// work tool calls) differ per run. Each distinct id is named `ECHO_<n>` in
-/// order of first appearance in requests: the recorder hides it in replies,
-/// and replay substitutes the current run's id for the same name.
+/// Product-generated ids the model must echo back verbatim differ per run:
+/// the Work id in work tool calls (`ECHO_<n>`), and the plan and message ids
+/// a project briefing cites as sources (`PLAN_ECHO_<n>`, `MSG_ECHO_<n>`).
+/// Each distinct id gets the next name of its kind in order of first
+/// appearance in requests: the recorder hides it in replies, and replay
+/// substitutes the current run's id for the same name.
 pub(super) fn learn_echo_ids(state: &State, request: &str) {
-    static PATTERN: std::sync::OnceLock<Option<regex::Regex>> = std::sync::OnceLock::new();
-    let Some(pattern) = PATTERN
-        .get_or_init(|| regex::Regex::new(r"guided-work-[0-9a-f]{64}").ok())
-        .as_ref()
-    else {
-        return;
-    };
+    const UUID: &str = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+    static PATTERNS: std::sync::OnceLock<Vec<(regex::Regex, &'static str)>> =
+        std::sync::OnceLock::new();
+    let patterns = PATTERNS.get_or_init(|| {
+        [
+            (r"guided-work-[0-9a-f]{64}".to_owned(), "ECHO_"),
+            (r"guided-plan-[0-9a-f]{64}".to_owned(), "PLAN_ECHO_"),
+            (format!(r"\bmessage-{UUID}"), "MSG_ECHO_"),
+        ]
+        .into_iter()
+        .filter_map(|(pattern, prefix)| {
+            regex::Regex::new(&pattern)
+                .ok()
+                .map(|regex| (regex, prefix))
+        })
+        .collect()
+    });
     let mut placeholders = lock(&state.placeholders);
-    for found in pattern.find_iter(request) {
-        let value = found.as_str();
-        if placeholders.0.iter().any(|(_, known)| known == value) {
-            continue;
+    for (pattern, prefix) in patterns {
+        for found in pattern.find_iter(request) {
+            let value = found.as_str();
+            if placeholders.0.iter().any(|(_, known)| known == value) {
+                continue;
+            }
+            let next = placeholders
+                .0
+                .iter()
+                .filter(|(name, _)| {
+                    name.strip_prefix(prefix)
+                        .is_some_and(|rest| rest.chars().all(|c| c.is_ascii_digit()))
+                })
+                .count()
+                + 1;
+            placeholders.add(&format!("{prefix}{next}"), value);
         }
-        let next = placeholders
-            .0
-            .iter()
-            .filter(|(name, _)| name.starts_with("ECHO_"))
-            .count()
-            + 1;
-        placeholders.add(&format!("ECHO_{next}"), value);
     }
 }
 

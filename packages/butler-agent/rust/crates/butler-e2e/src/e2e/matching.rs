@@ -63,9 +63,10 @@ pub fn user_request(text: &str, placeholders: &Placeholders) -> String {
 }
 
 /// Values the product writes into background prompts that differ on every
-/// run (clock readings, consolidation run ids, the local time of day) are
-/// named, so a recording matches the same request made at another time.
-fn normalize_volatile(text: &str) -> String {
+/// run (clock readings, consolidation run ids, the local time of day, record
+/// digests and uuids) are named, so a recording matches the same request
+/// made at another time. Idempotent; also applied to recorded keys on load.
+pub fn normalize_volatile(text: &str) -> String {
     static PATTERNS: std::sync::OnceLock<Vec<(regex::Regex, &'static str)>> =
         std::sync::OnceLock::new();
     let patterns = PATTERNS.get_or_init(|| {
@@ -79,8 +80,15 @@ fn normalize_volatile(text: &str) -> String {
                 "{{RUN_ID}}",
             ),
             (
-                r#""time_of_day": "(?:morning|afternoon|evening|night)""#,
+                r#""time_of_day":\s*"(?:morning|afternoon|evening|night)""#,
                 r#""time_of_day": "{{TIME_OF_DAY}}""#,
+            ),
+            // Content digests and uuids of per-run records (revisions,
+            // session and message ids) that a briefing lists as sources.
+            (r"\b[0-9a-f]{64}\b", "{{DIGEST}}"),
+            (
+                r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
+                "{{UUID}}",
             ),
         ]
         .into_iter()

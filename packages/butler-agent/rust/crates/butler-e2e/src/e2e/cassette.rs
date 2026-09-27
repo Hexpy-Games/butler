@@ -81,6 +81,10 @@ pub struct Meta {
     pub files: Vec<FileHash>,
     /// Per exchange: ordered SSE event types and their JSON key sets.
     pub fingerprint: Vec<Vec<String>>,
+    /// Cassette this one extends: its exchanges are served first, and this
+    /// one holds only the requests the base had no recording for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -120,7 +124,10 @@ pub fn load_from(dir: &Path, scenario: &str) -> Result<Cassette, HarnessError> {
             meta_path.display()
         ))
     })?)?;
-    let mut exchanges = Vec::new();
+    let mut exchanges = match &meta.base {
+        Some(base) => Cassette::load(base)?.exchanges,
+        None => Vec::new(),
+    };
     for file in &meta.files {
         let bytes = fs::read(dir.join(&file.file))?;
         if sha256_hex(&bytes) != file.sha256 {
@@ -129,7 +136,10 @@ pub fn load_from(dir: &Path, scenario: &str) -> Result<Cassette, HarnessError> {
                 file.file
             )));
         }
-        exchanges.push(serde_json::from_slice(&bytes)?);
+        let mut exchange: Exchange = serde_json::from_slice(&bytes)?;
+        exchange.request.key.user_request =
+            super::matching::normalize_volatile(&exchange.request.key.user_request);
+        exchanges.push(exchange);
     }
     Ok(Cassette {
         scenario: scenario.to_owned(),

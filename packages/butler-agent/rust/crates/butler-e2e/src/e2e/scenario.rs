@@ -49,6 +49,7 @@ pub struct Setup {
     stub_credential: bool,
     record_into: Option<std::path::PathBuf>,
     replay_only: bool,
+    extends: Option<String>,
 }
 
 /// A running scenario. Field order is drop order: agent before sandbox.
@@ -79,6 +80,7 @@ impl Setup {
             stub_credential: true,
             record_into: None,
             replay_only: false,
+            extends: None,
         })
     }
 
@@ -116,6 +118,14 @@ impl Setup {
         self
     }
 
+    /// The cassette extends `base`: recording replays what `base` has a
+    /// recording for (the scenario repeats that scenario's steps) and keeps
+    /// only the new requests; replay serves both.
+    pub fn extends(mut self, base: &str) -> Self {
+        self.extends = Some(base.to_owned());
+        self
+    }
+
     /// Always replays the cassette, also under `BUTLER_E2E_RECORD=1`: for
     /// scenarios that reuse another scenario's recording or inject faults
     /// into it, so a record run can never overwrite that cassette.
@@ -147,6 +157,7 @@ impl Setup {
             stub_credential,
             record_into,
             replay_only,
+            extends,
         } = self;
         let mut launch = Launch::new(&sandbox)?;
         let default_model = ModelChoice {
@@ -195,10 +206,13 @@ impl Setup {
                     recorded_at: now_utc(),
                     recorder: "butler-e2e record proxy".into(),
                     sanitization: SANITIZATION.iter().map(|s| (*s).to_owned()).collect(),
+                    base: extends.clone(),
                     ..Meta::default()
                 };
+                let base = extends.as_deref().map(Cassette::load).transpose()?;
                 let provider =
-                    Provider::record(upstream, meta, placeholders.clone(), record_into).await?;
+                    Provider::record(upstream, meta, placeholders.clone(), record_into, base)
+                        .await?;
                 if let Some(key) = live_provider.base_url_env() {
                     launch.set_env(key, provider.base_url.clone());
                 }
