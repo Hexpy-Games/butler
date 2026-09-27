@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import type { RefObject } from "react";
 import { browserRandomUUID } from "@/app/id.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useComposerStore } from "../composerStore";
@@ -7,31 +6,21 @@ import type {
   QueuedMessageRecord,
   SessionSummaryView,
 } from "@/app/types.ts";
-import type { useFileAttachments } from "./useFileAttachments";
 
 interface UseComposerQueueProps {
   enabled?: boolean;
   activeChatId: string;
   summary: SessionSummaryView | null;
-  files: ReturnType<typeof useFileAttachments>;
-  setText: (text: string) => void;
-  textAreaRef: RefObject<HTMLElement | null>;
 }
 
+/** Keeps the session queue fresh; the conversation shows it (QueuedMessage). */
 export function useComposerQueue({
   enabled = true,
   activeChatId,
   summary,
-  files,
-  setText,
-  textAreaRef,
 }: UseComposerQueueProps) {
-  const sessionQueue = useButlerStore((state) => state.sessionQueue);
   const refreshSessionQueue = useButlerStore(
     (state) => state.refreshSessionQueue,
-  );
-  const deleteQueuedMessage = useButlerStore(
-    (state) => state.deleteQueuedMessage,
   );
 
   useEffect(() => {
@@ -45,28 +34,24 @@ export function useComposerQueue({
     summary?.latest_progress?.turn_id,
     summary?.turn_state,
   ]);
+}
 
-  const handleEditQueued = (message: QueuedMessageRecord) => {
-    if (message.content_parts) useComposerStore.getState().setContentParts(message.content_parts);
-    else setText(message.text);
-    files.setAttachments(
-      (message.attachments ?? []).map((file) => ({
-        id: `queued-${file.file_id}-${browserRandomUUID()}`,
-        file,
-        kind: file.kind,
-      })),
-    );
-    void deleteQueuedMessage(message.id);
-    window.requestAnimationFrame(() => textAreaRef.current?.focus());
-  };
-
-  const handleDeleteQueued = (message: QueuedMessageRecord) => {
-    void deleteQueuedMessage(message.id);
-  };
-
-  return {
-    sessionQueue: enabled ? sessionQueue : [],
-    handleEditQueued,
-    handleDeleteQueued,
-  };
+/**
+ * Edit a queued (or failed) message: load its text, content parts and
+ * attachments into the composer, remove it from the queue and focus the
+ * editor.
+ */
+export function loadQueuedMessageIntoComposer(message: QueuedMessageRecord) {
+  const composer = useComposerStore.getState();
+  if (message.content_parts) composer.setContentParts(message.content_parts);
+  else composer.setText(message.text);
+  composer.setAttachments(
+    (message.attachments ?? []).map((file) => ({
+      id: `queued-${file.file_id}-${browserRandomUUID()}`,
+      file,
+      kind: file.kind,
+    })),
+  );
+  void useButlerStore.getState().deleteQueuedMessage(message.id);
+  window.requestAnimationFrame(() => composer.textAreaRef?.current?.focus());
 }

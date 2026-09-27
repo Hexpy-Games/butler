@@ -8,7 +8,6 @@ interface SidebarItemProps {
   right?: ReactNode;
   active?: boolean;
   rightVisibility?: "visible" | "hover" | "hover-compact-hidden";
-  className?: string;
   dataTestClass?: string;
   onClick?: HTMLAttributes<HTMLDivElement>["onClick"];
   onContextMenu?: HTMLAttributes<HTMLDivElement>["onContextMenu"];
@@ -22,7 +21,6 @@ export function SidebarItem({
   right,
   active = false,
   rightVisibility = "visible",
-  className,
   dataTestClass,
   onClick,
   onContextMenu,
@@ -36,7 +34,6 @@ export function SidebarItem({
       actions={right}
       active={active}
       actionsVisibility={rightVisibility}
-      className={className}
       dataTestClass={dataTestClass}
       onClick={onClick}
       onContextMenu={onContextMenu}

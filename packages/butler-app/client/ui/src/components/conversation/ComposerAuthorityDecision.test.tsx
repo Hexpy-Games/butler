@@ -1,9 +1,19 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import type { Root } from "react-dom/client";
 import type { ComposerAuthorityDecision } from "./useComposerAuthorityDecision";
 import type { ComposerSubmit } from "./hooks/composerEventTypes";
+import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
+
+// These expectations are the Korean copy; pin the locale instead of inheriting it.
+const previousLocale = getAppLocale();
+beforeAll(async () => {
+  // Loading the store applies the cached settings language once; do that first.
+  await import("@/app/store.ts");
+  setAppCopyLanguage("ko-KR");
+});
+afterAll(() => setAppCopyLanguage(previousLocale));
 
 let root: Root | undefined;
 let dom: JSDOM | undefined;
@@ -57,7 +67,9 @@ afterEach(async () => {
 test("only the oldest actual request replaces the Composer with ordered decision buttons", async () => {
   const { container, store } = await renderDecision();
   expect(container.textContent).not.toContain("Second request");
-  expect([...container.querySelectorAll("button")].slice(2).map((button) => button.textContent))
+  // The decision actions are the trailing buttons; the DS ComposerDecisionPanel
+  // (297bf23b3) changed how many controls precede them.
+  expect([...container.querySelectorAll("button")].slice(-3).map((button) => button.textContent))
     .toEqual(["거절", "이번만 허용", ""]);
   expect(container.textContent).not.toContain("직접 입력");
   expect(container.querySelector("textarea")).toBeNull();

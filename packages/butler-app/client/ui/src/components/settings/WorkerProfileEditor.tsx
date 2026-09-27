@@ -5,7 +5,6 @@ import {
   Input,
   SettingsField,
   Stack,
-  SurfacePanel,
   Switch,
   Typo,
 } from "@/butler-ds";
@@ -60,11 +59,11 @@ export function WorkerProfileEditor({
   }
 
   return (
-    <SurfacePanel data-test-class="worker-profile" elevation="none">
-      <Stack gap="md">
+    <Stack gap="md" data-test-class="worker-profile">
         <Typo.PanelSectionTitle as="h3">{profile.label}</Typo.PanelSectionTitle>
         <SettingsField
           id={nameId}
+          settingId="worker-name"
           data-test-class="settings-field"
           label={settingsFields.name}
           control={
@@ -79,6 +78,7 @@ export function WorkerProfileEditor({
         />
         <SettingsField
           id={enabledId}
+          settingId="worker-enabled"
           data-test-class="settings-field"
           label={settingsFields.enabled}
           control={
@@ -94,6 +94,7 @@ export function WorkerProfileEditor({
         />
         <WorkerProfileTaskFields profile={profile} onCommit={onUpdate} />
         <SettingsSelect
+          settingId="worker-model"
           label={settingsFields.model}
           disabled={saving}
           value={
@@ -106,6 +107,7 @@ export function WorkerProfileEditor({
           }))}
         />
         <SettingsSelect
+          settingId="worker-reasoning"
           label={settingsFields.reasoning}
           disabled={saving}
           value={profile.reasoning_effort}
@@ -133,7 +135,6 @@ export function WorkerProfileEditor({
             </Button>
           </Stack>
         )}
-      </Stack>
-    </SurfacePanel>
+    </Stack>
   );
 }

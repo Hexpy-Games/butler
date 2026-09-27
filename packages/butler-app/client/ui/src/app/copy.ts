@@ -47,6 +47,7 @@ export function interfaceArgumentLabel(kind: string | undefined, label: string):
 
 export function setAppCopyLanguage(language?: string | null): void {
   const next = appLocaleFromLanguage(language);
+  if (typeof document !== "undefined") document.documentElement.lang = next;
   if (next === activeAppLocale) return;
   activeAppLocale = next;
   for (const listener of localeListeners) listener();

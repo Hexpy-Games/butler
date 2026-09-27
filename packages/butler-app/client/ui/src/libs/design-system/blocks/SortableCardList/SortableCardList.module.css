@@ -25,8 +25,8 @@
 .item {
   min-width: 0;
   transition:
-    opacity 120ms ease,
-    transform 120ms ease;
+    opacity var(--motion-fast) var(--motion-ease-standard),
+    transform var(--motion-fast) var(--motion-ease-standard);
 }
 
 .dropIndicator {
@@ -41,13 +41,18 @@
   align-items: start;
 }
 
+/* Grip handle: IconButton sizing, grab cursor over IconButton's pointer. */
 .handle {
   margin: calc(var(--space-1) * -1) 0 0 calc(var(--space-1) * -1);
+  color: var(--text-tertiary);
+}
+
+.card > .handle:not(:disabled) {
   cursor: grab;
   touch-action: none;
 }
 
-.handle:active {
+.card > .handle:not(:disabled):active {
   cursor: grabbing;
 }
 
@@ -100,9 +105,26 @@
   opacity: 0.42;
 }
 
+/* The dragged card lifts toward the pointer (scale + shadow, spring) and
+   stays lifted while it moves; reduced motion keeps only the shadow. */
 .overlay {
   width: 100%;
-  box-shadow: var(--shadow-lg);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-drag-lift);
+  scale: var(--motion-scale-lift);
+  animation: lift var(--motion-base) var(--motion-ease-spring) both;
+}
+
+@keyframes lift {
+  from {
+    box-shadow: none;
+    scale: 1;
+  }
+
+  to {
+    box-shadow: var(--shadow-drag-lift);
+    scale: var(--motion-scale-lift);
+  }
 }
 
 .srOnly {

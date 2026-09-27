@@ -19,7 +19,27 @@ Import from the public design-system alias:
 import { Icons } from "@/butler-ds";
 ```
 
-Prefer token-backed spacing and responsive composition. Validate the fixture in the design-system workbench before using it in a domain flow.
+Size icons with the named scale, which mirrors `--icon-size-sm|md|lg` in
+`tokens.css` and is exported as `ICON_SIZE`:
+
+| Size | px | Use |
+| --- | --- | --- |
+| `xs` | 12 | Micro badges and chips (plan-mode badge, branch chip) |
+| `sm` | 14 | Dense rows, inline badges, small buttons |
+| `md` | 16 | Default for controls, menus, nav rows and toolbars |
+| `lg` | 20 | Status marks, back arrows, prominent headers |
+| `xl` | 24 | Resource tiles and summary illustrations |
+| `2xl` | 32 | Empty-state illustrations |
+
+```tsx
+<Plus />            // md (16px) by default
+<Search size="lg" />
+```
+
+Do not pass literal 11-32px sizes; pick the nearest named size. Numeric sizes
+are reserved for artwork outside the icon scale.
+
+Prefer token-backed spacing and responsive composition. Check its showcase and usage guidance in the DS Viewer before using it in a domain flow.
 
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.

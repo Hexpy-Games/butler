@@ -6,9 +6,6 @@ import { ComposerAdjunctPanels } from "./ComposerAdjunctPanels";
 test("composer progress owns the canonical Work and Task list", () => {
   const html = renderToStaticMarkup(
     <ComposerAdjunctPanels
-      queuedMessages={[]}
-      onDeleteQueued={() => undefined}
-      onEditQueued={() => undefined}
       showWorkers={false}
       taskTurnState="thinking"
       taskRows={[

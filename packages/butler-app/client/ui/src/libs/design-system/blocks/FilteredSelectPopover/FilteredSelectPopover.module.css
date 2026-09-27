@@ -14,15 +14,25 @@
   max-width: min(320px, calc(100vw - 32px));
 }
 
-.title,
-.groupTitle,
-.footerTitle {
+.title {
   min-width: 0;
-  padding: 3px var(--space-2) 4px;
+  padding: 3px var(--space-2) var(--space-xs);
   color: var(--text-primary);
   font-size: var(--font-size-2);
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-compact);
+}
+
+/* Group and footer titles label the options below them: the shared menu
+   group-label voice, below the popover title and the body-size items. */
+.groupTitle,
+.footerTitle {
+  min-width: 0;
+  padding: var(--menu-group-label-padding);
+  color: var(--menu-group-label-color);
+  font-size: var(--menu-group-label-size);
+  font-weight: var(--menu-group-label-weight);
+  line-height: var(--menu-group-label-line-height);
 }
 
 .searchLabel {
@@ -42,12 +52,14 @@
 }
 
 .clearButton {
+  --filtered-select-clear-size: 22px;
+
   position: absolute;
   top: 50%;
   right: 6px;
   display: inline-grid;
-  width: 22px;
-  height: 22px;
+  width: var(--filtered-select-clear-size);
+  height: var(--filtered-select-clear-size);
   place-items: center;
   padding: 0;
   border: 0;
@@ -57,15 +69,19 @@
   cursor: pointer;
   transform: translateY(-50%);
   transition:
-    background-color 120ms ease,
-    color 120ms ease;
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    color var(--motion-fast) var(--motion-ease-standard);
 }
 
 .clearButton:hover,
 .clearButton:focus-visible {
   background: var(--selection);
   color: var(--text-primary);
+}
+
+.clearButton:focus-visible {
   outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .srOnly {
@@ -140,25 +156,27 @@
   display: grid;
   width: 100%;
   min-width: 0;
-  min-height: 28px;
-  grid-template-columns: auto minmax(0, 1fr);
+  min-height: var(--menu-item-height);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: var(--space-1);
   align-items: start;
-  padding: 3px var(--space-2);
+  padding: 0 var(--space-2);
+  padding-block: var(--menu-item-padding-block);
   border: 0;
   border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-primary);
   font: inherit;
+  line-height: var(--menu-item-line-height);
   text-align: left;
   cursor: pointer;
   transition:
-    background-color 120ms ease,
-    color 120ms ease;
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    color var(--motion-fast) var(--motion-ease-standard);
 }
 
 .item:not([data-has-icon="true"]) {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .item:hover,
@@ -166,7 +184,11 @@
 .item[data-selected="true"] {
   background: var(--selection);
   color: var(--text-primary);
+}
+
+.item:focus-visible {
   outline: none;
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
 }
 
 .icon {
@@ -178,6 +200,17 @@
 }
 
 .icon svg {
+  display: block;
+}
+
+.check {
+  display: inline-grid;
+  height: 1lh;
+  place-items: center;
+  color: var(--text-primary);
+}
+
+.check svg {
   display: block;
 }
 
@@ -193,7 +226,7 @@
   overflow: hidden;
   font-size: var(--font-size-3);
   font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-body);
+  line-height: var(--menu-item-line-height);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -203,7 +236,7 @@
   color: var(--text-secondary);
   font-size: var(--font-size-2);
   font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-body);
+  line-height: var(--menu-item-line-height);
 }
 
 .empty {

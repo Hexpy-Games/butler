@@ -1,8 +1,14 @@
 /// <reference types="bun" />
 
-import { expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, test } from "bun:test";
 import { projectTurnActivity } from "./activity";
 import type { ProgressRow } from "../types";
+import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
+
+// These expectations are the Korean copy; pin the locale instead of inheriting it.
+const previousLocale = getAppLocale();
+beforeAll(() => setAppCopyLanguage("ko-KR"));
+afterAll(() => setAppCopyLanguage(previousLocale));
 
 test("unbound ordinary operations project to one stable 작업 중 activity", () => {
   const rows: ProgressRow[] = [

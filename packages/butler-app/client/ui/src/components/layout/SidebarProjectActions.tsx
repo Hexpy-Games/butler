@@ -32,7 +32,7 @@ export function SidebarProjectActions({ project }: SidebarProjectActionsProps) {
 
   return (
     <ButtonContainer
-      className="no-drag"
+      windowDrag="no-drag"
       size="icon-sm"
       onClick={(event) => event.stopPropagation()}
     >
@@ -43,7 +43,7 @@ export function SidebarProjectActions({ project }: SidebarProjectActionsProps) {
           openProjectDashboard(project.id);
         }}
       >
-        <LayoutDashboard size={14} />
+        <LayoutDashboard size="sm" />
       </IconButton>
       <IconButton
         label={appCopy.sidebar.newProjectChat}
@@ -52,28 +52,28 @@ export function SidebarProjectActions({ project }: SidebarProjectActionsProps) {
           openNewProjectChat(project.id);
         }}
       >
-        <MessageSquarePlus size={14} />
+        <MessageSquarePlus size="sm" />
       </IconButton>
       <OverflowActionMenu
         label={appCopy.sidebar.projectMenu}
         items={[
           {
-            icon: <PencilLine size={14} />,
+            icon: <PencilLine size="sm" />,
             label: appCopy.sessionActions.rename,
             onSelect: () => runProjectAction(project, "rename"),
           },
           {
-            icon: <Pin size={14} />,
+            icon: <Pin size="sm" />,
             label: project.pinned ? appCopy.sidebar.unpin : appCopy.sidebar.pin,
             onSelect: () => runProjectAction(project, "pin"),
           },
           {
-            icon: <Archive size={14} />,
+            icon: <Archive size="sm" />,
             label: appCopy.sessionActions.archive,
             onSelect: () => runProjectAction(project, "archive"),
           },
           {
-            icon: <Trash2 size={14} />,
+            icon: <Trash2 size="sm" />,
             label: appCopy.sidebar.delete,
             onSelect: () => runProjectAction(project, "delete"),
             variant: "destructive" as const,

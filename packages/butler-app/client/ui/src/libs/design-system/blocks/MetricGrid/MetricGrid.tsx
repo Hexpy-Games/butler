@@ -1,15 +1,14 @@
+import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import type { ReactNode } from "react";
-import { Grid } from "../../components/Grid";
-import { cn } from "../../lib/utils";
+import { Grid, type GridColumnPreset, type GridResponsiveColumns } from "../../components/Grid";
 import styles from "./MetricGrid.module.css";
+import { dsClass } from "../../lib/internal";
 
-export interface MetricGridProps {
+export interface MetricGridProps extends DsPrivateStyleProps {
   /** MetricCard children */
   children: ReactNode;
-  /** Number of columns (responsive default: 2-4) */
-  columns?: number;
-  /** Additional CSS class */
-  className?: string;
+  /** Grid column preset or `{ base, wide }`; default fills 150px+ columns. */
+  columns?: GridColumnPreset | GridResponsiveColumns;
 }
 
 export function MetricGrid({
@@ -20,8 +19,9 @@ export function MetricGrid({
   return (
     <Grid
       gap="md"
-      className={cn(styles.grid, className)}
-      style={columns ? { gridTemplateColumns: `repeat(${columns}, 1fr)` } : undefined}
+      columns={columns}
+      className={dsClass(!columns && styles.grid, className)}
+      data-slot="metric-grid"
     >
       {children}
     </Grid>

@@ -30,9 +30,7 @@ export function TurnActivityMessage({
       index={virtualRow.index}
       key="active-turn-activity"
       rowRef={rowVirtualizer.measureElement}
-      style={{
-        transform: `translateY(${virtualRow.start + topOffset}px)`,
-      }}
+      offsetY={virtualRow.start + topOffset}
     >
       <TurnActivityPanel
         rows={progressRows}

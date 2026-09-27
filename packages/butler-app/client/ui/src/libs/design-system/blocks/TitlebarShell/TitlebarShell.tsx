@@ -1,10 +1,12 @@
+import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import type { ReactNode } from "react";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
 import styles from "./TitlebarShell.module.css";
+import { dsClass } from "../../lib/internal";
 
-export interface TitlebarShellProps {
+export interface TitlebarShellProps extends DsPrivateStyleProps {
   title: ReactNode;
   subtitle?: ReactNode;
   leading?: ReactNode;
@@ -12,7 +14,8 @@ export interface TitlebarShellProps {
   trailing?: ReactNode;
   windowControls?: ReactNode;
   collapsed?: boolean;
-  className?: string;
+  /** Makes the titlebar a window drag region (controls inside it stay clickable). */
+  dragRegion?: boolean;
   dataTestClass?: string;
 }
 
@@ -24,15 +27,16 @@ export function TitlebarShell({
   trailing,
   windowControls,
   collapsed = false,
+  dragRegion = false,
   className,
   dataTestClass,
 }: TitlebarShellProps) {
   return (
     <header
-      className={cn(styles.titlebar, collapsed && styles.collapsed, className)}
+      className={cn(styles.titlebar, collapsed && styles.collapsed, dragRegion && "drag-region", className)}
       data-test-class={dataTestClass}
     >
-      <Stack align="row" cross="center" gap="sm" className={styles.identity}>
+      <Stack align="row" cross="center" gap="sm" className={dsClass(styles.identity)}>
         {leading ? (
           <span
             className={styles.leading}
@@ -43,11 +47,11 @@ export function TitlebarShell({
           </span>
         ) : null}
         <div className={styles.copy}>
-          <Typo.AppTitle className={styles.title} data-slot="titlebar-title">
+          <Typo.AppTitle className={dsClass(styles.title)} data-slot="titlebar-title">
             {title}
           </Typo.AppTitle>
           {subtitle ? (
-            <Typo.Caption className={styles.subtitle}>{subtitle}</Typo.Caption>
+            <Typo.Caption className={dsClass(styles.subtitle)}>{subtitle}</Typo.Caption>
           ) : null}
         </div>
       </Stack>

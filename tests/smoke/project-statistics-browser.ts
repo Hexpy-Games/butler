@@ -43,7 +43,7 @@ try {
     await chart.focus();
     await page.keyboard.press("ArrowRight");
     assert(await root.getByText(/기록 \d+개/).count());
-    const days = root.getByRole("button", { name: / · 대화 \d+ · 작업 변경/ });
+    const days = root.getByRole("button", { name: / · 대화 \d+ · Work 변경/ });
     await days.last().scrollIntoViewIfNeeded();
     await days.last().tap();
     assert.equal(await days.last().getAttribute("aria-pressed"), "true");

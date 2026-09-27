@@ -1,5 +1,5 @@
+import { Typo } from "@/butler-ds";
 import type { SpaceRowData } from "@/app/space/projection";
-import interaction from "./SpaceInteractions.module.css";
 export function SpaceRowLabel({
   row,
   flat,
@@ -8,11 +8,10 @@ export function SpaceRowLabel({
   flat: boolean;
 }) {
   return (
-      <span
-        className={flat ? interaction.clampedTitle : interaction.singleTitle}
-        title={row.title}
-      >
-        {row.title}
-      </span>
+    flat ? (
+      <Typo.Text lineClamp={2} wrap="anywhere" title={row.title}>{row.title}</Typo.Text>
+    ) : (
+      <Typo.Text truncate title={row.title}>{row.title}</Typo.Text>
+    )
   );
 }

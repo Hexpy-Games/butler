@@ -15,7 +15,7 @@ test("settings navigation groups existing pages without placeholder categories",
   const groups = createSettingsSectionGroups(settingsCopy);
 
   expect(groups.map((group) => group.label)).toEqual([
-    "General",
+    "Preferences",
     "Models and extensions",
     "App and system",
   ]);
@@ -87,7 +87,7 @@ test("settings sidebar renders each group through the existing settings nav", ()
     Array.from(document.querySelectorAll("nav")).map((nav) =>
       nav.getAttribute("aria-label"),
     ),
-  ).toEqual(["General", "Models and extensions", "App and system"]);
+  ).toEqual(["Preferences", "Models and extensions", "App and system"]);
   expect(markup).toContain('aria-current="page"');
   expect(markup).toContain('data-slot="nav-row-label">MCP</span>');
   expect(markup).not.toContain("Project");

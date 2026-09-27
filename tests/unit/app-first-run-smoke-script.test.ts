@@ -16,6 +16,11 @@ test("first-run smoke only cleans up test-owned app-server listeners", () => {
 
 test("first-run smoke launches isolated Electron first-run environment", () => {
   expect(smokeScript).toContain("--user-data-dir=${electronProfileDir}");
+  expect(smokeScript).toContain("prepareBundledAgentResource(");
+  expect(smokeScript).toContain("BUTLER_NATIVE_AGENT_EXECUTABLE: nativeAgentExecutable");
+  expect(smokeScript).toContain("BUTLER_FIRST_RUN_NATIVE_AGENT_EXECUTABLE");
+  expect(smokeScript).toContain("delete env.BUTLER_APP_BUNDLED_AGENT_DIR");
+  expect(smokeScript).toContain("CODEX_HOME: join(smokeHome, \".codex\")");
   expect(smokeScript).toContain("BUTLER_DATA: dataDir");
   expect(smokeScript).toContain("delete env.BUTLER_APP_SERVER_URL");
   expect(smokeScript).toContain("delete env.BUTLER_APP_UI_URL");

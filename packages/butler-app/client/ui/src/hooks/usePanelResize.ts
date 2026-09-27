@@ -1,9 +1,9 @@
 import type {
-  CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
 } from "react";
 import { useState } from "react";
+import type { UnsafeStyle } from "@/butler-ds";
 import { useButlerStore } from "@/app/store.ts";
 import {
   DEFAULT_LEFT_PANEL_WIDTH,
@@ -130,10 +130,11 @@ export function usePanelResize({
     }
   }
 
-  const panelStyle = {
+  // Data-driven panel widths: passed to AdaptiveShell as UNSAFE_style.
+  const panelStyle: UnsafeStyle = {
     "--sidebar-width": `${leftPanelWidth}px`,
     "--right-panel-width": `${rightPanelWidth}px`,
-  } as CSSProperties;
+  };
 
   return {
     shellRef,

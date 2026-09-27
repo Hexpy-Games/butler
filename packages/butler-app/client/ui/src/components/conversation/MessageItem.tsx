@@ -9,6 +9,7 @@ function MessageItemComponent({
   virtualRow,
   topOffset,
   copied,
+  entering,
   footerMeta,
   onCopyAssistantMessage,
   onCopyContextMenuText,
@@ -21,6 +22,7 @@ function MessageItemComponent({
       virtualRow={virtualRow}
       topOffset={topOffset}
       rowVirtualizer={rowVirtualizer}
+      entering={entering}
       onCopyContextMenuText={onCopyContextMenuText}
     >
       <MessageContent

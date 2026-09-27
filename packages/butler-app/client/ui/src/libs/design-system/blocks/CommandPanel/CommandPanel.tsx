@@ -1,4 +1,11 @@
-import type { KeyboardEvent, ReactNode, Ref } from "react";
+import {
+  useEffect,
+  useId,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+  type Ref,
+} from "react";
 import { Search } from "../../components/Icons";
 import { IconButton } from "../../components/IconButton";
 import { X } from "../../components/Icons";
@@ -7,6 +14,7 @@ import { Stack } from "../../components/Stack";
 import { SurfacePanel } from "../SurfacePanel";
 import { Dialog, DialogContent, DialogTitle } from "../../components/Dialog";
 import styles from "./CommandPanel.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface CommandPanelProps {
   query: string;
@@ -17,15 +25,15 @@ export interface CommandPanelProps {
 
 export function CommandPanel({
   query,
-  placeholder = "Search commands",
+  placeholder,
   children,
   onQueryChange,
 }: CommandPanelProps) {
   return (
-    <SurfacePanel elevation="high" className={styles.panel}>
+    <SurfacePanel elevation="high" className={dsClass(styles.panel)}>
       <Stack gap="sm">
         <label className={styles.search}>
-          <Search size={15} aria-hidden="true" />
+          <Search size="md" aria-hidden="true" />
           <Input
             value={query}
             placeholder={placeholder}
@@ -47,6 +55,8 @@ export interface CommandPaletteItem {
 }
 
 export interface CommandPalettePanelProps {
+  /** Keep the panel mounted and toggle this, so the palette can animate out. */
+  open?: boolean;
   label: string;
   query: string;
   placeholder: string;
@@ -59,6 +69,7 @@ export interface CommandPalettePanelProps {
 }
 
 export function CommandPalettePanel({
+  open = true,
   label,
   query,
   placeholder,
@@ -69,42 +80,77 @@ export function CommandPalettePanel({
   onClose,
   onQueryChange,
 }: CommandPalettePanelProps) {
+  const listId = useId();
+  const [active, setActive] = useState(0);
+  const activeIndex = Math.min(active, items.length - 1);
+  const optionId = (index: number) => `${listId}-option-${index}`;
+  const activeId = activeIndex >= 0 ? optionId(activeIndex) : undefined;
+
+  useEffect(() => {
+    if (!activeId) return;
+    document.getElementById(activeId)?.scrollIntoView?.({ block: "nearest" });
+  }, [activeId]);
+
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Escape") onClose();
-    if (event.key === "Enter") items[0]?.onSelect();
+    if (event.key === "Enter") items[activeIndex]?.onSelect();
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      setActive(Math.max(0, Math.min(items.length - 1, activeIndex + step)));
+    }
   }
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent
-        className={styles.palette}
+        motion="palette"
+        className={dsClass(styles.palette)}
         aria-label={label}
         aria-describedby={undefined}
         showCloseButton={false}
       >
-        <DialogTitle className="sr-only">{label}</DialogTitle>
+        <DialogTitle className={dsClass("sr-only")}>{label}</DialogTitle>
         <div className={styles.inputRow}>
-          <Search size={18} aria-hidden="true" />
+          <Search size="lg" aria-hidden="true" />
           <input
             ref={inputRef}
             value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
+            onChange={(event) => {
+              setActive(0);
+              onQueryChange(event.target.value);
+            }}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
+            role="combobox"
+            aria-expanded={items.length > 0}
+            aria-controls={listId}
+            aria-activedescendant={activeId}
           />
           <IconButton label={closeLabel} onClick={onClose}>
-            <X size={16} />
+            <X size="md" />
           </IconButton>
         </div>
         <div className={styles.results}>
           {feedback ? <div role="status" aria-live="polite">{feedback}</div> : null}
-          {items.map((item) => (
-            <button key={item.id} type="button" onClick={item.onSelect}>
-              {item.icon}
-              <span>{item.title}</span>
-              {item.subtitle ? <small>{item.subtitle}</small> : null}
-            </button>
-          ))}
+          <div role="listbox" id={listId} aria-label={label}>
+            {items.map((item, index) => (
+              <button
+                key={item.id}
+                id={optionId(index)}
+                type="button"
+                role="option"
+                tabIndex={-1}
+                aria-selected={index === activeIndex}
+                onClick={item.onSelect}
+                onPointerMove={() => setActive(index)}
+              >
+                {item.icon}
+                <span>{item.title}</span>
+                {item.subtitle ? <small>{item.subtitle}</small> : null}
+              </button>
+            ))}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

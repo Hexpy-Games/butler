@@ -18,3 +18,10 @@ needed. Product components should map their domain records into the neutral
   onRemove={(id) => removeModel(id)}
 />
 ```
+
+## Motion
+The dragged card lifts in a DragOverlay (`--motion-scale-lift`,
+`--shadow-drag-lift`, spring easing) and its neighbors slide aside with dnd-kit
+transforms timed by `--motion-base` and `--motion-ease-standard`. Reduced
+motion moves neighbors at once and keeps only the shadow.
+

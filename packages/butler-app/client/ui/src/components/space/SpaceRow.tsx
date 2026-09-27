@@ -3,6 +3,7 @@ import { SpaceRowLabel } from "./SpaceRowLabel";
 import { SpaceRowMeta } from "./SpaceRowMeta";
 import { memo, useEffect, useRef, useState } from "react";
 import {
+  CollapsibleList,
   CollapsibleNavGroup,
   NavRow,
 } from "@/butler-ds";
@@ -10,12 +11,12 @@ import { useButlerStore } from "@/app/store";
 import { useOrganization } from "@/app/space/organization";
 import { projectSpace, spaceChildren } from "@/app/space/projection";
 import { useLongPressAction } from "../layout/useLongPressAction";
-import { SpaceGlyph, SpaceIdentity } from "./SpaceIdentity";
+import { SpaceGlyph } from "./SpaceGlyph";
+import { SpaceIdentity } from "./SpaceIdentity";
 import { SpaceRowActions } from "./SpaceRowActions";
 import { SidebarSessionLoadMore } from "../layout/SidebarSessionLoadMore";
 import { SpaceDragRow } from "./SpaceDragRow";
-import styles from "./SpaceSidebar.module.css";
-import interaction from "./SpaceInteractions.module.css";
+import { useSpaceDrag } from "@/app/space/drag";
 
 export const SpaceRow = memo(function SpaceRow({
   rowKey,
@@ -29,7 +30,11 @@ export const SpaceRow = memo(function SpaceRow({
   depth?: number;
 }) {
   useAppLocale();
-  const row = useButlerStore(s => projectSpace(s.navigation).get(rowKey));
+  const liveRow = useButlerStore(s => projectSpace(s.navigation).get(rowKey));
+  // A removed row keeps its last content while it folds away (CollapsibleList).
+  const lastRow = useRef(liveRow);
+  if (liveRow) lastRow.current = liveRow;
+  const row = liveRow ?? lastRow.current;
   const active = useButlerStore(s => s.activeChatId === row?.node.entityId);
   const children = useButlerStore(s => spaceChildren(projectSpace(s.navigation), rowKey));
   const activeChild = useButlerStore(s => {
@@ -62,7 +67,6 @@ export const SpaceRow = memo(function SpaceRow({
     <SpaceDragRow row={row} enabled={!flat && !shortcut}>
       <div
         ref={rowRef}
-        className={interaction.rowShell}
         {...longPress}
         onPointerDown={(e) => {
           e.stopPropagation();
@@ -82,25 +86,31 @@ export const SpaceRow = memo(function SpaceRow({
             expanded={expanded}
             onToggle={() => toggle(row.node.key)}
             icon={<SpaceGlyph row={row} />}
-            label={
-              <span className={styles.groupLabel}>
-                {label}
-              </span>
-            }
+            label={label}
             actions={actions}
           >
-            {children.slice(0, limit).map((child) => (
-              <SpaceRow
-                key={child.node.key}
-                rowKey={child.node.key}
-                depth={depth + 1}
-              />
-            ))}
+            <CollapsibleList scope={rowKey}>
+              {children.slice(0, limit).map((child) => (
+                <SpaceRow
+                  key={child.node.key}
+                  rowKey={child.node.key}
+                  depth={depth + 1}
+                />
+              ))}
+            </CollapsibleList>
             {children.length > limit && (
-              <SidebarSessionLoadMore
-                remainingCount={children.length - limit}
-                onClick={() => setVisibleCount(limit + 5)}
-              />
+              <div onDragOver={(event) => {
+                if (!useSpaceDrag.getState().source) return;
+                event.preventDefault();
+                event.stopPropagation();
+                useSpaceDrag.getState().over(null);
+                setVisibleCount((count) => Math.min(count + 5, children.length));
+              }}>
+                <SidebarSessionLoadMore
+                  remainingCount={children.length - limit}
+                  onClick={() => setVisibleCount(limit + 5)}
+                />
+              </div>
             )}
           </CollapsibleNavGroup>
         ) : (

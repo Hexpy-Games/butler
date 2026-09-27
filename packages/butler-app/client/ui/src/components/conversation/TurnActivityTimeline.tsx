@@ -46,7 +46,7 @@ export function TurnActivityTimeline({
           <Button
             aria-expanded={expanded}
             data-test-class="toggle-turn-activity-disclosure"
-            iconEnd={expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            iconEnd={expanded ? <ChevronDown size="sm" /> : <ChevronRight size="sm" />}
             onClick={() => setExpanded((value) => !value)}
             text={headerLabel}
             type="button"
@@ -55,7 +55,7 @@ export function TurnActivityTimeline({
         </Stack>
         <Stack gap="sm">
           {expanded ? (
-            <Stack as="ol" gap="sm" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+            <Stack as="ol" gap="sm">
               {activities.map((activity, index) => (
                 <li key={activity.id} data-turn-id={activity.turnId ?? turnId}>
                   <ActivityBlock
@@ -75,7 +75,7 @@ export function TurnActivityTimeline({
             <Stack as="footer" cross="start">
               <Button
                 data-test-class="collapse-turn-activity-history"
-                iconStart={<ListChecks size={14} />}
+                iconStart={<ListChecks size="sm" />}
                 onClick={() => setExpanded(false)}
                 size="xs"
                 text={workCopy.collapseLabel}
@@ -113,13 +113,13 @@ function ActivityBlock({
         <Stack as="span" gap="xs">
           <Typo.Caption as="span">{meta}</Typo.Caption>
           {sameActivityText(activity.title, activity.summary) ? null : (
-            <Typo.Caption as="span">{appCopy.interfaceDetails.contentLabel}{activity.summary}</Typo.Caption>
+            <Typo.Caption as="span">{appCopy.interfaceDetails.contentLabel} {activity.summary}</Typo.Caption>
           )}
           {activity.rationale ? (
-            <Typo.Caption as="span">{appCopy.interfaceDetails.intentLabel}{activity.rationale}</Typo.Caption>
+            <Typo.Caption as="span">{appCopy.interfaceDetails.intentLabel} {activity.rationale}</Typo.Caption>
           ) : null}
           {activity.nextStep ? (
-            <Typo.Caption as="span">{appCopy.interfaceDetails.nextLabel}{activity.nextStep}</Typo.Caption>
+            <Typo.Caption as="span">{appCopy.interfaceDetails.nextLabel} {activity.nextStep}</Typo.Caption>
           ) : null}
         </Stack>
       }

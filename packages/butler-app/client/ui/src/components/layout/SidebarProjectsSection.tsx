@@ -6,7 +6,7 @@ import { SidebarProjectsMenu } from "@/components/layout/SidebarProjectsMenu.tsx
 import { useSidebarProjectCollapse } from "@/components/layout/useSidebarProjectCollapse.ts";
 import { canSelectProjectFolder } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
-import { appThemeClasses } from "@/app/utils.ts";
+import { appShellTheme } from "@/app/utils.ts";
 import { useButlerStore } from "@/app/store.ts";
 
 export function SidebarProjectsSection() {
@@ -36,7 +36,7 @@ export function SidebarProjectsSection() {
         <SidebarProjectsMenu
           creatingProject={creatingProject}
           folderPickerAvailable={canSelectProjectFolder()}
-          popoverThemeClass={appThemeClasses(settings)}
+          popoverTheme={appShellTheme(settings)}
           projectMenuOpen={projectMenuOpen}
           projectsCollapsed={collapse.projectsCollapsed}
           onCreateScratch={() =>

@@ -1,15 +1,15 @@
+import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import type { ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import styles from "./ChromeFrame.module.css";
 
-export interface ChromeFrameProps {
+export interface ChromeFrameProps extends DsPrivateStyleProps {
   sidebar?: ReactNode;
   titlebar?: ReactNode;
   inspector?: ReactNode;
   children: ReactNode;
   leftCollapsed?: boolean;
   rightOpen?: boolean;
-  className?: string;
 }
 
 export interface ChromeFloatingToggleLayerProps {

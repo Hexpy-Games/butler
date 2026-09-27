@@ -11,10 +11,12 @@
   border-radius: var(--radius-control);
   cursor: pointer;
   outline: none;
+  transition: scale var(--motion-fast) var(--motion-ease-standard);
 }
 
 .clickable[data-disabled="true"] {
-  cursor: default;
+  color: var(--interactive-disabled-fg);
+  cursor: var(--interactive-disabled-cursor);
 }
 
 .clickable[data-stretch="true"] {
@@ -25,8 +27,35 @@
   background: var(--selection);
 }
 
+.clickable:active:not([data-disabled="true"]) {
+  background: var(--selection-strong);
+}
+
+/* Compact clickables press in; stretched rows keep only the pressed fill so
+   wide rows do not visibly shrink. */
+.clickable:active:not([data-disabled="true"], [data-stretch="true"]) {
+  scale: var(--motion-scale-press);
+  transition-duration: var(--motion-instant);
+}
+
+/* Text variant: a bare text target (a title that opens its source). */
+.clickable[data-variant="text"] {
+  width: auto;
+  padding: 0;
+  min-height: 0;
+  color: inherit;
+  transition: color var(--motion-fast) var(--motion-ease-standard);
+}
+
+.clickable[data-variant="text"]:hover:not([data-disabled="true"]),
+.clickable[data-variant="text"]:active:not([data-disabled="true"]) {
+  background: transparent;
+  color: var(--text-secondary);
+  scale: none;
+}
+
 .clickable:focus-visible {
-  box-shadow: 0 0 0 3px var(--ring);
+  box-shadow: var(--focus-ring);
 }
 
 .clickable [data-slot="button"][data-size^="icon"] {
@@ -37,6 +66,6 @@
 }
 
 .clickable [data-slot="button"][data-size^="icon"] svg {
-  width: var(--clickable-action-icon-size, min(15px, 0.78lh));
-  height: var(--clickable-action-icon-size, min(15px, 0.78lh));
+  width: var(--clickable-action-icon-size, min(var(--icon-size-md), 0.78lh));
+  height: var(--clickable-action-icon-size, min(var(--icon-size-md), 0.78lh));
 }

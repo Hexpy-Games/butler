@@ -1,5 +1,6 @@
 "use client";
 
+import type { DsBaseProps } from "../../lib/dsProps";
 import * as React from "react";
 import * as LabelPrimitive from "@radix-ui/react-label";
 
@@ -9,7 +10,7 @@ import styles from "../../components/Label/Label.module.css";
 function Label({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root>>) {
   return (
     <LabelPrimitive.Root
       data-slot="label"

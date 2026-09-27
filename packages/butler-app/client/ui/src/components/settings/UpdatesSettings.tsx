@@ -8,27 +8,29 @@ import type {
   UpdateComponentId,
   UpdateStatusView,
 } from "@/app/types.ts";
-import { Button, RefreshCcw, Stack } from "@/butler-ds";
+import { Button, RefreshCcw } from "@/butler-ds";
 import {
   emptyComponentStatus,
   UPDATE_COMPONENTS,
   UpdateComponentRow,
 } from "./UpdateComponentRow";
-import { SettingsSection } from "./SettingsSection";
+import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 
 export function UpdatesSettings() {
   useAppLocale();
   const copy = appCopy.settings;
   const [view, setView] = useState<UpdateStatusView | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [applying, setApplying] = useState<UpdateComponentId | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadFailed(false);
     try {
       setView(await api<UpdateStatusView>("/updates"));
-    } catch (error) {
-      notifyError(error, copy.errors.loadUpdates, { id: "settings-updates-load" });
+    } catch {
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
@@ -77,35 +79,30 @@ export function UpdatesSettings() {
   );
 
   return (
-    <SettingsSection
-      title={copy.panels.updates}
-      description={copy.descriptions.updates}
-    >
-      <Stack gap="md">
-        <Stack align="row" justify="end">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={loading}
-            onClick={() => void check()}
-          >
-            <RefreshCcw size={15} /> {loading ? copy.actions.updateChecking : copy.actions.checkUpdates}
+    <SettingsPage>
+      <SettingsSection
+        id="updates"
+        kind="list"
+        state={view ? "ready" : loadFailed ? "error" : "loading"}
+        errorMessage={copy.errors.loadUpdates}
+        onRetry={() => void load()}
+        actions={
+          <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => void check()}>
+            <RefreshCcw size="md" /> {loading ? copy.actions.updateChecking : copy.actions.checkUpdates}
           </Button>
-        </Stack>
-        <Stack gap="sm">
-          {rows.map((status) => (
-            <UpdateComponentRow
-              key={status.component}
-              status={status}
-              applying={applying}
-              labels={copy.actions}
-              onApply={(component) => void apply(component)}
-            />
-          ))}
-        </Stack>
-      </Stack>
-    </SettingsSection>
+        }
+      >
+        {rows.map((status) => (
+          <UpdateComponentRow
+            key={status.component}
+            status={status}
+            applying={applying}
+            labels={copy.actions}
+            onApply={(component) => void apply(component)}
+          />
+        ))}
+      </SettingsSection>
+    </SettingsPage>
   );
 }
 

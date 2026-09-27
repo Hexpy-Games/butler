@@ -1,3 +1,4 @@
+import type { DsPrivateStyleProps, DsBaseProps } from "../../lib/dsProps";
 import * as React from "react";
 import * as RechartsPrimitive from "recharts";
 import { cn } from "../../lib/utils";
@@ -16,13 +17,15 @@ interface ChartContextValue {
   config: ChartConfig;
 }
 
-interface ChartContainerProps extends React.HTMLAttributes<HTMLDivElement> {
+interface ChartContainerProps extends DsBaseProps<React.HTMLAttributes<HTMLDivElement>> {
   config: ChartConfig;
   initialDimension?: {
     width: number;
     height: number;
   };
   children: React.ReactElement;
+  /** `panel`: a full-width 13rem chart for dashboard panels. */
+  size?: "default" | "panel";
 }
 
 interface ChartStyleProps {
@@ -38,10 +41,9 @@ interface TooltipPayload {
   payload?: Record<string, unknown>;
 }
 
-interface ChartTooltipContentProps {
+interface ChartTooltipContentProps extends DsPrivateStyleProps {
   active?: boolean;
   payload?: TooltipPayload[];
-  className?: string;
   hideLabel?: boolean;
   label?: string | number;
   formatter?: (
@@ -78,6 +80,7 @@ export function ChartContainer({
   onPointerDownCapture,
   onKeyDownCapture,
   onBlurCapture,
+  size = "default",
   ...props
 }: ChartContainerProps) {
   const uniqueId = React.useId();
@@ -90,6 +93,7 @@ export function ChartContainer({
         className={cn(styles.chart, className)}
         data-chart={chartId}
         data-slot="chart"
+        data-size={size === "default" ? undefined : size}
         data-pointer-focus={pointerFocus}
         {...props}
         onPointerDownCapture={(event) => {
@@ -139,7 +143,6 @@ export function ChartStyle({ id, config }: ChartStyleProps) {
 }
 
 export const ChartTooltip = RechartsPrimitive.Tooltip;
-export const ChartLegend = RechartsPrimitive.Legend;
 
 export function ChartTooltipContent({
   active,
@@ -187,10 +190,6 @@ export function ChartTooltipContent({
       </div>
     </div>
   );
-}
-
-export function ChartLegendContent() {
-  return null;
 }
 
 function formatTooltipValue(value: unknown): string {

@@ -1,23 +1,23 @@
 .row {
   width: 100%;
   min-height: var(--sidebar-row-height, 32px);
-  padding: 0 var(--space-2, 8px);
+  padding: 0 var(--sidebar-row-padding-inline, var(--space-sm));
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--sidebar-row-gap, 8px);
+  gap: var(--sidebar-row-gap, var(--space-sm));
   border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-primary);
   text-align: left;
   transition:
-    background-color 120ms ease,
-    color 120ms ease;
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    color var(--motion-fast) var(--motion-ease-standard);
 }
 
 .row[data-slot="clickable"] {
   display: grid;
-  padding: 0 var(--space-2, 8px);
+  padding: 0 var(--sidebar-row-padding-inline, var(--space-sm));
 }
 
 .interactive {
@@ -36,7 +36,8 @@
 
 .meta[data-has-icon] {
   padding-inline-start: calc(
-    var(--sidebar-icon-size, 17px) + var(--sidebar-row-gap, 8px)
+    var(--sidebar-icon-size, var(--icon-size-md)) +
+      var(--sidebar-row-gap, var(--space-sm))
   );
 }
 
@@ -68,24 +69,34 @@
   font-size: var(--font-size-2);
 }
 
-.interactive:hover {
-  background: color-mix(in srgb, var(--selection) 84%, transparent);
+.interactive:where(:not(.disabled)):hover {
+  background: color-mix(in srgb, var(--selection) 60%, transparent);
 }
 
-.active {
+.active,
+.interactive.active:where(:not(.disabled)):hover {
   background: var(--selection-strong);
+  color: var(--text-primary);
+}
+
+.active .label {
+  font-weight: var(--font-weight-medium);
+}
+
+.active .icon {
+  opacity: 1;
 }
 
 .disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+  color: var(--interactive-disabled-fg);
+  cursor: var(--interactive-disabled-cursor);
 }
 
 .labelRegion {
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: var(--sidebar-row-gap, 8px);
+  gap: var(--sidebar-row-gap, var(--space-sm));
 }
 
 .icon {
@@ -96,9 +107,13 @@
   opacity: 0.82;
 }
 
+.iconReserve {
+  width: var(--sidebar-icon-size, var(--icon-size-md));
+}
+
 .icon svg {
-  width: var(--sidebar-icon-size, 17px);
-  height: var(--sidebar-icon-size, 17px);
+  width: var(--sidebar-icon-size, var(--icon-size-md));
+  height: var(--sidebar-icon-size, var(--icon-size-md));
 }
 
 .label {
@@ -145,9 +160,7 @@
   font-weight: var(--font-weight-regular);
   opacity: 1;
   text-align: right;
-  transition:
-    max-width 120ms ease,
-    opacity 120ms ease;
+  transition: opacity var(--motion-fast) var(--motion-ease-standard);
 }
 
 .actions {
@@ -168,8 +181,8 @@
   opacity: 0;
   transform: translate(2px, -50%);
   transition:
-    opacity 120ms ease,
-    transform 120ms ease;
+    opacity var(--motion-fast) var(--motion-ease-standard),
+    transform var(--motion-fast) var(--motion-ease-standard);
 }
 
 .hoverActions:focus-within,
@@ -178,9 +191,9 @@
   transform: translate(0, -50%);
 }
 
+/* The hover actions overlay the badge's place; the badge only fades. */
 .row[data-has-hover-actions="true"]:hover .badge,
 .row[data-has-hover-actions="true"]:focus-within .badge {
-  max-width: 0;
   opacity: 0;
 }
 
@@ -206,5 +219,46 @@
 
   .label {
     font-size: var(--font-size-4);
+  }
+}
+
+/* NavRowSwap: rest content at rest, row actions on hover or keyboard focus. */
+.swap {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+}
+
+.swapRest,
+.swapReveal {
+  display: inline-grid;
+  grid-area: 1 / 1;
+  place-items: center;
+}
+
+/* Kept in keyboard order: focus inside reveals it. */
+.swapReveal {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--motion-fast) var(--motion-ease-standard);
+}
+
+@media (width > 640px) {
+  .row:is(:hover, :focus-visible, :has(:focus-visible)) .swapReveal,
+  .swap[data-open] > .swapReveal {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .row:is(:hover, :focus-visible, :has(:focus-visible)) .swapRest,
+  .swap[data-open] > .swapRest {
+    visibility: hidden;
+  }
+}
+
+@media (width > 640px) and (not ((hover: hover) and (pointer: fine))) {
+  .swap:not([data-has-rest]) > .swapReveal {
+    opacity: 1;
+    pointer-events: auto;
   }
 }

@@ -21,9 +21,7 @@
 
 .glass:focus-visible {
   outline: none;
-  box-shadow:
-    0 0 0 3px var(--ring),
-    var(--shadow-card);
+  box-shadow: var(--focus-ring), var(--shadow-card);
 }
 
 .glass [data-slot="button-icon"] {

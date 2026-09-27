@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/butler-ds";
-import { IconButton } from "@/butler-ds";
+import { IconButton, type AdaptiveShellTheme } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 
 interface SidebarProjectsMenuProps {
@@ -15,7 +15,7 @@ interface SidebarProjectsMenuProps {
   projectMenuOpen: boolean;
   creatingProject: boolean;
   folderPickerAvailable: boolean;
-  popoverThemeClass: string;
+  popoverTheme: AdaptiveShellTheme;
   onToggleCollapse: () => void;
   onMenuOpenChange: (open: boolean) => void;
   onCreateScratch: () => void;
@@ -27,7 +27,7 @@ export function SidebarProjectsMenu({
   projectMenuOpen,
   creatingProject,
   folderPickerAvailable,
-  popoverThemeClass,
+  popoverTheme,
   onToggleCollapse,
   onMenuOpenChange,
   onCreateScratch,
@@ -47,7 +47,7 @@ export function SidebarProjectsMenu({
         }
         onClick={onToggleCollapse}
       >
-        {projectsCollapsed ? <Expand size={15} /> : <Collapse size={15} />}
+        {projectsCollapsed ? <Expand size="md" /> : <Collapse size="md" />}
       </IconButton>
       <DropdownMenu
         key="new"
@@ -56,11 +56,11 @@ export function SidebarProjectsMenu({
       >
         <DropdownMenuTrigger asChild>
           <IconButton label={sidebarCopy.newProject} selected={projectMenuOpen}>
-            <FolderPlus size={15} />
+            <FolderPlus size="md" />
           </IconButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent
-          className={popoverThemeClass}
+          theme={popoverTheme}
           align="end"
           onInteractOutside={() => onMenuOpenChange(false)}
           sideOffset={8}

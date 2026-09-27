@@ -3,7 +3,6 @@ import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { ChevronRight, DisclosureRow, FileText, NavRow, Stack, Typo } from "@/butler-ds";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
 import type { DashboardBriefingView } from "../../../../shared/app-contracts.ts";
-import styles from "./ProjectInformation.module.css";
 
 export function ProjectSourceLinks({ ids, briefing, projectId, onSelect, coverage = false }: {
   ids: string[]; briefing: DashboardBriefingView; projectId: string;
@@ -18,7 +17,7 @@ export function ProjectSourceLinks({ ids, briefing, projectId, onSelect, coverag
       {ids.map((id) => {
         const item = briefing.sources.find((source) => source.sourceId === id);
         return item && <NavRow key={id} icon={<FileText />} multiline
-          label={<span className={styles.title}>{item.title}</span>} actions={<ChevronRight />}
+          label={<Typo.Text lineClamp={2} wrap="anywhere">{item.title}</Typo.Text>} actions={<ChevronRight />}
           onClick={() => onSelect({ id: item.id, project_id: projectId, revision: item.revision,
             kind: item.kind === "spec" ? "spec" : item.kind === "report" ? "report" : "plan",
             document_type: item.kind, title: item.title, markdown: "", safe_path_label: item.id, updated_at: "" })} />;

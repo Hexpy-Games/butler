@@ -21,7 +21,6 @@
 
 .scroll {
   --conversation-scrollbar-offset: 10px;
-  --conversation-scroll-fade-size: 14px;
 
   display: flex;
   flex-direction: column;
@@ -33,49 +32,13 @@
     transparent;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
-  -webkit-mask-image:
-    linear-gradient(
-      to bottom,
-      transparent 0,
-      var(--text-primary) var(--conversation-scroll-fade-size),
-      var(--text-primary) calc(100% - var(--conversation-scroll-fade-size)),
-      transparent 100%
-    ),
-    linear-gradient(var(--text-primary), var(--text-primary));
-  -webkit-mask-position:
-    0 0,
-    right top;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-size:
-    calc(100% - var(--conversation-scrollbar-offset)) 100%,
-    var(--conversation-scrollbar-offset) 100%;
-  mask-image:
-    linear-gradient(
-      to bottom,
-      transparent 0,
-      var(--text-primary) var(--conversation-scroll-fade-size),
-      var(--text-primary) calc(100% - var(--conversation-scroll-fade-size)),
-      transparent 100%
-    ),
-    linear-gradient(var(--text-primary), var(--text-primary));
-  mask-position:
-    0 0,
-    right top;
-  mask-repeat: no-repeat;
-  mask-size:
-    calc(100% - var(--conversation-scrollbar-offset)) 100%,
-    var(--conversation-scrollbar-offset) 100%;
+  --scroll-fade-gutter: var(--conversation-scrollbar-offset);
 }
 
 .virtualScroll {
   display: block;
   overflow-anchor: none;
   padding-bottom: 0;
-}
-
-.unmaskedScroll {
-  -webkit-mask-image: none;
-  mask-image: none;
 }
 
 .lockedScroll {
@@ -147,10 +110,11 @@
   max-width: calc(100% - 32px);
   transform: translateX(50%);
   transition:
-    background-color 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease,
-    transform 120ms ease;
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    border-color var(--motion-fast) var(--motion-ease-standard),
+    color var(--motion-fast) var(--motion-ease-standard),
+    transform var(--motion-fast) var(--motion-ease-standard),
+    scale var(--motion-fast) var(--motion-ease-standard);
 }
 
 .scrollToBottomButton:hover {

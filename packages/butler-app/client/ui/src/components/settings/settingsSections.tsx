@@ -1,15 +1,16 @@
 import {
+  AiChip,
   Archive,
   Activity,
-  Blocks,
   BookOpenText,
   Database,
+  MagicWand,
+  McpServer,
   Palette,
   RefreshCcw,
   Server,
   ShieldCheck,
   SlidersHorizontal,
-  Sparkles,
   Terminal,
   UserRound,
 } from "@/butler-ds";
@@ -38,12 +39,12 @@ function createSettingsSectionMap(
 
   return {
     general: section("general", settingsCopy.sections.general, <SlidersHorizontal />),
-    models: section("models", settingsCopy.sections.models, <Sparkles />),
+    models: section("models", settingsCopy.sections.models, <AiChip />),
     appearance: section("appearance", settingsCopy.sections.appearance, <Palette />),
     server: section("server", settingsCopy.sections.server, <Server />),
     updates: section("updates", settingsCopy.sections.updates, <RefreshCcw />),
-    mcp: section("mcp", settingsCopy.sections.mcp, <Blocks />),
-    skills: section("skills", settingsCopy.sections.skills, <Sparkles />),
+    mcp: section("mcp", settingsCopy.sections.mcp, <McpServer />),
+    skills: section("skills", settingsCopy.sections.skills, <MagicWand />),
     usage: section("usage", settingsCopy.sections.usage, <Database />),
     logs: section("logs", settingsCopy.sections.logs, <Terminal />),
     personalization: section("personalization", settingsCopy.sections.personalization, <UserRound />),
@@ -71,7 +72,7 @@ type SettingsSectionGroupDefinition = {
 const SETTINGS_SECTION_GROUPS: SettingsSectionGroupDefinition[] = [
   {
     id: "general",
-    label: "general",
+    label: "preferences",
     sectionIds: ["general", "appearance", "personalization"],
   },
   {
@@ -141,3 +142,6 @@ export function filterSettingsSectionGroups(
     })
     .filter((group) => group.sections.length > 0);
 }
+
+
+export { settingsPageSchema, type SettingsSectionSchema } from "./settingsPageSchema";

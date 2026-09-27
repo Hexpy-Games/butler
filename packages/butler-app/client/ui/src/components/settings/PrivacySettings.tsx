@@ -2,7 +2,7 @@ import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
-import { SettingsSection, SettingsSwitch } from "./SettingsFormComponents";
+import { SettingsPage, SettingsSection, SettingsSwitch } from "./SettingsFormComponents";
 
 export function PrivacySettings() {
   useAppLocale();
@@ -16,12 +16,15 @@ export function PrivacySettings() {
   if (!draft) return null;
 
   return (
-    <SettingsSection title={settingsCopy.panels.privacyDiagnostics}>
-      <SettingsSwitch
-        label={settingsFields.diagnostics}
-        checked={draft.diagnostics_enabled}
-        onChange={(value) => update({ diagnostics_enabled: value }, setSettings)}
-      />
-    </SettingsSection>
+    <SettingsPage>
+      <SettingsSection id="diagnostics" kind="form" title={settingsCopy.pageSections.diagnostics}>
+        <SettingsSwitch
+          settingId="diagnostics"
+          label={settingsFields.diagnostics}
+          checked={draft.diagnostics_enabled}
+          onChange={(value) => update({ diagnostics_enabled: value }, setSettings)}
+        />
+      </SettingsSection>
+    </SettingsPage>
   );
 }

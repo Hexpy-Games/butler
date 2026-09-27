@@ -13,6 +13,7 @@ import {
 import type { WorkerProfile } from "@/app/types.ts";
 
 interface DeferredTextFieldProps {
+  settingId: string;
   label: string;
   value: string;
   maxLength?: number;
@@ -22,6 +23,7 @@ interface DeferredTextFieldProps {
 }
 
 function DeferredTextField({
+  settingId,
   label,
   value,
   maxLength,
@@ -35,6 +37,7 @@ function DeferredTextField({
   return (
     <SettingsField
       id={controlId}
+      settingId={settingId}
       data-test-class="settings-field"
       label={label}
       control={
@@ -102,6 +105,7 @@ export function WorkerProfileTaskFields({
   return (
     <>
       <SettingsSelect
+        settingId="worker-job"
         label={settingsFields.job}
         disabled={saving}
         value={selectedBuiltin ?? "custom"}
@@ -116,6 +120,7 @@ export function WorkerProfileTaskFields({
       />
       {customSelected && (
         <DeferredTextField
+          settingId="worker-custom-job"
           label={settingsFields.customJob}
           value={profile.job.kind === "custom" ? profile.job.text : ""}
           maxLength={WORKER_PROFILE_CUSTOM_JOB_MAX_LENGTH}
@@ -125,6 +130,7 @@ export function WorkerProfileTaskFields({
         />
       )}
       <DeferredTextField
+        settingId="worker-domain"
         label={settingsFields.domain}
         value={profile.domain ?? ""}
         disabled={saving}
@@ -133,6 +139,7 @@ export function WorkerProfileTaskFields({
         }
       />
       <DeferredTextField
+        settingId="worker-prompt"
         label={settingsFields.workerPrompt}
         value={profile.prompt ?? ""}
         disabled={saving}

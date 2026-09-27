@@ -20,7 +20,10 @@ pub(super) fn result_message(
     if turn.turn_id != owner.binding.turn_id {
         return Err(error("guided_tool_turn_mismatch"));
     }
-    if !GuidedTools::supports(&result.name) {
+    // A call to a tool Butler does not provide (a model hallucination) has a
+    // failed result; it goes back to the model as a tool error instead of
+    // interrupting the turn (E2E TOOL-03).
+    if !GuidedTools::supports(&result.name) && result.ok {
         return Err(error("guided_tool_provider_projection_unavailable"));
     }
     let mut content = String::from("{\"ok\":");
@@ -36,67 +39,7 @@ pub(super) fn result_message(
     }
     if let Some(output) = &result.output {
         content.push_str(",\"output\":");
-        let encoded = output.as_str().trim();
-        if encoded.starts_with('{') {
-            if result.name == ToolName::ReadOperationResults
-                && output
-                    .field("data")
-                    .map_err(|source| {
-                        error("guided_tool_provider_serialization_failed").with_source(source)
-                    })?
-                    .is_some_and(|raw| raw.starts_with('"'))
-            {
-                content.push_str("{\"tool_name\":\"read_operation_results\"");
-                for key in [
-                    "encoding",
-                    "data",
-                    "offset",
-                    "length",
-                    "totalBytes",
-                    "nextOffset",
-                    "resultSha256",
-                    "complete",
-                ] {
-                    if let Some(value) = output.field(key).map_err(|source| {
-                        error("guided_tool_provider_serialization_failed").with_source(source)
-                    })? {
-                        content.push(',');
-                        butler_core::json::write_string(key, &mut content).map_err(|source| {
-                            error("guided_tool_provider_serialization_failed").with_source(source)
-                        })?;
-                        content.push(':');
-                        content.push_str(value);
-                    }
-                }
-                content.push('}');
-            } else {
-                content.push_str("{\"tool_name\":");
-                butler_core::json::write_string(&result.name, &mut content).map_err(|source| {
-                    error("guided_tool_provider_serialization_failed").with_source(source)
-                })?;
-                if encoded.len() > 2 {
-                    content.push(',');
-                    content.push_str(&encoded[1..encoded.len() - 1]);
-                }
-                content.push('}');
-            }
-        } else if encoded.starts_with('"') {
-            content.push_str("{\"tool_name\":");
-            butler_core::json::write_string(&result.name, &mut content).map_err(|source| {
-                error("guided_tool_provider_serialization_failed").with_source(source)
-            })?;
-            content.push_str(",\"text\":");
-            content.push_str(encoded);
-            content.push('}');
-        } else {
-            content.push_str("{\"tool_name\":");
-            butler_core::json::write_string(&result.name, &mut content).map_err(|source| {
-                error("guided_tool_provider_serialization_failed").with_source(source)
-            })?;
-            content.push_str(",\"value\":");
-            content.push_str(encoded);
-            content.push('}');
-        }
+        append_output(result, output, &mut content)?;
     }
     content.push('}');
     let content = preview::fit(result, references, content)?;
@@ -108,21 +51,93 @@ pub(super) fn result_message(
         tool_calls: None,
         image_attachments: Vec::new(),
         provider_data: None,
-        request_segment_kind: Some(
-            match result.name.as_str() {
-                "read_operation_results" => "exact_result_view",
-                "query_memory" | "recall_memory" => "memory_recall_context",
-                name if !result.ok && crate::host::GuidedWorkTools::is_work_tool(name) => {
-                    "work_recovery_receipt"
-                }
-                _ => "latest_tool_result_delivery",
-            }
-            .into(),
-        ),
+        request_segment_kind: Some(request_segment_kind(result).into()),
         operation_result_reference: references.reference.clone(),
         operation_result_call_id: references.operation_result_call_id.clone(),
         continuation_item_id: None,
     })
+}
+
+/// Appends the provider-shaped `output` object of a tool result to `content`.
+fn append_output(
+    result: &ToolResult,
+    output: &butler_core::json::JsonDocument,
+    content: &mut String,
+) -> Result<(), BtccError> {
+    let encoded = output.as_str().trim();
+    if encoded.starts_with('{') {
+        if result.name == ToolName::ReadOperationResults
+            && output
+                .field("data")
+                .map_err(|source| {
+                    error("guided_tool_provider_serialization_failed").with_source(source)
+                })?
+                .is_some_and(|raw| raw.starts_with('"'))
+        {
+            content.push_str("{\"tool_name\":\"read_operation_results\"");
+            for key in [
+                "encoding",
+                "data",
+                "offset",
+                "length",
+                "totalBytes",
+                "nextOffset",
+                "resultSha256",
+                "complete",
+            ] {
+                if let Some(value) = output.field(key).map_err(|source| {
+                    error("guided_tool_provider_serialization_failed").with_source(source)
+                })? {
+                    content.push(',');
+                    butler_core::json::write_string(key, content).map_err(|source| {
+                        error("guided_tool_provider_serialization_failed").with_source(source)
+                    })?;
+                    content.push(':');
+                    content.push_str(value);
+                }
+            }
+            content.push('}');
+        } else {
+            content.push_str("{\"tool_name\":");
+            butler_core::json::write_string(&result.name, content).map_err(|source| {
+                error("guided_tool_provider_serialization_failed").with_source(source)
+            })?;
+            if encoded.len() > 2 {
+                content.push(',');
+                content.push_str(&encoded[1..encoded.len() - 1]);
+            }
+            content.push('}');
+        }
+    } else if encoded.starts_with('"') {
+        content.push_str("{\"tool_name\":");
+        butler_core::json::write_string(&result.name, content).map_err(|source| {
+            error("guided_tool_provider_serialization_failed").with_source(source)
+        })?;
+        content.push_str(",\"text\":");
+        content.push_str(encoded);
+        content.push('}');
+    } else {
+        content.push_str("{\"tool_name\":");
+        butler_core::json::write_string(&result.name, content).map_err(|source| {
+            error("guided_tool_provider_serialization_failed").with_source(source)
+        })?;
+        content.push_str(",\"value\":");
+        content.push_str(encoded);
+        content.push('}');
+    }
+    Ok(())
+}
+
+/// The request segment a tool result message belongs to.
+fn request_segment_kind(result: &ToolResult) -> &'static str {
+    match result.name.as_str() {
+        "read_operation_results" => "exact_result_view",
+        "query_memory" | "recall_memory" => "memory_recall_context",
+        name if !result.ok && crate::host::GuidedWorkTools::is_work_tool(name) => {
+            "work_recovery_receipt"
+        }
+        _ => "latest_tool_result_delivery",
+    }
 }
 
 fn error(code: &'static str) -> BtccError {

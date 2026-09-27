@@ -1,0 +1,29 @@
+{
+  "scenario": "_errors/codex-401",
+  "provider": "openai-subscription",
+  "model": "openai/gpt-6-sol",
+  "effort": "low",
+  "wire_shape": "openai_responses",
+  "butler_git_sha": "214bd9a37958",
+  "recorded_at": "2026-09-27T08:43:56Z",
+  "recorder": "butler-e2e record proxy",
+  "sanitization": [
+    "per-run values -> {{W}}, {{D}}, {{SANDBOX}}, scenario nonces",
+    "JWT/sk-key/bearer/email/home path/host name -> fixed placeholders",
+    "response.instructions -> {{REDACTED_ECHO}}, response.tools -> []",
+    "response headers reduced to content-type, retry-after",
+    "chunks re-cut at SSE event boundaries (event bytes unchanged)"
+  ],
+  "files": [
+    {
+      "file": "000.json",
+      "sha256": "3a40e3279aa60d38b9dc97ab7f47bb3d7234b490064b7d2971939bb303bbaf59"
+    }
+  ],
+  "fingerprint": [
+    [
+      "status:401",
+      "json{detail}"
+    ]
+  ]
+}

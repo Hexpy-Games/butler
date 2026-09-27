@@ -36,14 +36,14 @@ export function SidebarChatsSection() {
             }
             onClick={() => setChatsCollapsed((value) => !value)}
           >
-            {chatsCollapsed ? <Expand size={15} /> : <Collapse size={15} />}
+            {chatsCollapsed ? <Expand size="md" /> : <Collapse size="md" />}
           </IconButton>
           <IconButton
             key="new"
-            label={sidebarCopy.newChat}
+            label={appCopy.space.newChat}
             onClick={openNewChat}
           >
-            <MessageSquarePlus size={15} />
+            <MessageSquarePlus size="md" />
           </IconButton>
         </ButtonContainer>
       }

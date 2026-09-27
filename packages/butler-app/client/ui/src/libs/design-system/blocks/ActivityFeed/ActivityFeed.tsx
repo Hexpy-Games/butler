@@ -1,9 +1,10 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes, ReactNode } from "react";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
-import { cn } from "../../lib/utils";
 import { SurfacePanel } from "../SurfacePanel";
 import styles from "./ActivityFeed.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface ActivityFeedItem {
   id: string;
@@ -14,7 +15,7 @@ export interface ActivityFeedItem {
 }
 
 export interface ActivityFeedProps extends Omit<
-  HTMLAttributes<HTMLDivElement>,
+  DsBaseProps<HTMLAttributes<HTMLDivElement>>,
   "title"
 > {
   title?: ReactNode;
@@ -34,35 +35,31 @@ export function ActivityFeed({
   return (
     <SurfacePanel
       elevation="none"
-      className={cn(
-        styles.feed,
-        surface === "composer" && styles.composer,
-        className,
-      )}
+      className={dsClass(styles.feed, surface === "composer" && styles.composer, className)}
       {...props}
     >
       <Stack gap="sm">
-        {title ? <Typo.PanelSectionTitle className={styles.feedTitle}>{title}</Typo.PanelSectionTitle> : null}
+        {title ? <Typo.PanelSectionTitle className={dsClass(styles.feedTitle)}>{title}</Typo.PanelSectionTitle> : null}
         {items.length === 0 ? (
-          <Typo.Caption className={styles.empty}>{emptyLabel}</Typo.Caption>
+          <Typo.Caption className={dsClass(styles.empty)}>{emptyLabel}</Typo.Caption>
         ) : (
           <Stack gap="xs">
             {items.map((item) => (
               <div className={styles.item} key={item.id}>
                 {item.icon ? <span className={styles.icon} data-slot="activity-feed-icon">{item.icon}</span> : null}
-                <Stack gap="xs" className={styles.body}>
+                <Stack gap="xs" className={dsClass(styles.body)}>
                   <Stack
                     align="row"
                     justify="between"
                     gap="sm"
                     cross="start"
-                    className={styles.header}
+                    className={dsClass(styles.header)}
                   >
-                    <Typo.Body className={styles.title} data-slot="activity-feed-title">{item.title}</Typo.Body>
-                    {item.meta ? <Typo.Caption className={styles.meta}>{item.meta}</Typo.Caption> : null}
+                    <Typo.Body className={dsClass(styles.title)} data-slot="activity-feed-title">{item.title}</Typo.Body>
+                    {item.meta ? <Typo.Caption className={dsClass(styles.meta)}>{item.meta}</Typo.Caption> : null}
                   </Stack>
                   {item.description ? (
-                    <Typo.Caption className={styles.description}>{item.description}</Typo.Caption>
+                    <Typo.Caption className={dsClass(styles.description)}>{item.description}</Typo.Caption>
                   ) : null}
                 </Stack>
               </div>

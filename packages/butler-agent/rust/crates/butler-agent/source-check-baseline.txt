@@ -83,7 +83,6 @@ src/host/guided/tools/effect/topic_conversation.rs	TopicConversationEffect::requ
 src/host/guided/tools/execute.rs	execute	141
 src/host/guided/tools/image.rs	admitted_image	96
 src/host/guided/tools/image.rs	execute	105
-src/host/guided/tools/message.rs	result_message	113
 src/host/guided/tools/message/preview.rs	fit	85
 src/host/guided/tools/message/preview/tests.rs	structured_previews_drop_private_fields_and_bound_artifact_pages	83
 src/host/guided/tools/message/preview/work.rs	project_raw	99

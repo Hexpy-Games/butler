@@ -78,7 +78,7 @@ export function ArtifactViewer({
       {embedded ? <Typo.Caption>{meta}</Typo.Caption> : <PanelHeader
         actions={
           <Button
-            iconStart={<ArrowLeft size={14} />}
+            iconStart={<ArrowLeft size="sm" />}
             size="xs"
             text={appCopy.artifacts.backToList}
             variant="borderless"

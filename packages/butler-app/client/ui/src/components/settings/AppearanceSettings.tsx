@@ -2,9 +2,8 @@ import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
-import { Button, ButtonContainer } from "@/butler-ds";
-import { Sun, Moon, Monitor } from "@/butler-ds";
 import {
+  SettingsPage,
   SettingsSection,
   SettingsSelect,
   SettingsSwitch,
@@ -16,68 +15,59 @@ export function AppearanceSettings() {
   useAppLocale();
   const draft = useSettingsUIStore((state) => state.draft);
   const update = useSettingsUIStore((state) => state.update);
-  const saving = useSettingsUIStore((state) => state.saving);
   const setSettings = useButlerStore((state) => state.setSettings);
 
   const settingsCopy = appCopy.settings;
-  const settingsFields = settingsCopy.fields;
-  const settingsOptions = settingsCopy.options;
+  const fields = settingsCopy.fields;
+  const options = settingsCopy.options;
+  const sections = settingsCopy.pageSections;
 
   if (!draft) return null;
 
   return (
-    <SettingsSection title={settingsCopy.sections.appearance}>
-      <SettingsSelect
-        label={settingsFields.theme}
-        value={draft.appearance_theme}
-        onChange={(value) =>
-          update(
-            {
-              appearance_theme: value as SettingsData["appearance_theme"],
-            },
-            setSettings,
-          )
-        }
-        options={[
-          { value: "system", label: settingsOptions.system },
-          { value: "light", label: settingsOptions.light },
-          { value: "dark", label: settingsOptions.dark },
-        ]}
-      />
-      <ButtonContainer size="default" aria-label={settingsFields.themeSamples}>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={saving}
-          onClick={() => update({ appearance_theme: "light" }, setSettings)}
-        >
-          <Sun size={15} /> {settingsOptions.light}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={saving}
-          onClick={() => update({ appearance_theme: "dark" }, setSettings)}
-        >
-          <Moon size={15} /> {settingsOptions.dark}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={saving}
-          onClick={() => update({ appearance_theme: "system" }, setSettings)}
-        >
-          <Monitor size={15} /> {settingsOptions.system}
-        </Button>
-      </ButtonContainer>
-      <MainScreenThemeSettings />
-      <SettingsSwitch
-        label={settingsFields.translucentSidebar}
-        checked={draft.translucent_sidebar}
-        onChange={(value) =>
-          update({ translucent_sidebar: value }, setSettings)
-        }
-      />
-    </SettingsSection>
+    <SettingsPage>
+      <SettingsSection id="theme" kind="form" title={sections.theme}>
+        <SettingsSelect
+          settingId="theme"
+          label={fields.theme}
+          value={draft.appearance_theme}
+          onChange={(value) =>
+            update({ appearance_theme: value as SettingsData["appearance_theme"] }, setSettings)}
+          options={[
+            { value: "system", label: options.system },
+            { value: "light", label: options.light },
+            { value: "dark", label: options.dark },
+          ]}
+        />
+        <SettingsSwitch
+          settingId="translucent-sidebar"
+          label={fields.translucentSidebar}
+          checked={draft.translucent_sidebar}
+          onChange={(value) => update({ translucent_sidebar: value }, setSettings)}
+        />
+      </SettingsSection>
+      <SettingsSection
+        id="sidebar"
+        kind="form"
+        title={sections.sidebar}
+        description={settingsCopy.pageSectionDescriptions.sidebar}
+      >
+        <SettingsSwitch
+          settingId="smart-groups"
+          label={appCopy.interfaceDetails.smartGroups}
+          description={appCopy.interfaceDetails.smartGroupsDescription}
+          checked={draft.smart_grouping_enabled}
+          onChange={(value) => update({ smart_grouping_enabled: value }, setSettings)}
+        />
+      </SettingsSection>
+      <SettingsSection
+        id="home-screen"
+        kind="form"
+        title={sections.homeScreen}
+        description={settingsCopy.pageSectionDescriptions.homeScreen}
+      >
+        <MainScreenThemeSettings />
+      </SettingsSection>
+    </SettingsPage>
   );
 }

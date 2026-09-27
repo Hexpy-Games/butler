@@ -53,13 +53,50 @@ if (!source.includes('import { appCopy } from "@/app/copy.ts";')) {
   });
 }
 
-if (findings.length > 0) {
+// Components whose visible labels must come from butler-i18n (via app copy or
+// caller props) instead of hardcoded English text or English prop defaults.
+const localizedComponentFiles = [
+  "libs/design-system/shadcn/ui/dialog.tsx",
+  "components/management/ProjectStatsGrid.tsx",
+  "components/management/ProjectWorkStatistics.tsx",
+  "libs/design-system/blocks/WorkerActivityRow/WorkerActivityRow.tsx",
+  "libs/design-system/blocks/CommandPanel/CommandPanel.tsx",
+  "libs/design-system/blocks/DocumentTile/DocumentTile.tsx",
+];
+
+const hardcodedEnglishLabelPatterns = [
+  { pattern: /\b(?:aria-label|label|placeholder|title)="[A-Za-z][^"]*"/u, reason: "literal English label attribute" },
+  { pattern: /\b\w*(?:Label|placeholder)\s*=\s*"[A-Za-z][^"]*"/u, reason: "English default for a label prop" },
+  { pattern: />\s*[A-Z][a-z]+(?:\s+[A-Za-z]+)*\s*</u, reason: "hardcoded English JSX text" },
+];
+
+const localizedFindings: Array<Finding & { path: string }> = [];
+for (const file of localizedComponentFiles) {
+  const path = `packages/butler-app/client/ui/src/${file}`;
+  readFileSync(join(root, path), "utf8").split("\n").forEach((line, index) => {
+    for (const { pattern, reason } of hardcodedEnglishLabelPatterns) {
+      if (!pattern.test(line)) continue;
+      localizedFindings.push({
+        path,
+        line: index + 1,
+        text: line.trim(),
+        reason: `${reason}; move the string into packages/butler-i18n and pass it through app copy`,
+      });
+    }
+  });
+}
+
+if (findings.length > 0 || localizedFindings.length > 0) {
   console.error("App client copy lint failed:");
   for (const finding of findings) {
     console.error(`packages/butler-app/client/ui/src/components/conversation/Conversation.tsx:${finding.line}: ${finding.reason}`);
     console.error(`  ${finding.text}`);
   }
+  for (const finding of localizedFindings) {
+    console.error(`${finding.path}:${finding.line}: ${finding.reason}`);
+    console.error(`  ${finding.text}`);
+  }
   process.exit(1);
 }
 
-if (verbose) console.log("App client copy lint passed for conversation turn labels.");
+if (verbose) console.log("App client copy lint passed for conversation turn labels and localized components.");

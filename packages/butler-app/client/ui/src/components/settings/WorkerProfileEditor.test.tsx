@@ -1,6 +1,6 @@
 /// <reference types="bun" />
 
-import { afterEach, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
@@ -21,6 +21,12 @@ import {
   selectWorkerProfileJob,
   selectWorkerProfileModel,
 } from "./workerProfileUpdates";
+import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
+
+// These expectations are the default (English) copy; pin the locale instead of inheriting it.
+const previousLocale = getAppLocale();
+beforeAll(() => setAppCopyLanguage("en-US"));
+afterAll(() => setAppCopyLanguage(previousLocale));
 
 function model(
   modelRef: string,
@@ -112,6 +118,7 @@ const INSTALLED_GLOBAL_KEYS = [
   "HTMLElement",
   "HTMLInputElement",
   "Node",
+  "DocumentFragment",
   "Event",
   "FocusEvent",
   "getComputedStyle",
@@ -135,6 +142,7 @@ function installDom(): JSDOM {
     HTMLElement: installed.window.HTMLElement,
     HTMLInputElement: installed.window.HTMLInputElement,
     Node: installed.window.Node,
+    DocumentFragment: installed.window.DocumentFragment,
     Event: installed.window.Event,
     FocusEvent: installed.window.FocusEvent,
     getComputedStyle: installed.window.getComputedStyle.bind(installed.window),
@@ -469,7 +477,7 @@ test("add, delete, and max-workers controls persist canonical patches through th
     (patches[1]!.worker_profiles as WorkerProfile[]).map((profile) => profile.id),
   ).toEqual(["default", "w1"]);
 
-  const maxInput = fieldInput(document.body, "Max simultaneous Workers");
+  const maxInput = document.querySelector('[data-test-class="worker-max-simultaneous"] input')!;
   expect((maxInput as HTMLInputElement).value).toBe("10");
   await typeAndBlur(maxInput, "6");
   expect(patches.length).toBe(3);
@@ -619,7 +627,7 @@ test("pending save disables worker controls until the bridge resolves", async ()
   const deleteButton = research.querySelector<HTMLElement>(
     '[data-test-class="worker-profile-delete"]',
   )!;
-  const maxInput = fieldInput(document.body, "Max simultaneous Workers");
+  const maxInput = document.querySelector('[data-test-class="worker-max-simultaneous"] input')!;
   const enabledSwitch = fieldByLabel(research, "Enabled")!.querySelector(
     '[data-slot="switch"]',
   )!;

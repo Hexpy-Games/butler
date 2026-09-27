@@ -1,0 +1,9 @@
+/* Send flight story: like the conversation, the latest message sits a
+   composer-reserve above the composer, so the flight travels up. */
+.flightList {
+  display: flex;
+  min-height: 280px;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding-bottom: calc(var(--composer-reserve) / 2);
+}

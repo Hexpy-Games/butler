@@ -3,6 +3,11 @@
 ## What is this component
 Stack is a Butler design-system component for building consistent client UI without reaching into domain components or raw implementation details.
 
+### Phone gap
+
+`compactGap` replaces `gap` at 640px and below, for a group that needs more
+air on touch layouts (the sidebar browse header).
+
 ## When to use this component
 Use Stack when the interface needs the behavior implied by its name and when a shared Butler token, spacing, interaction, or accessibility contract should stay consistent across the app.
 
@@ -19,7 +24,25 @@ Import from the public design-system alias:
 import { Stack } from "@/butler-ds";
 ```
 
-Prefer token-backed spacing and responsive composition. Validate the fixture in the design-system workbench before using it in a domain flow.
+Prefer token-backed spacing and responsive composition. Check its showcase and usage guidance in the DS Viewer before using it in a domain flow.
+
+### Item props and Stack.Item
+
+`gap` takes named spacing only (`none`..`2xl`; the numeric aliases were removed).
+`rowGap` (same scale) sets the gap between wrapped lines separately, so a
+wrapping row can space items `lg` apart and wrapped lines `sm` apart.
+Stack accepts layout item props (`grow`, `shrink`, `basis`, `minWidth`,
+`alignSelf`) for its place in a parent Stack, and `Stack.Item` wraps any other
+child with them, so rows never need `style={{ flex: ... }}` or a wrapper class:
+
+```tsx
+<Stack align="row" gap="sm" cross="center">
+  <Stack gap="none" grow minWidth="0"><Typo.Body truncate>{title}</Typo.Body></Stack>
+  <Stack.Item shrink={false}><Button size="sm" text={action} /></Stack.Item>
+</Stack>
+```
+
+Use `Inline` for wrapping, centered rows.
 
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
