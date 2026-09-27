@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Butler Design System</title>
+    <script>
+      // Viewer routes live in ?page=; map a path-style link (/components/Button) onto it.
+      (function () {
+        var page = window.location.pathname.replace(/^\/+|\/+$/g, "");
+        var target = "/" + (page ? "?page=" + encodeURIComponent(page) : "") + window.location.hash;
+        window.location.replace(target);
+      })();
+    </script>
+  </head>
+  <body>
+    <p><a href="/">Butler Design System</a></p>
+  </body>
+</html>

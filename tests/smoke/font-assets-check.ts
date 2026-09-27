@@ -55,7 +55,8 @@ export function inspectFontAssets(distDir: string): FontAssetsReport {
 }
 
 if (import.meta.main) {
-  const distDir = resolve(process.cwd(), "packages", "butler-app", "client", "ui", "dist");
+  // Default: the app UI build; pass a dist path for another build (the DS site).
+  const distDir = resolve(process.argv[2] ?? resolve(process.cwd(), "packages", "butler-app", "client", "ui", "dist"));
   if (!existsSync(join(distDir, "index.html"))) {
     throw new Error("UI dist is missing. Run `npm --prefix packages/butler-app/client/ui run build` first.");
   }
