@@ -60,8 +60,40 @@ fn read_open(
 ) -> Option<ProfileCoverageHealth> {
     let db = storage::open(data_root, false).ok()?;
     let consent = storage::read_consent(data_root);
+    let rows = coverage_rows(&db)?;
+    let mut reader = sources.open().ok()?;
+    let counts = tally(reader.as_mut(), rows, consent.mode);
+    let closed = reader.close();
+    let counts = counts.filter(|_| closed.is_ok())?;
+    let offset = db
+        .query_row(
+            "SELECT value_json FROM profile_meta WHERE key='source_scan_offset'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .ok()
+        .flatten()
+        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+        .and_then(|value| value.as_i64());
+    let discovery = offset.filter(|value| *value > 0).map(|_| true);
+    Some(ProfileCoverageHealth {
+        available: true,
+        reason: None,
+        consent_mode: consent.mode.as_str(),
+        processed_windows: counts.processed,
+        pending_windows: counts.pending,
+        failed_windows: counts.failed,
+        stale_history_windows: counts.stale,
+        historical_processed_windows: counts.historical,
+        discovery_incomplete: discovery,
+        discovery_reason: discovery.is_none().then_some("discovery_not_observed"),
+    })
+}
+
+fn coverage_rows(db: &rusqlite::Connection) -> Option<Vec<CoverageRow>> {
     let mut statement = db.prepare("SELECT disposition,failure_code,message_id,part_id,scalar_pointer,source_hash,byte_start,byte_end FROM profile_source_coverage").ok()?;
-    let rows = statement
+    statement
         .query_map([], |row| {
             Ok(CoverageRow {
                 disposition: row.get(0)?,
@@ -76,77 +108,69 @@ fn read_open(
         })
         .ok()?
         .collect::<Result<Vec<_>, _>>()
-        .ok()?;
-    let mut reader = sources.open().ok()?;
-    // processed, pending, failed, stale, historically processed
-    let mut counts = [0_usize; 5];
-    let mut read_ok = true;
+        .ok()
+}
+
+/// Coverage windows by state.
+#[derive(Default)]
+struct Counts {
+    processed: usize,
+    pending: usize,
+    failed: usize,
+    /// Windows whose source text changed or disappeared.
+    stale: usize,
+    /// Windows ever completed, current or not.
+    historical: usize,
+}
+
+/// Counts each row against the current source text; `None` when a message
+/// cannot be read.
+fn tally(
+    reader: &mut dyn super::CanonicalProfileSourceReader,
+    rows: Vec<CoverageRow>,
+    mode: super::ProfilingMode,
+) -> Option<Counts> {
+    let mut counts = Counts::default();
     for row in rows {
         if row.disposition == "complete" {
-            counts[4] += 1;
+            counts.historical += 1;
         }
-        let Ok(message) = reader.read_message(&row.message_id) else {
-            read_ok = false;
-            break;
-        };
-        let scalar = message
+        let message = reader.read_message(&row.message_id).ok()?;
+        let current = message
             .as_ref()
-            .filter(|message| message.role == "user" && message.origin_kind == "user_input")
-            .and_then(|message| {
-                message
-                    .parts
-                    .iter()
-                    .find(|part| part.part_id == row.part_id)
-            })
-            .and_then(|part| {
-                part.scalars.iter().find(|scalar| {
-                    scalar.pointer == row.pointer && scalar.source_hash == row.source_hash
-                })
-            });
-        let current = scalar.is_some_and(|scalar| {
-            row.byte_start >= 0
-                && row.byte_end > row.byte_start
-                && row.byte_end <= i64::try_from(scalar.text.len()).unwrap_or(i64::MAX)
-        });
+            .is_some_and(|message| still_current(&row, message));
         if row.failure_code.as_deref() == Some("source_stale") || !current {
-            counts[3] += 1;
-        } else if consent.mode != super::ProfilingMode::Off {
+            counts.stale += 1;
+        } else if mode != super::ProfilingMode::Off {
             match row.disposition.as_str() {
-                "complete" => counts[0] += 1,
-                "pending" => counts[1] += 1,
-                "failed" => counts[2] += 1,
+                "complete" => counts.processed += 1,
+                "pending" => counts.pending += 1,
+                "failed" => counts.failed += 1,
                 _ => {}
             }
         }
     }
-    let closed = reader.close();
-    if !read_ok || closed.is_err() {
-        return None;
+    Some(counts)
+}
+
+/// Whether the row's byte range still exists in the user's own text.
+fn still_current(row: &CoverageRow, message: &super::CanonicalProfileMessage) -> bool {
+    if message.role != "user" || message.origin_kind != "user_input" {
+        return false;
     }
-    let offset = db
-        .query_row(
-            "SELECT value_json FROM profile_meta WHERE key='source_scan_offset'",
-            [],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()
-        .ok()
-        .flatten()
-        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
-        .and_then(|value| value.as_i64());
-    let discovery = offset.filter(|value| *value > 0).map(|_| true);
-    let [processed, pending, failed, stale, historical] = counts;
-    Some(ProfileCoverageHealth {
-        available: true,
-        reason: None,
-        consent_mode: consent.mode.as_str(),
-        processed_windows: processed,
-        pending_windows: pending,
-        failed_windows: failed,
-        stale_history_windows: stale,
-        historical_processed_windows: historical,
-        discovery_incomplete: discovery,
-        discovery_reason: discovery.is_none().then_some("discovery_not_observed"),
+    let scalar = message
+        .parts
+        .iter()
+        .find(|part| part.part_id == row.part_id)
+        .and_then(|part| {
+            part.scalars.iter().find(|scalar| {
+                scalar.pointer == row.pointer && scalar.source_hash == row.source_hash
+            })
+        });
+    scalar.is_some_and(|scalar| {
+        row.byte_start >= 0
+            && row.byte_end > row.byte_start
+            && row.byte_end <= i64::try_from(scalar.text.len()).unwrap_or(i64::MAX)
     })
 }
 

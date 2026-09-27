@@ -1,3 +1,6 @@
+//! Committing an extracted batch: re-validating what the batch was built
+//! from, storing its candidates, and completing its coverage.
+
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
@@ -29,6 +32,9 @@ pub(super) struct CommitInput<'a> {
     pub(super) nonce: &'a str,
 }
 
+/// Commits one extracted batch in a single transaction: the consent, the
+/// batch's coverage claim, its source text and every correction target must
+/// be unchanged, then the candidates are stored and the coverage completed.
 pub(super) fn commit(input: CommitInput<'_>) -> ProfileResult<HashSet<String>> {
     let CommitInput {
         root,
@@ -51,32 +57,7 @@ pub(super) fn commit(input: CommitInput<'_>) -> ProfileResult<HashSet<String>> {
         return Err(interruption("profiling consent changed"));
     }
     for window in windows {
-        let owner = tx
-            .query_row(
-                "SELECT owner_pid,owner_nonce FROM profile_source_coverage WHERE coverage_key=?1",
-                [&window.coverage_key],
-                |row| {
-                    Ok((
-                        row.get::<_, Option<f64>>(0)?,
-                        row.get::<_, Option<String>>(1)?,
-                    ))
-                },
-            )
-            .optional()
-            .map_err(storage::db_error)?;
-        if !owner.is_some_and(|(pid, value)| {
-            pid == Some(f64::from(host.process_id())) && value.as_deref() == Some(nonce)
-        }) {
-            return Err(interruption("memory_write_busy"));
-        }
-        let mut reader = sources.open()?;
-        let current = discovery::current_text(reader.as_mut(), window);
-        let close = reader.close();
-        close?;
-        let current = current?;
-        if current.as_deref() != Some(window.text.as_ref()) {
-            return Err(interruption("profile source changed"));
-        }
+        verify_claim(&tx, sources, host, window, nonce)?;
     }
     validate_targets(
         root,
@@ -87,6 +68,57 @@ pub(super) fn commit(input: CommitInput<'_>) -> ProfileResult<HashSet<String>> {
         &extracted,
         offered,
     )?;
+    let ids = store_candidates(&tx, host, windows, extracted)?;
+    complete_coverage(&tx, host, windows, usage, nonce)?;
+    tx.commit().map_err(storage::db_error)?;
+    Ok(ids)
+}
+
+/// The window must still be claimed by this batch and read the same text.
+fn verify_claim(
+    tx: &rusqlite::Transaction<'_>,
+    sources: &dyn CanonicalProfileSourceFactory,
+    host: &dyn ProfileHostFacts,
+    window: &SourceWindow,
+    nonce: &str,
+) -> ProfileResult<()> {
+    let owner = tx
+        .query_row(
+            "SELECT owner_pid,owner_nonce FROM profile_source_coverage WHERE coverage_key=?1",
+            [&window.coverage_key],
+            |row| {
+                Ok((
+                    row.get::<_, Option<f64>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(storage::db_error)?;
+    if !owner.is_some_and(|(pid, value)| {
+        pid == Some(f64::from(host.process_id())) && value.as_deref() == Some(nonce)
+    }) {
+        return Err(interruption("memory_write_busy"));
+    }
+    let mut reader = sources.open()?;
+    let current = discovery::current_text(reader.as_mut(), window);
+    let close = reader.close();
+    close?;
+    let current = current?;
+    if current.as_deref() != Some(window.text.as_ref()) {
+        return Err(interruption("profile source changed"));
+    }
+    Ok(())
+}
+
+/// Merges each candidate once per evidence ref, observed when its window
+/// was written; the ids of the stored candidates.
+fn store_candidates(
+    tx: &rusqlite::Transaction<'_>,
+    host: &dyn ProfileHostFacts,
+    windows: &[SourceWindow],
+    extracted: Vec<ExtractedCandidate>,
+) -> ProfileResult<HashSet<String>> {
     let observed = windows
         .iter()
         .map(|value| (value.evidence_ref.as_str(), value.timestamp.as_str()))
@@ -106,11 +138,22 @@ pub(super) fn commit(input: CommitInput<'_>) -> ProfileResult<HashSet<String>> {
                     .map(|value| (*value).to_owned()),
                 expires_or_decay: candidate.expires_or_decay,
             };
-            if let Some(record) = candidates::upsert_in_db(&tx, &input, &host.now_iso())? {
+            if let Some(record) = candidates::upsert_in_db(tx, &input, &host.now_iso())? {
                 ids.insert(record.id);
             }
         }
     }
+    Ok(ids)
+}
+
+/// Marks the batch's claimed coverage complete with the provider usage.
+fn complete_coverage(
+    tx: &rusqlite::Transaction<'_>,
+    host: &dyn ProfileHostFacts,
+    windows: &[SourceWindow],
+    usage: Option<&PromptUsageReport>,
+    nonce: &str,
+) -> ProfileResult<()> {
     let usage_json = usage_json(usage);
     let now = host.now_iso();
     let mut complete=tx.prepare("UPDATE profile_source_coverage SET disposition='complete',failure_code=NULL,usage_json=?1,owner_pid=NULL,owner_nonce=NULL,claimed_at=NULL,updated_at=?2 WHERE coverage_key=?3 AND owner_pid=?4 AND owner_nonce=?5").map_err(storage::db_error)?;
@@ -125,9 +168,7 @@ pub(super) fn commit(input: CommitInput<'_>) -> ProfileResult<HashSet<String>> {
             ])
             .map_err(storage::db_error)?;
     }
-    drop(complete);
-    tx.commit().map_err(storage::db_error)?;
-    Ok(ids)
+    Ok(())
 }
 
 fn validate_targets(
