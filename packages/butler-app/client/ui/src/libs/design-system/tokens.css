@@ -1129,8 +1129,9 @@ body {
 }
 
 /* Korean wraps between words, never inside one; long unbroken tokens (paths,
-   URLs) still wrap instead of overflowing. Inherited by every surface. */
-:root:lang(ko) {
+   URLs) still wrap instead of overflowing. Applies to the root and to every
+   lang="ko" subtree (a Korean message or preview inside an English window). */
+:lang(ko) {
   word-break: keep-all;
   overflow-wrap: break-word;
 }
