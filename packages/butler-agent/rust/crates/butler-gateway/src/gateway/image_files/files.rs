@@ -8,6 +8,7 @@ use std::{
 
 use sha2::{Digest, Sha256};
 
+use super::errors::{ImageErrorCode, image_error, image_error_with_status};
 use super::{AppMessageFileSnapshot, GatewayApplicationError, public};
 use butler_runtime::context::VisualAttachmentManifest;
 
@@ -18,19 +19,10 @@ pub(super) fn source(
     row: &AppMessageFileSnapshot,
 ) -> Result<Vec<u8>, GatewayApplicationError> {
     let bytes = read_bounded(&root.join(&row.storage_name), MAX_BYTES).map_err(|source| {
-        public(
-            422,
-            "image_payload_invalid",
-            "이미지 첨부를 처리할 수 없습니다.",
-        )
-        .with_source(source)
+        image_error_with_status(ImageErrorCode::PayloadInvalid, 422).with_source(source)
     })?;
     if bytes.len() as u64 != row.size_bytes || digest(&bytes) != row.sha256 {
-        return Err(public(
-            409,
-            "image_source_tampered",
-            "Image attachment could not be verified.",
-        ));
+        return Err(image_error(ImageErrorCode::SourceTampered));
     }
     Ok(bytes)
 }
@@ -41,20 +33,11 @@ pub(super) fn verified_derivative(
 ) -> Result<Vec<u8>, GatewayApplicationError> {
     let bytes =
         read_bounded(&root.join(derivative_name(manifest)), MAX_BYTES).map_err(|source| {
-            public(
-                422,
-                "image_payload_invalid",
-                "이미지 첨부를 처리할 수 없습니다.",
-            )
-            .with_source(source)
+            image_error_with_status(ImageErrorCode::PayloadInvalid, 422).with_source(source)
         })?;
     if bytes.len() != manifest.derivative_size_bytes || digest(&bytes) != manifest.derivative_digest
     {
-        return Err(public(
-            413,
-            "image_payload_invalid",
-            "이미지 첨부를 확인할 수 없습니다.",
-        ));
+        return Err(image_error(ImageErrorCode::PayloadInvalid));
     }
     Ok(bytes)
 }

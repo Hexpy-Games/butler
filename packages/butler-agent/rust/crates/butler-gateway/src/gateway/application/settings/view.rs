@@ -9,6 +9,7 @@ use super::{
 };
 mod normalize;
 use crate::gateway::application::storage::AppStorageError;
+use crate::gateway::ui_language::UiLanguage;
 use normalize::{
     access, enum_value, integer, language, main_colors, main_preset, main_theme, multiline,
     native_value, notifications, object, timezone, ui_defaults, workspace_label,
@@ -19,7 +20,7 @@ use normalize::{
 pub(in crate::gateway::application) fn ui_language(
     db: &Connection,
     facts: &AppSettingsFacts,
-) -> Result<&'static str, AppStorageError> {
+) -> Result<UiLanguage, AppStorageError> {
     let stored = read_json(db, SETTINGS_KEY)?
         .and_then(|value| value.as_object().cloned())
         .unwrap_or_default();
@@ -146,10 +147,7 @@ pub(super) fn read(
     );
     output.insert(
         "language".into(),
-        json!(language(
-            stored.get("language"),
-            config_user.get("language")
-        )),
+        json!(language(stored.get("language"), config_user.get("language")).as_str()),
     );
     output.insert(
         "timezone".into(),

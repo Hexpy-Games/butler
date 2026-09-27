@@ -193,7 +193,8 @@ impl AppApplication {
     ) -> GatewayApplicationError {
         let is_image = matches!(
             &error,
-            GatewayApplicationError::Public { code, .. } if code.starts_with("image_")
+            GatewayApplicationError::Public { code, .. }
+                if crate::gateway::image_files::ImageErrorCode::from_wire(code).is_some()
         );
         if !is_image {
             return error;
@@ -205,10 +206,14 @@ impl AppApplication {
             .storage
             .execute(move |db| settings::ui_language(db, &facts))
             .await
-            .unwrap_or("en");
+            .unwrap_or_default();
         crate::gateway::image_files::localize_image_error(error, language)
     }
 
+    /// Marks a queued message's admission failed. Only the stable code is
+    /// stored (`safe_error_code`, also in the queue event); the refusal's
+    /// message exists only on the reply, already in the App language
+    /// (`admit_visual_localized`), so no English text is persisted.
     pub(super) async fn fail_admission(
         &self,
         chat_id: &str,

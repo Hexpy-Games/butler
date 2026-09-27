@@ -1,8 +1,11 @@
 //! On-demand App image derivatives and verified provider payloads.
 
 mod admission;
+mod errors;
 mod files;
 mod payload;
+
+pub(crate) use errors::{ImageErrorCode, localize_image_error};
 
 use parking_lot::Mutex;
 use std::{
@@ -131,86 +134,6 @@ impl AppImageFiles {
         receiver
             .await
             .map_err(GatewayApplicationError::internal_from)?
-    }
-}
-
-fn image_error(code: &str) -> GatewayApplicationError {
-    let status = match code {
-        "image_payload_invalid" => 413,
-        "image_manifest_invalid" => 422,
-        _ => 409,
-    };
-    GatewayApplicationError::Public {
-        status,
-        code: code.into(),
-        message: image_error_message(code, "en").into(),
-        source: None,
-    }
-}
-
-/// Gives an image admission refusal the App's language (`en` or `ko`);
-/// other errors are returned unchanged.
-pub(crate) fn localize_image_error(
-    error: GatewayApplicationError,
-    language: &str,
-) -> GatewayApplicationError {
-    match error {
-        GatewayApplicationError::Public {
-            status,
-            code,
-            message: _,
-            source,
-        } if IMAGE_ERROR_CODES.contains(&code.as_str()) => GatewayApplicationError::Public {
-            status,
-            message: image_error_message(&code, language).into(),
-            code,
-            source,
-        },
-        other => other,
-    }
-}
-
-const IMAGE_ERROR_CODES: [&str; 7] = [
-    "image_model_unsupported",
-    "image_capability_unknown",
-    "image_carrier_unavailable",
-    "image_route_incompatible",
-    "image_carrier_unverified",
-    "image_payload_invalid",
-    "image_manifest_invalid",
-];
-
-fn image_error_message(code: &str, language: &str) -> &'static str {
-    let korean = language == "ko";
-    match (code, korean) {
-        ("image_model_unsupported", false) => {
-            "The selected model can't read images. Choose a model that supports images or remove the image."
-        }
-        ("image_model_unsupported", true) => {
-            "현재 모델은 이미지를 읽을 수 없습니다. 이미지 지원 모델을 선택하거나 이미지를 제거하세요."
-        }
-        ("image_capability_unknown", false) => {
-            "Butler can't confirm that the selected model reads images. Check the model settings or remove the image."
-        }
-        ("image_capability_unknown", true) => {
-            "현재 모델의 이미지 지원 여부를 확인할 수 없습니다. 모델 설정을 확인하거나 이미지를 제거하세요."
-        }
-        ("image_carrier_unavailable", false) => {
-            "No adapter can send images to the selected model. Check the model connection settings."
-        }
-        ("image_carrier_unavailable", true) => {
-            "현재 모델로 이미지를 전송할 수 있는 어댑터가 없습니다. 모델 연결 설정을 확인하세요."
-        }
-        ("image_route_incompatible", false) => {
-            "The selected model's connection doesn't accept image input. Check the connection settings."
-        }
-        ("image_route_incompatible", true) => {
-            "현재 모델 연결 경로는 이미지 입력과 호환되지 않습니다. 연결 설정을 확인하세요."
-        }
-        ("image_carrier_unverified", false) => "Butler can't verify how the image would be sent.",
-        ("image_carrier_unverified", true) => "이미지 전송 경로를 확인할 수 없습니다.",
-        (_, false) => "Butler can't check this image attachment.",
-        (_, true) => "이미지 첨부를 확인할 수 없습니다.",
     }
 }
 

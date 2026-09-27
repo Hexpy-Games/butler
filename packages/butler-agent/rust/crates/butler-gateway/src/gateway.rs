@@ -15,6 +15,7 @@ mod protocol;
 mod rate_limit;
 mod session_references;
 mod transcript;
+mod ui_language;
 
 pub(crate) use mutations::GatewayMutationCommands;
 use std::{future::Future, net::SocketAddr, pin::Pin, sync::Arc};
