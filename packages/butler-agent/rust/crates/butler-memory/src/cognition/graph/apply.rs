@@ -115,22 +115,27 @@ pub(super) fn apply_final(
     tx.commit().map_err(db_error)
 }
 
+/// Quotes resolved to source leaves, by local ref.
+type ResolvedEvidence = HashMap<String, Vec<super::plan::ValidatedQuote>>;
+
+/// Writes a plan's nodes, claims, and relations. The meaning stage stops
+/// there; the bound stage also links identities, applies corrections and the
+/// summary, and completes the window.
 fn apply_plan(tx: &Transaction<'_>, application: PlanApplication<'_>) -> CognitionResult<()> {
     let PlanApplication {
         owner,
         input,
         output,
         plan,
-        candidates,
         now,
         stage,
+        ..
     } = application;
-    let job = owner.job_id;
     let window = owner.window_ref;
     if output.disposition == "unsupported" {
         if stage == ApplyStage::Bound {
             tx.execute("UPDATE memory_projection_windows SET state='unsupported',error_code=NULL,owner_pid=NULL,owner_nonce=NULL,started_at=NULL WHERE window_ref=?1",[window]).map_err(db_error)?;
-            jobs::refresh_semantic_state(tx, job, now)?;
+            jobs::refresh_semantic_state(tx, owner.job_id, now)?;
         }
         return Ok(());
     }
@@ -138,12 +143,38 @@ fn apply_plan(tx: &Transaction<'_>, application: PlanApplication<'_>) -> Cogniti
         .evidence
         .iter()
         .map(|(reference, quotes)| Ok((reference.clone(), resolve_quotes(tx, input, quotes)?)))
-        .collect::<CognitionResult<HashMap<_, _>>>()?;
+        .collect::<CognitionResult<ResolvedEvidence>>()?;
     for node in &output.nodes {
-        let id = plan
+        application.apply_node(tx, node, &resolved)?;
+    }
+    for claim in &output.claims {
+        application.apply_claim(tx, claim, &resolved)?;
+    }
+    for relation in &output.relations {
+        application.apply_relation(tx, relation)?;
+    }
+    if stage == ApplyStage::Meaning {
+        return increment_graph_revision(tx);
+    }
+    application.complete_window(tx)
+}
+
+impl PlanApplication<'_> {
+    fn node_id(&self, local_ref: &str) -> CognitionResult<&String> {
+        self.plan
             .refs
-            .get(&node.local_ref)
-            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?;
+            .get(local_ref)
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))
+    }
+
+    fn apply_node(
+        &self,
+        tx: &Transaction<'_>,
+        node: &crate::cognition::extraction::ExtractNode,
+        resolved: &ResolvedEvidence,
+    ) -> CognitionResult<()> {
+        let (input, window) = (self.input, self.owner.window_ref);
+        let id = self.node_id(&node.local_ref)?;
         upsert_node(
             tx,
             nodes::NodeUpsert {
@@ -153,7 +184,7 @@ fn apply_plan(tx: &Transaction<'_>, application: PlanApplication<'_>) -> Cogniti
                 resolution: &node.resolution,
                 input,
                 window,
-                now,
+                now: self.now,
                 evidence: resolved.get(&node.local_ref),
             },
         )?;
@@ -167,36 +198,38 @@ fn apply_plan(tx: &Transaction<'_>, application: PlanApplication<'_>) -> Cogniti
                 quote.byte_start,
             )?;
         }
-        if stage == ApplyStage::Bound {
-            edges::identity_match(tx, input, plan, candidates, id, &node.resolution)?;
+        if self.stage == ApplyStage::Bound {
+            edges::identity_match(tx, input, self.plan, self.candidates, id, &node.resolution)?;
         }
-        for alias in std::iter::once((&node.label, &node.evidence)).chain(
+        let aliases = std::iter::once((&node.label, &node.evidence)).chain(
             node.aliases
                 .iter()
                 .map(|alias| (&alias.text, &alias.evidence)),
-        ) {
-            for quote in resolve_quotes(
-                tx,
-                input,
-                &super::plan::validate_quotes_for_apply(input, alias.1)?,
-            )? {
+        );
+        for (text, evidence) in aliases {
+            let validated = super::plan::validate_quotes_for_apply(input, evidence)?;
+            for quote in resolve_quotes(tx, input, &validated)? {
                 record_mention(
                     tx,
                     id,
                     &quote.source_id,
-                    alias.0,
+                    text,
                     &quote.quote,
                     quote.byte_start,
                 )?;
-                insert_alias(tx, id, alias.0, &quote.source_id, node.resolution.kind())?;
+                insert_alias(tx, id, text, &quote.source_id, node.resolution.kind())?;
             }
         }
+        Ok(())
     }
-    for claim in &output.claims {
-        let id = plan
-            .refs
-            .get(&claim.local_ref)
-            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?;
+
+    fn apply_claim(
+        &self,
+        tx: &Transaction<'_>,
+        claim: &crate::cognition::extraction::ExtractClaim,
+        resolved: &ResolvedEvidence,
+    ) -> CognitionResult<()> {
+        let id = self.node_id(&claim.local_ref)?;
         upsert_node(
             tx,
             nodes::NodeUpsert {
@@ -204,15 +237,22 @@ fn apply_plan(tx: &Transaction<'_>, application: PlanApplication<'_>) -> Cogniti
                 node_type: &claim.claim_type,
                 label: &claim.statement,
                 resolution: &claim.resolution,
-                input,
-                window,
-                now,
+                input: self.input,
+                window: self.owner.window_ref,
+                now: self.now,
                 evidence: resolved.get(&claim.local_ref),
             },
         )?;
         insert_claim(tx, id, claim, resolved.get(&claim.local_ref))?;
-        if stage == ApplyStage::Bound {
-            edges::same_claim(tx, input, plan, candidates, id, &claim.resolution)?;
+        if self.stage == ApplyStage::Bound {
+            edges::same_claim(
+                tx,
+                self.input,
+                self.plan,
+                self.candidates,
+                id,
+                &claim.resolution,
+            )?;
         }
         for quote in resolved.get(&claim.local_ref).into_iter().flatten() {
             insert_alias(
@@ -223,39 +263,38 @@ fn apply_plan(tx: &Transaction<'_>, application: PlanApplication<'_>) -> Cogniti
                 claim.resolution.kind(),
             )?;
         }
-        if let Some(subject) = &claim.subject_ref {
+        let roles = [
+            ("has_subject", claim.subject_ref.as_ref()),
+            ("has_object", claim.object_ref.as_ref()),
+        ];
+        for (relation, target) in roles {
+            let Some(target) = target else {
+                continue;
+            };
             edges::add(
                 tx,
                 edges::EdgeInput {
-                    input,
-                    plan,
-                    relation: "has_subject",
+                    input: self.input,
+                    plan: self.plan,
+                    relation,
                     from: &claim.local_ref,
-                    to: subject,
+                    to: target,
                     claim: &claim.local_ref,
                     evidence: &claim.evidence,
                     basis: &claim.basis,
                 },
             )?;
         }
-        if let Some(object) = &claim.object_ref {
-            edges::add(
-                tx,
-                edges::EdgeInput {
-                    input,
-                    plan,
-                    relation: "has_object",
-                    from: &claim.local_ref,
-                    to: object,
-                    claim: &claim.local_ref,
-                    evidence: &claim.evidence,
-                    basis: &claim.basis,
-                },
-            )?;
-        }
+        Ok(())
     }
-    for relation in &output.relations {
-        let claim = output
+
+    fn apply_relation(
+        &self,
+        tx: &Transaction<'_>,
+        relation: &crate::cognition::extraction::ExtractRelation,
+    ) -> CognitionResult<()> {
+        let claim = self
+            .output
             .claims
             .iter()
             .find(|claim| claim.local_ref == relation.claim_ref)
@@ -263,8 +302,8 @@ fn apply_plan(tx: &Transaction<'_>, application: PlanApplication<'_>) -> Cogniti
         edges::add(
             tx,
             edges::EdgeInput {
-                input,
-                plan,
+                input: self.input,
+                plan: self.plan,
                 relation: &relation.relation,
                 from: &relation.from_ref,
                 to: &relation.to_ref,
@@ -272,21 +311,21 @@ fn apply_plan(tx: &Transaction<'_>, application: PlanApplication<'_>) -> Cogniti
                 evidence: &relation.evidence,
                 basis: &claim.basis,
             },
-        )?;
+        )
     }
-    if stage == ApplyStage::Meaning {
+
+    /// Applies corrections and the summary, then marks the window complete.
+    fn complete_window(&self, tx: &Transaction<'_>) -> CognitionResult<()> {
+        let (job, window, now) = (self.owner.job_id, self.owner.window_ref, self.now);
+        edges::refinements_and_corrections(tx, self.input, self.output, self.plan)?;
+        if self.output.summary.is_some() {
+            update_summary(tx, job, self.input, self.output)?;
+        }
+        tx.execute("UPDATE memory_projection_windows SET state='complete',error_code=NULL,owner_pid=NULL,owner_nonce=NULL,started_at=NULL WHERE window_ref=?1",[window]).map_err(db_error)?;
+        tx.execute("INSERT OR REPLACE INTO memory_projection_attempts(attempt_ref,window_ref,job_id,attempt_count,state,error_code,input_sha256,output_json,provider_evidence_json,recorded_at,attempt_kind,provider_invoked,outcome_known,recovery_revision) SELECT window_ref||':attempt:'||attempt_count||':complete',window_ref,job_id,attempt_count,'complete',NULL,input_sha256,NULL,NULL,?1,'apply',0,1,recovery_revision FROM memory_projection_windows WHERE window_ref=?2",params![now,window]).map_err(db_error)?;
         increment_graph_revision(tx)?;
-        return Ok(());
+        jobs::refresh_semantic_state(tx, job, now)
     }
-    edges::refinements_and_corrections(tx, input, output, plan)?;
-    if output.summary.is_some() {
-        update_summary(tx, job, input, output)?;
-    }
-    tx.execute("UPDATE memory_projection_windows SET state='complete',error_code=NULL,owner_pid=NULL,owner_nonce=NULL,started_at=NULL WHERE window_ref=?1",[window]).map_err(db_error)?;
-    tx.execute("INSERT OR REPLACE INTO memory_projection_attempts(attempt_ref,window_ref,job_id,attempt_count,state,error_code,input_sha256,output_json,provider_evidence_json,recorded_at,attempt_kind,provider_invoked,outcome_known,recovery_revision) SELECT window_ref||':attempt:'||attempt_count||':complete',window_ref,job_id,attempt_count,'complete',NULL,input_sha256,NULL,NULL,?1,'apply',0,1,recovery_revision FROM memory_projection_windows WHERE window_ref=?2",params![now,window]).map_err(db_error)?;
-    increment_graph_revision(tx)?;
-    jobs::refresh_semantic_state(tx, job, now)?;
-    Ok(())
 }
 
 fn assert_owner(

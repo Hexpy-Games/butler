@@ -85,8 +85,19 @@ pub(crate) struct ExtractCandidate {
     pub scope: String,
     pub project_id: Option<String>,
     #[serde(default)]
-    pub claim: Option<Value>,
+    pub claim: Option<CandidateClaim>,
     pub evidence: Vec<CandidateEvidence>,
+}
+
+/// The claim a candidate node states, with its subject and object nodes.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+pub(crate) struct CandidateClaim {
+    pub statement: String,
+    pub subject_ref: Option<String>,
+    pub object_ref: Option<String>,
+    pub relation: Option<String>,
+    pub polarity: Option<String>,
+    pub condition: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

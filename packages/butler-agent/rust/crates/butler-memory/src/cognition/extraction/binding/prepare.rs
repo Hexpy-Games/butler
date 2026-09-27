@@ -136,9 +136,7 @@ pub(in crate::cognition) async fn prepare(
             let statement = candidate
                 .claim
                 .as_ref()
-                .and_then(|c| c.get("statement"))
-                .and_then(Value::as_str)
-                .unwrap_or(&candidate.label);
+                .map_or(candidate.label.as_str(), |claim| claim.statement.as_str());
             let mut spans = Vec::new();
             if target.change
                 && let Some(old) = target.old.as_deref().filter(|s| !s.is_empty())

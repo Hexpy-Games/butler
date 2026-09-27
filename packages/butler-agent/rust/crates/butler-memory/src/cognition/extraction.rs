@@ -8,10 +8,10 @@ mod runner;
 
 use contract_data::ExtractionContractData;
 pub(crate) use contracts::{
-    CandidateEvidence, CandidateSearchFuture, CognitionCandidateSearch, ExtractAlias,
-    ExtractCandidate, ExtractClaim, ExtractCorrection, ExtractInput, ExtractNode, ExtractOutput,
-    ExtractRelation, ExtractSummary, NodeResolution, ProjectionContextUnit, ProjectionSourceSpan,
-    ProjectionSourceUnit, QuoteRef,
+    CandidateClaim, CandidateEvidence, CandidateSearchFuture, CognitionCandidateSearch,
+    ExtractAlias, ExtractCandidate, ExtractClaim, ExtractCorrection, ExtractInput, ExtractNode,
+    ExtractOutput, ExtractRelation, ExtractSummary, NodeResolution, ProjectionContextUnit,
+    ProjectionSourceSpan, ProjectionSourceUnit, QuoteRef,
 };
 pub use contracts::{CandidateSearchInput, CognitionVectorSearch, VectorSearchFuture};
 pub(in crate::cognition) use meaning::{

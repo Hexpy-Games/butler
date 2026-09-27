@@ -123,9 +123,11 @@ pub(in crate::cognition) fn apply(
             .position(|c| c.local_ref == reference)
             .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?;
         let meta = candidate.claim.as_ref();
-        let endpoint_refs = ["subject_ref", "object_ref"]
+        let endpoint_refs = meta
+            .map(|claim| [claim.subject_ref.as_deref(), claim.object_ref.as_deref()])
+            .unwrap_or_default()
             .into_iter()
-            .filter_map(|k| meta.and_then(|m| m.get(k)).and_then(Value::as_str))
+            .flatten()
             .collect::<Vec<_>>();
         let context_available =
             endpoint_refs.iter().all(|id| {
@@ -137,7 +139,7 @@ pub(in crate::cognition) fn apply(
                         && historical_quote(n).is_some()
                 })
             });
-        let relation = meta.and_then(|m| m.get("relation")).and_then(Value::as_str);
+        let relation = meta.and_then(|claim| claim.relation.as_deref());
         if !context_available || relation.is_some() && endpoint_refs.len() != 2 {
             warnings.push(json!({"code":"correction_context_unavailable","target_ref":reference}));
             continue;
@@ -148,10 +150,7 @@ pub(in crate::cognition) fn apply(
                 claim.evidence.push(quote.clone());
             }
         }
-        let previous = meta
-            .and_then(|m| m.get("statement"))
-            .and_then(Value::as_str)
-            .unwrap_or(&candidate.label);
+        let previous = meta.map_or(candidate.label.as_str(), |claim| claim.statement.as_str());
         if chosen.end > previous.len()
             || !previous.is_char_boundary(chosen.start)
             || !previous.is_char_boundary(chosen.end)
@@ -165,27 +164,21 @@ pub(in crate::cognition) fn apply(
             &previous[chosen.end..]
         );
         claim.claim_type = candidate.node_type.clone();
-        claim.condition = meta
-            .and_then(|m| m.get("condition"))
-            .and_then(Value::as_str)
-            .map(str::to_owned);
+        claim.condition = meta.and_then(|claim| claim.condition.clone());
         claim.polarity = meta
-            .and_then(|m| m.get("polarity"))
-            .and_then(Value::as_str)
+            .and_then(|claim| claim.polarity.as_deref())
             .unwrap_or("unspecified")
             .into();
         let claim_ref = claim.local_ref.clone();
         let claim_evidence = claim.evidence.clone();
         let subject = endpoint(
-            meta.and_then(|m| m.get("subject_ref"))
-                .and_then(Value::as_str),
+            meta.and_then(|claim| claim.subject_ref.as_deref()),
             output,
             input,
             &claim_evidence,
         )?;
         let object = endpoint(
-            meta.and_then(|m| m.get("object_ref"))
-                .and_then(Value::as_str),
+            meta.and_then(|claim| claim.object_ref.as_deref()),
             output,
             input,
             &claim_evidence,

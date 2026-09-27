@@ -19,7 +19,6 @@ pub(super) use pinned::{
 
 use rusqlite::{Connection, params};
 use serde::{Serialize, Serializer, ser::SerializeSeq};
-use serde_json::Value;
 
 use super::db_error;
 use crate::cognition::extraction::{ExtractCandidate, ExtractInput};
@@ -161,14 +160,13 @@ fn append(
         return Ok(false);
     };
     visiting.insert(id.to_owned());
-    for endpoint in ["subject_ref", "object_ref"] {
-        if let Some(id) = candidate
-            .claim
-            .as_ref()
-            .and_then(|c| c.get(endpoint))
-            .and_then(Value::as_str)
-            && !append(context, id, visiting, group, source_only)?
-        {
+    let endpoints = candidate
+        .claim
+        .as_ref()
+        .map(|claim| [claim.subject_ref.as_deref(), claim.object_ref.as_deref()])
+        .unwrap_or_default();
+    for id in endpoints.into_iter().flatten() {
+        if !append(context, id, visiting, group, source_only)? {
             visiting.remove(&candidate.ref_id);
             return Ok(false);
         }

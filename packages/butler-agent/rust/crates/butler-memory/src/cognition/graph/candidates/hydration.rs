@@ -2,10 +2,10 @@
 
 use super::*;
 use crate::cognition::CognitionCode;
+use crate::cognition::extraction::CandidateClaim;
 use crate::cognition::graph::{input, plan::NormalizedPlan};
 use indexmap::IndexSet;
 use rusqlite::OptionalExtension;
-use serde_json::json;
 
 pub(in crate::cognition::graph) fn assert_current(
     db: &Connection,
@@ -73,6 +73,9 @@ pub(in crate::cognition::graph) fn assert_current(
     Ok(())
 }
 
+/// A graph node rendered as an extraction candidate with up to two quoted
+/// source excerpts, or `None` when it is out of scope, has no eligible
+/// alias, or its evidence cannot be read.
 pub(super) fn hydrate(
     db: &Connection,
     canonical: &ConversationSourceReader,
@@ -81,6 +84,50 @@ pub(super) fn hydrate(
     id: &str,
     source_only: bool,
 ) -> CognitionResult<Option<ExtractCandidate>> {
+    let Some((node_type, scope, project_id)) = node_in_scope(db, input, id)? else {
+        return Ok(None);
+    };
+    let identity = node_type == "entity" || node_type == "project";
+    let aliases = eligible_aliases(db, input, id, source_only)?;
+    let Some(label) = aliases.first().map(|(surface, _)| surface.clone()) else {
+        return Ok(None);
+    };
+    let Some(evidence) = alias_evidence(db, canonical, source_root, &aliases)? else {
+        return Ok(None);
+    };
+    let claim = if identity {
+        None
+    } else {
+        let Some(claim) = candidate_claim(db, id)? else {
+            return Ok(None);
+        };
+        Some(claim)
+    };
+    Ok(Some(ExtractCandidate {
+        ref_id: id.into(),
+        node_type,
+        aliases: aliases
+            .iter()
+            .map(|alias| alias.0.clone())
+            .collect::<IndexSet<_>>()
+            .into_iter()
+            .filter(|alias| identity || alias != &label)
+            .collect(),
+        label,
+        scope,
+        project_id,
+        claim,
+        evidence,
+    }))
+}
+
+/// The node's type, scope, and project when it is complete and visible to
+/// this input: identities always, other nodes only in the bound scope.
+fn node_in_scope(
+    db: &Connection,
+    input: &ExtractInput,
+    id: &str,
+) -> CognitionResult<Option<(String, String, Option<String>)>> {
     let node = db
         .query_row(
             "SELECT n.type, n.identity_scope, n.project_id
@@ -102,15 +149,22 @@ pub(super) fn hydrate(
         return Ok(None);
     };
     let identity = node_type == "entity" || node_type == "project";
-    if !identity
-        && (if input.bound_project_id.is_none() {
-            scope != "user" || project_id.is_some()
-        } else {
-            scope != "project" || project_id.as_deref() != input.bound_project_id.as_deref()
-        })
-    {
-        return Ok(None);
-    }
+    let out_of_scope = if input.bound_project_id.is_none() {
+        scope != "user" || project_id.is_some()
+    } else {
+        scope != "project" || project_id.as_deref() != input.bound_project_id.as_deref()
+    };
+    Ok((identity || !out_of_scope).then_some((node_type, scope, project_id)))
+}
+
+/// Up to three `(surface, source)` aliases of the node from current sources
+/// a candidate may quote.
+fn eligible_aliases(
+    db: &Connection,
+    input: &ExtractInput,
+    id: &str,
+    source_only: bool,
+) -> CognitionResult<Vec<(String, String)>> {
     let source_filter = if source_only {
         "s.origin_kind IN ('user_input', 'assistant_public')"
     } else {
@@ -131,19 +185,26 @@ pub(super) fn hydrate(
              LIMIT 3"
         ))
         .map_err(db_error)?;
-    let aliases = aliases
+    aliases
         .query_map(params![id, input.bound_project_id], |r| {
             Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
         })
         .map_err(db_error)?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(db_error)?;
-    if aliases.is_empty() {
-        return Ok(None);
-    }
+        .map_err(db_error)
+}
+
+/// The source text of the first two distinct alias sources; `None` when a
+/// source row or conversation link is missing.
+fn alias_evidence(
+    db: &Connection,
+    canonical: &ConversationSourceReader,
+    source_root: &std::path::Path,
+    aliases: &[(String, String)],
+) -> CognitionResult<Option<Vec<crate::cognition::extraction::CandidateEvidence>>> {
     let mut evidence = Vec::new();
     let mut sources = HashSet::new();
-    for (_, source) in &aliases {
+    for (_, source) in aliases {
         if !sources.insert(source.clone()) || evidence.len() >= 2 {
             continue;
         }
@@ -171,76 +232,69 @@ pub(super) fn hydrate(
             basis: row.basis,
         });
     }
-    let claim = if identity {
-        None
-    } else {
-        let value = db
-            .query_row(
-                "SELECT statement, polarity, condition FROM memory_claims WHERE node_id = ?1",
-                [id],
-                |r| {
-                    Ok((
-                        r.get::<_, String>(0)?,
-                        r.get::<_, Option<String>>(1)?,
-                        r.get::<_, Option<String>>(2)?,
-                    ))
-                },
-            )
-            .optional()
-            .map_err(db_error)?;
-        let Some((statement, polarity, condition)) = value else {
-            return Ok(None);
-        };
-        let mut edges = db
-            .prepare(
-                "SELECT rel_type, target_node_id
-                 FROM edges
-                 WHERE source_node_id = ?1 AND rel_type IN ('has_subject', 'has_object')
-                 ORDER BY edge_id",
-            )
-            .map_err(db_error)?;
-        let edges = edges
-            .query_map([id], |r| {
-                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
-            })
-            .map_err(db_error)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(db_error)?;
-        let relation = db
-            .query_row(
-                "SELECT rel_type
-                 FROM edges
-                 WHERE claim_node_id = ?1
-                   AND rel_type NOT IN ('has_subject', 'has_object', 'supersedes',
-                       'contradicts', 'condition_member', 'identity_match', 'same_claim', 'refines')
-                 ORDER BY edge_id
-                 LIMIT 1",
-                [id],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
-            .map_err(db_error)?;
-        Some(
-            json!({"statement":statement,"subject_ref":edges.iter().find(|x|x.0=="has_subject").map(|x|&x.1),
-            "object_ref":edges.iter().find(|x|x.0=="has_object").map(|x|&x.1),"relation":relation,
-            "polarity":polarity,"condition":condition}),
+    Ok(Some(evidence))
+}
+
+/// A claim node's statement with its subject, object, and relation.
+fn candidate_claim(db: &Connection, id: &str) -> CognitionResult<Option<CandidateClaim>> {
+    let value = db
+        .query_row(
+            "SELECT statement, polarity, condition FROM memory_claims WHERE node_id = ?1",
+            [id],
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, Option<String>>(1)?,
+                    r.get::<_, Option<String>>(2)?,
+                ))
+            },
         )
+        .optional()
+        .map_err(db_error)?;
+    let Some((statement, polarity, condition)) = value else {
+        return Ok(None);
     };
-    let label = aliases[0].0.clone();
-    Ok(Some(ExtractCandidate {
-        ref_id: id.into(),
-        node_type,
-        label: label.clone(),
-        aliases: aliases
+    let mut edges = db
+        .prepare(
+            "SELECT rel_type, target_node_id
+             FROM edges
+             WHERE source_node_id = ?1 AND rel_type IN ('has_subject', 'has_object')
+             ORDER BY edge_id",
+        )
+        .map_err(db_error)?;
+    let edges = edges
+        .query_map([id], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })
+        .map_err(db_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(db_error)?;
+    let relation = db
+        .query_row(
+            "SELECT rel_type
+             FROM edges
+             WHERE claim_node_id = ?1
+               AND rel_type NOT IN ('has_subject', 'has_object', 'supersedes',
+                   'contradicts', 'condition_member', 'identity_match', 'same_claim', 'refines')
+             ORDER BY edge_id
+             LIMIT 1",
+            [id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(db_error)?;
+    let endpoint = |kind: &str| {
+        edges
             .iter()
-            .map(|x| x.0.clone())
-            .collect::<IndexSet<_>>()
-            .into_iter()
-            .filter(|a| identity || a != &label)
-            .collect(),
-        scope,
-        project_id,
-        claim,
-        evidence,
+            .find(|(rel, _)| rel == kind)
+            .map(|(_, target)| target.clone())
+    };
+    Ok(Some(CandidateClaim {
+        statement,
+        subject_ref: endpoint("has_subject"),
+        object_ref: endpoint("has_object"),
+        relation,
+        polarity,
+        condition,
     }))
 }
