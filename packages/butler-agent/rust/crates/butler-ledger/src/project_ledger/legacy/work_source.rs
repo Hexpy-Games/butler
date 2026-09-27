@@ -1,6 +1,7 @@
 //! Stable raw-R2 Project Ledger reads for the required legacy Work source port.
 
-use std::{fs, path::Path};
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value, json};
 
@@ -41,6 +42,8 @@ impl LegacyProjectWorkSource for ProjectLedger {
     }
 }
 
+/// The one open legacy program among `ids`, read against a stable source
+/// head (retried once when the ledger changes while it is read).
 fn read(
     data: &Path,
     reference: &str,
@@ -53,18 +56,7 @@ fn read(
     if ids.is_empty() {
         return Ok(None);
     }
-    let root = if let Some(id) = reference.strip_prefix("project:") {
-        if !active_reference::safe_id(id) {
-            return Err(invalid());
-        }
-        let projects = data.join("project-ledger/projects");
-        let root = projects.join(id);
-        active_reference::canonical_containment(&projects, &root)?;
-        root
-    } else {
-        // The source resolver has no workspace fallback for this legacy lookup.
-        active_reference::resolve_workspace(data, "", reference)?
-    };
+    let root = resolve_root(data, reference)?;
     if !root.join("project.json").exists() || !root.join("ledger.jsonl").exists() {
         return Ok(None);
     }
@@ -72,54 +64,9 @@ fn read(
         let before = source_head::observe(&root, collation)?;
         let mut snapshots = Vec::new();
         for id in &ids {
-            let Some(body) = reference_body(&root, &format!("BTCC-PROGRAM-{id}"))? else {
-                continue;
-            };
-            let program = canonical_body(&body)?;
-            if program["programId"].as_str() != Some(id.as_str()) {
-                return Err(invalid());
+            if let Some(snapshot) = open_program(&root, id, &before)? {
+                snapshots.push(snapshot);
             }
-            let revision = program["manifestRevision"]
-                .as_f64()
-                .filter(|value| {
-                    value.is_finite()
-                        && value.fract() == 0.0
-                        && value.abs() <= 9_007_199_254_740_991.0
-                })
-                .ok_or_else(invalid)?;
-            let planning = text(&program, "planningState")?;
-            let frontier = text(&program, "frontier")?;
-            let goal_ref = decode_ref(&program["goalContractRef"])?;
-            // Decode before the openness decision, matching source decodeProgram.
-            let works = decode_items(&program["works"], "work")?;
-            let tasks = decode_items(&program["tasks"], "task")?;
-            let criteria = decode_criteria(&program["criteria"])?;
-            if planning != "unplanned" && matches!(frontier, "closed" | "cancelled") {
-                continue;
-            }
-            let goal = goal_contract(&root, &goal_ref)?;
-            let source_revision = digest_identity(&format!(
-                "btcc-r2-project-work-import.v1\0{}\0{}\0{}\0{}\0{}",
-                before.project_root.to_string_lossy(),
-                before.source_sha256,
-                before.source_file_count,
-                id,
-                js::stringify(&json!(revision)).map_err(|source| invalid().with_source(source))?,
-            ));
-            let planned = planning != "unplanned";
-            snapshots.push(LegacyProjectWorkSourceSnapshot {
-                source_program_id: id.clone(),
-                source_revision,
-                goal_contract: goal,
-                plan: if planned {
-                    program.get("plan").cloned().unwrap_or(Value::Null)
-                } else {
-                    Value::Null
-                },
-                works: if planned { works } else { Vec::new() },
-                tasks: if planned { tasks } else { Vec::new() },
-                referenced_records: if planned { criteria } else { Vec::new() },
-            });
         }
         let after = source_head::observe(&root, collation)?;
         if before.project_root != after.project_root
@@ -138,6 +85,76 @@ fn read(
     Err(ProjectLedgerReadError::record_show(
         "project_work_legacy_source_changed",
     ))
+}
+
+/// `project:<id>` names a Ledger directly; anything else is an App project.
+fn resolve_root(data: &Path, reference: &str) -> Result<PathBuf, ProjectLedgerReadError> {
+    let Some(id) = reference.strip_prefix("project:") else {
+        // The source resolver has no workspace fallback for this legacy lookup.
+        return active_reference::resolve_workspace(data, "", reference);
+    };
+    if !active_reference::safe_id(id) {
+        return Err(invalid());
+    }
+    let projects = data.join("project-ledger/projects");
+    let root = projects.join(id);
+    active_reference::canonical_containment(&projects, &root)?;
+    Ok(root)
+}
+
+/// The program `id`'s snapshot when it exists and is still open.
+fn open_program(
+    root: &Path,
+    id: &str,
+    before: &source_head::SourceHead,
+) -> Result<Option<LegacyProjectWorkSourceSnapshot>, ProjectLedgerReadError> {
+    let Some(body) = reference_body(root, &format!("BTCC-PROGRAM-{id}"))? else {
+        return Ok(None);
+    };
+    let program = canonical_body(&body)?;
+    let field = |key: &str| program.get(key).unwrap_or(&Value::Null);
+    if field("programId").as_str() != Some(id) {
+        return Err(invalid());
+    }
+    let revision = field("manifestRevision")
+        .as_f64()
+        .filter(|value| {
+            value.is_finite() && value.fract() == 0.0 && value.abs() <= 9_007_199_254_740_991.0
+        })
+        .ok_or_else(invalid)?;
+    let planning = text(&program, "planningState")?;
+    let frontier = text(&program, "frontier")?;
+    let goal_ref = decode_ref(field("goalContractRef"))?;
+    // Decode before the openness decision, matching source decodeProgram.
+    let works = decode_items(field("works"), "work")?;
+    let tasks = decode_items(field("tasks"), "task")?;
+    let criteria = decode_criteria(field("criteria"))?;
+    if planning != "unplanned" && matches!(frontier, "closed" | "cancelled") {
+        return Ok(None);
+    }
+    let goal = goal_contract(root, &goal_ref)?;
+    let source_revision = digest_identity(&format!(
+        "btcc-r2-project-work-import.v1\0{}\0{}\0{}\0{}\0{}",
+        before.project_root.to_string_lossy(),
+        before.source_sha256,
+        before.source_file_count,
+        id,
+        js::stringify(&json!(revision)).map_err(|source| invalid().with_source(source))?,
+    ));
+    let planned = planning != "unplanned";
+    Ok(Some(LegacyProjectWorkSourceSnapshot {
+        source_program_id: id.to_owned(),
+        source_revision,
+        goal_contract: goal,
+        plan: if planned {
+            program.get("plan").cloned().unwrap_or(Value::Null)
+        } else {
+            Value::Null
+        },
+        works: if planned { works } else { Vec::new() },
+        tasks: if planned { tasks } else { Vec::new() },
+        referenced_records: if planned { criteria } else { Vec::new() },
+    }))
 }
 
 fn goal_contract(root: &Path, source: &Value) -> Result<Value, ProjectLedgerReadError> {

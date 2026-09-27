@@ -11,6 +11,7 @@ use super::super::contracts::{
 };
 use super::record_path;
 use crate::project_ledger::records;
+use crate::project_ledger::status::Lifecycle;
 
 /// Creates or updates one record file in the publication candidate: the
 /// update's fields are merged over the existing frontmatter (or a new one),
@@ -100,21 +101,16 @@ fn check_work_status(
 ) -> Result<(), ProjectWorkPublicationError> {
     let current = metadata.get("status").and_then(Value::as_str).unwrap_or("");
     let target = update.status.as_deref().unwrap_or(current);
-    if !matches!(
-        target,
-        "proposed"
-            | "scoped"
-            | "specified"
-            | "in_progress"
-            | "review"
-            | "done"
-            | "blocked"
-            | "cancelled"
-    ) {
+    let Some(target) = Lifecycle::Work.status(target) else {
         return Err(invalid());
-    }
-    if exists {
-        work_transition(current, target)?;
+    };
+    if exists && current != target.as_str() {
+        let reachable = Lifecycle::Work
+            .status(current)
+            .is_some_and(|current| current.publishes_to(target));
+        if !reachable {
+            return Err(ProjectWorkPublicationError::adapter("invalid_transition"));
+        }
     }
     Ok(())
 }
@@ -211,26 +207,6 @@ fn create_status<'a>(
             Ok(status.unwrap_or("active"))
         }
         _ => Err(invalid()),
-    }
-}
-
-fn work_transition(from: &str, to: &str) -> Result<(), ProjectWorkPublicationError> {
-    if from == to {
-        return Ok(());
-    }
-    let reachable = match from {
-        "proposed" => !matches!(to, "proposed"),
-        "scoped" => !matches!(to, "proposed" | "scoped"),
-        "specified" => !matches!(to, "proposed" | "scoped" | "specified"),
-        "in_progress" => matches!(to, "review" | "done" | "blocked" | "cancelled"),
-        "review" => matches!(to, "done" | "in_progress" | "blocked" | "cancelled"),
-        "blocked" => matches!(to, "in_progress" | "review" | "done" | "cancelled"),
-        _ => false,
-    };
-    if reachable {
-        Ok(())
-    } else {
-        Err(ProjectWorkPublicationError::adapter("invalid_transition"))
     }
 }
 

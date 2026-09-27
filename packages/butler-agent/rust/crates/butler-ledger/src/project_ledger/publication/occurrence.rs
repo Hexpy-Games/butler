@@ -302,6 +302,9 @@ pub(super) fn atomic_json(
     result.map_err(|source| io().with_source(source))
 }
 
+/// Runs `action` while holding the SQLite admission lock for `id`: one of
+/// 64 shard databases under the canonical data root, each with a fence
+/// generation bumped on every acquisition and one row per held lock.
 pub(super) fn with_lock<T>(
     root: &Path,
     id: &str,
@@ -311,27 +314,56 @@ pub(super) fn with_lock<T>(
     let logical = canonical_root
         .join("runtime/btcc-project-ledger-effects-v2/admission-locks")
         .join(id);
+    let mut connection = open_shard(&canonical_root, &logical)?;
+    let tx = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|source| conflict().with_source(source))?;
+    tx.execute(
+        "UPDATE shard_fence SET generation=generation+1 WHERE singleton=1",
+        [],
+    )
+    .map_err(|source| io().with_source(source))?;
+    let token = uuid::Uuid::new_v4().to_string();
+    let key = logical.to_string_lossy();
+    tx.execute("INSERT OR REPLACE INTO active_lock(lock_key,ownership_token,owner_id,acquired_at,renewed_at) VALUES(?1,?2,?3,datetime('now'),datetime('now'))", params![key.as_ref(), token, "native-project-ledger"]).map_err(|source| io().with_source(source))?;
+    let result = match action() {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = tx.rollback();
+            return Err(error);
+        }
+    };
+    tx.execute(
+        "DELETE FROM active_lock WHERE lock_key=?1 AND ownership_token=?2",
+        params![key.as_ref(), token],
+    )
+    .map_err(|source| io().with_source(source))?;
+    tx.commit().map_err(|source| io().with_source(source))?;
+    Ok(result)
+}
+
+/// The shard database `logical` hashes to, created with its schema and
+/// owner-only permissions; symlinked shards or directories are refused.
+fn open_shard(
+    canonical_root: &Path,
+    logical: &Path,
+) -> Result<Connection, ProjectWorkPublicationError> {
     let digest = Sha256::digest(logical.to_string_lossy().as_bytes());
-    let shard = u32::from_be_bytes(
-        digest[..4]
-            .try_into()
-            .map_err(|source| invalid().with_source(source))?,
-    ) % 64;
+    let prefix: [u8; 4] = digest
+        .get(..4)
+        .and_then(|bytes| bytes.try_into().ok())
+        .ok_or_else(invalid)?;
+    let shard = u32::from_be_bytes(prefix) % 64;
     let directory = canonical_root.join("runtime/mutation-lock-shards");
     for parent in [canonical_root.join("runtime"), directory.clone()] {
-        if parent.exists()
-            && fs::symlink_metadata(&parent)
-                .map_err(|source| io().with_source(source))?
-                .file_type()
-                .is_symlink()
-        {
+        if is_symlink(&parent)? {
             return Err(ProjectWorkPublicationError::Uncertain { source: None });
         }
     }
     fs::create_dir_all(&directory).map_err(|source| io().with_source(source))?;
     if !fs::canonicalize(&directory)
         .map_err(|source| io().with_source(source))?
-        .starts_with(&canonical_root)
+        .starts_with(canonical_root)
     {
         return Err(ProjectWorkPublicationError::Uncertain { source: None });
     }
@@ -342,15 +374,10 @@ pub(super) fn with_lock<T>(
             .map_err(|source| io().with_source(source))?;
     }
     let shard = directory.join(format!("mutation-lock-{shard:02}.sqlite3"));
-    if shard.exists()
-        && fs::symlink_metadata(&shard)
-            .map_err(|source| io().with_source(source))?
-            .file_type()
-            .is_symlink()
-    {
+    if is_symlink(&shard)? {
         return Err(ProjectWorkPublicationError::Uncertain { source: None });
     }
-    let mut connection = Connection::open(&shard).map_err(|source| io().with_source(source))?;
+    let connection = Connection::open(&shard).map_err(|source| io().with_source(source))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -361,30 +388,18 @@ pub(super) fn with_lock<T>(
         .busy_timeout(Duration::from_millis(250))
         .map_err(|source| io().with_source(source))?;
     connection.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS shard_fence(singleton INTEGER PRIMARY KEY CHECK(singleton=1), generation INTEGER NOT NULL); INSERT OR IGNORE INTO shard_fence VALUES(1,0); CREATE TABLE IF NOT EXISTS active_lock(lock_key TEXT PRIMARY KEY, ownership_token TEXT NOT NULL, owner_id TEXT NOT NULL, acquired_at TEXT NOT NULL, renewed_at TEXT NOT NULL);").map_err(|source| io().with_source(source))?;
-    let tx = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(|source| conflict().with_source(source))?;
-    tx.execute(
-        "UPDATE shard_fence SET generation=generation+1 WHERE singleton=1",
-        [],
-    )
-    .map_err(|source| io().with_source(source))?;
-    let token = uuid::Uuid::new_v4().to_string();
-    tx.execute("INSERT OR REPLACE INTO active_lock(lock_key,ownership_token,owner_id,acquired_at,renewed_at) VALUES(?1,?2,?3,datetime('now'),datetime('now'))", params![logical.to_string_lossy().as_ref(), token, "native-project-ledger"]).map_err(|source| io().with_source(source))?;
-    let result = match action() {
-        Ok(value) => value,
-        Err(error) => {
-            let _ = tx.rollback();
-            return Err(error);
-        }
-    };
-    tx.execute(
-        "DELETE FROM active_lock WHERE lock_key=?1 AND ownership_token=?2",
-        params![logical.to_string_lossy().as_ref(), token],
-    )
-    .map_err(|source| io().with_source(source))?;
-    tx.commit().map_err(|source| io().with_source(source))?;
-    Ok(result)
+    Ok(connection)
+}
+
+/// Whether `path` exists as a symlink.
+fn is_symlink(path: &Path) -> Result<bool, ProjectWorkPublicationError> {
+    if !path.exists() {
+        return Ok(false);
+    }
+    Ok(fs::symlink_metadata(path)
+        .map_err(|source| io().with_source(source))?
+        .file_type()
+        .is_symlink())
 }
 
 fn invalid() -> ProjectWorkPublicationError {

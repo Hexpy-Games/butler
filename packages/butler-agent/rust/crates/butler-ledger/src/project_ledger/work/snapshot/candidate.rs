@@ -13,6 +13,8 @@ use super::super::super::publication::{
 use super::super::super::{dashboard, records};
 use super::{child_refs, dependencies, hydrate};
 
+/// Every managed Work the updates touch still hydrates from the candidate,
+/// reading records the candidate does not rewrite from the canonical root.
 pub(in crate::project_ledger) fn validate_publication_candidate(
     candidate_root: &Path,
     canonical_root: &Path,
@@ -30,47 +32,52 @@ pub(in crate::project_ledger) fn validate_publication_candidate(
             Some(_) | None => None,
         })
         .collect::<HashSet<_>>();
+    let reader = CandidateReader {
+        candidate_root,
+        canonical_root,
+        collation,
+    };
     for id in ids {
-        let path = format!("work/{id}/work.md");
-        let raw = candidate_or_committed(candidate_root, canonical_root, &path)?.ok_or(
-            ProjectWorkPublicationError::adapter("project_work_managed_record_invalid"),
-        )?;
+        reader.validate_work(scope, &id)?;
+    }
+    Ok(())
+}
+
+fn managed_invalid() -> ProjectWorkPublicationError {
+    ProjectWorkPublicationError::adapter("project_work_managed_record_invalid")
+}
+
+struct CandidateReader<'a> {
+    candidate_root: &'a Path,
+    canonical_root: &'a Path,
+    collation: &'a LocaleCollation,
+}
+
+impl CandidateReader<'_> {
+    fn read(&self, path: &str) -> Result<String, ProjectWorkPublicationError> {
+        candidate_or_committed(self.candidate_root, self.canonical_root, path)?
+            .ok_or_else(managed_invalid)
+    }
+
+    /// The Work's manifest and children decode and hydrate into a view.
+    fn validate_work(
+        &self,
+        scope: &ResolvedProjectWorkScope,
+        id: &str,
+    ) -> Result<(), ProjectWorkPublicationError> {
+        let raw = self.read(&format!("work/{id}/work.md"))?;
         let manifest = dashboard::decode_manifest_body(
             records::frontmatter_body_ref(&raw),
-            &id,
+            id,
             &scope.app_project_id,
             &scope.ledger_project_id,
-            collation,
+            self.collation,
         )
-        .map_err(|source| {
-            ProjectWorkPublicationError::adapter("project_work_managed_record_invalid")
-                .with_source(source)
-        })?;
-        let refs = child_refs(&manifest).map_err(|source| {
-            ProjectWorkPublicationError::adapter("project_work_managed_record_invalid")
-                .with_source(source)
-        })?;
+        .map_err(|source| managed_invalid().with_source(source))?;
+        let refs = child_refs(&manifest).map_err(|source| managed_invalid().with_source(source))?;
         let mut children = HashMap::with_capacity(refs.len());
         for (child_id, kind, schema) in refs {
-            let path = if kind == "plan" {
-                format!("plans/{}.md", child_id.to_lowercase())
-            } else {
-                format!("references/{}.md", child_id.to_lowercase())
-            };
-            let raw = candidate_or_committed(candidate_root, canonical_root, &path)?.ok_or(
-                ProjectWorkPublicationError::adapter("project_work_managed_record_invalid"),
-            )?;
-            let child = dashboard::decode_child_body(
-                records::frontmatter_body_ref(&raw),
-                &id,
-                &child_id,
-                schema,
-                collation,
-            )
-            .map_err(|source| {
-                ProjectWorkPublicationError::adapter("project_work_managed_record_invalid")
-                    .with_source(source)
-            })?;
+            let child = self.child(id, &child_id, kind, schema)?;
             children.insert(child_id, child);
         }
         let dependencies =
@@ -78,36 +85,39 @@ pub(in crate::project_ledger) fn validate_publication_candidate(
         for (child_id, kind, schema) in dependencies {
             if let Some(existing) = children.get(&child_id) {
                 if existing.get("schema").and_then(Value::as_str) != Some(schema) {
-                    return Err(ProjectWorkPublicationError::adapter(
-                        "project_work_managed_record_invalid",
-                    ));
+                    return Err(managed_invalid());
                 }
                 continue;
             }
-            let path = if kind == "plan" {
-                format!("plans/{}.md", child_id.to_lowercase())
-            } else {
-                format!("references/{}.md", child_id.to_lowercase())
-            };
-            let raw = candidate_or_committed(candidate_root, canonical_root, &path)?.ok_or(
-                ProjectWorkPublicationError::adapter("project_work_managed_record_invalid"),
-            )?;
-            let child = dashboard::decode_child_body(
-                records::frontmatter_body_ref(&raw),
-                &id,
-                &child_id,
-                schema,
-                collation,
-            )
-            .map_err(|source| {
-                ProjectWorkPublicationError::adapter("project_work_managed_record_invalid")
-                    .with_source(source)
-            })?;
+            let child = self.child(id, &child_id, kind, schema)?;
             children.insert(child_id, child);
         }
         hydrate(&manifest, &children).map_err(ProjectWorkPublicationError::Work)?;
+        Ok(())
     }
-    Ok(())
+
+    fn child(
+        &self,
+        work_id: &str,
+        child_id: &str,
+        kind: &str,
+        schema: &str,
+    ) -> Result<Value, ProjectWorkPublicationError> {
+        let directory = if kind == "plan" {
+            "plans"
+        } else {
+            "references"
+        };
+        let raw = self.read(&format!("{directory}/{}.md", child_id.to_lowercase()))?;
+        dashboard::decode_child_body(
+            records::frontmatter_body_ref(&raw),
+            work_id,
+            child_id,
+            schema,
+            self.collation,
+        )
+        .map_err(|source| managed_invalid().with_source(source))
+    }
 }
 
 fn candidate_or_committed(

@@ -14,6 +14,8 @@ pub struct PlanRecordShow {
     pub path: Option<String>,
 }
 
+/// The one plan record whose id is `original_id`; every other record is
+/// still read (and must parse) exactly as the source does.
 pub(super) fn show_plan(
     _butler_data: &Path,
     root: &Path,
@@ -32,81 +34,90 @@ pub(super) fn show_plan(
             continue;
         }
         let Some(raw) = raw else { continue };
-        let current = root.join(&relative);
-        // readRecord observes the current file even when raw is a before-image.
-        let stats = fs::metadata(&current).map_err(|source| {
+        if let Some(plan) = plan_record(root, &relative, &raw, lookup)? {
+            matches.push(plan);
+        }
+    }
+    let mut matches = matches.into_iter();
+    match (matches.next(), matches.next()) {
+        (None, _) => Err(ProjectLedgerReadError::record_show("record_not_found")),
+        (Some(plan), None) => Ok(plan),
+        (Some(_), Some(_)) => Err(ProjectLedgerReadError::record_show("ambiguous_record")),
+    }
+}
+
+/// The record at `relative` as a plan show when it is the plan `lookup`.
+fn plan_record(
+    root: &Path,
+    relative: &str,
+    raw: &str,
+    lookup: &str,
+) -> Result<Option<PlanRecordShow>, ProjectLedgerReadError> {
+    let current = root.join(relative);
+    // readRecord observes the current file even when raw is a before-image.
+    let stats = fs::metadata(&current).map_err(|source| {
+        ProjectLedgerReadError::record_show("project_ledger_record_io_error").with_source(source)
+    })?;
+    let data = if relative.ends_with(".json") {
+        serde_json::from_str::<Value>(raw).map_err(|source| {
+            ProjectLedgerReadError::record_show("invalid_record_json").with_source(source)
+        })?
+    } else {
+        frontmatter(raw).unwrap_or_else(|| Value::Object(Map::new()))
+    };
+    if js_falsy(&data) {
+        return Ok(None);
+    }
+    let kind = data
+        .get("kind")
+        .and_then(Value::as_str)
+        .filter(|kind| !kind.is_empty())
+        .map(str::to_owned)
+        .unwrap_or_else(|| infer_kind(relative).to_owned());
+    let filename_id = current
+        .file_stem()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let id = data
+        .get("id")
+        .and_then(Value::as_str)
+        .map(butler_core::public_text::trim_js_whitespace)
+        .filter(|id| !id.is_empty())
+        .unwrap_or(&filename_id);
+    let present = |key: &str| data.get(key).filter(|value| !value.is_null());
+    let title = present("title")
+        .or_else(|| present("name"))
+        .map(js_string)
+        .transpose()?
+        .unwrap_or_else(|| id.to_owned());
+    let status = present("status")
+        .map(js_string)
+        .transpose()?
+        .unwrap_or_else(|| "unknown".to_owned());
+    if let Some(updated_at) = present("updatedAt") {
+        js_string(updated_at)?;
+    } else {
+        let _ = stats.modified().map_err(|source| {
             ProjectLedgerReadError::record_show("project_ledger_record_io_error")
                 .with_source(source)
         })?;
-        let data = if relative.ends_with(".json") {
-            serde_json::from_str::<Value>(&raw).map_err(|source| {
-                ProjectLedgerReadError::record_show("invalid_record_json").with_source(source)
-            })?
-        } else {
-            frontmatter(&raw).unwrap_or_else(|| Value::Object(Map::new()))
-        };
-        if js_falsy(&data) {
-            continue;
-        }
-        let kind = data
-            .get("kind")
-            .and_then(Value::as_str)
-            .filter(|kind| !kind.is_empty())
-            .map(str::to_owned)
-            .unwrap_or_else(|| infer_kind(&relative).to_owned());
-        let filename_id = current
-            .file_stem()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        let id = data
-            .get("id")
-            .and_then(Value::as_str)
-            .map(butler_core::public_text::trim_js_whitespace)
-            .filter(|id| !id.is_empty())
-            .unwrap_or(&filename_id);
-        let title = data
-            .get("title")
-            .filter(|value| !value.is_null())
-            .or_else(|| data.get("name").filter(|value| !value.is_null()))
-            .map(js_string)
-            .transpose()?
-            .unwrap_or_else(|| id.to_owned());
-        let status = data
-            .get("status")
-            .filter(|value| !value.is_null())
-            .map(js_string)
-            .transpose()?
-            .unwrap_or_else(|| "unknown".to_owned());
-        if let Some(updated_at) = data.get("updatedAt").filter(|value| !value.is_null()) {
-            js_string(updated_at)?;
-        } else {
-            let _ = stats.modified().map_err(|source| {
-                ProjectLedgerReadError::record_show("project_ledger_record_io_error")
-                    .with_source(source)
-            })?;
-        }
-        if id != lookup || kind != "plan" {
-            continue;
-        }
-        let path = format!(
-            "project-ledger/projects/{}/{}",
-            root.file_name().unwrap_or_default().to_string_lossy(),
-            relative.replace('\\', "/")
-        );
-        let body = relative.ends_with(".md").then(|| frontmatter_body(&raw));
-        matches.push(PlanRecordShow {
-            id: id.to_owned(),
-            title,
-            status,
-            body,
-            path: Some(path),
-        });
     }
-    match matches.len() {
-        0 => Err(ProjectLedgerReadError::record_show("record_not_found")),
-        1 => Ok(matches.remove(0)),
-        _ => Err(ProjectLedgerReadError::record_show("ambiguous_record")),
+    if id != lookup || kind != "plan" {
+        return Ok(None);
     }
+    let path = format!(
+        "project-ledger/projects/{}/{}",
+        root.file_name().unwrap_or_default().to_string_lossy(),
+        relative.replace('\\', "/")
+    );
+    let body = relative.ends_with(".md").then(|| frontmatter_body(raw));
+    Ok(Some(PlanRecordShow {
+        id: id.to_owned(),
+        title,
+        status,
+        body,
+        path: Some(path),
+    }))
 }
 
 fn infer_kind(relative: &str) -> &'static str {

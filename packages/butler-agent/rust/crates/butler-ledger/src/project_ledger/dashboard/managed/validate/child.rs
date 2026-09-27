@@ -1,3 +1,4 @@
+use super::super::child::Part;
 use super::super::{invalid, required_string};
 use super::common::*;
 use crate::project_ledger::ProjectLedgerReadError;
@@ -5,21 +6,21 @@ use serde_json::Value;
 
 type Record = serde_json::Map<String, Value>;
 
+/// The child's operation identity and its payload's fields and values.
 pub(in crate::project_ledger::dashboard::managed) fn child(
     value: &Value,
-    property: &str,
+    part: Part,
 ) -> Result<(), ProjectLedgerReadError> {
     identity(value.get("operationIdentity").ok_or_else(invalid)?)?;
-    let item = value.get(property).ok_or_else(invalid)?;
+    let item = value.get(part.property()).ok_or_else(invalid)?;
     let record = object(Some(item))?;
-    match property {
-        "plan" => plan(item, record),
-        "checkpoint" => checkpoint(item, record),
-        "review" => review(item, record),
-        "disposition" => disposition(item, record),
-        "result" => result(item, record),
-        "binding" => binding(item, record),
-        _ => Err(invalid()),
+    match part {
+        Part::Plan => plan(item, record),
+        Part::Checkpoint => checkpoint(item, record),
+        Part::Review => review(item, record),
+        Part::Disposition => disposition(item, record),
+        Part::Result => result(item, record),
+        Part::Binding => binding(item, record),
     }
 }
 

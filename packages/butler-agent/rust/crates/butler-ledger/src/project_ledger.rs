@@ -10,6 +10,7 @@ mod publication;
 mod records;
 mod result_authority;
 mod source_head;
+mod status;
 /// The Bun source-plan fixture, shared with tests of dependent crates.
 #[cfg(any(test, feature = "test-support"))]
 pub const SOURCE_PLAN_FIXTURE: &str = include_str!("project_ledger/tests/source-plan.json");

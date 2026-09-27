@@ -6,6 +6,7 @@ use serde_json::{Map, Value, json};
 
 use super::{markdown, options, state};
 use crate::project_ledger::commands::contracts::CliFailure;
+use crate::project_ledger::status::Lifecycle;
 
 const ALL_METADATA: &[&str] = &[
     "title",
@@ -78,7 +79,7 @@ pub(super) fn create_top_level(root: &Path, args: &Value) -> Result<Value, CliFa
 pub(super) fn create_work(root: &Path, args: &Value) -> Result<Value, CliFailure> {
     let status = options::optional(args, "status").unwrap_or("proposed");
     let optional_id = options::optional(args, "id");
-    state::valid_creation("work", status, optional_id, None)?;
+    state::valid_creation(Lifecycle::Work, status, optional_id, None)?;
     let id = options::required(args, "id")?;
     let title = options::required(args, "title")?;
     let created = super::super::now_iso()?;
@@ -110,7 +111,7 @@ pub(super) fn create_task(root: &Path, args: &Value) -> Result<Value, CliFailure
     super::super::show::resolve_record(root, &work_id, Some("work"))?;
     let status = options::optional(args, "status").unwrap_or("todo");
     let optional_id = options::optional(args, "id");
-    state::valid_creation("task", status, optional_id, Some(&work_id))?;
+    state::valid_creation(Lifecycle::Task, status, optional_id, Some(&work_id))?;
     let id = options::required(args, "id")?;
     let title = options::required(args, "title")?;
     let created = super::super::now_iso()?;
@@ -163,10 +164,10 @@ pub(super) fn update_generic(root: &Path, args: &Value) -> Result<Value, CliFail
         ));
     }
     if let Some(status) = updates.get("status").and_then(Value::as_str)
-        && matches!(kind, "work" | "task" | "attempt")
+        && let Some(lifecycle) = Lifecycle::parse(kind)
     {
-        state::transition(kind, &current.record, status, &id)?;
-        if kind == "work" && status == "done" {
+        state::transition(lifecycle, &current.record, status, &id)?;
+        if lifecycle == Lifecycle::Work && status == "done" {
             state::work_completion_gate(&current.record, &updates)?;
         }
     }

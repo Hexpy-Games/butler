@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 
 use super::contracts::{CliFailure, LedgerCommand, LedgerCommandRequest};
 use super::{envelope, refresh_index_after_mutation};
+use crate::project_ledger::status::Lifecycle;
 use butler_core::locale::LocaleCollation;
 
 pub(super) fn execute(
@@ -81,7 +82,7 @@ fn update_work(root: &Path, options: &Value, complete: bool) -> Result<Value, Cl
     };
     let mut updates = options::updates(options, fields)?;
     if let Some(status) = status {
-        state::transition("work", &current.record, status, &id)?;
+        state::transition(Lifecycle::Work, &current.record, status, &id)?;
         updates.insert("status".into(), Value::String(status.into()));
         if status == "done" {
             state::work_completion_gate(&current.record, &updates)?;
@@ -117,7 +118,7 @@ fn update_task(root: &Path, options: &Value, complete: bool) -> Result<Value, Cl
         &["title", "validation", "review", "report", "reason"],
     )?;
     if let Some(status) = status {
-        state::transition("task", &current.record, status, &id)?;
+        state::transition(Lifecycle::Task, &current.record, status, &id)?;
         updates.insert("status".into(), Value::String(status.into()));
     }
     let body = options::body(options)?;
@@ -207,7 +208,7 @@ fn update_attempt(root: &Path, options: &Value, target: &str) -> Result<Value, C
             format!("Cannot infer task id for attempt: {id}"),
         ));
     }
-    state::transition("attempt", &current.record, target, &id)?;
+    state::transition(Lifecycle::Attempt, &current.record, target, &id)?;
     let mut updates = serde_json::Map::new();
     updates.insert("status".into(), Value::String(target.into()));
     updates.extend(options::updates(

@@ -8,6 +8,7 @@ use super::{LedgerCommand, execute_candidate, show};
 use crate::project_ledger::publication::{
     ProjectLedgerRecordKind, ProjectLedgerRecordOperation, ProjectLedgerRecordUpdate,
 };
+use crate::project_ledger::status::Lifecycle;
 use butler_core::locale::LocaleCollation;
 
 pub(in crate::project_ledger) fn apply(
@@ -34,22 +35,20 @@ pub(in crate::project_ledger) fn apply(
     if current.record.get("spec").is_some_and(truthy) && update.spec_exemption == Some(true) {
         options.shift_remove("spec-exemption");
     }
-    let status = update.status.as_deref();
-    if status.is_none() || !matches!(kind, "work" | "task" | "attempt") {
+    let (Some(status), Some(lifecycle)) = (update.status.as_deref(), Lifecycle::parse(kind)) else {
         return command(root, LedgerCommand::RecordUpdate, options, collation);
-    }
-    let status = status.ok_or(())?;
+    };
     let from = current
         .record
         .get("status")
         .and_then(Value::as_str)
         .unwrap_or("");
-    let path = super::lifecycle::state::plan_transition_path(kind, from, status).map_err(|_| ())?;
+    let path = super::lifecycle::state::plan_transition_path(lifecycle, from, status).ok_or(())?;
     for step in path.iter().take(path.len().saturating_sub(1)) {
         let mut intermediate = Map::new();
         intermediate.insert("id".into(), Value::String(update.id.clone()));
         intermediate.insert("kind".into(), Value::String(kind.into()));
-        intermediate.insert("status".into(), Value::String(step.clone()));
+        intermediate.insert("status".into(), Value::String(step.as_str().into()));
         command(root, LedgerCommand::RecordUpdate, intermediate, collation)?;
     }
     if !path.is_empty() || has_non_status(update) {

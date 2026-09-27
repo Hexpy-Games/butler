@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 
+use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
 use butler_turn::btcc::{
-    ProjectWorkOperationIdentity, ProjectWorkOperationKind, ResolvedProjectWorkScope, WorkView,
+    ActionProgress, DurableWorkStatus, ProjectWorkMaterialSnapshot, ProjectWorkOperationIdentity,
+    ProjectWorkOperationKind, ResolvedProjectWorkScope, WorkOrigin, WorkStage, WorkView,
 };
 
 use super::super::publication::{
@@ -36,6 +38,17 @@ pub(super) fn mutation_identity(id: &str, digest: &str) -> ProjectWorkOperationI
     }
 }
 
+/// An operation identity as child records and manifests store it.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct IdentityRecord<'a> {
+    kind: &'static str,
+    id: &'a str,
+    request_sha256: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mutation_call_id: Option<&'a str>,
+}
+
 pub(super) fn identity_value(identity: &ProjectWorkOperationIdentity) -> Value {
     let kind = match identity.kind {
         ProjectWorkOperationKind::MutationCall => "mutation_call",
@@ -44,13 +57,14 @@ pub(super) fn identity_value(identity: &ProjectWorkOperationIdentity) -> Value {
         ProjectWorkOperationKind::Abandonment => "abandonment",
         ProjectWorkOperationKind::LegacyImport => "legacy_import",
     };
-    let mut value = serde_json::json!({
-        "kind": kind, "id": identity.id, "requestSha256": identity.request_sha256,
-    });
-    if let Some(call) = &identity.mutation_call_id {
-        value["mutationCallId"] = Value::String(call.clone());
-    }
-    value
+    let record = IdentityRecord {
+        kind,
+        id: &identity.id,
+        request_sha256: &identity.request_sha256,
+        mutation_call_id: identity.mutation_call_id.as_deref(),
+    };
+    // Strings only: serializing cannot fail.
+    serde_json::to_value(record).unwrap_or(Value::Null)
 }
 
 pub(super) fn identity_from_value(
@@ -142,6 +156,58 @@ pub(super) struct ManifestViewInput<'a> {
     pub revisions: &'a Value,
 }
 
+/// The persisted Project Work manifest (`butler.btcc-project-work.v1`).
+/// It is stored as canonical JSON, so field order here is only the order of
+/// the in-memory value; revision counters come from the caller and pointers
+/// are present only when set.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Manifest<'a, R> {
+    schema: &'static str,
+    work_id: &'a str,
+    session_id: &'a str,
+    scope: ManifestScope<'a>,
+    origin: &'a WorkOrigin,
+    objective: &'a str,
+    status: DurableWorkStatus,
+    session_head: bool,
+    allowed_next_stages: &'a [WorkStage],
+    action_progress: &'a [ActionProgress],
+    result_refs: &'a [R],
+    binding_refs: Value,
+    result_sequence: usize,
+    material_fingerprint: &'a str,
+    material_snapshot: &'a ProjectWorkMaterialSnapshot,
+    operation_identity: Value,
+    created_at: &'a Value,
+    updated_at: &'a str,
+    #[serde(flatten)]
+    revisions: &'a Map<String, Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    current_stage: Option<WorkStage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    current_plan_revision_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    latest_checkpoint_revision_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    latest_plan_review_revision_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    latest_result_review_revision_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    latest_completion_validation_revision_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    latest_disposition_revision_id: Option<&'a str>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ManifestScope<'a> {
+    app_project_id: &'a str,
+    ledger_project_id: &'a str,
+}
+
+/// The manifest describing `view` after one operation; the creation time is
+/// kept from the prior manifest.
 pub(super) fn manifest_for_view(
     input: ManifestViewInput<'_>,
 ) -> Result<Value, butler_turn::btcc::BtccError> {
@@ -155,82 +221,62 @@ pub(super) fn manifest_for_view(
         material,
         revisions,
     } = input;
-    let mut manifest = serde_json::json!({
-        "schema": "butler.btcc-project-work.v1",
-        "workId": view.work_id,
-        "sessionId": view.session_id,
-        "scope": {"appProjectId": scope.app_project_id, "ledgerProjectId": scope.ledger_project_id},
-        "origin": view.origin,
-        "objective": view.objective,
-        "status": view.status,
-        "sessionHead": session_head,
-        "allowedNextStages": view.allowed_next_stages,
-        "actionProgress": view.action_progress,
-        "resultRefs": view.result_refs,
-        "bindingRefs": binding_refs,
-        "resultSequence": view.result_refs.len(),
-        "materialFingerprint": material.material_fingerprint,
-        "materialSnapshot": material.material_snapshot,
-        "operationIdentity": identity_value(identity),
-        "createdAt": prior.and_then(|v| v.get("createdAt")).unwrap_or(&Value::String(view.created_at.clone())),
-        "updatedAt": view.updated_at,
-    });
-    let object = manifest
-        .as_object_mut()
-        .ok_or_else(|| invalid("project_work_managed_record_invalid"))?;
-    for (key, value) in revisions
-        .as_object()
-        .ok_or_else(|| invalid("project_work_managed_record_invalid"))?
-    {
-        object.insert(key.clone(), value.clone());
-    }
-    for (key, value) in [
-        (
-            "currentStage",
-            serde_json::to_value(view.current_stage).ok(),
-        ),
-        (
-            "currentPlanRevisionId",
-            view.current_plan
-                .as_ref()
-                .map(|item| Value::String(item.plan_revision_id.clone())),
-        ),
-        (
-            "latestCheckpointRevisionId",
-            view.latest_checkpoint
-                .as_ref()
-                .map(|item| Value::String(item.checkpoint_revision_id.clone())),
-        ),
-        (
-            "latestPlanReviewRevisionId",
-            view.latest_plan_review
-                .as_ref()
-                .map(|item| Value::String(item.review_revision_id.clone())),
-        ),
-        (
-            "latestResultReviewRevisionId",
-            view.latest_result_review
-                .as_ref()
-                .map(|item| Value::String(item.review_revision_id.clone())),
-        ),
-        (
-            "latestCompletionValidationRevisionId",
-            view.latest_completion_validation
-                .as_ref()
-                .map(|item| Value::String(item.review_revision_id.clone())),
-        ),
-        (
-            "latestDispositionRevisionId",
-            view.latest_disposition
-                .as_ref()
-                .map(|item| Value::String(item.disposition_revision_id.clone())),
-        ),
-    ] {
-        if let Some(value) = value.filter(|item| !item.is_null()) {
-            object.insert(key.into(), value);
-        }
-    }
-    Ok(manifest)
+    let created_at = Value::String(view.created_at.clone());
+    let manifest = Manifest {
+        schema: "butler.btcc-project-work.v1",
+        work_id: &view.work_id,
+        session_id: &view.session_id,
+        scope: ManifestScope {
+            app_project_id: &scope.app_project_id,
+            ledger_project_id: &scope.ledger_project_id,
+        },
+        origin: &view.origin,
+        objective: &view.objective,
+        status: view.status,
+        session_head,
+        allowed_next_stages: &view.allowed_next_stages,
+        action_progress: &view.action_progress,
+        result_refs: &view.result_refs,
+        binding_refs,
+        result_sequence: view.result_refs.len(),
+        material_fingerprint: &material.material_fingerprint,
+        material_snapshot: &material.material_snapshot,
+        operation_identity: identity_value(identity),
+        created_at: prior
+            .and_then(|value| value.get("createdAt"))
+            .unwrap_or(&created_at),
+        updated_at: &view.updated_at,
+        revisions: revisions
+            .as_object()
+            .ok_or_else(|| invalid("project_work_managed_record_invalid"))?,
+        current_stage: view.current_stage,
+        current_plan_revision_id: view
+            .current_plan
+            .as_ref()
+            .map(|item| item.plan_revision_id.as_str()),
+        latest_checkpoint_revision_id: view
+            .latest_checkpoint
+            .as_ref()
+            .map(|item| item.checkpoint_revision_id.as_str()),
+        latest_plan_review_revision_id: view
+            .latest_plan_review
+            .as_ref()
+            .map(|item| item.review_revision_id.as_str()),
+        latest_result_review_revision_id: view
+            .latest_result_review
+            .as_ref()
+            .map(|item| item.review_revision_id.as_str()),
+        latest_completion_validation_revision_id: view
+            .latest_completion_validation
+            .as_ref()
+            .map(|item| item.review_revision_id.as_str()),
+        latest_disposition_revision_id: view
+            .latest_disposition
+            .as_ref()
+            .map(|item| item.disposition_revision_id.as_str()),
+    };
+    serde_json::to_value(manifest)
+        .map_err(|source| invalid("project_work_managed_record_invalid").with_source(source))
 }
 
 pub(super) fn revisions(manifest: &Value) -> Value {

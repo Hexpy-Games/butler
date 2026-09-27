@@ -13,7 +13,7 @@ use super::{CliFailure, CommandContext, display_path, index, io_failure, option_
 
 #[expect(
     clippy::expect_used,
-    reason = "fixed source patterns; tests::private_patterns_compile forces this set"
+    reason = "fixed source patterns; the wire_formats golden check runs this set"
 )]
 static PRIVATE_PATTERNS: LazyLock<RegexSet> = LazyLock::new(|| {
     RegexSetBuilder::new([
@@ -30,6 +30,8 @@ static PRIVATE_PATTERNS: LazyLock<RegexSet> = LazyLock::new(|| {
     .expect("source privacy patterns compile")
 });
 
+/// Every issue the index, generated views and privacy scan raise; any issue
+/// fails the check with the issue list as its data.
 pub(super) fn check(
     context: &CommandContext,
     options: &Value,
@@ -38,47 +40,7 @@ pub(super) fn check(
     let root = &context.root;
     let index_available = root.join("index/project.json").exists();
     let index = index::build(root)?;
-    let mut issues = index
-        .get("issues")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    if !index_available {
-        issues.insert(
-            0,
-            issue(
-                "missing_index",
-                "Index has not been written yet",
-                "index/project.json",
-                root,
-            ),
-        );
-    } else if index.pointer("/index/stale").and_then(Value::as_bool) == Some(true) {
-        issues.insert(
-            0,
-            issue(
-                "stale_index",
-                "Index is older than source records",
-                "index/project.json",
-                root,
-            ),
-        );
-    }
-    for view in index
-        .get("views")
-        .and_then(Value::as_array)
-        .map(Vec::as_slice)
-        .unwrap_or(&[])
-    {
-        if view.get("stale").and_then(Value::as_bool) == Some(true) {
-            let exists = view.get("exists").and_then(Value::as_bool) == Some(true);
-            issues.push(json!({
-                "code":"stale_view","severity":"warning",
-                "message":if exists {"Generated view is older than source records"} else {"Generated view is missing"},
-                "path":view.get("path"),"record":null,
-            }));
-        }
-    }
+    let mut issues = index_issues(root, &index, index_available);
     scan_privacy(root, &mut issues)?;
     let issue_count = issues.len();
     let error_count = issues
@@ -110,6 +72,54 @@ pub(super) fn check(
         json!({"command":format!("project-ledger index{project_flag}"),"reason":"Refresh the derived index after source-record repairs."}),
     ];
     Err(failure)
+}
+
+/// The index's own issues, led by a missing or stale index and followed by
+/// stale or missing generated views.
+fn index_issues(root: &Path, index: &Value, index_available: bool) -> Vec<Value> {
+    let mut issues = index
+        .get("issues")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if !index_available {
+        issues.insert(
+            0,
+            issue(
+                "missing_index",
+                "Index has not been written yet",
+                "index/project.json",
+                root,
+            ),
+        );
+    } else if index.pointer("/index/stale").and_then(Value::as_bool) == Some(true) {
+        issues.insert(
+            0,
+            issue(
+                "stale_index",
+                "Index is older than source records",
+                "index/project.json",
+                root,
+            ),
+        );
+    }
+    let views = index
+        .get("views")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    for view in views {
+        if view.get("stale").and_then(Value::as_bool) != Some(true) {
+            continue;
+        }
+        let exists = view.get("exists").and_then(Value::as_bool) == Some(true);
+        issues.push(json!({
+            "code":"stale_view","severity":"warning",
+            "message":if exists {"Generated view is older than source records"} else {"Generated view is missing"},
+            "path":view.get("path"),"record":null,
+        }));
+    }
+    issues
 }
 
 fn issue(code: &str, message: &str, relative: &str, root: &Path) -> Value {

@@ -21,6 +21,9 @@ pub(super) fn resolve_workspace(
     resolve_reference(butler_data, Some(workspace_path), app_project_id, None)
 }
 
+/// The Ledger root an App project resolves to: an explicit absolute path
+/// inside the projects root is used as is; otherwise the first initialized
+/// candidate named by the workspace, an explicit id or the App project id.
 pub(super) fn resolve_reference(
     butler_data: &Path,
     workspace_path: Option<&str>,
@@ -30,26 +33,13 @@ pub(super) fn resolve_reference(
     let projects_root = butler_data.join("project-ledger/projects");
     let explicit_path = explicit_ref
         .map(Path::new)
-        .filter(|path| path.is_absolute());
-    let explicit_path = explicit_path.map(normalize_absolute);
+        .filter(|path| path.is_absolute())
+        .map(normalize_absolute);
     if let Some(path) = explicit_path
         .as_ref()
         .filter(|path| path.starts_with(&projects_root))
     {
-        canonical_containment(&projects_root, path)?;
-        let id = path
-            .strip_prefix(&projects_root)
-            .ok()
-            .and_then(|path| path.components().next())
-            .and_then(|part| part.as_os_str().to_str())
-            .filter(|id| safe_id(id))
-            .ok_or(ProjectLedgerReadError::resolution(
-                "active_project_ledger_unresolved",
-            ))?;
-        let root = projects_root.join(id);
-        file_generation(&root.join("project.json"))?;
-        file_generation(&root.join("ledger.jsonl"))?;
-        return Ok(root);
+        return explicit_root(&projects_root, path);
     }
     let workspace_path = explicit_path
         .as_ref()
@@ -58,6 +48,58 @@ pub(super) fn resolve_reference(
         .unwrap_or("");
     // The source cache key observes this generation before candidate reads.
     file_generation(&projects_root)?;
+    let candidates: Vec<_> = candidate_ids(workspace_path, explicit_ref, app_project_id)
+        .into_iter()
+        .map(|id| projects_root.join(id))
+        .collect();
+    for candidate in &candidates {
+        canonical_containment(&projects_root, candidate)?;
+    }
+    let selected = candidates
+        .iter()
+        .find(|candidate| {
+            candidate.join("project.json").exists() && candidate.join("ledger.jsonl").exists()
+        })
+        .or_else(|| candidates.first())
+        .ok_or(unresolved())?;
+    if workspace_path.is_empty() && explicit_ref.is_none_or(|value| Path::new(value).is_absolute())
+    {
+        return Err(unresolved());
+    }
+    // buildReference observes these, even though Guided Turn uses only ledger_root.
+    file_generation(&selected.join("project.json"))?;
+    file_generation(&selected.join("ledger.jsonl"))?;
+    Ok(selected.clone())
+}
+
+fn unresolved() -> ProjectLedgerReadError {
+    ProjectLedgerReadError::resolution("active_project_ledger_unresolved")
+}
+
+/// The Ledger named by an explicit path inside the projects root.
+fn explicit_root(projects_root: &Path, path: &Path) -> Result<PathBuf, ProjectLedgerReadError> {
+    canonical_containment(projects_root, path)?;
+    let id = path
+        .strip_prefix(projects_root)
+        .ok()
+        .and_then(|path| path.components().next())
+        .and_then(|part| part.as_os_str().to_str())
+        .filter(|id| safe_id(id))
+        .ok_or(unresolved())?;
+    let root = projects_root.join(id);
+    file_generation(&root.join("project.json"))?;
+    file_generation(&root.join("ledger.jsonl"))?;
+    Ok(root)
+}
+
+/// Candidate Ledger ids in preference order, trimmed, safe and distinct:
+/// the workspace's project id, package name and directory name, a relative
+/// explicit reference, then the App project id.
+fn candidate_ids(
+    workspace_path: &str,
+    explicit_ref: Option<&str>,
+    app_project_id: &str,
+) -> Vec<String> {
     let workspace = Path::new(workspace_path);
     let mut values = Vec::new();
     if !workspace_path.is_empty() {
@@ -74,48 +116,20 @@ pub(super) fn resolve_reference(
     }
     values.push(Some(app_project_id.to_owned()));
     let mut seen = HashSet::new();
-    let candidates: Vec<_> = values
+    values
         .into_iter()
         .flatten()
         .filter_map(|value| {
             let id = butler_core::public_text::trim_js_whitespace(&value);
             (safe_id(id) && seen.insert(id.to_owned())).then(|| id.to_owned())
         })
-        .map(|id| projects_root.join(id))
-        .collect();
-    for candidate in &candidates {
-        canonical_containment(&projects_root, candidate)?;
-    }
-    let mut initialized = Vec::new();
-    for candidate in &candidates {
-        if candidate.join("project.json").exists() && candidate.join("ledger.jsonl").exists() {
-            initialized.push(candidate);
-        }
-    }
-    let selected = initialized
-        .first()
-        .copied()
-        .or_else(|| candidates.first())
-        .ok_or(ProjectLedgerReadError::resolution(
-            "active_project_ledger_unresolved",
-        ))?;
-    if workspace_path.is_empty() && explicit_ref.is_none_or(|value| Path::new(value).is_absolute())
-    {
-        return Err(ProjectLedgerReadError::resolution(
-            "active_project_ledger_unresolved",
-        ));
-    }
-    // buildReference observes these, even though Guided Turn uses only ledger_root.
-    file_generation(&selected.join("project.json"))?;
-    file_generation(&selected.join("ledger.jsonl"))?;
-    Ok(selected.clone())
+        .collect()
 }
 
 pub(super) fn safe_id(value: &str) -> bool {
     let bytes = value.as_bytes();
-    !bytes.is_empty()
-        && bytes.len() <= 120
-        && bytes[0].is_ascii_alphanumeric()
+    bytes.len() <= 120
+        && bytes.first().is_some_and(u8::is_ascii_alphanumeric)
         && bytes
             .iter()
             .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(byte))

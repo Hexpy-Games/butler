@@ -13,12 +13,46 @@ use super::{
     option_truthy, query, record,
 };
 
+/// A generated Project Ledger view.
+#[derive(Clone, Copy)]
+enum View {
+    Dashboard,
+    Handoff,
+    Roadmap,
+}
+
+impl View {
+    fn parse(name: &str) -> Option<Self> {
+        match name {
+            "dashboard" => Some(Self::Dashboard),
+            "handoff" => Some(Self::Handoff),
+            "roadmap" => Some(Self::Roadmap),
+            _ => None,
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Dashboard => "dashboard",
+            Self::Handoff => "handoff",
+            Self::Roadmap => "roadmap",
+        }
+    }
+}
+
+/// Whether a rendered view is only returned or also written to `views/`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Output {
+    Preview,
+    Write,
+}
+
 pub(super) fn render(
     context: &CommandContext,
     options: &Value,
     collation: &LocaleCollation,
 ) -> Result<Value, CliFailure> {
-    let view = option_string(options, "view")
+    let name = option_string(options, "view")
         .filter(|value| !value.is_empty())
         .ok_or_else(|| {
             CliFailure::new(
@@ -26,117 +60,92 @@ pub(super) fn render(
                 "render requires dashboard, handoff, or roadmap",
             )
         })?;
-    if !matches!(view, "dashboard" | "handoff" | "roadmap") {
-        return Err(CliFailure::new(
+    let view = View::parse(name).ok_or_else(|| {
+        CliFailure::new(
             "invalid_render_view",
-            format!("Unsupported render view: {view}"),
-        ));
-    }
+            format!("Unsupported render view: {name}"),
+        )
+    })?;
     if option_truthy(options, "write") {
         super::with_mutation_claim(&context.root, || {
-            render_unlocked(&context.root, view, true, collation)
+            render_unlocked(&context.root, view, Output::Write, collation)
         })
     } else {
-        render_unlocked(&context.root, view, false, collation)
+        render_unlocked(&context.root, view, Output::Preview, collation)
     }
 }
 
 fn render_unlocked(
     root: &Path,
-    view: &str,
-    write: bool,
+    view: View,
+    output: Output,
     collation: &LocaleCollation,
 ) -> Result<Value, CliFailure> {
-    let index = if write {
-        index::load_locked(root)?
-    } else {
-        index::load(root, collation)?
+    let index = match output {
+        Output::Write => index::load_locked(root)?,
+        Output::Preview => index::load(root, collation)?,
     };
     let markdown = markdown(&index, view, collation)?;
-    let relative = format!("views/{view}.md");
-    let path = root.join(&relative);
+    let relative = format!("views/{}.md", view.name());
     let display = display_path(root, Path::new(&relative));
-    if write {
-        fs::create_dir_all(path.parent().ok_or_else(io_failure)?)
-            .map_err(|source| io_failure().with_source(source))?;
-        fs::write(&path, markdown.as_bytes()).map_err(|source| io_failure().with_source(source))?;
-        let event = json!({
-            "schema":"project-ledger.event.v1","ts":now_iso()?,
-            "type":"view_rendered","view":view,"path":display,"source":"project-ledger",
-        });
-        let mut line = butler_core::json::stringify(&event)
-            .map_err(|source| io_failure().with_source(source))?
-            .into_bytes();
-        line.push(b'\n');
-        fs::OpenOptions::new()
-            .append(true)
-            .open(root.join("ledger.jsonl"))
-            .and_then(|mut file| file.write_all(&line))
-            .map_err(|source| io_failure().with_source(source))?;
+    if output == Output::Write {
+        write_view(root, &relative, &display, view, &markdown)?;
     }
-    Ok(json!({"view":view,"path":display,"markdown":markdown,"written":write}))
+    Ok(
+        json!({"view":view.name(),"path":display,"markdown":markdown,
+        "written":output == Output::Write}),
+    )
 }
 
-fn markdown(index: &Value, view: &str, collation: &LocaleCollation) -> Result<String, CliFailure> {
+/// Writes the view file and records a `view_rendered` event.
+fn write_view(
+    root: &Path,
+    relative: &str,
+    display: &str,
+    view: View,
+    markdown: &str,
+) -> Result<(), CliFailure> {
+    let path = root.join(relative);
+    fs::create_dir_all(path.parent().ok_or_else(io_failure)?)
+        .map_err(|source| io_failure().with_source(source))?;
+    fs::write(&path, markdown.as_bytes()).map_err(|source| io_failure().with_source(source))?;
+    let event = json!({
+        "schema":"project-ledger.event.v1","ts":now_iso()?,
+        "type":"view_rendered","view":view.name(),"path":display,"source":"project-ledger",
+    });
+    let mut line = butler_core::json::stringify(&event)
+        .map_err(|source| io_failure().with_source(source))?
+        .into_bytes();
+    line.push(b'\n');
+    fs::OpenOptions::new()
+        .append(true)
+        .open(root.join("ledger.jsonl"))
+        .and_then(|mut file| file.write_all(&line))
+        .map_err(|source| io_failure().with_source(source))
+}
+
+/// The reference lists the views share, at most ten entries each.
+struct Sections {
+    next: Vec<String>,
+    blocked: Vec<String>,
+    missing: Vec<String>,
+    gaps: Vec<String>,
+}
+
+fn markdown(index: &Value, view: View, collation: &LocaleCollation) -> Result<String, CliFailure> {
     let generated = now_iso()?;
-    let next = refs(
-        &query::select(index, "next-actions", &json!({}), collation)?,
-        10,
-    );
-    let blocked = refs(&query::select(index, "blocked", &json!({}), collation)?, 10);
-    let missing = refs(
-        &query::select(index, "missing-spec", &json!({}), collation)?,
-        10,
-    );
-    let gaps = refs(
-        &query::select(index, "completion-gaps", &json!({}), collation)?,
-        10,
-    );
+    let list =
+        |kind: &str| query::select(index, kind, &json!({}), collation).map(|rows| refs(&rows, 10));
+    let sections = Sections {
+        next: list("next-actions")?,
+        blocked: list("blocked")?,
+        missing: list("missing-spec")?,
+        gaps: list("completion-gaps")?,
+    };
     let mut lines = vec!["<!-- generated by project-ledger; do not edit -->".to_owned()];
     match view {
-        "dashboard" => {
-            let project = index.get("project").unwrap_or(&Value::Null);
-            let counts = index.get("counts").unwrap_or(&Value::Null);
-            lines.extend([
-                "# Project Ledger Dashboard".into(),
-                String::new(),
-                format!("Generated: {generated}"),
-                String::new(),
-                format!(
-                    "Project: {} ({})",
-                    text(project, "name"),
-                    text(project, "id")
-                ),
-                String::new(),
-                "## Counts".into(),
-                String::new(),
-            ]);
-            for (label, key) in [
-                ("Work", "work"),
-                ("Tasks", "task"),
-                ("Attempts", "attempt"),
-                ("Decisions", "decision"),
-                ("Risks", "risk"),
-            ] {
-                lines.push(format!(
-                    "- {label}: {}",
-                    counts.get(key).and_then(Value::as_u64).unwrap_or(0)
-                ));
-            }
-            lines.push(format!(
-                "- Issues: {}",
-                index
-                    .get("issues")
-                    .and_then(Value::as_array)
-                    .map(Vec::len)
-                    .unwrap_or(0)
-            ));
-            section(&mut lines, "Next Actions", &next);
-            section(&mut lines, "Blocked", &blocked);
-            section(&mut lines, "Missing Spec", &missing);
-            section(&mut lines, "Completion Gaps", &gaps);
-        }
-        "handoff" => {
+        View::Dashboard => dashboard(&mut lines, index, &generated, &sections),
+        View::Handoff => {
             lines.extend([
                 "# Project Ledger Handoff".into(),
                 String::new(),
@@ -148,45 +157,84 @@ fn markdown(index: &Value, view: &str, collation: &LocaleCollation) -> Result<St
                 "- Run `project-ledger query --kind next-actions --json`.".into(),
                 "- Read only referenced source records and specs.".into(),
             ]);
-            section(&mut lines, "Next Actions", &next);
-            section(&mut lines, "Risks And Blockers", &blocked);
+            section(&mut lines, "Next Actions", &sections.next);
+            section(&mut lines, "Risks And Blockers", &sections.blocked);
         }
-        "roadmap" => {
-            lines.extend([
-                "# Project Ledger Roadmap".into(),
-                String::new(),
-                format!("Generated: {generated}"),
-                String::new(),
-                "## Work".into(),
-                String::new(),
-            ]);
-            let mut work = index
-                .get("records")
-                .and_then(Value::as_array)
-                .map(Vec::as_slice)
-                .unwrap_or(&[])
-                .iter()
-                .filter(|record| text(record, "kind") == "work")
-                .cloned()
-                .collect::<Vec<_>>();
-            query::sort_records(&mut work, collation);
-            let refs = work
-                .iter()
-                .map(|record| record::reference(record, None))
-                .collect::<Vec<_>>();
-            lines.extend(refs.iter().map(format_ref));
-            if refs.is_empty() {
-                lines.push("- None".into());
-            }
-        }
-        _ => {
-            return Err(CliFailure::new(
-                "invalid_render_view",
-                format!("Unsupported render view: {view}"),
-            ));
-        }
+        View::Roadmap => roadmap(&mut lines, index, &generated, collation),
     }
     Ok(lines.join("\n"))
+}
+
+fn dashboard(lines: &mut Vec<String>, index: &Value, generated: &str, sections: &Sections) {
+    let project = index.get("project").unwrap_or(&Value::Null);
+    let counts = index.get("counts").unwrap_or(&Value::Null);
+    lines.extend([
+        "# Project Ledger Dashboard".into(),
+        String::new(),
+        format!("Generated: {generated}"),
+        String::new(),
+        format!(
+            "Project: {} ({})",
+            text(project, "name"),
+            text(project, "id")
+        ),
+        String::new(),
+        "## Counts".into(),
+        String::new(),
+    ]);
+    for (label, key) in [
+        ("Work", "work"),
+        ("Tasks", "task"),
+        ("Attempts", "attempt"),
+        ("Decisions", "decision"),
+        ("Risks", "risk"),
+    ] {
+        lines.push(format!(
+            "- {label}: {}",
+            counts.get(key).and_then(Value::as_u64).unwrap_or(0)
+        ));
+    }
+    lines.push(format!(
+        "- Issues: {}",
+        index
+            .get("issues")
+            .and_then(Value::as_array)
+            .map(Vec::len)
+            .unwrap_or(0)
+    ));
+    section(lines, "Next Actions", &sections.next);
+    section(lines, "Blocked", &sections.blocked);
+    section(lines, "Missing Spec", &sections.missing);
+    section(lines, "Completion Gaps", &sections.gaps);
+}
+
+fn roadmap(lines: &mut Vec<String>, index: &Value, generated: &str, collation: &LocaleCollation) {
+    lines.extend([
+        "# Project Ledger Roadmap".into(),
+        String::new(),
+        format!("Generated: {generated}"),
+        String::new(),
+        "## Work".into(),
+        String::new(),
+    ]);
+    let mut work = index
+        .get("records")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+        .iter()
+        .filter(|record| text(record, "kind") == "work")
+        .cloned()
+        .collect::<Vec<_>>();
+    query::sort_records(&mut work, collation);
+    let refs = work
+        .iter()
+        .map(|record| record::reference(record, None))
+        .collect::<Vec<_>>();
+    lines.extend(refs.iter().map(format_ref));
+    if refs.is_empty() {
+        lines.push("- None".into());
+    }
 }
 
 fn section(lines: &mut Vec<String>, title: &str, references: &[String]) {

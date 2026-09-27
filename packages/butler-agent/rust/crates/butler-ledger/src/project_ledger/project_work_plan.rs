@@ -1,6 +1,8 @@
 //! Source Project Work Plan observation for App session progress.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+use serde::Deserialize;
 
 use serde_json::Value;
 
@@ -21,6 +23,9 @@ pub struct ProjectWorkPlanFacts {
     pub completed_action_keys: Vec<String>,
 }
 
+/// Plan facts of one managed Work for session progress: the current plan's
+/// action keys, the ones done or skipped, and whether the latest plan review
+/// accepted this plan.
 pub(super) fn read(
     data_root: &Path,
     input: &ProjectWorkPlanRead,
@@ -28,12 +33,16 @@ pub(super) fn read(
 ) -> Result<Option<ProjectWorkPlanFacts>, ProjectLedgerReadError> {
     safe_id(&input.ledger_project_id)?;
     safe_id(&input.work_id)?;
-    let root = data_root
-        .join("project-ledger")
-        .join("projects")
-        .join(&input.ledger_project_id);
+    let reader = Reader {
+        root: data_root
+            .join("project-ledger")
+            .join("projects")
+            .join(&input.ledger_project_id),
+        input,
+        collation,
+    };
     let work_path = format!("work/{}/work.md", input.work_id);
-    let Some(work) = committed::read_selected(&root, &work_path)? else {
+    let Some(work) = committed::read_selected(&reader.root, &work_path)? else {
         return Ok(None);
     };
     let manifest = dashboard::decode_manifest_body(
@@ -51,70 +60,126 @@ pub(super) fn read(
         return Ok(None);
     };
     safe_id(plan_id)?;
-    let plan_path = format!("plans/{}.md", plan_id.to_lowercase());
-    let Some(plan_body) = committed::read_selected(&root, &plan_path)? else {
-        return Ok(None);
-    };
-    let plan = dashboard::decode_child_body(
-        records::frontmatter_body_ref(&plan_body),
-        &input.work_id,
+    let Some(plan) = reader.child(
+        &format!("plans/{}.md", plan_id.to_lowercase()),
         plan_id,
         "butler.btcc-project-work-plan.v1",
-        collation,
-    )?;
-    drop(plan_body);
-    let action_keys = plan["plan"]["actions"]
-        .as_array()
-        .ok_or_else(invalid)?
-        .iter()
-        .map(|action| {
-            action["actionKey"]
-                .as_str()
-                .map(str::to_owned)
-                .ok_or_else(invalid)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    drop(plan);
-    let completed_action_keys = manifest["actionProgress"]
-        .as_array()
-        .ok_or_else(invalid)?
-        .iter()
-        .filter(|entry| matches!(entry["status"].as_str(), Some("done" | "skipped")))
-        .map(|entry| {
-            entry["actionKey"]
-                .as_str()
-                .map(str::to_owned)
-                .ok_or_else(invalid)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    let approved = if let Some(review_id) = manifest
-        .get("latestPlanReviewRevisionId")
-        .and_then(Value::as_str)
-    {
-        safe_id(review_id)?;
-        let path = format!("references/{}.md", review_id.to_lowercase());
-        if let Some(body) = committed::read_selected(&root, &path)? {
-            let wrapper = dashboard::decode_child_body(
-                records::frontmatter_body_ref(&body),
-                &input.work_id,
-                review_id,
-                "butler.btcc-project-work-review.v1",
-                collation,
-            )?;
-            let review = &wrapper["review"];
-            review["verdict"].as_str() == Some("accept")
-                && review["boundPlanRevisionId"].as_str() == Some(plan_id)
-        } else {
-            false
-        }
-    } else {
-        false
+    )?
+    else {
+        return Ok(None);
     };
+    let action_keys = PlanChild::deserialize(&plan)
+        .map_err(|source| invalid().with_source(source))?
+        .plan
+        .actions
+        .into_iter()
+        .map(|action| action.action_key)
+        .collect();
+    drop(plan);
+    let completed_action_keys = completed_action_keys(&manifest)?;
     Ok(Some(ProjectWorkPlanFacts {
-        approved,
+        approved: reader.plan_approved(&manifest, plan_id)?,
         action_keys,
         completed_action_keys,
     }))
+}
+
+/// The current plan child: only its action keys are read.
+#[derive(Deserialize)]
+struct PlanChild {
+    plan: PlanActions,
+}
+
+#[derive(Deserialize)]
+struct PlanActions {
+    actions: Vec<PlanActionKey>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PlanActionKey {
+    action_key: String,
+}
+
+struct Reader<'a> {
+    root: PathBuf,
+    input: &'a ProjectWorkPlanRead,
+    collation: &'a LocaleCollation,
+}
+
+impl Reader<'_> {
+    /// A committed child record of the Work, decoded; `None` when absent.
+    fn child(
+        &self,
+        path: &str,
+        id: &str,
+        schema: &str,
+    ) -> Result<Option<Value>, ProjectLedgerReadError> {
+        let Some(body) = committed::read_selected(&self.root, path)? else {
+            return Ok(None);
+        };
+        dashboard::decode_child_body(
+            records::frontmatter_body_ref(&body),
+            &self.input.work_id,
+            id,
+            schema,
+            self.collation,
+        )
+        .map(Some)
+    }
+
+    /// The latest plan review accepted `plan_id`.
+    fn plan_approved(
+        &self,
+        manifest: &Value,
+        plan_id: &str,
+    ) -> Result<bool, ProjectLedgerReadError> {
+        let Some(review_id) = manifest
+            .get("latestPlanReviewRevisionId")
+            .and_then(Value::as_str)
+        else {
+            return Ok(false);
+        };
+        safe_id(review_id)?;
+        let Some(wrapper) = self.child(
+            &format!("references/{}.md", review_id.to_lowercase()),
+            review_id,
+            "butler.btcc-project-work-review.v1",
+        )?
+        else {
+            return Ok(false);
+        };
+        let review = wrapper.get("review");
+        let text = |key: &str| {
+            review
+                .and_then(|review| review.get(key))
+                .and_then(Value::as_str)
+        };
+        Ok(text("verdict") == Some("accept") && text("boundPlanRevisionId") == Some(plan_id))
+    }
+}
+
+/// Action keys whose progress is done or skipped.
+fn completed_action_keys(manifest: &Value) -> Result<Vec<String>, ProjectLedgerReadError> {
+    manifest
+        .get("actionProgress")
+        .and_then(Value::as_array)
+        .ok_or_else(invalid)?
+        .iter()
+        .filter(|entry| {
+            matches!(
+                entry.get("status").and_then(Value::as_str),
+                Some("done" | "skipped")
+            )
+        })
+        .map(|entry| {
+            entry
+                .get("actionKey")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+                .ok_or_else(invalid)
+        })
+        .collect()
 }
 
 fn safe_id(id: &str) -> Result<(), ProjectLedgerReadError> {
