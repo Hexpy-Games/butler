@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200">
+  <style>
+    .ink { fill: #0a0a0b; stroke: #0a0a0b; }
+    @media (prefers-color-scheme: dark) { .ink { fill: #fff; stroke: #fff; } }
+  </style>
+  <g class="ink">
+    <path d="M600 600 L300 464 A329.43 329.43 0 0 0 300 736 Z M600 600 L900 464 A329.43 329.43 0 0 1 900 736 Z" stroke-linejoin="round" stroke-width="68"/>
+    <circle cx="600" cy="600" r="435" fill="none" stroke-width="74"/>
+  </g>
+</svg>

@@ -1,0 +1,9 @@
+.anchor {
+  display: inline-flex;
+  flex: none;
+}
+
+.anchor[data-size="hero"] {
+  display: block;
+  width: var(--web-hero-mark-size);
+}

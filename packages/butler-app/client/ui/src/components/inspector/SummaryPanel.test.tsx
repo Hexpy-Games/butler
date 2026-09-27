@@ -139,6 +139,24 @@ test("summary keeps project Git dependency status distinct from worktree failure
   expect(html).toContain("Git is not installed");
 });
 
+test("the default summary shows progress without gateway, Git, context or skills rows", () => {
+  const html = renderSummary({
+    branch_info: {
+      available: true,
+      workspace_mode: "git",
+      branch_name: "main",
+      safe_status: "Git branch main",
+      dirty: true,
+    },
+  }, false);
+
+  expect(html).toContain("summary-progress-panel");
+  for (const internal of ["Branch details", "Gateway", "Git branch", ">main<", "Dirty", "Context", "Skills", "No app-visible skills"]) {
+    expect(html).not.toContain(internal);
+  }
+  expect(renderSummary({ branch_info: { workspace_mode: "git", branch_name: "main" } })).toContain("Gateway");
+});
+
 test("summary maps canonical progress state families to distinguishable DS tones", () => {
   const familyMarkup = new Map<string, string>();
   const families: Record<string, string[]> = {
@@ -173,9 +191,11 @@ test("summary maps canonical progress state families to distinguishable DS tones
 
 function renderSummary(
   branch: Pick<SessionSummaryView, "branch_info">,
+  developerMode = true,
 ): string {
   return renderToStaticMarkup(
     <SummaryPanel
+      developerMode={developerMode}
       status={{ label: "Connected", tone: "ok" }}
       summary={{
         ...branch,

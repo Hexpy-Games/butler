@@ -1,0 +1,801 @@
+/*
+ * Butler web design system tokens: a fork of the app design system tokens
+ * (packages/butler-app/client/ui/src/libs/design-system/tokens.css).
+ *
+ * - Tokens only: no resets, no component styles (base styles live in base.css).
+ * - Shared names keep the app values exactly; `bun run tokens:check` fails on drift.
+ * - Web-only tokens are prefixed --web-*.
+ * - Theme follows prefers-color-scheme; :root[data-theme="light" | "dark"]
+ *   is the explicit override (the app's .theme-light / .theme-dark values).
+ */
+
+:root {
+  color-scheme: light;
+  --titlebar-height: 48px;
+  --control-hit-target: 30px;
+  --touch-target: 44px;
+  --control-height-xs: 24px;
+  --control-height-sm: 28px;
+  --control-height-md: 30px;
+  --control-height-lg: 34px;
+  --scroll-fade-size: 14px;
+  --focus-ring-width: 2px;
+  --z-sticky: 50;
+  --z-drawer: 60;
+  --z-overlay: 80;
+  --z-dialog: 90;
+  --z-popover: 100;
+  --z-tooltip: 110;
+  --motion-instant: 60ms;
+  --motion-menu: 90ms;
+  --motion-fast: 120ms;
+  --motion-base: 160ms;
+  --motion-slow: 220ms;
+  --motion-deliberate: 320ms;
+  --motion-exit-menu: 60ms;
+  --motion-exit-fast: 90ms;
+  --motion-exit-base: 110ms;
+  --motion-exit-slow: 150ms;
+  --motion-palette: 140ms;
+  --motion-enter-menu: 140ms;
+  --motion-enter-overlay: var(--motion-base);
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-decelerate: cubic-bezier(0, 0, 0, 1);
+  --motion-ease-accelerate: cubic-bezier(0.3, 0, 1, 1);
+  --motion-ease-emphasized: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-ease-spring: linear(
+    0,
+    0.0855,
+    0.2683,
+    0.472,
+    0.6547,
+    0.7991,
+    0.9021,
+    0.9686,
+    1.0067,
+    1.0247,
+    1.0299,
+    1.028,
+    1.0227,
+    1.0166,
+    1.011,
+    1.0065,
+    1.0033,
+    1.0011,
+    0.9999,
+    0.9993,
+    1
+    );
+  --motion-ease-linear: linear;
+  --motion-ease-enter: var(--motion-ease-standard);
+  --motion-ease-exit: var(--motion-ease-accelerate);
+  --motion-distance-xs: 2px;
+  --motion-distance-sm: 4px;
+  --motion-distance-md: 8px;
+  --motion-distance-lg: 24px;
+  --motion-scale-menu: 0.97;
+  --motion-scale-dialog: 0.96;
+  --motion-scale-press: 0.97;
+  --motion-scale-palette: 0.98;
+  --motion-scale-check: 0.85;
+  --spinner-duration: 1320ms;
+  --spinner-rotate-duration: 2000ms;
+  --pulse-duration: 1250ms;
+  --dialog-width-sm: 380px;
+  --dialog-width-md: 520px;
+  --dialog-width-lg: 720px;
+  --dialog-width-xl: 880px;
+  --spinner-easing: linear(
+    0,
+    0.0363,
+    0.0766,
+    0.1243,
+    0.1816,
+    0.2493,
+    0.3266,
+    0.4113,
+    0.5,
+    0.5887,
+    0.6734,
+    0.7507,
+    0.8184,
+    0.8757,
+    0.9234,
+    0.9637,
+    1
+    );
+  --adaptive-drawer-width: min(88vw, 320px);
+  --adaptive-panel-bg: var(--neutral-white);
+  --adaptive-scrim-bg: rgba(0, 0, 0, 0.12);
+  --space-none: 0;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 20px;
+  --space-2xl: 24px;
+  --space-3xl: 32px;
+  --space-4xl: 40px;
+  --space-1: var(--space-xs);
+  --space-2: var(--space-sm);
+  --space-3: var(--space-md);
+  --space-4: var(--space-lg);
+  --space-5: var(--space-xl);
+  --space-6: var(--space-2xl);
+  --tabs-line-indicator-gap: var(--space-md);
+  --border-hairline: 1px;
+  --border-width-strong: 2px;
+  --page-max-width-narrow: 38rem;
+  --page-max-width-reading: 760px;
+  --page-max-width-wide: 72rem;
+  --page-container-narrow: var(--page-max-width-reading);
+  --page-container-default: var(--page-max-width-wide);
+  --page-container-gutter: clamp(var(--space-lg), 3vw, 40px);
+  --neutral-white: #ffffff;
+  --neutral-light-text-primary: #222326;
+  --neutral-light-text-secondary: #696d73;
+  --neutral-light-text-tertiary: #6d7279;
+  --neutral-light-text-disabled: #a7abb0;
+  --neutral-light-placeholder: #6a6e74;
+  --neutral-dark-text-secondary: #b5b8bd;
+  --neutral-dark-text-tertiary: #8b8f97;
+  --neutral-dark-text-disabled: #5a5d64;
+  --neutral-dark-icon-muted: #c5c7cb;
+  --neutral-dark-placeholder: #969a9f;
+  --neutral-dark-send-stop: #e8e9eb;
+  --green-worker-active: #20c052;
+  --amber-worker-warning: #d19a19;
+  --grayscale-01: #f8f9fa;
+  --grayscale-02: #f2f3f4;
+  --grayscale-03: #e9eaec;
+  --grayscale-04: #d5d7da;
+  --grayscale-05: #c2c4c7;
+  --grayscale-06: #9a9da2;
+  --grayscale-07: #71767d;
+  --grayscale-08: #54585e;
+  --grayscale-09: #3a3d42;
+  --grayscale-10: #26282c;
+  --grayscale-11: #1f2023;
+  --grayscale-12: #141516;
+  --blue-01: #e6f2ff;
+  --blue-02: #b3d9ff;
+  --blue-03: #80bfff;
+  --blue-04: #4da6ff;
+  --blue-05: #1a8cff;
+  --blue-06: #007aff;
+  --blue-07: #0066d9;
+  --blue-08: #0052b3;
+  --blue-09: #003d8c;
+  --blue-10: #002966;
+  --green-01: #e6f7e9;
+  --green-02: #b3e6bf;
+  --green-03: #80d494;
+  --green-04: #4dc26a;
+  --green-05: #2fb050;
+  --green-06: #2a9f48;
+  --green-07: #228b3e;
+  --green-08: #1b7733;
+  --green-09: #146328;
+  --green-10: #0d4f1e;
+  --red-01: #fff5f4;
+  --red-02: #ffe0de;
+  --red-03: #ffcac7;
+  --red-04: #ffb3af;
+  --red-05: #ff8a85;
+  --red-06: #e85552;
+  --red-07: #be3836;
+  --red-08: #a42e2c;
+  --red-09: #8a2523;
+  --red-10: #701c1a;
+  --amber-01: #fff9e6;
+  --amber-02: #ffedb3;
+  --amber-03: #ffe080;
+  --amber-04: #ffd44d;
+  --amber-05: #ffc71a;
+  --amber-06: #e6b000;
+  --amber-07: #cc9900;
+  --amber-08: #b38300;
+  --amber-09: #996c00;
+  --amber-10: #805600;
+  /* Warning text on light surfaces (amber-08 read 3.2:1 on its tint). */
+  --amber-warning-text: #8f6500;
+  --color-text-primary: var(--neutral-light-text-primary);
+  --color-text-secondary: var(--neutral-light-text-secondary);
+  --color-text-tertiary: var(--neutral-light-text-tertiary);
+  --color-text-disabled: var(--neutral-light-text-disabled);
+  --interactive-disabled-fg: var(--color-text-disabled);
+  --interactive-disabled-cursor: not-allowed;
+  --color-text-inverse: var(--neutral-white);
+  --color-action-primary: var(--blue-06);
+  --color-success: var(--green-06);
+  --color-success-bg: var(--green-01);
+  --color-warning: var(--amber-06);
+  --color-warning-bg: var(--amber-01);
+  --color-danger: var(--red-07);
+  --color-danger-bg: var(--red-01);
+  --color-success-border: var(--green-02);
+  --color-success-text: var(--green-08);
+  --color-warning-border: var(--amber-02);
+  --color-warning-text: var(--amber-warning-text);
+  --color-danger-border: var(--red-02);
+  --color-danger-text: var(--color-danger);
+  --color-info-bg: var(--blue-01);
+  --color-info-border: var(--blue-02);
+  --color-info-text: var(--blue-07);
+  --color-border-default: var(--grayscale-03);
+  --color-border-strong: var(--grayscale-04);
+  --color-border-interactive: var(--blue-06);
+  --color-surface-base: var(--grayscale-01);
+  --color-surface-raised: rgba(255, 255, 255, 0.96);
+  --color-surface-overlay: rgba(255, 255, 255, 0.98);
+  --color-disabled-bg: var(--grayscale-02);
+  --color-disabled-fg: var(--grayscale-05);
+  --focus-ring-color: var(--color-action-primary);
+  --focus-ring: 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
+  --typo-h1-size: 32px;
+  --typo-h1-weight: 620;
+  --typo-h1-line-height: 1.25;
+  --typo-h1-letter-spacing: 0;
+  --typo-h2-size: 24px;
+  --typo-h2-weight: 620;
+  --typo-h2-line-height: 1.3;
+  --typo-h2-letter-spacing: 0;
+  --typo-h3-size: 20px;
+  --typo-h3-weight: 560;
+  --typo-h3-line-height: 1.35;
+  --typo-h3-letter-spacing: 0;
+  --typo-h4-size: 18px;
+  --typo-h4-weight: 560;
+  --typo-h4-line-height: 1.4;
+  --typo-h4-letter-spacing: 0;
+  --typo-h5-size: 16px;
+  --typo-h5-weight: 560;
+  --typo-h5-line-height: 1.45;
+  --typo-h5-letter-spacing: 0;
+  --typo-h6-size: 14px;
+  --typo-h6-weight: 560;
+  --typo-h6-line-height: 1.45;
+  --typo-h6-letter-spacing: 0;
+  --typo-body-size: 14px;
+  --typo-body-weight: 400;
+  --typo-body-line-height: 1.45;
+  --typo-body-letter-spacing: 0;
+  --typo-caption-size: 12px;
+  --typo-caption-weight: 400;
+  --typo-caption-line-height: 1.45;
+  --typo-caption-letter-spacing: 0;
+  --typo-label-size: 13px;
+  --typo-label-weight: 500;
+  --typo-label-line-height: 1.45;
+  --typo-label-letter-spacing: 0;
+  --typo-code-size: 13px;
+  --typo-code-weight: 400;
+  --typo-code-line-height: 1.45;
+  --typo-code-letter-spacing: 0;
+  --typo-code-font: var(--typo-code-weight) var(--typo-code-size) /
+    var(--typo-code-line-height) var(--font-family-code);
+  --typo-app-title-size: 15px;
+  --typo-app-title-weight: 620;
+  --typo-app-title-line-height: 1.4;
+  --typo-app-title-letter-spacing: 0;
+  --typo-panel-title-size: 15px;
+  --typo-panel-title-weight: 620;
+  --typo-panel-title-line-height: 1.3;
+  --typo-panel-title-letter-spacing: 0;
+  --typo-dashboard-title-size: 24px;
+  --typo-dashboard-title-weight: 620;
+  --typo-dashboard-title-line-height: 1.3;
+  --typo-dashboard-title-letter-spacing: 0;
+  --typo-section-title-size: 13px;
+  --typo-section-title-weight: 500;
+  --typo-section-title-line-height: 1.45;
+  --typo-section-title-letter-spacing: 0;
+  --typo-panel-section-title-size: 15px;
+  --typo-panel-section-title-weight: 500;
+  --typo-panel-section-title-line-height: 1.45;
+  --typo-panel-section-title-letter-spacing: 0;
+  --typo-metric-value-size: 18px;
+  --typo-metric-value-weight: 560;
+  --typo-metric-value-line-height: 1.4;
+  --typo-metric-value-letter-spacing: 0;
+  --font-body: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic",
+    sans-serif;
+  --font-family-code: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-code: var(--font-size-2)/var(--line-height-body)
+    var(--font-family-code);
+  --font-size-1: var(--typo-caption-size);
+  --font-size-2: var(--typo-label-size);
+  --font-size-3: var(--typo-body-size);
+  --font-size-4: var(--typo-app-title-size);
+  --font-size-5: var(--typo-h4-size);
+  --font-size-6: var(--typo-h2-size);
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 560;
+  --font-weight-strong: 620;
+  --line-height-none: 1;
+  --line-height-tight: 1.2;
+  --line-height-snug: 1.35;
+  --line-height-body: 1.45;
+  --line-height-document: 1.58;
+  --icon-size-xs: 12px;
+  --icon-size-sm: 14px;
+  --icon-size-md: 16px;
+  --icon-size-lg: 20px;
+  --icon-size-xl: 24px;
+  --icon-size-2xl: 32px;
+  --sidebar-row-height: 30px;
+  --sidebar-row-gap: 10px;
+  --radius-control: 8px;
+  --radius-panel: 10px;
+  --radius-popover: 12px;
+  --radius-composer: 22px;
+  --radius-pill: 999px;
+  --surface: rgba(255, 255, 255, 0.9);
+  --surface-raised: var(--color-surface-raised);
+  --workspace-bg: rgba(255, 255, 255, 0.94);
+  --titlebar-bg: rgba(255, 255, 255, 0.72);
+  --control-bg: rgba(255, 255, 255, 0.82);
+  --control-hover-bg: rgba(255, 255, 255, 0.94);
+  --composer-glass-bg: rgba(255, 255, 255, 0.52);
+  --composer-glass-control-bg: rgba(246, 247, 249, 0.3);
+  --composer-glass-border: rgba(255, 255, 255, 0.65);
+  --composer-glass-divider: rgba(0, 0, 0, 0.045);
+  --composer-glass-highlight: rgba(255, 255, 255, 0.42);
+  --composer-glass-lowlight: rgba(0, 0, 0, 0.035);
+  --composer-glass-glint: transparent;
+  --composer-glass-shadow: 0 12px 28px rgba(0, 0, 0, 0.06);
+  --composer-glass-blur: 4px;
+  --composer-glass-filter: saturate(1.35) blur(var(--composer-glass-blur));
+  --tinted-glass-bg: var(--composer-glass-bg);
+  --tinted-glass-tint: rgba(255, 255, 255, 1);
+  --tinted-glass-edge-size: 20px;
+  --tinted-glass-border: var(--composer-glass-border);
+  --tinted-glass-highlight: var(--composer-glass-highlight);
+  --tinted-glass-shadow: var(--composer-glass-shadow);
+  --tinted-glass-blur: 4px;
+  --tinted-glass-filter: saturate(1.35) blur(var(--tinted-glass-blur));
+  --sidebar-bg: rgba(255, 255, 255, 0.52);
+  --text-primary: var(--color-text-primary);
+  --text-secondary: var(--color-text-secondary);
+  --text-tertiary: var(--color-text-tertiary);
+  --line: var(--color-border-default);
+  --line-strong: var(--color-border-strong);
+  --selection: rgba(32, 35, 39, 0.07);
+  --selection-strong: rgba(32, 35, 39, 0.1);
+  --accent: var(--color-action-primary);
+  --ok: var(--color-success);
+  --danger: var(--color-danger);
+  --icon-muted: var(--grayscale-08);
+  --placeholder: var(--neutral-light-placeholder);
+  --send-bg: var(--grayscale-10);
+  --dialog-overlay-bg: rgba(0, 0, 0, 0.12);
+  --command-overlay-bg: rgba(0, 0, 0, 0.06);
+  --color-mix-light: var(--neutral-white);
+  --shadow-card: 0 10px 28px rgba(0, 0, 0, 0.08);
+  --shadow-window: 0 18px 48px rgba(0, 0, 0, 0.14);
+  --shadow-control: 0 1px 3px rgba(0, 0, 0, 0.22);
+  --background: var(--surface-raised);
+  --foreground: var(--text-primary);
+  --popover: var(--color-surface-overlay);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--send-bg);
+  --primary-foreground: var(--color-text-inverse);
+  --secondary: rgba(32, 35, 39, 0.08);
+  --secondary-foreground: var(--text-primary);
+  --secondary-border: transparent;
+  --muted: rgba(32, 35, 39, 0.06);
+  --muted-foreground: var(--text-secondary);
+  --destructive: var(--danger);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--focus-ring-color);
+  --radius: var(--radius-control);
+  --syntax-keyword: var(--blue-08);
+  --syntax-string: var(--green-08);
+  --syntax-comment: var(--grayscale-07);
+  --syntax-number: var(--amber-09);
+  --syntax-title: var(--blue-07);
+  --syntax-type: var(--amber-10);
+  --syntax-variable: var(--red-07);
+  --syntax-meta: var(--grayscale-08);
+  --syntax-addition: var(--green-08);
+  --syntax-deletion: var(--red-07);
+
+  /* Web-only tokens */
+  --web-palette-mark-ink: #0a0a0b;
+  --web-mark-ink: var(--web-palette-mark-ink);
+  --web-page-bg: var(--color-surface-base);
+  --web-content-bg: var(--neutral-white);
+  --web-sidebar-width: 264px;
+  --web-toc-width: 212px;
+  --web-content-max-width: var(--page-max-width-reading);
+  --web-gutter: var(--page-container-gutter);
+  --web-hero-mark-size: 56px;
+  /* Narrowest last (prose) column of a docs table before the table scrolls. */
+  --web-table-prose-min-width: 8rem;
+}
+
+/* System dark, unless the reader chose light. Keep in sync with the explicit
+   dark scope below (both are checked against the app's .theme-dark). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --color-text-primary: var(--grayscale-02);
+    --color-text-secondary: var(--neutral-dark-text-secondary);
+    --color-text-tertiary: var(--neutral-dark-text-tertiary);
+    --color-text-disabled: var(--neutral-dark-text-disabled);
+    --interactive-disabled-fg: var(--color-text-disabled);
+    --color-text-inverse: var(--grayscale-11);
+    --color-action-primary: var(--blue-06);
+    --color-success: var(--green-05);
+    --color-success-bg: rgba(42, 159, 72, 0.12);
+    --color-warning: var(--amber-06);
+    --color-warning-bg: rgba(230, 176, 0, 0.12);
+    --color-danger: var(--red-06);
+    --color-danger-bg: rgba(190, 56, 54, 0.16);
+    --color-success-border: rgba(42, 159, 72, 0.32);
+    --color-success-text: var(--green-04);
+    --color-warning-border: rgba(230, 176, 0, 0.32);
+    --color-warning-text: var(--amber-05);
+    --color-danger-border: rgba(190, 56, 54, 0.4);
+    --color-danger-text: var(--red-05);
+    --color-info-bg: rgba(0, 122, 255, 0.14);
+    --color-info-border: rgba(0, 122, 255, 0.32);
+    --color-info-text: var(--blue-04);
+    --color-border-default: rgba(255, 255, 255, 0.1);
+    --color-border-strong: rgba(255, 255, 255, 0.16);
+    --color-border-interactive: var(--color-action-primary);
+    --color-surface-base: var(--grayscale-11);
+    --color-surface-raised: rgba(35, 36, 39, 0.96);
+    --color-surface-overlay: rgba(37, 38, 41, 0.98);
+    --color-disabled-bg: rgba(255, 255, 255, 0.08);
+    --color-disabled-fg: var(--neutral-dark-text-disabled);
+    --focus-ring-color: var(--color-action-primary);
+    --focus-ring: 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
+    --ring: var(--focus-ring-color);
+    --surface: rgba(30, 31, 34, 0.9);
+    --adaptive-panel-bg: var(--grayscale-11);
+    --adaptive-scrim-bg: rgba(0, 0, 0, 0.34);
+    --surface-raised: var(--color-surface-raised);
+    --workspace-bg: rgba(26, 27, 30, 0.94);
+    --titlebar-bg: rgba(26, 27, 30, 0.76);
+    --control-bg: rgba(255, 255, 255, 0.08);
+    --control-hover-bg: rgba(255, 255, 255, 0.13);
+    --composer-glass-bg: rgba(30, 30, 32, 0.7);
+    --composer-glass-control-bg: rgba(255, 255, 255, 0.045);
+    --composer-glass-border: rgba(0, 0, 0, 0.08);
+    --composer-glass-divider: rgba(255, 255, 255, 0.055);
+    --composer-glass-highlight: rgba(255, 255, 255, 0.11);
+    --composer-glass-lowlight: rgba(0, 0, 0, 0.16);
+    --composer-glass-glint: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(23, 24, 26, 0.81) 13%,
+      rgba(23, 24, 26, 1) 20%,
+      rgba(23, 24, 26, 1) 81%,
+      rgba(23, 24, 26, 0.75) 90%,
+      rgba(255, 255, 255, 0) 100%
+      );
+    --composer-glass-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+    --composer-glass-blur: 4px;
+    --composer-glass-filter: saturate(1.3) blur(var(--composer-glass-blur));
+    --tinted-glass-bg: var(--composer-glass-bg);
+    --tinted-glass-tint: rgba(23, 24, 26, 1);
+    --tinted-glass-edge-size: 20px;
+    --tinted-glass-border: var(--composer-glass-border);
+    --tinted-glass-highlight: var(--composer-glass-highlight);
+    --tinted-glass-shadow: var(--composer-glass-shadow);
+    --tinted-glass-blur: 4px;
+    --tinted-glass-filter: saturate(1.3) blur(var(--tinted-glass-blur));
+    --sidebar-bg: rgba(36, 37, 40, 0.72);
+    --text-primary: var(--color-text-primary);
+    --text-secondary: var(--color-text-secondary);
+    --text-tertiary: var(--color-text-tertiary);
+    --line: var(--color-border-default);
+    --line-strong: var(--color-border-strong);
+    --selection: rgba(255, 255, 255, 0.08);
+    --selection-strong: rgba(255, 255, 255, 0.13);
+    --icon-muted: var(--neutral-dark-icon-muted);
+    --placeholder: var(--neutral-dark-placeholder);
+    --send-bg: var(--color-text-primary);
+    --dialog-overlay-bg: rgba(0, 0, 0, 0.34);
+    --command-overlay-bg: rgba(0, 0, 0, 0.26);
+    --shadow-card: 0 16px 34px rgba(0, 0, 0, 0.32);
+    --shadow-window: 0 18px 48px rgba(0, 0, 0, 0.38);
+    --shadow-control: 0 1px 3px rgba(0, 0, 0, 0.32);
+    --background: var(--surface-raised);
+    --foreground: var(--text-primary);
+    --popover: var(--color-surface-overlay);
+    --popover-foreground: var(--text-primary);
+    --primary: var(--send-bg);
+    --primary-foreground: var(--color-text-inverse);
+    --secondary: rgba(255, 255, 255, 0.08);
+    --secondary-border: rgba(255, 255, 255, 0.4);
+    --muted: rgba(255, 255, 255, 0.06);
+    --color-mix-light: var(--neutral-white);
+    --syntax-keyword: var(--blue-03);
+    --syntax-string: var(--green-03);
+    --syntax-comment: var(--grayscale-06);
+    --syntax-number: var(--amber-04);
+    --syntax-title: var(--blue-02);
+    --syntax-type: var(--amber-03);
+    --syntax-variable: var(--red-04);
+    --syntax-meta: var(--grayscale-05);
+    --syntax-addition: var(--green-04);
+    --syntax-deletion: var(--red-05);
+    --accent: var(--color-action-primary);
+    --ok: var(--color-success);
+    --danger: var(--color-danger);
+    --secondary-foreground: var(--text-primary);
+    --muted-foreground: var(--text-secondary);
+    --destructive: var(--danger);
+    --border: var(--line);
+    --input: var(--line);
+
+    --web-mark-ink: var(--neutral-white);
+    --web-content-bg: color-mix(in srgb, var(--grayscale-11) 50%, var(--grayscale-12));
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-text-primary: var(--grayscale-02);
+  --color-text-secondary: var(--neutral-dark-text-secondary);
+  --color-text-tertiary: var(--neutral-dark-text-tertiary);
+  --color-text-disabled: var(--neutral-dark-text-disabled);
+  --interactive-disabled-fg: var(--color-text-disabled);
+  --color-text-inverse: var(--grayscale-11);
+  --color-action-primary: var(--blue-06);
+  --color-success: var(--green-05);
+  --color-success-bg: rgba(42, 159, 72, 0.12);
+  --color-warning: var(--amber-06);
+  --color-warning-bg: rgba(230, 176, 0, 0.12);
+  --color-danger: var(--red-06);
+  --color-danger-bg: rgba(190, 56, 54, 0.16);
+  --color-success-border: rgba(42, 159, 72, 0.32);
+  --color-success-text: var(--green-04);
+  --color-warning-border: rgba(230, 176, 0, 0.32);
+  --color-warning-text: var(--amber-05);
+  --color-danger-border: rgba(190, 56, 54, 0.4);
+  --color-danger-text: var(--red-05);
+  --color-info-bg: rgba(0, 122, 255, 0.14);
+  --color-info-border: rgba(0, 122, 255, 0.32);
+  --color-info-text: var(--blue-04);
+  --color-border-default: rgba(255, 255, 255, 0.1);
+  --color-border-strong: rgba(255, 255, 255, 0.16);
+  --color-border-interactive: var(--color-action-primary);
+  --color-surface-base: var(--grayscale-11);
+  --color-surface-raised: rgba(35, 36, 39, 0.96);
+  --color-surface-overlay: rgba(37, 38, 41, 0.98);
+  --color-disabled-bg: rgba(255, 255, 255, 0.08);
+  --color-disabled-fg: var(--neutral-dark-text-disabled);
+  --focus-ring-color: var(--color-action-primary);
+  --focus-ring: 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
+  --ring: var(--focus-ring-color);
+  --surface: rgba(30, 31, 34, 0.9);
+  --adaptive-panel-bg: var(--grayscale-11);
+  --adaptive-scrim-bg: rgba(0, 0, 0, 0.34);
+  --surface-raised: var(--color-surface-raised);
+  --workspace-bg: rgba(26, 27, 30, 0.94);
+  --titlebar-bg: rgba(26, 27, 30, 0.76);
+  --control-bg: rgba(255, 255, 255, 0.08);
+  --control-hover-bg: rgba(255, 255, 255, 0.13);
+  --composer-glass-bg: rgba(30, 30, 32, 0.7);
+  --composer-glass-control-bg: rgba(255, 255, 255, 0.045);
+  --composer-glass-border: rgba(0, 0, 0, 0.08);
+  --composer-glass-divider: rgba(255, 255, 255, 0.055);
+  --composer-glass-highlight: rgba(255, 255, 255, 0.11);
+  --composer-glass-lowlight: rgba(0, 0, 0, 0.16);
+  --composer-glass-glint: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(23, 24, 26, 0.81) 13%,
+    rgba(23, 24, 26, 1) 20%,
+    rgba(23, 24, 26, 1) 81%,
+    rgba(23, 24, 26, 0.75) 90%,
+    rgba(255, 255, 255, 0) 100%
+    );
+  --composer-glass-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+  --composer-glass-blur: 4px;
+  --composer-glass-filter: saturate(1.3) blur(var(--composer-glass-blur));
+  --tinted-glass-bg: var(--composer-glass-bg);
+  --tinted-glass-tint: rgba(23, 24, 26, 1);
+  --tinted-glass-edge-size: 20px;
+  --tinted-glass-border: var(--composer-glass-border);
+  --tinted-glass-highlight: var(--composer-glass-highlight);
+  --tinted-glass-shadow: var(--composer-glass-shadow);
+  --tinted-glass-blur: 4px;
+  --tinted-glass-filter: saturate(1.3) blur(var(--tinted-glass-blur));
+  --sidebar-bg: rgba(36, 37, 40, 0.72);
+  --text-primary: var(--color-text-primary);
+  --text-secondary: var(--color-text-secondary);
+  --text-tertiary: var(--color-text-tertiary);
+  --line: var(--color-border-default);
+  --line-strong: var(--color-border-strong);
+  --selection: rgba(255, 255, 255, 0.08);
+  --selection-strong: rgba(255, 255, 255, 0.13);
+  --icon-muted: var(--neutral-dark-icon-muted);
+  --placeholder: var(--neutral-dark-placeholder);
+  --send-bg: var(--color-text-primary);
+  --dialog-overlay-bg: rgba(0, 0, 0, 0.34);
+  --command-overlay-bg: rgba(0, 0, 0, 0.26);
+  --shadow-card: 0 16px 34px rgba(0, 0, 0, 0.32);
+  --shadow-window: 0 18px 48px rgba(0, 0, 0, 0.38);
+  --shadow-control: 0 1px 3px rgba(0, 0, 0, 0.32);
+  --background: var(--surface-raised);
+  --foreground: var(--text-primary);
+  --popover: var(--color-surface-overlay);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--send-bg);
+  --primary-foreground: var(--color-text-inverse);
+  --secondary: rgba(255, 255, 255, 0.08);
+  --secondary-border: rgba(255, 255, 255, 0.4);
+  --muted: rgba(255, 255, 255, 0.06);
+  --color-mix-light: var(--neutral-white);
+  --syntax-keyword: var(--blue-03);
+  --syntax-string: var(--green-03);
+  --syntax-comment: var(--grayscale-06);
+  --syntax-number: var(--amber-04);
+  --syntax-title: var(--blue-02);
+  --syntax-type: var(--amber-03);
+  --syntax-variable: var(--red-04);
+  --syntax-meta: var(--grayscale-05);
+  --syntax-addition: var(--green-04);
+  --syntax-deletion: var(--red-05);
+  --accent: var(--color-action-primary);
+  --ok: var(--color-success);
+  --danger: var(--color-danger);
+  --secondary-foreground: var(--text-primary);
+  --muted-foreground: var(--text-secondary);
+  --destructive: var(--danger);
+  --border: var(--line);
+  --input: var(--line);
+
+  --web-mark-ink: var(--neutral-white);
+  --web-content-bg: color-mix(in srgb, var(--grayscale-11) 50%, var(--grayscale-12));
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-success: var(--green-06);
+  --color-success-bg: var(--green-01);
+  --color-warning: var(--amber-06);
+  --color-warning-bg: var(--amber-01);
+  --color-danger: var(--red-07);
+  --color-danger-bg: var(--red-01);
+  --color-success-border: var(--green-02);
+  --color-success-text: var(--green-08);
+  --color-warning-border: var(--amber-02);
+  --color-warning-text: var(--amber-warning-text);
+  --color-danger-border: var(--red-02);
+  --color-danger-text: var(--color-danger);
+  --color-info-bg: var(--blue-01);
+  --color-info-border: var(--blue-02);
+  --color-info-text: var(--blue-07);
+  --color-surface-raised: rgba(255, 255, 255, 0.96);
+  --color-surface-overlay: rgba(255, 255, 255, 0.98);
+  --color-text-primary: var(--neutral-light-text-primary);
+  --color-text-secondary: var(--neutral-light-text-secondary);
+  --color-text-tertiary: var(--neutral-light-text-tertiary);
+  --color-text-disabled: var(--neutral-light-text-disabled);
+  --interactive-disabled-fg: var(--color-text-disabled);
+  --color-text-inverse: var(--neutral-white);
+  --focus-ring-color: var(--color-action-primary);
+  --focus-ring: 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
+  --ring: var(--focus-ring-color);
+  --surface: rgba(255, 255, 255, 0.9);
+  --adaptive-panel-bg: var(--neutral-white);
+  --adaptive-scrim-bg: rgba(0, 0, 0, 0.12);
+  --surface-raised: var(--color-surface-raised);
+  --workspace-bg: rgba(255, 255, 255, 0.94);
+  --titlebar-bg: rgba(255, 255, 255, 0.72);
+  --control-bg: rgba(255, 255, 255, 0.82);
+  --control-hover-bg: rgba(255, 255, 255, 0.94);
+  --composer-glass-bg: rgba(255, 255, 255, 0.52);
+  --composer-glass-control-bg: rgba(246, 247, 249, 0.3);
+  --composer-glass-border: rgba(255, 255, 255, 0.65);
+  --composer-glass-divider: rgba(0, 0, 0, 0.045);
+  --composer-glass-highlight: rgba(255, 255, 255, 0.42);
+  --composer-glass-lowlight: rgba(0, 0, 0, 0.035);
+  --composer-glass-glint: transparent;
+  --composer-glass-shadow: 0 12px 28px rgba(0, 0, 0, 0.06);
+  --composer-glass-blur: 4px;
+  --composer-glass-filter: saturate(1.35) blur(var(--composer-glass-blur));
+  --tinted-glass-bg: var(--composer-glass-bg);
+  --tinted-glass-tint: rgba(255, 255, 255, 1);
+  --tinted-glass-edge-size: 20px;
+  --tinted-glass-border: var(--composer-glass-border);
+  --tinted-glass-highlight: var(--composer-glass-highlight);
+  --tinted-glass-shadow: var(--composer-glass-shadow);
+  --tinted-glass-blur: 4px;
+  --tinted-glass-filter: saturate(1.35) blur(var(--tinted-glass-blur));
+  --sidebar-bg: rgba(255, 255, 255, 0.52);
+  --text-primary: var(--color-text-primary);
+  --text-secondary: var(--color-text-secondary);
+  --text-tertiary: var(--color-text-tertiary);
+  --line: var(--color-border-default);
+  --line-strong: var(--color-border-strong);
+  --selection: rgba(32, 35, 39, 0.07);
+  --selection-strong: rgba(32, 35, 39, 0.1);
+  --icon-muted: var(--grayscale-08);
+  --placeholder: var(--neutral-light-placeholder);
+  --send-bg: var(--grayscale-10);
+  --dialog-overlay-bg: rgba(0, 0, 0, 0.12);
+  --command-overlay-bg: rgba(0, 0, 0, 0.06);
+  --color-mix-light: var(--neutral-white);
+  --background: var(--surface-raised);
+  --foreground: var(--text-primary);
+  --popover: var(--color-surface-overlay);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--send-bg);
+  --primary-foreground: var(--color-text-inverse);
+  --syntax-keyword: var(--blue-08);
+  --syntax-string: var(--green-08);
+  --syntax-comment: var(--grayscale-07);
+  --syntax-number: var(--amber-09);
+  --syntax-title: var(--blue-07);
+  --syntax-type: var(--amber-10);
+  --syntax-variable: var(--red-07);
+  --syntax-meta: var(--grayscale-08);
+  --syntax-addition: var(--green-08);
+  --syntax-deletion: var(--red-07);
+  --accent: var(--color-action-primary);
+  --ok: var(--color-success);
+  --danger: var(--color-danger);
+  --secondary-foreground: var(--text-primary);
+  --muted-foreground: var(--text-secondary);
+  --destructive: var(--danger);
+  --border: var(--line);
+  --input: var(--line);
+}
+
+/* Touch-sized hit targets on phones and coarse pointers. */
+@media (width <= 640px), (pointer: coarse) {
+  :root {
+    --control-hit-target: 44px;
+  }
+}
+
+@media (width <= 640px) {
+  :root {
+    --titlebar-height: 56px;
+    --adaptive-drawer-width: min(78vw, 336px);
+    --sidebar-row-height: 48px;
+    --sidebar-icon-size: 22px;
+    --sidebar-row-gap: var(--space-md);
+    --typo-h1-size: 34px;
+    --typo-h2-size: 26px;
+    --typo-h3-size: 22px;
+    --typo-h4-size: 20px;
+    --typo-h5-size: 18px;
+    --typo-h6-size: 16px;
+    --typo-body-size: 16px;
+    --typo-caption-size: 14px;
+    --typo-label-size: 15px;
+    --typo-code-size: 15px;
+    --typo-app-title-size: 17px;
+    --typo-panel-title-size: 17px;
+    --typo-dashboard-title-size: 26px;
+    --typo-section-title-size: 15px;
+    --typo-panel-section-title-size: 17px;
+    --typo-metric-value-size: 20px;
+  }
+}
+
+/* Reduced motion is an opacity fade, not zero motion. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-distance-xs: 0px;
+    --motion-distance-sm: 0px;
+    --motion-distance-md: 0px;
+    --motion-distance-lg: 0px;
+    --motion-scale-menu: 1;
+    --motion-scale-dialog: 1;
+    --motion-scale-press: 1;
+    --motion-scale-lift: 1;
+    --motion-scale-palette: 1;
+    --motion-scale-check: 1;
+  }
+}

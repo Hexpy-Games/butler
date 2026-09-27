@@ -7,7 +7,8 @@
     "packages/butler-app/client/electron",
     "packages/butler-app/client/ui",
     "packages/butler-progress-projection",
-    "packages/project-ledger"
+    "packages/project-ledger",
+    "packages/butler-site"
   ],
   "scripts": {
     "lint": "eslint . && ${BUTLER_BUN:-bun} run --silent lint:design && ${BUTLER_BUN:-bun} run --silent lint:css",
@@ -44,6 +45,11 @@
     "app:motion:trace": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/ds-motion-trace.ts",
     "render": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/ds-viewer-render.ts",
     "ds:skill-catalog": "${BUTLER_BUN:-bun} run packages/butler-app/client/ui/src/libs/design-system/scripts/generate-skill-catalog.ts",
+    "site:dev": "${BUTLER_BUN:-bun} run --cwd packages/butler-site dev",
+    "site:build": "${BUTLER_BUN:-bun} run --cwd packages/butler-site build",
+    "site:build:help": "${BUTLER_BUN:-bun} run --cwd packages/butler-site build:help",
+    "site:build:ds": "${BUTLER_BUN:-bun} run --cwd packages/butler-site build:ds",
+    "site:check": "${BUTLER_BUN:-bun} run --cwd packages/butler-site check",
     "app:ui:hmr:smoke": "${BUTLER_BUN:-bun} run packages/butler-app/scripts/app-ui-hmr-smoke.ts",
     "release:agent:gate": "${BUTLER_PYTHON3:-python3} packages/butler-agent/rust/scripts/release-standalone-macos-arm64.py gate --payload \"${BUTLER_NATIVE_AGENT_PAYLOAD:-packages/butler-app/client/electron/.native-agent-payload/bundled-agent}\"",
     "release:agent:package": "${BUTLER_PYTHON3:-python3} packages/butler-agent/rust/scripts/package-standalone-macos-arm64.py --payload \"${BUTLER_NATIVE_AGENT_PAYLOAD:-packages/butler-app/client/electron/.native-agent-payload/bundled-agent}\" --output \"${BUTLER_AGENT_ARCHIVE:-dist/release/agent/butler-agent-darwin-arm64.tar.gz}\"",
