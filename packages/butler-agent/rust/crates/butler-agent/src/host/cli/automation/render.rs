@@ -56,7 +56,7 @@ fn safe_preview_text(value: &str) -> String {
         fixed_regex(r"(?i)\b(?:password|passwd|secret|token|api[_-]?key|access[_-]?token|refresh[_-]?token|authorization)[-_][A-Za-z0-9._~-]{4,}")
     });
     let token = SECRET_TOKEN.get_or_init(|| fixed_regex(r"\b(?:sk|pk|rk)-[A-Za-z0-9_-]{12,}\b"));
-    let redacted = crate::operations::redact_log_line(value);
+    let redacted = butler_runtime::operations::redact_log_line(value);
     let redacted = field.replace_all(&redacted, "$1$2[redacted]");
     let redacted = label.replace_all(&redacted, "[redacted]");
     token.replace_all(&redacted, "[redacted]").into_owned()

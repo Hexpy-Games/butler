@@ -184,20 +184,20 @@ pub(crate) trait GatewayApplication:
 {
     fn check_app_update(
         &self,
-        request: crate::operations::UpdateRequest,
+        request: butler_runtime::operations::UpdateRequest,
     ) -> ApplicationFuture<serde_json::Value>;
     fn apply_app_update(
         &self,
-        request: crate::operations::UpdateRequest,
+        request: butler_runtime::operations::UpdateRequest,
     ) -> ApplicationFuture<serde_json::Value>;
-    fn list_skills(&self) -> ApplicationFuture<crate::skills::SkillSettingsView> {
+    fn list_skills(&self) -> ApplicationFuture<butler_runtime::skills::SkillSettingsView> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn import_skill(
         &self,
-        _archive: crate::skills::StagedSkillArchive,
+        _archive: butler_runtime::skills::StagedSkillArchive,
         _project_id: Option<String>,
-    ) -> ApplicationFuture<crate::skills::SkillImportResult> {
+    ) -> ApplicationFuture<butler_runtime::skills::SkillImportResult> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn create_project(

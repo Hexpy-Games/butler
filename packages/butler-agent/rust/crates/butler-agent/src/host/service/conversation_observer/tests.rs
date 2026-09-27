@@ -32,7 +32,7 @@ async fn canonical_completion_publishes_one_observation_and_one_queue_job_then_d
             &root.clone(),
             &CognitionPathEnvironment::default(),
             clock,
-            Arc::new(crate::operations::MetricFiles::new(root.clone())),
+            Arc::new(butler_runtime::operations::MetricFiles::new(root.clone())),
         )
         .unwrap(),
     );

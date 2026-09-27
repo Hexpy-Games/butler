@@ -1,7 +1,7 @@
 //! Runtime owner shutdown after admission has stopped and Turn futures have drained.
 
 use super::*;
-use crate::skills::Skills;
+use butler_runtime::skills::Skills;
 
 pub(super) struct RuntimeOwners {
     pub(super) stores: RuntimeStores,
@@ -9,7 +9,7 @@ pub(super) struct RuntimeOwners {
     pub(super) project_tools: Arc<crate::host::guided::project_tools::GuidedProjectTools>,
     pub(super) session_worktrees: SessionWorktrees,
     pub(super) image_files: Arc<crate::gateway::AppImageFiles>,
-    pub(super) attachment_context: Arc<crate::context::AttachmentContext>,
+    pub(super) attachment_context: Arc<butler_runtime::context::AttachmentContext>,
     pub(super) memory_sync: crate::host::memory_jobs::sync::MemorySync,
     #[cfg(unix)]
     pub(super) embedding: Arc<super::super::EmbeddingOwner>,
@@ -29,7 +29,7 @@ pub(super) struct RuntimeOwners {
     pub(super) mutations: WorkspaceMutations,
     pub(super) work_streams: Arc<super::super::WorkStreams>,
     pub(super) skills: Arc<Skills>,
-    pub(super) automations: Arc<crate::operations::AutomationService>,
+    pub(super) automations: Arc<butler_runtime::operations::AutomationService>,
 }
 
 impl HostDependencies for RuntimeOwners {

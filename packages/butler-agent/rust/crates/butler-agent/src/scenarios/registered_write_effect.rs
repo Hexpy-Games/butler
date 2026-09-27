@@ -3,8 +3,8 @@ use std::sync::Arc;
 use serde_json::json;
 use tokio_util::sync::CancellationToken;
 
-use crate::capabilities::Capabilities;
 use crate::host::{RegisteredWrite, RegisteredWriteContext};
+use butler_runtime::capabilities::Capabilities;
 use butler_turn::btcc::effects::EffectService;
 use butler_turn::btcc::effects::contracts::Access;
 use butler_turn::btcc::effects::contracts::EffectAdapter;

@@ -6,7 +6,8 @@ use serde_json::json;
 
 use crate::cognition::{RecallMetric, RecallMetricSink};
 
-use crate::operations::{MetricFiles, metrics_enabled};
+use butler_runtime::operations::MetricFiles;
+use butler_runtime::operations::metrics_enabled;
 
 pub(crate) struct RecallMetrics {
     files: Arc<MetricFiles>,

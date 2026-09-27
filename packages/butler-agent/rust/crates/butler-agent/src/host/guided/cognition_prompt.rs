@@ -3,10 +3,12 @@
 use std::sync::Arc;
 
 use crate::cognition::{CapsulePresence, CognitionError, CognitionPromptReader};
-use crate::context::{
-    CognitionPromptPort, ContextError, ContextFuture, ProjectCapsuleStatus, PromptProjectionInput,
-    ScopedFeedbackProjection,
-};
+use butler_runtime::context::CognitionPromptPort;
+use butler_runtime::context::ContextError;
+use butler_runtime::context::ContextFuture;
+use butler_runtime::context::ProjectCapsuleStatus;
+use butler_runtime::context::PromptProjectionInput;
+use butler_runtime::context::ScopedFeedbackProjection;
 use butler_turn::workspace::StoredSessionBinding;
 
 pub(crate) struct CognitionPrompt {

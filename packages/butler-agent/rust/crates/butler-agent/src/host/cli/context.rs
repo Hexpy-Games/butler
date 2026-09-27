@@ -11,11 +11,11 @@ use std::{
 
 use serde_json::{Value, json};
 
-use crate::context::ContextBudgetEnvironment;
-use crate::context::ContextBudgetOwner;
 use crate::host::ResolvedInstallation;
 use crate::host::cli::settings as settings_cli;
 use butler_models::models;
+use butler_runtime::context::ContextBudgetEnvironment;
+use butler_runtime::context::ContextBudgetOwner;
 
 mod compaction;
 mod maintenance;

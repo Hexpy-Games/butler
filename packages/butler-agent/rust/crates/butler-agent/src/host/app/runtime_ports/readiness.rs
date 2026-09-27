@@ -5,10 +5,10 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
-use crate::{
-    gateway::{AppExecutorReadiness, GatewayApplicationError, RuntimeReadinessView},
-    operations::ServiceReadiness,
-};
+use crate::gateway::AppExecutorReadiness;
+use crate::gateway::GatewayApplicationError;
+use crate::gateway::RuntimeReadinessView;
+use butler_runtime::operations::ServiceReadiness;
 
 pub(crate) struct AppReadiness {
     receipt: Arc<ServiceReadiness>,

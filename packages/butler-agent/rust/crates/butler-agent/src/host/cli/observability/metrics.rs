@@ -98,8 +98,9 @@ pub(super) fn tail(
             .ok()
             .map(|duration| duration.as_millis() as f64 - hours * 3_600_000.0)
     });
-    let events = crate::operations::tail_operational_metric_events(data_root, since_ts, lines);
-    let enabled = crate::operations::metrics_enabled(data_root);
+    let events =
+        butler_runtime::operations::tail_operational_metric_events(data_root, since_ts, lines);
+    let enabled = butler_runtime::operations::metrics_enabled(data_root);
     let data = json!({ "events": events, "lines": lines, "enabled": enabled });
     let text = data["events"]
         .as_array()

@@ -11,7 +11,6 @@ pub(crate) use crate::host::guided::tool_artifact::ToolArtifactReader;
 pub(crate) use crate::host::memory_jobs::source::MemorySourceReader;
 mod runtime;
 
-pub(crate) use crate::capabilities::{RegisteredWrite, RegisteredWriteContext};
 #[cfg(unix)]
 pub(crate) use crate::host::app::monitoring::AppMonitoring;
 #[cfg(unix)]
@@ -42,6 +41,8 @@ pub(crate) use crate::host::guided::tools::{GuidedToolBinding, GuidedTools};
 pub(crate) use crate::host::guided::work::GuidedWorkAdapter;
 pub(crate) use crate::host::guided::work_tools::GuidedWorkTools;
 pub(crate) use crate::host::service::conversation_observer::ConversationObserver;
+pub(crate) use butler_runtime::capabilities::RegisteredWrite;
+pub(crate) use butler_runtime::capabilities::RegisteredWriteContext;
 mod app;
 mod automation;
 pub(crate) mod cli;

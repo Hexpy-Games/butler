@@ -7,6 +7,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+butler-runtime = { path = "../butler-runtime" }
 butler-models = { path = "../butler-models" }
 butler-turn = { path = "../butler-turn" }
 butler-core = { path = "../butler-core" }
@@ -64,6 +65,7 @@ nix.workspace = true
 libproc.workspace = true
 
 [dev-dependencies]
+butler-runtime = { path = "../butler-runtime", features = ["test-support"] }
 butler-models = { path = "../butler-models", features = ["test-support"] }
 butler-turn = { path = "../butler-turn", features = ["test-support"] }
 butler-test-support = { path = "../butler-test-support" }

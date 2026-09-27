@@ -9,7 +9,6 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
-use crate::context::ContextPortAdapter;
 use butler_core::locale::LocaleCollation;
 use butler_models::models::ModelCatalog;
 use butler_models::models::ModelCatalogSnapshot;
@@ -27,6 +26,7 @@ use butler_models::models::ProviderPromptCachePolicy;
 use butler_models::models::ProviderRequestConfig;
 use butler_models::models::ProviderRequestConfigPort;
 use butler_models::models::ProviderRoundPolicy;
+use butler_runtime::context::ContextPortAdapter;
 use butler_turn::btcc::ContextMessages;
 use butler_turn::btcc::ContextPort;
 use butler_turn::btcc::ContextProjectionInput;

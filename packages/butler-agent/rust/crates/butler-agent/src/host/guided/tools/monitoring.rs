@@ -18,7 +18,7 @@ pub(crate) struct MonitoringReaders {
     catalog: Arc<butler_models::models::ModelCatalog>,
     memory_health: Arc<crate::cognition::MemoryHealthService>,
     profile: Arc<crate::profile::ProfileService>,
-    metrics: Arc<crate::operations::CycleMetrics>,
+    metrics: Arc<butler_runtime::operations::CycleMetrics>,
 }
 
 impl MonitoringReaders {
@@ -28,7 +28,7 @@ impl MonitoringReaders {
         catalog: Arc<butler_models::models::ModelCatalog>,
         memory_health: Arc<crate::cognition::MemoryHealthService>,
         profile: Arc<crate::profile::ProfileService>,
-        metrics: Arc<crate::operations::CycleMetrics>,
+        metrics: Arc<butler_runtime::operations::CycleMetrics>,
     ) -> Self {
         Self {
             data_root,
@@ -41,7 +41,7 @@ impl MonitoringReaders {
     }
 
     async fn context(&self, session: &str, model_ref: &str) -> Value {
-        crate::operations::read_context_tool(
+        butler_runtime::operations::read_context_tool(
             &self.data_root,
             session,
             model_ref,
@@ -52,7 +52,7 @@ impl MonitoringReaders {
     }
 
     fn usage(&self, session: &str, since_ts: Option<f64>) -> Value {
-        crate::operations::read_usage_tool(&self.data_root, session, since_ts)
+        butler_runtime::operations::read_usage_tool(&self.data_root, session, since_ts)
     }
 
     async fn memory_health(&self) -> Result<Value, BtccError> {

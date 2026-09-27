@@ -4,13 +4,17 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 
-use crate::context::{
-    ImageSanitizerInput, ImageSanitizerLimits, ImageSourceRecord, VisualImageAdmissionResult,
-    admit_visual_image_request, assert_visual_carrier_matches_catalog,
-    image_admission_for_catalog_entry, sanitize_image, verify_visual_manifest_source,
-};
 use butler_models::models::HostedApiShape;
 use butler_models::models::ModelProviderMetadata;
+use butler_runtime::context::ImageSanitizerInput;
+use butler_runtime::context::ImageSanitizerLimits;
+use butler_runtime::context::ImageSourceRecord;
+use butler_runtime::context::VisualImageAdmissionResult;
+use butler_runtime::context::admit_visual_image_request;
+use butler_runtime::context::assert_visual_carrier_matches_catalog;
+use butler_runtime::context::image_admission_for_catalog_entry;
+use butler_runtime::context::sanitize_image;
+use butler_runtime::context::verify_visual_manifest_source;
 
 use super::files::{self, Stage};
 use super::{AppMessageFileSnapshot, GatewayApplicationError, image_error, public};
@@ -146,7 +150,7 @@ pub(super) fn validate(
     serde_json::to_value(checked).map_err(GatewayApplicationError::internal_from)
 }
 
-fn route(entry: Option<&ModelProviderMetadata>) -> crate::context::ImageCarrierTuple {
+fn route(entry: Option<&ModelProviderMetadata>) -> butler_runtime::context::ImageCarrierTuple {
     let carrier = entry
         .and_then(|entry| entry.image_carrier_protocol.clone())
         .or_else(|| {
@@ -159,7 +163,7 @@ fn route(entry: Option<&ModelProviderMetadata>) -> crate::context::ImageCarrierT
             })
         })
         .unwrap_or_else(|| "fake_vision".into());
-    crate::context::ImageCarrierTuple {
+    butler_runtime::context::ImageCarrierTuple {
         provider_id: entry
             .map(|entry| entry.provider_id.clone())
             .unwrap_or_default(),

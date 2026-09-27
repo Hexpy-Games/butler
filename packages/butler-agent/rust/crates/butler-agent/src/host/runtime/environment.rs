@@ -8,8 +8,9 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 use crate::cognition::CognitionPathEnvironment;
-use crate::context::{ContextBudgetEnvironment, PromptEnvironment};
 use butler_models::models::ModelConfigurationEnvironment;
+use butler_runtime::context::ContextBudgetEnvironment;
+use butler_runtime::context::PromptEnvironment;
 
 pub(crate) struct ProcessEnvironment {
     pub model: ModelConfigurationEnvironment,

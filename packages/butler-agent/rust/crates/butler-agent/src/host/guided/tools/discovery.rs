@@ -6,10 +6,12 @@ mod mcp;
 use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
-use crate::capabilities::{BridgeCatalogTool, describe_native, search_native};
 use butler_core::json::JsonDocument;
 use butler_core::json::visit_raw_array;
 use butler_core::json::visit_raw_object;
+use butler_runtime::capabilities::BridgeCatalogTool;
+use butler_runtime::capabilities::describe_native;
+use butler_runtime::capabilities::search_native;
 use butler_turn::btcc::BtccError;
 use butler_turn::btcc::GuidedInvocation;
 use butler_turn::btcc::ModelRoundToolCall;

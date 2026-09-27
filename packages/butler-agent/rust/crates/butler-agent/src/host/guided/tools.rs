@@ -26,10 +26,10 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use crate::capabilities::Capabilities;
 use crate::cognition::{ExactMemoryQuery, MemoryRecall};
-use crate::context::ConversationSessionReference;
 use crate::host::{GuidedActivity, GuidedWorkTools};
+use butler_runtime::capabilities::Capabilities;
+use butler_runtime::context::ConversationSessionReference;
 use butler_turn::btcc::AuthorityLoopContinuation;
 use butler_turn::btcc::BtccError;
 use butler_turn::btcc::GuidedInvocation;
@@ -95,7 +95,7 @@ pub(crate) struct GuidedTools {
     memory_paths: crate::cognition::CognitionPathEnvironment,
     memory_publisher: Arc<crate::cognition::CompletionPublisher>,
     conversations: Arc<ConversationSessionReference>,
-    conversation_tools: Arc<crate::context::ConversationTools>,
+    conversation_tools: Arc<butler_runtime::context::ConversationTools>,
     project: Arc<crate::host::guided::project_tools::GuidedProjectTools>,
     work: GuidedWorkTools,
     activity: Arc<GuidedActivity>,
@@ -103,14 +103,14 @@ pub(crate) struct GuidedTools {
     catalog: Arc<crate::host::GuidedCatalog>,
     subsessions: Arc<butler_turn::btcc::SubsessionService>,
     work_streams: Arc<crate::host::WorkStreams>,
-    automations: Arc<crate::operations::AutomationService>,
+    automations: Arc<butler_runtime::operations::AutomationService>,
     mcp_client: Arc<butler_models::mcp_client::McpClient>,
     verified_image_payload: Arc<dyn butler_turn::btcc::VerifiedImagePayloadPort>,
     profile: Arc<crate::profile::ProfileService>,
     monitoring: Arc<MonitoringReaders>,
-    attachment_context: Arc<crate::context::AttachmentContext>,
+    attachment_context: Arc<butler_runtime::context::AttachmentContext>,
     session_worktrees: butler_turn::workspace::SessionWorktrees,
-    web_session: crate::web_access::WebSession,
+    web_session: butler_runtime::web_access::WebSession,
     app_endpoint: Arc<crate::host::ActiveAppEndpoint>,
     binding: GuidedToolBinding,
     state: Mutex<State>,
@@ -165,7 +165,7 @@ impl GuidedTools {
         memory_paths: crate::cognition::CognitionPathEnvironment,
         memory_publisher: Arc<crate::cognition::CompletionPublisher>,
         conversations: Arc<ConversationSessionReference>,
-        conversation_tools: Arc<crate::context::ConversationTools>,
+        conversation_tools: Arc<butler_runtime::context::ConversationTools>,
         project: Arc<crate::host::guided::project_tools::GuidedProjectTools>,
         work: GuidedWorkTools,
         activity: Arc<GuidedActivity>,
@@ -173,14 +173,14 @@ impl GuidedTools {
         catalog: Arc<crate::host::GuidedCatalog>,
         subsessions: Arc<butler_turn::btcc::SubsessionService>,
         work_streams: Arc<crate::host::WorkStreams>,
-        automations: Arc<crate::operations::AutomationService>,
+        automations: Arc<butler_runtime::operations::AutomationService>,
         mcp_client: Arc<butler_models::mcp_client::McpClient>,
         verified_image_payload: Arc<dyn butler_turn::btcc::VerifiedImagePayloadPort>,
         profile: Arc<crate::profile::ProfileService>,
         monitoring: Arc<MonitoringReaders>,
-        attachment_context: Arc<crate::context::AttachmentContext>,
+        attachment_context: Arc<butler_runtime::context::AttachmentContext>,
         session_worktrees: butler_turn::workspace::SessionWorktrees,
-        web_session: crate::web_access::WebSession,
+        web_session: butler_runtime::web_access::WebSession,
         app_endpoint: Arc<crate::host::ActiveAppEndpoint>,
         restored: Option<&AuthorityLoopContinuation>,
         binding: GuidedToolBinding,

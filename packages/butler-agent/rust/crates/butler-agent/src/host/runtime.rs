@@ -26,10 +26,6 @@ use crate::cognition::{
     CognitionPromptReader, CompletionPublisher, ExactMemoryQuery, MemoryRecall,
     ProjectCapsuleService,
 };
-use crate::context::{
-    ContextBudgetOwner, ContextConversation, ConversationSessionReference, ConversationTools,
-    PromptAssembler, PromptDependencies, PromptPaths, ToolOutput,
-};
 use crate::coordination::CognitionWriteCoordinator;
 use crate::host::memory_jobs::context_maintenance::ContextMaintenance;
 #[cfg(unix)]
@@ -37,13 +33,21 @@ use crate::host::memory_jobs::daily::{DailyCognitionJobs, DailyCognitionOwners};
 use crate::host::memory_jobs::recall_metrics::RecallMetrics;
 use crate::host::runtime::environment::ProcessEnvironment;
 use crate::host::runtime::stores::RuntimeStores;
-use crate::operations::MetricFiles;
 use crate::profile::{PersonaPresets, ProfileService};
 use crate::project_ledger::{ProjectLedger, ProjectWork};
 use boundary::{setup, validate_data_installation_boundary};
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
 use butler_models::models::ModelConfigurationClock;
+use butler_runtime::context::ContextBudgetOwner;
+use butler_runtime::context::ContextConversation;
+use butler_runtime::context::ConversationSessionReference;
+use butler_runtime::context::ConversationTools;
+use butler_runtime::context::PromptAssembler;
+use butler_runtime::context::PromptDependencies;
+use butler_runtime::context::PromptPaths;
+use butler_runtime::context::ToolOutput;
+use butler_runtime::operations::MetricFiles;
 use butler_turn::btcc;
 use butler_turn::btcc::BtccError;
 use butler_turn::btcc::BtccRepositories;
@@ -119,7 +123,7 @@ impl AgentRuntime {
         ));
         let files = WorkspaceFiles::new(4);
         let image_files = Arc::new(crate::gateway::AppImageFiles::new(&paths.data_root.clone()));
-        let attachment_context = Arc::new(crate::context::AttachmentContext::new(
+        let attachment_context = Arc::new(butler_runtime::context::AttachmentContext::new(
             paths.data_root.clone(),
         ));
         let commands = Commands::new();

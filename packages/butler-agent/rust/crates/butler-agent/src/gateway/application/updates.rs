@@ -1,6 +1,8 @@
 use super::GatewayApplicationError;
 
-pub(super) fn update_error(error: &crate::operations::UpdateError) -> GatewayApplicationError {
+pub(super) fn update_error(
+    error: &butler_runtime::operations::UpdateError,
+) -> GatewayApplicationError {
     let code = error.code();
     let (status, message) = match code {
         "unsupported_component" => (400, "Only Butler App package updates are available."),

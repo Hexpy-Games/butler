@@ -80,20 +80,23 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
             );
         }
     };
-    let metrics = Arc::new(crate::operations::WebSearchMetrics::new(data_root.clone()));
-    let access = match crate::web_access::WebAccess::new_reader(data_root.clone(), metrics.clone())
-    {
-        Ok(access) => access,
-        Err(error) => {
-            return report_error(
-                command.source_name(),
-                options.json,
-                error.code(),
-                &error.message(),
-                1,
-            );
-        }
-    };
+    let metrics = Arc::new(butler_runtime::operations::WebSearchMetrics::new(
+        data_root.clone(),
+    ));
+    let access =
+        match butler_runtime::web_access::WebAccess::new_reader(data_root.clone(), metrics.clone())
+        {
+            Ok(access) => access,
+            Err(error) => {
+                return report_error(
+                    command.source_name(),
+                    options.json,
+                    error.code(),
+                    &error.message(),
+                    1,
+                );
+            }
+        };
     match command {
         Command::SearchStatus => match access.search_status() {
             Ok(data) => {
@@ -167,7 +170,7 @@ async fn run_search_test(
     options: Options,
     command: Command,
     data_root: PathBuf,
-    metrics: Arc<crate::operations::WebSearchMetrics>,
+    metrics: Arc<butler_runtime::operations::WebSearchMetrics>,
 ) -> ExitCode {
     let home = env::var_os("HOME")
         .filter(|value| !value.is_empty())
@@ -204,19 +207,22 @@ async fn run_search_test(
             5,
         );
     };
-    let access =
-        match crate::web_access::WebAccess::new_search(data_root, models.configuration, metrics) {
-            Ok(access) => access,
-            Err(error) => {
-                return report_error(
-                    command.source_name(),
-                    options.json,
-                    error.code(),
-                    &error.message(),
-                    5,
-                );
-            }
-        };
+    let access = match butler_runtime::web_access::WebAccess::new_search(
+        data_root,
+        models.configuration,
+        metrics,
+    ) {
+        Ok(access) => access,
+        Err(error) => {
+            return report_error(
+                command.source_name(),
+                options.json,
+                error.code(),
+                &error.message(),
+                5,
+            );
+        }
+    };
     let query = options.positionals[2..].join(" ").trim().to_owned();
     match access.search_test(&query, &CancellationToken::new()).await {
         Ok(data) => {

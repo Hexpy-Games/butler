@@ -141,12 +141,14 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
     ));
     let tool_output = crate::host::open_tool_output(
         scratch.0.clone(),
-        Arc::new(crate::context::ContextBudgetOwner::new(
+        Arc::new(butler_runtime::context::ContextBudgetOwner::new(
             output_models.configuration.clone(),
             output_models.catalog.clone(),
             Default::default(),
         )),
-        Arc::new(crate::operations::MetricFiles::new(scratch.0.clone())),
+        Arc::new(butler_runtime::operations::MetricFiles::new(
+            scratch.0.clone(),
+        )),
     );
     let conversation_store = butler_turn::conversation::AgentConversationStore::open(
         butler_turn::conversation::ConversationStoreConfig {
@@ -157,9 +159,9 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
     )
     .await
     .unwrap();
-    let conversation_tools = Arc::new(crate::context::ConversationTools::new(
+    let conversation_tools = Arc::new(butler_runtime::context::ConversationTools::new(
         scratch.0.clone(),
-        Arc::new(crate::context::ContextConversation::new(
+        Arc::new(butler_runtime::context::ContextConversation::new(
             conversation_store.clone(),
             output_models.configuration.clone(),
             output_models.catalog.clone(),
@@ -180,9 +182,9 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
         Arc::new(LocaleCollation::new("en-US").unwrap()),
     ));
     let work_streams = Arc::new(crate::host::WorkStreams::open(scratch.0.clone()).unwrap());
-    let automations = crate::operations::AutomationService::open(
+    let automations = butler_runtime::operations::AutomationService::open(
         &scratch.0.clone(),
-        crate::operations::AutomationDependencies {
+        butler_runtime::operations::AutomationDependencies {
             parse_date: Arc::new(butler_core::js_date::parse_iso_millis),
             now_millis: Arc::new(|| 0),
             enqueue: Arc::new(crate::host::AutomationQueue(Arc::new(
@@ -207,14 +209,16 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
             &scratch.0.clone(),
             1,
         )),
-        conversation_reference: Arc::new(crate::context::ConversationSessionReference::new(
-            &scratch.0.clone(),
-            1,
-            Arc::new(crate::host::MemorySourceReader::new(
-                scratch.0.clone(),
-                Default::default(),
-            )),
-        )),
+        conversation_reference: Arc::new(
+            butler_runtime::context::ConversationSessionReference::new(
+                &scratch.0.clone(),
+                1,
+                Arc::new(crate::host::MemorySourceReader::new(
+                    scratch.0.clone(),
+                    Default::default(),
+                )),
+            ),
+        ),
         memory_recall: Arc::new(crate::cognition::MemoryRecall::new(
             scratch.0.clone(),
             Default::default(),
@@ -230,7 +234,9 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
             Arc::new(|| "now".into()),
         )),
         compactions: ContextCompactionRepository::new(storage.clone()),
-        attachment_context: Arc::new(crate::context::AttachmentContext::new(scratch.0.clone())),
+        attachment_context: Arc::new(butler_runtime::context::AttachmentContext::new(
+            scratch.0.clone(),
+        )),
         verified_image_payload: Arc::new(crate::gateway::AppImageFiles::new(&scratch.0.clone())),
         butler_data: scratch.0.clone(),
         installation_root: scratch.0.clone(),
@@ -256,8 +262,8 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
                 ),
             )),
             profile,
-            Arc::new(crate::operations::CycleMetrics::new(Arc::new(
-                crate::operations::MetricFiles::new(scratch.0.clone()),
+            Arc::new(butler_runtime::operations::CycleMetrics::new(Arc::new(
+                butler_runtime::operations::MetricFiles::new(scratch.0.clone()),
             ))),
         )),
         session_worktrees: butler_turn::workspace::SessionWorktrees::new(
@@ -268,7 +274,7 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
             scratch.0.clone(),
             Arc::new(SystemIdentity),
         ),
-        web_access: Arc::new(crate::web_access::tests::access(
+        web_access: Arc::new(butler_runtime::web_access::testing::access(
             scratch.0.clone(),
             &web_endpoint,
         )),

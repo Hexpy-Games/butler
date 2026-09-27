@@ -7,10 +7,9 @@ use axum::{
 };
 use serde::Deserialize;
 
-use crate::{
-    gateway::protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
-    operations::UpdateRequest,
-};
+use crate::gateway::protocol::APP_PROTOCOL_VERSION;
+use crate::gateway::protocol::ApiEnvelope;
+use butler_runtime::operations::UpdateRequest;
 
 use super::{HttpError, HttpState, json, read_body_with_limit};
 

@@ -15,8 +15,8 @@ use serde_json::{Value, json};
 
 use crate::host::ResolvedInstallation;
 use crate::host::service::instance as service_instance;
-use crate::operations;
 use butler_models::models;
+use butler_runtime::operations;
 
 #[derive(Default)]
 struct Options {

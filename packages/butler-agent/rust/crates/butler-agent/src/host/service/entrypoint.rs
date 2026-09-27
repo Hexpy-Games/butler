@@ -9,8 +9,8 @@ use tokio::signal::unix::{Signal, SignalKind, signal};
 use tokio::{sync::oneshot, task::JoinSet, time::MissedTickBehavior};
 
 use crate::gateway::TranscriptWriter;
-use crate::operations::ServiceReadiness;
 use butler_models::models::ModelConfigurationClock;
+use butler_runtime::operations::ServiceReadiness;
 use butler_turn::btcc::BtccError;
 
 use crate::host::app::gateway_lifecycle::{

@@ -123,9 +123,9 @@ pub(crate) use sessions::{
 };
 pub(crate) use space::{AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin};
 use storage::{AppStorage, AppStorageError};
-type SkillImportResult = crate::skills::SkillImportResult;
-type SkillSettingsView = crate::skills::SkillSettingsView;
-type StagedSkillArchive = crate::skills::StagedSkillArchive;
+type SkillImportResult = butler_runtime::skills::SkillImportResult;
+type SkillSettingsView = butler_runtime::skills::SkillSettingsView;
+type StagedSkillArchive = butler_runtime::skills::StagedSkillArchive;
 pub(crate) use transcript_export::{TranscriptExport, TranscriptExportOwner};
 
 /// Reuse the App projection's source public-event policy before transcript append.
@@ -375,13 +375,13 @@ fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
     clippy::needless_pass_by_value,
     reason = "map_err/iterator adapter taking owned values"
 )]
-fn skill_error(error: crate::skills::SkillError) -> GatewayApplicationError {
+fn skill_error(error: butler_runtime::skills::SkillError) -> GatewayApplicationError {
     match error {
-        crate::skills::SkillError::ArchiveInvalid(_)
-        | crate::skills::SkillError::ArchivePathInvalid => {
+        butler_runtime::skills::SkillError::ArchiveInvalid(_)
+        | butler_runtime::skills::SkillError::ArchivePathInvalid => {
             public(400, error.code(), &error.message())
         }
-        crate::skills::SkillError::Closed => public(503, error.code(), &error.message()),
+        butler_runtime::skills::SkillError::Closed => public(503, error.code(), &error.message()),
         _ => GatewayApplicationError::internal(),
     }
 }

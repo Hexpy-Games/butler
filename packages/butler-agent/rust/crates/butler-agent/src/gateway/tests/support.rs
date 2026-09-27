@@ -154,13 +154,13 @@ impl GatewayApplication for TestApplication {
     }
     fn check_app_update(
         &self,
-        _request: crate::operations::UpdateRequest,
+        _request: butler_runtime::operations::UpdateRequest,
     ) -> ApplicationFuture<serde_json::Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn apply_app_update(
         &self,
-        _request: crate::operations::UpdateRequest,
+        _request: butler_runtime::operations::UpdateRequest,
     ) -> ApplicationFuture<serde_json::Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }

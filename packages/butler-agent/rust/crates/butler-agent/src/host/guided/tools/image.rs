@@ -9,11 +9,11 @@ use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
-use crate::context::ImageCapabilityEvidence;
-use crate::context::ImageCarrierTuple;
-use crate::context::VisualAttachmentManifest;
 use butler_core::json::JsonDocument;
 use butler_core::public_text::trim_js_whitespace;
+use butler_runtime::context::ImageCapabilityEvidence;
+use butler_runtime::context::ImageCarrierTuple;
+use butler_runtime::context::VisualAttachmentManifest;
 use butler_turn::btcc::AccessMode;
 use butler_turn::btcc::GuidedInvocation;
 use butler_turn::btcc::ModelRoundToolCall;

@@ -424,10 +424,10 @@ pub(super) fn dependencies(native: Arc<Native>, clock: u64) -> AppApplicationDep
     }
 }
 
-pub(super) fn test_updates() -> Arc<crate::operations::AppUpdateService> {
+pub(super) fn test_updates() -> Arc<butler_runtime::operations::AppUpdateService> {
     let root = std::env::temp_dir().join(format!("butler-update-test-{}", uuid::Uuid::new_v4()));
     Arc::new(
-        crate::operations::AppUpdateService::new(
+        butler_runtime::operations::AppUpdateService::new(
             root.join("data"),
             root.join("installation"),
             Some("1.0.0".into()),
@@ -436,9 +436,9 @@ pub(super) fn test_updates() -> Arc<crate::operations::AppUpdateService> {
     )
 }
 
-pub(super) fn test_skills() -> Arc<crate::skills::Skills> {
+pub(super) fn test_skills() -> Arc<butler_runtime::skills::Skills> {
     let root = std::env::temp_dir().join(format!("butler-test-skills-{}", uuid::Uuid::new_v4()));
-    Arc::new(crate::skills::Skills::new(root.clone(), root))
+    Arc::new(butler_runtime::skills::Skills::new(root.clone(), root))
 }
 
 pub(super) fn command(client: &str, text: &str) -> SendMessageCommand {

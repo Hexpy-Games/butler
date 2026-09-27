@@ -1,8 +1,8 @@
 //! Host-owned visual fact for this admitted App Turn's Guided surface.
 
 use super::Envelope;
-use crate::context::VisualImageAdmissionResult;
-use crate::context::admit_visual_image_request;
+use butler_runtime::context::VisualImageAdmissionResult;
+use butler_runtime::context::admit_visual_image_request;
 use butler_turn::btcc::AttachmentKind;
 
 pub(super) fn admits_zai_image_tool(envelope: &Envelope) -> bool {

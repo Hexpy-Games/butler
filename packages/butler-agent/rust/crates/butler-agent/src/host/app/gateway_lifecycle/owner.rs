@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use tokio::sync::Mutex;
 
 use crate::gateway::InboundQueue;
-use crate::operations::ServiceReadiness;
+use butler_runtime::operations::ServiceReadiness;
 use butler_turn::btcc::BtccError;
 
 use super::ActiveAppEndpoint;

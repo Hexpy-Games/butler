@@ -17,8 +17,8 @@ use std::sync::Arc;
 use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
 
-use crate::context::ToolOutput;
 use butler_core::json::JsonDocument;
+use butler_runtime::context::ToolOutput;
 use butler_turn::btcc::AccessMode;
 use butler_turn::btcc::BtccError;
 use butler_turn::workspace::Commands;

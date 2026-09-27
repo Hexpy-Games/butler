@@ -8,7 +8,7 @@ use axum::{
 use tokio::io::AsyncWriteExt;
 
 use crate::gateway::protocol::{APP_PROTOCOL_VERSION, ApiEnvelope};
-use crate::skills::StagedSkillArchive;
+use butler_runtime::skills::StagedSkillArchive;
 
 use super::{HttpError, HttpState, json};
 

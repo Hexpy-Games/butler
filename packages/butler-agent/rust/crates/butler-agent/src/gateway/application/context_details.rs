@@ -6,10 +6,9 @@ use super::{
     AppApplication, AppContextReadQuery, AppSessionViewPage, GatewayApplicationError, app_error,
     settings,
 };
-use crate::{
-    context::{WORKING_CONTEXT_AUTO_COMPACT_RATIO, WORKING_CONTEXT_HARD_PRESSURE_RATIO},
-    gateway::MessageRole,
-};
+use crate::gateway::MessageRole;
+use butler_runtime::context::WORKING_CONTEXT_AUTO_COMPACT_RATIO;
+use butler_runtime::context::WORKING_CONTEXT_HARD_PRESSURE_RATIO;
 
 const MESSAGE_LIMIT: usize = 16;
 const RECENT_CHAR_LIMIT: usize = 32_000;

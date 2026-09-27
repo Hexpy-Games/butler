@@ -22,7 +22,7 @@ impl GatewayApplication for AppApplication {
     }
     fn check_app_update(
         &self,
-        request: crate::operations::UpdateRequest,
+        request: butler_runtime::operations::UpdateRequest,
     ) -> ApplicationFuture<serde_json::Value> {
         let updates = self.dependencies.updates.clone();
         Box::pin(async move {
@@ -34,7 +34,7 @@ impl GatewayApplication for AppApplication {
     }
     fn apply_app_update(
         &self,
-        request: crate::operations::UpdateRequest,
+        request: butler_runtime::operations::UpdateRequest,
     ) -> ApplicationFuture<serde_json::Value> {
         let updates = self.dependencies.updates.clone();
         Box::pin(async move {

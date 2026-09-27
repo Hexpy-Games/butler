@@ -6,7 +6,6 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
 };
 
-use crate::operations::PromptUsageMetrics;
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
 use butler_models::mcp_client::McpClient;
@@ -17,6 +16,7 @@ use butler_models::models::ModelProvider;
 use butler_models::models::ProviderObservation;
 use butler_models::models::ProviderObservationSink;
 use butler_models::models::provider_http_client;
+use butler_runtime::operations::PromptUsageMetrics;
 use butler_turn::btcc::BtccError;
 
 use crate::host::SystemIdentity;

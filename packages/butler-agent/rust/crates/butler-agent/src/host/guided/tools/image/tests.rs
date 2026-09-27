@@ -3,8 +3,8 @@ use std::{fs, path::PathBuf};
 use serde_json::{Map, Value, json};
 
 use super::{TempImageFile, admitted_image, frozen_carrier_valid, project_result, required_text};
-use crate::context::ImageCarrierTuple;
 use butler_core::public_text::trim_js_whitespace;
+use butler_runtime::context::ImageCarrierTuple;
 
 struct Scratch(PathBuf);
 
@@ -59,7 +59,7 @@ fn frozen_route_requires_exact_zai_tool_digest_and_prompt_trim() {
     assert!(frozen_carrier_valid(&tuple, &capability));
     assert!(!frozen_carrier_valid(
         &tuple,
-        &crate::context::ImageCapabilityEvidence {
+        &butler_runtime::context::ImageCapabilityEvidence {
             tool_capability_digest: Some("changed".into()),
             ..capability
         }

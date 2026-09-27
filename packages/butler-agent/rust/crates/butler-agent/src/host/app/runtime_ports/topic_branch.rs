@@ -182,7 +182,7 @@ impl AppBranchConversationReader for AppBranchConversations {
                 };
                 format!(
                     "{role}: {}",
-                    crate::context::text_for_message(message, false)
+                    butler_runtime::context::text_for_message(message, false)
                 )
             }));
             Ok(Some(sections.join("\n\n")))

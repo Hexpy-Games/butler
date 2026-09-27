@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 
-use crate::capabilities::{Capabilities, CapabilityInvocation};
+use butler_runtime::capabilities::Capabilities;
+use butler_runtime::capabilities::CapabilityInvocation;
 use butler_turn::btcc::EffectFailure;
 use butler_turn::btcc::EffectFuture;
 use butler_turn::btcc::RegisteredEditPort;

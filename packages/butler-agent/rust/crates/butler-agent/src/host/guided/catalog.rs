@@ -1,7 +1,9 @@
 //! One source catalog translated at host composition, with executable coverage
 //! checked separately from BTCC's authority and provider-surface selection.
 
-use crate::capabilities::{Capabilities, CatalogError, ToolCatalog};
+use butler_runtime::capabilities::Capabilities;
+use butler_runtime::capabilities::CatalogError;
+use butler_runtime::capabilities::ToolCatalog;
 use butler_turn::btcc::BtccError;
 use butler_turn::btcc::GuidedCatalogSnapshot;
 

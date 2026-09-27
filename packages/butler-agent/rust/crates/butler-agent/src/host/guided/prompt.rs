@@ -33,7 +33,7 @@ pub(crate) struct GuidedTextState {
     pub work_scope: butler_turn::btcc::WorkTurnScope,
     pub documents: BtccRepositories,
     pub journal: Arc<ToolJournalRepository>,
-    pub attachment_context: Arc<crate::context::AttachmentContext>,
+    pub attachment_context: Arc<butler_runtime::context::AttachmentContext>,
     pub effects: Arc<dyn EffectJournal>,
     pub accepted_plan: Option<ProjectLedgerPlan>,
     pub butler_data: String,

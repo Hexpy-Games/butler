@@ -8,7 +8,10 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::host::ResolvedInstallation;
-use crate::skills::{SkillError, SkillSettingsView, Skills, StagedSkillArchive};
+use butler_runtime::skills::SkillError;
+use butler_runtime::skills::SkillSettingsView;
+use butler_runtime::skills::Skills;
+use butler_runtime::skills::StagedSkillArchive;
 use output::{CommandError, failure, render_error, render_success};
 
 pub(crate) use output::SkillCliResult;
@@ -314,7 +317,7 @@ fn option_value<'a>(args: &'a [String], name: &str) -> Option<&'a String> {
     args.get(index + 1).filter(|value| !value.starts_with("--"))
 }
 
-fn flattened(view: &SkillSettingsView) -> Vec<&crate::skills::SkillSummary> {
+fn flattened(view: &SkillSettingsView) -> Vec<&butler_runtime::skills::SkillSummary> {
     view.core
         .iter()
         .chain(&view.user)
@@ -322,7 +325,7 @@ fn flattened(view: &SkillSettingsView) -> Vec<&crate::skills::SkillSummary> {
         .collect()
 }
 
-fn names(label: &str, skills: &[crate::skills::SkillSummary]) -> String {
+fn names(label: &str, skills: &[butler_runtime::skills::SkillSummary]) -> String {
     if skills.is_empty() {
         format!("{label}: none")
     } else {

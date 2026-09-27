@@ -66,14 +66,14 @@ pub(super) fn test_dependencies() -> AppApplicationDependencies {
         std::env::temp_dir().join(format!("butler-artifact-skills-{}", uuid::Uuid::new_v4()));
     AppApplicationDependencies {
         updates: Arc::new(
-            crate::operations::AppUpdateService::new(
+            butler_runtime::operations::AppUpdateService::new(
                 root.join("update-data"),
                 root.join("installation"),
                 Some("1.0.0".into()),
             )
             .unwrap(),
         ),
-        skills: Arc::new(crate::skills::Skills::new(root.clone(), root)),
+        skills: Arc::new(butler_runtime::skills::Skills::new(root.clone(), root)),
         mcp_client: Arc::new(butler_models::mcp_client::McpClient::new(
             std::env::temp_dir().join(format!("butler-artifact-mcp-{}", uuid::Uuid::new_v4())),
             Default::default(),

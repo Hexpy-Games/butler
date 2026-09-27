@@ -699,6 +699,7 @@ dependencies = [
  "base64 0.22.1",
  "butler-core",
  "butler-models",
+ "butler-runtime",
  "butler-test-support",
  "butler-turn",
  "bytes",
@@ -795,6 +796,46 @@ dependencies = [
  "url",
  "uuid",
  "webp",
+]
+
+[[package]]
+name = "butler-runtime"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "butler-core",
+ "butler-models",
+ "butler-test-support",
+ "butler-turn",
+ "bytes",
+ "chrono",
+ "dom_smoothie",
+ "futures-util",
+ "http",
+ "image",
+ "indexmap 2.14.2",
+ "lopdf",
+ "nix",
+ "parking_lot",
+ "regex",
+ "regress",
+ "reqwest 0.12.28",
+ "rusqlite",
+ "rustix 1.1.5",
+ "ryu-js",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tz-rs",
+ "unicode-normalization",
+ "unicode-segmentation",
+ "url",
+ "uuid",
+ "webp",
+ "zip",
 ]
 
 [[package]]

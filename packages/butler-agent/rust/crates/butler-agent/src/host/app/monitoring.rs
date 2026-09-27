@@ -39,7 +39,7 @@ impl AppMonitoringPort for AppMonitoring {
     fn usage_monitor(&self, query: AppUsageMonitorQuery) -> ApplicationFuture<Value> {
         let root = self.data_root.clone();
         Box::pin(async move {
-            let mut view = crate::operations::read_usage_monitor(
+            let mut view = butler_runtime::operations::read_usage_monitor(
                 &root,
                 query.session_id.as_deref(),
                 query.since_ts,

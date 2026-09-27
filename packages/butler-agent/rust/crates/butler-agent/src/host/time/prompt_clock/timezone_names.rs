@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
-use crate::context::ContextResult;
+use butler_runtime::context::ContextResult;
 
 use super::failure;
 

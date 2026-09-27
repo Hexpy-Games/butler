@@ -8,7 +8,10 @@ use std::{
 use serde_json::json;
 
 use super::{Options, ResolvedInstallation, clamp_lines, path, report_error, report_success};
-use crate::operations::{LogEntry, LogFile, LogFollower, tail_log_entries};
+use butler_runtime::operations::LogEntry;
+use butler_runtime::operations::LogFile;
+use butler_runtime::operations::LogFollower;
+use butler_runtime::operations::tail_log_entries;
 
 pub(super) async fn run(
     options: Options,

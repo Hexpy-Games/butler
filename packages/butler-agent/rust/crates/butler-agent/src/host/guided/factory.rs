@@ -9,11 +9,12 @@ mod tests;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::capabilities::Capabilities;
 use crate::cognition::{
     CognitionPathEnvironment, CompletionPublisher, ExactMemoryQuery, MemoryRecall,
 };
-use crate::context::{ContextPortAdapter, ConversationSessionReference};
+use butler_runtime::capabilities::Capabilities;
+use butler_runtime::context::ContextPortAdapter;
+use butler_runtime::context::ConversationSessionReference;
 use butler_turn::btcc::AgentLoopProgress;
 use butler_turn::btcc::BoundGuidedTurn;
 use butler_turn::btcc::BtccError;
@@ -48,21 +49,21 @@ pub(crate) struct GuidedTurnFactoryAdapter {
     pub memory_paths: CognitionPathEnvironment,
     pub memory_publisher: Arc<CompletionPublisher>,
     pub conversation_reference: Arc<ConversationSessionReference>,
-    pub conversation_tools: Arc<crate::context::ConversationTools>,
+    pub conversation_tools: Arc<butler_runtime::context::ConversationTools>,
     pub compactions: ContextCompactionRepository,
-    pub attachment_context: Arc<crate::context::AttachmentContext>,
+    pub attachment_context: Arc<butler_runtime::context::AttachmentContext>,
     pub verified_image_payload: Arc<dyn butler_turn::btcc::VerifiedImagePayloadPort>,
     pub butler_data: PathBuf,
     pub installation_root: PathBuf,
     pub protected_ledger_roots: Vec<PathBuf>,
     pub subsessions: Arc<butler_turn::btcc::SubsessionService>,
     pub work_streams: Arc<crate::host::WorkStreams>,
-    pub automations: Arc<crate::operations::AutomationService>,
+    pub automations: Arc<butler_runtime::operations::AutomationService>,
     pub mcp_client: Arc<butler_models::mcp_client::McpClient>,
     pub profile: Arc<crate::profile::ProfileService>,
     pub monitoring: Arc<crate::host::MonitoringReaders>,
     pub session_worktrees: butler_turn::workspace::SessionWorktrees,
-    pub web_access: Arc<crate::web_access::WebAccess>,
+    pub web_access: Arc<butler_runtime::web_access::WebAccess>,
     pub app_endpoint: Arc<crate::host::ActiveAppEndpoint>,
 }
 

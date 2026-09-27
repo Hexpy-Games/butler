@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use crate::capabilities::Capabilities;
+use butler_runtime::capabilities::Capabilities;
 use butler_turn::btcc::BtccError;
 use butler_turn::btcc::EffectAdapter;
 use butler_turn::btcc::EffectJournal;

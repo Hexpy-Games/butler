@@ -10,7 +10,7 @@ use std::{
 use nix::fcntl::{Flock, FlockArg};
 
 use super::super::ResolvedInstallation;
-use crate::operations;
+use butler_runtime::operations;
 
 const LOCK_RELATIVE_PATH: &str = "state/locks/mcp-startup-cleanup.lock";
 

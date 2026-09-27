@@ -17,7 +17,7 @@ use crate::gateway::GatewayApplicationError;
 use crate::gateway::GatewayServer;
 use crate::gateway::InboundQueue;
 use crate::gateway::serve_gateway;
-use crate::operations::ServiceReadiness;
+use butler_runtime::operations::ServiceReadiness;
 use butler_turn::btcc::BtccError;
 
 use crate::host::app::dashboard::AppDashboardLedger;

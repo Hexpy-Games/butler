@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use super::super::ResolvedInstallation;
-use crate::skills::Skills;
+use butler_runtime::skills::Skills;
 
 pub(super) async fn list_text(installation: &ResolvedInstallation, data_root: &Path) -> String {
     let skills = Skills::new(

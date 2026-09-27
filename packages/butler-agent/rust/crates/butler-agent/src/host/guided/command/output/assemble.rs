@@ -4,8 +4,8 @@ use serde_json::Value;
 
 use super::super::artifacts::Artifact;
 use super::super::{evidence, structured_stdout, validation};
-use crate::context::BudgetedToolOutput;
 use butler_core::json::JsonDocument;
+use butler_runtime::context::BudgetedToolOutput;
 use butler_turn::btcc::BtccError;
 use butler_turn::workspace::GuidedSummary;
 

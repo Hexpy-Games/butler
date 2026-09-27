@@ -19,7 +19,7 @@ chrono = { version = "0.4.42", default-features = false, features = ["std"] }
 dom_smoothie = "=0.18.2"
 uuid = { version = "1.18.1", default-features = false, features = ["std", "v4"] }
 regex = "1.13.1"
-reqwest = { version = "=0.12.28", default-features = false, features = ["rustls-tls-native-roots", "stream", "gzip", "brotli", "deflate", "http2"] }
+reqwest = { version = "=0.12.28", default-features = false, features = ["json", "rustls-tls-native-roots", "stream", "gzip", "brotli", "deflate", "http2"] }
 futures-core = "0.3.31"
 futures-util = { version = "0.3.31", default-features = false, features = ["async-await", "std"] }
 http-body-util = "0.1.3"

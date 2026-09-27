@@ -9,7 +9,7 @@ use std::{
 use sha2::{Digest, Sha256};
 
 use super::{AppMessageFileSnapshot, GatewayApplicationError, public};
-use crate::context::VisualAttachmentManifest;
+use butler_runtime::context::VisualAttachmentManifest;
 
 const MAX_BYTES: u64 = 10 * 1024 * 1024;
 

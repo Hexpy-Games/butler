@@ -10,7 +10,8 @@ use serde_json::{Value, json};
 
 use crate::host::ResolvedInstallation;
 use crate::host::cli::settings as settings_cli;
-use crate::operations::{AppUpdateService, UpdateRequest};
+use butler_runtime::operations::AppUpdateService;
+use butler_runtime::operations::UpdateRequest;
 
 mod agent;
 
