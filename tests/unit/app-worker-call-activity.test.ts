@@ -39,14 +39,16 @@ test("Worker projection carries the calling identity, real phase and approved Pl
   const presentation = { task_id: "task", objective: "Implement", source_tool_call_id: "call" };
   const active = projectStewardWorkerActivity(relation, snapshot, presentation);
   expect(active).toMatchObject({ source_tool_call_id: "call", parent_turn_id: "parent-turn",
-    phase: "verifying", status_line: "검토 중", approved_plan_total: 2, approved_plan_completed: 1, terminal: false });
+    // Since 64dbc5c9b status_line is the en-US fallback; the UI localizes status_reference.
+    phase: "verifying", status_line: "Reviewing", status_reference: { key: "workerStatus", parameters: { phase: "verifying" } },
+    approved_plan_total: 2, approved_plan_completed: 1, terminal: false });
   snapshot.progress_events.push({ id: "read", session_id: "worker", turn_id: "worker-turn", session_sequence: 2,
     turn_sequence: 2, visibility: "public", kind: "tool.started", created_at: "2026-09-06T00:01:00Z",
     payload: { toolName: "read_file", toolCallId: "read-call", safeLabel: "읽기: routes.ts" } });
   expect(projectStewardWorkerActivity(relation, snapshot, presentation).current_activity_title).toBe("읽기: routes.ts");
   snapshot.result = { status: "failed", summary: "실행 중 오류", changed_artifacts: [], acceptance_evidence: [] } as unknown as NonNullable<StewardObserverSnapshot["result"]>;
-  expect(projectStewardWorkerActivity(relation, snapshot, presentation)).toMatchObject({ phase: "failed", status_line: "실패", terminal: true });
-  expect(projectStewardWorkerActivity(relation, null, presentation)).toMatchObject({ phase: "orienting", status_line: "구상 중" });
+  expect(projectStewardWorkerActivity(relation, snapshot, presentation)).toMatchObject({ phase: "failed", status_reference: { key: "workerStatus", parameters: { phase: "failed" } }, terminal: true });
+  expect(projectStewardWorkerActivity(relation, null, presentation)).toMatchObject({ phase: "orienting", status_reference: { key: "workerStatus", parameters: { phase: "orienting" } } });
 });
 
 test("stored calling identity wins; old packets attach only to a unique exact successful invocation", () => {

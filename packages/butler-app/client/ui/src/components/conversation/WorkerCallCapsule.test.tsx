@@ -56,7 +56,9 @@ test("Worker stays below the aggregate while its invocation is inside the expand
     expect(details.textContent).toContain("Worker 호출");
     expect(details.textContent).toContain("워커 대기");
     expect(details.textContent).not.toContain("Juno");
-    expect(group.children[1]).toBe(details);
+    // The detail list sits inside the animated disclosure wrapper (f50145530).
+    expect(group.children[1]?.getAttribute("data-slot")).toBe("collapsible");
+    expect(group.children[1]?.contains(details)).toBe(true);
     expect(group.lastElementChild?.contains(capsule)).toBe(true);
     expect(container.querySelectorAll('[data-test-class="worker-call-capsule"]')).toHaveLength(1);
     await act(async () => button.click());

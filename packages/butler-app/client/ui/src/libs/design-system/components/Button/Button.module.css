@@ -40,7 +40,7 @@
 }
 
 /* Press feedback: a quick press-in, released on --motion-fast. The scale
-   token is 1 under reduced motion. The `scale` property composes with any
+   token is 1 under reduced motion. The `scale` property composes with the
    transform a caller positions the button with (transform would replace it). */
 .button:active:not(:disabled) {
   scale: var(--motion-scale-press);

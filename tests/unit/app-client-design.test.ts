@@ -380,7 +380,8 @@ test("dedicated client keeps complete work history and session management contro
   expect(sidebarCss).toContain(
     "--sidebar-scroll-fade-size: var(--scroll-fade-size)",
   );
-  expect(sidebarCss).toContain("--sidebar-scroll-edge-padding: var(--sidebar-content-inset, 16px)");
+  // Edge padding moved to DS sidebar density tokens (dfd63acd9).
+  expect(sidebarCss).toContain("--sidebar-scroll-edge-padding: 0px");
   expect(sidebarCss).toContain(
     "width: calc(100% + var(--sidebar-scrollbar-offset))",
   );
@@ -411,7 +412,7 @@ test("dedicated client keeps complete work history and session management contro
     read(
       "packages/butler-app/client/ui/src/libs/design-system/blocks/NavSection/NavSection.tsx",
     ),
-  ).toContain('gap="1"');
+  ).toContain('gap="xs"'); // DS gap tokens (079728031)
   expect(
     read(
       "packages/butler-app/client/ui/src/libs/design-system/blocks/NavSection/NavSection.module.css",
@@ -441,11 +442,12 @@ test("dedicated client keeps complete work history and session management contro
     ),
   ).toContain("--nav-row-action-target-size: var(--sidebar-action-size)");
   expect(sidebarCss).toContain(".footer");
+  // Collapse motion comes from the DS Collapsible, not a CSS class (506bc3be1).
   expect(
     read(
-      "packages/butler-app/client/ui/src/libs/design-system/blocks/NavSection/NavSection.module.css",
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/NavSection/NavSection.tsx",
     ),
-  ).toContain(".contentCollapsed");
+  ).toContain("<Collapsible open={!collapsed}");
   expect(sidebarSessionActions).toContain("function SidebarSessionActions");
   expect(sidebarChatsSection).toContain("chatsCollapsed");
   expect(sidebarChatsSection).toContain("sidebarCopy.collapseChats");
@@ -467,12 +469,14 @@ test("dedicated client keeps complete work history and session management contro
     "collapsedProjectIds.has(project.id)",
   );
   expect(sidebarProjectsSection).toContain("projectRowCollapsed");
-  expect(sidebarProjectActions).toContain('className="no-drag"');
-  expect(sidebarSessionActions).toContain('className="no-drag"');
+  // Window drag regions are a DS prop since 079728031.
+  expect(sidebarProjectActions).toContain('windowDrag="no-drag"');
+  expect(sidebarSessionActions).toContain('windowDrag="no-drag"');
   expect(
     read("packages/butler-app/client/ui/src/components/layout/Chrome.tsx"),
   ).toContain(
-    "if (leftOpen) return null;",
+    // The floating toggle stays mounted and flips its label (6282c650a).
+    "leftOpen ? appCopy.titlebar.hideLeftPanel : appCopy.titlebar.showLeftPanel",
   );
   expect(
     read("packages/butler-app/client/ui/src/components/layout/Titlebar.tsx"),
@@ -1597,7 +1601,7 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(renderer).toContain("Worked for");
   expect(renderer).toContain("formatWorkedDuration");
   expect(renderer).toContain("function ContextUsagePopover");
-  expect(renderer).toContain("Context window:");
+  expect(renderer).toContain("appCopy.interfacePanels.contextWindow"); // copy moved to butler-i18n (64dbc5c9b)
   expect(virtualMessageRow).toContain("MessageAvatar");
   expect(renderer).not.toContain("latestAssistantMessageId");
   expect(renderer).toContain("ChartContainer");
@@ -1607,7 +1611,7 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(renderer).toContain("appCopy.composer.attachFile");
   expect(renderer).toContain("uploadMessageFile");
   expect(renderer).toContain("uploadEpochRef");
-  expect(css).toContain('.root[data-right-open="true"] .workspace');
+  expect(css).toContain('.root[data-right-track="true"] .workspace'); // 7685f1584
   expect(css).toContain("border-right-width: 0");
   expect(renderer).toContain("MESSAGE_FILE_URL_PATTERN");
   expect(renderer).toContain("function MessageAttachments");
@@ -1811,11 +1815,12 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(renderer).toContain('api<AppInfoView>("/app-info")');
   expect(renderer).toContain("setDeveloperMode(enabled)");
   expect(renderer).toContain('data-test-class="about-developer-mode"');
-  expect(renderer).toContain("settingsCopy.fields.appRepository");
-  expect(aboutSettings).not.toContain("KeyValueRow");
+  // About shows read-only facts as DS KeyValueRows since the settings
+  // restructure (52b0d7139); the developer-mode switch stays a SettingsField.
+  expect(aboutSettings).toContain("label={fields.appRepository}");
+  expect(aboutSettings).toContain('data-setting-id="app-repository"');
+  expect(aboutSettings).toContain("<KeyValueRow");
   expect(aboutSettings).toContain("<SettingsField");
-  expect(aboutSettings).toContain('controlWidth="full"');
-  expect(aboutSettings).toContain("readOnlyValue");
   expect(renderer).toContain("function UpdatesSettings");
   expect(renderer).toContain("/updates/check");
   expect(renderer).toContain("/updates/apply");
@@ -1860,13 +1865,16 @@ test("settings, command palette, automations, right panel, and worker UI are app
   ).toContain("var(--color-success)");
   expect(renderer).toContain('api<SettingsData>("/settings"');
   expect(renderer).toContain('api<ModelCatalogView>("/model-catalog")');
-  expect(renderer).toContain("settings-titlebar drag-region");
+  // Settings header drag lane is a DS windowDrag prop (079728031).
+  expect(renderer).toContain('data-test-class="settings-header settings-titlebar"');
   expect(
     read(
       "packages/butler-app/client/ui/src/components/settings/SettingsDetailHeader.tsx",
     ),
   ).not.toContain("settings-detail-header drag-region");
-  expect(renderer).toContain("settings-back-button no-drag");
+  expect(collapseWhitespace(read(
+    "packages/butler-app/client/ui/src/components/settings/SettingsSidebar.tsx",
+  ))).toContain('ariaLabel={backLabel} windowDrag="no-drag"');
   expect(settingsShell).toContain("settings-titlebar-drag-overlay");
   expect(settingsShell).toContain("settings-detail-drag-lane");
   expect(settingsShell.indexOf("settings-titlebar-drag-overlay")).toBeGreaterThan(
@@ -1888,22 +1896,22 @@ test("settings, command palette, automations, right panel, and worker UI are app
   );
   expect(setupWizardShell).toContain('data-test-class="setup-wizard-drag-lane"');
   expect(setupWizardShell).toContain("styles.dragLane");
-  expect(setupWizardShell).toContain("className={`${styles.header} drag-region`}");
+  expect(setupWizardShell).toContain("className={dsClass(`${styles.header} drag-region`)}");
   expect(setupWizardShellStyles).toContain(".dragLane");
   expect(setupWizardShellStyles).toContain("-webkit-app-region: drag");
   expect(renderer).toContain("closeSettings");
-  expect(renderer).toContain("settingsCopy.panels.butlerModel");
+  expect(renderer).toContain("title={sections.butlerModel}"); // settings restructure (52b0d7139)
   expect(appCopySource()).toContain(
     'butlerModel: "모델 설정"',
   );
-  expect(renderer).toContain("settingsFields.contextLimit");
+  expect(renderer).toContain("fields.contextLimit");
   expect(renderer).toContain("context_window_tokens");
   expect(renderer).toContain("settingsFields.consolidationModel");
   expect(renderer).toContain("consolidation_model");
   expect(renderer).toContain("consolidationModelOptionsFrom");
-  expect(renderer).toContain("settingsFields.multilineSend");
+  expect(renderer).toContain("fields.multilineSend");
   expect(renderer).toContain("modifier_enter_send_enter_newline");
-  expect(renderer).toContain("settingsOptions.modifierEnterSendEnterNewline");
+  expect(renderer).toContain("options.modifierEnterSendEnterNewline");
   expect(renderer).toContain("settingsFields.personaPreset");
   expect(personalizationOptions).toContain("fields.butlerNickname");
   expect(personalizationOptions).toContain("fields.principalName");
@@ -1997,21 +2005,17 @@ test("settings, command palette, automations, right panel, and worker UI are app
       "packages/butler-app/client/ui/src/components/settings/SettingsSelect.tsx",
     ),
   ).toContain("triggerTestClass");
+  // Select sizing is DS item/field props, not inline style (75b4a00a8).
   expect(
     read(
       "packages/butler-app/client/ui/src/components/settings/SettingsSelect.tsx",
     ),
-  ).toContain('width: "100%"');
+  ).toContain("controlWidth={controlWidth}");
   expect(
     read(
       "packages/butler-app/client/ui/src/components/settings/SettingsSelect.tsx",
     ),
-  ).toContain('flex: "0 1 460px"');
-  expect(
-    read(
-      "packages/butler-app/client/ui/src/components/settings/SettingsSelect.tsx",
-    ),
-  ).toContain('width: "min(100%, 460px)"');
+  ).toContain('<Stack.Item basis="lg" minWidth="0">');
   expect(
     read(
       "packages/butler-app/client/ui/src/components/settings/ButlerPrimaryModelSelect.tsx",
@@ -2117,7 +2121,7 @@ test("settings, command palette, automations, right panel, and worker UI are app
     read("packages/butler-app/client/ui/src/stores/settingsUIStore.ts"),
   ).toContain("editablePersonaText");
   expect(renderer).toContain("function TokenInputControl");
-  expect(renderer).toContain("settingsFields.localReasoningBudget");
+  expect(renderer).toContain("fields.localReasoningBudget");
   expect(renderer).toContain("function PercentInputControl");
   expect(renderer).toContain("localModelMutationPayload");
   expect(renderer).toContain("settingsCopy.errors.updateLocalReasoningBudget");
@@ -2138,9 +2142,9 @@ test("settings, command palette, automations, right panel, and worker UI are app
   ).toContain("grid-template-columns: minmax(220px, 236px) minmax(0, 1fr)");
   expect(renderer).toContain('aria-live="polite"');
   expect(renderer).toContain("aria-describedby={descriptionId}");
-  expect(renderer).toContain("settingsDescriptions.contextLimitClamped");
+  expect(renderer).toContain("descriptions.contextLimitClamped");
   expect(renderer).toContain("<SettingsShell");
-  expect(renderer).toContain("settingsCopy.panels.workerProfiles");
+  expect(renderer).toContain("title={sections.workerProfiles}");
   expect(renderer).toContain("draft.worker_profiles");
   expect(renderer).toContain("appCopy.settings.localModels");
   expect(renderer).toContain("/model-catalog/local/discover");
@@ -2295,7 +2299,10 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(
     read("packages/butler-app/client/ui/src/hooks/useAppBootstrap.ts"),
   ).not.toContain("/events?cursor=");
-  expect(liveSessionEvents).toContain("subscribeLiveEvents(");
+  // The subscription itself lives in the fenced connection helper (39adf55f5).
+  expect(read(
+    "packages/butler-app/client/ui/src/hooks/live-session/liveEventConnection.ts",
+  )).toContain("subscribeLiveEvents(");
   expect(liveSessionEvents).toContain("projectedEventCursor");
   expect(liveSessionEvents).toContain('event.type === "stream.reconcile_required"');
   expect(liveSessionEvents).not.toContain("setInterval(");
@@ -2331,12 +2338,14 @@ test("settings, command palette, automations, right panel, and worker UI are app
     "aria-label={appCopy.conversation.result.regionLabel}",
   );
   expect(renderer).toContain("appCopy.conversation.work.historyRegionLabel");
-  expect(renderer).toContain('export type AppLocale = "en-US" | "ko-KR"');
-  expect(renderer).toContain('const defaultAppLocale: AppLocale = "en-US"');
-  expect(renderer).toContain('return "ko-KR"');
-  expect(renderer).toContain("export function getAppCopy");
-  expect(renderer).toContain('historyRegionLabel: "진행 내역"');
-  expect(renderer).toContain('regionLabel: "답변"');
+  // Locale and copy live in the shared butler-i18n package (64dbc5c9b).
+  const i18nSource = [appCopySource(), read("packages/butler-i18n/src/locale.ts")].join("\n");
+  expect(i18nSource).toContain('export type AppLocale = "en-US" | "ko-KR"');
+  expect(i18nSource).toContain('const defaultAppLocale: AppLocale = "en-US"');
+  expect(i18nSource).toContain('return "ko-KR"');
+  expect(i18nSource).toContain("export function getAppCopy");
+  expect(i18nSource).toContain('historyRegionLabel: "진행 내역"');
+  expect(i18nSource).toContain('regionLabel: "답변"');
   expect(read("package.json")).toContain(
     "packages/butler-app/scripts/lint/app-client-copy-lint.ts",
   );
@@ -2354,10 +2363,9 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(renderer).toContain("function toolchainLabel");
   expect(renderer).toContain("function toolchainSummaryLabel");
   expect(renderer).toContain("function toolchainGroupLabel");
-  expect(renderer).toContain('return row.safe_tool_name ?? row.safe_input_label ?? "Tool"');
+  expect(renderer).toContain("return row.safe_tool_name ?? row.safe_input_label ?? appCopy.interfaceDetails.tool");
   expect(renderer).not.toContain('label.includes("검증")');
   expect(renderer).not.toContain('label.includes("review")');
-  expect(renderer).toContain("activityLabel");
   expect(renderer).not.toContain("Using web search:");
   expect(renderer).not.toContain("Running command:");
   expect(renderer).not.toContain("Dispatching:");
@@ -2394,7 +2402,7 @@ test("settings, command palette, automations, right panel, and worker UI are app
     read(
       "packages/butler-app/client/ui/src/components/settings/ModelSettingsTitle.tsx",
     ),
-  ).toContain("BreadcrumbLink");
+  ).toContain("BreadcrumbButton"); // 75b4a00a8
   expect(
     read(
       "packages/butler-app/client/ui/src/components/settings/ModelSettingsTitle.tsx",
@@ -2442,7 +2450,7 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(css).toContain(".trigger");
   expect(css).toContain(".panel");
   expect(css).toContain(".donut");
-  expect(css).toContain("@keyframes dialog-open");
+  expect(css).toContain("@keyframes dialog-enter"); // overlay motion (f1fd5f5ae)
   expect(css).toContain("background: var(--composer-glass-bg)");
   const conversation = read(
     "packages/butler-app/client/ui/src/components/conversation/Conversation.tsx",
@@ -2456,7 +2464,7 @@ test("settings, command palette, automations, right panel, and worker UI are app
   ]) {
     expect(conversation).not.toContain(forbidden);
   }
-  expect(renderer).toContain("accessModeIcon(accessMode, 16)");
+  expect(renderer).toContain("accessModeIcon(accessMode)"); // icon size tokens (585449176)
   expect(renderer).toContain("permissionTone={accessPermissionTone(accessMode)}");
   // Access colors are DS permission tones, not inline custom properties.
   expect(
@@ -2473,7 +2481,7 @@ test("settings, command palette, automations, right panel, and worker UI are app
     read(
       "packages/butler-app/client/ui/src/components/conversation/accessModeUtils.tsx",
     ),
-  ).toContain('return "--access-read-icon"');
+  ).toContain("export function accessPermissionTone(mode: AccessMode): PermissionTone");
   const optionMenuCss = read(
     "packages/butler-app/client/ui/src/libs/design-system/blocks/OptionMenu/OptionMenu.module.css",
   );
@@ -3475,7 +3483,12 @@ describe("app-client design system foundation", () => {
 
     expect(componentCssModules).toEqual([]);
     expect(componentSources).not.toContain("@/styles/components");
-    expect(componentSources).not.toMatch(/\.module\.css["']/u);
+    // Product source (not tests that inspect DS stylesheets) imports no CSS module.
+    const componentProductSources = listUiSourceFiles(
+      "packages/butler-app/client/ui/src/components",
+    ).filter((file) => /\.(?:ts|tsx)$/u.test(file) && !file.includes(".test."))
+      .map(read).join("\n");
+    expect(componentProductSources).not.toMatch(/\.module\.css["']/u);
   });
 
   test("DS Viewer component rendering contracts are covered", () => {
@@ -3823,8 +3836,9 @@ describe("app-client design system foundation", () => {
     expect(selectStyles).toContain("[data-placeholder]");
     expect(separatorStyles).toContain('[data-line="false"]');
     expect(chartStyles).toContain(".chart");
-    expect(popoverStyles).toContain("@keyframes popover-open");
-    expect(dialogStyles).toContain("@keyframes dialog-open");
+    // Overlay enter/exit keyframes (f1fd5f5ae).
+    expect(popoverStyles).toContain("@keyframes popover-enter");
+    expect(dialogStyles).toContain("@keyframes dialog-enter");
     expect(dialogStyles).toContain("scrollbar-width: thin");
     expect(dialogStyles).toContain("var(--titlebar-safe-area-top)");
     expect(dialogStyles).toContain(".content::-webkit-scrollbar-thumb");
@@ -3884,9 +3898,12 @@ describe("app-client design system foundation", () => {
     expect(tabs).toContain("Tabs.module.css");
     expect(tabsStyles).toContain("var(--selection)");
     expect(tabsStyles).toContain("transition:");
-    expect(tabsStyles).not.toContain("box-shadow");
-    expect(navRowStyles).toContain("background-color 120ms ease");
-    expect(navRowStyles).toContain("transform 120ms ease");
+    // Only the line variant's inset underline (3af7c3b64) and the focus ring use
+    // box-shadow; tabs carry no elevation.
+    expect(tabsStyles).not.toMatch(/box-shadow:(?!\s*(?:none|inset\b|var\(--focus-ring\)))/u);
+    // Motion tokens replace literal durations (lint:motion).
+    expect(navRowStyles).toContain("background-color var(--motion-fast) var(--motion-ease-standard)");
+    expect(navRowStyles).toContain("transform var(--motion-fast) var(--motion-ease-standard)");
     expect(navRowStyles).toContain(
       "grid-template-columns: minmax(0, 1fr) auto",
     );
@@ -3895,13 +3912,13 @@ describe("app-client design system foundation", () => {
     expect(navRowStyles).not.toContain("box-shadow");
     expect(navRow).toContain("stretch");
     expect(collapsible).toContain("ariaExpanded={expanded}");
-    expect(collapsible).toContain('data-state={expanded ? "open" : "closed"}');
+    // Open/close motion is the DS Collapsible (506bc3be1).
+    expect(collapseWhitespace(collapsible)).toContain("<Collapsible open={expanded}");
     expect(collapsible).not.toContain("ChevronRight");
-    expect(collapsibleStyles).toContain("grid-template-rows");
-    expect(collapsibleStyles).toContain("opacity 140ms ease");
+    expect(collapsibleStyles).toContain("DS Collapsible");
     expect(collapsibleStyles).not.toContain("padding-left");
     expect(collapsibleFixture).toContain("useState");
-    expect(activityFeed).toContain("className={styles.header}");
+    expect(activityFeed).toContain("className={dsClass(styles.feedTitle)}"); // S8 (079728031)
     expect(activityFeedStyles).toContain("width: 1lh");
     expect(activityFeedStyles).toContain("text-overflow: ellipsis");
     expect(workerActivityRow).toContain("phaseRail");
@@ -4000,12 +4017,16 @@ describe("app-client design system foundation", () => {
     expect(workActivity).toContain("WorkActivityToolGroup");
     expect(workActivity).not.toContain("tools.map((tool)");
     expect(workActivityToolGroup).toContain("toolGroupSummary");
-    expect(workActivityToolGroup).toContain("toolDetailButton");
+    // Tool rows (and their detail buttons) moved to WorkActivityToolRow (3d8720aab).
+    const workActivityToolRow = read(
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/WorkActivityBlock/WorkActivityToolRow.tsx",
+    );
+    expect(workActivityToolRow).toContain("toolDetailButton");
     expect(workActivityToolGroup).toContain("turn-work-tool-group");
-    expect(workActivityToolGroup).toContain("turn-work-tool-detail-row");
+    expect(workActivityToolRow).toContain("turn-work-tool-detail-row");
     expect(workActivity).toContain('data-slot="work-activity-description"');
     expect(workActivity).toContain('as="div"');
-    expect(workActivityToolGroup).toContain(
+    expect(workActivityToolRow).toContain(
       'data-slot="work-activity-tool-details"',
     );
     expect(workDecisionBody).toContain('<Typo.Body as="span"');
@@ -4515,7 +4536,10 @@ describe("app-client design system foundation", () => {
     );
     expect(sidebarContent).toContain("<NavSection");
     expect(navSectionContent).toContain('as="section"');
-    expect(navSectionContent).toContain("<Typo.SectionTitle");
+    expect(readFileSync(
+      join(appClientPath, "src/libs/design-system/blocks/NavSection/NavSectionHeading.tsx"),
+      "utf8",
+    )).toContain("<Typo.SectionTitle");
 
     // ProjectDashboardHeader.tsx
     const dashboardHeaderContent = readFileSync(
@@ -4544,8 +4568,8 @@ describe("app-client design system foundation", () => {
       join(appClientPath, "src/components/management/ProjectDashboardView.tsx"),
       "utf8",
     );
-    expect(projectDashboardContent).toContain(
-      'import { Stack } from "@/butler-ds"',
+    expect(projectDashboardContent).toMatch(
+      /import \{[^}]*\bStack\b[^}]*\} from "@\/butler-ds"/u,
     );
     expect(projectDashboardContent).toContain('<Stack as="main"');
     expect(projectDashboardContent).not.toContain(
@@ -4605,11 +4629,11 @@ describe("app-client design system foundation", () => {
       ),
       "utf8",
     );
-    expect(documentDialog).toContain("projectDocumentMarkdownView");
-    expect(documentDialog).toContain(
-      'data-test-class="project-document-frontmatter"',
-    );
-    expect(documentDialog).toContain("{documentView.body}");
+    // The dialog composes the DS DocumentReader over projectDocumentReaderView.
+    expect(documentDialog).toContain("projectDocumentReaderView(document)");
+    expect(documentDialog).toContain("<DocumentReader");
+    expect(documentDialog).toContain("facts={view.facts}");
+    expect(documentDialog).toContain("markdown={view.body}");
     expect(documentDialog).not.toContain('{document?.markdown ?? ""}');
 
     // Inspector panels
@@ -4617,8 +4641,8 @@ describe("app-client design system foundation", () => {
       join(appClientPath, "src/components/inspector/ArtifactsPanel.tsx"),
       "utf8",
     );
-    expect(artifactsPanel).toContain(
-      'import { DocumentTile, FileText, Section, Stack } from "@/butler-ds"',
+    expect(artifactsPanel).toMatch(
+      /import \{ DocumentTile, FileText, (?:InspectorInset, )?Section, Stack \} from "@\/butler-ds"/u,
     );
     expect(artifactsPanel).toContain("<Section");
     expect(artifactsPanel).toContain("<Stack");
@@ -4643,8 +4667,8 @@ describe("app-client design system foundation", () => {
       ),
       "utf8",
     );
-    expect(automationPanel).toContain(
-      'import { Clickable, ListRow, Section, Stack } from "@/butler-ds"',
+    expect(automationPanel).toMatch(
+      /import \{ Clickable, (?:InspectorInset, )?ListRow, Section, Stack \} from "@\/butler-ds"/u,
     );
     expect(automationPanel).toContain("<Section");
     expect(automationPanel).toContain('gap="sm"');

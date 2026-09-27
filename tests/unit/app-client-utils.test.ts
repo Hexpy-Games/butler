@@ -108,8 +108,17 @@ test("browser random ids still exist when Web Crypto is unavailable", () => {
   );
 });
 
-test("work summary copy keeps public progress suffix language-stable", () => {
-  const copy = getAppCopy("en-US").conversation.work;
+test("work summary copy suffix follows the interface locale, not the label language", () => {
+  // Since 64dbc5c9b interface copy follows the interface locale; the public
+  // progress label itself is passed through unchanged.
+  const english = getAppCopy("en-US").conversation.work;
+  expect(english.collapsedSummary("공개 출처를 확인하는 중", 2)).toBe(
+    "공개 출처를 확인하는 중 and 1 more activities",
+  );
+  expect(english.expandHistoryLabel("공개 출처를 확인하는 중", 2)).toBe(
+    "Expand 공개 출처를 확인하는 중 and 1 more activities",
+  );
+  const copy = getAppCopy("ko-KR").conversation.work;
 
   expect(copy.collapsedSummary("공개 출처를 확인하는 중", 2)).toBe(
     "공개 출처를 확인하는 중 외 1개 진행 내역",

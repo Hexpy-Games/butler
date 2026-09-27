@@ -218,7 +218,8 @@ describe("responsive adaptive design contracts", () => {
     expect(presentation).toContain('"pointercancel", cancelInternalPointer');
     expect(composer).toContain("onFocusCapture");
     expect(composer).toContain("onBlurCapture");
-    expect(textArea).toContain("const minRows = 1");
+    // The composer is a Lexical editor that auto-grows up to a row cap.
+    expect(textArea).toContain("data-max-auto-rows={COMPOSER_MAX_AUTO_ROWS}");
     expect(card).toContain("data-expanded={expanded}");
     expect(card).toContain("ComposerCardCompactPreview");
     expect(card).toContain("ComposerCardExpandedBody");

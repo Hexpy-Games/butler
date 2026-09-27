@@ -20,7 +20,7 @@ export interface KanbanBoardProps extends DsBaseProps<HTMLAttributes<HTMLElement
   scroll?: boolean;
 }
 
-/** Lanes side by side; each lane is a KanbanLane (or any lane surface). */
+/** Lanes side by side; each lane is a KanbanLane (or another lane surface). */
 export function KanbanBoard({ children, columns = "4", scroll = false, className, ...props }: KanbanBoardProps) {
   const edgesRef = useScrollEdges("x", scroll);
   return (
