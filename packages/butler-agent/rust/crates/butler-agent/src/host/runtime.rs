@@ -78,7 +78,7 @@ impl AgentRuntime {
             Arc::new(std::env::vars().collect());
         let continuation_limits =
             btcc::select_turn_continuation_budget(|key| host_environment.get(key).cloned())?;
-        let mcp_client = mcp_owner::for_runtime(&paths, &host_environment.clone(), writes.clone());
+        let mcp_client = mcp_owner::for_runtime(&paths, &host_environment, writes.clone());
         let process_services = web_owner::open(
             &paths,
             environment.model,
@@ -103,7 +103,7 @@ impl AgentRuntime {
         ));
         let files = WorkspaceFiles::new(4);
         let image_files = Arc::new(butler_gateway::gateway::AppImageFiles::new(
-            &paths.data_root.clone(),
+            &paths.data_root,
         ));
         let attachment_context = Arc::new(butler_runtime::context::AttachmentContext::new(
             paths.data_root.clone(),
@@ -222,13 +222,13 @@ impl AgentRuntime {
             host_environment.clone(),
         ));
         let tool_artifacts = Arc::new(super::ToolArtifactReader::new(tool_output.clone()));
-        let memory_query = Arc::new(ExactMemoryQuery::new(&paths.data_root.clone(), 2));
+        let memory_query = Arc::new(ExactMemoryQuery::new(&paths.data_root, 2));
         let memory_sources = Arc::new(super::MemorySourceReader::new(
             paths.data_root.clone(),
             environment.cognition_paths.clone(),
         ));
         let conversation_reference = Arc::new(ConversationSessionReference::new(
-            &paths.data_root.clone(),
+            &paths.data_root,
             2,
             memory_sources,
         ));
@@ -276,8 +276,8 @@ impl AgentRuntime {
         let repositories = Arc::new(documents.clone());
         let now: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
         let memory_publisher = Arc::new(CompletionPublisher::new(
-            &paths.data_root.clone(),
-            &environment.cognition_paths.clone(),
+            &paths.data_root,
+            &environment.cognition_paths,
             now.clone(),
         ));
         let preparation = Arc::new(DefaultTurnPreparation::new(
@@ -333,9 +333,7 @@ impl AgentRuntime {
             host_environment.clone(),
         );
         let work_service = Arc::new(DurableWorkService::new(work_repository));
-        let inbound_queue = Arc::new(butler_gateway::gateway::InboundQueue::new(
-            &paths.data_root.clone(),
-        ));
+        let inbound_queue = Arc::new(butler_gateway::gateway::InboundQueue::new(&paths.data_root));
         let automations =
             super::open_automation_service(&paths.data_root, date_parser, inbound_queue.clone());
         let subsessions = Arc::new(butler_turn::btcc::SubsessionService::new(
