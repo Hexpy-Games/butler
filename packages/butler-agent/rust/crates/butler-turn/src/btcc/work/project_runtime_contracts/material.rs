@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::super::contracts::{ActionProgress, WorkStatus, WorkView};
 
+/// The Work material a disposition fingerprints.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectWorkMaterialSnapshot {
@@ -95,6 +96,7 @@ pub struct ProjectWorkMaterialResultRef {
     pub origin_turn_id: String,
 }
 
+/// A digested effect blocker in the material.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectWorkMaterialBlocker {
@@ -105,12 +107,14 @@ pub struct ProjectWorkMaterialBlocker {
     pub detail_sha256: String,
 }
 
+/// A captured material snapshot with its fingerprint.
 #[derive(Clone, Debug)]
 pub struct ProjectWorkCapturedMaterial {
     pub material_fingerprint: String,
     pub material_snapshot: ProjectWorkMaterialSnapshot,
 }
 
+/// The Work view to capture material for.
 #[derive(Clone, Debug)]
 pub struct ProjectWorkMaterialInput {
     pub candidate: WorkView,

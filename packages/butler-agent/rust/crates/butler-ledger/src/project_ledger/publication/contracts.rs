@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// The kind of a Project Ledger record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ProjectLedgerRecordKind {
     Initiative,
@@ -18,7 +19,55 @@ pub enum ProjectLedgerRecordKind {
 }
 
 impl ProjectLedgerRecordKind {
-    pub(in crate::project_ledger) fn as_str(&self) -> &'static str {
+    const ALL: [Self; 12] = [
+        Self::Initiative,
+        Self::Decision,
+        Self::Risk,
+        Self::Spec,
+        Self::Report,
+        Self::Work,
+        Self::Task,
+        Self::Attempt,
+        Self::Plan,
+        Self::Handoff,
+        Self::Reference,
+        Self::Roadmap,
+    ];
+
+    /// The kind named `name`, if it is one.
+    pub(in crate::project_ledger) fn parse(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.as_str() == name)
+    }
+
+    /// The directory a top-level record of this kind lives in; Work, Task
+    /// and Attempt records live under `work/` instead.
+    pub(in crate::project_ledger) fn top_level_directory(self) -> Option<&'static str> {
+        Some(match self {
+            Self::Initiative => "initiatives",
+            Self::Decision => "decisions",
+            Self::Risk => "risks",
+            Self::Spec => "specs",
+            Self::Report => "reports",
+            Self::Plan => "plans",
+            Self::Handoff => "handoffs",
+            Self::Reference => "references",
+            Self::Roadmap => "roadmaps",
+            Self::Work | Self::Task | Self::Attempt => return None,
+        })
+    }
+
+    /// The status a new top-level record of this kind starts in.
+    pub(in crate::project_ledger) fn initial_status(self) -> &'static str {
+        match self {
+            Self::Decision => "accepted",
+            Self::Risk => "open",
+            Self::Report => "done",
+            _ => "active",
+        }
+    }
+
+    /// The kind's name in records and tool input.
+    pub(in crate::project_ledger) fn as_str(self) -> &'static str {
         match self {
             Self::Initiative => "initiative",
             Self::Decision => "decision",
@@ -36,58 +85,102 @@ impl ProjectLedgerRecordKind {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// Whether a record update creates the record or changes an existing one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ProjectLedgerRecordOperation {
     Create,
     Update,
 }
 
+/// One record create or update in a Project Ledger publication, as a
+/// `project_ledger_create`/`project_ledger_update` call sends it. The core
+/// names the record and where it sits; the optional content comes in two
+/// flattened groups, so the JSON stays one flat object.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectLedgerRecordUpdate {
+    /// Create or update; an update when absent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub operation: Option<ProjectLedgerRecordOperation>,
+    /// The record id.
     pub id: String,
+    /// The record kind; inferred from the existing record when absent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kind: Option<ProjectLedgerRecordKind>,
+    /// The parent record (a task's Work, a managed child's Work).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<String>,
+    /// The record title.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /// The record status, in its kind's lifecycle when it has one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
+    /// The Markdown body.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub spec: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub acceptance: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub validation: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub review: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub report: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub implementation: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub mitigation: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub code_commits: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub ledger_commits: Option<String>,
+    /// Dashboard ordering; lower comes first.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<f64>,
+    /// Text sections of the record.
+    #[serde(flatten)]
+    pub sections: RecordSections,
+    /// Completion evidence and the gates it satisfies.
+    #[serde(flatten)]
+    pub evidence: RecordEvidence,
+}
+
+/// The text sections a record update may set.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordSections {
+    /// The governing spec id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spec: Option<String>,
+    /// Acceptance criteria.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub acceptance: Option<String>,
+    /// How the result was validated.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub validation: Option<String>,
+    /// Review notes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub review: Option<String>,
+    /// The report path or text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub report: Option<String>,
+    /// What implements a decision.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub implementation: Option<String>,
+    /// A risk's mitigation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mitigation: Option<String>,
+    /// Why the record changed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+/// Commit evidence and completion-gate flags a record update may set.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordEvidence {
+    /// JSON array of `{repo, hash, message}` code commits.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code_commits: Option<String>,
+    /// Ledger commit references.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ledger_commits: Option<String>,
+    /// Completing the Work requires code commit evidence.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub requires_commit_evidence: Option<bool>,
+    /// The Work needs no spec.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub spec_exemption: Option<bool>,
 }
 
 impl ProjectLedgerRecordUpdate {
+    /// An update of `id` that sets nothing yet.
     pub(crate) fn new(id: String) -> Self {
         Self {
             operation: None,
@@ -97,47 +190,51 @@ impl ProjectLedgerRecordUpdate {
             title: None,
             status: None,
             body: None,
-            spec: None,
-            acceptance: None,
-            validation: None,
-            review: None,
-            report: None,
-            implementation: None,
-            mitigation: None,
-            reason: None,
-            code_commits: None,
-            ledger_commits: None,
             priority: None,
-            requires_commit_evidence: None,
-            spec_exemption: None,
+            sections: RecordSections::default(),
+            evidence: RecordEvidence::default(),
         }
     }
 }
 
+/// A record a publication touches, with its state before publishing.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
 pub struct ProjectWorkTarget {
+    /// The record id.
     pub id: String,
+    /// The record kind.
     pub kind: ProjectLedgerRecordKind,
+    /// The record path inside the Ledger project.
     pub path: String,
+    /// The parent record id.
     pub parent_id: Option<String>,
+    /// Whether the record existed before.
     pub state: ProjectWorkTargetState,
+    /// The digest of the record before publishing, when it existed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_record_sha256: Option<String>,
 }
 
+/// Whether a publication target existed before publishing.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ProjectWorkTargetState {
+    /// The record did not exist.
     Absent,
+    /// The record existed.
     Present,
 }
 
+/// What a Project Work publication did.
 #[derive(Clone, Debug)]
 pub struct ProjectWorkPublicationOutcome {
+    /// An earlier attempt of the same operation was replayed.
     pub replayed: bool,
+    /// The operation had nothing to publish.
     pub skipped: bool,
+    /// The records the publication wrote.
     pub targets: Vec<ProjectWorkTarget>,
 }
 
@@ -158,7 +255,9 @@ pub enum ProjectWorkPublicationError {
     /// which check failed and `source` is the decode error when there was one.
     #[error("{code}")]
     Adapter {
+        /// The failed check.
         code: &'static str,
+        /// The decode error, when there was one.
         #[source]
         source: Option<std::sync::Arc<dyn std::error::Error + Send + Sync>>,
     },
@@ -171,13 +270,16 @@ pub enum ProjectWorkPublicationError {
     /// The publication state could not be verified.
     #[error("project_work_publication_uncertain")]
     Uncertain {
+        /// The failed read, write or decode, when there was one.
         #[source]
         source: Option<std::sync::Arc<dyn std::error::Error + Send + Sync>>,
     },
     /// A ledger file operation failed; `code` names the step.
     #[error("{code}")]
     Io {
+        /// The failed step.
         code: &'static str,
+        /// The I/O error, when there was one.
         #[source]
         source: Option<std::sync::Arc<dyn std::error::Error + Send + Sync>>,
     },
@@ -187,6 +289,7 @@ pub enum ProjectWorkPublicationError {
 }
 
 impl ProjectWorkPublicationError {
+    /// The wire code.
     pub fn code(&self) -> &str {
         match self {
             Self::Adapter { code, .. } | Self::Io { code, .. } | Self::Owner(code) => code,

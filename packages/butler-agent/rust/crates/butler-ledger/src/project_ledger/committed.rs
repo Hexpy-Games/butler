@@ -12,29 +12,43 @@ pub(super) fn read_selected(
     root: &Path,
     relative: &str,
 ) -> Result<Option<String>, ProjectLedgerReadError> {
+    stable_read(root, |journal| selected(root, relative, journal), || {})
+}
+
+/// The journal of the publication currently holding the claim, if any.
+fn claimed_journal(root: &Path) -> Result<Option<Value>, ProjectLedgerReadError> {
+    let claim = parse_optional(read_optional(&claim_path(root))?.as_deref())?;
+    let journal = claim
+        .as_ref()
+        .and_then(|value| value.get("journalPath"))
+        .and_then(Value::as_str)
+        .map(|path| read_optional(Path::new(path)))
+        .transpose()?
+        .flatten();
+    parse_optional(journal.as_deref())
+}
+
+/// `read` twice under one publication version, until both reads agree (at
+/// most three attempts). An error counts only when the version held.
+fn stable_read<T: PartialEq>(
+    root: &Path,
+    mut read: impl FnMut(Option<&Value>) -> Result<T, ProjectLedgerReadError>,
+    mut after_first_read: impl FnMut(),
+) -> Result<T, ProjectLedgerReadError> {
     for _attempt in 0..3 {
         let version = publication_version(root)?;
         let attempt = (|| {
-            let claim = parse_optional(read_optional(&claim_path(root))?.as_deref())?;
-            let journal = claim
-                .as_ref()
-                .and_then(|value| value.get("journalPath"))
-                .and_then(Value::as_str)
-                .map(|path| read_optional(Path::new(path)))
-                .transpose()?
-                .flatten();
-            let journal = parse_optional(journal.as_deref())?;
-            let first = selected(root, relative, journal.as_ref())?;
-            if version == publication_version(root)? {
-                let second = selected(root, relative, journal.as_ref())?;
-                if first == second && version == publication_version(root)? {
-                    return Ok(Some(first));
-                }
+            let journal = claimed_journal(root)?;
+            let first = read(journal.as_ref())?;
+            after_first_read();
+            if version != publication_version(root)? {
+                return Ok(None);
             }
-            Ok(None)
+            let second = read(journal.as_ref())?;
+            Ok((first == second && version == publication_version(root)?).then_some(first))
         })();
         match attempt {
-            Ok(Some(raw)) => return Ok(raw),
+            Ok(Some(value)) => return Ok(value),
             Err(error) if version == publication_version(root)? => return Err(error),
             Ok(None) | Err(_) => {}
         }
@@ -77,40 +91,9 @@ pub(super) fn read_all(root: &Path) -> Result<ReadSet, ProjectLedgerReadError> {
 
 pub(super) fn read_all_with_hook(
     root: &Path,
-    mut after_first_read: impl FnMut(),
+    after_first_read: impl FnMut(),
 ) -> Result<ReadSet, ProjectLedgerReadError> {
-    for _attempt in 0..3 {
-        let version = publication_version(root)?;
-        let attempt = (|| {
-            let claim_text = read_optional(&claim_path(root))?;
-            let claim = parse_optional(claim_text.as_deref())?;
-            let journal_text = claim
-                .as_ref()
-                .and_then(|value| value.get("journalPath"))
-                .and_then(Value::as_str)
-                .map(|path| read_optional(Path::new(path)))
-                .transpose()?
-                .flatten();
-            let journal = parse_optional(journal_text.as_deref())?;
-            let first = read_set(root, journal.as_ref())?;
-            after_first_read();
-            if version == publication_version(root)? {
-                let second = read_set(root, journal.as_ref())?;
-                if first == second && version == publication_version(root)? {
-                    return Ok(Some(first));
-                }
-            }
-            Ok(None)
-        })();
-        match attempt {
-            Ok(Some(records)) => return Ok(records),
-            Err(error) if version == publication_version(root)? => return Err(error),
-            Ok(None) | Err(_) => {}
-        }
-    }
-    Err(ProjectLedgerReadError::record_show(
-        "project_ledger_changed_during_record_read",
-    ))
+    stable_read(root, |journal| read_set(root, journal), after_first_read)
 }
 
 fn read_set(root: &Path, journal: Option<&Value>) -> Result<ReadSet, ProjectLedgerReadError> {

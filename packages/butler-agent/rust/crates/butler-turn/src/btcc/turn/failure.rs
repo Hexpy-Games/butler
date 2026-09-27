@@ -1,14 +1,19 @@
 use crate::btcc::RuntimeFailure;
 
+/// The answer of a turn whose agent loop failed operationally.
 pub(super) fn runtime_failure_message(original: &str, failure: &RuntimeFailure) -> String {
-    runtime_failure_message_for_work(original, failure, false)
+    runtime_failure_message_for_work(original, failure, None)
 }
 
+/// The failure answer in the user's language (Korean when the request is
+/// Korean), noting when the accepted Work already completed.
 pub(super) fn runtime_failure_message_for_work(
     original: &str,
     failure: &RuntimeFailure,
-    work_completed: bool,
+    accepted_work: Option<&crate::btcc::AcceptedWorkResult>,
 ) -> String {
+    let work_completed =
+        accepted_work.is_some_and(|value| value.status == crate::btcc::AcceptedWorkStatus::Success);
     let korean = original.chars().any(|value| ('가'..='힣').contains(&value));
     let cause = match (failure.code.as_str(), korean) {
         ("provider_rate_limited", true) => "모델 제공자의 요청 한도에 걸려",

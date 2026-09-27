@@ -15,16 +15,19 @@ use crate::workspace::{
     EffectFileObservation, EffectFileScope, guard_effect_file, observe_effect_file,
 };
 
+/// Workspace file writes as effects.
 pub struct WorkspaceFileEffectAdapter {
     scope: EffectFileScope,
     registered: Arc<dyn RegisteredWritePort>,
 }
 impl WorkspaceFileEffectAdapter {
+    /// An adapter confined to `scope` that writes through the registered port.
     pub fn new(scope: EffectFileScope, registered: Arc<dyn RegisteredWritePort>) -> Self {
         Self { scope, registered }
     }
 }
 
+/// The contained workspace path an effect targets.
 pub fn normalized_workspace_effect_path(
     scope: &EffectFileScope,
     path: &str,
@@ -119,14 +122,15 @@ fn observed_result(
         "create_parents":input["create_parents"],"target_observed":true
     });
     if created {
-        result["created_from_absent"] = json!(true);
+        butler_core::json::object_mut(&mut result)
+            .insert("created_from_absent".into(), json!(true));
     }
     if let Some(detail) = registered
         .and_then(Value::as_object)
         .and_then(|record| record.get("changed_file"))
         .filter(|detail| detail.is_object())
     {
-        result["changed_file"] = detail.clone();
+        butler_core::json::object_mut(&mut result).insert("changed_file".into(), detail.clone());
     }
     // A receipt built from JSON values always encodes; a failure means no observation.
     let receipt = butler_core::json::JsonDocument::from_value(&result).ok()?;

@@ -9,6 +9,7 @@ use sha2::{Digest, Sha256};
 
 use super::path_guard::{MutationGuardInput, resolve_workspace_mutation_guard};
 
+/// Where effect file writes may land.
 #[derive(Clone)]
 pub struct EffectFileScope {
     pub workspace: PathBuf,
@@ -104,6 +105,7 @@ pub struct GuardedEffectFile {
     identity: PathBuf,
 }
 
+/// What an effect target file currently is.
 #[derive(Clone, Debug)]
 pub enum EffectFileObservation {
     File { bytes: usize, sha256: String },
@@ -111,6 +113,7 @@ pub enum EffectFileObservation {
     Unavailable(EffectFileError),
 }
 
+/// Guards an effect target path inside the scope.
 pub async fn guard_effect_file(
     scope: &EffectFileScope,
     path: &str,
@@ -167,6 +170,7 @@ pub async fn read_effect_edit_target(
     .map_err(EffectFileError::edit_target)?
 }
 
+/// Observes the target's size and digest.
 pub async fn observe_effect_file(target: &GuardedEffectFile) -> EffectFileObservation {
     let path = target.absolute.clone();
     tokio::task::spawn_blocking(move || {
@@ -192,7 +196,7 @@ pub async fn observe_effect_file(target: &GuardedEffectFile) -> EffectFileObserv
                 bytes = bytes
                     .checked_add(length)
                     .ok_or_else(|| std::io::Error::other("workspace target byte count overflow"))?;
-                sha256.update(&chunk[..length]);
+                sha256.update(chunk.get(..length).unwrap_or_default());
             }
             Ok(EffectFileObservation::File {
                 bytes,

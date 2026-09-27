@@ -15,9 +15,11 @@ pub(super) fn read(
     )
 }
 
+/// The assembly must carry exactly one non-empty EOL profile section in the
+/// live configuration; otherwise it fails with `invalid`.
 pub(super) fn validate_assembly(
     assembly: &ContextAssembly,
-    steward: bool,
+    invalid: BtccCode,
 ) -> Result<(), BtccError> {
     let mut eol = assembly
         .static_context
@@ -36,15 +38,7 @@ pub(super) fn validate_assembly(
     }) && eol.next().is_none();
     if valid {
         Ok(())
-    } else if steward {
-        Err(BtccError::detected(
-            BtccCode::SubsessionContextAssemblyInvalid,
-            "subsession_context_assembly_invalid",
-        ))
     } else {
-        Err(BtccError::detected(
-            BtccCode::ButlerEolContextAssemblyInvalid,
-            "butler_eol_context_assembly_invalid",
-        ))
+        Err(BtccError::detected(invalid, invalid.as_str()))
     }
 }

@@ -31,9 +31,9 @@ use butler_memory::cognition::{ExactMemoryQuery, MemoryRecall};
 use butler_runtime::capabilities::Capabilities;
 use butler_runtime::context::ConversationSessionReference;
 use butler_turn::btcc::{
-    AuthorityLoopContinuation, BtccError, GuidedInvocation, ModelRoundMessage, ModelRoundTool,
-    ModelRoundToolCall, PortFuture, ToolExecutionError, ToolJournalRepository, ToolPort,
-    ToolResult, TurnRecord,
+    AuthorityLoopContinuation, BtccError, GuidedInvocation, LoopPhase, ModelRoundMessage,
+    ModelRoundTool, ModelRoundToolCall, PortFuture, ToolExecutionError, ToolJournalRepository,
+    ToolPort, ToolResult, ToolSurface, TurnRecord,
 };
 use butler_turn::conversation::CanonicalMemoryReadBinding;
 use butler_turn::workspace::WorkspaceReference;
@@ -326,8 +326,8 @@ impl ToolPort for GuidedTools {
         &'a self,
         invocation: GuidedInvocation<'a>,
         _: &'a [ModelRoundTool],
-        final_report: bool,
-    ) -> PortFuture<'a, (Vec<ModelRoundTool>, Option<String>)> {
+        phase: LoopPhase,
+    ) -> PortFuture<'a, ToolSurface> {
         Box::pin(async move {
             self.same_turn(invocation)?;
             if self.binding.visible_names.iter().any(|name| {
@@ -343,14 +343,14 @@ impl ToolPort for GuidedTools {
                 ));
             }
             self.resume_pool().await?;
-            Ok((
-                if final_report {
-                    Vec::new()
-                } else {
-                    self.binding.surface.clone()
-                },
-                None,
-            ))
+            let tools = match phase {
+                LoopPhase::Working => self.binding.surface.clone(),
+                LoopPhase::FinalReport => Vec::new(),
+            };
+            Ok(ToolSurface {
+                tools,
+                digest: None,
+            })
         })
     }
 

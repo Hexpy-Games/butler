@@ -21,13 +21,14 @@ pub(super) fn show(context: &CommandContext, options: &Value) -> Result<Value, C
     let record = resolve_record(&context.root, id, option_string(options, "kind"))?;
     let mut result = record.record;
     if super::option_truthy(options, "body") {
-        result["body"] = if record.relative.extension().is_some_and(|ext| ext == "md") {
+        let body = if record.relative.extension().is_some_and(|ext| ext == "md") {
             Value::String(crate::project_ledger::records::frontmatter_body(
                 &record.raw,
             ))
         } else {
             Value::Null
         };
+        crate::project_ledger::work_json::set_field(&mut result, "body", body);
     }
     Ok(result)
 }

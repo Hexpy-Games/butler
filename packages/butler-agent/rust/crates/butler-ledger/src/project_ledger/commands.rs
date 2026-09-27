@@ -12,6 +12,7 @@ mod show;
 
 use std::path::{Path, PathBuf};
 
+use serde::Serialize;
 use serde_json::{Value, json};
 
 use butler_core::locale::LocaleCollation;
@@ -183,21 +184,63 @@ pub(in crate::project_ledger) fn canonical_record_kinds(
     Ok(kinds)
 }
 
+/// The JSON every Ledger command answers with: the outcome, the command
+/// label, its data, the error (null on success) and the privacy flags.
+#[derive(Serialize)]
+struct Envelope<'a> {
+    ok: bool,
+    command: &'a str,
+    data: Value,
+    error: Option<EnvelopeError>,
+    privacy: Privacy,
+}
+
+/// A failed command's error, with details and next-command hints.
+#[derive(Serialize)]
+struct EnvelopeError {
+    code: &'static str,
+    message: String,
+    details: Value,
+    next: Vec<Value>,
+}
+
+/// Ledger commands never return raw text or secrets.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Privacy {
+    raw_text_included: bool,
+    secrets_included: bool,
+}
+
 pub(in crate::project_ledger::commands) fn envelope(
     command: &str,
     result: Result<Value, CliFailure>,
 ) -> Value {
-    match result {
-        Ok(data) => json!({
-            "ok":true,"command":command,"data":data,"error":null,
-            "privacy":{"rawTextIncluded":false,"secretsIncluded":false}
-        }),
-        Err(error) => json!({
-            "ok":false,"command":command,"data":error.data,
-            "error":{"code":error.code,"message":error.message,"details":error.details,"next":error.next},
-            "privacy":{"rawTextIncluded":false,"secretsIncluded":false}
-        }),
-    }
+    let (ok, data, error) = match result {
+        Ok(data) => (true, data, None),
+        Err(error) => (
+            false,
+            *error.data,
+            Some(EnvelopeError {
+                code: error.code,
+                message: error.message,
+                details: *error.details,
+                next: error.next,
+            }),
+        ),
+    };
+    let envelope = Envelope {
+        ok,
+        command,
+        data,
+        error,
+        privacy: Privacy {
+            raw_text_included: false,
+            secrets_included: false,
+        },
+    };
+    // Strings, booleans and values that are already JSON: this cannot fail.
+    serde_json::to_value(envelope).unwrap_or(Value::Null)
 }
 
 pub(in crate::project_ledger::commands) fn io_failure() -> CliFailure {

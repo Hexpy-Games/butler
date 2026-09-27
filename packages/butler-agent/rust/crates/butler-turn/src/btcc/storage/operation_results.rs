@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use super::{BtccStorage, StorageResult};
 
+/// Reads stored exact tool results, verifying project Work results with the ledger authority.
 #[derive(Clone)]
 pub struct OperationResultRepository {
     storage: BtccStorage,
@@ -28,6 +29,7 @@ impl OperationResultRepository {
         }
     }
 
+    /// A repository whose project Work results are verified by the factory's authority.
     pub fn with_project_authority_factory(
         storage: BtccStorage,
         project_factory: Arc<dyn ProjectWorkResultAuthorityFactory>,

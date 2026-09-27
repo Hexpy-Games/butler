@@ -12,16 +12,17 @@ use crate::btcc::agent_loop::{
     ToolChoice,
 };
 use crate::btcc::{
-    AgentLoopProgress, BtccError, ContinuationBudgetTransition, ModelRoundAcceptanceWrite,
-    ModelRoundKey, ModelRouteEventWrite, PortFuture, ReasoningEffort, StateExecutionClaim,
+    AgentLoopProgress, AttemptHistory, BtccError, ContinuationBudgetTransition,
+    ModelRoundAcceptanceWrite, ModelRoundKey, ModelRouteEvent, ModelRouteEventKind,
+    ModelRouteEventWrite, PortFuture, ReasoningEffort, RouteEventStatus, StateExecutionClaim,
     StopPersistenceOutcome, TransitionCommitError, TurnRecord, TurnSemanticState, TurnStore,
     TurnTransition,
 };
 
 #[derive(Default)]
 pub(super) struct Store {
-    pub(super) events: Mutex<Vec<Value>>,
-    pub(super) histories: Mutex<VecDeque<Value>>,
+    pub(super) events: Mutex<Vec<ModelRouteEvent>>,
+    pub(super) histories: Mutex<VecDeque<AttemptHistory>>,
     pub(super) accepted: Mutex<VecDeque<Option<Value>>>,
     acceptances: Mutex<Vec<Value>>,
     pub(super) fail_read: Mutex<Option<BtccError>>,
@@ -57,13 +58,13 @@ impl TurnStore for Store {
     fn record_model_route_event(
         &self,
         write: ModelRouteEventWrite,
-    ) -> PortFuture<'_, Option<Value>> {
+    ) -> PortFuture<'_, RouteEventStatus> {
         Box::pin(async move {
             self.events.lock().unwrap().push(write.event);
-            Ok(Some(json!({"status":"recorded"})))
+            Ok(RouteEventStatus::Recorded)
         })
     }
-    fn load_model_route_attempt_history(&self, _: ModelRoundKey) -> PortFuture<'_, Value> {
+    fn load_model_route_attempt_history(&self, _: ModelRoundKey) -> PortFuture<'_, AttemptHistory> {
         Box::pin(async move {
             if let Some(error) = self.fail_read.lock().unwrap().take() {
                 return Err(error);
@@ -73,7 +74,7 @@ impl TurnStore for Store {
                 .lock()
                 .unwrap()
                 .pop_front()
-                .unwrap_or_else(|| json!({"started":[],"failed":[],"succeeded":[],"abandoned":[]})))
+                .unwrap_or_default())
         })
     }
     fn load_model_round_acceptance(&self, _: ModelRoundKey) -> PortFuture<'_, Option<Value>> {
@@ -309,8 +310,8 @@ pub(super) fn failed_codes(store: &Store) -> Vec<String> {
         .lock()
         .unwrap()
         .iter()
-        .filter(|v| v["type"] == "model.attempt.failed")
-        .map(|v| v["errorCode"].as_str().unwrap().into())
+        .filter(|v| v.kind == ModelRouteEventKind::AttemptFailed)
+        .map(|v| v.failure.as_ref().unwrap().error_code.clone())
         .collect()
 }
 pub(super) fn claim() -> StateExecutionClaim {

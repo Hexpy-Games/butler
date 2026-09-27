@@ -1,0 +1,5805 @@
+=== status before init
+{
+  "ok": true,
+  "command": "project-ledger status",
+  "data": {
+    "initialized": false
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query before init
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "initialized": false,
+    "kind": "work",
+    "results": []
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== ensure_project_ledger
+Ok(
+    (),
+)
+=== ensure_project_ledger
+Ok(
+    (),
+)
+=== status after init
+{
+  "ok": true,
+  "command": "project-ledger status",
+  "data": {
+    "project": {
+      "id": "demo",
+      "name": "Demo Project",
+      "status": "active",
+      "path": "project-ledger/projects/demo/project.json"
+    },
+    "index": {
+      "available": true,
+      "stale": false,
+      "generatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/index/project.json"
+    },
+    "counts": {
+      "records": 2,
+      "initiative": 0,
+      "work": 0,
+      "task": 0,
+      "attempt": 0,
+      "decision": 0,
+      "risk": 0,
+      "spec": 0,
+      "report": 0,
+      "plan": 0,
+      "handoff": 0,
+      "reference": 0,
+      "roadmap": 0
+    },
+    "issueCount": 0,
+    "staleViews": [
+      {
+        "id": "dashboard",
+        "kind": "view",
+        "title": "dashboard view",
+        "status": "missing",
+        "path": "project-ledger/projects/demo/views/dashboard.md",
+        "reason": "generated_view_missing"
+      },
+      {
+        "id": "handoff",
+        "kind": "view",
+        "title": "handoff view",
+        "status": "missing",
+        "path": "project-ledger/projects/demo/views/handoff.md",
+        "reason": "generated_view_missing"
+      },
+      {
+        "id": "roadmap",
+        "kind": "view",
+        "title": "roadmap view",
+        "status": "missing",
+        "path": "project-ledger/projects/demo/views/roadmap.md",
+        "reason": "generated_view_missing"
+      }
+    ],
+    "nextActions": []
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record create initiative INIT-1
+{
+  "ok": true,
+  "command": "project-ledger record",
+  "data": {
+    "id": "INIT-1",
+    "kind": "initiative",
+    "title": "initiative INIT-1",
+    "status": "active",
+    "priority": 100,
+    "parentId": null,
+    "spec": null,
+    "specExemption": false,
+    "acceptance": null,
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/initiatives/init-1.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 3,
+        "issues": 0,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record create decision DEC-1
+{
+  "ok": true,
+  "command": "project-ledger record",
+  "data": {
+    "id": "DEC-1",
+    "kind": "decision",
+    "title": "decision DEC-1",
+    "status": "accepted",
+    "priority": 100,
+    "parentId": null,
+    "spec": null,
+    "specExemption": false,
+    "acceptance": null,
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": "Chosen for speed",
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/decisions/dec-1.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 4,
+        "issues": 0,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record create risk RISK-1
+{
+  "ok": true,
+  "command": "project-ledger record",
+  "data": {
+    "id": "RISK-1",
+    "kind": "risk",
+    "title": "risk RISK-1",
+    "status": "open",
+    "priority": 100,
+    "parentId": "INIT-1",
+    "spec": null,
+    "specExemption": false,
+    "acceptance": null,
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/risks/risk-1.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 5,
+        "issues": 0,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record create risk RISK-2
+{
+  "ok": true,
+  "command": "project-ledger record",
+  "data": {
+    "id": "RISK-2",
+    "kind": "risk",
+    "title": "risk RISK-2",
+    "status": "mitigated",
+    "priority": 100,
+    "parentId": null,
+    "spec": null,
+    "specExemption": false,
+    "acceptance": null,
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": "Canary rollout",
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/risks/risk-2.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 6,
+        "issues": 0,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record create spec SPEC-1
+{
+  "ok": true,
+  "command": "project-ledger record",
+  "data": {
+    "id": "SPEC-1",
+    "kind": "spec",
+    "title": "spec SPEC-1",
+    "status": "active",
+    "priority": 3.0,
+    "parentId": null,
+    "spec": null,
+    "specExemption": false,
+    "acceptance": "It works",
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/specs/spec-1.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 7,
+        "issues": 0,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record create plan PLAN-1
+{
+  "ok": true,
+  "command": "project-ledger record",
+  "data": {
+    "id": "PLAN-1",
+    "kind": "plan",
+    "title": "plan PLAN-1",
+    "status": "active",
+    "priority": 100,
+    "parentId": null,
+    "spec": null,
+    "specExemption": false,
+    "acceptance": null,
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/plans/plan-1.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 8,
+        "issues": 0,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record create report REP-1
+{
+  "ok": true,
+  "command": "project-ledger record",
+  "data": {
+    "id": "REP-1",
+    "kind": "report",
+    "title": "report REP-1",
+    "status": "done",
+    "priority": 100,
+    "parentId": null,
+    "spec": null,
+    "specExemption": false,
+    "acceptance": null,
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/reports/rep-1.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 9,
+        "issues": 0,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record create handoff HAND-1
+{
+  "ok": true,
+  "command": "project-ledger record",
+  "data": {
+    "id": "HAND-1",
+    "kind": "handoff",
+    "title": "handoff HAND-1",
+    "status": "active",
+    "priority": 100,
+    "parentId": null,
+    "spec": null,
+    "specExemption": false,
+    "acceptance": null,
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/handoffs/hand-1.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 10,
+        "issues": 0,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record create reference REF-1
+{
+  "ok": true,
+  "command": "project-ledger record",
+  "data": {
+    "id": "REF-1",
+    "kind": "reference",
+    "title": "reference REF-1",
+    "status": "active",
+    "priority": 100,
+    "parentId": null,
+    "spec": null,
+    "specExemption": false,
+    "acceptance": null,
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/references/ref-1.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 11,
+        "issues": 0,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record create roadmap MAP-1
+{
+  "ok": true,
+  "command": "project-ledger record",
+  "data": {
+    "id": "MAP-1",
+    "kind": "roadmap",
+    "title": "roadmap MAP-1",
+    "status": "active",
+    "priority": 100,
+    "parentId": null,
+    "spec": null,
+    "specExemption": false,
+    "acceptance": null,
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/roadmaps/map-1.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 12,
+        "issues": 0,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record create fails: unsupported kind
+{
+  "ok": false,
+  "command": "project-ledger record",
+  "data": null,
+  "error": {
+    "code": "invalid_input",
+    "message": "Unsupported record kind: note",
+    "details": null,
+    "next": []
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record create fails: duplicate
+{
+  "ok": false,
+  "command": "project-ledger record",
+  "data": null,
+  "error": {
+    "code": "record_exists",
+    "message": "plan already exists: PLAN-1",
+    "details": null,
+    "next": []
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record create fails: missing title
+{
+  "ok": false,
+  "command": "project-ledger record",
+  "data": null,
+  "error": {
+    "code": "invalid_arguments",
+    "message": "--title is required",
+    "details": null,
+    "next": []
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record create fails: unsafe id
+{
+  "ok": false,
+  "command": "project-ledger record",
+  "data": null,
+  "error": {
+    "code": "invalid_input",
+    "message": "Invalid record id: ../x",
+    "details": null,
+    "next": []
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record create fails: body and from
+{
+  "ok": false,
+  "command": "project-ledger record",
+  "data": null,
+  "error": {
+    "code": "invalid_input",
+    "message": "--from and --body cannot be used together",
+    "details": null,
+    "next": []
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record create fails: empty body
+{
+  "ok": false,
+  "command": "project-ledger record",
+  "data": null,
+  "error": {
+    "code": "invalid_input",
+    "message": "--body input is empty",
+    "details": null,
+    "next": []
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record create fails: bad priority
+{
+  "ok": false,
+  "command": "project-ledger record",
+  "data": null,
+  "error": {
+    "code": "invalid_arguments",
+    "message": "--priority must be a number",
+    "details": null,
+    "next": []
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record create fails: auto commit
+{
+  "ok": false,
+  "command": "project-ledger record",
+  "data": null,
+  "error": {
+    "code": "invalid_input",
+    "message": "code-commit auto requires normalized Git evidence",
+    "details": null,
+    "next": []
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== work create invalid state
+{
+  "ok": false,
+  "command": "project-ledger work",
+  "data": null,
+  "error": {
+    "code": "invalid_state",
+    "message": "Invalid work state: bogus",
+    "details": [
+      {
+        "id": "W-9",
+        "kind": "work",
+        "status": "bogus"
+      }
+    ],
+    "next": [
+      {
+        "command": "project-ledger work create --id W-9 --status proposed",
+        "reason": "Use a valid work state instead of bogus: proposed."
+      },
+      {
+        "command": "project-ledger work create --id W-9 --status scoped",
+        "reason": "Use a valid work state instead of bogus: scoped."
+      },
+      {
+        "command": "project-ledger work create --id W-9 --status specified",
+        "reason": "Use a valid work state instead of bogus: specified."
+      },
+      {
+        "command": "project-ledger work create --id W-9 --status in_progress",
+        "reason": "Use a valid work state instead of bogus: in_progress."
+      },
+      {
+        "command": "project-ledger work create --id W-9 --status review",
+        "reason": "Use a valid work state instead of bogus: review."
+      },
+      {
+        "command": "project-ledger work create --id W-9 --status done",
+        "reason": "Use a valid work state instead of bogus: done."
+      },
+      {
+        "command": "project-ledger work create --id W-9 --status blocked",
+        "reason": "Use a valid work state instead of bogus: blocked."
+      },
+      {
+        "command": "project-ledger work create --id W-9 --status cancelled",
+        "reason": "Use a valid work state instead of bogus: cancelled."
+      }
+    ]
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== work create
+{
+  "ok": true,
+  "command": "project-ledger work",
+  "data": {
+    "id": "W-1",
+    "kind": "work",
+    "title": "Ship it",
+    "status": "proposed",
+    "priority": 2.0,
+    "parentId": null,
+    "spec": "SPEC-1",
+    "specExemption": false,
+    "acceptance": "Users can ship",
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": true,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/work/W-1/work.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 13,
+        "issues": 0,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== work create second
+{
+  "ok": true,
+  "command": "project-ledger work",
+  "data": {
+    "id": "W-2",
+    "kind": "work",
+    "title": "Blocked work",
+    "status": "blocked",
+    "priority": 100,
+    "parentId": null,
+    "spec": null,
+    "specExemption": false,
+    "acceptance": null,
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/work/W-2/work.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 14,
+        "issues": 1,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== task create unknown work
+{
+  "ok": false,
+  "command": "project-ledger task",
+  "data": null,
+  "error": {
+    "code": "record_not_found",
+    "message": "work record not found: W-404",
+    "details": [
+      {
+        "id": "W-404",
+        "kind": "work"
+      }
+    ],
+    "next": [
+      {
+        "command": "project-ledger record show --kind work --id W-404",
+        "reason": "Check the exact id and kind."
+      },
+      {
+        "command": "project-ledger query --kind work",
+        "reason": "List existing records before retrying."
+      }
+    ]
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== task create
+{
+  "ok": true,
+  "command": "project-ledger task",
+  "data": {
+    "id": "T-1",
+    "kind": "task",
+    "title": "First task",
+    "status": "todo",
+    "priority": 100,
+    "parentId": "W-1",
+    "spec": null,
+    "specExemption": false,
+    "acceptance": null,
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/work/W-1/tasks/T-1.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 15,
+        "issues": 1,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== task create second
+{
+  "ok": true,
+  "command": "project-ledger task",
+  "data": {
+    "id": "T-2",
+    "kind": "task",
+    "title": "Second task",
+    "status": "todo",
+    "priority": 100,
+    "parentId": "W-1",
+    "spec": null,
+    "specExemption": false,
+    "acceptance": null,
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": "unit",
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/work/W-1/tasks/T-2.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 16,
+        "issues": 1,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== attempt start
+{
+  "ok": true,
+  "command": "project-ledger attempt",
+  "data": {
+    "id": "A-1",
+    "kind": "attempt",
+    "title": "Try one",
+    "status": "started",
+    "priority": 100,
+    "parentId": "T-1",
+    "spec": null,
+    "specExemption": false,
+    "acceptance": null,
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/work/W-1/tasks/T-1/attempts/A-1.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 17,
+        "issues": 1,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== attempt start duplicate
+{
+  "ok": false,
+  "command": "project-ledger attempt",
+  "data": null,
+  "error": {
+    "code": "record_exists",
+    "message": "Attempt already exists: A-1",
+    "details": null,
+    "next": []
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== attempt fail
+{
+  "ok": true,
+  "command": "project-ledger attempt",
+  "data": {
+    "id": "A-1",
+    "kind": "attempt",
+    "title": "Try one",
+    "status": "failed",
+    "priority": 100,
+    "parentId": "T-1",
+    "spec": null,
+    "specExemption": false,
+    "acceptance": null,
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": "flaky",
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/work/W-1/tasks/T-1/attempts/A-1.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 17,
+        "issues": 1,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== attempt succeed after fail
+{
+  "ok": false,
+  "command": "project-ledger attempt",
+  "data": null,
+  "error": {
+    "code": "invalid_transition",
+    "message": "Invalid attempt transition: failed -> succeeded",
+    "details": [
+      {
+        "id": "A-1",
+        "kind": "attempt",
+        "status": "failed"
+      }
+    ],
+    "next": [
+      {
+        "command": "project-ledger attempt start --task T-1 --id A-1",
+        "reason": "attempt records in failed cannot transition to succeeded; create or choose an active record."
+      }
+    ]
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== attempt start second
+{
+  "ok": true,
+  "command": "project-ledger attempt",
+  "data": {
+    "id": "A-2",
+    "kind": "attempt",
+    "title": "Attempt A-2",
+    "status": "started",
+    "priority": 100,
+    "parentId": "T-1",
+    "spec": null,
+    "specExemption": false,
+    "acceptance": null,
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/work/W-1/tasks/T-1/attempts/A-2.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 18,
+        "issues": 1,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== attempt succeed
+{
+  "ok": true,
+  "command": "project-ledger attempt",
+  "data": {
+    "id": "A-2",
+    "kind": "attempt",
+    "title": "Attempt A-2",
+    "status": "succeeded",
+    "priority": 100,
+    "parentId": "T-1",
+    "spec": null,
+    "specExemption": false,
+    "acceptance": null,
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": "green",
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/work/W-1/tasks/T-1/attempts/A-2.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 18,
+        "issues": 1,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== task complete from todo
+{
+  "ok": false,
+  "command": "project-ledger task",
+  "data": null,
+  "error": {
+    "code": "invalid_transition",
+    "message": "Invalid task transition: todo -> done",
+    "details": [
+      {
+        "id": "T-2",
+        "kind": "task",
+        "status": "todo"
+      }
+    ],
+    "next": [
+      {
+        "command": "project-ledger task update --id T-2 --status in_progress",
+        "reason": "Move the task to in_progress first."
+      },
+      {
+        "command": "project-ledger task complete --id T-2",
+        "reason": "Retry completion after the task is in_progress."
+      }
+    ]
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== task invalid state
+{
+  "ok": false,
+  "command": "project-ledger task",
+  "data": null,
+  "error": {
+    "code": "invalid_state",
+    "message": "Invalid task state: paused",
+    "details": [
+      {
+        "id": "T-2",
+        "kind": "task",
+        "status": "paused"
+      }
+    ],
+    "next": [
+      {
+        "command": "project-ledger task update --id T-2 --status todo",
+        "reason": "Use a valid task state instead of paused: todo."
+      },
+      {
+        "command": "project-ledger task update --id T-2 --status in_progress",
+        "reason": "Use a valid task state instead of paused: in_progress."
+      },
+      {
+        "command": "project-ledger task complete --id T-2",
+        "reason": "Use a valid task state instead of paused: done."
+      },
+      {
+        "command": "project-ledger task update --id T-2 --status blocked",
+        "reason": "Use a valid task state instead of paused: blocked."
+      },
+      {
+        "command": "project-ledger task update --id T-2 --status failed",
+        "reason": "Use a valid task state instead of paused: failed."
+      },
+      {
+        "command": "project-ledger task update --id T-2 --status cancelled",
+        "reason": "Use a valid task state instead of paused: cancelled."
+      }
+    ]
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== task update
+{
+  "ok": true,
+  "command": "project-ledger task",
+  "data": {
+    "id": "T-1",
+    "kind": "task",
+    "title": "First task (renamed)",
+    "status": "in_progress",
+    "priority": 100,
+    "parentId": "W-1",
+    "spec": null,
+    "specExemption": false,
+    "acceptance": null,
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/work/W-1/tasks/T-1.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 18,
+        "issues": 1,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== task complete
+{
+  "ok": true,
+  "command": "project-ledger task",
+  "data": {
+    "id": "T-1",
+    "kind": "task",
+    "title": "First task (renamed)",
+    "status": "done",
+    "priority": 100,
+    "parentId": "W-1",
+    "spec": null,
+    "specExemption": false,
+    "acceptance": null,
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": "done",
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/work/W-1/tasks/T-1.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 18,
+        "issues": 1,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== work jump to done
+{
+  "ok": false,
+  "command": "project-ledger work",
+  "data": null,
+  "error": {
+    "code": "invalid_transition",
+    "message": "Invalid work transition: proposed -> done",
+    "details": [
+      {
+        "id": "W-1",
+        "kind": "work",
+        "status": "proposed"
+      }
+    ],
+    "next": [
+      {
+        "command": "project-ledger work update --id W-1 --status scoped",
+        "reason": "Transition work from proposed to scoped before retrying done."
+      },
+      {
+        "command": "project-ledger work update --id W-1 --status blocked",
+        "reason": "Transition work from proposed to blocked before retrying done."
+      },
+      {
+        "command": "project-ledger work update --id W-1 --status cancelled",
+        "reason": "Transition work from proposed to cancelled before retrying done."
+      }
+    ]
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== work update scoped
+{
+  "ok": true,
+  "command": "project-ledger work",
+  "data": {
+    "id": "W-1",
+    "kind": "work",
+    "title": "Ship it",
+    "status": "scoped",
+    "priority": 2.0,
+    "parentId": null,
+    "spec": "SPEC-1",
+    "specExemption": false,
+    "acceptance": "Users can ship",
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": true,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/work/W-1/work.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 18,
+        "issues": 1,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== work update specified
+{
+  "ok": true,
+  "command": "project-ledger work",
+  "data": {
+    "id": "W-1",
+    "kind": "work",
+    "title": "Ship it",
+    "status": "specified",
+    "priority": 2.0,
+    "parentId": null,
+    "spec": "SPEC-1",
+    "specExemption": false,
+    "acceptance": "Users can ship",
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": true,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/work/W-1/work.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 18,
+        "issues": 1,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== work update in_progress
+{
+  "ok": true,
+  "command": "project-ledger work",
+  "data": {
+    "id": "W-1",
+    "kind": "work",
+    "title": "Ship it",
+    "status": "in_progress",
+    "priority": 2.0,
+    "parentId": null,
+    "spec": "SPEC-1",
+    "specExemption": false,
+    "acceptance": "Users can ship",
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": true,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/work/W-1/work.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 18,
+        "issues": 1,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== work update review
+{
+  "ok": true,
+  "command": "project-ledger work",
+  "data": {
+    "id": "W-1",
+    "kind": "work",
+    "title": "Ship it",
+    "status": "review",
+    "priority": 2.0,
+    "parentId": null,
+    "spec": "SPEC-1",
+    "specExemption": false,
+    "acceptance": "Users can ship",
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": true,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/work/W-1/work.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 18,
+        "issues": 1,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== work complete gate
+{
+  "ok": false,
+  "command": "project-ledger work",
+  "data": null,
+  "error": {
+    "code": "completion_gate_failed",
+    "message": "Work completion gate failed: validation, review, report, codeCommits",
+    "details": [
+      {
+        "code": "missing_validation",
+        "field": "validation",
+        "message": "Completed work is missing validation evidence",
+        "next": [
+          {
+            "command": "project-ledger work complete --id W-1 --validation TEXT",
+            "reason": "Provide validation evidence before completing the work."
+          }
+        ]
+      },
+      {
+        "code": "missing_review",
+        "field": "review",
+        "message": "Completed work is missing review evidence",
+        "next": [
+          {
+            "command": "project-ledger work complete --id W-1 --review TEXT",
+            "reason": "Provide review evidence before completing the work."
+          }
+        ]
+      },
+      {
+        "code": "missing_report",
+        "field": "report",
+        "message": "Completed work is missing report evidence",
+        "next": [
+          {
+            "command": "project-ledger work complete --id W-1 --report PATH",
+            "reason": "Provide report evidence before completing the work."
+          }
+        ]
+      },
+      {
+        "code": "missing_codeCommits",
+        "field": "codeCommits",
+        "message": "Completed work is missing codeCommits evidence",
+        "next": [
+          {
+            "command": "project-ledger work complete --id W-1 --code-commits JSON or --code-commit auto",
+            "reason": "Provide codeCommits evidence before completing the work."
+          }
+        ]
+      }
+    ],
+    "next": [
+      {
+        "command": "project-ledger work complete --id W-1 --validation TEXT",
+        "reason": "Provide validation evidence before completing the work."
+      },
+      {
+        "command": "project-ledger work complete --id W-1 --review TEXT",
+        "reason": "Provide review evidence before completing the work."
+      },
+      {
+        "command": "project-ledger work complete --id W-1 --report PATH",
+        "reason": "Provide report evidence before completing the work."
+      },
+      {
+        "command": "project-ledger work complete --id W-1 --code-commits JSON or --code-commit auto",
+        "reason": "Provide codeCommits evidence before completing the work."
+      }
+    ]
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== work complete bad commits
+{
+  "ok": false,
+  "command": "project-ledger work",
+  "data": null,
+  "error": {
+    "code": "completion_gate_failed",
+    "message": "Work completion gate failed: codeCommits",
+    "details": [
+      {
+        "code": "missing_codeCommits",
+        "field": "codeCommits",
+        "message": "Completed work is missing codeCommits evidence",
+        "next": [
+          {
+            "command": "project-ledger work complete --id W-1 --code-commits JSON or --code-commit auto",
+            "reason": "Provide codeCommits evidence before completing the work."
+          }
+        ]
+      }
+    ],
+    "next": [
+      {
+        "command": "project-ledger work complete --id W-1 --code-commits JSON or --code-commit auto",
+        "reason": "Provide codeCommits evidence before completing the work."
+      }
+    ]
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== work complete
+{
+  "ok": true,
+  "command": "project-ledger work",
+  "data": {
+    "id": "W-1",
+    "kind": "work",
+    "title": "Ship it",
+    "status": "done",
+    "priority": 2.0,
+    "parentId": null,
+    "spec": "SPEC-1",
+    "specExemption": false,
+    "acceptance": "Users can ship",
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": true,
+    "codeCommits": "[{\"repo\":\"butler\",\"hash\":\"abc123\",\"message\":\"ship\"}]",
+    "ledgerCommits": "none",
+    "report": "reports/rep-1.md",
+    "review": "ok",
+    "validation": "tests",
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/work/W-1/work.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 18,
+        "issues": 1,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== work complete twice
+{
+  "ok": false,
+  "command": "project-ledger work",
+  "data": null,
+  "error": {
+    "code": "invalid_transition",
+    "message": "Work is already completed: W-1",
+    "details": null,
+    "next": []
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== work update cancelled from blocked
+{
+  "ok": true,
+  "command": "project-ledger work",
+  "data": {
+    "id": "W-2",
+    "kind": "work",
+    "title": "Blocked work",
+    "status": "cancelled",
+    "priority": 100,
+    "parentId": null,
+    "spec": null,
+    "specExemption": false,
+    "acceptance": null,
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": "Dropped",
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/work/W-2/work.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 18,
+        "issues": 0,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record update plan
+{
+  "ok": true,
+  "command": "project-ledger record",
+  "data": {
+    "id": "PLAN-1",
+    "kind": "plan",
+    "title": "plan PLAN-1",
+    "status": "closed",
+    "priority": 100,
+    "parentId": null,
+    "spec": null,
+    "specExemption": false,
+    "acceptance": null,
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/plans/plan-1.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 18,
+        "issues": 0,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record update decision
+{
+  "ok": true,
+  "command": "project-ledger record",
+  "data": {
+    "id": "DEC-1",
+    "kind": "decision",
+    "title": "decision DEC-1",
+    "status": "accepted",
+    "priority": 100,
+    "parentId": null,
+    "spec": null,
+    "specExemption": true,
+    "acceptance": null,
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": "W-1",
+    "mitigation": null,
+    "reason": "Chosen for speed",
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/decisions/dec-1.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "derived": {
+      "index_refresh": {
+        "ok": true,
+        "records": 18,
+        "issues": 0,
+        "path": "project-ledger/projects/demo/index/project.json",
+        "generatedAt": "<ts>"
+      },
+      "warnings": []
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record update nothing
+{
+  "ok": false,
+  "command": "project-ledger record",
+  "data": null,
+  "error": {
+    "code": "invalid_input",
+    "message": "record update requires --from or at least one metadata flag",
+    "details": null,
+    "next": []
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record update missing
+{
+  "ok": false,
+  "command": "project-ledger record",
+  "data": null,
+  "error": {
+    "code": "record_not_found",
+    "message": "record not found: NOPE",
+    "details": [
+      {
+        "id": "NOPE",
+        "kind": null
+      }
+    ],
+    "next": [
+      {
+        "command": "project-ledger record show --id NOPE",
+        "reason": "Check the exact id and kind."
+      },
+      {
+        "command": "project-ledger query --kind all",
+        "reason": "List existing records before retrying."
+      }
+    ]
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record update wrong kind
+{
+  "ok": false,
+  "command": "project-ledger record",
+  "data": null,
+  "error": {
+    "code": "record_not_found",
+    "message": "risk record not found: DEC-1",
+    "details": [
+      {
+        "id": "DEC-1",
+        "kind": "risk"
+      }
+    ],
+    "next": [
+      {
+        "command": "project-ledger record show --kind risk --id DEC-1",
+        "reason": "Check the exact id and kind."
+      },
+      {
+        "command": "project-ledger query --kind risk",
+        "reason": "List existing records before retrying."
+      }
+    ]
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== record update attempt transition
+{
+  "ok": false,
+  "command": "project-ledger record",
+  "data": null,
+  "error": {
+    "code": "invalid_transition",
+    "message": "Invalid attempt transition: succeeded -> started",
+    "details": [
+      {
+        "id": "A-2",
+        "kind": "attempt",
+        "status": "succeeded"
+      }
+    ],
+    "next": [
+      {
+        "command": "project-ledger attempt start --task T-1 --id A-2",
+        "reason": "attempt records in succeeded cannot transition to started; create or choose an active record."
+      }
+    ]
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== index
+{
+  "ok": true,
+  "command": "project-ledger index",
+  "data": {
+    "schema": "project-ledger.index.v1",
+    "generatedAt": "<ts>",
+    "project": {
+      "id": "demo",
+      "name": "Demo Project",
+      "status": "active",
+      "path": "project-ledger/projects/demo/project.json"
+    },
+    "counts": {
+      "records": 18,
+      "initiative": 1,
+      "work": 2,
+      "task": 2,
+      "attempt": 2,
+      "decision": 1,
+      "risk": 2,
+      "spec": 1,
+      "report": 1,
+      "plan": 1,
+      "handoff": 1,
+      "reference": 1,
+      "roadmap": 1
+    },
+    "records": [
+      {
+        "id": "DEC-1",
+        "kind": "decision",
+        "title": "decision DEC-1",
+        "status": "accepted",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": true,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": "W-1",
+        "mitigation": null,
+        "reason": "Chosen for speed",
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/decisions/dec-1.md"
+      },
+      {
+        "id": "HAND-1",
+        "kind": "handoff",
+        "title": "handoff HAND-1",
+        "status": "active",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/handoffs/hand-1.md"
+      },
+      {
+        "id": "INIT-1",
+        "kind": "initiative",
+        "title": "initiative INIT-1",
+        "status": "active",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/initiatives/init-1.md"
+      },
+      {
+        "id": "PLAN-1",
+        "kind": "plan",
+        "title": "plan PLAN-1",
+        "status": "closed",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/plans/plan-1.md"
+      },
+      {
+        "id": "demo",
+        "kind": "project",
+        "title": "Demo Project",
+        "status": "active",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/project.json"
+      },
+      {
+        "id": "demo",
+        "kind": "project",
+        "title": "Demo Project",
+        "status": "active",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/project.json"
+      },
+      {
+        "id": "REF-1",
+        "kind": "reference",
+        "title": "reference REF-1",
+        "status": "active",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/references/ref-1.md"
+      },
+      {
+        "id": "REP-1",
+        "kind": "report",
+        "title": "report REP-1",
+        "status": "done",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/reports/rep-1.md"
+      },
+      {
+        "id": "RISK-1",
+        "kind": "risk",
+        "title": "risk RISK-1",
+        "status": "open",
+        "priority": 100,
+        "parentId": "INIT-1",
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/risks/risk-1.md"
+      },
+      {
+        "id": "RISK-2",
+        "kind": "risk",
+        "title": "risk RISK-2",
+        "status": "mitigated",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": "Canary rollout",
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/risks/risk-2.md"
+      },
+      {
+        "id": "MAP-1",
+        "kind": "roadmap",
+        "title": "roadmap MAP-1",
+        "status": "active",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/roadmaps/map-1.md"
+      },
+      {
+        "id": "SPEC-1",
+        "kind": "spec",
+        "title": "spec SPEC-1",
+        "status": "active",
+        "priority": 3.0,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": "It works",
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/specs/spec-1.md"
+      },
+      {
+        "id": "T-1",
+        "kind": "task",
+        "title": "First task (renamed)",
+        "status": "done",
+        "priority": 100,
+        "parentId": "W-1",
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": "done",
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/work/W-1/tasks/T-1.md"
+      },
+      {
+        "id": "A-1",
+        "kind": "attempt",
+        "title": "Try one",
+        "status": "failed",
+        "priority": 100,
+        "parentId": "T-1",
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": "flaky",
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/work/W-1/tasks/T-1/attempts/A-1.md"
+      },
+      {
+        "id": "A-2",
+        "kind": "attempt",
+        "title": "Attempt A-2",
+        "status": "succeeded",
+        "priority": 100,
+        "parentId": "T-1",
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": "green",
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/work/W-1/tasks/T-1/attempts/A-2.md"
+      },
+      {
+        "id": "T-2",
+        "kind": "task",
+        "title": "Second task",
+        "status": "todo",
+        "priority": 100,
+        "parentId": "W-1",
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": "unit",
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/work/W-1/tasks/T-2.md"
+      },
+      {
+        "id": "W-1",
+        "kind": "work",
+        "title": "Ship it",
+        "status": "done",
+        "priority": 2.0,
+        "parentId": null,
+        "spec": "SPEC-1",
+        "specExemption": false,
+        "acceptance": "Users can ship",
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": true,
+        "codeCommits": "[{\"repo\":\"butler\",\"hash\":\"abc123\",\"message\":\"ship\"}]",
+        "ledgerCommits": "none",
+        "report": "reports/rep-1.md",
+        "review": "ok",
+        "validation": "tests",
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/work/W-1/work.md"
+      },
+      {
+        "id": "W-2",
+        "kind": "work",
+        "title": "Blocked work",
+        "status": "cancelled",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": "Dropped",
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/work/W-2/work.md"
+      }
+    ],
+    "issues": [],
+    "views": [
+      {
+        "name": "dashboard",
+        "path": "project-ledger/projects/demo/views/dashboard.md",
+        "exists": false,
+        "stale": true
+      },
+      {
+        "name": "handoff",
+        "path": "project-ledger/projects/demo/views/handoff.md",
+        "exists": false,
+        "stale": true
+      },
+      {
+        "name": "roadmap",
+        "path": "project-ledger/projects/demo/views/roadmap.md",
+        "exists": false,
+        "stale": true
+      }
+    ],
+    "index": {
+      "available": true,
+      "stale": false,
+      "generatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/index/project.json"
+    },
+    "privacy": {
+      "rawTextIncluded": false,
+      "secretsIncluded": false
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query all
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "all",
+    "results": [
+      {
+        "id": "W-1",
+        "kind": "work",
+        "title": "Ship it",
+        "status": "done",
+        "path": "project-ledger/projects/demo/work/W-1/work.md"
+      },
+      {
+        "id": "SPEC-1",
+        "kind": "spec",
+        "title": "spec SPEC-1",
+        "status": "active",
+        "path": "project-ledger/projects/demo/specs/spec-1.md"
+      },
+      {
+        "id": "DEC-1",
+        "kind": "decision",
+        "title": "decision DEC-1",
+        "status": "accepted",
+        "path": "project-ledger/projects/demo/decisions/dec-1.md"
+      },
+      {
+        "id": "PLAN-1",
+        "kind": "plan",
+        "title": "plan PLAN-1",
+        "status": "closed",
+        "path": "project-ledger/projects/demo/plans/plan-1.md"
+      },
+      {
+        "id": "W-2",
+        "kind": "work",
+        "title": "Blocked work",
+        "status": "cancelled",
+        "path": "project-ledger/projects/demo/work/W-2/work.md"
+      },
+      {
+        "id": "T-1",
+        "kind": "task",
+        "title": "First task (renamed)",
+        "status": "done",
+        "path": "project-ledger/projects/demo/work/W-1/tasks/T-1.md"
+      },
+      {
+        "id": "A-2",
+        "kind": "attempt",
+        "title": "Attempt A-2",
+        "status": "succeeded",
+        "path": "project-ledger/projects/demo/work/W-1/tasks/T-1/attempts/A-2.md"
+      },
+      {
+        "id": "A-1",
+        "kind": "attempt",
+        "title": "Try one",
+        "status": "failed",
+        "path": "project-ledger/projects/demo/work/W-1/tasks/T-1/attempts/A-1.md"
+      },
+      {
+        "id": "T-2",
+        "kind": "task",
+        "title": "Second task",
+        "status": "todo",
+        "path": "project-ledger/projects/demo/work/W-1/tasks/T-2.md"
+      },
+      {
+        "id": "MAP-1",
+        "kind": "roadmap",
+        "title": "roadmap MAP-1",
+        "status": "active",
+        "path": "project-ledger/projects/demo/roadmaps/map-1.md"
+      },
+      {
+        "id": "REF-1",
+        "kind": "reference",
+        "title": "reference REF-1",
+        "status": "active",
+        "path": "project-ledger/projects/demo/references/ref-1.md"
+      },
+      {
+        "id": "HAND-1",
+        "kind": "handoff",
+        "title": "handoff HAND-1",
+        "status": "active",
+        "path": "project-ledger/projects/demo/handoffs/hand-1.md"
+      },
+      {
+        "id": "REP-1",
+        "kind": "report",
+        "title": "report REP-1",
+        "status": "done",
+        "path": "project-ledger/projects/demo/reports/rep-1.md"
+      },
+      {
+        "id": "RISK-2",
+        "kind": "risk",
+        "title": "risk RISK-2",
+        "status": "mitigated",
+        "path": "project-ledger/projects/demo/risks/risk-2.md"
+      },
+      {
+        "id": "RISK-1",
+        "kind": "risk",
+        "title": "risk RISK-1",
+        "status": "open",
+        "path": "project-ledger/projects/demo/risks/risk-1.md"
+      },
+      {
+        "id": "INIT-1",
+        "kind": "initiative",
+        "title": "initiative INIT-1",
+        "status": "active",
+        "path": "project-ledger/projects/demo/initiatives/init-1.md"
+      }
+    ]
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query initiative
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "initiative",
+    "results": [
+      {
+        "id": "INIT-1",
+        "kind": "initiative",
+        "title": "initiative INIT-1",
+        "status": "active",
+        "path": "project-ledger/projects/demo/initiatives/init-1.md"
+      }
+    ]
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query decision
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "decision",
+    "results": [
+      {
+        "id": "DEC-1",
+        "kind": "decision",
+        "title": "decision DEC-1",
+        "status": "accepted",
+        "path": "project-ledger/projects/demo/decisions/dec-1.md"
+      }
+    ]
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query risk
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "risk",
+    "results": [
+      {
+        "id": "RISK-2",
+        "kind": "risk",
+        "title": "risk RISK-2",
+        "status": "mitigated",
+        "path": "project-ledger/projects/demo/risks/risk-2.md"
+      },
+      {
+        "id": "RISK-1",
+        "kind": "risk",
+        "title": "risk RISK-1",
+        "status": "open",
+        "path": "project-ledger/projects/demo/risks/risk-1.md"
+      }
+    ]
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query spec
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "spec",
+    "results": [
+      {
+        "id": "SPEC-1",
+        "kind": "spec",
+        "title": "spec SPEC-1",
+        "status": "active",
+        "path": "project-ledger/projects/demo/specs/spec-1.md"
+      }
+    ]
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query report
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "report",
+    "results": [
+      {
+        "id": "REP-1",
+        "kind": "report",
+        "title": "report REP-1",
+        "status": "done",
+        "path": "project-ledger/projects/demo/reports/rep-1.md"
+      }
+    ]
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query plan
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "plan",
+    "results": [
+      {
+        "id": "PLAN-1",
+        "kind": "plan",
+        "title": "plan PLAN-1",
+        "status": "closed",
+        "path": "project-ledger/projects/demo/plans/plan-1.md"
+      }
+    ]
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query handoff
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "handoff",
+    "results": [
+      {
+        "id": "HAND-1",
+        "kind": "handoff",
+        "title": "handoff HAND-1",
+        "status": "active",
+        "path": "project-ledger/projects/demo/handoffs/hand-1.md"
+      }
+    ]
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query reference
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "reference",
+    "results": [
+      {
+        "id": "REF-1",
+        "kind": "reference",
+        "title": "reference REF-1",
+        "status": "active",
+        "path": "project-ledger/projects/demo/references/ref-1.md"
+      }
+    ]
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query roadmap
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "roadmap",
+    "results": [
+      {
+        "id": "MAP-1",
+        "kind": "roadmap",
+        "title": "roadmap MAP-1",
+        "status": "active",
+        "path": "project-ledger/projects/demo/roadmaps/map-1.md"
+      }
+    ]
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query work
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "work",
+    "results": [
+      {
+        "id": "W-1",
+        "kind": "work",
+        "title": "Ship it",
+        "status": "done",
+        "path": "project-ledger/projects/demo/work/W-1/work.md"
+      },
+      {
+        "id": "W-2",
+        "kind": "work",
+        "title": "Blocked work",
+        "status": "cancelled",
+        "path": "project-ledger/projects/demo/work/W-2/work.md"
+      }
+    ]
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query task
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "task",
+    "results": [
+      {
+        "id": "T-1",
+        "kind": "task",
+        "title": "First task (renamed)",
+        "status": "done",
+        "path": "project-ledger/projects/demo/work/W-1/tasks/T-1.md"
+      },
+      {
+        "id": "T-2",
+        "kind": "task",
+        "title": "Second task",
+        "status": "todo",
+        "path": "project-ledger/projects/demo/work/W-1/tasks/T-2.md"
+      }
+    ]
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query attempt
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "attempt",
+    "results": [
+      {
+        "id": "A-2",
+        "kind": "attempt",
+        "title": "Attempt A-2",
+        "status": "succeeded",
+        "path": "project-ledger/projects/demo/work/W-1/tasks/T-1/attempts/A-2.md"
+      },
+      {
+        "id": "A-1",
+        "kind": "attempt",
+        "title": "Try one",
+        "status": "failed",
+        "path": "project-ledger/projects/demo/work/W-1/tasks/T-1/attempts/A-1.md"
+      }
+    ]
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query next-actions
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "next-actions",
+    "results": [
+      {
+        "id": "T-2",
+        "kind": "task",
+        "title": "Second task",
+        "status": "todo",
+        "path": "project-ledger/projects/demo/work/W-1/tasks/T-2.md",
+        "reason": "active_next_action"
+      }
+    ]
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query blocked
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "blocked",
+    "results": []
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query review
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "review",
+    "results": []
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query missing-spec
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "missing-spec",
+    "results": []
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query completion-gaps
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "completion-gaps",
+    "results": []
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query stale-view
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "stale-view",
+    "results": [
+      {
+        "id": "dashboard",
+        "kind": "view",
+        "title": "dashboard view",
+        "status": "missing",
+        "path": "project-ledger/projects/demo/views/dashboard.md",
+        "reason": "generated_view_missing"
+      },
+      {
+        "id": "handoff",
+        "kind": "view",
+        "title": "handoff view",
+        "status": "missing",
+        "path": "project-ledger/projects/demo/views/handoff.md",
+        "reason": "generated_view_missing"
+      },
+      {
+        "id": "roadmap",
+        "kind": "view",
+        "title": "roadmap view",
+        "status": "missing",
+        "path": "project-ledger/projects/demo/views/roadmap.md",
+        "reason": "generated_view_missing"
+      }
+    ]
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query stale-index
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "stale-index",
+    "results": []
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query decision-without-implementation
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "decision-without-implementation",
+    "results": []
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query risk-without-mitigation
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "risk-without-mitigation",
+    "results": [
+      {
+        "id": "RISK-1",
+        "kind": "risk",
+        "title": "risk RISK-1",
+        "status": "open",
+        "path": "project-ledger/projects/demo/risks/risk-1.md",
+        "reason": "risk_without_mitigation"
+      }
+    ]
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query recent-completed
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "recent-completed",
+    "results": [
+      {
+        "id": "W-1",
+        "kind": "work",
+        "title": "Ship it",
+        "status": "done",
+        "path": "project-ledger/projects/demo/work/W-1/work.md",
+        "reason": "recent_completed"
+      },
+      {
+        "id": "T-1",
+        "kind": "task",
+        "title": "First task (renamed)",
+        "status": "done",
+        "path": "project-ledger/projects/demo/work/W-1/tasks/T-1.md",
+        "reason": "recent_completed"
+      },
+      {
+        "id": "REP-1",
+        "kind": "report",
+        "title": "report REP-1",
+        "status": "done",
+        "path": "project-ledger/projects/demo/reports/rep-1.md",
+        "reason": "recent_completed"
+      }
+    ]
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query filtered
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "all",
+    "results": []
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query limited
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "all",
+    "results": [
+      {
+        "id": "W-1",
+        "kind": "work",
+        "title": "Ship it",
+        "status": "done",
+        "path": "project-ledger/projects/demo/work/W-1/work.md"
+      },
+      {
+        "id": "SPEC-1",
+        "kind": "spec",
+        "title": "spec SPEC-1",
+        "status": "active",
+        "path": "project-ledger/projects/demo/specs/spec-1.md"
+      }
+    ],
+    "limit": 2,
+    "returned": 2,
+    "total": 16,
+    "truncated": true
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query bad limit
+{
+  "ok": false,
+  "command": "project-ledger query",
+  "data": null,
+  "error": {
+    "code": "invalid_arguments",
+    "message": "limit must be an integer between 1 and 1000",
+    "details": null,
+    "next": []
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query unknown kind
+{
+  "ok": false,
+  "command": "project-ledger query",
+  "data": null,
+  "error": {
+    "code": "invalid_query_kind",
+    "message": "Unsupported query kind: notes",
+    "details": null,
+    "next": []
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query missing kind
+{
+  "ok": false,
+  "command": "project-ledger query",
+  "data": null,
+  "error": {
+    "code": "invalid_arguments",
+    "message": "Missing required option: --kind",
+    "details": null,
+    "next": []
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== show
+{
+  "ok": true,
+  "command": "project-ledger record",
+  "data": {
+    "id": "PLAN-1",
+    "kind": "plan",
+    "title": "plan PLAN-1",
+    "status": "closed",
+    "priority": 100,
+    "parentId": null,
+    "spec": null,
+    "specExemption": false,
+    "acceptance": null,
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": false,
+    "codeCommits": null,
+    "ledgerCommits": null,
+    "report": null,
+    "review": null,
+    "validation": null,
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/plans/plan-1.md",
+    "sourceMtimeMs": <epoch-ms>,
+    "body": "Closed plan\n"
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== show json-less
+{
+  "ok": true,
+  "command": "project-ledger record",
+  "data": {
+    "id": "W-1",
+    "kind": "work",
+    "title": "Ship it",
+    "status": "done",
+    "priority": 2.0,
+    "parentId": null,
+    "spec": "SPEC-1",
+    "specExemption": false,
+    "acceptance": "Users can ship",
+    "acceptanceExemption": false,
+    "requiresCommitEvidence": true,
+    "codeCommits": "[{\"repo\":\"butler\",\"hash\":\"abc123\",\"message\":\"ship\"}]",
+    "ledgerCommits": "none",
+    "report": "reports/rep-1.md",
+    "review": "ok",
+    "validation": "tests",
+    "implementation": null,
+    "mitigation": null,
+    "reason": null,
+    "updatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/work/W-1/work.md",
+    "sourceMtimeMs": <epoch-ms>
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== show missing
+{
+  "ok": false,
+  "command": "project-ledger record",
+  "data": null,
+  "error": {
+    "code": "record_not_found",
+    "message": "record not found: NOPE",
+    "details": [
+      {
+        "id": "NOPE",
+        "kind": null
+      }
+    ],
+    "next": [
+      {
+        "command": "project-ledger record show --id NOPE",
+        "reason": "Check the exact id and kind."
+      },
+      {
+        "command": "project-ledger query --kind all",
+        "reason": "List existing records before retrying."
+      }
+    ]
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== show no id
+{
+  "ok": false,
+  "command": "project-ledger record",
+  "data": null,
+  "error": {
+    "code": "invalid_arguments",
+    "message": "Missing required option: --id",
+    "details": null,
+    "next": []
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== check
+{
+  "ok": false,
+  "command": "project-ledger check",
+  "data": {
+    "ok": false,
+    "issueCount": 3,
+    "issues": [
+      {
+        "code": "stale_view",
+        "severity": "warning",
+        "message": "Generated view is missing",
+        "path": "project-ledger/projects/demo/views/dashboard.md",
+        "record": null
+      },
+      {
+        "code": "stale_view",
+        "severity": "warning",
+        "message": "Generated view is missing",
+        "path": "project-ledger/projects/demo/views/handoff.md",
+        "record": null
+      },
+      {
+        "code": "stale_view",
+        "severity": "warning",
+        "message": "Generated view is missing",
+        "path": "project-ledger/projects/demo/views/roadmap.md",
+        "record": null
+      }
+    ],
+    "counts": {
+      "records": 18,
+      "initiative": 1,
+      "work": 2,
+      "task": 2,
+      "attempt": 2,
+      "decision": 1,
+      "risk": 2,
+      "spec": 1,
+      "report": 1,
+      "plan": 1,
+      "handoff": 1,
+      "reference": 1,
+      "roadmap": 1
+    }
+  },
+  "error": {
+    "code": "project_ledger_check_failed",
+    "message": "Project Ledger check failed with 3 issues",
+    "details": [
+      {
+        "issueCount": 3,
+        "errorCount": 0,
+        "warningCount": 3
+      }
+    ],
+    "next": [
+      {
+        "command": "project-ledger check --verbose",
+        "reason": "Inspect the full issue list before retrying."
+      },
+      {
+        "command": "project-ledger index",
+        "reason": "Refresh the derived index after source-record repairs."
+      }
+    ]
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== status
+{
+  "ok": true,
+  "command": "project-ledger status",
+  "data": {
+    "project": {
+      "id": "demo",
+      "name": "Demo Project",
+      "status": "active",
+      "path": "project-ledger/projects/demo/project.json"
+    },
+    "index": {
+      "available": true,
+      "stale": false,
+      "generatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/index/project.json"
+    },
+    "counts": {
+      "records": 18,
+      "initiative": 1,
+      "work": 2,
+      "task": 2,
+      "attempt": 2,
+      "decision": 1,
+      "risk": 2,
+      "spec": 1,
+      "report": 1,
+      "plan": 1,
+      "handoff": 1,
+      "reference": 1,
+      "roadmap": 1
+    },
+    "issueCount": 0,
+    "staleViews": [
+      {
+        "id": "dashboard",
+        "kind": "view",
+        "title": "dashboard view",
+        "status": "missing",
+        "path": "project-ledger/projects/demo/views/dashboard.md",
+        "reason": "generated_view_missing"
+      },
+      {
+        "id": "handoff",
+        "kind": "view",
+        "title": "handoff view",
+        "status": "missing",
+        "path": "project-ledger/projects/demo/views/handoff.md",
+        "reason": "generated_view_missing"
+      },
+      {
+        "id": "roadmap",
+        "kind": "view",
+        "title": "roadmap view",
+        "status": "missing",
+        "path": "project-ledger/projects/demo/views/roadmap.md",
+        "reason": "generated_view_missing"
+      }
+    ],
+    "nextActions": [
+      {
+        "id": "T-2",
+        "kind": "task",
+        "title": "Second task",
+        "status": "todo",
+        "path": "project-ledger/projects/demo/work/W-1/tasks/T-2.md",
+        "reason": "active_next_action"
+      }
+    ]
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== render dashboard
+{
+  "ok": true,
+  "command": "project-ledger render",
+  "data": {
+    "view": "dashboard",
+    "path": "project-ledger/projects/demo/views/dashboard.md",
+    "markdown": "<!-- generated by project-ledger; do not edit -->\n# Project Ledger Dashboard\n\nGenerated: <ts>\n\nProject: Demo Project (demo)\n\n## Counts\n\n- Work: 2\n- Tasks: 2\n- Attempts: 2\n- Decisions: 1\n- Risks: 2\n- Issues: 0\n\n## Next Actions\n\n- T-2 [todo] Second task (project-ledger/projects/demo/work/W-1/tasks/T-2.md)\n\n## Blocked\n\n- None\n\n## Missing Spec\n\n- None\n\n## Completion Gaps\n\n- None",
+    "written": false
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== render handoff write
+{
+  "ok": true,
+  "command": "project-ledger render",
+  "data": {
+    "view": "handoff",
+    "path": "project-ledger/projects/demo/views/handoff.md",
+    "markdown": "<!-- generated by project-ledger; do not edit -->\n# Project Ledger Handoff\n\nGenerated: <ts>\n\n## Start Here\n\n- Run `project-ledger status --json`.\n- Run `project-ledger query --kind next-actions --json`.\n- Read only referenced source records and specs.\n\n## Next Actions\n\n- T-2 [todo] Second task (project-ledger/projects/demo/work/W-1/tasks/T-2.md)\n\n## Risks And Blockers\n\n- None",
+    "written": true
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== render roadmap write
+{
+  "ok": true,
+  "command": "project-ledger render",
+  "data": {
+    "view": "roadmap",
+    "path": "project-ledger/projects/demo/views/roadmap.md",
+    "markdown": "<!-- generated by project-ledger; do not edit -->\n# Project Ledger Roadmap\n\nGenerated: <ts>\n\n## Work\n\n- W-1 [done] Ship it (project-ledger/projects/demo/work/W-1/work.md)\n- W-2 [cancelled] Blocked work (project-ledger/projects/demo/work/W-2/work.md)",
+    "written": true
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== render dashboard write
+{
+  "ok": true,
+  "command": "project-ledger render",
+  "data": {
+    "view": "dashboard",
+    "path": "project-ledger/projects/demo/views/dashboard.md",
+    "markdown": "<!-- generated by project-ledger; do not edit -->\n# Project Ledger Dashboard\n\nGenerated: <ts>\n\nProject: Demo Project (demo)\n\n## Counts\n\n- Work: 2\n- Tasks: 2\n- Attempts: 2\n- Decisions: 1\n- Risks: 2\n- Issues: 0\n\n## Next Actions\n\n- T-2 [todo] Second task (project-ledger/projects/demo/work/W-1/tasks/T-2.md)\n\n## Blocked\n\n- None\n\n## Missing Spec\n\n- None\n\n## Completion Gaps\n\n- None",
+    "written": true
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== render unknown
+{
+  "ok": false,
+  "command": "project-ledger render",
+  "data": null,
+  "error": {
+    "code": "invalid_render_view",
+    "message": "Unsupported render view: calendar",
+    "details": null,
+    "next": []
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== render missing
+{
+  "ok": false,
+  "command": "project-ledger render",
+  "data": null,
+  "error": {
+    "code": "invalid_arguments",
+    "message": "render requires dashboard, handoff, or roadmap",
+    "details": null,
+    "next": []
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query stale-view after render
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "stale-view",
+    "results": []
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== show_plan_record "PLAN-1"
+Ok(
+    PlanRecordShow {
+        id: "PLAN-1",
+        title: "plan PLAN-1",
+        status: "closed",
+        body: Some(
+            "Closed plan\n",
+        ),
+        path: Some(
+            "project-ledger/projects/demo/plans/plan-1.md",
+        ),
+    },
+)
+=== show_plan_record " PLAN-1 "
+Ok(
+    PlanRecordShow {
+        id: "PLAN-1",
+        title: "plan PLAN-1",
+        status: "closed",
+        body: Some(
+            "Closed plan\n",
+        ),
+        path: Some(
+            "project-ledger/projects/demo/plans/plan-1.md",
+        ),
+    },
+)
+=== show_plan_record "W-1"
+Err(
+    RecordShow {
+        code: "record_not_found",
+        source: None,
+    },
+)
+=== show_plan_record ""
+Err(
+    RecordShow {
+        code: "invalid_input",
+        source: None,
+    },
+)
+=== find_canonical_record_kinds W-1
+Ok(
+    [
+        "work",
+    ],
+)
+=== find_canonical_record_kinds PLAN-1
+Ok(
+    [
+        "plan",
+    ],
+)
+=== find_canonical_record_kinds NOPE
+Ok(
+    [],
+)
+=== dashboard_snapshot
+Ok(
+    DashboardLedgerSnapshot {
+        revision: "<sha:1>",
+        observed_at: "<ts>",
+        records: [
+            DashboardLedgerRecord {
+                id: "PLAN-1",
+                kind: "plan",
+                title: "plan PLAN-1",
+                status: "closed",
+                path: "project-ledger/projects/demo/plans/plan-1.md",
+                parent_id: None,
+                spec: None,
+                updated_at: "<ts>",
+                priority: 100.0,
+                unavailable: false,
+            },
+            DashboardLedgerRecord {
+                id: "REP-1",
+                kind: "report",
+                title: "report REP-1",
+                status: "done",
+                path: "project-ledger/projects/demo/reports/rep-1.md",
+                parent_id: None,
+                spec: None,
+                updated_at: "<ts>",
+                priority: 100.0,
+                unavailable: false,
+            },
+            DashboardLedgerRecord {
+                id: "SPEC-1",
+                kind: "spec",
+                title: "spec SPEC-1",
+                status: "active",
+                path: "project-ledger/projects/demo/specs/spec-1.md",
+                parent_id: None,
+                spec: None,
+                updated_at: "<ts>",
+                priority: 3.0,
+                unavailable: false,
+            },
+            DashboardLedgerRecord {
+                id: "T-1",
+                kind: "task",
+                title: "First task (renamed)",
+                status: "done",
+                path: "project-ledger/projects/demo/work/W-1/tasks/T-1.md",
+                parent_id: Some(
+                    "W-1",
+                ),
+                spec: None,
+                updated_at: "<ts>",
+                priority: 100.0,
+                unavailable: false,
+            },
+            DashboardLedgerRecord {
+                id: "T-2",
+                kind: "task",
+                title: "Second task",
+                status: "todo",
+                path: "project-ledger/projects/demo/work/W-1/tasks/T-2.md",
+                parent_id: Some(
+                    "W-1",
+                ),
+                spec: None,
+                updated_at: "<ts>",
+                priority: 100.0,
+                unavailable: false,
+            },
+            DashboardLedgerRecord {
+                id: "W-1",
+                kind: "work",
+                title: "Ship it",
+                status: "done",
+                path: "project-ledger/projects/demo/work/W-1/work.md",
+                parent_id: None,
+                spec: Some(
+                    "SPEC-1",
+                ),
+                updated_at: "<ts>",
+                priority: 2.0,
+                unavailable: false,
+            },
+            DashboardLedgerRecord {
+                id: "W-2",
+                kind: "work",
+                title: "Blocked work",
+                status: "cancelled",
+                path: "project-ledger/projects/demo/work/W-2/work.md",
+                parent_id: None,
+                spec: None,
+                updated_at: "<ts>",
+                priority: 100.0,
+                unavailable: false,
+            },
+        ],
+        works: [
+            DashboardLedgerWork {
+                record: DashboardLedgerRecord {
+                    id: "W-1",
+                    kind: "work",
+                    title: "Ship it",
+                    status: "done",
+                    path: "project-ledger/projects/demo/work/W-1/work.md",
+                    parent_id: None,
+                    spec: Some(
+                        "SPEC-1",
+                    ),
+                    updated_at: "<ts>",
+                    priority: 2.0,
+                    unavailable: false,
+                },
+                revision: Some(
+                    "<sha:2>",
+                ),
+                availability: "ready",
+                managed: None,
+            },
+            DashboardLedgerWork {
+                record: DashboardLedgerRecord {
+                    id: "W-2",
+                    kind: "work",
+                    title: "Blocked work",
+                    status: "cancelled",
+                    path: "project-ledger/projects/demo/work/W-2/work.md",
+                    parent_id: None,
+                    spec: None,
+                    updated_at: "<ts>",
+                    priority: 100.0,
+                    unavailable: false,
+                },
+                revision: Some(
+                    "<sha:3>",
+                ),
+                availability: "ready",
+                managed: None,
+            },
+        ],
+    },
+)
+=== read_dashboard_source plan PLAN-1
+Ok(
+    DashboardLedgerSource {
+        title: "plan PLAN-1",
+        body: "Closed plan\n",
+        revision: "<sha:4>",
+        document_type: "plan",
+        updated_at: "<ts>",
+        status: "closed",
+    },
+)
+=== read_dashboard_source work W-1
+Ok(
+    DashboardLedgerSource {
+        title: "Ship it",
+        body: "Work body\n",
+        revision: "<sha:2>",
+        document_type: "work",
+        updated_at: "<ts>",
+        status: "done",
+    },
+)
+=== read_dashboard_source decision DEC-1
+Err(
+    DashboardUnavailable {
+        code: "dashboard_source_unavailable",
+        source: Some(
+            RecordShow {
+                code: "dashboard_source_unavailable",
+                source: None,
+            },
+        ),
+    },
+)
+=== read_dashboard_source reference REF-1
+Err(
+    DashboardUnavailable {
+        code: "dashboard_source_unavailable",
+        source: None,
+    },
+)
+=== read_dashboard_source plan NOPE
+Err(
+    DashboardUnavailable {
+        code: "dashboard_source_unavailable",
+        source: Some(
+            RecordShow {
+                code: "dashboard_source_unavailable",
+                source: None,
+            },
+        ),
+    },
+)
+=== read_dashboard_source stale revision
+Err(
+    DashboardChanged,
+)
+=== dashboard_work_history_for_revision
+Ok(
+    [],
+)
+=== read_dashboard_ledger_history
+Ok(
+    DashboardLedgerHistory {
+        revision: "<inode>:10275:<epoch-ms>:<epoch-ms>",
+        events: [
+            DashboardLedgerEvent {
+                id: "<inode>:8867",
+                record_id: "PLAN-1",
+                kind: "plan",
+                action: "updated",
+                at: "<ts>",
+            },
+            DashboardLedgerEvent {
+                id: "<inode>:8597",
+                record_id: "W-2",
+                kind: "work",
+                action: "updated",
+                at: "<ts>",
+            },
+            DashboardLedgerEvent {
+                id: "<inode>:8297",
+                record_id: "W-1",
+                kind: "work",
+                action: "completed",
+                at: "<ts>",
+            },
+            DashboardLedgerEvent {
+                id: "<inode>:8027",
+                record_id: "W-1",
+                kind: "work",
+                action: "updated",
+                at: "<ts>",
+            },
+            DashboardLedgerEvent {
+                id: "<inode>:7757",
+                record_id: "W-1",
+                kind: "work",
+                action: "updated",
+                at: "<ts>",
+            },
+            DashboardLedgerEvent {
+                id: "<inode>:7487",
+                record_id: "W-1",
+                kind: "work",
+                action: "updated",
+                at: "<ts>",
+            },
+            DashboardLedgerEvent {
+                id: "<inode>:7217",
+                record_id: "W-1",
+                kind: "work",
+                action: "updated",
+                at: "<ts>",
+            },
+            DashboardLedgerEvent {
+                id: "<inode>:6947",
+                record_id: "T-1",
+                kind: "task",
+                action: "updated",
+                at: "<ts>",
+            },
+            DashboardLedgerEvent {
+                id: "<inode>:6677",
+                record_id: "T-1",
+                kind: "task",
+                action: "updated",
+                at: "<ts>",
+            },
+            DashboardLedgerEvent {
+                id: "<inode>:5006",
+                record_id: "T-2",
+                kind: "task",
+                action: "created",
+                at: "<ts>",
+            },
+            DashboardLedgerEvent {
+                id: "<inode>:4646",
+                record_id: "T-1",
+                kind: "task",
+                action: "created",
+                at: "<ts>",
+            },
+            DashboardLedgerEvent {
+                id: "<inode>:4288",
+                record_id: "W-2",
+                kind: "work",
+                action: "created",
+                at: "<ts>",
+            },
+            DashboardLedgerEvent {
+                id: "<inode>:3929",
+                record_id: "W-1",
+                kind: "work",
+                action: "created",
+                at: "<ts>",
+            },
+            DashboardLedgerEvent {
+                id: "<inode>:2463",
+                record_id: "REP-1",
+                kind: "report",
+                action: "created",
+                at: "<ts>",
+            },
+            DashboardLedgerEvent {
+                id: "<inode>:2105",
+                record_id: "PLAN-1",
+                kind: "plan",
+                action: "created",
+                at: "<ts>",
+            },
+            DashboardLedgerEvent {
+                id: "<inode>:1747",
+                record_id: "SPEC-1",
+                kind: "spec",
+                action: "created",
+                at: "<ts>",
+            },
+        ],
+    },
+)
+=== briefing_signals all
+Ok(
+    [
+        ProjectBriefingSignal {
+            id: "demo",
+            display_name: "Demo Project",
+            summary: None,
+            recent_session_titles: [],
+            ledger_event_summary: [
+                "index_written x30",
+                "work_updated x5",
+                "view_rendered x3",
+                "task_created:task:todo x2",
+                "attempt_started:attempt:started x2",
+                "task_updated x2",
+                "project_initialized x1",
+                "initiative_created:initiative:active x1",
+                "decision_created:decision:accepted x1",
+                "risk_created:risk:open x1",
+                "risk_created:risk:mitigated x1",
+                "spec_created:spec:active x1",
+            ],
+            open_work_titles: [],
+            completed_work_titles: [
+                "Ship it",
+            ],
+            excluded_topics: [],
+        },
+    ],
+)
+=== briefing_signals targeted
+Ok(
+    [
+        ProjectBriefingSignal {
+            id: "app-demo",
+            display_name: "Demo",
+            summary: None,
+            recent_session_titles: [
+                "Kickoff",
+            ],
+            ledger_event_summary: [
+                "index_written x30",
+                "work_updated x5",
+                "view_rendered x3",
+                "task_created:task:todo x2",
+                "attempt_started:attempt:started x2",
+                "task_updated x2",
+                "project_initialized x1",
+                "initiative_created:initiative:active x1",
+                "decision_created:decision:accepted x1",
+                "risk_created:risk:open x1",
+                "risk_created:risk:mitigated x1",
+                "spec_created:spec:active x1",
+            ],
+            open_work_titles: [],
+            completed_work_titles: [
+                "Ship it",
+            ],
+            excluded_topics: [],
+        },
+    ],
+)
+=== read_project_work_plan unmanaged
+Err(
+    RecordShow {
+        code: "project_work_managed_record_invalid",
+        source: Some(
+            Error("expected value", line: 1, column: 1),
+        ),
+    },
+)
+=== check broken
+{
+  "ok": false,
+  "command": "project-ledger check",
+  "data": {
+    "ok": false,
+    "issueCount": 11,
+    "issues": [
+      {
+        "code": "stale_index",
+        "severity": "warning",
+        "message": "Index is older than source records",
+        "path": "project-ledger/projects/demo/index/project.json",
+        "record": null
+      },
+      {
+        "code": "invalid_schema",
+        "severity": "error",
+        "message": "Cannot parse record: Invalid Project Ledger record JSON",
+        "path": "project-ledger/projects/demo/references/bad.json",
+        "record": null
+      },
+      {
+        "code": "completion_gate",
+        "severity": "error",
+        "message": "Completed work is missing spec evidence",
+        "path": "project-ledger/projects/demo/work/W-3/work.md",
+        "record": {
+          "id": "W-3",
+          "kind": "work",
+          "title": "W-3",
+          "status": "done",
+          "path": "project-ledger/projects/demo/work/W-3/work.md"
+        }
+      },
+      {
+        "code": "completion_gate",
+        "severity": "error",
+        "message": "Completed work is missing acceptance evidence",
+        "path": "project-ledger/projects/demo/work/W-3/work.md",
+        "record": {
+          "id": "W-3",
+          "kind": "work",
+          "title": "W-3",
+          "status": "done",
+          "path": "project-ledger/projects/demo/work/W-3/work.md"
+        }
+      },
+      {
+        "code": "completion_gate",
+        "severity": "error",
+        "message": "Completed work is missing validation evidence",
+        "path": "project-ledger/projects/demo/work/W-3/work.md",
+        "record": {
+          "id": "W-3",
+          "kind": "work",
+          "title": "W-3",
+          "status": "done",
+          "path": "project-ledger/projects/demo/work/W-3/work.md"
+        }
+      },
+      {
+        "code": "completion_gate",
+        "severity": "error",
+        "message": "Completed work is missing review evidence",
+        "path": "project-ledger/projects/demo/work/W-3/work.md",
+        "record": {
+          "id": "W-3",
+          "kind": "work",
+          "title": "W-3",
+          "status": "done",
+          "path": "project-ledger/projects/demo/work/W-3/work.md"
+        }
+      },
+      {
+        "code": "completion_gate",
+        "severity": "error",
+        "message": "Completed work is missing report evidence",
+        "path": "project-ledger/projects/demo/work/W-3/work.md",
+        "record": {
+          "id": "W-3",
+          "kind": "work",
+          "title": "W-3",
+          "status": "done",
+          "path": "project-ledger/projects/demo/work/W-3/work.md"
+        }
+      },
+      {
+        "code": "stale_view",
+        "severity": "warning",
+        "message": "Generated view is older than source records",
+        "path": "project-ledger/projects/demo/views/dashboard.md",
+        "record": null
+      },
+      {
+        "code": "stale_view",
+        "severity": "warning",
+        "message": "Generated view is older than source records",
+        "path": "project-ledger/projects/demo/views/handoff.md",
+        "record": null
+      },
+      {
+        "code": "stale_view",
+        "severity": "warning",
+        "message": "Generated view is older than source records",
+        "path": "project-ledger/projects/demo/views/roadmap.md",
+        "record": null
+      },
+      {
+        "code": "possible_private_content",
+        "severity": "error",
+        "message": "Record may contain private content; inspect locally without copying raw text.",
+        "path": "project-ledger/projects/demo/plans/plan-broken.md",
+        "record": null
+      }
+    ],
+    "counts": {
+      "records": 20,
+      "initiative": 1,
+      "work": 3,
+      "task": 2,
+      "attempt": 2,
+      "decision": 1,
+      "risk": 2,
+      "spec": 1,
+      "report": 1,
+      "plan": 2,
+      "handoff": 1,
+      "reference": 1,
+      "roadmap": 1
+    }
+  },
+  "error": {
+    "code": "project_ledger_check_failed",
+    "message": "Project Ledger check failed with 11 issues",
+    "details": [
+      {
+        "issueCount": 11,
+        "errorCount": 7,
+        "warningCount": 4
+      }
+    ],
+    "next": [
+      {
+        "command": "project-ledger check --project demo --verbose",
+        "reason": "Inspect the full issue list before retrying."
+      },
+      {
+        "command": "project-ledger index --project demo",
+        "reason": "Refresh the derived index after source-record repairs."
+      }
+    ]
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== index broken
+{
+  "ok": true,
+  "command": "project-ledger index",
+  "data": {
+    "schema": "project-ledger.index.v1",
+    "generatedAt": "<ts>",
+    "project": {
+      "id": "demo",
+      "name": "Demo Project",
+      "status": "active",
+      "path": "project-ledger/projects/demo/project.json"
+    },
+    "counts": {
+      "records": 20,
+      "initiative": 1,
+      "work": 3,
+      "task": 2,
+      "attempt": 2,
+      "decision": 1,
+      "risk": 2,
+      "spec": 1,
+      "report": 1,
+      "plan": 2,
+      "handoff": 1,
+      "reference": 1,
+      "roadmap": 1
+    },
+    "records": [
+      {
+        "id": "DEC-1",
+        "kind": "decision",
+        "title": "decision DEC-1",
+        "status": "accepted",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": true,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": "W-1",
+        "mitigation": null,
+        "reason": "Chosen for speed",
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/decisions/dec-1.md"
+      },
+      {
+        "id": "HAND-1",
+        "kind": "handoff",
+        "title": "handoff HAND-1",
+        "status": "active",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/handoffs/hand-1.md"
+      },
+      {
+        "id": "INIT-1",
+        "kind": "initiative",
+        "title": "initiative INIT-1",
+        "status": "active",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/initiatives/init-1.md"
+      },
+      {
+        "id": "PLAN-1",
+        "kind": "plan",
+        "title": "plan PLAN-1",
+        "status": "closed",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/plans/plan-1.md"
+      },
+      {
+        "id": "PLAN-1",
+        "kind": "plan",
+        "title": "Duplicate",
+        "status": "active",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/plans/plan-broken.md"
+      },
+      {
+        "id": "demo",
+        "kind": "project",
+        "title": "Demo Project",
+        "status": "active",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/project.json"
+      },
+      {
+        "id": "demo",
+        "kind": "project",
+        "title": "Demo Project",
+        "status": "active",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/project.json"
+      },
+      {
+        "id": "REF-1",
+        "kind": "reference",
+        "title": "reference REF-1",
+        "status": "active",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/references/ref-1.md"
+      },
+      {
+        "id": "REP-1",
+        "kind": "report",
+        "title": "report REP-1",
+        "status": "done",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/reports/rep-1.md"
+      },
+      {
+        "id": "RISK-1",
+        "kind": "risk",
+        "title": "risk RISK-1",
+        "status": "open",
+        "priority": 100,
+        "parentId": "INIT-1",
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/risks/risk-1.md"
+      },
+      {
+        "id": "RISK-2",
+        "kind": "risk",
+        "title": "risk RISK-2",
+        "status": "mitigated",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": "Canary rollout",
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/risks/risk-2.md"
+      },
+      {
+        "id": "MAP-1",
+        "kind": "roadmap",
+        "title": "roadmap MAP-1",
+        "status": "active",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/roadmaps/map-1.md"
+      },
+      {
+        "id": "SPEC-1",
+        "kind": "spec",
+        "title": "spec SPEC-1",
+        "status": "active",
+        "priority": 3.0,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": "It works",
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/specs/spec-1.md"
+      },
+      {
+        "id": "T-1",
+        "kind": "task",
+        "title": "First task (renamed)",
+        "status": "done",
+        "priority": 100,
+        "parentId": "W-1",
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": "done",
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/work/W-1/tasks/T-1.md"
+      },
+      {
+        "id": "A-1",
+        "kind": "attempt",
+        "title": "Try one",
+        "status": "failed",
+        "priority": 100,
+        "parentId": "T-1",
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": "flaky",
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/work/W-1/tasks/T-1/attempts/A-1.md"
+      },
+      {
+        "id": "A-2",
+        "kind": "attempt",
+        "title": "Attempt A-2",
+        "status": "succeeded",
+        "priority": 100,
+        "parentId": "T-1",
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": "green",
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/work/W-1/tasks/T-1/attempts/A-2.md"
+      },
+      {
+        "id": "T-2",
+        "kind": "task",
+        "title": "Second task",
+        "status": "todo",
+        "priority": 100,
+        "parentId": "W-1",
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": "unit",
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/work/W-1/tasks/T-2.md"
+      },
+      {
+        "id": "W-1",
+        "kind": "work",
+        "title": "Ship it",
+        "status": "done",
+        "priority": 2.0,
+        "parentId": null,
+        "spec": "SPEC-1",
+        "specExemption": false,
+        "acceptance": "Users can ship",
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": true,
+        "codeCommits": "[{\"repo\":\"butler\",\"hash\":\"abc123\",\"message\":\"ship\"}]",
+        "ledgerCommits": "none",
+        "report": "reports/rep-1.md",
+        "review": "ok",
+        "validation": "tests",
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/work/W-1/work.md"
+      },
+      {
+        "id": "W-2",
+        "kind": "work",
+        "title": "Blocked work",
+        "status": "cancelled",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": "Dropped",
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/work/W-2/work.md"
+      },
+      {
+        "id": "W-3",
+        "kind": "work",
+        "title": "W-3",
+        "status": "done",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/work/W-3/work.md"
+      }
+    ],
+    "issues": [
+      {
+        "code": "invalid_schema",
+        "severity": "error",
+        "message": "Cannot parse record: Invalid Project Ledger record JSON",
+        "path": "project-ledger/projects/demo/references/bad.json",
+        "record": null
+      },
+      {
+        "code": "completion_gate",
+        "severity": "error",
+        "message": "Completed work is missing spec evidence",
+        "path": "project-ledger/projects/demo/work/W-3/work.md",
+        "record": {
+          "id": "W-3",
+          "kind": "work",
+          "title": "W-3",
+          "status": "done",
+          "path": "project-ledger/projects/demo/work/W-3/work.md"
+        }
+      },
+      {
+        "code": "completion_gate",
+        "severity": "error",
+        "message": "Completed work is missing acceptance evidence",
+        "path": "project-ledger/projects/demo/work/W-3/work.md",
+        "record": {
+          "id": "W-3",
+          "kind": "work",
+          "title": "W-3",
+          "status": "done",
+          "path": "project-ledger/projects/demo/work/W-3/work.md"
+        }
+      },
+      {
+        "code": "completion_gate",
+        "severity": "error",
+        "message": "Completed work is missing validation evidence",
+        "path": "project-ledger/projects/demo/work/W-3/work.md",
+        "record": {
+          "id": "W-3",
+          "kind": "work",
+          "title": "W-3",
+          "status": "done",
+          "path": "project-ledger/projects/demo/work/W-3/work.md"
+        }
+      },
+      {
+        "code": "completion_gate",
+        "severity": "error",
+        "message": "Completed work is missing review evidence",
+        "path": "project-ledger/projects/demo/work/W-3/work.md",
+        "record": {
+          "id": "W-3",
+          "kind": "work",
+          "title": "W-3",
+          "status": "done",
+          "path": "project-ledger/projects/demo/work/W-3/work.md"
+        }
+      },
+      {
+        "code": "completion_gate",
+        "severity": "error",
+        "message": "Completed work is missing report evidence",
+        "path": "project-ledger/projects/demo/work/W-3/work.md",
+        "record": {
+          "id": "W-3",
+          "kind": "work",
+          "title": "W-3",
+          "status": "done",
+          "path": "project-ledger/projects/demo/work/W-3/work.md"
+        }
+      }
+    ],
+    "views": [
+      {
+        "name": "dashboard",
+        "path": "project-ledger/projects/demo/views/dashboard.md",
+        "exists": true,
+        "stale": true,
+        "updatedAt": "<ts>"
+      },
+      {
+        "name": "handoff",
+        "path": "project-ledger/projects/demo/views/handoff.md",
+        "exists": true,
+        "stale": true,
+        "updatedAt": "<ts>"
+      },
+      {
+        "name": "roadmap",
+        "path": "project-ledger/projects/demo/views/roadmap.md",
+        "exists": true,
+        "stale": true,
+        "updatedAt": "<ts>"
+      }
+    ],
+    "index": {
+      "available": true,
+      "stale": false,
+      "generatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/index/project.json"
+    },
+    "privacy": {
+      "rawTextIncluded": false,
+      "secretsIncluded": false
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== query completion-gaps broken
+{
+  "ok": true,
+  "command": "project-ledger query",
+  "data": {
+    "kind": "completion-gaps",
+    "results": [
+      {
+        "id": "W-3",
+        "kind": "work",
+        "title": "W-3",
+        "status": "done",
+        "path": "project-ledger/projects/demo/work/W-3/work.md",
+        "reason": "Completed work is missing spec evidence"
+      },
+      {
+        "id": "W-3",
+        "kind": "work",
+        "title": "W-3",
+        "status": "done",
+        "path": "project-ledger/projects/demo/work/W-3/work.md",
+        "reason": "Completed work is missing acceptance evidence"
+      },
+      {
+        "id": "W-3",
+        "kind": "work",
+        "title": "W-3",
+        "status": "done",
+        "path": "project-ledger/projects/demo/work/W-3/work.md",
+        "reason": "Completed work is missing validation evidence"
+      },
+      {
+        "id": "W-3",
+        "kind": "work",
+        "title": "W-3",
+        "status": "done",
+        "path": "project-ledger/projects/demo/work/W-3/work.md",
+        "reason": "Completed work is missing review evidence"
+      },
+      {
+        "id": "W-3",
+        "kind": "work",
+        "title": "W-3",
+        "status": "done",
+        "path": "project-ledger/projects/demo/work/W-3/work.md",
+        "reason": "Completed work is missing report evidence"
+      }
+    ]
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== show ambiguous
+{
+  "ok": false,
+  "command": "project-ledger record",
+  "data": null,
+  "error": {
+    "code": "invalid_json",
+    "message": "Invalid Project Ledger record JSON",
+    "details": null,
+    "next": []
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+
+##### files
+--- file project-ledger/projects/demo/decisions/dec-1.md
+---
+schema: "project-ledger.decision.v1"
+kind: "decision"
+id: "DEC-1"
+title: "decision DEC-1"
+status: "accepted"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+reason: "Chosen for speed"
+implementation: "W-1"
+specExemption: true
+---
+
+# decision DEC-1
+
+Managed by Project Ledger.
+<no trailing newline>
+--- file project-ledger/projects/demo/handoffs/hand-1.md
+---
+schema: "project-ledger.handoff.v1"
+kind: "handoff"
+id: "HAND-1"
+title: "handoff HAND-1"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+---
+
+Next steps
+<no trailing newline>
+--- file project-ledger/projects/demo/index/project.json
+{
+  "schema": "project-ledger.index.v1",
+  "generatedAt": "<ts>",
+  "project": {
+    "id": "demo",
+    "name": "Demo Project",
+    "status": "active",
+    "path": "project-ledger/projects/demo/project.json"
+  },
+  "counts": {
+    "records": 20,
+    "initiative": 1,
+    "work": 3,
+    "task": 2,
+    "attempt": 2,
+    "decision": 1,
+    "risk": 2,
+    "spec": 1,
+    "report": 1,
+    "plan": 2,
+    "handoff": 1,
+    "reference": 1,
+    "roadmap": 1
+  },
+  "records": [
+    {
+      "id": "DEC-1",
+      "kind": "decision",
+      "title": "decision DEC-1",
+      "status": "accepted",
+      "priority": 100,
+      "parentId": null,
+      "spec": null,
+      "specExemption": true,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": "W-1",
+      "mitigation": null,
+      "reason": "Chosen for speed",
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/decisions/dec-1.md"
+    },
+    {
+      "id": "HAND-1",
+      "kind": "handoff",
+      "title": "handoff HAND-1",
+      "status": "active",
+      "priority": 100,
+      "parentId": null,
+      "spec": null,
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/handoffs/hand-1.md"
+    },
+    {
+      "id": "INIT-1",
+      "kind": "initiative",
+      "title": "initiative INIT-1",
+      "status": "active",
+      "priority": 100,
+      "parentId": null,
+      "spec": null,
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/initiatives/init-1.md"
+    },
+    {
+      "id": "PLAN-1",
+      "kind": "plan",
+      "title": "plan PLAN-1",
+      "status": "closed",
+      "priority": 100,
+      "parentId": null,
+      "spec": null,
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/plans/plan-1.md"
+    },
+    {
+      "id": "PLAN-1",
+      "kind": "plan",
+      "title": "Duplicate",
+      "status": "active",
+      "priority": 100,
+      "parentId": null,
+      "spec": null,
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/plans/plan-broken.md"
+    },
+    {
+      "id": "demo",
+      "kind": "project",
+      "title": "Demo Project",
+      "status": "active",
+      "priority": 100,
+      "parentId": null,
+      "spec": null,
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/project.json"
+    },
+    {
+      "id": "demo",
+      "kind": "project",
+      "title": "Demo Project",
+      "status": "active",
+      "priority": 100,
+      "parentId": null,
+      "spec": null,
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/project.json"
+    },
+    {
+      "id": "REF-1",
+      "kind": "reference",
+      "title": "reference REF-1",
+      "status": "active",
+      "priority": 100,
+      "parentId": null,
+      "spec": null,
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/references/ref-1.md"
+    },
+    {
+      "id": "REP-1",
+      "kind": "report",
+      "title": "report REP-1",
+      "status": "done",
+      "priority": 100,
+      "parentId": null,
+      "spec": null,
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/reports/rep-1.md"
+    },
+    {
+      "id": "RISK-1",
+      "kind": "risk",
+      "title": "risk RISK-1",
+      "status": "open",
+      "priority": 100,
+      "parentId": "INIT-1",
+      "spec": null,
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/risks/risk-1.md"
+    },
+    {
+      "id": "RISK-2",
+      "kind": "risk",
+      "title": "risk RISK-2",
+      "status": "mitigated",
+      "priority": 100,
+      "parentId": null,
+      "spec": null,
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": "Canary rollout",
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/risks/risk-2.md"
+    },
+    {
+      "id": "MAP-1",
+      "kind": "roadmap",
+      "title": "roadmap MAP-1",
+      "status": "active",
+      "priority": 100,
+      "parentId": null,
+      "spec": null,
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/roadmaps/map-1.md"
+    },
+    {
+      "id": "SPEC-1",
+      "kind": "spec",
+      "title": "spec SPEC-1",
+      "status": "active",
+      "priority": 3.0,
+      "parentId": null,
+      "spec": null,
+      "specExemption": false,
+      "acceptance": "It works",
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/specs/spec-1.md"
+    },
+    {
+      "id": "T-1",
+      "kind": "task",
+      "title": "First task (renamed)",
+      "status": "done",
+      "priority": 100,
+      "parentId": "W-1",
+      "spec": null,
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": "done",
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/work/W-1/tasks/T-1.md"
+    },
+    {
+      "id": "A-1",
+      "kind": "attempt",
+      "title": "Try one",
+      "status": "failed",
+      "priority": 100,
+      "parentId": "T-1",
+      "spec": null,
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": "flaky",
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/work/W-1/tasks/T-1/attempts/A-1.md"
+    },
+    {
+      "id": "A-2",
+      "kind": "attempt",
+      "title": "Attempt A-2",
+      "status": "succeeded",
+      "priority": 100,
+      "parentId": "T-1",
+      "spec": null,
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": "green",
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/work/W-1/tasks/T-1/attempts/A-2.md"
+    },
+    {
+      "id": "T-2",
+      "kind": "task",
+      "title": "Second task",
+      "status": "todo",
+      "priority": 100,
+      "parentId": "W-1",
+      "spec": null,
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": "unit",
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/work/W-1/tasks/T-2.md"
+    },
+    {
+      "id": "W-1",
+      "kind": "work",
+      "title": "Ship it",
+      "status": "done",
+      "priority": 2.0,
+      "parentId": null,
+      "spec": "SPEC-1",
+      "specExemption": false,
+      "acceptance": "Users can ship",
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": true,
+      "codeCommits": "[{\"repo\":\"butler\",\"hash\":\"abc123\",\"message\":\"ship\"}]",
+      "ledgerCommits": "none",
+      "report": "reports/rep-1.md",
+      "review": "ok",
+      "validation": "tests",
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/work/W-1/work.md"
+    },
+    {
+      "id": "W-2",
+      "kind": "work",
+      "title": "Blocked work",
+      "status": "cancelled",
+      "priority": 100,
+      "parentId": null,
+      "spec": null,
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": "Dropped",
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/work/W-2/work.md"
+    },
+    {
+      "id": "W-3",
+      "kind": "work",
+      "title": "W-3",
+      "status": "done",
+      "priority": 100,
+      "parentId": null,
+      "spec": null,
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/work/W-3/work.md"
+    }
+  ],
+  "issues": [
+    {
+      "code": "invalid_schema",
+      "severity": "error",
+      "message": "Cannot parse record: Invalid Project Ledger record JSON",
+      "path": "project-ledger/projects/demo/references/bad.json",
+      "record": null
+    },
+    {
+      "code": "completion_gate",
+      "severity": "error",
+      "message": "Completed work is missing spec evidence",
+      "path": "project-ledger/projects/demo/work/W-3/work.md",
+      "record": {
+        "id": "W-3",
+        "kind": "work",
+        "title": "W-3",
+        "status": "done",
+        "path": "project-ledger/projects/demo/work/W-3/work.md"
+      }
+    },
+    {
+      "code": "completion_gate",
+      "severity": "error",
+      "message": "Completed work is missing acceptance evidence",
+      "path": "project-ledger/projects/demo/work/W-3/work.md",
+      "record": {
+        "id": "W-3",
+        "kind": "work",
+        "title": "W-3",
+        "status": "done",
+        "path": "project-ledger/projects/demo/work/W-3/work.md"
+      }
+    },
+    {
+      "code": "completion_gate",
+      "severity": "error",
+      "message": "Completed work is missing validation evidence",
+      "path": "project-ledger/projects/demo/work/W-3/work.md",
+      "record": {
+        "id": "W-3",
+        "kind": "work",
+        "title": "W-3",
+        "status": "done",
+        "path": "project-ledger/projects/demo/work/W-3/work.md"
+      }
+    },
+    {
+      "code": "completion_gate",
+      "severity": "error",
+      "message": "Completed work is missing review evidence",
+      "path": "project-ledger/projects/demo/work/W-3/work.md",
+      "record": {
+        "id": "W-3",
+        "kind": "work",
+        "title": "W-3",
+        "status": "done",
+        "path": "project-ledger/projects/demo/work/W-3/work.md"
+      }
+    },
+    {
+      "code": "completion_gate",
+      "severity": "error",
+      "message": "Completed work is missing report evidence",
+      "path": "project-ledger/projects/demo/work/W-3/work.md",
+      "record": {
+        "id": "W-3",
+        "kind": "work",
+        "title": "W-3",
+        "status": "done",
+        "path": "project-ledger/projects/demo/work/W-3/work.md"
+      }
+    }
+  ],
+  "views": [
+    {
+      "name": "dashboard",
+      "path": "project-ledger/projects/demo/views/dashboard.md",
+      "exists": true,
+      "stale": true,
+      "updatedAt": "<ts>"
+    },
+    {
+      "name": "handoff",
+      "path": "project-ledger/projects/demo/views/handoff.md",
+      "exists": true,
+      "stale": true,
+      "updatedAt": "<ts>"
+    },
+    {
+      "name": "roadmap",
+      "path": "project-ledger/projects/demo/views/roadmap.md",
+      "exists": true,
+      "stale": true,
+      "updatedAt": "<ts>"
+    }
+  ],
+  "index": {
+    "available": true,
+    "stale": false,
+    "generatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/index/project.json"
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+--- file project-ledger/projects/demo/initiatives/init-1.md
+---
+schema: "project-ledger.initiative.v1"
+kind: "initiative"
+id: "INIT-1"
+title: "initiative INIT-1"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+---
+
+Initiative body
+--- file project-ledger/projects/demo/ledger.jsonl
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"project_initialized","projectId":"demo","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":2,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"initiative_created","id":"INIT-1","kind":"initiative","status":"active","path":"project-ledger/projects/demo/initiatives/init-1.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":3,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"decision_created","id":"DEC-1","kind":"decision","status":"accepted","path":"project-ledger/projects/demo/decisions/dec-1.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":4,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"risk_created","id":"RISK-1","kind":"risk","status":"open","path":"project-ledger/projects/demo/risks/risk-1.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":5,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"risk_created","id":"RISK-2","kind":"risk","status":"mitigated","path":"project-ledger/projects/demo/risks/risk-2.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":6,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"spec_created","id":"SPEC-1","kind":"spec","status":"active","path":"project-ledger/projects/demo/specs/spec-1.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":7,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"plan_created","id":"PLAN-1","kind":"plan","status":"active","path":"project-ledger/projects/demo/plans/plan-1.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":8,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"report_created","id":"REP-1","kind":"report","status":"done","path":"project-ledger/projects/demo/reports/rep-1.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":9,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"handoff_created","id":"HAND-1","kind":"handoff","status":"active","path":"project-ledger/projects/demo/handoffs/hand-1.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":10,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"reference_created","id":"REF-1","kind":"reference","status":"active","path":"project-ledger/projects/demo/references/ref-1.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":11,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"roadmap_created","id":"MAP-1","kind":"roadmap","status":"active","path":"project-ledger/projects/demo/roadmaps/map-1.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":12,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"work_created","id":"W-1","kind":"work","status":"proposed","path":"project-ledger/projects/demo/work/W-1/work.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":13,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"work_created","id":"W-2","kind":"work","status":"blocked","path":"project-ledger/projects/demo/work/W-2/work.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":14,"issues":1,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"task_created","id":"T-1","kind":"task","status":"todo","path":"project-ledger/projects/demo/work/W-1/tasks/T-1.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":15,"issues":1,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"task_created","id":"T-2","kind":"task","status":"todo","path":"project-ledger/projects/demo/work/W-1/tasks/T-2.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":16,"issues":1,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"attempt_started","id":"A-1","kind":"attempt","status":"started","path":"project-ledger/projects/demo/work/W-1/tasks/T-1/attempts/A-1.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":17,"issues":1,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"attempt_failed","id":"A-1","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":17,"issues":1,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"attempt_started","id":"A-2","kind":"attempt","status":"started","path":"project-ledger/projects/demo/work/W-1/tasks/T-1/attempts/A-2.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":18,"issues":1,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"attempt_succeeded","id":"A-2","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":18,"issues":1,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"task_updated","id":"T-1","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":18,"issues":1,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"task_updated","id":"T-1","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":18,"issues":1,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"work_updated","id":"W-1","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":18,"issues":1,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"work_updated","id":"W-1","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":18,"issues":1,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"work_updated","id":"W-1","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":18,"issues":1,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"work_updated","id":"W-1","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":18,"issues":1,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"work_completed","id":"W-1","report":"reports/rep-1.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":18,"issues":1,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"work_updated","id":"W-2","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":18,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"plan_updated","id":"PLAN-1","kind":"plan","path":"project-ledger/projects/demo/plans/plan-1.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":18,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"decision_updated","id":"DEC-1","kind":"decision","path":"project-ledger/projects/demo/decisions/dec-1.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":18,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":18,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"view_rendered","view":"handoff","path":"project-ledger/projects/demo/views/handoff.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"view_rendered","view":"roadmap","path":"project-ledger/projects/demo/views/roadmap.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"view_rendered","view":"dashboard","path":"project-ledger/projects/demo/views/dashboard.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":20,"issues":6,"source":"project-ledger"}
+--- file project-ledger/projects/demo/plans/plan-1.md
+---
+schema: "project-ledger.plan.v1"
+kind: "plan"
+id: "PLAN-1"
+title: "plan PLAN-1"
+status: "closed"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+---
+
+Closed plan
+--- file project-ledger/projects/demo/plans/plan-broken.md
+---
+schema: "project-ledger.plan.v1"
+kind: "plan"
+id: "PLAN-1"
+title: "Duplicate"
+status: "active"
+---
+
+Authorization: Bearer not-a-real-token
+--- file project-ledger/projects/demo/project.json
+{
+  "schema": "project-ledger.project.v1",
+  "id": "demo",
+  "name": "Demo Project",
+  "status": "active",
+  "createdAt": "<ts>",
+  "updatedAt": "<ts>"
+}
+--- file project-ledger/projects/demo/references/bad.json
+{invalid
+<no trailing newline>
+--- file project-ledger/projects/demo/references/ref-1.md
+---
+schema: "project-ledger.reference.v1"
+kind: "reference"
+id: "REF-1"
+title: "reference REF-1"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+logicalId: "doc-1"
+---
+
+# reference REF-1
+
+Managed by Project Ledger.
+<no trailing newline>
+--- file project-ledger/projects/demo/reports/rep-1.md
+---
+schema: "project-ledger.report.v1"
+kind: "report"
+id: "REP-1"
+title: "report REP-1"
+status: "done"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+---
+
+# report REP-1
+
+Managed by Project Ledger.
+<no trailing newline>
+--- file project-ledger/projects/demo/risks/risk-1.md
+---
+schema: "project-ledger.risk.v1"
+kind: "risk"
+id: "RISK-1"
+title: "risk RISK-1"
+status: "open"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+parentId: "INIT-1"
+---
+
+# risk RISK-1
+
+Managed by Project Ledger.
+<no trailing newline>
+--- file project-ledger/projects/demo/risks/risk-2.md
+---
+schema: "project-ledger.risk.v1"
+kind: "risk"
+id: "RISK-2"
+title: "risk RISK-2"
+status: "mitigated"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+mitigation: "Canary rollout"
+---
+
+# risk RISK-2
+
+Managed by Project Ledger.
+<no trailing newline>
+--- file project-ledger/projects/demo/roadmaps/map-1.md
+---
+schema: "project-ledger.roadmap.v1"
+kind: "roadmap"
+id: "MAP-1"
+title: "roadmap MAP-1"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+priority: 1.5
+---
+
+# roadmap MAP-1
+
+Managed by Project Ledger.
+<no trailing newline>
+--- file project-ledger/projects/demo/specs/spec-1.md
+---
+schema: "project-ledger.spec.v1"
+kind: "spec"
+id: "SPEC-1"
+title: "spec SPEC-1"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+acceptance: "It works"
+priority: 3
+---
+
+# spec SPEC-1
+
+Managed by Project Ledger.
+<no trailing newline>
+--- file project-ledger/projects/demo/views/dashboard.md
+<!-- generated by project-ledger; do not edit -->
+# Project Ledger Dashboard
+
+Generated: <ts>
+
+Project: Demo Project (demo)
+
+## Counts
+
+- Work: 2
+- Tasks: 2
+- Attempts: 2
+- Decisions: 1
+- Risks: 2
+- Issues: 0
+
+## Next Actions
+
+- T-2 [todo] Second task (project-ledger/projects/demo/work/W-1/tasks/T-2.md)
+
+## Blocked
+
+- None
+
+## Missing Spec
+
+- None
+
+## Completion Gaps
+
+- None
+<no trailing newline>
+--- file project-ledger/projects/demo/views/handoff.md
+<!-- generated by project-ledger; do not edit -->
+# Project Ledger Handoff
+
+Generated: <ts>
+
+## Start Here
+
+- Run `project-ledger status --json`.
+- Run `project-ledger query --kind next-actions --json`.
+- Read only referenced source records and specs.
+
+## Next Actions
+
+- T-2 [todo] Second task (project-ledger/projects/demo/work/W-1/tasks/T-2.md)
+
+## Risks And Blockers
+
+- None
+<no trailing newline>
+--- file project-ledger/projects/demo/views/roadmap.md
+<!-- generated by project-ledger; do not edit -->
+# Project Ledger Roadmap
+
+Generated: <ts>
+
+## Work
+
+- W-1 [done] Ship it (project-ledger/projects/demo/work/W-1/work.md)
+- W-2 [cancelled] Blocked work (project-ledger/projects/demo/work/W-2/work.md)
+<no trailing newline>
+--- file project-ledger/projects/demo/work/W-1/tasks/T-1.md
+---
+schema: "project-ledger.task.v1"
+kind: "task"
+id: "T-1"
+title: "First task (renamed)"
+status: "done"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+parentId: "W-1"
+report: "done"
+---
+
+# First task
+
+Managed by Project Ledger.
+<no trailing newline>
+--- file project-ledger/projects/demo/work/W-1/tasks/T-1/attempts/A-1.md
+---
+schema: "project-ledger.attempt.v1"
+kind: "attempt"
+id: "A-1"
+title: "Try one"
+parentId: "T-1"
+status: "failed"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+report: "flaky"
+---
+
+# Try one
+
+Managed by Project Ledger.
+<no trailing newline>
+--- file project-ledger/projects/demo/work/W-1/tasks/T-1/attempts/A-2.md
+---
+schema: "project-ledger.attempt.v1"
+kind: "attempt"
+id: "A-2"
+title: "Attempt A-2"
+parentId: "T-1"
+status: "succeeded"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+validation: "green"
+---
+
+Attempt notes
+<no trailing newline>
+--- file project-ledger/projects/demo/work/W-1/tasks/T-2.md
+---
+schema: "project-ledger.task.v1"
+kind: "task"
+id: "T-2"
+title: "Second task"
+status: "todo"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+parentId: "W-1"
+validation: "unit"
+---
+
+# Second task
+
+Managed by Project Ledger.
+<no trailing newline>
+--- file project-ledger/projects/demo/work/W-1/work.md
+---
+schema: "project-ledger.work.v1"
+kind: "work"
+id: "W-1"
+title: "Ship it"
+status: "done"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-1"
+acceptance: "Users can ship"
+requiresCommitEvidence: true
+priority: 2
+validation: "tests"
+review: "ok"
+report: "reports/rep-1.md"
+codeCommits: "[{\"repo\":\"butler\",\"hash\":\"abc123\",\"message\":\"ship\"}]"
+ledgerCommits: "none"
+---
+
+Work body
+--- file project-ledger/projects/demo/work/W-2/work.md
+---
+schema: "project-ledger.work.v1"
+kind: "work"
+id: "W-2"
+title: "Blocked work"
+status: "cancelled"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+reason: "Dropped"
+---
+
+# Blocked work
+
+Managed by Project Ledger.
+<no trailing newline>
+--- file project-ledger/projects/demo/work/W-3/work.md
+---
+kind: "work"
+id: "W-3"
+status: "done"
+---
+--- file workspace/project.json
+{"id":"demo"}
+<no trailing newline>

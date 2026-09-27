@@ -1,16 +1,17 @@
 use std::path::PathBuf;
-use std::process::Stdio;
+use std::process::{ExitStatus, Stdio};
 use std::time::Duration;
 
-use tokio::process::Command;
+use tokio::process::{Child, Command};
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
 use super::environment::guided_environment;
 use super::process::{
-    FORCE_SETTLEMENT_GRACE, ProcessHost, TERMINATION_GRACE, signal_command, signal_name,
+    FORCE_SETTLEMENT_GRACE, GroupSignal, ProcessHost, TERMINATION_GRACE, signal_command,
+    signal_name,
 };
-use super::spool::{Capture, Spool, SpoolPaths};
+use super::spool::{Capture, CaptureEnd, Spool, SpoolPaths};
 use super::{CommandError, GuidedAccess, GuidedCommandInput, GuidedCommandOutput, GuidedSummary};
 use crate::workspace::CommandCode;
 use crate::workspace::path_guard::{GuardInput, lexical_absolute, resolve_workspace_path_guard};
@@ -38,12 +39,120 @@ pub(super) async fn dispatch(
     send_completion(sender, result).await;
 }
 
+/// Why the direct child stopped running.
+enum Cause {
+    Exited(ExitStatus),
+    TimedOut,
+    /// Aborted by the caller or by owner shutdown.
+    Cancelled,
+    /// Waiting on the child or capturing its output failed.
+    Failed(CommandError),
+}
+
+/// How the command settled after its child stopped.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Stopped {
+    Exited,
+    TimedOut,
+    Cancelled,
+}
+
+/// Whether the child was reaped within the termination and force graces.
+enum Reaped {
+    Exited(ExitStatus),
+    /// Still unreaped after SIGKILL; the result settles without its status.
+    Unreaped,
+}
+
+/// A spawned command whose output is being spooled.
+struct Running {
+    child: Child,
+    pid: u32,
+    capture: Capture,
+    paths: SpoolPaths,
+}
+
+impl Running {
+    /// Kills and reaps the child, drops the capture and reports `error`.
+    async fn fail(
+        mut self,
+        host: &dyn ProcessHost,
+        error: CommandError,
+    ) -> Result<Option<GuidedCommandOutput>, CommandError> {
+        let _ = signal_command(host, &mut self.child, self.pid, GroupSignal::Kill);
+        let _ = self.child.start_kill();
+        let _ = host.wait(&mut self.child).await;
+        self.capture.stop();
+        let _ = self.capture.finish(CaptureEnd::Stopped).await;
+        self.paths.discard().await;
+        Err(error)
+    }
+}
+
 async fn execute(
     host: &dyn ProcessHost,
     input: GuidedCommandInput,
     shutdown: CancellationToken,
     completion: &mut Option<oneshot::Sender<Result<GuidedCommandOutput, CommandError>>>,
 ) -> Result<Option<GuidedCommandOutput>, CommandError> {
+    let (cwd, command) = prepare_command(&input, &shutdown).await?;
+    let spool = Spool::create(&input.butler_data).await?;
+    let mut running = spawn_captured(host, command, spool).await?;
+    let cause = await_stop(host, &mut running, &input, &shutdown).await;
+    let (stopped, reaped) = match settle_process(host, &mut running, cause).await {
+        Ok(settled) => settled,
+        Err(error) => return running.fail(host, error).await,
+    };
+    let summary = |exit_code, signal, timed_out| GuidedSummary {
+        command: input.command.clone(),
+        cwd: cwd.to_string_lossy().into_owned(),
+        exit_code,
+        signal,
+        timed_out,
+    };
+    let status = match reaped {
+        Reaped::Exited(status) => status,
+        Reaped::Unreaped => {
+            running.capture.stop();
+            let result = match stopped {
+                Stopped::Cancelled => discard_cancelled(running.capture, running.paths).await,
+                Stopped::Exited | Stopped::TimedOut => {
+                    complete(running.paths, running.capture, summary(None, None, true)).await
+                }
+            };
+            if let Some(sender) = completion.take() {
+                send_completion(sender, result).await;
+            }
+            // The public result is settled; the owner stays active until reaped.
+            let _ = host.wait(&mut running.child).await;
+            return Ok(None);
+        }
+    };
+    if stopped == Stopped::Cancelled {
+        running.capture.stop();
+        return discard_cancelled(running.capture, running.paths)
+            .await
+            .map(Some);
+    }
+    let timed_out = stopped == Stopped::TimedOut;
+    let exit_code = if timed_out { None } else { status.code() };
+    let summary = summary(exit_code, signal_name(status), timed_out);
+    let payload_source = running
+        .paths
+        .complete(running.capture, &summary, CaptureEnd::Drained)
+        .await?;
+    Ok(Some(GuidedCommandOutput {
+        summary,
+        payload_source,
+    }))
+}
+
+/// Validates the input and builds the sandboxed command with its guarded
+/// working directory and environment. Refuses once the owner is closing.
+async fn prepare_command(
+    input: &GuidedCommandInput,
+    shutdown: &CancellationToken,
+) -> Result<(PathBuf, Command), CommandError> {
     if input.command.is_empty() {
         return Err(CommandError::new(
             CommandCode::CommandInvalid,
@@ -51,8 +160,7 @@ async fn execute(
         ));
     }
     let cwd = resolve_guided_cwd(&input.workspace_root, input.cwd.as_deref()).await?;
-    let timeout = guided_timeout(input.timeout_ms);
-    let (executable, arguments) = invocation(&input)?;
+    let (executable, arguments) = invocation(input)?;
     let environment = tokio::task::spawn_blocking({
         let host = input.host_environment.clone();
         let butler_data = input.butler_data.clone();
@@ -69,7 +177,6 @@ async fn execute(
             "Command owner is closing",
         ));
     }
-    let spool = Spool::create(&input.butler_data).await?;
     let mut command = Command::new(executable);
     command
         .args(arguments)
@@ -85,6 +192,14 @@ async fn execute(
         use std::os::unix::process::CommandExt;
         command.as_std_mut().process_group(0);
     }
+    Ok((cwd, command))
+}
+
+async fn spawn_captured(
+    host: &dyn ProcessHost,
+    mut command: Command,
+    spool: Spool,
+) -> Result<Running, CommandError> {
     let mut child = match host.spawn(&mut command).await {
         Ok(child) => child,
         Err(error) => {
@@ -102,157 +217,102 @@ async fn execute(
             "Spawned command has no pid or piped output",
         ));
     };
-    let (paths, mut capture) = spool.capture(host, stdout, stderr);
+    let (paths, capture) = spool.capture(host, stdout, stderr);
+    Ok(Running {
+        child,
+        pid,
+        capture,
+        paths,
+    })
+}
 
-    enum Cause {
-        Normal,
-        Timeout,
-        Abort,
-        Shutdown,
-        Capture(CommandError),
+/// Waits for the first of: exit, timeout, abort, owner shutdown or a capture failure.
+async fn await_stop(
+    host: &dyn ProcessHost,
+    running: &mut Running,
+    input: &GuidedCommandInput,
+    shutdown: &CancellationToken,
+) -> Cause {
+    let abort = &input.abort;
+    if abort.is_cancelled() {
+        return Cause::Cancelled;
     }
-    let (cause, mut status) = if input.abort.is_cancelled() {
-        (Cause::Abort, None)
-    } else {
-        tokio::select! {
-            result = host.wait(&mut child) => match result {
-                Ok(status) => (Cause::Normal, Some(status)),
-                Err(error) => return cleanup_error(host, &mut child, pid, capture, paths, CommandError::io(error)).await,
-            },
-            () = tokio::time::sleep(timeout) => (Cause::Timeout, None),
-            () = input.abort.cancelled() => (Cause::Abort, None),
-            () = shutdown.cancelled() => (Cause::Shutdown, None),
-            error = capture.failure() => (Cause::Capture(error), None),
-        }
-    };
-    let mut forced_output_close = false;
-    let mut force_sent = false;
-    match cause {
-        Cause::Normal => {
-            // Node's close handler kills descendants even after the direct child exits.
-            #[cfg(unix)]
-            if let Err(error) = host.signal_group(pid, true) {
-                return cleanup_error(host, &mut child, pid, capture, paths, error).await;
-            }
-        }
-        Cause::Capture(error) => {
-            return cleanup_error(host, &mut child, pid, capture, paths, error).await;
-        }
-        Cause::Timeout | Cause::Abort | Cause::Shutdown => {
-            if let Err(error) = signal_command(host, &mut child, pid, false) {
-                return cleanup_error(host, &mut child, pid, capture, paths, error).await;
-            }
-            status = match tokio::time::timeout(TERMINATION_GRACE, host.wait(&mut child)).await {
-                Ok(Ok(status)) => Some(status),
-                Ok(Err(error)) => {
-                    return cleanup_error(
-                        host,
-                        &mut child,
-                        pid,
-                        capture,
-                        paths,
-                        CommandError::io(error),
-                    )
-                    .await;
-                }
-                Err(_) => {
-                    if let Err(error) = signal_command(host, &mut child, pid, true) {
-                        return cleanup_error(host, &mut child, pid, capture, paths, error).await;
-                    }
-                    force_sent = true;
-                    match tokio::time::timeout(FORCE_SETTLEMENT_GRACE, host.wait(&mut child)).await
-                    {
-                        Ok(Ok(status)) => Some(status),
-                        Ok(Err(error)) => {
-                            return cleanup_error(
-                                host,
-                                &mut child,
-                                pid,
-                                capture,
-                                paths,
-                                CommandError::io(error),
-                            )
-                            .await;
-                        }
-                        Err(_) => {
-                            forced_output_close = true;
-                            None
-                        }
-                    }
-                }
-            };
-            #[cfg(unix)]
-            if !force_sent && let Err(error) = host.signal_group(pid, true) {
-                return cleanup_error(host, &mut child, pid, capture, paths, error).await;
-            }
-        }
-    }
-    if forced_output_close {
-        capture.stop();
-        let result = if matches!(cause, Cause::Abort | Cause::Shutdown) {
-            let finished = capture.finish(true).await;
-            paths.discard().await;
-            finished.and(Err(CommandError::new(
-                CommandCode::CommandCancelled,
-                "Command cancelled",
-            )))
-        } else {
-            let summary = GuidedSummary {
-                command: input.command,
-                cwd: cwd.to_string_lossy().into_owned(),
-                exit_code: None,
-                signal: None,
-                timed_out: true,
-            };
-            paths
-                .complete(capture, &summary, true)
-                .await
-                .map(|payload_source| GuidedCommandOutput {
-                    summary,
-                    payload_source,
-                })
-        };
-        if let Some(sender) = completion.take() {
-            send_completion(sender, result).await;
-        }
-        // The public result is settled; the owner stays active until reaped.
-        let _ = host.wait(&mut child).await;
-        return Ok(None);
-    }
-    if matches!(cause, Cause::Abort | Cause::Shutdown) {
-        capture.stop();
-        let finished = capture.finish(true).await;
-        paths.discard().await;
-        return finished.and(Err(CommandError::new(
-            CommandCode::CommandCancelled,
-            "Command cancelled",
-        )));
-    }
-    let Some(status) = status else {
-        let error = CommandError::new(
-            CommandCode::CommandTerminationFailed,
-            "Command exited without a reaped status",
-        );
-        return cleanup_error(host, &mut child, pid, capture, paths, error).await;
-    };
-    let summary = GuidedSummary {
-        command: input.command,
-        cwd: cwd.to_string_lossy().into_owned(),
-        exit_code: if matches!(cause, Cause::Timeout) {
-            None
-        } else {
-            status.code()
+    tokio::select! {
+        result = host.wait(&mut running.child) => match result {
+            Ok(status) => Cause::Exited(status),
+            Err(error) => Cause::Failed(CommandError::io(error)),
         },
-        signal: signal_name(status),
-        timed_out: matches!(cause, Cause::Timeout),
+        () = tokio::time::sleep(guided_timeout(input.timeout_ms)) => Cause::TimedOut,
+        () = abort.cancelled() => Cause::Cancelled,
+        () = shutdown.cancelled() => Cause::Cancelled,
+        error = running.capture.failure() => Cause::Failed(error),
+    }
+}
+
+/// Stops the process group and reaps the child. An exited child still has
+/// its group killed, as Node's close handler kills descendants.
+async fn settle_process(
+    host: &dyn ProcessHost,
+    running: &mut Running,
+    cause: Cause,
+) -> Result<(Stopped, Reaped), CommandError> {
+    let stopped = match cause {
+        Cause::Failed(error) => return Err(error),
+        Cause::Exited(status) => {
+            #[cfg(unix)]
+            host.signal_group(running.pid, GroupSignal::Kill)?;
+            return Ok((Stopped::Exited, Reaped::Exited(status)));
+        }
+        Cause::TimedOut => Stopped::TimedOut,
+        Cause::Cancelled => Stopped::Cancelled,
     };
-    let payload_source = paths
-        .complete(capture, &summary, forced_output_close)
-        .await?;
-    Ok(Some(GuidedCommandOutput {
-        summary,
-        payload_source,
-    }))
+    Ok((stopped, terminate(host, running).await?))
+}
+
+/// SIGTERM, then SIGKILL after the termination grace, then gives up waiting
+/// after the force-settlement grace.
+async fn terminate(host: &dyn ProcessHost, running: &mut Running) -> Result<Reaped, CommandError> {
+    let pid = running.pid;
+    signal_command(host, &mut running.child, pid, GroupSignal::Terminate)?;
+    match tokio::time::timeout(TERMINATION_GRACE, host.wait(&mut running.child)).await {
+        Ok(Ok(status)) => {
+            #[cfg(unix)]
+            host.signal_group(pid, GroupSignal::Kill)?;
+            return Ok(Reaped::Exited(status));
+        }
+        Ok(Err(error)) => return Err(CommandError::io(error)),
+        Err(_) => {}
+    }
+    signal_command(host, &mut running.child, pid, GroupSignal::Kill)?;
+    match tokio::time::timeout(FORCE_SETTLEMENT_GRACE, host.wait(&mut running.child)).await {
+        Ok(Ok(status)) => Ok(Reaped::Exited(status)),
+        Ok(Err(error)) => Err(CommandError::io(error)),
+        Err(_) => Ok(Reaped::Unreaped),
+    }
+}
+
+/// Drops the spooled output of a cancelled command and reports the cancellation.
+async fn discard_cancelled<T>(capture: Capture, paths: SpoolPaths) -> Result<T, CommandError> {
+    let finished = capture.finish(CaptureEnd::Stopped).await;
+    paths.discard().await;
+    finished.and(Err(CommandError::new(
+        CommandCode::CommandCancelled,
+        "Command cancelled",
+    )))
+}
+
+async fn complete(
+    paths: SpoolPaths,
+    capture: Capture,
+    summary: GuidedSummary,
+) -> Result<GuidedCommandOutput, CommandError> {
+    paths
+        .complete(capture, &summary, CaptureEnd::Stopped)
+        .await
+        .map(|payload_source| GuidedCommandOutput {
+            summary,
+            payload_source,
+        })
 }
 
 async fn send_completion(
@@ -262,23 +322,6 @@ async fn send_completion(
     if let Err(Ok(output)) = sender.send(result) {
         let _ = tokio::fs::remove_file(output.payload_source.path).await;
     }
-}
-
-async fn cleanup_error(
-    host: &dyn ProcessHost,
-    child: &mut tokio::process::Child,
-    pid: u32,
-    capture: Capture,
-    paths: SpoolPaths,
-    error: CommandError,
-) -> Result<Option<GuidedCommandOutput>, CommandError> {
-    let _ = signal_command(host, child, pid, true);
-    let _ = child.start_kill();
-    let _ = host.wait(child).await;
-    capture.stop();
-    let _ = capture.finish(true).await;
-    paths.discard().await;
-    Err(error)
 }
 
 pub(super) async fn resolve_guided_cwd(
@@ -326,6 +369,15 @@ pub(super) fn guarded_directory(
     })
 }
 
+/// The shell invocation of a guided command: sandboxed read-only on macOS;
+/// other hosts only run fully accessible commands.
+#[cfg_attr(
+    target_os = "macos",
+    expect(
+        clippy::unnecessary_wraps,
+        reason = "only macOS can sandbox every access mode; other hosts refuse read-only commands"
+    )
+)]
 fn invocation(input: &GuidedCommandInput) -> Result<(String, Vec<String>), CommandError> {
     #[cfg(target_os = "macos")]
     {

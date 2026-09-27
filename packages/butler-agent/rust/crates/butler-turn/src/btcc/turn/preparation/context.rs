@@ -12,6 +12,12 @@ use crate::workspace::{SessionRole, StoredSessionBinding};
 use butler_core::json::stringify;
 use butler_core::public_text::trim_js_whitespace;
 
+/// Builds the persisted Butler context of a turn: context documents by
+/// projection class, observation scopes, execution policy, authority and plan
+/// references, attachments and image admission.
+///
+/// The object is persisted as `btcc_turns.context_json`; its key order and
+/// omission rules are part of that format.
 pub(super) async fn snapshot(
     repositories: &BtccRepositories,
     binding: &StoredSessionBinding,
@@ -28,15 +34,115 @@ pub(super) async fn snapshot(
     let project_ref = subsession
         .and_then(|value| value.project_context.as_ref().map(|v| v.project_id.clone()))
         .or_else(|| binding.project_id.clone());
-    let mut profile = Vec::new();
-    let mut feedback = Vec::new();
-    let mut mandatory = Vec::new();
-    let mut optional = Vec::new();
+    let mut refs = persist_sections(
+        repositories,
+        assembly,
+        binding,
+        &user_ref,
+        project_ref.as_deref(),
+    )
+    .await?;
+    let observations = match subsession {
+        Some(subsession) => {
+            refs.inherit(subsession);
+            Vec::new()
+        }
+        None => {
+            let mut observations = vec![
+                format!("workspace:{}", binding.workspace_path),
+                "web:current".into(),
+                format!("memory:{user_ref}"),
+            ];
+            if let Some(project) = &project_ref {
+                observations.push(format!("ledger:{project}"));
+            }
+            observations
+        }
+    };
+    let mut context = Map::new();
+    context.insert("userRef".into(), user_ref.into());
+    if let Some(project) = project_ref {
+        context.insert("projectRef".into(), project.into());
+    }
+    context.insert("profileRefs".into(), strings(refs.profile));
+    context.insert("recentFeedbackRefs".into(), strings(refs.feedback));
+    context.insert("mandatoryHotCacheRefs".into(), strings(refs.mandatory));
+    context.insert("optionalHotCacheRefs".into(), strings(refs.optional));
+    context.insert("baselineObservationScopeRefs".into(), strings(observations));
+    context.insert(
+        "executionPolicy".into(),
+        execution_policy(binding, subsession, controls)?,
+    );
+    insert_request_refs(&mut context, binding, request);
+    if !request.message.attachments.is_empty() {
+        context.insert(
+            "attachments".into(),
+            Value::Array(
+                request
+                    .message
+                    .attachments
+                    .iter()
+                    .map(attachment_value)
+                    .collect(),
+            ),
+        );
+    }
+    if let Some(value) = &request.message.image_admission {
+        context.insert("imageAdmission".into(), value.clone());
+    }
+    Ok(Value::Object(context))
+}
+
+/// Context document references by projection class.
+#[derive(Default)]
+struct ContextRefs {
+    profile: Vec<String>,
+    feedback: Vec<String>,
+    mandatory: Vec<String>,
+    optional: Vec<String>,
+}
+
+impl ContextRefs {
+    /// A subsession also sees its parent's feedback and project hot caches.
+    fn inherit(&mut self, subsession: &SubsessionMetadata) {
+        let feedback = std::mem::take(&mut self.feedback);
+        self.feedback = unique(
+            feedback
+                .into_iter()
+                .chain(subsession.recent_feedback_refs.clone()),
+        );
+        if let Some(project) = &subsession.project_context {
+            let mandatory = std::mem::take(&mut self.mandatory);
+            self.mandatory = unique(
+                mandatory
+                    .into_iter()
+                    .chain(project.mandatory_hot_cache_refs.clone()),
+            );
+            let optional = std::mem::take(&mut self.optional);
+            self.optional = unique(
+                optional
+                    .into_iter()
+                    .chain(project.optional_hot_cache_refs.clone()),
+            );
+        }
+    }
+}
+
+/// Persists each assembled section as a context document in its user,
+/// session or project scope and groups the references by projection class.
+async fn persist_sections(
+    repositories: &BtccRepositories,
+    assembly: &ContextAssembly,
+    binding: &StoredSessionBinding,
+    user_ref: &str,
+    project_ref: Option<&str>,
+) -> Result<ContextRefs, BtccError> {
+    let mut refs = ContextRefs::default();
     for section in sections(assembly) {
         let scope_id = match section.scope_kind.as_str() {
-            "user" => user_ref.clone(),
+            "user" => user_ref.to_owned(),
             "session" => binding.session_id.clone(),
-            "project" => project_ref.clone().ok_or_else(|| {
+            "project" => project_ref.map(str::to_owned).ok_or_else(|| {
                 BtccError::detected(
                     BtccCode::ContextProjectBindingMissing,
                     "BTCC project context section requires a project binding",
@@ -59,61 +165,29 @@ pub(super) async fn snapshot(
                 content: format!("## {}\n\n{}", section.title, section.content),
             })
             .await?;
-        match section.projection_class.as_str() {
-            "profile" => profile.push(reference),
-            "recent_feedback" => feedback.push(reference),
-            "mandatory_hot_cache" => mandatory.push(reference),
-            "optional_hot_cache" => optional.push(reference),
+        let class = match section.projection_class.as_str() {
+            "profile" => &mut refs.profile,
+            "recent_feedback" => &mut refs.feedback,
+            "mandatory_hot_cache" => &mut refs.mandatory,
+            "optional_hot_cache" => &mut refs.optional,
             _ => {
                 return Err(BtccError::detected(
                     BtccCode::ContextProjectionInvalid,
                     "BTCC context projection is invalid",
                 ));
             }
-        }
+        };
+        class.push(reference);
     }
-    let mut observations = vec![
-        format!("workspace:{}", binding.workspace_path),
-        "web:current".into(),
-        format!("memory:{user_ref}"),
-    ];
-    if let Some(project) = &project_ref {
-        observations.push(format!("ledger:{project}"));
-    }
-    if let Some(subsession) = subsession {
-        feedback = unique(
-            feedback
-                .into_iter()
-                .chain(subsession.recent_feedback_refs.clone()),
-        );
-        if let Some(project) = &subsession.project_context {
-            mandatory = unique(
-                mandatory
-                    .into_iter()
-                    .chain(project.mandatory_hot_cache_refs.clone()),
-            );
-            optional = unique(
-                optional
-                    .into_iter()
-                    .chain(project.optional_hot_cache_refs.clone()),
-            );
-        }
-        observations.clear();
-    }
-    let mut context = Map::new();
-    context.insert("userRef".into(), user_ref.into());
-    if let Some(project) = project_ref {
-        context.insert("projectRef".into(), project.into());
-    }
-    context.insert("profileRefs".into(), strings(profile));
-    context.insert("recentFeedbackRefs".into(), strings(feedback));
-    context.insert("mandatoryHotCacheRefs".into(), strings(mandatory));
-    context.insert("optionalHotCacheRefs".into(), strings(optional));
-    context.insert("baselineObservationScopeRefs".into(), strings(observations));
-    context.insert(
-        "executionPolicy".into(),
-        execution_policy(binding, subsession, controls)?,
-    );
+    Ok(refs)
+}
+
+/// Authority request/message references of the request and the binding's plan id.
+fn insert_request_refs(
+    context: &mut Map<String, Value>,
+    binding: &StoredSessionBinding,
+    request: &TurnRequest,
+) {
     if let Some(value) = authority_value(
         request,
         "authorityRequestRef",
@@ -136,50 +210,37 @@ pub(super) async fn snapshot(
     {
         context.insert("planId".into(), plan.into());
     }
-    if !request.message.attachments.is_empty() {
-        context.insert(
-            "attachments".into(),
-            Value::Array(
-                request
-                    .message
-                    .attachments
-                    .iter()
-                    .map(|value| {
-                        let mut item = Map::new();
-                        item.insert("id".into(), value.id.clone().into());
-                        item.insert("kind".into(), value.kind.as_str().into());
-                        if let Some(v) = value.mime_type.as_ref().filter(|v| !v.is_empty()) {
-                            item.insert("mimeType".into(), v.clone().into());
-                        }
-                        if let Some(v) = value.file_name.as_ref().filter(|v| !v.is_empty()) {
-                            item.insert("fileName".into(), v.clone().into());
-                        }
-                        if let Some(v) = value.size_bytes.filter(|v| v.is_finite())
-                            && let Some(number) = serde_json::Number::from_f64(v)
-                        {
-                            item.insert("sizeBytes".into(), Value::Number(number));
-                        }
-                        if let Some(v) = value.url.as_ref().filter(|v| !v.is_empty()) {
-                            item.insert("url".into(), v.clone().into());
-                        }
-                        if !matches!(value.kind, crate::btcc::AttachmentKind::Image)
-                            && let Some(v) = value.local_path.as_ref().filter(|v| !v.is_empty())
-                        {
-                            item.insert("localPath".into(), v.clone().into());
-                        }
-                        if let Some(v) = value.visual_manifest.as_ref().filter(|v| js_truthy(v)) {
-                            item.insert("visualManifest".into(), v.clone());
-                        }
-                        Value::Object(item)
-                    })
-                    .collect(),
-            ),
-        );
+}
+
+/// The persisted attachment entry: empty strings and non-finite sizes are
+/// omitted, and images never expose a local path.
+fn attachment_value(value: &crate::btcc::AttachmentRef) -> Value {
+    let mut item = Map::new();
+    item.insert("id".into(), value.id.clone().into());
+    item.insert("kind".into(), value.kind.as_str().into());
+    if let Some(v) = value.mime_type.as_ref().filter(|v| !v.is_empty()) {
+        item.insert("mimeType".into(), v.clone().into());
     }
-    if let Some(value) = &request.message.image_admission {
-        context.insert("imageAdmission".into(), value.clone());
+    if let Some(v) = value.file_name.as_ref().filter(|v| !v.is_empty()) {
+        item.insert("fileName".into(), v.clone().into());
     }
-    Ok(Value::Object(context))
+    if let Some(v) = value.size_bytes.filter(|v| v.is_finite())
+        && let Some(number) = serde_json::Number::from_f64(v)
+    {
+        item.insert("sizeBytes".into(), Value::Number(number));
+    }
+    if let Some(v) = value.url.as_ref().filter(|v| !v.is_empty()) {
+        item.insert("url".into(), v.clone().into());
+    }
+    if !matches!(value.kind, crate::btcc::AttachmentKind::Image)
+        && let Some(v) = value.local_path.as_ref().filter(|v| !v.is_empty())
+    {
+        item.insert("localPath".into(), v.clone().into());
+    }
+    if let Some(v) = value.visual_manifest.as_ref().filter(|v| js_truthy(v)) {
+        item.insert("visualManifest".into(), v.clone());
+    }
+    Value::Object(item)
 }
 
 fn execution_policy(

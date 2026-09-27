@@ -40,70 +40,37 @@ fn raw(row: &Row<'_>) -> rusqlite::Result<Raw> {
         created_at: row.get(12)?,
     })
 }
+/// A stored blocker with its input verified against its digest and a
+/// resolution consistent with its status.
 fn hydrate(row: Raw) -> EffectResult<EffectBlocker> {
+    let corrupt = |what: &str| {
+        EffectFailure::storage(
+            "effect_blocker_corrupt",
+            format!("{what}: {}", row.blocker_id),
+        )
+    };
     let digest = format!("{:x}", Sha256::digest(row.input_json.as_bytes()));
     if digest != row.input_sha256 {
-        return Err(EffectFailure::storage(
-            "effect_blocker_corrupt",
-            format!(
-                "Guided Work effect blocker input is corrupted: {}",
-                row.blocker_id
-            ),
-        ));
+        return Err(corrupt("Guided Work effect blocker input is corrupted"));
     }
     let input: Value = serde_json::from_str(&row.input_json).map_err(|error| {
         EffectFailure::storage("effect_blocker_json", error.to_string()).with_source(error)
     })?;
     if !input.is_object() {
-        return Err(EffectFailure::storage(
-            "effect_blocker_corrupt",
-            format!(
-                "Guided Work effect blocker input is invalid: {}",
-                row.blocker_id
-            ),
-        ));
+        return Err(corrupt("Guided Work effect blocker input is invalid"));
     }
-    if row.status == "unresolved" {
-        if row.resolution_json.is_some() {
-            return Err(EffectFailure::storage(
-                "effect_blocker_corrupt",
-                format!(
-                    "Unresolved Guided Work blocker has a resolution: {}",
-                    row.blocker_id
-                ),
-            ));
-        }
-    } else if row.status == "applied" {
-        let resolution = row
-            .resolution_json
-            .as_deref()
-            .filter(|text| !text.is_empty())
-            .map(|text| {
-                serde_json::from_str::<Value>(text).map_err(|error| {
-                    EffectFailure::storage("effect_blocker_json", error.to_string())
-                        .with_source(error)
-                })
-            })
-            .transpose()?;
-        if resolution
-            .as_ref()
-            .and_then(|value| value.get("status"))
-            .and_then(Value::as_str)
-            != Some("applied")
-        {
-            return Err(EffectFailure::storage(
-                "effect_blocker_corrupt",
-                format!(
-                    "Guided Work blocker resolution is invalid: {}",
-                    row.blocker_id
-                ),
-            ));
-        }
-    } else {
-        return Err(EffectFailure::storage(
-            "effect_blocker_corrupt",
-            "invalid blocker status",
-        ));
+    let status = BlockerStatus::parse(&row.status).ok_or_else(|| {
+        EffectFailure::storage("effect_blocker_corrupt", "invalid blocker status")
+    })?;
+    let consistent = match status {
+        BlockerStatus::Unresolved => row.resolution_json.is_none(),
+        BlockerStatus::Applied => resolved_applied(row.resolution_json.as_deref())?,
+    };
+    if !consistent {
+        return Err(corrupt(match status {
+            BlockerStatus::Unresolved => "Unresolved Guided Work blocker has a resolution",
+            BlockerStatus::Applied => "Guided Work blocker resolution is invalid",
+        }));
     }
     Ok(EffectBlocker {
         blocker_id: row.blocker_id,
@@ -116,14 +83,27 @@ fn hydrate(row: Raw) -> EffectResult<EffectBlocker> {
         input_sha256: row.input_sha256,
         idempotency_key: row.idempotency_key,
         detail: row.detail,
-        resolution: if row.status == "applied" {
-            Some("applied".into())
-        } else {
-            None
-        },
-        status: row.status,
+        resolution: (status == BlockerStatus::Applied).then(|| "applied".into()),
+        status,
         created_at: row.created_at,
     })
+}
+
+/// Whether an applied blocker's stored resolution records `status: applied`.
+fn resolved_applied(resolution_json: Option<&str>) -> EffectResult<bool> {
+    let resolution = resolution_json
+        .filter(|text| !text.is_empty())
+        .map(|text| {
+            serde_json::from_str::<Value>(text).map_err(|error| {
+                EffectFailure::storage("effect_blocker_json", error.to_string()).with_source(error)
+            })
+        })
+        .transpose()?;
+    Ok(resolution
+        .as_ref()
+        .and_then(|value| value.get("status"))
+        .and_then(Value::as_str)
+        == Some("applied"))
 }
 pub(super) fn list(db: &Connection, work_id: &str) -> EffectResult<Vec<EffectBlocker>> {
     let mut statement = db.prepare("SELECT blocker_id,source_turn_id,source_occurrence_id,work_id,capability,target,

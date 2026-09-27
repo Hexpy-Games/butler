@@ -3,6 +3,7 @@ use sha2::{Digest, Sha256};
 
 use super::super::{ConversationMessageWithParts, ConversationPart, ConversationPartKind};
 
+/// A text scalar inside a message part, addressed by JSON pointer.
 #[derive(Debug)]
 pub struct ConversationScalar<'a> {
     pub message: &'a ConversationMessageWithParts,
@@ -12,6 +13,7 @@ pub struct ConversationScalar<'a> {
     pub hash: String,
 }
 
+/// The text scalars of a message.
 pub fn decode_message_scalars(
     message: &ConversationMessageWithParts,
 ) -> Vec<ConversationScalar<'_>> {
@@ -29,16 +31,18 @@ pub fn decode_message_scalars(
                 }
             }
             ConversationPartKind::MessageContent => {
-                if let Some(items) = part.content_json.as_array() {
-                    for (index, item) in items.iter().enumerate() {
-                        if let Some(text) = item
-                            .as_object()
-                            .and_then(|value| value.get("text"))
-                            .and_then(Value::as_str)
-                        {
-                            push(&mut output, message, part, format!("/{index}/text"), text);
-                        }
-                    }
+                let texts = part
+                    .content_json
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .enumerate()
+                    .filter_map(|(index, item)| {
+                        let text = item.as_object()?.get("text")?.as_str()?;
+                        Some((index, text))
+                    });
+                for (index, text) in texts {
+                    push(&mut output, message, part, format!("/{index}/text"), text);
                 }
             }
             _ => {}
@@ -47,6 +51,7 @@ pub fn decode_message_scalars(
     output
 }
 
+/// The text scalar at `pointer` in a part.
 pub fn scalar_for_part<'a>(part: &'a ConversationPart, pointer: &str) -> Option<&'a str> {
     if pointer == "/text" {
         return part

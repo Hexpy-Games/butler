@@ -45,7 +45,7 @@ pub(super) fn read_page(
                 && row.source_ref.is_some()
         })
         .collect::<Vec<_>>();
-    let queue = queue::read(data_root, &locators, started, cancellation)?;
+    let queue = queue::read(data_root, &locators, started, cancellation);
     rows.iter()
         .map(|row| {
             if cancellation.is_cancelled() || started.elapsed() >= Duration::from_secs(60) {

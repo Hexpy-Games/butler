@@ -19,7 +19,7 @@ pub(super) fn assert_result_ownership(
          FROM btcc_guided_work_results WHERE work_id=?1 OR result_ref=?2 OR tool_call_id=?3",
         )
         .map_err(StorageError::sqlite)?;
-    for (owner, sequence, reference) in expected {
+    for (_, _, reference) in expected {
         let rows = statement
             .query_map(
                 params![work_id, reference.result_ref, reference.tool_call_id],
@@ -49,12 +49,83 @@ pub(super) fn assert_result_ownership(
                 return Err(invalid(StorageCode::ProjectWorkRuntimeOwnershipConflict));
             }
         }
-        let _ = (owner, sequence);
     }
     Ok(())
 }
 
+/// Refuses an observed projection that would take over rows owned by another
+/// session, scope, ledger project, result, session head or turn binding.
 pub(super) fn assert_projection_ownership(
+    db: &Connection,
+    input: &ProjectWorkObserveWorks,
+    work_ids: &HashSet<&str>,
+) -> StorageResult<()> {
+    for item in &input.works {
+        assert_work_ownership(db, input, &item.work)?;
+    }
+    if !input
+        .works
+        .iter()
+        .any(|item| item.work.work_id == input.session_head_work_id)
+    {
+        return Err(invalid(StorageCode::ProjectWorkRuntimeHeadInvalid));
+    }
+    assert_session_heads(db, input, work_ids)?;
+    assert_turn_bindings(db, input, work_ids)
+}
+
+/// The stored Work (if any) must belong to the same session, project scope
+/// and ledger project (an unbound ledger only for the claimed legacy import),
+/// and hold exactly the observed results.
+fn assert_work_ownership(
+    db: &Connection,
+    input: &ProjectWorkObserveWorks,
+    work: &crate::btcc::work::WorkView,
+) -> StorageResult<()> {
+    let WorkScope::Project { project_ref } = &work.scope else {
+        return Err(invalid(StorageCode::ProjectWorkRuntimeProjectionMismatch));
+    };
+    let row = db.query_row(
+        "SELECT session_id,scope_kind,scope_ref,ledger_project_id FROM btcc_guided_works WHERE work_id=?1",
+        [&work.work_id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?, row.get::<_, Option<String>>(3)?)),
+    ).optional().map_err(StorageError::sqlite)?;
+    if row.is_some_and(|(session, kind, scope, ledger)| {
+        session != work.session_id
+            || kind != "project"
+            || scope != *project_ref
+            || (ledger.is_none()
+                && input.legacy_import_claim_work_id.as_deref() != Some(work.work_id.as_str()))
+            || ledger.is_some_and(|id| id != input.ledger_project_id)
+    }) {
+        return Err(invalid(StorageCode::ProjectWorkRuntimeOwnershipConflict));
+    }
+    let expected = work
+        .result_refs
+        .iter()
+        .enumerate()
+        .map(|(i, r)| (work.work_id.as_str(), i as u64 + 1, r))
+        .collect::<Vec<_>>();
+    if !expected.is_empty() {
+        return assert_result_ownership(db, &expected, &work.work_id);
+    }
+    let extra = db
+        .query_row(
+            "SELECT 1 FROM btcc_guided_work_results WHERE work_id=?1 LIMIT 1",
+            [&work.work_id],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()
+        .map_err(StorageError::sqlite)?;
+    if extra.is_some() {
+        return Err(invalid(StorageCode::ProjectWorkRuntimeOwnershipConflict));
+    }
+    Ok(())
+}
+
+/// Every session head touching the observed sessions or Works must point at
+/// a Work of the observed session, project scope and ledger project.
+fn assert_session_heads(
     db: &Connection,
     input: &ProjectWorkObserveWorks,
     work_ids: &HashSet<&str>,
@@ -64,55 +135,6 @@ pub(super) fn assert_projection_ownership(
         .iter()
         .map(|item| item.work.session_id.as_str())
         .collect();
-    for item in &input.works {
-        let work = &item.work;
-        let WorkScope::Project { project_ref } = &work.scope else {
-            return Err(invalid(StorageCode::ProjectWorkRuntimeProjectionMismatch));
-        };
-        let row = db.query_row(
-            "SELECT session_id,scope_kind,scope_ref,ledger_project_id FROM btcc_guided_works WHERE work_id=?1",
-            [&work.work_id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?, row.get::<_, Option<String>>(3)?)),
-        ).optional().map_err(StorageError::sqlite)?;
-        if row.is_some_and(|(session, kind, scope, ledger)| {
-            session != work.session_id
-                || kind != "project"
-                || scope != *project_ref
-                || (ledger.is_none()
-                    && input.legacy_import_claim_work_id.as_deref() != Some(work.work_id.as_str()))
-                || ledger.is_some_and(|id| id != input.ledger_project_id)
-        }) {
-            return Err(invalid(StorageCode::ProjectWorkRuntimeOwnershipConflict));
-        }
-        let expected = work
-            .result_refs
-            .iter()
-            .enumerate()
-            .map(|(i, r)| (work.work_id.as_str(), i as u64 + 1, r))
-            .collect::<Vec<_>>();
-        if expected.is_empty() {
-            let extra = db
-                .query_row(
-                    "SELECT 1 FROM btcc_guided_work_results WHERE work_id=?1 LIMIT 1",
-                    [&work.work_id],
-                    |row| row.get::<_, i64>(0),
-                )
-                .optional()
-                .map_err(StorageError::sqlite)?;
-            if extra.is_some() {
-                return Err(invalid(StorageCode::ProjectWorkRuntimeOwnershipConflict));
-            }
-        } else {
-            assert_result_ownership(db, &expected, &work.work_id)?;
-        }
-    }
-    let Some(_head) = input
-        .works
-        .iter()
-        .find(|item| item.work.work_id == input.session_head_work_id)
-    else {
-        return Err(invalid(StorageCode::ProjectWorkRuntimeHeadInvalid));
-    };
     let mut heads = db.prepare(
         "SELECT head.session_id,head.work_id,work.session_id,work.scope_kind,work.scope_ref,work.ledger_project_id \
          FROM btcc_guided_work_session_heads head LEFT JOIN btcc_guided_works work ON work.work_id=head.work_id",
@@ -150,6 +172,16 @@ pub(super) fn assert_projection_ownership(
             return Err(invalid(StorageCode::ProjectWorkRuntimeOwnershipConflict));
         }
     }
+    Ok(())
+}
+
+/// Every stored turn binding that touches an observed Work or binding must be
+/// exactly one of the observed bindings.
+fn assert_turn_bindings(
+    db: &Connection,
+    input: &ProjectWorkObserveWorks,
+    work_ids: &HashSet<&str>,
+) -> StorageResult<()> {
     let bindings = input
         .works
         .iter()

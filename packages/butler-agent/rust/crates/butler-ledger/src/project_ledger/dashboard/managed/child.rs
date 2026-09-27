@@ -79,6 +79,69 @@ pub(super) fn read_child(
     Ok(value)
 }
 
+/// Which payload a managed Work child carries, from its schema suffix.
+#[derive(Clone, Copy)]
+pub(super) enum Part {
+    Plan,
+    Checkpoint,
+    Review,
+    Disposition,
+    Result,
+    Binding,
+}
+
+impl Part {
+    fn from_schema(schema: &str) -> Option<Self> {
+        [
+            ("-plan.v1", Self::Plan),
+            ("-checkpoint.v1", Self::Checkpoint),
+            ("-review.v1", Self::Review),
+            ("-disposition.v1", Self::Disposition),
+            ("-result-reference.v1", Self::Result),
+            ("-binding.v1", Self::Binding),
+        ]
+        .into_iter()
+        .find_map(|(suffix, part)| schema.ends_with(suffix).then_some(part))
+    }
+
+    /// The key holding the payload.
+    pub(super) fn property(self) -> &'static str {
+        match self {
+            Self::Plan => "plan",
+            Self::Checkpoint => "checkpoint",
+            Self::Review => "review",
+            Self::Disposition => "disposition",
+            Self::Result => "result",
+            Self::Binding => "binding",
+        }
+    }
+
+    /// Top-level keys this child has besides the common ones.
+    fn extra_keys(self) -> &'static [&'static str] {
+        match self {
+            Self::Checkpoint => &["checkpointIdentity", "resultWindow"],
+            Self::Review => &["boundResultSequence"],
+            Self::Disposition => &["materialSnapshot"],
+            Self::Result => &["sessionId", "scope"],
+            Self::Plan | Self::Binding => &[],
+        }
+    }
+
+    /// The payload key naming the child's record id.
+    fn id_key(self) -> &'static str {
+        match self {
+            Self::Plan => "planRevisionId",
+            Self::Checkpoint => "checkpointRevisionId",
+            Self::Review => "reviewRevisionId",
+            Self::Disposition => "dispositionRevisionId",
+            Self::Result => "resultRef",
+            Self::Binding => "bindingRevisionId",
+        }
+    }
+}
+
+/// A child record body: canonical JSON with exactly its schema's keys, for
+/// this Work and id, whose recorded digest matches its semantic content.
 pub(super) fn decode_body(
     body: &str,
     work_id: &str,
@@ -88,58 +151,25 @@ pub(super) fn decode_body(
 ) -> Result<Value, ProjectLedgerReadError> {
     let value = parse_canonical(body, collation)?;
     let object = value.as_object().ok_or_else(invalid)?;
-    let property = if schema.ends_with("-plan.v1") {
-        "plan"
-    } else if schema.ends_with("-checkpoint.v1") {
-        "checkpoint"
-    } else if schema.ends_with("-review.v1") {
-        "review"
-    } else if schema.ends_with("-disposition.v1") {
-        "disposition"
-    } else if schema.ends_with("-result-reference.v1") {
-        "result"
-    } else if schema.ends_with("-binding.v1") {
-        "binding"
-    } else {
-        return Err(invalid());
-    };
-    let mut required = vec![
+    let part = Part::from_schema(schema).ok_or_else(invalid)?;
+    let common = [
         "schema",
         "workId",
         "operationIdentity",
         "recordSha256",
-        property,
+        part.property(),
     ];
-    if schema.ends_with("-checkpoint.v1") {
-        required.extend(["checkpointIdentity", "resultWindow"]);
-    }
-    if schema.ends_with("-review.v1") {
-        required.push("boundResultSequence");
-    }
-    if schema.ends_with("-disposition.v1") {
-        required.push("materialSnapshot");
-    }
-    if schema.ends_with("-result-reference.v1") {
-        required.extend(["sessionId", "scope"]);
-    }
-    if object.len() != required.len()
-        || required.iter().any(|key| !object.contains_key(*key))
+    let required = || common.iter().chain(part.extra_keys());
+    if object.len() != required().count()
+        || required().any(|key| !object.contains_key(*key))
         || required_string(&value, "schema")? != schema
         || required_string(&value, "workId")? != work_id
     {
         return Err(invalid());
     }
-    let child = value.get(property).ok_or_else(invalid)?;
-    super::validate::child(&value, property)?;
-    let id_key = match property {
-        "plan" => "planRevisionId",
-        "checkpoint" => "checkpointRevisionId",
-        "review" => "reviewRevisionId",
-        "disposition" => "dispositionRevisionId",
-        "result" => "resultRef",
-        _ => "bindingRevisionId",
-    };
-    if child.get(id_key).and_then(Value::as_str) != Some(id) {
+    let child = value.get(part.property()).ok_or_else(invalid)?;
+    super::validate::child(&value, part)?;
+    if child.get(part.id_key()).and_then(Value::as_str) != Some(id) {
         return Err(invalid());
     }
     let recorded_digest = required_string(&value, "recordSha256")?;

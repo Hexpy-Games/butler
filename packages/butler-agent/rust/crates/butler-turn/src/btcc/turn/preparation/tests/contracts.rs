@@ -5,7 +5,7 @@ use crate::btcc::subsessions::read_subsession_metadata;
 fn eol_validation_rejects_missing_or_duplicate_exact_profile_section() {
     let missing = ContextAssembly::default();
     assert_eq!(
-        subsession::validate_assembly(&missing, false)
+        subsession::validate_assembly(&missing, BtccCode::ButlerEolContextAssemblyInvalid)
             .unwrap_err()
             .code(),
         "butler_eol_context_assembly_invalid"
@@ -24,7 +24,7 @@ fn eol_validation_rejects_missing_or_duplicate_exact_profile_section() {
         ..ContextAssembly::default()
     };
     assert_eq!(
-        subsession::validate_assembly(&duplicate, false)
+        subsession::validate_assembly(&duplicate, BtccCode::ButlerEolContextAssemblyInvalid)
             .unwrap_err()
             .code(),
         "butler_eol_context_assembly_invalid"

@@ -6,6 +6,7 @@ use super::{AgentConversationStore, ConversationError, ConversationResult};
 use crate::conversation::ConversationCode;
 
 impl AgentConversationStore {
+    /// Updates a session's project context at a revision.
     pub async fn sync_session_context(
         &self,
         session_id: &str,
@@ -69,6 +70,7 @@ impl AgentConversationStore {
         .await
     }
 
+    /// A session by id.
     pub async fn get_session(
         &self,
         session_id: &str,
@@ -87,6 +89,7 @@ impl AgentConversationStore {
         .await
     }
 
+    /// The session bound to a gateway's external session.
     pub async fn get_session_by_gateway_binding(
         &self,
         gateway: &str,
@@ -109,6 +112,7 @@ impl AgentConversationStore {
         .await
     }
 
+    /// A session's binding for a gateway.
     pub async fn get_gateway_binding_for_conversation(
         &self,
         session_id: &str,

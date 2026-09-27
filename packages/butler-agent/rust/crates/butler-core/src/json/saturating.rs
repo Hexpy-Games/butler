@@ -12,6 +12,7 @@ macro_rules! saturating {
             clippy::cast_sign_loss,
             reason = "float-to-int `as` saturates and truncates by definition; that is the intent"
         )]
+        /// Truncates toward zero, maps NaN to 0 and saturates at the target bounds.
         pub fn $name(value: f64) -> $target {
             value as $target
         }
@@ -38,6 +39,7 @@ pub fn saturating_i64(value: f64) -> i64 {
     clippy::cast_possible_truncation,
     reason = "float-to-int `as` saturates and truncates by definition; that is the intent"
 )]
+/// Signed targets cannot lose a sign; only truncation is possible.
 pub fn saturating_i32(value: f64) -> i32 {
     value as i32
 }

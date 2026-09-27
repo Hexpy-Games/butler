@@ -25,6 +25,8 @@ pub fn iso_from_system_time(time: std::time::SystemTime) -> String {
     format_iso_millis(millis.clamp(-TIME_CLIP, TIME_CLIP)).unwrap_or_default()
 }
 
+/// `Date.prototype.toISOString` of epoch milliseconds; `None` outside the
+/// ECMAScript time clip. Years outside 0..=9999 use the signed six-digit form.
 pub fn format_iso_millis(value: i64) -> Option<String> {
     if !(-TIME_CLIP..=TIME_CLIP).contains(&value) {
         return None;
@@ -60,6 +62,8 @@ pub fn format_date_value(value: f64) -> Option<String> {
     format_iso_millis(millis)
 }
 
+/// `Date.parse` of an ISO timestamp to epoch milliseconds; `None` for
+/// invalid dates, leap seconds and values outside the time clip.
 pub fn parse_iso_millis(value: &str) -> Option<i64> {
     if let Some(parsed) = parse_canonical(value) {
         return Some(parsed);
@@ -79,19 +83,26 @@ fn parse_canonical(value: &str) -> Option<i64> {
         _ => 4,
     };
     let b = value.as_bytes();
+    // `YYYY-MM-DDTHH:mm:ss.sssZ` separators, offset from the end of the year.
+    let separators = [
+        (0, b'-'),
+        (3, b'-'),
+        (6, b'T'),
+        (9, b':'),
+        (12, b':'),
+        (15, b'.'),
+        (19, b'Z'),
+    ];
     if b.len() != year_len + 20
-        || b[year_len] != b'-'
-        || b[year_len + 3] != b'-'
-        || b[year_len + 6] != b'T'
-        || b[year_len + 9] != b':'
-        || b[year_len + 12] != b':'
-        || b[year_len + 15] != b'.'
-        || b[year_len + 19] != b'Z'
+        || separators
+            .iter()
+            .any(|(offset, expected)| b.get(year_len + offset) != Some(expected))
     {
         return None;
     }
-    let unsigned_year = digits(&b[usize::from(year_len == 7)..year_len])?;
-    let year = if b[0] == b'-' {
+    let field = |start: usize, end: usize| b.get(start..end).and_then(digits);
+    let unsigned_year = field(usize::from(year_len == 7), year_len)?;
+    let year = if b.first() == Some(&b'-') {
         if unsigned_year == 0 {
             return None;
         }
@@ -99,12 +110,12 @@ fn parse_canonical(value: &str) -> Option<i64> {
     } else {
         unsigned_year
     };
-    let month = digits(&b[year_len + 1..year_len + 3])?;
-    let day = digits(&b[year_len + 4..year_len + 6])?;
-    let hour = digits(&b[year_len + 7..year_len + 9])?;
-    let minute = digits(&b[year_len + 10..year_len + 12])?;
-    let second = digits(&b[year_len + 13..year_len + 15])?;
-    let millis = digits(&b[year_len + 16..year_len + 19])?;
+    let month = field(year_len + 1, year_len + 3)?;
+    let day = field(year_len + 4, year_len + 6)?;
+    let hour = field(year_len + 7, year_len + 9)?;
+    let minute = field(year_len + 10, year_len + 12)?;
+    let second = field(year_len + 13, year_len + 15)?;
+    let millis = field(year_len + 16, year_len + 19)?;
     if !(1..=12).contains(&month)
         || !(1..=31).contains(&day)
         || hour > 24
@@ -140,6 +151,7 @@ fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
     era * 146_097 + year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year - 719_468
 }
 
+/// The proleptic Gregorian `(year, month, day)` of days since the Unix epoch.
 pub fn civil_from_days(days: i64) -> (i64, i64, i64) {
     let shifted = days + 719_468;
     let era = shifted.div_euclid(146_097);

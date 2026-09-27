@@ -5,11 +5,13 @@ mod briefing_signals;
 mod commands;
 mod committed;
 mod dashboard;
+mod events;
 mod project_work_plan;
 mod publication;
 mod records;
 mod result_authority;
 mod source_head;
+mod status;
 /// The Bun source-plan fixture, shared with tests of dependent crates.
 #[cfg(any(test, feature = "test-support"))]
 pub const SOURCE_PLAN_FIXTURE: &str = include_str!("project_ledger/tests/source-plan.json");
@@ -41,7 +43,8 @@ pub use dashboard::{
 pub use project_work_plan::{ProjectWorkPlanFacts, ProjectWorkPlanRead};
 pub use publication::{
     LedgerEffectError, LedgerEffectReconciliation, LedgerEffectRequest, ProjectLedgerRecordUpdate,
-    ProjectWorkPublicationError, ProjectWorkPublicationOutcome,
+    ProjectWorkPublicationError, ProjectWorkPublicationOutcome, ProjectWorkTarget,
+    ProjectWorkTargetState, RecordEvidence, RecordSections,
 };
 pub(crate) use records::PlanRecordShow;
 pub use result_authority::prepare_exact_project_work_result_authority;
@@ -52,13 +55,20 @@ pub use read_error::ProjectLedgerReadError;
 pub use work::ProjectWork;
 pub use work_scope::ProjectWorkScopeLookup;
 
+/// A request to show one plan of the project a workspace resolves to.
 #[derive(Clone, Debug)]
 pub struct PlanRecordRead {
+    /// The workspace whose project identifies the Ledger.
     pub workspace_path: String,
+    /// The App project id, the fallback Ledger id.
     pub app_project_id: String,
+    /// The plan id to show.
     pub plan_id: String,
 }
 
+/// The owner of every Project Ledger under one Butler data root: reads run
+/// on bounded blocking permits, publications one at a time, and `close`
+/// waits for everything admitted.
 #[derive(Clone)]
 pub struct ProjectLedger {
     data_root: PathBuf,
@@ -90,6 +100,7 @@ impl Drop for ActiveRead {
 }
 
 impl ProjectLedger {
+    /// Briefing signals for `targets`, or for every Ledger when `None`.
     pub async fn briefing_signals(
         &self,
         targets: Option<Vec<ProjectBriefingTarget>>,
@@ -100,6 +111,7 @@ impl ProjectLedger {
         })
         .await
     }
+    /// A test owner comparing text in en-US.
     #[cfg(any(test, feature = "test-support"))]
     pub fn new(butler_data: &Path, max_blocking_reads: usize) -> Self {
         Self::with_collation(
@@ -109,6 +121,8 @@ impl ProjectLedger {
         )
     }
 
+    /// An owner over `butler_data` running at most `max_blocking_reads` reads
+    /// at once, comparing text with `collation`.
     pub fn with_collation(
         butler_data: &Path,
         max_blocking_reads: usize,
@@ -129,6 +143,7 @@ impl ProjectLedger {
         }
     }
 
+    /// The plan `input` names, as the Bun record reader shows it.
     pub async fn show_plan_record(
         &self,
         input: PlanRecordRead,
@@ -157,6 +172,7 @@ impl ProjectLedger {
         .await
     }
 
+    /// The dashboard snapshot of the bound Ledger.
     pub async fn dashboard_snapshot(
         &self,
         binding: ProjectLedgerBinding,
@@ -165,6 +181,8 @@ impl ProjectLedger {
             .await
     }
 
+    /// One dashboard source document, if the snapshot is still at
+    /// `expected_revision` (or the source is).
     pub async fn read_dashboard_source(
         &self,
         binding: ProjectLedgerBinding,
@@ -178,6 +196,8 @@ impl ProjectLedger {
         .await
     }
 
+    /// The managed Work history, if the snapshot is still at
+    /// `expected_snapshot_revision`.
     pub async fn dashboard_work_history_for_revision(
         &self,
         binding: ProjectLedgerBinding,
@@ -194,6 +214,7 @@ impl ProjectLedger {
         .await
     }
 
+    /// The Ledger's record event history, newest first.
     pub async fn read_dashboard_ledger_history(
         &self,
         ledger_project_id: String,
@@ -202,6 +223,7 @@ impl ProjectLedger {
             .await
     }
 
+    /// Plan facts of one managed Work, or `None` without a current plan.
     pub async fn read_project_work_plan(
         &self,
         input: ProjectWorkPlanRead,
@@ -210,6 +232,7 @@ impl ProjectLedger {
             .await
     }
 
+    /// The distinct kinds of records with this id in the project's index.
     pub async fn find_canonical_record_kinds(
         &self,
         project_root: PathBuf,
@@ -254,6 +277,8 @@ impl ProjectLedger {
         })
     }
 
+    /// Initializes the scope's Ledger (project file, event log and layout)
+    /// once, under the mutation claim.
     pub async fn ensure_project_ledger(
         &self,
         scope: ResolvedProjectWorkScope,
@@ -321,6 +346,7 @@ impl ProjectLedger {
         })?
     }
 
+    /// Applies one generic record effect exactly once and returns its result.
     pub async fn apply_record_effect(
         &self,
         request: LedgerEffectRequest,
@@ -348,6 +374,7 @@ impl ProjectLedger {
         .map_err(|_| LedgerEffectError::Owner("project_ledger_worker_failed"))?
     }
 
+    /// Reports whether an effect was applied, without applying it.
     pub async fn reconcile_record_effect(
         &self,
         request: LedgerEffectRequest,
@@ -430,6 +457,8 @@ impl ProjectLedger {
         })?
     }
 
+    /// Refuses new work and waits until every admitted read and publication
+    /// has finished.
     pub async fn close(&self) {
         {
             self.owner.state.lock().closing = true;

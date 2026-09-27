@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 
 use super::{CapabilityError, CapabilityInvocation, evidence};
 use butler_turn::workspace::{
-    WorkspaceFiles, WorkspaceListInput, WorkspaceListLimits, WorkspaceListOutcome,
+    ListStop, WorkspaceFiles, WorkspaceListInput, WorkspaceListLimits, WorkspaceListOutcome,
 };
 
 pub(super) fn definition() -> Value {
@@ -133,8 +133,10 @@ pub(super) async fn execute(
                 .or(listed.last_path.as_deref())
                 .or_else(|| files.last().and_then(|file| file["path"].as_str()));
             let next_cursor = if truncated
-                && matches!(listed.stopped_by, None | Some("max_results" | "max_files"))
-            {
+                && matches!(
+                    listed.stopped_by,
+                    None | Some(ListStop::MaxResults | ListStop::MaxFiles)
+                ) {
                 marker.map(|path| cursor::encode(&query, path))
             } else {
                 None
@@ -144,7 +146,7 @@ pub(super) async fn execute(
                 "dirs_visited":listed.dirs_visited,"io_errors":listed.io_errors,
                 "truncated":truncated});
             if let Some(reason) = listed.stopped_by {
-                references["stopped_by"] = json!(reason);
+                references["stopped_by"] = json!(reason.as_str());
             }
             let mut result = json!({
                 "ok":true, "root":listed.root, "files":files,
@@ -163,9 +165,9 @@ pub(super) async fn execute(
                     &files, listed.files_considered, listed.dirs_visited, truncated)
             });
             if let Some(reason) = listed.stopped_by {
-                result["stopped_by"] = json!(reason);
-                if !matches!(reason, "max_results" | "max_files") {
-                    result["recovery_hint"] = json!(if reason == "io_error" {
+                result["stopped_by"] = json!(reason.as_str());
+                if !matches!(reason, ListStop::MaxResults | ListStop::MaxFiles) {
+                    result["recovery_hint"] = json!(if reason == ListStop::IoError {
                         "Discovery hit a workspace I/O error; retry list_files with a narrower admitted root or glob."
                     } else {
                         "Discovery stopped before a safe file boundary; narrow the root/globs or raise the directory/depth/time cap and retry without cursor."

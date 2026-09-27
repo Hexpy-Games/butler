@@ -46,23 +46,37 @@ pub(in crate::project_ledger) fn validate_managed_work(
     Ok(())
 }
 
+/// The App project and the Ledger project it is bound to.
 #[derive(Clone, Debug)]
 pub struct ProjectLedgerBinding {
+    /// The App project id.
     pub app_project_id: String,
+    /// The Ledger project id.
     pub ledger_project_id: String,
 }
 
+/// One indexed record as the dashboard lists it.
 #[derive(Clone, Debug)]
 pub struct DashboardLedgerRecord {
+    /// The record id.
     pub id: String,
+    /// The record kind.
     pub kind: String,
+    /// The record title.
     pub title: String,
+    /// The record status, or `unknown` when unavailable.
     pub status: String,
+    /// The record path under `project-ledger/projects/`.
     pub path: String,
+    /// The parent record, for tasks and managed children.
     pub parent_id: Option<String>,
+    /// The governing spec id.
     pub spec: Option<String>,
+    /// The last update time.
     pub updated_at: String,
+    /// Dashboard ordering; lower comes first.
     pub priority: f64,
+    /// The source file is missing or unreadable.
     pub unavailable: bool,
 }
 
@@ -74,28 +88,47 @@ pub struct DashboardLedgerWork {
     pub managed: Option<DashboardManagedWorkView>,
 }
 
+/// Every dashboard record and Work at one Ledger revision.
 #[derive(Clone, Debug)]
 pub struct DashboardLedgerSnapshot {
+    /// The digest of the binding, publication, index and source metadata.
     pub revision: String,
+    /// When the snapshot was read.
     pub observed_at: String,
+    /// Indexed records, refreshed from their sources.
     pub records: Vec<DashboardLedgerRecord>,
+    /// Every Work, with its managed view when it has one.
     pub works: Vec<DashboardLedgerWork>,
 }
 
+/// The public view of one managed (BTCC) Work.
 #[derive(Clone, Debug)]
 pub struct DashboardManagedWorkView {
+    /// The Work objective.
     pub objective: String,
+    /// The session that owns the Work.
     pub session_id: String,
+    /// The Work status (open, blocked, completed or abandoned).
     pub status: String,
+    /// The current Work stage.
     pub current_stage: Option<String>,
+    /// Progress of each plan action.
     pub action_progress: Vec<DashboardActionProgress>,
+    /// The current plan.
     pub current_plan: Option<DashboardManagedPlanView>,
+    /// The latest checkpoint.
     pub latest_checkpoint: Option<DashboardCheckpointSummary>,
+    /// The latest disposition.
     pub latest_disposition: Option<DashboardDispositionSummary>,
+    /// Corrections from the latest plan review.
     pub latest_plan_review_corrections: Vec<String>,
+    /// Corrections from the latest result review.
     pub latest_result_review_corrections: Vec<String>,
+    /// The latest public summary.
     pub public_summary: Option<String>,
+    /// Actions the latest disposition left open.
     pub remaining_actions: Vec<String>,
+    /// Follow-ups the latest disposition named.
     pub followups: Vec<String>,
 }
 
@@ -129,26 +162,43 @@ pub struct DashboardDispositionSummary {
     pub followups: Vec<String>,
 }
 
+/// A dashboard source document.
 #[derive(Clone, Debug)]
 pub struct DashboardLedgerSource {
+    /// The document title.
     pub title: String,
+    /// The Markdown body shown for it.
     pub body: String,
+    /// The digest the caller must present to read it again.
     pub revision: String,
+    /// The record kind, or `reference` for history entries.
     pub document_type: String,
+    /// The last update time.
     pub updated_at: String,
+    /// The record status.
     pub status: String,
 }
 
+/// One public entry of managed Work history.
 #[derive(Clone, Debug)]
 pub struct DashboardWorkHistoryEntry {
+    /// `<work id>|<child id>`.
     pub id: String,
+    /// The Work id.
     pub work_id: String,
+    /// The session that owns the Work.
     pub session_id: String,
+    /// When it happened.
     pub at: String,
+    /// `reviewed`, `disposition` or `result`.
     pub action: String,
+    /// The Work objective.
     pub title: String,
+    /// The public JSON projection of the child.
     pub body: String,
+    /// The digest of the entry.
     pub revision: String,
+    /// The review verdict, disposition or result status.
     pub status: String,
 }
 

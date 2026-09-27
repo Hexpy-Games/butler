@@ -29,6 +29,7 @@ const EXCLUDED_DIRS: &[&str] = &[
     "vendor",
 ];
 
+/// A bounded listing of workspace files.
 pub struct WorkspaceListInput {
     pub root: PathBuf,
     pub requested_root: String,
@@ -41,6 +42,7 @@ pub struct WorkspaceListInput {
     pub limits: WorkspaceListLimits,
 }
 
+/// The limits of a listing.
 #[derive(Clone, Copy)]
 pub struct WorkspaceListLimits {
     pub max_results: usize,
@@ -50,17 +52,46 @@ pub struct WorkspaceListLimits {
     pub elapsed_ms: u64,
 }
 
+/// Why the listing root was refused.
 pub struct WorkspaceListRejection {
     pub reason: &'static str,
     pub safe_path: Option<String>,
     pub guard: Value,
 }
 
+/// One listed file.
 pub struct WorkspaceListEntry {
     pub path: String,
     pub bytes: u64,
 }
 
+/// Why a listing stopped before walking the whole tree; the strings are
+/// reported to the model as `stopped_by`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ListStop {
+    ElapsedMs,
+    MaxDepth,
+    MaxDirs,
+    MaxFiles,
+    MaxResults,
+    IoError,
+}
+
+impl ListStop {
+    /// The reported reason.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ElapsedMs => "elapsed_ms",
+            Self::MaxDepth => "max_depth",
+            Self::MaxDirs => "max_dirs",
+            Self::MaxFiles => "max_files",
+            Self::MaxResults => "max_results",
+            Self::IoError => "io_error",
+        }
+    }
+}
+
+/// The listed files and why the listing stopped, if it did.
 pub struct WorkspaceListResult {
     pub root: String,
     pub files: Vec<WorkspaceListEntry>,
@@ -68,11 +99,12 @@ pub struct WorkspaceListResult {
     pub dirs_visited: usize,
     pub io_errors: usize,
     pub elapsed_ms: u64,
-    pub stopped_by: Option<&'static str>,
+    pub stopped_by: Option<ListStop>,
     pub last_file_path: Option<String>,
     pub last_path: Option<String>,
 }
 
+/// A refused or completed listing.
 pub enum WorkspaceListOutcome {
     Rejected(WorkspaceListRejection),
     Listed(WorkspaceListResult),
@@ -164,9 +196,15 @@ struct Walk<'a> {
     files_considered: usize,
     dirs_visited: usize,
     io_errors: usize,
-    stopped_by: Option<&'static str>,
+    stopped_by: Option<ListStop>,
     last_file_path: Option<String>,
     last_path: Option<String>,
+}
+
+/// Whether the walk goes on to the next directory entry.
+enum Next {
+    Continue,
+    Stop,
 }
 
 impl Walk<'_> {
@@ -175,45 +213,48 @@ impl Walk<'_> {
             .unwrap_or(u64::MAX)
     }
 
-    fn stop(&mut self, reason: &'static str) {
+    fn stop(&mut self, reason: ListStop) {
         if self.stopped_by.is_none() {
             self.stopped_by = Some(reason);
         }
     }
 
+    fn io_error(&mut self) -> Next {
+        self.io_errors += 1;
+        self.stop(ListStop::IoError);
+        Next::Stop
+    }
+
+    /// Walks one directory depth-first in UTF-16 name order until a limit stops it.
     fn visit(&mut self, directory: &Path, depth: usize) -> std::io::Result<()> {
         if self.stopped_by.is_some() {
             return Ok(());
         }
         if self.elapsed() >= self.input.limits.elapsed_ms {
-            self.stop("elapsed_ms");
+            self.stop(ListStop::ElapsedMs);
             return Ok(());
         }
         if depth > self.input.limits.max_depth {
-            self.stop("max_depth");
+            self.stop(ListStop::MaxDepth);
             return Ok(());
         }
         match std::fs::symlink_metadata(directory) {
             Ok(metadata) if metadata.is_dir() => {}
             Ok(_) => return Ok(()),
             Err(_) => {
-                self.io_errors += 1;
-                self.stop("io_error");
+                self.io_error();
                 return Ok(());
             }
         }
         self.dirs_visited += 1;
         if self.dirs_visited > self.input.limits.max_dirs {
-            self.stop("max_dirs");
+            self.stop(ListStop::MaxDirs);
             return Ok(());
         }
-        let mut children = match std::fs::read_dir(directory) {
-            Ok(children) => children.collect::<std::io::Result<Vec<_>>>(),
-            Err(error) => Err(error),
-        };
-        let Ok(children) = &mut children else {
-            self.io_errors += 1;
-            self.stop("io_error");
+        let Ok(mut children) =
+            std::fs::read_dir(directory).and_then(Iterator::collect::<std::io::Result<Vec<_>>>)
+        else {
+            self.io_error();
             return Ok(());
         };
         children.sort_by(|left, right| {
@@ -227,85 +268,89 @@ impl Walk<'_> {
                 break;
             }
             if self.elapsed() >= self.input.limits.elapsed_ms {
-                self.stop("elapsed_ms");
+                self.stop(ListStop::ElapsedMs);
                 break;
             }
-            let path = child.path();
-            let Ok(relative) = path.strip_prefix(self.root) else {
-                continue;
-            };
-            let relative = relative.to_string_lossy().replace('\\', "/");
-            if relative.is_empty()
-                || looks_sensitive(&relative)
-                || protected_path(self.root, &path, &self.input.protected_roots)
-            {
-                continue;
-            }
-            let Ok(metadata) = child.file_type() else {
-                self.io_errors += 1;
-                self.stop("io_error");
-                break;
-            };
-            if metadata.is_dir() {
-                if EXCLUDED_DIRS.contains(&child.file_name().to_string_lossy().as_ref())
-                    || self.excluded_directory(&relative)
-                {
-                    continue;
-                }
-                match std::fs::symlink_metadata(&path) {
-                    Ok(metadata) if metadata.is_dir() => {}
-                    Ok(_) => continue,
-                    Err(_) => {
-                        self.io_errors += 1;
-                        self.stop("io_error");
-                        break;
-                    }
-                }
-                self.last_path = Some(relative);
-                self.visit(&path, depth + 1)?;
-                continue;
-            }
-            if !metadata.is_file() {
-                continue;
-            }
-            if self.input.after_path.as_deref().is_some_and(|after| {
-                let order = utf16_cmp(&relative, after);
-                order.is_lt() || (order.is_eq() && !self.input.include_after_path)
-            }) {
-                continue;
-            }
-            self.files_considered += 1;
-            if self.files_considered > self.input.limits.max_files {
-                self.stop("max_files");
-                break;
-            }
-            self.last_file_path = Some(relative.clone());
-            self.last_path = Some(relative.clone());
-            if self.exclude.iter().any(|glob| glob.matches(&relative))
-                || (!self.include.is_empty()
-                    && !self.include.iter().any(|glob| glob.matches(&relative)))
-            {
-                continue;
-            }
-            let size = match std::fs::symlink_metadata(&path) {
-                Ok(metadata) if metadata.is_file() => metadata.len(),
-                Ok(_) => continue,
-                Err(_) => {
-                    self.io_errors += 1;
-                    self.stop("io_error");
-                    break;
-                }
-            };
-            self.entries.push(WorkspaceListEntry {
-                path: relative,
-                bytes: size,
-            });
-            if self.entries.len() >= self.input.limits.max_results {
-                self.stop("max_results");
+            if let Next::Stop = self.visit_entry(&child, depth)? {
                 break;
             }
         }
         Ok(())
+    }
+
+    /// Skips sensitive, protected and excluded entries, descends into
+    /// directories and considers regular files.
+    fn visit_entry(&mut self, child: &std::fs::DirEntry, depth: usize) -> std::io::Result<Next> {
+        let path = child.path();
+        let Ok(relative) = path.strip_prefix(self.root) else {
+            return Ok(Next::Continue);
+        };
+        let relative = relative.to_string_lossy().replace('\\', "/");
+        if relative.is_empty()
+            || looks_sensitive(&relative)
+            || protected_path(self.root, &path, &self.input.protected_roots)
+        {
+            return Ok(Next::Continue);
+        }
+        let Ok(file_type) = child.file_type() else {
+            return Ok(self.io_error());
+        };
+        if file_type.is_dir() {
+            if EXCLUDED_DIRS.contains(&child.file_name().to_string_lossy().as_ref())
+                || self.excluded_directory(&relative)
+            {
+                return Ok(Next::Continue);
+            }
+            match std::fs::symlink_metadata(&path) {
+                Ok(metadata) if metadata.is_dir() => {}
+                Ok(_) => return Ok(Next::Continue),
+                Err(_) => return Ok(self.io_error()),
+            }
+            self.last_path = Some(relative);
+            self.visit(&path, depth + 1)?;
+            return Ok(Next::Continue);
+        }
+        if !file_type.is_file() {
+            return Ok(Next::Continue);
+        }
+        Ok(self.consider_file(&path, relative))
+    }
+
+    /// Counts a file past the resume cursor and lists it when the globs select it.
+    fn consider_file(&mut self, path: &Path, relative: String) -> Next {
+        if self.input.after_path.as_deref().is_some_and(|after| {
+            let order = utf16_cmp(&relative, after);
+            order.is_lt() || (order.is_eq() && !self.input.include_after_path)
+        }) {
+            return Next::Continue;
+        }
+        self.files_considered += 1;
+        if self.files_considered > self.input.limits.max_files {
+            self.stop(ListStop::MaxFiles);
+            return Next::Stop;
+        }
+        self.last_file_path = Some(relative.clone());
+        self.last_path = Some(relative.clone());
+        if self.exclude.iter().any(|glob| glob.matches(&relative))
+            || (!self.include.is_empty()
+                && !self.include.iter().any(|glob| glob.matches(&relative)))
+        {
+            return Next::Continue;
+        }
+        let size = match std::fs::symlink_metadata(path) {
+            Ok(metadata) if metadata.is_file() => metadata.len(),
+            Ok(_) => return Next::Continue,
+            Err(_) => return self.io_error(),
+        };
+        self.entries.push(WorkspaceListEntry {
+            path: relative,
+            bytes: size,
+        });
+        if self.entries.len() >= self.input.limits.max_results {
+            self.stop(ListStop::MaxResults);
+            return Next::Stop;
+        }
+        Next::Continue
     }
 
     fn excluded_directory(&self, path: &str) -> bool {

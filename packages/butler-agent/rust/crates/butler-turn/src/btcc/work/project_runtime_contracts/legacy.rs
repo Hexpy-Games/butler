@@ -6,6 +6,7 @@ use super::super::contracts::{
 };
 use super::identity::{ProjectWorkBinding, ResolvedProjectWorkScope};
 
+/// A legacy ledger record (passthrough JSON content).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LegacyProjectWorkRecord {
@@ -14,6 +15,7 @@ pub struct LegacyProjectWorkRecord {
     pub content: Value,
 }
 
+/// A legacy (R2) program with its records (passthrough JSON).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LegacyProjectWorkSourceSnapshot {
@@ -26,6 +28,7 @@ pub struct LegacyProjectWorkSourceSnapshot {
     pub referenced_records: Vec<LegacyProjectWorkReferencedRecord>,
 }
 
+/// A record a legacy program references.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LegacyProjectWorkReferencedRecord {
@@ -66,6 +69,7 @@ pub struct ProjectWorkLegacyTurn {
     pub execution_fence: u64,
 }
 
+/// Legacy Work projected for import, digested over its semantic JSON.
 #[derive(Clone, Debug)]
 pub struct ProjectWorkLegacySnapshot {
     pub source_kind: ProjectWorkLegacySourceKind,
@@ -89,12 +93,14 @@ pub struct ProjectWorkLegacyObservation {
     pub work_id: String,
 }
 
+/// The scope a legacy import runs in.
 #[derive(Clone, Debug)]
 pub struct ProjectWorkLegacyInput {
     pub scope: WorkTurnScope,
     pub resolved_scope: ResolvedProjectWorkScope,
 }
 
+/// An import snapshot to observe at a ledger head.
 #[derive(Clone)]
 pub struct ProjectWorkLegacyObserveInput {
     pub scope: WorkTurnScope,

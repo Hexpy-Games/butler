@@ -1,6 +1,7 @@
 mod batch;
 mod locator;
 
+/// The text with `old_text` replaced, located near `start_line` when given.
 pub fn prepare_exact_text(
     text: &str,
     old_text: &str,

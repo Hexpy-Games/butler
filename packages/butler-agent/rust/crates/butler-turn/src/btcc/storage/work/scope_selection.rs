@@ -5,6 +5,7 @@ use rusqlite::OptionalExtension;
 use super::{SessionWorkRepository, StorageError, common::error};
 use crate::btcc::{BtccError, StorageCode};
 
+/// The Work scope a turn was persisted with.
 pub enum PersistedWorkTurnScope {
     Unbound {
         session_id: String,
@@ -18,6 +19,7 @@ pub enum PersistedWorkTurnScope {
 }
 
 impl SessionWorkRepository {
+    /// The Work scope a turn was persisted with.
     pub async fn persisted_scope_for_turn(
         &self,
         turn_id: String,

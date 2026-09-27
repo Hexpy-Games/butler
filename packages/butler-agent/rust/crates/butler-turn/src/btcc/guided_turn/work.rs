@@ -32,11 +32,13 @@ impl From<AuthorityError> for GuidedPreparationError {
     }
 }
 
+/// The Work context a guided turn starts with.
 pub struct GuidedWork {
     pub context: Option<WorkContext>,
     pub bound: bool,
 }
 
+/// The Work scope of a turn; ledger tracking scopes it to the project.
 pub fn work_scope_for_turn(turn: &TurnRecord, tracking_mode: &str) -> WorkTurnScope {
     WorkTurnScope {
         turn_id: turn.turn_id.clone(),
@@ -85,6 +87,7 @@ async fn load_initial_guided_work(
     })
 }
 
+/// Loads (importing or binding as needed) the Work a guided turn continues.
 pub async fn load_guided_turn_work(
     service: &DurableWorkService,
     authority: Option<&PrincipalAuthority>,

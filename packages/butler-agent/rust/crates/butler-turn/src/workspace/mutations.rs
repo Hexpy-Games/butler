@@ -17,6 +17,7 @@ pub use contracts::{
 };
 pub(crate) use contracts::{CommitObserver, Unobserved};
 
+/// The line diff between two file contents; `None` when unchanged.
 pub fn net_changed_file_detail(path: &str, before: &[u8], after: &[u8]) -> Option<ChangedFile> {
     diff::changed_file(path, before, after, false)
 }
@@ -33,6 +34,7 @@ use contracts::GuardedCommand;
 
 type MutationCompletion = Result<(MutationOutcome, Duration), MutationOwnerError>;
 
+/// Serializes workspace writes and edits per file until closed.
 #[derive(Clone)]
 pub struct WorkspaceMutations {
     inner: Arc<MutationOwner>,
@@ -76,6 +78,7 @@ pub enum MutationOwnerError {
 }
 
 impl MutationOwnerError {
+    /// The wire code.
     pub fn code(&self) -> &'static str {
         match self {
             Self::Closed => "workspace_mutations_closed",
@@ -92,6 +95,7 @@ impl Default for WorkspaceMutations {
 }
 
 impl WorkspaceMutations {
+    /// An owner without a commit observer.
     pub fn new() -> Self {
         Self::observed(Arc::new(Unobserved))
     }
@@ -148,10 +152,12 @@ impl WorkspaceMutations {
         Ok(receiver)
     }
 
+    /// The number of running mutations.
     pub fn active_count(&self) -> usize {
         self.inner.state.lock().active
     }
 
+    /// Refuses new mutations and waits for running ones.
     pub async fn close(&self) {
         self.inner.state.lock().closing = true;
         loop {

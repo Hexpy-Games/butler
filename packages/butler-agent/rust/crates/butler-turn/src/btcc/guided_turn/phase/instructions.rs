@@ -3,12 +3,13 @@ use std::sync::OnceLock;
 
 use super::super::work::GuidedPreparationError;
 use super::policy::GuidedExecutionPolicy;
+use super::selection::{GuidedPhase, SurfaceMode};
 
 static PREFIXES: OnceLock<HashMap<String, String>> = OnceLock::new();
 
 pub(super) fn prefix(
-    mode: &str,
-    phase: &str,
+    mode: SurfaceMode,
+    phase: GuidedPhase,
     policy: &GuidedExecutionPolicy,
 ) -> Result<String, GuidedPreparationError> {
     // The bundled table is parsed by `tests::bundled_prefixes_parse`; were it
@@ -29,14 +30,14 @@ pub(super) fn prefix(
         )
     } else if policy.subsession.is_some() && policy.role == "worker" {
         format!("delegated|worker|{}", policy.access_mode.as_str())
-    } else if mode == "legacy" {
+    } else if mode == SurfaceMode::Legacy {
         format!(
             "legacy|butler|{}|{}",
             policy.access_mode.as_str(),
             policy.tracking_mode
         )
     } else {
-        format!("phase_minimal|butler|{phase}")
+        format!("phase_minimal|butler|{}", phase.as_str())
     };
     let mut value = prefixes
         .get(&key)

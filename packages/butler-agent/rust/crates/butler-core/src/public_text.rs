@@ -16,6 +16,9 @@ pub use source_regex::{fixed_regex, fixed_regex_ci};
 
 static PATTERNS: LazyLock<Patterns> = LazyLock::new(Patterns::new);
 
+/// `value` fit for a public surface: control characters blanked, secrets and
+/// bearer tokens redacted, whitespace collapsed; `fallback` when nothing
+/// public remains or it looks private.
 pub fn sanitize_public_text(value: &str, fallback: &str) -> String {
     let stripped: Cow<'_, str> = if value.chars().any(is_control) {
         Cow::Owned(
@@ -37,6 +40,8 @@ pub fn sanitize_public_text(value: &str, fallback: &str) -> String {
     }
 }
 
+/// [`sanitize_public_text`] of a JSON scalar's JavaScript string form;
+/// non-scalars become `fallback`.
 pub fn sanitize_public_value(value: &Value, fallback: &str) -> String {
     match value {
         Value::String(text) => sanitize_public_text(text, fallback),
@@ -51,14 +56,18 @@ pub fn sanitize_public_value(value: &Value, fallback: &str) -> String {
     }
 }
 
+/// `String.prototype.trim`: trims ECMAScript whitespace, which differs from
+/// Rust's Unicode `White_Space` set.
 pub fn trim_js_whitespace(value: &str) -> &str {
     value.trim_matches(is_js_whitespace)
 }
 
+/// `String.prototype.trimStart`.
 pub fn trim_js_whitespace_start(value: &str) -> &str {
     value.trim_start_matches(is_js_whitespace)
 }
 
+/// `String.prototype.trimEnd`.
 pub fn trim_js_whitespace_end(value: &str) -> &str {
     value.trim_end_matches(is_js_whitespace)
 }
@@ -119,6 +128,7 @@ fn is_control(character: char) -> bool {
     character < '\u{20}' || character == '\u{7f}'
 }
 
+/// Whether `character` is ECMAScript whitespace or a line terminator.
 pub fn is_js_whitespace(character: char) -> bool {
     matches!(character, '\u{9}'..='\u{d}' | '\u{20}' | '\u{a0}' | '\u{1680}' |
         '\u{2000}'..='\u{200a}' | '\u{2028}' | '\u{2029}' | '\u{202f}' |

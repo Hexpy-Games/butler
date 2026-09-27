@@ -14,6 +14,15 @@ use crate::workspace::CommandCode;
 pub(super) const TERMINATION_GRACE: Duration = Duration::from_millis(500);
 pub(super) const FORCE_SETTLEMENT_GRACE: Duration = Duration::from_millis(500);
 
+/// The signal sent to a command's process group.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum GroupSignal {
+    /// SIGTERM: ask the group to exit within the termination grace.
+    Terminate,
+    /// SIGKILL: stop the group unconditionally.
+    Kill,
+}
+
 pub(crate) type ProcessFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 pub(crate) type CaptureSink = Box<dyn AsyncWrite + Send + Unpin>;
 
@@ -29,10 +38,10 @@ pub(crate) trait ProcessHost: Send + Sync + 'static {
         Box::pin(async move { command.spawn() })
     }
 
-    /// Signals the process group led by `pid` (SIGTERM, or SIGKILL when
-    /// `force`). A group that no longer exists is already terminated.
-    fn signal_group(&self, pid: u32, force: bool) -> Result<(), CommandError> {
-        signal_pid(pid, force)
+    /// Signals the process group led by `pid`. A group that no longer exists
+    /// is already terminated.
+    fn signal_group(&self, pid: u32, signal: GroupSignal) -> Result<(), CommandError> {
+        signal_pid(pid, signal)
     }
 
     fn wait<'a>(&'a self, child: &'a mut Child) -> ProcessFuture<'a, io::Result<ExitStatus>> {
@@ -53,7 +62,7 @@ pub(crate) struct SystemProcesses;
 impl ProcessHost for SystemProcesses {}
 
 #[cfg(unix)]
-pub(super) fn signal_pid(pid: u32, force: bool) -> Result<(), CommandError> {
+pub(super) fn signal_pid(pid: u32, signal: GroupSignal) -> Result<(), CommandError> {
     use nix::errno::Errno;
     use nix::sys::signal::{Signal, killpg};
     use nix::unistd::Pid;
@@ -65,10 +74,9 @@ pub(super) fn signal_pid(pid: u32, force: bool) -> Result<(), CommandError> {
         )
         .with_source(source)
     })?;
-    let signal = if force {
-        Signal::SIGKILL
-    } else {
-        Signal::SIGTERM
+    let signal = match signal {
+        GroupSignal::Kill => Signal::SIGKILL,
+        GroupSignal::Terminate => Signal::SIGTERM,
     };
     match killpg(Pid::from_raw(group), signal) {
         Ok(()) | Err(Errno::ESRCH) => Ok(()),
@@ -120,7 +128,7 @@ fn group_has_only_zombies(_group: u32) -> bool {
 }
 
 #[cfg(not(unix))]
-pub(super) fn signal_pid(_pid: u32, _force: bool) -> Result<(), CommandError> {
+pub(super) fn signal_pid(_pid: u32, _signal: GroupSignal) -> Result<(), CommandError> {
     Ok(())
 }
 
@@ -128,16 +136,16 @@ pub(super) fn signal_command(
     host: &dyn ProcessHost,
     child: &mut Child,
     pid: u32,
-    force: bool,
+    signal: GroupSignal,
 ) -> Result<(), CommandError> {
     #[cfg(unix)]
     {
         let _ = child;
-        host.signal_group(pid, force)
+        host.signal_group(pid, signal)
     }
     #[cfg(not(unix))]
     {
-        let _ = (host, pid, force);
+        let _ = (host, pid, signal);
         match child.start_kill() {
             Ok(()) => Ok(()),
             Err(error)
@@ -175,7 +183,7 @@ pub(super) async fn terminate_and_reap(
 ) -> Result<(), CommandError> {
     let pid = child.id();
     let signalled = match pid {
-        Some(pid) => signal_command(host, child, pid, false),
+        Some(pid) => signal_command(host, child, pid, GroupSignal::Terminate),
         None => Ok(()),
     };
     if let Err(error) = signalled {
@@ -187,7 +195,7 @@ pub(super) async fn terminate_and_reap(
     // Partial pipeline startup is a failure boundary: descendants of an
     // already-exited direct child must still be terminated before admission ends.
     if let Some(pid) = pid
-        && let Err(error) = host.signal_group(pid, true)
+        && let Err(error) = host.signal_group(pid, GroupSignal::Kill)
     {
         let _ = child.start_kill();
         let _ = host.wait(child).await;

@@ -14,6 +14,8 @@ const WORK: &[&str] = &[
 ];
 const REVIEW: &[&str] = &["record_work_review"];
 
+/// Indices of the latest successful plan, work and review tool results, which
+/// replay keeps verbatim.
 pub fn latest_work_anchor_indices(messages: &[ModelRoundMessage]) -> BTreeSet<usize> {
     let mut calls: HashMap<&str, String> = HashMap::new();
     for message in messages {
@@ -41,9 +43,9 @@ pub fn latest_work_anchor_indices(messages: &[ModelRoundMessage]) -> BTreeSet<us
             .and_then(|id| calls.get(id).map(String::as_str))
             .or(message.name.as_deref())
             .unwrap_or("");
-        for (slot, tools) in [PLAN, WORK, REVIEW].iter().enumerate() {
+        for (latest, tools) in latest.iter_mut().zip([PLAN, WORK, REVIEW]) {
             if tools.contains(&name) {
-                latest[slot] = Some(index);
+                *latest = Some(index);
             }
         }
     }

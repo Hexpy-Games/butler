@@ -23,19 +23,6 @@ const RECORD_KINDS: &[&str] = &[
     "task",
     "attempt",
 ];
-const DERIVED_KINDS: &[&str] = &[
-    "next-actions",
-    "blocked",
-    "review",
-    "missing-spec",
-    "completion-gaps",
-    "stale-view",
-    "stale-index",
-    "decision-without-implementation",
-    "risk-without-mitigation",
-    "recent-completed",
-];
-
 pub(super) fn query(
     context: &CommandContext,
     options: &Value,
@@ -94,145 +81,173 @@ pub(super) fn query(
     }))
 }
 
+/// A query family: records of one kind (or all), or a derived view.
+#[derive(Clone, Copy)]
+enum Query<'a> {
+    Records(&'a str),
+    NextActions,
+    /// Records in one status, with the reason each is listed.
+    InStatus(&'static str, &'static str),
+    /// Records of index issues with this code.
+    Issues(&'static str),
+    StaleViews,
+    StaleIndex,
+    DecisionWithoutImplementation,
+    RiskWithoutMitigation,
+    RecentCompleted,
+}
+
+impl<'a> Query<'a> {
+    fn parse(kind: &'a str) -> Option<Self> {
+        Some(match kind {
+            "next-actions" => Self::NextActions,
+            "blocked" => Self::InStatus("blocked", "blocked"),
+            "review" => Self::InStatus("review", "review_ready"),
+            "missing-spec" => Self::Issues("missing_spec"),
+            "completion-gaps" => Self::Issues("completion_gate"),
+            "stale-view" => Self::StaleViews,
+            "stale-index" => Self::StaleIndex,
+            "decision-without-implementation" => Self::DecisionWithoutImplementation,
+            "risk-without-mitigation" => Self::RiskWithoutMitigation,
+            "recent-completed" => Self::RecentCompleted,
+            _ if RECORD_KINDS.contains(&kind) => Self::Records(kind),
+            _ => return None,
+        })
+    }
+}
+
 pub(super) fn select(
     index: &Value,
     kind: &str,
     options: &Value,
     collation: &LocaleCollation,
 ) -> Result<Value, CliFailure> {
-    if !RECORD_KINDS.contains(&kind) && !DERIVED_KINDS.contains(&kind) {
-        return Err(CliFailure::new(
+    let query = Query::parse(kind).ok_or_else(|| {
+        CliFailure::new(
             "invalid_query_kind",
             format!("Unsupported query kind: {kind}"),
-        ));
-    }
+        )
+    })?;
     let records = index
         .get("records")
         .and_then(Value::as_array)
         .ok_or_else(|| CliFailure::new("internal_error", "Invalid Project Ledger index records"))?;
-    let mut rows = records
+    let rows = records
         .iter()
         .filter(|record| text(record, "kind") != "project")
         .cloned()
         .collect::<Vec<_>>();
-    let issue_rows = index
+    let selected = match query {
+        Query::NextActions => listed(rows, collation, Some("active_next_action"), |record| {
+            matches!(text(record, "kind"), "work" | "task")
+                && matches!(
+                    text(record, "status"),
+                    "proposed" | "scoped" | "specified" | "in_progress" | "todo"
+                )
+        }),
+        Query::InStatus(status, reason) => listed(rows, collation, Some(reason), |record| {
+            text(record, "status") == status
+        }),
+        Query::Issues(code) => issue_records(index, code),
+        Query::StaleViews => stale_views(index),
+        Query::StaleIndex => stale_index(index),
+        Query::DecisionWithoutImplementation => listed(
+            rows,
+            collation,
+            Some("decision_without_implementation"),
+            |record| text(record, "kind") == "decision" && !truthy(record.get("implementation")),
+        ),
+        Query::RiskWithoutMitigation => {
+            listed(rows, collation, Some("risk_without_mitigation"), |record| {
+                text(record, "kind") == "risk"
+                    && text(record, "status") != "closed"
+                    && !truthy(record.get("mitigation"))
+            })
+        }
+        Query::RecentCompleted => listed(rows, collation, Some("recent_completed"), |record| {
+            text(record, "status") == "done"
+        }),
+        Query::Records(kind) => {
+            let status = option_string(options, "status")
+                .map(butler_core::public_text::trim_js_whitespace)
+                .filter(|value| !value.is_empty());
+            listed(rows, collation, None, |record| {
+                (kind == "all" || text(record, "kind") == kind)
+                    && status.is_none_or(|status| text(record, "status") == status)
+            })
+        }
+    };
+    Ok(Value::Array(selected))
+}
+
+/// The rows `keep` accepts, in dashboard order, as references with `reason`.
+fn listed(
+    mut rows: Vec<Value>,
+    collation: &LocaleCollation,
+    reason: Option<&str>,
+    keep: impl Fn(&Value) -> bool,
+) -> Vec<Value> {
+    rows.retain(|record| keep(record));
+    sort_records(&mut rows, collation);
+    rows.into_iter()
+        .map(|record| record::reference(&record, reason))
+        .collect()
+}
+
+/// The record of every index issue with `code`, with the issue message as
+/// its reason.
+fn issue_records(index: &Value, code: &str) -> Vec<Value> {
+    let issues = index
         .get("issues")
         .and_then(Value::as_array)
         .map(Vec::as_slice)
         .unwrap_or(&[]);
-    let selected = match kind {
-        "next-actions" => {
-            rows.retain(|record| {
-                matches!(text(record, "kind"), "work" | "task")
-                    && matches!(
-                        text(record, "status"),
-                        "proposed" | "scoped" | "specified" | "in_progress" | "todo"
-                    )
-            });
-            sort_records(&mut rows, collation);
-            rows.into_iter()
-                .map(|record| record::reference(&record, Some("active_next_action")))
-                .collect()
-        }
-        "blocked" | "review" => {
-            rows.retain(|record| text(record, "status") == kind);
-            sort_records(&mut rows, collation);
-            let reason = if kind == "blocked" {
-                "blocked"
-            } else {
-                "review_ready"
-            };
-            rows.into_iter()
-                .map(|record| record::reference(&record, Some(reason)))
-                .collect()
-        }
-        "missing-spec" | "completion-gaps" => {
-            let code = if kind == "missing-spec" {
-                "missing_spec"
-            } else {
-                "completion_gate"
-            };
-            issue_rows
-                .iter()
-                .filter(|issue| text(issue, "code") == code)
-                .filter_map(|issue| {
-                    issue
-                        .get("record")
-                        .filter(|record| !record.is_null())
-                        .map(|record| {
-                            let mut row = record.clone();
-                            row["reason"] = issue.get("message").cloned().unwrap_or(Value::Null);
-                            row
-                        })
-                })
-                .collect()
-        }
-        "stale-view" => index
-            .get("views")
-            .and_then(Value::as_array)
-            .map(Vec::as_slice)
-            .unwrap_or(&[])
-            .iter()
-            .filter(|view| view.get("stale").and_then(Value::as_bool) == Some(true))
-            .map(|view| {
-                let name = text(view, "name");
-                let exists = view.get("exists").and_then(Value::as_bool) == Some(true);
-                json!({"id":name,"kind":"view","title":format!("{name} view"),
-                    "status":if exists {"stale"} else {"missing"},"path":view.get("path"),
-                    "reason":if exists {"generated_view_stale"} else {"generated_view_missing"}})
-            })
-            .collect(),
-        "stale-index" => {
-            let observed = index.get("index").unwrap_or(&Value::Null);
-            if observed.get("stale").and_then(Value::as_bool) == Some(true) {
-                let available = observed.get("available").and_then(Value::as_bool) == Some(true);
-                vec![
-                    json!({"id":"project-index","kind":"index","title":"Project Ledger compact index",
-                    "status":if available {"stale"} else {"missing"},
-                    "path":observed.get("path").cloned().unwrap_or_else(||json!("index/project.json")),
-                    "reason":if available {"compact_index_stale"} else {"compact_index_missing"}}),
-                ]
-            } else {
-                Vec::new()
-            }
-        }
-        "decision-without-implementation" | "risk-without-mitigation" | "recent-completed" => {
-            rows.retain(|record| match kind {
-                "decision-without-implementation" => {
-                    text(record, "kind") == "decision" && !truthy(record.get("implementation"))
-                }
-                "risk-without-mitigation" => {
-                    text(record, "kind") == "risk"
-                        && text(record, "status") != "closed"
-                        && !truthy(record.get("mitigation"))
-                }
-                _ => text(record, "status") == "done",
-            });
-            sort_records(&mut rows, collation);
-            let reason = match kind {
-                "decision-without-implementation" => "decision_without_implementation",
-                "risk-without-mitigation" => "risk_without_mitigation",
-                _ => "recent_completed",
-            };
-            rows.into_iter()
-                .map(|record| record::reference(&record, Some(reason)))
-                .collect()
-        }
-        _ => {
-            let status = option_string(options, "status")
-                .map(butler_core::public_text::trim_js_whitespace)
-                .filter(|value| !value.is_empty());
-            rows.retain(|record| {
-                (kind == "all" || text(record, "kind") == kind)
-                    && status.is_none_or(|status| text(record, "status") == status)
-            });
-            sort_records(&mut rows, collation);
-            rows.into_iter()
-                .map(|record| record::reference(&record, None))
-                .collect()
-        }
-    };
-    Ok(Value::Array(selected))
+    issues
+        .iter()
+        .filter(|issue| text(issue, "code") == code)
+        .filter_map(|issue| {
+            let record = issue.get("record").filter(|record| !record.is_null())?;
+            let mut row = record.clone();
+            crate::project_ledger::work_json::set_field(
+                &mut row,
+                "reason",
+                issue.get("message").cloned().unwrap_or(Value::Null),
+            );
+            Some(row)
+        })
+        .collect()
+}
+
+fn stale_views(index: &Value) -> Vec<Value> {
+    index
+        .get("views")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+        .iter()
+        .filter(|view| view.get("stale").and_then(Value::as_bool) == Some(true))
+        .map(|view| {
+            let name = text(view, "name");
+            let exists = view.get("exists").and_then(Value::as_bool) == Some(true);
+            json!({"id":name,"kind":"view","title":format!("{name} view"),
+                "status":if exists {"stale"} else {"missing"},"path":view.get("path"),
+                "reason":if exists {"generated_view_stale"} else {"generated_view_missing"}})
+        })
+        .collect()
+}
+
+fn stale_index(index: &Value) -> Vec<Value> {
+    let observed = index.get("index").unwrap_or(&Value::Null);
+    if observed.get("stale").and_then(Value::as_bool) != Some(true) {
+        return Vec::new();
+    }
+    let available = observed.get("available").and_then(Value::as_bool) == Some(true);
+    vec![
+        json!({"id":"project-index","kind":"index","title":"Project Ledger compact index",
+        "status":if available {"stale"} else {"missing"},
+        "path":observed.get("path").cloned().unwrap_or_else(||json!("index/project.json")),
+        "reason":if available {"compact_index_stale"} else {"compact_index_missing"}}),
+    ]
 }
 
 pub(super) fn sort_records(rows: &mut [Value], collation: &LocaleCollation) {

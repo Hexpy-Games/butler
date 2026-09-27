@@ -137,14 +137,18 @@ pub(super) fn input(value: &Value, workspace: &Path) -> EffectResult<Value> {
         let overwrite = overwrite
             .as_bool()
             .ok_or_else(|| invalid("write_file effect overwrite must be a boolean"))?;
-        normalized["overwrite"] = Value::Bool(overwrite);
+        butler_core::json::object_mut(&mut normalized)
+            .insert("overwrite".into(), Value::Bool(overwrite));
     }
     if let Some(expected) = record.get("expected_sha256") {
         let expected = expected
             .as_str()
             .filter(|value| value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()))
             .ok_or_else(|| invalid("write_file effect expected_sha256 must be a SHA-256 digest"))?;
-        normalized["expected_sha256"] = Value::String(expected.to_ascii_lowercase());
+        butler_core::json::object_mut(&mut normalized).insert(
+            "expected_sha256".into(),
+            Value::String(expected.to_ascii_lowercase()),
+        );
     }
     Ok(normalized)
 }

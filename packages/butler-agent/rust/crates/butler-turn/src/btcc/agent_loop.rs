@@ -2,9 +2,11 @@
 
 mod completion;
 mod continuation;
+/// Model-round, tool and continuation contracts of the loop.
 pub mod contracts;
 mod driver;
 mod guided_policy;
+/// The ports a guided turn is composed of.
 pub mod guided_ports;
 mod guided_types;
 mod model_round;
@@ -55,14 +57,16 @@ pub use contracts::{
     AcceptedCheckpoint, AuthorityDecision, BatchDisposition, BoundedContinuationEnvelope,
     BoundedEnvelopeV1, CandidateDisposition, ContextMessages, ContextProjection,
     ContextProjectionInput, ContextProjectionRebaseIdentity, ContextProjectionRebaseV1,
-    ModelRoundMessage, ModelRoundRequest, ModelRoundResult, ModelRoundRole, ModelRoundTool,
-    ModelRoundToolCall, ProviderIdentity, RollingContextV1, SteeringObservation,
-    TextCallDisposition, ToolCallOrigin, ToolChoice, ToolOutcome, ToolResult, UsageAttribution,
+    ContextRebase, LoopPhase, ModelRoundMessage, ModelRoundRequest, ModelRoundResult,
+    ModelRoundRole, ModelRoundTool, ModelRoundToolCall, ProviderIdentity, RollingContextV1,
+    SteeringObservation, TextCallDisposition, ToolCallOrigin, ToolChoice, ToolOutcome, ToolResult,
+    ToolSurface, UsageAttribution,
 };
 pub use guided_ports::{
-    AuthorityPort, ContextPort, GuidedInvocation, GuidedPolicyDependencies, JournalCloseout,
-    JournalPort, PromptPort, RenderedGuidedPrompt, ToolPort, TurnContextProjection,
-    TurnSteeringPort, WorkFinalState, WorkPort,
+    AuthorityPort, ContextPort, FinalSynthesis, GuidedInvocation, GuidedPolicyDependencies,
+    JournalCloseout, JournalPort, PromptImages, PromptPort, RenderedGuidedPrompt,
+    RoundRequestOptions, ToolPort, TurnContextProjection, TurnSteeringPort, WorkFinalState,
+    WorkPort,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub use operation_result_replay::OperationResultReference;
@@ -85,6 +89,7 @@ pub use ports::{
 
 use driver::run;
 
+/// The agent loop used in production: binds a guided turn, routes its model and runs the loop.
 pub struct ProductionAgentLoop {
     model: Arc<dyn ModelRoundPort>,
     execution_factory: Arc<dyn crate::btcc::model_route::ModelExecutionFactory>,
@@ -93,6 +98,7 @@ pub struct ProductionAgentLoop {
 }
 
 impl ProductionAgentLoop {
+    /// A loop over the model port, route execution factory and guided turn factory.
     pub fn native(
         model: Arc<dyn ModelRoundPort>,
         execution_factory: Arc<dyn crate::btcc::model_route::ModelExecutionFactory>,

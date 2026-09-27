@@ -3,62 +3,41 @@ use std::collections::HashMap;
 use serde_json::Value;
 
 use super::records::issue;
+use crate::project_ledger::status::Lifecycle;
 
+/// The index issues one record raises: generic ids, invalid lifecycle
+/// states, orphan tasks, active Work without a spec, and completed Work
+/// missing evidence.
 pub(super) fn validate(record: &Value, by_id: &HashMap<&str, &Value>) -> Vec<Value> {
     let id = text(record, "id");
     let kind = text(record, "kind");
     let status = text(record, "status");
     let path = text(record, "path");
     let mut issues = Vec::new();
+    let mut raise = |code: &str, severity: &str, message: &str| {
+        issues.push(issue(code, severity, message, path, Some(record)));
+    };
     if id.is_empty() || matches!(id, "work" | "project") {
-        issues.push(issue(
+        raise(
             "invalid_schema",
             "error",
             "Record id is missing or too generic",
-            path,
-            Some(record),
-        ));
+        );
     }
-    let valid_states: &[&str] = match kind {
-        "work" => &[
-            "proposed",
-            "scoped",
-            "specified",
-            "in_progress",
-            "review",
-            "done",
-            "blocked",
-            "cancelled",
-        ],
-        "task" => &[
-            "todo",
-            "in_progress",
-            "done",
-            "blocked",
-            "failed",
-            "cancelled",
-        ],
-        "attempt" => &["started", "succeeded", "failed", "interrupted"],
-        _ => &[],
-    };
-    if !valid_states.is_empty() && !valid_states.contains(&status) {
-        issues.push(issue(
+    if Lifecycle::parse(kind).is_some_and(|lifecycle| lifecycle.status(status).is_none()) {
+        raise(
             "invalid_state",
             "error",
             &format!("Invalid {kind} state: {status}"),
-            path,
-            Some(record),
-        ));
+        );
     }
     let parent = text(record, "parentId");
     if kind == "task" && !parent.is_empty() && !by_id.contains_key(parent) {
-        issues.push(issue(
+        raise(
             "orphan_task",
             "error",
             &format!("Task parent does not exist: {parent}"),
-            path,
-            Some(record),
-        ));
+        );
     }
     if kind == "work"
         && !matches!(status, "done" | "cancelled")
@@ -68,44 +47,46 @@ pub(super) fn validate(record: &Value, by_id: &HashMap<&str, &Value>) -> Vec<Val
             .and_then(Value::as_bool)
             .unwrap_or(false)
     {
-        issues.push(issue(
+        raise(
             "missing_spec",
             "warning",
             "Active work has no linked spec or spec exemption",
-            path,
-            Some(record),
-        ));
+        );
     }
     if kind == "work" && status == "done" {
-        for (field, available) in [
-            (
-                "spec",
-                !text(record, "spec").is_empty() || truthy(record, "specExemption"),
-            ),
-            (
-                "acceptance",
-                !text(record, "acceptance").is_empty() || truthy(record, "acceptanceExemption"),
-            ),
-            ("validation", !text(record, "validation").is_empty()),
-            ("review", !text(record, "review").is_empty()),
-            ("report", !text(record, "report").is_empty()),
-            (
-                "codeCommits",
-                !truthy(record, "requiresCommitEvidence") || code_commit_evidence(record),
-            ),
-        ] {
-            if !available {
-                issues.push(issue(
-                    "completion_gate",
-                    "error",
-                    &format!("Completed work is missing {field} evidence"),
-                    path,
-                    Some(record),
-                ));
-            }
+        for field in missing_evidence(record) {
+            raise(
+                "completion_gate",
+                "error",
+                &format!("Completed work is missing {field} evidence"),
+            );
         }
     }
     issues
+}
+
+/// The evidence fields completed Work lacks, in gate order.
+fn missing_evidence(record: &Value) -> Vec<&'static str> {
+    [
+        (
+            "spec",
+            !text(record, "spec").is_empty() || truthy(record, "specExemption"),
+        ),
+        (
+            "acceptance",
+            !text(record, "acceptance").is_empty() || truthy(record, "acceptanceExemption"),
+        ),
+        ("validation", !text(record, "validation").is_empty()),
+        ("review", !text(record, "review").is_empty()),
+        ("report", !text(record, "report").is_empty()),
+        (
+            "codeCommits",
+            !truthy(record, "requiresCommitEvidence") || code_commit_evidence(record),
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(field, available)| (!available).then_some(field))
+    .collect()
 }
 
 fn text<'a>(record: &'a Value, field: &str) -> &'a str {

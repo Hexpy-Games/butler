@@ -17,12 +17,16 @@ use butler_turn::btcc::{ProjectWorkOperationIdentity, ResolvedProjectWorkScope};
 pub(crate) use contracts::{ProjectLedgerRecordKind, ProjectLedgerRecordOperation};
 pub use contracts::{
     ProjectLedgerRecordUpdate, ProjectWorkPublicationError, ProjectWorkPublicationOutcome,
+    ProjectWorkTarget, ProjectWorkTargetState, RecordEvidence, RecordSections,
 };
 pub use generic::{LedgerEffectError, LedgerEffectReconciliation, LedgerEffectRequest};
 pub(super) use init::with_mutation_claim;
 
 pub(super) use generic::{apply as apply_record_effect, reconcile as reconcile_record_effect};
 
+/// Publishes one Project Work operation exactly once. An operation with an
+/// occurrence already on disk is reconciled and resumed; a new one prepares
+/// its updates, is admitted, and applied.
 pub(super) async fn publish<F, Fut>(
     data_root: std::path::PathBuf,
     fs_permits: Arc<Semaphore>,
@@ -54,90 +58,130 @@ where
         }
     })
     .await?;
-    if let Some(existing) = existing {
-        let state = fs_phase(Arc::clone(&fs_permits), {
-            let data_root = data_root.clone();
+    let publisher = Publisher {
+        data_root,
+        fs_permits,
+        collation,
+        scope,
+        identity,
+    };
+    match existing {
+        Some(existing) => publisher.resume(existing, prepare_updates).await,
+        None => publisher.admit(prepare_updates).await,
+    }
+}
+
+/// One operation's publication on the Ledger's filesystem lane.
+struct Publisher {
+    data_root: std::path::PathBuf,
+    fs_permits: Arc<Semaphore>,
+    collation: Arc<butler_core::locale::LocaleCollation>,
+    scope: ResolvedProjectWorkScope,
+    identity: ProjectWorkOperationIdentity,
+}
+
+impl Publisher {
+    /// An operation seen before: replay what was applied, finish what was
+    /// admitted, or append a new attempt when the earlier one provably did
+    /// not apply.
+    async fn resume<F, Fut>(
+        self,
+        existing: occurrence::Occurrence,
+        prepare_updates: F,
+    ) -> Result<ProjectWorkPublicationOutcome, ProjectWorkPublicationError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<
+            Output = Result<Option<Vec<ProjectLedgerRecordUpdate>>, ProjectWorkPublicationError>,
+        >,
+    {
+        let state = fs_phase(Arc::clone(&self.fs_permits), {
+            let data_root = self.data_root.clone();
             let existing = existing.clone();
             move || transaction::reconcile(&data_root, &existing)
         })
         .await?;
-        match state {
-            transaction::Reconciled::Applied(targets) => {
-                return Ok(ProjectWorkPublicationOutcome {
-                    replayed: true,
-                    skipped: false,
-                    targets,
-                });
-            }
+        let targets = match state {
+            transaction::Reconciled::Applied(targets) => targets,
             transaction::Reconciled::Ready => {
-                let targets = fs_phase(Arc::clone(&fs_permits), {
-                    let data_root = data_root.clone();
-                    let scope = scope.clone();
-                    let collation = Arc::clone(&collation);
-                    move || transaction::apply(&data_root, &scope, &existing, None, &collation)
+                let Self {
+                    data_root,
+                    fs_permits,
+                    collation,
+                    scope,
+                    ..
+                } = self;
+                fs_phase(fs_permits, move || {
+                    transaction::apply(&data_root, &scope, &existing, None, &collation)
                 })
-                .await?;
-                return Ok(ProjectWorkPublicationOutcome {
-                    replayed: true,
-                    skipped: false,
-                    targets,
-                });
+                .await?
             }
             transaction::Reconciled::NotAppliedWithReceipt => {
                 let updates = required_updates(prepare_updates().await?)?;
                 let Some(updates) = updates else {
                     return Ok(ProjectWorkPublicationOutcome::skipped());
                 };
-                let targets = fs_phase(Arc::clone(&fs_permits), {
-                    let data_root = data_root.clone();
-                    let scope = scope.clone();
-                    let identity = identity.clone();
-                    let collation = Arc::clone(&collation);
-                    move || {
-                        let attempt = occurrence::append(
-                            &data_root, &scope, &identity, &existing, &updates, &collation,
-                        )?;
-                        let targets = transaction::apply(
-                            &data_root,
-                            &scope,
-                            &attempt,
-                            Some(&updates),
-                            &collation,
-                        )?;
-                        Ok(targets)
-                    }
-                })
-                .await?;
-                return Ok(ProjectWorkPublicationOutcome {
-                    replayed: false,
-                    skipped: false,
-                    targets,
-                });
+                return self.apply(Some(existing), updates).await;
             }
             transaction::Reconciled::NotApplied => {
                 return Err(ProjectWorkPublicationError::NotApplied);
             }
-        }
+        };
+        Ok(ProjectWorkPublicationOutcome {
+            replayed: true,
+            skipped: false,
+            targets,
+        })
     }
-    let updates = required_updates(prepare_updates().await?)?;
-    let Some(updates) = updates else {
-        return Ok(ProjectWorkPublicationOutcome::skipped());
-    };
-    let targets = fs_phase(fs_permits, {
-        let collation = Arc::clone(&collation);
-        move || {
-            let attempt = occurrence::admit(&data_root, &scope, &identity, &updates, &collation)?;
-            let targets =
-                transaction::apply(&data_root, &scope, &attempt, Some(&updates), &collation)?;
-            Ok(targets)
-        }
-    })
-    .await?;
-    Ok(ProjectWorkPublicationOutcome {
-        replayed: false,
-        skipped: false,
-        targets,
-    })
+
+    /// A new operation: prepare its updates, admit and apply them.
+    async fn admit<F, Fut>(
+        self,
+        prepare_updates: F,
+    ) -> Result<ProjectWorkPublicationOutcome, ProjectWorkPublicationError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<
+            Output = Result<Option<Vec<ProjectLedgerRecordUpdate>>, ProjectWorkPublicationError>,
+        >,
+    {
+        let updates = required_updates(prepare_updates().await?)?;
+        let Some(updates) = updates else {
+            return Ok(ProjectWorkPublicationOutcome::skipped());
+        };
+        self.apply(None, updates).await
+    }
+
+    /// Admits `updates` as the first attempt, or appends them after the
+    /// previous occurrence, then applies them.
+    async fn apply(
+        self,
+        previous: Option<occurrence::Occurrence>,
+        updates: Vec<ProjectLedgerRecordUpdate>,
+    ) -> Result<ProjectWorkPublicationOutcome, ProjectWorkPublicationError> {
+        let Self {
+            data_root,
+            fs_permits,
+            collation,
+            scope,
+            identity,
+        } = self;
+        let targets = fs_phase(fs_permits, move || {
+            let attempt = match &previous {
+                Some(previous) => occurrence::append(
+                    &data_root, &scope, &identity, previous, &updates, &collation,
+                )?,
+                None => occurrence::admit(&data_root, &scope, &identity, &updates, &collation)?,
+            };
+            transaction::apply(&data_root, &scope, &attempt, Some(&updates), &collation)
+        })
+        .await?;
+        Ok(ProjectWorkPublicationOutcome {
+            replayed: false,
+            skipped: false,
+            targets,
+        })
+    }
 }
 
 pub(super) async fn ensure(

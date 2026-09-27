@@ -90,7 +90,7 @@ fn protect_program_files(
             crate::workspace::path_guard::lexical_absolute(home).map_err(CommandError::io)?;
         let real = lexical.canonicalize().unwrap_or_else(|_| lexical.clone());
         let mut roots = vec![lexical];
-        if roots[0] != real {
+        if roots.first() != Some(&real) {
             roots.push(real);
         }
         let mut clauses = Vec::with_capacity(roots.len());

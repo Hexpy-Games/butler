@@ -145,21 +145,28 @@ async fn model_journal_abandons_restarted_attempt_and_budget_terminal_commits() 
     };
     let event = crate::btcc::ModelRouteEventWrite {
         binding: binding.clone(),
-        event: json!({"type":"model.attempt.started","roundId":"round-1","candidateIndex":0,"transportAttempt":1,"modelRef":"openai/gpt"}),
+        event: crate::btcc::ModelRouteEvent {
+            kind: crate::btcc::ModelRouteEventKind::AttemptStarted,
+            round_id: "round-1".into(),
+            candidate_index: 0,
+            model_ref: "openai/gpt".into(),
+            transport_attempt: Some(1),
+            failure: None,
+        },
     };
     assert_eq!(
         repositories
             .record_model_route_event(event.clone())
             .await
             .expect("record start"),
-        Some(json!({"status":"recorded"}))
+        crate::btcc::RouteEventStatus::Recorded
     );
     assert_eq!(
         repositories
             .record_model_route_event(event)
             .await
             .expect("replay start"),
-        Some(json!({"status":"abandoned_after_restart"}))
+        crate::btcc::RouteEventStatus::AbandonedAfterRestart
     );
     let checkpoint = turn.checkpoint.as_ref().expect("checkpoint");
     let key = crate::btcc::ModelRoundKey {
@@ -175,8 +182,8 @@ async fn model_journal_abandons_restarted_attempt_and_budget_terminal_commits() 
         .load_model_route_attempt_history(key.clone())
         .await
         .expect("load model route history");
-    assert_eq!(history["started"], json!([1]));
-    assert_eq!(history["abandoned"], json!([1]));
+    assert_eq!(history.started, [1]);
+    assert_eq!(history.abandoned, [1]);
     repositories.record_model_round_acceptance(crate::btcc::ModelRoundAcceptanceWrite {
         binding: binding.clone(), key: key.clone(), transport_attempt: 2,
         result: json!({"toolCalls":[],"assistantMessage":{"role":"assistant","content":"ok",

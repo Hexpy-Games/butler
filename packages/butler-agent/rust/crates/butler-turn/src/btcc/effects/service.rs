@@ -3,12 +3,14 @@ use std::sync::Arc;
 use super::contracts::*;
 use super::{blockers, execution, identity, outcomes};
 
+/// Executes guided effects exactly once through the effect journal.
 pub struct EffectService {
     journal: Arc<dyn EffectJournal>,
     clock: Arc<dyn Fn() -> String + Send + Sync>,
     fault: Arc<dyn EffectFaultHook>,
 }
 impl EffectService {
+    /// A service over the journal and clock.
     pub fn new(
         journal: Arc<dyn EffectJournal>,
         clock: Arc<dyn Fn() -> String + Send + Sync>,
@@ -29,6 +31,7 @@ impl EffectService {
             fault,
         }
     }
+    /// Executes (or replays) one effect: prepare, reconcile legacy blockers, dispatch, record.
     pub async fn execute(&self, input: ExecuteEffect) -> EffectResult<EffectOutcome> {
         if let Some(denied) = outcomes::permission(&input) {
             if input.signal.is_cancelled()

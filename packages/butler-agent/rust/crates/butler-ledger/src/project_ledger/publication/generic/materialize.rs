@@ -55,11 +55,12 @@ fn validate_events(path: &Path) -> Result<(), LedgerEffectError> {
         }
         let mut start = 0;
         while start < size {
-            let end = buffer[start..size]
+            let pending = buffer.get(start..size).unwrap_or_default();
+            let end = pending
                 .iter()
                 .position(|byte| *byte == b'\n')
                 .map(|at| start + at);
-            let part = &buffer[start..end.unwrap_or(size)];
+            let part = buffer.get(start..end.unwrap_or(size)).unwrap_or_default();
             if part.len() > MAX_EVENT_LINE_BYTES.saturating_sub(line.len()) {
                 return Err(LedgerEffectError::Uncertain { source: None });
             }

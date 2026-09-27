@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+/// The stage durable Work is in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkStage {
@@ -12,6 +13,7 @@ pub enum WorkStage {
     Reporting,
 }
 
+/// The lifecycle state of durable Work.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkStatus {
@@ -21,6 +23,7 @@ pub enum WorkStatus {
     Abandoned,
 }
 
+/// The progress state of one plan action.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ActionStatus {
@@ -31,6 +34,7 @@ pub enum ActionStatus {
     Skipped,
 }
 
+/// Who executes a plan: the turn itself, a steward, or workers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionMode {
@@ -39,6 +43,7 @@ pub enum ExecutionMode {
     Workers,
 }
 
+/// One action of a Work plan with its dependencies and optional effect.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlanAction {
@@ -61,6 +66,7 @@ fn present_effect<'de, D: serde::Deserializer<'de>>(
     Value::deserialize(deserializer).map(Some)
 }
 
+/// The progress of one plan action.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActionProgress {
@@ -70,6 +76,7 @@ pub struct ActionProgress {
     pub note: Option<String>,
 }
 
+/// A revision of a Work's plan.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkPlan {
@@ -102,6 +109,7 @@ pub struct ToolResultRef {
     pub attached_at: String,
 }
 
+/// A progress checkpoint of a Work against its plan.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Checkpoint {
@@ -117,6 +125,7 @@ pub struct Checkpoint {
     pub created_at: String,
 }
 
+/// What a review judges: the plan, a result, or completion.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReviewSubject {
@@ -125,6 +134,7 @@ pub enum ReviewSubject {
     Completion,
 }
 
+/// A review's verdict.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReviewVerdict {
@@ -133,6 +143,7 @@ pub enum ReviewVerdict {
     Partial,
 }
 
+/// A review revision bound to the plan, results and progress it judged.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkReview {
@@ -153,6 +164,7 @@ pub struct WorkReview {
     pub created_at: String,
 }
 
+/// The status a disposition leaves the Work in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DispositionStatus {
@@ -161,6 +173,7 @@ pub enum DispositionStatus {
     Blocked,
 }
 
+/// An action status change recorded with a disposition.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DispositionActionUpdate {
@@ -170,6 +183,7 @@ pub struct DispositionActionUpdate {
     pub note: Option<String>,
 }
 
+/// A disposition revision with the material fingerprint it was decided on.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkDisposition {
@@ -202,6 +216,7 @@ pub struct EffectBlocker {
     pub created_at: String,
 }
 
+/// Whether Work belongs to a session or a project.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum WorkScope {
@@ -215,6 +230,7 @@ pub enum WorkScope {
     },
 }
 
+/// The turn and message that started a Work.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkOrigin {
@@ -222,6 +238,7 @@ pub struct WorkOrigin {
     pub message_id: String,
 }
 
+/// The current state of a Work: plan, progress, reviews, disposition and results.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkView {
@@ -277,6 +294,7 @@ pub struct OriginalRequest {
     pub content: String,
 }
 
+/// A Work with its original request and attached result facts.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkContext {
@@ -285,6 +303,7 @@ pub struct WorkContext {
     pub result_facts: Vec<WorkResultFact>,
 }
 
+/// The outcome of importing open legacy Work.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LegacyImport {

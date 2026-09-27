@@ -235,8 +235,8 @@ async fn absent_round_ids_use_execution_local_sequence_without_collapsing_empty(
         .lock()
         .unwrap()
         .iter()
-        .filter(|event| event["type"] == "model.attempt.started")
-        .map(|event| event["roundId"].as_str().unwrap().to_owned())
+        .filter(|event| event.kind == crate::btcc::ModelRouteEventKind::AttemptStarted)
+        .map(|event| event.round_id.clone())
         .collect::<Vec<_>>();
     assert_eq!(rounds, ["turn:round:0", ""]);
 }
@@ -248,7 +248,10 @@ async fn restart_abandons_open_slot_before_dispatch() {
         .histories
         .lock()
         .unwrap()
-        .push_back(json!({"started":[1],"failed":[],"succeeded":[],"abandoned":[]}));
+        .push_back(crate::btcc::AttemptHistory {
+            started: vec![1],
+            ..Default::default()
+        });
     let base = Base::new([Ok(result("recovered"))]);
     let turn = turn(route(0, 2));
     let claim = claim();
@@ -268,7 +271,7 @@ async fn restart_abandons_open_slot_before_dispatch() {
         .lock()
         .unwrap()
         .iter()
-        .map(|v| v["type"].as_str().unwrap().to_owned())
+        .map(|v| v.kind.as_str().to_owned())
         .collect::<Vec<_>>();
     assert_eq!(
         &kinds[..2],

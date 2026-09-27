@@ -11,6 +11,9 @@ use crate::btcc::turn::{
     TurnTransition,
 };
 
+mod records;
+use records::*;
+
 pub(super) fn commit(
     connection: &mut Connection,
     turn: &TurnVersion,
@@ -130,55 +133,7 @@ fn suspend(
         ));
     }
     if reason == SuspensionReason::AuthorityPending {
-        let continuation = continuation.ok_or_else(|| {
-            error(
-                StorageCode::AuthorityContinuationMissing,
-                "authority_continuation_missing",
-            )
-        })?;
-        let request_ref = continuation
-            .get("requestRef")
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                error(
-                    StorageCode::AuthorityContinuationInvalid,
-                    "authority requestRef missing",
-                )
-            })?;
-        let call_id = continuation
-            .get("callId")
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                error(
-                    StorageCode::AuthorityContinuationInvalid,
-                    "authority callId missing",
-                )
-            })?;
-        let bound = connection
-            .execute(
-                "UPDATE btcc_authority_requests SET source_call_id = ?1 WHERE request_ref = ?2 \
-             AND source_turn_id = ?3 AND decision = 'pending' AND close_reason IS NULL \
-             AND (source_call_id IS NULL OR source_call_id = ?1)",
-                params![call_id, request_ref, turn.turn_id],
-            )
-            .map_err(StorageError::sqlite)?;
-        if bound != 1 {
-            return Err(error(
-                StorageCode::AuthoritySourceCallMismatch,
-                "authority_source_call_mismatch",
-            ));
-        }
-        let pending = connection.execute(
-            "UPDATE btcc_guided_tool_calls SET status = 'awaiting_authority' WHERE call_id = ?1 \
-             AND turn_id = ?2 AND status IN ('started','awaiting_authority')",
-            params![call_id, turn.turn_id],
-        ).map_err(StorageError::sqlite)?;
-        if pending != 1 {
-            return Err(error(
-                StorageCode::AuthoritySourceCallNotPending,
-                "authority_source_call_not_pending",
-            ));
-        }
+        park_authority_call(connection, turn, continuation)?;
     }
     let continuation_json = continuation.map(stringify).transpose()?;
     let changed = connection
@@ -207,6 +162,57 @@ fn suspend(
         return Err(error(
             StorageCode::TransitionContention,
             "BTCC suspension commit lost Turn CAS",
+        ));
+    }
+    Ok(())
+}
+
+/// Binds the pending authority request to the continuation's source call
+/// and parks that call as awaiting authority.
+fn park_authority_call(
+    connection: &Connection,
+    turn: &TurnVersion,
+    continuation: Option<&Value>,
+) -> StorageResult<()> {
+    let continuation = continuation.ok_or_else(|| {
+        error(
+            StorageCode::AuthorityContinuationMissing,
+            "authority_continuation_missing",
+        )
+    })?;
+    let field = |name: &str, message: &str| {
+        continuation
+            .get(name)
+            .and_then(Value::as_str)
+            .ok_or_else(|| error(StorageCode::AuthorityContinuationInvalid, message))
+    };
+    let request_ref = field("requestRef", "authority requestRef missing")?;
+    let call_id = field("callId", "authority callId missing")?;
+    let bound = connection
+        .execute(
+            "UPDATE btcc_authority_requests SET source_call_id = ?1 WHERE request_ref = ?2 \
+         AND source_turn_id = ?3 AND decision = 'pending' AND close_reason IS NULL \
+         AND (source_call_id IS NULL OR source_call_id = ?1)",
+            params![call_id, request_ref, turn.turn_id],
+        )
+        .map_err(StorageError::sqlite)?;
+    if bound != 1 {
+        return Err(error(
+            StorageCode::AuthoritySourceCallMismatch,
+            "authority_source_call_mismatch",
+        ));
+    }
+    let pending = connection
+        .execute(
+            "UPDATE btcc_guided_tool_calls SET status = 'awaiting_authority' WHERE call_id = ?1 \
+         AND turn_id = ?2 AND status IN ('started','awaiting_authority')",
+            params![call_id, turn.turn_id],
+        )
+        .map_err(StorageError::sqlite)?;
+    if pending != 1 {
+        return Err(error(
+            StorageCode::AuthoritySourceCallNotPending,
+            "authority_source_call_not_pending",
         ));
     }
     Ok(())
@@ -433,66 +439,6 @@ fn consume_claim(connection: &Connection, claim: &StateExecutionClaim) -> Storag
         return Err(error(
             StorageCode::TransitionCheckpointInactive,
             "BTCC R3 transition checkpoint was not actively claimed",
-        ));
-    }
-    Ok(())
-}
-
-fn checkpoint_for(turn_id: &str, revision: u64, state: TurnSemanticState) -> TurnCheckpoint {
-    TurnCheckpoint {
-        checkpoint_id: digest(&format!(
-            "btcc-checkpoint.v1\0{turn_id}\0{revision}\0{}",
-            state_text(state)
-        )),
-        checkpoint_revision: 1,
-        semantic_state: state,
-    }
-}
-
-fn insert_checkpoint(
-    connection: &Connection,
-    turn_id: &str,
-    revision: u64,
-    checkpoint: &TurnCheckpoint,
-) -> StorageResult<()> {
-    connection.execute("INSERT INTO btcc_checkpoints (checkpoint_id, turn_id, turn_revision, \
-        semantic_state, kind, checkpoint_revision, is_active) VALUES (?1, ?2, ?3, ?4, 'runtime', ?5, 1)",
-        params![checkpoint.checkpoint_id, turn_id, revision, state_text(checkpoint.semantic_state),
-            checkpoint.checkpoint_revision]).map_err(StorageError::sqlite)?;
-    Ok(())
-}
-
-fn insert_immutable_record(
-    connection: &Connection,
-    id: &str,
-    kind: &str,
-    sha: &str,
-    content: &str,
-) -> StorageResult<()> {
-    connection
-        .execute(
-            "INSERT OR IGNORE INTO btcc_records (record_id, kind, sha256, content_json) \
-        VALUES (?1, ?2, ?3, ?4)",
-            params![id, kind, sha, content],
-        )
-        .map_err(StorageError::sqlite)?;
-    let stored = connection
-        .query_row(
-            "SELECT kind, sha256, content_json FROM btcc_records WHERE record_id=?1",
-            [id],
-            |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                ))
-            },
-        )
-        .map_err(StorageError::sqlite)?;
-    if stored != (kind.to_owned(), sha.to_owned(), content.to_owned()) {
-        return Err(error(
-            StorageCode::ImmutableRecordConflict,
-            format!("Immutable BTCC record conflict: {id}"),
         ));
     }
     Ok(())

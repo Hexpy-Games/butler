@@ -22,6 +22,7 @@ use crate::btcc::{BtccError, PortFuture};
 
 use super::{BtccStorage, StorageError, StorageResult};
 
+/// The SQLite project Work runtime: projection, results and legacy import.
 #[derive(Clone)]
 pub struct SqliteProjectWorkRuntime {
     storage: BtccStorage,
@@ -30,6 +31,7 @@ pub struct SqliteProjectWorkRuntime {
 }
 
 impl SqliteProjectWorkRuntime {
+    /// A runtime over the store, clock and legacy R2 source.
     pub fn new(
         storage: BtccStorage,
         clock: Arc<dyn Fn() -> String + Send + Sync>,

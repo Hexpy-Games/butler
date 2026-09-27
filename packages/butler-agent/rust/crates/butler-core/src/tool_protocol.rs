@@ -21,7 +21,9 @@ pub(crate) struct ParsedToolCatalogId<'a> {
     pub name: Cow<'a, str>,
 }
 
+/// The tool a guided call actually targets once `tool_call` wrappers are unwrapped.
 pub struct NormalizedGuidedToolCall<'a> {
+    /// The effective tool name.
     pub name: Cow<'a, str>,
 }
 
@@ -49,6 +51,8 @@ pub(crate) fn parse_tool_catalog_id(id: &str) -> Option<ParsedToolCatalogId<'_>>
     })
 }
 
+/// Resolves a `tool_call` wrapper (or a call naming its own catalog id) to
+/// the native tool it invokes; other calls keep their name.
 pub fn normalize_guided_tool_call<'a>(
     tool_name: &'a str,
     args: &'a Map<String, Value>,
@@ -78,8 +82,8 @@ fn decode_segment(value: &str) -> Cow<'_, str> {
         return Cow::Borrowed(value);
     };
     let mut decoded = Vec::with_capacity(value.len());
-    decoded.extend_from_slice(&value.as_bytes()[..first_escape]);
-    let mut remaining = &value.as_bytes()[first_escape..];
+    let (head, mut remaining) = value.as_bytes().split_at(first_escape);
+    decoded.extend_from_slice(head);
     while let Some((&byte, tail)) = remaining.split_first() {
         if byte != b'%' {
             decoded.push(byte);

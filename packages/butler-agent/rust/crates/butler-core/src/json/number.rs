@@ -4,6 +4,8 @@
 use super::JsonError;
 use serde_json::Value;
 
+/// ECMAScript `Number(value)` for a JSON value; objects that do not convert
+/// to a primitive are errors.
 pub fn coerce_number(value: &Value) -> Result<f64, JsonError> {
     validate_primitive_conversion(value)?;
     Ok(match value {
@@ -59,6 +61,8 @@ fn array_number(mut values: &[Value]) -> f64 {
     }
 }
 
+/// ECMAScript `Number(string)`: whitespace-trimmed decimal, hex, octal,
+/// binary or `Infinity`; `NaN` otherwise.
 pub fn number_from_string(value: &str) -> f64 {
     let value = crate::public_text::trim_js_whitespace(value);
     match value {

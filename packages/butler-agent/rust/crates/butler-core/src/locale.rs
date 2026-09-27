@@ -7,6 +7,7 @@ use std::cmp::Ordering;
 use icu_collator::{Collator, CollatorOptions, Strength};
 use icu_locid::Locale;
 
+/// Tertiary-strength collation for one resolved BCP-47 locale.
 pub struct LocaleCollation {
     collator: Collator,
 }
@@ -18,6 +19,7 @@ impl LocaleCollation {
         "ICU4X 1.4.0"
     }
 
+    /// A collator for a resolved BCP-47 locale (underscore separators refused).
     pub fn new(locale: &str) -> Result<Self, LocaleError> {
         // Host input is a resolved BCP-47 locale, not an ICU/POSIX locale ID.
         // ICU4X also accepts underscore separators; do not silently accept them.
@@ -35,6 +37,7 @@ impl LocaleCollation {
         Ok(Self { collator })
     }
 
+    /// Orders two strings as the locale sorts them.
     pub fn compare(&self, left: &str, right: &str) -> Ordering {
         self.collator.compare(left, right)
     }

@@ -3,6 +3,7 @@ use serde_json::{Map, Value};
 
 use crate::btcc::BtccError;
 
+/// Limits of a turn's bounded stateless context: requests, tool rounds and bytes.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TurnContinuationBudgetLimits {

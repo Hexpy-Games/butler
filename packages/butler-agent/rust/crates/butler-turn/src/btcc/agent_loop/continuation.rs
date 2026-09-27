@@ -5,6 +5,11 @@ use super::contracts::{
     AuthorityDecision, ModelRoundMessage, ModelRoundTool, ModelRoundToolCall, ToolError, ToolResult,
 };
 
+/// The loop state persisted while a turn waits for an authority decision
+/// (`btcc_turns.authority_continuation_json`); resuming restores it exactly.
+///
+/// Provider continuation and stable cache prefix are provider passthrough JSON.
+/// `extensions` keeps unknown fields so newer writers round-trip.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthorityLoopContinuation {
@@ -29,6 +34,7 @@ pub struct AuthorityLoopContinuation {
     pub extensions: Map<String, Value>,
 }
 
+/// The tool batch interrupted by the authority request, with the cursor of the pending call.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthorityBatch {
@@ -38,6 +44,8 @@ pub struct AuthorityBatch {
     pub results: Vec<ToolResult>,
 }
 
+/// The guided activity presentation at suspension, restored on resume so the
+/// user sees the same activity state.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GuidedPresentation {
@@ -45,6 +53,7 @@ pub struct GuidedPresentation {
     pub activity: GuidedActivitySnapshot,
 }
 
+/// Snapshot of guided activity grouping: which tool calls belong to which activity.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GuidedActivitySnapshot {
@@ -66,6 +75,9 @@ pub struct GuidedActivitySnapshot {
     pub extensions: Map<String, Value>,
 }
 
+/// One user-visible activity and its presentation text.
+///
+/// `interface_content` is UI passthrough JSON rendered by the client.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActivityGroup {
@@ -96,6 +108,7 @@ pub struct ActivityGroup {
     pub extensions: Map<String, Value>,
 }
 
+/// A tool announced for an activity that has not been claimed by a call yet.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PendingTool {
@@ -104,6 +117,7 @@ pub struct PendingTool {
     pub group_id: String,
 }
 
+/// The activity a tool call is shown under.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GuidedActivityBinding {
@@ -113,6 +127,7 @@ pub struct GuidedActivityBinding {
     pub deferred_until_accepted: bool,
 }
 
+/// The request ref of a tool output that parked the call on an authority request.
 pub(super) fn pending_authority(value: Option<&butler_core::json::JsonDocument>) -> Option<String> {
     let value = value?;
     (value.field("authority_pending").ok().flatten()? == "true")
@@ -138,11 +153,22 @@ impl Refusal {
     }
 }
 
+/// Where a refused call sits in the resumed batch.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum RefusedCall {
+    /// The call the authority request was about.
+    Pending,
+    /// A later call of the same batch, skipped because of the refusal.
+    Following,
+}
+
+/// The tool result recorded for a call the user's decision kept from running.
 pub(super) fn unexecuted_call(
     call: &ModelRoundToolCall,
     refusal: Refusal,
-    pending: bool,
+    position: RefusedCall,
 ) -> ToolResult {
+    let pending = position == RefusedCall::Pending;
     let (decision_name, message) = match refusal {
         Refusal::Denied => (
             "denied",

@@ -101,16 +101,8 @@ pub(super) fn decide(
     let transaction = db
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(query::sql)?;
-    let decision = match write.action.as_str() {
-        "allow" => "allowed",
-        "deny" => "denied",
-        _ => "modified",
-    };
-    let schedule = match write.action.as_str() {
-        "allow" => "Continue the approved operation exactly once.",
-        "deny" => "The reviewed command was denied.",
-        _ => "Continue with the reviewed alternative.",
-    };
+    let decision = write.action.decision();
+    let schedule = write.action.schedule_text();
     let changed = transaction.execute("UPDATE btcc_authority_requests \
         SET decision=?1, schedule_input_text=?2, allow_scope=?3, \
         private_alternative_input=CASE WHEN ?4='modified' THEN ?5 ELSE private_alternative_input END, \

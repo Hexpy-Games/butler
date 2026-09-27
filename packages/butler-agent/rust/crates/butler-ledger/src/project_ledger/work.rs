@@ -36,6 +36,8 @@ fn invalid(code: &'static str) -> BtccError {
     BtccError::relayed(code, code)
 }
 
+/// Project Work: the durable Work repository BTCC turns use, backed by
+/// the Ledger and observed back into the BTCC runtime.
 pub struct ProjectWork {
     shared: Arc<Shared>,
 }
@@ -63,6 +65,7 @@ struct MutationState {
 }
 
 impl ProjectWork {
+    /// Project Work over `ledger`, observed through the BTCC runtime ports.
     pub fn new(
         ledger: ProjectLedger,
         projection: Arc<dyn ProjectWorkRuntimeProjection>,
@@ -83,6 +86,7 @@ impl ProjectWork {
         }
     }
 
+    /// The durable Work repository for one resolved project scope.
     pub fn repository(&self, scope: ResolvedProjectWorkScope) -> Arc<dyn DurableWorkRepository> {
         Arc::new(ProjectWorkRepository {
             shared: self.shared.clone(),
@@ -90,6 +94,7 @@ impl ProjectWork {
         })
     }
 
+    /// Refuses new mutations and waits for running ones.
     pub async fn close(&self) {
         self.shared.mutations.close().await;
     }

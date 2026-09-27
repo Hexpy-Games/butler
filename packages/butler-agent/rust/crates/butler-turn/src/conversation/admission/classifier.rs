@@ -9,6 +9,7 @@ use crate::conversation::types::{
     ConversationVisibility,
 };
 
+/// Where an admitted event came from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AdmissionSource {
     Gateway,

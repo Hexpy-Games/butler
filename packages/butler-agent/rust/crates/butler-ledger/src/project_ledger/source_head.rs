@@ -20,6 +20,8 @@ pub(super) struct SourceHead {
     pub storage_entry_count: usize,
 }
 
+/// The Ledger's semantic head (records without volatile fields, in
+/// collation order) and storage head (every file's bytes).
 pub(super) fn observe(
     root: &Path,
     collation: &LocaleCollation,
@@ -38,49 +40,74 @@ pub(super) fn observe(
     let mut semantic = Sha256::new();
     semantic.update(b"[");
     for (index, (_, path)) in descriptors.iter().enumerate() {
-        let (raw, data) = record_data(path)?;
-        let kind = record_kind(root, path, &data);
-        let id = data.get("id").and_then(Value::as_str).unwrap_or("project");
-        let metadata = data
-            .as_object()
-            .map(|object| {
-                object
-                    .iter()
-                    .filter(|(key, _)| {
-                        !matches!(
-                            key.as_str(),
-                            "createdAt"
-                                | "updatedAt"
-                                | "generatedAt"
-                                | "sourceMtimeMs"
-                                | "path"
-                                | "codeCommits"
-                                | "ledgerCommits"
-                        )
-                    })
-                    .map(|(key, value)| (key.clone(), value.clone()))
-                    .collect::<Map<_, _>>()
-            })
-            .unwrap_or_default();
-        let mut record = json!({"kind":kind,"id":id,"metadata":metadata});
-        if path.extension().and_then(|v| v.to_str()) == Some("md") {
-            record["body"] = records::frontmatter_body_ref(&raw).into();
-        }
-        let normalized = normalize(&record);
-        let mut encoded = String::new();
-        write_canonical(&normalized, collation, &mut encoded)?;
         if index != 0 {
             semantic.update(b",");
         }
-        semantic.update(encoded.as_bytes());
+        semantic.update(semantic_record(root, path, collation)?.as_bytes());
     }
     semantic.update(b"]");
     let mut entries = Vec::new();
     root_entries(root, root, &mut entries)?;
     entries.sort_by(|left, right| collation.compare(&left.0, &right.0));
+    Ok(SourceHead {
+        project_root: root.to_owned(),
+        source_sha256: format!("{:x}", semantic.finalize()),
+        source_file_count: descriptors.len(),
+        storage_sha256: storage_digest(&entries)?,
+        storage_entry_count: entries.len(),
+    })
+}
+
+/// Metadata the semantic head ignores: clocks, paths and commit evidence.
+const VOLATILE_KEYS: [&str; 7] = [
+    "createdAt",
+    "updatedAt",
+    "generatedAt",
+    "sourceMtimeMs",
+    "path",
+    "codeCommits",
+    "ledgerCommits",
+];
+
+/// One record's canonical semantic encoding: kind, id, stable metadata and
+/// the Markdown body.
+fn semantic_record(
+    root: &Path,
+    path: &Path,
+    collation: &LocaleCollation,
+) -> Result<String, ProjectLedgerReadError> {
+    let (raw, data) = record_data(path)?;
+    let kind = record_kind(root, path, &data);
+    let id = data.get("id").and_then(Value::as_str).unwrap_or("project");
+    let metadata = data
+        .as_object()
+        .map(|object| {
+            object
+                .iter()
+                .filter(|(key, _)| !VOLATILE_KEYS.contains(&key.as_str()))
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect::<Map<_, _>>()
+        })
+        .unwrap_or_default();
+    let mut record = json!({"kind":kind,"id":id,"metadata":metadata});
+    if path.extension().and_then(|v| v.to_str()) == Some("md") {
+        crate::project_ledger::work_json::set_field(
+            &mut record,
+            "body",
+            records::frontmatter_body_ref(&raw).into(),
+        );
+    }
+    let normalized = normalize(&record);
+    let mut encoded = String::new();
+    write_canonical(&normalized, collation, &mut encoded)?;
+    Ok(encoded)
+}
+
+/// The digest of every storage entry's kind, NFC path and file bytes.
+fn storage_digest(entries: &[(String, PathBuf, bool)]) -> Result<String, ProjectLedgerReadError> {
     let mut storage = Sha256::new();
     let mut buffer = vec![0u8; 64 * 1024];
-    for (relative, path, directory) in &entries {
+    for (relative, path, directory) in entries {
         storage.update(if *directory {
             b"directory".as_slice()
         } else {
@@ -90,24 +117,27 @@ pub(super) fn observe(
         storage.update(relative.nfc().collect::<String>().as_bytes());
         storage.update(b"\0");
         if !directory {
-            let mut file = File::open(path).map_err(io)?;
-            loop {
-                let size = file.read(&mut buffer).map_err(io)?;
-                if size == 0 {
-                    break;
-                }
-                storage.update(&buffer[..size]);
-            }
+            hash_file(&mut storage, path, &mut buffer)?;
         }
         storage.update(b"\0");
     }
-    Ok(SourceHead {
-        project_root: root.to_owned(),
-        source_sha256: format!("{:x}", semantic.finalize()),
-        source_file_count: descriptors.len(),
-        storage_sha256: format!("{:x}", storage.finalize()),
-        storage_entry_count: entries.len(),
-    })
+    Ok(format!("{:x}", storage.finalize()))
+}
+
+/// Feeds the file's bytes to `digest` through `buffer`.
+fn hash_file(
+    digest: &mut Sha256,
+    path: &Path,
+    buffer: &mut [u8],
+) -> Result<(), ProjectLedgerReadError> {
+    let mut file = File::open(path).map_err(io)?;
+    loop {
+        let size = file.read(buffer).map_err(io)?;
+        let Some(chunk) = buffer.get(..size).filter(|chunk| !chunk.is_empty()) else {
+            return Ok(());
+        };
+        digest.update(chunk);
+    }
 }
 
 fn record_data(path: &Path) -> Result<(String, Value), ProjectLedgerReadError> {

@@ -12,6 +12,7 @@ use super::path_guard::{GuardInput, GuardResult, resolve_workspace_path_guard};
 #[cfg(test)]
 mod tests;
 
+/// Runs blocking workspace file reads with bounded concurrency until closed.
 #[derive(Clone)]
 pub struct WorkspaceFiles {
     inner: Arc<FileOwner>,
@@ -47,6 +48,7 @@ pub enum FileOwnerError {
 }
 
 impl FileOwnerError {
+    /// The wire code.
     pub fn code(&self) -> &'static str {
         match self {
             Self::Closed => "workspace_files_closed",
@@ -56,6 +58,7 @@ impl FileOwnerError {
 }
 
 impl WorkspaceFiles {
+    /// An owner allowing `max_blocking_reads` concurrent reads (at least one).
     pub fn new(max_blocking_reads: usize) -> Self {
         Self {
             inner: Arc::new(FileOwner {
@@ -71,6 +74,7 @@ impl WorkspaceFiles {
     pub(crate) fn active_count(&self) -> usize {
         self.inner.state.lock().active
     }
+    /// Refuses new reads and waits for running ones.
     pub async fn close(&self) {
         {
             self.inner.state.lock().closing = true;
@@ -113,6 +117,7 @@ impl WorkspaceFiles {
         });
         task.await.map_err(FileOwnerError::WorkerFailed)
     }
+    /// Guards a workspace path.
     pub async fn guard(
         &self,
         root: PathBuf,
@@ -131,6 +136,7 @@ impl WorkspaceFiles {
         })
         .await
     }
+    /// Reads one file window.
     pub async fn read_one(
         &self,
         input: ReadFileInput,
@@ -138,6 +144,7 @@ impl WorkspaceFiles {
         self.run(move || read_one_blocking(&input)).await
     }
 
+    /// Lists workspace files.
     pub async fn list_files(
         &self,
         input: WorkspaceListInput,
@@ -145,6 +152,7 @@ impl WorkspaceFiles {
         self.run(move || list_blocking(&input)).await
     }
 
+    /// Searches one listed file.
     pub async fn grep_candidate(&self, input: GrepCandidate) -> Result<GrepRead, FileOwnerError> {
         self.run(move || read_candidate(&input)).await
     }

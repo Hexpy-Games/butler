@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+/// The author of a canonical conversation message.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConversationRole {
@@ -10,6 +11,7 @@ pub enum ConversationRole {
     Assistant,
     Tool,
 }
+/// Who a message is shown to: the model, the user, operators, or only audit links.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConversationVisibility {
@@ -18,6 +20,7 @@ pub enum ConversationVisibility {
     Operator,
     AuditLink,
 }
+/// The lifecycle state of a message or part.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConversationStatus {
@@ -26,6 +29,7 @@ pub enum ConversationStatus {
     Failed,
     Compacted,
 }
+/// Where a message came from: live traffic, recovery, import or a synthetic summary.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConversationProvenance {
@@ -34,6 +38,7 @@ pub enum ConversationProvenance {
     Imported,
     SyntheticSummary,
 }
+/// The kind of content a message part carries.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConversationPartKind {
@@ -44,6 +49,7 @@ pub enum ConversationPartKind {
     SummaryRef,
     MessageContent,
 }
+/// The provider wire shape a tool part was recorded in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConversationProviderShape {
@@ -51,6 +57,7 @@ pub enum ConversationProviderShape {
     Anthropic,
     Generic,
 }
+/// Whether a message is user input, public assistant output, internal control or unknown.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConversationOriginKind {
@@ -70,6 +77,7 @@ pub struct ConversationOriginEvidence {
     pub reference: String,
     pub sha256: Option<String>,
 }
+/// A versioned origin classification of a message with its evidence.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConversationOriginDecision {
     pub kind: ConversationOriginKind,
@@ -80,6 +88,7 @@ pub struct ConversationOriginDecision {
     pub complete: bool,
 }
 
+/// A canonical conversation session.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConversationSession {
     pub id: String,
@@ -91,6 +100,7 @@ pub struct ConversationSession {
     pub status: String,
     pub schema_version: u64,
 }
+/// Maps a gateway's external session to its canonical conversation session.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConversationBinding {
     pub gateway: String,
@@ -98,6 +108,7 @@ pub struct ConversationBinding {
     pub conversation_session_id: String,
     pub created_at: String,
 }
+/// One request/response turn of a session.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConversationTurn {
     pub id: String,
@@ -109,6 +120,7 @@ pub struct ConversationTurn {
     pub started_at: String,
     pub completed_at: Option<String>,
 }
+/// A canonical message without its parts.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConversationMessage {
     pub id: String,
@@ -129,6 +141,7 @@ pub struct ConversationMessage {
     pub origin_version: Option<String>,
     pub origin_evidence_json: Option<String>,
 }
+/// One ordered part of a message (text, attachment, tool call or result).
 #[derive(Clone, Debug, PartialEq)]
 pub struct ConversationPart {
     pub id: String,
@@ -141,16 +154,19 @@ pub struct ConversationPart {
     pub provider_shape: Option<ConversationProviderShape>,
     pub status: ConversationStatus,
 }
+/// A message with its ordered parts.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ConversationMessageWithParts {
     pub message: ConversationMessage,
     pub parts: Vec<ConversationPart>,
 }
+/// A page of messages and whether more exist.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ConversationMessagePage {
     pub messages: Vec<ConversationMessageWithParts>,
     pub has_more: bool,
 }
+/// A stored summary covering a sequence range of a session.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ConversationSummary {
     pub id: String,
@@ -164,6 +180,7 @@ pub struct ConversationSummary {
     pub invalidated_at: Option<String>,
 }
 
+/// How a turn ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TurnOutcomeKind {
@@ -172,6 +189,7 @@ pub enum TurnOutcomeKind {
     Cancelled,
     Recoverable,
 }
+/// The generation-versioned outcome of a turn, hashed over the messages it references.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TurnOutcomeCapsule {
     pub id: String,
@@ -190,6 +208,7 @@ pub struct TurnOutcomeCapsule {
     pub safe_code: Option<String>,
     pub created_at: String,
 }
+/// The outcome capsule to write; id, generation and time default when absent.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TurnOutcomeCapsuleInput {
     pub id: Option<String>,
@@ -208,6 +227,7 @@ pub struct TurnOutcomeCapsuleInput {
     pub created_at: Option<String>,
 }
 
+/// Starts (or replays) a turn, binding the gateway session to its conversation session.
 #[derive(Clone, Debug)]
 pub struct BeginTurnInput {
     pub gateway: String,
@@ -220,6 +240,7 @@ pub struct BeginTurnInput {
     pub turn_id: Option<String>,
     pub now: Option<String>,
 }
+/// One part of a message being appended.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MessagePartInput {
     pub kind: ConversationPartKind,
@@ -229,6 +250,7 @@ pub struct MessagePartInput {
     pub provider_shape: Option<ConversationProviderShape>,
     pub status: Option<ConversationStatus>,
 }
+/// A message to append, with its origin classification and optional parts.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AppendMessageInput {
     pub session_id: String,
@@ -258,6 +280,7 @@ pub(crate) struct AppendToolPartInput {
     pub provider_shape: Option<ConversationProviderShape>,
     pub status: Option<ConversationStatus>,
 }
+/// Finalizes a turn's status, optionally writing its outcome capsule.
 #[derive(Clone, Debug, PartialEq)]
 pub struct FinalizeTurnInput {
     pub turn_id: String,
@@ -265,6 +288,7 @@ pub struct FinalizeTurnInput {
     pub completed_at: Option<String>,
     pub outcome_capsule: Option<TurnOutcomeCapsuleInput>,
 }
+/// A summary to store for a sequence range.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ConversationSummaryInput {
     pub session_id: String,
@@ -277,12 +301,14 @@ pub struct ConversationSummaryInput {
     pub now: Option<String>,
 }
 
+/// Reads a session's latest messages.
 #[derive(Clone, Debug)]
 pub struct ReadMessagesInput {
     pub session_id: String,
     pub limit: Option<f64>,
     pub include_compacted: bool,
 }
+/// Reads messages before or after an anchor message.
 #[derive(Clone, Debug)]
 pub struct ReadAroundInput {
     pub session_id: String,
@@ -291,6 +317,7 @@ pub struct ReadAroundInput {
     pub limit: Option<f64>,
     pub include_compacted: bool,
 }
+/// Reads messages for memory cognition, filtered by role and time.
 #[derive(Clone, Debug, Default)]
 pub struct ReadCognitionMessagesInput {
     pub session_id: Option<String>,
@@ -302,28 +329,33 @@ pub struct ReadCognitionMessagesInput {
     pub order: Option<ConversationReadOrder>,
 }
 
+/// Sequence order of a message read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConversationReadOrder {
     Asc,
     Desc,
 }
+/// Message counts of a session.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConversationMessageStats {
     pub semantic_messages: u64,
     pub compacted_messages: u64,
     pub latest_message_timestamp: Option<String>,
 }
+/// Summary counts of a session.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConversationSummaryStats {
     pub summaries: u64,
     pub summary_text_chars: u64,
 }
+/// Message and summary statistics of a session with a prompt-size estimate.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConversationStatusStats {
     pub messages: ConversationMessageStats,
     pub summaries: ConversationSummaryStats,
     pub prompt_token_estimate: u64,
 }
+/// What a prompt is built from: summaries, the semantic tail and the current turn.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PromptMaterial {
     pub session_id: String,
@@ -336,12 +368,14 @@ pub struct PromptMaterial {
     pub provenance: Vec<PromptProvenance>,
 }
 
+/// Whether prompt content came from a summary or a message.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PromptProvenanceKind {
     Summary,
     Message,
 }
 
+/// The summary or message a piece of prompt content came from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PromptProvenance {
     pub kind: PromptProvenanceKind,

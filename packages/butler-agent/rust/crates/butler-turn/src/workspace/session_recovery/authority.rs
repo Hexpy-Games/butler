@@ -12,6 +12,7 @@ pub struct SessionWorkspaceMarker {
     pub bound_at: String,
 }
 
+/// Whether a session works in its project or a session worktree.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SessionWorkspaceAuthority {
     Project {
