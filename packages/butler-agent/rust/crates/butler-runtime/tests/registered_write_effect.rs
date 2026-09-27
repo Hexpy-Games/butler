@@ -1,10 +1,17 @@
+//! A reviewed file effect through the real registered write_file capability.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "scenario test helpers abort the test on setup failure"
+)]
 use std::sync::Arc;
 
 use serde_json::json;
 use tokio_util::sync::CancellationToken;
 
-use crate::host::{RegisteredWrite, RegisteredWriteContext};
 use butler_runtime::capabilities::Capabilities;
+use butler_runtime::capabilities::{RegisteredWrite, RegisteredWriteContext};
 use butler_turn::btcc::effects::EffectService;
 use butler_turn::btcc::effects::contracts::Access;
 use butler_turn::btcc::effects::contracts::EffectAdapter;

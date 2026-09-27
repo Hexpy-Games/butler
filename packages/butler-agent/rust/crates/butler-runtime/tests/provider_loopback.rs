@@ -1,4 +1,10 @@
 //! Same-actor replay, durable model-route acceptance, and physical-provider loopback.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "scenario test helpers abort the test on setup failure"
+)]
 
 use butler_core::json::JsonDocument;
 

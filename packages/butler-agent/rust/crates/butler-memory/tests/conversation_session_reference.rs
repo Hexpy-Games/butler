@@ -1,10 +1,17 @@
+//! Conversation session references resolve memory sources through Cognition.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "scenario test helpers abort the test on setup failure"
+)]
 use std::{cmp::Ordering, sync::Arc};
 
 use serde_json::json;
 
-use crate::host::MemorySourceReader;
 use butler_memory::cognition::CognitionPathEnvironment;
 use butler_memory::cognition::ExactMemoryQuery;
+use butler_memory::cognition::MemorySourceReader;
 use butler_turn::conversation::AgentConversationStore;
 use butler_turn::conversation::AppendMessageInput;
 use butler_turn::conversation::BeginTurnInput;

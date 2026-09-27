@@ -48,6 +48,8 @@ nix.workspace = true
 test-support = []
 
 [dev-dependencies]
+butler-models = { path = "../butler-models", features = ["test-support"] }
+butler-turn = { path = "../butler-turn", features = ["test-support"] }
 butler-test-support = { path = "../butler-test-support" }
 tokio = { workspace = true, features = ["test-util"] }
 

@@ -1,4 +1,10 @@
 //! Real Context summary producer with the native provider and full BTCC store.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "scenario test helpers abort the test on setup failure"
+)]
 
 use std::{sync::Arc, time::Duration};
 
