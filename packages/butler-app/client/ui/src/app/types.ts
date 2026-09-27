@@ -146,6 +146,8 @@ export interface ModelCatalogView {
     auth_methods?: ProviderAuthMethod[];
     default_api_base_url?: string;
     models: AppModelSummary[];
+    /** #230: the per-provider default first-run setup picks (model ref or id, effort). */
+    presets?: { routine?: { model: string; effort: ReasoningEffort } };
   }>;
   models: AppModelSummary[];
   registered_models?: AppModelSummary[];
@@ -546,6 +548,14 @@ export interface SettingsView {
   web_search: WebSearchSettingsView;
   model_fallback: ModelFallbackSettingsView;
   profile_label: string;
+  /** #230: onboarding state kept by the agent; absent on agents before #230. */
+  onboarding?: OnboardingSettingsView;
+}
+
+export interface OnboardingSettingsView {
+  consent_version?: number | null;
+  accepted_at?: string | null;
+  completed_at?: string | null;
 }
 
 export interface ModelFallbackSettingsView {

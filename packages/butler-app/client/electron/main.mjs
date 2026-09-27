@@ -748,6 +748,18 @@ async function submitOpenAIOAuthCallback(input = {}) {
   return await waitForOAuthCompletion();
 }
 
+// First-run Cancel (`POST /setup/oauth/{flow_id}/cancel`). Killing the helper
+// closes its localhost callback listener and drops the PKCE state.
+// #230 integration: when the agent owns the sign-in flow, forward this to the
+// agent route instead.
+function cancelOpenAIOAuthLoginFlow(input = {}) {
+  const flowId = safeString(input?.flowId);
+  if (flowId && openAIOAuthLoginSession?.id !== flowId) {
+    return { flow_id: flowId, status: "cancelled" };
+  }
+  return cancelOpenAIOAuthLogin();
+}
+
 function cancelOpenAIOAuthLogin() {
   if (
     openAIOAuthLoginSession?.child &&
@@ -885,6 +897,7 @@ function stateFromAuthUrl(value) {
 function oauthLoginSessionView(session) {
   if (!session) return { status: "idle" };
   return {
+    flow_id: session.id,
     status: session.status,
     ...(session.authUrl ? { auth_url: session.authUrl } : {}),
     ...(session.redirectUri ? { redirect_uri: session.redirectUri } : {}),
@@ -2207,6 +2220,10 @@ ipcMain.handle("butler:restart-openai-oauth-login", async () =>
 
 ipcMain.handle("butler:get-openai-oauth-login-status", async () =>
   await openAIOAuthLoginStatus(),
+);
+
+ipcMain.handle("butler:cancel-openai-oauth-login", (_event, input) =>
+  cancelOpenAIOAuthLoginFlow(input ?? {}),
 );
 
 ipcMain.handle("butler:submit-openai-oauth-callback", async (_event, input) =>

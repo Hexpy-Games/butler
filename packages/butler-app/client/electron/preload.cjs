@@ -499,6 +499,20 @@ const butlerApp = Object.freeze({
     ipcRenderer.invoke("butler:first-run-setup-cancel", request ?? {}),
   exportSetupDiagnostics: () =>
     ipcRenderer.invoke("butler:first-run-setup-diagnostics"),
+  // #230 first-run routes served by the agent. Envelopes keep the public
+  // error code (invalid_key, no_access, network) across contextBridge.
+  getSetupReadiness: () => requestBridgeResult("/setup/readiness"),
+  getLocalModelServers: () => requestJson("/setup/local-model-servers"),
+  verifySetupCredential: (request) => requestBridgeResult("/setup/credentials/verify", {
+    method: "POST",
+    body: JSON.stringify(request ?? {}),
+  }),
+  saveCredential: (request) => requestBridgeResult("/credentials", {
+    method: "POST",
+    body: JSON.stringify(request ?? {}),
+  }),
+  cancelSetupOAuth: ({ flowId } = {}) =>
+    ipcRenderer.invoke("butler:cancel-openai-oauth-login", { flowId }),
   getAgentServiceStatus: () => ipcRenderer.invoke("butler:agent-service-status"),
   installAgentService: (request = {}) =>
     ipcRenderer.invoke("butler:agent-service-install", request ?? {}),

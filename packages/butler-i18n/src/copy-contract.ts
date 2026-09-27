@@ -1,34 +1,86 @@
+/** Provider cards on the first-run "Pick an AI" screen. */
+export type FirstRunProviderCardId =
+  | "chatgpt" | "claude" | "gemini" | "local" | "openai" | "grok" | "qwen"
+  | "kimi" | "zaiCoding" | "zaiApi" | "opencodeGo" | "other";
+
 interface FirstRunCopy {
-product: string;
-steps: string[];
-languageTitle: string;
-continue: string;
-back: string;
-safetyTitle: string;
-safetyBody: string;
-safetyItems: string[];
-accept: string;
-installTitle: string;
-installReady: string;
-installChecking: string;
-installFailed: string;
-retry: string;
-repair: string;
-diagnostics: string;
-diagnosticsCopied: string;
-diagnosticsUnavailable: string;
-quit: string;
-modelTitle: string;
-modelBody: string;
-modelSelectLabel: string;
-modelLoading: string;
-modelLoadFailed: string;
-modelRetry: string;
-modelSave: string;
-modelSaving: string;
-modelSaved: string;
-modelSaveFailed: string;
-modelUnavailable: string;
+  product: string;
+  welcomeTitle: string;
+  welcomeLede: string;
+  consent: Array<{ title: string; body: string }>;
+  agree: string;
+  agreeBlocked: string;
+  prepWorking: string;
+  prepReady: string;
+  prepFailed: string;
+  /** Plain failure reasons keyed by readiness error code; `default` covers the rest. */
+  prepReasons: Record<string, string>;
+  /** Preparation step names keyed by step id (bug-report info). */
+  prepSteps: Record<string, string>;
+  retry: string;
+  moreActions: string;
+  repair: string;
+  copyReport: string;
+  reportCopied: string;
+  reportUnavailable: string;
+  quit: string;
+  languageLabel: string;
+  learnMore: string;
+  cancel: string;
+  connectTitle: string;
+  connectLede: string;
+  prepWaitConnect: string;
+  providerNames: Record<FirstRunProviderCardId, string>;
+  providerDescriptions: Record<FirstRunProviderCardId, string>;
+  tagNoKey: string;
+  tagLocal: string;
+  localModelCount: (count: number) => string;
+  moreProviders: (count: number) => string;
+  showLess: string;
+  localOff: string;
+  localMissing: string;
+  rescan: string;
+  checking: string;
+  connecting: string;
+  offline: string;
+  offlineShort: string;
+  offlineTile: string;
+  noModels: string;
+  noUsable: string;
+  back: string;
+  backToList: string;
+  signInTitle: string;
+  signInBody: string;
+  signInCopyLink: string;
+  linkCopied: string;
+  signInCancelled: string;
+  signInCancelledBody: string;
+  signInFailed: string;
+  chooseOther: string;
+  keyTitle: (name: string) => string;
+  keyLabel: string;
+  keyHint: string;
+  keyValid: string;
+  keyInvalid: string;
+  keyNetwork: string;
+  keyNoAccess: string;
+  keyFailedShort: string;
+  getKey: string;
+  keyStored: string;
+  finishing: string;
+  finishFailed: string;
+  localTitle: string;
+  localBody: string;
+  localStart: string;
+  localNote: string;
+  customTitle: string;
+  customUrl: string;
+  customKey: string;
+  customConnect: string;
+  connectedToast: (name: string) => string;
+  rerunTitle: string;
+  rerunDescription: string;
+  rerunAction: string;
 }
 export interface NewChatBriefingSuggestion { id: string; title: string; description: string; text: string; }
 

@@ -262,6 +262,21 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (method === "POST" && url.pathname === "/setup/start") return await callBridge<T>(bridge, "startSetup", parseBody(options.body));
   if (method === "POST" && url.pathname === "/setup/cancel") return await callBridge<T>(bridge, "cancelSetup", parseBody(options.body));
   if (method === "GET" && url.pathname === "/setup/diagnostics") return await callBridge<T>(bridge, "exportSetupDiagnostics");
+  // #230 first-run routes (Rust agent). Envelopes keep the public error code across contextBridge.
+  if (method === "GET" && url.pathname === "/setup/readiness") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getSetupReadiness"));
+  }
+  if (method === "GET" && url.pathname === "/setup/local-model-servers") return await callBridge<T>(bridge, "getLocalModelServers");
+  if (method === "POST" && url.pathname === "/setup/credentials/verify") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "verifySetupCredential", parseBody(options.body)));
+  }
+  if (method === "POST" && url.pathname === "/credentials") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "saveCredential", parseBody(options.body)));
+  }
+  const setupOAuthCancel = method === "POST" ? url.pathname.match(/^\/setup\/oauth\/([^/]+)\/cancel$/u) : null;
+  if (setupOAuthCancel) {
+    return await callBridge<T>(bridge, "cancelSetupOAuth", { flowId: decodeURIComponent(setupOAuthCancel[1]!) });
+  }
   if (method === "GET" && url.pathname === "/chats") return await callBridge<T>(bridge, "listChats");
   if (method === "GET" && url.pathname === "/navigation") return await callBridge<T>(bridge, "listNavigation");
   if (url.pathname.startsWith("/space/")) {

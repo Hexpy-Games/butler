@@ -14,7 +14,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createNativeAppServer } from "../support/native-app-server.ts";
-import { FIRST_RUN_STORAGE_KEY, firstRunCompleteState } from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
+import { LEGACY_FIRST_RUN_STORAGE_KEY as FIRST_RUN_STORAGE_KEY, legacyFirstRunCompleteRecord } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 
 const root = process.cwd();
 const dir = mkdtempSync(join(tmpdir(), "butler-drop-zones-"));
@@ -166,7 +166,7 @@ let cdp: Cdp | null = null;
 try {
   cdp = await connect();
   await waitFor(cdp, "document.readyState === \"complete\" && typeof localStorage === \"object\"", "the first load");
-  await evaluate(cdp, `localStorage.setItem(${JSON.stringify(FIRST_RUN_STORAGE_KEY)}, ${JSON.stringify(JSON.stringify(firstRunCompleteState("en")))})`);
+  await evaluate(cdp, `localStorage.setItem(${JSON.stringify(FIRST_RUN_STORAGE_KEY)}, ${JSON.stringify(JSON.stringify(legacyFirstRunCompleteRecord()))})`);
   await cdp.send("Page.reload");
   await wait(1000);
   await cdp.send("Emulation.setDeviceMetricsOverride", { width: 1100, height: 760, deviceScaleFactor: 0, mobile: false });

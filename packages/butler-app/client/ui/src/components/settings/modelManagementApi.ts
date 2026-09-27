@@ -12,6 +12,8 @@ import type {
 export interface OpenAIOAuthLoginResult {
   auth_url?: string;
   error?: string;
+  /** #230: id of the pending sign-in; `POST /setup/oauth/{flow_id}/cancel` stops it. */
+  flow_id?: string;
   label?: string;
   redirect_uri?: string;
   status:

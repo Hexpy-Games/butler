@@ -26,7 +26,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "conversation-input", kind: "form", fields: ["follow-up-behavior", "multiline-send"] },
     { id: "notifications", kind: "form", fields: ["desktop-notifications", "notify-assistant-messages", "notify-task-completions"] },
     { id: "notification-permission", kind: "status", fields: ["notification-permission"] },
-    { id: "app-behavior", kind: "form", fields: ["desktop-tray"] },
+    { id: "app-behavior", kind: "form", fields: ["desktop-tray", "rerun-setup"] },
     { id: "search-provider", kind: "form", fields: ["search-provider", "search-api-key"] },
     { id: "search-behavior", kind: "form", fields: ["search-reader", "search-planning", "search-depth"] },
   ],

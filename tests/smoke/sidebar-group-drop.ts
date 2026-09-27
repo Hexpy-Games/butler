@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { chromium } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import type { NavigationView, SessionSummary } from "../../packages/butler-app/client/ui/src/app/types.ts";
-import { FIRST_RUN_STORAGE_KEY, firstRunCompleteState } from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
+import { LEGACY_FIRST_RUN_STORAGE_KEY as FIRST_RUN_STORAGE_KEY, legacyFirstRunCompleteRecord } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "butler-group-drop-"));
 const server = await createNativeAppServer({
@@ -19,7 +19,7 @@ const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 1200, height: 700 } });
   await page.addInitScript(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), {
-    key: FIRST_RUN_STORAGE_KEY, value: firstRunCompleteState("ko"),
+    key: FIRST_RUN_STORAGE_KEY, value: legacyFirstRunCompleteRecord(),
   });
   let groupRequests = 0;
   await page.route("**/space/group-sessions", async route => {

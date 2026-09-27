@@ -1,5 +1,6 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -44,6 +45,10 @@ const forbiddenCopy = [
   "직업",
   "프로필",
 ];
+
+const stubModelId = "smoke-local-model";
+let stubModelServer: HttpServer | null = null;
+let stubModelPort = 0;
 
 let electronProcess: ChildProcess | null = null;
 let appServerPort: number | null = null;
@@ -403,6 +408,22 @@ function stageNativeAgentInstallation(workDir: string): string {
   return join(installation, "bin", "butler-agent");
 }
 
+/** An OpenAI-compatible model list, for the first run's "Other" server path. */
+async function startStubModelServer(): Promise<void> {
+  stubModelServer = createHttpServer((request, response) => {
+    if (request.method === "GET" && /\/models$/u.test(request.url ?? "")) {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ object: "list", data: [{ id: stubModelId, object: "model" }] }));
+      return;
+    }
+    response.writeHead(404, { "content-type": "application/json" });
+    response.end("{}");
+  });
+  await new Promise<void>((done) => stubModelServer!.listen(0, "127.0.0.1", done));
+  const address = stubModelServer.address();
+  stubModelPort = typeof address === "object" && address ? address.port : 0;
+}
+
 async function main(): Promise<void> {
   assert(
     existsSync(electronBin),
@@ -413,6 +434,7 @@ async function main(): Promise<void> {
     "UI dist is missing; run npm --prefix packages/butler-app/client/ui run build first.",
   );
 
+  await startStubModelServer();
   const serverPort = await freePort();
   appServerPort = serverPort;
   const debugPort = await freePort();
@@ -493,16 +515,18 @@ async function main(): Promise<void> {
     `first-run drag lane should be draggable, got ${setupDragRegion}`,
   );
 
-  await waitForHeading(cdp, "언어 선택");
+  // Welcome: language comes from the system, consent is one screen, and the
+  // agent prepares in the background (no language, safety or install screen).
+  await waitForHeading(cdp, "반갑습니다");
   await expectNoForbiddenCopy(cdp);
-  const selectedLanguageLabel = await evaluateString(
+  const selectedLanguage = await evaluateString(
     cdp,
-    "document.querySelector('[role=\"combobox\"][aria-label=\"언어 선택\"]')?.textContent?.trim() ?? \"\"",
+    "document.querySelector('#first-run-language')?.value ?? ''",
   );
-  assert(
-    selectedLanguageLabel.includes("한국어"),
-    "system language did not preselect Korean",
-  );
+  assert(selectedLanguage === "ko", "system language did not preselect Korean");
+  for (const retired of ["언어 선택", "안전고지", "Butler Agent를 준비합니다", "모델 설정"]) {
+    assert(!(await evaluateBoolean(cdp, `document.body.innerText.includes(${JSON.stringify(retired)})`)), `retired first-run screen visible: ${retired}`);
+  }
 
   await cdp.send("Emulation.setEmulatedMedia", {
     features: [{ name: "prefers-color-scheme", value: "dark" }],
@@ -523,49 +547,31 @@ async function main(): Promise<void> {
   );
   await cdp.send("Emulation.setEmulatedMedia", { features: [] });
 
-  await clickButton(cdp, "계속");
-  await waitForHeading(cdp, "안전고지");
+  await clickButton(cdp, "동의하고 계속");
+  await waitForHeading(cdp, "어떤 AI와 일할까요?");
   await expectNoForbiddenCopy(cdp);
+  const topCards = await evaluateString(
+    cdp,
+    "Array.from(document.querySelectorAll('[data-test-class=\"first-run-top-cards\"] [data-card-id]')).map((card) => card.getAttribute('data-card-id')).join(',')",
+  );
+  assert(topCards.startsWith("chatgpt,claude,gemini"), `top provider cards: ${topCards}`);
+  for (const jargon of ["OAuth", "credential", "provider", "endpoint"]) {
+    assert(!(await evaluateBoolean(cdp, `document.body.innerText.includes(${JSON.stringify(jargon)})`)), `jargon in the AI list: ${jargon}`);
+  }
 
-  await clickButton(cdp, "동의");
-  await waitForHeading(cdp, "Butler Agent를 준비합니다");
-  await expectNoForbiddenCopy(cdp);
-  assert(
-    !(await evaluateBoolean(
-      cdp,
-      `Array.from(document.querySelectorAll(${JSON.stringify("button")})).some((button) => button.textContent?.trim() === ${JSON.stringify("기존 Agent 연결")})`,
-    )),
-    "existing-Agent action is visible in the normal setup path",
+  // Other (OpenAI-compatible) against a stub server: the one path that needs
+  // no network account, so the smoke stays offline.
+  await clickButton(cdp, "다른 서비스 8개");
+  const otherClicked = await evaluateBoolean(
+    cdp,
+    "(() => { const tile = document.querySelector('[data-card-id=\"other\"]'); tile?.click(); return Boolean(tile); })()",
   );
-  await waitForText(cdp, "준비 완료");
-
-  await waitForHeading(cdp, "모델 설정");
-  await waitForHeading(cdp, "모델 추가");
-  await waitForText(cdp, "API 키");
-  await expectNoForbiddenCopy(cdp, new Set(["이름"]));
-  assert(
-    await evaluateBoolean(
-      cdp,
-      "document.querySelector('[data-test-class=\"model-add-provider-select\"]') !== null",
-    ),
-    "model add provider select is missing",
-  );
-  assert(
-    await evaluateBoolean(
-      cdp,
-      "document.querySelector('[data-test-class=\"hosted-auth-method-select\"]') !== null",
-    ),
-    "hosted auth method select is missing",
-  );
-  assert(
-    !(await evaluateBoolean(
-      cdp,
-      `Array.from(document.querySelectorAll("button")).some((button) => button.textContent?.trim() === ${JSON.stringify("저장하고 시작")})`,
-    )),
-    "finish action is visible before registering a model",
-  );
-  await fillInput(cdp, "input[type=\"password\"]", "sk-smoke-test");
-  await clickButton(cdp, "추가");
+  assert(otherClicked, "Other (OpenAI-compatible) tile is missing");
+  await waitForHeading(cdp, "OpenAI 호환 서버");
+  await fillInput(cdp, "#first-run-server-url", `http://127.0.0.1:${stubModelPort}/v1`);
+  await clickButton(cdp, "연결");
+  await waitForText(cdp, stubModelId);
+  await clickButton(cdp, "이 모델로 시작");
   await waitForExpression(
     cdp,
     `document.querySelector(${JSON.stringify(firstRunSelector)}) === null && document.querySelector('[data-test-class="workspace"]') !== null`,
@@ -581,15 +587,14 @@ async function main(): Promise<void> {
       "first-run-drag-lane",
       "system-language-ko-preselected",
       "first-run-honors-dark-theme",
-      "language-safety-install-model-order",
-      "agent-progress-title",
+      "welcome-then-pick-an-ai",
+      "no-language-safety-install-screens",
       "no-normal-gateway-selector",
       "no-personal-onboarding-copy",
-      "model-setup-after-readiness",
-      "model-add-first-screen",
-      "oauth-auth-method-available",
-      "model-register-save-complete",
-      "workspace-gate-opens-after-model-save",
+      "top-provider-cards",
+      "no-jargon-in-ai-list",
+      "openai-compatible-server-models",
+      "workspace-gate-opens-after-connection",
     ],
     appServerUrl: `http://127.0.0.1:${serverPort}/`,
   }));
@@ -604,6 +609,7 @@ try {
 } finally {
   (cdp as CdpClient | null)?.close();
   stopElectron();
+  (stubModelServer as HttpServer | null)?.close();
   if (electronProcess) {
     await new Promise((resolve) => setTimeout(resolve, 300));
   }

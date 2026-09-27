@@ -5,24 +5,14 @@ import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { EMPTY_MODEL_CATALOG, EMPTY_SETTINGS } from "@/app/constants.ts";
-import { FIRST_RUN_TEST_MODEL } from "@/app/fixtures.ts";
-import {
-  createInitialFirstRunState,
-  FIRST_RUN_STORAGE_KEY,
-} from "@/app/firstRunSetup.ts";
-import type {
-  AppModelSummary,
-  ModelCatalogView,
-  ProviderAuthMethod,
-  SettingsView,
-  SpaceView,
-} from "@/app/types.ts";
+import { FIRST_RUN_CONSENT_VERSION } from "@/app/onboarding.ts";
+import type { ModelCatalogView, SettingsView, SpaceView } from "@/app/types.ts";
+import { useOnboardingStore } from "@/stores/onboardingStore.ts";
 import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 
-// First-run language choices switch the app locale and the model step drives
-// the real settings UI store (model route, draft); hand both back unchanged so
-// later files in the same bun process (e.g. SettingsSectionHeaders) start clean.
+// First-run language choices switch the app locale; hand it and the settings UI
+// store back unchanged so later files in the same bun process start clean.
 const initialAppLocale = getAppLocale();
 const initialSettingsUIState = useSettingsUIStore.getState();
 afterAll(() => {
@@ -224,6 +214,7 @@ function testStoreSnapshot(): TestStoreState {
       emitStoreChange();
     },
     setLeftOpen() {},
+    openNewChat() {},
   } as TestStoreState;
   return cachedStoreSnapshot;
 }
@@ -243,85 +234,85 @@ afterEach(() => {
   cachedStoreSnapshot = null;
   portalThemeCalls.length = 0;
   systemPrefersDarkForTest = false;
+  useOnboardingStore.setState({ rerunOpen: false, connectedCardId: null });
 });
 
-test("AppShell gates workspace behind pending first-run setup", async () => {
-  const rendered = await renderAppShell({
-    [FIRST_RUN_STORAGE_KEY]: JSON.stringify(createInitialFirstRunState("ko")),
-  });
+const LEGACY_KEY = "butler:first-run-setup:v1";
+const legacyComplete = JSON.stringify({ schema: "butler.app.first-run.v1", status: "complete", completed_at: "2026-06-01T00:00:00.000Z" });
+const currentOnboarding = { consent_version: FIRST_RUN_CONSENT_VERSION, accepted_at: "2026-09-01", completed_at: "2026-09-01" };
 
-  expect(rendered.container.textContent).toContain("언어 선택");
+test("a fresh install shows the welcome instead of the workspace", async () => {
+  const rendered = await renderAppShell({}, { onboarding: {} });
+  // The language comes from the system (jsdom: en-US); there is no language screen.
+  await waitForText(rendered.container, "Welcome to Butler");
   expect(rendered.container.textContent).not.toContain("Workspace");
-  expect(
-    rendered.container.querySelector('[data-test-class="app-window-controls"]'),
-  ).not.toBeNull();
-  expect(
-    rendered.container.querySelector('[data-test-class="app-window-minimize"]'),
-  ).not.toBeNull();
-  expect(
-    rendered.container.querySelector('[data-test-class="app-window-maximize"]'),
-  ).not.toBeNull();
-  expect(
-    rendered.container.querySelector('[data-test-class="app-window-close"]'),
-  ).not.toBeNull();
-
-  await clickButton(rendered.container, "계속");
-  await clickButton(rendered.container, "동의");
-  await waitForText(rendered.container, "모델 설정");
-  await addHostedModelAndFinish(rendered.container);
-
-  expect(rendered.container.textContent).toContain("Workspace");
-  expect(storeState.openSettingsCalls).toEqual([]);
-
+  expect(rendered.container.querySelector('[data-test-class="app-window-controls"]')).not.toBeNull();
+  expect(rendered.container.querySelector('[data-test-class="app-window-close"]')).not.toBeNull();
   await act(async () => rendered.root.unmount());
 });
 
-test("AppShell keeps model setup inside first-run wizard", async () => {
-  const rendered = await renderAppShell({
-    [FIRST_RUN_STORAGE_KEY]: JSON.stringify(createInitialFirstRunState("ko")),
-  });
-
-  await clickButton(rendered.container, "계속");
-  await clickButton(rendered.container, "동의");
-  await waitForText(rendered.container, "모델 설정");
-  expect(rendered.container.textContent).not.toContain("모델 설정 열기");
-  await addHostedModelAndFinish(rendered.container);
-
-  expect(storeState.openSettingsCalls).toEqual([]);
-  expect(rendered.container.textContent).toContain("Workspace");
-
+test("an agent with completed onboarding and current consent opens the workspace directly", async () => {
+  const rendered = await renderAppShell({}, { onboarding: currentOnboarding });
+  await waitForText(rendered.container, "Workspace");
+  expect(rendered.patches).toEqual([]);
   await act(async () => rendered.root.unmount());
 });
 
-test("AppShell applies the resolved theme while first-run setup is pending", async () => {
+test("an upgrade PATCHes the legacy completion once, then asks only for consent", async () => {
+  const rendered = await renderAppShell({ [LEGACY_KEY]: legacyComplete }, { onboarding: {} });
+  await waitForText(rendered.container, "반갑습니다");
+  expect(rendered.patches).toEqual([{ onboarding: { completed_at: "2026-06-01T00:00:00.000Z" } }]);
+  expect(rendered.storage.getItem(LEGACY_KEY)).toBeNull();
+  await clickButton(rendered.container, "동의하고 계속");
+  await waitForText(rendered.container, "Workspace");
+  expect(rendered.container.textContent).not.toContain("어떤 AI와 일할까요?");
+  expect(rendered.patches.at(-1)).toMatchObject({ onboarding: { consent_version: FIRST_RUN_CONSENT_VERSION } });
+  await act(async () => rendered.root.unmount());
+});
+
+test("a newer consent version re-shows only the consent step", async () => {
+  const rendered = await renderAppShell({}, { onboarding: { ...currentOnboarding, consent_version: FIRST_RUN_CONSENT_VERSION - 1 } });
+  await waitForText(rendered.container, "반갑습니다");
+  await clickButton(rendered.container, "동의하고 계속");
+  await waitForText(rendered.container, "Workspace");
+  expect(rendered.patches).toHaveLength(1);
+  await act(async () => rendered.root.unmount());
+});
+
+test("an agent without onboarding support leaves the legacy flag in charge", async () => {
+  const rendered = await renderAppShell({ [LEGACY_KEY]: legacyComplete }, {});
+  await waitForText(rendered.container, "Workspace");
+  expect(rendered.patches).toEqual([]);
+  expect(rendered.storage.getItem(LEGACY_KEY)).toBe(legacyComplete);
+  await act(async () => rendered.root.unmount());
+});
+
+test("Run setup again opens the setup over the workspace and Cancel changes nothing", async () => {
+  const rendered = await renderAppShell({}, { onboarding: currentOnboarding });
+  await waitForText(rendered.container, "Workspace");
+  await act(async () => useOnboardingStore.getState().openRerun());
+  await waitForText(rendered.container, "반갑습니다");
+  await clickButton(rendered.container, "취소");
+  await waitForText(rendered.container, "Workspace");
+  expect(rendered.patches).toEqual([]);
+  await act(async () => rendered.root.unmount());
+});
+
+test("first-run keeps the workspace chrome unmounted and gives the setup the resolved dark backdrop", async () => {
   systemPrefersDarkForTest = true;
-  const rendered = await renderAppShell({
-    [FIRST_RUN_STORAGE_KEY]: JSON.stringify(createInitialFirstRunState("ko")),
-  });
-
-  expect(rendered.container.textContent).toContain("언어 선택");
-  expect(portalThemeCalls).toContain(true);
-
-  await act(async () => rendered.root.unmount());
-});
-
-test("first-run keeps the workspace chrome unmounted and gives the wizard the resolved dark backdrop", async () => {
-  systemPrefersDarkForTest = true;
-  const rendered = await renderAppShell({
-    [FIRST_RUN_STORAGE_KEY]: JSON.stringify(createInitialFirstRunState("ko")),
-  });
-
+  const rendered = await renderAppShell({}, { onboarding: {} });
   expect(rendered.container.textContent).not.toContain("Sidebar");
   expect(rendered.container.textContent).not.toContain("Titlebar");
-  const wizard = rendered.container.querySelector('[data-test-class="first-run-setup"]')!;
-  expect(wizard.getAttribute("data-tone")).toBe("dark");
-
+  const setup = rendered.container.querySelector('[data-test-class="first-run-setup"]')!;
+  expect(setup.getAttribute("data-tone")).toBe("dark");
+  expect(portalThemeCalls).toContain(true);
   await act(async () => rendered.root.unmount());
 });
 
 async function renderAppShell(
   storageValues: Record<string, string>,
-): Promise<{ container: HTMLElement; root: Root }> {
+  agentSettings: Partial<SettingsView>,
+): Promise<{ container: HTMLElement; root: Root; patches: unknown[]; storage: Storage }> {
   const dom = new JSDOM(
     "<!doctype html><html><body><div id=\"root\"></div></body></html>",
     { url: "http://127.0.0.1:5173" },
@@ -343,49 +334,18 @@ async function renderAppShell(
   Object.entries(storageValues).forEach(([key, value]) => {
     dom.window.localStorage.setItem(key, value);
   });
-  const authMethods: ProviderAuthMethod[] = ["api_key", "codex_oauth"];
+  const patches: unknown[] = [];
   Object.assign(dom.window, {
     matchMedia: (media: string) => ({ media, matches: false, onchange: null,
       addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => true }),
     butlerApp: {
-      startSetup: async () => ({
-        diagnostics_available: true,
-        phase: "ready",
-        status_label: "준비 완료",
-      }),
-      getModelCatalog: async () => ({
-        ...EMPTY_MODEL_CATALOG,
-        providers: [
-          {
-            provider_id: "openai",
-            provider_label: "OpenAI",
-            latest_model_ref: FIRST_RUN_TEST_MODEL.model_ref,
-            auth_methods: authMethods,
-            models: [FIRST_RUN_TEST_MODEL],
-          },
-        ],
-        provider_credentials: [
-          {
-            id: "cred-existing",
-            provider_id: "openai",
-            label: "Existing key",
-            masked_value: "sk-...",
-            auth_type: "api_key",
-            created_at: "2026-06-13T00:00:00.000Z",
-            updated_at: "2026-06-13T00:00:00.000Z",
-          },
-        ],
-        registered_models: [],
-      }),
-      getSettings: async () => EMPTY_SETTINGS,
-      registerHostedModel: async () => {
-        const catalog = firstRunRegisteredModelCatalog();
-        return {
-          model: catalog.registered_models?.[0],
-          catalog,
-        };
+      startSetup: async () => ({ diagnostics_available: true, phase: "ready" }),
+      getSettings: async () => ({ ...EMPTY_SETTINGS, language: "ko", ...agentSettings }),
+      getLocalModelServers: async () => ({ servers: [] }),
+      updateSettings: async (patch: unknown) => {
+        patches.push(patch);
+        return {};
       },
-      updateSettings: async () => ({}),
       platform: "win32",
       minimizeWindow: async () => ({}),
       toggleWindowMaximize: async () => ({}),
@@ -400,7 +360,7 @@ async function renderAppShell(
   await act(async () => {
     root.render(<AppShell />);
   });
-  return { container, root };
+  return { container, root, patches, storage: dom.window.localStorage };
 }
 
 async function clickButton(container: HTMLElement, label: string): Promise<void> {
@@ -413,58 +373,6 @@ async function clickButton(container: HTMLElement, label: string): Promise<void>
   await act(async () => {
     button.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
   });
-}
-
-async function addHostedModelAndFinish(container: HTMLElement): Promise<void> {
-  await waitForText(container, "API 키");
-  expect(buttonByLabel(container, "저장하고 시작")).toBeUndefined();
-  await clickButton(container, "추가");
-  await waitForText(container, "Workspace");
-}
-
-function buttonByLabel(
-  container: HTMLElement,
-  label: string,
-): HTMLButtonElement | undefined {
-  return Array.from(container.querySelectorAll("button")).find(
-    (candidate) => candidate.textContent?.trim() === label,
-  );
-}
-
-function firstRunRegisteredModelCatalog(): ModelCatalogView {
-  const defaultModel: AppModelSummary = {
-    ...FIRST_RUN_TEST_MODEL,
-    registered: true,
-    auth_type: "api_key",
-    credential_id: "cred-test",
-    credential_label: "Test key",
-    credential_masked_value: "sk-...",
-  };
-  const authMethods: ProviderAuthMethod[] = ["api_key", "codex_oauth"];
-  return {
-    ...EMPTY_MODEL_CATALOG,
-    providers: [
-      {
-        provider_id: "openai",
-        provider_label: "OpenAI",
-        latest_model_ref: defaultModel.model_ref,
-        auth_methods: authMethods,
-        models: [defaultModel],
-      },
-    ],
-    provider_credentials: [
-      {
-        id: "cred-existing",
-        provider_id: "openai",
-        label: "Existing key",
-        masked_value: "sk-...",
-        auth_type: "api_key",
-        created_at: "2026-06-13T00:00:00.000Z",
-        updated_at: "2026-06-13T00:00:00.000Z",
-      },
-    ],
-    registered_models: [defaultModel],
-  };
 }
 
 async function waitForText(

@@ -11,6 +11,7 @@ import { createServer, type Server } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { onboardingCompletedPatch } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 
 export type StubModelRequest = { stream: boolean; messages: unknown[]; body: Record<string, unknown> };
 
@@ -191,6 +192,24 @@ export function writeOnboardingComplete(butlerData: string): void {
   }, null, 2)}\n`, { mode: 0o600 });
 }
 
+/**
+ * Marks the app's first run as done at the current consent version so smokes
+ * open the workspace. Agents before #230 have no `settings.onboarding`; for
+ * them the smokes' legacy renderer flag keeps doing that job.
+ */
+async function completeAppOnboarding(url: string): Promise<void> {
+  const settings = await fetch(`${url}settings`).then((response) => response.json()).catch(() => null) as
+    { data?: { onboarding?: Record<string, unknown> | null } } | null;
+  const onboarding = settings?.data?.onboarding;
+  if (!onboarding) return;
+  const now = new Date().toISOString();
+  await fetch(`${url}settings`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(onboardingCompletedPatch(onboarding, now, now)),
+  });
+}
+
 async function startStubModel(
   reply: NativeAppServerOptions["stubReply"],
   calls: StubModelRequest[],
@@ -306,6 +325,7 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
     }
     await new Promise((done) => setTimeout(done, 200));
   }
+  if (options.onboardingComplete !== false) await completeAppOnboarding(url);
 
   return {
     url,
