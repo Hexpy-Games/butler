@@ -48,7 +48,11 @@ fn active_targets_in_file(path: &Path, now_epoch_ms: i64) -> CognitionResult<Vec
                 record.clear();
             }
             started = true;
-            append_line(&mut record, &line.bytes[3..], line.terminated);
+            append_line(
+                &mut record,
+                line.bytes.get(3..).unwrap_or_default(),
+                line.terminated,
+            );
         } else {
             started = true;
             append_line(&mut record, &line.bytes, line.terminated);

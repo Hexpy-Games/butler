@@ -91,10 +91,10 @@ pub(super) fn generation_hot_cache(
     data_root: &Path,
     environment: &CognitionPathEnvironment,
     project: Option<&str>,
-) -> CognitionResult<Option<String>> {
+) -> Option<String> {
     // Source's optional prompt projection treats an unavailable or changing
     // generation as absent. Keep this read path separate from mutation authority.
-    Ok(read_generation_hot_cache(data_root, environment, project).unwrap_or(None))
+    read_generation_hot_cache(data_root, environment, project).unwrap_or(None)
 }
 
 fn read_generation_hot_cache(

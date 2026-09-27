@@ -360,8 +360,9 @@ fn chunk_text(text: &str) -> Vec<String> {
     let mut chunks = Vec::new();
     let mut at = 0;
     while at < units.len() {
+        let end = units.len().min(at + 2000);
         chunks.push(String::from_utf16_lossy(
-            &units[at..units.len().min(at + 2000)],
+            units.get(at..end).unwrap_or_default(),
         ));
         at += 1950;
     }

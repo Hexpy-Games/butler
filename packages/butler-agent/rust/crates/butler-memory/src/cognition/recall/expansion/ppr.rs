@@ -19,6 +19,52 @@ pub(super) fn personalized_page_rank(
         .enumerate()
         .map(|(index, node)| (node.as_str(), index))
         .collect::<std::collections::HashMap<_, _>>();
+    let distribution = seed_distribution(&indexes, seeds, nodes.len());
+    let transitions = transitions(&indexes, edges, nodes.len());
+    let mut scores = distribution.clone();
+    let mut next = vec![0.0; nodes.len()];
+    for _ in 0..32 {
+        for (target, seed) in next.iter_mut().zip(&distribution) {
+            *target = ALPHA * seed;
+        }
+        let mut dangling = 0.0;
+        for (outgoing, &score) in transitions.iter().zip(&scores) {
+            let total = outgoing.iter().map(|item| item.1).sum::<f64>();
+            if total <= 0.0 {
+                dangling += score;
+                continue;
+            }
+            for &(target, weight) in outgoing {
+                if let Some(slot) = next.get_mut(target) {
+                    *slot += PROPAGATION * score * weight / total;
+                }
+            }
+        }
+        for seed in seeds {
+            if let Some(&index) = indexes.get(seed.as_str())
+                && let (Some(slot), Some(seed_weight)) =
+                    (next.get_mut(index), distribution.get(index))
+            {
+                *slot += PROPAGATION * dangling * seed_weight;
+            }
+        }
+        let delta = next
+            .iter()
+            .zip(&scores)
+            .map(|(new, old)| (new - old).abs())
+            .sum::<f64>();
+        std::mem::swap(&mut scores, &mut next);
+        if delta <= EPSILON {
+            break;
+        }
+    }
+    nodes.iter().cloned().zip(scores).collect()
+}
+
+type NodeIndexes<'a> = std::collections::HashMap<&'a str, usize>;
+
+/// The restart distribution: each seed weighted by its reciprocal rank.
+fn seed_distribution(indexes: &NodeIndexes<'_>, seeds: &[String], len: usize) -> Vec<f64> {
     let weights = seeds
         .iter()
         .enumerate()
@@ -27,13 +73,26 @@ pub(super) fn personalized_page_rank(
     let weight_total = weights.iter().copied().sum::<f64>();
     // JavaScript Map preserves the first insertion slot but a duplicate seed
     // overwrites its distribution value with that seed's later weight.
-    let mut distribution = vec![0.0; nodes.len()];
+    let mut distribution = vec![0.0; len];
     for (seed, weight) in seeds.iter().zip(weights) {
-        if let Some(&index) = indexes.get(seed.as_str()) {
-            distribution[index] = weight / weight_total;
+        if let Some(slot) = indexes
+            .get(seed.as_str())
+            .and_then(|index| distribution.get_mut(*index))
+        {
+            *slot = weight / weight_total;
         }
     }
-    let mut transitions = vec![Vec::<(usize, f64)>::new(); nodes.len()];
+    distribution
+}
+
+/// Weighted outgoing edges per node; reverse edges are damped unless the
+/// relation is symmetric.
+fn transitions(
+    indexes: &NodeIndexes<'_>,
+    edges: &[RecallEdge],
+    len: usize,
+) -> Vec<Vec<(usize, f64)>> {
+    let mut transitions = vec![Vec::<(usize, f64)>::new(); len];
     for edge in edges {
         let (Some(&source), Some(&target)) = (
             indexes.get(edge.source_node_id.as_str()),
@@ -50,46 +109,17 @@ pub(super) fn personalized_page_rank(
         } else {
             1.0
         };
-        transitions[source].push((target, support * factor));
+        if let Some(outgoing) = transitions.get_mut(source) {
+            outgoing.push((target, support * factor));
+        }
         let reverse = if edge.relation == "related_to" || edge.relation == "co_occurred" {
             1.0
         } else {
             0.5
         };
-        transitions[target].push((source, support * factor * reverse));
-    }
-    let mut scores = distribution.clone();
-    let mut next = vec![0.0; nodes.len()];
-    for _ in 0..32 {
-        for (target, seed) in next.iter_mut().zip(&distribution) {
-            *target = ALPHA * seed;
-        }
-        let mut dangling = 0.0;
-        for (index, outgoing) in transitions.iter().enumerate() {
-            let score = scores[index];
-            let total = outgoing.iter().map(|item| item.1).sum::<f64>();
-            if total <= 0.0 {
-                dangling += score;
-                continue;
-            }
-            for &(target, weight) in outgoing {
-                next[target] += PROPAGATION * score * weight / total;
-            }
-        }
-        for seed in seeds {
-            if let Some(&index) = indexes.get(seed.as_str()) {
-                next[index] += PROPAGATION * dangling * distribution[index];
-            }
-        }
-        let delta = next
-            .iter()
-            .zip(&scores)
-            .map(|(new, old)| (new - old).abs())
-            .sum::<f64>();
-        std::mem::swap(&mut scores, &mut next);
-        if delta <= EPSILON {
-            break;
+        if let Some(incoming) = transitions.get_mut(target) {
+            incoming.push((source, support * factor * reverse));
         }
     }
-    nodes.iter().cloned().zip(scores).collect()
+    transitions
 }

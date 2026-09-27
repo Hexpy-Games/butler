@@ -108,20 +108,21 @@ impl MemorySourceReference {
 
 fn decode_handle(handle: &str, generation_id: &str) -> CognitionResult<String> {
     let parts = handle.split(':').collect::<Vec<_>>();
-    if parts.len() != 4 || parts[0] != "memory-source" || parts[1] != "v2" {
+    let ["memory-source", "v2", generation, source] = parts.as_slice() else {
         return Err(error(CognitionCode::MemorySourceNotFound));
-    }
+    };
     let decode = |value: &str| {
         URL_SAFE_NO_PAD
             .decode(value)
             .ok()
             .and_then(|bytes| String::from_utf8(bytes).ok())
     };
-    let referenced = decode(parts[2]).ok_or_else(|| error(CognitionCode::MemorySourceNotFound))?;
+    let referenced =
+        decode(generation).ok_or_else(|| error(CognitionCode::MemorySourceNotFound))?;
     if referenced != generation_id {
         return Err(error(CognitionCode::MemorySourceChanged));
     }
-    decode(parts[3]).ok_or_else(|| error(CognitionCode::MemorySourceNotFound))
+    decode(source).ok_or_else(|| error(CognitionCode::MemorySourceNotFound))
 }
 
 fn error(code: CognitionCode) -> CognitionError {

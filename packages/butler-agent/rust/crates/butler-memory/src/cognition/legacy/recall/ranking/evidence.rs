@@ -256,8 +256,8 @@ fn planned_strategy_evidence_score(
     signals: RankingSignals,
     policy: &ActivePolicy,
 ) -> f64 {
-    if let Some(mapped) = requirement_for_strategy(strategy)
-        && policy.evidence_required.contains(&mapped)
+    let mapped = requirement_for_strategy(strategy);
+    if policy.evidence_required.contains(&mapped)
         && evidence_requirement_score(mapped, candidate, signals) <= 0.0
     {
         return 0.0;
@@ -265,31 +265,22 @@ fn planned_strategy_evidence_score(
     strategy_evidence_score(strategy, candidate, signals)
 }
 
-fn requirement_for_strategy(
-    strategy: LegacyRecallStrategy,
-) -> Option<LegacyRecallEvidenceRequirement> {
+/// The evidence a strategy's hits provide.
+fn requirement_for_strategy(strategy: LegacyRecallStrategy) -> LegacyRecallEvidenceRequirement {
     match strategy {
         LegacyRecallStrategy::SearchVectorEpisode => {
-            Some(LegacyRecallEvidenceRequirement::VectorEpisodeHit)
+            LegacyRecallEvidenceRequirement::VectorEpisodeHit
         }
         LegacyRecallStrategy::SearchLexicalMemory => {
-            Some(LegacyRecallEvidenceRequirement::ProjectMemoryHit)
+            LegacyRecallEvidenceRequirement::ProjectMemoryHit
         }
-        LegacyRecallStrategy::ReadGraphMemory => {
-            Some(LegacyRecallEvidenceRequirement::GraphRelationHit)
-        }
+        LegacyRecallStrategy::ReadGraphMemory => LegacyRecallEvidenceRequirement::GraphRelationHit,
         LegacyRecallStrategy::ReadExplicitMemory => {
-            Some(LegacyRecallEvidenceRequirement::ExplicitRuleHit)
+            LegacyRecallEvidenceRequirement::ExplicitRuleHit
         }
-        LegacyRecallStrategy::ReadTaskState => {
-            Some(LegacyRecallEvidenceRequirement::TaskContinuity)
-        }
-        LegacyRecallStrategy::ReadRecentContext => {
-            Some(LegacyRecallEvidenceRequirement::RecentTurnHit)
-        }
-        LegacyRecallStrategy::QueryExactTranscript => {
-            Some(LegacyRecallEvidenceRequirement::ExactQuote)
-        }
+        LegacyRecallStrategy::ReadTaskState => LegacyRecallEvidenceRequirement::TaskContinuity,
+        LegacyRecallStrategy::ReadRecentContext => LegacyRecallEvidenceRequirement::RecentTurnHit,
+        LegacyRecallStrategy::QueryExactTranscript => LegacyRecallEvidenceRequirement::ExactQuote,
     }
 }
 

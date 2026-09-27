@@ -3,6 +3,7 @@
 //! (`queue/completion-observations/<job>.json`).
 
 use crate::cognition::CognitionCode;
+use crate::lenient::JsonField;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
@@ -140,29 +141,29 @@ fn required(value: &str) -> CognitionResult<&str> {
 
 /// The observation of `job_id` when its file exists, is the v1 schema for
 /// this job, and its integrity hash holds.
-pub(super) fn read_verified(root: &Path, job_id: &str) -> CognitionResult<Option<ObservedTurn>> {
+pub(super) fn read_verified(root: &Path, job_id: &str) -> Option<ObservedTurn> {
     if job_id.is_empty()
         || !job_id
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
     {
-        return Ok(None);
+        return None;
     }
     let path = root
         .join("queue/completion-observations")
         .join(format!("{job_id}.json"));
     let Ok(content) = fs::read_to_string(path) else {
-        return Ok(None);
+        return None;
     };
     // Passthrough: the stored observation, verified over every field it has.
     let value: Value = match serde_json::from_str(&content) {
         Ok(value) => value,
-        Err(_) => return Ok(None),
+        Err(_) => return None,
     };
-    Ok(
-        (value["schema_version"] == SCHEMA && value["job_id"] == job_id && integrity_valid(&value))
-            .then(|| crate::lenient::view(&value)),
-    )
+    (value.field("schema_version") == SCHEMA
+        && value.field("job_id") == job_id
+        && integrity_valid(&value))
+    .then(|| crate::lenient::view(&value))
 }
 
 /// Passthrough: `value` is a stored observation; its `integrity_sha256`

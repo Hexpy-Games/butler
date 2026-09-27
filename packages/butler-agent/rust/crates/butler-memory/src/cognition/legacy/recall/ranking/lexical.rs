@@ -71,9 +71,11 @@ fn non_ascii_lexical_shingles(token: &str) -> Vec<String> {
         if characters.len() < size {
             continue;
         }
-        for index in 0..=characters.len() - size {
-            shingles.push(characters[index..index + size].iter().collect());
-        }
+        shingles.extend(
+            characters
+                .windows(size)
+                .map(|window| window.iter().collect::<String>()),
+        );
     }
     shingles
 }

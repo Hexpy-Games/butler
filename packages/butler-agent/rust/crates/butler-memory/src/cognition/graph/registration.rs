@@ -271,11 +271,13 @@ fn replacement_source_refs(
     source_id: &str,
 ) -> CognitionResult<Vec<String>> {
     let leaves = expand(connection, source_id)?;
-    Ok(if leaves.len() == 1 && leaves[0] == source_id {
-        Vec::new()
-    } else {
-        leaves
-    })
+    Ok(
+        if matches!(leaves.as_slice(), [only] if only == source_id) {
+            Vec::new()
+        } else {
+            leaves
+        },
+    )
 }
 
 fn expand(connection: &Connection, source_id: &str) -> CognitionResult<Vec<String>> {

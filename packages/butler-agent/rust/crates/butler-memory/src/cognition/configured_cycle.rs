@@ -1,5 +1,7 @@
 //! The four source-configured memory maintenance phases and their durable report.
 
+use crate::lenient::JsonField;
+use crate::lenient::set_field;
 use std::{
     future::Future,
     path::PathBuf,
@@ -71,7 +73,7 @@ impl ConfiguredCycleOptions {
             .ok()
             .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
             .unwrap_or(Value::Null);
-        let config = &raw["cognition"]["consolidationCycle"];
+        let config = &raw.field("cognition").field("consolidationCycle");
         let number = |key: &str, default| config[key].as_u64().unwrap_or(default);
         let sub = &config["subPhaseBudgetsMs"];
         Self {
@@ -220,7 +222,11 @@ fn now_ms() -> i64 {
 
 async fn append_event(data_root: PathBuf, root: PathBuf, mut event: Value) -> CognitionResult<()> {
     let now: chrono::DateTime<chrono::Utc> = SystemTime::now().into();
-    event["ts"] = json!(now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
+    set_field(
+        &mut event,
+        "ts",
+        json!(now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
+    );
     let path = root.join("logs").join(format!(
         "consolidation-cycle-{}.jsonl",
         now.format("%Y-%m-%d")
@@ -234,7 +240,11 @@ async fn append_summary(
     mut event: Value,
 ) -> CognitionResult<()> {
     let now: chrono::DateTime<chrono::Utc> = SystemTime::now().into();
-    event["ts"] = json!(now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
+    set_field(
+        &mut event,
+        "ts",
+        json!(now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
+    );
     append(data_root, root.join("run-summary.jsonl"), event).await
 }
 

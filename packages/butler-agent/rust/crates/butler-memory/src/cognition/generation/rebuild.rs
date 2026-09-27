@@ -371,7 +371,7 @@ fn hash_file(path: &Path) -> CognitionResult<String> {
         if n == 0 {
             break;
         }
-        hash.update(&buffer[..n]);
+        hash.update(buffer.get(..n).unwrap_or_default());
     }
     Ok(format!("{:x}", hash.finalize()))
 }

@@ -1,6 +1,8 @@
 //! Operator quality exclusions of memory sources, recorded beside the
 //! feedback buffer and replayed idempotently by operation id.
 
+use crate::lenient::JsonField;
+use crate::lenient::set_field;
 use std::{
     fs::{self, OpenOptions},
     io::Write,
@@ -90,7 +92,7 @@ fn record_exclusion(input: ExclusionOperation<'_>) -> CognitionResult<Value> {
         return Err(error(CognitionCode::MemoryFeedbackEntryNotFound));
     }
     let expected = expected_operation(input, prior.as_ref(), owner)?;
-    if expected["feedback_owner_revision"].as_str().is_none() {
+    if expected.field("feedback_owner_revision").as_str().is_none() {
         return Err(error(CognitionCode::MemoryQualityTargetChanged));
     }
     let (operation, replayed) = if let Some(prior) = prior {
@@ -100,13 +102,16 @@ fn record_exclusion(input: ExclusionOperation<'_>) -> CognitionResult<Value> {
         (prior, true)
     } else {
         let mut operation = expected;
-        operation["status"] = json!("pending");
-        operation["created_at"] = json!(now_iso());
+        set_field(&mut operation, "status", json!("pending"));
+        set_field(&mut operation, "created_at", json!(now_iso()));
         append_operation(&operation_path, &operations, &operation)?;
         input.publisher.publish_feedback_quality_exclusion(
             input.feedback_id,
             input.operation_id,
-            operation["source_revision"].as_str().unwrap_or_default(),
+            operation
+                .field("source_revision")
+                .as_str()
+                .unwrap_or_default(),
         )?;
         (operation, false)
     };
@@ -167,7 +172,7 @@ fn read_operations(path: &Path) -> CognitionResult<Vec<Value>> {
         .lines()
         .filter_map(|line| {
             let value: Value = serde_json::from_str(line).ok()?;
-            (value["schema"] == "butler.memory-source-quality-operation.v1").then_some(value)
+            (value.field("schema") == "butler.memory-source-quality-operation.v1").then_some(value)
         })
         .collect())
 }

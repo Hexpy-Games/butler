@@ -70,7 +70,9 @@ pub(super) fn collect_promotions(
                 groups.push(Vec::new());
                 groups.len() - 1
             });
-            groups[index].push(candidate);
+            if let Some(group) = groups.get_mut(index) {
+                group.push(candidate);
+            }
         }
     }
 
@@ -82,10 +84,9 @@ pub(super) fn collect_promotions(
                 provenance.push(candidate.provenance.clone());
             }
         }
-        if provenance.len() < 2 {
+        let Some(first) = candidates.first().filter(|_| provenance.len() >= 2) else {
             continue;
-        }
-        let first = &candidates[0];
+        };
         result.entry(first.category).or_default().push(Promotion {
             text: first.text.clone(),
             sources: provenance.len(),
@@ -154,13 +155,16 @@ fn split_sentences(line: &str) -> Vec<String> {
     let mut parts = Vec::new();
     let mut start = 0;
     let mut index = 0;
-    while index < chars.len() {
-        let (position, character) = chars[index];
-        let previous_is_punctuation =
-            index > 0 && matches!(chars[index - 1].1, '.' | '!' | '?' | '。');
+    while let Some(&(position, character)) = chars.get(index) {
+        let previous_is_punctuation = index
+            .checked_sub(1)
+            .and_then(|previous| chars.get(previous))
+            .is_some_and(|(_, previous)| matches!(previous, '.' | '!' | '?' | '。'));
         if previous_is_punctuation && butler_core::public_text::is_js_whitespace(character) {
-            parts.push(line[start..position].to_owned());
-            while index < chars.len() && butler_core::public_text::is_js_whitespace(chars[index].1)
+            parts.push(line.get(start..position).unwrap_or_default().to_owned());
+            while chars
+                .get(index)
+                .is_some_and(|(_, next)| butler_core::public_text::is_js_whitespace(*next))
             {
                 index += 1;
             }
@@ -169,7 +173,7 @@ fn split_sentences(line: &str) -> Vec<String> {
             index += 1;
         }
     }
-    parts.push(line[start..].to_owned());
+    parts.push(line.get(start..).unwrap_or_default().to_owned());
     parts
 }
 

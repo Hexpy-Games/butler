@@ -7,30 +7,45 @@ use super::contracts::{
     RecallResultChannel, Salience, TimeBasis,
 };
 
+/// One channel's ranked episodes in a round-robin fusion.
+struct FusionLane<'a> {
+    queue: &'a [String],
+    /// Episodes of this channel considered (at most 128).
+    length: usize,
+    offset: usize,
+}
+
+/// Interleaves the channels round-robin into at most 128 distinct episodes.
 pub(in crate::cognition) fn fuse_episode_candidates(
     graph: &[String],
     vector: &[String],
     lexical: &[String],
     context: &[String],
 ) -> FusedEpisodeCandidates {
-    let queues = [graph, vector, lexical, context];
-    let lengths = queues.map(|queue| queue.len().min(128));
-    let mut offsets = [0usize; 4];
+    let mut lanes = [graph, vector, lexical, context].map(|queue| FusionLane {
+        queue,
+        length: queue.len().min(128),
+        offset: 0,
+    });
+    let pending = |lanes: &[FusionLane<'_>]| lanes.iter().any(|lane| lane.offset < lane.length);
     let mut seen = HashSet::new();
     let mut episode_ids = Vec::new();
-    while episode_ids.len() < 128 && (0..4).any(|index| offsets[index] < lengths[index]) {
-        for index in 0..4 {
+    while episode_ids.len() < 128 && pending(&lanes) {
+        for lane in &mut lanes {
             if episode_ids.len() == 128 {
                 break;
             }
-            let offset = offsets[index];
-            offsets[index] += 1;
-            if offset < lengths[index] && seen.insert(queues[index][offset].as_str()) {
-                episode_ids.push(queues[index][offset].clone());
+            let offset = lane.offset;
+            lane.offset += 1;
+            if offset < lane.length
+                && let Some(id) = lane.queue.get(offset)
+                && seen.insert(id.as_str())
+            {
+                episode_ids.push(id.clone());
             }
         }
     }
-    let candidate_limit = (0..4).any(|index| offsets[index] < lengths[index]);
+    let candidate_limit = pending(&lanes);
     FusedEpisodeCandidates {
         episode_ids,
         candidate_limit,

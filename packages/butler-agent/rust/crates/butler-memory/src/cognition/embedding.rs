@@ -278,7 +278,7 @@ impl EmbeddingEngine {
         }
         let limit = max_embeddings.unwrap_or(prepared.len()).min(prepared.len());
         let omitted_count = prepared.len() - limit;
-        let embedded_texts = prepared[..limit].to_vec();
+        let embedded_texts = prepared.get(..limit).unwrap_or_default().to_vec();
         let mut embeddings = Vec::with_capacity(limit);
         let mut token_counts = Vec::with_capacity(limit);
         for text in &embedded_texts {
@@ -325,9 +325,9 @@ impl EmbeddingEngine {
                 if graphemes.len() <= 1 {
                     return Err(EmbeddingFailure::new("embed_grapheme_too_long"));
                 }
-                let mid = graphemes.len().div_ceil(2);
-                pending.push(graphemes[mid..].concat());
-                pending.push(graphemes[..mid].concat());
+                let (head, tail) = graphemes.split_at(graphemes.len().div_ceil(2));
+                pending.push(tail.concat());
+                pending.push(head.concat());
             }
             if pending.len() + result.len() > 1024 {
                 return Err(EmbeddingFailure::new("embed_resplit_limit"));
@@ -364,28 +364,30 @@ impl EmbeddingEngine {
         let (shape, data) = output
             .try_extract_tensor::<f32>()
             .map_err(EmbeddingFailure::caused("embed_output_invalid"))?;
-        if shape.len() != 3
-            || shape[0] != 1
-            || shape[1] != i64::try_from(len).unwrap_or(i64::MAX)
-            || shape[2] != i64::try_from(EXPECTED_DIMENSION).unwrap_or(i64::MAX)
-            || data.len() != len * EXPECTED_DIMENSION
-        {
+        let expected_shape = [
+            1,
+            i64::try_from(len).unwrap_or(i64::MAX),
+            i64::try_from(EXPECTED_DIMENSION).unwrap_or(i64::MAX),
+        ];
+        if **shape != expected_shape || data.len() != len * EXPECTED_DIMENSION {
             return Err(EmbeddingFailure::new("embed_dimension_invalid"));
         }
         let mut vector = vec![0.0_f32; EXPECTED_DIMENSION];
         if checked {
-            vector.copy_from_slice(&data[..EXPECTED_DIMENSION]);
+            let first = data
+                .get(..EXPECTED_DIMENSION)
+                .ok_or(EmbeddingFailure::new("embed_output_invalid"))?;
+            vector.copy_from_slice(first);
         } else {
             let mask = encoded.get_attention_mask();
             let count: u32 = mask.iter().sum();
             if count == 0 {
                 return Err(EmbeddingFailure::new("embed_output_invalid"));
             }
-            for (position, active) in mask.iter().enumerate() {
+            for (active, row) in mask.iter().zip(data.chunks_exact(EXPECTED_DIMENSION)) {
                 if *active == 0 {
                     continue;
                 }
-                let row = &data[position * EXPECTED_DIMENSION..(position + 1) * EXPECTED_DIMENSION];
                 for (total, value) in vector.iter_mut().zip(row) {
                     *total += *value / count as f32;
                 }
@@ -445,7 +447,7 @@ fn hash_file(path: &PathBuf) -> Result<String, EmbeddingFailure> {
         if count == 0 {
             break;
         }
-        digest.update(&buffer[..count]);
+        digest.update(buffer.get(..count).unwrap_or_default());
     }
     Ok(format!("{:x}", digest.finalize()))
 }

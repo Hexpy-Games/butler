@@ -341,7 +341,9 @@ pub(super) fn complete(
             return Err(error(CognitionCode::MemoryVectorUnitChanged));
         }
     }
-    refresh(&tx, &units[0].job_id, now)?;
+    if let Some(first) = units.first() {
+        refresh(&tx, &first.job_id, now)?;
+    }
     tx.commit().map_err(db_error)
 }
 
@@ -373,7 +375,9 @@ pub(super) fn fail(
         });
         tx.execute("UPDATE memory_vector_units SET state=?1,error_code=?2,next_attempt_at=?3,owner_pid=NULL,owner_nonce=NULL,started_at=NULL,outcome_known=1 WHERE unit_id=?4 AND owner_nonce=?5", params![if retryable {"pending"} else {"failed"},code,next_attempt,unit.unit_id,unit.owner_nonce]).map_err(db_error)?;
     }
-    refresh(&tx, &units[0].job_id, now)?;
+    if let Some(first) = units.first() {
+        refresh(&tx, &first.job_id, now)?;
+    }
     tx.commit().map_err(db_error)
 }
 

@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use crate::lenient::set_field;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -85,9 +86,13 @@ impl Serialize for GenerationEmbedding {
                         && number.fract() == 0.0
                         && number <= 9_007_199_254_740_991.0
                     {
-                        wire[field] = Value::Number(serde_json::Number::from(
-                            butler_core::json::saturating_u64(number),
-                        ));
+                        set_field(
+                            &mut wire,
+                            field,
+                            Value::Number(serde_json::Number::from(
+                                butler_core::json::saturating_u64(number),
+                            )),
+                        );
                     }
                 }
                 wire.serialize(serializer)

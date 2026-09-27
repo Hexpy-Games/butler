@@ -178,3 +178,24 @@ where
             .collect(),
     ))
 }
+
+/// Reads of stored JSON that cannot panic: the same result as `value[key]`
+/// (`null` when the value is not an object or has no such key).
+pub(crate) trait JsonField {
+    /// The field, or `null`.
+    fn field(&self, key: &str) -> &Value;
+}
+
+impl JsonField for Value {
+    fn field(&self, key: &str) -> &Value {
+        static NULL: Value = Value::Null;
+        self.get(key).unwrap_or(&NULL)
+    }
+}
+
+/// Sets a field of a JSON object record (a no-op on other values).
+pub(crate) fn set_field(record: &mut Value, key: &str, value: Value) {
+    if let Some(object) = record.as_object_mut() {
+        object.insert(key.to_owned(), value);
+    }
+}

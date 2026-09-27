@@ -1,3 +1,4 @@
+use crate::lenient::set_field;
 use chrono::{DateTime, Utc};
 use serde_json::json;
 
@@ -48,12 +49,16 @@ pub(super) fn prompt(
         "suggestions":[{"id":"stable-kebab-id","title":"topic name","description":"why this is useful to open","text":"message to send if selected","source_kind":"one allowed source kind"}],
     });
     if project.is_none() {
-        output_shape["title_variants"] = json!({
-            "morning":"surface headline for local morning",
-            "afternoon":"surface headline for local afternoon",
-            "evening":"surface headline for local evening",
-            "night":"surface headline for local night",
-        });
+        set_field(
+            &mut output_shape,
+            "title_variants",
+            json!({
+                "morning":"surface headline for local morning",
+                "afternoon":"surface headline for local afternoon",
+                "evening":"surface headline for local evening",
+                "night":"surface headline for local night",
+            }),
+        );
     }
     let rules = if project.is_some() {
         vec![
@@ -154,5 +159,5 @@ pub(super) fn moment(local_minute: u16, locale: &str) -> String {
 }
 
 fn head(values: &[String], count: usize) -> &[String] {
-    &values[..values.len().min(count)]
+    values.get(..count).unwrap_or(values)
 }

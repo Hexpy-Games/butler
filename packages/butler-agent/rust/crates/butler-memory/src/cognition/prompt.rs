@@ -68,7 +68,13 @@ impl CognitionPromptReader {
         let root = self.data_root.clone();
         let environment = self.environment.clone();
         self.owner
-            .run(move || memory::generation_hot_cache(&root, &environment, project.as_deref()))
+            .run(move || {
+                Ok(memory::generation_hot_cache(
+                    &root,
+                    &environment,
+                    project.as_deref(),
+                ))
+            })
             .await
     }
 

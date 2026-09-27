@@ -124,8 +124,11 @@ fn group_graph_mentions(mentions: Vec<GraphMention>) -> Vec<LegacyRecallCandidat
     let mut by_key = HashMap::<String, usize>::new();
     for mention in mentions {
         let key = format!("{}\0{}", mention.session_id, mention.snippet);
-        if let Some(index) = by_key.get(&key).copied() {
-            let group = &mut grouped[index];
+        if let Some(group) = by_key
+            .get(&key)
+            .copied()
+            .and_then(|index| grouped.get_mut(index))
+        {
             group.timestamp = group.timestamp.max(mention.timestamp);
             if !group.entity_ids.contains(&mention.node_id) {
                 group.entity_ids.push(mention.node_id);

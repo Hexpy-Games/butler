@@ -182,7 +182,11 @@ fn count_feedback_file(path: &Path, now_epoch_ms: i64) -> CognitionResult<Feedba
                 record.clear();
             }
             has_record = true;
-            append_line(&mut record, &line.bytes[3..], line.terminated);
+            append_line(
+                &mut record,
+                line.bytes.get(3..).unwrap_or_default(),
+                line.terminated,
+            );
         } else {
             has_record = true;
             append_line(&mut record, &line.bytes, line.terminated);
@@ -214,8 +218,9 @@ fn read_line(reader: &mut impl BufRead) -> CognitionResult<Option<Line>> {
                 .iter()
                 .position(|byte| *byte == b'\n')
                 .map_or(available.len(), |position| position + 1);
-            let has_newline = available[count - 1] == b'\n';
-            bytes.extend_from_slice(&available[..count]);
+            let line = available.get(..count).unwrap_or_default();
+            let has_newline = line.last() == Some(&b'\n');
+            bytes.extend_from_slice(line);
             (count, has_newline)
         };
         reader.consume(count);

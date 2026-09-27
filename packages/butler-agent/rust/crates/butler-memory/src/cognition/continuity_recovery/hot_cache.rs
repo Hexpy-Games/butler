@@ -56,7 +56,7 @@ pub(super) fn replay_result(
     };
     if replayed {
         Ok(Some(ContinuityRecoveryAction {
-            manifest: super::view(manifest)?,
+            manifest: super::view(manifest),
             replayed: true,
         }))
     } else {
@@ -82,7 +82,7 @@ pub(super) fn apply(
             .is_some_and(|after| after.sha256 == current_hash)
     {
         return Ok(ContinuityRecoveryAction {
-            manifest: super::view(manifest)?,
+            manifest: super::view(manifest),
             replayed: true,
         });
     }
@@ -141,7 +141,7 @@ pub(super) fn apply(
     });
     manifest::write(data_root, paths, &manifest)?;
     Ok(ContinuityRecoveryAction {
-        manifest: super::view(manifest)?,
+        manifest: super::view(manifest),
         replayed: false,
     })
 }
@@ -160,7 +160,7 @@ pub(super) fn rollback(
     let current_hash = sha256(read_text(cache)?.as_bytes());
     if manifest.status == "rolled_back" && current_hash == manifest.before.sha256 {
         return Ok(ContinuityRecoveryAction {
-            manifest: super::view(manifest)?,
+            manifest: super::view(manifest),
             replayed: true,
         });
     }
@@ -193,7 +193,7 @@ pub(super) fn rollback(
     manifest.updated_at = manifest::now();
     manifest::write(data_root, paths, &manifest)?;
     Ok(ContinuityRecoveryAction {
-        manifest: super::view(manifest)?,
+        manifest: super::view(manifest),
         replayed: false,
     })
 }

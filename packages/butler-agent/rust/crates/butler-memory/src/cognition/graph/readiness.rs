@@ -205,7 +205,7 @@ fn lineage(
             .is_none_or(|last| last.byte_end != root.byte_end)
         || children
             .windows(2)
-            .any(|pair| pair[0].byte_end != pair[1].byte_start)
+            .any(|pair| matches!(pair, [left, right] if left.byte_end != right.byte_start))
     {
         return Ok(None);
     }

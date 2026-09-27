@@ -204,7 +204,11 @@ pub(super) fn read_entries(path: &Path) -> CognitionResult<Vec<FeedbackEntry>> {
                 record.clear();
             }
             started = true;
-            append_line(&mut record, &line.bytes[3..], line.terminated);
+            append_line(
+                &mut record,
+                line.bytes.get(3..).unwrap_or_default(),
+                line.terminated,
+            );
         } else {
             started = true;
             append_line(&mut record, &line.bytes, line.terminated);

@@ -1,6 +1,7 @@
 use std::{collections::BTreeMap, fs, io::Write, path::Path};
 
 use crate::cognition::CognitionCode;
+use crate::lenient::JsonField;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -76,7 +77,7 @@ pub(super) fn read(
         Ok(value) => value,
         Err(_) => return Ok(None),
     };
-    if value["schema_version"] != SCHEMA || value["manifest_id"] != manifest_id {
+    if value.field("schema_version") != SCHEMA || value.field("manifest_id") != manifest_id {
         return Ok(None);
     }
     serde_json::from_value(value).map(Some).map_err(|source| {

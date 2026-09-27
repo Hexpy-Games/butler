@@ -7,6 +7,7 @@ pub use generation::{
     BriefingProjectSignal, BriefingSettings,
 };
 
+use crate::lenient::JsonField;
 use serde_json::Value;
 use std::{
     collections::BTreeSet,
@@ -141,7 +142,7 @@ fn valid_artifact(value: &Value, scope: &str, project_id: Option<&str>, locale: 
         && (scope != "project" || value["project_id"] == project_id.unwrap_or_default())
         && value["title"].as_str().is_some_and(|text| !text.is_empty())
         && value["description"].is_string()
-        && value["source"]["raw_text_included"] == false
+        && value.field("source").field("raw_text_included") == false
         && value["raw_text_included"] == false
         && value["suggestions"]
             .as_array()
@@ -178,12 +179,13 @@ pub fn latest_completed_briefing_run_id(data_root: &Path, date: Option<&str>) ->
         let Ok(value) = serde_json::from_slice::<Value>(&bytes) else {
             continue;
         };
-        if value["status"] != "completed" {
+        if value.field("status") != "completed" {
             continue;
         }
         if date.filter(|date| !date.is_empty()).is_some_and(|date| {
             !["completed_at", "started_at"].iter().any(|key| {
-                value[*key]
+                value
+                    .field(key)
                     .as_str()
                     .and_then(|timestamp| timestamp.get(..10))
                     .filter(|part| valid_date(part))
@@ -192,7 +194,7 @@ pub fn latest_completed_briefing_run_id(data_root: &Path, date: Option<&str>) ->
         }) {
             continue;
         }
-        if let Some(id) = value["run_id"].as_str() {
+        if let Some(id) = value.field("run_id").as_str() {
             best = Some((modified, id.to_owned()));
         }
     }

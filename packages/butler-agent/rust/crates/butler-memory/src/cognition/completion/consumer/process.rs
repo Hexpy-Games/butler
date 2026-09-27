@@ -185,7 +185,7 @@ async fn process_entry(
     if kind != Some("conversation_turn") {
         return Err(error(CognitionCode::MemorySyncSourceUnavailable));
     }
-    let Some(observation) = super::super::observation::read_verified(root, job_id)? else {
+    let Some(observation) = super::super::observation::read_verified(root, job_id) else {
         return reject_invalid(root, request, job_id, &(input.clock)());
     };
     if !source

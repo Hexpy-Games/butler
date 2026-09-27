@@ -1,5 +1,6 @@
 //! Read-only adapter for the retained MCP tool's legacy graph database.
 
+use crate::lenient::JsonField;
 use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags, params};
@@ -89,7 +90,7 @@ fn reject_generation_writer(memory_root: &Path) -> Result<(), LegacyGraphReadErr
     };
     let value: Value = serde_json::from_slice(&bytes)
         .map_err(|error| LegacyGraphReadError::GenerationUnavailable(error.into()))?;
-    if value["schema"] == "butler.memory-active-generation.v2" {
+    if value.field("schema") == "butler.memory-active-generation.v2" {
         return Err(LegacyGraphReadError::WriterDisabled);
     }
     Ok(())

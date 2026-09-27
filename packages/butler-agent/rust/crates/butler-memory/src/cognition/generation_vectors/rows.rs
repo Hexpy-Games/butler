@@ -257,7 +257,9 @@ async fn persisted_receipt_in_table(
         return Ok(None);
     }
     seen.sort();
-    let version = &rows[0].embedding_version;
+    let Some(version) = rows.first().map(|row| &row.embedding_version) else {
+        return Ok(None);
+    };
     if rows.iter().any(|row| row.embedding_version != *version) {
         return Ok(None);
     }

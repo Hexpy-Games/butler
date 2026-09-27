@@ -20,8 +20,11 @@ pub(super) fn prepare(
     let mut windows = Vec::new();
     let mut consumed = 0;
     let mut remainders = Vec::new();
-    while consumed < source.len() && windows.len() < MAX_OBSERVATIONS {
-        let mut candidate = source[consumed].clone();
+    while let Some(next) = source
+        .get(consumed)
+        .filter(|_| windows.len() < MAX_OBSERVATIONS)
+    {
+        let mut candidate = next.clone();
         windows.push(candidate.clone());
         let exceeds_budget = extractor_prompt(&windows, mode, &targets.public).len() > PROMPT_BYTES;
         windows.pop();
@@ -29,7 +32,9 @@ pub(super) fn prepare(
             if !windows.is_empty() {
                 break;
             }
-            let Some(split) = split_window(&candidate, mode, &targets.public) else {
+            let split = split_window(&candidate, mode, &targets.public);
+            let Some((first, rest)) = split.as_deref().and_then(<[SourceWindow]>::split_first)
+            else {
                 return PreparedBatch {
                     windows: Vec::new(),
                     prompt: String::new(),
@@ -38,8 +43,8 @@ pub(super) fn prepare(
                     replaced_parent: None,
                 };
             };
-            candidate = split[0].clone();
-            remainders = split[1..].to_vec();
+            candidate = first.clone();
+            remainders = rest.to_vec();
             windows.push(candidate);
             consumed = 1;
             break;
@@ -47,7 +52,11 @@ pub(super) fn prepare(
         windows.push(candidate);
         consumed += 1;
     }
-    let replaced_parent = (!remainders.is_empty()).then(|| source[consumed - 1].clone());
+    let replaced_parent = consumed
+        .checked_sub(1)
+        .and_then(|parent| source.get(parent))
+        .filter(|_| !remainders.is_empty())
+        .cloned();
     PreparedBatch {
         prompt: extractor_prompt(&windows, mode, &targets.public),
         windows,

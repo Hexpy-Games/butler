@@ -95,7 +95,7 @@ impl ContinuityRecoveryService {
         let workspace = workspace.to_owned();
         tokio::task::spawn_blocking(move || {
             let manifest = candidates::plan(&data_root, &paths, &project_id, &workspace)?;
-            view(manifest)
+            Ok(view(manifest))
         })
         .await
         .map_err(|source| {
@@ -111,9 +111,7 @@ impl ContinuityRecoveryService {
         let paths = self.paths.clone();
         let manifest_id = manifest_id.to_owned();
         tokio::task::spawn_blocking(move || {
-            manifest::read(&data_root, &paths, &manifest_id)?
-                .map(view)
-                .transpose()
+            Ok(manifest::read(&data_root, &paths, &manifest_id)?.map(view))
         })
         .await
         .map_err(|source| {
@@ -146,7 +144,7 @@ impl ContinuityRecoveryService {
                     .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
                 let current = manifest::required(&data_root, &paths, &manifest_id)?;
                 let updated = manifest::approve(&data_root, &paths, current, candidate_ids)?;
-                view(updated)
+                Ok(view(updated))
             })();
             let released = lease.release(result.is_ok()).map_err(CognitionError::from);
             match (result, released) {
@@ -244,7 +242,7 @@ impl ContinuityRecoveryService {
     }
 }
 
-fn view(manifest: ContinuityRecoveryManifest) -> CognitionResult<ContinuityRecoveryManifestView> {
+fn view(manifest: ContinuityRecoveryManifest) -> ContinuityRecoveryManifestView {
     let before = RecoveryBeforeView {
         path: manifest.before.path.clone(),
         bytes: manifest.before.bytes,
@@ -265,7 +263,7 @@ fn view(manifest: ContinuityRecoveryManifest) -> CognitionResult<ContinuityRecov
             body_sha256: candidate.body_sha256.clone(),
         })
         .collect::<Vec<_>>();
-    Ok(ContinuityRecoveryManifestView {
+    ContinuityRecoveryManifestView {
         manifest_id: manifest.manifest_id,
         project_id: manifest.project_id,
         status: manifest.status,
@@ -277,7 +275,7 @@ fn view(manifest: ContinuityRecoveryManifest) -> CognitionResult<ContinuityRecov
         after: manifest.after,
         candidates,
         quarantine: manifest.quarantine,
-    })
+    }
 }
 
 fn error(code: CognitionCode) -> CognitionError {
