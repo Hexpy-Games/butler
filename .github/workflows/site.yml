@@ -3,10 +3,11 @@ name: Butler Site
 # The repository's one GitHub Pages site, https://butler.hexpy.games:
 #   /       redirects to /help/ until the intro page exists
 #   /help/  the user manual (packages/butler-site; old /docs/ URLs redirect here)
-#   /ds/    the DS Viewer (client/ui `build:ds-site` with DS_SITE_BASE=/ds/)
-# plus one 404.html that forwards /ds/<path> links to the viewer and shows the manual's 404 otherwise.
-# The custom domain is the SITE_DOMAIN repository variable (default butler.hexpy.games); it becomes
-# dist/CNAME and must match Settings → Pages → Custom domain.
+#   /ds/    the DS Viewer (client/ui `build:ds-site:ds`, DS_SITE_BASE=/ds/; see ds-site/README.md)
+# plus one 404.html that forwards /ds/<path> links to the viewer (ds-404-redirect.js) and shows the
+# manual's 404 otherwise. The custom domain is the SITE_DOMAIN repository variable (default
+# butler.hexpy.games); it becomes dist/CNAME and must match Settings → Pages → Custom domain.
+# Triggers cover every input of both builds (the whole client/ui package feeds the DS build).
 # Pull requests only check and build; pushes to main (and manual runs) also deploy.
 on:
   push:
@@ -14,12 +15,17 @@ on:
     paths:
       - "packages/butler-site/**"
       - "packages/butler-app/client/ui/**"
+      - "tests/smoke/ds-site-*.ts"
       - "LICENSE"
       - "VERSION"
       - ".github/workflows/site.yml"
   pull_request:
     paths:
       - "packages/butler-site/**"
+      - "packages/butler-app/client/ui/**"
+      - "tests/smoke/ds-site-*.ts"
+      - "LICENSE"
+      - "VERSION"
       - ".github/workflows/site.yml"
   workflow_dispatch:
 

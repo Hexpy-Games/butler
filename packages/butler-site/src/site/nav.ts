@@ -56,6 +56,13 @@ export function designSystemRoot(base: string): string {
   return withBase(base, "ds/");
 }
 
+/**
+ * Emitted by the DS site build at <ds root>; the site's 404.html loads it to
+ * forward path-style /ds/<page> links to ?page= (it ignores other paths).
+ * See packages/butler-app/client/ui/ds-site/README.md.
+ */
+export const DS_REDIRECT_HELPER = "ds-404-redirect.js";
+
 export function docHref(base: string, locale: Locale, slug: string): string {
   return withBase(docsRoot(base, locale), `${slug}/`);
 }

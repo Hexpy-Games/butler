@@ -18,13 +18,14 @@ function redirect(to: string): string {
 function completeSite(): void {
   put("CNAME", "butler.hexpy.games\n");
   put("index.html", redirect("/help/"));
-  put("404.html");
+  put("404.html", '<script src="/ds/ds-404-redirect.js"></script>');
   put("help/index.html");
   put("help/models/cloud/index.html");
   put("docs/index.html", redirect("/help/"));
   put("docs/models/cloud/index.html", redirect("/help/models/cloud/"));
   put("pagefind/pagefind.js", "");
   put("ds/index.html");
+  put("ds/ds-404-redirect.js", "");
 }
 
 beforeEach(() => {
@@ -62,6 +63,16 @@ describe("checkDist", () => {
     ]);
   });
 
+  test("the 404 page loads the DS redirect helper for /ds/<path> links", () => {
+    completeSite();
+    put("404.html", "<h1>404</h1>");
+    rmSync(join(dir, "ds/ds-404-redirect.js"));
+    expect(checkDist(dir, { base: "/", domain: "butler.hexpy.games" })).toEqual([
+      "404.html: does not load /ds/ds-404-redirect.js",
+      "ds/ds-404-redirect.js: missing",
+    ]);
+  });
+
   test("needs the 404 page, search index and DS Viewer, and only one CNAME / 404", () => {
     completeSite();
     rmSync(join(dir, "404.html"));
@@ -70,7 +81,7 @@ describe("checkDist", () => {
     put("ds/CNAME", "butler-design.hexpy.games\n");
     put("ds/404.html");
     expect(checkDist(dir, { base: "/", domain: "butler.hexpy.games" })).toEqual([
-      "404.html: missing",
+      "404.html: does not load /ds/ds-404-redirect.js",
       "pagefind/pagefind.js: missing",
       "ds/index.html: missing (run build:ds)",
       "ds/CNAME: only the site root may have one",

@@ -2,11 +2,12 @@
 /**
  * Checks the Pages artifact (dist/) after `bun run build`: the CNAME for the
  * configured domain, `/` and every old /docs/ page forwarding into /help/,
- * the site-wide 404.html, the search index, and the DS Viewer at /ds/ with no
- * CNAME or 404.html of its own.
+ * the site-wide 404.html loading the DS redirect helper, the search index, and
+ * the DS Viewer at /ds/ with no CNAME or 404.html of its own.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { DS_REDIRECT_HELPER, designSystemRoot } from "../src/site/nav";
 import { SITE_ROOT } from "./check-token-sync";
 import { resolveDeployTarget } from "./deploy-target";
 
@@ -46,10 +47,11 @@ export function checkDist(dir: string, { base, domain }: Target): string[] {
     expectRedirect(legacy, `${base}${path.replace(/index\.html$/u, "")}`);
   }
 
-  for (const path of ["404.html", "pagefind/pagefind.js"]) {
-    if (!existsSync(file(path))) problems.push(`${path}: missing`);
-  }
+  const dsHelper = `${designSystemRoot(base)}${DS_REDIRECT_HELPER}`;
+  if (!read("404.html")?.includes(`src="${dsHelper}"`)) problems.push(`404.html: does not load ${dsHelper}`);
+  if (!existsSync(file("pagefind/pagefind.js"))) problems.push("pagefind/pagefind.js: missing");
   if (!existsSync(file("ds/index.html"))) problems.push("ds/index.html: missing (run build:ds)");
+  if (!existsSync(file(`ds/${DS_REDIRECT_HELPER}`))) problems.push(`ds/${DS_REDIRECT_HELPER}: missing`);
   for (const path of ["ds/CNAME", "ds/404.html"]) {
     if (existsSync(file(path))) problems.push(`${path}: only the site root may have one`);
   }

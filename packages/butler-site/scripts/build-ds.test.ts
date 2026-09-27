@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { dsAssetProblems, keepInDs } from "./build-ds";
+import { dsAssetProblems } from "./build-ds";
 
 describe("dsAssetProblems", () => {
   test("accepts a viewer built for /ds/", () => {
@@ -17,14 +17,5 @@ describe("dsAssetProblems", () => {
 
   test("rejects a page with no bundle at all", () => {
     expect(dsAssetProblems("<html></html>", "/ds/")).toEqual(["no script or stylesheet in index.html"]);
-  });
-});
-
-describe("keepInDs", () => {
-  test("drops the standalone site's CNAME and 404.html; the integrated site owns both", () => {
-    expect(keepInDs("CNAME")).toBe(false);
-    expect(keepInDs("404.html")).toBe(false);
-    expect(keepInDs("index.html")).toBe(true);
-    expect(keepInDs("assets/404.html.js")).toBe(true);
   });
 });
