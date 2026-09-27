@@ -36,7 +36,12 @@ pub(super) fn project(
         .unwrap_or_else(|| "Continue the unfinished Butler work.".into());
     let original_message_id = concise(field(goal, "originalMessageId"), 200);
     let sources = if tasks.is_empty() { works } else { tasks };
-    let actions = project_actions(sources, !tasks.is_empty());
+    let kind = if tasks.is_empty() {
+        LegacyItemKind::Work
+    } else {
+        LegacyItemKind::Task
+    };
+    let actions = project_actions(sources, kind);
     let mut checks = Vec::new();
     for task in tasks {
         for reference in references(field(&task.content, "criterionRefs")) {
@@ -106,17 +111,75 @@ pub(super) fn project(
     })
 }
 
-fn project_actions(items: &[LegacyItem], tasks: bool) -> Vec<PlanAction> {
-    let selected = &items[..items.len().min(20)];
-    let mut keys = Vec::with_capacity(selected.len());
+/// Whether legacy plan actions come from task records or work records,
+/// which name their fields differently.
+#[derive(Clone, Copy)]
+enum LegacyItemKind {
+    Task,
+    Work,
+}
+
+impl LegacyItemKind {
+    fn key_field(self) -> &'static str {
+        match self {
+            Self::Task => "taskLogicalId",
+            Self::Work => "workLogicalId",
+        }
+    }
+    fn title_field(self) -> &'static str {
+        match self {
+            Self::Task => "displayTitle",
+            Self::Work => "workLogicalId",
+        }
+    }
+    fn outcome_field(self) -> &'static str {
+        match self {
+            Self::Task => "intendedOutcome",
+            Self::Work => "outcome",
+        }
+    }
+    fn dependencies_field(self) -> &'static str {
+        match self {
+            Self::Task => "dependencyTaskRefs",
+            Self::Work => "dependencyWorkRefs",
+        }
+    }
+}
+
+/// The first 20 legacy items as plan actions with unique keys and
+/// dependencies mapped to those keys.
+fn project_actions(items: &[LegacyItem], kind: LegacyItemKind) -> Vec<PlanAction> {
+    let selected = items.get(..items.len().min(20)).unwrap_or(items);
+    let keys = unique_action_keys(selected, kind);
+    let mut refs = HashMap::new();
+    for (item, key) in selected.iter().zip(&keys) {
+        refs.insert(item.id.clone(), key.clone());
+        if let Some(id) = reference(field(&item.content, "ref")) {
+            refs.insert(id, key.clone());
+        }
+    }
+    selected
+        .iter()
+        .zip(keys)
+        .enumerate()
+        .map(|(index, (item, action_key))| PlanAction {
+            action_key,
+            description: action_description(item, kind, index),
+            dependency_keys: references(field(&item.content, kind.dependencies_field()))
+                .into_iter()
+                .filter_map(|reference| refs.get(&reference).cloned())
+                .collect(),
+            effect: None,
+        })
+        .collect()
+}
+
+/// Logical ids (or positional keys) made unique with numeric suffixes.
+fn unique_action_keys(items: &[LegacyItem], kind: LegacyItemKind) -> Vec<String> {
+    let mut keys = Vec::with_capacity(items.len());
     let mut used = HashSet::new();
-    for (index, item) in selected.iter().enumerate() {
-        let field_name = if tasks {
-            "taskLogicalId"
-        } else {
-            "workLogicalId"
-        };
-        let base = concise(field(&item.content, field_name), 80)
+    for (index, item) in items.iter().enumerate() {
+        let base = concise(field(&item.content, kind.key_field()), 80)
             .unwrap_or_else(|| format!("legacy-action-{}", index + 1));
         let mut key = base.clone();
         let mut suffix = 2;
@@ -127,68 +190,28 @@ fn project_actions(items: &[LegacyItem], tasks: bool) -> Vec<PlanAction> {
         used.insert(key.clone());
         keys.push(key);
     }
-    let mut refs = HashMap::new();
-    for (item, key) in selected.iter().zip(&keys) {
-        refs.insert(item.id.clone(), key.clone());
-        if let Some(id) = reference(field(&item.content, "ref")) {
-            refs.insert(id, key.clone());
-        }
+    keys
+}
+
+/// "title: outcome" (without repeating an identical outcome), or a
+/// positional placeholder.
+fn action_description(item: &LegacyItem, kind: LegacyItemKind, index: usize) -> String {
+    let title = concise(field(&item.content, kind.title_field()), 160);
+    let outcome = concise(field(&item.content, kind.outcome_field()), 400);
+    let mut parts = Vec::new();
+    if let Some(title) = title {
+        parts.push(title);
     }
-    selected
-        .iter()
-        .enumerate()
-        .map(|(index, item)| {
-            let title = concise(
-                field(
-                    &item.content,
-                    if tasks {
-                        "displayTitle"
-                    } else {
-                        "workLogicalId"
-                    },
-                ),
-                160,
-            );
-            let outcome = concise(
-                field(
-                    &item.content,
-                    if tasks { "intendedOutcome" } else { "outcome" },
-                ),
-                400,
-            );
-            let mut parts = Vec::new();
-            if let Some(title) = title {
-                parts.push(title);
-            }
-            if let Some(outcome) = outcome
-                && !parts.contains(&outcome)
-            {
-                parts.push(outcome);
-            }
-            let description = if parts.is_empty() {
-                format!("Continue imported action {}.", index + 1)
-            } else {
-                parts.join(": ")
-            };
-            let dependency_keys = references(field(
-                &item.content,
-                if tasks {
-                    "dependencyTaskRefs"
-                } else {
-                    "dependencyWorkRefs"
-                },
-            ))
-            .into_iter()
-            .filter_map(|reference| refs.get(&reference).cloned())
-            .collect();
-            PlanAction {
-                action_key: keys[index].clone(),
-                description,
-                dependency_keys,
-                effect: None,
-            }
-        })
-        .collect()
+    if let Some(outcome) = outcome
+        && !parts.contains(&outcome)
+    {
+        parts.push(outcome);
+    }
+    if parts.is_empty() {
+        format!("Continue imported action {}.", index + 1)
+    } else {
+        parts.join(": ")
+    }
 }
 
 fn field<'a>(value: &'a Value, name: &str) -> &'a Value {

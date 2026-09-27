@@ -111,7 +111,7 @@ async fn reconcile_blocker(
         custom,
     } = classified;
     let overlapping_applied =
-        blocker.status == "applied" && relation == BlockerRelation::Overlapping;
+        blocker.status == BlockerStatus::Applied && relation == BlockerRelation::Overlapping;
     let unconfirmed = |outcome: EffectOutcome| {
         if overlapping_applied {
             Verdict::Dispatch
@@ -147,7 +147,7 @@ async fn reconcile_blocker(
                 None,
             )));
         }
-        Ok(AdapterOutcome::NotApplied(_)) if blocker.status == "applied" => {
+        Ok(AdapterOutcome::NotApplied(_)) if blocker.status == BlockerStatus::Applied => {
             return Ok(unconfirmed(outcomes::uncertain(
                 EffectError::new(
                     "effect_reconciliation_required",
@@ -161,7 +161,7 @@ async fn reconcile_blocker(
         }
         Ok(AdapterOutcome::Applied(result)) => result,
     };
-    if blocker.status == "unresolved" {
+    if blocker.status == BlockerStatus::Unresolved {
         context
             .journal
             .resolve_blockers(

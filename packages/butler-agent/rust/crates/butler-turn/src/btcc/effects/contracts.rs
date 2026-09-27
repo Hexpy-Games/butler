@@ -244,9 +244,28 @@ pub struct EffectBlocker {
     pub input_sha256: String,
     pub idempotency_key: String,
     pub detail: String,
-    pub status: String,
+    pub status: BlockerStatus,
     pub resolution: Option<String>,
     pub created_at: String,
+}
+
+/// Whether a legacy effect blocker's prior occurrence is known to have applied.
+/// Stored as `unresolved` / `applied` in `btcc_guided_work_effect_blockers.status`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlockerStatus {
+    Unresolved,
+    Applied,
+}
+
+impl BlockerStatus {
+    /// Parses a stored status; other values are corrupt rows.
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "unresolved" => Some(Self::Unresolved),
+            "applied" => Some(Self::Applied),
+            _ => None,
+        }
+    }
 }
 #[derive(Clone, Debug, PartialEq)]
 pub enum PrepareEffect {

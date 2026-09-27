@@ -97,7 +97,7 @@ async fn legacy_blocker_grouping_preserves_first_payload_and_conservative_relati
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     let blockers = journal.blockers(work.work_id.clone()).await.unwrap();
     assert_eq!(blockers.len(), 2);
-    assert!(blockers.iter().all(|row| row.status == "applied"));
+    assert!(blockers.iter().all(|row| row.status == super::super::contracts::BlockerStatus::Applied));
     let state: String = storage
         .execute(move |db| {
             db.query_row(

@@ -72,6 +72,54 @@ pub(super) fn begin_in_transaction(
     if let Some(turn) = get_turn(tx, &turn_id)? {
         return Ok(turn);
     }
+    bind_session(tx, clock, &input, session_id, now)?;
+    let turn = ConversationTurn {
+        id: turn_id,
+        session_id: session_id.to_string(),
+        seq: next_seq(tx, "conversation_turns", session_id)?,
+        actor: input.actor,
+        status: "running".into(),
+        request_id: input.request_id,
+        started_at: now.to_string(),
+        completed_at: None,
+    };
+    tx.execute(
+        "INSERT INTO conversation_turns \
+         (id,session_id,seq,actor,status,request_id,started_at,completed_at) \
+         VALUES (?1,?2,?3,?4,?5,?6,?7,NULL)",
+        params![
+            turn.id,
+            turn.session_id,
+            turn.seq,
+            turn.actor,
+            turn.status,
+            turn.request_id,
+            turn.started_at
+        ],
+    )
+    .map_err(ConversationError::sqlite)?;
+    enqueue(
+        tx,
+        clock,
+        session_id,
+        turn.seq as f64,
+        "conversation.turn_started",
+        &turn.id,
+        now,
+    )?;
+    Ok(turn)
+}
+
+/// Upserts the active session and its gateway binding and publishes
+/// `conversation.session_bound`; a project or status change bumps the
+/// public revision.
+fn bind_session(
+    tx: &Connection,
+    clock: &dyn ConversationIdentityClock,
+    input: &BeginTurnInput,
+    session_id: &str,
+    now: &str,
+) -> ConversationResult<()> {
     let before = tx
         .query_row(
             "SELECT project_id,status FROM conversation_sessions WHERE id=?1",
@@ -116,42 +164,7 @@ pub(super) fn begin_in_transaction(
         "conversation.session_bound",
         session_id,
         now,
-    )?;
-    let turn = ConversationTurn {
-        id: turn_id,
-        session_id: session_id.to_string(),
-        seq: next_seq(tx, "conversation_turns", session_id)?,
-        actor: input.actor,
-        status: "running".into(),
-        request_id: input.request_id,
-        started_at: now.to_string(),
-        completed_at: None,
-    };
-    tx.execute(
-        "INSERT INTO conversation_turns \
-         (id,session_id,seq,actor,status,request_id,started_at,completed_at) \
-         VALUES (?1,?2,?3,?4,?5,?6,?7,NULL)",
-        params![
-            turn.id,
-            turn.session_id,
-            turn.seq,
-            turn.actor,
-            turn.status,
-            turn.request_id,
-            turn.started_at
-        ],
     )
-    .map_err(ConversationError::sqlite)?;
-    enqueue(
-        tx,
-        clock,
-        session_id,
-        turn.seq as f64,
-        "conversation.turn_started",
-        &turn.id,
-        now,
-    )?;
-    Ok(turn)
 }
 
 fn finalize(

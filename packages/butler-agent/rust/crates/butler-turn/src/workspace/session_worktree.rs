@@ -11,7 +11,6 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 
-use serde_json::Map;
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
@@ -283,34 +282,53 @@ impl Owner {
             Ok(inspected) => inspected,
             Err(failed) => return Ok(failed),
         };
+        let bound = Bound {
+            action,
+            branch,
+            dirty: validated.dirty,
+            source_dirty,
+            idempotent,
+        };
+        self.commit_binding(&attempt, input, binding, &anchor, &validated.path, bound)
+            .await
+    }
+
+    /// Records the worktree marker on the binding (compare-and-swap), points
+    /// the workspace reference at the worktree and reports it bound.
+    async fn commit_binding(
+        &self,
+        attempt: &BindAttempt<'_>,
+        input: BindSessionWorktreeInput,
+        binding: StoredSessionBinding,
+        anchor: &str,
+        path: &str,
+        bound: Bound<'_>,
+    ) -> WorkspaceResult<BindSessionWorktreeResult> {
         let now = self
             .clock
             .iso_from_epoch_millis(self.clock.now_epoch_millis())?;
-        let mut metadata = binding.metadata.unwrap_or_else(Map::new);
-        metadata.insert("sessionWorkspace".into(), marker(&anchor, branch, &now));
+        let mut metadata = binding.metadata.unwrap_or_default();
+        metadata.insert("sessionWorkspace".into(), marker(anchor, bound.branch, &now));
         let rebind = RebindWorkspaceInput {
             session_id: input.session_id,
             expected_updated_at: binding.updated_at,
-            workspace_path: validated.path.clone(),
+            workspace_path: path.to_owned(),
             metadata,
             updated_at: Some(now),
         };
         if let Some(code) = self.persist_rebinding(rebind).await {
             return Ok(attempt.fail(code));
         }
-        input
-            .workspace_reference
-            .set(&validated.path)
-            .map_err(|error| {
-                super::WorkspaceError::new(WorkspaceCode::WorkspaceReferenceFailed, error.code())
-            })?;
+        input.workspace_reference.set(path).map_err(|error| {
+            super::WorkspaceError::new(WorkspaceCode::WorkspaceReferenceFailed, error.code())
+        })?;
         Ok(BindSessionWorktreeResult::Bound {
-            action,
-            workspace_label: public_label(branch),
-            branch: branch.into(),
-            dirty: validated.dirty,
-            source_dirty,
-            idempotent,
+            action: bound.action,
+            workspace_label: public_label(bound.branch),
+            branch: bound.branch.into(),
+            dirty: bound.dirty,
+            source_dirty: bound.source_dirty,
+            idempotent: bound.idempotent,
         })
     }
 
@@ -400,6 +418,15 @@ fn validate_request(
 
 /// A bind step's result: a value, or the failure the bind reports.
 type BindStep<T> = WorkspaceResult<Result<T, BindSessionWorktreeResult>>;
+
+/// The facts a successful bind reports.
+struct Bound<'a> {
+    action: SessionWorktreeAction,
+    branch: &'a str,
+    dirty: bool,
+    source_dirty: bool,
+    idempotent: bool,
+}
 
 /// Whether the bound worktree already existed or this bind created it.
 #[derive(Clone, Copy, PartialEq, Eq)]
