@@ -255,6 +255,73 @@ async fn claimed_window_meaning_and_bound_apply_are_durable() {
 }
 
 #[tokio::test]
+async fn actual_canonical_writer_registers_and_replays_exact_durable_projection() {
+    let fixture = Fixture::new("register");
+    fixture.seed().await;
+    let coordinator = Arc::new(CognitionWriteCoordinator::new(Arc::new(Facts::new())).unwrap());
+    let service = service(coordinator);
+    let ConversationRegistrationOutcome::Registered(first) = service
+        .register_conversation_source(fixture.input("z"))
+        .await
+        .unwrap()
+    else {
+        panic!("first call must register")
+    };
+    assert_eq!(first.outcome, crate::cognition::JobOutcome::Partial);
+    assert_eq!(first.observed_completion_job_ids, ["z"]);
+
+    let db = Connection::open(fixture.graph_path()).unwrap();
+    let chunk: (String, String, String, String, String) = db.query_row(
+        "SELECT conversation_start,conversation_end,project_id,origin_kind,status FROM memory_chunks",
+        [], |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?)),
+    ).unwrap();
+    assert_eq!(
+        chunk,
+        (
+            "2026-09-14T00:00:01.000Z".into(),
+            "2026-09-14T00:00:02.000Z".into(),
+            "project".into(),
+            "user_input".into(),
+            "active".into(),
+        )
+    );
+    let counts: (i64,i64,i64,i64) = db.query_row(
+        "SELECT (SELECT COUNT(*) FROM memory_chunk_sources),(SELECT COUNT(*) FROM memory_source_text),(SELECT COUNT(*) FROM memory_projection_jobs),(SELECT COUNT(*) FROM memory_projection_windows)",
+        [], |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?)),
+    ).unwrap();
+    assert_eq!(counts, (2, 2, 1, 2));
+    let strasse: i64 = db
+        .query_row(
+            "SELECT COUNT(*) FROM memory_source_terms WHERE term='strasse'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        strasse, 0,
+        "index terms are graphemes and 2/3-grams, not whole words"
+    );
+    drop(db);
+
+    let ConversationRegistrationOutcome::Replayed(replay) = service
+        .register_conversation_source(fixture.input("a"))
+        .await
+        .unwrap()
+    else {
+        panic!("same revision must replay")
+    };
+    assert_eq!(replay.job_id, first.job_id);
+    assert_eq!(replay.observed_completion_job_ids, ["a", "z"]);
+    let db = Connection::open(fixture.graph_path()).unwrap();
+    let counts: (i64,i64,i64) = db.query_row(
+        "SELECT (SELECT COUNT(*) FROM memory_chunk_sources),(SELECT COUNT(*) FROM memory_projection_jobs),(SELECT COUNT(*) FROM memory_projection_windows)",
+        [], |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?)),
+    ).unwrap();
+    assert_eq!(counts, (2, 1, 2));
+    service.close().await;
+}
+
+#[tokio::test]
 async fn new_revision_retains_history_and_invalidates_current_identity_head_atomically() {
     let fixture = Fixture::new("revision");
     fixture.seed().await;

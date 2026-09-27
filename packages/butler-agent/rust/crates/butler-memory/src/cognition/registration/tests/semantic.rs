@@ -1,6 +1,7 @@
 use super::*;
 use serde_json::Value;
 mod lifecycle;
+mod provider;
 mod ranked;
 use crate::cognition::extraction::{
     CandidateSearchInput, CognitionVectorSearch, VectorSearchFuture,
@@ -15,6 +16,33 @@ struct NoVectors;
 impl CognitionVectorSearch for NoVectors {
     fn search<'a>(&'a self, _: CandidateSearchInput<'a>) -> VectorSearchFuture<'a> {
         panic!("embedding-none must not invoke vector search")
+    }
+}
+struct MeaningProvider;
+impl ProviderPromptPort for MeaningProvider {
+    fn run_prompt<'a>(
+        &'a self,
+        request: ProviderPromptRequest<'a>,
+        lifecycle: ProviderPromptLifecycle<'a>,
+    ) -> ProviderPromptFuture<'a> {
+        Box::pin(async move {
+            if let Some(intent) = lifecycle.invocation_intent {
+                intent.invoked().await?;
+            }
+            if let Some(entry) = lifecycle.adapter_entry {
+                entry.entered()?;
+            }
+            let text = if request.prompt.contains("\"speaker\":\"user\"") {
+                serde_json::json!({"status":"processed","entities":[{"name":"Straße","evidence":[0]}],"items":[],"attributes":[]})
+            } else {
+                serde_json::json!({"status":"processed","entities":[],"items":[],"attributes":[]})
+            };
+            Ok(ProviderPromptResult {
+                text: text.to_string(),
+                model: "provider/model".into(),
+                usage: None,
+            })
+        })
     }
 }
 struct BindingProvider;
@@ -66,6 +94,99 @@ impl ProviderPromptPort for DispositionProvider {
             })
         })
     }
+}
+
+#[tokio::test]
+async fn same_operation_semantic_apply_reopens_without_live_nonce() {
+    let fixture = Fixture::new("semantic-operation");
+    fixture.seed().await;
+    let facts = Arc::new(Facts::new());
+    let coordinator = Arc::new(CognitionWriteCoordinator::new(facts.clone()).unwrap());
+    let service = CognitionRegistrationService::with_projection(
+        CognitionPathEnvironment::default(),
+        coordinator,
+        Arc::new(|| NOW.into()),
+        Arc::new(MeaningProvider),
+        Arc::new(NoVectors),
+        facts,
+    );
+    let registered = service
+        .register_conversation_source(fixture.input("semantic-operation"))
+        .await
+        .unwrap();
+    let ConversationRegistrationOutcome::Registered(progress) = registered else {
+        panic!("expected registration")
+    };
+    let input = ProjectSemanticWindowInput {
+        data_root: fixture.root.clone(),
+        target: MemoryGenerationTarget::Active {
+            expected_generation: GENERATION.into(),
+        },
+        job_id: progress.job_id.clone(),
+        notice: fixture.input("semantic-operation").notice.into(),
+        cancellation: None,
+        deadline_at_epoch_ms: None,
+        wait_class: CognitionWaitClass::Background,
+    };
+    let first = service
+        .project_semantic_window(input.clone())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        first.semantic_graph.state,
+        Some(crate::cognition::StageStatus::Partial)
+    );
+    service
+        .project_semantic_window(input.clone())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        service
+            .project_semantic_window(input)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    service.close().await;
+    assert_both_windows_applied_once(&fixture);
+}
+
+/// Both windows committed with no live owner nonce; the vector stages wait.
+fn assert_both_windows_applied_once(fixture: &Fixture) {
+    let graph = Connection::open(fixture.graph_path()).unwrap();
+    let states: Vec<(String, Option<String>)> = graph
+        .prepare("SELECT state,owner_nonce FROM memory_projection_windows ORDER BY ordinal")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(
+        states,
+        [("complete".into(), None), ("complete".into(), None)]
+    );
+    let counts:(i64,i64,i64,i64)=graph.query_row("SELECT (SELECT COUNT(*) FROM memory_meaning_commits),(SELECT COUNT(*) FROM memory_nodes WHERE window_ref IS NOT NULL),(SELECT COUNT(*) FROM memory_alias_postings),(SELECT COUNT(*) FROM memory_vector_units WHERE state='pending')",[],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).unwrap();
+    let stage: (String, String) = graph
+        .query_row(
+            "SELECT node_vectors_state,episode_vectors_state FROM memory_projection_jobs LIMIT 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(counts.0, 2);
+    assert!(counts.1 >= 1);
+    assert!(counts.2 > 0);
+    assert!(counts.3 > 0, "vector stages: {stage:?}");
+    assert_eq!(
+        crate::cognition::StageState::parse(&stage.0).state,
+        Some(crate::cognition::StageStatus::Pending)
+    );
+    assert_eq!(
+        crate::cognition::StageState::parse(&stage.1).state,
+        Some(crate::cognition::StageStatus::Pending)
+    );
 }
 
 #[tokio::test]
