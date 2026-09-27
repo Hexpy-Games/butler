@@ -13,7 +13,8 @@ use crate::cognition::CognitionResult;
 use super::error;
 use crate::cognition::CognitionCode;
 
-#[derive(Clone, Debug, PartialEq)]
+/// Aggregated outcomes of one source and tool, as the operator lists them.
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
 pub(super) struct SourceQualitySummary {
     pub source_id: String,
     pub tool_name: String,

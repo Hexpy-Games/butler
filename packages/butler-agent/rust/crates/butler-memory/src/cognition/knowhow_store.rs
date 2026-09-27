@@ -1,11 +1,20 @@
 //! Source-compatible KnowHow persistence and quality-index owner.
+//!
+//! [`KnowHowService`] owns `know-how/`: entry files (`entries`, read through
+//! the `document` view), the source-quality log (`quality`), the SQLite
+//! index rebuilt from both (`index`), feedback-driven revisions
+//! (`revision`) and the operator commands (`operator`). Every access holds
+//! the consolidation write lease.
 
+mod document;
 mod entries;
 mod index;
 mod operator;
 mod quality;
 mod revision;
 
+#[cfg(test)]
+mod format_pin;
 #[cfg(test)]
 mod tests;
 
@@ -100,7 +109,7 @@ impl KnowHowService {
                     entries::read_one(&root, &entry_path)
                 })
                 .await?;
-            let targeted = revision::targeted_feedback(&entry, &active_feedback)?;
+            let targeted = revision::targeted_feedback(&entry.entry(), &active_feedback)?;
             let mut next = if targeted.is_empty() {
                 entry.clone()
             } else {

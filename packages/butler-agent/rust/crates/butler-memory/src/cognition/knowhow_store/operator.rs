@@ -1,33 +1,76 @@
+//! Operator commands over KnowHow: list, show, disable, retrieve, source
+//! quality and index rebuild.
+
 use std::{
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use serde_json::{Value, json};
+use serde::Serialize;
+use serde_json::Value;
 
 use crate::cognition::{CognitionResult, FeedbackTarget};
 
+use super::document::{KnowHowDocument, KnowHowEntry, round3};
 use super::{KnowHowAggregateReport, KnowHowService, entries, error, quality};
 use crate::cognition::CognitionCode;
+use crate::lenient::{Arg, Obj};
+
+/// `knowhow rebuild-index`: what was indexed and where.
+#[derive(Serialize)]
+struct RebuildReport {
+    indexed_count: usize,
+    source_quality_count: usize,
+    index_path: String,
+}
+
+/// One scored entry of `knowhow retrieve`.
+#[derive(Serialize)]
+struct RetrievalCandidate {
+    entry: KnowHowDocument,
+    match_score: f64,
+    quality_score: f64,
+    final_score: f64,
+    suppressed_by_feedback_ids: Vec<String>,
+}
+
+/// `knowhow retrieve`: the best unsuppressed candidate and every candidate.
+#[derive(Serialize)]
+struct Retrieval<'a> {
+    query: &'a str,
+    selected: Option<&'a KnowHowDocument>,
+    candidates: &'a [RetrievalCandidate],
+}
 
 impl KnowHowService {
+    /// Every entry, newest first.
     pub async fn operator_entries(&self) -> CognitionResult<Vec<Value>> {
-        self.with_lease("knowhow_operator_list", |root| list(&root))
-            .await
+        self.with_lease("knowhow_operator_list", |root| {
+            Ok(list(&root)?
+                .into_iter()
+                .map(KnowHowDocument::into_value)
+                .collect())
+        })
+        .await
     }
 
+    /// The entry `id`, or `None` when it does not exist.
     pub async fn operator_read(&self, id: &str) -> CognitionResult<Option<Value>> {
         let id = id.to_owned();
-        self.with_lease("knowhow_operator_show", move |root| read(&root, &id))
-            .await
+        self.with_lease("knowhow_operator_show", move |root| {
+            Ok(entries::read_id(&root, &id)?.map(KnowHowDocument::into_value))
+        })
+        .await
     }
 
+    /// Disables the entry `id` and returns it.
     pub async fn operator_disable(&self, id: &str) -> CognitionResult<Option<Value>> {
         let id = id.to_owned();
         self.with_lease("knowhow_operator_disable", move |root| disable(&root, &id))
             .await
     }
 
+    /// Entries matching `query`, scored and suppressed by active feedback.
     pub async fn operator_retrieve(
         &self,
         query: &str,
@@ -42,61 +85,49 @@ impl KnowHowService {
         .await
     }
 
+    /// The aggregated source-quality summaries.
     pub async fn operator_source_quality(&self) -> CognitionResult<Vec<Value>> {
-        self.with_lease("knowhow_operator_quality", |root| source_quality(&root))
-            .await
+        self.with_lease("knowhow_operator_quality", |root| {
+            quality::aggregate(&root)?.iter().map(encode).collect()
+        })
+        .await
     }
 
+    /// Rebuilds the index and reports it.
     pub async fn operator_rebuild_index(&self) -> CognitionResult<Value> {
         let report: KnowHowAggregateReport = self.aggregate_and_rebuild().await?;
         let index_path = self
             .paths
             .cognition_root(&self.data_root)
             .join("know-how/index.sqlite");
-        Ok(json!({
-            "indexed_count": report.knowhow_indexed_count,
-            "source_quality_count": report.source_quality_summary_count,
-            "index_path": index_path.to_string_lossy(),
-        }))
+        encode(&RebuildReport {
+            indexed_count: report.knowhow_indexed_count,
+            source_quality_count: report.source_quality_summary_count,
+            index_path: index_path.to_string_lossy().into_owned(),
+        })
     }
 }
 
-pub(super) fn list(root: &Path) -> CognitionResult<Vec<Value>> {
+pub(super) fn list(root: &Path) -> CognitionResult<Vec<KnowHowDocument>> {
     entries::list_paths(root)?
         .iter()
         .map(|path| entries::read_one(root, path))
         .collect()
 }
 
-pub(super) fn read(root: &Path, id: &str) -> CognitionResult<Option<Value>> {
-    entries::read_id(root, id)
-}
-
 pub(super) fn disable(root: &Path, id: &str) -> CognitionResult<Option<Value>> {
-    let Some(mut entry) = entries::read_id(root, id)? else {
+    let Some(mut document) = entries::read_id(root, id)? else {
         return Ok(None);
     };
-    let object = entry
-        .as_object_mut()
-        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
-    let previous_status = object
-        .get("status")
-        .and_then(Value::as_str)
-        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?
-        .to_owned();
-    object.insert("status".into(), json!("disabled"));
-    object.insert("updated_at".into(), json!(now_iso()));
-    object
-        .get_mut("revision_history")
-        .and_then(Value::as_array_mut)
-        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?
-        .push(json!({
-            "at": now_iso(),
-            "kind": "operator_disable",
-            "previous_status": previous_status,
-        }));
-    entries::write(root, &entry)?;
-    Ok(Some(entry))
+    let entry = document.entry();
+    let previous_status = entry.status.valid().cloned();
+    let now = now_iso();
+    document.set_status("disabled", &now)?;
+    let previous_status =
+        previous_status.ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
+    document.push_history("operator_disable", None, &previous_status, now_iso())?;
+    entries::write(root, &document)?;
+    Ok(Some(document.into_value()))
 }
 
 pub(super) fn retrieve(
@@ -107,112 +138,103 @@ pub(super) fn retrieve(
 ) -> CognitionResult<Value> {
     let normalized_query = normalize(query);
     let query_tokens = tokenize(&normalized_query);
-    let entries = list(root)?;
-    let mut candidates = entries
+    let mut candidates = list(root)?
         .into_iter()
-        .filter(|entry| {
+        .filter(|document| {
             matches!(
-                string(entry, "status"),
+                document.entry().status.valid().map(String::as_str),
                 Some("active" | "candidate" | "needs_review")
             )
         })
-        .map(|entry| {
-            let match_score = match_score(&entry, &normalized_query, &query_tokens)?;
-            let id = string(&entry, "knowhow_id")
-                .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
-            let preferred_sources = entry
-                .pointer("/strategy/preferred_sources")
-                .and_then(Value::as_array)
-                .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
-            let suppressed = feedback
-                .iter()
-                .filter(|feedback| {
-                    feedback.target_ref == format!("knowhow:{id}")
-                        || preferred_sources.iter().any(|source| {
-                            source.as_str().is_some_and(|source| {
-                                feedback.target_ref == format!("source:{source}")
-                            })
-                        })
-                })
-                .filter(|feedback| {
-                    feedback.category.contains("policy")
-                        || feedback.category.contains("quality")
-                        || feedback.promotion_target.contains("know")
-                })
-                .map(|feedback| feedback.feedback_id.clone())
-                .collect::<Vec<_>>();
-            let quality_score = entry
-                .pointer("/quality/score")
-                .and_then(Value::as_f64)
-                .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
-            let final_score = if suppressed.is_empty() {
-                round3(match_score * 0.65 + quality_score * 0.35)
-            } else {
-                0.0
-            };
-            Ok(json!({
-                "entry": entry,
-                "match_score": match_score,
-                "quality_score": quality_score,
-                "final_score": final_score,
-                "suppressed_by_feedback_ids": suppressed,
-            }))
-        })
-        .collect::<CognitionResult<Vec<Value>>>()?;
-    candidates.retain(|candidate| candidate["match_score"].as_f64().unwrap_or(0.0) > 0.0);
-    candidates.sort_by(|left, right| {
-        right["final_score"]
-            .as_f64()
-            .unwrap_or(0.0)
-            .total_cmp(&left["final_score"].as_f64().unwrap_or(0.0))
-    });
+        .map(|document| candidate(document, &normalized_query, &query_tokens, feedback))
+        .collect::<CognitionResult<Vec<_>>>()?;
+    candidates.retain(|candidate| candidate.match_score > 0.0);
+    candidates.sort_by(|left, right| right.final_score.total_cmp(&left.final_score));
     candidates.truncate(limit);
     let selected = candidates
         .iter()
-        .find(|candidate| candidate["final_score"].as_f64().unwrap_or(0.0) > 0.0)
-        .map(|candidate| candidate["entry"].clone())
-        .unwrap_or(Value::Null);
-    Ok(json!({
-        "query": query,
-        "selected": selected,
-        "candidates": candidates,
-    }))
-}
-
-pub(super) fn source_quality(root: &Path) -> CognitionResult<Vec<Value>> {
-    quality::aggregate(root).map(|summaries| {
-        summaries
-            .into_iter()
-            .map(|summary| {
-                json!({
-                    "source_id": summary.source_id,
-                    "tool_name": summary.tool_name,
-                    "event_count": summary.event_count,
-                    "success_count": summary.success_count,
-                    "failure_count": summary.failure_count,
-                    "negative_feedback_count": summary.negative_feedback_count,
-                    "average_freshness_score": summary.average_freshness_score,
-                    "average_latency_ms": summary.average_latency_ms,
-                    "score": summary.score,
-                    "last_observed_at": summary.last_observed_at,
-                })
-            })
-            .collect()
+        .find(|candidate| candidate.final_score > 0.0)
+        .map(|candidate| &candidate.entry);
+    encode(&Retrieval {
+        query,
+        selected,
+        candidates: &candidates,
     })
 }
 
-fn match_score(entry: &Value, query: &str, query_tokens: &[String]) -> CognitionResult<f64> {
-    let name =
-        string(entry, "name").ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
-    let aliases = string_array(entry, "/aliases")?;
-    let topics = string_array(entry, "/intent_match/topics")?;
-    let examples = string_array(entry, "/intent_match/examples")?;
-    let summary =
-        string(entry, "summary").ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
+/// An entry's match, quality and final score; feedback aimed at the entry
+/// or its sources in a policy/quality/know-how category suppresses it.
+fn candidate(
+    document: KnowHowDocument,
+    query: &str,
+    query_tokens: &[String],
+    feedback: &[FeedbackTarget],
+) -> CognitionResult<RetrievalCandidate> {
+    let entry = document.entry();
+    let match_score = match_score(&entry, query, query_tokens)?;
+    let id = KnowHowEntry::required(&entry.knowhow_id)?;
+    let Arg::Valid(Obj(strategy)) = &entry.strategy else {
+        return Err(error(CognitionCode::MemoryKnowhowEntryInvalid));
+    };
+    let preferred_sources = strategy
+        .preferred_sources
+        .valid()
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
+    let suppressed = feedback
+        .iter()
+        .filter(|feedback| {
+            feedback.target_ref == format!("knowhow:{id}")
+                || preferred_sources.iter().any(|source| {
+                    source
+                        .valid()
+                        .is_some_and(|source| feedback.target_ref == format!("source:{source}"))
+                })
+        })
+        .filter(|feedback| {
+            feedback.category.contains("policy")
+                || feedback.category.contains("quality")
+                || feedback.promotion_target.contains("know")
+        })
+        .map(|feedback| feedback.feedback_id.clone())
+        .collect::<Vec<_>>();
+    let quality_score = entry
+        .quality()
+        .ok()
+        .and_then(|quality| quality.score.valid().copied())
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
+    let final_score = if suppressed.is_empty() {
+        round3(match_score * 0.65 + quality_score * 0.35)
+    } else {
+        0.0
+    };
+    Ok(RetrievalCandidate {
+        entry: document,
+        match_score,
+        quality_score,
+        final_score,
+        suppressed_by_feedback_ids: suppressed,
+    })
+}
+
+/// The best weighted match of the query against the entry's name (1.0),
+/// aliases (0.95), topics (0.8), examples (0.65) and summary (0.35): a
+/// substring match counts fully, a token overlap proportionally.
+fn match_score(entry: &KnowHowEntry, query: &str, query_tokens: &[String]) -> CognitionResult<f64> {
+    let required = KnowHowEntry::required;
+    let name = required(&entry.name)?;
+    let aliases = KnowHowEntry::strings(&entry.aliases)?;
+    let (topics, examples) = match &entry.intent_match {
+        Arg::Valid(Obj(intent)) => (
+            KnowHowEntry::strings(&intent.topics)?,
+            KnowHowEntry::strings(&intent.examples)?,
+        ),
+        _ => return Err(error(CognitionCode::MemoryKnowhowEntryInvalid)),
+    };
+    let summary = required(&entry.summary)?;
     let buckets = std::iter::once((name, 1.0))
-        .chain(aliases.iter().map(|value| (value.as_str(), 0.95)))
-        .chain(topics.iter().map(|value| (value.as_str(), 0.8)))
-        .chain(examples.iter().map(|value| (value.as_str(), 0.65)))
+        .chain(aliases.iter().map(|value| (*value, 0.95)))
+        .chain(topics.iter().map(|value| (*value, 0.8)))
+        .chain(examples.iter().map(|value| (*value, 0.65)))
         .chain(std::iter::once((summary, 0.35)));
     let mut best: f64 = 0.0;
     for (value, weight) in buckets {
@@ -232,19 +254,9 @@ fn match_score(entry: &Value, query: &str, query_tokens: &[String]) -> Cognition
     Ok(round3(best))
 }
 
-fn string_array(value: &Value, pointer: &str) -> CognitionResult<Vec<String>> {
-    value
-        .pointer(pointer)
-        .and_then(Value::as_array)
-        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?
-        .iter()
-        .map(|value| {
-            value
-                .as_str()
-                .map(str::to_owned)
-                .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))
-        })
-        .collect()
+fn encode(value: &impl Serialize) -> CognitionResult<Value> {
+    serde_json::to_value(value)
+        .map_err(|source| error(CognitionCode::MemoryKnowhowEntryInvalid).with_source(source))
 }
 
 fn normalize(value: &str) -> String {
@@ -275,14 +287,6 @@ fn tokenize(value: &str) -> Vec<String> {
     tokens.sort();
     tokens.dedup();
     tokens
-}
-
-fn string<'a>(value: &'a Value, field: &str) -> Option<&'a str> {
-    value.get(field).and_then(Value::as_str)
-}
-
-fn round3(value: f64) -> f64 {
-    (value * 1_000.0).round() / 1_000.0
 }
 
 fn now_millis() -> i64 {

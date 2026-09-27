@@ -1,13 +1,15 @@
+//! Entry files under `know-how/entries/`: listing, reading, validation and
+//! atomic private writes.
+
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
     path::{Component, Path, PathBuf},
 };
 
-use serde_json::Value;
-
 use crate::cognition::CognitionResult;
 
+use super::document::{KnowHowDocument, KnowHowEntry};
 use super::error;
 use crate::cognition::CognitionCode;
 
@@ -44,21 +46,15 @@ pub(super) fn list_paths(root: &Path) -> CognitionResult<Vec<EntryPath>> {
         if !row.file_name().to_string_lossy().ends_with(".json") {
             continue;
         }
-        let value = read_path(&directory, &path)?;
-        let updated_at = value
-            .get("updated_at")
-            .and_then(Value::as_str)
-            .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
-        entries.push(EntryPath {
-            path,
-            updated_at: updated_at.to_owned(),
-        });
+        let entry = read_path(&directory, &path)?.entry();
+        let updated_at = KnowHowEntry::required(&entry.updated_at)?.to_owned();
+        entries.push(EntryPath { path, updated_at });
     }
     entries.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
     Ok(entries)
 }
 
-pub(super) fn read_one(root: &Path, entry: &EntryPath) -> CognitionResult<Value> {
+pub(super) fn read_one(root: &Path, entry: &EntryPath) -> CognitionResult<KnowHowDocument> {
     let directory = entries_directory(root, false)?
         .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryNotFound))?;
     if entry.path.parent() != Some(directory.as_path()) {
@@ -67,7 +63,7 @@ pub(super) fn read_one(root: &Path, entry: &EntryPath) -> CognitionResult<Value>
     read_path(&directory, &entry.path)
 }
 
-pub(super) fn read_id(root: &Path, id: &str) -> CognitionResult<Option<Value>> {
+pub(super) fn read_id(root: &Path, id: &str) -> CognitionResult<Option<KnowHowDocument>> {
     if !safe_id(id) {
         return Err(error(CognitionCode::MemoryKnowhowEntryIdInvalid));
     }
@@ -111,7 +107,7 @@ pub(super) fn count_files(root: &Path) -> CognitionResult<usize> {
     Ok(count)
 }
 
-fn read_path(directory: &Path, path: &Path) -> CognitionResult<Value> {
+fn read_path(directory: &Path, path: &Path) -> CognitionResult<KnowHowDocument> {
     let metadata = fs::symlink_metadata(path)
         .map_err(|source| error(CognitionCode::MemoryKnowhowEntryReadFailed).with_source(source))?;
     if !metadata.file_type().is_file() {
@@ -125,18 +121,18 @@ fn read_path(directory: &Path, path: &Path) -> CognitionResult<Value> {
     let file = File::open(canonical)
         .map_err(|source| error(CognitionCode::MemoryKnowhowEntryReadFailed).with_source(source))?;
     serde_json::from_reader(file)
+        .map(KnowHowDocument::new)
         .map_err(|source| error(CognitionCode::MemoryKnowhowEntryInvalid).with_source(source))
 }
 
-pub(super) fn write(root: &Path, entry: &Value) -> CognitionResult<()> {
-    let issues = validate(entry);
-    if !issues.is_empty() {
+/// Atomically replaces the entry's file (pretty JSON, mode 0600) after
+/// validating it.
+pub(super) fn write(root: &Path, document: &KnowHowDocument) -> CognitionResult<()> {
+    let entry = document.entry();
+    if !validate(&entry).is_empty() {
         return Err(error(CognitionCode::MemoryKnowhowEntryInvalid));
     }
-    let id = entry
-        .get("knowhow_id")
-        .and_then(Value::as_str)
-        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
+    let id = KnowHowEntry::required(&entry.knowhow_id)?;
     let directory = entries_directory(root, true)?
         .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntriesWriteFailed))?;
     let path = directory.join(format!("{id}.json"));
@@ -154,7 +150,7 @@ pub(super) fn write(root: &Path, entry: &Value) -> CognitionResult<()> {
         Err(_) => return Err(error(CognitionCode::MemoryKnowhowEntryWriteFailed)),
     }
 
-    let mut bytes = serde_json::to_vec_pretty(entry).map_err(|source| {
+    let mut bytes = serde_json::to_vec_pretty(document).map_err(|source| {
         error(CognitionCode::MemoryKnowhowEntryWriteFailed).with_source(source)
     })?;
     bytes.push(b'\n');
@@ -193,35 +189,37 @@ pub(super) fn write(root: &Path, entry: &Value) -> CognitionResult<()> {
     result
 }
 
-pub(super) fn validate(entry: &Value) -> Vec<&'static str> {
+/// The fields that make an entry unusable: schema, a safe `kh_` id, a
+/// non-blank name, a known status, and a preferred-sources array.
+pub(super) fn validate(entry: &KnowHowEntry) -> Vec<&'static str> {
     let mut issues = Vec::new();
-    if entry.get("schema").and_then(Value::as_str) != Some(ENTRY_SCHEMA) {
+    if entry.schema.valid().map(String::as_str) != Some(ENTRY_SCHEMA) {
         issues.push("schema");
     }
-    let id = entry.get("knowhow_id").and_then(Value::as_str);
-    if !id.is_some_and(safe_id) {
+    if !entry.knowhow_id.valid().is_some_and(|id| safe_id(id)) {
         issues.push("knowhow_id");
     }
     if entry
-        .get("name")
-        .and_then(Value::as_str)
+        .name
+        .valid()
         .is_none_or(|name| butler_core::public_text::trim_js_whitespace(name).is_empty())
     {
         issues.push("name");
     }
     if !entry
-        .get("status")
-        .and_then(Value::as_str)
-        .is_some_and(|status| ENTRY_STATUSES.contains(&status))
+        .status
+        .valid()
+        .is_some_and(|status| ENTRY_STATUSES.contains(&status.as_str()))
     {
         issues.push("status");
     }
-    if !entry
-        .get("strategy")
-        .and_then(Value::as_object)
-        .and_then(|strategy| strategy.get("preferred_sources"))
-        .is_some_and(Value::is_array)
-    {
+    let preferred_sources = match &entry.strategy {
+        crate::lenient::Arg::Valid(crate::lenient::Obj(strategy)) => {
+            strategy.preferred_sources.valid().is_some()
+        }
+        _ => false,
+    };
+    if !preferred_sources {
         issues.push("strategy.preferred_sources");
     }
     issues
