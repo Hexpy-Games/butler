@@ -97,6 +97,8 @@ impl ProjectWorkRepository {
         Ok(self.require_current(&target_id).await?.view)
     }
 
+    /// The new plan child with its conception (for an opening plan) and
+    /// planning checkpoints, and the manifest now in the planning stage.
     async fn plan_updates(
         &self,
         input: PlanUpdatesInput<'_>,
@@ -110,22 +112,7 @@ impl ProjectWorkRepository {
             create,
             leading,
         } = input;
-        if command
-            .expected_work_id
-            .as_ref()
-            .is_some_and(|id| id != &current.view.work_id)
-        {
-            return Err(invalid("project_work_expected_work_mismatch"));
-        }
-        if command.expected_progress_revision.is_some_and(|revision| {
-            Some(revision)
-                != current
-                    .manifest
-                    .get("checkpointRevision")
-                    .and_then(Value::as_u64)
-        }) {
-            return Err(invalid("project_work_progress_revision_mismatch"));
-        }
+        plan_preconditions(current, command)?;
         let plan_revision = codec::number(&current.manifest, "planRevision")? + 1;
         let plan_id = codec::record_id("plan", &command.input.mutation_call_id);
         let plan: WorkPlan = codec::typed(json!({
@@ -146,36 +133,31 @@ impl ProjectWorkRepository {
             .first()
             .map(|item| item.description.as_str())
             .unwrap_or("");
-        if command.opening_plan {
-            checkpoint_revision += 1;
-            children.push(checkpoint_child(CheckpointChildInput {
+        let stage_checkpoint = |revision: u64, stage: WorkStage, suffix: &str| {
+            checkpoint_child(CheckpointChildInput {
                 current,
                 turn_id: &command.input.scope.turn_id,
                 identity,
                 at,
-                revision: checkpoint_revision,
-                stage: WorkStage::Conception,
+                revision,
+                stage,
                 plan_id: &plan_id,
                 progress: &command.action_progress,
                 summary,
                 next,
-                checkpoint_identity: &format!("{}\0conception", command.input.mutation_call_id),
-            })?);
+                checkpoint_identity: &format!("{}\0{suffix}", command.input.mutation_call_id),
+            })
+        };
+        if command.opening_plan {
+            checkpoint_revision += 1;
+            children.push(stage_checkpoint(
+                checkpoint_revision,
+                WorkStage::Conception,
+                "conception",
+            )?);
         }
         checkpoint_revision += 1;
-        let planning = checkpoint_child(CheckpointChildInput {
-            current,
-            turn_id: &command.input.scope.turn_id,
-            identity,
-            at,
-            revision: checkpoint_revision,
-            stage: WorkStage::Planning,
-            plan_id: &plan_id,
-            progress: &command.action_progress,
-            summary,
-            next,
-            checkpoint_identity: &format!("{}\0plan", command.input.mutation_call_id),
-        })?;
+        let planning = stage_checkpoint(checkpoint_revision, WorkStage::Planning, "plan")?;
         let checkpoint: Checkpoint = codec::typed(
             planning
                 .get("checkpoint")
@@ -186,16 +168,7 @@ impl ProjectWorkRepository {
         if let Some(opening) = opening {
             children.insert(0, opening);
         }
-        let mut view = current.view.clone();
-        view.objective = command.input.objective.clone();
-        view.status = status_for_progress(&command.action_progress);
-        view.current_stage = Some(WorkStage::Planning);
-        view.allowed_next_stages =
-            butler_turn::btcc::allowed_next_work_stages(Some(WorkStage::Planning));
-        view.action_progress = command.action_progress.clone();
-        view.current_plan = Some(plan);
-        view.latest_checkpoint = Some(checkpoint);
-        view.updated_at = at.into();
+        let view = planned_view(current, command, plan, checkpoint, at);
         let mut revisions = codec::revisions(&current.manifest);
         revisions["planRevision"] = Value::from(plan_revision);
         revisions["checkpointRevision"] = Value::from(checkpoint_revision);
@@ -291,6 +264,48 @@ impl ProjectWorkRepository {
             .ok_or_else(|| invalid("project_work_replay_target_missing"))?;
         Ok(self.require_current(&work_id).await?.view)
     }
+}
+
+/// The plan targets the expected Work at the expected progress revision.
+fn plan_preconditions(current: &Snapshot, command: &ReplacePlanCommand) -> Result<(), BtccError> {
+    if command
+        .expected_work_id
+        .as_ref()
+        .is_some_and(|id| id != &current.view.work_id)
+    {
+        return Err(invalid("project_work_expected_work_mismatch"));
+    }
+    if command.expected_progress_revision.is_some_and(|revision| {
+        Some(revision)
+            != current
+                .manifest
+                .get("checkpointRevision")
+                .and_then(Value::as_u64)
+    }) {
+        return Err(invalid("project_work_progress_revision_mismatch"));
+    }
+    Ok(())
+}
+
+/// The Work in the planning stage under its new plan.
+fn planned_view(
+    current: &Snapshot,
+    command: &ReplacePlanCommand,
+    plan: WorkPlan,
+    checkpoint: Checkpoint,
+    at: &str,
+) -> WorkView {
+    let mut view = current.view.clone();
+    view.objective = command.input.objective.clone();
+    view.status = status_for_progress(&command.action_progress);
+    view.current_stage = Some(WorkStage::Planning);
+    view.allowed_next_stages =
+        butler_turn::btcc::allowed_next_work_stages(Some(WorkStage::Planning));
+    view.action_progress = command.action_progress.clone();
+    view.current_plan = Some(plan);
+    view.latest_checkpoint = Some(checkpoint);
+    view.updated_at = at.into();
+    view
 }
 
 pub(super) fn checkpoint_child(input: CheckpointChildInput<'_>) -> Result<Value, BtccError> {

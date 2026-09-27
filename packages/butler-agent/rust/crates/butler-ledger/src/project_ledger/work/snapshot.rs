@@ -73,6 +73,8 @@ enum Attempt {
     Ready(Box<Snapshot>),
 }
 
+/// One stable read of a managed Work: its record, manifest and every child it
+/// depends on, unchanged across the read and validation.
 fn current_attempt(
     scope: &ResolvedProjectWorkScope,
     work_id: &str,
@@ -95,40 +97,7 @@ fn current_attempt(
         &scope.ledger_project_id,
         collation,
     )?;
-    let direct = child_refs(&manifest)?;
-    let mut children = HashMap::with_capacity(direct.len());
-    for (id, kind, schema) in direct {
-        read_child(ChildReadInput {
-            scope,
-            work_id,
-            collation,
-            id: &id,
-            kind,
-            schema,
-            children: &mut children,
-            observed: &mut observed,
-        })?;
-    }
-    let dependencies = dependencies::refs(&manifest, &children)
-        .map_err(|source| managed_invalid().with_source(source))?;
-    for (id, kind, schema) in dependencies {
-        if let Some(existing) = children.get(&id) {
-            if existing.get("schema").and_then(Value::as_str) != Some(schema) {
-                return Err(managed_invalid());
-            }
-            continue;
-        }
-        read_child(ChildReadInput {
-            scope,
-            work_id,
-            collation,
-            id: &id,
-            kind,
-            schema,
-            children: &mut children,
-            observed: &mut observed,
-        })?;
-    }
+    let children = read_children(scope, work_id, collation, &manifest, &mut observed)?;
     // The source reads initial, stable and dependency-complete snapshots, then
     // revalidates the entire exact read set. Keep only digests while doing so.
     if !unchanged(&scope.ledger_root, &observed)? {
@@ -154,6 +123,46 @@ fn current_attempt(
         view,
         children,
     })))
+}
+
+/// The children the manifest names, then the ones those depend on; each
+/// read's digest is added to `observed`.
+fn read_children(
+    scope: &ResolvedProjectWorkScope,
+    work_id: &str,
+    collation: &LocaleCollation,
+    manifest: &Value,
+    observed: &mut Vec<(String, [u8; 32])>,
+) -> Result<HashMap<String, Value>, ProjectLedgerReadError> {
+    let direct = child_refs(manifest)?;
+    let mut children = HashMap::with_capacity(direct.len());
+    let mut read = |id: &str, kind, schema, children: &mut HashMap<String, Value>| {
+        read_child(ChildReadInput {
+            scope,
+            work_id,
+            collation,
+            id,
+            kind,
+            schema,
+            children,
+            observed: &mut *observed,
+        })
+    };
+    for (id, kind, schema) in direct {
+        read(&id, kind, schema, &mut children)?;
+    }
+    let dependencies = dependencies::refs(manifest, &children)
+        .map_err(|source| managed_invalid().with_source(source))?;
+    for (id, kind, schema) in dependencies {
+        if let Some(existing) = children.get(&id) {
+            if existing.get("schema").and_then(Value::as_str) != Some(schema) {
+                return Err(managed_invalid());
+            }
+            continue;
+        }
+        read(&id, kind, schema, &mut children)?;
+    }
+    Ok(children)
 }
 
 struct ChildReadInput<'a> {
@@ -301,10 +310,50 @@ pub(super) fn child_refs(
     Ok(refs)
 }
 
+/// The Work view a manifest and its children describe, checked against the
+/// manifest's counters, bindings, plan and pointers.
 pub(super) fn hydrate(
     manifest: &Value,
     children: &HashMap<String, Value>,
 ) -> Result<WorkView, BtccError> {
+    // Source hydration omits optional effectWatermark/effectBlockers even when
+    // the separately verified material proof carries effect facts.
+    let view: WorkView = codec::typed(view_value(manifest, children)?)?;
+    if view.allowed_next_stages != butler_turn::btcc::allowed_next_work_stages(view.current_stage)
+        || view.result_refs.len() as u64 != codec::number(manifest, "resultSequence")?
+        || view.current_plan.as_ref().map(|plan| plan.revision)
+            != manifest
+                .get("planRevision")
+                .and_then(Value::as_u64)
+                .filter(|revision| *revision > 0)
+    {
+        return Err(invalid("project_work_managed_record_invalid"));
+    }
+    bindings_match(manifest, children, &view.work_id)?;
+    if let Some(plan) = &view.current_plan {
+        let keys = plan
+            .actions
+            .iter()
+            .map(|item| &item.action_key)
+            .collect::<Vec<_>>();
+        let progress = view
+            .action_progress
+            .iter()
+            .map(|item| &item.action_key)
+            .collect::<Vec<_>>();
+        if plan.objective != view.objective
+            || keys != progress
+            || keys.iter().collect::<HashSet<_>>().len() != keys.len()
+        {
+            return Err(invalid("project_work_managed_record_invalid"));
+        }
+    }
+    validation::pointers(manifest, children, &view)?;
+    Ok(view)
+}
+
+/// The view's JSON: manifest fields plus each pointed child's payload.
+fn view_value(manifest: &Value, children: &HashMap<String, Value>) -> Result<Value, BtccError> {
     let mut value = Map::new();
     for key in [
         "workId",
@@ -351,27 +400,24 @@ pub(super) fn hydrate(
             "disposition",
         ),
     ] {
-        if let Some(id) = manifest.get(pointer).and_then(Value::as_str) {
-            let child = children
-                .get(id)
-                .and_then(|item| item.get(part))
-                .ok_or_else(|| invalid("project_work_managed_record_invalid"))?;
-            value.insert(field.into(), child.clone());
-        }
+        let Some(id) = manifest.get(pointer).and_then(Value::as_str) else {
+            continue;
+        };
+        let child = children
+            .get(id)
+            .and_then(|item| item.get(part))
+            .ok_or_else(|| invalid("project_work_managed_record_invalid"))?;
+        value.insert(field.into(), child.clone());
     }
-    // Source hydration omits optional effectWatermark/effectBlockers even when
-    // the separately verified material proof carries effect facts.
-    let view: WorkView = codec::typed(Value::Object(value))?;
-    if view.allowed_next_stages != butler_turn::btcc::allowed_next_work_stages(view.current_stage)
-        || view.result_refs.len() as u64 != codec::number(manifest, "resultSequence")?
-        || view.current_plan.as_ref().map(|plan| plan.revision)
-            != manifest
-                .get("planRevision")
-                .and_then(Value::as_u64)
-                .filter(|revision| *revision > 0)
-    {
-        return Err(invalid("project_work_managed_record_invalid"));
-    }
+    Ok(Value::Object(value))
+}
+
+/// Every binding reference matches its child and its derived id.
+fn bindings_match(
+    manifest: &Value,
+    children: &HashMap<String, Value>,
+    work_id: &str,
+) -> Result<(), BtccError> {
     for binding in manifest
         .get("bindingRefs")
         .and_then(Value::as_array)
@@ -387,31 +433,12 @@ pub(super) fn hydrate(
         if child.get("turnId") != binding.get("turnId")
             || child.get("sessionId") != manifest.get("sessionId")
             || child.get("revision") != binding.get("revision")
-            || id != codec::record_id("binding", &format!("{turn}\0{revision}\0{}", view.work_id))
+            || id != codec::record_id("binding", &format!("{turn}\0{revision}\0{work_id}"))
         {
             return Err(invalid("project_work_managed_record_invalid"));
         }
     }
-    if let Some(plan) = &view.current_plan {
-        let keys = plan
-            .actions
-            .iter()
-            .map(|item| &item.action_key)
-            .collect::<Vec<_>>();
-        let progress = view
-            .action_progress
-            .iter()
-            .map(|item| &item.action_key)
-            .collect::<Vec<_>>();
-        if plan.objective != view.objective
-            || keys != progress
-            || keys.iter().collect::<HashSet<_>>().len() != keys.len()
-        {
-            return Err(invalid("project_work_managed_record_invalid"));
-        }
-    }
-    validation::pointers(manifest, children, &view)?;
-    Ok(view)
+    Ok(())
 }
 
 fn managed_invalid() -> ProjectLedgerReadError {

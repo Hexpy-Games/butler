@@ -4,16 +4,21 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use butler_turn::btcc::{
-    BtccError, LegacyImport, ProjectWorkLegacyInput, ProjectWorkLegacyObserveInput,
-    ProjectWorkLegacySnapshot, ProjectWorkMaterialInput, ProjectWorkOperationIdentity,
-    ProjectWorkOperationKind, WorkTurnScope, WorkView,
+    BtccError, LegacyImport, ProjectWorkCapturedMaterial, ProjectWorkLegacyInput,
+    ProjectWorkLegacyObserveInput, ProjectWorkLegacySnapshot, ProjectWorkMaterialInput,
+    ProjectWorkOperationIdentity, ProjectWorkOperationKind, WorkTurnScope, WorkView,
 };
 
-use super::super::publication::ProjectLedgerRecordKind;
+use super::super::publication::{
+    ProjectLedgerRecordKind, ProjectLedgerRecordUpdate, ProjectWorkPublicationOutcome,
+};
 use super::codec;
 use super::{ProjectWorkRepository, invalid};
 
 impl ProjectWorkRepository {
+    /// Imports the scope's open legacy Work once: an import already observed
+    /// is replayed from its receipt; otherwise a stable legacy snapshot is
+    /// published as managed Work and observed back into the runtime.
     pub(super) async fn import_legacy_impl(
         &self,
         scope: WorkTurnScope,
@@ -29,28 +34,14 @@ impl ProjectWorkRepository {
             .read_import_observation(input.clone())
             .await?
         {
-            let source_identity = if observed.source_program_id.starts_with("current-r3:") {
-                format!("current-r3:{}", observed.work_id)
-            } else {
-                format!("r2:{}:{}", observed.source_program_id, observed.work_id)
-            };
-            let identity = self.legacy_identity(&source_identity, &observed.source_sha256)?;
-            let receipt = self.publish(identity, || async { Ok(None) }, false).await?;
-            if receipt.skipped
-                || !receipt.targets.iter().any(|target| {
-                    target.id == observed.work_id
-                        && target.kind == ProjectLedgerRecordKind::Work
-                        && target.parent_id.is_none()
-                })
-            {
-                return Err(invalid("project_work_occurrence_receipt_missing"));
-            }
-            let current = self.require_current(&observed.work_id).await?;
-            return Ok(Some(LegacyImport {
-                source_program_id: observed.source_program_id,
-                imported: false,
-                work: current.view,
-            }));
+            return self
+                .replay_legacy_import(
+                    observed.source_program_id,
+                    observed.work_id,
+                    &observed.source_sha256,
+                )
+                .await
+                .map(Some);
         }
         let Some(snapshot) = self
             .shared
@@ -60,50 +51,7 @@ impl ProjectWorkRepository {
         else {
             return Ok(None);
         };
-        let identity = self.legacy_identity(&snapshot.source_identity, &snapshot.source_sha256)?;
-        self.verify_legacy_results(&snapshot, None).await?;
-        let material = self
-            .shared
-            .projection
-            .capture_work_material(ProjectWorkMaterialInput {
-                candidate: snapshot.work.clone(),
-            })
-            .await?;
-        codec::assert_material(&snapshot.work, &material)?;
-        let repo = self.clone();
-        let prepare_identity = identity.clone();
-        let prepared_snapshot = Arc::clone(&snapshot);
-        let prepared_material = material.clone();
-        let observe_scope = scope.clone();
-        let publish = self.publish(identity, move || async move {
-            let relation = repo.relation(&scope).await?;
-            if relation.head.is_some() || relation.binding.is_some() || repo.read_current(&prepared_snapshot.work.work_id).await?.is_some() {
-                return Err(invalid("project_work_legacy_target_conflict"));
-            }
-            let children = legacy_children(&repo, &prepared_snapshot, &prepare_identity)?;
-            let revisions = legacy_revisions(&prepared_snapshot);
-            let refs = prepared_snapshot.bindings.iter().map(|binding| json!({
-                "bindingRevisionId":binding.binding_revision_id,"turnId":binding.turn_id,"revision":binding.revision,
-            })).collect::<Vec<_>>();
-            let manifest = codec::manifest_for_view(codec::ManifestViewInput {
-                prior: None,
-                view: &prepared_snapshot.work,
-                scope: &repo.scope,
-                identity: &prepare_identity,
-                binding_refs: Value::Array(refs),
-                session_head: true,
-                material: &prepared_material,
-                revisions: &revisions,
-            })?;
-            let mut updates = vec![codec::work_update(&manifest, true, &repo.shared.ledger.collation)?];
-            for child in children {
-                let (id, kind, title) = super::write::child_metadata(&child)?;
-                if let Some(update) = repo.child_update(&prepared_snapshot.work.work_id, &id, kind, title, child).await? {
-                    updates.push(update);
-                }
-            }
-            Ok(Some(updates))
-        }, false).await?;
+        let publish = self.publish_legacy(scope.clone(), &snapshot).await?;
         if publish.skipped {
             return Err(invalid("project_work_legacy_publication_missing"));
         }
@@ -114,6 +62,137 @@ impl ProjectWorkRepository {
             .legacy
             .revalidate_before_observation(input, Arc::clone(&snapshot))
             .await?;
+        self.observe_legacy_import(scope, &snapshot, &current.view)
+            .await?;
+        Ok(Some(LegacyImport {
+            source_program_id: snapshot.source_program_id.clone(),
+            imported: !publish.replayed,
+            work: current.view,
+        }))
+    }
+
+    /// The import the runtime already observed, confirmed by its receipt.
+    async fn replay_legacy_import(
+        &self,
+        source_program_id: String,
+        work_id: String,
+        source_sha256: &str,
+    ) -> Result<LegacyImport, BtccError> {
+        let source_identity = if source_program_id.starts_with("current-r3:") {
+            format!("current-r3:{work_id}")
+        } else {
+            format!("r2:{source_program_id}:{work_id}")
+        };
+        let identity = self.legacy_identity(&source_identity, source_sha256)?;
+        let receipt = self.publish(identity, || async { Ok(None) }, false).await?;
+        if receipt.skipped
+            || !receipt.targets.iter().any(|target| {
+                target.id == work_id
+                    && target.kind == ProjectLedgerRecordKind::Work
+                    && target.parent_id.is_none()
+            })
+        {
+            return Err(invalid("project_work_occurrence_receipt_missing"));
+        }
+        let current = self.require_current(&work_id).await?;
+        Ok(LegacyImport {
+            source_program_id,
+            imported: false,
+            work: current.view,
+        })
+    }
+
+    /// Publishes the legacy snapshot's manifest and children as new Work.
+    async fn publish_legacy(
+        &self,
+        scope: WorkTurnScope,
+        snapshot: &Arc<ProjectWorkLegacySnapshot>,
+    ) -> Result<ProjectWorkPublicationOutcome, BtccError> {
+        let identity = self.legacy_identity(&snapshot.source_identity, &snapshot.source_sha256)?;
+        self.verify_legacy_results(snapshot, None).await?;
+        let material = self
+            .shared
+            .projection
+            .capture_work_material(ProjectWorkMaterialInput {
+                candidate: snapshot.work.clone(),
+            })
+            .await?;
+        codec::assert_material(&snapshot.work, &material)?;
+        let repo = self.clone();
+        let prepare_identity = identity.clone();
+        let snapshot = Arc::clone(snapshot);
+        self.publish(
+            identity,
+            move || async move {
+                repo.legacy_updates(&scope, &snapshot, &prepare_identity, &material)
+                    .await
+                    .map(Some)
+            },
+            false,
+        )
+        .await
+    }
+
+    async fn legacy_updates(
+        &self,
+        scope: &WorkTurnScope,
+        snapshot: &ProjectWorkLegacySnapshot,
+        identity: &ProjectWorkOperationIdentity,
+        material: &ProjectWorkCapturedMaterial,
+    ) -> Result<Vec<ProjectLedgerRecordUpdate>, BtccError> {
+        let relation = self.relation(scope).await?;
+        if relation.head.is_some()
+            || relation.binding.is_some()
+            || self.read_current(&snapshot.work.work_id).await?.is_some()
+        {
+            return Err(invalid("project_work_legacy_target_conflict"));
+        }
+        let children = legacy_children(self, snapshot, identity)?;
+        let revisions = legacy_revisions(snapshot);
+        let refs = snapshot
+            .bindings
+            .iter()
+            .map(|binding| {
+                json!({
+                    "bindingRevisionId":binding.binding_revision_id,"turnId":binding.turn_id,
+                    "revision":binding.revision,
+                })
+            })
+            .collect::<Vec<_>>();
+        let manifest = codec::manifest_for_view(codec::ManifestViewInput {
+            prior: None,
+            view: &snapshot.work,
+            scope: &self.scope,
+            identity,
+            binding_refs: Value::Array(refs),
+            session_head: true,
+            material,
+            revisions: &revisions,
+        })?;
+        let mut updates = vec![codec::work_update(
+            &manifest,
+            true,
+            &self.shared.ledger.collation,
+        )?];
+        for child in children {
+            let (id, kind, title) = super::write::child_metadata(&child)?;
+            if let Some(update) = self
+                .child_update(&snapshot.work.work_id, &id, kind, title, child)
+                .await?
+            {
+                updates.push(update);
+            }
+        }
+        Ok(updates)
+    }
+
+    /// Tells the runtime the import landed at the current canonical head.
+    async fn observe_legacy_import(
+        &self,
+        scope: WorkTurnScope,
+        snapshot: &Arc<ProjectWorkLegacySnapshot>,
+        current: &WorkView,
+    ) -> Result<(), BtccError> {
         let project_root = self.scope.ledger_root.clone();
         let head = self
             .shared
@@ -127,18 +206,13 @@ impl ProjectWorkRepository {
         self.shared
             .legacy
             .observe_imported(ProjectWorkLegacyObserveInput {
-                scope: observe_scope,
+                scope,
                 resolved_scope: self.scope.clone(),
-                snapshot: Arc::clone(&snapshot),
+                snapshot: Arc::clone(snapshot),
                 canonical_head_sha256: head,
-                canonical_result_refs: current.view.result_refs.clone(),
+                canonical_result_refs: current.result_refs.clone(),
             })
-            .await?;
-        Ok(Some(LegacyImport {
-            source_program_id: snapshot.source_program_id.clone(),
-            imported: !publish.replayed,
-            work: current.view,
-        }))
+            .await
     }
 
     fn legacy_identity(

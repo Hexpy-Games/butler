@@ -6,8 +6,8 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use super::{
-    DashboardLedgerRecord, DashboardLedgerSnapshot, DashboardLedgerSource, ProjectLedgerBinding,
-    managed,
+    DashboardLedgerRecord, DashboardLedgerSnapshot, DashboardLedgerSource, DashboardLedgerWork,
+    ProjectLedgerBinding, managed,
 };
 use crate::project_ledger::{ProjectLedgerReadError, committed, records};
 
@@ -69,14 +69,24 @@ pub(super) fn revalidate(
     Ok(())
 }
 
-pub(super) fn read_source(
-    root: &Path,
+fn unavailable() -> ProjectLedgerReadError {
+    ProjectLedgerReadError::record_show("dashboard_source_unavailable")
+}
+
+/// The snapshot record a dashboard source names: a Work, the current plan
+/// of a managed Work, or exactly one indexed record.
+struct SourceTarget<'a> {
+    work: Option<&'a DashboardLedgerWork>,
+    plan_work: Option<&'a DashboardLedgerWork>,
+    record: DashboardLedgerRecord,
+}
+
+fn source_target<'a>(
     binding: &ProjectLedgerBinding,
-    snapshot: &DashboardLedgerSnapshot,
+    snapshot: &'a DashboardLedgerSnapshot,
     kind: &str,
     id: &str,
-    collation: &LocaleCollation,
-) -> Result<DashboardLedgerSource, ProjectLedgerReadError> {
+) -> Result<SourceTarget<'a>, ProjectLedgerReadError> {
     let work = snapshot
         .works
         .iter()
@@ -118,41 +128,60 @@ pub(super) fn read_source(
             unavailable: false,
         })
     });
-    let target = work
-        .map(|work| &work.record)
-        .or(plan_target.as_ref())
-        .or(first)
-        .ok_or(ProjectLedgerReadError::record_show(
-            "dashboard_source_unavailable",
-        ))?;
+    let record = work
+        .map(|work| work.record.clone())
+        .or(plan_target)
+        .or_else(|| first.cloned())
+        .ok_or_else(unavailable)?;
     if work.is_some_and(|work| work.availability != "ready") {
-        return Err(ProjectLedgerReadError::record_show(
-            "dashboard_source_unavailable",
-        ));
+        return Err(unavailable());
     }
-    let exact = read_record(root, &binding.ledger_project_id, target)?;
+    Ok(SourceTarget {
+        work,
+        plan_work,
+        record,
+    })
+}
+
+/// One dashboard source document. Managed Work and plans show their public
+/// projection, never the private manifest; the file must not change while
+/// it is read.
+pub(super) fn read_source(
+    root: &Path,
+    binding: &ProjectLedgerBinding,
+    snapshot: &DashboardLedgerSnapshot,
+    kind: &str,
+    id: &str,
+    collation: &LocaleCollation,
+) -> Result<DashboardLedgerSource, ProjectLedgerReadError> {
+    let SourceTarget {
+        work,
+        plan_work,
+        record: target,
+    } = source_target(binding, snapshot, kind, id)?;
+    let exact = read_record(root, &binding.ledger_project_id, &target)?;
     if exact.metadata.get("schema").and_then(Value::as_str)
         != Some(format!("project-ledger.{kind}.v1").as_str())
     {
-        return Err(ProjectLedgerReadError::record_show(
-            "dashboard_source_unavailable",
-        ));
+        return Err(unavailable());
     }
-    let mut body = exact.body;
-    let mut title = exact
-        .metadata
-        .get("title")
-        .and_then(Value::as_str)
-        .unwrap_or(&target.title)
-        .to_owned();
+    let text = |key: &str, fallback: &str| {
+        exact
+            .metadata
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or(fallback)
+            .to_owned()
+    };
+    let mut body = exact.body.clone();
+    let mut title = text("title", &target.title);
     if let Some(work) = work.and_then(|work| work.managed.as_ref()) {
-        if snapshot
+        let revision = snapshot
             .works
             .iter()
             .find(|candidate| candidate.record.id == id)
-            .and_then(|candidate| candidate.revision.as_deref())
-            != Some(exact.revision.as_str())
-        {
+            .and_then(|candidate| candidate.revision.as_deref());
+        if revision != Some(exact.revision.as_str()) {
             return Err(ProjectLedgerReadError::record_show(
                 "dashboard_source_changed",
             ));
@@ -162,39 +191,19 @@ pub(super) fn read_source(
     } else if kind == "plan"
         && exact.metadata.get("spec").and_then(Value::as_str) == Some(managed::PROJECT_WORK_SPEC)
     {
-        let plan = managed::read_plan_child(
-            root,
-            binding,
-            &plan_work
-                .ok_or(ProjectLedgerReadError::record_show(
-                    "dashboard_source_unavailable",
-                ))?
-                .record
-                .id,
-            id,
-            collation,
-        )?;
+        let work_id = &plan_work.ok_or_else(unavailable)?.record.id;
+        let plan = managed::read_plan_child(root, binding, work_id, id, collation)?;
         title.clone_from(&plan.objective);
         body = plan.public_markdown();
     }
-    revalidate(root, &binding.ledger_project_id, target, &exact.revision)?;
+    revalidate(root, &binding.ledger_project_id, &target, &exact.revision)?;
     Ok(DashboardLedgerSource {
         title,
         body,
-        revision: exact.revision,
         document_type: kind.to_owned(),
-        updated_at: exact
-            .metadata
-            .get("updatedAt")
-            .and_then(Value::as_str)
-            .unwrap_or(&target.updated_at)
-            .to_owned(),
-        status: exact
-            .metadata
-            .get("status")
-            .and_then(Value::as_str)
-            .unwrap_or(&target.status)
-            .to_owned(),
+        updated_at: text("updatedAt", &target.updated_at),
+        status: text("status", &target.status),
+        revision: exact.revision,
     })
 }
 
