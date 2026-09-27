@@ -62,33 +62,41 @@ pub async fn run(
         .await
         .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
         .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
-    let result = (|| {
-        lease
-            .assert_for_path(&lock)
-            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
-        if cancellation.is_cancelled() {
-            return Err(error(CognitionCode::MemoryOperationAborted));
-        }
-        let current = resolve_generation(data_root, environment, &target)?;
-        assert_mutation_authority(data_root, environment, &target, &current)?;
-        if current.graph_path != handle.graph_path {
-            return Err(error(CognitionCode::MemoryGenerationChanged));
-        }
-        ensure_data_authority(data_root, &[&current.graph_path, &lock])?;
-        let mut graph = GraphRepository::open(&current.graph_path)?;
-        graph.ensure_schema(now)?;
-        let configured = graph.configure_projection_model_policy(policy, now)?;
-        graph.close()?;
-        to_value(configured)
-            .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))
-    })();
-    let released = lease
-        .release(result.is_ok())
-        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
-    result.and_then(|value| {
-        released?;
-        Ok(value)
-    })
+    let data_root = data_root.to_owned();
+    let environment = environment.to_owned();
+    let policy = policy.to_owned();
+    let now = now.to_owned();
+    let cancellation = cancellation.to_owned();
+    crate::cognition::generation::stage::leased(
+        lease,
+        CognitionCode::MemoryGraphFailed,
+        move |lease| {
+            let data_root = &data_root;
+            let environment = &environment;
+            let policy = &policy;
+            let now = &now;
+            let cancellation = &cancellation;
+            lease
+                .assert_for_path(&lock)
+                .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
+            if cancellation.is_cancelled() {
+                return Err(error(CognitionCode::MemoryOperationAborted));
+            }
+            let current = resolve_generation(data_root, environment, &target)?;
+            assert_mutation_authority(data_root, environment, &target, &current)?;
+            if current.graph_path != handle.graph_path {
+                return Err(error(CognitionCode::MemoryGenerationChanged));
+            }
+            ensure_data_authority(data_root, &[&current.graph_path, &lock])?;
+            let mut graph = GraphRepository::open(&current.graph_path)?;
+            graph.ensure_schema(now)?;
+            let configured = graph.configure_projection_model_policy(policy, now)?;
+            graph.close()?;
+            to_value(configured)
+                .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))
+        },
+    )
+    .await
 }
 
 fn error(code: CognitionCode) -> CognitionError {

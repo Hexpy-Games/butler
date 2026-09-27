@@ -122,7 +122,7 @@ pub async fn prepare(
         .await
         .map_err(gate_error)?
         .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
-    let result = (|| {
+    crate::cognition::generation::stage::leased(lease, CognitionCode::MemoryRebuildPrepareFailed, move |lease| {
         lease
             .assert_for_path(&lock)
             .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
@@ -168,14 +168,8 @@ pub async fn prepare(
             source_inventory_hash: snapshot.source_inventory_hash,
             unaccounted_source_count: snapshot.source_count,
         })
-    })();
-    let released = lease
-        .release(result.is_ok())
-        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
-    match (result, released) {
-        (Err(error), _) | (Ok(_), Err(error)) => Err(error),
-        (Ok(value), Ok(())) => Ok(value),
-    }
+    })
+    .await
 }
 
 struct Staged {

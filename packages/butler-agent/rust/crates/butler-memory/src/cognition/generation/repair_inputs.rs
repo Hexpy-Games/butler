@@ -103,48 +103,56 @@ pub async fn run(request: CandidateInputRepairRequest<'_>) -> CognitionResult<Va
         .await
         .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
         .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
-    let result = (|| {
-        lease
-            .assert_for_path(&lock)
-            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
-        if cancellation.is_cancelled() {
-            return Err(error(CognitionCode::MemoryOperationAborted));
-        }
-        let current = resolve_generation(data_root, environment, &target)?;
-        assert_mutation_authority(data_root, environment, &target, &current)?;
-        if current.graph_path != handle.graph_path
-            || current.source_root != handle.source_root
-            || current.canonical_snapshot_path != handle.canonical_snapshot_path
-        {
-            return Err(error(CognitionCode::MemoryGenerationChanged));
-        }
-        ensure_data_authority(data_root, &[&current.graph_path, &canonical_path, &lock])?;
-        let canonical = ConversationSourceReader::open(&canonical_path)
-            .map_err(|source| error(CognitionCode::MemorySourceChanged).with_source(source))?;
-        let mut graph = if dry_run {
-            GraphRepository::open_readonly(&current.graph_path)?
-        } else {
-            GraphRepository::open(&current.graph_path)?
-        };
-        let repaired = graph.repair_candidate_inputs(
-            generation_id,
-            &canonical,
-            &current.source_root,
-            &request,
-            dry_run,
-            now,
-        )?;
-        graph.close()?;
-        to_value(repaired)
-            .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))
-    })();
-    let released = lease
-        .release(result.is_ok())
-        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
-    result.and_then(|value| {
-        released?;
-        Ok(value)
-    })
+    let data_root = data_root.to_owned();
+    let environment = environment.to_owned();
+    let generation_id = generation_id.to_owned();
+    let now = now.to_owned();
+    let cancellation = cancellation.to_owned();
+    crate::cognition::generation::stage::leased(
+        lease,
+        CognitionCode::MemoryGraphFailed,
+        move |lease| {
+            let data_root = &data_root;
+            let environment = &environment;
+            let generation_id = &generation_id;
+            let now = &now;
+            let cancellation = &cancellation;
+            lease
+                .assert_for_path(&lock)
+                .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
+            if cancellation.is_cancelled() {
+                return Err(error(CognitionCode::MemoryOperationAborted));
+            }
+            let current = resolve_generation(data_root, environment, &target)?;
+            assert_mutation_authority(data_root, environment, &target, &current)?;
+            if current.graph_path != handle.graph_path
+                || current.source_root != handle.source_root
+                || current.canonical_snapshot_path != handle.canonical_snapshot_path
+            {
+                return Err(error(CognitionCode::MemoryGenerationChanged));
+            }
+            ensure_data_authority(data_root, &[&current.graph_path, &canonical_path, &lock])?;
+            let canonical = ConversationSourceReader::open(&canonical_path)
+                .map_err(|source| error(CognitionCode::MemorySourceChanged).with_source(source))?;
+            let mut graph = if dry_run {
+                GraphRepository::open_readonly(&current.graph_path)?
+            } else {
+                GraphRepository::open(&current.graph_path)?
+            };
+            let repaired = graph.repair_candidate_inputs(
+                generation_id,
+                &canonical,
+                &current.source_root,
+                &request,
+                dry_run,
+                now,
+            )?;
+            graph.close()?;
+            to_value(repaired)
+                .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))
+        },
+    )
+    .await
 }
 
 fn error(code: CognitionCode) -> CognitionError {

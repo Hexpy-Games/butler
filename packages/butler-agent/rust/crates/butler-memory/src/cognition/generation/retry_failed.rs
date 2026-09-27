@@ -74,53 +74,62 @@ pub async fn run(
         .await
         .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
         .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
-    let result = (|| {
-        lease
-            .assert_for_path(&lock)
-            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
-        if cancellation.is_cancelled() {
-            return Err(error(CognitionCode::MemoryOperationAborted));
-        }
-        let current = resolve_generation(data_root, environment, &target)?;
-        assert_mutation_authority(data_root, environment, &target, &current)?;
-        if current.graph_path != handle.graph_path
-            || current
-                .embedding
-                .as_ref()
-                .map(super::types::GenerationEmbedding::version)
-                != handle
+    let data_root = data_root.to_owned();
+    let environment = environment.to_owned();
+    let generation_id = generation_id.to_owned();
+    let now = now.to_owned();
+    let cancellation = cancellation.to_owned();
+    crate::cognition::generation::stage::leased(
+        lease,
+        CognitionCode::MemoryGenerationUnavailable,
+        move |lease| {
+            let data_root = &data_root;
+            let environment = &environment;
+            let generation_id = &generation_id;
+            let now = &now;
+            let cancellation = &cancellation;
+            lease
+                .assert_for_path(&lock)
+                .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
+            if cancellation.is_cancelled() {
+                return Err(error(CognitionCode::MemoryOperationAborted));
+            }
+            let current = resolve_generation(data_root, environment, &target)?;
+            assert_mutation_authority(data_root, environment, &target, &current)?;
+            if current.graph_path != handle.graph_path
+                || current
                     .embedding
                     .as_ref()
                     .map(super::types::GenerationEmbedding::version)
-        {
-            return Err(error(CognitionCode::MemoryGenerationChanged));
-        }
-        ensure_data_authority(data_root, &[&current.graph_path, &lock])?;
-        let mut graph = GraphRepository::open(&current.graph_path)?;
-        graph.ensure_schema(now)?;
-        let updated = if let Some(request) = &request {
-            let version = current
-                .embedding
-                .as_ref()
-                .map(super::types::GenerationEmbedding::version)
-                .ok_or_else(|| error(CognitionCode::MemoryVectorRepairPreimageChanged))?;
-            let count = graph.repair_selected_invalid_vectors(generation_id, version, request)?;
-            json!({"semantic_windows":0,"vector_units":count,"cache_jobs":0})
-        } else {
-            let counts = graph.retry_failed(generation_id, now)?;
-            json!({"semantic_windows":counts.semantic_windows,
+                    != handle
+                        .embedding
+                        .as_ref()
+                        .map(super::types::GenerationEmbedding::version)
+            {
+                return Err(error(CognitionCode::MemoryGenerationChanged));
+            }
+            ensure_data_authority(data_root, &[&current.graph_path, &lock])?;
+            let mut graph = GraphRepository::open(&current.graph_path)?;
+            graph.ensure_schema(now)?;
+            let updated = if let Some(request) = &request {
+                let version = current
+                    .embedding
+                    .as_ref()
+                    .map(super::types::GenerationEmbedding::version)
+                    .ok_or_else(|| error(CognitionCode::MemoryVectorRepairPreimageChanged))?;
+                let count =
+                    graph.repair_selected_invalid_vectors(generation_id, version, request)?;
+                json!({"semantic_windows":0,"vector_units":count,"cache_jobs":0})
+            } else {
+                let counts = graph.retry_failed(generation_id, now)?;
+                json!({"semantic_windows":counts.semantic_windows,
                 "vector_units":counts.vector_units,"cache_jobs":counts.cache_jobs})
-        };
-        graph.close()?;
-        Ok(json!({"generationId":generation_id,"retried":updated}))
-    })();
-    let released = lease
-        .release(result.is_ok())
-        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
-    result.and_then(|value| {
-        released?;
-        Ok(value)
-    })
+            };
+            graph.close()?;
+            Ok(json!({"generationId":generation_id,"retried":updated}))
+        },
+    )
+    .await
 }
 
 fn read_request(path: &Path) -> CognitionResult<VectorRepairRequest> {

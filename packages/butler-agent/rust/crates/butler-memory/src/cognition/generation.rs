@@ -13,6 +13,7 @@ mod reconcile;
 mod repair_inputs;
 mod retry_failed;
 mod set_extractor;
+mod stage;
 mod types;
 
 pub use crate::cognition::generation::embedding_binding::bind_native_embedding_identity;

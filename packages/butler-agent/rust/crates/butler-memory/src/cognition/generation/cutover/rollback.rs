@@ -267,38 +267,51 @@ async fn resume_for_build(
         .await
         .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
         .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
-    let result = (|| {
-        lease
-            .assert_for_path(&lock)
-            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
-        if cancellation.is_cancelled() {
-            return Err(error(CognitionCode::MemoryOperationAborted));
-        }
-        let current = descriptor::capture_active_descriptor(data_root, environment)?;
-        let current_json = butler_core::json::stringify(&current.raw)
-            .map_err(|source| error(CognitionCode::MemoryGenerationChanged).with_source(source))?;
-        let expected_json = butler_core::json::stringify(expected_descriptor)
-            .map_err(|source| error(CognitionCode::MemoryGenerationChanged).with_source(source))?;
-        if current_json != expected_json
-            || current.fields.previous_generation_id.as_deref() != Some(generation_id)
-        {
-            return Err(error(CognitionCode::MemoryGenerationChanged));
-        }
-        let (mut manifest, _) = read_manifest(&path, generation_id)?;
-        if manifest["format"] != "v2"
-            || !matches!(manifest["state"].as_str(), Some("retired" | "building"))
-        {
-            return Err(error(CognitionCode::MemoryGenerationChanged));
-        }
-        if manifest["state"] == "retired" {
-            manifest["state"] = json!("building");
-            super::super::initialize::durable::write_json(&path, &manifest)?;
-        }
-        Ok(())
-    })();
-    let released = lease
-        .release(result.is_ok())
-        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
-    result?;
-    released
+    let data_root = data_root.to_owned();
+    let environment = environment.to_owned();
+    let expected_descriptor = expected_descriptor.to_owned();
+    let generation_id = generation_id.to_owned();
+    let cancellation = cancellation.to_owned();
+    crate::cognition::generation::stage::leased(
+        lease,
+        CognitionCode::MemoryGenerationUnavailable,
+        move |lease| {
+            let data_root = &data_root;
+            let environment = &environment;
+            let expected_descriptor = &expected_descriptor;
+            let generation_id = &generation_id;
+            let cancellation = &cancellation;
+            lease
+                .assert_for_path(&lock)
+                .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
+            if cancellation.is_cancelled() {
+                return Err(error(CognitionCode::MemoryOperationAborted));
+            }
+            let current = descriptor::capture_active_descriptor(data_root, environment)?;
+            let current_json = butler_core::json::stringify(&current.raw).map_err(|source| {
+                error(CognitionCode::MemoryGenerationChanged).with_source(source)
+            })?;
+            let expected_json =
+                butler_core::json::stringify(expected_descriptor).map_err(|source| {
+                    error(CognitionCode::MemoryGenerationChanged).with_source(source)
+                })?;
+            if current_json != expected_json
+                || current.fields.previous_generation_id.as_deref() != Some(generation_id)
+            {
+                return Err(error(CognitionCode::MemoryGenerationChanged));
+            }
+            let (mut manifest, _) = read_manifest(&path, generation_id)?;
+            if manifest["format"] != "v2"
+                || !matches!(manifest["state"].as_str(), Some("retired" | "building"))
+            {
+                return Err(error(CognitionCode::MemoryGenerationChanged));
+            }
+            if manifest["state"] == "retired" {
+                manifest["state"] = json!("building");
+                super::super::initialize::durable::write_json(&path, &manifest)?;
+            }
+            Ok(())
+        },
+    )
+    .await
 }

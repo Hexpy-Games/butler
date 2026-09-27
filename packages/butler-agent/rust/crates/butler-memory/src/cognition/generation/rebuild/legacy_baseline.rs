@@ -31,7 +31,19 @@ pub(super) async fn ensure(
         .await
         .map_err(gate_error)?
         .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
-    let result = (|| {
+    let data_root = data_root.to_owned();
+    let memory_root = memory_root.to_owned();
+    let canonical = canonical.to_owned();
+    let lock = lock.to_owned();
+    let now = now.to_owned();
+    let cancellation = cancellation.to_owned();
+    crate::cognition::generation::stage::leased(lease, CognitionCode::MemoryGenerationUnavailable, move |lease| {
+        let data_root = &data_root;
+        let memory_root = &memory_root;
+        let canonical = &canonical;
+        let lock = &lock;
+        let now = &now;
+        let cancellation = &cancellation;
         lease
             .assert_for_path(lock)
             .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
@@ -105,14 +117,8 @@ pub(super) async fn ensure(
                 "previous_generation_id":null, "activated_at":now, "projection_mode":"paused",
             }),
         )
-    })();
-    let released = lease
-        .release(result.is_ok())
-        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
-    match (result, released) {
-        (Err(error), _) | (Ok(()), Err(error)) => Err(error),
-        (Ok(()), Ok(())) => Ok(()),
-    }
+    })
+    .await
 }
 
 fn validate_active_descriptor(data_root: &Path, path: &Path) -> CognitionResult<()> {
