@@ -1,15 +1,21 @@
+//! The module tree of a crate, as `rustc` would load it without `cfg(test)`.
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use syn::{Attribute, Item, Meta};
 
-pub(super) struct Module {
+/// One logical module: its path below the crate root, the file that holds it
+/// and its items.
+pub(crate) struct Module {
     pub path: Vec<String>,
     pub file: PathBuf,
     pub items: Vec<Item>,
 }
 
-pub(super) fn load(entry: &Path) -> Result<Vec<Module>, String> {
+/// Every module reachable from the crate root `entry`, skipping modules that
+/// compile only under `cfg(test)`.
+pub(crate) fn load(entry: &Path) -> Result<Vec<Module>, String> {
     let mut modules = Vec::new();
     let file = read(entry)?;
     visit_modules(
@@ -163,13 +169,25 @@ fn read(path: &Path) -> Result<syn::File, String> {
         .map_err(|error| format!("invalid Rust syntax in {}: {error}", path.display()))
 }
 
-pub(super) fn test_only(attributes: &[Attribute]) -> bool {
+/// Whether `attributes` compile the item only under `cfg(test)`.
+pub(crate) fn test_only(attributes: &[Attribute]) -> bool {
     attributes.iter().any(|attribute| {
         attribute.path().is_ident("cfg")
             && attribute
                 .parse_args::<Meta>()
                 .ok()
                 .is_some_and(|meta| test_condition(&meta) == Some(false))
+    })
+}
+
+/// Whether `attributes` mark a test function: `#[test]`, `#[tokio::test]`, ...
+pub(crate) fn test_function(attributes: &[Attribute]) -> bool {
+    attributes.iter().any(|attribute| {
+        attribute
+            .path()
+            .segments
+            .last()
+            .is_some_and(|segment| segment.ident == "test")
     })
 }
 
@@ -209,7 +227,7 @@ fn test_condition(meta: &Meta) -> Option<bool> {
     }
 }
 
-pub(super) fn item_attributes(item: &Item) -> &[Attribute] {
+pub(crate) fn item_attributes(item: &Item) -> &[Attribute] {
     match item {
         Item::Const(v) => &v.attrs,
         Item::Enum(v) => &v.attrs,
