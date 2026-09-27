@@ -2,7 +2,8 @@ import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../s
 import { Card } from "../Card";
 import { PageContainer } from "../PageContainer";
 import { Typo } from "../Typo";
-import { Grid } from "./Grid";
+import { Stack } from "../Stack";
+import { Grid, type GridColumnPreset } from "./Grid";
 
 export const meta: ShowcaseMeta = {
   title: "Grid",
@@ -19,6 +20,12 @@ const labels = {
 function text({ locale }: ShowcaseRenderContext) {
   return labels[locale];
 }
+
+const LONG_VALUE = "/Users/butler/Projects/workspace/packages/client/src/components/management/ProjectDocumentMarkdownContent.tsx";
+const presetCells: Array<[GridColumnPreset, number]> = [
+  ["1", 1], ["2", 2], ["3", 3], ["4", 4], ["6", 6], ["12", 12],
+  ["auto-fit", 3], ["auto-fill", 3], ["main-aside", 2], ["label-value", 2],
+];
 
 function Cell({ children }: { children: string }) {
   return <Card><Typo.Body>{children}</Typo.Body></Card>;
@@ -71,6 +78,25 @@ export const stories: ShowcaseStory[] = [
           </Grid>
         ))}
       </Grid>
+    ),
+  },
+  {
+    // Unbreakable content (a truncated path) in every preset: tracks shrink, the grid never widens.
+    name: "Wide content (every preset)",
+    widths: ["320", "375", "app"],
+    render: () => (
+      <Stack gap="md">
+        {presetCells.map(([preset, count]) => (
+          <Stack key={preset} gap="xs">
+            <Typo.Caption tone="tertiary">{preset}</Typo.Caption>
+            <Grid columns={preset} gap="xs">
+              {Array.from({ length: count }, (_, index) => (
+                <Grid.Item key={index}><Typo.Caption tone="secondary" truncate>{LONG_VALUE}</Typo.Caption></Grid.Item>
+              ))}
+            </Grid>
+          </Stack>
+        ))}
+      </Stack>
     ),
   },
 ];

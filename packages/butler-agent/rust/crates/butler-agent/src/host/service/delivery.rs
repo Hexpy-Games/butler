@@ -1,4 +1,8 @@
 //! App transport acknowledgement follows its actual durable transcript append.
+//!
+//! Every action enters the transcript after the progress committed before it:
+//! App projection drops progress that arrives once its Turn has settled, and a
+//! Turn commits its events before its outcome is delivered.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -6,10 +10,9 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 
+use crate::host::ProgressPublisher;
 use crate::host::service::ingress::{IngressDelivery, IngressError};
 use butler_gateway::gateway::TranscriptWriter;
-
-use super::progress_publisher::ProgressPublisher;
 
 pub(in crate::host) struct AppDelivery {
     writer: Arc<TranscriptWriter>,
@@ -49,10 +52,15 @@ impl IngressDelivery for AppDelivery {
                         "Action identity unavailable",
                     )
                 })?;
-            // Committed progress (streamed text included) is transcribed before
-            // the action, so the App projects it while the turn is still open.
-            // Pending events that fail here are retried by maintenance.
-            let _ = progress.reconcile().await;
+            // The periodic pass may not have reached the Turn's last events
+            // yet; publish them first so none of them trails this action.
+            progress.reconcile().await.map_err(|error| {
+                IngressError::new(
+                    "native_progress_publication_failed",
+                    "Committed progress could not be published",
+                )
+                .with_source(error)
+            })?;
             // Source App adapter acknowledges locally. Projection consumes the
             // durable outbound/delivery pair; no HTTP send is hidden here.
             let delivery = json!({"ok": true, "transportMessageId": format!("app:{action_id}")});
@@ -69,3 +77,6 @@ impl IngressDelivery for AppDelivery {
         })
     }
 }
+
+#[cfg(test)]
+mod tests;

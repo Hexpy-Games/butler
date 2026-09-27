@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use serde_json::{Value, json};
+use tokio::sync::Mutex;
 
 use butler_gateway::gateway::{TranscriptWriter, normalize_committed_turn_event};
 use butler_turn::btcc::{
@@ -14,8 +15,10 @@ const PAGE_SIZE: usize = 32;
 pub(crate) struct ProgressPublisher {
     repository: StorageProgressPublication,
     writer: Arc<TranscriptWriter>,
-    /// One reconciliation pass at a time keeps the transcript in event order.
-    pass: tokio::sync::Mutex<()>,
+    /// One pass at a time: a pass appends every event it read before the next
+    /// pass reads the store, so the periodic pass and a delivery's flush never
+    /// append an event twice or out of source order.
+    pass: Mutex<()>,
 }
 
 pub(crate) struct ProgressPublicationSummary {
@@ -31,12 +34,14 @@ impl ProgressPublisher {
         Self {
             repository,
             writer,
-            pass: tokio::sync::Mutex::new(()),
+            pass: Mutex::new(()),
         }
     }
 
     /// Each page releases its hydrated events before the next SQLite read.
     /// Failures remain pending; the keyset lets later events proceed this pass.
+    /// On return, every event committed before the call has been attempted:
+    /// published ones precede anything appended to the transcript afterwards.
     pub(crate) async fn reconcile(&self) -> Result<ProgressPublicationSummary, BtccError> {
         let _pass = self.pass.lock().await;
         let mut summary = ProgressPublicationSummary {

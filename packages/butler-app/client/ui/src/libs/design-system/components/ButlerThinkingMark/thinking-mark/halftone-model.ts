@@ -7,7 +7,8 @@ import {
   SCREEN_ANGLES,
   type SizeClass,
 } from "./constants";
-import { clamp, ease, mLocal, type MorphSim } from "./motion";
+import { clamp, progressOf, type MorphSim } from "./motion";
+import { morphSd } from "./morph-outline";
 import { sdRibbon } from "./ribbon-geometry";
 
 /** One halftone screen: fixed cells with precomputed ribbon SDF, emboss and sphere normals. */
@@ -74,6 +75,7 @@ export function latticeFor(cls: SizeClass) {
 
 /** Per-frame parameters, one reused object per mark (no allocation in the hot loop). */
 export interface FrameParams {
+  /** Morph progress in [0, 1]; drives every channel at once. */
   M: number;
   T: number;
   e: number;
@@ -88,9 +90,9 @@ export function createFrameParams(): FrameParams {
 }
 
 export function setFrameParams(p: FrameParams, M: number, T: number, _cls: SizeClass) {
-  p.M = M;
+  p.M = progressOf(M);
   p.T = T;
-  p.e = Math.min(1, M * 4);
+  p.e = p.M;
   p.br = 1 + 0.025 * Math.sin(T * 1.3);
   // riso moon: the light orbits briskly with a gentle bob
   const phi = RISO_MOTION.lightPhase + RISO_MOTION.lightRate * T;
@@ -113,19 +115,26 @@ export function htTone(L: HalftoneLayer, i: number, m: number, p: FrameParams) {
   return clamp(0.1 + 0.9 * lam + spec, 0, 1);
 }
 
-/** Dot radius (design units) for cell i on screen `ink` (0 key, 1 blue, 2 pink); 0 = no dot. */
+/** Below this coverage a dot has shrunk to nothing; radius grows continuously from here. */
+const COVERAGE_FLOOR = 0.004;
+
+/**
+ * Dot radius (design units) for cell i on screen `ink` (0 key, 1 blue, 2 pink); 0 = no dot.
+ * Every term reads the same progress g: the outline, the dot separation (fused -> screened),
+ * the tone and the riso inks all change together, and each cell keeps its dot throughout.
+ */
 export function dotRadius(L: HalftoneLayer, i: number, ink: number, p: FrameParams) {
   const pitch = L.pitch;
   const dc = L.DC[i];
-  const m = mLocal(p.M, dc / 400);
-  const gr = ease(clamp(m / 0.3, 0, 1));
-  const sd = L.SR[i] + (dc - HS_R * p.br - L.SR[i]) * m;
-  const mask = clamp(0.5 - sd / (pitch * 0.7) + 0.7 * (1 - gr), 0, 1);
-  if (mask < 0.01) return 0;
-  const tone = htTone(L, i, m, p);
-  const s = p.e * (0.35 + 0.65 * m);
+  const g = p.M;
+  const sd = morphSd(L.SR[i], dc, g, p.br);
+  // fused at rest (+0.7 spill), a crisp screen once formed
+  const mask = clamp(0.5 - sd / (pitch * 0.7) + 0.7 * (1 - g), 0, 1);
+  if (mask <= 0) return 0;
+  const tone = htTone(L, i, g, p);
+  const s = p.e * (0.35 + 0.65 * g);
   // a ripple of dot size travelling outward, and a diagonal sweep that trades blue and pink
-  const ripple = 1 + RISO_MOTION.wave * m * Math.sin(dc / 46 - p.T * 3.1);
+  const ripple = 1 + RISO_MOTION.wave * g * Math.sin(dc / 46 - p.T * 3.1);
   let cov: number;
   if (ink === 0) {
     cov = mask * (1 + (tone - 1) * s) * ripple;
@@ -133,8 +142,8 @@ export function dotRadius(L: HalftoneLayer, i: number, ink: number, p: FramePara
     const sw = 0.5 + 0.5 * Math.sin((L.X[i] * 0.72 + L.Y[i] * 0.69) / 150 - p.T * RISO_MOTION.sweep);
     cov = mask * (1 - tone) * 0.9 * s * (ink === 1 ? 1 - sw : sw) * ripple;
   }
-  if (cov < 0.004) return 0;
-  return pitch * (0.8 + (0.64 - 0.8) * gr) * Math.sqrt(Math.min(cov, 1.25));
+  if (cov <= COVERAGE_FLOOR) return 0;
+  return pitch * (0.8 - 0.16 * g) * Math.sqrt(Math.min(cov - COVERAGE_FLOOR, 1.25));
 }
 
 export type RenderMode = "rest" | "reduced" | "halftone";

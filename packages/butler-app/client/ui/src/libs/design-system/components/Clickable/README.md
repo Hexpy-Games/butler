@@ -33,6 +33,7 @@ Product engineers and agents can use it when composing interactive rows. Design-
 - Prefer native `Button` when the control does not contain nested interactive children.
 - Keep `Clickable` content visually row-like, not form-submit-like.
 - Ensure nested controls stop event propagation when they should not activate the row.
+- A row never grows past its container: its children may shrink and icons keep their size. Give a text label `<Typo.Text truncate>` (or use `ListRow`) so it ends in an ellipsis.
 
 ## Wrong use cases
 - Do not use `Clickable` for form submission; use `Button`.

@@ -27,7 +27,7 @@ export const stories: ShowcaseStory[] = [
       <Stack gap="xs">
         {(["xs", "sm", "md", "lg"] as const).map((size) => (
           <Stack align="row" key={size}>
-            <Stack.Item basis={size} shrink={false}><Tag>{`basis=${text(context)[size]}`}</Tag></Stack.Item>
+            <Stack.Item basis={size}><Tag>{`basis=${text(context)[size]}`}</Tag></Stack.Item>
           </Stack>
         ))}
       </Stack>

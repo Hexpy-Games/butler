@@ -1784,6 +1784,9 @@ try {
     testClass("attachment-button"),
     "attachment button",
   );
+  // The stub is a Custom model with no declared image capability: unknown is
+  // treated like text-only (the gateway rejects images at admission), so the
+  // picker filters images out and a picked image is refused.
   const fileInputAccept = await page
     .locator("input[type='file']")
     .getAttribute("accept");
@@ -1791,12 +1794,12 @@ try {
     .locator("input[type='file']")
     .getAttribute("data-picker-filter");
   assert(
-    !fileInputAccept,
-    `attachment-picker-all-files failed: accept=${fileInputAccept}`,
+    fileInputPickerMode === "non-image",
+    `attachment picker should advertise non-image mode for an unknown-capability model, got ${fileInputPickerMode}`,
   );
   assert(
-    fileInputPickerMode === "all-files",
-    `attachment picker should advertise all-files mode, got ${fileInputPickerMode}`,
+    !!fileInputAccept && !/image\/(\*|png|jpeg|webp|gif)|\.(png|jpe?g|webp|gif)\b/u.test(fileInputAccept),
+    `attachment-picker-non-image failed: accept=${fileInputAccept}`,
   );
   await page.setInputFiles("input[type='file']", {
     name: "smoke.md",
@@ -1812,12 +1815,26 @@ try {
       "base64",
     ),
   });
-  await page.getByText("smoke.png").waitFor({ state: "visible" });
+  // This visual harness mounts no toaster; the refusal toast is covered by
+  // composerImageGating.test.tsx. A later file still attaching shows the
+  // picker kept working and the image was refused rather than lost.
+  await page.setInputFiles("input[type='file']", {
+    name: "after-image.md",
+    mimeType: "text/markdown",
+    buffer: Buffer.from("after"),
+  });
+  await page.getByText("after-image.md").waitFor({ state: "visible" });
+  await expectLocatorCount(
+    page,
+    `${testClass("composer-card")} [data-slot="attachment-item"]:has-text("smoke.png")`,
+    0,
+    "image with unknown model capability should be refused, not attached",
+  );
   await expectLocatorCount(
     page,
     `${testClass("composer-error")}:visible`,
     0,
-    "png attachment should not show unsupported type error",
+    "refused image should use the brief toast, not a composer error",
   );
 
   await page.locator(`${testClass("composer-card")} ${composerEditor}`).focus();
@@ -4101,8 +4118,8 @@ try {
         "composer-control-hover-pill",
         "composer-control-hover-clipped",
         "attachment-picker-visible",
-        "attachment-picker-all-files",
-        "png-attachment-chip",
+        "attachment-picker-non-image",
+        "image-unknown-capability-refused",
         "permission-popover-closes-outside",
         "permission-mode-updates-icon-and-color",
         "composer-control-button-gap-tokenized",

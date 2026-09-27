@@ -1,8 +1,8 @@
 import type { RisoInk } from "../butlerMarkTheme";
-import { CENTER, GRAIN_TILE, HALFTONE_PRESETS, RHO, RING_R, RING_W, TAU } from "./constants";
+import { CENTER, GRAIN_TILE, HALFTONE_PRESETS, RING_R, RING_W, TAU } from "./constants";
 import { dotRadius, renderMode, setFrameParams, type FrameParams, type HalftoneLayer } from "./halftone-model";
-import { clamp, ease, type MorphSim } from "./motion";
-import { traceRibbon } from "./ribbon-geometry";
+import { clipMargin, OUTLINE_RAYS, traceOutline } from "./morph-outline";
+import { progressOf, type MorphSim } from "./motion";
 import type { Ctx, MarkSurface } from "./mark-surface";
 
 export { createSurface, resizeSurface, type MarkSurface } from "./mark-surface";
@@ -52,20 +52,34 @@ function setInk(c: Ctx, ink: RisoInk) {
   c.globalAlpha = ink.alpha;
 }
 
-/** At rest the dots are fused and clipped to the exact logo; the clip dilates away as they granulate. */
-function maskDilated(s: MarkSurface, M: number) {
-  const d = 720 * ease(clamp(M * 2.5, 0, 1));
-  if (d > 700) return;
+/**
+ * The dots are clipped to the morphing outline itself (traced from the same progress), so at
+ * rest they are fused and trimmed to the exact logo, and as the morph runs the clip moves
+ * with the shape and opens by clipMargin until the edge is whole dots; then it is released.
+ */
+function clipToOutline(s: MarkSurface, g: number, pitch: number) {
+  const margin = clipMargin(g, pitch);
+  if (!Number.isFinite(margin)) return;
+  traceOutline(g, s.params.br, s.outline);
   const x = s.mctx;
   x.setTransform(1, 0, 0, 1, 0, 0);
   x.clearRect(0, 0, s.px, s.px);
   x.setTransform(s.k, 0, 0, s.k, 0, 0);
   x.fillStyle = x.strokeStyle = s.ink;
   x.lineJoin = "round";
-  traceRibbon(x);
+  x.beginPath();
+  for (let a = 0; a < OUTLINE_RAYS; a += 1) {
+    const angle = (a / OUTLINE_RAYS) * TAU;
+    const r = s.outline[a] ?? 0;
+    if (a === 0) x.moveTo(CENTER + r, CENTER);
+    else x.lineTo(CENTER + Math.cos(angle) * r, CENTER + Math.sin(angle) * r);
+  }
+  x.closePath();
   x.fill();
-  x.lineWidth = RHO * 2 + 2 * d;
-  x.stroke();
+  if (margin > 0) {
+    x.lineWidth = 2 * margin;
+    x.stroke();
+  }
   const l = s.lctx;
   l.setTransform(1, 0, 0, 1, 0, 0);
   l.globalAlpha = 1;
@@ -88,7 +102,7 @@ function grainOver(s: MarkSurface, alpha: number) {
 }
 
 export function renderHalftone(s: MarkSurface, sim: MorphSim) {
-  const M = sim.M.x;
+  const M = progressOf(sim.M.x);
   const T = sim.T;
   const p = s.params;
   const preset = HALFTONE_PRESETS[s.cls] ?? HALFTONE_PRESETS[2];
@@ -103,8 +117,9 @@ export function renderHalftone(s: MarkSurface, sim: MorphSim) {
   l.clearRect(0, 0, s.px, s.px);
   l.setTransform(s.k, 0, 0, s.k, 0, 0);
   if (M > 0.001) {
-    const mis = (7 + 4 * Math.sin(T * 1.2)) * preset.mis;
-    const mis2 = (-5 + 3 * Math.cos(T * 0.95)) * preset.mis;
+    // misregistration opens with the morph: the inks start in register on the key dots
+    const mis = (7 + 4 * Math.sin(T * 1.2)) * preset.mis * M;
+    const mis2 = (-5 + 3 * Math.cos(T * 0.95)) * preset.mis * M;
     setInk(l, s.riso.blue);
     drawHalftoneInk(l, blue, 1, mis, mis2, p);
     setInk(l, s.riso.pink);
@@ -113,8 +128,8 @@ export function renderHalftone(s: MarkSurface, sim: MorphSim) {
   l.fillStyle = s.ink;
   l.globalAlpha = 1;
   drawHalftoneInk(l, key, 0, 0, 0, p);
-  grainOver(s, preset.grain * clamp(M, 0, 1));
-  maskDilated(s, M);
+  grainOver(s, preset.grain * M);
+  clipToOutline(s, M, preset.pitch);
   s.ctx.drawImage(l.canvas, 0, 0);
   drawRing(s);
 }

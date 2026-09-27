@@ -37,7 +37,7 @@
     "app:first-run:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-first-run-setup-smoke.ts",
     "app:layout:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-layout-smoke.ts",
     "app:screen-contracts:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-screen-contracts-smoke.ts",
-    "app:design-system:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/ds-viewer-bundle-check.ts && ${BUTLER_BUN:-bun} run tests/smoke/ds-viewer-navigation-smoke.ts && ${BUTLER_BUN:-bun} run tests/smoke/app-design-system-smoke.ts && ${BUTLER_BUN:-bun} run tests/smoke/ds-conversation-stories-smoke.ts && ${BUTLER_BUN:-bun} run tests/smoke/ds-motion-trace.ts",
+    "app:design-system:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/ds-viewer-bundle-check.ts && ${BUTLER_BUN:-bun} run tests/smoke/ds-viewer-navigation-smoke.ts && ${BUTLER_BUN:-bun} run tests/smoke/app-design-system-smoke.ts && ${BUTLER_BUN:-bun} run tests/smoke/ds-viewer-overflow-smoke.ts && ${BUTLER_BUN:-bun} run tests/smoke/ds-conversation-stories-smoke.ts && ${BUTLER_BUN:-bun} run tests/smoke/ds-motion-trace.ts",
     "app:sidebar-drop:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/sidebar-drop-zones-electron.ts",
     "app:motion:trace": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/ds-motion-trace.ts",
     "render": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/ds-viewer-render.ts",

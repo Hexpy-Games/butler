@@ -40,6 +40,7 @@ export const guidance: ShowcaseGuidance = {
   content: [
     "Placeholder invites a request (Ask Butler anything / Ask for follow-up changes).",
     "ComposerSendButton disabledReason blocks send and names why in a few words (Model doesn't accept images).",
+    "An unknown capability is treated as unavailable (the gateway refuses it), with its own few-word reason (Image support unknown for this model).",
     "Capability feedback is terse and non-intrusive: the disabled state plus a few-word tooltip (disabledReason), at most a brief transient toast for a refused drop or paste; no banners, inline paragraphs, persistent notices, or why/how explanations.",
   ],
   accessibility: [
