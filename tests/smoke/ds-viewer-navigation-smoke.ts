@@ -170,7 +170,10 @@ async function assertSearch(page: Page, baseUrl: string, label: string): Promise
   await palette.waitFor({ state: "detached" });
 
   const blocksRow = page.locator('[data-ds-nav-item="blocks"]');
-  if (!(await blocksRow.isVisible())) await page.getByRole("button", { name: "Open navigation" }).click();
+  // The palette's navigation closes the phone drawer (it may still be sliding out); reopen it.
+  if (await page.locator('[data-ds-viewer][data-menu-open="false"]').count()) {
+    await page.getByRole("button", { name: "Open navigation" }).click();
+  }
   await blocksRow.click();
   await page.locator('[data-ds-gallery="blocks"]').waitFor({ state: "visible" });
   assert(param(page, "page") === "blocks", `${label}: sidebar navigation did not write the page param`);
