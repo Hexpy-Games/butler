@@ -9,6 +9,7 @@ use super::contracts::ProfileCandidateInput;
 use super::*;
 
 mod extraction;
+mod format_pin;
 mod legacy_candidates;
 mod provider;
 mod support;
