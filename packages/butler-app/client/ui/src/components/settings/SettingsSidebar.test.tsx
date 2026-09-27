@@ -4,31 +4,36 @@ import { act } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { getAppCopy } from "@/app/copy.ts";
 import { SettingsSidebar } from "./SettingsSidebar";
+import { normalizeSettingsSectionId } from "@/app/utils.ts";
 import {
   createSettingsSectionGroups,
   filterSettingsSectionGroups,
+  settingsPageSchema,
 } from "./settingsSections";
 
 const settingsCopy = getAppCopy("en-US").settings;
 
-test("settings navigation groups existing pages without placeholder categories", () => {
+test("everyday settings come first and agent-level pages sit in a last Advanced group", () => {
   const groups = createSettingsSectionGroups(settingsCopy);
 
   expect(groups.map((group) => group.label)).toEqual([
     "Preferences",
-    "Models and extensions",
     "App and system",
+    "Advanced",
   ]);
   expect(
     groups.map((group) => group.sections.map((section) => section.id)),
   ).toEqual([
-    ["general", "appearance", "personalization"],
-    ["models", "mcp", "skills"],
-    ["server", "updates", "usage", "privacy", "system", "archives", "about"],
+    ["general", "appearance", "personalization", "models"],
+    ["updates", "usage", "privacy", "system", "archives", "about"],
+    ["helpers", "mcp", "skills", "server"],
   ]);
   expect(
     groups.flatMap((group) => group.sections).map((section) => section.id),
   ).not.toContain("logs");
+  expect(
+    createSettingsSectionGroups(getAppCopy("ko-KR").settings).at(-1)?.label,
+  ).toBe("고급");
 });
 
 test("developer logs stay in the app group when enabled", () => {
@@ -36,7 +41,6 @@ test("developer logs stay in the app group when enabled", () => {
   const appGroup = groups.find((group) => group.id === "app-and-system");
 
   expect(appGroup?.sections.map((section) => section.id)).toEqual([
-    "server",
     "updates",
     "usage",
     "logs",
@@ -44,6 +48,33 @@ test("developer logs stay in the app group when enabled", () => {
     "system",
     "archives",
     "about",
+  ]);
+  expect(groups.at(-1)?.id).toBe("advanced");
+});
+
+test("advanced settings keep their section ids and deep links", () => {
+  for (const [link, section] of [
+    ["mcp", "mcp"],
+    ["settings:mcp", "mcp"],
+    ["skills", "skills"],
+    ["server", "server"],
+    ["Server/Bridge", "server"],
+    ["helpers", "helpers"],
+    ["settings:helpers", "helpers"],
+    ["worker-profiles", "helpers"],
+    ["fallback-consolidation", "helpers"],
+    ["backup models", "helpers"],
+    ["models", "models"],
+    ["Models/Access", "models"],
+    ["system-events", "system"],
+  ] as const) {
+    expect(normalizeSettingsSectionId(link), link).toBe(section);
+  }
+  const helpers = settingsPageSchema.helpers.map((section) => section.id);
+  expect(helpers).toEqual(["fallback-consolidation", "worker-profiles"]);
+  expect(settingsPageSchema.models.map((section) => section.id)).toEqual([
+    "butler-model",
+    "permissions",
   ]);
 });
 
@@ -56,7 +87,8 @@ test("settings search matches labels, descriptions, and bounded aliases", () => 
 
   expect(sectionIds("tokens")).toEqual(["usage"]);
   expect(sectionIds("project folder")).toEqual(["server"]);
-  expect(sectionIds("worker")).toEqual(["models"]);
+  expect(sectionIds("worker")).toEqual(["helpers"]);
+  expect(sectionIds("backup")).toEqual(["helpers"]);
   expect(sectionIds("developer logs")).toEqual(["logs"]);
   expect(sectionIds("does not exist")).toEqual([]);
   expect(filterSettingsSectionGroups(groups, " ")).toBe(groups);
@@ -80,6 +112,10 @@ test("settings sidebar renders each group through the existing settings nav", ()
   const searchInput = document.querySelector('input[type="search"]');
   expect(navigationScroll).not.toBeNull();
   expect(navigationScroll?.querySelectorAll("nav").length).toBe(3);
+  // The Advanced group is visually separated from the everyday groups.
+  const advancedNav = Array.from(navigationScroll?.querySelectorAll("nav") ?? []).at(-1);
+  expect(advancedNav?.previousElementSibling?.getAttribute("data-slot")).toBe("separator");
+  expect(navigationScroll?.querySelectorAll('[data-slot="separator"]').length).toBe(1);
   expect(navigationScroll?.contains(searchInput)).toBe(false);
   expect(navigationScroll?.textContent).not.toContain("Back");
   expect(searchInput?.getAttribute("aria-label")).toBeTruthy();
@@ -87,7 +123,7 @@ test("settings sidebar renders each group through the existing settings nav", ()
     Array.from(document.querySelectorAll("nav")).map((nav) =>
       nav.getAttribute("aria-label"),
     ),
-  ).toEqual(["Preferences", "Models and extensions", "App and system"]);
+  ).toEqual(["Preferences", "App and system", "Advanced"]);
   expect(markup).toContain('aria-current="page"');
   expect(markup).toContain('data-slot="nav-row-label">MCP</span>');
   expect(markup).not.toContain("Project");

@@ -1445,7 +1445,9 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(markdownContentStyles).toContain("max-width: 30%");
   expect(markdownContentStyles).toContain("height: auto");
   expect(renderer).toContain("<PromptSuggestionList");
-  expect(renderer).toContain("onSelect: () => onSend(suggestion.text)");
+  // Templates fill the composer; ready-to-send suggestions send right away.
+  expect(renderer).toContain("? fillComposerWithTemplate(suggestion.text)");
+  expect(renderer).toContain(": onSend(suggestion.text)");
   expect(emptyState).toContain('from "@/assets/butler-mark.png"');
   expect(emptyState).toContain('from "@/assets/butler-mark-white.png"');
   expect(emptyState).toContain(
@@ -2125,7 +2127,7 @@ test("settings, command palette, automations, right panel, and worker UI are app
   ).toContain("<LocalModelApiSection");
   expect(
     read(
-      "packages/butler-app/client/ui/src/components/settings/ModelsSettings.tsx",
+      "packages/butler-app/client/ui/src/components/settings/HelperModelsSettings.tsx",
     ),
   ).toContain("<WorkerProfileEditor");
   expect(

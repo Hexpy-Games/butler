@@ -15,6 +15,7 @@ import {
 import { ConversationScroll, ConversationShell } from "@/butler-ds";
 import { useSessionViewSubscription } from
   "@/components/layout/hooks/useSessionViewSubscription.ts";
+import { useDeveloperMode } from "@/hooks/useDeveloperMode.ts";
 
 void appCopy;
 
@@ -38,6 +39,7 @@ export function Conversation() {
   const refreshSessionView = useButlerStore((state) => state.refreshSessionView);
   const setRightOpen = useButlerStore((state) => state.setRightOpen);
   const setRightTab = useButlerStore((state) => state.setRightTab);
+  const developerMode = useDeveloperMode();
 
   const activeChat = useMemo(
     () => activeChatFromNavigation(navigation, activeChatId),
@@ -60,9 +62,11 @@ export function Conversation() {
     );
   }, []);
   const openContext = useCallback(() => {
+    // The Context tab is a developer-mode tab; the hover popover shows usage.
+    if (!developerMode) return;
     setRightOpen(true);
     setRightTab("context");
-  }, [setRightOpen, setRightTab]);
+  }, [developerMode, setRightOpen, setRightTab]);
 
   const hasMessages = messages.length > 0;
   const stewardParentSubscriptionId = summary?.steward_children?.some(

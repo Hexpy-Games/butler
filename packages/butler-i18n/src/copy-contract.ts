@@ -30,7 +30,14 @@ modelSaved: string;
 modelSaveFailed: string;
 modelUnavailable: string;
 }
-export interface NewChatBriefingSuggestion { id: string; title: string; description: string; text: string; }
+export interface NewChatBriefingSuggestion {
+  id: string;
+  title: string;
+  description: string;
+  text: string;
+  /** A template the user finishes: it fills the composer instead of sending. */
+  template?: boolean;
+}
 
 export interface BriefingFallbackCopy { title: string; description: string; suggestions: NewChatBriefingSuggestion[]; }
 
@@ -265,7 +272,7 @@ export interface AppCopy {
     skills: string;
   };
   progress: { operations: Record<string, string>; fallback: string; storageRecovery: string; reconnecting: string; stopping: string; };
-  briefing: { general: BriefingFallbackCopy; onboarding: BriefingFallbackCopy; projectSuggestions: (name: string) => NewChatBriefingSuggestion[]; skillSuggestions: (name: string) => NewChatBriefingSuggestion[]; onboardingMoment: string; projectMoment: string; projectTitle: (name: string) => string; projectDescription: (name: string) => string; };
+  briefing: { general: BriefingFallbackCopy; onboarding: BriefingFallbackCopy; projectSuggestions: (name: string) => NewChatBriefingSuggestion[]; onboardingMoment: string; projectMoment: string; projectTitle: (name: string) => string; projectDescription: (name: string) => string; };
   interfaceTemplates: {
     relativeAge: (seconds: number) => string;
     workedFor: (duration: string) => string;
@@ -796,12 +803,13 @@ export interface AppCopy {
     searchEmpty: (query: string) => string;
     groups: {
       preferences: string;
-      modelsAndExtensions: string;
       appAndSystem: string;
+      advanced: string;
     };
     sections: {
       general: string;
       models: string;
+      helpers: string;
       appearance: string;
       server: string;
       updates: string;
@@ -818,6 +826,7 @@ export interface AppCopy {
     sectionDescriptions: {
       general: string;
       models: string;
+      helpers: string;
       appearance: string;
       server: string;
       updates: string;
@@ -834,6 +843,7 @@ export interface AppCopy {
     sectionAliases: {
       general: string[];
       models: string[];
+      helpers: string[];
       appearance: string[];
       server: string[];
       updates: string[];

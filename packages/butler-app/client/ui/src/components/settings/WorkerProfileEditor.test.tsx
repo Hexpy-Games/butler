@@ -14,7 +14,7 @@ import type {
   WorkerProfile,
 } from "@/app/types.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
-import { ModelsSettings } from "./ModelsSettings";
+import { HelperModelsSettings } from "./HelperModelsSettings";
 import {
   WORKER_PROFILE_BUILTIN_JOBS,
   commitWorkerProfileCustomJob,
@@ -161,7 +161,7 @@ async function renderApp(): Promise<void> {
   }
   const { createRoot } = await import("react-dom/client");
   root = createRoot(container);
-  await act(async () => root?.render(<ModelsSettings />));
+  await act(async () => root?.render(<HelperModelsSettings />));
 }
 
 interface BridgeDouble {

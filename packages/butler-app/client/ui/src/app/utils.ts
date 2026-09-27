@@ -1811,6 +1811,13 @@ export function normalizeSettingsSectionId(value: unknown): SettingsSectionId {
   if (section.includes("mcp")) return "mcp";
   if (section.includes("skill")) return "skills";
   if (
+    section.includes("helper") ||
+    section.includes("worker") ||
+    section.includes("backup") ||
+    section.includes("fallback")
+  )
+    return "helpers";
+  if (
     section.includes("usage") ||
     section.includes("metrics") ||
     section.includes("사용량")

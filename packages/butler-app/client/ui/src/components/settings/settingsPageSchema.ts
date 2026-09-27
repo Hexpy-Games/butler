@@ -43,8 +43,10 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   ],
   models: [
     { id: "butler-model", kind: "form", fields: ["primary-model", "reasoning", "context-limit", "local-reasoning-budget"] },
-    { id: "fallback-consolidation", kind: "form", fields: ["backup-models-enabled", "backup-models", "consolidation-model", "consolidation-reasoning"] },
     { id: "permissions", kind: "form", fields: ["access-mode", "plan-mode-default"] },
+  ],
+  helpers: [
+    { id: "fallback-consolidation", kind: "form", fields: ["backup-models-enabled", "backup-models", "consolidation-model", "consolidation-reasoning"] },
     { id: "worker-profiles", kind: "list", fields: WORKER_PROFILE_FIELDS },
   ],
   mcp: [

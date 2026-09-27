@@ -3,6 +3,7 @@ import {
   Archive,
   Activity,
   BookOpenText,
+  Bot,
   Database,
   MagicWand,
   McpServer,
@@ -40,6 +41,7 @@ function createSettingsSectionMap(
   return {
     general: section("general", settingsCopy.sections.general, <SlidersHorizontal />),
     models: section("models", settingsCopy.sections.models, <AiChip />),
+    helpers: section("helpers", settingsCopy.sections.helpers, <Bot />),
     appearance: section("appearance", settingsCopy.sections.appearance, <Palette />),
     server: section("server", settingsCopy.sections.server, <Server />),
     updates: section("updates", settingsCopy.sections.updates, <RefreshCcw />),
@@ -73,18 +75,12 @@ const SETTINGS_SECTION_GROUPS: SettingsSectionGroupDefinition[] = [
   {
     id: "general",
     label: "preferences",
-    sectionIds: ["general", "appearance", "personalization"],
-  },
-  {
-    id: "models-and-extensions",
-    label: "modelsAndExtensions",
-    sectionIds: ["models", "mcp", "skills"],
+    sectionIds: ["general", "appearance", "personalization", "models"],
   },
   {
     id: "app-and-system",
     label: "appAndSystem",
     sectionIds: [
-      "server",
       "updates",
       "usage",
       "logs",
@@ -93,6 +89,12 @@ const SETTINGS_SECTION_GROUPS: SettingsSectionGroupDefinition[] = [
       "archives",
       "about",
     ],
+  },
+  // Agent-level settings most people never need; always the last group.
+  {
+    id: "advanced",
+    label: "advanced",
+    sectionIds: ["helpers", "mcp", "skills", "server"],
   },
 ];
 

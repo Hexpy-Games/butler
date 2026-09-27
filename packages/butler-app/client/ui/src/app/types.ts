@@ -7,6 +7,7 @@ export type StatusTone = "ok" | "muted" | "error";
 export type SettingsSectionId =
   | "general"
   | "models"
+  | "helpers"
   | "appearance"
   | "server"
   | "updates"
@@ -1331,6 +1332,8 @@ export interface NewChatBriefingSuggestion {
   title: string;
   description: string;
   text: string;
+  /** A template the user finishes: it fills the composer instead of sending. */
+  template?: boolean;
 }
 
 export interface NewChatBriefingView {

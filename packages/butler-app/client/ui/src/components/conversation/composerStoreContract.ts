@@ -40,6 +40,8 @@ export interface ComposerStore {
   contentParts?: MessageContent;
   setContentParts: (content: MessageContent) => void;
   insertSessionReference: ((reference: { sessionId: string; titleSnapshot: string }) => void) | null;
+  /** Appends text at the end of the draft and focuses it there (registered by the editor). */
+  appendDraftText: ((text: string) => void) | null;
   setText: (text: string) => void;
   setIsComposing: (value: boolean) => void;
   large: boolean;
