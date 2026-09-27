@@ -1628,7 +1628,9 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(renderer).toContain("composerControlsForSubmit");
   expect(renderer).toContain("attachments,");
   expect(renderer).toContain("file_id: attachment.file_id");
-  expect(renderer).toContain('data-picker-filter="all-files"');
+  // Image-capable models keep the all-files picker; text-only models filter images out.
+  expect(renderer).toContain("data-picker-filter={picker.filter}");
+  expect(renderer).toContain('policy.accepts ? { filter: "all-files" }');
   expect(renderer).not.toContain("accept={ATTACHMENT_ACCEPT}");
   expect(renderer).toContain('role="alert"');
   expect(renderer).not.toContain("formatPromptWithAttachments");

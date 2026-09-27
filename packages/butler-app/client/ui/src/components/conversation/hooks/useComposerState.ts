@@ -15,6 +15,7 @@ import type {
   WorkerActivitySummary,
 } from "@/app/types.ts";
 import type { ComposerAttachment } from "./useFileAttachments";
+import { blockedImageAttachmentIds, composerImagePolicy } from "../composerImagePolicy";
 
 export function useComposerState(
   summary: SessionSummaryView | null | undefined,
@@ -50,17 +51,19 @@ export function useComposerState(
   const canStop = !synthesisLocked && Boolean(
     isSending || parentActive || activeWorker,
   );
-  const canSend =
-    modelState === "ready" &&
-    hasSendableDraft &&
-    uploadingCount === 0 &&
-    (!isSending || activeTurn);
-
   const context = summary?.context_details;
   const models = runtimeModels(modelCatalog);
 
   const activeModel =
     models.find((item) => item.model_ref === model);
+  const blockedAttachments = blockedImageAttachmentIds(attachments, composerImagePolicy(activeModel));
+
+  const canSend =
+    modelState === "ready" &&
+    hasSendableDraft &&
+    uploadingCount === 0 &&
+    blockedAttachments.size === 0 &&
+    (!isSending || activeTurn);
 
   const availableReasoning = activeModel?.reasoning_efforts?.length
     ? activeModel.reasoning_efforts
@@ -71,6 +74,7 @@ export function useComposerState(
   return {
     hasSendableDraft,
     canSend,
+    blockedAttachments,
     workers,
     activeTurn,
     canStop,

@@ -18,6 +18,7 @@ import type {
 import type { KeyboardEventLike } from "./hooks/composerEventTypes";
 import type { ComposerAttachment } from "./hooks/useFileAttachments";
 import type { MessageContent } from "@/app/messageContent";
+import type { AttachmentPickerKind, ImageRefusal } from "./composerImagePolicy";
 
 type AttachmentSetter = Dispatch<SetStateAction<ComposerAttachment[]>>;
 
@@ -47,6 +48,9 @@ export interface ComposerStore {
   attachments: ComposerAttachment[];
   setAttachments: AttachmentSetter;
   removeAttachment: (id: string) => void;
+  /** Attached images the selected model refuses; kept, but they block send. */
+  blockedAttachments: ReadonlyMap<string, ImageRefusal>;
+  pickerKind: AttachmentPickerKind;
   uploadingCount: number;
   addFiles: (files: FileList | null) => void;
   addProjectDocument: (document: ProjectDashboardDocument, topic?: string) => Promise<void>;
@@ -83,6 +87,6 @@ export interface ComposerStore {
   handleReasoningChange: (effort: ReasoningEffort) => void;
   onStop: () => void;
   onOpenContext: () => void;
-  openAttachmentPicker: () => void;
+  openAttachmentPicker: (kind?: AttachmentPickerKind) => void;
   setSnapshot: (snapshot: Partial<ComposerStore>) => void;
 }

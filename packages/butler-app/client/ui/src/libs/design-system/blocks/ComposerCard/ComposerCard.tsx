@@ -2,8 +2,6 @@ import type { DsBaseProps } from "../../lib/dsProps";
 import type { ButtonHTMLAttributes, FormHTMLAttributes, ReactNode, Ref, TextareaHTMLAttributes } from "react";
 import { createContext, forwardRef, useContext } from "react";
 import { Collapsible } from "../../components/Collapsible";
-import { SendHorizontal, Square } from "../../components/Icons";
-import { Spinner } from "../../components/Spinner";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import { cn } from "../../lib/utils";
 import styles from "./ComposerCard.module.css";
@@ -123,33 +121,5 @@ export function ComposerCardToolbarSpacer() {
       aria-hidden="true"
       data-test-class="composer-toolbar-spacer"
     />
-  );
-}
-
-export interface ComposerSendButtonProps
- extends DsBaseProps<ButtonHTMLAttributes<HTMLButtonElement>> {
-  mode?: "send" | "stop";
-  busy?: boolean;
-}
-
-export function ComposerSendButton({
-  mode = "send",
-  busy = false,
-  disabled,
-  className,
-  children,
-  ...props
-}: ComposerSendButtonProps) {
-  return (
-    <button
-      className={cn(styles.sendButton, mode === "stop" && styles.stop, className)}
-      data-test-class="composer-send-button"
-      type={!busy && mode === "send" ? "submit" : "button"}
-      {...props}
-      disabled={busy || disabled}
-      aria-busy={busy || undefined}
-    >
-      {busy ? <Spinner size={16} /> : children ?? (mode === "stop" ? <Square size="sm" /> : <SendHorizontal size="md" />)}
-    </button>
   );
 }
