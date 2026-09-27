@@ -4,9 +4,8 @@ use std::{ffi::OsString, path::PathBuf, process::ExitCode, sync::Arc};
 
 use serde_json::{Value, json};
 
-use crate::host::ResolvedInstallation;
-use crate::host::SystemIdentity;
 use crate::host::cli::settings as settings_cli;
+use crate::host::{ResolvedInstallation, SystemIdentity};
 use crate::{
     cognition::{
         BoxStoreService, CognitionPathEnvironment, CompletionPublisher, KnowHowService,

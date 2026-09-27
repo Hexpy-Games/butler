@@ -13,10 +13,8 @@ use crate::{
     models::{ModelCatalog, ModelConfiguration, provider_http_client},
 };
 
-use crate::host::NativeProcessEnvironment;
-use crate::host::ResolvedInstallation;
-use crate::host::SystemIdentity;
 use crate::host::installation::realpath_or_nearest;
+use crate::host::{NativeProcessEnvironment, ResolvedInstallation, SystemIdentity};
 
 pub(crate) async fn run_native_oauth_login(
     installation: ResolvedInstallation,

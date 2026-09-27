@@ -20,13 +20,12 @@ use crate::{
     models::ModelConfigurationClock,
 };
 
-use crate::host::NativeEmbeddingOwner;
-use crate::host::NativeProcessEnvironment;
-use crate::host::NativeProcessModels;
-use crate::host::ResolvedInstallation;
-use crate::host::SystemIdentity;
 use crate::host::cli::consolidation::NativeConsolidationCliResult;
 use crate::host::memory_jobs::maintain_phase::NativeConfiguredPhases;
+use crate::host::{
+    NativeEmbeddingOwner, NativeProcessEnvironment, NativeProcessModels, ResolvedInstallation,
+    SystemIdentity,
+};
 
 struct Options {
     data: PathBuf,

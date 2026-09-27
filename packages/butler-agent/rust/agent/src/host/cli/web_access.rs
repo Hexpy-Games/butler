@@ -8,9 +8,7 @@ use std::{env, ffi::OsString, path::PathBuf, process::ExitCode, sync::Arc};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::host::NativeProcessEnvironment;
-use crate::host::NativeProcessModels;
-use crate::host::ResolvedInstallation;
+use crate::host::{NativeProcessEnvironment, NativeProcessModels, ResolvedInstallation};
 
 #[derive(Default, Debug)]
 struct Options {

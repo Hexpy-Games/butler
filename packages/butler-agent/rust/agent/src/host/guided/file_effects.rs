@@ -10,9 +10,7 @@ use crate::btcc::{BtccError, EffectAdapter, EffectJournal, WorkView, WorkspaceFi
 use crate::capabilities::NativeCapabilities;
 use crate::workspace::EffectFileScope;
 
-use crate::host::NativeRegisteredEdit;
-use crate::host::NativeRegisteredWrite;
-use crate::host::RegisteredWriteContext;
+use crate::host::{NativeRegisteredEdit, NativeRegisteredWrite, RegisteredWriteContext};
 
 pub(crate) struct PreparedGuidedFileEffect {
     pub target: String,

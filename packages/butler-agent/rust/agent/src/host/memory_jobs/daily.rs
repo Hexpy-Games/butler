@@ -21,14 +21,12 @@ use crate::{
     workspace::SessionBindingStore,
 };
 
-use crate::host::NativeDateParser;
-use crate::host::NativeEmbeddingOwner;
-use crate::host::SystemIdentity;
 use crate::host::memory_jobs::briefing::NativeBriefingGeneration;
 use crate::host::memory_jobs::consolidation_phase::NativeCyclePhases;
 use crate::host::memory_jobs::maintain_phase::NativeConfiguredPhases;
 use crate::host::memory_jobs::profile_consolidation::ProfileConsolidation;
 use crate::host::memory_jobs::transcript_sync::NativeLegacySessionSync;
+use crate::host::{NativeDateParser, NativeEmbeddingOwner, SystemIdentity};
 
 pub(in crate::host) struct DailyCognitionJobs {
     data_root: PathBuf,

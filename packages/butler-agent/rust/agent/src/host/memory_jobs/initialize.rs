@@ -11,9 +11,8 @@ use crate::{
     models::ModelConfigurationClock,
 };
 
-use crate::host::ResolvedInstallation;
-use crate::host::SystemIdentity;
 use crate::host::cli::consolidation::NativeConsolidationCliResult;
+use crate::host::{ResolvedInstallation, SystemIdentity};
 
 pub(crate) async fn run(
     installation: ResolvedInstallation,

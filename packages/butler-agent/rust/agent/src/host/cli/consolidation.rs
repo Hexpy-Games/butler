@@ -5,12 +5,10 @@ use std::{ffi::OsString, path::PathBuf, sync::Arc};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::host::NativeProcessEnvironment;
-use crate::host::ResolvedInstallation;
-use crate::host::SystemIdentity;
 use crate::host::memory_jobs::briefing::NativeBriefingGeneration;
 use crate::host::memory_jobs::consolidation_phase::NativeCyclePhases;
 use crate::host::memory_jobs::profile_consolidation::ProfileConsolidation;
+use crate::host::{NativeProcessEnvironment, ResolvedInstallation, SystemIdentity};
 use crate::{
     cognition::{
         BoxStoreService, CognitionPathEnvironment, CycleService, CycleStatus,

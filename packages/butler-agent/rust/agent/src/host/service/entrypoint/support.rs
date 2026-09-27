@@ -3,8 +3,7 @@ use std::sync::Arc;
 use crate::btcc::BtccError;
 use crate::models::ModelConfigurationClock;
 
-use crate::host::NativeAgentRuntime;
-use crate::host::SystemIdentity;
+use crate::host::{NativeAgentRuntime, SystemIdentity};
 
 pub(super) async fn deliver_parent_results(
     client: &reqwest::Client,

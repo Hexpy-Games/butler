@@ -6,8 +6,7 @@ use tokio::sync::Mutex;
 
 use crate::btcc::{GuidedInvocation, PortFuture, SteeringObservation, TurnSteeringPort};
 
-use crate::host::guided::prompt::GuidedTextState;
-use crate::host::guided::prompt::work_context;
+use crate::host::guided::prompt::{GuidedTextState, work_context};
 
 pub(crate) struct NativeGuidedSteering {
     state: Arc<GuidedTextState>,

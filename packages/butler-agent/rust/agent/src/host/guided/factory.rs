@@ -21,18 +21,12 @@ use crate::cognition::{
 use crate::context::{NativeContextPort, NativeConversationSessionReference};
 use crate::conversation::CanonicalMemoryReadBinding;
 
-use crate::host::GuidedTextState;
-use crate::host::GuidedToolBinding;
-use crate::host::NativeGuidedActivity;
-use crate::host::NativeGuidedJournal;
-use crate::host::NativeGuidedPreparation;
-use crate::host::NativeGuidedPrompt;
-use crate::host::NativeGuidedSteering;
-use crate::host::NativeGuidedTools;
-use crate::host::NativeGuidedWork;
-use crate::host::NativeGuidedWorkTools;
-use crate::host::PreparedNativeGuidedTurn;
-use crate::host::resolve_guided_response_language;
+use crate::host::{
+    GuidedTextState, GuidedToolBinding, NativeGuidedActivity, NativeGuidedJournal,
+    NativeGuidedPreparation, NativeGuidedPrompt, NativeGuidedSteering, NativeGuidedTools,
+    NativeGuidedWork, NativeGuidedWorkTools, PreparedNativeGuidedTurn,
+    resolve_guided_response_language,
+};
 
 /// All fields are process services or immutable host configuration, never Turn state.
 pub(crate) struct NativeGuidedTurnFactory {

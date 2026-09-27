@@ -14,19 +14,15 @@ pub(super) mod storage_bootstrap;
 pub(super) mod stores;
 mod subsession_queue;
 mod web_owner;
-use super::NativeAcceptedPlanProducer;
-use super::NativeActiveAppEndpoint;
-use super::NativeCognitionPrompt;
-use super::NativeConversationObserver;
+use super::{
+    NativeAcceptedPlanProducer, NativeActiveAppEndpoint, NativeCognitionPrompt,
+    NativeConversationObserver,
+};
 #[cfg(unix)]
-use super::NativeEmbeddingOwner;
-use super::NativeGuidedCatalog;
-use super::NativeGuidedPreparation;
-use super::NativeGuidedTurnFactory;
-use super::NativePromptClock;
-use super::ProfileConversationSources;
-use super::ResolvedInstallation;
-use super::SystemIdentity;
+use super::{
+    NativeEmbeddingOwner, NativeGuidedCatalog, NativeGuidedPreparation, NativeGuidedTurnFactory,
+    NativePromptClock, ProfileConversationSources, ResolvedInstallation, SystemIdentity,
+};
 use crate::btcc::{
     self, BtccError, BtccRepositories, ContextCompactionRepository, DefaultTurnPreparation,
     DurableWorkService, GuidedContinuationBudgetFactory, HostDependencies, ModelRouteRetryConfig,
@@ -50,8 +46,7 @@ use crate::conversation::conversation_store_path;
 use crate::coordination::CognitionWriteCoordinator;
 use crate::host::memory_jobs::context_maintenance::ContextMaintenance;
 #[cfg(unix)]
-use crate::host::memory_jobs::daily::DailyCognitionJobs;
-use crate::host::memory_jobs::daily::DailyCognitionOwners;
+use crate::host::memory_jobs::daily::{DailyCognitionJobs, DailyCognitionOwners};
 use crate::host::memory_jobs::recall_metrics::RecallMetrics;
 use crate::host::runtime::environment::NativeProcessEnvironment;
 use crate::host::runtime::stores::RuntimeStores;

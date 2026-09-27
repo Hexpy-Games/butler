@@ -14,8 +14,7 @@ use crate::btcc::{
 use crate::project_ledger::ProjectLedgerReadError;
 use crate::workspace::{NativeSessionWorkspaceRecovery, WorkspaceReference};
 
-use crate::host::NativeAcceptedPlanProducer;
-use crate::host::NativeGuidedCatalog;
+use crate::host::{NativeAcceptedPlanProducer, NativeGuidedCatalog};
 
 pub(crate) struct NativeGuidedPreparation {
     pub catalog: Arc<NativeGuidedCatalog>,

@@ -16,8 +16,7 @@ use crate::workspace::{
     SessionBindingStore, SessionBindingStoreConfig, WorkspaceStorageProfile, session_store_path,
 };
 
-use crate::host::SystemIdentity;
-use crate::host::prepare_btcc_storage;
+use crate::host::{SystemIdentity, prepare_btcc_storage};
 
 pub(in crate::host) struct RuntimeStores {
     pub btcc: BtccStorage,

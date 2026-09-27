@@ -10,10 +10,9 @@ use tokio::{
 };
 
 use crate::host::ResolvedInstallation;
-use crate::host::service::instance::InstanceRecord;
-use crate::host::service::instance::instance_is_locked;
-use crate::host::service::instance::process_matches;
-use crate::host::service::instance::read_record;
+use crate::host::service::instance::{
+    InstanceRecord, instance_is_locked, process_matches, read_record,
+};
 
 const CONTROL_SCHEMA: &str = "butler.native-app-gateway-control.v1";
 const MAX_FRAME_BYTES: usize = 8 * 1024;

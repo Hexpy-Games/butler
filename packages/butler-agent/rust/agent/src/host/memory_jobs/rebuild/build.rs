@@ -6,10 +6,9 @@ use std::{collections::HashSet, path::Path, sync::Arc};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::host::NativeEmbeddingOwner;
-use crate::host::NativeProcessEnvironment;
-use crate::host::NativeProcessModels;
-use crate::host::SystemIdentity;
+use crate::host::{
+    NativeEmbeddingOwner, NativeProcessEnvironment, NativeProcessModels, SystemIdentity,
+};
 use crate::{
     cognition::{
         CognitionError, CognitionPathEnvironment, CognitionRegistrationService, CognitionResult,

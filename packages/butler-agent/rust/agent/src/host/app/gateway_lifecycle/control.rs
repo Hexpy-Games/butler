@@ -14,10 +14,9 @@ use tokio_util::sync::CancellationToken;
 
 use crate::btcc::StorageEffectJournal;
 use crate::host::ResolvedInstallation;
-use crate::host::service::instance::instance_is_locked;
-use crate::host::service::instance::process_matches;
-use crate::host::service::instance::read_record;
-use crate::host::service::instance::validate_write_destinations;
+use crate::host::service::instance::{
+    instance_is_locked, process_matches, read_record, validate_write_destinations,
+};
 
 use super::{GatewayControlCommand, NativeAppGatewayLifecycle};
 

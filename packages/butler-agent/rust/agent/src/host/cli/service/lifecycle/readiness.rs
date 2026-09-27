@@ -10,9 +10,7 @@ use serde_json::Value;
 
 use super::{INSTANCE_PUBLISH_TIMEOUT, POLL_INTERVAL, START_TIMEOUT, active_service};
 use crate::host::NativeServiceConfiguration;
-use crate::host::service::instance::InstanceRecord;
-use crate::host::service::instance::instance_is_locked;
-use crate::host::service::instance::read_record;
+use crate::host::service::instance::{InstanceRecord, instance_is_locked, read_record};
 
 pub(super) async fn wait_until_ready(
     config: &NativeServiceConfiguration,

@@ -7,8 +7,7 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 
 use crate::gateway::NativeTranscriptWriter;
-use crate::host::service::ingress::NativeIngressDelivery;
-use crate::host::service::ingress::NativeIngressError;
+use crate::host::service::ingress::{NativeIngressDelivery, NativeIngressError};
 
 pub(in crate::host) struct NativeAppDelivery {
     writer: Arc<NativeTranscriptWriter>,

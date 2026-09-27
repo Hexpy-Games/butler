@@ -11,18 +11,12 @@ use nix::sys::signal::Signal;
 use serde_json::{Value, json};
 
 use super::Action;
-use crate::host::NativeServiceConfiguration;
-use crate::host::ResolvedInstallation;
-use crate::host::service::instance::AdmissionLock;
-use crate::host::service::instance::InstanceRecord;
-use crate::host::service::instance::RestartIdentity;
-use crate::host::service::instance::instance_is_locked;
-use crate::host::service::instance::mark_stopping;
-use crate::host::service::instance::process_matches;
-use crate::host::service::instance::read_record;
-use crate::host::service::instance::refuse_live_legacy_process;
-use crate::host::service::instance::send_signal;
-use crate::host::service::instance::validate_write_destinations;
+use crate::host::service::instance::{
+    AdmissionLock, InstanceRecord, RestartIdentity, instance_is_locked, mark_stopping,
+    process_matches, read_record, refuse_live_legacy_process, send_signal,
+    validate_write_destinations,
+};
+use crate::host::{NativeServiceConfiguration, ResolvedInstallation};
 
 mod readiness;
 mod restart_handoff;

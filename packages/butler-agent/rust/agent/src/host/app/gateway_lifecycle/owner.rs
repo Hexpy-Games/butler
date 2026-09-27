@@ -8,13 +8,13 @@ use tokio::sync::Mutex;
 use crate::{btcc::BtccError, gateway::NativeInboundQueue, operations::ServiceReadiness};
 
 use super::NativeActiveAppEndpoint;
-use crate::host::NativeAgentRuntime;
-use crate::host::NativeAppServer;
-use crate::host::NativeServiceConfiguration;
-use crate::host::ResolvedInstallation;
-use crate::host::service::configuration::NativeAppCapturedDependencies;
-use crate::host::service::configuration::NativeAppServiceConfiguration;
+use crate::host::service::configuration::{
+    NativeAppCapturedDependencies, NativeAppServiceConfiguration,
+};
 use crate::host::service::instance::mark_gateway_state;
+use crate::host::{
+    NativeAgentRuntime, NativeAppServer, NativeServiceConfiguration, ResolvedInstallation,
+};
 
 #[derive(Clone, Copy, Debug, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]

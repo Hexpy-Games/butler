@@ -18,30 +18,19 @@ use crate::{
     operations::ServiceReadiness,
 };
 
-use crate::host::NativeAgentRuntime;
-use crate::host::NativeAppAdmission;
-use crate::host::NativeAppApprovalClaims;
-use crate::host::NativeAppAssets;
-use crate::host::NativeAppBranchConversations;
-use crate::host::NativeAppBranchSummarizer;
-use crate::host::NativeAppContextRead;
-use crate::host::NativeAppIngress;
-use crate::host::NativeAppModelCatalog;
-use crate::host::NativeAppMonitoring;
-use crate::host::NativeAppQueueOwnerLiveness;
-use crate::host::NativeAppReadiness;
-use crate::host::NativeAppSessionProgress;
-use crate::host::NativeAppSessionWorkspaces;
-use crate::host::NativeAppSettingsFacts;
-use crate::host::NativeAppSettingsMutation;
-use crate::host::NativeAuthorityHandoff;
-use crate::host::ResolvedInstallation;
-use crate::host::SystemIdentity;
 use crate::host::app::dashboard::NativeAppDashboardLedger;
 use crate::host::app::dashboard_briefing::NativeAppDashboardBriefing;
 use crate::host::app::plan_decision::NativeAppPlanDecisionLedger;
 use crate::host::app::runtime_ports::NativeAppRuntimeInfo;
 use crate::host::service::configuration::NativeAppServiceConfiguration;
+use crate::host::{
+    NativeAgentRuntime, NativeAppAdmission, NativeAppApprovalClaims, NativeAppAssets,
+    NativeAppBranchConversations, NativeAppBranchSummarizer, NativeAppContextRead,
+    NativeAppIngress, NativeAppModelCatalog, NativeAppMonitoring, NativeAppQueueOwnerLiveness,
+    NativeAppReadiness, NativeAppSessionProgress, NativeAppSessionWorkspaces,
+    NativeAppSettingsFacts, NativeAppSettingsMutation, NativeAuthorityHandoff,
+    ResolvedInstallation, SystemIdentity,
+};
 
 pub(crate) struct NativeAppServer {
     listener: Option<GatewayServer>,

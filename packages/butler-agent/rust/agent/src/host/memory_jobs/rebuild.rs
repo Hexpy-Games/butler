@@ -26,10 +26,9 @@ use crate::{
     models::ModelConfigurationClock,
 };
 
-use crate::host::ResolvedInstallation;
-use crate::host::SystemIdentity;
 use crate::host::cli::consolidation::NativeConsolidationCliResult;
 use crate::host::memory_jobs::maintain::signals;
+use crate::host::{ResolvedInstallation, SystemIdentity};
 
 use crate::cognition::CognitionCode;
 use options::{Operation, parse};

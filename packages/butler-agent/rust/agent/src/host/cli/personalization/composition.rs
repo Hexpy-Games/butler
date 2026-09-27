@@ -10,12 +10,11 @@ use crate::{
     profile::{PersonaPresets, ProfileService},
 };
 
-use crate::host::NativeProcessEnvironment;
-use crate::host::NativeProcessModels;
-use crate::host::ProfileConversationSources;
-use crate::host::ResolvedInstallation;
-use crate::host::SystemIdentity;
 use crate::host::cli::settings as settings_cli;
+use crate::host::{
+    NativeProcessEnvironment, NativeProcessModels, ProfileConversationSources,
+    ResolvedInstallation, SystemIdentity,
+};
 
 pub(super) fn open(
     data_root: &Path,

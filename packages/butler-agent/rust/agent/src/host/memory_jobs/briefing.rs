@@ -23,11 +23,10 @@ use crate::{
 };
 
 use crate::cognition::BriefingGenerationCode;
-use crate::host::NativeDateParser;
-use crate::host::NativeProcessEnvironment;
-use crate::host::NativeProcessModels;
-use crate::host::ProfileConversationSources;
-use crate::host::SystemIdentity;
+use crate::host::{
+    NativeDateParser, NativeProcessEnvironment, NativeProcessModels, ProfileConversationSources,
+    SystemIdentity,
+};
 
 pub(in crate::host) struct NativeBriefingGeneration {
     generator: BriefingGenerationService,

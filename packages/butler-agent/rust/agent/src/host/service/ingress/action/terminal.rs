@@ -3,8 +3,7 @@
 use serde_json::{Map, Value, json};
 
 use super::{base_metadata, peer};
-use crate::btcc::FinalArtifact;
-use crate::btcc::TurnOutcomeKind;
+use crate::btcc::{FinalArtifact, TurnOutcomeKind};
 use crate::gateway::ClaimedInboundEvent;
 use crate::host::service::ingress::NativeIngressError;
 use crate::host::service::ingress::bind::Envelope;

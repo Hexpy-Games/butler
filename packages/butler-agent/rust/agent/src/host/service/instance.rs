@@ -12,10 +12,9 @@ use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
 
 use crate::host::installation::ResolvedInstallation;
-use crate::host::service::instance_identity::executable_matches;
-use crate::host::service::instance_identity::process_executable;
-use crate::host::service::instance_identity::process_is_alive;
-use crate::host::service::instance_identity::process_start_identity;
+use crate::host::service::instance_identity::{
+    executable_matches, process_executable, process_is_alive, process_start_identity,
+};
 
 const INSTANCE_SCHEMA: &str = "butler.native-agent-service-instance.v1";
 

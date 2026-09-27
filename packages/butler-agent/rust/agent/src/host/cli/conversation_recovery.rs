@@ -2,10 +2,8 @@
 
 use std::{ffi::OsString, path::PathBuf, process::ExitCode, sync::Arc};
 
-use crate::host::NativeDateParser;
-use crate::host::ResolvedInstallation;
-use crate::host::SystemIdentity;
 use crate::host::cli::settings as settings_cli;
+use crate::host::{NativeDateParser, ResolvedInstallation, SystemIdentity};
 use crate::{
     conversation::{
         AgentConversationStore, ConversationSourceReader, ConversationStoreConfig,

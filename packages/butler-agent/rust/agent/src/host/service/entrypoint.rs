@@ -13,23 +13,19 @@ use crate::gateway::NativeTranscriptWriter;
 use crate::models::ModelConfigurationClock;
 use crate::operations::ServiceReadiness;
 
-use crate::host::app::gateway_lifecycle::GatewayControlServer;
-use crate::host::app::gateway_lifecycle::NativeActiveAppEndpoint;
-use crate::host::app::gateway_lifecycle::NativeAppGatewayLifecycle;
+use crate::host::app::gateway_lifecycle::{
+    GatewayControlServer, NativeActiveAppEndpoint, NativeAppGatewayLifecycle,
+};
 use crate::host::service::foreground_lease::ForegroundLease;
 use crate::host::service::ingress::NativeIngressDispatcher;
 use crate::host::service::restart_handoff::NativeRestartHandoff;
 mod maintenance;
 mod support;
-use crate::host::NativeAgentRuntime;
-use crate::host::NativeProcessEnvironment;
-use crate::host::NativeProgressPublisher;
-use crate::host::NativeRuntimePaths;
-use crate::host::NativeServiceConfiguration;
-use crate::host::ResolvedInstallation;
-use crate::host::SystemIdentity;
-use crate::host::require_model_ref;
 use crate::host::service::delivery::NativeAppDelivery;
+use crate::host::{
+    NativeAgentRuntime, NativeProcessEnvironment, NativeProgressPublisher, NativeRuntimePaths,
+    NativeServiceConfiguration, ResolvedInstallation, SystemIdentity, require_model_ref,
+};
 use maintenance::{maintenance_join_result, run_service_maintenance, unexpected_maintenance_exit};
 use support::{close_runtime, failure, io, process_locale};
 

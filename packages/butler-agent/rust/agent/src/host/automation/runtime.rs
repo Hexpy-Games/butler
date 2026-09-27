@@ -2,9 +2,7 @@ use std::{path::Path, sync::Arc, time::Duration};
 
 use crate::{gateway::NativeInboundQueue, operations::NativeAutomationService};
 
-use crate::host::NativeAutomationQueue;
-use crate::host::NativeDateParser;
-use crate::host::SystemIdentity;
+use crate::host::{NativeAutomationQueue, NativeDateParser, SystemIdentity};
 use crate::models::ModelConfigurationClock;
 
 pub(crate) fn open_automation_service(
