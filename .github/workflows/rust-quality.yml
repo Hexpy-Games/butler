@@ -61,7 +61,7 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
-      # File size caps, domain architecture and the function-length ratchet
+      # File size caps, domain architecture and the production function-length ratchet
       # (per-crate source-check-baseline.txt). Builds only syn.
       - name: Check Rust source rules
         run: cargo run --locked -p butler-source-check -- .

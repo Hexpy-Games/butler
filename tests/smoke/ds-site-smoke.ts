@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, normalize, resolve, sep } from "node:path";
 import { chromium, type Page } from "playwright";
+import { MOBILE_VIEWPORTS, assertMobileViewer, launchMobileBrowser, mobileContext } from "../support/ds-viewer-mobile-checks.ts";
 
 // Static DS site smoke. Serves a ds-site build the way GitHub Pages does (real files, directory
 // index + trailing-slash redirect, 404.html with a 404 status) and checks, under the build's base:
@@ -12,6 +13,8 @@ import { chromium, type Page } from "playwright";
 //   DS_SITE_BASE=/ds/  dist-ds-site-ds/: mounted at /ds/ of a combined-site fixture whose single
 //                      404.html includes /ds/ds-404-redirect.js (the build emits no CNAME/404.html).
 // An explicit dist dir may be passed as the first argument.
+// On a phone (375x812, WebKit when installed) the site has the app's drawer navigation, compact
+// titlebar, View options and search sheet, and no page scrolls sideways.
 
 const uiRoot = resolve(process.cwd(), "packages", "butler-app", "client", "ui");
 const segments = (process.env.DS_SITE_BASE ?? "").split("/").filter(Boolean);
@@ -125,7 +128,7 @@ try {
   // In-app navigation rewrites only the query, so it stays under the base.
   await visit(page, siteUrl, "[data-ds-overview]", "overview (nav)");
   const blocksRow = page.locator('[data-ds-nav-item="blocks"]');
-  if (!(await blocksRow.isVisible())) await page.getByRole("button", { name: "Toggle navigation" }).click();
+  if (!(await blocksRow.isVisible())) await page.getByRole("button", { name: "Open navigation" }).click();
   await blocksRow.click();
   await page.locator('[data-ds-gallery="blocks"]').waitFor({ state: "visible" });
   assert(param(page, "page") === "blocks", "sidebar navigation did not write the page param");
@@ -147,7 +150,20 @@ try {
 
   assert(foreign.length === 0, `static site requested foreign URLs:\n${foreign.join("\n")}`);
   assert(errors.length === 0, `static site logged errors:\n${errors.join("\n")}`);
-  console.log(`ds-site smoke passed (base ${base}): overview, 3 deep links, sidebar nav, path redirect, 0 foreign requests`);
+
+  const mobile = await launchMobileBrowser();
+  try {
+    const phone = await mobileContext(mobile.browser, MOBILE_VIEWPORTS[0]);
+    const phonePage = await phone.newPage();
+    const phoneErrors: string[] = [];
+    phonePage.on("pageerror", (error) => phoneErrors.push(error.message));
+    await assertMobileViewer(phonePage, (params) => `${siteUrl}?${new URLSearchParams({ motion: "full", ...params })}`,
+      `ds-site ${mobile.engine} ${MOBILE_VIEWPORTS[0].label}`, ["overview", "components/Button", "foundations/color", "guide"]);
+    assert(phoneErrors.length === 0, `static site logged errors on a phone:\n${phoneErrors.join("\n")}`);
+  } finally {
+    await mobile.browser.close();
+  }
+  console.log(`ds-site smoke passed (base ${base}): overview, 3 deep links, sidebar nav, path redirect, phone navigation, 0 foreign requests`);
 } catch (error) {
   console.error(error);
   process.exitCode = 1;

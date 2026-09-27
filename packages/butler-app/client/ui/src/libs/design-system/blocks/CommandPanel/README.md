@@ -22,7 +22,9 @@ Keep `CommandPalettePanel` mounted and toggle `open` so it can animate out.
 It opens with `DialogContent motion="palette"`: the panel scales 0.98 -> 1
 (`--motion-scale-palette`) and fades with the backdrop over
 `--motion-palette` (140ms); it leaves on `--motion-exit-fast`. Reduced
-motion fades only. Bind Cmd+K with the DS `useHotkey("mod+k", toggle)`,
+motion fades only. On phones (640px and below) the palette is a full-width
+top sheet below the safe area that drops in on `--motion-slow`, and its rows
+meet the 44px touch target. Bind Cmd+K with the DS `useHotkey("mod+k", toggle)`,
 which ignores IME composition (Korean input) and key repeat.
 
 ## Who can use this component

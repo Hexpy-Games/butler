@@ -40,6 +40,7 @@ export const useComposerStore = create<ComposerStore>((set, get) => ({
   text: "",
   contentParts: undefined,
   insertSessionReference: null,
+  appendDraftText: null,
   setContentParts: (content) => {
     const state = get();
     const text = messageContentText(content);

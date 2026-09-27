@@ -1,24 +1,3 @@
-# Functions over 80 lines, ratcheted by tools/source-check.
+# Production functions over 80 lines, ratcheted by tools/source-check.
 # Split a function and regenerate: cargo run -p butler-source-check -- --bless .
 # Entries may only shrink or disappear; new entries need review.
-src/cognition/feedback_buffer/tests.rs	counts_apply_source_defaults_expiry_and_active_profile_filter	83
-src/cognition/generation/rebuild/tests.rs	readiness_rejects_candidate_change_while_waiting_for_commit_gate	86
-src/cognition/generation/rebuild/tests.rs	representative_commit_rejects_changed_candidate_after_gate_wait	95
-src/cognition/graph/candidates/selection/tests.rs	real_schema_selector_matches_bun_alias_lexical_fusion_golden	103
-src/cognition/graph/internal_supersession/tests.rs	supersession_marks_only_canonical_sources_recomputes_claims_and_bumps_once	95
-src/cognition/graph/recall/semantic/tests.rs	fixture	148
-src/cognition/graph/recall/vectors/tests.rs	episode_vector_receipt_and_finite_distance_are_required	82
-src/cognition/graph/recall/vectors/tests.rs	node_vector_second_filter_requires_complete_current_unit_and_scoped_source	87
-src/cognition/knowhow_store/tests.rs	aggregation_builds_index_and_revision_resolves_each_target_without_holding_lock	95
-src/cognition/recall/tests.rs	graph_expansion_matches_unchanged_bun_source	104
-src/cognition/registration/tests.rs	Fixture::seed_pair_with_origin	100
-src/cognition/registration/tests/cases.rs	claimed_window_meaning_and_bound_apply_are_durable	123
-src/cognition/registration/tests/cases.rs	new_revision_retains_history_and_invalidates_current_identity_head_atomically	89
-src/cognition/registration/tests/semantic/ranked.rs	two_window_binding_prefers_exact_alias_over_posting_count_tie	153
-src/cognition/sources/recall/tests.rs	canonical_writer_original_source_hydrates_and_changed_scalar_fails	86
-src/cognition/sources/tests.rs	canonical_writer_turn_prepares_ordered_windows_hydration_and_prior_context	201
-src/coordination/tests.rs	real_exclusive_gate_preserves_fence_and_release_projection	94
-src/profile/tests.rs	candidate_duplicate_and_promoted_stable_merge_preserve_source_history	102
-src/profile/tests/extraction/provider.rs	actual_native_provider_loopback_reaches_profile_commit	93
-src/profile/tests/legacy_candidates.rs	consolidation_hydrates_legacy_rows_and_expires_after_promotion_pass	100
-tests/conversation_session_reference.rs	canonical_write_query_read_args_reopens_original_scalar	84
