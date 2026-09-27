@@ -1,0 +1,4 @@
+# Functions over 80 lines, ratcheted by tools/source-check.
+# Split a function and regenerate: cargo run -p butler-source-check -- --bless .
+# Entries may only shrink or disappear; new entries need review.
+src/js_date/parse/iso.rs	parse	93

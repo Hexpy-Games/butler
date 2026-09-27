@@ -1,4 +1,5 @@
 mod architecture;
+mod function_length;
 
 use std::env;
 use std::ffi::OsStr;
@@ -7,11 +8,13 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use function_length::Mode;
+
 const REVIEW_MIN_LINES: usize = 400;
 const MAX_LINES: usize = 500;
 
 fn main() -> ExitCode {
-    match parse_root().and_then(|root| scan(&root)) {
+    match parse_arguments().and_then(|(root, mode)| scan(&root, mode)) {
         Ok(has_violations) if has_violations => ExitCode::FAILURE,
         Ok(_) => ExitCode::SUCCESS,
         Err(error) => {
@@ -21,16 +24,24 @@ fn main() -> ExitCode {
     }
 }
 
-fn parse_root() -> Result<PathBuf, String> {
-    let mut arguments = env::args_os().skip(1);
+fn parse_arguments() -> Result<(PathBuf, Mode), String> {
+    let mut arguments = env::args_os().skip(1).peekable();
+    let mode = if arguments
+        .next_if(|argument| argument == "--bless")
+        .is_some()
+    {
+        Mode::Bless
+    } else {
+        Mode::Check
+    };
     let root = arguments.next().unwrap_or_else(|| ".".into());
     if arguments.next().is_some() {
-        return Err("usage: butler-source-check [ROOT]".to_owned());
+        return Err("usage: butler-source-check [--bless] [ROOT]".to_owned());
     }
-    Ok(PathBuf::from(root))
+    Ok((PathBuf::from(root), mode))
 }
 
-fn scan(root: &Path) -> Result<bool, String> {
+fn scan(root: &Path, mode: Mode) -> Result<bool, String> {
     ensure_directory_root(root)?;
     let mut sources = Vec::new();
     collect_sources(root, &mut sources).map_err(|error| format_io(root, &error))?;
@@ -59,6 +70,7 @@ fn scan(root: &Path) -> Result<bool, String> {
     }
 
     println!("SCANNED files={}", sources.len());
+    has_violations |= function_length::check(root, &sources, mode)?;
     has_violations |= architecture::check(root)?;
     Ok(has_violations)
 }
