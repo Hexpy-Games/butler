@@ -43,7 +43,10 @@ struct Lifecycle {
 }
 
 impl ProfileService {
-    pub async fn read_coverage_health(&self) -> ProfileResult<serde_json::Value> {
+    /// How much of the conversation the profile extractor has covered.
+    pub async fn read_coverage_health(
+        &self,
+    ) -> ProfileResult<super::coverage_health::ProfileCoverageHealth> {
         let root = self.data_root.clone();
         let sources = self.canonical_sources.clone();
         self.run(move || Ok(super::coverage_health::read(&root, sources.as_ref())))

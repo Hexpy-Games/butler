@@ -8,6 +8,7 @@ mod box_store;
 mod briefing;
 mod completion;
 mod configured_cycle;
+mod configured_projects;
 mod consolidation;
 mod continuity_recovery;
 mod embedding;
@@ -72,6 +73,7 @@ pub use configured_cycle::{
     ConfiguredCycleOptions, ConfiguredCycleResult, ConfiguredCycleService, ConfiguredPhase,
     ConfiguredPhaseExecutor, ConfiguredPhaseFuture,
 };
+pub(crate) use configured_projects::registered_project_names;
 pub use consolidation::{
     CycleEventSink, CycleService, CycleStatus, Phase, PhaseError, PhaseExecutor, RunCycle,
 };

@@ -250,7 +250,7 @@ async fn run_active(
 }
 
 fn projection(report: &MemoryHealthReport) -> Value {
-    json!({"maintenanceStatus":report.maintenance_status.as_str(),"queueBacklog":report.metric_dimensions["queue_backlog_count"],"graphEntityCount":report.metric_dimensions["graph_entities_count"],"graphEdgeCount":report.metric_dimensions["graph_edges_count"]})
+    json!({"maintenanceStatus":report.maintenance_status.as_str(),"queueBacklog":report.metric_dimensions()["queue_backlog_count"],"graphEntityCount":report.metric_dimensions()["graph_entities_count"],"graphEdgeCount":report.metric_dimensions()["graph_edges_count"]})
 }
 
 fn parse(

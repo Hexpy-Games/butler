@@ -8,7 +8,7 @@
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Number, Value};
 use sha2::{Digest, Sha256};
 
 use super::read::{
@@ -36,6 +36,42 @@ pub(crate) struct PlannedTaskMemoryReport {
     pub text: String,
 }
 
+/// The fields of `memory-report-binding.json` the checks read, each as
+/// sent (their raw values are hashed into the source revision).
+#[derive(Default, Deserialize)]
+struct ReportBinding {
+    #[serde(default)]
+    schema: Arg<String>,
+    #[serde(default)]
+    task_id: Arg<String>,
+    #[serde(default)]
+    record_id: Arg<String>,
+    #[serde(default)]
+    attempt: Arg<Number>,
+    #[serde(default)]
+    result_hash: Arg<String>,
+    #[serde(default)]
+    review_hash: Arg<String>,
+    #[serde(default)]
+    plan_hash: Arg<String>,
+    #[serde(default)]
+    report_hash: Arg<String>,
+    #[serde(default)]
+    source_revision: Arg<String>,
+    #[serde(default)]
+    disposition: Arg<String>,
+}
+
+impl ReportBinding {
+    fn attempt(&self) -> Option<f64> {
+        self.attempt.valid().and_then(Number::as_f64)
+    }
+
+    fn text(field: &Arg<String>) -> Option<&str> {
+        field.valid().map(String::as_str)
+    }
+}
+
 /// The files a binding hashes.
 struct BoundFiles {
     report: String,
@@ -48,14 +84,12 @@ pub(super) fn read(
     directory: &Path,
     availability: ReadAvailability,
 ) -> Result<Option<PlannedTaskMemoryReport>, WorkRecordReadError> {
-    // Passthrough: the binding document is checked field by field and its
-    // raw values are hashed into the source revision.
-    let Some(binding) = read::json(&directory.join("memory-report-binding.json"), availability)?
+    let Some(document) = read::json(&directory.join("memory-report-binding.json"), availability)?
     else {
         return Ok(None);
     };
-    if binding.get("schema").and_then(Value::as_str) != Some("butler.planned-task-memory-report.v1")
-    {
+    let binding: ReportBinding = crate::lenient::view(&document);
+    if ReportBinding::text(&binding.schema) != Some("butler.planned-task-memory-report.v1") {
         return Ok(None);
     }
     let files = bound_files(directory, &binding, availability)?;
@@ -80,7 +114,7 @@ pub(super) fn read(
     {
         return Ok(None);
     }
-    let mut output: PlannedTaskMemoryReport = serde_json::from_value(binding)?;
+    let mut output: PlannedTaskMemoryReport = serde_json::from_value(document)?;
     output.text = files.report;
     Ok(Some(output))
 }
@@ -89,14 +123,14 @@ pub(super) fn read(
 /// texts; `None` when any is missing.
 fn bound_files(
     directory: &Path,
-    binding: &Value,
+    binding: &ReportBinding,
     availability: ReadAvailability,
 ) -> Result<Option<BoundFiles>, WorkRecordReadError> {
     let report = read::text(&directory.join("public-report.md"), availability)?;
-    let attempt_name = binding
-        .get("attempt")
-        .map(js_string)
-        .unwrap_or_else(|| "undefined".into());
+    let attempt_name = match &binding.attempt {
+        Arg::Missing => "undefined".into(),
+        attempt => js_string(&serde_json::to_value(attempt)?),
+    };
     let attempt_name = format!("{attempt_name:0>3}");
     let result = read::text(
         &directory
@@ -118,47 +152,45 @@ fn bound_files(
     })
 }
 
-fn hashes_match(binding: &Value, files: &BoundFiles) -> bool {
+fn hashes_match(binding: &ReportBinding, files: &BoundFiles) -> bool {
     [
-        (&files.report, "report_hash"),
-        (&files.result, "result_hash"),
-        (&files.review, "review_hash"),
-        (&files.plan, "plan_hash"),
+        (&files.report, &binding.report_hash),
+        (&files.result, &binding.result_hash),
+        (&files.review, &binding.review_hash),
+        (&files.plan, &binding.plan_hash),
     ]
     .into_iter()
-    .all(|(text, key)| binding.get(key).and_then(Value::as_str) == Some(hash(text).as_str()))
+    .all(|(text, bound)| ReportBinding::text(bound) == Some(hash(text).as_str()))
 }
 
 /// The binding's attempt is the task's latest (whole-numbered) attempt.
-fn latest_attempt_matches(binding: &Value, current: &Snapshot) -> bool {
+fn latest_attempt_matches(binding: &ReportBinding, current: &Snapshot) -> bool {
     let latest = current
         .latest_attempt
         .as_deref()
         .map(butler_core::json::number_from_string)
         .unwrap_or(f64::NAN);
-    latest.is_finite()
-        && latest.fract() == 0.0
-        && Some(latest) == binding.get("attempt").and_then(Value::as_f64)
+    latest.is_finite() && latest.fract() == 0.0 && Some(latest) == binding.attempt()
 }
 
 /// The binding names the task's memory record.
-fn record_matches(binding: &Value) -> Result<bool, WorkRecordReadError> {
-    let task_id = binding
-        .get("task_id")
-        .and_then(Value::as_str)
-        .ok_or(WorkRecordReadError::Malformed)?;
-    Ok(binding.get("record_id").and_then(Value::as_str)
+fn record_matches(binding: &ReportBinding) -> Result<bool, WorkRecordReadError> {
+    let task_id = ReportBinding::text(&binding.task_id).ok_or(WorkRecordReadError::Malformed)?;
+    Ok(ReportBinding::text(&binding.record_id)
         == Some(super::task_memory_record_id(task_id).as_str()))
 }
 
 /// A non-null review of the bound attempt that verified its memory source,
 /// reviewed the plan's goal, lists no missing evidence, covers every
 /// acceptance criterion, and gives evidence for every passed criterion.
-fn review_accepted(binding: &Value, current: &Snapshot) -> Result<bool, WorkRecordReadError> {
+fn review_accepted(
+    binding: &ReportBinding,
+    current: &Snapshot,
+) -> Result<bool, WorkRecordReadError> {
     let Some(review) = current.review.as_ref().and_then(read::ReviewFile::document) else {
         return Ok(false);
     };
-    if review.attempt.valid().copied() != binding.get("attempt").and_then(Value::as_f64)
+    if review.attempt.valid().copied() != binding.attempt()
         || review.memory_source_verified != Arg::Valid(true)
     {
         return Ok(false);
@@ -220,33 +252,36 @@ fn criteria(review: &ReviewRecord) -> Result<Vec<Option<&CriterionReview>>, Work
 }
 
 /// The task's state and the bound disposition agree with the review.
-fn disposition_matches(binding: &Value, current: &Snapshot, disposition: Option<&str>) -> bool {
+fn disposition_matches(
+    binding: &ReportBinding,
+    current: &Snapshot,
+    disposition: Option<&str>,
+) -> bool {
     if !matches!(
         current.status.as_str(),
         "PUBLIC_REPORT_READY" | "FAILED_PUBLIC_REPORT_READY" | "REPORTED"
     ) {
         return false;
     }
-    let bound = binding.get("disposition").and_then(Value::as_str);
+    let bound = ReportBinding::text(&binding.disposition);
     disposition == bound
         && !(current.status == "PUBLIC_REPORT_READY" && bound != Some("succeeded"))
         && !(current.status == "FAILED_PUBLIC_REPORT_READY" && bound == Some("succeeded"))
 }
 
 /// The binding's source revision hashes its own identity fields.
-fn revision_matches(binding: &Value) -> Result<bool, WorkRecordReadError> {
-    let field = |key: &str| binding.get(key).unwrap_or(&Value::Null);
+fn revision_matches(binding: &ReportBinding) -> Result<bool, WorkRecordReadError> {
     let revision = crate::js_json::stringify(&(
         "planned-task-memory-report",
-        field("task_id"),
-        field("attempt"),
-        field("result_hash"),
-        field("review_hash"),
-        field("plan_hash"),
-        field("report_hash"),
-        field("disposition"),
+        &binding.task_id,
+        &binding.attempt,
+        &binding.result_hash,
+        &binding.review_hash,
+        &binding.plan_hash,
+        &binding.report_hash,
+        &binding.disposition,
     ))?;
-    Ok(binding.get("source_revision").and_then(Value::as_str) == Some(hash(&revision).as_str()))
+    Ok(ReportBinding::text(&binding.source_revision) == Some(hash(&revision).as_str()))
 }
 
 /// `succeeded` when the review, its goal review and every criterion passed;
@@ -319,7 +354,7 @@ fn hash(text: &str) -> String {
     format!("{:x}", Sha256::digest(text.as_bytes()))
 }
 /// JavaScript `String(value)` of the binding's attempt, used as the attempt
-/// directory name.
+/// directory name. Passthrough: `value` is whatever the binding holds.
 fn js_string(value: &Value) -> String {
     match value {
         Value::String(value) => value.clone(),

@@ -17,7 +17,7 @@ use crate::{
     },
 };
 
-struct TestHost;
+pub(super) struct TestHost;
 
 impl CognitionCoordinationHost for TestHost {
     fn process_id(&self) -> u32 {
@@ -45,7 +45,7 @@ impl CognitionCoordinationHost for TestHost {
     }
 }
 
-fn epoch_now() -> i64 {
+pub(super) fn epoch_now() -> i64 {
     i64::try_from(
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -55,7 +55,7 @@ fn epoch_now() -> i64 {
     .unwrap_or(i64::MAX)
 }
 
-fn temp_root() -> PathBuf {
+pub(super) fn temp_root() -> PathBuf {
     std::env::temp_dir().join(format!(
         "butler-memory-health-{}-{}",
         std::process::id(),
@@ -115,12 +115,15 @@ async fn vector_snapshot_and_maintenance_status_drive_source_diagnostics() {
     assert_eq!(missing_vector.maintenance_status.as_str(), "failed");
     assert_eq!(missing_vector.metric_status, "error");
     assert_eq!(missing_vector.diagnostics_count, 4);
-    assert_eq!(missing_vector.metric_dimensions["queue_backlog_count"], 1);
+    assert_eq!(missing_vector.metric_dimensions()["queue_backlog_count"], 1);
     assert_eq!(
-        missing_vector.metric_dimensions["maintenance_failed_phases_count"],
+        missing_vector.metric_dimensions()["maintenance_failed_phases_count"],
         2
     );
-    assert_eq!(missing_vector.metric_dimensions["serving_available"], false);
+    assert_eq!(
+        missing_vector.metric_dimensions()["serving_available"],
+        false
+    );
 
     fs::create_dir_all(memory.join("hot")).expect("create hot dir");
     fs::write(memory.join("hot/current.md"), "projection\n").expect("write hot cache file");
@@ -154,9 +157,9 @@ async fn vector_snapshot_and_maintenance_status_drive_source_diagnostics() {
     assert_eq!(present_vector.maintenance_status.as_str(), "repaired");
     assert_eq!(present_vector.metric_status, "ok");
     assert_eq!(present_vector.diagnostics_count, 2);
-    assert_eq!(present_vector.metric_dimensions["stale"], false);
+    assert_eq!(present_vector.metric_dimensions()["stale"], false);
     assert_eq!(
-        present_vector.metric_dimensions["maintenance_failed_phases_count"],
+        present_vector.metric_dimensions()["maintenance_failed_phases_count"],
         0
     );
     fs::remove_dir_all(root).expect("remove fixture");
@@ -213,10 +216,22 @@ async fn active_generation_serving_health_reads_populated_graph_without_writing(
         Arc::new(CognitionWriteCoordinator::new(Arc::new(TestHost)).unwrap()),
     );
     let report = service
-        .read_tool(json!({"available":false,"reason":"fixture"}))
+        .read_tool(crate::profile::ProfileCoverageHealth {
+            available: false,
+            reason: Some("fixture"),
+            consent_mode: "off",
+            processed_windows: 0,
+            pending_windows: 0,
+            failed_windows: 0,
+            stale_history_windows: 0,
+            historical_processed_windows: 0,
+            discovery_incomplete: None,
+            discovery_reason: None,
+        })
         .await
         .unwrap();
-    let serving = &report.summary["serving"];
+    let summary = report.summary();
+    let serving = &summary["serving"];
     assert_eq!(serving["available"], true, "{serving}");
     assert_eq!(serving["sources"]["registered_current"], 1);
     assert_eq!(serving["sources"]["inventory_complete"], false);

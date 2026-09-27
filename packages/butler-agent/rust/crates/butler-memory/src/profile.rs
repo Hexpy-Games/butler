@@ -23,6 +23,7 @@ pub use contracts::{
     ProfileThirdPartyImportOptions, ProfilingConsentSnapshot, ProfilingExtractorModelSnapshot,
     ProfilingMode, RuntimeProfileProjection,
 };
+pub use coverage_health::ProfileCoverageHealth;
 pub use error::ProfileCode;
 pub(crate) use extractor_config::read as read_profiling_extractor_model;
 pub use migration_prompt::third_party_migration_prompt;

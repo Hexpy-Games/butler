@@ -100,7 +100,7 @@ impl PhaseExecutor for CyclePhases {
                         self.metrics.record(
                             "health",
                             report.metric_status,
-                            &report.metric_dimensions,
+                            &report.metric_dimensions(),
                         );
                         butler_core::json::json_object!({
                             "memory_chunks_count": report.memory_chunks_count,

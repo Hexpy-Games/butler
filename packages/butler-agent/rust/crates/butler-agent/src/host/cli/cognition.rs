@@ -142,9 +142,9 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
                     CycleMetrics::new(Arc::new(MetricFiles::new(data_root.clone()))).record(
                         "health",
                         report.metric_status,
-                        &report.metric_dimensions.clone(),
+                        &report.metric_dimensions(),
                     );
-                    let data = report.summary;
+                    let data = report.summary();
                     let human = format!(
                         "hotCacheFiles={} transcriptFiles={}\nprojectCapsules={} missing={} refreshFailures={}\nmemoryChunks={} vectorRows={} graphEntities={} graphEdges={}\nmaintenance={}",
                         display(&data["hotCacheFiles"]),

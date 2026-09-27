@@ -3,9 +3,35 @@
 use std::path::Path;
 
 use rusqlite::OptionalExtension;
-use serde_json::{Value, json};
+use serde::Serialize;
+use serde_json::Value;
 
 use super::{contracts::CanonicalProfileSourceFactory, storage};
+
+/// How much of the user's conversation the profile extractor has covered.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ProfileCoverageHealth {
+    /// Whether the profile store could be read.
+    pub available: bool,
+    /// Why it could not be read.
+    pub reason: Option<&'static str>,
+    /// The profiling consent mode (`off`, `basic`, `deep`).
+    pub consent_mode: &'static str,
+    /// Current source windows fully processed.
+    pub processed_windows: usize,
+    /// Current source windows waiting for extraction.
+    pub pending_windows: usize,
+    /// Current source windows whose extraction failed.
+    pub failed_windows: usize,
+    /// Windows whose source changed or disappeared since extraction.
+    pub stale_history_windows: usize,
+    /// Windows ever processed, current or not.
+    pub historical_processed_windows: usize,
+    /// `true` while source discovery has not reached the end.
+    pub discovery_incomplete: Option<bool>,
+    /// Why discovery progress is unknown.
+    pub discovery_reason: Option<&'static str>,
+}
 
 struct CoverageRow {
     disposition: String,
@@ -18,14 +44,20 @@ struct CoverageRow {
     byte_end: i64,
 }
 
-pub(super) fn read(data_root: &Path, sources: &dyn CanonicalProfileSourceFactory) -> Value {
+pub(super) fn read(
+    data_root: &Path,
+    sources: &dyn CanonicalProfileSourceFactory,
+) -> ProfileCoverageHealth {
     if !storage::database_path(data_root).exists() {
         return unavailable("profile_store_unavailable");
     }
     read_open(data_root, sources).unwrap_or_else(|| unavailable("profile_coverage_unavailable"))
 }
 
-fn read_open(data_root: &Path, sources: &dyn CanonicalProfileSourceFactory) -> Option<Value> {
+fn read_open(
+    data_root: &Path,
+    sources: &dyn CanonicalProfileSourceFactory,
+) -> Option<ProfileCoverageHealth> {
     let db = storage::open(data_root, false).ok()?;
     let consent = storage::read_consent(data_root);
     let mut statement = db.prepare("SELECT disposition,failure_code,message_id,part_id,scalar_pointer,source_hash,byte_start,byte_end FROM profile_source_coverage").ok()?;
@@ -46,6 +78,7 @@ fn read_open(data_root: &Path, sources: &dyn CanonicalProfileSourceFactory) -> O
         .collect::<Result<Vec<_>, _>>()
         .ok()?;
     let mut reader = sources.open().ok()?;
+    // processed, pending, failed, stale, historically processed
     let mut counts = [0_usize; 5];
     let mut read_ok = true;
     for row in rows {
@@ -102,18 +135,32 @@ fn read_open(data_root: &Path, sources: &dyn CanonicalProfileSourceFactory) -> O
         .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
         .and_then(|value| value.as_i64());
     let discovery = offset.filter(|value| *value > 0).map(|_| true);
-    Some(
-        json!({"available":true,"reason":null,"consent_mode":consent.mode.as_str(),
-        "processed_windows":counts[0],"pending_windows":counts[1],"failed_windows":counts[2],
-        "stale_history_windows":counts[3],"historical_processed_windows":counts[4],
-        "discovery_incomplete":discovery,
-        "discovery_reason":if discovery.is_some(){None}else{Some("discovery_not_observed")}}),
-    )
+    let [processed, pending, failed, stale, historical] = counts;
+    Some(ProfileCoverageHealth {
+        available: true,
+        reason: None,
+        consent_mode: consent.mode.as_str(),
+        processed_windows: processed,
+        pending_windows: pending,
+        failed_windows: failed,
+        stale_history_windows: stale,
+        historical_processed_windows: historical,
+        discovery_incomplete: discovery,
+        discovery_reason: discovery.is_none().then_some("discovery_not_observed"),
+    })
 }
 
-fn unavailable(reason: &str) -> Value {
-    json!({"available":false,"reason":reason,"consent_mode":"off",
-        "processed_windows":0,"pending_windows":0,"failed_windows":0,
-        "stale_history_windows":0,"historical_processed_windows":0,
-        "discovery_incomplete":null,"discovery_reason":"discovery_not_observed"})
+fn unavailable(reason: &'static str) -> ProfileCoverageHealth {
+    ProfileCoverageHealth {
+        available: false,
+        reason: Some(reason),
+        consent_mode: "off",
+        processed_windows: 0,
+        pending_windows: 0,
+        failed_windows: 0,
+        stale_history_windows: 0,
+        historical_processed_windows: 0,
+        discovery_incomplete: None,
+        discovery_reason: Some("discovery_not_observed"),
+    }
 }
