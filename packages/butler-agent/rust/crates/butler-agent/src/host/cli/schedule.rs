@@ -1,4 +1,5 @@
-//! One-shot native automation commands over the existing DATA file store.
+//! One-shot `butler schedule` commands over the existing DATA schedule store.
+//! `butler automation` is the deprecated, hidden spelling of the same command.
 
 mod helpers;
 mod render;
@@ -16,6 +17,11 @@ use helpers::{command_id, command_name, command_name_os, required_value, valid_i
 use render::{redact_json_strings, report_error, report_success, safe_preview};
 
 const STORE_MUTATION_PATHS: &[&str] = &["automations", "automations/.automation-store.lock"];
+/// The command word.
+const COMMAND: &str = "schedule";
+/// The command word before schedules were named schedules: still accepted,
+/// with one deprecation line on stderr, and left out of help.
+const DEPRECATED_COMMAND: &str = "automation";
 
 #[expect(
     clippy::struct_excessive_bools,
@@ -45,7 +51,7 @@ enum Command {
 
 impl Command {
     fn parse(values: &[String]) -> Option<Self> {
-        if values.first().map(String::as_str) != Some("automation") {
+        if !values.first().is_some_and(|value| is_command_word(value)) {
             return None;
         }
         Some(match values.get(1).map(String::as_str) {
@@ -62,11 +68,11 @@ impl Command {
 
     fn name(&self) -> &'static str {
         match self {
-            Self::List => "butler automation list",
-            Self::Show(_) | Self::MissingId("show") => "butler automation show",
-            Self::Run(_) | Self::MissingId("run") => "butler automation run",
-            Self::Delete(_) | Self::MissingId("delete") => "butler automation delete",
-            Self::MissingId(_) | Self::Unknown => "butler automation",
+            Self::List => "butler schedule list",
+            Self::Show(_) | Self::MissingId("show") => "butler schedule show",
+            Self::Run(_) | Self::MissingId("run") => "butler schedule run",
+            Self::Delete(_) | Self::MissingId("delete") => "butler schedule delete",
+            Self::MissingId(_) | Self::Unknown => "butler schedule",
         }
     }
 }
@@ -74,10 +80,23 @@ impl Command {
 pub(crate) fn recognizes(args: &[OsString]) -> bool {
     positionals_without_options(args)
         .first()
-        .is_some_and(|value| value == "automation")
+        .is_some_and(|value| is_command_word(value))
+}
+
+fn is_command_word(value: &str) -> bool {
+    value == COMMAND || value == DEPRECATED_COMMAND
+}
+
+/// One stderr line when the deprecated spelling was used; stdout (and so
+/// `--json` output) is unchanged.
+fn warn_if_deprecated(args: &[OsString]) {
+    if positionals_without_options(args).first().map(String::as_str) == Some(DEPRECATED_COMMAND) {
+        eprintln!("butler automation is deprecated; use butler schedule.");
+    }
 }
 
 pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> ExitCode {
+    warn_if_deprecated(args);
     let json_requested = args.iter().any(|arg| arg == "--json");
     let options = match parse(args) {
         Ok(options) => options,
@@ -87,7 +106,7 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
         return report_error(
             command_name(&options.positionals),
             options.json,
-            &CliError::invalid("automation requires list, show <id>, run <id>, or delete <id>"),
+            &CliError::invalid("schedule requires list, show <id>, run <id>, or delete <id>"),
         );
     };
     if command == Command::Unknown {
@@ -97,7 +116,7 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
             &CliError::failed(
                 "unknown_command",
                 format!(
-                    "unknown automation command: {}",
+                    "unknown schedule command: {}",
                     options.positionals.get(1).map_or("", String::as_str)
                 ),
             )
@@ -108,28 +127,28 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
         return report_error(
             command.name(),
             options.json,
-            &CliError::invalid("automation delete requires --yes or --non-interactive"),
+            &CliError::invalid("schedule delete requires --yes or --non-interactive"),
         );
     }
     if let Command::MissingId(action) = &command {
         return report_error(
             command.name(),
             options.json,
-            &CliError::invalid(format!("automation {action} requires <id>")),
+            &CliError::invalid(format!("schedule {action} requires <id>")),
         );
     }
     if options.status.is_some() && command != Command::List {
         return report_error(
             command.name(),
             options.json,
-            &CliError::invalid("--status is only supported by automation list"),
+            &CliError::invalid("--status is only supported by schedule list"),
         );
     }
     if options.include_deleted && command != Command::List {
         return report_error(
             command.name(),
             options.json,
-            &CliError::invalid("--include-deleted is only supported by automation list"),
+            &CliError::invalid("--include-deleted is only supported by schedule list"),
         );
     }
     let Ok(data_root) =
@@ -146,7 +165,7 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
             return report_error(
                 command.name(),
                 options.json,
-                &CliError::invalid("automation id must contain 1-100 safe characters"),
+                &CliError::invalid("schedule id must contain 1-100 safe characters"),
             );
         }
         if matches!(&command, Command::Run(_) | Command::Delete(_)) {
@@ -160,7 +179,7 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
                     options.json,
                     &CliError::failed(
                         "unsafe_path",
-                        "automation writes require non-symlink paths inside DATA",
+                        "schedule writes require non-symlink paths inside DATA",
                     ),
                 );
             }
@@ -178,7 +197,7 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
             .map(|items| {
                 let items: Vec<_> = items.into_iter().map(safe_preview).collect();
                 let human = if items.is_empty() {
-                    "No automations found.".to_owned()
+                    "No schedules found.".to_owned()
                 } else {
                     items
                         .iter()
@@ -202,7 +221,7 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
             })
             .and_then(|item| {
                 let item = item.ok_or_else(|| {
-                    CliError::failed("not_found", format!("automation not found: {id}"))
+                    CliError::failed("not_found", format!("schedule not found: {id}"))
                 })?;
                 let item = safe_preview(item);
                 let human = format!(
@@ -220,7 +239,7 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
                 let automation = safe_preview(value["automation"].clone());
                 let envelope = redact_json_strings(value["envelope"].clone());
                 let human = format!(
-                    "Automation run claimed: {}",
+                    "Schedule run claimed: {}",
                     automation["id"].as_str().unwrap_or("")
                 );
                 (
@@ -244,14 +263,14 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
             .map(|value| {
                 let automation = safe_preview(value);
                 let human = format!(
-                    "Automation deleted: {}",
+                    "Schedule deleted: {}",
                     automation["id"].as_str().unwrap_or("")
                 );
                 (json!({"automation":automation}), human)
             }),
         // Rejected above; kept total so dispatch needs no panic.
         Command::MissingId(_) | Command::Unknown => Err(CliError::invalid(
-            "automation requires list, show <id>, run <id>, or delete <id>",
+            "schedule requires list, show <id>, run <id>, or delete <id>",
         )),
     };
     match result {
@@ -317,7 +336,7 @@ fn parse(args: &[OsString]) -> Result<Options, (&'static str, CliError)> {
                 let Some(value) = args[index].to_str() else {
                     return Err((
                         command_name_os(args),
-                        CliError::invalid("automation arguments must be valid UTF-8"),
+                        CliError::invalid("schedule arguments must be valid UTF-8"),
                     ));
                 };
                 options.positionals.push(value.to_owned());
@@ -325,10 +344,14 @@ fn parse(args: &[OsString]) -> Result<Options, (&'static str, CliError)> {
             }
         }
     }
-    if options.positionals.first().map(String::as_str) != Some("automation") {
+    if !options
+        .positionals
+        .first()
+        .is_some_and(|value| is_command_word(value))
+    {
         return Err((
             command_name(&options.positionals),
-            CliError::invalid("automation command is required"),
+            CliError::invalid("schedule command is required"),
         ));
     }
     Ok(options)

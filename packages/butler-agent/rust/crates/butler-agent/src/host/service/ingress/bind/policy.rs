@@ -1,6 +1,8 @@
 //! App session binding mutation and runtime policy.
 
 use super::{Envelope, IngressError};
+use butler_core::tool_protocol::ToolName;
+use butler_turn::btcc::{AccessMode, ApprovalExemptAction};
 use butler_turn::workspace::{
     OwnOptional, SessionBindingStore, SessionLifecycleState, SessionRole, SessionTransportBinding,
     StoredSessionBinding, UpsertSessionBinding,
@@ -153,28 +155,16 @@ pub(super) async fn upsert_app_binding(
         "thinFirstResponse":true,"thin_first_response":true,
         "requiredNativeTools":[],"required_tools":[],"requiredNativeToolProfiles":profiles,
     });
-    if access == "full_access" {
-        let onboarding_active = butler_role
-            && !butler_memory::profile::first_chat_onboarding_complete(
-                data_root,
-                &butler_models::models::ModelConfigurationClock::now_iso(
-                    &crate::host::SystemIdentity,
-                ),
-            );
-        let mut selected = Vec::new();
-        if onboarding_active || selected_memory_write {
-            selected.push("update_onboarding_profile");
-        }
-        if onboarding_active || selected_memory_write {
-            selected.push("summarize_user_profile");
-        }
-        if selected_memory_write {
-            selected.push("ingest_task_memory");
-            selected.push("update_explicit_memory");
-        }
-        if super::image_admission::admits_zai_image_tool(envelope) {
-            selected.push("analyze_attached_image");
-        }
+    let selected = approval_free_tools(
+        access,
+        ApprovalFreeFacts {
+            envelope,
+            data_root,
+            butler_role,
+            selected_memory_write,
+        },
+    );
+    if !selected.is_empty() {
         policy["requiredNativeTools"] = json!(selected);
     }
     if has_project {
@@ -242,4 +232,50 @@ pub(super) async fn upsert_app_binding(
             IngressError::new("session_binding_unavailable", "Session binding unavailable")
                 .with_source(source)
         })
+}
+
+/// What decides which approval-free tools an App turn is offered.
+struct ApprovalFreeFacts<'a> {
+    envelope: &'a Envelope,
+    data_root: &'a Path,
+    /// The session is a Butler session (only it runs onboarding).
+    butler_role: bool,
+    /// The session selected the legacy memory-write profile.
+    selected_memory_write: bool,
+}
+
+/// The required tools of the approval-free actions this turn may take:
+/// first-conversation onboarding (or the selected memory-write profile, which
+/// includes it), memory save when selected, and analysis of an admitted
+/// attached image. Full access and ask-first offer them; read-only does not.
+fn approval_free_tools(access: &str, facts: ApprovalFreeFacts<'_>) -> Vec<&'static str> {
+    let mode = serde_json::from_value::<AccessMode>(Value::String(access.to_owned()))
+        .unwrap_or(AccessMode::ReadOnly);
+    let onboarding = mode.allows_without_approval(ApprovalExemptAction::FirstConversationOnboarding)
+        && (facts.selected_memory_write
+            || facts.butler_role
+                && !butler_memory::profile::first_chat_onboarding_complete(
+                    facts.data_root,
+                    &butler_models::models::ModelConfigurationClock::now_iso(
+                        &crate::host::SystemIdentity,
+                    ),
+                ));
+    let mut selected = Vec::new();
+    if onboarding {
+        selected.extend([
+            ToolName::UpdateOnboardingProfile,
+            ToolName::SummarizeUserProfile,
+        ]);
+    }
+    if facts.selected_memory_write {
+        selected.extend([ToolName::IngestTaskMemory, ToolName::UpdateExplicitMemory]);
+    }
+    if super::image_admission::admits_zai_image_tool(facts.envelope) {
+        selected.push(ToolName::AnalyzeAttachedImage);
+    }
+    selected
+        .into_iter()
+        .map(ToolName::as_str)
+        .filter(|name| mode.exempts_tool(name))
+        .collect()
 }

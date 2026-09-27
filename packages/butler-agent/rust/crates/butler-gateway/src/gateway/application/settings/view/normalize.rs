@@ -10,7 +10,7 @@ pub(super) fn ui_defaults() -> Value {
         "consolidation_model":"default", "consolidation_reasoning_effort":"xhigh",
         "effective_consolidation_model":"openai/gpt-5.5", "consolidation_uses_butler_model":true,
         "context_window_tokens":258_000, "worker_profiles":[], "max_simultaneous_workers":10,
-        "access_mode":"full_access", "plan_mode_default":false, "follow_up_behavior":"queue",
+        "access_mode":"ask_first", "plan_mode_default":false, "follow_up_behavior":"queue",
         "multiline_send_behavior":"modifier_enter_send_enter_newline", "appearance_theme":"system",
         "main_screen_theme":"bloom", "main_screen_theme_preset":"monochrome",
         "main_screen_theme_custom_colors":["#32424d","#555d7c","#485c70","#6a7d9a","#53708d","#434d70"],
@@ -67,9 +67,9 @@ pub(super) fn workspace_label(path: &std::path::Path) -> String {
 }
 pub(super) fn access(value: Option<&Value>) -> &'static str {
     match value.and_then(Value::as_str) {
-        Some("ask_first") => "ask_first",
+        Some("full_access") => "full_access",
         Some("read_only") => "read_only",
-        _ => "full_access",
+        _ => "ask_first",
     }
 }
 pub(super) fn multiline(value: Option<&Value>) -> &'static str {

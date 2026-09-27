@@ -3,6 +3,7 @@
 //! Gateway and host composition may run or stop a Turn. Durable state, model
 //! execution, delivery, and supervision remain private children of this module.
 
+mod access;
 pub mod agent_loop;
 mod authority;
 mod continuation_budget;
@@ -31,6 +32,7 @@ pub use contracts::{
     StopRequest, TurnMessage, TurnOutcome, TurnOutcomeKind, TurnRequest, TurnRoute, TurnTrigger,
     WorkStatus,
 };
+pub use access::ApprovalExemptAction;
 pub use error::{BtccCode, BtccError, BtccSource};
 
 pub use turn::{

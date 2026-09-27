@@ -30,6 +30,28 @@ pub enum Fixture {
     Ready,
     /// `F3-legacy` (synthetic previous-generation data dir).
     Legacy,
+    /// `F2-first-conversation`: like `F1-ready` with the first-conversation
+    /// onboarding not done yet.
+    FirstConversation,
+}
+
+/// The global access mode a scenario starts with (`PATCH /settings`).
+/// Every scenario recorded before ask-first became the default assumes full
+/// access, so that stays the harness default.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Access {
+    FullAccess,
+    AskFirst,
+}
+
+impl Access {
+    /// The settings value.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::FullAccess => "full_access",
+            Self::AskFirst => "ask_first",
+        }
+    }
 }
 
 enum Source {
@@ -43,6 +65,7 @@ pub struct Setup {
     pub sandbox: Sandbox,
     pub placeholders: Placeholders,
     fixture: Fixture,
+    access: Access,
     source: Source,
     env: Vec<(String, String)>,
     model: Option<ModelChoice>,
@@ -72,6 +95,7 @@ impl Setup {
             sandbox,
             placeholders,
             fixture: Fixture::Ready,
+            access: Access::FullAccess,
             source: Source::None,
             env: Vec::new(),
             model: None,
@@ -94,6 +118,12 @@ impl Setup {
 
     pub fn fixture(mut self, fixture: Fixture) -> Self {
         self.fixture = fixture;
+        self
+    }
+
+    /// The global access mode set with the model (not for `F0-empty`).
+    pub fn access(mut self, access: Access) -> Self {
+        self.access = access;
         self
     }
 
@@ -131,6 +161,7 @@ impl Setup {
             sandbox,
             placeholders,
             fixture,
+            access,
             source,
             env,
             model,
@@ -162,6 +193,7 @@ impl Setup {
         match fixture {
             Fixture::Ready => fixtures::ready(&sandbox.data, &choice.model)?,
             Fixture::Legacy => fixtures::legacy(&sandbox.data, &choice.model)?,
+            Fixture::FirstConversation => fixtures::first_conversation(&sandbox.data, &choice.model)?,
             Fixture::Empty => {}
         }
         let (agent, gw) = Agent::start(launch).await?;
@@ -179,7 +211,9 @@ impl Setup {
             scenario.register_api_key(provider_name, env_var).await?;
         }
         if fixture != Fixture::Empty {
-            scenario.select_model(&scenario.model.clone()).await?;
+            let mut settings = model_settings(&scenario.model);
+            settings["access_mode"] = access.as_str().into();
+            scenario.patch_settings(settings, &scenario.model.label()).await?;
         }
         Ok(scenario)
     }
@@ -304,17 +338,17 @@ pub const SANITIZATION: &[&str] = &[
 
 impl Scenario {
     pub async fn select_model(&self, choice: &ModelChoice) -> Result<Reply, HarnessError> {
-        let mut body = json!({"model": choice.model});
-        if let Some(effort) = &choice.effort {
-            body["reasoning_effort"] = Value::String(effort.clone());
-        }
+        self.patch_settings(model_settings(choice), &choice.label())
+            .await
+    }
+
+    /// `PATCH /settings` with `body`; `what` names it in the error.
+    pub async fn patch_settings(&self, body: Value, what: &str) -> Result<Reply, HarnessError> {
         let reply = self.gw.patch("/settings", body).await?;
         if reply.status != 200 {
             return Err(harness_error(format!(
-                "fixture: PATCH /settings {} failed: {} {}",
-                choice.label(),
-                reply.status,
-                reply.text
+                "fixture: PATCH /settings {what} failed: {} {}",
+                reply.status, reply.text
             )));
         }
         Ok(reply)
@@ -426,6 +460,15 @@ impl Scenario {
             .await?;
         Ok((turn_id, turn))
     }
+}
+
+/// The settings that select `choice` (model and reasoning effort).
+fn model_settings(choice: &ModelChoice) -> Value {
+    let mut body = json!({"model": choice.model});
+    if let Some(effort) = &choice.effort {
+        body["reasoning_effort"] = Value::String(effort.clone());
+    }
+    body
 }
 
 pub fn accepted_turn_id(accepted: &Value) -> Result<String, HarnessError> {

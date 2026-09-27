@@ -3,6 +3,7 @@
 mod core;
 mod migration;
 mod project_ledger_bindings;
+mod schedule_access;
 mod space;
 mod supporting;
 
@@ -35,6 +36,7 @@ pub(super) fn migrate(
         )
         .map_err(AppStorageError::sqlite)?;
     migration::backfill_queue_identity(connection)?;
+    schedule_access::backfill(connection)?;
     migration::create_post_backfill_indexes(connection)?;
     project_ledger_bindings::initialize(connection, butler_data)?;
     space::migrate(connection)?;

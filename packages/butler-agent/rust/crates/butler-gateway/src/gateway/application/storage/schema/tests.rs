@@ -147,6 +147,58 @@ fn deployed_schema_adds_columns_without_removing_unknown_data() {
     ));
 }
 
+/// Persisted-format pin (#237): a schedule stored before schedules had their
+/// own access mode gets the mode its conversation runs with (explicit session
+/// controls, else the stored global setting), and an unset one the default
+/// of that time, full access, so it keeps running as it did.
+#[test]
+fn stored_schedules_get_their_conversation_access_mode() {
+    let mut connection = Connection::open_in_memory().unwrap();
+    migrate(&mut connection, None).unwrap();
+    let schedule = |connection: &Connection, id: &str| {
+        connection
+            .execute_batch(&format!(
+                "INSERT INTO chats(id,title,kind,created_at,updated_at) VALUES('{id}','t','chat','now','now');\
+                 INSERT INTO app_automations(id,title,prompt_body,target_kind,target_session_id,\
+                   interval_seconds,access_mode,state,last_run_state,created_at,updated_at) \
+                 VALUES('schedule-{id}','t','p','chat','{id}',3600,NULL,'enabled','never_run','now','now');"
+            ))
+            .unwrap();
+    };
+    let access = |connection: &Connection, id: &str| {
+        connection
+            .query_row(
+                "SELECT access_mode FROM app_automations WHERE id=?1",
+                [format!("schedule-{id}")],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap()
+    };
+    schedule(&connection, "explicit");
+    schedule(&connection, "unset");
+    connection
+        .execute_batch(
+            "INSERT INTO app_settings VALUES('session-controls-explicit:explicit','true','now');\
+             INSERT INTO app_settings VALUES('session-controls:explicit','{\"access_mode\":\"read_only\"}','now');\
+             INSERT INTO app_settings VALUES('settings','{\"language\":\"en\"}','now');",
+        )
+        .unwrap();
+    migrate(&mut connection, None).unwrap();
+    assert_eq!(access(&connection, "explicit"), "read_only");
+    assert_eq!(access(&connection, "unset"), "full_access");
+
+    schedule(&connection, "global");
+    connection
+        .execute(
+            "UPDATE app_settings SET value_json='{\"access_mode\":\"ask_first\"}' WHERE key='settings'",
+            [],
+        )
+        .unwrap();
+    migrate(&mut connection, None).unwrap();
+    assert_eq!(access(&connection, "global"), "ask_first");
+    assert_eq!(access(&connection, "unset"), "full_access", "rewritten");
+}
+
 fn table_exists(connection: &Connection, table: &str) -> bool {
     connection
         .query_row(

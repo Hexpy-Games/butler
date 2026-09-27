@@ -88,7 +88,7 @@ pub(super) fn global_settings(
             .get("access_mode")
             .and_then(Value::as_str)
             .and_then(parse_access)
-            .unwrap_or(AccessMode::FullAccess),
+            .unwrap_or(super::DEFAULT_ACCESS_MODE),
         plan_mode: stored
             .get("plan_mode_default")
             .and_then(Value::as_bool)

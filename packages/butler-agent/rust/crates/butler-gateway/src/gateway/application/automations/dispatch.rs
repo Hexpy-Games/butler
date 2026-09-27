@@ -7,6 +7,7 @@ use super::{
     store::publish,
 };
 use crate::gateway::application::storage::AppStorageCode;
+use crate::gateway::application::settings;
 use crate::gateway::{
     MessageRecord, MessageRole, MessageSendRequest, MessageStatus,
     application::{
@@ -52,7 +53,7 @@ impl AppApplication {
         let (row, queued) = self.storage.execute(move |db| {
             let row = records::active(db, &automation_id)?;
             if trigger == "scheduled" && row.state != "enabled" {
-                return Err(AppStorageError::new(AppStorageCode::AutomationNotEnabled, "Automation is not enabled."));
+                return Err(AppStorageError::new(AppStorageCode::AutomationNotEnabled, "Schedule is not enabled."));
             }
             let busy = session_has_active_turn(db, &row.target_id)?;
             db.execute(
@@ -61,7 +62,7 @@ impl AppApplication {
             ).map_err(AppStorageError::sqlite)?;
             if busy {
                 db.execute(
-                    "INSERT INTO messages(id,chat_id,role,text,status,created_at,updated_at,retryable) VALUES(?1,?2,'automation','Automation prompt queued.','pending',?3,?3,0)",
+                    "INSERT INTO messages(id,chat_id,role,text,status,created_at,updated_at,retryable) VALUES(?1,?2,'automation','Scheduled prompt queued.','pending',?3,?3,0)",
                     params![stored_placeholder_id,row.target_id,started],
                 ).map_err(AppStorageError::sqlite)?;
             }
@@ -178,7 +179,8 @@ impl AppApplication {
             attachments: None,
             model: None,
             reasoning_effort: None,
-            access_mode: None,
+            // The schedule's own access, whatever the conversation's mode (#237).
+            access_mode: Some(json!(settings::access_mode_name(&row.access))),
             plan_mode: None,
             subsession_result: None,
         };
@@ -362,11 +364,11 @@ fn record_run(
     db.execute("UPDATE app_automation_runs SET state=?1,completed_at=?2,safe_error_code=?3,queued_message_id=?4,turn_id=?5 WHERE id=?6",params![result.state,completed,result.safe_error,placeholder,turn,run_id]).map_err(AppStorageError::sqlite)?;
     if let Some(message_id) = placeholder {
         let (text, status, retryable) = if result.state == "queued" {
-            ("Automation prompt queued.", "pending", 0)
+            ("Scheduled prompt queued.", "pending", 0)
         } else if result.state == "succeeded" {
-            ("Automation prompt dispatched.", "delivered", 0)
+            ("Scheduled prompt dispatched.", "delivered", 0)
         } else {
-            ("Automation prompt could not be dispatched.", "failed", 1)
+            ("Scheduled prompt could not be dispatched.", "failed", 1)
         };
         db.execute("UPDATE messages SET text=?1,status=?2,safe_error_code=?3,retryable=?4,updated_at=?5 WHERE id=?6",params![text,status,result.safe_error,retryable,completed,message_id]).map_err(AppStorageError::sqlite)?;
     }

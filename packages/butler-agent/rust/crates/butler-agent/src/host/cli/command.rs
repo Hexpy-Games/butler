@@ -33,8 +33,8 @@ pub enum Command {
     Observability,
     /// `search ...`, `web ...`
     WebAccess,
-    /// `automation ...`
-    Automation,
+    /// `schedule ...` (and its deprecated spelling `automation ...`)
+    Schedule,
     /// `update ...`
     Update,
     /// `status`, `model status`, `metrics status`, ...
@@ -84,7 +84,7 @@ impl Command {
             (cli::settings::recognizes, Self::Settings),
             (cli::observability::recognizes, Self::Observability),
             (cli::web_access::recognizes, Self::WebAccess),
-            (cli::automation::recognizes, Self::Automation),
+            (cli::schedule::recognizes, Self::Schedule),
             (cli::update::recognizes, Self::Update),
             (cli::status::recognizes, Self::Status),
             (cli::context::recognizes, Self::Context),
@@ -138,7 +138,7 @@ impl Command {
             Self::Settings => cli::settings::run(installation, args).await,
             Self::Observability => cli::observability::run(installation, args).await,
             Self::WebAccess => cli::web_access::run(installation, args).await,
-            Self::Automation => cli::automation::run(&installation, &args),
+            Self::Schedule => cli::schedule::run(&installation, &args),
             Self::Update => Box::pin(cli::update::run(installation, args)).await,
             Self::Status => cli::status::run_native_status_cli(installation, args).await,
             Self::Context => cli::context::run(installation, args).await,
@@ -379,20 +379,21 @@ mod tests {
     #[test]
     fn command_families_claim_their_commands_after_common_options() {
         for (args, expected) in [
-            (&["automation", "list"][..], Command::Automation),
+            (&["schedule", "list"][..], Command::Schedule),
+            (&["automation", "list"], Command::Schedule),
             (
                 &[
                     "--data",
                     "/tmp/d",
-                    "automation",
+                    "schedule",
                     "list",
                     "--status",
                     "active",
                     "--json",
                 ],
-                Command::Automation,
+                Command::Schedule,
             ),
-            (&["automation", "future-command"], Command::Automation),
+            (&["schedule", "future-command"], Command::Schedule),
             (&["metrics", "tail"], Command::Observability),
             (
                 &["--data", "/tmp/d", "metrics", "tail", "--lines"],

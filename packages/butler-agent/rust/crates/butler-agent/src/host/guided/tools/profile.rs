@@ -7,7 +7,7 @@ use serde_json::{Map, Value, json};
 
 use butler_core::json::JsonDocument;
 use butler_memory::profile::{FirstChatOnboardingUpdate, ProfileError, ProfilingMode};
-use butler_turn::btcc::{AccessMode, ModelRoundToolCall, ToolExecutionError};
+use butler_turn::btcc::{ApprovalExemptAction, ModelRoundToolCall, ToolExecutionError};
 
 use super::GuidedTools;
 use butler_memory::profile::ProfileCode;
@@ -25,10 +25,14 @@ pub(super) async fn execute(
 ) -> Result<JsonDocument, ToolExecutionError> {
     let result = match call.name.as_str() {
         "update_onboarding_profile" => {
-            if owner.binding.access_mode != AccessMode::FullAccess {
+            if !owner
+                .binding
+                .access_mode
+                .allows_without_approval(ApprovalExemptAction::FirstConversationOnboarding)
+            {
                 return encoded(&json!({"ok":false,"error":{
                     "code":"profile_write_requires_full_access",
-                    "message":"This Turn does not have full access; no profile change was applied."
+                    "message":"This Turn is read-only; no profile change was applied."
                 }}));
             }
             let input = onboarding_input(&call.arguments);

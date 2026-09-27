@@ -2,8 +2,6 @@
 //! and dispatches to them.
 
 #[cfg(unix)]
-pub(super) mod automation;
-#[cfg(unix)]
 pub(super) mod cognition;
 #[cfg(unix)]
 pub(crate) mod command;
@@ -26,6 +24,8 @@ pub(super) mod observability;
 pub(super) mod personalization;
 #[cfg(unix)]
 pub(super) mod public;
+#[cfg(unix)]
+pub(super) mod schedule;
 #[cfg(unix)]
 pub(super) mod service;
 #[cfg(unix)]

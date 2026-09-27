@@ -84,3 +84,5 @@ scenario's doc comment cites its decision.
 | TURN-03 | Stop keeps the partial text, marked stopped. | Owner, #211 |
 | REC-02, REC-03 | A crash-interrupted turn is not resumed automatically; it ends failed with retry available, and no tool effect runs twice. | Owner, #211 |
 | Q-02 | Stopping the running turn pauses the session queue; the next user input resumes it in order. | Owner, #211 |
+| ONB-01, ACC-01..04 | A fresh install asks first (`ask_first`). In ask-first, first-conversation onboarding, memory save and analysis of an attached image proceed without approval; nothing else new does, and an MCP tool still asks. Scenarios recorded before assume full access, which the harness sets (`Setup::access`). | Owner, #236 |
+| SCHED-01..03 | A schedule runs with its own access mode, whatever its conversation's; English says "schedule" (`butler schedule`, `butler automation` a hidden deprecated alias). | Owner, #237 |

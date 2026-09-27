@@ -5,6 +5,7 @@ use std::{path::Path, sync::Arc};
 use rusqlite::{Connection, OpenFlags};
 use serde_json::{Value, json};
 
+mod access;
 mod controls;
 mod model;
 mod persistence;
@@ -57,6 +58,9 @@ pub(super) use plan_continuation::{
 pub(super) use session::{
     session_context_settings, session_controls_view, session_workspace_settings,
     update_session_controls,
+};
+pub(super) use access::{
+    DEFAULT_ACCESS_MODE, PRE_ASK_FIRST_ACCESS_MODE, access_mode_name, stored_session_access,
 };
 pub(super) use view::ui_language;
 

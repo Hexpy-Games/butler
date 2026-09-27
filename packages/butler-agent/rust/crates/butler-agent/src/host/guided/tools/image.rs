@@ -14,7 +14,9 @@ use butler_core::public_text::trim_js_whitespace;
 use butler_runtime::context::{
     ImageCapabilityEvidence, ImageCarrierTuple, VisualAttachmentManifest,
 };
-use butler_turn::btcc::{AccessMode, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
+use butler_turn::btcc::{
+    ApprovalExemptAction, GuidedInvocation, ModelRoundToolCall, ToolExecutionError,
+};
 
 use super::GuidedTools;
 
@@ -32,10 +34,14 @@ pub(super) async fn execute(
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    if owner.binding.access_mode != AccessMode::FullAccess {
+    if !owner
+        .binding
+        .access_mode
+        .allows_without_approval(ApprovalExemptAction::AttachedImageAnalysis)
+    {
         return Err(integrity(
             "image_analysis_requires_full_access",
-            "Image analysis requires full access.",
+            "Image analysis requires full access or ask-first access.",
         ));
     }
     let file_id = required_text(
