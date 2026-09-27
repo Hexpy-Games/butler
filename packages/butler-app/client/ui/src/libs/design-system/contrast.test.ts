@@ -190,10 +190,13 @@ const accentIconRules = new Set([
   "libs/design-system/blocks/TodoProgressPanel/TodoProgressPanel.module.css .item[data-state=\"running\"] .marker, .item[data-state=\"reviewing\"] .marker",
 ]);
 
+// Product surfaces: DS components and blocks plus app code (the DS Viewer
+// chrome is documentation, not product UI).
 test("accent used as text reads through --accent-text, never the fill token", async () => {
   const { Glob } = await import("bun");
   const offenders: string[] = [];
   for await (const path of new Glob("**/*.module.css").scan({ cwd: new URL("../..", import.meta.url).pathname })) {
+    if (path.startsWith("libs/design-system/viewer/")) continue;
     const source = readFileSync(new URL(`../../${path}`, import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//gu, "");
     for (const [, selector, body] of source.matchAll(/([^{}]+)\{([^{}]*)\}/gu)) {
       if (!/(?<![\w-])color:\s*var\(--(?:accent|color-action-primary)\)/u.test(body!)) continue;
