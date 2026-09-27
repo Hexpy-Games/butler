@@ -25,15 +25,7 @@ pub(super) async fn run(
     generation: &str,
     cancellation: &CancellationToken,
 ) -> CognitionResult<Value> {
-    let mut outcome = rollback_memory_rebuild(
-        data_root,
-        paths,
-        coordinator.clone(),
-        Some(generation),
-        stamp(&SystemIdentity.now_iso()),
-        cancellation,
-    )
-    .await?;
+    let mut outcome = rollback(data_root, paths, &coordinator, generation, cancellation).await?;
     let mut build = None;
     if let RollbackOutcome::Pending {
         next_step: RollbackStep::Build,
@@ -51,15 +43,7 @@ pub(super) async fn run(
             )
             .await?,
         );
-        outcome = rollback_memory_rebuild(
-            data_root,
-            paths,
-            coordinator.clone(),
-            Some(generation),
-            stamp(&SystemIdentity.now_iso()),
-            cancellation,
-        )
-        .await?;
+        outcome = rollback(data_root, paths, &coordinator, generation, cancellation).await?;
     }
     let mut result = serde_json::to_value(&outcome)
         .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
@@ -103,11 +87,26 @@ pub(super) async fn run(
     Ok(result)
 }
 
-fn stamp(now: &str) -> CutoverStamp<'_> {
-    CutoverStamp {
-        now,
-        verified_commit: option_env!("BUTLER_MEMORY_VERIFIED_COMMIT"),
-    }
+/// One rollback attempt toward `generation`, stamped now.
+async fn rollback(
+    data_root: &Path,
+    paths: &CognitionPathEnvironment,
+    coordinator: &Arc<CognitionWriteCoordinator>,
+    generation: &str,
+    cancellation: &CancellationToken,
+) -> CognitionResult<RollbackOutcome> {
+    rollback_memory_rebuild(
+        data_root,
+        paths,
+        coordinator.clone(),
+        Some(generation),
+        CutoverStamp {
+            now: &SystemIdentity.now_iso(),
+            verified_commit: option_env!("BUTLER_MEMORY_VERIFIED_COMMIT"),
+        },
+        cancellation,
+    )
+    .await
 }
 
 async fn serving_catchup(

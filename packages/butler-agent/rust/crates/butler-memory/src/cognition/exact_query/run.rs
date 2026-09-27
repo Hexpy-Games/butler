@@ -133,22 +133,7 @@ fn run(snapshot: &PublicMemorySnapshot, args: &QueryArgs) -> CognitionResult<Val
     let identity = crate::js_json::stringify(&args.filter_identity)
         .map_err(|e| CognitionError::new(CognitionCode::Json, e.to_string()).with_source(e))?;
     let filter_hash = format!("{:x}", Sha256::digest(identity.as_bytes()));
-    let cursor = args.cursor.as_deref().map(decode_cursor).transpose()?;
-    if cursor
-        .as_ref()
-        .is_some_and(|c| c.filter_hash != filter_hash || c.revision != revision)
-    {
-        return Err(CognitionError::new(
-            CognitionCode::StaleCursor,
-            "Query cursor revision or filters changed",
-        ));
-    }
-    if !snapshot.validate_scope(&args.scope).map_err(store_error)? {
-        return Err(CognitionError::new(
-            CognitionCode::InvalidScope,
-            "Conversation scope is invalid",
-        ));
-    }
+    let cursor = checked_cursor(snapshot, args, &filter_hash, revision)?;
     let mut scan = scan(snapshot, args, cursor.as_ref())?;
     let make_cursor = |(at, id, count): (&String, &String, usize)| {
         encode_cursor(&Cursor {
@@ -208,6 +193,33 @@ fn run(snapshot: &PublicMemorySnapshot, args: &QueryArgs) -> CognitionResult<Val
         &diagnostics,
         trimmed,
     ))
+}
+
+/// The decoded cursor, which must be for the same filters and store
+/// revision; the query scope must be valid too.
+fn checked_cursor(
+    snapshot: &PublicMemorySnapshot,
+    args: &QueryArgs,
+    filter_hash: &str,
+    revision: u64,
+) -> CognitionResult<Option<Cursor>> {
+    let cursor = args.cursor.as_deref().map(decode_cursor).transpose()?;
+    if cursor
+        .as_ref()
+        .is_some_and(|c| c.filter_hash != filter_hash || c.revision != revision)
+    {
+        return Err(CognitionError::new(
+            CognitionCode::StaleCursor,
+            "Query cursor revision or filters changed",
+        ));
+    }
+    if !snapshot.validate_scope(&args.scope).map_err(store_error)? {
+        return Err(CognitionError::new(
+            CognitionCode::InvalidScope,
+            "Conversation scope is invalid",
+        ));
+    }
+    Ok(cursor)
 }
 
 /// Pages through messages after `cursor` (1000 per page, at most 50 000

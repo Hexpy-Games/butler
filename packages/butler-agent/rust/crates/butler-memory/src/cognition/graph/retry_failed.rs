@@ -132,40 +132,7 @@ pub(super) fn repair_selected_invalid_vectors(
     embedding_version: &str,
     request: &VectorRepairRequest,
 ) -> CognitionResult<usize> {
-    if current_generation.is_empty()
-        || embedding_version.is_empty()
-        || request.generation_id != current_generation
-        || request.units.is_empty()
-    {
-        return Err(error(CognitionCode::MemoryVectorRepairPreimageChanged));
-    }
-
-    let mut snapshots = Vec::with_capacity(request.units.len());
-    for requested in &request.units {
-        let snapshot = read_repair_unit(connection, requested, current_generation)?
-            .ok_or_else(|| error(CognitionCode::MemoryVectorRepairPreimageChanged))?;
-        if snapshot.state != "complete"
-            || snapshot.owner_revision != requested.owner_revision
-            || snapshot.source_revision != requested.source_revision
-            || snapshot.receipt_json.as_deref() != Some(requested.receipt_json.as_str())
-            || snapshot.source_membership_invalid != 0
-            || snapshot.source_kind.as_deref().is_none_or(str::is_empty)
-            || snapshot
-                .source_observed_at
-                .as_deref()
-                .is_none_or(str::is_empty)
-            || !completed_receipt_lacks_expected_identity(
-                &snapshot,
-                current_generation,
-                embedding_version,
-                &requested.receipt_json,
-            )
-        {
-            return Err(error(CognitionCode::MemoryVectorRepairPreimageChanged));
-        }
-        snapshots.push(snapshot);
-    }
-
+    let snapshots = checked_snapshots(connection, current_generation, embedding_version, request)?;
     let tx = connection.transaction().map_err(db_error)?;
     for (requested, snapshot) in request.units.iter().zip(&snapshots) {
         let changed = tx
@@ -213,6 +180,50 @@ pub(super) fn repair_selected_invalid_vectors(
     }
     tx.commit().map_err(db_error)?;
     Ok(snapshots.len())
+}
+
+/// The stored preimage of every requested unit, each still complete and
+/// matching the request, with a receipt that lacks the expected identity.
+fn checked_snapshots(
+    connection: &Connection,
+    current_generation: &str,
+    embedding_version: &str,
+    request: &VectorRepairRequest,
+) -> CognitionResult<Vec<RepairUnitSnapshot>> {
+    if current_generation.is_empty()
+        || embedding_version.is_empty()
+        || request.generation_id != current_generation
+        || request.units.is_empty()
+    {
+        return Err(error(CognitionCode::MemoryVectorRepairPreimageChanged));
+    }
+
+    let mut snapshots = Vec::with_capacity(request.units.len());
+    for requested in &request.units {
+        let snapshot = read_repair_unit(connection, requested, current_generation)?
+            .ok_or_else(|| error(CognitionCode::MemoryVectorRepairPreimageChanged))?;
+        if snapshot.state != "complete"
+            || snapshot.owner_revision != requested.owner_revision
+            || snapshot.source_revision != requested.source_revision
+            || snapshot.receipt_json.as_deref() != Some(requested.receipt_json.as_str())
+            || snapshot.source_membership_invalid != 0
+            || snapshot.source_kind.as_deref().is_none_or(str::is_empty)
+            || snapshot
+                .source_observed_at
+                .as_deref()
+                .is_none_or(str::is_empty)
+            || !completed_receipt_lacks_expected_identity(
+                &snapshot,
+                current_generation,
+                embedding_version,
+                &requested.receipt_json,
+            )
+        {
+            return Err(error(CognitionCode::MemoryVectorRepairPreimageChanged));
+        }
+        snapshots.push(snapshot);
+    }
+    Ok(snapshots)
 }
 
 fn read_repair_unit(

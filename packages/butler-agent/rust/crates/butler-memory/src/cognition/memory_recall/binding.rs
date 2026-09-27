@@ -82,18 +82,7 @@ pub(super) fn run(
         ..
     } = *request;
     let rows = current_source_rows(graph, request.data_root, &source_ids(selection))?;
-    let episodes = source_episodes(selection.rows.values());
-    let hydrated = hydrate_recall_sources(RecallSourceHydration {
-        data_root: request.data_root,
-        memory_root: request.memory_root,
-        reader: request.canonical,
-        rows: &rows,
-        episodes: &episodes,
-        max_graphemes: 480,
-        deadline_at: request.deadline_at,
-        now_millis: clocks.now_millis,
-        compare_locale: clocks.compare_locale,
-    });
+    let hydrated = hydrate(request, &rows, &clocks);
     on_hydrated();
     let source_by_id = rows
         .iter()
@@ -151,6 +140,27 @@ pub(super) fn run(
         .map(|row| (row.source_id.clone(), row))
         .collect();
     Ok(output)
+}
+
+/// The current text of `rows` and of the selected episodes, hydrated up to
+/// the request deadline.
+fn hydrate(
+    request: &BindingInput<'_>,
+    rows: &[CognitionSourceRow],
+    clocks: &Clocks<'_>,
+) -> HashMap<String, RecallSourceResolution> {
+    let episodes = source_episodes(request.selection.rows.values());
+    hydrate_recall_sources(RecallSourceHydration {
+        data_root: request.data_root,
+        memory_root: request.memory_root,
+        reader: request.canonical,
+        rows,
+        episodes: &episodes,
+        max_graphemes: 480,
+        deadline_at: request.deadline_at,
+        now_millis: clocks.now_millis,
+        compare_locale: clocks.compare_locale,
+    })
 }
 
 /// Every distinct source mentioned by a ranked episode, in rank order.

@@ -4,7 +4,9 @@
 
 use super::*;
 use crate::cognition::CognitionCode;
-use crate::cognition::extraction::{ExtractClaim, ExtractCorrection, ExtractNode, ExtractRelation};
+use crate::cognition::extraction::{
+    CandidateClaim, ExtractClaim, ExtractCorrection, ExtractNode, ExtractRelation,
+};
 
 /// A decision that was valid but could not be applied; recorded in the
 /// projection evidence.
@@ -291,6 +293,30 @@ fn correct(
         .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?;
     rewrite_claim(claim, selected, chosen)?;
     let claim_ref = claim.local_ref.clone();
+    adopt_endpoints(output, input, claim_index, past)?;
+    output.corrections.push(ExtractCorrection {
+        previous_claim_ref: candidate.ref_id.clone(),
+        replacement_claim_ref: claim_ref,
+        relation: "supersedes".into(),
+        effective_at: None,
+        evidence: selected.evidence.clone(),
+    });
+    Ok(None)
+}
+
+/// Points the rewritten claim at the past claim's subject and object and,
+/// when the past claim had a relation, adds that relation between them.
+fn adopt_endpoints(
+    output: &mut ExtractOutput,
+    input: &ExtractInput,
+    claim_index: usize,
+    past: Option<&CandidateClaim>,
+) -> CognitionResult<()> {
+    let claim = output
+        .claims
+        .get(claim_index)
+        .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?;
+    let claim_ref = claim.local_ref.clone();
     let claim_evidence = claim.evidence.clone();
     let subject = endpoint(
         past.and_then(|claim| claim.subject_ref.as_deref()),
@@ -308,26 +334,19 @@ fn correct(
         claim.subject_ref.clone_from(&subject);
         claim.object_ref.clone_from(&object);
     }
-    if let Some(relation) = relation {
+    if let Some(relation) = past.and_then(|claim| claim.relation.as_deref()) {
         let (Some(from_ref), Some(to_ref)) = (subject, object) else {
             return Err(error(CognitionCode::MemoryExtractInvalidCorrection));
         };
         output.relations.push(ExtractRelation {
-            claim_ref: claim_ref.clone(),
+            claim_ref,
             from_ref,
             to_ref,
             relation: relation.into(),
             evidence: claim_evidence,
         });
     }
-    output.corrections.push(ExtractCorrection {
-        previous_claim_ref: candidate.ref_id.clone(),
-        replacement_claim_ref: claim_ref,
-        relation: "supersedes".into(),
-        effective_at: None,
-        evidence: selected.evidence.clone(),
-    });
-    Ok(None)
+    Ok(())
 }
 
 /// A past claim's endpoint is available when this output already reuses it

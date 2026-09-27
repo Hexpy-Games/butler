@@ -58,6 +58,7 @@ struct ChannelRanks {
     vector: HashMap<String, f64>,
 }
 
+/// Scores, fuses, ranks and diversifies the seeded episodes.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn rank(
     graph: &GraphRecallReader,
@@ -89,32 +90,19 @@ pub(super) fn rank(
         context: rank_map(&lists.context),
         vector: rank_map(&lists.vector),
     };
-    let executed = ExecutedEpisodeChannels {
-        graph: admitted.graph,
-        vector: admitted.vector && input.include_vector && seeds.vector_searched,
-        lexical: admitted.lexical
-            && !seeds
-                .selected
-                .coverage_codes
-                .iter()
-                .any(|code| code == "lexical_partial"),
-        context: admitted.context,
-    };
+    let executed = executed_channels(input, &admitted, &seeds);
     let inputs = usable
         .iter()
         .map(|row| rank_input(row, &admitted, &ranks, &raw, &seeds))
         .collect();
-    let basis = if input
-        .time
-        .as_ref()
-        .is_some_and(|time| time.basis == RecallTimeBasis::Event)
-    {
-        TimeBasis::Event
-    } else {
-        TimeBasis::Conversation
-    };
     let mut ranked = diversify_by_session(
-        rank_episodes(inputs, executed, &input.as_of, basis, parse_date),
+        rank_episodes(
+            inputs,
+            executed,
+            &input.as_of,
+            time_basis(input),
+            parse_date,
+        ),
         128,
     );
     ranked.sort_by_key(|episode| !raw.exact.contains(&episode.input.episode_id));
@@ -146,6 +134,39 @@ pub(super) fn rank(
             context: executed.context,
         },
     })
+}
+
+/// The admitted channels that actually ran: vector only when requested and
+/// searched, lexical only when its scan completed.
+fn executed_channels(
+    input: &RecallRequest,
+    admitted: &RecallAdmittedChannels,
+    seeds: &SeedGraph,
+) -> ExecutedEpisodeChannels {
+    ExecutedEpisodeChannels {
+        graph: admitted.graph,
+        vector: admitted.vector && input.include_vector && seeds.vector_searched,
+        lexical: admitted.lexical
+            && !seeds
+                .selected
+                .coverage_codes
+                .iter()
+                .any(|code| code == "lexical_partial"),
+        context: admitted.context,
+    }
+}
+
+/// Event time when the request asks for it, else conversation time.
+fn time_basis(input: &RecallRequest) -> TimeBasis {
+    if input
+        .time
+        .as_ref()
+        .is_some_and(|time| time.basis == RecallTimeBasis::Event)
+    {
+        TimeBasis::Event
+    } else {
+        TimeBasis::Conversation
+    }
 }
 
 fn group_mentions(all: Vec<RecallMention>) -> HashMap<String, Vec<RecallMention>> {

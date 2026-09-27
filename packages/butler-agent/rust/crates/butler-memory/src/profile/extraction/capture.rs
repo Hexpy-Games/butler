@@ -12,6 +12,8 @@ use super::result::{CaptureResultInput, empty_result, interruption, result, safe
 use super::types::{CorrectionTargets, SourceRead, SourceWindow};
 use super::{Dependencies, commit, coverage, discovery, prompt, runtime, targets};
 
+/// Captures profile candidates from transcript text the extractor has not
+/// read yet.
 pub(in super::super) async fn capture(
     dependencies: Dependencies,
     options: ProfileModelTranscriptCaptureOptions,
@@ -47,20 +49,9 @@ pub(in super::super) async fn capture(
     if read.windows.is_empty() {
         return nothing_to_read(&dependencies, &read, consent.mode, extractor_model).await;
     }
-    let model = options
-        .model
-        .as_deref()
-        .map(butler_core::public_text::trim_js_whitespace)
-        .filter(|value| !value.is_empty())
-        .map(|value| butler_models::models::parse_model_ref(value).canonical_ref)
-        .unwrap_or_else(|| extractor_model.effective_model.clone());
+    let model = runtime::chosen_model(options.model.as_deref(), &extractor_model.effective_model);
     extractor_model.effective_model = model.clone();
-    let raw_max_batches = options.max_model_batches.unwrap_or(8.0);
-    let max_batches = if raw_max_batches.is_nan() {
-        f64::NAN
-    } else {
-        raw_max_batches.clamp(1.0, 120.0)
-    };
+    let max_batches = batch_limit(options.max_model_batches);
     let mut session = Capture {
         dependencies: &dependencies,
         consent: &consent,
@@ -95,6 +86,17 @@ pub(in super::super) async fn capture(
         }
     }
     session.finish(&read, extractor_model).await
+}
+
+/// How many extractor batches one capture may send: 8 by default, clamped
+/// to 1..=120 (NaN sends none).
+fn batch_limit(requested: Option<f64>) -> f64 {
+    let requested = requested.unwrap_or(8.0);
+    if requested.is_nan() {
+        f64::NAN
+    } else {
+        requested.clamp(1.0, 120.0)
+    }
 }
 
 /// The result when discovery found no window to send.

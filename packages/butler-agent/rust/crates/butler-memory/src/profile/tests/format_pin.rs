@@ -194,6 +194,52 @@ fn seed_legacy_rows(root: &Root) {
 async fn stored_profile_rows_prompts_and_manifests_keep_their_bytes() {
     let root = Root::new("format-pin");
     let prompts = Arc::new(Mutex::new(Vec::new()));
+    let (service, [captured, first_consolidation, second_consolidation]) =
+        capture_twice(&root, &prompts).await;
+    let [stale, confirmed, merged] = upsert_directly(&root);
+    service.consolidate_profile_candidates().await.unwrap();
+    let third_consolidation = snapshot(&root);
+    import_export(&service).await;
+    let imported = snapshot(&root);
+    let manifests = fs::read_dir(root.0.join("personalization/profile-imports"))
+        .unwrap()
+        .map(|entry| fs::read_to_string(entry.unwrap().path()).unwrap())
+        .collect::<Vec<_>>();
+    let reflective = service.reflective_summary("en").await.unwrap();
+    let projection = service.read_runtime_profile_projection().await.unwrap();
+    service.close().await;
+
+    let pinned = json!({
+        "captured": captured,
+        "first_consolidation": first_consolidation,
+        "second_consolidation": second_consolidation,
+        "stale_record": stale,
+        "confirmed_record": confirmed,
+        "merged_record": merged,
+        "third_consolidation": third_consolidation,
+        "imported": imported,
+        "manifests": manifests,
+        "prompts": *prompts.lock().unwrap(),
+        "reflective": reflective,
+        "projection": projection,
+    });
+    let text = butler_core::json::pretty(&pinned);
+    let path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/profile/tests/format-pin.json");
+    if std::env::var_os("BUTLER_BLESS_FORMAT").is_some() {
+        fs::write(&path, &text).unwrap();
+        return;
+    }
+    let expected = fs::read_to_string(&path).unwrap();
+    assert_eq!(text, expected, "profile format changed");
+}
+
+/// Two transcript captures in deep mode, each consolidated; the service and
+/// the snapshots after the first capture and after each consolidation.
+async fn capture_twice(
+    root: &Root,
+    prompts: &Arc<Mutex<Vec<String>>>,
+) -> (Arc<ProfileService>, [Value; 3]) {
     let messages = Arc::new(Mutex::new(HashMap::from([(
         "m1".into(),
         message(
@@ -203,7 +249,7 @@ async fn stored_profile_rows_prompts_and_manifests_keep_their_bytes() {
         ),
     )])));
     let (service, _) = service_with_parts(
-        &root,
+        root,
         messages.clone(),
         Arc::new(Scripted {
             prompts: prompts.clone(),
@@ -217,9 +263,9 @@ async fn stored_profile_rows_prompts_and_manifests_keep_their_bytes() {
         .capture_profile_candidates_from_transcripts_with_model(Default::default())
         .await
         .unwrap();
-    let captured = snapshot(&root);
+    let captured = snapshot(root);
     service.consolidate_profile_candidates().await.unwrap();
-    let first_consolidation = snapshot(&root);
+    let first_consolidation = snapshot(root);
 
     messages.lock().unwrap().insert(
         "m2".into(),
@@ -234,8 +280,16 @@ async fn stored_profile_rows_prompts_and_manifests_keep_their_bytes() {
         .await
         .unwrap();
     service.consolidate_profile_candidates().await.unwrap();
-    let second_consolidation = snapshot(&root);
+    let second_consolidation = snapshot(root);
+    (
+        service,
+        [captured, first_consolidation, second_consolidation],
+    )
+}
 
+/// Direct candidate upserts around seeded legacy rows; the stale, confirmed
+/// and merged records as returned.
+fn upsert_directly(root: &Root) -> [String; 3] {
     let stale = candidates::upsert(
         &root.0,
         &ProfileCandidateInput {
@@ -274,7 +328,7 @@ async fn stored_profile_rows_prompts_and_manifests_keep_their_bytes() {
     )
     .unwrap()
     .unwrap();
-    seed_legacy_rows(&root);
+    seed_legacy_rows(root);
     let merged = candidates::upsert(
         &root.0,
         &ProfileCandidateInput {
@@ -296,9 +350,11 @@ async fn stored_profile_rows_prompts_and_manifests_keep_their_bytes() {
     )
     .unwrap()
     .unwrap();
-    service.consolidate_profile_candidates().await.unwrap();
-    let third_consolidation = snapshot(&root);
+    [&stale, &confirmed, &merged].map(|record| serde_json::to_string(record).unwrap())
+}
 
+/// Imports a third-party export at a fixed time.
+async fn import_export(service: &ProfileService) {
     service
         .import_profile_candidates_from_third_party_dump_with_model(
             ProfileThirdPartyImportOptions {
@@ -311,36 +367,4 @@ async fn stored_profile_rows_prompts_and_manifests_keep_their_bytes() {
         )
         .await
         .unwrap();
-    let imported = snapshot(&root);
-    let manifests = fs::read_dir(root.0.join("personalization/profile-imports"))
-        .unwrap()
-        .map(|entry| fs::read_to_string(entry.unwrap().path()).unwrap())
-        .collect::<Vec<_>>();
-    let reflective = service.reflective_summary("en").await.unwrap();
-    let projection = service.read_runtime_profile_projection().await.unwrap();
-    service.close().await;
-
-    let pinned = json!({
-        "captured": captured,
-        "first_consolidation": first_consolidation,
-        "second_consolidation": second_consolidation,
-        "stale_record": serde_json::to_string(&stale).unwrap(),
-        "confirmed_record": serde_json::to_string(&confirmed).unwrap(),
-        "merged_record": serde_json::to_string(&merged).unwrap(),
-        "third_consolidation": third_consolidation,
-        "imported": imported,
-        "manifests": manifests,
-        "prompts": *prompts.lock().unwrap(),
-        "reflective": reflective,
-        "projection": projection,
-    });
-    let text = butler_core::json::pretty(&pinned);
-    let path =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/profile/tests/format-pin.json");
-    if std::env::var_os("BUTLER_BLESS_FORMAT").is_some() {
-        fs::write(&path, &text).unwrap();
-        return;
-    }
-    let expected = fs::read_to_string(&path).unwrap();
-    assert_eq!(text, expected, "profile format changed");
 }

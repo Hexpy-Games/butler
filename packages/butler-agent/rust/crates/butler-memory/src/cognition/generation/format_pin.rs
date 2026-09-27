@@ -144,12 +144,22 @@ async fn conversation_store(root: &Path) {
     store.close().await.unwrap();
 }
 
+type Coordinator = Arc<CognitionWriteCoordinator>;
+
 #[tokio::test]
 async fn generation_files_and_results_keep_their_pre_typing_bytes() {
     let coordinator = Arc::new(CognitionWriteCoordinator::new(Arc::new(Host)).unwrap());
     let environment = CognitionPathEnvironment::default();
+    pin_empty_generation(&coordinator, &environment).await;
+    let data = Root::new();
+    let rebuild = pin_prepared_rebuild(&data.0, &coordinator, &environment).await;
+    let (readiness, recorded_text) =
+        pin_readiness(&data.0, &coordinator, &environment, &rebuild).await;
+    pin_qualification_and_activation(&data.0, &rebuild, &readiness, &recorded_text);
+}
 
-    // Empty initialization: manifest and descriptor.
+/// Empty initialization: manifest and descriptor.
+async fn pin_empty_generation(coordinator: &Coordinator, environment: &CognitionPathEnvironment) {
     let empty = Root::new();
     let handle = super::initialize_empty_memory_generation(
         empty.0.clone(),
@@ -171,12 +181,25 @@ async fn generation_files_and_results_keep_their_pre_typing_bytes() {
         "empty-descriptor.json",
         &normalize.apply(&read(&memory.join("active-generation.json"))),
     );
+}
 
-    // Legacy baseline and rebuild preparation.
-    let data = Root::new();
-    conversation_store(&data.0).await;
+/// A prepared rebuild next to its legacy baseline.
+struct Rebuild {
+    prepared: super::rebuild::PreparedRebuild,
+    legacy_id: String,
+    root: PathBuf,
+    normalize: Normalizer,
+}
+
+/// Legacy baseline and rebuild preparation.
+async fn pin_prepared_rebuild(
+    data: &Path,
+    coordinator: &Coordinator,
+    environment: &CognitionPathEnvironment,
+) -> Rebuild {
+    conversation_store(data).await;
     let prepared = super::prepare_memory_rebuild(
-        data.0.clone(),
+        data.to_path_buf(),
         environment.clone(),
         coordinator.clone(),
         CancellationToken::new(),
@@ -186,14 +209,14 @@ async fn generation_files_and_results_keep_their_pre_typing_bytes() {
     )
     .await
     .unwrap();
-    let memory = environment.memory_root(&data.0);
+    let memory = environment.memory_root(data);
     let descriptor_text = read(&memory.join("active-generation.json"));
     let descriptor: serde_json::Value = serde_json::from_str(&descriptor_text).unwrap();
     let legacy_id = descriptor["generation_id"].as_str().unwrap().to_owned();
     let legacy_root = memory.join("generations").join(&legacy_id);
     let legacy: serde_json::Value =
         serde_json::from_str(&read(&legacy_root.join("manifest.json"))).unwrap();
-    let rebuild_root = memory.join("generations").join(&prepared.generation_id);
+    let root = memory.join("generations").join(&prepared.generation_id);
     let normalize = Normalizer(vec![
         (legacy_id.clone(), "<LEGACY>".into()),
         (
@@ -210,23 +233,41 @@ async fn generation_files_and_results_keep_their_pre_typing_bytes() {
     pin("legacy-descriptor.json", &normalize.apply(&descriptor_text));
     pin(
         "prepared-manifest.json",
-        &normalize.apply(&read(&rebuild_root.join("manifest.json"))),
+        &normalize.apply(&read(&root.join("manifest.json"))),
     );
     pin(
         "prepared-inventory.json",
         &normalize.apply(&read(
-            &rebuild_root.join("source-snapshot/memory-source-inventory.json"),
+            &root.join("source-snapshot/memory-source-inventory.json"),
         )),
     );
+    Rebuild {
+        prepared,
+        legacy_id,
+        root,
+        normalize,
+    }
+}
 
-    // Readiness record and inspection.
+/// Readiness record and inspection; the readiness and the recorded manifest.
+async fn pin_readiness(
+    data: &Path,
+    coordinator: &Coordinator,
+    environment: &CognitionPathEnvironment,
+    rebuild: &Rebuild,
+) -> (super::GenerationReadiness, String) {
+    let Rebuild {
+        prepared,
+        normalize,
+        ..
+    } = rebuild;
     let target = super::MemoryGenerationTarget::Rebuild {
         generation_id: prepared.generation_id.clone(),
         canonical_snapshot_id: prepared.canonical_snapshot_id.clone(),
     };
     let readiness = super::record_rebuild_readiness(
-        &data.0,
-        &environment,
+        data,
+        environment,
         coordinator.clone(),
         &target,
         &CancellationToken::new(),
@@ -237,20 +278,34 @@ async fn generation_files_and_results_keep_their_pre_typing_bytes() {
         "readiness-result.json",
         &normalize.apply(&serde_json::to_string(&readiness).unwrap()),
     );
-    let recorded_text = read(&rebuild_root.join("manifest.json"));
+    let recorded_text = read(&rebuild.root.join("manifest.json"));
     pin("readiness-manifest.json", &normalize.apply(&recorded_text));
     let inspected =
-        super::inspect_memory_rebuild(&data.0, &environment, &prepared.generation_id).unwrap();
+        super::inspect_memory_rebuild(data, environment, &prepared.generation_id).unwrap();
     let inspected = serde_json::to_string(&inspected)
         .unwrap()
-        .replace(&data.0.to_string_lossy().into_owned(), "<DATA>");
+        .replace(&data.to_string_lossy().into_owned(), "<DATA>");
     pin("inspect-result.json", &normalize.apply(&inspected));
+    (readiness, recorded_text)
+}
 
-    // Qualification and activation writers.
-    let mut qualified: super::GenerationManifest = serde_json::from_str(&recorded_text).unwrap();
+/// Qualification and activation writers.
+fn pin_qualification_and_activation(
+    data: &Path,
+    rebuild: &Rebuild,
+    readiness: &super::GenerationReadiness,
+    recorded_text: &str,
+) {
+    let Rebuild {
+        prepared,
+        legacy_id,
+        normalize,
+        ..
+    } = rebuild;
+    let mut qualified: super::GenerationManifest = serde_json::from_str(recorded_text).unwrap();
     super::qualification_service::qualify_manifest(
         &mut qualified,
-        &readiness,
+        readiness,
         &super::qualification::ValidatedEvidence {
             acceptance_sha256: "a".repeat(64),
             verification_generation_id: "33333333-3333-3333-3333-333333333333".into(),
@@ -260,7 +315,7 @@ async fn generation_files_and_results_keep_their_pre_typing_bytes() {
         &prepared.generation_id,
         &prepared.source_inventory_hash,
     );
-    let qualified_path = data.0.join("qualified.json");
+    let qualified_path = data.join("qualified.json");
     super::initialize::durable::write_json(&qualified_path, &qualified).unwrap();
     pin(
         "qualified-manifest.json",
@@ -268,11 +323,11 @@ async fn generation_files_and_results_keep_their_pre_typing_bytes() {
     );
     let next = super::cutover::next_descriptor_for_pin(
         &prepared.generation_id,
-        &legacy_id,
+        legacy_id,
         NOW,
         super::ProjectionMode::Running,
     );
-    let next_path = data.0.join("next-descriptor.json");
+    let next_path = data.join("next-descriptor.json");
     super::initialize::durable::write_json(&next_path, &next).unwrap();
     pin(
         "activated-descriptor.json",

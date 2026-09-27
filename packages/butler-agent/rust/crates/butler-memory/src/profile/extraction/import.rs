@@ -19,6 +19,8 @@ use crate::profile::ProfileCode;
 use butler_core::json::Utf16Prefix;
 use butler_models::models::{ProviderPromptLifecycle, ProviderPromptRequest};
 
+/// Imports another assistant's profile export as candidates, then
+/// consolidates the profile.
 pub(super) async fn run(
     dependencies: Dependencies,
     options: ProfileThirdPartyImportOptions,
@@ -41,28 +43,14 @@ pub(super) async fn run(
         let stable = stable_count(&dependencies).await?;
         return Ok(base(consent.mode, source, Some(id), model_config, stable));
     }
-    model_config.effective_model = options
-        .model
-        .as_deref()
-        .map(butler_core::public_text::trim_js_whitespace)
-        .filter(|value| !value.is_empty())
-        .map(|value| butler_models::models::parse_model_ref(value).canonical_ref)
-        .unwrap_or_else(|| model_config.effective_model.clone());
-    let imported_at = match options.now_epoch_millis {
-        Some(value) => butler_core::js_date::format_date_value(value).ok_or_else(|| {
-            ProfileError::new(
-                ProfileCode::ProfileDataInvalid,
-                "Profile import time is invalid.",
-            )
-        })?,
-        None => dependencies.host.now_iso(),
-    };
+    model_config.effective_model =
+        runtime::chosen_model(options.model.as_deref(), &model_config.effective_model);
     let import = Import {
         source,
         id,
         hash,
         text,
-        imported_at,
+        imported_at: import_time(&dependencies, options.now_epoch_millis)?,
         fixed_time: options.now_epoch_millis.is_some(),
     };
     let response = request_candidates(
@@ -100,6 +88,19 @@ pub(super) async fn run(
         model_called: true,
         fallback_used: false,
         model_error: None,
+    })
+}
+
+/// The caller's fixed import time, or now.
+fn import_time(dependencies: &Dependencies, fixed: Option<f64>) -> ProfileResult<String> {
+    let Some(value) = fixed else {
+        return Ok(dependencies.host.now_iso());
+    };
+    butler_core::js_date::format_date_value(value).ok_or_else(|| {
+        ProfileError::new(
+            ProfileCode::ProfileDataInvalid,
+            "Profile import time is invalid.",
+        )
     })
 }
 

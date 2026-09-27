@@ -55,6 +55,7 @@ pub(super) struct RecallSelectionInput<'a> {
     pub(super) compare_locale: &'a dyn Fn(&str, &str) -> std::cmp::Ordering,
 }
 
+/// Selects and ranks recall candidates from every admitted channel.
 pub(super) fn run(request: RecallSelectionInput<'_>) -> CognitionResult<Selection> {
     let RecallSelectionInput {
         graph,
@@ -72,15 +73,7 @@ pub(super) fn run(request: RecallSelectionInput<'_>) -> CognitionResult<Selectio
         parse_date,
         compare_locale,
     } = request;
-    let admitted = input.admitted_channels.clone().unwrap_or_default();
-    let raw = if admitted.lexical {
-        graph.raw_source_candidates(input, candidate_deadline, now_millis)?
-    } else {
-        crate::cognition::graph::RawSourceSelection {
-            sources: vec![],
-            partial: false,
-        }
-    };
+    let raw = lexical_sources(&request)?;
     let inventory: CanonicalInventory = read_canonical_inventory(
         canonical,
         input,
@@ -103,7 +96,7 @@ pub(super) fn run(request: RecallSelectionInput<'_>) -> CognitionResult<Selectio
         candidate_deadline,
         now_millis,
     )?;
-    let temporal = if admitted.context {
+    let temporal = if input.admitted_channels.clone().unwrap_or_default().context {
         graph.temporal_seeds(input, parse_date)?
     } else {
         Default::default()
@@ -135,6 +128,23 @@ pub(super) fn run(request: RecallSelectionInput<'_>) -> CognitionResult<Selectio
     )?;
     selected.vector_current = vector_current;
     Ok(selected)
+}
+
+/// Raw lexical source candidates; none when the lexical channel is not
+/// admitted.
+fn lexical_sources(
+    request: &RecallSelectionInput<'_>,
+) -> CognitionResult<crate::cognition::graph::RawSourceSelection> {
+    let input = request.input;
+    if !input.admitted_channels.clone().unwrap_or_default().lexical {
+        return Ok(crate::cognition::graph::RawSourceSelection {
+            sources: vec![],
+            partial: false,
+        });
+    }
+    request
+        .graph
+        .raw_source_candidates(input, request.candidate_deadline, request.now_millis)
 }
 
 /// The caller session's recent public message ids (none without a canonical

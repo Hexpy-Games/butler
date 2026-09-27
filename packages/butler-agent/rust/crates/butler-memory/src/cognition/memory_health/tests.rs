@@ -63,11 +63,9 @@ pub(super) fn temp_root() -> PathBuf {
     ))
 }
 
-#[tokio::test]
-async fn vector_snapshot_and_maintenance_status_drive_source_diagnostics() {
-    let root = temp_root();
-    let memory = root.join("cognition/memory");
-    let now = epoch_now();
+/// A queued sync row, one legacy chunk and one graph node, with no vector
+/// stats.
+fn seed_legacy_stores(root: &std::path::Path, memory: &std::path::Path) {
     fs::create_dir_all(memory.join("db")).expect("create memory db dir");
     fs::create_dir_all(memory.join("queue")).expect("create queue dir");
     fs::create_dir_all(root.join("cognition/consolidation")).expect("create maintenance dir");
@@ -88,6 +86,14 @@ async fn vector_snapshot_and_maintenance_status_drive_source_diagnostics() {
         )
         .expect("create graph fixture");
     drop(graph);
+}
+
+#[tokio::test]
+async fn vector_snapshot_and_maintenance_status_drive_source_diagnostics() {
+    let root = temp_root();
+    let memory = root.join("cognition/memory");
+    let now = epoch_now();
+    seed_legacy_stores(&root, &memory);
 
     let failed_summary = json!({
         "phase": "summary",
@@ -168,6 +174,40 @@ async fn vector_snapshot_and_maintenance_status_drive_source_diagnostics() {
 #[tokio::test]
 async fn active_generation_serving_health_reads_populated_graph_without_writing() {
     let root = temp_root();
+    let graph_path = seed_active_generation(&root);
+    let before = fs::read(&graph_path).unwrap();
+    let service = MemoryHealthService::new(
+        root.clone(),
+        CognitionPathEnvironment::default(),
+        Arc::new(CognitionWriteCoordinator::new(Arc::new(TestHost)).unwrap()),
+    );
+    let report = service.read_tool(no_profile_coverage()).await.unwrap();
+    let summary = report.summary();
+    let serving = &summary["serving"];
+    assert_eq!(serving["available"], true, "{serving}");
+    assert_eq!(serving["sources"]["registered_current"], 1);
+    assert_eq!(serving["sources"]["inventory_complete"], false);
+    assert_eq!(serving["sources"]["eligible"], serde_json::Value::Null);
+    assert_eq!(
+        serving["sources"]["coverage_percent"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        serving["sources"]["inventory_reason"],
+        "canonical_inventory_unavailable"
+    );
+    assert_eq!(serving["stages"]["semantic_graph"]["failed"], 1);
+    assert_eq!(serving["stages"]["episode_vectors"]["failed"], 1);
+    assert_eq!(serving["source_resolution_failures"], 1);
+    assert_eq!(serving["embedding_version_mismatch"], 1);
+    assert_eq!(serving["graph_revision"], 3);
+    assert_eq!(fs::read(&graph_path).unwrap(), before);
+    fs::remove_dir_all(root).unwrap();
+}
+
+/// An active generation whose graph has one current source with a failed
+/// window and a failed vector unit; the graph path.
+fn seed_active_generation(root: &std::path::Path) -> PathBuf {
     let generation = "11111111-1111-1111-1111-111111111111";
     let memory = root.join("cognition/memory");
     let generation_root = memory.join("generations").join(generation);
@@ -209,46 +249,21 @@ async fn active_generation_serving_health_reads_populated_graph_without_writing(
     )
     .unwrap();
     drop(db);
-    let before = fs::read(&graph_path).unwrap();
-    let service = MemoryHealthService::new(
-        root.clone(),
-        CognitionPathEnvironment::default(),
-        Arc::new(CognitionWriteCoordinator::new(Arc::new(TestHost)).unwrap()),
-    );
-    let report = service
-        .read_tool(crate::profile::ProfileCoverageHealth {
-            available: false,
-            reason: Some("fixture"),
-            consent_mode: "off",
-            processed_windows: 0,
-            pending_windows: 0,
-            failed_windows: 0,
-            stale_history_windows: 0,
-            historical_processed_windows: 0,
-            discovery_incomplete: None,
-            discovery_reason: None,
-        })
-        .await
-        .unwrap();
-    let summary = report.summary();
-    let serving = &summary["serving"];
-    assert_eq!(serving["available"], true, "{serving}");
-    assert_eq!(serving["sources"]["registered_current"], 1);
-    assert_eq!(serving["sources"]["inventory_complete"], false);
-    assert_eq!(serving["sources"]["eligible"], serde_json::Value::Null);
-    assert_eq!(
-        serving["sources"]["coverage_percent"],
-        serde_json::Value::Null
-    );
-    assert_eq!(
-        serving["sources"]["inventory_reason"],
-        "canonical_inventory_unavailable"
-    );
-    assert_eq!(serving["stages"]["semantic_graph"]["failed"], 1);
-    assert_eq!(serving["stages"]["episode_vectors"]["failed"], 1);
-    assert_eq!(serving["source_resolution_failures"], 1);
-    assert_eq!(serving["embedding_version_mismatch"], 1);
-    assert_eq!(serving["graph_revision"], 3);
-    assert_eq!(fs::read(&graph_path).unwrap(), before);
-    fs::remove_dir_all(root).unwrap();
+    graph_path
+}
+
+/// Profile coverage that is unavailable.
+fn no_profile_coverage() -> crate::profile::ProfileCoverageHealth {
+    crate::profile::ProfileCoverageHealth {
+        available: false,
+        reason: Some("fixture"),
+        consent_mode: "off",
+        processed_windows: 0,
+        pending_windows: 0,
+        failed_windows: 0,
+        stale_history_windows: 0,
+        historical_processed_windows: 0,
+        discovery_incomplete: None,
+        discovery_reason: None,
+    }
 }

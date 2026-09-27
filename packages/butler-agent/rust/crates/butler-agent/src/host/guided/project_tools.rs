@@ -139,11 +139,7 @@ impl GuidedProjectTools {
         if name == ToolName::GetWorkDashboard {
             let reader = self.work_records.clone();
             let collation = self.collation.clone();
-            let detail = if args.get("debug") == Some(&Value::Bool(true)) {
-                butler_memory::work_records::DashboardDetail::Debug
-            } else {
-                butler_memory::work_records::DashboardDetail::Public
-            };
+            let detail = dashboard_detail(&args);
             let limit = args.get("limit").and_then(Value::as_f64);
             let mut result =
                 tokio::task::spawn_blocking(move || reader.dashboard(detail, limit, &collation))
@@ -365,4 +361,13 @@ async fn plan_body(
         }
     }
     Ok(result)
+}
+
+/// Debug detail only when the tool call asks for `debug: true`.
+fn dashboard_detail(args: &Map<String, Value>) -> butler_memory::work_records::DashboardDetail {
+    if args.get("debug") == Some(&Value::Bool(true)) {
+        butler_memory::work_records::DashboardDetail::Debug
+    } else {
+        butler_memory::work_records::DashboardDetail::Public
+    }
 }
