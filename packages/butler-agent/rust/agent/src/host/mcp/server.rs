@@ -13,7 +13,7 @@ use serde::Deserialize;
 use tokio_util::sync::CancellationToken;
 
 use super::{graph, model, restart, skills, status, stdio::NonblockingStdio};
-use crate::{ResolvedInstallation, operations};
+use crate::{host::ResolvedInstallation, operations};
 
 pub(super) async fn serve(
     installation: ResolvedInstallation,

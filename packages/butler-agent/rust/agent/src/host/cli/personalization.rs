@@ -93,11 +93,11 @@ impl CliError {
     }
 }
 
-pub fn recognizes(args: &[OsString]) -> bool {
+pub(crate) fn recognizes(args: &[OsString]) -> bool {
     Command::parse(&positionals_without_common_options(args)).is_some()
 }
 
-pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
+pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
     let json_requested = args.iter().any(|arg| arg == "--json");
     let (options, _parsed_command) = match parse(&args) {
         Ok(parsed) => parsed,

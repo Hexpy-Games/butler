@@ -16,15 +16,15 @@ enum Action {
     Version,
 }
 
-pub fn recognizes(args: &[OsString]) -> bool {
+pub(crate) fn recognizes(args: &[OsString]) -> bool {
     args.iter().any(|arg| arg == "--help" || arg == "-h")
         || first_positionals(args)
             .first()
             .is_some_and(|value| matches!(value.as_str(), "help" | "commands" | "version"))
 }
 
-pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
-    let parsed = match parse(&args) {
+pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> ExitCode {
+    let parsed = match parse(args) {
         Ok(value) => value,
         Err(message) => return error(args.iter().any(|arg| arg == "--json"), &message),
     };
@@ -44,7 +44,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
         Action::Commands => json!({"commands": inventory::values(&inventory::all())}),
         Action::Version => {
             let data_root =
-                match settings_cli::resolve_data_root_override(parsed.data, &installation) {
+                match settings_cli::resolve_data_root_override(parsed.data, installation) {
                     Ok(value) => value,
                     Err(message) => return error(parsed.json, &message),
                 };

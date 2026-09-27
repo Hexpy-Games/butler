@@ -21,7 +21,7 @@ use crate::{
     operations::{CycleMetrics, MetricFiles},
 };
 
-pub struct NativeConsolidationCliResult {
+pub(crate) struct NativeConsolidationCliResult {
     pub stdout: String,
     pub stderr: String,
     pub exit_code: u8,
@@ -36,7 +36,7 @@ struct Options {
     resume: bool,
 }
 
-pub async fn run_native_consolidation_cli(
+pub(crate) async fn run_native_consolidation_cli(
     installation: ResolvedInstallation,
     arguments: Vec<OsString>,
 ) -> NativeConsolidationCliResult {

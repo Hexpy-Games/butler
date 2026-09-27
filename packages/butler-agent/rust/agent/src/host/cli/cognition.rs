@@ -104,7 +104,7 @@ impl CliError {
     }
 }
 
-pub fn recognizes(args: &[OsString]) -> bool {
+pub(crate) fn recognizes(args: &[OsString]) -> bool {
     let values = parser::positionals_without_options(args);
     let Some((command, _, _)) = parser::command_prefix(&values) else {
         return false;
@@ -115,7 +115,7 @@ pub fn recognizes(args: &[OsString]) -> bool {
     }
 }
 
-pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
+pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
     let (options, command, prefix) = match parser::parse(&args) {
         Ok(parsed) => parsed,
         Err((name, error, json_requested)) => {

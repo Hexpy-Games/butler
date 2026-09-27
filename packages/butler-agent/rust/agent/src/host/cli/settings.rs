@@ -116,7 +116,7 @@ impl CliError {
     }
 }
 
-pub fn recognizes(args: &[OsString]) -> bool {
+pub(crate) fn recognizes(args: &[OsString]) -> bool {
     let values = positionals_without_common_options(args);
     Command::from_positionals(&values).is_some()
 }
@@ -152,7 +152,7 @@ pub(in crate::host) fn validate_absolute_data_mutation_paths(
         .map_err(|error| error.message)
 }
 
-pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
+pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
     let json_requested = args.iter().any(|arg| arg == "--json");
     let parsed = parse(&args);
     let (options, command) = match parsed {

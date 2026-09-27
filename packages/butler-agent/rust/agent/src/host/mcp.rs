@@ -22,7 +22,7 @@ struct Options {
     positionals: Vec<String>,
 }
 
-pub fn recognizes(args: &[OsString]) -> bool {
+pub(crate) fn recognizes(args: &[OsString]) -> bool {
     if registry_cli::recognizes(args) {
         return true;
     }
@@ -44,7 +44,7 @@ pub fn recognizes(args: &[OsString]) -> bool {
     positionals.as_slice() == ["mcp", "serve"]
 }
 
-pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
+pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
     if registry_cli::recognizes(&args) {
         return Box::pin(registry_cli::run(installation, args)).await;
     }

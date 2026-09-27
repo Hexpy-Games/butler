@@ -18,7 +18,9 @@ use crate::host::ResolvedInstallation;
 use crate::host::SystemIdentity;
 use crate::host::installation::realpath_or_nearest;
 
-pub async fn run_native_oauth_login(installation: ResolvedInstallation) -> Result<(), String> {
+pub(crate) async fn run_native_oauth_login(
+    installation: ResolvedInstallation,
+) -> Result<(), String> {
     let user_home = std::env::var_os("HOME")
         .filter(|home| !home.is_empty())
         .map(PathBuf::from)

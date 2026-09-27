@@ -2,7 +2,7 @@ use serde_json::json;
 
 use super::Options;
 
-pub struct NativeSkillCliResult {
+pub(crate) struct NativeSkillCliResult {
     pub stdout: String,
     pub stderr: String,
     pub exit_code: u8,

@@ -79,7 +79,7 @@ impl CliError {
     }
 }
 
-pub fn recognizes(args: &[OsString]) -> bool {
+pub(crate) fn recognizes(args: &[OsString]) -> bool {
     let positionals = positionals_without_options(args);
     matches!(positionals.first().map(String::as_str), Some("context"))
         || matches!(
@@ -88,7 +88,7 @@ pub fn recognizes(args: &[OsString]) -> bool {
         )
 }
 
-pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
+pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
     let json_requested = args.iter().any(|arg| arg == "--json");
     let (options, command) = match parse(&args) {
         Ok(parsed) => parsed,

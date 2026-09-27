@@ -36,7 +36,9 @@ use support::{close_runtime, failure, io, process_locale};
 const INBOUND_QUEUE_FALLBACK_POLL: Duration = Duration::from_millis(500);
 
 /// The product binary's sole entrypoint; domains remain crate-private.
-pub async fn run_native_service(installation: ResolvedInstallation) -> Result<String, String> {
+pub(crate) async fn run_native_service(
+    installation: ResolvedInstallation,
+) -> Result<String, String> {
     run(installation, None, None, ServiceLogMode::desktop())
         .await
         .map_err(|error| format!("{}: {}", error.code(), error.message()))

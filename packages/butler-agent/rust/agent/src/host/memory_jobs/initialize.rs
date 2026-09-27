@@ -15,7 +15,7 @@ use crate::host::ResolvedInstallation;
 use crate::host::SystemIdentity;
 use crate::host::cli::consolidation::NativeConsolidationCliResult;
 
-pub async fn run(
+pub(crate) async fn run(
     installation: ResolvedInstallation,
     arguments: Vec<OsString>,
 ) -> NativeConsolidationCliResult {

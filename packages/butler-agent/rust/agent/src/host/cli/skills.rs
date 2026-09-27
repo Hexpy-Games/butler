@@ -11,7 +11,7 @@ use crate::host::ResolvedInstallation;
 use crate::skills::{NativeSkills, SkillError, SkillSettingsView, StagedSkillArchive};
 use output::{CommandError, failure, render_error, render_success};
 
-pub use output::NativeSkillCliResult;
+pub(crate) use output::NativeSkillCliResult;
 
 struct Options {
     args: Vec<String>,
@@ -20,7 +20,7 @@ struct Options {
     quiet: bool,
 }
 
-pub async fn run_native_skills_cli(
+pub(crate) async fn run_native_skills_cli(
     installation: ResolvedInstallation,
     raw_args: Vec<OsString>,
 ) -> NativeSkillCliResult {

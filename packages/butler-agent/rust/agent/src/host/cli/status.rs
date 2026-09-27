@@ -43,7 +43,7 @@ impl Command {
     }
 }
 
-pub fn recognizes(args: &[OsString]) -> bool {
+pub(crate) fn recognizes(args: &[OsString]) -> bool {
     let mut index = 0;
     while index < args.len() {
         let value = args[index].to_string_lossy();
@@ -68,7 +68,7 @@ pub fn recognizes(args: &[OsString]) -> bool {
     false
 }
 
-pub async fn run_native_status_cli(
+pub(crate) async fn run_native_status_cli(
     installation: ResolvedInstallation,
     args: Vec<OsString>,
 ) -> ExitCode {

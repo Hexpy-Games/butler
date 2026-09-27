@@ -17,7 +17,7 @@ const MAX_TEXTS: usize = 32;
 const IDLE_EXIT: Duration = Duration::from_secs(15 * 60);
 
 /// Called only by main's hidden private entrypoint, before normal installation.
-pub async fn run() -> std::process::ExitCode {
+pub(crate) async fn run() -> std::process::ExitCode {
     let data_root = std::env::var_os("BUTLER_DATA")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".butler")));

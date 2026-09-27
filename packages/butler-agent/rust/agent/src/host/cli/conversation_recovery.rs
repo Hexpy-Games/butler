@@ -25,7 +25,7 @@ struct Options {
     write: bool,
 }
 
-pub fn recognizes(args: &[OsString]) -> bool {
+pub(crate) fn recognizes(args: &[OsString]) -> bool {
     let mut positionals = Vec::new();
     let mut index = 0;
     while index < args.len() {
@@ -41,7 +41,7 @@ pub fn recognizes(args: &[OsString]) -> bool {
     matches!(positionals.as_slice(), [conversation, recovery, ..] if conversation == "conversation" && recovery == "historical-recovery")
 }
 
-pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
+pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
     let options = match parse(&args) {
         Ok(Some(options)) => options,
         Ok(None) => {

@@ -12,6 +12,19 @@ use chrono::{DateTime, Timelike};
 const MILLIS_PER_DAY: i64 = 86_400_000;
 const TIME_CLIP: i64 = 8_640_000_000_000_000;
 
+/// `Date.prototype.toISOString` for a system time (millisecond precision).
+pub(crate) fn iso_from_system_time(time: std::time::SystemTime) -> String {
+    let millis = match time.duration_since(std::time::UNIX_EPOCH) {
+        Ok(after) => i64::try_from(after.as_millis()).unwrap_or(i64::MAX),
+        Err(before) => {
+            i64::try_from(before.duration().as_millis()).map_or(i64::MIN, |millis| -millis)
+        }
+    };
+    // Any representable system time is within the ECMAScript time clip in
+    // practice; clamp so the formatter always has a value.
+    format_iso_millis(millis.clamp(-TIME_CLIP, TIME_CLIP)).unwrap_or_default()
+}
+
 pub(crate) fn format_iso_millis(value: i64) -> Option<String> {
     if !(-TIME_CLIP..=TIME_CLIP).contains(&value) {
         return None;

@@ -33,7 +33,7 @@ struct Options {
     positionals: Vec<String>,
 }
 
-pub fn recognizes(args: &[OsString]) -> bool {
+pub(crate) fn recognizes(args: &[OsString]) -> bool {
     let mut index = 0;
     while index < args.len() {
         let arg = args[index].to_string_lossy();
@@ -46,7 +46,7 @@ pub fn recognizes(args: &[OsString]) -> bool {
     false
 }
 
-pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
+pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
     let json_requested = args.iter().any(|arg| arg == "--json");
     let options = match parse(&args) {
         Ok(options) => options,

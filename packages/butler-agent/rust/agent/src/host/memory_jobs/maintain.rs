@@ -36,7 +36,7 @@ struct Options {
     command: String,
 }
 
-pub async fn run(
+pub(crate) async fn run(
     installation: ResolvedInstallation,
     arguments: Vec<OsString>,
 ) -> NativeConsolidationCliResult {

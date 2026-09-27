@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-pub struct NativeWorkCliResult {
+pub(crate) struct NativeWorkCliResult {
     pub stdout: String,
     pub stderr: String,
     pub exit_code: u8,

@@ -34,7 +34,7 @@ use crate::host::memory_jobs::maintain::signals;
 use crate::cognition::CognitionCode;
 use options::{Operation, parse};
 
-pub async fn run(
+pub(crate) async fn run(
     installation: ResolvedInstallation,
     arguments: Vec<OsString>,
 ) -> NativeConsolidationCliResult {

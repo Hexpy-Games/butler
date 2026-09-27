@@ -1,7 +1,12 @@
+//! One module per `butler-agent` command family; [`command`] classifies argv
+//! and dispatches to them.
+
 #[cfg(unix)]
 pub(super) mod automation;
 #[cfg(unix)]
 pub(super) mod cognition;
+#[cfg(unix)]
+pub(crate) mod command;
 #[cfg(unix)]
 pub(super) mod consolidation;
 #[cfg(unix)]

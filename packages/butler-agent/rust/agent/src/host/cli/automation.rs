@@ -93,15 +93,15 @@ impl CliError {
     }
 }
 
-pub fn recognizes(args: &[OsString]) -> bool {
+pub(crate) fn recognizes(args: &[OsString]) -> bool {
     positionals_without_options(args)
         .first()
         .is_some_and(|value| value == "automation")
 }
 
-pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
+pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> ExitCode {
     let json_requested = args.iter().any(|arg| arg == "--json");
-    let options = match parse(&args) {
+    let options = match parse(args) {
         Ok(options) => options,
         Err((command, error)) => return report_error(command, json_requested, &error),
     };
@@ -155,7 +155,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
         );
     }
     let Ok(data_root) =
-        settings_cli::resolve_data_root_override(options.data.clone(), &installation)
+        settings_cli::resolve_data_root_override(options.data.clone(), installation)
     else {
         return report_error(
             command.name(),
@@ -175,8 +175,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
             let record_path = format!("automations/{}.json", id.trim());
             let mut paths = STORE_MUTATION_PATHS.to_vec();
             paths.push(&record_path);
-            if settings_cli::validate_data_mutation_paths(&data_root, &installation, &paths)
-                .is_err()
+            if settings_cli::validate_data_mutation_paths(&data_root, installation, &paths).is_err()
             {
                 return report_error(
                     command.name(),

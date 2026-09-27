@@ -55,7 +55,7 @@ pub(crate) use crate::host::guided::work_tools::NativeGuidedWorkTools;
 pub(crate) use crate::host::service::conversation_observer::NativeConversationObserver;
 mod app;
 mod automation;
-mod cli;
+pub(crate) mod cli;
 mod embedding;
 mod guided;
 mod memory_jobs;
@@ -69,99 +69,30 @@ pub(crate) use crate::host::time::date_parser::NativeDateParser;
 pub(crate) use crate::host::app::gateway_lifecycle::NativeActiveAppEndpoint;
 #[cfg(unix)]
 pub(crate) use crate::host::embedding::owner::NativeEmbeddingOwner;
-#[cfg(unix)]
-pub use crate::host::embedding::worker::run as run_private_embedding_worker;
 pub(crate) use crate::host::guided::tool_output::native_tool_output;
 
-#[cfg(unix)]
-pub use crate::host::cli::automation::recognizes as native_automation_cli_recognizes;
-pub use crate::host::cli::automation::run as run_native_automation_cli;
-#[cfg(unix)]
-pub use crate::host::cli::cognition::recognizes as native_cognition_operator_cli_recognizes;
-pub use crate::host::cli::cognition::run as run_native_cognition_operator_cli;
-#[cfg(unix)]
-pub use crate::host::cli::consolidation::NativeConsolidationCliResult;
-pub use crate::host::cli::consolidation::run_native_consolidation_cli;
-#[cfg(unix)]
-pub use crate::host::cli::context::recognizes as native_context_cli_recognizes;
-pub use crate::host::cli::context::run as run_native_context_cli;
-#[cfg(unix)]
-pub use crate::host::cli::conversation_recovery::recognizes as native_conversation_recovery_cli_recognizes;
-pub use crate::host::cli::conversation_recovery::run as run_native_conversation_recovery_cli;
-#[cfg(unix)]
-pub use crate::host::cli::doctor::recognizes as native_doctor_cli_recognizes;
-pub use crate::host::cli::doctor::run as run_native_doctor_cli;
-#[cfg(unix)]
-pub use crate::host::cli::gateway::recognizes as native_gateway_cli_recognizes;
-pub use crate::host::cli::gateway::run as run_native_gateway_cli;
-#[cfg(unix)]
-pub use crate::host::cli::oauth_login::run_native_oauth_login;
-#[cfg(unix)]
-pub use crate::host::cli::observability::recognizes as native_observability_cli_recognizes;
-pub use crate::host::cli::observability::run as run_native_observability_cli;
-#[cfg(unix)]
-pub use crate::host::cli::personalization::recognizes as native_personalization_cli_recognizes;
-pub use crate::host::cli::personalization::run as run_native_personalization_cli;
-#[cfg(unix)]
-pub use crate::host::cli::public::recognizes as native_public_cli_recognizes;
-pub use crate::host::cli::public::run as run_native_public_cli;
-#[cfg(unix)]
-pub use crate::host::cli::service::recognizes as native_service_cli_recognizes;
-pub use crate::host::cli::service::run_native_service_cli;
-#[cfg(unix)]
-pub use crate::host::cli::settings::recognizes as native_settings_cli_recognizes;
-pub use crate::host::cli::settings::run as run_native_settings_cli;
-#[cfg(unix)]
-pub use crate::host::cli::skills::NativeSkillCliResult;
-pub use crate::host::cli::skills::run_native_skills_cli;
-#[cfg(unix)]
-pub use crate::host::cli::status::recognizes as native_status_cli_recognizes;
-pub use crate::host::cli::status::run_native_status_cli;
-#[cfg(unix)]
-pub use crate::host::cli::transport::recognizes as native_transport_cli_recognizes;
-pub use crate::host::cli::transport::run as run_native_transport_cli;
-#[cfg(unix)]
-pub use crate::host::cli::update::recognizes as native_update_cli_recognizes;
-pub use crate::host::cli::update::run as run_native_update_cli;
-#[cfg(unix)]
-pub use crate::host::cli::web_access::recognizes as native_web_access_cli_recognizes;
-pub use crate::host::cli::web_access::run as run_native_web_access_cli;
-#[cfg(unix)]
-pub use crate::host::cli::work::NativeWorkCliResult;
-pub use crate::host::cli::work::recognizes as native_work_cli_recognizes;
-pub use crate::host::cli::work::run as run_native_work_cli;
 pub(crate) use crate::host::guided::active_plan::NativeAcceptedPlanProducer;
 pub(crate) use crate::host::guided::vision::NativeZaiVisionCapability;
 pub(crate) use crate::host::guided::vision::catalog_for_visual_admission;
 pub(crate) use crate::host::guided::work_streams::NativeWorkStreams;
 #[cfg(unix)]
 pub(crate) use crate::host::guided::worker_profiles::NativeWorkerProfileReader;
-#[cfg(unix)]
-pub use crate::host::memory_jobs::initialize::run as run_native_memory_initialize_cli;
-#[cfg(unix)]
-pub use crate::host::memory_jobs::maintain::run as run_native_memory_maintain_cli;
 pub(crate) use crate::host::memory_jobs::profile_sources::ProfileConversationSources;
-#[cfg(unix)]
-pub use crate::host::memory_jobs::rebuild::run as run_native_memory_rebuild_cli;
 pub(crate) use crate::host::runtime::environment::NativeProcessEnvironment;
 pub(crate) use crate::host::runtime::models::NativeProcessModels;
 pub(crate) use crate::host::runtime::storage_bootstrap::prepare_btcc_storage;
 pub(crate) use crate::host::service::configuration::NativeServiceConfiguration;
 pub(crate) use crate::host::service::configuration::require_model_ref;
-#[cfg(unix)]
-pub use crate::host::service::entrypoint::run_native_service;
 pub(crate) use crate::host::service::progress_publisher::NativeProgressPublisher;
 pub(crate) use crate::host::time::prompt_clock::NativePromptClock;
 #[cfg(unix)]
-pub use installation::ResolvedInstallation;
-#[cfg(unix)]
-pub use mcp::{recognizes as native_mcp_cli_recognizes, run as run_native_mcp_cli};
+pub(crate) use installation::ResolvedInstallation;
 pub(crate) use runtime::{NativeAgentRuntime, NativeRuntimePaths};
 
 use std::time::{Duration, SystemTime};
 
 use crate::js_date as date;
-use chrono::{DateTime, Datelike, Timelike, Utc};
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::conversation::ConversationIdentityClock;
@@ -189,7 +120,7 @@ impl crate::profile::ProfileHostFacts for SystemIdentity {
         crate::models::ModelConfigurationClock::now_epoch_millis(self)
     }
     fn now_iso(&self) -> String {
-        iso_timestamp(SystemTime::now())
+        date::iso_from_system_time(SystemTime::now())
     }
     fn process_status(&self, pid: f64) -> crate::coordination::CognitionProcessStatus {
         crate::host::runtime::process_probe::profile_process_status(pid)
@@ -198,7 +129,7 @@ impl crate::profile::ProfileHostFacts for SystemIdentity {
 
 impl crate::models::ModelConfigurationClock for SystemIdentity {
     fn now_iso(&self) -> String {
-        iso_timestamp(SystemTime::now())
+        date::iso_from_system_time(SystemTime::now())
     }
     fn now_epoch_millis(&self) -> i64 {
         let now: DateTime<Utc> = SystemTime::now().into();
@@ -232,7 +163,7 @@ impl ConversationIdentityClock for SystemIdentity {
     }
 
     fn now_iso(&self) -> String {
-        iso_timestamp(SystemTime::now())
+        date::iso_from_system_time(SystemTime::now())
     }
 }
 
@@ -242,33 +173,12 @@ impl AppIdentityClock for SystemIdentity {
     }
 
     fn now_iso(&self) -> String {
-        iso_timestamp(SystemTime::now())
+        date::iso_from_system_time(SystemTime::now())
     }
 
     fn iso_after_millis(&self, millis: u64) -> String {
-        iso_timestamp(SystemTime::now() + Duration::from_millis(millis))
+        date::iso_from_system_time(SystemTime::now() + Duration::from_millis(millis))
     }
-}
-
-fn iso_timestamp(time: SystemTime) -> String {
-    let date: DateTime<Utc> = time.into();
-    let year = date.year();
-    // Date.toISOString uses six year digits with an explicit sign outside
-    // 0000..9999. RFC3339's formatter uses a different extended-year width.
-    let year = if (0..=9999).contains(&year) {
-        format!("{year:04}")
-    } else {
-        format!("{year:+07}")
-    };
-    format!(
-        "{year}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
-        date.month(),
-        date.day(),
-        date.hour(),
-        date.minute(),
-        date.second(),
-        date.timestamp_subsec_millis()
-    )
 }
 
 #[cfg(test)]
@@ -291,7 +201,7 @@ mod tests {
                 SystemTime::UNIX_EPOCH
                     + Duration::from_millis(u64::try_from(millis).unwrap_or_default())
             };
-            assert_eq!(iso_timestamp(time), expected);
+            assert_eq!(date::iso_from_system_time(time), expected);
         }
     }
 }

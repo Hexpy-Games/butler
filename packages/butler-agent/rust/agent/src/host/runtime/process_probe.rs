@@ -43,7 +43,7 @@ impl CognitionCoordinationHost for SystemIdentity {
     }
 
     fn now_iso(&self) -> String {
-        crate::host::iso_timestamp(std::time::SystemTime::now())
+        crate::js_date::iso_from_system_time(std::time::SystemTime::now())
     }
 }
 

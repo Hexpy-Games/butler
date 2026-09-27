@@ -7,17 +7,16 @@ use std::{
 };
 
 use crate::{
-    ResolvedInstallation,
     btcc::{
         BtccStorage, BtccStorageConfig, ProcessLiveness, RuntimeOwnerIdentity, StorageActivation,
         StorageEffectJournal, StorageProfile, ToolJournalRepository,
         read_activated_storage_manifest,
     },
     coordination::CognitionCoordinationHost,
+    host::ResolvedInstallation,
 };
 
 use crate::host::SystemIdentity;
-use crate::host::iso_timestamp;
 use crate::host::service::instance::RestartIdentity;
 
 pub(crate) struct NativeRestartHandoff {
@@ -120,7 +119,7 @@ pub(crate) async fn record_helper_terminal(
     .map_err(|_| "restart_handoff_journal_unavailable".to_owned())?;
     let journal = StorageEffectJournal::new(
         storage.clone(),
-        Arc::new(|| iso_timestamp(SystemTime::now())),
+        Arc::new(|| crate::js_date::iso_from_system_time(SystemTime::now())),
     );
     let result = journal
         .finish_restart_handoff(intent_id.to_owned(), state)

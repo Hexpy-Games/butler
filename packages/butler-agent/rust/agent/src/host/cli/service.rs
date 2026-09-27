@@ -45,7 +45,7 @@ impl Action {
     }
 }
 
-pub fn recognizes(args: &[OsString]) -> bool {
+pub(crate) fn recognizes(args: &[OsString]) -> bool {
     let mut index = 0;
     let mut saw_option = false;
     while index < args.len() {
@@ -68,7 +68,7 @@ pub fn recognizes(args: &[OsString]) -> bool {
     saw_option
 }
 
-pub async fn run_native_service_cli(
+pub(crate) async fn run_native_service_cli(
     installation: ResolvedInstallation,
     args: Vec<OsString>,
 ) -> ExitCode {

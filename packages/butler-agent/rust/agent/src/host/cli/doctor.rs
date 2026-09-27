@@ -32,7 +32,7 @@ struct Options {
     positionals: Vec<String>,
 }
 
-pub fn recognizes(args: &[OsString]) -> bool {
+pub(crate) fn recognizes(args: &[OsString]) -> bool {
     let mut index = 0;
     while index < args.len() {
         match args[index].to_string_lossy().as_ref() {
@@ -48,13 +48,13 @@ pub fn recognizes(args: &[OsString]) -> bool {
     false
 }
 
-pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
+pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> ExitCode {
     let json_requested = args.iter().any(|arg| arg == "--json");
-    let options = match parse(&args) {
+    let options = match parse(args) {
         Ok(options) => options,
         Err((code, message)) => return report_error(json_requested, code, &message, 2),
     };
-    let data = match settings_cli::resolve_data_root_override(options.data.clone(), &installation) {
+    let data = match settings_cli::resolve_data_root_override(options.data.clone(), installation) {
         Ok(data) => data,
         Err(error) => return report_error(options.json, "unsafe_path", &error, 1),
     };
@@ -64,31 +64,31 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
         || requested == Some("payload")
         || requested == Some("installation")
     {
-        checks.push(executable_check(&installation));
+        checks.push(executable_check(installation));
     }
     if selected(requested, "resources")
         || requested == Some("payload")
         || requested == Some("installation")
     {
-        checks.push(resources_check(&installation));
+        checks.push(resources_check(installation));
     }
     if selected(requested, "version")
         || requested == Some("payload")
         || requested == Some("installation")
     {
-        checks.push(version_check(&installation));
+        checks.push(version_check(installation));
     }
     if selected(requested, "integrity")
         || requested == Some("payload")
         || requested == Some("installation")
     {
-        checks.push(digest_check(&installation));
+        checks.push(digest_check(installation));
     }
     if selected(requested, "data") {
         checks.push(data_check(&data));
     }
     if selected(requested, "owned_service") || requested == Some("service") {
-        checks.push(owned_service_check(&data, &installation));
+        checks.push(owned_service_check(&data, installation));
     }
     let healthy = checks.iter().all(|check| check.status == "pass");
     let report = json!({

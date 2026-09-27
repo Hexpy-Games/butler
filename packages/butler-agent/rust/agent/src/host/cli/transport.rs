@@ -67,20 +67,20 @@ impl CliError {
     }
 }
 
-pub fn recognizes(args: &[OsString]) -> bool {
+pub(crate) fn recognizes(args: &[OsString]) -> bool {
     let values = positionals_without_options(args);
     matches!(values.first().map(String::as_str), Some("transport"))
         && matches!(values.get(1).map(String::as_str), Some("status" | "test"))
 }
 
-pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
+pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> ExitCode {
     let json_requested = args.iter().any(|arg| arg == "--json");
-    let (options, command) = match parse(&args) {
+    let (options, command) = match parse(args) {
         Ok(parsed) => parsed,
-        Err(error) => return report_error(error_command(&args), json_requested, &error),
+        Err(error) => return report_error(error_command(args), json_requested, &error),
     };
     if let Err(message) =
-        settings_cli::resolve_data_root_override(options.data.clone(), &installation)
+        settings_cli::resolve_data_root_override(options.data.clone(), installation)
     {
         return report_error(
             command.name(),
