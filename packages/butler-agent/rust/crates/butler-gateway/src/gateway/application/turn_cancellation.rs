@@ -76,16 +76,7 @@ impl AppApplication {
                     ));
                 }
                 let tx = db.transaction().map_err(AppStorageError::sqlite)?;
-                tx.execute(
-                    "UPDATE turns SET state='cancelling',safe_status_label='Stopping',safe_error_code=NULL,retryable=0,cancellable=0,updated_at=?1 WHERE id=?2 AND state NOT IN ('cancelled','delivered','failed','runtime_fault')",
-                    params![stored_at, turn],
-                )
-                .map_err(AppStorageError::sqlite)?;
-                tx.execute(
-                    "INSERT INTO app_turn_cancel_outbox(turn_id,queue_id,dispatch_claim_id,state,created_at) VALUES(?1,NULL,NULL,'pending',?2) ON CONFLICT(turn_id) DO NOTHING",
-                    params![turn, stored_at],
-                )
-                .map_err(AppStorageError::sqlite)?;
+                mark_cancelling(&tx, &row.0, &turn, &stored_at)?;
                 let queued = tx
                     .query_row(
                         "SELECT queue_id FROM app_turn_cancel_outbox WHERE turn_id=?1",
@@ -156,4 +147,26 @@ impl AppApplication {
             .await
             .map_err(app_error)
     }
+}
+
+/// Marks the turn cancelling, queues its cancel outbox entry and pauses the
+/// session queue: a user's Stop holds queued messages until the user sends
+/// again.
+fn mark_cancelling(
+    tx: &rusqlite::Transaction<'_>,
+    chat_id: &str,
+    turn_id: &str,
+    now: &str,
+) -> Result<(), AppStorageError> {
+    tx.execute(
+        "UPDATE turns SET state='cancelling',safe_status_label='Stopping',safe_error_code=NULL,retryable=0,cancellable=0,updated_at=?1 WHERE id=?2 AND state NOT IN ('cancelled','delivered','failed','runtime_fault')",
+        params![now, turn_id],
+    )
+    .map_err(AppStorageError::sqlite)?;
+    tx.execute(
+        "INSERT INTO app_turn_cancel_outbox(turn_id,queue_id,dispatch_claim_id,state,created_at) VALUES(?1,NULL,NULL,'pending',?2) ON CONFLICT(turn_id) DO NOTHING",
+        params![turn_id, now],
+    )
+    .map_err(AppStorageError::sqlite)?;
+    queue::pause(tx, chat_id, turn_id, now)
 }

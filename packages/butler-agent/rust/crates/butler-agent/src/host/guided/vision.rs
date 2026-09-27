@@ -39,6 +39,10 @@ impl ProviderVisualCapabilityPort for ZaiVisionCapability {
 /// Returns current public model facts and freezes the live Z.AI image carrier
 /// digest into the existing admitted catalog entry. No provider request or
 /// model credential resolution is performed here.
+///
+/// The models are the ones the App lets the user select: the registered
+/// models when any are registered, otherwise the whole catalog (a
+/// subscription-only setup registers none).
 pub(crate) async fn catalog_for_visual_admission(
     models: &ModelConfiguration,
     mcp: &McpClient,
@@ -48,7 +52,12 @@ pub(crate) async fn catalog_for_visual_admission(
         .read()
         .await
         .map_err(GatewayApplicationError::internal_from)?;
-    let mut catalog = read.catalog.view().registered_models.clone();
+    let view = read.catalog.view();
+    let mut catalog = if view.registered_models.is_empty() {
+        view.models.clone()
+    } else {
+        view.registered_models.clone()
+    };
     let Some(entry) = catalog
         .iter_mut()
         .find(|entry| entry.model_ref == model_ref)

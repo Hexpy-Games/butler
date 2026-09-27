@@ -12,6 +12,7 @@
 use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::HarnessError;
+use butler_e2e::e2e::cassette::Cassette;
 use butler_e2e::e2e::events::{LiveEvents, event_turn_id};
 use butler_e2e::e2e::gateway::{TERMINAL, turn_state};
 use butler_e2e::e2e::provider::Pacing;
@@ -44,6 +45,23 @@ fn turn_states(events: &[Value], turn_id: &str) -> Vec<String> {
                 .to_owned()
         })
         .collect()
+}
+
+/// The answer text of the first exchange of `cassette`, whitespace as recorded.
+fn recorded_answer(cassette: &str) -> Result<String, HarnessError> {
+    Ok(Cassette::load(cassette)?
+        .exchanges
+        .first()
+        .map(|exchange| exchange.response.output_text())
+        .unwrap_or_default())
+}
+
+/// `text` is a non-empty prefix of the recorded `answer`, whitespace included.
+fn assert_streamed_prefix(text: &str, answer: &str) {
+    assert!(
+        !text.is_empty() && answer.starts_with(text),
+        "streamed {text:?} is not a prefix of the recorded answer {answer:?}"
+    );
 }
 
 fn by_role<'a>(messages: &'a [Value], role: &str) -> Vec<&'a Value> {
@@ -170,7 +188,6 @@ async fn turn_01_reply_is_delivered_persisted_and_survives_restart() -> Result<(
 
 /// TURN-01 (streaming part) — the UI receives incremental text.
 #[tokio::test]
-#[ignore = "product gap: TURN-01-STREAM — the Rust runtime emits no model.stream.text_delta / message.final.delta events; the UI gets the answer only as one message.created"]
 async fn turn_01_reply_is_streamed_incrementally() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("TURN-01-STREAM")?
@@ -191,6 +208,29 @@ async fn turn_01_reply_is_streamed_incrementally() -> Result<(), HarnessError> {
         })
         .count();
     assert!(deltas > 1, "expected streamed text deltas, saw {deltas}");
+    // The provisional message grows through prefixes of the recorded answer,
+    // whitespace included, and the delivered answer is the recorded one.
+    let turn_id = butler_e2e::e2e::gateway::turn_id_of(&turn).unwrap_or_default();
+    let answer = recorded_answer("TURN-01")?;
+    let streamed: Vec<String> = live
+        .snapshot()
+        .iter()
+        .map(|event| &event["payload"]["message"])
+        .filter(|message| message["turn_id"] == turn_id && message["status"] == "streaming")
+        .map(|message| message["text"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert!(streamed.len() > 1, "{streamed:?}");
+    for text in &streamed {
+        assert_streamed_prefix(text, &answer);
+    }
+    assert!(
+        streamed.iter().any(|text| text.contains(' ')),
+        "{streamed:?}"
+    );
+    let messages = s.gw.messages("general").await?;
+    let replies = by_role(&messages, "assistant");
+    assert_eq!(replies.len(), 1, "{messages:?}");
+    assert_eq!(replies[0]["text"], answer.trim());
     s.finish().await
 }
 
@@ -331,7 +371,6 @@ async fn turn_03_stop_mid_stream() -> Result<(), HarnessError> {
 
 /// TURN-03 (partial text) — owner decision: keep the partial text, marked stopped.
 #[tokio::test]
-#[ignore = "product gap: TURN-03-PARTIAL — after Stop mid-stream no partial assistant text is kept; the owner decided partial text stays, marked stopped"]
 async fn turn_03_stop_keeps_partial_text_marked_stopped() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("TURN-03-PARTIAL")?
@@ -358,8 +397,11 @@ async fn turn_03_stop_keeps_partial_text_marked_stopped() -> Result<(), HarnessE
         .iter()
         .find(|message| message["role"] == "assistant" && message["turn_id"] == turn_id.as_str());
     let partial = partial.expect("partial assistant text kept after Stop");
-    assert!(!partial["text"].as_str().unwrap_or_default().is_empty());
-    assert_ne!(partial["status"], "delivered");
+    assert_streamed_prefix(
+        partial["text"].as_str().unwrap_or_default(),
+        &recorded_answer("TURN-03")?,
+    );
+    assert_eq!(partial["status"], "cancelled", "{partial}");
     s.finish().await
 }
 

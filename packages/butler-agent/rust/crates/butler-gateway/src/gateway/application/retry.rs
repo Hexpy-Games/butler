@@ -12,7 +12,15 @@ use super::{
 use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::{MessageSendRequest, MessageSendResult};
 use butler_turn::btcc::SubsessionResultContext;
-use source::{current_controls_retry_source, retry_snapshot, verified_execution_controls};
+use source::{
+    current_controls_retry_source, reservation, retry_snapshot, verified_execution_controls,
+};
+
+/// Safe error code of a turn a crashed service process was running. Such a
+/// turn is failed and retryable; `/retry` resumes it (owner decision: never
+/// resumed automatically). `/retry-current` refuses it: a fresh turn could
+/// run the interrupted turn's completed tool effects again.
+pub(super) const INTERRUPTED_TURN_CODE: &str = "turn_interrupted";
 
 impl AppApplication {
     pub(super) async fn retry_turn_owned(
@@ -38,27 +46,14 @@ impl AppApplication {
                     let snapshot = retry_snapshot(&transaction, &operation_turn)?;
                     let (verified, controls) = verified_execution_controls(&snapshot)?;
                     let status_label = retry_status_label(verified.subsession_result.as_ref());
-                    let attempt = snapshot.attempt.saturating_add(1);
-                    let changed = transaction
-                        .execute(
-                            "UPDATE turns SET state='retrying',safe_status_label=?1,\
-                         safe_status_label_key=NULL,safe_status_label_parameters_json=NULL,\
-                         safe_status_content_json=NULL,safe_error_code=NULL,retryable=0,\
-                         cancellable=?2,attempt=?3,updated_at=?4 \
-                         WHERE id=?5 AND state='runtime_fault' AND retryable=1 AND attempt=?6",
-                            params![
-                                status_label,
-                                verified.subsession_result.is_none(),
-                                attempt,
-                                now,
-                                operation_turn,
-                                snapshot.attempt
-                            ],
-                        )
-                        .map_err(AppStorageError::sqlite)?;
-                    if changed != 1 {
-                        return Err(not_retryable_error());
-                    }
+                    mark_retrying(
+                        &transaction,
+                        &operation_turn,
+                        &status_label,
+                        verified.subsession_result.is_none(),
+                        snapshot.attempt,
+                        &now,
+                    )?;
                     let turn = read_model::exact_turn(&transaction, &operation_turn)?.ok_or_else(
                         || AppStorageError::new(AppStorageCode::TurnNotFound, "Turn not found."),
                     )?;
@@ -78,22 +73,7 @@ impl AppApplication {
                         &now,
                     )?;
 
-                    let reservation = queue::QueueReservation {
-                        id: queue_id.clone(),
-                        chat_id: snapshot.chat_id.clone(),
-                        text: snapshot.text.clone(),
-                        client_message_id: format!(
-                            "retry-{operation_turn}-{}",
-                            snapshot.attempt.saturating_add(1)
-                        ),
-                        input_identity_digest: snapshot.input_identity_digest.clone(),
-                        control_resolution_json: snapshot.control_resolution_json,
-                        controls_json: snapshot.controls_json,
-                        attachments_json: snapshot.attachments_json,
-                        content_parts_json: snapshot.content_parts_json,
-                        project_source_refs_json: snapshot.project_source_refs_json,
-                        created_at: now.clone(),
-                    };
+                    let reservation = reservation(&snapshot, &queue_id, &now);
                     queue::reserve(&transaction, &reservation)?;
                     let requested_claim = queue::QueueClaim {
                         queued_message_id: queue_id,
@@ -102,8 +82,14 @@ impl AppApplication {
                         claim_owner,
                         lease_expires_at,
                     };
-                    let claim = queue::claim(&transaction, &requested_claim, &now, &subscribers)?
-                        .ok_or_else(|| {
+                    let claim = queue::claim(
+                        &transaction,
+                        &requested_claim,
+                        queue::ClaimOrder::Immediate,
+                        &now,
+                        &subscribers,
+                    )?
+                    .ok_or_else(|| {
                         AppStorageError::new(
                             AppStorageCode::TurnRetryDispatchBusy,
                             "The session already has a message being dispatched.",
@@ -180,6 +166,42 @@ impl AppApplication {
             source.user_message_id,
         )
         .await
+    }
+}
+
+/// Moves a retryable turn (a runtime fault or a crash interruption) at
+/// `attempt` to retrying at the next attempt.
+fn mark_retrying(
+    db: &Connection,
+    turn_id: &str,
+    status_label: &str,
+    cancellable: bool,
+    attempt: u64,
+    now: &str,
+) -> Result<(), AppStorageError> {
+    let changed = db
+        .execute(
+            "UPDATE turns SET state='retrying',safe_status_label=?1,\
+             safe_status_label_key=NULL,safe_status_label_parameters_json=NULL,\
+             safe_status_content_json=NULL,safe_error_code=NULL,retryable=0,\
+             cancellable=?2,attempt=?3,updated_at=?4 \
+             WHERE id=?5 AND retryable=1 AND attempt=?6 \
+             AND (state='runtime_fault' OR (state='failed' AND safe_error_code=?7))",
+            params![
+                status_label,
+                cancellable,
+                attempt.saturating_add(1),
+                now,
+                turn_id,
+                attempt,
+                INTERRUPTED_TURN_CODE
+            ],
+        )
+        .map_err(AppStorageError::sqlite)?;
+    if changed == 1 {
+        Ok(())
+    } else {
+        Err(not_retryable_error())
     }
 }
 

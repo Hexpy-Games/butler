@@ -1,7 +1,18 @@
 use super::*;
 
+fn controls_updated_events(events: &[crate::gateway::AppEventEnvelope]) -> usize {
+    events
+        .iter()
+        .filter(|event| event.event_type == "session.controls_updated")
+        .count()
+}
+
+/// A message's own controls apply to that message only (the session's
+/// controls and revision stay unchanged), and a send replayed after its
+/// dispatch lease expired reuses the message's durable resolution even when
+/// the session's controls changed in between.
 #[tokio::test]
-async fn message_override_is_persisted_once_and_replay_reuses_durable_resolution() {
+async fn message_override_stays_per_message_and_replay_reuses_its_resolution() {
     let native = Arc::new(Native(Mutex::new(Vec::new())));
     let path = temp_path("controls");
     let app = AppApplication::open(
@@ -19,20 +30,23 @@ async fn message_override_is_persisted_once_and_replay_reuses_durable_resolution
     let mut request = command("controls-id", "same");
     request.request.plan_mode = Some(json!(true));
     app.send_message(request).await.unwrap();
-    app.storage
-        .execute(|db| {
-            let revision: String = db
-                .query_row(
-                    "SELECT value_json FROM app_settings WHERE key='session-controls-revision:general'",
-                    [],
-                    |row| row.get(0),
-                )
-                .map_err(AppStorageError::sqlite)?;
-            assert_eq!(revision, "1");
-            Ok(())
-        })
+    let session = app
+        .get_session_controls_view_owned("general".into())
         .await
         .unwrap();
+    assert_eq!(session.revision, 0, "the override became session controls");
+    assert!(!session.controls.plan_mode);
+    let patched = app
+        .update_session_controls_view_owned(
+            "general".into(),
+            AppSessionControlUpdate {
+                access_mode: Some("read_only".into()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(patched.revision, 1);
     app.storage
         .execute(|db| {
             db.execute(
@@ -51,16 +65,20 @@ async fn message_override_is_persisted_once_and_replay_reuses_durable_resolution
         let turns = native.0.lock().unwrap();
         assert_eq!(turns.len(), 2);
         assert_eq!(turns[0].execution_controls["source"], "message_override");
-        assert_eq!(turns[1].execution_controls["session_control_revision"], 1);
+        assert_eq!(
+            turns[1].execution_controls, turns[0].execution_controls,
+            "the replay resolved its controls again"
+        );
     }
-    let controls_events = app
-        .replay_events(0.0, 200)
+    let session = app
+        .get_session_controls_view_owned("general".into())
         .await
-        .unwrap()
-        .into_iter()
-        .filter(|event| event.event_type == "session.controls_updated")
-        .count();
-    assert_eq!(controls_events, 1);
+        .unwrap();
+    assert_eq!(session.revision, 1, "only the PATCH changed the session");
+    assert_eq!(
+        controls_updated_events(&app.replay_events(0.0, 200).await.unwrap()),
+        1
+    );
     app.close().await.unwrap();
     let _ = std::fs::remove_file(path);
 }

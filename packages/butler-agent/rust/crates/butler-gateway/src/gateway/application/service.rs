@@ -175,6 +175,45 @@ impl AppApplication {
         }).await.map_err(app_error)
     }
 
+    /// Visual admission whose image refusals speak the App's language.
+    pub(super) async fn admit_visual_localized(
+        &self,
+        request: crate::gateway::VisualAdmissionRequest,
+    ) -> Result<Value, GatewayApplicationError> {
+        match self.dependencies.admission.admit_visual(request).await {
+            Ok(value) => Ok(value),
+            Err(error) => Err(self.localized_admission_error(error).await),
+        }
+    }
+
+    /// Gives an image admission refusal the App's language.
+    async fn localized_admission_error(
+        &self,
+        error: GatewayApplicationError,
+    ) -> GatewayApplicationError {
+        let is_image = matches!(
+            &error,
+            GatewayApplicationError::Public { code, .. }
+                if crate::gateway::image_files::ImageErrorCode::from_wire(code).is_some()
+        );
+        if !is_image {
+            return error;
+        }
+        let Ok(facts) = self.dependencies.settings_facts.snapshot() else {
+            return error;
+        };
+        let language = self
+            .storage
+            .execute(move |db| settings::ui_language(db, &facts))
+            .await
+            .unwrap_or_default();
+        crate::gateway::image_files::localize_image_error(error, language)
+    }
+
+    /// Marks a queued message's admission failed. Only the stable code is
+    /// stored (`safe_error_code`, also in the queue event); the refusal's
+    /// message exists only on the reply, already in the App language
+    /// (`admit_visual_localized`), so no English text is persisted.
     pub(super) async fn fail_admission(
         &self,
         chat_id: &str,

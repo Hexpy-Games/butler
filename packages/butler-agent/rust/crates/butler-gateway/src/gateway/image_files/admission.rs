@@ -11,8 +11,9 @@ use butler_runtime::context::{
     image_admission_for_catalog_entry, sanitize_image, verify_visual_manifest_source,
 };
 
+use super::errors::{ImageErrorCode, image_error};
 use super::files::{self, Stage};
-use super::{AppMessageFileSnapshot, GatewayApplicationError, image_error, public};
+use super::{AppMessageFileSnapshot, GatewayApplicationError};
 
 pub(super) fn admit(
     root: &Path,
@@ -32,7 +33,7 @@ pub(super) fn admit(
             position,
             limits: ImageSanitizerLimits::default(),
         })
-        .map_err(|error| image_error(error.code()))?;
+        .map_err(|error| image_error(ImageErrorCode::from_admission(error.code())))?;
         verify_visual_manifest_source(
             &sanitized.manifest,
             &source,
@@ -42,12 +43,12 @@ pub(super) fn admit(
                 storage_revision: &revision,
             },
         )
-        .map_err(|error| image_error(error.code()))?;
+        .map_err(|error| image_error(ImageErrorCode::from_admission(error.code())))?;
         stages.push(Stage::write(root, sanitized.manifest, &sanitized.bytes)?);
     }
     let manifests: Vec<_> = stages.iter().map(|stage| stage.manifest.clone()).collect();
     let admitted = image_admission_for_catalog_entry(entry, &manifests)
-        .map_err(|error| image_error(error.code))?;
+        .map_err(|error| image_error(ImageErrorCode::from_admission(error.code)))?;
     for stage in &mut stages {
         stage.publish(root)?;
     }
@@ -113,21 +114,15 @@ pub(super) fn validate(
 ) -> Result<Value, GatewayApplicationError> {
     let route = route(entry);
     assert_visual_carrier_matches_catalog(entry, &admission.tuple, &admission.capability, &route)
-        .map_err(|error| image_error(error.code))?;
+        .map_err(|error| image_error(ImageErrorCode::from_admission(error.code)))?;
     let checked =
         admit_visual_image_request(admission.tuple, admission.capability, &admission.manifests)
-            .map_err(|error| image_error(error.code))?;
+            .map_err(|error| image_error(ImageErrorCode::from_admission(error.code)))?;
     for manifest in &checked.manifests {
         let file = files
             .iter()
             .find(|file| file.id == manifest.file_id && file.kind == "image")
-            .ok_or_else(|| {
-                public(
-                    413,
-                    "image_payload_invalid",
-                    "이미지 첨부를 확인할 수 없습니다.",
-                )
-            })?;
+            .ok_or_else(|| image_error(ImageErrorCode::PayloadInvalid))?;
         let source = files::source(root, file)?;
         let revision = format!("{}:{}", file.created_at, file.sha256);
         verify_visual_manifest_source(
@@ -139,7 +134,7 @@ pub(super) fn validate(
                 storage_revision: &revision,
             },
         )
-        .map_err(|error| image_error(error.code()))?;
+        .map_err(|error| image_error(ImageErrorCode::from_admission(error.code())))?;
         files::verified_derivative(root, manifest)?;
     }
     serde_json::to_value(checked).map_err(GatewayApplicationError::internal_from)
@@ -179,9 +174,5 @@ fn route(entry: Option<&ModelProviderMetadata>) -> butler_runtime::context::Imag
 }
 
 fn invalid_queue() -> GatewayApplicationError {
-    public(
-        409,
-        "image_carrier_unverified",
-        "Queued image admission is invalid.",
-    )
+    image_error(ImageErrorCode::CarrierUnverified)
 }

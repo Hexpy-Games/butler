@@ -832,6 +832,8 @@ export interface QueuedMessageRecord {
 export interface SessionQueueView {
   session_id: string;
   queued_messages: QueuedMessageRecord[];
+  /** Stopped turn: queued messages wait for the next user input. */
+  paused?: boolean;
 }
 
 export interface ContextUsageCategory {

@@ -76,6 +76,23 @@ pub(super) fn existing_control_resolution(
     })
 }
 
+/// Pauses the session's queue after the user stopped `turn_id`.
+pub(super) fn pause(
+    connection: &Connection,
+    chat_id: &str,
+    turn_id: &str,
+    now: &str,
+) -> Result<(), AppStorageError> {
+    connection
+        .execute(
+            "INSERT INTO session_queue_pauses(chat_id,turn_id,created_at) VALUES(?1,?2,?3) \
+             ON CONFLICT(chat_id) DO UPDATE SET turn_id=excluded.turn_id,created_at=excluded.created_at",
+            params![chat_id, turn_id, now],
+        )
+        .map_err(AppStorageError::sqlite)?;
+    Ok(())
+}
+
 pub(super) fn reserve(
     connection: &Connection,
     input: &QueueReservation,
@@ -122,12 +139,33 @@ pub(super) fn reserve(
             ],
         )
         .map_err(AppStorageError::sqlite)?;
+    // New user input (a send, a queue add or a retry) resumes a queue paused
+    // by Stop; the messages queued before it run first (see `claim`).
+    connection
+        .execute(
+            "DELETE FROM session_queue_pauses WHERE chat_id=?1",
+            [&input.chat_id],
+        )
+        .map_err(AppStorageError::sqlite)?;
     Ok(true)
 }
 
+/// Whether a claim waits for the messages queued before it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum ClaimOrder {
+    /// First in, first out: a message sent to a paused queue runs after the
+    /// messages queued before it.
+    Fifo,
+    /// A retry runs its earlier turn again now.
+    Immediate,
+}
+
+/// Claims a queued message for dispatch when nothing in its session is
+/// dispatching and, for a FIFO claim, no older message waits.
 pub(super) fn claim(
     connection: &Connection,
     claim: &QueueClaim,
+    order: ClaimOrder,
     claimed_at: &str,
     subscribers: &EventSubscribers,
 ) -> Result<Option<QueueClaim>, AppStorageError> {
@@ -137,14 +175,16 @@ pub(super) fn claim(
                claim_owner=?2, claimed_at=?3, lease_expires_at=?4, updated_at=?3 \
              WHERE id=?5 AND chat_id=?6 AND state='queued' AND NOT EXISTS (\
                SELECT 1 FROM session_queued_messages active \
-               WHERE active.chat_id=?6 AND active.state='dispatching')",
+               WHERE active.chat_id=?6 AND (active.state='dispatching' OR (?7 \
+                 AND active.state='queued' AND active.rowid < session_queued_messages.rowid)))",
             params![
                 claim.claim_id,
                 claim.claim_owner,
                 claimed_at,
                 claim.lease_expires_at,
                 claim.queued_message_id,
-                claim.chat_id
+                claim.chat_id,
+                order == ClaimOrder::Fifo
             ],
         )
         .map_err(AppStorageError::sqlite)?;
@@ -239,12 +279,59 @@ pub(super) fn fence(
 /// Restore only a claim whose already-delivered final result survived lease recovery.
 /// The recovery event and unchanged timestamp prove that the queued input has not
 /// been edited, cancelled, or claimed again since the original dispatch.
+/// Which terminal outbound restores a claim the App recovered.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ClaimRestore {
+    /// A delivered final result of a turn that is still thinking.
+    DeliveredFinal,
+    /// A crash interruption report of a turn in any running state
+    /// (accepted, thinking or retrying).
+    Interruption,
+}
+
+/// Restores the recovered claim a delivered final result settles.
 pub(super) fn restore_delivered_claim(
     connection: &Connection,
     chat_id: &str,
     turn_id: &str,
     original_claim: &str,
     reply_to_message_id: &str,
+) -> Result<bool, AppStorageError> {
+    restore_claim(
+        connection,
+        chat_id,
+        turn_id,
+        original_claim,
+        reply_to_message_id,
+        ClaimRestore::DeliveredFinal,
+    )
+}
+
+/// Restores the recovered claim a crash interruption report settles.
+pub(super) fn restore_interrupted_claim(
+    connection: &Connection,
+    chat_id: &str,
+    turn_id: &str,
+    original_claim: &str,
+    reply_to_message_id: &str,
+) -> Result<bool, AppStorageError> {
+    restore_claim(
+        connection,
+        chat_id,
+        turn_id,
+        original_claim,
+        reply_to_message_id,
+        ClaimRestore::Interruption,
+    )
+}
+
+fn restore_claim(
+    connection: &Connection,
+    chat_id: &str,
+    turn_id: &str,
+    original_claim: &str,
+    reply_to_message_id: &str,
+    restore: ClaimRestore,
 ) -> Result<bool, AppStorageError> {
     connection
         .execute(
@@ -254,7 +341,8 @@ pub(super) fn restore_delivered_claim(
                AND terminal_result_message_id IS NULL AND dispatched_message_id=?4 \
                AND input_identity_digest IS NOT NULL AND input_identity_digest<>'' \
                AND EXISTS (SELECT 1 FROM turns t JOIN messages m ON m.id=t.user_message_id \
-                 WHERE t.id=?3 AND t.chat_id=?2 AND t.state='thinking' \
+                 WHERE t.id=?3 AND t.chat_id=?2 \
+                   AND (t.state='thinking' OR (?5=1 AND t.state IN ('accepted','retrying'))) \
                    AND m.id=?4 AND m.chat_id=?2 AND m.role='user' AND m.status='sent' \
                    AND m.text=session_queued_messages.text \
                    AND m.content_parts_json IS session_queued_messages.content_parts_json) \
@@ -264,7 +352,13 @@ pub(super) fn restore_delivered_claim(
                    AND json_extract(e.payload_json,'$.queued_message_id')=session_queued_messages.id \
                    AND json_extract(e.payload_json,'$.action')='recovered' \
                    AND json_extract(e.payload_json,'$.recovery_reason')='dispatch_lease_expired')",
-            params![original_claim, chat_id, turn_id, reply_to_message_id],
+            params![
+                original_claim,
+                chat_id,
+                turn_id,
+                reply_to_message_id,
+                restore == ClaimRestore::Interruption
+            ],
         )
         .map(|changed| changed == 1)
         .map_err(AppStorageError::sqlite)

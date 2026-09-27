@@ -56,7 +56,13 @@ pub(super) fn prepare_runtime_payload(
         .into_iter()
         .filter(|(key, _)| key != "operatorSummary")
         .map(|(key, value)| {
-            let sanitized = sanitize_value(&value, &key, kind.starts_with("model.stream."));
+            let sanitized = match value {
+                // Streamed answer text is concatenated: keep its whitespace.
+                Value::String(delta) if kind == "model.stream.text_delta" && key == "textDelta" => {
+                    Value::String(butler_core::public_text::sanitize_public_delta(&delta))
+                }
+                value => sanitize_value(&value, &key, kind.starts_with("model.stream.")),
+            };
             (key, sanitized)
         })
         .collect())
@@ -132,10 +138,17 @@ fn validate_provider_stream(
             .is_some_and(|value| !value.is_empty())
     };
     let integer = |key: &str| payload.get(key).and_then(Value::as_u64).is_some();
+    // A text delta may be whitespace only (a line break between paragraphs).
+    let delta = || {
+        payload
+            .get("textDelta")
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.is_empty())
+    };
     match kind {
         "model.stream.text_delta"
             if !required_text("streamId")
-                || !required_text("textDelta")
+                || !delta()
                 || !matches!(
                     payload.get("target").and_then(Value::as_str),
                     Some("opening_decision" | "public_note" | "final_candidate")
@@ -165,7 +178,7 @@ fn validate_provider_stream(
             if !required_text("streamId")
                 || !matches!(
                     payload.get("status").and_then(Value::as_str),
-                    Some("completed" | "failed" | "aborted")
+                    Some("completed" | "failed" | "aborted" | "discarded")
                 ) =>
         {
             Err(invalid())

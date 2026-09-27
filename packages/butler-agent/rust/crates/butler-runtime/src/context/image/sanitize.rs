@@ -11,6 +11,10 @@ use super::manifest::{assert_magic, create_visual_manifest};
 use crate::context::ContextCode;
 use crate::context::{ContextError, ContextResult};
 
+// Butler internal defaults, not provider limits: they bound the memory of
+// decoding an upload (a 16384 x 16384 RGBA image is 1 GiB). A model's own
+// documented limits come from its catalog entry (`image_max_*`, see
+// `image_limit_sources`) and apply on top of these; nothing is resized.
 const MAX_SOURCE_BYTES: usize = 10 * 1024 * 1024;
 const MAX_WIDTH: u32 = 16_384;
 const MAX_HEIGHT: u32 = 16_384;
