@@ -50,6 +50,22 @@ export function fontWeights(catalog: TokenEntry[]): TokenEntry[] {
   return catalog.filter((token) => /^--font-weight-/u.test(token.name)).sort((a, b) => Number(a.light) - Number(b.light));
 }
 
+/** Faces the UI bundles (fonts/fonts.css) and what each covers. */
+export const BUNDLED_FACES: Record<string, string> = {
+  "Pretendard Variable": "Latin + Hangul · variable weight 45–920 · OFL 1.1",
+  "IBM Plex Mono": "Latin · 400 and 600 · OFL 1.1",
+};
+
+/** Weight axis samples, inside the official @font-face range (45 920). */
+export const WEIGHT_AXIS = [45, 200, 400, 600, 800, 920];
+
+/** Hero name: a bundled lead face stands alone; a system lead pairs with its Hangul face. */
+export function typefaceTitle(families: string[]): string {
+  const lead = families[0] ?? "System UI";
+  if (BUNDLED_FACES[lead]) return lead;
+  return `${lead} + ${families.find((family) => /Gothic|KR/u.test(family)) ?? "Hangul system font"}`;
+}
+
 /** Family names in a font stack token, generic keywords dropped. */
 export function fontFamilies(stack: string): string[] {
   return stack.split(",").map((family) => family.trim().replace(/^"|"$/gu, ""))

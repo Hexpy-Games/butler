@@ -59,6 +59,9 @@ jobs:
       - name: Leak check
         run: bun run tests/smoke/ds-site-leak-check.ts
 
+      - name: Font assets (slices, url() targets, OFL notices)
+        run: bun run tests/smoke/font-assets-check.ts packages/butler-app/client/ui/dist-ds-site
+
       - name: Install Playwright Chromium
         run: bunx playwright install --with-deps chromium
 
@@ -72,6 +75,11 @@ jobs:
 
       - name: Leak check (/ds/)
         run: bun run tests/smoke/ds-site-leak-check.ts packages/butler-app/client/ui/dist-ds-site-ds
+
+      - name: Font assets (/ds/)
+        env:
+          DS_SITE_BASE: /ds/
+        run: bun run tests/smoke/font-assets-check.ts packages/butler-app/client/ui/dist-ds-site-ds
 
       - name: Smoke (/ds/)
         timeout-minutes: 5
