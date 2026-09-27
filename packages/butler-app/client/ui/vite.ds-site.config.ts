@@ -5,9 +5,53 @@ import baseConfig from "./vite.config";
 
 // Static DS Viewer site: `vite build --config vite.ds-site.config.ts` -> dist-ds-site/.
 // Same aliases/plugins as the app build (font files + font OFL notices included), rooted at ds-site/
-// so its index.html is the site root.
+// so its index.html is the site root. Env knobs (see ds-site/README.md):
+//   DS_SITE_BASE        public path the site is served under: "/" (default) or e.g. "/ds/".
+//   DS_SITE_OUT_DIR     output dir relative to this package; default dist-ds-site for "/" and
+//                       dist-ds-site-<base> otherwise, so a sub-path build never clobbers the Pages artifact.
+//   DS_SITE_HOST_FILES  "1"/"0": emit the host-owned CNAME + 404.html (default: only when base is "/").
 const uiRoot = process.cwd();
 const repoRoot = path.resolve(uiRoot, "..", "..", "..", "..");
+const siteDir = path.resolve(uiRoot, "ds-site");
+
+/** Normalizes DS_SITE_BASE to "/" or "/segment/.../" (leading + trailing slash, URL-safe segments). */
+function dsSiteBase(raw: string | undefined): string {
+  const segments = (raw ?? "").trim().split("/").filter(Boolean);
+  if (segments.some((segment) => !/^[A-Za-z0-9_~-][A-Za-z0-9._~-]*$/.test(segment))) {
+    throw new Error(`DS_SITE_BASE must be a path like "/" or "/ds/", got ${JSON.stringify(raw)}`);
+  }
+  return segments.length ? `/${segments.join("/")}/` : "/";
+}
+
+const siteBase = dsSiteBase(process.env.DS_SITE_BASE);
+const hostFiles = process.env.DS_SITE_HOST_FILES ? process.env.DS_SITE_HOST_FILES === "1" : siteBase === "/";
+const outDir = path.resolve(
+  uiRoot,
+  process.env.DS_SITE_OUT_DIR || (siteBase === "/" ? "dist-ds-site" : `dist-ds-site-${siteBase.slice(1, -1).split("/").join("-")}`),
+);
+
+/**
+ * Always emits ds-404-redirect.js (base baked in) for a combined site's 404.html to include. With host
+ * files on (the standalone site at "/"), also emits CNAME and a 404.html that inlines the same helper;
+ * a combined site owns those, so a sub-path build leaves them out.
+ */
+function siteRedirect(): Plugin {
+  return {
+    name: "butler-ds-site-redirect",
+    apply: "build",
+    generateBundle() {
+      const helper = readFileSync(path.join(siteDir, "ds-404-redirect.js"), "utf8")
+        .replace('"__DS_SITE_BASE__"', JSON.stringify(siteBase));
+      this.emitFile({ type: "asset", fileName: "ds-404-redirect.js", source: helper });
+      if (!hostFiles) return;
+      this.emitFile({ type: "asset", fileName: "CNAME", source: readFileSync(path.join(siteDir, "host", "CNAME"), "utf8") });
+      const page = readFileSync(path.join(siteDir, "host", "404.html"), "utf8")
+        .replace("__DS_404_REDIRECT__", () => helper.trim())
+        .replace("__DS_SITE_BASE__", siteBase);
+      this.emitFile({ type: "asset", fileName: "404.html", source: page });
+    },
+  };
+}
 
 function packageRootOf(id: string): string | null {
   const marker = `${path.sep}node_modules${path.sep}`;
@@ -54,12 +98,14 @@ function siteLicenses(): Plugin {
 }
 
 export default mergeConfig(baseConfig as UserConfig, {
-  root: path.resolve(uiRoot, "ds-site"),
-  publicDir: path.resolve(uiRoot, "ds-site", "public"),
-  base: "./",
-  plugins: [siteLicenses()],
+  root: siteDir,
+  publicDir: false,
+  // "/" keeps the relative asset URLs the standalone site has always shipped; a sub-path gets absolute
+  // ones so assets and fonts resolve whether the page is opened as /ds/ or /ds/index.html.
+  base: siteBase === "/" ? "./" : siteBase,
+  plugins: [siteLicenses(), siteRedirect()],
   build: {
-    outDir: path.resolve(uiRoot, "dist-ds-site"),
+    outDir,
     emptyOutDir: true,
     sourcemap: false,
   },
