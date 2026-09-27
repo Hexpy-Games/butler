@@ -7,4 +7,6 @@ mod selection;
 mod visibility;
 
 pub use catalog::{GuidedCatalogRead, GuidedCatalogSnapshot};
-pub use selection::{GuidedPhaseInput, GuidedPhaseSelection, select_phase};
+pub use selection::{
+    GuidedPhase, GuidedPhaseInput, GuidedPhaseSelection, SurfaceMode, select_phase,
+};

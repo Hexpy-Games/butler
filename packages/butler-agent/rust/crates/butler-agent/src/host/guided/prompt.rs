@@ -11,10 +11,10 @@ use std::sync::Arc;
 use serde_json::Value;
 
 use butler_turn::btcc::{
-    BtccError, BtccRepositories, EffectJournal, GuidedInvocation, GuidedPhaseSelection, GuidedWork,
-    FinalSynthesis, ModelRoundTool, PortFuture, ProjectLedgerPlan, PromptImages, PromptPort,
-    RenderedGuidedPrompt, RoundRequestOptions,
-    ToolJournalRepository, TurnRecord, UsageAttribution, render_accepted_project_plan,
+    BtccError, BtccRepositories, EffectJournal, FinalSynthesis, GuidedInvocation, GuidedPhase,
+    GuidedPhaseSelection, GuidedWork, ModelRoundTool, PortFuture, ProjectLedgerPlan, PromptImages,
+    PromptPort, RenderedGuidedPrompt, RoundRequestOptions, ToolJournalRepository, TurnRecord,
+    UsageAttribution, render_accepted_project_plan,
 };
 
 pub(crate) struct GuidedTextState {
@@ -321,16 +321,16 @@ impl PromptPort for GuidedPrompt {
                 source_instructions(&state.phase.stable_instruction_prefix, &documents);
             let excluded = state.continuation_budget_enabled
                 && match state.phase.phase {
-                    "direct" => {
+                    GuidedPhase::Direct => {
                         nonempty_array(turn, "mandatoryHotCacheRefs")
                             || nonempty_array(turn, "optionalHotCacheRefs")
                     }
-                    "read_only" => nonempty_array(turn, "optionalHotCacheRefs"),
-                    _ => false,
+                    GuidedPhase::ReadOnly => nonempty_array(turn, "optionalHotCacheRefs"),
+                    GuidedPhase::Execution => false,
                 };
             let (prompt, instructions) = if excluded {
                 let projected =
-                    phase_memory::read(&state.documents, turn, state.phase.phase).await?;
+                    phase_memory::read(&state.documents, turn, state.phase.phase.as_str()).await?;
                 let fixed = {
                     let empty = phase_memory::render(&projected, 0)?;
                     let empty_documents = documents::read(

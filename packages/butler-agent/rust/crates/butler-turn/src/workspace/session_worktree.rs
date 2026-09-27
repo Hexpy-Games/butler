@@ -17,11 +17,11 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
 use super::{
-    Commands, RebindWorkspaceInput, RebindWorkspaceResult, SessionBindingStore, WorkspaceClock,
-    WorkspaceFiles, WorkspaceReference, WorkspaceResult,
+    Commands, RebindWorkspaceInput, RebindWorkspaceResult, SessionBindingStore,
+    StoredSessionBinding, WorkspaceClock, WorkspaceFiles, WorkspaceReference, WorkspaceResult,
 };
 use git::{GitWorktrees, Validated};
-use path::{marker, normalize_ref, public_label, safe_ref};
+use path::{BindingMarker, marker, normalize_ref, public_label, safe_ref};
 
 use crate::workspace::WorkspaceCode;
 pub use path::short_session_worktree_branch;
@@ -231,31 +231,17 @@ impl Owner {
             Ok(start_point) => start_point,
             Err(failed) => return Ok(failed),
         };
-        let Some(binding) = self.bindings.get_by_session_id(&input.session_id).await? else {
-            return Ok(failure(action, Some(branch), "session_binding_required"));
-        };
-        let Ok(existing_marker) = path::read_marker(binding.metadata.as_ref()) else {
-            return Ok(failure(
-                action,
-                Some(branch),
-                "session_workspace_unavailable",
-            ));
-        };
         let attempt = BindAttempt {
             git: GitWorktrees::new(&self.commands, &self.files, &self.host_environment),
             action,
             branch,
             abort,
         };
-        let anchor_path = existing_marker
-            .as_ref()
-            .map_or(binding.workspace_path.as_str(), |value| {
-                value.repository_anchor_path.as_str()
-            });
-        let anchor = match attempt.git.repository_anchor(anchor_path).await? {
-            Ok(path) => path,
-            Err(code) => return Ok(attempt.fail(code.as_str())),
-        };
+        let (binding, existing_marker, anchor) =
+            match self.load_anchor(&attempt, &input.session_id).await? {
+                Ok(loaded) => loaded,
+                Err(failed) => return Ok(failed),
+            };
         let created_path = match action {
             SessionWorktreeAction::Create => match self.prepare_target_path(&input, branch).await {
                 Some(path) => Some(path),
@@ -326,6 +312,31 @@ impl Owner {
             source_dirty,
             idempotent,
         })
+    }
+
+    /// The session's current binding and the repository anchor its worktree
+    /// marker (or workspace) points at.
+    async fn load_anchor(
+        &self,
+        attempt: &BindAttempt<'_>,
+        session_id: &str,
+    ) -> BindStep<(StoredSessionBinding, Option<BindingMarker>, String)> {
+        let Some(binding) = self.bindings.get_by_session_id(session_id).await? else {
+            return Ok(Err(attempt.fail("session_binding_required")));
+        };
+        let Ok(existing_marker) = path::read_marker(binding.metadata.as_ref()) else {
+            return Ok(Err(attempt.fail("session_workspace_unavailable")));
+        };
+        let anchor_path = existing_marker
+            .as_ref()
+            .map_or(binding.workspace_path.as_str(), |value| {
+                value.repository_anchor_path.as_str()
+            });
+        let anchor = match attempt.git.repository_anchor(anchor_path).await? {
+            Ok(path) => path,
+            Err(code) => return Ok(Err(attempt.fail(code.as_str()))),
+        };
+        Ok(Ok((binding, existing_marker, anchor)))
     }
 
     /// Reserves the directory a created worktree will live in; `None` when it

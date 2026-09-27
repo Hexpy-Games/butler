@@ -244,8 +244,8 @@ impl Walk<'_> {
             self.stop(ListStop::MaxDirs);
             return Ok(());
         }
-        let Ok(mut children) = std::fs::read_dir(directory)
-            .and_then(Iterator::collect::<std::io::Result<Vec<_>>>)
+        let Ok(mut children) =
+            std::fs::read_dir(directory).and_then(Iterator::collect::<std::io::Result<Vec<_>>>)
         else {
             self.io_error();
             return Ok(());

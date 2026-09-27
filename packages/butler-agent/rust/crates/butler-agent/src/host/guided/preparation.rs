@@ -83,7 +83,7 @@ impl GuidedPreparation {
             return Err(contract("guided_project_plan_mutation_unsupported"));
         }
         let budget = self.budget.bind(turn, start.claim)?;
-        if phase.replay_mode == "available" && turn.model_route.is_none() {
+        if phase.replay_mode == ReplayMode::Available && turn.model_route.is_none() {
             return Err(contract(
                 "operation_result_route_acceptance_dependency_missing",
             ));
@@ -135,11 +135,7 @@ impl GuidedPreparation {
         .map_err(preparation_error)?;
         let operation_results = OperationResultReplayFactory::new(
             ExactResultReplaySelection {
-                mode: if phase.replay_mode == "available" {
-                    ReplayMode::Available
-                } else {
-                    ReplayMode::Disabled
-                },
+                mode: phase.replay_mode,
                 exact_read_capability: true,
             },
             self.journal.clone(),

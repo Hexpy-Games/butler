@@ -20,7 +20,10 @@ enum DirectoryCheck {
 }
 
 /// A plan that works in `workspace_path` directly, without a session worktree.
-fn unmanaged_plan(input: RelocationWorkspaceInput, workspace_path: String) -> RelocationWorkspacePlan {
+fn unmanaged_plan(
+    input: RelocationWorkspaceInput,
+    workspace_path: String,
+) -> RelocationWorkspacePlan {
     RelocationWorkspacePlan {
         runtime_session_id: input.runtime_session_id,
         operation_id: input.operation_id,
@@ -232,9 +235,7 @@ impl Owner {
             .map_err(workspace_error)?;
         for entry in entries {
             if entry.branch.as_deref() == Some(branch)
-                && git
-                    .same_path(&entry.path.to_string_lossy(), target)
-                    .await?
+                && git.same_path(&entry.path.to_string_lossy(), target).await?
             {
                 return Ok(true);
             }
