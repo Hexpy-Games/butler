@@ -1,5 +1,4 @@
 use rusqlite::{Connection, OptionalExtension, Row, ToSql, params};
-use serde_json::Value;
 
 use crate::btcc::authority::contracts::{
     AuthorityAdmissionInput, AuthorityError, AuthorityRecord, AuthorityResult,
@@ -222,10 +221,12 @@ pub(super) fn resume_source(
         |(session_id, turn_id, original_event_id, original_message_id, original_message, raw)| {
             let destination = raw
                 .map(|json| {
-                    serde_json::from_str::<Value>(&json).map_err(|error| {
-                        AuthorityError::storage("authority_destination_json", error.to_string())
-                            .with_source(error)
-                    })
+                    serde_json::from_str::<crate::btcc::ProgressDestination>(&json).map_err(
+                        |error| {
+                            AuthorityError::storage("authority_destination_json", error.to_string())
+                                .with_source(error)
+                        },
+                    )
                 })
                 .transpose()?;
             Ok(AuthorityResumeSource {

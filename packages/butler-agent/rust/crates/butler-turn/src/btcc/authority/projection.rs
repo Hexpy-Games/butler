@@ -1,8 +1,6 @@
-use serde_json::{Value, json};
-
 use super::contracts::{
     AuthorityAdmissionResult, AuthorityDecisionResult, AuthorityError, AuthorityRecord,
-    AuthorityResult,
+    AuthorityRequestProjection, AuthorityResult, AuthorityScopeProjection,
 };
 use super::permission;
 
@@ -42,26 +40,25 @@ pub(super) fn admission(
 pub(super) fn request(
     record: &AuthorityRecord,
     collation: &butler_core::locale::LocaleCollation,
-) -> AuthorityResult<Value> {
+) -> AuthorityResult<AuthorityRequestProjection> {
     let scope = permission::for_record(record, collation)?;
-    let mut output = json!({
-        "request_ref": record.request_ref,
-        "category": record.category,
-        "reason": record.reason,
-        "executable": record.executable,
-        "command_count": 1,
-        "scope": {"title": scope.title, "description": scope.description},
-        "source_turn_id": record.source_turn_id,
-        "source_session_id": record.source_session_id,
-    });
-    if let Some(call) = record
-        .source_call_id
-        .as_deref()
-        .filter(|value| !value.is_empty())
-    {
-        butler_core::json::object_mut(&mut output).insert("source_call_id".into(), json!(call));
-    }
-    Ok(output)
+    Ok(AuthorityRequestProjection {
+        request_ref: record.request_ref.clone(),
+        category: record.category.clone(),
+        reason: record.reason.clone(),
+        executable: record.executable.clone(),
+        command_count: 1,
+        scope: AuthorityScopeProjection {
+            title: scope.title,
+            description: scope.description,
+        },
+        source_turn_id: record.source_turn_id.clone(),
+        source_session_id: record.source_session_id.clone(),
+        source_call_id: record
+            .source_call_id
+            .clone()
+            .filter(|value| !value.is_empty()),
+    })
 }
 pub(super) fn decision(record: &AuthorityRecord) -> AuthorityResult<AuthorityDecisionResult> {
     if record.decision == "pending" {

@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use serde_json::{Value, json};
+use serde_json::json;
 
 use butler_core::json::JsonDocument;
 use butler_gateway::gateway::{
@@ -41,22 +41,13 @@ impl AuthorityHandoff {
             return Ok(());
         };
         let destination = source.destination.as_ref();
-        let peer = if let Some(destination) = destination {
-            destination
-                .get("peer")
-                .cloned()
-                .ok_or(GatewayApplicationError::internal())?
-        } else {
-            json!({"kind":"dm","id":source.session_id})
+        let peer = match destination {
+            Some(destination) => serde_json::to_value(&destination.peer)
+                .map_err(GatewayApplicationError::internal_from)?,
+            None => json!({"kind":"dm","id":source.session_id}),
         };
-        let transport = destination
-            .and_then(|value| value.get("transport"))
-            .and_then(Value::as_str)
-            .unwrap_or("app");
-        let account_id = destination
-            .and_then(|value| value.get("accountId"))
-            .and_then(Value::as_str)
-            .unwrap_or("local");
+        let transport = destination.map_or("app", |value| value.transport.as_str());
+        let account_id = destination.map_or("local", |value| value.account_id.as_str());
         let requested_at = (self.now_iso)();
         let mut envelope = json!({
             "eventId":format!("app:resume:{request_ref}"),
@@ -82,8 +73,8 @@ impl AuthorityHandoff {
             },
             "raw":{"source":"app-server"},
         });
-        if let Some(claim) = destination.and_then(|value| value.get("appQueueClaimId")) {
-            envelope["routingHints"]["appQueueClaimId"] = claim.clone();
+        if let Some(claim) = destination.and_then(|value| value.app_queue_claim_id.as_ref()) {
+            envelope["routingHints"]["appQueueClaimId"] = json!(claim);
         }
         let document =
             JsonDocument::from_value(&envelope).map_err(GatewayApplicationError::internal_from)?;
@@ -116,7 +107,11 @@ impl AppAuthorityHandoff for AuthorityHandoff {
             let requests = owner
                 .list(owner_session_id.clone())
                 .await
-                .map_err(authority_error)?;
+                .map_err(authority_error)?
+                .iter()
+                .map(serde_json::to_value)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(GatewayApplicationError::internal_from)?;
             let permissions = owner
                 .list_permissions(owner_session_id)
                 .await

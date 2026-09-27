@@ -127,7 +127,23 @@ async fn real_turn_work_journal_authority_resume_outcome_and_reopen() {
     else {
         panic!("pending authority")
     };
-    assert_eq!(projection["executable"], "echo");
+    assert_eq!(projection.executable, "echo");
+    // KEEP: the pending request projection's key order is part of its wire form.
+    let encoded = serde_json::to_value(&projection).unwrap();
+    assert_eq!(
+        encoded.as_object().unwrap().keys().collect::<Vec<_>>(),
+        [
+            "request_ref",
+            "category",
+            "reason",
+            "executable",
+            "command_count",
+            "scope",
+            "source_turn_id",
+            "source_session_id",
+            "source_call_id"
+        ]
+    );
     let call_status: String = storage
         .execute(|db| {
             db.query_row(

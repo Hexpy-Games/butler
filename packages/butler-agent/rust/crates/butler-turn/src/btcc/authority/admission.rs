@@ -17,7 +17,7 @@ pub(super) fn admit(
     uuid: &dyn Fn() -> String,
 ) -> AuthorityResult<AuthorityAdmissionResult> {
     let (identity_sha, generation) = match free_slot(repository, &input, collation)? {
-        Slot::Settled(result) => return Ok(result),
+        Slot::Settled(result) => return Ok(*result),
         Slot::Free {
             identity_sha,
             generation,
@@ -48,7 +48,7 @@ pub(super) fn admit(
 /// The admission slot of a request.
 enum Slot {
     /// An existing request or a standing permission already answers it.
-    Settled(AuthorityAdmissionResult),
+    Settled(Box<AuthorityAdmissionResult>),
     /// No request holds this identity and generation yet.
     Free {
         identity_sha: String,
@@ -67,10 +67,11 @@ fn free_slot(
         let sha = identity::identity(input, generation, collation)?;
         if let Some(existing) = repository.find_identity(&sha)? {
             assert_not_closed(&existing)?;
-            return projection::admission(&existing, collation).map(Slot::Settled);
+            return projection::admission(&existing, collation)
+                .map(|result| Slot::Settled(Box::new(result)));
         }
         if repository.has_permission(&permission::for_admission(input, collation)?.grant_ref)? {
-            return Ok(Slot::Settled(AuthorityAdmissionResult::Granted));
+            return Ok(Slot::Settled(Box::new(AuthorityAdmissionResult::Granted)));
         }
         match repository.find_slot(input, generation)? {
             None => {

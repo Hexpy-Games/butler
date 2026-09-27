@@ -82,7 +82,8 @@ pub use agent_loop::{
 };
 pub use authority::contracts::{
     AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityDecisionInput, AuthorityError,
-    AuthorityExecutionInput, AuthorityOutcomeInput, PrincipalAuthority,
+    AuthorityExecutionInput, AuthorityOutcomeInput, AuthorityRequestProjection,
+    AuthorityScopeProjection, PrincipalAuthority,
 };
 pub use continuation_budget::{
     TurnContinuationAdmission, TurnContinuationBudgetEvent, TurnContinuationBudgetLimits,

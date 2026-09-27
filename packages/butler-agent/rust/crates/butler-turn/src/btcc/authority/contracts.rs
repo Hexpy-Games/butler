@@ -129,7 +129,7 @@ pub enum AuthorityAdmissionResult {
     Granted,
     Pending {
         request_ref: String,
-        projection: Value,
+        projection: AuthorityRequestProjection,
     },
     Allowed {
         request_ref: String,
@@ -219,7 +219,30 @@ pub struct AuthorityResumeSource {
     pub original_event_id: String,
     pub original_message_id: String,
     pub original_message: String,
-    pub destination: Option<Value>,
+    pub destination: Option<crate::btcc::ProgressDestination>,
+}
+
+/// The public projection of a pending authority request (shown to the user
+/// and to the model).
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AuthorityRequestProjection {
+    pub request_ref: String,
+    pub category: String,
+    pub reason: String,
+    pub executable: String,
+    pub command_count: u32,
+    pub scope: AuthorityScopeProjection,
+    pub source_turn_id: String,
+    pub source_session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_call_id: Option<String>,
+}
+
+/// The title and description of the permission a request would grant.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AuthorityScopeProjection {
+    pub title: String,
+    pub description: String,
 }
 #[derive(Clone, Debug)]
 pub(crate) struct AuthorityRecord {
