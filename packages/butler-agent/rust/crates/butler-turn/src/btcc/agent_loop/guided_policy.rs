@@ -6,8 +6,9 @@ use butler_core::tool_protocol::ToolName;
 use super::continuation::GuidedPresentation;
 use super::contracts::{
     BatchDisposition, CandidateDisposition, CloseoutInput, ContextProjectionInput, GuidedCloseout,
-    ModelRoundMessage, ModelRoundTool, ModelRoundToolCall, PreparedPolicy, SteeringObservation,
-    TextCallDisposition, ToolOutcome, ToolResult,
+    LoopPhase, ModelRoundMessage, ModelRoundTool, ModelRoundToolCall, PreparedPolicy,
+    ProviderRoundPorts, SteeringObservation, TextCallDisposition, ToolOutcome, ToolResult,
+    ToolSurface,
 };
 use super::guided_ports::{GuidedInvocation, GuidedPolicyDependencies};
 use super::ports::{ContextProjectionFuture, GuidedPolicyPort, ToolExecutionError};
@@ -49,24 +50,16 @@ impl GuidedPolicyPort for GuidedPolicy {
                 instructions: rendered.instructions,
                 tools: rendered.tools,
                 tool_choice: rendered.tool_choice,
-                route_context: rendered.route_context,
-                authority_decision: self.authority_decision.clone(),
                 resumed_tool_call: rendered.resumed_tool_call,
-                max_output_tokens: rendered.max_output_tokens,
-                attachments: rendered.attachments,
-                image_carrier: rendered.image_carrier,
-                image_capability: rendered.image_capability,
-                image_manifests: rendered.image_manifests,
-                butler_data: rendered.butler_data,
-                usage_attribution: rendered.usage_attribution,
-                cache_scope: rendered.cache_scope,
-                stable_provider_cache_prefix: rendered.stable_provider_cache_prefix,
-                route_transport_attempt_ordinal: rendered.route_transport_attempt_ordinal,
-                verified_image_payload: self.dependencies.verified_image_payload.clone(),
-                stream_observer: self.dependencies.stream_observer.clone(),
-                identity_observer: self.dependencies.identity_observer.clone(),
-                synthesize_after_tool_candidate: rendered.synthesize_after_tool_candidate,
-                synthesize_after_tool_empty: rendered.synthesize_after_tool_empty,
+                authority_decision: self.authority_decision.clone(),
+                images: rendered.images,
+                request: rendered.request,
+                ports: ProviderRoundPorts {
+                    verified_image_payload: self.dependencies.verified_image_payload.clone(),
+                    stream_observer: self.dependencies.stream_observer.clone(),
+                    identity_observer: self.dependencies.identity_observer.clone(),
+                },
+                final_synthesis: rendered.final_synthesis,
             })
         })
     }
@@ -82,11 +75,9 @@ impl GuidedPolicyPort for GuidedPolicy {
         &'a self,
         invocation: GuidedInvocation<'a>,
         fallback: &'a [ModelRoundTool],
-        final_report: bool,
-    ) -> PortFuture<'a, (Vec<ModelRoundTool>, Option<String>)> {
-        self.dependencies
-            .tools
-            .surface(invocation, fallback, final_report)
+        phase: LoopPhase,
+    ) -> PortFuture<'a, ToolSurface> {
+        self.dependencies.tools.surface(invocation, fallback, phase)
     }
 
     fn begin_context<'a>(

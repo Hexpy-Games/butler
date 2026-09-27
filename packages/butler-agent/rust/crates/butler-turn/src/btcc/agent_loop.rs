@@ -55,14 +55,16 @@ pub use contracts::{
     AcceptedCheckpoint, AuthorityDecision, BatchDisposition, BoundedContinuationEnvelope,
     BoundedEnvelopeV1, CandidateDisposition, ContextMessages, ContextProjection,
     ContextProjectionInput, ContextProjectionRebaseIdentity, ContextProjectionRebaseV1,
-    ModelRoundMessage, ModelRoundRequest, ModelRoundResult, ModelRoundRole, ModelRoundTool,
-    ModelRoundToolCall, ProviderIdentity, RollingContextV1, SteeringObservation,
-    TextCallDisposition, ToolCallOrigin, ToolChoice, ToolOutcome, ToolResult, UsageAttribution,
+    ContextRebase, LoopPhase, ModelRoundMessage, ModelRoundRequest, ModelRoundResult,
+    ModelRoundRole, ModelRoundTool, ModelRoundToolCall, ProviderIdentity, RollingContextV1,
+    SteeringObservation, TextCallDisposition, ToolCallOrigin, ToolChoice, ToolOutcome, ToolResult,
+    ToolSurface, UsageAttribution,
 };
 pub use guided_ports::{
-    AuthorityPort, ContextPort, GuidedInvocation, GuidedPolicyDependencies, JournalCloseout,
-    JournalPort, PromptPort, RenderedGuidedPrompt, ToolPort, TurnContextProjection,
-    TurnSteeringPort, WorkFinalState, WorkPort,
+    AuthorityPort, ContextPort, FinalSynthesis, GuidedInvocation, GuidedPolicyDependencies,
+    JournalCloseout, JournalPort, PromptImages, PromptPort, RenderedGuidedPrompt,
+    RoundRequestOptions, ToolPort, TurnContextProjection, TurnSteeringPort, WorkFinalState,
+    WorkPort,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub use operation_result_replay::OperationResultReference;

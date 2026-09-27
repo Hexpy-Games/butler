@@ -42,8 +42,7 @@ impl TurnContextProjection for Context {
                     messages: super::ContextMessages::Transport,
                     bounded_continuation: None,
                     provider_body_admission: None,
-                    requires_rebase: false,
-                    recheck_steering_on_rebase: false,
+                    rebase: super::contracts::ContextRebase::NotRequired,
                 })
             }
         })
@@ -140,22 +139,23 @@ async fn failed_round(failure: Failure, cleanup_error: bool) -> (AgentLoopError,
         model_round_index: 0,
         iteration: 0,
         empty_recovery_used: false,
-        final_report: false,
+        phase: super::contracts::LoopPhase::Working,
         resumed_batch: None,
         resumed_call: None,
         presentation: None,
         used_tools: vec![],
         runtime_failure: None,
     };
-    let mut tools = prepared.tools.clone();
-    let mut digest = None;
+    let mut surface = super::contracts::ToolSurface {
+        tools: prepared.tools.clone(),
+        digest: None,
+    };
     let error = run_model_round(
         &invocation,
         &mut state,
         &prepared,
         0,
-        &mut tools,
-        &mut digest,
+        &mut surface,
         &Context(failure),
     )
     .await

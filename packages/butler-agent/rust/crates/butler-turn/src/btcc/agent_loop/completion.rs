@@ -11,13 +11,35 @@ use super::guided_ports::GuidedInvocation;
 use super::ports::propagated;
 use super::state::{State, emit};
 
+/// Whether a recorded tool result may still end the loop early.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum OutcomeCheck {
+    /// Ask the policy whether the result suspends the turn.
+    Evaluate,
+    /// Record only; an earlier result in the batch already decided the outcome.
+    RecordOnly,
+}
+
+/// How a loop execution ends.
+pub(super) enum Ending<'a> {
+    /// The turn answers with this content (possibly empty).
+    Answer(&'a str),
+    /// The turn suspends for a reason that carries no continuation.
+    Suspend(SuspensionReason),
+    /// The turn suspends on a pending authority request with this serialized
+    /// `AuthorityLoopContinuation`.
+    AwaitAuthority(Value),
+}
+
+/// Records one tool result in the transcript and asks the policy whether it
+/// ends the loop.
 pub(super) async fn record_result(
     input: &Invocation<'_>,
     state: &mut State,
     call: &super::contracts::ModelRoundToolCall,
     result: ToolResult,
     iteration: u32,
-    evaluate: bool,
+    check: OutcomeCheck,
 ) -> Result<Option<ToolOutcome>, AgentLoopError> {
     state.tool_results.push(result.clone());
     let operation_call_id = input.policy.operation_result_call_id(&call.id);
@@ -46,7 +68,7 @@ pub(super) async fn record_result(
             result: result.clone(),
         },
     );
-    if !result.ok || !evaluate {
+    if !result.ok || check == OutcomeCheck::RecordOnly {
         return Ok(None);
     }
     input
@@ -76,19 +98,27 @@ pub(super) async fn finish_outcome(
 ) -> Result<Option<AgentLoopResult>, AgentLoopError> {
     match outcome {
         Some(ToolOutcome::Suspend(reason)) => {
-            finish(input, state, "", Some(reason), None).await.map(Some)
+            finish(input, state, Ending::Suspend(reason)).await.map(Some)
         }
         None => Ok(None),
     }
 }
 
+/// Closes the execution out through the policy and assembles the loop result.
 pub(super) async fn finish(
     input: &Invocation<'_>,
     state: &State,
-    content: &str,
-    suspension: Option<SuspensionReason>,
-    authority_continuation: Option<Value>,
+    ending: Ending<'_>,
 ) -> Result<AgentLoopResult, AgentLoopError> {
+    let (content, suspension, authority_continuation) = match ending {
+        Ending::Answer(content) => (content, None, None),
+        Ending::Suspend(reason) => ("", Some(reason), None),
+        Ending::AwaitAuthority(continuation) => (
+            "",
+            Some(SuspensionReason::AuthorityPending),
+            Some(continuation),
+        ),
+    };
     let closeout = input
         .policy
         .closeout(

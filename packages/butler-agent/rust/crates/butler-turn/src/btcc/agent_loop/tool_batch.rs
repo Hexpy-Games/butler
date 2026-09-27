@@ -57,9 +57,10 @@ pub(super) fn prepare<'a>(
     }
 }
 
-pub(super) fn concurrent(calls: &[PreparedCall<'_>], resumed: bool) -> bool {
-    !resumed
-        && calls.len() > 1
+/// Whether a fresh batch may run concurrently: more than one call, all valid
+/// and all declared concurrency-safe. Resumed batches always run in order.
+pub(super) fn concurrent(calls: &[PreparedCall<'_>]) -> bool {
+    calls.len() > 1
         && calls.iter().all(|prepared| {
             prepared.validation.is_none()
                 && prepared

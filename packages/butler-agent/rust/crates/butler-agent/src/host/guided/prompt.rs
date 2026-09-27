@@ -12,7 +12,8 @@ use serde_json::Value;
 
 use butler_turn::btcc::{
     BtccError, BtccRepositories, EffectJournal, GuidedInvocation, GuidedPhaseSelection, GuidedWork,
-    ModelRoundTool, PortFuture, ProjectLedgerPlan, PromptPort, RenderedGuidedPrompt,
+    FinalSynthesis, ModelRoundTool, PortFuture, ProjectLedgerPlan, PromptImages, PromptPort,
+    RenderedGuidedPrompt, RoundRequestOptions,
     ToolJournalRepository, TurnRecord, UsageAttribution, render_accepted_project_plan,
 };
 
@@ -408,33 +409,36 @@ impl PromptPort for GuidedPrompt {
                 instructions: Some(instructions),
                 tools,
                 tool_choice: None,
-                route_context: None,
                 resumed_tool_call: None,
-                max_output_tokens: None,
-                image_manifests: image_attachments
-                    .iter()
-                    .filter_map(|value| {
-                        value
-                            .get("visualManifest")
-                            .filter(|manifest| !manifest.is_null())
-                            .cloned()
-                    })
-                    .collect(),
-                attachments: image_attachments,
-                image_carrier: turn.context.pointer("/imageAdmission/tuple").cloned(),
-                image_capability: turn.context.pointer("/imageAdmission/capability").cloned(),
-                butler_data: Some(state.butler_data.clone()),
-                usage_attribution: Some(UsageAttribution {
-                    turn_id: turn.turn_id.clone(),
-                    phase: "guided".into(),
-                    reasoning_effort: Some(invocation.model_execution.selected_reasoning_effort()),
-                    round_index: None,
-                }),
-                cache_scope: Some(format!("btcc-guided:{}", turn.session_id)),
-                stable_provider_cache_prefix: state.phase.stable_provider_cache_prefix.clone(),
-                route_transport_attempt_ordinal: None,
-                synthesize_after_tool_candidate: false,
-                synthesize_after_tool_empty: false,
+                images: PromptImages {
+                    manifests: image_attachments
+                        .iter()
+                        .filter_map(|value| {
+                            value
+                                .get("visualManifest")
+                                .filter(|manifest| !manifest.is_null())
+                                .cloned()
+                        })
+                        .collect(),
+                    attachments: image_attachments,
+                    carrier: turn.context.pointer("/imageAdmission/tuple").cloned(),
+                    capability: turn.context.pointer("/imageAdmission/capability").cloned(),
+                },
+                request: RoundRequestOptions {
+                    butler_data: Some(state.butler_data.clone()),
+                    usage_attribution: Some(UsageAttribution {
+                        turn_id: turn.turn_id.clone(),
+                        phase: "guided".into(),
+                        reasoning_effort: Some(
+                            invocation.model_execution.selected_reasoning_effort(),
+                        ),
+                        round_index: None,
+                    }),
+                    cache_scope: Some(format!("btcc-guided:{}", turn.session_id)),
+                    stable_provider_cache_prefix: state.phase.stable_provider_cache_prefix.clone(),
+                    ..Default::default()
+                },
+                final_synthesis: FinalSynthesis::Never,
             })
         })
     }

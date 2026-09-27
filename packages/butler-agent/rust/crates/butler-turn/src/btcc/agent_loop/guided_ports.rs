@@ -10,9 +10,9 @@ use crate::btcc::{
 
 use super::continuation::GuidedPresentation;
 use super::contracts::{
-    BatchDisposition, CandidateDisposition, ContextProjectionInput, ModelRoundMessage,
+    BatchDisposition, CandidateDisposition, ContextProjectionInput, LoopPhase, ModelRoundMessage,
     ModelRoundTool, ModelRoundToolCall, SteeringObservation, TextCallDisposition, ToolOutcome,
-    ToolResult,
+    ToolResult, ToolSurface,
 };
 use super::ports::{ContextProjectionFuture, ToolExecutionError};
 
@@ -64,7 +64,9 @@ pub trait PromptPort: Send + Sync {
     ) -> PortFuture<'a, RenderedGuidedPrompt>;
 }
 
-pub use super::guided_types::RenderedGuidedPrompt;
+pub use super::guided_types::{
+    FinalSynthesis, PromptImages, RenderedGuidedPrompt, RoundRequestOptions,
+};
 
 pub trait AuthorityPort: Send + Sync {
     fn presentation<'a>(
@@ -101,13 +103,15 @@ pub trait TurnContextProjection: Send + Sync {
     ) -> ContextProjectionFuture<'a>;
 }
 
+/// Resolves and executes the tools of a guided turn.
 pub trait ToolPort: Send + Sync {
+    /// The tools offered for the next round; the final-report phase offers none.
     fn surface<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
         fallback: &'a [ModelRoundTool],
-        final_report: bool,
-    ) -> PortFuture<'a, (Vec<ModelRoundTool>, Option<String>)>;
+        phase: LoopPhase,
+    ) -> PortFuture<'a, ToolSurface>;
 
     fn execute<'a>(
         &'a self,

@@ -12,7 +12,7 @@ use tokio::sync::Mutex;
 
 use butler_turn::btcc::{
     BoundedContinuationEnvelope, BoundedEnvelopeV1, BtccError, ContextCompactionRepository,
-    ContextMessages, ContextPort, ContextProjection, ContextProjectionError,
+    ContextMessages, ContextPort, ContextProjection, ContextProjectionError, ContextRebase,
     ContextProjectionInput, ContextProjectionRebaseIdentity, ContextSizingRequest,
     GuidedInvocation, ModelRoundError, ModelRoundMessage, ModelRoundRequest, PortFuture,
     ProviderBodyAdmissionPort, SteeringObservation, TurnContextProjection,
@@ -172,8 +172,11 @@ impl TurnContext {
             messages,
             bounded_continuation: Some(envelope),
             provider_body_admission: admission,
-            requires_rebase,
-            recheck_steering_on_rebase: self.state.is_some(),
+            rebase: match (requires_rebase, self.state.is_some()) {
+                (false, _) => ContextRebase::NotRequired,
+                (true, false) => ContextRebase::Required,
+                (true, true) => ContextRebase::RequiredWithSteeringRecheck,
+            },
         })
     }
 

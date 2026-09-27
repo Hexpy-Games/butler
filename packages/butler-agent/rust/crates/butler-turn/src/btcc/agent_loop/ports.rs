@@ -7,9 +7,9 @@ use crate::btcc::{BtccError, PortFuture, RuntimeFailure, TurnRecord};
 use super::continuation::GuidedPresentation;
 use super::contracts::{
     AgentLoopEvent, BatchDisposition, CandidateDisposition, CloseoutInput, ContextProjection,
-    ContextProjectionInput, GuidedCloseout, ModelRoundRequest, ModelRoundResult, ModelRoundTool,
-    ModelRoundToolCall, PreparedPolicy, SteeringObservation, TextCallDisposition, ToolOutcome,
-    ToolResult,
+    ContextProjectionInput, GuidedCloseout, LoopPhase, ModelRoundRequest, ModelRoundResult,
+    ModelRoundTool, ModelRoundToolCall, PreparedPolicy, SteeringObservation, TextCallDisposition,
+    ToolOutcome, ToolResult, ToolSurface,
 };
 use super::guided_ports::{GuidedInvocation, TurnContextProjection};
 
@@ -173,8 +173,8 @@ pub(crate) trait GuidedPolicyPort: Send + Sync {
         &'a self,
         invocation: GuidedInvocation<'a>,
         fallback: &'a [ModelRoundTool],
-        final_report: bool,
-    ) -> PortFuture<'a, (Vec<ModelRoundTool>, Option<String>)>;
+        phase: LoopPhase,
+    ) -> PortFuture<'a, ToolSurface>;
 
     fn begin_context<'a>(
         &'a self,
