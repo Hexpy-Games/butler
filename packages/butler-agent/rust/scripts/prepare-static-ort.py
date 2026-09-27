@@ -38,6 +38,25 @@ UNIX_DEPS = (
     "_deps/protobuf-build/libprotobuf-lite.a",
     "_deps/re2-build/libre2.a",
 )
+LINUX = {
+    "curl": "/usr/bin/curl",
+    "cmake": "bin/cmake",
+    "cmake_archive": "cmake.tar.gz",
+    "exe": "",
+    "static_lib": "lib{}.a",
+    "static_glob": "*.a",
+    "dynamic_glob": "libonnxruntime*.so*",
+    # ORT always builds this loader for shared execution providers off Apple;
+    # the static CPU build neither links nor loads it.
+    "dynamic_allowed": ("libonnxruntime_providers_shared.so",),
+    "deps": UNIX_DEPS,
+    # GCC 15's libstdc++ no longer includes <cstdint> transitively, which the
+    # pinned ORT relies on; older compilers are unaffected.
+    "cmake_defines": ("CMAKE_CXX_FLAGS=-include cstdint",),
+    "cmake_cache": (),
+    # The pinned ORT predates the host GCC; its new warnings must not fail the build.
+    "build_args": ("--compile_no_warning_as_error",),
+}
 TARGETS = {
     "macos-arm64": {
         "host": ("darwin", ("arm64",)),
@@ -48,42 +67,17 @@ TARGETS = {
         "static_lib": "lib{}.a",
         "static_glob": "*.a",
         "dynamic_glob": "libonnxruntime*.dylib",
+        "dynamic_allowed": (),
         "deps": UNIX_DEPS,
         "cmake_defines": ("CMAKE_OSX_ARCHITECTURES=arm64",),
         "cmake_cache": ("CMAKE_OSX_ARCHITECTURES:STRING=arm64",),
         "build_args": (),
     },
-    "linux-x64": {
-        "host": ("linux", ("x86_64",)),
-        "curl": "/usr/bin/curl",
-        "cmake": "bin/cmake",
-        "cmake_archive": "cmake.tar.gz",
-        "exe": "",
-        "static_lib": "lib{}.a",
-        "static_glob": "*.a",
-        "dynamic_glob": "libonnxruntime*.so*",
-        "deps": UNIX_DEPS,
-        "cmake_defines": (),
-        "cmake_cache": (),
-        # The pinned ORT predates the host GCC; its new warnings must not fail the build.
-        "build_args": ("--compile_no_warning_as_error",),
-    },
-    "linux-arm64": {
-        "host": ("linux", ("aarch64", "arm64")),
-        "curl": "/usr/bin/curl",
-        "cmake": "bin/cmake",
-        "cmake_archive": "cmake.tar.gz",
-        "exe": "",
-        "static_lib": "lib{}.a",
-        "static_glob": "*.a",
-        "dynamic_glob": "libonnxruntime*.so*",
-        "deps": UNIX_DEPS,
-        "cmake_defines": (),
-        "cmake_cache": (),
-        "build_args": ("--compile_no_warning_as_error",),
-    },
-    # Only --protoc-only is exercised in CI. The full build must run inside a
-    # Visual Studio x64 developer environment (cl.exe on PATH) with symlink rights.
+    "linux-x64": {**LINUX, "host": ("linux", ("x86_64",))},
+    "linux-arm64": {**LINUX, "host": ("linux", ("aarch64", "arm64"))},
+    # CI exercises only --protoc-only. The full build must run inside a Visual
+    # Studio x64 developer environment (cl.exe on PATH) with symlink rights,
+    # under a short CARGO_TARGET_DIR (MAX_PATH).
     "windows-x64": {
         "host": ("win32", ("AMD64", "x86_64")),
         "curl": str(pathlib.Path(os.environ.get("SystemRoot", "C:\\Windows")) / "System32" / "curl.exe"),
@@ -93,6 +87,7 @@ TARGETS = {
         "static_lib": "{}.lib",
         "static_glob": "*.lib",
         "dynamic_glob": "onnxruntime*.dll",
+        "dynamic_allowed": ("onnxruntime_providers_shared.dll",),
         "deps": (
             "_deps/onnx-build/onnx.lib",
             "_deps/protobuf-build/libprotobuf-lite.lib",
@@ -323,6 +318,21 @@ def archive_members_safe(names):
             fail(f"Unsafe archive member: {name}")
 
 
+def native_path(path):
+    """The path for bulk file operations: on Windows its extended-length form,
+    because archive members (ONNX test data) nest past MAX_PATH."""
+    if os.name != "nt":
+        return path
+    return pathlib.Path("\\\\?\\" + str(path.resolve()))
+
+
+def stage_name(kind, fingerprint):
+    """A unique staging directory name; short on Windows to keep build paths under MAX_PATH."""
+    if os.name == "nt":
+        return f".{kind[0]}{uuid.uuid4().hex[:8]}.tmp"
+    return f".{kind}{fingerprint}.{os.getpid()}.{uuid.uuid4().hex}.tmp"
+
+
 def extract(archive, destination):
     destination.mkdir(parents=True)
     if archive.suffix == ".zip":
@@ -335,7 +345,7 @@ def extract(archive, destination):
             for item in members:
                 if (item.external_attr >> 16) & 0o170000 == 0o120000:
                     fail(f"Unexpected archive symlink: {item.filename}")
-            source.extractall(destination)
+            source.extractall(native_path(destination))
     else:
         with tarfile.open(archive, "r:gz") as source:
             members = source.getmembers()
@@ -348,7 +358,7 @@ def extract(archive, destination):
                     target = (destination / item.name).parent / item.linkname
                     if not target.resolve().is_relative_to(destination.resolve()):
                         fail(f"Archive link escapes extraction root: {item.name}")
-            source.extractall(destination)
+            source.extractall(native_path(destination))
 
 
 def sole_directory(root):
@@ -371,8 +381,10 @@ def verified_outputs(lib_path, target):
     for path in required:
         if not path.is_file() or path.stat().st_size == 0:
             fail(f"Required ORT static library is missing: {path}")
-    if any(lib_path.rglob(spec["dynamic_glob"])):
-        fail("Unexpected ONNX Runtime dynamic library in static build")
+    dynamic = sorted({path.name for path in lib_path.rglob(spec["dynamic_glob"])}
+                     - set(spec["dynamic_allowed"]))
+    if dynamic:
+        fail(f"Unexpected ONNX Runtime dynamic library in static build: {', '.join(dynamic)}")
     settings = (lib_path / "CMakeCache.txt").read_text()
     for setting in (
         *spec["cmake_cache"],
@@ -493,7 +505,7 @@ def prepare_protoc(cache_root, lock, target):
     protoc = complete / executable
     if protoc.is_file():
         return protoc
-    stage = cache_root / f".protoc.{os.getpid()}.{uuid.uuid4().hex}.tmp"
+    stage = cache_root / stage_name("protoc", "")
     stage.mkdir()
     try:
         download(spec, stage / "protoc.zip", target)
@@ -506,7 +518,7 @@ def prepare_protoc(cache_root, lock, target):
         (stage / "protoc").rename(complete)
     finally:
         if stage.exists():
-            shutil.rmtree(stage)
+            shutil.rmtree(native_path(stage))
     return protoc
 
 
@@ -571,7 +583,7 @@ def main():
         adopt(complete, fingerprint, lock, target)
     else:
         check_space(cache_root)
-        stage = cache_root / f".ort-{fingerprint}.{os.getpid()}.{uuid.uuid4().hex}.tmp"
+        stage = cache_root / stage_name("ort-", fingerprint)
         stage.mkdir()
         try:
             lib_path, protoc = prepare(stage, lock, target)
@@ -587,7 +599,7 @@ def main():
             stage.rename(complete)
         finally:
             if stage.exists():
-                shutil.rmtree(stage)
+                shutil.rmtree(native_path(stage))
     print(json.dumps({
         "ort_lib_path": str(complete / "build/Release"),
         "protoc": str(complete / f"tools/protoc/bin/protoc{TARGETS[target]['exe']}"),

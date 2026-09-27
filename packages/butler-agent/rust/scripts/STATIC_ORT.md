@@ -7,7 +7,7 @@
 | `macos-arm64` | `aarch64-apple-darwin` | macOS system `/usr/bin/curl`, Xcode command-line tools (`xcrun`/clang) | full ORT build (tests, E2E, release) |
 | `linux-x64` | `x86_64-unknown-linux-gnu` | `/usr/bin/curl`, a C/C++ compiler (`CC`/`CXX`, default `cc`/`c++`) | full ORT build (Linux tests) |
 | `linux-arm64` | `aarch64-unknown-linux-gnu` | as `linux-x64` | full ORT build (Linux tests) |
-| `windows-x64` | `x86_64-pc-windows-msvc` | `%SystemRoot%\System32\curl.exe`, Visual Studio with the x64 C++ tools; the full build runs in an x64 developer environment (`cl.exe` on `PATH`) with symlink rights | `--protoc-only` (compile check); the full ORT build is unverified |
+| `windows-x64` | `x86_64-pc-windows-msvc` | `%SystemRoot%\System32\curl.exe`, Visual Studio with the x64 C++ tools; the full build runs in an x64 developer environment (`cl.exe` on `PATH`) with symlink rights and a short `CARGO_TARGET_DIR` | `--protoc-only` (compile check); the full ORT build runs only on a developer host |
 
 Every target also needs Python 3.9+, Rust 1.91.0 and more than 8 GiB free. CMake, Ninja and protoc come from pinned archives; they do not need a global installation. The script rejects other hosts and caps downloads, archive expansion, build time, parallel jobs and disk use.
 
@@ -17,7 +17,7 @@ Every target also needs Python 3.9+, Rust 1.91.0 and more than 8 GiB free. CMake
 
 `static-ort.lock.json` holds every input URL, revision, archive SHA-256 digest and digest provenance. `sources` (ORT, ONNX, Eigen) are shared by all targets; each `targets` entry pins that target's CMake, Ninja and protoc archives and its build settings (Linux and Windows build with 4 parallel jobs, macOS with 2). The ORT and ONNX digests were measured from official GitHub commit tarballs. CMake digests match Kitware's published `cmake-3.31.10-SHA-256.txt` and release API digests. The Linux and Windows protoc digests match the protobuf release API digests; the macOS protoc and all Ninja digests were measured from official release assets. ORT pins an Eigen archive SHA-1 whose current official GitLab archive bytes differ. The recipe verifies the currently observed official commit archive SHA-256 and passes its extracted source through `FETCHCONTENT_SOURCE_DIR_EIGEN`. This preserves the commit, but does not claim the archive bytes match ORT's pinned SHA-1.
 
-Linux and Windows builds pass `--compile_no_warning_as_error`: the pinned ORT predates the runners' compilers, whose new warnings would otherwise fail the build. The macOS build arguments are unchanged.
+Linux and Windows builds pass `--compile_no_warning_as_error`: the pinned ORT predates the runners' compilers, whose new warnings would otherwise fail the build. Linux builds also compile C++ with `-include cstdint`, because GCC 15's libstdc++ no longer includes `<cstdint>` transitively and the pinned ORT relies on it (GCC 13 on the CI runners is unaffected). Off Apple, ORT always builds its loader for shared execution providers (`libonnxruntime_providers_shared.so`, `onnxruntime_providers_shared.dll`); the static CPU build neither links nor loads it, so it is the one dynamic library the output check allows. Windows sources nest past `MAX_PATH`: the recipe extracts through extended-length paths and uses short staging names, and the cache root (`CARGO_TARGET_DIR`) must be short (the CI runner's `D:\a\_temp\ort-cache` is). The macOS build arguments are unchanged.
 
 ## Cache
 

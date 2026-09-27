@@ -199,15 +199,6 @@ jobs:
           - target: linux-arm64
             runner: ubuntu-24.04-arm
     steps:
-      # The static ORT build needs more than 8 GiB free while it runs, next to
-      # the test build; drop preinstalled SDKs these jobs never use.
-      - name: Free disk space
-        working-directory: /
-        run: |
-          df -h /
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
-          df -h /
-
       - name: Check out repository
         uses: actions/checkout@v4
 
