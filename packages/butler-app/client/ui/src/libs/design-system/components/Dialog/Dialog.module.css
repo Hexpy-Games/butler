@@ -163,6 +163,33 @@
   background-clip: content-box;
 }
 
+/* Phones: the command palette is a full-width sheet from the top edge, below
+   the safe area. It drops in from above; reduced motion zeroes the travel
+   token, so it only fades. */
+@media (width <= 640px) {
+  .content[data-motion="palette"] {
+    top: 0;
+    left: 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: var(--adaptive-viewport-block-size);
+    padding-top: var(--safe-area-top);
+    padding-inline: var(--safe-area-left) var(--safe-area-right);
+    border-radius: 0 0 var(--radius-popover) var(--radius-popover);
+    transform: none;
+  }
+
+  .content[data-motion="palette"][data-state="open"] {
+    animation: palette-sheet-enter var(--motion-slow)
+      var(--motion-ease-emphasized);
+  }
+
+  .content[data-motion="palette"][data-state="closed"] {
+    animation: palette-sheet-exit var(--motion-exit-fast)
+      var(--motion-ease-accelerate) forwards;
+  }
+}
+
 @keyframes dialog-overlay-enter {
   from {
     opacity: 0;
@@ -201,5 +228,19 @@
   to {
     opacity: 0;
     transform: translate(-50%, -50%) scale(var(--motion-scale-palette));
+  }
+}
+
+@keyframes palette-sheet-enter {
+  from {
+    opacity: 0;
+    transform: translateY(calc(-1 * var(--motion-distance-lg)));
+  }
+}
+
+@keyframes palette-sheet-exit {
+  to {
+    opacity: 0;
+    transform: translateY(calc(-1 * var(--motion-distance-lg)));
   }
 }

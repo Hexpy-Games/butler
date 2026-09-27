@@ -2,27 +2,6 @@
    design-system components; this module only lays out frames, previews and
    the viewer's own editorial surfaces (hero, token rows, matrices). */
 
-.viewer {
-  display: grid;
-  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-  height: 100vh;
-  min-height: 0;
-  background: var(--conversation-bg);
-  color: var(--text-primary);
-}
-
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-lg);
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  padding: var(--space-lg) var(--space-md) var(--space-2xl);
-  border-right: var(--border-hairline) solid var(--line);
-  background: var(--sidebar-bg);
-}
-
 .brand {
   display: flex;
   align-items: center;
@@ -40,25 +19,13 @@
   color: var(--send-fg);
 }
 
-.main {
+/* The page scroller: row 2 of the shell workspace, under the titlebar row. */
+.scroll {
   min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden auto;
   overscroll-behavior: contain;
-}
-
-.toolbar {
-  position: sticky;
-  top: 0;
-  z-index: var(--z-sticky);
-  padding: var(--space-sm) var(--space-xl);
-  border-bottom: var(--border-hairline) solid var(--line);
-  background: var(--workspace-bg);
-  backdrop-filter: var(--composer-glass-filter);
-}
-
-.menuToggle {
-  display: none;
+  -webkit-overflow-scrolling: touch;
 }
 
 .content {
@@ -282,6 +249,11 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
   gap: var(--space-lg);
+}
+
+/* A thumbnail wider than a 320px card scrolls inside the card, not the page. */
+.gallery .preview {
+  overflow-x: auto;
 }
 
 .card {
@@ -652,37 +624,21 @@
 }
 
 @media (width <= 768px) {
-  .viewer {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .sidebar {
-    position: fixed;
-    inset: 0 auto 0 0;
-    z-index: var(--z-drawer);
-    display: none;
-    width: min(20rem, 88vw);
-    box-shadow: var(--shadow-card);
-  }
-
-  .viewer[data-menu-open="true"] .sidebar {
-    display: flex;
-  }
-
-  .menuToggle {
-    display: inline-flex;
-  }
-
-  .toolbar {
-    padding: var(--space-sm) var(--space-md);
-  }
-
   .content {
-    padding: var(--space-xl) var(--space-md) var(--space-3xl);
+    padding: var(--space-xl) max(var(--space-md), var(--safe-area-right))
+      calc(var(--space-3xl) + var(--safe-area-bottom))
+      max(var(--space-md), var(--safe-area-left));
   }
 
   .heroGrid {
     padding: var(--space-2xl) var(--space-lg);
+  }
+
+  /* Need over answer: the long component name never pushes the row sideways. */
+  .guideRow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-xs);
+    justify-items: start;
   }
 
   .heroControls {

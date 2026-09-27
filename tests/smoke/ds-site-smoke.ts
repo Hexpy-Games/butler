@@ -3,10 +3,13 @@ import { existsSync } from "node:fs";
 import { createServer } from "node:net";
 import { join, resolve } from "node:path";
 import { chromium, type Page } from "playwright";
+import { MOBILE_VIEWPORTS, assertMobileViewer, launchMobileBrowser, mobileContext } from "../support/ds-viewer-mobile-checks.ts";
 
 // Static DS site (dist-ds-site/, the GitHub Pages artifact) served by `vite preview`: Overview renders
 // at "/", query deep links (?page=components/Button, #anchors) open item pages, and the page never
-// requests anything outside its own origin (no gateway, no 127.0.0.1 API, no telemetry).
+// requests anything outside its own origin (no gateway, no 127.0.0.1 API, no telemetry). On a phone
+// (375x812, WebKit when installed) the site has the app's drawer navigation, compact titlebar,
+// View options and search sheet, and no page scrolls sideways.
 
 const uiRoot = resolve(process.cwd(), "packages", "butler-app", "client", "ui");
 const distDir = join(uiRoot, "dist-ds-site");
@@ -94,7 +97,20 @@ try {
 
   assert(foreign.length === 0, `static site requested foreign URLs:\n${foreign.join("\n")}`);
   assert(errors.length === 0, `static site logged errors:\n${errors.join("\n")}`);
-  console.log(`ds-site smoke passed: overview + 3 deep links, 0 foreign requests (${origin})`);
+
+  const mobile = await launchMobileBrowser();
+  try {
+    const phone = await mobileContext(mobile.browser, MOBILE_VIEWPORTS[0]);
+    const phonePage = await phone.newPage();
+    const phoneErrors: string[] = [];
+    phonePage.on("pageerror", (error) => phoneErrors.push(error.message));
+    await assertMobileViewer(phonePage, (params) => `${origin}/?${new URLSearchParams({ motion: "full", ...params })}`,
+      `ds-site ${mobile.engine} ${MOBILE_VIEWPORTS[0].label}`, ["overview", "components/Button", "foundations/color", "guide"]);
+    assert(phoneErrors.length === 0, `static site logged errors on a phone:\n${phoneErrors.join("\n")}`);
+  } finally {
+    await mobile.browser.close();
+  }
+  console.log(`ds-site smoke passed: overview + 3 deep links + phone navigation, 0 foreign requests (${origin})`);
 } catch (error) {
   if (previewLog) console.error(previewLog);
   console.error(error);

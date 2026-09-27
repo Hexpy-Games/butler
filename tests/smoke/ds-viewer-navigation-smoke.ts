@@ -28,6 +28,9 @@ async function assertDeepLinks(page: Page, baseUrl: string, label: string): Prom
     waitUntil: "networkidle",
   });
   await page.locator('[data-ds-detail="Button"]').waitFor({ state: "visible" });
+  // The viewer controls live in the View options popover (titlebar); phones leave out the width presets.
+  const phone = (page.viewportSize()?.width ?? 1440) <= 640;
+  await openViewOptions(page);
   const item = await page.evaluate(() => {
     const canvases = [...document.querySelectorAll<HTMLElement>('[data-ds-detail="Button"] [data-ds-examples] [data-ds-fixture-canvas]')];
     const pressed = [...document.querySelectorAll('[data-ds-toolbar] [role="radio"][aria-checked="true"]')]
@@ -54,7 +57,10 @@ async function assertDeepLinks(page: Page, baseUrl: string, label: string): Prom
   assert(item.maxCanvasWidth <= 375, `${label}: width=375 deep link rendered ${item.maxCanvasWidth}px canvases`);
   assert(item.importLine.includes('import { Button } from "@/butler-ds"'), `${label}: import line is missing`);
   assert(item.examplesBeforeReadme, `${label}: item page must show examples before the README`);
-  assert(["Dark", "KO", "375"].every((value) => item.pressed.includes(value)), `${label}: toolbar does not reflect the deep link`);
+  assert(["Dark", "KO", ...phone ? [] : ["375"]].every((value) => item.pressed.includes(value)),
+    `${label}: View options do not reflect the deep link (${item.pressed.join(", ")})`);
+  assert(!phone || !item.pressed.includes("375"), `${label}: phones must not offer width presets`);
+  await closeViewOptions(page);
 
   await page.goto(viewerUrl(baseUrl, { page: "navrow", theme: "side-by-side" }), { waitUntil: "networkidle" });
   await page.locator('[data-ds-detail="NavRow"]').waitFor({ state: "visible" });
@@ -62,9 +68,14 @@ async function assertDeepLinks(page: Page, baseUrl: string, label: string): Prom
     [...story.querySelectorAll("[data-ds-theme]")].map((frame) => frame.getAttribute("data-ds-theme")).join(",")));
   assert(frames.length > 0 && frames.every((value) => value === "light,dark"), `${label}: side-by-side should render light and dark frames`);
 
+  await openViewOptions(page);
   await page.locator("[data-ds-toolbar]").getByRole("radiogroup", { name: "Theme" }).getByRole("radio", { name: "Light" }).click();
-  await page.locator("[data-ds-toolbar]").getByRole("radiogroup", { name: "Width" }).getByRole("radio", { name: "Wide" }).click();
-  await page.waitForFunction(() => new URLSearchParams(window.location.search).get("width") === "wide");
+  await page.waitForFunction(() => new URLSearchParams(window.location.search).get("theme") === "light");
+  if (!phone) {
+    await page.locator("[data-ds-toolbar]").getByRole("radiogroup", { name: "Width" }).getByRole("radio", { name: "Wide" }).click();
+    await page.waitForFunction(() => new URLSearchParams(window.location.search).get("width") === "wide");
+  }
+  await closeViewOptions(page);
   assert(param(page, "theme") === "light", `${label}: toolbar theme was not written to the URL`);
   assert(param(page, "page") === "navrow", `${label}: toolbar changes must keep the page param`);
 
@@ -97,19 +108,32 @@ async function assertDeepLinks(page: Page, baseUrl: string, label: string): Prom
     viewer: document.querySelector("[data-ds-viewer]")?.getAttribute("data-motion"),
   }));
   assert(motion.body === "reduced" && motion.viewer === "reduced", `${label}: motion=reduced deep link was not applied`);
+  await openViewOptions(page);
   await page.locator("[data-ds-toolbar]").getByRole("radiogroup", { name: "Motion" }).getByRole("radio", { name: "Full" }).click();
   // Defaults are dropped from the URL, so Full clears the motion param.
   await page.waitForFunction(() => document.body.dataset.motion === "full" &&
     new URLSearchParams(window.location.search).get("motion") === null);
+  await closeViewOptions(page);
 
   await page.goto(viewerUrl(baseUrl, { page: "components/Button#states" }), { waitUntil: "networkidle" });
   await page.locator('[data-ds-detail="Button"] [data-ds-states-matrix]').first().waitFor({ state: "visible" });
   await page.waitForFunction(() => {
-    // The anchor lands just below the sticky toolbar, not under it.
+    // The anchor lands at the top of the page scroller, below the titlebar row, not under it.
     const top = document.getElementById("states")?.getBoundingClientRect().top ?? -1;
-    const toolbar = document.querySelector("main")?.firstElementChild?.getBoundingClientRect().bottom ?? 0;
-    return top >= toolbar - 2 && top < window.innerHeight / 2;
+    const scroller = document.querySelector("[data-ds-scroll]")?.getBoundingClientRect().top ?? 0;
+    const titlebar = document.querySelector('[data-test-class~="custom-titlebar"]')?.getBoundingClientRect().bottom ?? 0;
+    return top >= scroller - 2 && top >= titlebar - 2 && top < window.innerHeight / 2;
   });
+}
+
+async function openViewOptions(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "View options" }).click();
+  await page.locator("[data-ds-view-options-panel]").waitFor({ state: "visible" });
+}
+
+async function closeViewOptions(page: Page): Promise<void> {
+  await page.keyboard.press("Escape");
+  await page.locator("[data-ds-view-options-panel]").waitFor({ state: "detached" });
 }
 
 async function assertSearch(page: Page, baseUrl: string, label: string): Promise<void> {
@@ -146,7 +170,7 @@ async function assertSearch(page: Page, baseUrl: string, label: string): Promise
   await palette.waitFor({ state: "detached" });
 
   const blocksRow = page.locator('[data-ds-nav-item="blocks"]');
-  if (!(await blocksRow.isVisible())) await page.getByRole("button", { name: "Toggle navigation" }).click();
+  if (!(await blocksRow.isVisible())) await page.getByRole("button", { name: "Open navigation" }).click();
   await blocksRow.click();
   await page.locator('[data-ds-gallery="blocks"]').waitFor({ state: "visible" });
   assert(param(page, "page") === "blocks", `${label}: sidebar navigation did not write the page param`);
