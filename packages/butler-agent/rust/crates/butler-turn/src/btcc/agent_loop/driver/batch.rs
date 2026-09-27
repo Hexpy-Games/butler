@@ -299,13 +299,7 @@ pub(super) async fn suspend_for_authority(
         },
         extensions: Default::default(),
     };
-    let value = serde_json::to_value(continuation).map_err(|source| {
-        propagated(
-            super::super::invalid_contract(BtccCode::InvalidAuthorityContinuation)
-                .with_source(source),
-        )
-    })?;
-    finish(input, state, Ending::AwaitAuthority(value)).await
+    finish(input, state, Ending::AwaitAuthority(Box::new(continuation))).await
 }
 
 /// Applies the policy's disposition for a settled batch.

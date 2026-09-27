@@ -3,7 +3,7 @@
 use std::path::Path;
 
 mod sessions;
-pub use sessions::PublicSessionRow;
+pub use sessions::{Archived, MessageOrigins, PublicSessionRow};
 
 use rusqlite::{OptionalExtension, params_from_iter, types::Value};
 
@@ -32,6 +32,13 @@ pub struct PublicMemoryScope {
     pub project_filter: String,
     pub project_ids: Vec<String>,
     pub include_internal: bool,
+}
+
+/// Whether a message page starts from the oldest or the latest message.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PageOrder {
+    Oldest,
+    Latest,
 }
 
 /// A consistent read transaction over public conversation memory.
@@ -179,7 +186,7 @@ impl PublicMemorySnapshot {
             ReadAroundInput {
                 session_id: session_id.to_owned(),
                 anchor_message_id: anchor.map(str::to_owned),
-                direction: Some(direction.to_owned()),
+                direction: Some(crate::conversation::AroundDirection::parse(direction)),
                 limit: Some(limit as f64),
                 include_compacted: false,
             },
@@ -277,7 +284,7 @@ impl PublicMemorySnapshot {
         scope: &PublicMemoryScope,
         role: Option<&str>,
         time: Option<(&str, &str)>,
-        latest: bool,
+        order: PageOrder,
         after: Option<(&str, &str)>,
         limit: usize,
     ) -> ConversationResult<Vec<ConversationMessageWithParts>> {
@@ -285,32 +292,7 @@ impl PublicMemorySnapshot {
             "SELECT m.id FROM conversation_messages m JOIN conversation_sessions s ON s.id=m.session_id WHERE m.visibility='model' AND m.status IN ('complete','compacted') AND m.role IN ('user','assistant') AND s.status!='deleted'",
         );
         let mut values: Vec<Value> = Vec::new();
-        if !scope.include_internal {
-            sql.push_str(" AND m.origin_kind IN ('user_input','assistant_public')");
-        }
-        if scope.kind == "current_session" {
-            sql.push_str(" AND m.session_id=?");
-            values.push(scope.current_session_id.clone().into());
-        }
-        if scope.kind == "current_project" {
-            sql.push_str(" AND s.project_id=?");
-            values.push(scope.current_project_id.clone().unwrap_or_default().into());
-        }
-        if !scope.session_ids.is_empty() {
-            sql.push_str(" AND m.session_id IN (");
-            placeholders(&mut sql, scope.session_ids.len());
-            sql.push(')');
-            values.extend(scope.session_ids.iter().cloned().map(Value::from));
-        }
-        if scope.project_filter == "unassigned" {
-            sql.push_str(" AND s.project_id IS NULL");
-        }
-        if scope.project_filter == "selected" {
-            sql.push_str(" AND s.project_id IN (");
-            placeholders(&mut sql, scope.project_ids.len());
-            sql.push(')');
-            values.extend(scope.project_ids.iter().cloned().map(Value::from));
-        }
+        scope_filter(&mut sql, &mut values, scope);
         if let Some(role) = role {
             sql.push_str(" AND m.role=?");
             values.push(role.to_owned().into());
@@ -321,7 +303,7 @@ impl PublicMemorySnapshot {
             values.push(to.to_owned().into());
         }
         if let Some((at, id)) = after {
-            sql.push_str(if latest {
+            sql.push_str(if order == PageOrder::Latest {
                 " AND (m.created_at<? OR (m.created_at=? AND m.id<?))"
             } else {
                 " AND (m.created_at>? OR (m.created_at=? AND m.id>?))"
@@ -332,7 +314,7 @@ impl PublicMemorySnapshot {
                 id.to_owned().into(),
             ]);
         }
-        sql.push_str(if latest {
+        sql.push_str(if order == PageOrder::Latest {
             " ORDER BY m.created_at DESC,m.id DESC LIMIT ?"
         } else {
             " ORDER BY m.created_at ASC,m.id ASC LIMIT ?"
@@ -352,6 +334,37 @@ impl PublicMemorySnapshot {
             .map(|id| self.reader.read_message(id))
             .collect::<ConversationResult<Vec<_>>>()
             .map(|rows| rows.into_iter().flatten().collect())
+    }
+}
+
+/// Restricts a message page to the scope's sessions and projects.
+// Passthrough: SQL parameter values.
+fn scope_filter(sql: &mut String, values: &mut Vec<Value>, scope: &PublicMemoryScope) {
+    if !scope.include_internal {
+        sql.push_str(" AND m.origin_kind IN ('user_input','assistant_public')");
+    }
+    if scope.kind == "current_session" {
+        sql.push_str(" AND m.session_id=?");
+        values.push(scope.current_session_id.clone().into());
+    }
+    if scope.kind == "current_project" {
+        sql.push_str(" AND s.project_id=?");
+        values.push(scope.current_project_id.clone().unwrap_or_default().into());
+    }
+    if !scope.session_ids.is_empty() {
+        sql.push_str(" AND m.session_id IN (");
+        placeholders(sql, scope.session_ids.len());
+        sql.push(')');
+        values.extend(scope.session_ids.iter().cloned().map(Value::from));
+    }
+    if scope.project_filter == "unassigned" {
+        sql.push_str(" AND s.project_id IS NULL");
+    }
+    if scope.project_filter == "selected" {
+        sql.push_str(" AND s.project_id IN (");
+        placeholders(sql, scope.project_ids.len());
+        sql.push(')');
+        values.extend(scope.project_ids.iter().cloned().map(Value::from));
     }
 }
 

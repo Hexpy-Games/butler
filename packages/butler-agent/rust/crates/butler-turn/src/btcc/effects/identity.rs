@@ -6,6 +6,7 @@ use super::contracts::{EffectFailure, EffectIdentity, EffectResult, ExecuteEffec
 pub(super) struct Resolved {
     pub identity: EffectIdentity,
     pub normalized_target: String,
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     pub normalized_input: Value,
 }
 
@@ -19,6 +20,7 @@ pub(super) struct IdentityParts<'a> {
     pub capability: &'a str,
     pub normalized_target: &'a str,
     pub sanitized_target: &'a str,
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     pub normalized_input: &'a Value,
 }
 
@@ -42,10 +44,12 @@ pub fn accepted_plan_effect_id(
 }
 
 /// The digest of an effect input's stable JSON.
+// Passthrough: EffectAdapter input is capability-generic tool input.
 pub fn effect_input_sha256(value: &Value) -> EffectResult<String> {
     Ok(digest(&stable(value)?))
 }
 
+// Passthrough: EffectAdapter input is capability-generic tool input.
 pub(super) fn stable(value: &Value) -> EffectResult<String> {
     butler_core::json::stringify_sorted(value, &|left, right| {
         left.encode_utf16().cmp(right.encode_utf16())

@@ -22,7 +22,7 @@ use super::{HarnessError, harness_error};
 
 mod sources;
 
-use sources::{apply_credential, live_source, record_provider, replay_provider};
+use sources::{apply_credential, live_source, record_source, replay_source};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Fixture {
@@ -172,23 +172,19 @@ impl Setup {
             Source::Cassette(name)
                 if (flag("BUTLER_E2E_RECORD") && !replay_only) || record_into.is_some() =>
             {
-                record_provider(
+                record_source(
                     &name,
                     model,
+                    &placeholders,
                     record_into,
                     extends,
-                    &placeholders,
                     &mut launch,
                 )
                 .await?
             }
             Source::Cassette(name) => {
-                let (provider, choice, subscription) =
-                    replay_provider(&name, &placeholders, &mut launch).await?;
-                if subscription && stub_credential {
-                    fixtures::stub_codex_auth(&sandbox.codex_home())?;
-                }
-                (Some(provider), choice, None)
+                let stub_codex_home = stub_credential.then(|| sandbox.codex_home());
+                replay_source(&name, &placeholders, stub_codex_home, &mut launch).await?
             }
         };
         if let Some((_, credential)) = &credential {

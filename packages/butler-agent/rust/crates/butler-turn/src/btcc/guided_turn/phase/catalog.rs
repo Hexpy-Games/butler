@@ -8,6 +8,7 @@ use serde_json::Value;
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GuidedCatalogTool {
     pub(super) name: String,
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub(super) definition: Value,
     pub(super) effect_boundary: Option<String>,
     pub(super) category: Option<String>,
@@ -17,6 +18,13 @@ pub(crate) struct GuidedCatalogTool {
     pub(super) safety_notes: Vec<String>,
     #[serde(default)]
     pub(super) durable: bool,
+}
+
+/// Whether project ledger effects are enabled for the session.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LedgerEffects {
+    Enabled,
+    Disabled,
 }
 
 /// The guided tool catalog: tools, profiles and role restrictions.
@@ -64,15 +72,21 @@ impl GuidedCatalogSnapshot {
     pub fn builtin_tool(&self, name: &str) -> Option<GuidedCatalogRead<'_>> {
         self.builtin_tools().find(|tool| tool.name == name)
     }
-    /// Whether a native bridge tool is hidden from the surface.
-    pub fn hidden_native_bridge_tool(
+    /// A builtin tool the native bridge exposes.
+    pub fn bridge_tool(
         &self,
         name: &str,
-        enable_project_ledger_effects: bool,
-    ) -> bool {
+        ledger_effects: LedgerEffects,
+    ) -> Option<GuidedCatalogRead<'_>> {
+        self.builtin_tool(name)
+            .filter(|_| !self.hidden_native_bridge_tool(name, ledger_effects))
+    }
+    /// Whether a native bridge tool is hidden from the surface.
+    pub fn hidden_native_bridge_tool(&self, name: &str, ledger_effects: LedgerEffects) -> bool {
         self.work_tracking.contains(name)
             || (self.project_mutations.contains(name)
-                && !(enable_project_ledger_effects && self.managed_ledger_effects.contains(name)))
+                && !(ledger_effects == LedgerEffects::Enabled
+                    && self.managed_ledger_effects.contains(name)))
     }
     /// Required profiles are checked against concrete Host executors at admission.
     pub fn profile_tool_names(&self, name: &str) -> Option<&[String]> {
@@ -104,6 +118,7 @@ impl GuidedCatalogSnapshot {
 #[derive(Clone, Copy)]
 pub struct GuidedCatalogRead<'a> {
     pub name: &'a str,
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub definition: &'a Value,
     pub category: Option<&'a str>,
     pub tags: &'a [String],

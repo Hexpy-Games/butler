@@ -94,7 +94,7 @@ pub(super) async fn gate(
         if execution.source_work_id != work.work_id
             || execution.workspace_path != owner.binding.workspace_path.to_string_lossy()
             || execution.source_call_id.as_deref() != Some(occurrence)
-            || execution.decision != "allowed"
+            || execution.decision != butler_turn::btcc::RequestDecision::Allowed
             || execution.capability != adapter.capability()
             || execution.normalized_target != normalized_target
             || effect_input_sha256(&execution.normalized_input)

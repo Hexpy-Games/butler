@@ -6,12 +6,20 @@ use super::contracts::{ChangedFile, ChangedLine};
 /// reconstruction order, but retain only two score rows and one decision bit
 /// for each interior mismatch cell. Equal-line moves are recomputed from the
 /// borrowed line slices during reconstruction.
+/// Whether a changed file existed before the change or was created by it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum FileOrigin {
+    Existing,
+    Created,
+}
+
 pub(super) fn changed_file(
     path: &str,
     before: &[u8],
     after: &[u8],
-    created: bool,
+    origin: FileOrigin,
 ) -> Option<ChangedFile> {
+    let created = origin == FileOrigin::Created;
     let before_text = String::from_utf8_lossy(before).into_owned();
     let after_text = String::from_utf8_lossy(after).into_owned();
     let old_lines = split_lines(&before_text)?;

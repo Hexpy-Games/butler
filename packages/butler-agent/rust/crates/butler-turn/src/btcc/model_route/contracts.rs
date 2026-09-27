@@ -30,9 +30,11 @@ pub struct ProviderRequestError {
     pub timeout_kind: Option<String>,
     pub retry_at: Option<String>,
     pub provider_request_id: Option<String>,
+    // Passthrough: provider payload, opaque to BTCC.
     pub rate_limit: Option<Box<Value>>,
     pub provider_error_code: Option<String>,
     pub provider_error_type: Option<String>,
+    // Passthrough: provider payload, opaque to BTCC.
     pub provider_error_details: Option<Box<Value>>,
 }
 
@@ -41,6 +43,7 @@ pub struct ContextSizingRequest<'a> {
     pub model: &'a str,
     pub instructions: Option<&'a str>,
     pub tools: &'a [crate::btcc::agent_loop::ModelRoundTool],
+    // Passthrough: image admission and attachment documents owned by butler-runtime.
     pub attachments: &'a [Value],
     pub max_output_tokens: Option<f64>,
     pub butler_data: Option<&'a str>,
@@ -109,24 +112,5 @@ pub trait ModelExecution: ModelExecutionView {
     fn base(&self) -> &dyn ModelRoundPort;
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct RouteState {
-    pub schema_version: String,
-    pub route_digest: String,
-    pub candidates: Vec<RouteCandidate>,
-    pub retry_ceiling: u32,
-    pub catalog_generation: String,
-    pub active_cursor: u32,
-    #[serde(default)]
-    pub consumed_attempts: Vec<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct RouteCandidate {
-    pub model_ref: String,
-    pub reasoning_effort: ReasoningEffort,
-}
-
 pub(super) use crate::btcc::turn::{AttemptHistory, FailureDisposition, FailureRecord};
+pub(super) use crate::btcc::turn::{RouteCandidate, RouteState};

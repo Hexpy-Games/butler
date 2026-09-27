@@ -13,6 +13,7 @@ pub struct HistoricalTranscriptRow {
     pub(crate) kind: String,
     pub(crate) timestamp: String,
     pub(crate) transport: Option<String>,
+    // Passthrough: legacy/historical records of unknown shape.
     pub(crate) payload: Option<Map<String, Value>>,
 }
 
@@ -150,6 +151,7 @@ pub fn read_historical_app_rows(
     rows
 }
 
+// Passthrough: legacy/historical records of unknown shape.
 fn js_string(value: Option<&Value>) -> String {
     match value {
         None | Some(Value::Null) => String::new(),

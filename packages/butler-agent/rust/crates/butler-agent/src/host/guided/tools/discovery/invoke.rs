@@ -38,9 +38,7 @@ pub(super) async fn run(
         ));
     };
     let catalog = owner.catalog.snapshot();
-    let Some(tool) = catalog.builtin_tool(name).filter(|_| {
-        !catalog.hidden_native_bridge_tool(name, owner.binding.enable_project_ledger_effects)
-    }) else {
+    let Some(tool) = catalog.bridge_tool(name, owner.binding.ledger_effects()) else {
         let mut error = bridge_error(
             "unknown_tool_catalog_id",
             &format!("Unknown tool catalog id: {id}"),

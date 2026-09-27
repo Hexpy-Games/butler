@@ -93,6 +93,7 @@ pub struct StoredSessionBinding {
     pub created_at: String,
     pub updated_at: String,
     pub last_active_at: Option<String>,
+    // Passthrough: free-form session-binding metadata shared with the App runtime policy.
     pub metadata: Option<Map<String, Value>>,
 }
 
@@ -124,6 +125,7 @@ pub struct UpsertSessionBinding {
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
     pub last_active_at: Option<String>,
+    // Passthrough: free-form session-binding metadata shared with the App runtime policy.
     pub metadata: Option<Map<String, Value>>,
 }
 
@@ -132,6 +134,7 @@ pub(crate) struct RebindWorkspaceInput {
     pub session_id: String,
     pub expected_updated_at: String,
     pub workspace_path: String,
+    // Passthrough: free-form session-binding metadata shared with the App runtime policy.
     pub metadata: Map<String, Value>,
     pub updated_at: Option<String>,
 }
@@ -146,6 +149,7 @@ pub struct ExecutionContextInput {
     pub project_id: Option<String>,
     pub app_project_id: Option<String>,
     pub ledger_project_id: Option<String>,
+    // Passthrough: free-form session-binding metadata shared with the App runtime policy.
     pub metadata: Map<String, Value>,
 }
 

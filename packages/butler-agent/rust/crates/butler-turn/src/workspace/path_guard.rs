@@ -2,11 +2,26 @@ use std::path::{Component, Path, PathBuf};
 
 use serde_json::{Value, json};
 
+/// Whether a requested path must be workspace-relative (delegated
+/// subsessions) or may also be absolute inside the workspace.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PathForm {
+    RelativeOnly,
+    RelativeOrAbsolute,
+}
+
+/// Whether a mutation target's final component must already exist.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Leaf {
+    MustExist,
+    MayBeMissing,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct GuardInput<'a> {
     pub root: &'a Path,
     pub requested: &'a str,
-    pub relative_only: bool,
+    pub path_form: PathForm,
     pub allow_directories: bool,
     pub protected_roots: &'a [PathBuf],
 }
@@ -15,8 +30,8 @@ pub(crate) struct GuardInput<'a> {
 pub(crate) struct MutationGuardInput<'a> {
     pub root: &'a Path,
     pub requested: &'a str,
-    pub relative_only: bool,
-    pub allow_missing_leaf: bool,
+    pub path_form: PathForm,
+    pub leaf: Leaf,
     pub installation_root: Option<&'a Path>,
     pub protected_roots: &'a [PathBuf],
 }
@@ -103,7 +118,7 @@ struct Resolved {
 fn resolve_request(
     root: &Path,
     requested: &str,
-    relative_only: bool,
+    path_form: PathForm,
 ) -> std::io::Result<(GuardResult, Option<Resolved>)> {
     let root_lex = lexical_absolute(root)?;
     let mut out = GuardResult {
@@ -119,7 +134,7 @@ fn resolve_request(
         return Ok((out, None));
     }
     let requested_path = Path::new(requested);
-    if relative_only && requested_path.is_absolute() {
+    if path_form == PathForm::RelativeOnly && requested_path.is_absolute() {
         out.reason = Some("absolute_path_not_allowed");
         return Ok((out, None));
     }
@@ -179,7 +194,7 @@ fn admit_contained(
 /// not protected, not escaping through symlinks, and an existing regular file
 /// (or directory when allowed).
 pub(crate) fn resolve_workspace_path_guard(input: GuardInput<'_>) -> std::io::Result<GuardResult> {
-    let (mut out, resolved) = resolve_request(input.root, input.requested, input.relative_only)?;
+    let (mut out, resolved) = resolve_request(input.root, input.requested, input.path_form)?;
     let Some(resolved) = resolved else {
         return Ok(out);
     };
@@ -235,7 +250,7 @@ impl Installation {
 pub(crate) fn resolve_workspace_mutation_guard(
     input: MutationGuardInput<'_>,
 ) -> std::io::Result<GuardResult> {
-    let (mut out, resolved) = resolve_request(input.root, input.requested, input.relative_only)?;
+    let (mut out, resolved) = resolve_request(input.root, input.requested, input.path_form)?;
     let Some(resolved) = resolved else {
         return Ok(out);
     };
@@ -256,7 +271,7 @@ pub(crate) fn resolve_workspace_mutation_guard(
             out.real = Some(real.clone());
             out.reason = existing_target_rejection(&root_real, &absolute, &real, &installation)?;
         }
-        Err(_) if input.allow_missing_leaf => {
+        Err(_) if input.leaf == Leaf::MayBeMissing => {
             let parent = absolute.parent().unwrap_or(&root_real);
             let parent_real = realpath_or_nearest(parent);
             if installation.contains(&parent_real) {

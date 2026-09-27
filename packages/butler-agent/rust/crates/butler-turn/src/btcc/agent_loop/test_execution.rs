@@ -1,7 +1,5 @@
 use std::{future::Future, pin::Pin};
 
-use serde_json::Value;
-
 use crate::btcc::{BtccError, ModelIdentity};
 
 use super::ports::ModelRoundPort;
@@ -49,18 +47,8 @@ impl crate::btcc::model_route::ModelExecutionFactory for Fixture {
         >,
     > {
         Box::pin(async move {
-            let provider = input
-                .turn
-                .model_selection
-                .get("provider")
-                .and_then(Value::as_str)
-                .unwrap_or("provider");
-            let model = input
-                .turn
-                .model_selection
-                .get("model")
-                .and_then(Value::as_str)
-                .unwrap_or("model");
+            let provider = &input.turn.model_selection.provider;
+            let model = &input.turn.model_selection.model;
             Ok(Box::new(FixtureExecution {
                 base: input.base,
                 model: format!("{provider}/{model}"),

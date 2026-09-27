@@ -10,7 +10,7 @@ use super::path_guard::{GuardInput, resolve_workspace_path_guard, safe_cursor_pa
 pub struct ReadFileInput {
     pub root: PathBuf,
     pub path: String,
-    pub relative_only: bool,
+    pub path_form: super::PathForm,
     pub protected_roots: Vec<PathBuf>,
     pub start_line: Option<usize>,
     pub limit_lines: Option<usize>,
@@ -20,6 +20,7 @@ pub struct ReadFileInput {
 /// A file read's model-facing result and cursor facts.
 #[derive(Debug)]
 pub struct WorkspaceFileRead {
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub result: Value,
     pub sha256: Option<String>,
     pub output_bytes: usize,
@@ -30,6 +31,7 @@ pub struct WorkspaceFileRead {
     pub next_offset: Option<usize>,
 }
 impl WorkspaceFileRead {
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     fn failed(result: Value) -> Self {
         Self {
             result,
@@ -135,12 +137,12 @@ fn admitted_file(input: &ReadFileInput) -> std::io::Result<Result<PathBuf, Value
     let guard = resolve_workspace_path_guard(GuardInput {
         root: &input.root,
         requested: &input.path,
-        relative_only: input.relative_only,
+        path_form: input.path_form,
         allow_directories: false,
         protected_roots: &input.protected_roots,
     })?;
     let Some((_, file)) = guard.accepted() else {
-        let safe = if input.relative_only {
+        let safe = if input.path_form == super::PathForm::RelativeOnly {
             guard.safe_path().unwrap_or_else(|| ".".into())
         } else {
             input.path.clone()
@@ -189,6 +191,7 @@ struct BytesRead {
 }
 
 impl BytesRead {
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     fn rejected(&self, result: Value, start_offset: Option<usize>) -> WorkspaceFileRead {
         WorkspaceFileRead {
             sha256: Some(self.sha256.clone()),
@@ -198,6 +201,7 @@ impl BytesRead {
         }
     }
 
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     fn cursor_rejected(&self, result: Value) -> WorkspaceFileRead {
         WorkspaceFileRead {
             cursor_invalid: true,

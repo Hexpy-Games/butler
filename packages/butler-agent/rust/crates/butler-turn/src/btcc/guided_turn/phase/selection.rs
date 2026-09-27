@@ -9,7 +9,7 @@ use crate::btcc::{AccessMode, TurnRecord};
 use super::super::work::GuidedPreparationError;
 use super::catalog::{GuidedCatalogSnapshot, GuidedCatalogTool};
 use super::instructions;
-use super::policy::GuidedExecutionPolicy;
+use super::policy::{GuidedExecutionPolicy, PolicyRole};
 use super::visibility::{
     ProjectSignals, legacy_authorized, legacy_visible, phase_allows, profile_initial,
     turn_admits_zai_image_tool,
@@ -231,7 +231,8 @@ fn required_profiles(
         .required_profiles
         .iter()
         .filter(|profile| {
-            policy.role != "butler" || !matches!(profile.as_str(), "project" | "project-lifecycle")
+            policy.role != PolicyRole::Butler
+                || !matches!(profile.as_str(), "project" | "project-lifecycle")
         })
         .cloned()
         .collect();
@@ -276,10 +277,10 @@ fn admit_phase_tools<'a>(
             authorized.push(tool);
         }
     }
-    let delegation: &[&str] = match policy.role.as_str() {
-        "butler" => &["delegate_to_steward", "steer_steward", "cancel_steward"],
-        "steward" => &["delegate_to_worker", "steer_worker", "wait_for_worker"],
-        _ => &[],
+    let delegation: &[&str] = match policy.role {
+        PolicyRole::Butler => &["delegate_to_steward", "steer_steward", "cancel_steward"],
+        PolicyRole::Steward => &["delegate_to_worker", "steer_worker", "wait_for_worker"],
+        PolicyRole::Worker | PolicyRole::Other(_) => &[],
     };
     push_missing(authorized, catalog, delegation);
 }

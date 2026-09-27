@@ -83,9 +83,11 @@ async fn fresh_turn_binds_and_continues_only_current_session_head() {
     next.request.turn_id = "turn-2".into();
     next.request.event_id = "event-2".into();
     next.request.message.id = "message-2".into();
-    next.command["turnId"] = "turn-2".into();
-    next.command["triggerKey"] = "event-2".into();
-    next.command["message"]["messageId"] = "message-2".into();
+    next.command.edit_json(|command| {
+        command["turnId"] = "turn-2".into();
+        command["triggerKey"] = "event-2".into();
+        command["message"]["messageId"] = "message-2".into();
+    });
     let turns = BtccRepositories::new(storage.clone(), None);
     assert!(turns.load_or_admit(&next).await.unwrap().1);
     let next_scope = crate::btcc::work::WorkTurnScope {

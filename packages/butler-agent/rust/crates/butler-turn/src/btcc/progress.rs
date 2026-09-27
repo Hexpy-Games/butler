@@ -21,8 +21,10 @@ pub struct RuntimeTurnEventInput {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visibility: Option<EventVisibility>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    // Passthrough: progress payload relayed to the App.
     pub payload: Option<Map<String, Value>>,
     #[serde(flatten)]
+    // Passthrough: unknown fields kept for forward compatibility.
     pub(crate) extensions: Map<String, Value>,
 }
 

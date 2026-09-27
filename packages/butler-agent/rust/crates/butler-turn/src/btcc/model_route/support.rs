@@ -48,30 +48,13 @@ pub(super) fn recovered(value: &FailureRecord) -> ModelRoundError {
     }
 }
 
-pub(super) fn selected(value: &Value) -> Result<(String, ReasoningEffort), BtccError> {
-    let provider = value
-        .get("provider")
-        .and_then(Value::as_str)
-        .ok_or_else(|| {
-            BtccError::detected(BtccCode::InvalidAdmittedModelSelection, "missing provider")
-        })?;
-    let model = value.get("model").and_then(Value::as_str).ok_or_else(|| {
-        BtccError::detected(BtccCode::InvalidAdmittedModelSelection, "missing model")
-    })?;
-    let reasoning = serde_json::from_value(
-        value
-            .get("reasoningEffort")
-            .cloned()
-            .unwrap_or(Value::String("medium".into())),
+pub(super) fn selected(
+    selection: &crate::btcc::AdmittedModelSelection,
+) -> (String, ReasoningEffort) {
+    (
+        format!("{}/{}", selection.provider, selection.model),
+        selection.reasoning_effort.clone(),
     )
-    .map_err(|source| {
-        BtccError::detected(
-            BtccCode::InvalidAdmittedModelSelection,
-            "invalid reasoning effort",
-        )
-        .with_source(source)
-    })?;
-    Ok((format!("{provider}/{model}"), reasoning))
 }
 pub(super) fn validate(route: &RouteState) -> Result<(), BtccError> {
     if route.schema_version != "butler.model-route.v1"
@@ -87,6 +70,7 @@ pub(super) fn validate(route: &RouteState) -> Result<(), BtccError> {
     }
     Ok(())
 }
+// Passthrough: image admission and attachment documents owned by butler-runtime.
 pub(super) fn visual_freeze(image: Option<&Value>, model: &str) -> Result<(), ModelRoundError> {
     let Some(image) = image else {
         return Ok(());
@@ -107,8 +91,11 @@ pub(super) fn visual_freeze(image: Option<&Value>, model: &str) -> Result<(), Mo
     }
     Ok(())
 }
+// Passthrough: provider payload, opaque to BTCC.
 pub(super) fn rebase_continuation<'a>(
+    // Passthrough: provider payload, opaque to BTCC.
     bounded: Option<&Value>,
+    // Passthrough: provider payload, opaque to BTCC.
     continuation: Option<&'a Value>,
 ) -> Result<Option<&'a Value>, ModelRoundError> {
     let Some(current) = bounded.and_then(|v| v.get("contextProjection")) else {
@@ -171,6 +158,7 @@ pub(super) fn attach_surface(
     Ok(result)
 }
 
+// Passthrough: generic JSON canonicalization/hashing over arbitrary documents.
 fn projection_identity(value: &Value) -> bool {
     let Some(value) = value.as_object() else {
         return false;

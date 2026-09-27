@@ -264,8 +264,11 @@ fn verified_snapshot(db: &Connection, snapshot_ref: &str) -> Option<(String, Val
 
 /// The matched admission's evidence: the snapshot, plus subsession, wake and
 /// authority-continuation evidence; such turns are internal control.
+// Passthrough: legacy/historical records of unknown shape.
 fn admission_evidence(
+    // Passthrough: legacy/historical records of unknown shape.
     command: &Value,
+    // Passthrough: legacy/historical records of unknown shape.
     context: &Value,
     snapshot_ref: String,
     record_hash: String,

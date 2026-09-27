@@ -162,7 +162,7 @@ async fn dropped_caller_still_completes_and_close_drains() {
         butler_turn::workspace::MutationCommand::Write(butler_turn::workspace::WriteMutation {
             context: butler_turn::workspace::MutationContext {
                 root: fixture.root.clone(),
-                relative_only: false,
+                path_form: butler_turn::workspace::PathForm::RelativeOrAbsolute,
                 installation_root: None,
                 protected_roots: Vec::new(),
             },

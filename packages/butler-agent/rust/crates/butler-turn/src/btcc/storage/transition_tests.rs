@@ -1,5 +1,3 @@
-use serde_json::json;
-
 use super::repository::BtccRepositories;
 use super::testing::{Fixture, prepared};
 use super::*;
@@ -31,7 +29,10 @@ async fn authority_suspension_rolls_back_then_resumes_from_decision() {
         .map_err(StorageError::sqlite)?; Ok(()) }).await.expect("seed authority");
     let transition = TurnTransition::Suspend {
         reason: SuspensionReason::AuthorityPending,
-        authority_continuation: Some(json!({"requestRef":"authority-ref","callId":"call-1"})),
+        authority_continuation: Some(Box::new(crate::btcc::AuthorityLoopContinuation::fixture(
+            "authority-ref",
+            "call-1",
+        ))),
     };
     let first = repositories
         .commit_transition(&turn, &claim, &transition)

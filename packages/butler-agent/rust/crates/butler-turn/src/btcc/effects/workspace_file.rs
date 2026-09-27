@@ -6,6 +6,7 @@ mod tests;
 
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
@@ -40,31 +41,61 @@ pub(crate) fn normalized_workspace_effect_target(
     path::target(target)
 }
 
+/// The normalized input of a write_file effect. Field order and the omitted
+/// optional fields are the journaled (identity-hashed) form.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub(super) struct WriteInput {
+    pub(super) path: String,
+    pub(super) content: String,
+    pub(super) create_parents: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) overwrite: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) expected_sha256: Option<String>,
+}
+
+impl WriteInput {
+    /// Decodes a journaled normalized input.
+    // Passthrough: parse boundary validating untyped JSON into typed values.
+    fn decode(input: &Value) -> Result<Self, EffectAdapterError> {
+        Self::deserialize(input).map_err(|error| {
+            adapter_error(
+                "write_file_input_invalid",
+                format!("write_file normalized input is invalid: {error}"),
+            )
+        })
+    }
+
+    /// Whether the caller stated a precondition (overwrite or expected digest).
+    fn caller_bound(&self) -> bool {
+        self.overwrite.is_some() || self.expected_sha256.is_some()
+    }
+}
+
 fn adapter_error(code: &str, message: impl Into<String>) -> EffectAdapterError {
     EffectAdapterError::new(code, message)
 }
 fn workspace_error(error: &crate::workspace::EffectFileError) -> EffectAdapterError {
     adapter_error(error.code(), error.message())
 }
-fn mismatch(target: &str, input: &Value) -> Option<EffectAdapterError> {
-    let path = input.get("path").and_then(Value::as_str).unwrap_or("");
-    (target != format!("workspace:{path}")).then(|| {
+fn mismatch(target: &str, input: &WriteInput) -> Option<EffectAdapterError> {
+    (target != format!("workspace:{}", input.path)).then(|| {
         adapter_error(
             "write_file_target_input_mismatch",
             "write_file target does not match its normalized path.",
         )
     })
 }
-fn expected_sha(input: &Value) -> String {
-    let content = input.get("content").and_then(Value::as_str).unwrap_or("");
-    format!("{:x}", Sha256::digest(content.as_bytes()))
+fn expected_sha(input: &WriteInput) -> String {
+    format!("{:x}", Sha256::digest(input.content.as_bytes()))
 }
 fn caller_precondition(
-    input: &Value,
+    input: &WriteInput,
     before: &EffectFileObservation,
 ) -> Option<EffectAdapterError> {
-    let overwrite = input.get("overwrite").and_then(Value::as_bool);
-    let expected = input.get("expected_sha256").and_then(Value::as_str);
+    let overwrite = input.overwrite;
+    let expected = input.expected_sha256.as_deref();
     match before {
         EffectFileObservation::File { sha256, .. } => {
             if overwrite == Some(false) {
@@ -104,11 +135,21 @@ fn caller_precondition(
     }
     None
 }
-fn observed_result(
-    input: &Value,
-    observation: &EffectFileObservation,
+/// How an observed write came about: from an absent target and, on
+/// dispatch, with the registered tool's receipt (passthrough JSON).
+struct Observed<'a> {
     created: bool,
-    registered: Option<&Value>,
+    // Passthrough: tool/effect receipts, shaped by the capability.
+    registered: Option<&'a Value>,
+}
+
+fn observed_result(
+    input: &WriteInput,
+    observation: &EffectFileObservation,
+    Observed {
+        created,
+        registered,
+    }: Observed<'_>,
 ) -> Option<AdapterOutcome> {
     let EffectFileObservation::File { bytes, sha256 } = observation else {
         return None;
@@ -118,8 +159,8 @@ fn observed_result(
     }
     let mut result = json!({
         "ok":true,"effect":"workspace_file_write",
-        "path":input["path"],"bytes":bytes,"after_sha256":sha256,
-        "create_parents":input["create_parents"],"target_observed":true
+        "path":input.path,"bytes":bytes,"after_sha256":sha256,
+        "create_parents":input.create_parents,"target_observed":true
     });
     if created {
         butler_core::json::object_mut(&mut result)
@@ -145,6 +186,7 @@ fn observation_error(observation: EffectFileObservation) -> EffectAdapterError {
         ),
     }
 }
+/// The registered tool's rejection in its receipt (passthrough JSON).
 fn rejection(value: &Value) -> Option<EffectAdapterError> {
     let record = value.as_object()?;
     if record.get("ok") != Some(&Value::Bool(false)) {
@@ -173,25 +215,33 @@ impl EffectAdapter for WorkspaceFileEffectAdapter {
     fn sanitize_target(&self, target: &str) -> EffectResult<String> {
         Ok(target.into())
     }
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     fn normalize_input(&self, input: &Value) -> EffectResult<Value> {
-        path::input(input, &self.scope.workspace)
+        let normalized = path::input(input, &self.scope.workspace)?;
+        serde_json::to_value(normalized)
+            .map_err(|source| EffectFailure::policy("effect_request_invalid", source.to_string()))
     }
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     fn dispatch<'a>(
         &'a self,
         target: &'a str,
+        // Passthrough: EffectAdapter input is capability-generic tool input.
         input: &'a Value,
         _key: &'a str,
         signal: &'a CancellationToken,
     ) -> EffectFuture<'a, AdapterOutcome> {
         Box::pin(async move {
-            if let Some(error) = mismatch(target, input) {
+            let input = match WriteInput::decode(input) {
+                Ok(input) => input,
+                Err(error) => return Ok(AdapterOutcome::NotApplied(error)),
+            };
+            if let Some(error) = mismatch(target, &input) {
                 return Ok(AdapterOutcome::NotApplied(error));
             }
-            let guarded =
-                match guard_effect_file(&self.scope, input["path"].as_str().unwrap_or("")).await {
-                    Ok(value) => value,
-                    Err(error) => return Ok(AdapterOutcome::NotApplied(workspace_error(&error))),
-                };
+            let guarded = match guard_effect_file(&self.scope, &input.path).await {
+                Ok(value) => value,
+                Err(error) => return Ok(AdapterOutcome::NotApplied(workspace_error(&error))),
+            };
             if signal.is_cancelled() {
                 return Ok(AdapterOutcome::NotApplied(adapter_error(
                     "write_file_cancelled",
@@ -204,38 +254,35 @@ impl EffectAdapter for WorkspaceFileEffectAdapter {
                     &error.clone(),
                 ))));
             }
-            if let Some(error) = caller_precondition(input, &before) {
+            if let Some(error) = caller_precondition(&input, &before) {
                 return Ok(AdapterOutcome::NotApplied(error));
             }
             let prepared = PreparedWrite {
-                path: input["path"].as_str().unwrap_or("").into(),
-                content: input["content"].as_str().unwrap_or("").into(),
-                create_parents: input["create_parents"].as_bool().unwrap_or(false),
+                path: input.path.clone(),
+                content: input.content.clone(),
+                create_parents: input.create_parents,
                 overwrite: input
-                    .get("overwrite")
-                    .and_then(Value::as_bool)
+                    .overwrite
                     .unwrap_or(matches!(before, EffectFileObservation::File { .. })),
-                expected_sha256: input
-                    .get("expected_sha256")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned)
-                    .or_else(|| match &before {
-                        EffectFileObservation::File { sha256, .. } => Some(sha256.clone()),
-                        _ => None,
-                    }),
+                expected_sha256: input.expected_sha256.clone().or_else(|| match &before {
+                    EffectFileObservation::File { sha256, .. } => Some(sha256.clone()),
+                    _ => None,
+                }),
             };
             let registered = self.registered.write(prepared).await?;
             let after = observe_effect_file(&guarded).await;
-            if (input.get("overwrite").is_some() || input.get("expected_sha256").is_some())
+            if input.caller_bound()
                 && let Some(error) = rejection(&registered)
             {
                 return Ok(AdapterOutcome::NotApplied(error));
             }
             if let Some(applied) = observed_result(
-                input,
+                &input,
                 &after,
-                matches!(before, EffectFileObservation::Missing),
-                Some(&registered),
+                Observed {
+                    created: matches!(before, EffectFileObservation::Missing),
+                    registered: Some(&registered),
+                },
             ) {
                 return Ok(applied);
             }
@@ -245,9 +292,11 @@ impl EffectAdapter for WorkspaceFileEffectAdapter {
             Ok(AdapterOutcome::Uncertain(Some(observation_error(after))))
         })
     }
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     fn reconcile<'a>(
         &'a self,
         target: &'a str,
+        // Passthrough: EffectAdapter input is capability-generic tool input.
         input: &'a Value,
         _key: &'a str,
         _signal: &'a CancellationToken,
@@ -255,25 +304,29 @@ impl EffectAdapter for WorkspaceFileEffectAdapter {
         _prior: Option<&'a EffectError>,
     ) -> EffectFuture<'a, AdapterOutcome> {
         Box::pin(async move {
-            if let Some(error) = mismatch(target, input) {
+            let input = match WriteInput::decode(input) {
+                Ok(input) => input,
+                Err(error) => return Ok(AdapterOutcome::Uncertain(Some(error))),
+            };
+            if let Some(error) = mismatch(target, &input) {
                 return Ok(AdapterOutcome::Uncertain(Some(error)));
             }
-            let guarded = match guard_effect_file(&self.scope, input["path"].as_str().unwrap_or(""))
-                .await
-            {
+            let guarded = match guard_effect_file(&self.scope, &input.path).await {
                 Ok(value) => value,
                 Err(error) => return Ok(AdapterOutcome::Uncertain(Some(workspace_error(&error)))),
             };
             let observed = observe_effect_file(&guarded).await;
-            if attempts == 0
-                && (input.get("overwrite").is_some() || input.get("expected_sha256").is_some())
-            {
+            if attempts == 0 && input.caller_bound() {
                 return Ok(AdapterOutcome::NotApplied(adapter_error(
                     "not_applied",
                     "not applied",
                 )));
             }
-            if let Some(applied) = observed_result(input, &observed, false, None) {
+            let unregistered = Observed {
+                created: false,
+                registered: None,
+            };
+            if let Some(applied) = observed_result(&input, &observed, unregistered) {
                 return Ok(applied);
             }
             if attempts == 0 {

@@ -3,20 +3,23 @@
 
 use super::super::agent::Launch;
 use super::super::cassette::{Cassette, Meta};
-use super::super::config::{Credential, LiveProvider, ModelChoice, base_url_env, nonempty};
+use super::super::config::{Credential, LiveProvider, ModelChoice};
+use super::super::fixtures;
 use super::super::live;
 use super::super::provider::Provider;
 use super::super::sanitize::Placeholders;
 use super::super::{HarnessError, harness_error};
+use super::SANITIZATION;
 
-type Source = (Option<Provider>, ModelChoice, Option<(String, Credential)>);
+/// A provider source plus the credential the agent runs with.
+type SourceSetup = (Option<Provider>, ModelChoice, Option<(String, Credential)>);
 
-/// Live mode: the agent talks to the provider directly.
+/// Live mode: the agent talks to the real provider directly.
 pub(super) fn live_source(
     live_provider: &LiveProvider,
     model: Option<ModelChoice>,
     launch: &mut Launch,
-) -> Source {
+) -> SourceSetup {
     if let Some(base) = &live_provider.base_url
         && let Some(key) = live_provider.base_url_env()
     {
@@ -26,20 +29,49 @@ pub(super) fn live_source(
     let credential = live_provider
         .credential
         .clone()
-        .map(|credential| (live_provider.provider.clone(), credential));
+        .map(|c| (live_provider.provider.clone(), c));
     (None, choice, credential)
 }
 
-/// Record mode: a recording proxy in front of the live provider (replaying
-/// what the `extends` base cassette already holds).
-pub(super) async fn record_provider(
+/// Replay mode: cassette `name` served by the local provider. With
+/// `stub_codex_home`, a subscription cassette gets the placeholder Codex
+/// credential there.
+pub(super) async fn replay_source(
+    name: &str,
+    placeholders: &Placeholders,
+    stub_codex_home: Option<std::path::PathBuf>,
+    launch: &mut Launch,
+) -> Result<SourceSetup, HarnessError> {
+    let cassette = Cassette::load(name)?;
+    let choice = ModelChoice {
+        model: cassette.meta.model.clone(),
+        effort: cassette.meta.effort.clone(),
+    };
+    let provider_name = cassette.meta.provider.clone();
+    let provider = Provider::replay(cassette, placeholders.clone()).await?;
+    if let Some(key) = super::super::config::base_url_env(&provider_name) {
+        launch.set_env(key, provider.base_url.clone());
+    }
+    if provider_name == "openai-subscription"
+        && let Some(codex_home) = stub_codex_home
+    {
+        fixtures::stub_codex_auth(&codex_home)?;
+    }
+    Ok((Some(provider), choice, None))
+}
+
+/// Record mode: a proxy that forwards cassette `name` to the live provider
+/// and records it (`BUTLER_E2E_RECORD=1` or [`super::Setup::record_into`]).
+/// With `extends`, requests the base cassette has a recording for are
+/// replayed from it and only the new ones are recorded.
+pub(super) async fn record_source(
     name: &str,
     model: Option<ModelChoice>,
+    placeholders: &Placeholders,
     record_into: Option<std::path::PathBuf>,
     extends: Option<String>,
-    placeholders: &Placeholders,
     launch: &mut Launch,
-) -> Result<Source, HarnessError> {
+) -> Result<SourceSetup, HarnessError> {
     let live_provider = live::gate(&format!("record {name}"))?.ok_or_else(|| {
         harness_error("BUTLER_E2E_RECORD=1 needs BUTLER_E2E_TIER=live|all and credentials")
     })?;
@@ -58,10 +90,7 @@ pub(super) async fn record_provider(
         butler_git_sha: git_sha(),
         recorded_at: now_utc(),
         recorder: "butler-e2e record proxy".into(),
-        sanitization: super::SANITIZATION
-            .iter()
-            .map(|s| (*s).to_owned())
-            .collect(),
+        sanitization: SANITIZATION.iter().map(|s| (*s).to_owned()).collect(),
         base: extends.clone(),
         ..Meta::default()
     };
@@ -78,29 +107,7 @@ pub(super) async fn record_provider(
     Ok((Some(provider), choice, credential))
 }
 
-/// Replay mode: serves the committed cassette `name` to the agent. Also says
-/// whether it was recorded against the ChatGPT subscription (replay then
-/// needs a placeholder Codex credential to select that mode).
-pub(super) async fn replay_provider(
-    name: &str,
-    placeholders: &Placeholders,
-    launch: &mut Launch,
-) -> Result<(Provider, ModelChoice, bool), HarnessError> {
-    let cassette = Cassette::load(name)?;
-    let choice = ModelChoice {
-        model: cassette.meta.model.clone(),
-        effort: cassette.meta.effort.clone(),
-    };
-    let provider_name = cassette.meta.provider.clone();
-    let provider = Provider::replay(cassette, placeholders.clone()).await?;
-    if let Some(key) = base_url_env(&provider_name) {
-        launch.set_env(key, provider.base_url.clone());
-    }
-    Ok((provider, choice, provider_name == "openai-subscription"))
-}
-
-/// Hands a live credential to the agent by path or through the product's
-/// own environment variable; the harness never reads token values.
+/// Points the agent at `credential` through the product's own variables.
 pub(super) fn apply_credential(launch: &mut Launch, credential: &Credential, choice: &ModelChoice) {
     match credential {
         Credential::CodexProfile(path) => {
@@ -111,7 +118,7 @@ pub(super) fn apply_credential(launch: &mut Launch, credential: &Credential, cho
         }
         Credential::ApiKey { env_var } => {
             if choice.provider() == "openai"
-                && let Some(value) = nonempty(env_var)
+                && let Some(value) = super::super::config::nonempty(env_var)
             {
                 launch.set_env("OPENAI_API_KEY", value);
             }

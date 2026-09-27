@@ -61,11 +61,11 @@ pub(super) fn insert(db: &mut Connection, record: &AuthorityRecord) -> Authority
                 record.reason,
                 record.executable,
                 record.command_count,
-                record.decision,
+                record.decision.as_str(),
                 record.schedule_client_message_id,
                 record.schedule_input_text,
                 record.private_alternative_input,
-                record.outcome,
+                record.outcome.as_str(),
                 record.outcome_receipt_json,
                 record.close_reason,
                 record.close_scope,
@@ -101,7 +101,7 @@ pub(super) fn decide(
     let transaction = db
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(query::sql)?;
-    let decision = write.action.decision();
+    let decision = write.action.decision().as_str();
     let schedule = write.action.schedule_text();
     let changed = transaction.execute("UPDATE btcc_authority_requests \
         SET decision=?1, schedule_input_text=?2, allow_scope=?3, \

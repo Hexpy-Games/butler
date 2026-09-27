@@ -58,15 +58,8 @@ pub(super) fn terminal_entry(
             ("model_turn_error", failure.message.clone(), Some(failure))
         }
     };
-    let model_selection = &turn.model_selection;
-    let provider = model_selection
-        .get("provider")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    let model_name = model_selection
-        .get("model")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
+    let provider = &turn.model_selection.provider;
+    let model_name = &turn.model_selection.model;
     let model_ref = format!("{provider}/{model_name}");
     let policy = turn.context.get("executionPolicy");
     let role = match policy

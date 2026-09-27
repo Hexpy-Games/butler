@@ -49,7 +49,7 @@ impl SubsessionService {
             .map_err(BtccError::from)?
             .filter(|relation| {
                 relation.parent_session_id == request.parent_session_id
-                    && relation.packet.get("child_role").and_then(Value::as_str) == Some("steward")
+                    && relation.packet.child_role == crate::btcc::ChildRole::Steward
             })
             .ok_or_else(|| error(BtccCode::StewardRelationNotFound))?;
         let parent = self
@@ -373,7 +373,7 @@ impl SubsessionService {
                 && query
                     .title
                     .is_none_or(|value| candidate.safe_title == value)
-                && candidate.packet.get("child_role").and_then(Value::as_str) == Some(role)
+                && candidate.packet.child_role.as_str() == role
         });
         Ok(candidates)
     }

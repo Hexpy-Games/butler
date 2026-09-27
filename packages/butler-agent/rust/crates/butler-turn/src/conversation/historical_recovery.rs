@@ -31,7 +31,15 @@ pub fn plan_historical_recovery(
         .iter()
         .map(|decision| planned_outcome(reader, decision))
         .collect::<ConversationResult<Vec<_>>>()?;
-    Ok(report::report(&decisions, &outcomes, input.dry_run))
+    Ok(report::report(
+        &decisions,
+        &outcomes,
+        if input.dry_run {
+            report::Mode::DryRun
+        } else {
+            report::Mode::Apply
+        },
+    ))
 }
 
 impl AgentConversationStore {
@@ -59,6 +67,14 @@ impl AgentConversationStore {
                 Ok((decisions, outcomes))
             })
             .await?;
-        Ok(report::report(&decisions, &outcomes, dry_run))
+        Ok(report::report(
+            &decisions,
+            &outcomes,
+            if dry_run {
+                report::Mode::DryRun
+            } else {
+                report::Mode::Apply
+            },
+        ))
     }
 }

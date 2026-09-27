@@ -1,11 +1,10 @@
 use std::future::Future;
 
-use serde_json::Value;
-
+use crate::btcc::agent_loop::ModelRoundResult;
 use crate::btcc::{
     AttemptHistory, BtccError, ModelRoundAcceptanceWrite, ModelRoundKey, ModelRouteEvent,
-    ModelRouteEventWrite, ModelRouteWrite, RouteEventStatus, StateExecutionClaim, TurnRecord,
-    TurnStore,
+    ModelRouteEventWrite, ModelRouteWrite, RouteEventStatus, RouteState, StateExecutionClaim,
+    TurnRecord, TurnStore,
 };
 
 use super::failure;
@@ -24,7 +23,7 @@ impl RouteHooks {
         store: std::sync::Arc<dyn TurnStore>,
         turn: &TurnRecord,
         claim: &StateExecutionClaim,
-        route: Value,
+        route: RouteState,
         route_digest: String,
     ) -> Self {
         Self {
@@ -34,7 +33,7 @@ impl RouteHooks {
                 expected_revision: turn.revision,
                 execution_fence: turn.execution_fence,
                 claim_id: claim.claim_id.clone(),
-                route,
+                route: Some(route),
             },
             route_digest,
             checkpoint_id: claim.checkpoint_id.clone(),
@@ -45,10 +44,10 @@ impl RouteHooks {
     pub(super) async fn event(
         &self,
         event: ModelRouteEvent,
-        route: Option<Value>,
+        route: Option<RouteState>,
     ) -> Result<RouteEventStatus, crate::btcc::agent_loop::ModelRoundError> {
         let mut binding = self.binding.clone();
-        if let Some(route) = route {
+        if route.is_some() {
             binding.route = route;
         }
         self.retry("attempt_event_write", || {
@@ -78,7 +77,7 @@ impl RouteHooks {
         round: &str,
         candidate: u32,
         model: &str,
-    ) -> Result<Option<Value>, crate::btcc::agent_loop::ModelRoundError> {
+    ) -> Result<Option<ModelRoundResult>, crate::btcc::agent_loop::ModelRoundError> {
         let key = self.key(round, candidate, model, KeyScope::Checkpoint);
         self.retry("response_acceptance_read", || {
             self.store.load_model_round_acceptance(key.clone())
@@ -92,13 +91,13 @@ impl RouteHooks {
         candidate: u32,
         attempt: u32,
         model: &str,
-        result: Value,
+        result: ModelRoundResult,
     ) -> Result<(), crate::btcc::agent_loop::ModelRoundError> {
         let write = ModelRoundAcceptanceWrite {
             binding: self.binding.clone(),
             key: self.key(round, candidate, model, KeyScope::Checkpoint),
             transport_attempt: attempt,
-            result,
+            result: Box::new(result),
         };
         self.retry("response_acceptance_write", || {
             self.store.record_model_round_acceptance(write.clone())

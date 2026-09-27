@@ -77,9 +77,11 @@ fn snapshot_files(edits: &[GuardedEdit], failures: &mut Vec<EditFailure>) -> Fil
         let Some(snapshot) = files.snapshots.get(key) else {
             continue;
         };
-        if let Err(error) =
-            io::prepare_guard(snapshot, edit.input.expected_sha256.as_deref(), false)
-        {
+        if let Err(error) = io::prepare_guard(
+            snapshot,
+            edit.input.expected_sha256.as_deref(),
+            io::Replacement::Unguarded,
+        ) {
             failures.push(edit_failure(edit.input.index, error));
         }
     }
@@ -93,8 +95,8 @@ fn snapshot_file(edit: &GuardedEdit) -> Result<(Snapshot, String), EditFailure> 
         absolute: edit.path.absolute.clone(),
         real: edit.path.real.clone(),
     };
-    let snapshot =
-        io::observe(path, false).map_err(|error| edit_failure(edit.input.index, error))?;
+    let snapshot = io::observe(path, io::Parent::MustExist)
+        .map_err(|error| edit_failure(edit.input.index, error))?;
     if !snapshot.exists {
         return Err(EditFailure::new(
             edit.input.index,
@@ -175,7 +177,7 @@ fn prepare_targets(
             snapshot,
             after.into_bytes(),
             target.expected_sha256.as_deref(),
-            false,
+            io::Replacement::Unguarded,
         ) {
             Ok(prepared) => ready.push(Ready { target, prepared }),
             Err(error) => outcome

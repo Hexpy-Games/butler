@@ -1,10 +1,12 @@
 use super::*;
-use butler_turn::btcc::{EffectFuture, RegisteredEditPort, WorkspaceFileEditEffectAdapter};
+use butler_turn::btcc::{
+    EffectFuture, PreparedEdit, RegisteredEditPort, WorkspaceFileEditEffectAdapter,
+};
 use butler_turn::workspace::EffectFileScope;
 
 struct UnusedRegisteredEdit;
 impl RegisteredEditPort for UnusedRegisteredEdit {
-    fn edit(&self, _: Value) -> EffectFuture<'_, Value> {
+    fn edit(&self, _: PreparedEdit) -> EffectFuture<'_, Value> {
         Box::pin(async { panic!("recovery never dispatches") })
     }
 }

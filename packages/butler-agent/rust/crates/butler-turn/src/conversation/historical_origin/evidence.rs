@@ -135,6 +135,7 @@ fn sha256(bytes: impl AsRef<[u8]>) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
+// Passthrough: legacy/historical records of unknown shape.
 fn truthy(value: &serde_json::Value) -> bool {
     match value {
         serde_json::Value::Null => false,
@@ -147,6 +148,7 @@ fn truthy(value: &serde_json::Value) -> bool {
     }
 }
 
+// Passthrough: legacy/historical records of unknown shape.
 fn js_string(value: &serde_json::Value) -> Option<String> {
     if !truthy(value) {
         return None;
@@ -154,6 +156,7 @@ fn js_string(value: &serde_json::Value) -> Option<String> {
     Some(js_to_string(value))
 }
 
+// Passthrough: legacy/historical records of unknown shape.
 fn js_to_string(value: &serde_json::Value) -> String {
     match value {
         serde_json::Value::String(value) => value.clone(),

@@ -11,7 +11,7 @@ use std::time::Duration;
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::agent::Launch;
 use butler_e2e::e2e::fixtures;
-use butler_e2e::e2e::gateway::turn_state;
+use butler_e2e::e2e::gateway::{Gateway, turn_state};
 use butler_e2e::e2e::scenario::{Fixture, Setup};
 use serde_json::json;
 
@@ -235,10 +235,18 @@ async fn onb_04_gateway_requires_its_token() -> Result<(), HarnessError> {
         "foreign origin allowed"
     );
 
+    assert_message_burst_is_rate_limited(&s.gw).await?;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(s.gw.healthy().await);
+    s.finish().await
+}
+
+/// ONB-04: a burst of messages past the configured limit answers 429
+/// `rate_limited`.
+async fn assert_message_burst_is_rate_limited(gw: &Gateway) -> Result<(), HarnessError> {
     let mut statuses = Vec::new();
     for index in 0..6 {
-        let reply = s
-            .gw
+        let reply = gw
             .post("/messages", json!({"chat_id": "burst", "text": format!("burst {index}"), "client_message_id": uuid::Uuid::new_v4().to_string()}))
             .await?;
         statuses.push(reply.status);
@@ -250,9 +258,7 @@ async fn onb_04_gateway_requires_its_token() -> Result<(), HarnessError> {
         statuses.contains(&429),
         "no rate limit on burst: {statuses:?}"
     );
-    tokio::time::sleep(Duration::from_millis(200)).await;
-    assert!(s.gw.healthy().await);
-    s.finish().await
+    Ok(())
 }
 
 /// ONB-02 (inject) — credential present, provider answers the recorded real

@@ -1,6 +1,6 @@
 use super::contracts::{
     AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityError, AuthorityRecord,
-    AuthorityRepository, AuthorityResult,
+    AuthorityRepository, AuthorityResult, RequestDecision, RequestOutcome,
 };
 use super::{identity, permission, projection};
 
@@ -17,7 +17,7 @@ pub(super) fn admit(
     uuid: &dyn Fn() -> String,
 ) -> AuthorityResult<AuthorityAdmissionResult> {
     let (identity_sha, generation) = match free_slot(repository, &input, collation)? {
-        Slot::Settled(result) => return Ok(result),
+        Slot::Settled(result) => return Ok(*result),
         Slot::Free {
             identity_sha,
             generation,
@@ -48,7 +48,7 @@ pub(super) fn admit(
 /// The admission slot of a request.
 enum Slot {
     /// An existing request or a standing permission already answers it.
-    Settled(AuthorityAdmissionResult),
+    Settled(Box<AuthorityAdmissionResult>),
     /// No request holds this identity and generation yet.
     Free {
         identity_sha: String,
@@ -67,10 +67,11 @@ fn free_slot(
         let sha = identity::identity(input, generation, collation)?;
         if let Some(existing) = repository.find_identity(&sha)? {
             assert_not_closed(&existing)?;
-            return projection::admission(&existing, collation).map(Slot::Settled);
+            return projection::admission(&existing, collation)
+                .map(|result| Slot::Settled(Box::new(result)));
         }
         if repository.has_permission(&permission::for_admission(input, collation)?.grant_ref)? {
-            return Ok(Slot::Settled(AuthorityAdmissionResult::Granted));
+            return Ok(Slot::Settled(Box::new(AuthorityAdmissionResult::Granted)));
         }
         match repository.find_slot(input, generation)? {
             None => {
@@ -141,12 +142,12 @@ fn pending_record(
             .unwrap_or_else(|| category.default_reason().into()),
         executable: executable?,
         command_count: 1,
-        decision: "pending".into(),
+        decision: RequestDecision::Pending,
         allow_scope: "once".into(),
         schedule_client_message_id: identity::client_message_id(&request_id),
         schedule_input_text: ALLOW_TEXT.into(),
         private_alternative_input: None,
-        outcome: "pending".into(),
+        outcome: RequestOutcome::Pending,
         outcome_receipt_json: None,
         close_reason: None,
         close_scope: None,
@@ -205,11 +206,14 @@ impl Category {
 
 fn terminal(record: &AuthorityRecord) -> bool {
     record.close_reason.is_some()
-        || matches!(record.decision.as_str(), "denied" | "modified")
-        || record.outcome != "pending"
+        || matches!(
+            record.decision,
+            RequestDecision::Denied | RequestDecision::Modified
+        )
+        || record.outcome != RequestOutcome::Pending
 }
 fn assert_not_closed(record: &AuthorityRecord) -> AuthorityResult<()> {
-    if record.decision == "pending" && record.close_reason.is_some() {
+    if record.decision == RequestDecision::Pending && record.close_reason.is_some() {
         Err(AuthorityError::policy(
             "authority_request_operationally_closed",
         ))

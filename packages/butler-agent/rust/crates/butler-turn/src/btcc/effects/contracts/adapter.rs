@@ -59,10 +59,27 @@ pub trait RegisteredWritePort: Send + Sync {
     /// Writes the file and returns the registered receipt (passthrough JSON).
     fn write(&self, prepared: PreparedWrite) -> EffectFuture<'_, Value>;
 }
+/// One reviewed edit for the registered edit tool.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct PreparedEditEntry {
+    pub path: String,
+    pub start_line: u64,
+    pub old_text: String,
+    pub new_text: String,
+    pub expected_sha256: String,
+}
+/// A reviewed edit or batch for the registered edit tool; serializes as the
+/// tool's arguments (`{..entry}` or `{"edits":[..]}`).
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(untagged)]
+pub enum PreparedEdit {
+    Batch { edits: Vec<PreparedEditEntry> },
+    Single(PreparedEditEntry),
+}
 /// Performs a registered workspace file edit and returns its receipt.
 pub trait RegisteredEditPort: Send + Sync {
-    /// Applies the normalized edit (passthrough JSON) and returns its receipt.
-    fn edit(&self, prepared: Value) -> EffectFuture<'_, Value>;
+    /// Applies the edit and returns the registered receipt (passthrough JSON).
+    fn edit(&self, prepared: PreparedEdit) -> EffectFuture<'_, Value>;
 }
 /// One effect capability: normalizes targets and inputs, dispatches once
 /// per idempotency key and reconciles an earlier dispatch after a restart.
@@ -78,32 +95,40 @@ pub trait EffectAdapter: Send + Sync {
     /// The target as it may be shown publicly.
     fn sanitize_target(&self, target: &str) -> EffectResult<String>;
     /// The canonical input used in the effect identity.
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     fn normalize_input(&self, input: &Value) -> EffectResult<Value>;
     /// What reconciliation needs to recognize this input's write, if anything.
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     fn recovery_hint(&self, _input: &Value) -> EffectResult<Option<RecoveryHint>> {
         Ok(None)
     }
     /// How a legacy blocker relates to the current target and input.
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     fn classify<'a>(
         &'a self,
         _blocker: &'a EffectBlocker,
         _target: &'a str,
+        // Passthrough: EffectAdapter input is capability-generic tool input.
         _input: &'a Value,
     ) -> Option<EffectFuture<'a, BlockerRelation>> {
         None
     }
     /// Performs the effect once for `key`.
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     fn dispatch<'a>(
         &'a self,
         target: &'a str,
+        // Passthrough: EffectAdapter input is capability-generic tool input.
         input: &'a Value,
         key: &'a str,
         signal: &'a CancellationToken,
     ) -> EffectFuture<'a, AdapterOutcome>;
     /// Observes whether an earlier dispatch for `key` was applied.
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     fn reconcile<'a>(
         &'a self,
         target: &'a str,
+        // Passthrough: EffectAdapter input is capability-generic tool input.
         input: &'a Value,
         key: &'a str,
         signal: &'a CancellationToken,
@@ -119,6 +144,7 @@ pub struct ExecuteEffect {
     pub occurrence_id: Option<String>,
     pub signal: CancellationToken,
     pub target: String,
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     pub input: Value,
     pub adapter: Arc<dyn EffectAdapter>,
 }

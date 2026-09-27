@@ -55,6 +55,7 @@ struct PermissionFacts<'a> {
     workspace: &'a str,
     capability: &'a str,
     target: &'a str,
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     input: &'a Value,
     title: Option<&'a str>,
     executable: Option<&'a str>,

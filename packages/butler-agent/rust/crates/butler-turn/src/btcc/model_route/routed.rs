@@ -4,7 +4,6 @@ use serde_json::Value;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio_util::sync::CancellationToken;
 
-use crate::btcc::BtccError;
 use crate::btcc::agent_loop::{
     ModelRoundError, ModelRoundPort, ModelRoundRequest, ModelRoundResult,
 };
@@ -16,7 +15,6 @@ use super::contracts::{
 use super::execution::ViewState;
 use super::support::*;
 use super::{failure, hooks::RouteHooks, projection};
-use crate::btcc::BtccCode;
 use crate::btcc::{AttemptFailure, ModelRouteEventKind, RouteEventStatus};
 
 mod recovery;
@@ -75,6 +73,7 @@ struct RoundCursor<'r> {
     loaded_key: Option<String>,
     attempt: u32,
     /// The provider continuation; dropped when the route falls back.
+    // Passthrough: provider payload, opaque to BTCC.
     continuation: Option<&'r Value>,
     dispatch_budget: usize,
     dispatches: usize,
@@ -183,20 +182,13 @@ impl RoutedRound<'_> {
         cursor: &RoundCursor<'_>,
         candidate: &RouteCandidate,
     ) -> Result<Option<ModelRoundResult>, ModelRoundError> {
-        let Some(value) = self
+        let Some(mut result) = self
             .hooks
             .accepted(&cursor.round_id, route.active_cursor, &candidate.model_ref)
             .await?
         else {
             return Ok(None);
         };
-        let mut result: ModelRoundResult = serde_json::from_value(value).map_err(|source| {
-            failure::durability(
-                "response_acceptance_read",
-                &BtccError::detected(BtccCode::ModelResponseInvalid, "invalid accepted response")
-                    .with_source(source),
-            )
-        })?;
         result
             .accepted_checkpoint
             .get_or_insert(crate::btcc::agent_loop::AcceptedCheckpoint {

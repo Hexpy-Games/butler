@@ -7,8 +7,9 @@ use crate::btcc::BtccCode;
 pub(super) fn reference(
     record: &ToolJournalRecord,
     stored: StoredReference,
-    exact_read: bool,
+    selection: super::ExactResultReplaySelection,
 ) -> Result<OperationResultReference, BtccError> {
+    let exact_read = selection.exact_read_capability;
     let sha256 = record
         .result_sha256
         .clone()

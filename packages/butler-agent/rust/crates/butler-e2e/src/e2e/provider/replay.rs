@@ -151,7 +151,22 @@ pub(super) fn replay(
             (delay, Bytes::from(placeholders.reveal(&chunk.text, true)))
         })
         .collect();
-    let stream = futures_util::stream::unfold(
+    let stream = paced_stream(chunks, ending);
+    let mut builder = Response::builder().status(response.status);
+    for (name, value) in &response.headers {
+        builder = builder.header(name, value);
+    }
+    builder
+        .body(Body::from_stream(stream))
+        .unwrap_or_else(|_| plain(500, "HARNESS_ERROR: bad recorded response"))
+}
+
+/// The recorded chunks, each after its paced delay, then the `ending`.
+fn paced_stream(
+    chunks: Vec<(Duration, Bytes)>,
+    ending: Ending,
+) -> impl futures_util::Stream<Item = Result<Bytes, std::io::Error>> {
+    futures_util::stream::unfold(
         (chunks.into_iter(), ending, false),
         |(mut chunks, ending, done)| async move {
             if done {
@@ -176,14 +191,7 @@ pub(super) fn replay(
                 }
             }
         },
-    );
-    let mut builder = Response::builder().status(response.status);
-    for (name, value) in &response.headers {
-        builder = builder.header(name, value);
-    }
-    builder
-        .body(Body::from_stream(stream))
-        .unwrap_or_else(|_| plain(500, "HARNESS_ERROR: bad recorded response"))
+    )
 }
 
 #[derive(Clone, Copy)]

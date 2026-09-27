@@ -57,6 +57,7 @@ pub struct PlanAction {
         deserialize_with = "present_effect",
         skip_serializing_if = "Option::is_none"
     )]
+    // Passthrough: plan-action effect markers kept losslessly (truthiness vs presence).
     pub effect: Option<Value>,
 }
 
@@ -281,6 +282,7 @@ pub struct WorkResultFact {
     pub tool_name: String,
     pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub result_json: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_code: Option<String>,

@@ -29,6 +29,7 @@ static PRIVATE_SENTINEL: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 pub(super) fn safe_tool_content(
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     payload: Option<&Map<String, Value>>,
     kind: &str,
 ) -> Map<String, Value> {
@@ -75,6 +76,7 @@ pub(super) fn safe_tool_content(
     out
 }
 
+// Passthrough: tool arguments/results/schemas, shaped by each tool.
 fn safe_arguments(value: Option<&Value>) -> Option<Map<String, Value>> {
     let record = value?.as_object()?;
     if record.get("schema_version")?.as_str() != Some(ARGUMENT_SCHEMA) {
@@ -100,6 +102,7 @@ fn safe_arguments(value: Option<&Value>) -> Option<Map<String, Value>> {
     out.insert("safe_arguments".into(), Value::Object(arguments));
     Some(out)
 }
+// Passthrough: tool arguments/results/schemas, shaped by each tool.
 fn safe_result(value: Option<&Value>) -> Option<Map<String, Value>> {
     let record = value?.as_object()?;
     if record.get("schema_version")?.as_str() != Some(EVIDENCE_SCHEMA) {
@@ -149,6 +152,7 @@ fn safe_result(value: Option<&Value>) -> Option<Map<String, Value>> {
     }
     Some(out)
 }
+// Passthrough: tool arguments/results/schemas, shaped by each tool.
 fn safe_observation(value: Option<&Value>) -> Option<Map<String, Value>> {
     let record = value?.as_object()?;
     let mut out = Map::new();
@@ -167,6 +171,7 @@ fn safe_observation(value: Option<&Value>) -> Option<Map<String, Value>> {
     }
     Some(out)
 }
+// Passthrough: tool arguments/results/schemas, shaped by each tool.
 fn safe_evidence(value: &Value, depth: usize) -> Value {
     if depth > 6 {
         return "[redacted]".into();
@@ -195,6 +200,7 @@ fn safe_evidence(value: &Value, depth: usize) -> Value {
         Value::Null => Value::Null,
     }
 }
+// Passthrough: tool arguments/results/schemas, shaped by each tool.
 fn safe_argument(key: &str, value: &Value, depth: usize) -> Value {
     if sensitive_key(key) || depth > 2 {
         return "[redacted]".into();
@@ -229,6 +235,7 @@ fn remove_unsafe(record: &Map<String, Value>) -> Map<String, Value> {
     }
     out
 }
+// Passthrough: tool arguments/results/schemas, shaped by each tool.
 fn remove_unsafe_value(value: &Value) -> Value {
     match value {
         Value::Object(child) => Value::Object(remove_unsafe(child)),
@@ -256,6 +263,7 @@ fn js_boundary(value: &str, offset: usize) -> bool {
     value[..offset].chars().next_back().is_some_and(word)
         != value[offset..].chars().next().is_some_and(word)
 }
+// Passthrough: tool arguments/results/schemas, shaped by each tool.
 fn safe_optional(value: Option<&Value>) -> Option<String> {
     let text = butler_core::public_text::trim_js_whitespace(value?.as_str()?);
     if text.is_empty() {
@@ -301,6 +309,7 @@ fn utf16_prefix(value: &str, max: usize) -> String {
         })
         .collect()
 }
+// Passthrough: tool arguments/results/schemas, shaped by each tool.
 fn text(value: Option<&Value>) -> Option<String> {
     value?
         .as_str()

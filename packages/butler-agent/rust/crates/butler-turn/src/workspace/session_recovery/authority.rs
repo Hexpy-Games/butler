@@ -71,6 +71,7 @@ pub(super) fn resolve_authority(
     }
 }
 
+// Passthrough: parse boundary validating untyped JSON into typed values.
 fn parse_marker(raw: Option<&Value>) -> ParsedMarker {
     let Some(raw) = raw else {
         return ParsedMarker::Absent;
