@@ -76,6 +76,23 @@ pub(super) fn existing_control_resolution(
     })
 }
 
+/// Pauses the session's queue after the user stopped `turn_id`.
+pub(super) fn pause(
+    connection: &Connection,
+    chat_id: &str,
+    turn_id: &str,
+    now: &str,
+) -> Result<(), AppStorageError> {
+    connection
+        .execute(
+            "INSERT INTO session_queue_pauses(chat_id,turn_id,created_at) VALUES(?1,?2,?3) \
+             ON CONFLICT(chat_id) DO UPDATE SET turn_id=excluded.turn_id,created_at=excluded.created_at",
+            params![chat_id, turn_id, now],
+        )
+        .map_err(AppStorageError::sqlite)?;
+    Ok(())
+}
+
 pub(super) fn reserve(
     connection: &Connection,
     input: &QueueReservation,
@@ -120,6 +137,13 @@ pub(super) fn reserve(
                 input.project_source_refs_json,
                 input.created_at,
             ],
+        )
+        .map_err(AppStorageError::sqlite)?;
+    // New user input resumes a queue paused by Stop.
+    connection
+        .execute(
+            "DELETE FROM session_queue_pauses WHERE chat_id=?1",
+            [&input.chat_id],
         )
         .map_err(AppStorageError::sqlite)?;
     Ok(true)

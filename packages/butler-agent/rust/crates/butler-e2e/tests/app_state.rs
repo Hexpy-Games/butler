@@ -421,14 +421,12 @@ async fn q_02_queue_durability_and_conflicts() -> Result<(), HarnessError> {
 }
 
 /// Q-02 (owner decision) — cancelling the running turn pauses the queue.
+/// Replays the Q-02 recording of the slow turn; the queued message must not
+/// reach the provider (an unmatched request would fail the replay).
 #[tokio::test]
-#[ignore = "product gap: Q-02-CANCEL — after POST /turns/{id}/cancel the next queued message is dispatched immediately; the owner decided a cancel pauses the queue"]
 async fn q_02_cancel_pauses_the_queue() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let s = Setup::new("Q-02-CANCEL")?
-        .cassette("Q-02-CANCEL")
-        .start()
-        .await?;
+    let s = Setup::new("Q-02-CANCEL")?.cassette("Q-02").start().await?;
     let running = start_slow_turn(&s).await?;
     enqueue(&s, "Reply with exactly the word: paused").await?;
     let cancel =

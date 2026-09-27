@@ -86,6 +86,8 @@ impl AppApplication {
                     params![turn, stored_at],
                 )
                 .map_err(AppStorageError::sqlite)?;
+                // A user's Stop pauses the session queue until the user sends again.
+                queue::pause(&tx, &row.0, &turn, &stored_at)?;
                 let queued = tx
                     .query_row(
                         "SELECT queue_id FROM app_turn_cancel_outbox WHERE turn_id=?1",
