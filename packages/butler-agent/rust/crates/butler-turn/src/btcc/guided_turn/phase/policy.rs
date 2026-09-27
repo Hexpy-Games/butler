@@ -4,9 +4,45 @@ use crate::btcc::{AccessMode, TurnRecord};
 
 use super::super::work::GuidedPreparationError;
 
+/// The role a guided turn runs as; other stored names are kept verbatim.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PolicyRole {
+    Butler,
+    Steward,
+    Worker,
+    Other(String),
+}
+
+impl PolicyRole {
+    fn parse(value: String) -> Self {
+        match value.as_ref() {
+            "butler" => Self::Butler,
+            "steward" => Self::Steward,
+            "worker" => Self::Worker,
+            _ => Self::Other(value),
+        }
+    }
+
+    /// The role name.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Butler => "butler",
+            Self::Steward => "steward",
+            Self::Worker => "worker",
+            Self::Other(value) => value,
+        }
+    }
+}
+
+impl std::fmt::Display for PolicyRole {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct GuidedExecutionPolicy {
-    pub role: String,
+    pub role: PolicyRole,
     pub access_mode: AccessMode,
     pub tracking_mode: String,
     pub required_profiles: Vec<String>,
@@ -103,7 +139,7 @@ impl GuidedExecutionPolicy {
             Value::String(access_mode.as_str().into()),
         );
         Ok(Self {
-            role: string(policy, "role")?,
+            role: PolicyRole::parse(string(policy, "role")?),
             access_mode,
             tracking_mode: string(policy, "trackingMode")?,
             required_profiles: strings(policy, "requiredNativeToolProfiles"),
@@ -146,7 +182,7 @@ fn default_policy(
         "local"
     };
     GuidedExecutionPolicy {
-        role: "butler".into(),
+        role: PolicyRole::Butler,
         access_mode: admitted,
         tracking_mode: tracking.into(),
         required_profiles: Vec::new(),

@@ -215,17 +215,12 @@ fn load_outbox(
                 "BTCC R3 delivery Outbox is missing",
             )
         })?;
-    let status = match row.5.as_str() {
-        "pending" => DeliveryStatus::Pending,
-        "inserted" => DeliveryStatus::Inserted,
-        "observed" => DeliveryStatus::Observed,
-        _ => {
-            return Err(error(
-                StorageCode::OutboxInvalid,
-                "BTCC R3 delivery Outbox is invalid",
-            ));
-        }
-    };
+    let status = delivery_status(&row.5).ok_or_else(|| {
+        error(
+            StorageCode::OutboxInvalid,
+            "BTCC R3 delivery Outbox is invalid",
+        )
+    })?;
     Ok(Some(DeliveryOutbox {
         outbox_id: row.0,
         final_payload_ref: ContentRef {
@@ -398,4 +393,14 @@ fn assert_record(turn: &TurnRecord) -> StorageResult<()> {
         ));
     }
     Ok(())
+}
+
+/// The delivery status of stored outbox text.
+fn delivery_status(value: &str) -> Option<DeliveryStatus> {
+    match value {
+        "pending" => Some(DeliveryStatus::Pending),
+        "inserted" => Some(DeliveryStatus::Inserted),
+        "observed" => Some(DeliveryStatus::Observed),
+        _ => None,
+    }
 }

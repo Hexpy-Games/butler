@@ -186,7 +186,7 @@ impl PublicMemorySnapshot {
             ReadAroundInput {
                 session_id: session_id.to_owned(),
                 anchor_message_id: anchor.map(str::to_owned),
-                direction: Some(direction.to_owned()),
+                direction: Some(crate::conversation::AroundDirection::parse(direction)),
                 limit: Some(limit as f64),
                 include_compacted: false,
             },

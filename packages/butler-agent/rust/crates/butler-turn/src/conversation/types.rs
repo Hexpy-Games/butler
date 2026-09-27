@@ -308,12 +308,31 @@ pub struct ReadMessagesInput {
     pub limit: Option<f64>,
     pub include_compacted: bool,
 }
+/// Which messages around an anchor a read returns.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AroundDirection {
+    Before,
+    After,
+    Around,
+}
+
+impl AroundDirection {
+    /// The direction named `value`; any other name reads around the anchor.
+    pub fn parse(value: &str) -> Self {
+        match value {
+            "before" => Self::Before,
+            "after" => Self::After,
+            _ => Self::Around,
+        }
+    }
+}
+
 /// Reads messages before or after an anchor message.
 #[derive(Clone, Debug)]
 pub struct ReadAroundInput {
     pub session_id: String,
     pub anchor_message_id: Option<String>,
-    pub direction: Option<String>,
+    pub direction: Option<AroundDirection>,
     pub limit: Option<f64>,
     pub include_compacted: bool,
 }

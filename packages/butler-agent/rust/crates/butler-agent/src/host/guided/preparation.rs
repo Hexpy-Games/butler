@@ -60,11 +60,14 @@ impl GuidedPreparation {
         })
         .map_err(preparation_error)?;
         let policy = &phase.execution_policy;
-        if policy.role == "worker" || policy.role == "steward" {
+        if matches!(
+            policy.role,
+            butler_turn::btcc::PolicyRole::Worker | butler_turn::btcc::PolicyRole::Steward
+        ) {
             self.subsessions
                 .ensure_child_work(&turn.session_id, &turn.turn_id)
                 .await?;
-        } else if policy.role != "butler" {
+        } else if policy.role != butler_turn::btcc::PolicyRole::Butler {
             return Err(contract("guided_subsession_role_unsupported"));
         }
         let project_id = policy.project_id.as_deref().or_else(|| {

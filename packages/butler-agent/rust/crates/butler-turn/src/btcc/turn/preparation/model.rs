@@ -223,7 +223,12 @@ fn binding_reasoning(binding: &StoredSessionBinding) -> Result<ReasoningEffort, 
             _ => js_string(v),
         })
         .unwrap_or_else(|| "medium".into());
-    match value.as_str() {
+    reasoning(&value)
+}
+
+/// The reasoning effort of a stored binding value.
+fn reasoning(value: &str) -> Result<ReasoningEffort, BtccError> {
+    match value {
         "none" => Ok(ReasoningEffort::None),
         "low" => Ok(ReasoningEffort::Low),
         "medium" => Ok(ReasoningEffort::Medium),

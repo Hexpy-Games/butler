@@ -123,7 +123,7 @@ impl AppBranchConversationReader for AppBranchConversations {
                 .read_messages_around(ReadAroundInput {
                     session_id: session_id.clone(),
                     anchor_message_id: Some(message_id.clone()),
-                    direction: Some("before".into()),
+                    direction: Some(butler_turn::conversation::AroundDirection::Before),
                     limit: Some(100.0),
                     include_compacted: true,
                 })

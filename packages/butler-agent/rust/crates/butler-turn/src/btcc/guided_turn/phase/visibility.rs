@@ -4,7 +4,7 @@ use crate::btcc::AccessMode;
 use butler_core::tool_protocol::ToolName;
 
 use super::catalog::{GuidedCatalogSnapshot, GuidedCatalogTool};
-use super::policy::GuidedExecutionPolicy;
+use super::policy::{GuidedExecutionPolicy, PolicyRole};
 use super::selection::GuidedPhase;
 
 const DISCOVERY: &[&str] = &[
@@ -76,7 +76,7 @@ pub(super) fn legacy_authorized<'a>(
     let scope = AuthorizationScope {
         has_project: policy.has_project_id() || signals.project_ref,
         ledger: policy.tracking_mode == "ledger",
-        worker: policy.role == "worker",
+        worker: policy.role == PolicyRole::Worker,
     };
     let mut names = if scope.worker {
         catalog.worker_default.clone()
@@ -239,7 +239,7 @@ fn apply_access_mode(
 /// Only the butler may delegate to stewards and only a steward to workers.
 fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
     for (role, tools) in [("butler", STEWARD_PARENT), ("steward", WORKER_DELEGATION)] {
-        if policy.role == role {
+        if policy.role.as_str() == role {
             names.extend(tools.iter().map(|name| (*name).to_owned()));
         } else {
             for name in tools {
@@ -286,10 +286,10 @@ pub(super) fn legacy_visible<'a>(
     if project && policy.access_mode != AccessMode::ReadOnly {
         names.insert("project_ledger_create");
     }
-    if policy.role == "butler" {
+    if policy.role == PolicyRole::Butler {
         names.extend(STEWARD_PARENT.iter().copied());
     }
-    if policy.role == "steward" {
+    if policy.role == PolicyRole::Steward {
         names.extend(WORKER_DELEGATION.iter().copied());
     }
     if policy.tracking_mode != "none" {

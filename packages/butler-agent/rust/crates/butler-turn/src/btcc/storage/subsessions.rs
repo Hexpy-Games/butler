@@ -412,10 +412,10 @@ impl SqliteSubsessionRepository {
                 let (result_id,parent_session_id,encoded)=value.map_err(StorageError::sqlite)?;
                 let invalid=|e: serde_json::Error| StorageError::new(StorageCode::SubsessionOutboxInvalid,e.to_string()).with_source(e);
                 let tag:RouteTag=serde_json::from_str(&encoded).map_err(invalid)?;
-                let route=match tag.route.as_deref() {
-                    Some("steward_queue")=>ParentResultRoute::StewardQueue,
-                    Some("butler_app")=>ParentResultRoute::ButlerApp,
-                    _=>return Err(StorageError::new(StorageCode::SubsessionOutboxRouteInvalid,"Subsession outbox route is invalid")),
+                let route=match tag.route {
+                    Some(OutboxRoute::StewardQueue)=>ParentResultRoute::StewardQueue,
+                    Some(OutboxRoute::ButlerApp)=>ParentResultRoute::ButlerApp,
+                    Some(OutboxRoute::Unknown) | None=>return Err(StorageError::new(StorageCode::SubsessionOutboxRouteInvalid,"Subsession outbox route is invalid")),
                 };
                 let input=serde_json::from_str(&encoded).map_err(invalid)?;
                 Ok(PendingParentInput{result_id,parent_session_id,route,input})
@@ -479,7 +479,16 @@ fn direction_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredSubsessionDi
 /// The route of an outbox row, read before the row is decoded.
 #[derive(serde::Deserialize)]
 struct RouteTag {
-    route: Option<String>,
+    route: Option<OutboxRoute>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum OutboxRoute {
+    StewardQueue,
+    ButlerApp,
+    #[serde(other)]
+    Unknown,
 }
 
 fn required_packet_string<'a>(value: &'a str, key: &str) -> Result<&'a str, StorageError> {

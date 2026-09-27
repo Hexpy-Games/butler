@@ -3,8 +3,8 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::context::{ContextError, ContextResult};
 use butler_turn::conversation::{
-    AgentConversationStore, ConversationMessageWithParts, ConversationOriginKind, ReadAroundInput,
-    ToolParts, conversation_session_id_for_durable_session, text_for_message,
+    AgentConversationStore, AroundDirection, ConversationMessageWithParts, ConversationOriginKind,
+    ReadAroundInput, ToolParts, conversation_session_id_for_durable_session, text_for_message,
 };
 
 use super::parts::{to_context_message, to_context_summary};
@@ -180,7 +180,11 @@ async fn select_messages(
             .read_messages_around(ReadAroundInput {
                 session_id: session.into(),
                 anchor_message_id: Some(anchor.into()),
-                direction: Some(direction_name(direction).into()),
+                direction: Some(match direction {
+                    ConversationContextDirection::Before => AroundDirection::Before,
+                    ConversationContextDirection::After => AroundDirection::After,
+                    ConversationContextDirection::Around => AroundDirection::Around,
+                }),
                 limit: Some(limit),
                 include_compacted: false,
             })
@@ -237,7 +241,7 @@ async fn before(
         .read_messages_around(ReadAroundInput {
             session_id: session.into(),
             anchor_message_id: None,
-            direction: Some("before".into()),
+            direction: Some(AroundDirection::Before),
             limit: Some(limit),
             include_compacted: false,
         })
@@ -329,13 +333,6 @@ fn clamp(value: Option<f64>, fallback: f64, min: f64, max: f64) -> f64 {
         .filter(|v| v.is_finite())
         .map(|v| v.floor().clamp(min, max))
         .unwrap_or(fallback)
-}
-fn direction_name(value: ConversationContextDirection) -> &'static str {
-    match value {
-        ConversationContextDirection::Before => "before",
-        ConversationContextDirection::After => "after",
-        ConversationContextDirection::Around => "around",
-    }
 }
 fn trim_option(value: Option<String>) -> Option<String> {
     value

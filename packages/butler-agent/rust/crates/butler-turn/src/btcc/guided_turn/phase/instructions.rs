@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use super::super::work::GuidedPreparationError;
-use super::policy::GuidedExecutionPolicy;
+use super::policy::{GuidedExecutionPolicy, PolicyRole};
 use super::selection::{GuidedPhase, SurfaceMode};
 
 static PREFIXES: OnceLock<HashMap<String, String>> = OnceLock::new();
@@ -17,7 +17,7 @@ pub(super) fn prefix(
     let prefixes = PREFIXES.get_or_init(|| {
         serde_json::from_str(include_str!("instruction-prefixes.json")).unwrap_or_default()
     });
-    let key = if policy.subsession.is_some() && policy.role == "steward" {
+    let key = if policy.subsession.is_some() && policy.role == PolicyRole::Steward {
         let submode = policy
             .subsession
             .as_ref()
@@ -27,7 +27,7 @@ pub(super) fn prefix(
             "delegated|steward|{}|{submode}",
             policy.access_mode.as_str()
         )
-    } else if policy.subsession.is_some() && policy.role == "worker" {
+    } else if policy.subsession.is_some() && policy.role == PolicyRole::Worker {
         format!("delegated|worker|{}", policy.access_mode.as_str())
     } else if mode == SurfaceMode::Legacy {
         format!(
