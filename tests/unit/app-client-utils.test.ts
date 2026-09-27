@@ -9,7 +9,7 @@ import {
   firstCancellableWorker,
   groupWorkerActivities,
   hasFollowableWorkerActivity,
-  isRuntimeFaultRetryableMessage,
+  isRetryableFailureMessage,
   mergeMessages,
   mergeTurnProgressFromSummary,
   mergeTurnProgressSnapshotMap,
@@ -3326,22 +3326,28 @@ test("work blocks ignore opening decisions and acknowledged receipt rows", () =>
   expect(JSON.stringify(blocks)).not.toContain("app-client readmodel");
 });
 
-test("retry eligibility requires runtime fault message code", () => {
+test("retry eligibility requires a runtime fault or crash interruption code", () => {
   expect(
-    isRuntimeFaultRetryableMessage({
+    isRetryableFailureMessage({
       retryable: true,
       safe_error_code: "runtime_fault",
     }),
   ).toBe(true);
   expect(
-    isRuntimeFaultRetryableMessage({
+    isRetryableFailureMessage({
+      retryable: true,
+      safe_error_code: "turn_interrupted",
+    }),
+  ).toBe(true);
+  expect(
+    isRetryableFailureMessage({
       retryable: true,
       safe_error_code: "tool_invalid_arguments",
     }),
   ).toBe(false);
-  expect(isRuntimeFaultRetryableMessage({ retryable: true })).toBe(false);
+  expect(isRetryableFailureMessage({ retryable: true })).toBe(false);
   expect(
-    isRuntimeFaultRetryableMessage({
+    isRetryableFailureMessage({
       retryable: false,
       safe_error_code: "runtime_fault",
     }),

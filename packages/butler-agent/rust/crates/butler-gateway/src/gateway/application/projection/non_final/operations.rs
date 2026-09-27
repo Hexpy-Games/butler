@@ -10,6 +10,7 @@ use super::{
     token,
 };
 use crate::gateway::application::projection::staging;
+use crate::gateway::application::retry::INTERRUPTED_TURN_CODE;
 use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::{
     events::{self, EventSubscribers},
@@ -43,7 +44,10 @@ pub(super) fn project_failed(
         retryable: requested_retryable,
     } = failed;
     let code = error_token(metadata.get("safeErrorCode"));
-    let retryable = code == "runtime_fault" && requested_retryable;
+    // A turn interrupted by a crash is failed but always retryable: the retry
+    // resumes it from its durable state.
+    let retryable =
+        (code == "runtime_fault" && requested_retryable) || code == INTERRUPTED_TURN_CODE;
     let label = if code == "internal_recovery_required" {
         "Butler could not complete this turn.".into()
     } else {

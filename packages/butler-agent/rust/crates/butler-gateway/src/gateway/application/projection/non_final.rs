@@ -105,7 +105,20 @@ pub(super) fn apply(
             terminal_turn: None,
         });
     }
-    let claim_status = queue::claim_status(&tx, chat_id, &turn_id, claim_id.as_deref())?;
+    let mut claim_status = queue::claim_status(&tx, chat_id, &turn_id, claim_id.as_deref())?;
+    if claim_status == QueuedTurnClaimStatus::Stale
+        && crash_interrupted_report(&kind, metadata)
+        && let (Some(claim), Some(reply_to)) = (
+            claim_id.as_deref(),
+            token(message.get("replyToMessageId")),
+        )
+        && queue::restore_delivered_claim(&tx, chat_id, &turn_id, claim, &reply_to)?
+    {
+        // The restarted App recovered the dead process's claim before the
+        // restarted service reported the interruption; the report settles
+        // that same claim, so the message is not dispatched again.
+        claim_status = QueuedTurnClaimStatus::Current;
+    }
     if claim_status == QueuedTurnClaimStatus::Stale {
         checkpoint::save(&tx, cursor, now)?;
         tx.commit().map_err(AppStorageError::sqlite)?;
@@ -283,6 +296,13 @@ struct RuntimeInput<'a> {
     now: &'a str,
     generated_id: &'a str,
 }
+/// The restarted service's report of a turn a crashed process was running.
+fn crash_interrupted_report(kind: &str, metadata: &Map<String, Value>) -> bool {
+    kind == "turn_failed"
+        && token(metadata.get("safeErrorCode")).as_deref()
+            == Some(crate::gateway::application::retry::INTERRUPTED_TURN_CODE)
+}
+
 fn project_runtime_event(input: RuntimeInput<'_>) -> Result<Option<&'static str>, AppStorageError> {
     let RuntimeInput {
         db,

@@ -1409,7 +1409,6 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(renderer).toContain("ConversationShell");
   expect(renderer).toContain('message.role === "assistant"');
   expect(renderer).toContain('message.status === "failed"');
-  expect(renderer).toContain("isRuntimeFaultRetryableMessage(message)");
   expect(renderer).toContain("onRetryTurn(turnId)");
   expect(renderer).not.toContain("eventPollingRef");
   expect(renderer).toContain("function collapseAssistantAttempts");

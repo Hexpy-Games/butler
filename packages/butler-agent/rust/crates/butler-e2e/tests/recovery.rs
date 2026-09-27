@@ -136,7 +136,6 @@ async fn rec_02_crash_during_streaming_recovers_without_duplicates() -> Result<(
 
 /// REC-02 (owner decision) — a crash-interrupted turn is not auto-resumed.
 #[tokio::test]
-#[ignore = "product gap: REC-02-AUTORESUME — after SIGKILL mid-stream the restarted service re-runs the interrupted turn to delivered; the owner decided such turns end failed with retry available"]
 async fn rec_02_crash_interrupted_turn_is_failed_not_resumed() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("REC-02-OWNER")?

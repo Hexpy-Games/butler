@@ -14,6 +14,11 @@ use crate::gateway::{MessageSendRequest, MessageSendResult};
 use butler_turn::btcc::SubsessionResultContext;
 use source::{current_controls_retry_source, retry_snapshot, verified_execution_controls};
 
+/// Safe error code of a turn a crashed service process was running. Such a
+/// turn is failed and retryable; the retry resumes it (owner decision: never
+/// resumed automatically).
+pub(super) const INTERRUPTED_TURN_CODE: &str = "turn_interrupted";
+
 impl AppApplication {
     pub(super) async fn retry_turn_owned(
         &self,
@@ -45,14 +50,16 @@ impl AppApplication {
                          safe_status_label_key=NULL,safe_status_label_parameters_json=NULL,\
                          safe_status_content_json=NULL,safe_error_code=NULL,retryable=0,\
                          cancellable=?2,attempt=?3,updated_at=?4 \
-                         WHERE id=?5 AND state='runtime_fault' AND retryable=1 AND attempt=?6",
+                         WHERE id=?5 AND retryable=1 AND attempt=?6 \
+                         AND (state='runtime_fault' OR (state='failed' AND safe_error_code=?7))",
                             params![
                                 status_label,
                                 verified.subsession_result.is_none(),
                                 attempt,
                                 now,
                                 operation_turn,
-                                snapshot.attempt
+                                snapshot.attempt,
+                                INTERRUPTED_TURN_CODE
                             ],
                         )
                         .map_err(AppStorageError::sqlite)?;

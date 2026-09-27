@@ -6,7 +6,7 @@ import { visibleSystemMessageText } from "@/app/system-event-message.ts";
 import { Stack, Tag } from "@/butler-ds";
 import {
   isAssistantFailureNoticeMessage,
-  isRuntimeFaultRetryableMessage,
+  isRetryableFailureMessage,
 } from "@/app/utils.ts";
 import { AssistantResponseFooter } from "./AssistantResponseFooter";
 import { BranchMessageActions } from "./BranchMessageActions";
@@ -120,7 +120,7 @@ function MessageContentComponent({
       )}
       {message.role !== "assistant" &&
         message.status === "failed" &&
-        isRuntimeFaultRetryableMessage(message) &&
+        isRetryableFailureMessage(message) &&
         message.turn_id && (
           <MessageRetryActionsContainer turnId={message.turn_id} />
         )}
