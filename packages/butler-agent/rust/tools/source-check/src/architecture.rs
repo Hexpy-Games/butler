@@ -1,38 +1,52 @@
-//! Production source boundaries; compiler checks still own complete name resolution.
+//! Production source boundaries between the domains of every workspace crate;
+//! compiler checks still own complete name resolution.
 
 mod modules;
 mod policy;
 mod references;
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 type Edges = BTreeMap<String, BTreeSet<String>>;
 
 pub(super) fn check(root: &Path) -> Result<bool, String> {
-    let entry = root.join("agent/src/lib.rs");
-    if !entry.is_file() {
+    let crates = workspace_crates(&root.join("crates"))?;
+    if crates.is_empty() {
         return Ok(false);
     }
-    let modules = modules::load(&entry)?;
-    let domains: BTreeSet<_> = modules
-        .iter()
-        .filter_map(|module| module.path.first().cloned())
-        .collect();
+    let idents: BTreeSet<_> = crates.iter().map(|(ident, _)| ident.clone()).collect();
+    let mut modules = Vec::new();
+    let mut owner = BTreeMap::<String, String>::new();
+    let mut errors = BTreeSet::new();
+    for (ident, entry) in &crates {
+        for module in modules::load(entry)? {
+            if let Some(domain) = module.path.first()
+                && let Some(other) = owner.insert(domain.clone(), ident.clone())
+                && other != *ident
+            {
+                errors.insert(format!(
+                    "domain {domain} is declared by {other} and {ident}"
+                ));
+            }
+            modules.push(module);
+        }
+    }
+    let domains: BTreeSet<_> = owner.keys().cloned().collect();
     let children: BTreeSet<_> = modules
         .iter()
         .filter(|module| module.path.len() == 2)
         .map(|module| module.path.clone())
         .collect();
-    let mut edges = Edges::new();
-    let mut errors = BTreeSet::new();
     for domain in &domains {
         if policy::dependencies(domain).is_none() {
             errors.insert(format!("domain {domain} has no reviewed dependency policy"));
         }
     }
+    let mut edges = Edges::new();
     for module in &modules {
-        let references = references::References::collect(module);
+        let references = references::References::collect(module, &idents);
         let file = module
             .file
             .strip_prefix(root)
@@ -55,8 +69,12 @@ pub(super) fn check(root: &Path) -> Result<bool, String> {
                 .entry(source.clone())
                 .or_default()
                 .insert(target.clone());
-            if !policy::dependencies(source)
-                .is_some_and(|allowed| allowed.contains(&target.as_str()))
+            // Edges between crates are declared, and enforced, by Cargo; the
+            // policy reviews the directions between domains of one crate.
+            let same_crate = owner.get(source) == owner.get(target);
+            if same_crate
+                && !policy::dependencies(source)
+                    .is_some_and(|allowed| allowed.contains(&target.as_str()))
             {
                 errors.insert(format!(
                     "{file}: dependency {source} -> {target} is not allowed"
@@ -93,6 +111,26 @@ pub(super) fn check(root: &Path) -> Result<bool, String> {
         errors.len()
     );
     Ok(!errors.is_empty())
+}
+
+/// Every `crates/<name>/src/lib.rs`, keyed by the crate's Rust identifier.
+fn workspace_crates(directory: &Path) -> Result<Vec<(String, PathBuf)>, String> {
+    if !directory.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut crates = Vec::new();
+    let entries =
+        fs::read_dir(directory).map_err(|error| format!("{}: {error}", directory.display()))?;
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("{}: {error}", directory.display()))?;
+        let entry_file = entry.path().join("src").join("lib.rs");
+        if entry_file.is_file() {
+            let ident = entry.file_name().to_string_lossy().replace('-', "_");
+            crates.push((ident, entry_file));
+        }
+    }
+    crates.sort();
+    Ok(crates)
 }
 
 fn cycle(

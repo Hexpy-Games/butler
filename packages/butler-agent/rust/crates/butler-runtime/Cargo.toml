@@ -1,0 +1,59 @@
+[package]
+name = "butler-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+butler-core = { path = "../butler-core" }
+butler-turn = { path = "../butler-turn" }
+butler-models = { path = "../butler-models" }
+base64.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+dom_smoothie.workspace = true
+uuid.workspace = true
+regex.workspace = true
+reqwest.workspace = true
+futures-util.workspace = true
+http.workspace = true
+indexmap.workspace = true
+image.workspace = true
+webp.workspace = true
+parking_lot.workspace = true
+lopdf.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+ryu-js.workspace = true
+rusqlite.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+thiserror.workspace = true
+unicode-normalization.workspace = true
+unicode-segmentation.workspace = true
+tz-rs.workspace = true
+url.workspace = true
+regress.workspace = true
+zip.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix.workspace = true
+nix.workspace = true
+
+[features]
+# Exposes test fixtures to tests in dependent crates.
+test-support = []
+
+[dev-dependencies]
+# Integration tests use this crate's own test-support fixtures.
+butler-runtime = { path = ".", features = ["test-support"] }
+butler-models = { path = "../butler-models", features = ["test-support"] }
+butler-turn = { path = "../butler-turn", features = ["test-support"] }
+butler-test-support = { path = "../butler-test-support" }
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true

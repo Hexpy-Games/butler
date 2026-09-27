@@ -1,0 +1,7 @@
+automation_date_invalid
+automation_envelope_invalid
+automation_invalid
+automation_preview_invalid
+automation_service_closed
+automation_store_unavailable
+automation_tool_unknown

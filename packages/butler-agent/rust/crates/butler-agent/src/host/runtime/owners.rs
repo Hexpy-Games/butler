@@ -1,0 +1,94 @@
+//! Runtime owner shutdown after admission has stopped and Turn futures have drained.
+
+use super::*;
+use butler_runtime::skills::Skills;
+
+pub(super) struct RuntimeOwners {
+    pub(super) stores: RuntimeStores,
+    pub(super) project_work: Arc<ProjectWork>,
+    pub(super) project_tools: Arc<crate::host::guided::project_tools::GuidedProjectTools>,
+    pub(super) session_worktrees: SessionWorktrees,
+    pub(super) image_files: Arc<butler_gateway::gateway::AppImageFiles>,
+    pub(super) attachment_context: Arc<butler_runtime::context::AttachmentContext>,
+    pub(super) memory_sync: crate::host::memory_jobs::sync::MemorySync,
+    #[cfg(unix)]
+    pub(super) embedding: Arc<super::super::EmbeddingOwner>,
+    pub(super) profile: Arc<ProfileService>,
+    pub(super) cognition: Arc<CognitionPromptReader>,
+    pub(super) memory_query: Arc<ExactMemoryQuery>,
+    pub(super) memory_recall: Arc<MemoryRecall>,
+    pub(super) conversation_reference: Arc<ConversationSessionReference>,
+    pub(super) conversation_tools: Arc<ConversationTools>,
+    pub(super) observer: Arc<ConversationObserver>,
+    pub(super) plans: AcceptedPlanProducer,
+    pub(super) command: Arc<crate::host::guided::command::GuidedCommand>,
+    pub(super) commands: Commands,
+    pub(super) tool_output: ToolOutput,
+    pub(super) context_maintenance: Arc<ContextMaintenance>,
+    pub(super) files: WorkspaceFiles,
+    pub(super) mutations: WorkspaceMutations,
+    pub(super) work_streams: Arc<super::super::WorkStreams>,
+    pub(super) skills: Arc<Skills>,
+    pub(super) automations: Arc<butler_runtime::operations::AutomationService>,
+}
+
+impl HostDependencies for RuntimeOwners {
+    fn close(&self) -> PortFuture<'_, ()> {
+        Box::pin(async move {
+            self.context_maintenance.close().await;
+            let automations = self
+                .automations
+                .close()
+                .await
+                .map_err(|error| BtccError::relayed(error.code(), error.message()));
+            self.project_tools.close().await;
+            self.project_work.close().await;
+            self.session_worktrees.close().await;
+            let image_files = self.image_files.close().await.map_err(|source| {
+                BtccError::relayed("image_files_close_failed", "Image file owner did not close")
+                    .with_source(source)
+            });
+            let attachment_context = self.attachment_context.close().await.map_err(setup);
+            let memory_sync = self.memory_sync.close().await;
+            #[cfg(unix)]
+            let embedding = self.embedding.close().await.map_err(setup);
+            self.profile.close().await;
+            self.cognition.close().await;
+            self.memory_recall.close().await;
+            let conversation_tools = self.conversation_tools.close().await.map_err(setup);
+            let memory_query = self
+                .memory_query
+                .close()
+                .await
+                .map_err(|e| BtccError::relayed(e.code(), e.message()));
+            let conversation_reference = self
+                .conversation_reference
+                .close()
+                .await
+                .map_err(|e| BtccError::relayed(e.code(), e.message()));
+            self.plans.close().await;
+            self.command.close().await;
+            self.commands.close().await;
+            self.tool_output.close().await;
+            self.files.close().await;
+            self.mutations.close().await;
+            self.skills.close().await;
+            let work_streams = self.work_streams.close().await;
+            let observer = self.observer.close().await.map_err(BtccError::from);
+            let stores = self.stores.close().await;
+            let result = image_files
+                .and(attachment_context)
+                .and(memory_sync)
+                .and(conversation_tools)
+                .and(memory_query)
+                .and(conversation_reference)
+                .and(observer)
+                .and(automations)
+                .and(work_streams)
+                .and(stores);
+            #[cfg(unix)]
+            let result = result.and(embedding);
+            result
+        })
+    }
+}

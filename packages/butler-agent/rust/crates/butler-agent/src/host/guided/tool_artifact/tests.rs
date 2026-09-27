@@ -1,0 +1,99 @@
+use std::{path::PathBuf, sync::Arc, time::SystemTime};
+
+use serde_json::json;
+
+use super::ToolArtifactReader;
+use butler_core::configuration::ConfigurationWrites;
+use butler_core::locale::LocaleCollation;
+use butler_models::models::{
+    ModelCatalog, ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
+};
+use butler_runtime::context::{
+    BudgetToolOutputInput, ContextBudgetEnvironment, ContextBudgetOwner, OutputModeInput,
+    ShellCommandResult, ToolOutputIdentity,
+};
+
+struct Clock;
+impl ModelConfigurationClock for Clock {
+    fn now_iso(&self) -> String {
+        "2026-09-20T00:00:00.000Z".into()
+    }
+    fn now_epoch_millis(&self) -> i64 {
+        1_790_000_000_000
+    }
+}
+impl ToolOutputIdentity for Clock {
+    fn now(&self) -> SystemTime {
+        SystemTime::now()
+    }
+    fn uuid(&self) -> String {
+        uuid::Uuid::new_v4().to_string()
+    }
+}
+
+fn service(root: PathBuf) -> butler_runtime::context::ToolOutput {
+    let catalog = Arc::new(ModelCatalog::new().unwrap());
+    let configuration = Arc::new(
+        ModelConfiguration::new(
+            root.clone(),
+            ModelConfigurationEnvironment::default(),
+            Arc::new(Clock),
+            catalog.clone(),
+            Arc::new(LocaleCollation::new("en-US").unwrap()),
+            butler_models::models::provider_http_client().unwrap(),
+            Arc::new(ConfigurationWrites::new()),
+        )
+        .unwrap(),
+    );
+    let budget = Arc::new(ContextBudgetOwner::new(
+        configuration,
+        catalog,
+        ContextBudgetEnvironment::default(),
+    ));
+    butler_runtime::context::ToolOutput::new(
+        root.clone(),
+        budget,
+        Arc::new(Clock),
+        Arc::new(butler_runtime::operations::MetricFiles::new(root)),
+    )
+}
+
+#[tokio::test]
+async fn retained_command_artifact_reads_exact_utf16_ranges() {
+    let root =
+        std::env::temp_dir().join(format!("butler-native-artifact-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&root).unwrap();
+    let owner = service(root.clone());
+    let retained = owner
+        .submit_budget(BudgetToolOutputInput {
+            result: ShellCommandResult {
+                stdout: "A😀B".into(),
+                stderr: String::new(),
+                exit_code: Some(0),
+                timed_out: false,
+            },
+            command: Some("printf".into()),
+            cwd: None,
+            max_model_tokens: None,
+            output_mode: OutputModeInput::Present(serde_json::json!("auto")),
+            validation_suite: None,
+            retain_original: true,
+        })
+        .await
+        .unwrap()
+        .await
+        .unwrap()
+        .unwrap();
+    let path = retained.butler_tool_artifact.unwrap().path;
+    let tools = ToolArtifactReader::new(owner.clone());
+    let output = tools
+        .read_output(json!({"path":path,"stream":"stdout","offset_chars":2,"max_tokens":50}))
+        .await
+        .unwrap();
+    assert!(
+        output.as_str().contains("\\ude00"),
+        "UTF-16 low surrogate must survive JSON wire"
+    );
+    owner.close().await;
+    std::fs::remove_dir_all(root).unwrap();
+}

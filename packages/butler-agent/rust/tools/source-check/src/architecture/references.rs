@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use proc_macro2::{TokenStream, TokenTree};
 use syn::visit::{self, Visit};
 use syn::{Item, UseTree};
@@ -6,14 +8,17 @@ use super::modules::{Module, item_attributes, test_only};
 
 pub(super) struct References<'a> {
     module: &'a Module,
+    /// Workspace crate identifiers; their paths name domains like `crate::` does.
+    crates: &'a BTreeSet<String>,
     pub(super) paths: Vec<Vec<String>>,
     pub(super) errors: Vec<String>,
 }
 
 impl<'a> References<'a> {
-    pub(super) fn collect(module: &'a Module) -> Self {
+    pub(super) fn collect(module: &'a Module, crates: &'a BTreeSet<String>) -> Self {
         let mut visitor = Self {
             module,
+            crates,
             paths: Vec::new(),
             errors: Vec::new(),
         };
@@ -34,6 +39,7 @@ impl<'a> References<'a> {
             "crate" => (Vec::new(), 1),
             "self" => (self.module.path.clone(), 1),
             "super" => (self.module.path.clone(), 0),
+            name if self.crates.contains(name) => (Vec::new(), 1),
             _ => return,
         };
         while parts.get(cursor).is_some_and(|part| part == "super") {
@@ -86,7 +92,10 @@ impl<'a> References<'a> {
             let TokenTree::Ident(first) = token else {
                 continue;
             };
-            if !matches!(first.to_string().as_str(), "crate" | "self" | "super") {
+            let first_name = first.to_string();
+            if !matches!(first_name.as_str(), "crate" | "self" | "super")
+                && !self.crates.contains(&first_name)
+            {
                 continue;
             }
             let mut parts = vec![first.to_string()];
