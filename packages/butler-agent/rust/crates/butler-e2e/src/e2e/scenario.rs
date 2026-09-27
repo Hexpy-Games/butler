@@ -12,15 +12,17 @@ use std::time::Duration;
 use serde_json::{Value, json};
 
 use super::agent::{Agent, Launch};
-use super::cassette::{Cassette, Meta};
 use super::config::{Credential, LiveProvider, ModelChoice, flag};
 use super::fixtures;
 use super::gateway::{Gateway, Reply};
-use super::live;
 use super::provider::Provider;
 use super::sandbox::Sandbox;
 use super::sanitize::Placeholders;
 use super::{HarnessError, harness_error};
+
+mod sources;
+
+use sources::{apply_credential, live_source, record_provider, replay_provider};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Fixture {
@@ -166,95 +168,31 @@ impl Setup {
         };
         let (provider, choice, credential) = match source {
             Source::None => (None, model.unwrap_or(default_model), None),
-            Source::Live(live_provider) => {
-                if let Some(base) = &live_provider.base_url
-                    && let Some(key) = live_provider.base_url_env()
-                {
-                    launch.set_env(key, base.clone());
-                }
-                let choice = model.unwrap_or_else(|| live_provider.choice.clone());
-                (
-                    None,
-                    choice,
-                    live_provider
-                        .credential
-                        .clone()
-                        .map(|c| (live_provider.provider.clone(), c)),
-                )
-            }
+            Source::Live(live_provider) => live_source(&live_provider, model, &mut launch),
             Source::Cassette(name)
                 if (flag("BUTLER_E2E_RECORD") && !replay_only) || record_into.is_some() =>
             {
-                let live_provider = live::gate(&format!("record {name}"))?.ok_or_else(|| {
-                    harness_error(
-                        "BUTLER_E2E_RECORD=1 needs BUTLER_E2E_TIER=live|all and credentials",
-                    )
-                })?;
-                let choice = model.unwrap_or_else(|| live_provider.choice.clone());
-                let upstream = live_provider
-                    .base_url
-                    .clone()
-                    .or_else(|| live_provider.upstream_default().map(str::to_owned))
-                    .ok_or_else(|| harness_error("record mode: no upstream for provider"))?;
-                let meta = Meta {
-                    scenario: name.clone(),
-                    provider: live_provider.provider.clone(),
-                    model: choice.model.clone(),
-                    effort: choice.effort.clone(),
-                    wire_shape: wire_shape(&live_provider.provider).into(),
-                    butler_git_sha: git_sha(),
-                    recorded_at: now_utc(),
-                    recorder: "butler-e2e record proxy".into(),
-                    sanitization: SANITIZATION.iter().map(|s| (*s).to_owned()).collect(),
-                    base: extends.clone(),
-                    ..Meta::default()
-                };
-                let base = extends.as_deref().map(Cassette::load).transpose()?;
-                let provider =
-                    Provider::record(upstream, meta, placeholders.clone(), record_into, base)
-                        .await?;
-                if let Some(key) = live_provider.base_url_env() {
-                    launch.set_env(key, provider.base_url.clone());
-                }
-                let credential = live_provider
-                    .credential
-                    .clone()
-                    .map(|c| (live_provider.provider.clone(), c));
-                (Some(provider), choice, credential)
+                record_provider(
+                    &name,
+                    model,
+                    record_into,
+                    extends,
+                    &placeholders,
+                    &mut launch,
+                )
+                .await?
             }
             Source::Cassette(name) => {
-                let cassette = Cassette::load(&name)?;
-                let choice = ModelChoice {
-                    model: cassette.meta.model.clone(),
-                    effort: cassette.meta.effort.clone(),
-                };
-                let provider_name = cassette.meta.provider.clone();
-                let provider = Provider::replay(cassette, placeholders.clone()).await?;
-                if let Some(key) = super::config::base_url_env(&provider_name) {
-                    launch.set_env(key, provider.base_url.clone());
-                }
-                if provider_name == "openai-subscription" && stub_credential {
+                let (provider, choice, subscription) =
+                    replay_provider(&name, &placeholders, &mut launch).await?;
+                if subscription && stub_credential {
                     fixtures::stub_codex_auth(&sandbox.codex_home())?;
                 }
                 (Some(provider), choice, None)
             }
         };
         if let Some((_, credential)) = &credential {
-            match credential {
-                Credential::CodexProfile(path) => {
-                    launch.set_env("BUTLER_CODEX_AUTH_PROFILE", path.display().to_string());
-                }
-                Credential::CodexAuthJson(path) => {
-                    launch.set_env("CODEX_AUTH_JSON", path.display().to_string());
-                }
-                Credential::ApiKey { env_var } => {
-                    if choice.provider() == "openai"
-                        && let Some(value) = super::config::nonempty(env_var)
-                    {
-                        launch.set_env("OPENAI_API_KEY", value);
-                    }
-                }
-            }
+            apply_credential(&mut launch, credential, &choice);
         }
         for (key, value) in env {
             launch.set_env(&key, value);
@@ -434,32 +372,4 @@ pub fn turn_timeout() -> u64 {
     } else {
         60
     }
-}
-
-fn wire_shape(provider: &str) -> &'static str {
-    match provider {
-        "openai-subscription" | "openai" => "openai_responses",
-        "anthropic" => "anthropic_messages",
-        "google" => "gemini_generate_content",
-        _ => "openai_chat_completions",
-    }
-}
-
-fn git_sha() -> String {
-    std::process::Command::new("git")
-        .args(["rev-parse", "--short=12", "HEAD"])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .output()
-        .ok()
-        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
-        .unwrap_or_default()
-}
-
-fn now_utc() -> String {
-    std::process::Command::new("date")
-        .args(["-u", "+%Y-%m-%dT%H:%M:%SZ"])
-        .output()
-        .ok()
-        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
-        .unwrap_or_default()
 }

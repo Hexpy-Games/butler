@@ -76,6 +76,41 @@ async fn mutate(s: &Scenario, path: &str, body: Value) -> Result<Reply, HarnessE
     Ok(reply)
 }
 
+/// Moves `gamma` after `beta` at the root, checks the order, and undoes it;
+/// returns the space after the undo.
+async fn reorder_and_undo(
+    s: &Scenario,
+    view: &Value,
+    beta: &str,
+    gamma: &str,
+) -> Result<Value, HarnessError> {
+    let before_move = children(view, None);
+    let moved = mutate(
+        s,
+        "/space/moves",
+        json!({"expectedRevision": revision(view), "sourceKey": gamma, "targetKey": beta, "position": "after"}),
+    )
+    .await?;
+    let moved_view = space(s).await?;
+    let order = children(&moved_view, None);
+    let position = |key: &str| order.iter().position(|k| k == key).unwrap();
+    assert_eq!(position(gamma), position(beta) + 1, "{order:?}");
+    let token = moved.data()["undoToken"].as_str().unwrap().to_owned();
+    mutate(
+        s,
+        "/space/undo",
+        json!({"expectedRevision": revision(&moved_view), "undoToken": token}),
+    )
+    .await?;
+    let undone = space(s).await?;
+    assert_eq!(
+        children(&undone, None),
+        before_move,
+        "undo did not restore the order"
+    );
+    Ok(undone)
+}
+
 /// WS-02 — Sidebar groups, moves, pins and undo show in `/navigation` and
 /// persist; a stale revision changes nothing.
 #[tokio::test]
@@ -109,30 +144,7 @@ async fn ws_02_sidebar_groups_moves_pins_undo() -> Result<(), HarnessError> {
     assert_eq!(children(&view, Some(&group)), vec![alpha.clone()], "{view}");
     assert!(!children(&view, None).contains(&alpha));
 
-    let before_move = children(&view, None);
-    let moved = mutate(
-        &s,
-        "/space/moves",
-        json!({"expectedRevision": revision(&view), "sourceKey": gamma, "targetKey": beta, "position": "after"}),
-    )
-    .await?;
-    let view = space(&s).await?;
-    let order = children(&view, None);
-    let position = |key: &str| order.iter().position(|k| k == key).unwrap();
-    assert_eq!(position(&gamma), position(&beta) + 1, "{order:?}");
-    let token = moved.data()["undoToken"].as_str().unwrap().to_owned();
-    mutate(
-        &s,
-        "/space/undo",
-        json!({"expectedRevision": revision(&view), "undoToken": token}),
-    )
-    .await?;
-    let view = space(&s).await?;
-    assert_eq!(
-        children(&view, None),
-        before_move,
-        "undo did not restore the order"
-    );
+    let view = reorder_and_undo(&s, &view, &beta, &gamma).await?;
 
     let stale = s
         .gw

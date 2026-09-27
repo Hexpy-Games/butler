@@ -8,8 +8,32 @@
 
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::fixtures::PROFILE_EXPORT as EXPORT;
-use butler_e2e::e2e::scenario::Setup;
+use butler_e2e::e2e::scenario::{Scenario, Setup};
 use serde_json::json;
+
+/// Malformed, unknown-field, invalid-JSON and oversize import bodies are
+/// refused with 400/413.
+async fn reject_malformed_imports(s: &Scenario) -> Result<(), HarnessError> {
+    for (body, status) in [
+        (json!({"text": 5}).to_string(), 400),
+        (
+            json!({"text": EXPORT, "source": "chatgpt", "extra": true}).to_string(),
+            400,
+        ),
+        ("{\"text\": ".to_owned(), 400),
+        (json!({"text": "x".repeat(1_100_000)}).to_string(), 413),
+    ] {
+        let rejected =
+            s.gw.send(
+                reqwest::Method::POST,
+                "/personalization/profile-import",
+                Some(body),
+            )
+            .await?;
+        assert_eq!(rejected.status, status, "{}", rejected.text);
+    }
+    Ok(())
+}
 
 /// PRO-02 — Profile import is safe and idempotent.
 #[tokio::test]
@@ -77,24 +101,7 @@ async fn pro_02_profile_import_is_safe_and_idempotent() -> Result<(), HarnessErr
         "re-import duplicated entries"
     );
 
-    for (body, status) in [
-        (json!({"text": 5}).to_string(), 400),
-        (
-            json!({"text": EXPORT, "source": "chatgpt", "extra": true}).to_string(),
-            400,
-        ),
-        ("{\"text\": ".to_owned(), 400),
-        (json!({"text": "x".repeat(1_100_000)}).to_string(), 413),
-    ] {
-        let rejected =
-            s.gw.send(
-                reqwest::Method::POST,
-                "/personalization/profile-import",
-                Some(body),
-            )
-            .await?;
-        assert_eq!(rejected.status, status, "{}", rejected.text);
-    }
+    reject_malformed_imports(&s).await?;
     let after = import().await?;
     assert_eq!(
         after.data()["stable_entry_count"].as_u64(),

@@ -268,6 +268,16 @@ async fn mig_03_historical_recovery_imports_once() -> Result<(), HarnessError> {
     s.finish().await
 }
 
+/// Pipes the shared third-party export into `args` (the CLI import).
+async fn import(s: &Scenario, args: &[&str]) -> Result<Value, HarnessError> {
+    let output = s
+        .agent
+        .cli_async_input(args, Some(butler_e2e::e2e::fixtures::PROFILE_EXPORT))
+        .await?;
+    assert_eq!(output.code, Some(0), "{} {}", output.stdout, output.stderr);
+    output.json()
+}
+
 /// MIG-03 — `butler personalization migration import --stdin` imports a
 /// third-party export once (the request is the one PRO-02 recorded), a
 /// repeat promotes nothing, and bad input is refused.
@@ -295,12 +305,7 @@ async fn mig_03_personalization_migration_import() -> Result<(), HarnessError> {
         "chatgpt",
         "--json",
     ];
-    let first = s
-        .agent
-        .cli_async_input(&args, Some(butler_e2e::e2e::fixtures::PROFILE_EXPORT))
-        .await?;
-    assert_eq!(first.code, Some(0), "{} {}", first.stdout, first.stderr);
-    let first = first.json()?;
+    let first = import(&s, &args).await?;
     let data = &first["data"];
     assert_eq!(data["model_called"], true, "{first}");
     assert_eq!(data["raw_text_included"], false, "{first}");
@@ -314,11 +319,7 @@ async fn mig_03_personalization_migration_import() -> Result<(), HarnessError> {
         "import echoes raw export text"
     );
 
-    let second = s
-        .agent
-        .cli_async_input(&args, Some(butler_e2e::e2e::fixtures::PROFILE_EXPORT))
-        .await?
-        .json()?;
+    let second = import(&s, &args).await?;
     assert_eq!(second["data"]["import_id"], data["import_id"], "{second}");
     assert_eq!(second["data"]["promoted_count"], 0, "{second}");
     assert_eq!(
