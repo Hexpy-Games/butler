@@ -66,6 +66,20 @@ jobs:
         timeout-minutes: 5
         run: bun run tests/smoke/ds-site-smoke.ts
 
+      # Sub-path build (/ds/) for a combined site: checked only, never deployed from here.
+      # It goes to dist-ds-site-ds/, so the Pages artifact below stays the base "/" build.
+      - name: Build the DS site under /ds/
+        run: npm --prefix packages/butler-app/client/ui run build:ds-site:ds
+
+      - name: Leak check (/ds/)
+        run: bun run tests/smoke/ds-site-leak-check.ts packages/butler-app/client/ui/dist-ds-site-ds
+
+      - name: Smoke (/ds/)
+        timeout-minutes: 5
+        env:
+          DS_SITE_BASE: /ds/
+        run: bun run tests/smoke/ds-site-smoke.ts
+
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
