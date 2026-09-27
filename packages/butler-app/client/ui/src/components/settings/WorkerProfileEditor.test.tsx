@@ -14,7 +14,7 @@ import type {
   WorkerProfile,
 } from "@/app/types.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
-import { HelperModelsSettings } from "./HelperModelsSettings";
+import { ModelsSettings } from "./ModelsSettings";
 import {
   WORKER_PROFILE_BUILTIN_JOBS,
   commitWorkerProfileCustomJob,
@@ -161,7 +161,13 @@ async function renderApp(): Promise<void> {
   }
   const { createRoot } = await import("react-dom/client");
   root = createRoot(container);
-  await act(async () => root?.render(<HelperModelsSettings />));
+  await act(async () => root?.render(<ModelsSettings />));
+  // Worker profiles sit in the Models page's collapsed Advanced disclosure.
+  const advanced = container.querySelector<HTMLElement>(
+    '[data-settings-section-id="advanced-models"] [aria-expanded]',
+  );
+  if (!advanced) throw new Error("Missing Advanced disclosure.");
+  await act(async () => advanced.click());
 }
 
 interface BridgeDouble {

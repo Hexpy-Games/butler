@@ -26,7 +26,7 @@ test("everyday settings come first and agent-level pages sit in a last Advanced 
   ).toEqual([
     ["general", "appearance", "personalization", "models"],
     ["updates", "usage", "privacy", "system", "archives", "about"],
-    ["helpers", "mcp", "skills", "server"],
+    ["mcp", "skills", "server"],
   ]);
   expect(
     groups.flatMap((group) => group.sections).map((section) => section.id),
@@ -52,30 +52,36 @@ test("developer logs stay in the app group when enabled", () => {
   expect(groups.at(-1)?.id).toBe("advanced");
 });
 
-test("advanced settings keep their section ids and deep links", () => {
+test("model settings stay on the Models page and old links still resolve", () => {
   for (const [link, section] of [
+    ["models", "models"],
+    ["settings:models", "models"],
+    ["Models/Access", "models"],
+    ["helpers", "models"],
+    ["settings:helpers", "models"],
+    ["worker-profiles", "models"],
+    ["fallback-consolidation", "models"],
+    ["backup models", "models"],
     ["mcp", "mcp"],
     ["settings:mcp", "mcp"],
     ["skills", "skills"],
     ["server", "server"],
     ["Server/Bridge", "server"],
-    ["helpers", "helpers"],
-    ["settings:helpers", "helpers"],
-    ["worker-profiles", "helpers"],
-    ["fallback-consolidation", "helpers"],
-    ["backup models", "helpers"],
-    ["models", "models"],
-    ["Models/Access", "models"],
     ["system-events", "system"],
   ] as const) {
     expect(normalizeSettingsSectionId(link), link).toBe(section);
   }
-  const helpers = settingsPageSchema.helpers.map((section) => section.id);
-  expect(helpers).toEqual(["fallback-consolidation", "worker-profiles"]);
-  expect(settingsPageSchema.models.map((section) => section.id)).toEqual([
-    "butler-model",
-    "permissions",
+  // Backup models stay visible; memory cleanup and worker profiles sit in
+  // the page's collapsed Advanced disclosure, so they may be absent.
+  expect(settingsPageSchema.models.map((section) => [section.id, section.optional === true])).toEqual([
+    ["butler-model", false],
+    ["backup-models", false],
+    ["permissions", false],
+    ["advanced-models", false],
+    ["memory-cleanup", true],
+    ["worker-profiles", true],
   ]);
+  expect(Object.keys(settingsPageSchema)).not.toContain("helpers");
 });
 
 test("settings search matches labels, descriptions, and bounded aliases", () => {
@@ -87,8 +93,8 @@ test("settings search matches labels, descriptions, and bounded aliases", () => 
 
   expect(sectionIds("tokens")).toEqual(["usage"]);
   expect(sectionIds("project folder")).toEqual(["server"]);
-  expect(sectionIds("worker")).toEqual(["helpers"]);
-  expect(sectionIds("backup")).toEqual(["helpers"]);
+  expect(sectionIds("worker")).toEqual(["models"]);
+  expect(sectionIds("backup")).toEqual(["models"]);
   expect(sectionIds("developer logs")).toEqual(["logs"]);
   expect(sectionIds("does not exist")).toEqual([]);
   expect(filterSettingsSectionGroups(groups, " ")).toBe(groups);

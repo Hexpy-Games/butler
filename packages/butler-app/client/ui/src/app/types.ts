@@ -7,7 +7,6 @@ export type StatusTone = "ok" | "muted" | "error";
 export type SettingsSectionId =
   | "general"
   | "models"
-  | "helpers"
   | "appearance"
   | "server"
   | "updates"

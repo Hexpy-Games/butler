@@ -809,7 +809,6 @@ export interface AppCopy {
     sections: {
       general: string;
       models: string;
-      helpers: string;
       appearance: string;
       server: string;
       updates: string;
@@ -826,7 +825,6 @@ export interface AppCopy {
     sectionDescriptions: {
       general: string;
       models: string;
-      helpers: string;
       appearance: string;
       server: string;
       updates: string;
@@ -843,7 +841,6 @@ export interface AppCopy {
     sectionAliases: {
       general: string[];
       models: string[];
-      helpers: string[];
       appearance: string[];
       server: string[];
       updates: string[];
@@ -859,8 +856,10 @@ export interface AppCopy {
     };
     sectionState: { loading: string; error: string; retry: string; empty: string };
     updateComponents: { app: string; service: string };
-    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "fallbackConsolidation" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview", string>;
-    pageSectionDescriptions: Record<"notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning" | "fallbackConsolidation", string>;
+    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview", string>;
+    pageSectionDescriptions: Record<"notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning", string>;
+    /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
+    modelsAdvanced: { title: string; contents: string };
     panels: {
       butlerModel: string;
       workerProfiles: string;
@@ -895,6 +894,12 @@ export interface AppCopy {
       empty: string;
       noCandidates: string;
       limitReached: string;
+      /** One-line summary on the Models page. */
+      summaryDescription: string;
+      off: string;
+      edit: string;
+      editLabel: string;
+      done: string;
     };
     workerProfilesPanel: {
       add: string;

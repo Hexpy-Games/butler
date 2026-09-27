@@ -74,6 +74,9 @@ export function VisualHarness() {
     new URLSearchParams(window.location.search).get("surface") === "ss03";
   const worktreeSurface =
     new URLSearchParams(window.location.search).get("surface") === "worktree";
+  // `developer=1` turns on developer mode (context and worker tabs, Git details).
+  const developerMode =
+    new URLSearchParams(window.location.search).get("developer") === "1";
   const harnessNavigation = ss03Surface
     ? HARNESS_SS03_NAVIGATION
     : HARNESS_NAVIGATION;
@@ -109,13 +112,14 @@ export function VisualHarness() {
       },
     ];
     return visualTheme === EMPTY_SETTINGS.appearance_theme
-      ? { ...EMPTY_SETTINGS, worker_profiles: workerProfiles }
+      ? { ...EMPTY_SETTINGS, diagnostics_enabled: developerMode, worker_profiles: workerProfiles }
       : {
           ...EMPTY_SETTINGS,
           appearance_theme: visualTheme,
+          diagnostics_enabled: developerMode,
           worker_profiles: workerProfiles,
         };
-  }, [visualTheme]);
+  }, [developerMode, visualTheme]);
   const systemPrefersDark = useSystemThemePreference();
   usePortalThemeClasses(harnessSettings, systemPrefersDark);
   const rightAvailable =

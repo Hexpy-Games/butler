@@ -936,7 +936,6 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     sections: {
       general: "일반",
       models: "모델",
-      helpers: "보조 모델",
       appearance: "모양",
       server: "서버",
       updates: "업데이트",
@@ -952,8 +951,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     },
     sectionDescriptions: {
       general: "언어, 시간대, 대화 입력과 검색 기본값을 설정합니다.",
-      models: "버틀러 모델과 권한을 설정합니다.",
-      helpers: "예비 모델, 정리 모델과 Worker 프로필을 관리합니다.",
+      models: "버틀러 모델, 예비 모델과 권한을 설정합니다.",
       appearance: "앱의 테마와 화면 표시 방식을 설정합니다.",
       server: "버틀러 서버 연결과 새 프로젝트 폴더를 설정합니다.",
       updates: "버틀러를 확인하고 업데이트합니다.",
@@ -969,8 +967,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     },
     sectionAliases: {
       general: ["기본", "일반 설정", "대화"],
-      models: ["모델 설정", "권한", "접근"],
-      helpers: ["Worker", "Worker 프로필", "예비 모델", "대체 모델", "정리 모델"],
+      models: ["모델 설정", "Worker", "예비 모델"],
       appearance: ["테마", "화면 설정", "디자인"],
       server: ["연결", "프로젝트 폴더"],
       updates: ["업그레이드", "새 버전"],
@@ -1007,7 +1004,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       learning: "학습",
       import: "가져오기",
       butlerModel: "버틀러 모델",
-      fallbackConsolidation: "예비·정리 모델",
+      backupModels: "예비 모델",
+      memoryCleanup: "기억 정리",
       permissions: "권한",
       workerProfiles: "Worker 프로필",
       connection: "연결",
@@ -1024,7 +1022,6 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       sidebar: "사이드바가 대화를 정리하는 방식입니다.",
       homeScreen: "새 채팅 첫 화면의 배경입니다.",
       learning: "버틀러가 로컬 대화에서 사용자에 대해 학습하는 범위입니다.",
-      fallbackConsolidation: "현재 모델이 실패할 때 이어받을 모델과 기억을 정리할 모델입니다.",
     },
     panels: {
       butlerModel: "모델 설정",
@@ -1062,6 +1059,15 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       empty: "등록된 예비 모델이 없습니다.",
       noCandidates: "추가할 수 있는 모델이 없습니다.",
       limitReached: "예비 모델은 최대 5개까지 등록할 수 있습니다.",
+      summaryDescription: "현재 모델이 실패하면 이어받습니다.",
+      off: "사용 안 함",
+      edit: "편집",
+      editLabel: "예비 모델 편집",
+      done: "완료",
+    },
+    modelsAdvanced: {
+      title: "고급",
+      contents: "기억 정리 모델과 Worker 프로필",
     },
     workerProfilesPanel: {
       add: "Worker 프로필 추가",

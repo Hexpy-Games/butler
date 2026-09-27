@@ -2110,7 +2110,7 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(renderer).toContain("descriptions.contextLimitClamped");
   expect(renderer).toContain("<SettingsShell");
   expect(renderer).toContain("title={sections.workerProfiles}");
-  expect(renderer).toContain("draft.worker_profiles");
+  expect(renderer).toMatch(/draft\??\.worker_profiles/u);
   expect(renderer).toContain("appCopy.settings.localModels");
   expect(renderer).toContain("/model-catalog/local/discover");
   expect(renderer).toContain("api<LocalModelRegistrationResult>(");
@@ -2127,7 +2127,7 @@ test("settings, command palette, automations, right panel, and worker UI are app
   ).toContain("<LocalModelApiSection");
   expect(
     read(
-      "packages/butler-app/client/ui/src/components/settings/HelperModelsSettings.tsx",
+      "packages/butler-app/client/ui/src/components/settings/ModelsSettings.tsx",
     ),
   ).toContain("<WorkerProfileEditor");
   expect(

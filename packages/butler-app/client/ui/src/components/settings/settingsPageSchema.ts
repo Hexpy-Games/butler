@@ -41,13 +41,14 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "learning", kind: "form", fields: ["profiling-mode", "profiling-model", "profiling-reasoning"] },
     { id: "import", kind: "form", fields: ["profile-migration", "profile-migration-prompt", "profile-migration-dump"] },
   ],
+  // Memory cleanup and worker profiles show when the Advanced disclosure is open.
   models: [
     { id: "butler-model", kind: "form", fields: ["primary-model", "reasoning", "context-limit", "local-reasoning-budget"] },
+    { id: "backup-models", kind: "form", fields: ["backup-models-summary", "backup-models-enabled", "backup-models"] },
     { id: "permissions", kind: "form", fields: ["access-mode", "plan-mode-default"] },
-  ],
-  helpers: [
-    { id: "fallback-consolidation", kind: "form", fields: ["backup-models-enabled", "backup-models", "consolidation-model", "consolidation-reasoning"] },
-    { id: "worker-profiles", kind: "list", fields: WORKER_PROFILE_FIELDS },
+    { id: "advanced-models", kind: "form", fields: [] },
+    { id: "memory-cleanup", kind: "form", fields: ["consolidation-model", "consolidation-reasoning"], optional: true },
+    { id: "worker-profiles", kind: "list", fields: WORKER_PROFILE_FIELDS, optional: true },
   ],
   mcp: [
     { id: "mcp-servers", kind: "list", fields: [] },

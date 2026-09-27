@@ -36,7 +36,7 @@ test("settings descriptors, headers, and shared controls expose their semantics"
   const sections = createSettingsSectionGroups(settingsCopy, true).flatMap(
     (group) => group.sections,
   );
-  expect(sections).toHaveLength(15);
+  expect(sections).toHaveLength(14);
   expect(sections.every((section) => section.description.trim().length > 0)).toBe(true);
 
   const markup = renderToStaticMarkup(

@@ -927,7 +927,6 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     sections: {
       general: "General",
       models: "Models",
-      helpers: "Helper models",
       appearance: "Appearance",
       server: "Server",
       updates: "Updates",
@@ -943,8 +942,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     },
     sectionDescriptions: {
       general: "Configure language, time zone, conversation input, and search defaults.",
-      models: "Choose Butler's model and permissions.",
-      helpers: "Manage backup, cleanup, and worker models.",
+      models: "Choose Butler's model, backup models, and permissions.",
       appearance: "Configure the app theme and display behavior.",
       server: "Configure the Butler server connection and new project folder.",
       updates: "Check and update Butler App.",
@@ -960,8 +958,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     },
     sectionAliases: {
       general: ["basics", "general settings", "conversation"],
-      models: ["model settings", "permissions", "access"],
-      helpers: ["workers", "worker profiles", "backup models", "fallback", "consolidation"],
+      models: ["model settings", "workers", "backup models"],
       appearance: ["theme", "display", "design"],
       server: ["connection", "project folder"],
       updates: ["upgrade", "new version"],
@@ -998,7 +995,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       learning: "Learning",
       import: "Import",
       butlerModel: "Butler model",
-      fallbackConsolidation: "Fallback & consolidation",
+      backupModels: "Backup models",
+      memoryCleanup: "Memory cleanup",
       permissions: "Permissions",
       workerProfiles: "Worker profiles",
       connection: "Connection",
@@ -1015,7 +1013,6 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       sidebar: "How the sidebar organizes conversations.",
       homeScreen: "The background of the new chat screen.",
       learning: "What Butler learns about you from local conversations.",
-      fallbackConsolidation: "Models that take over when the current one fails, and the model that consolidates memory.",
     },
     panels: {
       butlerModel: "Model settings",
@@ -1053,6 +1050,15 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       empty: "No backup models are registered.",
       noCandidates: "No models are available to add.",
       limitReached: "You can register up to 5 backup models.",
+      summaryDescription: "Take over when the current model fails.",
+      off: "Off",
+      edit: "Edit",
+      editLabel: "Edit backup models",
+      done: "Done",
+    },
+    modelsAdvanced: {
+      title: "Advanced",
+      contents: "Memory cleanup model and worker profiles",
     },
     workerProfilesPanel: {
       add: "Add Worker profile",

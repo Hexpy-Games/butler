@@ -12,7 +12,6 @@ const BASE_SETTINGS_SECTION_IDS: SettingsSectionId[] = [
   "system",
   "archives",
   "about",
-  "helpers",
   "mcp",
   "skills",
   "server",

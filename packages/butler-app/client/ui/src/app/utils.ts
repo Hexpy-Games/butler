@@ -1810,13 +1810,15 @@ export function normalizeSettingsSectionId(value: unknown): SettingsSectionId {
   if (section.includes("server") || section.includes("bridge")) return "server";
   if (section.includes("mcp")) return "mcp";
   if (section.includes("skill")) return "skills";
+  // Backup, cleanup and worker models live on the Models page (the
+  // short-lived "helpers" page id included).
   if (
     section.includes("helper") ||
     section.includes("worker") ||
     section.includes("backup") ||
     section.includes("fallback")
   )
-    return "helpers";
+    return "models";
   if (
     section.includes("usage") ||
     section.includes("metrics") ||
