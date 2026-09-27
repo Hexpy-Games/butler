@@ -139,7 +139,8 @@ pub(super) fn reserve(
             ],
         )
         .map_err(AppStorageError::sqlite)?;
-    // New user input resumes a queue paused by Stop.
+    // New user input (a send, a queue add or a retry) resumes a queue paused
+    // by Stop; the messages queued before it run first (see `claim`).
     connection
         .execute(
             "DELETE FROM session_queue_pauses WHERE chat_id=?1",
@@ -149,9 +150,22 @@ pub(super) fn reserve(
     Ok(true)
 }
 
+/// Whether a claim waits for the messages queued before it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum ClaimOrder {
+    /// First in, first out: a message sent to a paused queue runs after the
+    /// messages queued before it.
+    Fifo,
+    /// A retry runs its earlier turn again now.
+    Immediate,
+}
+
+/// Claims a queued message for dispatch when nothing in its session is
+/// dispatching and, for a FIFO claim, no older message waits.
 pub(super) fn claim(
     connection: &Connection,
     claim: &QueueClaim,
+    order: ClaimOrder,
     claimed_at: &str,
     subscribers: &EventSubscribers,
 ) -> Result<Option<QueueClaim>, AppStorageError> {
@@ -161,14 +175,16 @@ pub(super) fn claim(
                claim_owner=?2, claimed_at=?3, lease_expires_at=?4, updated_at=?3 \
              WHERE id=?5 AND chat_id=?6 AND state='queued' AND NOT EXISTS (\
                SELECT 1 FROM session_queued_messages active \
-               WHERE active.chat_id=?6 AND active.state='dispatching')",
+               WHERE active.chat_id=?6 AND (active.state='dispatching' OR (?7 \
+                 AND active.state='queued' AND active.rowid < session_queued_messages.rowid)))",
             params![
                 claim.claim_id,
                 claim.claim_owner,
                 claimed_at,
                 claim.lease_expires_at,
                 claim.queued_message_id,
-                claim.chat_id
+                claim.chat_id,
+                order == ClaimOrder::Fifo
             ],
         )
         .map_err(AppStorageError::sqlite)?;

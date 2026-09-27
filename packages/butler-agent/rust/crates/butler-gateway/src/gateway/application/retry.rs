@@ -12,7 +12,9 @@ use super::{
 use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::{MessageSendRequest, MessageSendResult};
 use butler_turn::btcc::SubsessionResultContext;
-use source::{current_controls_retry_source, retry_snapshot, verified_execution_controls};
+use source::{
+    current_controls_retry_source, reservation, retry_snapshot, verified_execution_controls,
+};
 
 /// Safe error code of a turn a crashed service process was running. Such a
 /// turn is failed and retryable; `/retry` resumes it (owner decision: never
@@ -71,22 +73,7 @@ impl AppApplication {
                         &now,
                     )?;
 
-                    let reservation = queue::QueueReservation {
-                        id: queue_id.clone(),
-                        chat_id: snapshot.chat_id.clone(),
-                        text: snapshot.text.clone(),
-                        client_message_id: format!(
-                            "retry-{operation_turn}-{}",
-                            snapshot.attempt.saturating_add(1)
-                        ),
-                        input_identity_digest: snapshot.input_identity_digest.clone(),
-                        control_resolution_json: snapshot.control_resolution_json,
-                        controls_json: snapshot.controls_json,
-                        attachments_json: snapshot.attachments_json,
-                        content_parts_json: snapshot.content_parts_json,
-                        project_source_refs_json: snapshot.project_source_refs_json,
-                        created_at: now.clone(),
-                    };
+                    let reservation = reservation(&snapshot, &queue_id, &now);
                     queue::reserve(&transaction, &reservation)?;
                     let requested_claim = queue::QueueClaim {
                         queued_message_id: queue_id,
@@ -95,8 +82,14 @@ impl AppApplication {
                         claim_owner,
                         lease_expires_at,
                     };
-                    let claim = queue::claim(&transaction, &requested_claim, &now, &subscribers)?
-                        .ok_or_else(|| {
+                    let claim = queue::claim(
+                        &transaction,
+                        &requested_claim,
+                        queue::ClaimOrder::Immediate,
+                        &now,
+                        &subscribers,
+                    )?
+                    .ok_or_else(|| {
                         AppStorageError::new(
                             AppStorageCode::TurnRetryDispatchBusy,
                             "The session already has a message being dispatched.",

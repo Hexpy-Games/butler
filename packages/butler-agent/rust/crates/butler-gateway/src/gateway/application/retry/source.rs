@@ -23,6 +23,32 @@ pub(super) struct RetrySnapshot {
     pub input_identity_digest: String,
 }
 
+/// The queue row a retry dispatches: the turn's snapshotted input under a
+/// client id of the next attempt.
+pub(super) fn reservation(
+    snapshot: &RetrySnapshot,
+    queue_id: &str,
+    now: &str,
+) -> crate::gateway::application::queue::QueueReservation {
+    crate::gateway::application::queue::QueueReservation {
+        id: queue_id.to_owned(),
+        chat_id: snapshot.chat_id.clone(),
+        text: snapshot.text.clone(),
+        client_message_id: format!(
+            "retry-{}-{}",
+            snapshot.turn_id,
+            snapshot.attempt.saturating_add(1)
+        ),
+        input_identity_digest: snapshot.input_identity_digest.clone(),
+        control_resolution_json: snapshot.control_resolution_json.clone(),
+        controls_json: snapshot.controls_json.clone(),
+        attachments_json: snapshot.attachments_json.clone(),
+        content_parts_json: snapshot.content_parts_json.clone(),
+        project_source_refs_json: snapshot.project_source_refs_json.clone(),
+        created_at: now.to_owned(),
+    }
+}
+
 pub(super) struct CurrentControlsRetrySource {
     pub chat_id: String,
     pub user_message_id: String,

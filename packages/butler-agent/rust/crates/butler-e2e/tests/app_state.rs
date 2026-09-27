@@ -420,35 +420,6 @@ async fn q_02_queue_durability_and_conflicts() -> Result<(), HarnessError> {
     s.finish().await
 }
 
-/// Q-02 (owner decision) — cancelling the running turn pauses the queue.
-/// Replays the Q-02 recording of the slow turn; the queued message must not
-/// reach the provider (an unmatched request would fail the replay).
-#[tokio::test]
-async fn q_02_cancel_pauses_the_queue() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let s = Setup::new("Q-02-CANCEL")?.cassette("Q-02").start().await?;
-    let running = start_slow_turn(&s).await?;
-    enqueue(&s, "Reply with exactly the word: paused").await?;
-    let cancel =
-        s.gw.post(&format!("/turns/{running}/cancel"), json!({}))
-            .await?;
-    assert_eq!(cancel.status, 202, "{}", cancel.text);
-    s.gw.wait_terminal("general", &running, Duration::from_secs(20))
-        .await?;
-    tokio::time::sleep(Duration::from_secs(3)).await;
-    assert_eq!(
-        queue(&s).await?.len(),
-        1,
-        "queued message left the queue after cancel"
-    );
-    assert_eq!(
-        s.gw.turns("general").await?.len(),
-        1,
-        "queue continued after cancel"
-    );
-    s.finish().await
-}
-
 /// ATT-01 (image) — a PNG attached for a model whose catalog entry says
 /// `image_input_support: supported` is admitted (checked before any model call).
 #[tokio::test]

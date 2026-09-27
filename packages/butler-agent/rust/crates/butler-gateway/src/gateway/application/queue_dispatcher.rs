@@ -269,6 +269,7 @@ async fn drain_chat(app: &AppApplication, chat_id: &str) -> Result<(), GatewayAp
                         claim_owner: owner,
                         lease_expires_at: lease,
                     },
+                    queue::ClaimOrder::Fifo,
                     &now,
                     &subscribers,
                 )
