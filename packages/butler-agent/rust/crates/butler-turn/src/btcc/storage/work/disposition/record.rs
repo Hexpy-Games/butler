@@ -29,7 +29,12 @@ pub(in crate::btcc::storage::work) fn record(
         && input
             .runtime_owned_open_generation
             .is_some_and(|value| value.version == 1);
-    let work = relation::require_bound(db, &input.scope, runtime_owned_open)?;
+    let accepted = if runtime_owned_open {
+        relation::BoundState::OpenOrCompleted
+    } else {
+        relation::BoundState::Open
+    };
+    let work = relation::require_bound(db, &input.scope, accepted)?;
     if work.id != input.work_id {
         return Err(common::error(
             StorageCode::DurableWorkDispositionNotBound,

@@ -83,87 +83,43 @@ fn operational_notice(event_json: &str, created_at: String) -> Option<WorkStatus
     })
 }
 
+const WORK_STATUS_CANDIDATES: &str = "SELECT work.work_id, work.session_id, work.status, work.updated_at, \
+     turn.turn_id, turn.semantic_state, relation.safe_title, \
+     disposition.disposition, disposition.runtime_owned_open, \
+     disposition.created_at, checkpoint.stage, checkpoint.public_summary, \
+     checkpoint.action_states_json, checkpoint.created_at, \
+     (SELECT COUNT(*) FROM btcc_guided_work_effect_blockers blocker \
+       WHERE blocker.work_id = work.work_id AND blocker.status = 'unresolved'), \
+     (SELECT COUNT(*) FROM btcc_guided_effects effect \
+       WHERE effect.work_id = work.work_id) \
+     FROM btcc_guided_works work \
+     LEFT JOIN btcc_guided_turn_work_bindings binding \
+       ON binding.rowid = (SELECT candidate.rowid \
+         FROM btcc_guided_turn_work_bindings candidate \
+         WHERE candidate.work_id = work.work_id \
+         ORDER BY candidate.bound_at DESC, candidate.rowid DESC LIMIT 1) \
+     LEFT JOIN btcc_turns turn ON turn.turn_id = binding.turn_id \
+     LEFT JOIN btcc_session_relations relation \
+       ON relation.child_session_id = work.session_id \
+     LEFT JOIN btcc_guided_work_disposition_revisions disposition \
+       ON disposition.work_id = work.work_id AND disposition.revision = (\
+         SELECT MAX(candidate.revision) \
+         FROM btcc_guided_work_disposition_revisions candidate \
+         WHERE candidate.work_id = work.work_id) \
+     LEFT JOIN btcc_guided_work_checkpoint_revisions checkpoint \
+       ON checkpoint.work_id = work.work_id AND checkpoint.revision = (\
+         SELECT MAX(candidate.revision) \
+         FROM btcc_guided_work_checkpoint_revisions candidate \
+         WHERE candidate.work_id = work.work_id) \
+     WHERE work.status != 'abandoned' \
+     ORDER BY CASE WHEN work.status IN ('open', 'blocked') THEN 0 ELSE 1 END, \
+       work.updated_at DESC LIMIT 24";
+
 impl SessionWorkRepository {
     /// Read bounded source-shaped Work monitor facts without starting other owners.
     pub async fn work_status_observations(&self) -> Result<Vec<WorkStatusObservation>, BtccError> {
         self.read(|db| {
-            let mut statement = db
-                .prepare(
-                    "SELECT work.work_id, work.session_id, work.status, work.updated_at, \
-                 turn.turn_id, turn.semantic_state, relation.safe_title, \
-                 disposition.disposition, disposition.runtime_owned_open, \
-                 disposition.created_at, checkpoint.stage, checkpoint.public_summary, \
-                 checkpoint.action_states_json, checkpoint.created_at, \
-                 (SELECT COUNT(*) FROM btcc_guided_work_effect_blockers blocker \
-                   WHERE blocker.work_id = work.work_id AND blocker.status = 'unresolved'), \
-                 (SELECT COUNT(*) FROM btcc_guided_effects effect \
-                   WHERE effect.work_id = work.work_id) \
-                 FROM btcc_guided_works work \
-                 LEFT JOIN btcc_guided_turn_work_bindings binding \
-                   ON binding.rowid = (SELECT candidate.rowid \
-                     FROM btcc_guided_turn_work_bindings candidate \
-                     WHERE candidate.work_id = work.work_id \
-                     ORDER BY candidate.bound_at DESC, candidate.rowid DESC LIMIT 1) \
-                 LEFT JOIN btcc_turns turn ON turn.turn_id = binding.turn_id \
-                 LEFT JOIN btcc_session_relations relation \
-                   ON relation.child_session_id = work.session_id \
-                 LEFT JOIN btcc_guided_work_disposition_revisions disposition \
-                   ON disposition.work_id = work.work_id AND disposition.revision = (\
-                     SELECT MAX(candidate.revision) \
-                     FROM btcc_guided_work_disposition_revisions candidate \
-                     WHERE candidate.work_id = work.work_id) \
-                 LEFT JOIN btcc_guided_work_checkpoint_revisions checkpoint \
-                   ON checkpoint.work_id = work.work_id AND checkpoint.revision = (\
-                     SELECT MAX(candidate.revision) \
-                     FROM btcc_guided_work_checkpoint_revisions candidate \
-                     WHERE candidate.work_id = work.work_id) \
-                 WHERE work.status != 'abandoned' \
-                 ORDER BY CASE WHEN work.status IN ('open', 'blocked') THEN 0 ELSE 1 END, \
-                   work.updated_at DESC LIMIT 24",
-                )
-                .map_err(StorageError::sqlite)?;
-            let candidates = statement
-                .query_map([], |row| {
-                    let action_states = row.get::<_, Option<String>>(12)?;
-                    let action_progress = action_states
-                        .as_deref()
-                        .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())
-                        .and_then(|value| value.as_array().cloned())
-                        .unwrap_or_default()
-                        .into_iter()
-                        .filter_map(|action| {
-                            action
-                                .get("status")
-                                .and_then(serde_json::Value::as_str)
-                                .map(str::to_owned)
-                        })
-                        .collect();
-                    Ok(WorkStatusCandidate {
-                        work_id: row.get(0)?,
-                        session_id: row.get(1)?,
-                        work_status: row.get(2)?,
-                        work_updated_at: row.get(3)?,
-                        turn_id: row.get(4)?,
-                        turn_state: row.get(5)?,
-                        safe_title: row.get(6)?,
-                        disposition_status: row.get(7)?,
-                        runtime_owned_open: row.get::<_, Option<i64>>(8)?.unwrap_or(0) == 1,
-                        disposition_updated_at: row.get(9)?,
-                        stage: row.get(10)?,
-                        summary: row.get(11)?,
-                        action_progress,
-                        checkpoint_updated_at: row.get(13)?,
-                        unresolved_blocker_count: u64::try_from(row.get::<_, i64>(14)?.max(0))
-                            .unwrap_or_default(),
-                        effect_count: u64::try_from(row.get::<_, i64>(15)?.max(0))
-                            .unwrap_or_default(),
-                    })
-                })
-                .map_err(StorageError::sqlite)?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(StorageError::sqlite)?;
-            drop(statement);
-
+            let candidates = work_status_candidates(db)?;
             let mut notices = db
                 .prepare(
                     "SELECT progress.event_json, progress.created_at \
@@ -185,28 +141,88 @@ impl SessionWorkRepository {
                     .map_err(StorageError::sqlite)?
                     .into_iter()
                     .find_map(|(event, created_at)| operational_notice(&event, created_at));
-                observations.push(WorkStatusObservation {
-                    work_id: candidate.work_id,
-                    session_id: candidate.session_id,
-                    turn_id: candidate.turn_id,
-                    work_status: candidate.work_status,
-                    disposition_status: candidate.disposition_status,
-                    runtime_owned_open: candidate.runtime_owned_open,
-                    turn_state: candidate.turn_state,
-                    safe_title: candidate.safe_title,
-                    summary: candidate.summary,
-                    stage: candidate.stage,
-                    action_progress: candidate.action_progress,
-                    effect_count: candidate.effect_count,
-                    unresolved_blocker_count: candidate.unresolved_blocker_count,
-                    work_updated_at: candidate.work_updated_at,
-                    disposition_updated_at: candidate.disposition_updated_at,
-                    checkpoint_updated_at: candidate.checkpoint_updated_at,
-                    operational_notice: notice,
-                });
+                observations.push(candidate.observation(notice));
             }
             Ok(observations)
         })
         .await
+    }
+}
+
+/// The 24 most relevant non-abandoned Works with their latest binding,
+/// disposition and checkpoint facts.
+fn work_status_candidates(
+    db: &rusqlite::Connection,
+) -> crate::btcc::storage::StorageResult<Vec<WorkStatusCandidate>> {
+    let mut statement = db
+        .prepare(WORK_STATUS_CANDIDATES)
+        .map_err(StorageError::sqlite)?;
+    statement
+        .query_map([], |row| {
+            Ok(WorkStatusCandidate {
+                work_id: row.get(0)?,
+                session_id: row.get(1)?,
+                work_status: row.get(2)?,
+                work_updated_at: row.get(3)?,
+                turn_id: row.get(4)?,
+                turn_state: row.get(5)?,
+                safe_title: row.get(6)?,
+                disposition_status: row.get(7)?,
+                runtime_owned_open: row.get::<_, Option<i64>>(8)?.unwrap_or(0) == 1,
+                disposition_updated_at: row.get(9)?,
+                stage: row.get(10)?,
+                summary: row.get(11)?,
+                action_progress: action_statuses(row.get::<_, Option<String>>(12)?.as_deref()),
+                checkpoint_updated_at: row.get(13)?,
+                unresolved_blocker_count: u64::try_from(row.get::<_, i64>(14)?.max(0))
+                    .unwrap_or_default(),
+                effect_count: u64::try_from(row.get::<_, i64>(15)?.max(0)).unwrap_or_default(),
+            })
+        })
+        .map_err(StorageError::sqlite)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(StorageError::sqlite)
+}
+
+/// The status of each action in a checkpoint's stored action states.
+fn action_statuses(action_states: Option<&str>) -> Vec<String> {
+    action_states
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())
+        .and_then(|value| value.as_array().cloned())
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|action| {
+            action
+                .get("status")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+        })
+        .collect()
+}
+
+impl WorkStatusCandidate {
+    fn observation(
+        self,
+        operational_notice: Option<WorkStatusOperationalNotice>,
+    ) -> WorkStatusObservation {
+        WorkStatusObservation {
+            work_id: self.work_id,
+            session_id: self.session_id,
+            turn_id: self.turn_id,
+            work_status: self.work_status,
+            disposition_status: self.disposition_status,
+            runtime_owned_open: self.runtime_owned_open,
+            turn_state: self.turn_state,
+            safe_title: self.safe_title,
+            summary: self.summary,
+            stage: self.stage,
+            action_progress: self.action_progress,
+            effect_count: self.effect_count,
+            unresolved_blocker_count: self.unresolved_blocker_count,
+            work_updated_at: self.work_updated_at,
+            disposition_updated_at: self.disposition_updated_at,
+            checkpoint_updated_at: self.checkpoint_updated_at,
+            operational_notice,
+        }
     }
 }

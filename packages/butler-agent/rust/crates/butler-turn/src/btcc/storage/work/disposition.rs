@@ -15,7 +15,7 @@ pub(super) fn claim_correction(
     input: &ClaimCloseoutCorrectionInput,
     clock: &dyn Fn() -> String,
 ) -> StorageResult<bool> {
-    let work = relation::require_bound(db, &input.scope, true)?;
+    let work = relation::require_bound(db, &input.scope, relation::BoundState::OpenOrCompleted)?;
     if work.id != input.work_id {
         return Err(common::error(
             StorageCode::DurableWorkCloseoutNotBound,

@@ -22,6 +22,9 @@ impl AgentConversationStore {
     }
 }
 
+/// Writes a turn's outcome capsule. An older generation keeps the stored
+/// capsule; the same generation must hash identically; a newer one replaces
+/// it and publishes `conversation.turn_outcome_written`.
 pub(super) fn write_outcome(
     connection: &Connection,
     clock: &dyn ConversationIdentityClock,
@@ -47,42 +50,7 @@ pub(super) fn write_outcome(
             input.public_assistant_message_id.clone(),
         ],
     )?;
-    let mut evidence = Vec::new();
-    for value in input.evidence_refs {
-        if !evidence.contains(&value) {
-            evidence.push(value);
-        }
-    }
-    let mut unresolved = Vec::new();
-    for value in input.unresolved_obligations {
-        if !unresolved.contains(&value) {
-            unresolved.push(value);
-        }
-    }
-    let generation = if input.generation.is_nan() {
-        f64::NAN
-    } else {
-        input.generation.trunc().max(0.0)
-    };
-    // Source evaluates idFactory("cto") before applying the optional input id.
-    let generated_id = clock.id("cto");
-    let mut capsule = TurnOutcomeCapsule {
-        id: input.id.unwrap_or(generated_id),
-        session_id: input.session_id,
-        turn_id: input.turn_id,
-        generation,
-        outcome: input.outcome,
-        source_hash: String::new(),
-        request_message_id: input.request_message_id,
-        public_assistant_message_id: input.public_assistant_message_id,
-        provider_id: input.provider_id,
-        model_ref: input.model_ref,
-        evidence_refs: evidence,
-        unresolved_obligations: unresolved,
-        continuation: input.continuation,
-        safe_code: input.safe_code,
-        created_at: input.created_at.unwrap_or_else(|| clock.now_iso()),
-    };
+    let mut capsule = new_capsule(clock, input);
     capsule.source_hash = outcome_hash(&capsule, &referenced)?;
     if let Some(existing) = read_outcome(connection, &capsule.turn_id)? {
         if requested_generation < existing.generation {
@@ -101,6 +69,63 @@ pub(super) fn write_outcome(
             return Ok(existing);
         }
     }
+    upsert_outcome(connection, &capsule)?;
+    bump_public_revision(connection)?;
+    enqueue(
+        connection,
+        clock,
+        &capsule.session_id,
+        turn.seq as f64,
+        "conversation.turn_outcome_written",
+        &capsule.id,
+        &capsule.created_at,
+    )?;
+    Ok(capsule)
+}
+
+/// The capsule of the input with deduplicated references and a whole,
+/// non-negative generation (NaN stays NaN); its source hash is set later.
+fn new_capsule(
+    clock: &dyn ConversationIdentityClock,
+    input: TurnOutcomeCapsuleInput,
+) -> TurnOutcomeCapsule {
+    let generation = if input.generation.is_nan() {
+        f64::NAN
+    } else {
+        input.generation.trunc().max(0.0)
+    };
+    // Source evaluates idFactory("cto") before applying the optional input id.
+    let generated_id = clock.id("cto");
+    TurnOutcomeCapsule {
+        id: input.id.unwrap_or(generated_id),
+        session_id: input.session_id,
+        turn_id: input.turn_id,
+        generation,
+        outcome: input.outcome,
+        source_hash: String::new(),
+        request_message_id: input.request_message_id,
+        public_assistant_message_id: input.public_assistant_message_id,
+        provider_id: input.provider_id,
+        model_ref: input.model_ref,
+        evidence_refs: first_occurrences(input.evidence_refs),
+        unresolved_obligations: first_occurrences(input.unresolved_obligations),
+        continuation: input.continuation,
+        safe_code: input.safe_code,
+        created_at: input.created_at.unwrap_or_else(|| clock.now_iso()),
+    }
+}
+
+fn first_occurrences(values: Vec<String>) -> Vec<String> {
+    let mut unique = Vec::new();
+    for value in values {
+        if !unique.contains(&value) {
+            unique.push(value);
+        }
+    }
+    unique
+}
+
+fn upsert_outcome(connection: &Connection, capsule: &TurnOutcomeCapsule) -> ConversationResult<()> {
     let evidence_json =
         stringify(&serde_json::to_value(&capsule.evidence_refs).map_err(ConversationError::json)?)?;
     let unresolved_json = stringify(
@@ -146,17 +171,7 @@ pub(super) fn write_outcome(
             ],
         )
         .map_err(ConversationError::sqlite)?;
-    bump_public_revision(connection)?;
-    enqueue(
-        connection,
-        clock,
-        &capsule.session_id,
-        turn.seq as f64,
-        "conversation.turn_outcome_written",
-        &capsule.id,
-        &capsule.created_at,
-    )?;
-    Ok(capsule)
+    Ok(())
 }
 
 pub(super) fn read_outcome(

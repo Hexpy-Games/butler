@@ -97,6 +97,8 @@ pub(super) fn construct_turn(
     Ok(stored.turn_id)
 }
 
+/// Inserts the admitted turn row (and its first checkpoint) from the stored
+/// turn command. A turn stopped before admission is inserted cancelled.
 fn insert_initial_turn(
     connection: &Connection,
     inbox_id: &str,
@@ -106,7 +108,8 @@ fn insert_initial_turn(
     let command: Value = serde_json::from_str(command_json).map_err(|error| {
         StorageError::new(StorageCode::InvalidTurnCommand, error.to_string()).with_source(error)
     })?;
-    let source = if kind(&command)? == "run" {
+    let run = kind(&command)? == "run";
+    let source = if run {
         object(&command, "message")?
     } else {
         object(&command, "trigger")?
@@ -116,63 +119,14 @@ fn insert_initial_turn(
         .ok_or_else(|| error(StorageCode::InvalidTurnCommand, "missing context"))?;
     let model = object(&command, "modelSelection")?;
     let context_json = canonical_json(context)?;
-    let snapshot_json = canonical_json(&json!({"context": context}))?;
-    let snapshot_sha = digest(&snapshot_json);
-    let snapshot_ref = digest(&format!("btcc-admission-snapshot.v1\0{snapshot_sha}"));
-    insert_immutable_record(
-        connection,
-        &snapshot_ref,
-        "admission_snapshot",
-        &snapshot_sha,
-        &snapshot_json,
-    )?;
+    let snapshot_ref = persist_admission_snapshot(connection, context)?;
     let turn_id = text(&command, "turnId")?;
     let checkpoint_id = digest(&format!("btcc-checkpoint.v1\0{turn_id}\0{}\0admitted", 0));
-    let stopped = connection
-        .query_row(
-            "SELECT status FROM btcc_stop_requests WHERE turn_id = ?1",
-            [turn_id],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()
-        .map_err(StorageError::sqlite)?
-        .as_deref()
-        == Some("cancelled_before_admission");
+    let stopped = stopped_before_admission(connection, turn_id)?;
     let mut admitted_model = model.clone();
     let route = admitted_model.shift_remove("modelRoute");
-    let now_ms = u64::try_from(
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|error| {
-                StorageError::new(StorageCode::ClockBeforeEpoch, error.to_string())
-                    .with_source(error)
-            })?
-            .as_millis(),
-    )
-    .unwrap_or(u64::MAX);
     let budget = limits
-        .map(|limits| {
-            let context_window = model.get("contextWindowTokens").and_then(Value::as_f64);
-            create_turn_continuation_budget_state(
-                turn_id.to_owned(),
-                continuation_limits_for_model(limits, context_window),
-                now_ms,
-            )
-            .and_then(|state| {
-                serde_json::to_value(state).map_err(|error| {
-                    crate::btcc::BtccError::detected(
-                        BtccCode::ContinuationBudgetJson,
-                        error.to_string(),
-                    )
-                    .with_source(error)
-                })
-            })
-            .and_then(|value| stringify(&value).map_err(crate::btcc::BtccError::from))
-            .map_err(|error| {
-                StorageError::new(StorageCode::InvalidContinuationBudget, error.message())
-                    .with_source(error)
-            })
-        })
+        .map(|limits| initial_budget_json(limits, model, turn_id))
         .transpose()?;
     let has_legacy = column_exists(connection, "btcc_turns", "continuation_snapshot_json")?;
     let sql = if has_legacy {
@@ -196,7 +150,7 @@ fn insert_initial_turn(
                 text(&command, "sessionId")?,
                 inbox_id,
                 text(&command, "triggerKey")?,
-                if kind(&command)? == "run" {
+                if run {
                     text_object(source, "messageId")?
                 } else {
                     text_object(source, "triggerId")?
@@ -228,6 +182,70 @@ fn insert_initial_turn(
             params![checkpoint_id, turn_id]).map_err(StorageError::sqlite)?;
     }
     Ok(())
+}
+
+/// Stores the admission snapshot (`{"context": ..}`) as an immutable record
+/// and returns its reference.
+fn persist_admission_snapshot(connection: &Connection, context: &Value) -> StorageResult<String> {
+    let snapshot_json = canonical_json(&json!({"context": context}))?;
+    let snapshot_sha = digest(&snapshot_json);
+    let snapshot_ref = digest(&format!("btcc-admission-snapshot.v1\0{snapshot_sha}"));
+    insert_immutable_record(
+        connection,
+        &snapshot_ref,
+        "admission_snapshot",
+        &snapshot_sha,
+        &snapshot_json,
+    )?;
+    Ok(snapshot_ref)
+}
+
+fn stopped_before_admission(connection: &Connection, turn_id: &str) -> StorageResult<bool> {
+    Ok(connection
+        .query_row(
+            "SELECT status FROM btcc_stop_requests WHERE turn_id = ?1",
+            [turn_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(StorageError::sqlite)?
+        .as_deref()
+        == Some("cancelled_before_admission"))
+}
+
+/// The serialized initial continuation budget, sized for the model's context window.
+fn initial_budget_json(
+    limits: TurnContinuationBudgetLimits,
+    model: &serde_json::Map<String, Value>,
+    turn_id: &str,
+) -> StorageResult<String> {
+    let now_ms = u64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|error| {
+                StorageError::new(StorageCode::ClockBeforeEpoch, error.to_string())
+                    .with_source(error)
+            })?
+            .as_millis(),
+    )
+    .unwrap_or(u64::MAX);
+    let context_window = model.get("contextWindowTokens").and_then(Value::as_f64);
+    create_turn_continuation_budget_state(
+        turn_id.to_owned(),
+        continuation_limits_for_model(limits, context_window),
+        now_ms,
+    )
+    .and_then(|state| {
+        serde_json::to_value(state).map_err(|error| {
+            crate::btcc::BtccError::detected(BtccCode::ContinuationBudgetJson, error.to_string())
+                .with_source(error)
+        })
+    })
+    .and_then(|value| stringify(&value).map_err(crate::btcc::BtccError::from))
+    .map_err(|error| {
+        StorageError::new(StorageCode::InvalidContinuationBudget, error.message())
+            .with_source(error)
+    })
 }
 
 fn insert_immutable_record(

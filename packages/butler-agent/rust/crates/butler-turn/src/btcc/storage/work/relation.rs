@@ -302,10 +302,21 @@ pub(super) fn select_for_plan(
     Ok(work)
 }
 
+/// Which Work states a bound-Work mutation accepts.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum BoundState {
+    /// Only open (or blocked) Work.
+    Open,
+    /// Open Work, or Work already completed (dispositions and closeouts).
+    OpenOrCompleted,
+}
+
+/// The Work bound to the turn, which must be the session head, in an
+/// accepted state and in the turn's scope.
 pub(super) fn require_bound(
     db: &Connection,
     scope: &WorkTurnScope,
-    allow_completed: bool,
+    accepted: BoundState,
 ) -> StorageResult<common::WorkRow> {
     common::relation_turn(db, scope)?;
     let bound = common::bound(db, &scope.turn_id)?.ok_or_else(|| {
@@ -320,7 +331,8 @@ pub(super) fn require_bound(
             "Durable Work Turn binding is no longer the Session head",
         ));
     }
-    if !(bound.is_open() || allow_completed && bound.status == "completed") {
+    if !(bound.is_open() || accepted == BoundState::OpenOrCompleted && bound.status == "completed")
+    {
         return Err(common::error(
             StorageCode::DurableWorkNotOpen,
             format!("Durable Work is not open: {}", bound.id),
