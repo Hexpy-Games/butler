@@ -241,45 +241,27 @@ fn resolve_project_key(data_root: &std::path::Path, raw: &str) -> CognitionResul
     }
     let config_path = data_root.join("butler.config.json");
     ensure_data_authority(data_root, &[&config_path])?;
-    let config = match fs::read(&config_path) {
-        Ok(bytes) => serde_json::from_slice::<Value>(&bytes).ok(),
-        Err(failure) if failure.kind() == std::io::ErrorKind::NotFound => None,
+    let projects = match fs::read(&config_path) {
+        Ok(bytes) => crate::cognition::registered_projects(&bytes),
+        Err(failure) if failure.kind() == std::io::ErrorKind::NotFound => Vec::new(),
         Err(_) => return Err(error(CognitionCode::MemoryProjectRegistryReadFailed)),
     };
-    let projects = match config.as_ref().and_then(|value| value.get("projects")) {
-        Some(Value::Array(projects)) => projects.iter().collect::<Vec<_>>(),
-        Some(Value::Object(projects)) => projects.values().collect::<Vec<_>>(),
-        _ => Vec::new(),
+    if projects.iter().any(|project| project.name == raw) {
+        return Ok(Some(raw.to_owned()));
+    }
+    let with_path = || {
+        projects
+            .iter()
+            .filter_map(|project| Some((&project.name, expand_home_path(project.path.as_deref()?))))
     };
-    for project in &projects {
-        if project.get("name").and_then(Value::as_str) == Some(raw) {
-            return Ok(Some(raw.to_owned()));
-        }
+    if raw.starts_with('/')
+        && let Some((name, _)) = with_path().find(|(_, path)| path.to_string_lossy() == raw)
+    {
+        return Ok(Some(name.clone()));
     }
-    if raw.starts_with('/') {
-        for project in &projects {
-            let Some(name) = project.get("name").and_then(Value::as_str) else {
-                continue;
-            };
-            if let Some(path) = project.get("path").and_then(Value::as_str)
-                && expand_home_path(path).to_string_lossy() == raw
-            {
-                return Ok(Some(name.to_owned()));
-            }
-        }
-    }
-    for project in projects {
-        let Some(name) = project.get("name").and_then(Value::as_str) else {
-            continue;
-        };
-        let Some(path) = project.get("path").and_then(Value::as_str) else {
-            continue;
-        };
-        if encode_project_path_key(&expand_home_path(path)) == raw {
-            return Ok(Some(name.to_owned()));
-        }
-    }
-    Ok(None)
+    Ok(with_path()
+        .find(|(_, path)| encode_project_path_key(path) == raw)
+        .map(|(name, _)| name.clone()))
 }
 
 fn expand_home_path(path: &str) -> PathBuf {

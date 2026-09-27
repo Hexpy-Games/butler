@@ -73,7 +73,7 @@ pub use configured_cycle::{
     ConfiguredCycleOptions, ConfiguredCycleResult, ConfiguredCycleService, ConfiguredPhase,
     ConfiguredPhaseExecutor, ConfiguredPhaseFuture,
 };
-pub(crate) use configured_projects::registered_project_names;
+pub(crate) use configured_projects::{registered_project_names, registered_projects};
 pub use consolidation::{
     CycleEventSink, CycleService, CycleStatus, Phase, PhaseError, PhaseExecutor, RunCycle,
 };

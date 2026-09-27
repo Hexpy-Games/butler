@@ -5,7 +5,6 @@ use butler_core::public_text::{fixed_regex, fixed_regex_ci};
 use std::{collections::HashSet, fs, path::Path, sync::OnceLock};
 
 use regex::Regex;
-use serde_json::Value;
 
 use crate::cognition::mutable_paths::ensure_data_authority;
 
@@ -146,22 +145,12 @@ pub(super) fn mention_snippet(text: &str) -> String {
 fn known_projects(data_root: &Path) -> CognitionResult<Vec<String>> {
     let path = data_root.join("butler.config.json");
     ensure_data_authority(data_root, &[&path])?;
-    let Ok(raw) = fs::read_to_string(path) else {
+    let Ok(raw) = fs::read(path) else {
         return Ok(Vec::new());
     };
-    let Ok(config) = serde_json::from_str::<Value>(&raw) else {
-        return Ok(Vec::new());
-    };
-    let projects = match config.get("projects") {
-        Some(Value::Array(projects)) => projects.iter().collect::<Vec<_>>(),
-        Some(Value::Object(projects)) => projects.values().collect::<Vec<_>>(),
-        _ => Vec::new(),
-    };
-    Ok(projects
+    Ok(crate::cognition::registered_project_names(&raw)
         .into_iter()
-        .filter_map(|project| project.get("name").and_then(Value::as_str))
         .filter(|name| name.encode_utf16().count() > 1)
-        .map(str::to_owned)
         .collect())
 }
 
