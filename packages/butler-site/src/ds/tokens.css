@@ -298,10 +298,15 @@
   --typo-metric-value-weight: 560;
   --typo-metric-value-line-height: 1.4;
   --typo-metric-value-letter-spacing: 0;
-  --font-body: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-    "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic",
-    sans-serif;
-  --font-family-code: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* Bundled faces: base.css imports the app's fonts/fonts.css. */
+  --font-body:
+    "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    system-ui, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR",
+    "Noto Sans CJK KR", "Segoe UI", Roboto, sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji", "Noto Color Emoji";
+  --font-family-code:
+    "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas,
+    "Pretendard Variable", monospace;
   --font-code: var(--font-size-2)/var(--line-height-body)
     var(--font-family-code);
   --font-size-1: var(--typo-caption-size);

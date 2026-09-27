@@ -73,6 +73,11 @@ jobs:
       - name: Leak check (/ds/)
         run: bun run tests/smoke/ds-site-leak-check.ts packages/butler-site/dist/ds
 
+      - name: Font assets (/ds/)
+        env:
+          DS_SITE_BASE: /ds/
+        run: bun run tests/smoke/font-assets-check.ts packages/butler-site/dist/ds
+
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3

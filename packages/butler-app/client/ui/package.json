@@ -36,6 +36,7 @@
     "clsx": "^2.1.1",
     "highlight.js": "^11.11.1",
     "lowlight": "^3.3.0",
+    "pretendard": "1.3.9",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-markdown": "^10.1.0",
