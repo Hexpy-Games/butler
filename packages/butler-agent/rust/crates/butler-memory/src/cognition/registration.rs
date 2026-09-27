@@ -174,7 +174,7 @@ async fn operation(
     let prepared = tokio::task::spawn_blocking(move || prepare(input, &initial_environment, &now))
         .await
         .map_err(join_error)??;
-    let mut state = match prepared {
+    let state = match prepared {
         InitialPreparation::Handoff(handoff) => {
             let SupersessionHandoff {
                 input,
@@ -194,45 +194,84 @@ async fn operation(
         }
         InitialPreparation::Ready(state) => state,
     };
-
-    let lock_path = environment.consolidation_lock(&state.input.data_root);
-    let lease = match acquire(&coordinator, lock_path.clone(), &state.input, &shutdown).await {
-        Ok(lease) => lease,
-        Err(error) => return close_after_failure(state, error).await,
+    let stages = Stages {
+        environment,
+        coordinator,
+        clock,
+        shutdown,
     };
-    let schema_environment = environment.clone();
-    let schema_clock = clock.clone();
-    state = tokio::task::spawn_blocking(move || {
-        let result = mutate(
-            &mut state,
-            lease,
-            &lock_path,
-            &schema_environment,
-            |state| state.graph.ensure_schema(&schema_clock()),
-        );
-        match result {
-            Ok(()) => Ok(state),
-            Err(error) => Err(close_with_error(state, error)),
-        }
-    })
-    .await
-    .map_err(join_error)??;
+    let state = stages.ensure_schema(state).await?;
+    match stages.replay(state).await? {
+        ReplayStage::Complete(progress) => Ok(ConversationRegistrationOutcome::Replayed(*progress)),
+        ReplayStage::Continue(state) => stages.register(state).await,
+    }
+}
 
-    let lock_path = environment.consolidation_lock(&state.input.data_root);
-    let lease = match acquire(&coordinator, lock_path.clone(), &state.input, &shutdown).await {
-        Ok(lease) => lease,
-        Err(error) => return close_after_failure(state, error).await,
-    };
-    let replay_environment = environment.clone();
-    let replay_clock = clock.clone();
-    let replayed = tokio::task::spawn_blocking(move || {
-        let replay = match mutate(
-            &mut state,
-            lease,
-            &lock_path,
-            &replay_environment,
-            |state| {
-                let now = replay_clock();
+/// What each locked stage of a registration runs with.
+struct Stages {
+    environment: CognitionPathEnvironment,
+    coordinator: Arc<CognitionWriteCoordinator>,
+    clock: Clock,
+    shutdown: CancellationToken,
+}
+
+impl Stages {
+    /// Takes the consolidation lease and runs `stage` with it on the
+    /// blocking pool; the state is closed when the lease cannot be taken.
+    async fn locked<T: Send + 'static>(
+        &self,
+        state: Box<OperationState>,
+        stage: impl FnOnce(
+            Box<OperationState>,
+            CognitionWriteLease,
+            PathBuf,
+            CognitionPathEnvironment,
+        ) -> CognitionResult<T>
+        + Send
+        + 'static,
+    ) -> CognitionResult<T> {
+        let lock_path = self.environment.consolidation_lock(&state.input.data_root);
+        let lease = match acquire(
+            &self.coordinator,
+            lock_path.clone(),
+            &state.input,
+            &self.shutdown,
+        )
+        .await
+        {
+            Ok(lease) => lease,
+            Err(error) => return close_after_failure(state, error).await,
+        };
+        let environment = self.environment.clone();
+        tokio::task::spawn_blocking(move || stage(state, lease, lock_path, environment))
+            .await
+            .map_err(join_error)?
+    }
+
+    async fn ensure_schema(
+        &self,
+        state: Box<OperationState>,
+    ) -> CognitionResult<Box<OperationState>> {
+        let clock = self.clock.clone();
+        self.locked(state, move |mut state, lease, lock_path, environment| {
+            let result = mutate(&mut state, lease, &lock_path, &environment, |state| {
+                state.graph.ensure_schema(&clock())
+            });
+            match result {
+                Ok(()) => Ok(state),
+                Err(error) => Err(close_with_error(state, error)),
+            }
+        })
+        .await
+    }
+
+    /// Replays an earlier registration of the same source revision; its
+    /// progress when there was one.
+    async fn replay(&self, state: Box<OperationState>) -> CognitionResult<ReplayStage> {
+        let clock = self.clock.clone();
+        self.locked(state, move |mut state, lease, lock_path, environment| {
+            let replay = match mutate(&mut state, lease, &lock_path, &environment, |state| {
+                let now = clock();
                 state.graph.replay(
                     &state.canonical,
                     state.input.notice.borrowed(),
@@ -241,46 +280,31 @@ async fn operation(
                     state.input.completion_job_id.as_deref(),
                     &now,
                 )
-            },
-        ) {
-            Ok(replay) => replay,
-            Err(error) => return Err(close_with_error(state, error)),
-        };
-        if let Some(job_id) = replay {
+            }) {
+                Ok(replay) => replay,
+                Err(error) => return Err(close_with_error(state, error)),
+            };
+            let Some(job_id) = replay else {
+                return Ok(ReplayStage::Continue(state));
+            };
             let progress = match state.graph.progress(&job_id) {
                 Ok(progress) => progress,
                 Err(error) => return Err(close_with_error(state, error)),
             };
             close_state(state)?;
-            Ok::<_, CognitionError>(ReplayStage::Complete(Box::new(progress)))
-        } else {
-            Ok(ReplayStage::Continue(state))
-        }
-    })
-    .await
-    .map_err(join_error)??;
-    state = match replayed {
-        ReplayStage::Complete(progress) => {
-            return Ok(ConversationRegistrationOutcome::Replayed(*progress));
-        }
-        ReplayStage::Continue(state) => state,
-    };
+            Ok(ReplayStage::Complete(Box::new(progress)))
+        })
+        .await
+    }
 
-    let lock_path = environment.consolidation_lock(&state.input.data_root);
-    let lease = match acquire(&coordinator, lock_path.clone(), &state.input, &shutdown).await {
-        Ok(lease) => lease,
-        Err(error) => return close_after_failure(state, error).await,
-    };
-    let register_environment = environment.clone();
-    let register_clock = clock.clone();
-    tokio::task::spawn_blocking(move || {
-        let result = (|| {
-            let registration = mutate(
-                &mut state,
-                lease,
-                &lock_path,
-                &register_environment,
-                |state| {
+    async fn register(
+        &self,
+        state: Box<OperationState>,
+    ) -> CognitionResult<ConversationRegistrationOutcome> {
+        let clock = self.clock.clone();
+        self.locked(state, move |mut state, lease, lock_path, environment| {
+            let result = (|| {
+                let registration = mutate(&mut state, lease, &lock_path, &environment, |state| {
                     state.graph.register(RegistrationInput {
                         generation_id: &state.handle.generation_id,
                         plan: &state.plan,
@@ -289,20 +313,19 @@ async fn operation(
                         completion_id: state.input.completion_job_id.as_deref(),
                         extraction_model: &state.extraction_model,
                         reasoning_effort: &state.reasoning_effort,
-                        clock: register_clock.as_ref(),
+                        clock: clock.as_ref(),
                     })
-                },
-            )?;
-            let progress = state.graph.progress(&registration.job_id)?;
-            Ok(ConversationRegistrationOutcome::Registered(progress))
-        })();
-        match result {
-            Ok(outcome) => close_state(state).map(|()| outcome),
-            Err(error) => Err(close_with_error(state, error)),
-        }
-    })
-    .await
-    .map_err(join_error)?
+                })?;
+                let progress = state.graph.progress(&registration.job_id)?;
+                Ok(ConversationRegistrationOutcome::Registered(progress))
+            })();
+            match result {
+                Ok(outcome) => close_state(state).map(|()| outcome),
+                Err(error) => Err(close_with_error(state, error)),
+            }
+        })
+        .await
+    }
 }
 
 enum InitialPreparation {
@@ -358,10 +381,10 @@ fn prepare(
     })))
 }
 
-async fn close_after_failure(
+async fn close_after_failure<T>(
     state: Box<OperationState>,
     operation_error: CognitionError,
-) -> CognitionResult<ConversationRegistrationOutcome> {
+) -> CognitionResult<T> {
     tokio::task::spawn_blocking(move || close_state(state))
         .await
         .map_err(join_error)??;
