@@ -164,7 +164,7 @@ pub(crate) enum ProjectWorkPublicationError {
     },
     /// Durable work failed.
     #[error(transparent)]
-    Work(crate::btcc::BtccError),
+    Work(butler_turn::btcc::BtccError),
     /// The publication was verified as not applied.
     #[error("project_work_publication_not_applied")]
     NotApplied,

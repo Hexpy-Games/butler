@@ -6,11 +6,13 @@ mod exact;
 mod retained;
 mod work;
 
-use crate::btcc::{BtccError, OperationResultMessageReferences, ToolResult};
 #[cfg(test)]
 use butler_core::json::JsonDocument;
 use butler_core::json::visit_raw_object;
 use butler_core::tool_protocol::ToolName;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::OperationResultMessageReferences;
+use butler_turn::btcc::ToolResult;
 
 const MAX_BYTES: usize = 50 * 1024;
 

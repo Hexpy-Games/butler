@@ -1,11 +1,18 @@
 use serde_json::{Value, json};
 
-use crate::btcc::{
-    BtccError, ClaimCloseoutCorrectionInput, DispositionCommand, DispositionStatus,
-    DurableWorkStatus as WorkStatus, ProjectWorkDispositionPreparation,
-    ProjectWorkOperationIdentity, ProjectWorkOperationKind, ReviewCommand, ReviewSubject,
-    WorkDisposition, WorkReview, WorkView,
-};
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::ClaimCloseoutCorrectionInput;
+use butler_turn::btcc::DispositionCommand;
+use butler_turn::btcc::DispositionStatus;
+use butler_turn::btcc::DurableWorkStatus as WorkStatus;
+use butler_turn::btcc::ProjectWorkDispositionPreparation;
+use butler_turn::btcc::ProjectWorkOperationIdentity;
+use butler_turn::btcc::ProjectWorkOperationKind;
+use butler_turn::btcc::ReviewCommand;
+use butler_turn::btcc::ReviewSubject;
+use butler_turn::btcc::WorkDisposition;
+use butler_turn::btcc::WorkReview;
+use butler_turn::btcc::WorkView;
 
 use super::super::publication::ProjectLedgerRecordKind;
 use super::codec;
@@ -46,7 +53,7 @@ impl ProjectWorkRepository {
                     let mut checkpoint_revision =
                         codec::number(&current.manifest, "checkpointRevision")?;
                     let mut children = Vec::new();
-                    let mut latest_checkpoint: Option<crate::btcc::Checkpoint> = None;
+                    let mut latest_checkpoint: Option<butler_turn::btcc::Checkpoint> = None;
                     let next = command
                         .input
                         .corrections
@@ -117,7 +124,7 @@ impl ProjectWorkRepository {
                     view.status = status_for_progress(&command.action_progress);
                     view.current_stage = Some(command.next_stage);
                     view.allowed_next_stages =
-                        crate::btcc::allowed_next_work_stages(Some(command.next_stage));
+                        butler_turn::btcc::allowed_next_work_stages(Some(command.next_stage));
                     view.action_progress = command.action_progress.clone();
                     if let Some(checkpoint) = latest_checkpoint.as_ref() {
                         view.latest_checkpoint = Some(checkpoint.clone());
@@ -197,7 +204,7 @@ impl ProjectWorkRepository {
                     identity: &prepare_identity,
                     at: &at,
                     revision: checkpoint_revision,
-                    stage: current.view.current_stage.unwrap_or(crate::btcc::WorkStage::Planning),
+                    stage: current.view.current_stage.unwrap_or(butler_turn::btcc::WorkStage::Planning),
                     plan_id: &plan.plan_revision_id,
                     progress: &action_progress,
                     summary: &command.normalized_summary,
@@ -216,7 +223,7 @@ impl ProjectWorkRepository {
             provisional.action_progress = action_progress;
             provisional.latest_checkpoint = latest_checkpoint.clone();
             provisional.updated_at = at.clone();
-            let material = repo.shared.projection.capture_work_material(crate::btcc::ProjectWorkMaterialInput {
+            let material = repo.shared.projection.capture_work_material(butler_turn::btcc::ProjectWorkMaterialInput {
                 candidate: provisional.clone(),
             }).await?;
             codec::assert_material(&provisional, &material)?;
@@ -322,13 +329,13 @@ fn review_for(
     }))
 }
 
-fn stage_name(stage: crate::btcc::WorkStage) -> &'static str {
+fn stage_name(stage: butler_turn::btcc::WorkStage) -> &'static str {
     match stage {
-        crate::btcc::WorkStage::Conception => "conception",
-        crate::btcc::WorkStage::Planning => "planning",
-        crate::btcc::WorkStage::Execution => "execution",
-        crate::btcc::WorkStage::Review => "review",
-        crate::btcc::WorkStage::Validation => "validation",
-        crate::btcc::WorkStage::Reporting => "reporting",
+        butler_turn::btcc::WorkStage::Conception => "conception",
+        butler_turn::btcc::WorkStage::Planning => "planning",
+        butler_turn::btcc::WorkStage::Execution => "execution",
+        butler_turn::btcc::WorkStage::Review => "review",
+        butler_turn::btcc::WorkStage::Validation => "validation",
+        butler_turn::btcc::WorkStage::Reporting => "reporting",
     }
 }

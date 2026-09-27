@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use serde_json::Value;
 
-use crate::btcc::BtccError;
+use butler_turn::btcc::BtccError;
 
 use super::super::invalid;
 

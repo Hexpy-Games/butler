@@ -168,7 +168,7 @@ impl PartialEq for ContextError {
 
 impl Eq for ContextError {}
 
-impl From<ContextError> for crate::btcc::BtccError {
+impl From<ContextError> for butler_turn::btcc::BtccError {
     fn from(error: ContextError) -> Self {
         Self::relay(error.code(), error.message(), error)
     }

@@ -7,7 +7,7 @@ use crate::cognition::{
     graph::GraphRecallReader,
     recall::{RecallRequest, RecallResponse},
 };
-use crate::conversation::ConversationSourceReader;
+use butler_turn::conversation::ConversationSourceReader;
 
 use super::{
     binding, continuation,

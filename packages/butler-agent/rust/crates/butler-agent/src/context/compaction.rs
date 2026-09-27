@@ -7,10 +7,10 @@ use std::{
 
 use serde::Serialize;
 
-use crate::conversation::{
-    AgentConversationStore, ConversationMessageWithParts, ConversationSummaryInput,
-    ReadMessagesInput,
-};
+use butler_turn::conversation::AgentConversationStore;
+use butler_turn::conversation::ConversationMessageWithParts;
+use butler_turn::conversation::ConversationSummaryInput;
+use butler_turn::conversation::ReadMessagesInput;
 
 use super::{
     ContextBudgetOverrides, ContextBudgetOwner, ContextError, ContextResult,
@@ -311,6 +311,6 @@ fn now_epoch_millis() -> f64 {
     clippy::needless_pass_by_value,
     reason = "map_err/iterator adapter taking owned values"
 )]
-fn conversation_error(error: crate::conversation::ConversationError) -> ContextError {
+fn conversation_error(error: butler_turn::conversation::ConversationError) -> ContextError {
     ContextError::new(ContextCode::ContextConversationError, error.to_string())
 }

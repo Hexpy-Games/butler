@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use crate::btcc::ResolvedProjectWorkScope;
+use butler_turn::btcc::ResolvedProjectWorkScope;
 
 use super::claim;
 use super::{Journal, JournalStatus, Paths, io, same_logical};

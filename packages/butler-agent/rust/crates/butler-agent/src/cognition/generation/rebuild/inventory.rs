@@ -26,11 +26,11 @@ use crate::cognition::sources::read_canonical_inventory;
 use crate::cognition::sources::read_explicit_record;
 use crate::cognition::sources::read_task_report;
 use crate::cognition::split_historical_source_spans;
-use crate::conversation::ConversationSourceReader;
 use crate::work_records::ReadAvailability;
 use crate::work_records::WorkRecordReader;
 use crate::work_records::task_memory_record_id;
 use butler_core::locale::LocaleCollation;
+use butler_turn::conversation::ConversationSourceReader;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]

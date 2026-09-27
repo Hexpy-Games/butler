@@ -3,11 +3,16 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use crate::btcc::{
-    BtccError, LegacyImport, ProjectWorkLegacyInput, ProjectWorkLegacyObserveInput,
-    ProjectWorkLegacySnapshot, ProjectWorkMaterialInput, ProjectWorkOperationIdentity,
-    ProjectWorkOperationKind, WorkTurnScope, WorkView,
-};
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::LegacyImport;
+use butler_turn::btcc::ProjectWorkLegacyInput;
+use butler_turn::btcc::ProjectWorkLegacyObserveInput;
+use butler_turn::btcc::ProjectWorkLegacySnapshot;
+use butler_turn::btcc::ProjectWorkMaterialInput;
+use butler_turn::btcc::ProjectWorkOperationIdentity;
+use butler_turn::btcc::ProjectWorkOperationKind;
+use butler_turn::btcc::WorkTurnScope;
+use butler_turn::btcc::WorkView;
 
 use super::super::publication::ProjectLedgerRecordKind;
 use super::codec;
@@ -175,7 +180,7 @@ impl ProjectWorkRepository {
             let evidence = self
                 .shared
                 .results
-                .read_committed_result(crate::btcc::ProjectWorkCommittedResultInput {
+                .read_committed_result(butler_turn::btcc::ProjectWorkCommittedResultInput {
                     turn_id: result.origin_turn_id.clone(),
                     session_id: snapshot.work.session_id.clone(),
                     tool_call_id: result.tool_call_id.clone(),
@@ -229,7 +234,7 @@ fn legacy_children(
         );
     }
     for item in &snapshot.dispositions {
-        let material = crate::btcc::build_project_work_material_snapshot(
+        let material = butler_turn::btcc::build_project_work_material_snapshot(
             &item.historical_view,
             item.disposition.material_fingerprint.clone(),
             Some(item.effect_watermark.clone()),

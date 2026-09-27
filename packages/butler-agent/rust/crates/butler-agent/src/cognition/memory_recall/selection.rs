@@ -18,7 +18,7 @@ use crate::cognition::{
     recall::{GraphExpansion, RankedEpisode, RecallRequest, RecallVectorMatches},
     sources::{CanonicalInventory, read_canonical_inventory},
 };
-use crate::conversation::ConversationSourceReader;
+use butler_turn::conversation::ConversationSourceReader;
 
 pub(super) struct Selection {
     pub empty_search: bool,

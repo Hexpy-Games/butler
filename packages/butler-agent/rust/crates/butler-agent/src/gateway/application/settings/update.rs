@@ -120,15 +120,15 @@ fn reasonings_for<'a>(
     model_ref: &str,
     facts: &'a AppSettingsFacts,
 ) -> (
-    &'a [crate::btcc::ReasoningEffort],
-    crate::btcc::ReasoningEffort,
+    &'a [butler_turn::btcc::ReasoningEffort],
+    butler_turn::btcc::ReasoningEffort,
 ) {
     let found = facts
         .known_models
         .iter()
         .chain(facts.registered_models.iter())
         .find(|value| value.model_ref == model_ref);
-    found.map_or((&[], crate::btcc::ReasoningEffort::Medium), |value| {
+    found.map_or((&[], butler_turn::btcc::ReasoningEffort::Medium), |value| {
         (
             &value.reasoning_efforts,
             value.default_reasoning_effort.clone(),

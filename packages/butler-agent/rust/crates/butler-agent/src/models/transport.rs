@@ -4,7 +4,9 @@ use reqwest::{Client, RequestBuilder, Response};
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
-use crate::btcc::{ModelRoundError, ProviderBodyAdmissionPort, ProviderRequestError};
+use butler_turn::btcc::ModelRoundError;
+use butler_turn::btcc::ProviderBodyAdmissionPort;
+use butler_turn::btcc::ProviderRequestError;
 
 use super::diagnostics;
 use super::provider::{ProviderClock, ProviderRoundPolicy};
@@ -42,7 +44,7 @@ pub(super) struct RequestExecution<'a> {
     pub policy: ProviderRoundPolicy,
     pub external: CancellationToken,
     pub mode: ResponseMode,
-    pub stream_observer: Option<&'a dyn crate::btcc::ProviderStreamObserver>,
+    pub stream_observer: Option<&'a dyn butler_turn::btcc::ProviderStreamObserver>,
     pub attempts: f64,
     pub admission: Option<&'a dyn ProviderBodyAdmissionPort>,
     pub physical_admission: Option<&'a PreparedRequestAdmission<'a>>,

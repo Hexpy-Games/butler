@@ -1,11 +1,11 @@
 use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Serialize, Serializer};
 
-use crate::btcc::ModelRoundError;
 use crate::models::{
     PromptCacheRetention, PromptUsageBudgetState, PromptUsageMetricInput,
     PromptUsageSectionAttribution, ReasoningEffort,
 };
+use butler_turn::btcc::ModelRoundError;
 
 pub(super) fn line(
     input: &PromptUsageMetricInput<'_>,

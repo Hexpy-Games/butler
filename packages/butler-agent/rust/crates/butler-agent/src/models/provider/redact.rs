@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::btcc::ProviderRequestError;
+use butler_turn::btcc::ProviderRequestError;
 
 pub(super) fn redact_local_error(error: &mut ProviderRequestError, secret: &str) {
     if secret.is_empty() {

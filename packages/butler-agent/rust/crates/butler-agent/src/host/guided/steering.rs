@@ -4,14 +4,17 @@ use std::sync::Arc;
 
 use tokio::sync::Mutex;
 
-use crate::btcc::{GuidedInvocation, PortFuture, SteeringObservation, TurnSteeringPort};
+use butler_turn::btcc::GuidedInvocation;
+use butler_turn::btcc::PortFuture;
+use butler_turn::btcc::SteeringObservation;
+use butler_turn::btcc::TurnSteeringPort;
 
 use crate::host::guided::prompt::{GuidedTextState, work_context};
 
 pub(crate) struct GuidedSteering {
     state: Arc<GuidedTextState>,
     last_rendered: Mutex<Option<String>>,
-    subsessions: Arc<crate::btcc::SubsessionService>,
+    subsessions: Arc<butler_turn::btcc::SubsessionService>,
     child_session_id: String,
     child_turn_id: String,
 }
@@ -19,7 +22,7 @@ pub(crate) struct GuidedSteering {
 impl GuidedSteering {
     pub(crate) fn new(
         state: Arc<GuidedTextState>,
-        subsessions: Arc<crate::btcc::SubsessionService>,
+        subsessions: Arc<butler_turn::btcc::SubsessionService>,
         child_session_id: String,
         child_turn_id: String,
     ) -> Self {

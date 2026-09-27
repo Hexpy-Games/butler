@@ -22,13 +22,11 @@ use serde::{Serialize, Serializer, ser::SerializeSeq};
 use serde_json::Value;
 
 use super::db_error;
-use crate::{
-    cognition::{
-        CognitionError, CognitionResult,
-        extraction::{ExtractCandidate, ExtractInput},
-    },
-    conversation::ConversationSourceReader,
-};
+use crate::cognition::CognitionError;
+use crate::cognition::CognitionResult;
+use crate::cognition::extraction::ExtractCandidate;
+use crate::cognition::extraction::ExtractInput;
+use butler_turn::conversation::ConversationSourceReader;
 
 pub(super) fn load(
     db: &Connection,

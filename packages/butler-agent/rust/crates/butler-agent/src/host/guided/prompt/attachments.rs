@@ -1,6 +1,8 @@
 //! Source attachment identity projection; bytes stay with the late payload owner.
 
-use crate::btcc::{AttachmentRef, BtccError, TurnRecord};
+use butler_turn::btcc::AttachmentRef;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::TurnRecord;
 use serde_json::Value;
 
 pub(super) fn source_refs(turn: &TurnRecord) -> Result<Vec<AttachmentRef>, BtccError> {

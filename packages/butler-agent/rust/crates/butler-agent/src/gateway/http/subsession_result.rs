@@ -44,7 +44,7 @@ pub(super) async fn post(
     }
     let client = format!(
         "subsession-result:{}",
-        crate::btcc::digest_identity(&format!("{relation_id}\0{result_id}"))
+        butler_turn::btcc::digest_identity(&format!("{relation_id}\0{result_id}"))
     );
     let result = state
         .application
@@ -61,7 +61,7 @@ pub(super) async fn post(
                 reasoning_effort: Some(reasoning.into()),
                 access_mode: Some(access.into()),
                 plan_mode: None,
-                subsession_result: Some(crate::btcc::SubsessionResultContext {
+                subsession_result: Some(butler_turn::btcc::SubsessionResultContext {
                     relation_id,
                     result_id,
                     safe_title,

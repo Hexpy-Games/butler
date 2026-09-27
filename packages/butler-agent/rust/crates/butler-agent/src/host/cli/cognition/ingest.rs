@@ -12,12 +12,12 @@ use crate::cognition::extract_legacy_import_transcript;
 use crate::models::ProviderPromptLifecycle;
 use crate::models::ProviderPromptPort;
 use crate::models::ProviderPromptRequest;
-use crate::workspace::SessionBindingStore;
-use crate::workspace::SessionBindingStoreConfig;
-use crate::workspace::WorkspaceStorageProfile;
-use crate::workspace::session_store_path;
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
+use butler_turn::workspace::SessionBindingStore;
+use butler_turn::workspace::SessionBindingStoreConfig;
+use butler_turn::workspace::WorkspaceStorageProfile;
+use butler_turn::workspace::session_store_path;
 
 use super::CliError;
 

@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::btcc::WorkView;
+use butler_turn::btcc::WorkView;
 
 pub(super) fn current_result_review(work: &WorkView) -> bool {
     let Some(review) = &work.latest_result_review else {
@@ -21,7 +21,7 @@ pub(super) fn current_completion_validation(work: &WorkView) -> bool {
     let Some(result_review) = &work.latest_result_review else {
         return false;
     };
-    validation.subject == crate::btcc::ReviewSubject::Completion
+    validation.subject == butler_turn::btcc::ReviewSubject::Completion
         && validation.bound_plan_revision_id.as_ref()
             == work
                 .current_plan
@@ -50,22 +50,22 @@ pub(super) fn available_reviews(work: &WorkView) -> String {
     }
     let mut available = Vec::new();
     match stage {
-        crate::btcc::WorkStage::Planning
-        | crate::btcc::WorkStage::Execution
-        | crate::btcc::WorkStage::Review => available.push("plan"),
+        butler_turn::btcc::WorkStage::Planning
+        | butler_turn::btcc::WorkStage::Execution
+        | butler_turn::btcc::WorkStage::Review => available.push("plan"),
         _ => {}
     }
     if matches!(
         stage,
-        crate::btcc::WorkStage::Execution | crate::btcc::WorkStage::Review
+        butler_turn::btcc::WorkStage::Execution | butler_turn::btcc::WorkStage::Review
     ) {
         available.push("result");
     }
     if matches!(
         stage,
-        crate::btcc::WorkStage::Review
-            | crate::btcc::WorkStage::Validation
-            | crate::btcc::WorkStage::Reporting
+        butler_turn::btcc::WorkStage::Review
+            | butler_turn::btcc::WorkStage::Validation
+            | butler_turn::btcc::WorkStage::Reporting
     ) && current_result_review(work)
         && work
             .latest_result_review

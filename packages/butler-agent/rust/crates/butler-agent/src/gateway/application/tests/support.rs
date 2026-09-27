@@ -9,8 +9,8 @@ use std::{
 use serde_json::{Value, json};
 
 use super::super::*;
-use crate::btcc::ReasoningEffort;
 use crate::gateway::MessageSendRequest;
+use butler_turn::btcc::ReasoningEffort;
 
 mod relocation;
 pub(super) use relocation::UnprovidedRelocation;

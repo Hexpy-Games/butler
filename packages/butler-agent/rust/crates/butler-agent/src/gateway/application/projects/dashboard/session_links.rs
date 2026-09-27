@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use rusqlite::Connection;
 
 use super::super::super::{AppSessionSummary, AppStorageError};
-use crate::conversation::conversation_session_id_for_durable_session;
+use butler_turn::conversation::conversation_session_id_for_durable_session;
 
 pub(super) struct ProjectSessionLinks {
     by_canonical_id: HashMap<String, Vec<String>>,

@@ -13,7 +13,8 @@ use crate::cognition::{
     graph::GraphRecallReader,
     sources::{RecallSourceHydration, RecallSourceResolution, hydrate_recall_sources},
 };
-use crate::conversation::{ConversationSourceReader, conversation_store_path};
+use butler_turn::conversation::ConversationSourceReader;
+use butler_turn::conversation::conversation_store_path;
 
 pub(crate) struct MemorySourceReference {
     data_root: PathBuf,

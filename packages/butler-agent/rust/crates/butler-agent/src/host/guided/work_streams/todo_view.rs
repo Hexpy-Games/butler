@@ -3,7 +3,7 @@
 use serde_json::{Value, json};
 
 use super::{WorkStreamScope, storage::Store, support::*};
-use crate::btcc::BtccError;
+use butler_turn::btcc::BtccError;
 
 impl Store {
     pub(super) fn view_todo(

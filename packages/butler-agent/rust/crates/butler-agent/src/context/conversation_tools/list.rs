@@ -7,11 +7,11 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use super::{ContextError, ContextResult};
 use crate::context::ContextCode;
-use crate::conversation::CanonicalMemoryReadBinding;
-use crate::conversation::PublicMemorySnapshot;
-use crate::conversation::decode_message_scalars;
 use args::{ListCursor, encode_cursor};
 use butler_core::json;
+use butler_turn::conversation::CanonicalMemoryReadBinding;
+use butler_turn::conversation::PublicMemorySnapshot;
+use butler_turn::conversation::decode_message_scalars;
 
 pub(super) fn run(
     path: &Path,
@@ -207,8 +207,8 @@ fn set_cursor(
     result: &mut Value,
     parsed: &args::ListArgs,
     revision: u64,
-    rows: &[crate::conversation::PublicSessionRow],
-    selected: &[&crate::conversation::PublicSessionRow],
+    rows: &[butler_turn::conversation::PublicSessionRow],
+    selected: &[&butler_turn::conversation::PublicSessionRow],
     has_more: bool,
 ) {
     let budget = result["diagnostics"]
@@ -274,6 +274,6 @@ fn failure(code: &str, diagnostics: &[&str]) -> Value {
     clippy::needless_pass_by_value,
     reason = "map_err/iterator adapter taking owned values"
 )]
-fn store_error(error: crate::conversation::ConversationError) -> ContextError {
+fn store_error(error: butler_turn::conversation::ConversationError) -> ContextError {
     ContextError::new(ContextCode::ConversationStoreUnavailable, error.to_string())
 }

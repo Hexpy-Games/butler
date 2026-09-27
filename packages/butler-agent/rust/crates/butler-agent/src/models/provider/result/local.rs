@@ -4,7 +4,9 @@ use std::{collections::HashSet, sync::LazyLock};
 use regex::Regex;
 use serde_json::{Map, Value};
 
-use crate::btcc::{ModelRoundRequest, ModelRoundToolCall, ToolCallOrigin};
+use butler_turn::btcc::ModelRoundRequest;
+use butler_turn::btcc::ModelRoundToolCall;
+use butler_turn::btcc::ToolCallOrigin;
 
 pub(super) fn decode(
     response: &Value,

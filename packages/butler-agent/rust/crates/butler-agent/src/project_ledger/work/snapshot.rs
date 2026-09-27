@@ -10,8 +10,10 @@ mod validation;
 
 pub(in crate::project_ledger) use candidate::validate_publication_candidate;
 
-use crate::btcc::{BtccError, ResolvedProjectWorkScope, WorkView};
 use butler_core::locale::LocaleCollation;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::ResolvedProjectWorkScope;
+use butler_turn::btcc::WorkView;
 
 use super::super::{ProjectLedgerReadError, committed, dashboard, records};
 use super::codec::{self, Snapshot};
@@ -141,10 +143,10 @@ fn current_attempt(
         return Ok(Attempt::Changed);
     }
     let status = match view.status {
-        crate::btcc::DurableWorkStatus::Open => "in_progress",
-        crate::btcc::DurableWorkStatus::Blocked => "blocked",
-        crate::btcc::DurableWorkStatus::Completed => "review",
-        crate::btcc::DurableWorkStatus::Abandoned => "cancelled",
+        butler_turn::btcc::DurableWorkStatus::Open => "in_progress",
+        butler_turn::btcc::DurableWorkStatus::Blocked => "blocked",
+        butler_turn::btcc::DurableWorkStatus::Completed => "review",
+        butler_turn::btcc::DurableWorkStatus::Abandoned => "cancelled",
     };
     if metadata.get("status").and_then(Value::as_str) != Some(status) {
         return Err(managed_invalid());
@@ -362,7 +364,7 @@ pub(super) fn hydrate(
     // Source hydration omits optional effectWatermark/effectBlockers even when
     // the separately verified material proof carries effect facts.
     let view: WorkView = codec::typed(Value::Object(value))?;
-    if view.allowed_next_stages != crate::btcc::allowed_next_work_stages(view.current_stage)
+    if view.allowed_next_stages != butler_turn::btcc::allowed_next_work_stages(view.current_stage)
         || view.result_refs.len() as u64 != codec::number(manifest, "resultSequence")?
         || view.current_plan.as_ref().map(|plan| plan.revision)
             != manifest

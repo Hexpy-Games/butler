@@ -5,7 +5,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::btcc::ResolvedProjectWorkScope;
+use butler_turn::btcc::ResolvedProjectWorkScope;
 
 use super::super::contracts::{
     ProjectWorkPublicationError, ProjectWorkTarget, ProjectWorkTargetState,

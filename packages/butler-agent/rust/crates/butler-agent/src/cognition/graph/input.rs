@@ -14,7 +14,8 @@ use crate::cognition::{
     extraction::ProjectionContextUnit, extraction::ProjectionSourceUnit,
     hydrate_conversation_source, read_prior_public_context, sources::hydrate_typed_source,
 };
-use crate::conversation::{ConversationMessageWithParts, ConversationSourceReader};
+use butler_turn::conversation::ConversationMessageWithParts;
+use butler_turn::conversation::ConversationSourceReader;
 
 pub(super) fn build(
     connection: &Connection,

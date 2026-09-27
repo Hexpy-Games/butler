@@ -11,8 +11,9 @@ use std::sync::Arc;
 use tokio::sync::{Semaphore, oneshot};
 use tokio_util::task::TaskTracker;
 
-use crate::btcc::{AttachmentKind, AttachmentRef};
 use butler_core::public_text::trim_js_whitespace;
+use butler_turn::btcc::AttachmentKind;
+use butler_turn::btcc::AttachmentRef;
 
 use super::{ContextError, ContextResult};
 use crate::context::ContextCode;

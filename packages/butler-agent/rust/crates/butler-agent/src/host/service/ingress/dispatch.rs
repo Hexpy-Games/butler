@@ -12,12 +12,15 @@ use super::{
     IngressDelivery, IngressPoll, action,
     bind::{self, Envelope},
 };
+use crate::gateway::ClaimedInboundEvent;
+use crate::gateway::InboundQueue;
+use crate::gateway::QueuedInboundEvent;
 use crate::host::service::restart_handoff::RestartHandoff;
-use crate::{
-    btcc::{Btcc, StopRequest, TurnOutcomeKind, WorkStatus},
-    gateway::{ClaimedInboundEvent, InboundQueue, QueuedInboundEvent},
-    workspace::SessionBindingStore,
-};
+use butler_turn::btcc::Btcc;
+use butler_turn::btcc::StopRequest;
+use butler_turn::btcc::TurnOutcomeKind;
+use butler_turn::btcc::WorkStatus;
+use butler_turn::workspace::SessionBindingStore;
 
 struct Executed {
     delivered: usize,
@@ -31,7 +34,7 @@ pub(super) struct DispatchDependencies {
     pub data_root: PathBuf,
     pub default_workspace: PathBuf,
     pub delivery: Arc<dyn IngressDelivery>,
-    pub subsessions: Arc<crate::btcc::SubsessionService>,
+    pub subsessions: Arc<butler_turn::btcc::SubsessionService>,
     pub restart_handoff: Arc<RestartHandoff>,
 }
 
@@ -47,10 +50,10 @@ pub(super) fn session_key(record: &QueuedInboundEvent) -> String {
                 .map(str::to_owned)
                 .unwrap_or_else(|| {
                     let peer_kind = match envelope.peer.kind {
-                        crate::btcc::PeerKind::Dm => "dm",
-                        crate::btcc::PeerKind::Group => "group",
-                        crate::btcc::PeerKind::Thread => "thread",
-                        crate::btcc::PeerKind::Channel => "channel",
+                        butler_turn::btcc::PeerKind::Dm => "dm",
+                        butler_turn::btcc::PeerKind::Group => "group",
+                        butler_turn::btcc::PeerKind::Thread => "thread",
+                        butler_turn::btcc::PeerKind::Channel => "channel",
                     };
                     format!(
                         "{}:{}:{}:{}",
@@ -168,7 +171,7 @@ async fn execute(
     data_root: &Path,
     default_workspace: &Path,
     delivery: &dyn IngressDelivery,
-    subsessions: &crate::btcc::SubsessionService,
+    subsessions: &butler_turn::btcc::SubsessionService,
 ) -> Result<Executed, super::IngressError> {
     let envelope = Envelope::from_record(&item.record)?;
     let kind = envelope
@@ -244,7 +247,7 @@ async fn execute(
     };
     let internal_subsession = matches!(
         binding.role,
-        crate::workspace::SessionRole::Worker | crate::workspace::SessionRole::Steward
+        butler_turn::workspace::SessionRole::Worker | butler_turn::workspace::SessionRole::Steward
     );
     if internal_subsession {
         complete_subsession_child(
@@ -291,10 +294,10 @@ async fn execute(
 }
 
 async fn complete_subsession_child(
-    subsessions: &crate::btcc::SubsessionService,
+    subsessions: &butler_turn::btcc::SubsessionService,
     session_id: &str,
     turn_id: &str,
-    outcome: &crate::btcc::TurnOutcome,
+    outcome: &butler_turn::btcc::TurnOutcome,
 ) -> Result<(), super::IngressError> {
     if matches!(
         outcome.result,

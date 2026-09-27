@@ -13,7 +13,7 @@ use serde_json::Value;
 use super::{GraphRepository, db_error, vector_registration::source_row};
 use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionResult, CognitionSourceRow, sources::hydrate_typed_source};
-use crate::conversation::ConversationSourceReader;
+use butler_turn::conversation::ConversationSourceReader;
 
 const SOURCE_COLUMNS: &str = "source_id,episode_id,revision,source_kind,conversation_session_id,conversation_message_id,part_id,scalar_pointer,byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis";
 

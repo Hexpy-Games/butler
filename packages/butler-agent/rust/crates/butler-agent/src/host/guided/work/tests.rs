@@ -6,12 +6,27 @@ use std::{
 use rusqlite::{Connection, params};
 use serde_json::json;
 
-use crate::btcc::{
-    BtccRepositories, BtccStorage, BtccStorageConfig, DurableWorkService, DurableWorkStatus, Peer,
-    PeerKind, PreparedTurn, ProcessLiveness, RuntimeOwnerIdentity, Sender, SessionRole,
-    SessionWorkRepository, StorageActivation, StorageProfile, TurnMessage, TurnRequest, TurnRoute,
-    TurnStore, TurnTrigger, WorkTurnScope,
-};
+use butler_turn::btcc::BtccRepositories;
+use butler_turn::btcc::BtccStorage;
+use butler_turn::btcc::BtccStorageConfig;
+use butler_turn::btcc::DurableWorkService;
+use butler_turn::btcc::DurableWorkStatus;
+use butler_turn::btcc::Peer;
+use butler_turn::btcc::PeerKind;
+use butler_turn::btcc::PreparedTurn;
+use butler_turn::btcc::ProcessLiveness;
+use butler_turn::btcc::RuntimeOwnerIdentity;
+use butler_turn::btcc::Sender;
+use butler_turn::btcc::SessionRole;
+use butler_turn::btcc::SessionWorkRepository;
+use butler_turn::btcc::StorageActivation;
+use butler_turn::btcc::StorageProfile;
+use butler_turn::btcc::TurnMessage;
+use butler_turn::btcc::TurnRequest;
+use butler_turn::btcc::TurnRoute;
+use butler_turn::btcc::TurnStore;
+use butler_turn::btcc::TurnTrigger;
+use butler_turn::btcc::WorkTurnScope;
 
 use super::{GuidedWorkAdapter, decision};
 
@@ -165,7 +180,7 @@ async fn real_sqlite_work_final_reconcile_persists_current_open_disposition() {
     let candidate = port.candidate("answer").await.unwrap();
     assert!(matches!(
         candidate,
-        crate::btcc::CandidateDisposition::Continue(_)
+        butler_turn::btcc::CandidateDisposition::Continue(_)
     ));
     let published = port.reconcile_text("answer").await.unwrap();
     assert!(published.starts_with("Work completion could not be confirmed"));

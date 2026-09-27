@@ -10,9 +10,9 @@ use std::{
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde_json::{Value, json};
 
-use crate::btcc::ModelRoundError;
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
+use butler_turn::btcc::ModelRoundError;
 
 use super::{
     ModelCatalog, ModelCatalogError, ModelConfiguration, ModelConfigurationEnvironment,

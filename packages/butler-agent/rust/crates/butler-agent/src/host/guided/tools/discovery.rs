@@ -6,11 +6,14 @@ mod mcp;
 use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
-use crate::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 use crate::capabilities::{BridgeCatalogTool, describe_native, search_native};
 use butler_core::json::JsonDocument;
 use butler_core::json::visit_raw_array;
 use butler_core::json::visit_raw_object;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::GuidedInvocation;
+use butler_turn::btcc::ModelRoundToolCall;
+use butler_turn::btcc::ToolExecutionError;
 
 use super::GuidedTools;
 
@@ -262,7 +265,7 @@ pub(super) fn remember_described(
 
 fn projection<'a>(
     owner: &GuidedTools,
-    tool: crate::btcc::GuidedCatalogRead<'a>,
+    tool: butler_turn::btcc::GuidedCatalogRead<'a>,
 ) -> BridgeCatalogTool<'a> {
     let configured_disabled = owner.web_session.configured_disabled_reason(tool.name);
     let enabled = configured_disabled.is_none()

@@ -4,7 +4,9 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use crate::btcc::{StorageError, bootstrap_fresh_storage, read_activated_storage_manifest};
+use butler_turn::btcc::StorageError;
+use butler_turn::btcc::bootstrap_fresh_storage;
+use butler_turn::btcc::read_activated_storage_manifest;
 
 #[cfg(test)]
 mod tests;

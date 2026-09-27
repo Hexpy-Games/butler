@@ -12,11 +12,11 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::btcc::StorageEffectJournal;
 use crate::host::ResolvedInstallation;
 use crate::host::service::instance::{
     instance_is_locked, process_matches, read_record, validate_write_destinations,
 };
+use butler_turn::btcc::StorageEffectJournal;
 
 use super::{AppGatewayLifecycle, GatewayControlCommand};
 

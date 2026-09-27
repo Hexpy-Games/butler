@@ -1,16 +1,21 @@
 use std::{path::PathBuf, sync::Arc};
 
-use crate::btcc::{
-    Btcc, BtccError, BtccHost, ContextCompactionRepository, PrincipalAuthority,
-    SessionWorkRepository, StorageProgressPublication,
-};
 use crate::context::ContextBudgetOwner;
-use crate::conversation::AgentConversationStore;
 use crate::host::memory_jobs::context_maintenance::ContextMaintenance;
 use crate::project_ledger::ProjectLedger;
 use crate::skills::Skills;
-use crate::workspace::{SessionBindingStore, SessionWorkspaceRecovery, SessionWorktrees};
 use butler_core::locale::LocaleCollation;
+use butler_turn::btcc::Btcc;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::BtccHost;
+use butler_turn::btcc::ContextCompactionRepository;
+use butler_turn::btcc::PrincipalAuthority;
+use butler_turn::btcc::SessionWorkRepository;
+use butler_turn::btcc::StorageProgressPublication;
+use butler_turn::conversation::AgentConversationStore;
+use butler_turn::workspace::SessionBindingStore;
+use butler_turn::workspace::SessionWorkspaceRecovery;
+use butler_turn::workspace::SessionWorktrees;
 
 use super::super::{ProcessModels, WorkStreams};
 
@@ -39,9 +44,9 @@ pub(crate) struct AgentRuntime {
     pub session_worktrees: SessionWorktrees,
     pub workspace_recovery: SessionWorkspaceRecovery,
     pub inbound_queue: Arc<crate::gateway::InboundQueue>,
-    pub restart_tool_journal: Arc<crate::btcc::ToolJournalRepository>,
-    pub restart_effect_journal: Arc<crate::btcc::StorageEffectJournal>,
-    pub subsessions: Arc<crate::btcc::SubsessionService>,
+    pub restart_tool_journal: Arc<butler_turn::btcc::ToolJournalRepository>,
+    pub restart_effect_journal: Arc<butler_turn::btcc::StorageEffectJournal>,
+    pub subsessions: Arc<butler_turn::btcc::SubsessionService>,
     pub work_streams: Arc<WorkStreams>,
     pub skills: Arc<Skills>,
     pub mcp_client: Arc<crate::mcp_client::McpClient>,

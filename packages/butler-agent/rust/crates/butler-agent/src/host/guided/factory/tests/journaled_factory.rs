@@ -81,8 +81,8 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
         storage.clone(),
         Arc::new(|| "now".into()),
     ));
-    let subsessions = Arc::new(crate::btcc::SubsessionService::new(
-        crate::btcc::SqliteSubsessionRepository::new(storage.clone()),
+    let subsessions = Arc::new(butler_turn::btcc::SubsessionService::new(
+        butler_turn::btcc::SqliteSubsessionRepository::new(storage.clone()),
         bindings.clone(),
         Arc::new(crate::host::runtime::SubsessionQueue(Arc::new(
             crate::gateway::InboundQueue::new(&scratch.0.clone()),
@@ -101,14 +101,14 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
         ),
         accepted_plans: AcceptedPlanProducer::new(&scratch.0, 1),
         work,
-        authority: Arc::new(crate::btcc::PrincipalAuthority::new(
+        authority: Arc::new(butler_turn::btcc::PrincipalAuthority::new(
             storage.clone(),
             Arc::new(LocaleCollation::new("en-US").unwrap()),
             Arc::new(|| "now".into()),
             Arc::new(|| "uuid".into()),
         )),
         journal: tool_journal.clone(),
-        operation_results: Arc::new(crate::btcc::OperationResultRepository::new(
+        operation_results: Arc::new(butler_turn::btcc::OperationResultRepository::new(
             storage.clone(),
             None,
         )),
@@ -135,7 +135,7 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
         ),
         Arc::new(SystemIdentity),
         Arc::new(crate::host::ProfileConversationSources::new(
-            crate::conversation::conversation_store_path(&scratch.0),
+            butler_turn::conversation::conversation_store_path(&scratch.0),
         )),
         output_models.provider.clone(),
     ));
@@ -148,9 +148,9 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
         )),
         Arc::new(crate::operations::MetricFiles::new(scratch.0.clone())),
     );
-    let conversation_store = crate::conversation::AgentConversationStore::open(
-        crate::conversation::ConversationStoreConfig {
-            path: crate::conversation::conversation_store_path(&scratch.0),
+    let conversation_store = butler_turn::conversation::AgentConversationStore::open(
+        butler_turn::conversation::ConversationStoreConfig {
+            path: butler_turn::conversation::conversation_store_path(&scratch.0),
             identity_clock: Arc::new(SystemIdentity),
             collation: Arc::new(LocaleCollation::new("en-US").unwrap()),
         },
@@ -260,7 +260,7 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
                 crate::operations::MetricFiles::new(scratch.0.clone()),
             ))),
         )),
-        session_worktrees: crate::workspace::SessionWorktrees::new(
+        session_worktrees: butler_turn::workspace::SessionWorktrees::new(
             bindings.clone(),
             commands.clone(),
             files.clone(),
@@ -317,7 +317,7 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
             &claim,
             1,
             &progress,
-            &crate::btcc::NOOP_MODEL_ROUND_OBSERVER,
+            &butler_turn::btcc::NOOP_MODEL_ROUND_OBSERVER,
             CancellationToken::new(),
         ),
     )

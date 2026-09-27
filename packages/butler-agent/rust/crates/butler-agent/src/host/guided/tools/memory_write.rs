@@ -3,15 +3,18 @@
 use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
-use crate::btcc::{AccessMode, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 use crate::cognition::{
     ExplicitMemoryUpdateInput, TaskMemoryIngestionResult, ingest_task_outcome_memory,
     update_explicit_memory,
 };
-use crate::conversation::{
-    CanonicalMemoryReadBinding, PublicMemorySnapshot, conversation_store_path,
-};
 use butler_core::json::JsonDocument;
+use butler_turn::btcc::AccessMode;
+use butler_turn::btcc::GuidedInvocation;
+use butler_turn::btcc::ModelRoundToolCall;
+use butler_turn::btcc::ToolExecutionError;
+use butler_turn::conversation::CanonicalMemoryReadBinding;
+use butler_turn::conversation::PublicMemorySnapshot;
+use butler_turn::conversation::conversation_store_path;
 
 use super::GuidedTools;
 
@@ -212,7 +215,7 @@ fn cognition_failure(code: &'static str, message: &str) -> Value {
 
 fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError> {
     JsonDocument::from_value(value).map_err(|error| {
-        ToolExecutionError::Integrity(crate::btcc::BtccError::relayed(
+        ToolExecutionError::Integrity(butler_turn::btcc::BtccError::relayed(
             "guided_memory_write_result_json",
             error.to_string(),
         ))

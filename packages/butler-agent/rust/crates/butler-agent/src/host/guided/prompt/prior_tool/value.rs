@@ -2,7 +2,7 @@
 
 use serde_json::{Map, Value};
 
-use crate::btcc::BtccError;
+use butler_turn::btcc::BtccError;
 
 use super::{digest, encode};
 

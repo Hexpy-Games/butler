@@ -14,7 +14,7 @@ use crate::cognition::{
     },
     sources::identity_binding_current,
 };
-use crate::conversation::ConversationSourceReader;
+use butler_turn::conversation::ConversationSourceReader;
 
 pub(super) struct SeedGraph {
     pub expansion: GraphExpansion,

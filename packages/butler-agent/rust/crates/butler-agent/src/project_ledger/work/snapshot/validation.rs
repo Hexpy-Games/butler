@@ -2,7 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use serde_json::Value;
 
-use crate::btcc::{BtccError, ProjectWorkMaterialSnapshot, WorkView};
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::ProjectWorkMaterialSnapshot;
+use butler_turn::btcc::WorkView;
 
 use super::super::{codec, invalid};
 
@@ -151,7 +153,7 @@ pub(super) fn pointers(
     if material.material_fingerprint != text(manifest, "materialFingerprint")? {
         return Err(failure());
     }
-    let expected = crate::btcc::build_project_work_material_snapshot(
+    let expected = butler_turn::btcc::build_project_work_material_snapshot(
         view,
         material.material_fingerprint.clone(),
         material.effect_watermark.clone(),

@@ -2,7 +2,7 @@ use crate::cognition::CognitionCode;
 use serde_json::{Map, Value, json};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::conversation::PublicMemoryScope;
+use butler_turn::conversation::PublicMemoryScope;
 
 #[derive(Clone)]
 pub(super) struct QueryArgs {

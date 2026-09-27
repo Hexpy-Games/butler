@@ -5,11 +5,12 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use crate::btcc::{
-    ExactProjectWorkResultAuthority, ExactProjectWorkResultIdentity,
-    ExactProjectWorkResultVerification, OperationResultReferenceInput, ResolvedProjectWorkScope,
-    StorageError,
-};
+use butler_turn::btcc::ExactProjectWorkResultAuthority;
+use butler_turn::btcc::ExactProjectWorkResultIdentity;
+use butler_turn::btcc::ExactProjectWorkResultVerification;
+use butler_turn::btcc::OperationResultReferenceInput;
+use butler_turn::btcc::ResolvedProjectWorkScope;
+use butler_turn::btcc::StorageError;
 
 use super::{ProjectLedger, ProjectLedgerReadError, active_reference, work};
 

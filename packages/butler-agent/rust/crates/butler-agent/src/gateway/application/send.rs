@@ -8,11 +8,10 @@ use super::{
     queue::QueueReservation,
     service::{accept_turn, assert_scope},
 };
+use crate::gateway::MessageContentPart;
 use crate::gateway::application::storage::AppStorageCode;
-use crate::{
-    btcc::{ControlResolution, ExecutionControls},
-    gateway::MessageContentPart,
-};
+use butler_turn::btcc::ControlResolution;
+use butler_turn::btcc::ExecutionControls;
 
 pub(super) struct ResolvedAppAdmission {
     pub text: String,

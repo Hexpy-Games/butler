@@ -7,21 +7,27 @@ use std::sync::Arc;
 
 use serde_json::{Map, Value};
 
-use crate::{
-    btcc::SubsessionService,
-    conversation::AgentConversationStore,
-    gateway::{
-        AppSessionWorkspaceProvisioner, AppSessionWorkspaceSnapshot, ApplicationFuture,
-        GatewayApplicationError,
-    },
-    workspace::{
-        BindSessionWorktreeInput, BindSessionWorktreeResult, OwnOptional,
-        ProjectWorkspaceInspection, SessionBindingStore, SessionLifecycleState, SessionRole,
-        SessionWorkspaceAuthority, SessionWorkspaceRecovery, SessionWorkspaceValidation,
-        SessionWorktreeAction, SessionWorktrees, UpsertSessionBinding, WorkspaceReference,
-        short_session_worktree_branch,
-    },
-};
+use crate::gateway::AppSessionWorkspaceProvisioner;
+use crate::gateway::AppSessionWorkspaceSnapshot;
+use crate::gateway::ApplicationFuture;
+use crate::gateway::GatewayApplicationError;
+use butler_turn::btcc::SubsessionService;
+use butler_turn::conversation::AgentConversationStore;
+use butler_turn::workspace::BindSessionWorktreeInput;
+use butler_turn::workspace::BindSessionWorktreeResult;
+use butler_turn::workspace::OwnOptional;
+use butler_turn::workspace::ProjectWorkspaceInspection;
+use butler_turn::workspace::SessionBindingStore;
+use butler_turn::workspace::SessionLifecycleState;
+use butler_turn::workspace::SessionRole;
+use butler_turn::workspace::SessionWorkspaceAuthority;
+use butler_turn::workspace::SessionWorkspaceRecovery;
+use butler_turn::workspace::SessionWorkspaceValidation;
+use butler_turn::workspace::SessionWorktreeAction;
+use butler_turn::workspace::SessionWorktrees;
+use butler_turn::workspace::UpsertSessionBinding;
+use butler_turn::workspace::WorkspaceReference;
+use butler_turn::workspace::short_session_worktree_branch;
 
 pub(crate) struct AppSessionWorkspaces {
     bindings: SessionBindingStore,

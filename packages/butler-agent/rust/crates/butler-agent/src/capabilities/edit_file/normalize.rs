@@ -1,6 +1,6 @@
 use serde_json::{Map, Value};
 
-use crate::workspace::ExactEdit;
+use butler_turn::workspace::ExactEdit;
 
 use super::super::arguments;
 

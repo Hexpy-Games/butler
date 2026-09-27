@@ -10,9 +10,9 @@ use url::Url;
 
 use super::super::support::{Root, service_with_parts};
 use super::super::*;
-use crate::btcc::ModelRoundError;
 use crate::models::*;
 use butler_core::locale::LocaleCollation;
+use butler_turn::btcc::ModelRoundError;
 
 struct Config {
     metadata: ModelProviderMetadata,
@@ -54,7 +54,7 @@ struct Observations;
 impl ProviderObservationSink for Observations {
     fn request(&self, _: ProviderObservation) {}
     fn response(&self, _: &str, _: &str) {}
-    fn failure(&self, _: &crate::btcc::ProviderRequestError) {}
+    fn failure(&self, _: &butler_turn::btcc::ProviderRequestError) {}
 }
 struct Metrics;
 impl PromptUsageMetricSink for Metrics {

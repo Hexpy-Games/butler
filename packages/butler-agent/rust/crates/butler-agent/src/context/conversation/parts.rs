@@ -1,4 +1,4 @@
-use crate::conversation::*;
+use butler_turn::conversation::*;
 
 use super::types::*;
 
@@ -31,7 +31,7 @@ pub(crate) fn to_context_message(
             ConversationRole::User => "user",
         },
         role: message.message.role,
-        text: crate::conversation::text_for_message(message, include_tools),
+        text: butler_turn::conversation::text_for_message(message, include_tools),
         parts,
     }
 }
@@ -47,7 +47,7 @@ pub(crate) fn to_context_summary(summary: &ConversationSummary) -> ConversationC
 fn to_context_part(part: &ConversationPart) -> ConversationContextPart {
     ConversationContextPart {
         kind: part.kind,
-        text: crate::conversation::text_for_part(part),
+        text: butler_turn::conversation::text_for_part(part),
         tool_call_id: part.tool_call_id.clone(),
         parent_tool_call_id: part.parent_tool_call_id.clone(),
         provider_shape: part.provider_shape,

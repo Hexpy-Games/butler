@@ -1,8 +1,9 @@
 use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::btcc::{BtccError, ToolExecutionError};
 use butler_core::json::JsonDocument;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::ToolExecutionError;
 
 use super::{GuidedTools, bridge_error, encoded};
 

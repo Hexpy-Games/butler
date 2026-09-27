@@ -1,27 +1,29 @@
 use serde_json::{Map, Value};
 
-use crate::btcc::{ModelRoundError, ModelRoundRequest, RuntimeFailure};
 use crate::models::{LocalModelPlatform, ModelProviderMetadata, ReasoningEffort};
+use butler_turn::btcc::ModelRoundError;
+use butler_turn::btcc::ModelRoundRequest;
+use butler_turn::btcc::RuntimeFailure;
 
 pub(super) fn effort(request: &ModelRoundRequest<'_>) -> Option<&'static str> {
     match request.reasoning_effort {
-        crate::btcc::ReasoningEffort::None => None,
-        crate::btcc::ReasoningEffort::Low => Some("low"),
-        crate::btcc::ReasoningEffort::Medium => Some("medium"),
-        crate::btcc::ReasoningEffort::High => Some("high"),
-        crate::btcc::ReasoningEffort::Xhigh => Some("xhigh"),
-        crate::btcc::ReasoningEffort::Max => Some("max"),
+        butler_turn::btcc::ReasoningEffort::None => None,
+        butler_turn::btcc::ReasoningEffort::Low => Some("low"),
+        butler_turn::btcc::ReasoningEffort::Medium => Some("medium"),
+        butler_turn::btcc::ReasoningEffort::High => Some("high"),
+        butler_turn::btcc::ReasoningEffort::Xhigh => Some("xhigh"),
+        butler_turn::btcc::ReasoningEffort::Max => Some("max"),
     }
 }
 
-pub(super) fn gemini_level(value: &crate::btcc::ReasoningEffort) -> &'static str {
+pub(super) fn gemini_level(value: &butler_turn::btcc::ReasoningEffort) -> &'static str {
     match value {
-        crate::btcc::ReasoningEffort::None => "MINIMAL",
-        crate::btcc::ReasoningEffort::Low => "LOW",
-        crate::btcc::ReasoningEffort::Medium => "MEDIUM",
-        crate::btcc::ReasoningEffort::High
-        | crate::btcc::ReasoningEffort::Xhigh
-        | crate::btcc::ReasoningEffort::Max => "HIGH",
+        butler_turn::btcc::ReasoningEffort::None => "MINIMAL",
+        butler_turn::btcc::ReasoningEffort::Low => "LOW",
+        butler_turn::btcc::ReasoningEffort::Medium => "MEDIUM",
+        butler_turn::btcc::ReasoningEffort::High
+        | butler_turn::btcc::ReasoningEffort::Xhigh
+        | butler_turn::btcc::ReasoningEffort::Max => "HIGH",
     }
 }
 
@@ -113,14 +115,14 @@ fn budget(value: &str) -> u64 {
     }
 }
 
-fn btcc_effort_name(value: &crate::btcc::ReasoningEffort) -> &'static str {
+fn btcc_effort_name(value: &butler_turn::btcc::ReasoningEffort) -> &'static str {
     match value {
-        crate::btcc::ReasoningEffort::None => "none",
-        crate::btcc::ReasoningEffort::Low => "low",
-        crate::btcc::ReasoningEffort::Medium => "medium",
-        crate::btcc::ReasoningEffort::High => "high",
-        crate::btcc::ReasoningEffort::Xhigh => "xhigh",
-        crate::btcc::ReasoningEffort::Max => "max",
+        butler_turn::btcc::ReasoningEffort::None => "none",
+        butler_turn::btcc::ReasoningEffort::Low => "low",
+        butler_turn::btcc::ReasoningEffort::Medium => "medium",
+        butler_turn::btcc::ReasoningEffort::High => "high",
+        butler_turn::btcc::ReasoningEffort::Xhigh => "xhigh",
+        butler_turn::btcc::ReasoningEffort::Max => "max",
     }
 }
 

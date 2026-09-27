@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::btcc::BtccError;
+use butler_turn::btcc::BtccError;
 
 pub(super) fn setup(error: impl std::error::Error + Send + Sync + 'static) -> BtccError {
     BtccError::relayed("native_runtime_initialization_failed", error.to_string()).with_source(error)

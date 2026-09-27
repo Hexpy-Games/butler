@@ -152,7 +152,7 @@ impl AppApplication {
                 cancellation.clone(),
             )
             .await?;
-        let expected_branch = crate::workspace::short_session_worktree_branch(&session.id);
+        let expected_branch = butler_turn::workspace::short_session_worktree_branch(&session.id);
         if info.get("available").and_then(serde_json::Value::as_bool) == Some(true)
             && info
                 .get("workspace_binding")

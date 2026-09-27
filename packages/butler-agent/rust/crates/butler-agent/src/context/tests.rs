@@ -6,12 +6,12 @@ use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use serde_json::{Map, json};
 
 use super::*;
-use crate::btcc::ContextAssembly;
-use crate::conversation::*;
 use crate::models::{
     ModelCatalog, ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
 };
 use butler_core::locale::LocaleCollation;
+use butler_turn::btcc::ContextAssembly;
+use butler_turn::conversation::*;
 
 struct Clock(AtomicU64);
 impl Clock {

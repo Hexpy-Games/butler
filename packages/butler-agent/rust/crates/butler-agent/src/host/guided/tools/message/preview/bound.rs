@@ -4,11 +4,11 @@ use std::borrow::Cow;
 
 use serde_json::Value;
 
-use crate::btcc::BtccError;
 use butler_core::json::bound_raw_string;
 use butler_core::json::raw_string_contains_any;
 use butler_core::json::visit_raw_array;
 use butler_core::json::visit_raw_object;
+use butler_turn::btcc::BtccError;
 
 const CONTROL_FACTS: &[&str] = &[
     "status",

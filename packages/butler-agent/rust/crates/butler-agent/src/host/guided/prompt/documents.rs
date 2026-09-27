@@ -6,7 +6,10 @@ use std::sync::LazyLock;
 use regex::Regex;
 use serde_json::Value;
 
-use crate::btcc::{BtccError, BtccRepositories, ContextDocumentRead, TurnRecord};
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::BtccRepositories;
+use butler_turn::btcc::ContextDocumentRead;
+use butler_turn::btcc::TurnRecord;
 
 pub(super) struct DocumentProjection {
     pub context: String,

@@ -1,10 +1,13 @@
 //! App session binding mutation and runtime policy.
 
 use super::{Envelope, IngressError};
-use crate::workspace::{
-    OwnOptional, SessionBindingStore, SessionLifecycleState, SessionRole, SessionTransportBinding,
-    StoredSessionBinding, UpsertSessionBinding,
-};
+use butler_turn::workspace::OwnOptional;
+use butler_turn::workspace::SessionBindingStore;
+use butler_turn::workspace::SessionLifecycleState;
+use butler_turn::workspace::SessionRole;
+use butler_turn::workspace::SessionTransportBinding;
+use butler_turn::workspace::StoredSessionBinding;
+use butler_turn::workspace::UpsertSessionBinding;
 use serde_json::{Value, json};
 use std::path::Path;
 

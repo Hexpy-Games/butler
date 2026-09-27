@@ -5,12 +5,17 @@ use std::sync::Arc;
 use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
 
-use crate::btcc::{
-    AdapterOutcome, BtccError, EffectAdapter, EffectAdapterError, EffectError, EffectFuture,
-    PlanBinding,
-};
 use crate::context::ToolOutput;
-use crate::workspace::{Commands, GuidedAccess, GuidedCommandInput};
+use butler_turn::btcc::AdapterOutcome;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::EffectAdapter;
+use butler_turn::btcc::EffectAdapterError;
+use butler_turn::btcc::EffectError;
+use butler_turn::btcc::EffectFuture;
+use butler_turn::btcc::PlanBinding;
+use butler_turn::workspace::Commands;
+use butler_turn::workspace::GuidedAccess;
+use butler_turn::workspace::GuidedCommandInput;
 
 use super::{CommandScope, GuidedCommand, PreparedCommandEffect, active_root, error, output};
 
@@ -92,22 +97,22 @@ impl EffectAdapter for CommandEffectAdapter {
     fn binding(&self) -> PlanBinding {
         PlanBinding::AcceptedPlan
     }
-    fn normalize_target(&self, target: &str) -> Result<String, crate::btcc::EffectFailure> {
+    fn normalize_target(&self, target: &str) -> Result<String, butler_turn::btcc::EffectFailure> {
         if target == self.target {
             Ok(target.to_owned())
         } else {
-            Err(crate::btcc::EffectFailure::policy(
+            Err(butler_turn::btcc::EffectFailure::policy(
                 "command_target_mismatch",
                 "run_command effect target changed after workspace admission",
             ))
         }
     }
-    fn sanitize_target(&self, target: &str) -> Result<String, crate::btcc::EffectFailure> {
+    fn sanitize_target(&self, target: &str) -> Result<String, butler_turn::btcc::EffectFailure> {
         Ok(target.to_owned())
     }
-    fn normalize_input(&self, input: &Value) -> Result<Value, crate::btcc::EffectFailure> {
+    fn normalize_input(&self, input: &Value) -> Result<Value, butler_turn::btcc::EffectFailure> {
         normalize(input).map_err(|message| {
-            crate::btcc::EffectFailure::policy("command_effect_invalid", message.to_string())
+            butler_turn::btcc::EffectFailure::policy("command_effect_invalid", message.to_string())
                 .with_source(message)
         })
     }
@@ -154,7 +159,7 @@ impl EffectAdapter for CommandEffectAdapter {
                 .run(move || super::artifacts::snapshot(&data))
                 .await
                 .map_err(|error| {
-                    crate::btcc::EffectFailure::adapter(error.message()).with_source(error)
+                    butler_turn::btcc::EffectFailure::adapter(error.message()).with_source(error)
                 })?;
             let started = std::time::SystemTime::now();
             let spooled = self
@@ -170,15 +175,15 @@ impl EffectAdapter for CommandEffectAdapter {
                     abort: signal.clone(),
                 })
                 .map_err(|error| {
-                    crate::btcc::EffectFailure::adapter(error.message()).with_source(error)
+                    butler_turn::btcc::EffectFailure::adapter(error.message()).with_source(error)
                 })?
                 .await
                 .map_err(|source| {
-                    crate::btcc::EffectFailure::adapter("Command completion was lost")
+                    butler_turn::btcc::EffectFailure::adapter("Command completion was lost")
                         .with_source(source)
                 })?
                 .map_err(|error| {
-                    crate::btcc::EffectFailure::adapter(error.message()).with_source(error)
+                    butler_turn::btcc::EffectFailure::adapter(error.message()).with_source(error)
                 })?;
             let effect = if self.effect == "remote_observation" {
                 "remote_observation"
@@ -202,7 +207,7 @@ impl EffectAdapter for CommandEffectAdapter {
             )
             .await
             .map_err(|error| {
-                crate::btcc::EffectFailure::adapter(error.message()).with_source(error)
+                butler_turn::btcc::EffectFailure::adapter(error.message()).with_source(error)
             })?;
             Ok(AdapterOutcome::Applied(result))
         })

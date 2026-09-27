@@ -6,12 +6,12 @@ use serde_json::{Value, json};
 
 use crate::context::compact_transcript;
 use crate::context::compaction_snapshot_path;
-use crate::conversation::AgentConversationStore;
-use crate::conversation::ConversationStoreConfig;
-use crate::conversation::conversation_session_id_for_durable_session;
-use crate::conversation::conversation_store_path;
 use crate::operations::MetricFiles;
 use butler_core::locale::LocaleCollation;
+use butler_turn::conversation::AgentConversationStore;
+use butler_turn::conversation::ConversationStoreConfig;
+use butler_turn::conversation::conversation_session_id_for_durable_session;
+use butler_turn::conversation::conversation_store_path;
 
 use super::{
     CliError, ResolvedInstallation, context_budget_owner, open_status_models, unavailable,

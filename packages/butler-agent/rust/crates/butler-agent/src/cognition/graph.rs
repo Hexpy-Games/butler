@@ -131,7 +131,7 @@ impl GraphRepository {
     }
     pub(in crate::cognition) fn read_episode_projection(
         &self,
-        canonical: &crate::conversation::ConversationSourceReader,
+        canonical: &butler_turn::conversation::ConversationSourceReader,
         source_root: &Path,
         job: &str,
     ) -> CognitionResult<Vec<EpisodeProjectionSource>> {
@@ -173,7 +173,7 @@ impl GraphRepository {
     }
     pub(in crate::cognition) fn expand_context(
         &self,
-        canonical: &crate::conversation::ConversationSourceReader,
+        canonical: &butler_turn::conversation::ConversationSourceReader,
         source_root: &Path,
         input: &crate::cognition::extraction::ExtractInput,
     ) -> CognitionResult<crate::cognition::extraction::ExtractInput> {
@@ -198,7 +198,7 @@ impl GraphRepository {
     }
     pub(in crate::cognition) fn source_window_candidates(
         &self,
-        canonical: &crate::conversation::ConversationSourceReader,
+        canonical: &butler_turn::conversation::ConversationSourceReader,
         source_root: &Path,
         input: &crate::cognition::extraction::ExtractInput,
         cue: &str,
@@ -217,7 +217,7 @@ impl GraphRepository {
     }
     pub(in crate::cognition) fn assert_candidate_sources_current(
         &self,
-        canonical: &crate::conversation::ConversationSourceReader,
+        canonical: &butler_turn::conversation::ConversationSourceReader,
         source_root: &Path,
         input: &crate::cognition::extraction::ExtractInput,
         plan: &NormalizedPlan,
@@ -280,7 +280,7 @@ impl GraphRepository {
     }
     pub(in crate::cognition) fn build_extract_input(
         &self,
-        canonical: &crate::conversation::ConversationSourceReader,
+        canonical: &butler_turn::conversation::ConversationSourceReader,
         source_root: &Path,
         job_id: &str,
         window_ref: &str,
@@ -329,7 +329,7 @@ impl GraphRepository {
 
     pub(super) fn replay(
         &mut self,
-        canonical: &crate::conversation::ConversationSourceReader,
+        canonical: &butler_turn::conversation::ConversationSourceReader,
         notice: super::ConversationSourceNotice<'_>,
         episode_id: &str,
         revision: &str,

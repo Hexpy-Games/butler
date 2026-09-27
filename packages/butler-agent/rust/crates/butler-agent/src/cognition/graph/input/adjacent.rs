@@ -11,7 +11,7 @@ use crate::cognition::{
     },
     grapheme_byte_boundaries, hydrate_conversation_source,
 };
-use crate::conversation::ConversationMessageWithParts;
+use butler_turn::conversation::ConversationMessageWithParts;
 
 pub(super) fn attach(
     input: &mut ExtractInput,

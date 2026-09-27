@@ -10,7 +10,8 @@ use crate::cognition::{
     ConversationSourceNotice, MEMORY_SOURCE_WINDOW_BYTES, assert_conversation_source_current,
     hydrate_conversation_source,
 };
-use crate::conversation::{ConversationMessageWithParts, ConversationSourceReader};
+use butler_turn::conversation::ConversationMessageWithParts;
+use butler_turn::conversation::ConversationSourceReader;
 
 #[derive(Clone, Copy)]
 pub(in crate::cognition) struct RegistrationInput<'a> {

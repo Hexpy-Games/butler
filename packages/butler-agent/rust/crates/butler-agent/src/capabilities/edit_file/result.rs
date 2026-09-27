@@ -3,7 +3,11 @@ use std::time::Duration;
 use serde_json::{Value, json};
 
 use super::super::mutation_evidence;
-use crate::workspace::{BatchResult, ChangedFile, EditFailure, EditedFile, MutationOutcome};
+use butler_turn::workspace::BatchResult;
+use butler_turn::workspace::ChangedFile;
+use butler_turn::workspace::EditFailure;
+use butler_turn::workspace::EditedFile;
+use butler_turn::workspace::MutationOutcome;
 
 pub(in crate::capabilities) fn changed_file_value(detail: &ChangedFile) -> Value {
     let mut value = json!({

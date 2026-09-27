@@ -9,16 +9,14 @@ use unicode_normalization::UnicodeNormalization;
 
 use super::{CognitionResult, ExtractInput, db_error, json_error};
 use crate::cognition::CognitionCode;
-use crate::{
-    cognition::{
-        lexical,
-        recall::{
-            Channel, RankedCandidate, SemanticSelection, rank_aliases, rank_lexical,
-            select_semantic_seeds,
-        },
-    },
-    conversation::ConversationSourceReader,
-};
+use crate::cognition::lexical;
+use crate::cognition::recall::Channel;
+use crate::cognition::recall::RankedCandidate;
+use crate::cognition::recall::SemanticSelection;
+use crate::cognition::recall::rank_aliases;
+use crate::cognition::recall::rank_lexical;
+use crate::cognition::recall::select_semantic_seeds;
+use butler_turn::conversation::ConversationSourceReader;
 
 // Projection uses all-user-sessions, projectFilter:any, includeInternal:false,
 // and sourceScope:{projectId: chunk.project_id}. The claim window is as-of.

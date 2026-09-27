@@ -4,9 +4,10 @@ use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
-use crate::btcc::{
-    ProjectWorkOperationIdentity, ProjectWorkOperationKind, ResolvedProjectWorkScope, WorkView,
-};
+use butler_turn::btcc::ProjectWorkOperationIdentity;
+use butler_turn::btcc::ProjectWorkOperationKind;
+use butler_turn::btcc::ResolvedProjectWorkScope;
+use butler_turn::btcc::WorkView;
 
 use super::super::publication::{
     ProjectLedgerRecordKind, ProjectLedgerRecordOperation, ProjectLedgerRecordUpdate,
@@ -55,7 +56,7 @@ pub(super) fn identity_value(identity: &ProjectWorkOperationIdentity) -> Value {
 
 pub(super) fn identity_from_value(
     value: &Value,
-) -> Result<ProjectWorkOperationIdentity, crate::btcc::BtccError> {
+) -> Result<ProjectWorkOperationIdentity, butler_turn::btcc::BtccError> {
     let kind = match text(value, "kind")? {
         "mutation_call" => ProjectWorkOperationKind::MutationCall,
         "binding_revision" => ProjectWorkOperationKind::BindingRevision,
@@ -78,7 +79,7 @@ pub(super) fn identity_from_value(
 pub(super) fn request_digest(
     value: &Value,
     collation: &butler_core::locale::LocaleCollation,
-) -> Result<String, crate::btcc::BtccError> {
+) -> Result<String, butler_turn::btcc::BtccError> {
     let body = super::super::work_json::canonical(value, collation)
         .map_err(super::snapshot::read_error)?;
     Ok(format!("{:x}", Sha256::digest(body.as_bytes())))
@@ -86,8 +87,8 @@ pub(super) fn request_digest(
 
 pub(super) fn assert_material(
     view: &WorkView,
-    material: &crate::btcc::ProjectWorkCapturedMaterial,
-) -> Result<(), crate::btcc::BtccError> {
+    material: &butler_turn::btcc::ProjectWorkCapturedMaterial,
+) -> Result<(), butler_turn::btcc::BtccError> {
     if material.material_fingerprint.len() != 64
         || !material
             .material_fingerprint
@@ -97,7 +98,7 @@ pub(super) fn assert_material(
     {
         return Err(invalid("project_work_material_fingerprint_invalid"));
     }
-    let expected = crate::btcc::build_project_work_material_snapshot(
+    let expected = butler_turn::btcc::build_project_work_material_snapshot(
         view,
         material.material_fingerprint.clone(),
         material.material_snapshot.effect_watermark.clone(),
@@ -109,19 +110,22 @@ pub(super) fn assert_material(
     Ok(())
 }
 
-pub(super) fn typed<T: DeserializeOwned>(value: Value) -> Result<T, crate::btcc::BtccError> {
+pub(super) fn typed<T: DeserializeOwned>(value: Value) -> Result<T, butler_turn::btcc::BtccError> {
     serde_json::from_value(value)
         .map_err(|source| invalid("project_work_managed_record_invalid").with_source(source))
 }
 
-pub(super) fn text<'a>(value: &'a Value, name: &str) -> Result<&'a str, crate::btcc::BtccError> {
+pub(super) fn text<'a>(
+    value: &'a Value,
+    name: &str,
+) -> Result<&'a str, butler_turn::btcc::BtccError> {
     value
         .get(name)
         .and_then(Value::as_str)
         .ok_or_else(|| invalid("project_work_managed_record_invalid"))
 }
 
-pub(super) fn number(value: &Value, name: &str) -> Result<u64, crate::btcc::BtccError> {
+pub(super) fn number(value: &Value, name: &str) -> Result<u64, butler_turn::btcc::BtccError> {
     value
         .get(name)
         .and_then(Value::as_u64)
@@ -135,13 +139,13 @@ pub(super) struct ManifestViewInput<'a> {
     pub identity: &'a ProjectWorkOperationIdentity,
     pub binding_refs: Value,
     pub session_head: bool,
-    pub material: &'a crate::btcc::ProjectWorkCapturedMaterial,
+    pub material: &'a butler_turn::btcc::ProjectWorkCapturedMaterial,
     pub revisions: &'a Value,
 }
 
 pub(super) fn manifest_for_view(
     input: ManifestViewInput<'_>,
-) -> Result<Value, crate::btcc::BtccError> {
+) -> Result<Value, butler_turn::btcc::BtccError> {
     let ManifestViewInput {
         prior,
         view,
@@ -251,7 +255,7 @@ pub(super) fn work_update(
     manifest: &Value,
     create: bool,
     collation: &butler_core::locale::LocaleCollation,
-) -> Result<ProjectLedgerRecordUpdate, crate::btcc::BtccError> {
+) -> Result<ProjectLedgerRecordUpdate, butler_turn::btcc::BtccError> {
     let work_id = text(manifest, "workId")?;
     let status = text(manifest, "status")?;
     let official = match status {

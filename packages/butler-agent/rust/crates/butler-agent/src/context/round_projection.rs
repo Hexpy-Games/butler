@@ -10,14 +10,28 @@ use std::sync::Arc;
 
 use tokio::sync::Mutex;
 
-use crate::btcc::{
-    BoundedContinuationEnvelope, BoundedEnvelopeV1, BtccError, ContextCompactionRepository,
-    ContextMessages, ContextPort, ContextProjection, ContextProjectionError,
-    ContextProjectionInput, ContextProjectionRebaseIdentity, ContextSizingRequest,
-    GuidedInvocation, ModelRoundError, ModelRoundMessage, ModelRoundRequest, PortFuture,
-    ProviderBodyAdmissionPort, SteeringObservation, TurnContextProjection,
-    TurnContinuationBudgetPort, TurnSteeringPort, UsageAttribution,
-};
+use butler_turn::btcc::BoundedContinuationEnvelope;
+use butler_turn::btcc::BoundedEnvelopeV1;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::ContextCompactionRepository;
+use butler_turn::btcc::ContextMessages;
+use butler_turn::btcc::ContextPort;
+use butler_turn::btcc::ContextProjection;
+use butler_turn::btcc::ContextProjectionError;
+use butler_turn::btcc::ContextProjectionInput;
+use butler_turn::btcc::ContextProjectionRebaseIdentity;
+use butler_turn::btcc::ContextSizingRequest;
+use butler_turn::btcc::GuidedInvocation;
+use butler_turn::btcc::ModelRoundError;
+use butler_turn::btcc::ModelRoundMessage;
+use butler_turn::btcc::ModelRoundRequest;
+use butler_turn::btcc::PortFuture;
+use butler_turn::btcc::ProviderBodyAdmissionPort;
+use butler_turn::btcc::SteeringObservation;
+use butler_turn::btcc::TurnContextProjection;
+use butler_turn::btcc::TurnContinuationBudgetPort;
+use butler_turn::btcc::TurnSteeringPort;
+use butler_turn::btcc::UsageAttribution;
 
 use compaction::CompactionState;
 use serialization::{MessageProjection, messages_json, request_for_messages, request_json};
@@ -402,7 +416,7 @@ impl SummaryPort for RoundSummary<'_> {
 
 fn user_message(content: &str) -> ModelRoundMessage {
     ModelRoundMessage {
-        role: crate::btcc::ModelRoundRole::User,
+        role: butler_turn::btcc::ModelRoundRole::User,
         content: Arc::from(content),
         tool_call_id: None,
         name: None,
@@ -418,7 +432,7 @@ fn user_message(content: &str) -> ModelRoundMessage {
 
 fn summary_output_tokens(
     model: &str,
-    capacity: Option<&crate::btcc::ContextSizing<'_>>,
+    capacity: Option<&butler_turn::btcc::ContextSizing<'_>>,
     max_output_bytes: usize,
 ) -> Option<f64> {
     if model.starts_with("local/") && capacity.and_then(|value| value.max_output_tokens).is_none() {

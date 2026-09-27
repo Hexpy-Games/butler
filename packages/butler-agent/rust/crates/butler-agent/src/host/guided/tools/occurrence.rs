@@ -1,10 +1,10 @@
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use crate::btcc::ModelRoundToolCall;
 use butler_core::json::CanonicalKeyOrder;
 use butler_core::json::canonical_json;
 use butler_core::public_text::trim_js_whitespace;
+use butler_turn::btcc::ModelRoundToolCall;
 
 use super::GuidedToolError;
 use butler_core::tool_protocol::ToolName;

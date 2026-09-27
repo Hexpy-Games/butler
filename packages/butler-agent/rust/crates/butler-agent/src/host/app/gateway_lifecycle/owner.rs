@@ -5,7 +5,9 @@ use std::{path::PathBuf, sync::Arc};
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
 
-use crate::{btcc::BtccError, gateway::InboundQueue, operations::ServiceReadiness};
+use crate::gateway::InboundQueue;
+use crate::operations::ServiceReadiness;
+use butler_turn::btcc::BtccError;
 
 use super::ActiveAppEndpoint;
 use crate::host::service::configuration::{AppCapturedDependencies, AppServiceConfiguration};

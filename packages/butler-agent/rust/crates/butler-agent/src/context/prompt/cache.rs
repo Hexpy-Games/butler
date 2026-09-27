@@ -3,9 +3,9 @@ use serde::ser::{SerializeSeq, Serializer};
 use sha2::{Digest, Sha256};
 use std::io::Write;
 
-use crate::btcc::ContextSection;
 use crate::context::ContextCode;
 use crate::context::{ContextError, ContextResult};
+use butler_turn::btcc::ContextSection;
 
 pub(super) fn live_configuration_hash(sections: &[ContextSection]) -> ContextResult<String> {
     section_hash(sections)

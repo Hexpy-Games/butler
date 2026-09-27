@@ -13,7 +13,9 @@ use regress::{Flags, Regex};
 use serde_json::{Value, json};
 
 use super::{CapabilityError, CapabilityInvocation, arguments, evidence};
-use crate::workspace::{WorkspaceFiles, WorkspaceListInput, WorkspaceListOutcome};
+use butler_turn::workspace::WorkspaceFiles;
+use butler_turn::workspace::WorkspaceListInput;
+use butler_turn::workspace::WorkspaceListOutcome;
 
 pub(super) fn definition() -> Value {
     json!({
@@ -158,5 +160,5 @@ pub(super) async fn execute(
 }
 
 pub(super) fn utf8_prefix_end(text: &str, max_bytes: usize) -> usize {
-    crate::workspace::utf8_prefix_end(text, max_bytes)
+    butler_turn::workspace::utf8_prefix_end(text, max_bytes)
 }

@@ -5,15 +5,15 @@ use std::{sync::Arc, time::Duration};
 use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
 
-use crate::btcc::AdapterOutcome;
-use crate::btcc::EffectAdapter;
-use crate::btcc::EffectAdapterError;
-use crate::btcc::EffectFailure;
-use crate::btcc::EffectFuture;
-use crate::btcc::PlanBinding;
 use crate::host::ActiveAppEndpoint;
 use crate::host::GuidedTools;
 use butler_core::json::JsonDocument;
+use butler_turn::btcc::AdapterOutcome;
+use butler_turn::btcc::EffectAdapter;
+use butler_turn::btcc::EffectAdapterError;
+use butler_turn::btcc::EffectFailure;
+use butler_turn::btcc::EffectFuture;
+use butler_turn::btcc::PlanBinding;
 
 const CAPABILITY: &str = "start_topic_conversation";
 const SOURCE_TARGET: &str = "conversation-branch";
@@ -24,11 +24,11 @@ pub(super) fn supports(name: &str) -> bool {
 
 pub(super) fn prepare(
     owner: &GuidedTools,
-    call: &crate::btcc::ModelRoundToolCall,
+    call: &butler_turn::btcc::ModelRoundToolCall,
     _occurrence: &str,
-) -> Result<(String, Value, Arc<dyn EffectAdapter>), crate::btcc::BtccError> {
+) -> Result<(String, Value, Arc<dyn EffectAdapter>), butler_turn::btcc::BtccError> {
     if owner.binding.app_session_id.is_none() {
-        return Err(crate::btcc::BtccError::relayed(
+        return Err(butler_turn::btcc::BtccError::relayed(
             "branch_source_required",
             "This Turn is not bound to an App conversation.",
         ));
@@ -107,7 +107,7 @@ impl EffectAdapter for TopicConversationEffect {
         idempotency_key: &'a str,
         signal: &'a CancellationToken,
         attempts: i64,
-        _: Option<&'a crate::btcc::EffectError>,
+        _: Option<&'a butler_turn::btcc::EffectError>,
     ) -> EffectFuture<'a, AdapterOutcome> {
         Box::pin(async move {
             if attempts <= 0 {
@@ -125,9 +125,11 @@ impl EffectAdapter for TopicConversationEffect {
     }
 }
 
-fn normalize(input: &Map<String, Value>) -> Result<Map<String, Value>, crate::btcc::BtccError> {
+fn normalize(
+    input: &Map<String, Value>,
+) -> Result<Map<String, Value>, butler_turn::btcc::BtccError> {
     let invalid = || {
-        crate::btcc::BtccError::relayed(
+        butler_turn::btcc::BtccError::relayed(
             "branch_input_invalid",
             "Topic conversation inputs are invalid.",
         )

@@ -4,10 +4,12 @@ mod stable;
 
 use serde_json::{Map, Value};
 
-use crate::btcc::{
-    ModelRoundMessage, ModelRoundRequest, ModelRoundRole, ModelRoundTool, ToolChoice,
-};
 use crate::models::ModelProviderMetadata;
+use butler_turn::btcc::ModelRoundMessage;
+use butler_turn::btcc::ModelRoundRequest;
+use butler_turn::btcc::ModelRoundRole;
+use butler_turn::btcc::ModelRoundTool;
+use butler_turn::btcc::ToolChoice;
 
 use super::continuation::{self, LegacyPreparation, LegacyProjection};
 use super::contracts::{PromptCacheRetention, ProviderAuthMode, ProviderRequestConfig};
@@ -29,7 +31,7 @@ pub(super) fn body(
     request: &ModelRoundRequest<'_>,
     config: &ProviderRequestConfig,
     carrier: Carrier,
-) -> Result<Value, crate::btcc::ModelRoundError> {
+) -> Result<Value, butler_turn::btcc::ModelRoundError> {
     body_with_continuation(request, config, carrier).map(|(body, _)| body)
 }
 
@@ -53,7 +55,7 @@ pub(super) fn body_with_continuation(
     request: &ModelRoundRequest<'_>,
     config: &ProviderRequestConfig,
     carrier: Carrier,
-) -> Result<(Value, Option<LegacyProjection>), crate::btcc::ModelRoundError> {
+) -> Result<(Value, Option<LegacyProjection>), butler_turn::btcc::ModelRoundError> {
     let mut continuation = (matches!(carrier, Carrier::Responses)
         && config.metadata.provider_id == "openai")
         .then(|| continuation::prepare(request))
@@ -72,7 +74,7 @@ fn responses(
     request: &ModelRoundRequest<'_>,
     config: &ProviderRequestConfig,
     mut continuation: Option<&mut LegacyPreparation>,
-) -> Result<Value, crate::btcc::ModelRoundError> {
+) -> Result<Value, butler_turn::btcc::ModelRoundError> {
     let model = &config.wire_model;
     let mut body = Map::new();
     if let Some(max) = request
@@ -191,7 +193,9 @@ fn responses(
 
 pub(super) use stable::identity as provider_cache_identity;
 
-fn openai_input(request: &ModelRoundRequest<'_>) -> Result<Value, crate::btcc::ModelRoundError> {
+fn openai_input(
+    request: &ModelRoundRequest<'_>,
+) -> Result<Value, butler_turn::btcc::ModelRoundError> {
     if let Some(bounded) = request.bounded_continuation {
         let response = bounded
             .get("responseItemId")
@@ -268,8 +272,8 @@ fn openai_input(request: &ModelRoundRequest<'_>) -> Result<Value, crate::btcc::M
         .unwrap_or(Value::String(String::new())))
 }
 
-fn continuation_error(code: &'static str) -> crate::btcc::ModelRoundError {
-    crate::btcc::ModelRoundError::Integrity(crate::btcc::BtccError::relayed(code, code))
+fn continuation_error(code: &'static str) -> butler_turn::btcc::ModelRoundError {
+    butler_turn::btcc::ModelRoundError::Integrity(butler_turn::btcc::BtccError::relayed(code, code))
 }
 
 fn cache_scope(value: Option<&str>) -> String {
@@ -376,7 +380,7 @@ fn chat(
     metadata: &ModelProviderMetadata,
     model: &str,
     stream: bool,
-) -> Result<Value, crate::btcc::ModelRoundError> {
+) -> Result<Value, butler_turn::btcc::ModelRoundError> {
     let mut body = Map::new();
     if !matches!(metadata.provider_id.as_str(), "kimi" | "qwen") {
         body.insert("temperature".into(), 0.into());

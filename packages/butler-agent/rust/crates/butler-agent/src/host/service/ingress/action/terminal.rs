@@ -3,11 +3,12 @@
 use serde_json::{Map, Value, json};
 
 use super::{base_metadata, peer};
-use crate::btcc::{FinalArtifact, TurnOutcomeKind};
 use crate::gateway::ClaimedInboundEvent;
 use crate::host::service::ingress::IngressError;
 use crate::host::service::ingress::bind::Envelope;
-use crate::workspace::SessionTransportBinding;
+use butler_turn::btcc::FinalArtifact;
+use butler_turn::btcc::TurnOutcomeKind;
+use butler_turn::workspace::SessionTransportBinding;
 
 pub(super) struct Terminal<'a> {
     pub(super) text: &'a str,

@@ -4,9 +4,12 @@ use std::{path::PathBuf, sync::Arc};
 
 use serde_json::{Value, json};
 
-use crate::btcc::{EffectFailure, EffectFuture, PreparedWrite, RegisteredWritePort};
 use crate::capabilities::{Capabilities, CapabilityInvocation};
-use crate::workspace::WorkspaceReference;
+use butler_turn::btcc::EffectFailure;
+use butler_turn::btcc::EffectFuture;
+use butler_turn::btcc::PreparedWrite;
+use butler_turn::btcc::RegisteredWritePort;
+use butler_turn::workspace::WorkspaceReference;
 
 #[derive(Clone)]
 pub(crate) struct RegisteredWriteContext {

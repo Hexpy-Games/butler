@@ -4,13 +4,13 @@ use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::btcc::AdapterOutcome;
-use crate::btcc::EffectAdapter;
-use crate::btcc::EffectAdapterError;
-use crate::btcc::EffectFailure;
-use crate::btcc::EffectFuture;
-use crate::btcc::PlanBinding;
 use butler_core::json::JsonDocument;
+use butler_turn::btcc::AdapterOutcome;
+use butler_turn::btcc::EffectAdapter;
+use butler_turn::btcc::EffectAdapterError;
+use butler_turn::btcc::EffectFailure;
+use butler_turn::btcc::EffectFuture;
+use butler_turn::btcc::PlanBinding;
 
 use super::super::GuidedTools;
 
@@ -21,7 +21,7 @@ pub(super) fn supports(name: &str) -> bool {
 pub(super) fn prepare(
     owner: &GuidedTools,
     args: &Map<String, Value>,
-) -> Result<(String, Value, Arc<dyn EffectAdapter>), crate::btcc::BtccError> {
+) -> Result<(String, Value, Arc<dyn EffectAdapter>), butler_turn::btcc::BtccError> {
     let server_id = required_text(args, "server_id")?;
     let tool_name = required_text(args, "tool_name")?;
     let arguments = args
@@ -32,7 +32,7 @@ pub(super) fn prepare(
     let (server_id, tool_name, arguments) = owner
         .mcp_client
         .prepare_tool_call(server_id, tool_name, arguments)
-        .map_err(|error| crate::btcc::BtccError::relayed(error.code, error.message))?;
+        .map_err(|error| butler_turn::btcc::BtccError::relayed(error.code, error.message))?;
     let target = format!("mcp:{server_id}/{tool_name}");
     let input = json!({
         "server_id": server_id,
@@ -140,7 +140,7 @@ impl EffectAdapter for McpToolEffect {
         _: &'a str,
         _: &'a CancellationToken,
         attempts: i64,
-        _: Option<&'a crate::btcc::EffectError>,
+        _: Option<&'a butler_turn::btcc::EffectError>,
     ) -> EffectFuture<'a, AdapterOutcome> {
         Box::pin(async move {
             if attempts > 0 {
@@ -160,13 +160,13 @@ impl EffectAdapter for McpToolEffect {
 fn required_text<'a>(
     args: &'a Map<String, Value>,
     key: &str,
-) -> Result<&'a str, crate::btcc::BtccError> {
+) -> Result<&'a str, butler_turn::btcc::BtccError> {
     args.get(key)
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| {
-            crate::btcc::BtccError::relayed(
+            butler_turn::btcc::BtccError::relayed(
                 "mcp_tool_input_invalid",
                 "MCP tool inputs are invalid.",
             )

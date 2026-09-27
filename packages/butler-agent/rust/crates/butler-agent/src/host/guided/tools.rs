@@ -26,24 +26,31 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use crate::btcc::ToolJournalRepository;
-use crate::btcc::{
-    AuthorityLoopContinuation, BtccError, GuidedInvocation, ModelRoundMessage, ModelRoundTool,
-    ModelRoundToolCall, PortFuture, ToolExecutionError, ToolPort, ToolResult, TurnRecord,
-};
 use crate::capabilities::Capabilities;
 use crate::cognition::{ExactMemoryQuery, MemoryRecall};
 use crate::context::ConversationSessionReference;
-use crate::conversation::CanonicalMemoryReadBinding;
 use crate::host::{GuidedActivity, GuidedWorkTools};
-use crate::workspace::WorkspaceReference;
+use butler_turn::btcc::AuthorityLoopContinuation;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::GuidedInvocation;
+use butler_turn::btcc::ModelRoundMessage;
+use butler_turn::btcc::ModelRoundTool;
+use butler_turn::btcc::ModelRoundToolCall;
+use butler_turn::btcc::PortFuture;
+use butler_turn::btcc::ToolExecutionError;
+use butler_turn::btcc::ToolJournalRepository;
+use butler_turn::btcc::ToolPort;
+use butler_turn::btcc::ToolResult;
+use butler_turn::btcc::TurnRecord;
+use butler_turn::conversation::CanonicalMemoryReadBinding;
+use butler_turn::workspace::WorkspaceReference;
 use resume::ResumePool;
 use tokio::sync::OnceCell;
 
 pub(crate) struct GuidedToolBinding {
     pub turn_id: String,
     pub app_session_id: Option<String>,
-    pub access_mode: crate::btcc::AccessMode,
+    pub access_mode: butler_turn::btcc::AccessMode,
     pub enable_project_ledger_effects: bool,
     pub current_user_message: String,
     pub memory: CanonicalMemoryReadBinding,
@@ -79,9 +86,9 @@ pub(crate) struct GuidedTools {
     capabilities: Arc<Capabilities>,
     command: Arc<crate::host::guided::command::GuidedCommand>,
     tool_artifacts: Arc<crate::host::ToolArtifactReader>,
-    effects: Arc<crate::btcc::EffectService>,
-    authority: Arc<crate::btcc::PrincipalAuthority>,
-    effect_journal: Arc<dyn crate::btcc::EffectJournal>,
+    effects: Arc<butler_turn::btcc::EffectService>,
+    authority: Arc<butler_turn::btcc::PrincipalAuthority>,
+    effect_journal: Arc<dyn butler_turn::btcc::EffectJournal>,
     file_effects: crate::host::GuidedFileEffects,
     query: Arc<ExactMemoryQuery>,
     recall: Arc<MemoryRecall>,
@@ -94,15 +101,15 @@ pub(crate) struct GuidedTools {
     activity: Arc<GuidedActivity>,
     journal: Arc<ToolJournalRepository>,
     catalog: Arc<crate::host::GuidedCatalog>,
-    subsessions: Arc<crate::btcc::SubsessionService>,
+    subsessions: Arc<butler_turn::btcc::SubsessionService>,
     work_streams: Arc<crate::host::WorkStreams>,
     automations: Arc<crate::operations::AutomationService>,
     mcp_client: Arc<crate::mcp_client::McpClient>,
-    verified_image_payload: Arc<dyn crate::btcc::VerifiedImagePayloadPort>,
+    verified_image_payload: Arc<dyn butler_turn::btcc::VerifiedImagePayloadPort>,
     profile: Arc<crate::profile::ProfileService>,
     monitoring: Arc<MonitoringReaders>,
     attachment_context: Arc<crate::context::AttachmentContext>,
-    session_worktrees: crate::workspace::SessionWorktrees,
+    session_worktrees: butler_turn::workspace::SessionWorktrees,
     web_session: crate::web_access::WebSession,
     app_endpoint: Arc<crate::host::ActiveAppEndpoint>,
     binding: GuidedToolBinding,
@@ -149,9 +156,9 @@ impl GuidedTools {
         capabilities: Arc<Capabilities>,
         command: Arc<crate::host::guided::command::GuidedCommand>,
         tool_artifacts: Arc<crate::host::ToolArtifactReader>,
-        effects: Arc<crate::btcc::EffectService>,
-        effect_journal: Arc<dyn crate::btcc::EffectJournal>,
-        authority: Arc<crate::btcc::PrincipalAuthority>,
+        effects: Arc<butler_turn::btcc::EffectService>,
+        effect_journal: Arc<dyn butler_turn::btcc::EffectJournal>,
+        authority: Arc<butler_turn::btcc::PrincipalAuthority>,
         file_effects: crate::host::GuidedFileEffects,
         query: Arc<ExactMemoryQuery>,
         recall: Arc<MemoryRecall>,
@@ -164,15 +171,15 @@ impl GuidedTools {
         activity: Arc<GuidedActivity>,
         journal: Arc<ToolJournalRepository>,
         catalog: Arc<crate::host::GuidedCatalog>,
-        subsessions: Arc<crate::btcc::SubsessionService>,
+        subsessions: Arc<butler_turn::btcc::SubsessionService>,
         work_streams: Arc<crate::host::WorkStreams>,
         automations: Arc<crate::operations::AutomationService>,
         mcp_client: Arc<crate::mcp_client::McpClient>,
-        verified_image_payload: Arc<dyn crate::btcc::VerifiedImagePayloadPort>,
+        verified_image_payload: Arc<dyn butler_turn::btcc::VerifiedImagePayloadPort>,
         profile: Arc<crate::profile::ProfileService>,
         monitoring: Arc<MonitoringReaders>,
         attachment_context: Arc<crate::context::AttachmentContext>,
-        session_worktrees: crate::workspace::SessionWorktrees,
+        session_worktrees: butler_turn::workspace::SessionWorktrees,
         web_session: crate::web_access::WebSession,
         app_endpoint: Arc<crate::host::ActiveAppEndpoint>,
         restored: Option<&AuthorityLoopContinuation>,
@@ -390,7 +397,7 @@ impl ToolPort for GuidedTools {
         &'a self,
         turn: &'a TurnRecord,
         result: &'a ToolResult,
-        references: &'a crate::btcc::OperationResultMessageReferences,
+        references: &'a butler_turn::btcc::OperationResultMessageReferences,
     ) -> PortFuture<'a, ModelRoundMessage> {
         Box::pin(async move { message::result_message(self, turn, result, references) })
     }

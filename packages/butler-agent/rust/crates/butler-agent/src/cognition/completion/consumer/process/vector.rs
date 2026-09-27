@@ -4,20 +4,29 @@ use crate::cognition::CognitionCode;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{Input, canonical_path, resolve_input_generation};
-use crate::{
-    cognition::{
-        CognitionEmbeddingPort, CognitionError, CognitionResult, ConversationSourceNotice,
-        EmbeddingMode, EmbeddingRequest, EmbeddingRequestClass, MemoryGenerationHandle,
-        MemoryGenerationTarget, assert_conversation_source_current, assert_mutation_authority,
-        bind_native_embedding_identity, ensure_data_authority,
-        generation_vectors::{GenerationVectorRow, GenerationVectorStore, persisted_receipt},
-        graph::{ClaimedVectorUnit, GraphRepository},
-        resolve_generation,
-        sources::read_typed_record,
-    },
-    conversation::ConversationSourceReader,
-    coordination::{CognitionWaitClass, CognitionWriteAcquire},
-};
+use crate::cognition::CognitionEmbeddingPort;
+use crate::cognition::CognitionError;
+use crate::cognition::CognitionResult;
+use crate::cognition::ConversationSourceNotice;
+use crate::cognition::EmbeddingMode;
+use crate::cognition::EmbeddingRequest;
+use crate::cognition::EmbeddingRequestClass;
+use crate::cognition::MemoryGenerationHandle;
+use crate::cognition::MemoryGenerationTarget;
+use crate::cognition::assert_conversation_source_current;
+use crate::cognition::assert_mutation_authority;
+use crate::cognition::bind_native_embedding_identity;
+use crate::cognition::ensure_data_authority;
+use crate::cognition::generation_vectors::GenerationVectorRow;
+use crate::cognition::generation_vectors::GenerationVectorStore;
+use crate::cognition::generation_vectors::persisted_receipt;
+use crate::cognition::graph::ClaimedVectorUnit;
+use crate::cognition::graph::GraphRepository;
+use crate::cognition::resolve_generation;
+use crate::cognition::sources::read_typed_record;
+use crate::coordination::CognitionWaitClass;
+use crate::coordination::CognitionWriteAcquire;
+use butler_turn::conversation::ConversationSourceReader;
 use chrono::{DateTime, SecondsFormat, Utc};
 
 pub(super) async fn process(

@@ -1,10 +1,13 @@
 //! Explicit coverage of the first executable native slice, not full tool parity.
 
-use crate::btcc::{BtccError, GuidedCatalogSnapshot, GuidedPhaseSelection, ModelRoundTool};
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::GuidedCatalogSnapshot;
+use butler_turn::btcc::GuidedPhaseSelection;
+use butler_turn::btcc::ModelRoundTool;
 
 pub(super) fn with_worker_profile_choices(
     phase: &mut GuidedPhaseSelection,
-    profiles: &[crate::btcc::WorkerProfile],
+    profiles: &[butler_turn::btcc::WorkerProfile],
 ) -> Result<(), BtccError> {
     if profiles.is_empty() {
         return Ok(());

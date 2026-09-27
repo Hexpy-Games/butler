@@ -2,13 +2,14 @@
 
 use std::{collections::HashSet, sync::Arc};
 
-use crate::{
-    btcc::{SessionPlanObservation, SessionWorkRepository},
-    gateway::{
-        AppSessionWorkProgress, AppWorkProgress, ApplicationFuture, GatewayApplicationError,
-    },
-    project_ledger::{ProjectLedger, ProjectWorkPlanRead},
-};
+use crate::gateway::AppSessionWorkProgress;
+use crate::gateway::AppWorkProgress;
+use crate::gateway::ApplicationFuture;
+use crate::gateway::GatewayApplicationError;
+use crate::project_ledger::ProjectLedger;
+use crate::project_ledger::ProjectWorkPlanRead;
+use butler_turn::btcc::SessionPlanObservation;
+use butler_turn::btcc::SessionWorkRepository;
 
 pub(crate) struct AppSessionProgress {
     session_work: Arc<SessionWorkRepository>,

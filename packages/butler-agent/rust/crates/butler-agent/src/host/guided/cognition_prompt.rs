@@ -7,7 +7,7 @@ use crate::context::{
     CognitionPromptPort, ContextError, ContextFuture, ProjectCapsuleStatus, PromptProjectionInput,
     ScopedFeedbackProjection,
 };
-use crate::workspace::StoredSessionBinding;
+use butler_turn::workspace::StoredSessionBinding;
 
 pub(crate) struct CognitionPrompt {
     reader: Arc<CognitionPromptReader>,

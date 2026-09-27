@@ -18,7 +18,7 @@ pub(in crate::cognition) fn projection_hash(
 }
 
 pub(super) fn recovered_parts_hash(
-    message: &crate::conversation::ConversationMessageWithParts,
+    message: &butler_turn::conversation::ConversationMessageWithParts,
 ) -> Result<String, CognitionSourceError> {
     let mut json = String::from("[");
     for (index, part) in message.parts.iter().enumerate() {

@@ -4,9 +4,6 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 
-use crate::btcc::AuthorityDecisionInput;
-use crate::btcc::AuthorityError;
-use crate::btcc::PrincipalAuthority;
 use crate::gateway::AppAuthorityDecision;
 use crate::gateway::AppAuthorityDecisionInput;
 use crate::gateway::AppAuthorityHandoff;
@@ -15,6 +12,9 @@ use crate::gateway::ApplicationFuture;
 use crate::gateway::GatewayApplicationError;
 use crate::gateway::InboundQueue;
 use butler_core::json::JsonDocument;
+use butler_turn::btcc::AuthorityDecisionInput;
+use butler_turn::btcc::AuthorityError;
+use butler_turn::btcc::PrincipalAuthority;
 
 #[derive(Clone)]
 pub(crate) struct AuthorityHandoff {

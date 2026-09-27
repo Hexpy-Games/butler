@@ -7,8 +7,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::btcc::ModelRoundError;
 use crate::models::{PromptUsageMetricInput, PromptUsageMetricSink, ProviderClock};
+use butler_turn::btcc::ModelRoundError;
 
 pub(crate) struct PromptUsageMetrics {
     data_root: PathBuf,

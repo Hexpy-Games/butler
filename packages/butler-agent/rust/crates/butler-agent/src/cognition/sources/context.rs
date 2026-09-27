@@ -1,8 +1,9 @@
-use crate::conversation::{
-    ConversationOriginKind, ConversationPartKind, ConversationRole, ConversationSourceReader,
-    ConversationStatus,
-};
 use butler_core::segmentation::grapheme_segments;
+use butler_turn::conversation::ConversationOriginKind;
+use butler_turn::conversation::ConversationPartKind;
+use butler_turn::conversation::ConversationRole;
+use butler_turn::conversation::ConversationSourceReader;
+use butler_turn::conversation::ConversationStatus;
 
 use super::types::{CognitionSourceError, CognitionSourceRow, PriorPublicContext};
 use crate::cognition::CognitionCode;
@@ -83,7 +84,7 @@ pub(crate) fn read_prior_public_context(
 }
 
 fn tail_within_bytes(
-    message: &crate::conversation::ConversationMessageWithParts,
+    message: &butler_turn::conversation::ConversationMessageWithParts,
     max_bytes: usize,
 ) -> String {
     let text = conversation_text(message);
@@ -99,7 +100,7 @@ fn tail_within_bytes(
     text[start..].to_owned()
 }
 
-fn conversation_text(message: &crate::conversation::ConversationMessageWithParts) -> String {
+fn conversation_text(message: &butler_turn::conversation::ConversationMessageWithParts) -> String {
     let mut output = String::new();
     for text in message.parts.iter().filter_map(|part| {
         if part.kind != ConversationPartKind::Text {

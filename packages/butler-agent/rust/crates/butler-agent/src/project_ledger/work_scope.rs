@@ -1,6 +1,6 @@
 //! Resolve and initialize the canonical Ledger selected by a live session binding.
 
-use crate::btcc::ResolvedProjectWorkScope;
+use butler_turn::btcc::ResolvedProjectWorkScope;
 
 use super::publication::ProjectWorkPublicationError;
 use super::{ProjectLedger, ProjectLedgerReadError, active_reference};

@@ -2,10 +2,15 @@ use std::collections::HashMap;
 
 use serde_json::{Value, json};
 
-use crate::btcc::{
-    BtccError, Checkpoint, CheckpointCommand, DurableWorkStatus as WorkStatus,
-    ProjectWorkOperationIdentity, ReplacePlanCommand, WorkPlan, WorkStage, WorkView,
-};
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::Checkpoint;
+use butler_turn::btcc::CheckpointCommand;
+use butler_turn::btcc::DurableWorkStatus as WorkStatus;
+use butler_turn::btcc::ProjectWorkOperationIdentity;
+use butler_turn::btcc::ReplacePlanCommand;
+use butler_turn::btcc::WorkPlan;
+use butler_turn::btcc::WorkStage;
+use butler_turn::btcc::WorkView;
 
 use super::super::publication::ProjectLedgerRecordUpdate;
 use super::codec::{self, Snapshot};
@@ -51,7 +56,7 @@ impl ProjectWorkRepository {
                 if original.turn_id != command.input.scope.turn_id { return Err(invalid("project_work_origin_turn_mismatch")); }
                 let (binding_id, child) = binding_child(&command.input.scope.turn_id, &command.input.scope.session_id, &work_id, 1, &prepare_identity, &at);
                 let view = opening_view(&repo, &command.input.scope, &command.input.objective, &work_id, &original.message_id, &at);
-                let material = repo.shared.projection.capture_work_material(crate::btcc::ProjectWorkMaterialInput {
+                let material = repo.shared.projection.capture_work_material(butler_turn::btcc::ProjectWorkMaterialInput {
                     candidate: view.clone(),
                 }).await?;
                 codec::assert_material(&view, &material)?;
@@ -190,7 +195,8 @@ impl ProjectWorkRepository {
         view.objective = command.input.objective.clone();
         view.status = status_for_progress(&command.action_progress);
         view.current_stage = Some(WorkStage::Planning);
-        view.allowed_next_stages = crate::btcc::allowed_next_work_stages(Some(WorkStage::Planning));
+        view.allowed_next_stages =
+            butler_turn::btcc::allowed_next_work_stages(Some(WorkStage::Planning));
         view.action_progress = command.action_progress.clone();
         view.current_plan = Some(plan);
         view.latest_checkpoint = Some(checkpoint);
@@ -262,7 +268,7 @@ impl ProjectWorkRepository {
                     view.status = status_for_progress(&command.action_progress);
                     view.current_stage = Some(command.stage);
                     view.allowed_next_stages =
-                        crate::btcc::allowed_next_work_stages(Some(command.stage));
+                        butler_turn::btcc::allowed_next_work_stages(Some(command.stage));
                     view.action_progress = command.action_progress.clone();
                     view.latest_checkpoint = Some(checkpoint);
                     view.updated_at = at;
@@ -334,16 +340,16 @@ pub(super) struct CheckpointChildInput<'a> {
     pub revision: u64,
     pub stage: WorkStage,
     pub plan_id: &'a str,
-    pub progress: &'a [crate::btcc::ActionProgress],
+    pub progress: &'a [butler_turn::btcc::ActionProgress],
     pub summary: &'a str,
     pub next: &'a str,
     pub checkpoint_identity: &'a str,
 }
 
-pub(super) fn status_for_progress(progress: &[crate::btcc::ActionProgress]) -> WorkStatus {
+pub(super) fn status_for_progress(progress: &[butler_turn::btcc::ActionProgress]) -> WorkStatus {
     if progress
         .iter()
-        .any(|item| item.status == crate::btcc::ActionStatus::Blocked)
+        .any(|item| item.status == butler_turn::btcc::ActionStatus::Blocked)
     {
         WorkStatus::Blocked
     } else {

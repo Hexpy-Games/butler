@@ -9,9 +9,12 @@ pub(super) use publication::publish_work_result;
 
 use serde_json::{Value, json};
 
-use crate::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 use crate::capabilities::CapabilityInvocation;
 use butler_core::json::JsonDocument;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::GuidedInvocation;
+use butler_turn::btcc::ModelRoundToolCall;
+use butler_turn::btcc::ToolExecutionError;
 
 use super::GuidedTools;
 use crate::host::GuidedWorkTools;
@@ -80,7 +83,7 @@ pub(super) async fn execute(
         let result = owner
             .subsessions
             .delegate_steward(
-                crate::btcc::StewardDelegationRequest {
+                butler_turn::btcc::StewardDelegationRequest {
                     parent_session_id: owner.binding.source_session_id.clone(),
                     parent_turn_id: owner.binding.turn_id.clone(),
                     anchor_message_id: invocation.turn.original_message_id.clone(),
@@ -93,9 +96,9 @@ pub(super) async fn execute(
                     model_ref: owner.binding.model_ref.clone(),
                     reasoning_effort: owner.binding.reasoning_effort.clone(),
                     access_mode: match owner.binding.access_mode {
-                        crate::btcc::AccessMode::FullAccess => "full_access",
-                        crate::btcc::AccessMode::AskFirst => "ask_first",
-                        crate::btcc::AccessMode::ReadOnly => "read_only",
+                        butler_turn::btcc::AccessMode::FullAccess => "full_access",
+                        butler_turn::btcc::AccessMode::AskFirst => "ask_first",
+                        butler_turn::btcc::AccessMode::ReadOnly => "read_only",
                     }
                     .into(),
                 },
@@ -191,7 +194,7 @@ pub(super) async fn execute(
         let result = owner
             .subsessions
             .delegate_worker(
-                crate::btcc::WorkerDelegationRequest {
+                butler_turn::btcc::WorkerDelegationRequest {
                     parent_session_id: owner.binding.source_session_id.clone(),
                     parent_turn_id: owner.binding.turn_id.clone(),
                     anchor_message_id: invocation.turn.original_message_id.clone(),
@@ -211,9 +214,9 @@ pub(super) async fn execute(
                         .and_then(Value::as_str)
                         .map(str::to_owned),
                     access_mode: match owner.binding.access_mode {
-                        crate::btcc::AccessMode::FullAccess => "full_access",
-                        crate::btcc::AccessMode::AskFirst => "ask_first",
-                        crate::btcc::AccessMode::ReadOnly => "read_only",
+                        butler_turn::btcc::AccessMode::FullAccess => "full_access",
+                        butler_turn::btcc::AccessMode::AskFirst => "ask_first",
+                        butler_turn::btcc::AccessMode::ReadOnly => "read_only",
                     }
                     .into(),
                 },
@@ -254,7 +257,7 @@ pub(super) async fn execute(
             })?;
         let result = owner
             .subsessions
-            .steer(crate::btcc::SubsessionDirectionRequest {
+            .steer(butler_turn::btcc::SubsessionDirectionRequest {
                 parent_session_id: owner.binding.source_session_id.clone(),
                 parent_turn_id: owner.binding.turn_id.clone(),
                 source_message_id: invocation.turn.original_message_id.clone(),
@@ -275,14 +278,14 @@ pub(super) async fn execute(
                     .map(str::to_owned),
                 instruction: instruction.into(),
                 child_role: if call.name == ToolName::SteerWorker {
-                    crate::workspace::SessionRole::Worker
+                    butler_turn::workspace::SessionRole::Worker
                 } else {
-                    crate::workspace::SessionRole::Steward
+                    butler_turn::workspace::SessionRole::Steward
                 },
                 access_mode: match owner.binding.access_mode {
-                    crate::btcc::AccessMode::FullAccess => "full_access",
-                    crate::btcc::AccessMode::AskFirst => "ask_first",
-                    crate::btcc::AccessMode::ReadOnly => "read_only",
+                    butler_turn::btcc::AccessMode::FullAccess => "full_access",
+                    butler_turn::btcc::AccessMode::AskFirst => "ask_first",
+                    butler_turn::btcc::AccessMode::ReadOnly => "read_only",
                 }
                 .into(),
             })
@@ -293,7 +296,7 @@ pub(super) async fn execute(
     if call.name == ToolName::CancelSteward {
         let result = owner
             .subsessions
-            .cancel(crate::btcc::SubsessionCancelRequest {
+            .cancel(butler_turn::btcc::SubsessionCancelRequest {
                 parent_session_id: owner.binding.source_session_id.clone(),
                 parent_turn_id: owner.binding.turn_id.clone(),
                 source_message_id: invocation.turn.original_message_id.clone(),
@@ -307,7 +310,7 @@ pub(super) async fn execute(
                     .get("safe_title")
                     .and_then(Value::as_str)
                     .map(str::to_owned),
-                child_role: crate::workspace::SessionRole::Steward,
+                child_role: butler_turn::workspace::SessionRole::Steward,
             })
             .await
             .map_err(ToolExecutionError::Integrity)?;
@@ -371,7 +374,7 @@ pub(super) async fn execute(
             .binding
             .workspace_reference
             .as_ref()
-            .map(crate::workspace::WorkspaceReference::get)
+            .map(butler_turn::workspace::WorkspaceReference::get)
             .transpose()
             .map_err(|error| {
                 ToolExecutionError::Integrity(BtccError::relayed(

@@ -1,6 +1,8 @@
 use serde_json::Value;
 
-use crate::btcc::{ModelRoundMessage, ModelRoundRequest, ModelRoundRole};
+use butler_turn::btcc::ModelRoundMessage;
+use butler_turn::btcc::ModelRoundRequest;
+use butler_turn::btcc::ModelRoundRole;
 
 pub(super) struct LegacyPreparation {
     pub request_items: Value,
@@ -15,7 +17,7 @@ pub(super) struct LegacyProjection {
 
 pub(super) fn prepare(
     request: &ModelRoundRequest<'_>,
-) -> Result<Option<LegacyPreparation>, crate::btcc::ModelRoundError> {
+) -> Result<Option<LegacyPreparation>, butler_turn::btcc::ModelRoundError> {
     if request.bounded_continuation.is_some() {
         return Ok(None);
     }
@@ -63,7 +65,7 @@ pub(super) fn prepare(
     }))
 }
 
-fn sent(previous: &Value, field: &str) -> Result<i64, crate::btcc::ModelRoundError> {
+fn sent(previous: &Value, field: &str) -> Result<i64, butler_turn::btcc::ModelRoundError> {
     previous
         .pointer(&format!("/sent/{field}"))
         .and_then(Value::as_f64)
@@ -127,6 +129,6 @@ pub(super) fn successful(projection: LegacyProjection, response: &Value) -> (Vec
     (items, projection.sent_tools, projection.sent_users)
 }
 
-fn invalid(code: &'static str) -> crate::btcc::ModelRoundError {
-    crate::btcc::ModelRoundError::Integrity(crate::btcc::BtccError::relayed(code, code))
+fn invalid(code: &'static str) -> butler_turn::btcc::ModelRoundError {
+    butler_turn::btcc::ModelRoundError::Integrity(butler_turn::btcc::BtccError::relayed(code, code))
 }

@@ -1,7 +1,8 @@
-use crate::conversation::{
-    ConversationPartKind, ConversationProviderShape, ConversationRole, ConversationStatus,
-    TurnOutcomeCapsule,
-};
+use butler_turn::conversation::ConversationPartKind;
+use butler_turn::conversation::ConversationProviderShape;
+use butler_turn::conversation::ConversationRole;
+use butler_turn::conversation::ConversationStatus;
+use butler_turn::conversation::TurnOutcomeCapsule;
 use serde::Serialize;
 use std::sync::Arc;
 

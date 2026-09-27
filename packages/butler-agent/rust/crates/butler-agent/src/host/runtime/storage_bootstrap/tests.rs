@@ -3,10 +3,12 @@ use std::sync::Arc;
 use rusqlite::Connection;
 
 use super::*;
-use crate::btcc::{
-    BtccStorage, BtccStorageConfig, ProcessLiveness, RuntimeOwnerIdentity, StorageActivation,
-    StorageProfile,
-};
+use butler_turn::btcc::BtccStorage;
+use butler_turn::btcc::BtccStorageConfig;
+use butler_turn::btcc::ProcessLiveness;
+use butler_turn::btcc::RuntimeOwnerIdentity;
+use butler_turn::btcc::StorageActivation;
+use butler_turn::btcc::StorageProfile;
 
 struct LocalLiveness;
 

@@ -143,8 +143,8 @@ impl From<crate::coordination::CoordinationError> for CognitionError {
     }
 }
 
-impl From<crate::conversation::ConversationError> for CognitionError {
-    fn from(error: crate::conversation::ConversationError) -> Self {
+impl From<butler_turn::conversation::ConversationError> for CognitionError {
+    fn from(error: butler_turn::conversation::ConversationError) -> Self {
         Self::port(error.code(), error.message(), error)
     }
 }

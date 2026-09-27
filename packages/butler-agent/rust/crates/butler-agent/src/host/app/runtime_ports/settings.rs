@@ -6,15 +6,16 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use crate::{
-    btcc::ReasoningEffort as BtccReasoningEffort,
-    gateway::{
-        AppModelFallbackFacts, AppModelMetadata, AppSettingsFacts, AppSettingsFactsProvider,
-        GatewayApplicationError,
-    },
-    models::{ModelConfiguration, ModelProviderMetadata, ReasoningEffort as ModelReasoningEffort},
-    profile::ProfileService,
-};
+use crate::gateway::AppModelFallbackFacts;
+use crate::gateway::AppModelMetadata;
+use crate::gateway::AppSettingsFacts;
+use crate::gateway::AppSettingsFactsProvider;
+use crate::gateway::GatewayApplicationError;
+use crate::models::ModelConfiguration;
+use crate::models::ModelProviderMetadata;
+use crate::models::ReasoningEffort as ModelReasoningEffort;
+use crate::profile::ProfileService;
+use butler_turn::btcc::ReasoningEffort as BtccReasoningEffort;
 
 pub(crate) struct AppSettingsFactsAdapter {
     configuration: Arc<ModelConfiguration>,

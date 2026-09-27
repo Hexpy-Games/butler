@@ -2,7 +2,7 @@ use futures_util::StreamExt;
 use reqwest::Response;
 use serde_json::{Map, Value};
 
-use crate::btcc::ProviderRequestError;
+use butler_turn::btcc::ProviderRequestError;
 
 use super::super::provider::ProviderClock;
 use super::super::{diagnostics, request_guard::RequestProgress};
@@ -127,7 +127,7 @@ pub(super) async fn codex(
     provider: &str,
     api: &str,
     progress: RequestProgress,
-    observer: Option<&dyn crate::btcc::ProviderStreamObserver>,
+    observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
     clock: &dyn ProviderClock,
 ) -> Result<Value, Box<ProviderRequestError>> {
     let mut state = CodexState::new(clock.now_epoch_millis());
@@ -168,7 +168,7 @@ impl CodexState {
     fn event(
         &mut self,
         event: &Value,
-        observer: Option<&dyn crate::btcc::ProviderStreamObserver>,
+        observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
         provider: &str,
         api: &str,
     ) -> Result<Option<Value>, Box<ProviderRequestError>> {
@@ -240,7 +240,11 @@ impl CodexState {
         self.sequence += 1;
         self.sequence
     }
-    fn emit(&self, observer: Option<&dyn crate::btcc::ProviderStreamObserver>, projection: &Value) {
+    fn emit(
+        &self,
+        observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
+        projection: &Value,
+    ) {
         if let Some(observer) = observer {
             observer.event(projection);
         }

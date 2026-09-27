@@ -5,12 +5,12 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::btcc::AdapterOutcome;
-use crate::btcc::EffectAdapter;
-use crate::btcc::EffectFailure;
-use crate::btcc::EffectFuture;
-use crate::btcc::PlanBinding;
 use butler_core::json::JsonDocument;
+use butler_turn::btcc::AdapterOutcome;
+use butler_turn::btcc::EffectAdapter;
+use butler_turn::btcc::EffectFailure;
+use butler_turn::btcc::EffectFuture;
+use butler_turn::btcc::PlanBinding;
 
 use super::GuidedTools;
 
@@ -20,15 +20,15 @@ const TARGET: &str = "butler-agent-native";
 pub(super) fn prepare(
     owner: &GuidedTools,
     args: &serde_json::Map<String, Value>,
-) -> Result<(String, Value, Arc<dyn EffectAdapter>), crate::btcc::BtccError> {
+) -> Result<(String, Value, Arc<dyn EffectAdapter>), butler_turn::btcc::BtccError> {
     if owner.binding.app_session_id.is_none() {
-        return Err(crate::btcc::BtccError::relayed(
+        return Err(butler_turn::btcc::BtccError::relayed(
             "restart_app_turn_required",
             "A delivered App Turn is required for a service restart request.",
         ));
     }
     if !args.is_empty() {
-        return Err(crate::btcc::BtccError::relayed(
+        return Err(butler_turn::btcc::BtccError::relayed(
             "restart_request_invalid",
             "This restart request takes no arguments.",
         ));
@@ -83,7 +83,7 @@ impl EffectAdapter for RestartRequest {
         key: &'a str,
         signal: &'a CancellationToken,
         _: i64,
-        _: Option<&'a crate::btcc::EffectError>,
+        _: Option<&'a butler_turn::btcc::EffectError>,
     ) -> EffectFuture<'a, AdapterOutcome> {
         Box::pin(async move { pending(key, signal) })
     }
@@ -92,7 +92,7 @@ impl EffectAdapter for RestartRequest {
 fn pending(key: &str, signal: &CancellationToken) -> Result<AdapterOutcome, EffectFailure> {
     if signal.is_cancelled() {
         return Ok(AdapterOutcome::NotApplied(
-            crate::btcc::EffectAdapterError::new(
+            butler_turn::btcc::EffectAdapterError::new(
                 "restart_request_cancelled",
                 "Restart was not requested.",
             ),

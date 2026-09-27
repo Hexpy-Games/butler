@@ -79,7 +79,7 @@ pub(crate) struct MessageSendRequest {
     pub reasoning_effort: Option<Value>,
     pub access_mode: Option<Value>,
     pub plan_mode: Option<Value>,
-    pub subsession_result: Option<crate::btcc::SubsessionResultContext>,
+    pub subsession_result: Option<butler_turn::btcc::SubsessionResultContext>,
 }
 
 #[derive(Clone, Debug)]

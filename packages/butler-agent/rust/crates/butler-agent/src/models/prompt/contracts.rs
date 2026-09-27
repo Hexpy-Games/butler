@@ -3,7 +3,9 @@ use std::{future::Future, pin::Pin};
 use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
 
-use crate::btcc::{AttachmentRef, ModelRoundError, ProviderStreamObserver};
+use butler_turn::btcc::AttachmentRef;
+use butler_turn::btcc::ModelRoundError;
+use butler_turn::btcc::ProviderStreamObserver;
 
 use super::super::{PromptCacheRetention, ReasoningEffort};
 

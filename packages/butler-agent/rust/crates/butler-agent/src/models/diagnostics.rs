@@ -5,7 +5,7 @@ use regex::Regex;
 use reqwest::header::HeaderMap;
 use serde_json::{Map, Value};
 
-use crate::btcc::ProviderRequestError;
+use butler_turn::btcc::ProviderRequestError;
 
 pub(super) fn cancelled(provider: &str, api: &str) -> ProviderRequestError {
     error(

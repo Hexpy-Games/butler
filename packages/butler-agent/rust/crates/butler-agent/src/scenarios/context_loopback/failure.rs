@@ -1,5 +1,5 @@
 use super::*;
-use crate::btcc::ContextProjectionError;
+use butler_turn::btcc::ContextProjectionError;
 
 #[tokio::test]
 async fn summary_failure_drops_turn_owner_without_saving() {
@@ -8,10 +8,10 @@ async fn summary_failure_drops_turn_owner_without_saving() {
         .await
         .unwrap();
     let repositories = Arc::new(BtccRepositories::new(storage.clone(), None));
-    let mut turn = crate::btcc::agent_loop::test_data::turn(None, "safe_fallback");
+    let mut turn = butler_turn::btcc::agent_loop::test_data::turn(None, "safe_fallback");
     turn.model_selection = json!({"provider":"openai","model":"gpt-5.5",
         "reasoningEffort":"medium","controls":{},"controlsHash":"hash"});
-    let claim = crate::btcc::agent_loop::test_data::claim();
+    let claim = butler_turn::btcc::agent_loop::test_data::claim();
     let (endpoint, bodies, serving) = server(true).await;
     let model = provider(endpoint);
     let progress = Fixture::new([]);
@@ -20,11 +20,11 @@ async fn summary_failure_drops_turn_owner_without_saving() {
         TurnModelExecutionFactory::new(repositories, ModelRouteRetryConfig::new(0.0));
     let execution = execution_factory
         .create(ModelExecutionInput {
-            source_revision: crate::btcc::model_route::GuidedSourceRevision::from_turn(&turn),
+            source_revision: butler_turn::btcc::model_route::GuidedSourceRevision::from_turn(&turn),
             turn: &turn,
             claim: &claim,
             progress: progress.as_ref(),
-            model_round_observer: &crate::btcc::NOOP_MODEL_ROUND_OBSERVER,
+            model_round_observer: &butler_turn::btcc::NOOP_MODEL_ROUND_OBSERVER,
             cancellation: cancellation.clone(),
             base: model.as_ref(),
         })

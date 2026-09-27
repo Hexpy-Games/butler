@@ -1,9 +1,10 @@
 use super::*;
-use crate::btcc::AdmissionContextPort;
-use crate::conversation::{
-    AppendMessageInput, BeginTurnInput, ConversationOriginKind, ConversationRole,
-};
-use crate::workspace::SessionRole as WorkspaceRole;
+use butler_turn::btcc::AdmissionContextPort;
+use butler_turn::conversation::AppendMessageInput;
+use butler_turn::conversation::BeginTurnInput;
+use butler_turn::conversation::ConversationOriginKind;
+use butler_turn::conversation::ConversationRole;
+use butler_turn::workspace::SessionRole as WorkspaceRole;
 
 #[tokio::test]
 async fn rich_ports_and_real_recent_store_feed_the_admission_adapter() {

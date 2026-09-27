@@ -5,17 +5,22 @@ mod hot;
 use std::{future::Future, path::PathBuf, sync::Arc, time::Duration};
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    cognition::{
-        CognitionError, CognitionPathEnvironment, CognitionResult, LegacyIndexService,
-        LegacySessionOffsets, append_legacy_session_diagnostic, ensure_data_authority,
-        index_legacy_transcript_query, normalize_session_id_for_storage, prepare_legacy_transcript,
-        read_legacy_new_lines,
-    },
-    coordination::CognitionWriteCoordinator,
-    models::ModelProvider,
-    workspace::{SessionBindingStore, SessionLifecycleState, SessionRole},
-};
+use crate::cognition::CognitionError;
+use crate::cognition::CognitionPathEnvironment;
+use crate::cognition::CognitionResult;
+use crate::cognition::LegacyIndexService;
+use crate::cognition::LegacySessionOffsets;
+use crate::cognition::append_legacy_session_diagnostic;
+use crate::cognition::ensure_data_authority;
+use crate::cognition::index_legacy_transcript_query;
+use crate::cognition::normalize_session_id_for_storage;
+use crate::cognition::prepare_legacy_transcript;
+use crate::cognition::read_legacy_new_lines;
+use crate::coordination::CognitionWriteCoordinator;
+use crate::models::ModelProvider;
+use butler_turn::workspace::SessionBindingStore;
+use butler_turn::workspace::SessionLifecycleState;
+use butler_turn::workspace::SessionRole;
 
 use crate::cognition::CognitionCode;
 use crate::host::EmbeddingOwner;

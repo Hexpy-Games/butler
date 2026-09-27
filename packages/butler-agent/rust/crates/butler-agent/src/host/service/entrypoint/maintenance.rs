@@ -7,16 +7,16 @@ use std::time::Duration;
 use tokio::{sync::oneshot, time::MissedTickBehavior};
 
 use super::support::{deliver_parent_results, failure};
-use crate::btcc::BtccError;
 use crate::host::ProgressPublisher;
 use crate::host::app::gateway_lifecycle::ActiveAppEndpoint;
+use butler_turn::btcc::BtccError;
 
 const SERVICE_MAINTENANCE_INTERVAL: Duration = Duration::from_millis(500);
 
 pub(super) async fn run_service_maintenance(
     progress: Arc<ProgressPublisher>,
     parent_client: reqwest::Client,
-    subsessions: crate::btcc::SqliteSubsessionRepository,
+    subsessions: butler_turn::btcc::SqliteSubsessionRepository,
     app_endpoint: ActiveAppEndpoint,
     mut stop: oneshot::Receiver<()>,
 ) -> Result<(), BtccError> {

@@ -4,15 +4,15 @@ use butler_core::tool_protocol::ToolName;
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
-use crate::btcc::AdapterOutcome;
-use crate::btcc::BtccError;
-use crate::btcc::EffectAdapter;
-use crate::btcc::EffectAdapterError;
-use crate::btcc::EffectFailure;
-use crate::btcc::EffectFuture;
-use crate::btcc::PlanBinding;
 use crate::operations::AutomationService;
 use butler_core::json::JsonDocument;
+use butler_turn::btcc::AdapterOutcome;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::EffectAdapter;
+use butler_turn::btcc::EffectAdapterError;
+use butler_turn::btcc::EffectFailure;
+use butler_turn::btcc::EffectFuture;
+use butler_turn::btcc::PlanBinding;
 
 use super::super::GuidedTools;
 
@@ -25,7 +25,7 @@ pub(super) fn supports(name: &str) -> bool {
 
 pub(super) fn prepare(
     owner: &GuidedTools,
-    call: &crate::btcc::ModelRoundToolCall,
+    call: &butler_turn::btcc::ModelRoundToolCall,
     occurrence: &str,
 ) -> Result<(String, Value, Arc<dyn EffectAdapter>), BtccError> {
     let target = match call.name.as_str() {
@@ -152,7 +152,7 @@ impl EffectAdapter for AutomationEffect {
         _: &'a str,
         _: &'a CancellationToken,
         attempts: i64,
-        _: Option<&'a crate::btcc::EffectError>,
+        _: Option<&'a butler_turn::btcc::EffectError>,
     ) -> EffectFuture<'a, AdapterOutcome> {
         Box::pin(async move {
             if attempts == 0 {

@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::workspace::safe_workspace_path;
+use butler_turn::workspace::safe_workspace_path;
 
 fn now_iso() -> String {
     DateTime::<Utc>::from(std::time::SystemTime::now())
@@ -121,7 +121,7 @@ pub(super) fn grep_limitation(error: &str) -> Vec<Value> {
 }
 
 pub(super) fn grep_capability(
-    matches: &[crate::workspace::GrepMatch],
+    matches: &[butler_turn::workspace::GrepMatch],
     truncated: bool,
     files_searched: usize,
     files_skipped: usize,

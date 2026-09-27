@@ -11,8 +11,8 @@ pub(crate) use types::*;
 
 use std::sync::Arc;
 
-use crate::conversation::AgentConversationStore;
 use crate::models::{ModelCatalog, ModelConfiguration};
+use butler_turn::conversation::AgentConversationStore;
 
 use super::{ContextBudgetEnvironment, ContextBudgetOwner};
 

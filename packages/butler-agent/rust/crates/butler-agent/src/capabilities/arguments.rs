@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use serde_json::{Map, Value};
 
 use super::{CapabilityError, CapabilityInvocation};
-use crate::workspace::MutationContext;
+use butler_turn::workspace::MutationContext;
 
 pub(super) fn parse(call: &Value) -> Result<Cow<'_, Map<String, Value>>, (&'static str, String)> {
     let raw = ["arguments", "input", "args"]

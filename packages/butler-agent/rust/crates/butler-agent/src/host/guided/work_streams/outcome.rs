@@ -1,7 +1,8 @@
 use serde_json::{Value, json};
 
 use super::{storage::Store, support::*};
-use crate::{btcc::BtccError, gateway::AppWorkStreamTurnOutcome};
+use crate::gateway::AppWorkStreamTurnOutcome;
+use butler_turn::btcc::BtccError;
 
 impl Store {
     pub(super) fn reconcile_turn(

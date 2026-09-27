@@ -10,7 +10,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::{GraphRegistration, db_error, index, invalidation, jobs};
 use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult, sources, sources::TypedPlan};
-use crate::conversation::ConversationSourceReader;
+use butler_turn::conversation::ConversationSourceReader;
 
 #[derive(Clone, Copy)]
 pub(in crate::cognition) struct TypedRegistrationInput<'a> {

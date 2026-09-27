@@ -15,9 +15,11 @@ use super::{
     },
     summary::{SummaryPort, SummaryRequest, SummarySizing},
 };
-use crate::btcc::{
-    ContextCompactionRecord, ModelRoundError, ModelRoundMessage, ModelRoundRole, ModelRoundToolCall,
-};
+use butler_turn::btcc::ContextCompactionRecord;
+use butler_turn::btcc::ModelRoundError;
+use butler_turn::btcc::ModelRoundMessage;
+use butler_turn::btcc::ModelRoundRole;
+use butler_turn::btcc::ModelRoundToolCall;
 
 fn message(role: ModelRoundRole, content: &str) -> ModelRoundMessage {
     ModelRoundMessage {
@@ -76,7 +78,7 @@ async fn summary_creation_and_reuse_keep_one_record_owner() {
     let measure = |messages: &[ModelRoundMessage]| {
         messages_json(messages.iter(), MessageProjection::Exact)
             .map(|json| json.len() as f64)
-            .map_err(crate::btcc::ContextProjectionError::Contract)
+            .map_err(butler_turn::btcc::ContextProjectionError::Contract)
     };
     let producer = FixedSummary(AtomicUsize::new(0));
     let mut state = CompactionState::new(Arc::from([]));

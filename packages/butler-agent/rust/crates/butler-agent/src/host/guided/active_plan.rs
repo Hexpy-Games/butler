@@ -3,8 +3,10 @@
 #[cfg(test)]
 use std::path::Path;
 
-use crate::btcc::{ProjectLedgerPlan, ProjectLedgerPlanInput, accepted_project_plan};
 use crate::project_ledger::{PlanRecordRead, ProjectLedger, ProjectLedgerReadError};
+use butler_turn::btcc::ProjectLedgerPlan;
+use butler_turn::btcc::ProjectLedgerPlanInput;
+use butler_turn::btcc::accepted_project_plan;
 
 #[derive(Clone)]
 pub(crate) struct AcceptedPlanProducer {
@@ -96,7 +98,7 @@ mod tests {
         };
         let active = read("PLAN-1").await.unwrap().unwrap();
         assert_eq!(
-            crate::btcc::render_accepted_project_plan(&active),
+            butler_turn::btcc::render_accepted_project_plan(&active),
             "Accepted Project Ledger Plan:\n- id: PLAN-1\n- title: Active\n- status: active\n\nSource Plan body\nline two"
         );
         assert!(read("PLAN-2").await.unwrap().is_none());

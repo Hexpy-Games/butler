@@ -10,17 +10,16 @@ use std::{
 use rusqlite::{Connection, OptionalExtension};
 
 use super::{CandidateAppendContext, CandidateSlices, append, db_error};
-use crate::{
-    cognition::{
-        CognitionError, CognitionResult, ConversationSourceNotice,
-        assert_conversation_source_current,
-        extraction::{ExtractCandidate, ExtractInput},
-        graph::input,
-        hydrate_conversation_source,
-        sources::hydrate_typed_source,
-    },
-    conversation::ConversationSourceReader,
-};
+use crate::cognition::CognitionError;
+use crate::cognition::CognitionResult;
+use crate::cognition::ConversationSourceNotice;
+use crate::cognition::assert_conversation_source_current;
+use crate::cognition::extraction::ExtractCandidate;
+use crate::cognition::extraction::ExtractInput;
+use crate::cognition::graph::input;
+use crate::cognition::hydrate_conversation_source;
+use crate::cognition::sources::hydrate_typed_source;
+use butler_turn::conversation::ConversationSourceReader;
 
 pub(in crate::cognition::graph) fn load(
     db: &Connection,

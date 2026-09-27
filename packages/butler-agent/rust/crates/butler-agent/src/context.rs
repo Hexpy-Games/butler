@@ -20,9 +20,9 @@ mod status_transcript_activity;
 mod tool_artifact_slice;
 mod tool_output;
 
-pub(crate) use crate::conversation::text_for_message;
 pub(crate) use attachment::AttachmentContext;
 pub(crate) use budget::*;
+pub(crate) use butler_turn::conversation::text_for_message;
 pub(crate) use compaction::{
     CompactionMetricEvent, ContextCompactionMetricSink, compact_transcript,
     compaction_snapshot_path,

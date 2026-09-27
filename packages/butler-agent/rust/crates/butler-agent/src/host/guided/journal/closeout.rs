@@ -7,7 +7,9 @@ mod tests;
 
 use std::sync::Arc;
 
-use crate::btcc::{BtccError, JournalCloseout, ToolJournalRepository};
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::JournalCloseout;
+use butler_turn::btcc::ToolJournalRepository;
 
 pub(super) async fn collect(
     journal: &Arc<ToolJournalRepository>,

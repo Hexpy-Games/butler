@@ -3,9 +3,11 @@
 use butler_core::tool_protocol::ToolName;
 use serde_json::{Value, json};
 
-use crate::btcc::{ModelRoundToolCall, WorkStage, WorkView};
 use butler_core::public_text::sanitize_public_text;
 use butler_core::public_text::sanitize_public_value;
+use butler_turn::btcc::ModelRoundToolCall;
+use butler_turn::btcc::WorkStage;
+use butler_turn::btcc::WorkView;
 
 pub(super) struct Content {
     pub title: String,
@@ -222,7 +224,7 @@ pub(super) fn resumed(work: &WorkView) -> Content {
     let active = work
         .action_progress
         .iter()
-        .find(|progress| progress.status == crate::btcc::ActionStatus::Active)
+        .find(|progress| progress.status == butler_turn::btcc::ActionStatus::Active)
         .and_then(|progress| {
             work.current_plan
                 .as_ref()?

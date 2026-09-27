@@ -3,10 +3,15 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 
 use super::GuidedWorkTools;
-use crate::btcc::{
-    BtccRepositories, BtccStorage, DurableWorkService, ReviewVerdict, SessionWorkRepository,
-    TestStorageFixture, TurnStore, WorkTurnScope, test_prepared_turn,
-};
+use butler_turn::btcc::BtccRepositories;
+use butler_turn::btcc::BtccStorage;
+use butler_turn::btcc::DurableWorkService;
+use butler_turn::btcc::ReviewVerdict;
+use butler_turn::btcc::SessionWorkRepository;
+use butler_turn::btcc::TestStorageFixture;
+use butler_turn::btcc::TurnStore;
+use butler_turn::btcc::WorkTurnScope;
+use butler_turn::btcc::test_prepared_turn;
 
 #[tokio::test]
 async fn model_work_calls_create_reviewed_plan_in_canonical_store() {

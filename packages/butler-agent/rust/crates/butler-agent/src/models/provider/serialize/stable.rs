@@ -1,7 +1,8 @@
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
-use crate::btcc::{ModelRoundError, ModelRoundRequest};
+use butler_turn::btcc::ModelRoundError;
+use butler_turn::btcc::ModelRoundRequest;
 
 use super::super::contracts::{ProviderAuthMode, ProviderRequestConfig};
 

@@ -5,13 +5,13 @@
 use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
-use crate::btcc::AccessMode;
-use crate::btcc::ModelRoundToolCall;
-use crate::btcc::ToolExecutionError;
 use crate::profile::FirstChatOnboardingUpdate;
 use crate::profile::ProfileError;
 use crate::profile::ProfilingMode;
 use butler_core::json::JsonDocument;
+use butler_turn::btcc::AccessMode;
+use butler_turn::btcc::ModelRoundToolCall;
+use butler_turn::btcc::ToolExecutionError;
 
 use super::GuidedTools;
 use crate::profile::ProfileCode;
@@ -124,7 +124,7 @@ fn text<'a>(args: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
 
 fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError> {
     JsonDocument::from_value(value).map_err(|error| {
-        ToolExecutionError::Integrity(crate::btcc::BtccError::relayed(
+        ToolExecutionError::Integrity(butler_turn::btcc::BtccError::relayed(
             "guided_profile_result_json",
             error.to_string(),
         ))

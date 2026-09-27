@@ -7,7 +7,7 @@ use std::process::Command;
 use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 
-use crate::btcc::ResolvedProjectWorkScope;
+use butler_turn::btcc::ResolvedProjectWorkScope;
 
 use super::contracts::ProjectWorkPublicationError;
 use super::record;

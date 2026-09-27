@@ -5,10 +5,10 @@ use std::{path::PathBuf, sync::Arc};
 
 use serde_json::{Value, json};
 
-use crate::btcc::BtccError;
-use crate::btcc::ModelRoundToolCall;
-use crate::btcc::ToolExecutionError;
 use butler_core::json::JsonDocument;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::ModelRoundToolCall;
+use butler_turn::btcc::ToolExecutionError;
 
 use super::GuidedTools;
 

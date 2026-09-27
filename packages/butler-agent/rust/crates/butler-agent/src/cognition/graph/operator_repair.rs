@@ -12,10 +12,9 @@ pub(in crate::cognition) use request::CandidateInputRepairRequest;
 use crate::cognition::CognitionCode;
 use std::path::Path;
 
-use crate::{
-    cognition::{CognitionError, CognitionResult},
-    conversation::ConversationSourceReader,
-};
+use crate::cognition::CognitionError;
+use crate::cognition::CognitionResult;
+use butler_turn::conversation::ConversationSourceReader;
 
 impl super::GraphRepository {
     pub(in crate::cognition) fn configure_projection_model_policy(

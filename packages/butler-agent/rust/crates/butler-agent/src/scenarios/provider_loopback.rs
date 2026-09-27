@@ -10,15 +10,6 @@ use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
-use crate::btcc::storage::{
-    BtccRepositories, BtccStorage, ContextCompactionRepository, OperationResultRepository,
-    TestStorageFixture, ToolJournalFinish, ToolJournalFinishStatus, ToolJournalRepository,
-    ToolJournalStart,
-};
-use crate::btcc::{
-    AgentLoop, ModelRoundError, ModelRouteEventWrite, ModelRouteRetryConfig, ModelRouteWrite,
-    PortFuture, TurnModelExecutionFactory, TurnSteeringPort, TurnStore,
-};
 use crate::context::ContextPortAdapter;
 use crate::models::{
     ModelCatalog, ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelProvider,
@@ -28,16 +19,34 @@ use crate::models::{
     ProviderRoundPolicy,
 };
 use butler_core::locale::LocaleCollation;
+use butler_turn::btcc::AgentLoop;
+use butler_turn::btcc::ModelRoundError;
+use butler_turn::btcc::ModelRouteEventWrite;
+use butler_turn::btcc::ModelRouteRetryConfig;
+use butler_turn::btcc::ModelRouteWrite;
+use butler_turn::btcc::PortFuture;
+use butler_turn::btcc::TurnModelExecutionFactory;
+use butler_turn::btcc::TurnSteeringPort;
+use butler_turn::btcc::TurnStore;
+use butler_turn::btcc::storage::BtccRepositories;
+use butler_turn::btcc::storage::BtccStorage;
+use butler_turn::btcc::storage::ContextCompactionRepository;
+use butler_turn::btcc::storage::OperationResultRepository;
+use butler_turn::btcc::storage::TestStorageFixture;
+use butler_turn::btcc::storage::ToolJournalFinish;
+use butler_turn::btcc::storage::ToolJournalFinishStatus;
+use butler_turn::btcc::storage::ToolJournalRepository;
+use butler_turn::btcc::storage::ToolJournalStart;
 
-use crate::btcc::agent_loop::contracts::SteeringObservation;
-use crate::btcc::agent_loop::fixture_binding::FixtureAgentLoop;
-use crate::btcc::agent_loop::guided_ports::ContextPort;
-use crate::btcc::agent_loop::guided_ports::GuidedInvocation;
-use crate::btcc::agent_loop::guided_ports::GuidedPolicyDependencies;
-use crate::btcc::agent_loop::operation_result_replay::ExactResultReplaySelection;
-use crate::btcc::agent_loop::operation_result_replay::OperationResultReplayFactory;
-use crate::btcc::agent_loop::operation_result_replay::ReplayMode;
-use crate::btcc::agent_loop::test_support::Fixture;
+use butler_turn::btcc::agent_loop::contracts::SteeringObservation;
+use butler_turn::btcc::agent_loop::fixture_binding::FixtureAgentLoop;
+use butler_turn::btcc::agent_loop::guided_ports::ContextPort;
+use butler_turn::btcc::agent_loop::guided_ports::GuidedInvocation;
+use butler_turn::btcc::agent_loop::guided_ports::GuidedPolicyDependencies;
+use butler_turn::btcc::agent_loop::operation_result_replay::ExactResultReplaySelection;
+use butler_turn::btcc::agent_loop::operation_result_replay::OperationResultReplayFactory;
+use butler_turn::btcc::agent_loop::operation_result_replay::ReplayMode;
+use butler_turn::btcc::agent_loop::test_support::Fixture;
 
 struct Config {
     snapshot: Arc<ModelCatalogSnapshot>,
@@ -91,7 +100,7 @@ struct Observations;
 impl ProviderObservationSink for Observations {
     fn request(&self, _: ProviderObservation) {}
     fn response(&self, _: &str, _: &str) {}
-    fn failure(&self, _: &crate::btcc::ProviderRequestError) {}
+    fn failure(&self, _: &butler_turn::btcc::ProviderRequestError) {}
 }
 struct Metrics;
 impl PromptUsageMetricSink for Metrics {
@@ -166,7 +175,7 @@ async fn provider_context_and_replay_share_one_turn_owner() {
         .unwrap();
     let repositories = Arc::new(BtccRepositories::new(storage.clone(), None));
     let (turn, _) = repositories
-        .load_or_admit(&crate::btcc::storage::test_prepared_turn())
+        .load_or_admit(&butler_turn::btcc::storage::test_prepared_turn())
         .await
         .unwrap();
     let claim = repositories.acquire_state_claim(&turn).await.unwrap();
@@ -198,7 +207,8 @@ async fn provider_context_and_replay_share_one_turn_owner() {
         "provider":"openai", "model":"gpt-5.5", "reasoningEffort":"medium",
         "controls":{}, "controlsHash":"hash"
     });
-    admitted.context = crate::btcc::agent_loop::test_data::turn(None, "safe_fallback").context;
+    admitted.context =
+        butler_turn::btcc::agent_loop::test_data::turn(None, "safe_fallback").context;
     let journal = Arc::new(ToolJournalRepository::new(
         storage.clone(),
         Arc::new(|| "now".into()),
@@ -288,7 +298,7 @@ async fn provider_context_and_replay_share_one_turn_owner() {
             Arc::new(OperationResultRepository::new(storage.clone(), None)),
         )),
         policy_fixture.clone(),
-        Arc::new(crate::btcc::GuidedContinuationBudgetFactory::new(
+        Arc::new(butler_turn::btcc::GuidedContinuationBudgetFactory::new(
             None,
             Arc::new(|| 0),
         )),
@@ -300,7 +310,7 @@ async fn provider_context_and_replay_share_one_turn_owner() {
             &claim,
             1,
             policy_fixture.as_ref(),
-            &crate::btcc::NOOP_MODEL_ROUND_OBSERVER,
+            &butler_turn::btcc::NOOP_MODEL_ROUND_OBSERVER,
             CancellationToken::new(),
         )
         .await

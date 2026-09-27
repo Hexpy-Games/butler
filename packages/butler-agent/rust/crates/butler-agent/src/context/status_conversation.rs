@@ -6,13 +6,12 @@ use std::{
 
 use serde_json::Value;
 
-use crate::{
-    conversation::{
-        ConversationSourceReader, conversation_session_id_for_durable_session,
-        conversation_store_path,
-    },
-    workspace::{StatusSessionIdentity, read_active_butler_session, session_store_path},
-};
+use butler_turn::conversation::ConversationSourceReader;
+use butler_turn::conversation::conversation_session_id_for_durable_session;
+use butler_turn::conversation::conversation_store_path;
+use butler_turn::workspace::StatusSessionIdentity;
+use butler_turn::workspace::read_active_butler_session;
+use butler_turn::workspace::session_store_path;
 
 const SEMANTIC_TAIL_LIMIT: u64 = 200;
 const MAX_TRANSCRIPT_LINE_BYTES: usize = 4 * 1024 * 1024;
@@ -327,7 +326,7 @@ fn read_conversation_summary(path: &Path, durable_session_id: &str) -> StatusCon
         Ok(reader) => reader,
         Err(error) => return unavailable_conversation_summary(fallback, error.code()),
     };
-    let summary: Result<StatusConversationSummary, crate::conversation::ConversationError> =
+    let summary: Result<StatusConversationSummary, butler_turn::conversation::ConversationError> =
         (|| {
             let canonical_exists = reader.read_session(durable_session_id)?.is_some();
             let session_id = if canonical_exists {

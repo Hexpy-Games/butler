@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use tokio::sync::{Notify, Semaphore};
 
-use crate::btcc::BtccError;
+use butler_turn::btcc::BtccError;
 
 #[derive(Clone)]
 pub(super) struct CommandJobs {

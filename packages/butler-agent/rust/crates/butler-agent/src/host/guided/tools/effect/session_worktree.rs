@@ -6,15 +6,19 @@ use std::sync::Arc;
 use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::btcc::{
-    AdapterOutcome, BtccError, EffectAdapter, EffectAdapterError, EffectFailure, EffectFuture,
-    PlanBinding,
-};
-use crate::workspace::{
-    BindSessionWorktreeInput, BindSessionWorktreeResult, SessionWorktreeAction, SessionWorktrees,
-    WorkspaceReference,
-};
 use butler_core::json::JsonDocument;
+use butler_turn::btcc::AdapterOutcome;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::EffectAdapter;
+use butler_turn::btcc::EffectAdapterError;
+use butler_turn::btcc::EffectFailure;
+use butler_turn::btcc::EffectFuture;
+use butler_turn::btcc::PlanBinding;
+use butler_turn::workspace::BindSessionWorktreeInput;
+use butler_turn::workspace::BindSessionWorktreeResult;
+use butler_turn::workspace::SessionWorktreeAction;
+use butler_turn::workspace::SessionWorktrees;
+use butler_turn::workspace::WorkspaceReference;
 
 use super::super::GuidedTools;
 
@@ -26,7 +30,8 @@ pub(super) fn prepare(
     owner: &GuidedTools,
     args: &Map<String, Value>,
 ) -> Result<(String, Value, Arc<dyn EffectAdapter>), BtccError> {
-    let input = normalize(&Value::Object(args.clone())).map_err(crate::btcc::BtccError::from)?;
+    let input =
+        normalize(&Value::Object(args.clone())).map_err(butler_turn::btcc::BtccError::from)?;
     let (Some(action), Some(branch)) = (
         input.get("action").and_then(Value::as_str),
         input.get("branch").and_then(Value::as_str),
@@ -168,7 +173,7 @@ impl EffectAdapter for SessionWorktreeEffect {
         _: &'a str,
         signal: &'a CancellationToken,
         attempts: i64,
-        _: Option<&'a crate::btcc::EffectError>,
+        _: Option<&'a butler_turn::btcc::EffectError>,
     ) -> EffectFuture<'a, AdapterOutcome> {
         Box::pin(async move {
             if attempts == 0 {

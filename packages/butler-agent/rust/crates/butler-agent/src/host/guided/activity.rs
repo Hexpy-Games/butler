@@ -9,10 +9,13 @@ use indexmap::IndexMap;
 use parking_lot::Mutex;
 use serde_json::{Map, Value};
 
-use crate::btcc::{
-    AgentLoopProgress, BtccError, GuidedActivitySnapshot, GuidedSourceRevision, ModelRoundToolCall,
-    WorkStage, WorkView,
-};
+use butler_turn::btcc::AgentLoopProgress;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::GuidedActivitySnapshot;
+use butler_turn::btcc::GuidedSourceRevision;
+use butler_turn::btcc::ModelRoundToolCall;
+use butler_turn::btcc::WorkStage;
+use butler_turn::btcc::WorkView;
 
 use content::{Content, activity_kind, content, resumed};
 use publication::{emit, publish};

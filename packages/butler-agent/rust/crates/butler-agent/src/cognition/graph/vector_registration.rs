@@ -14,7 +14,7 @@ use crate::cognition::{
     CognitionError, CognitionResult, CognitionSourceRow, hydrate_conversation_source,
     sources::hydrate_typed_source,
 };
-use crate::conversation::ConversationSourceReader;
+use butler_turn::conversation::ConversationSourceReader;
 
 const NODE_CHUNK_BYTES: usize = 4_096;
 const EPISODE_CHUNK_BYTES: usize = 4_000;

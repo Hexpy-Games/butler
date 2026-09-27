@@ -1,9 +1,12 @@
 use serde_json::{Value, json};
 
-use crate::btcc::{
-    BtccError, DurableWorkStatus as WorkStatus, ProjectWorkOperationIdentity, StartWorkCommand,
-    WorkOrigin, WorkScope, WorkView,
-};
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::DurableWorkStatus as WorkStatus;
+use butler_turn::btcc::ProjectWorkOperationIdentity;
+use butler_turn::btcc::StartWorkCommand;
+use butler_turn::btcc::WorkOrigin;
+use butler_turn::btcc::WorkScope;
+use butler_turn::btcc::WorkView;
 
 use super::super::publication::{ProjectLedgerRecordKind, ProjectLedgerRecordUpdate};
 use super::codec;
@@ -93,7 +96,7 @@ pub(super) fn binding_child(
 
 pub(super) fn opening_view(
     repo: &ProjectWorkRepository,
-    scope: &crate::btcc::WorkTurnScope,
+    scope: &butler_turn::btcc::WorkTurnScope,
     objective: &str,
     work_id: &str,
     message_id: &str,
@@ -112,7 +115,7 @@ pub(super) fn opening_view(
         objective: objective.into(),
         status: WorkStatus::Open,
         current_stage: None,
-        allowed_next_stages: crate::btcc::allowed_next_work_stages(None),
+        allowed_next_stages: butler_turn::btcc::allowed_next_work_stages(None),
         action_progress: Vec::new(),
         current_plan: None,
         latest_checkpoint: None,

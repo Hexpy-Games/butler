@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use super::*;
-use crate::workspace::{WorkspaceFiles, WorkspaceMutations};
+use butler_turn::workspace::WorkspaceFiles;
+use butler_turn::workspace::WorkspaceMutations;
 
 fn capabilities() -> Capabilities {
     Capabilities::new(

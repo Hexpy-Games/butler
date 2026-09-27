@@ -2,7 +2,10 @@ use std::collections::HashSet;
 
 use serde_json::Value;
 
-use crate::btcc::{ArtifactKind, BtccError, FinalArtifact, ToolJournalCloseoutRow};
+use butler_turn::btcc::ArtifactKind;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::FinalArtifact;
+use butler_turn::btcc::ToolJournalCloseoutRow;
 
 use super::{invalid, safe_path, trimmed};
 
@@ -99,7 +102,7 @@ fn final_artifact(value: &Value) -> Option<FinalArtifact> {
     }
     identity.push('}');
     Some(FinalArtifact {
-        id: format!("artifact-{}", crate::btcc::digest_identity(&identity)),
+        id: format!("artifact-{}", butler_turn::btcc::digest_identity(&identity)),
         kind,
         title: path.rsplit('/').next()?.to_owned(),
         safe_path_label: path,

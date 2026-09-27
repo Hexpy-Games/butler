@@ -2,9 +2,12 @@
 
 use indexmap::IndexMap;
 
-use crate::btcc::{
-    ActivityGroup, BtccError, GuidedActivityBinding, GuidedActivitySnapshot, PendingTool, WorkStage,
-};
+use butler_turn::btcc::ActivityGroup;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::GuidedActivityBinding;
+use butler_turn::btcc::GuidedActivitySnapshot;
+use butler_turn::btcc::PendingTool;
+use butler_turn::btcc::WorkStage;
 
 use super::{ActivityBinding, Group, Pending, State};
 

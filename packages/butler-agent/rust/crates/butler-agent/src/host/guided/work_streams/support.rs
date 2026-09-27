@@ -11,7 +11,7 @@ use sha1::{Digest as _, Sha1};
 use sha2::Sha256;
 
 use super::WorkStreamScope;
-use crate::btcc::BtccError;
+use butler_turn::btcc::BtccError;
 
 pub(super) const ACTIVE: &[&str] = &[
     "routing",

@@ -1,9 +1,8 @@
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    btcc::ModelRoundError,
-    models::{ModelProviderMetadata, ProviderVisualCapabilityPort},
-};
+use crate::models::ModelProviderMetadata;
+use crate::models::ProviderVisualCapabilityPort;
+use butler_turn::btcc::ModelRoundError;
 
 const ZAI_PROVIDER: &str = "zai";
 const ZAI_MODEL: &str = "glm-5.2";

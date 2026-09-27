@@ -3,7 +3,7 @@ use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
-use crate::btcc::ProviderRequestError;
+use butler_turn::btcc::ProviderRequestError;
 
 use super::super::{HostedApiShape, ModelProviderMetadata, ReasoningEffort};
 
@@ -86,7 +86,7 @@ pub(crate) trait ProviderRequestConfigPort: Send + Sync {
     fn effective_prompt_model(
         &self,
         requested: Option<&str>,
-    ) -> Result<String, crate::btcc::ModelRoundError>;
+    ) -> Result<String, butler_turn::btcc::ModelRoundError>;
 
     fn resolve<'a>(&'a self, request: ProviderConfigRequest<'a>) -> ProviderConfigFuture<'a>;
 
@@ -95,7 +95,7 @@ pub(crate) trait ProviderRequestConfigPort: Send + Sync {
     fn sizing_snapshot(
         &self,
         butler_data: Option<&str>,
-    ) -> Result<Arc<super::super::ModelCatalogSnapshot>, crate::btcc::ModelRoundError>;
+    ) -> Result<Arc<super::super::ModelCatalogSnapshot>, butler_turn::btcc::ModelRoundError>;
 }
 
 pub(crate) type ProviderVisualCapabilityFuture<'a> =

@@ -15,12 +15,12 @@ use std::{
 use serde_json::Value;
 use tokio::{sync::Mutex, task::JoinSet};
 
+use crate::gateway::InboundQueue;
+use crate::gateway::InboundQueueError;
 use crate::host::service::restart_handoff::RestartHandoff;
-use crate::{
-    btcc::{Btcc, PrincipalAuthority},
-    gateway::{InboundQueue, InboundQueueError},
-    workspace::SessionBindingStore,
-};
+use butler_turn::btcc::Btcc;
+use butler_turn::btcc::PrincipalAuthority;
+use butler_turn::workspace::SessionBindingStore;
 
 pub(crate) type DeliveryFuture = Pin<Box<dyn Future<Output = Result<bool, IngressError>> + Send>>;
 
@@ -96,7 +96,7 @@ pub(crate) struct IngressDispatcher {
     data_root: PathBuf,
     default_workspace: PathBuf,
     delivery: Arc<dyn IngressDelivery>,
-    subsessions: Arc<crate::btcc::SubsessionService>,
+    subsessions: Arc<butler_turn::btcc::SubsessionService>,
     restart_handoff: Arc<RestartHandoff>,
     lifecycle: Mutex<Lifecycle>,
 }
@@ -114,7 +114,7 @@ impl IngressDispatcher {
         data_root: PathBuf,
         default_workspace: PathBuf,
         delivery: Arc<dyn IngressDelivery>,
-        subsessions: Arc<crate::btcc::SubsessionService>,
+        subsessions: Arc<butler_turn::btcc::SubsessionService>,
         restart_handoff: Arc<RestartHandoff>,
     ) -> Self {
         Self {

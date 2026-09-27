@@ -4,10 +4,10 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::conversation::ConversationOriginKind;
-use crate::conversation::PublicMemorySnapshot;
-use crate::conversation::decode_message_scalars;
 use butler_core::json;
+use butler_turn::conversation::ConversationOriginKind;
+use butler_turn::conversation::PublicMemorySnapshot;
+use butler_turn::conversation::decode_message_scalars;
 
 use super::{
     ContextError, ContextResult, ResolvedMemorySource,
@@ -149,7 +149,7 @@ pub(super) fn read(
         split_grapheme,
     } = paginate(scalar.text, parsed, source_ref, parts[5], input)?;
     let mut result = json!({"ok":true,"status":if next_cursor.is_some(){"partial"}else{"complete"},"mode":"source",
-        "source_ref":source_ref,"basis":if message.message.role == crate::conversation::ConversationRole::User {"user_statement"} else {"assistant_statement"},
+        "source_ref":source_ref,"basis":if message.message.role == butler_turn::conversation::ConversationRole::User {"user_statement"} else {"assistant_statement"},
         "source_kind":"conversation","conversation_session_id":message.message.session_id,"conversation_message_id":message.message.id,
         "text":text,"byte_start":start,"byte_end":end,"source_hash":parts[5],"next_cursor":next_cursor,"diagnostics":[]});
     if split_grapheme {

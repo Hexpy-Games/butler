@@ -4,7 +4,7 @@ use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
-use crate::workspace::cursor_path;
+use butler_turn::workspace::cursor_path;
 
 #[derive(Clone, Debug)]
 pub(super) struct ReadCursor {

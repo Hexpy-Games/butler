@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use crate::conversation::PublicMemoryScope;
 use butler_core::json;
+use butler_turn::conversation::PublicMemoryScope;
 
 #[derive(Clone)]
 pub(super) struct ListArgs {

@@ -6,7 +6,7 @@ use serde_json::Value;
 use super::{db_error, redirect_chain, source};
 use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult, hydrate_conversation_source};
-use crate::conversation::ConversationSourceReader;
+use butler_turn::conversation::ConversationSourceReader;
 
 pub(super) struct Node {
     pub id: String,

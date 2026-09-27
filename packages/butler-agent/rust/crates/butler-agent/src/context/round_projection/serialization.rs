@@ -2,7 +2,10 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
-use crate::btcc::{BtccError, ModelRoundMessage, ModelRoundTool, ToolChoice};
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::ModelRoundMessage;
+use butler_turn::btcc::ModelRoundTool;
+use butler_turn::btcc::ToolChoice;
 
 #[derive(Clone, Copy)]
 pub(super) enum MessageProjection {
@@ -28,7 +31,7 @@ fn append_message_json(
     output.push('{');
     let mut has_field = false;
     string_field(output, &mut has_field, "role", role(message.role))?;
-    if message.role == crate::btcc::ModelRoundRole::Tool {
+    if message.role == butler_turn::btcc::ModelRoundRole::Tool {
         // toolResultToMessage constructs tool fields in this order; the
         // continuation cursor appends its identity last. JSON order enters
         // source and request digests.
@@ -308,12 +311,12 @@ fn field<T: Serialize + ?Sized>(
     Ok(())
 }
 
-fn role(role: crate::btcc::ModelRoundRole) -> &'static str {
+fn role(role: butler_turn::btcc::ModelRoundRole) -> &'static str {
     match role {
-        crate::btcc::ModelRoundRole::System => "system",
-        crate::btcc::ModelRoundRole::User => "user",
-        crate::btcc::ModelRoundRole::Assistant => "assistant",
-        crate::btcc::ModelRoundRole::Tool => "tool",
+        butler_turn::btcc::ModelRoundRole::System => "system",
+        butler_turn::btcc::ModelRoundRole::User => "user",
+        butler_turn::btcc::ModelRoundRole::Assistant => "assistant",
+        butler_turn::btcc::ModelRoundRole::Tool => "tool",
     }
 }
 

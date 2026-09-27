@@ -7,10 +7,10 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use crate::btcc::BtccError;
 use crate::host::installation::ResolvedInstallation;
 use crate::models::{DEFAULT_MODEL_REF, parse_model_ref};
-use crate::workspace::StoredSessionBinding;
+use butler_turn::btcc::BtccError;
+use butler_turn::workspace::StoredSessionBinding;
 
 pub(crate) use app::{AppCapturedDependencies, AppServiceConfiguration};
 

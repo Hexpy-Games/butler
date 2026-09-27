@@ -2,7 +2,7 @@
 
 use serde_json::{Map, Value};
 
-use crate::btcc::FinalArtifact;
+use butler_turn::btcc::FinalArtifact;
 
 pub(super) fn artifacts(source: &[FinalArtifact]) -> Vec<Value> {
     source

@@ -3,7 +3,8 @@ use std::path::Path;
 use serde_json::{Value, json};
 
 use super::super::super::{AppSettingsFacts, model};
-use crate::{btcc::ReasoningEffort, gateway::application::settings::worker_profiles};
+use crate::gateway::application::settings::worker_profiles;
+use butler_turn::btcc::ReasoningEffort;
 
 pub(super) fn project(
     current: &Value,

@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use butler_core::tool_protocol::ToolName;
 use serde_json::{Value, json};
 
-use crate::btcc::{BtccError, ToolJournalCloseoutRow};
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::ToolJournalCloseoutRow;
 
 use super::{invalid, safe_path};
 
@@ -114,7 +115,7 @@ impl ChangedCollector {
         self.order.into_iter().filter_map(|path| {
             let (first, last) = self.by_path.remove(&path)?;
             if let (Some(before), Some(after)) = (first.before, last.after.as_ref()) {
-                crate::workspace::net_changed_file_detail(&path, before.as_bytes(), after.as_bytes())
+                butler_turn::workspace::net_changed_file_detail(&path, before.as_bytes(), after.as_bytes())
                     .map(|detail| json!({
                         "path": detail.path,
                         "additions": detail.additions,

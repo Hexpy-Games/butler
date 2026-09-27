@@ -5,21 +5,30 @@ use std::collections::HashSet;
 use serde_json::{Map, Value};
 
 use super::AppSessionWorkspaces;
-use crate::{
-    btcc::SubsessionService,
-    gateway::{
-        AppRelocationBinding, AppRelocationBindingResult, AppRelocationBindingSeed,
-        AppRelocationBindingUpdate, AppRelocationCanonicalUpdate, AppRelocationHost,
-        AppRelocationSnapshot, AppRelocationTransportBinding, AppRelocationWorkspaceMarker,
-        AppRelocationWorkspacePlan, AppRelocationWorkspaceRequest, ApplicationFuture,
-        GatewayApplicationError,
-    },
-    workspace::{
-        ExecutionContextInput, OwnOptional, RebindWorkspaceResult, RelocationWorkspaceInput,
-        RelocationWorkspaceMarker, RelocationWorkspacePlan, SessionLifecycleState, SessionRole,
-        UpsertSessionBinding, WorkspaceError,
-    },
-};
+use crate::gateway::AppRelocationBinding;
+use crate::gateway::AppRelocationBindingResult;
+use crate::gateway::AppRelocationBindingSeed;
+use crate::gateway::AppRelocationBindingUpdate;
+use crate::gateway::AppRelocationCanonicalUpdate;
+use crate::gateway::AppRelocationHost;
+use crate::gateway::AppRelocationSnapshot;
+use crate::gateway::AppRelocationTransportBinding;
+use crate::gateway::AppRelocationWorkspaceMarker;
+use crate::gateway::AppRelocationWorkspacePlan;
+use crate::gateway::AppRelocationWorkspaceRequest;
+use crate::gateway::ApplicationFuture;
+use crate::gateway::GatewayApplicationError;
+use butler_turn::btcc::SubsessionService;
+use butler_turn::workspace::ExecutionContextInput;
+use butler_turn::workspace::OwnOptional;
+use butler_turn::workspace::RebindWorkspaceResult;
+use butler_turn::workspace::RelocationWorkspaceInput;
+use butler_turn::workspace::RelocationWorkspaceMarker;
+use butler_turn::workspace::RelocationWorkspacePlan;
+use butler_turn::workspace::SessionLifecycleState;
+use butler_turn::workspace::SessionRole;
+use butler_turn::workspace::UpsertSessionBinding;
+use butler_turn::workspace::WorkspaceError;
 
 impl AppRelocationHost for AppSessionWorkspaces {
     fn inspect(&self, runtime_session_id: String) -> ApplicationFuture<AppRelocationSnapshot> {
@@ -226,7 +235,7 @@ async fn has_open_child(
     Ok(false)
 }
 
-fn to_app_binding(binding: &crate::workspace::StoredSessionBinding) -> AppRelocationBinding {
+fn to_app_binding(binding: &butler_turn::workspace::StoredSessionBinding) -> AppRelocationBinding {
     AppRelocationBinding {
         session_id: binding.session_id.clone(),
         role: match &binding.role {

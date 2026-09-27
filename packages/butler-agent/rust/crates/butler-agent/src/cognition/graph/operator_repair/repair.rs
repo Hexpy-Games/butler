@@ -11,10 +11,9 @@ use super::{
     request::{CandidateInputRepairExpected, CandidateInputRepairRequest},
 };
 use crate::cognition::CognitionCode;
-use crate::{
-    cognition::{CognitionResult, extraction::ExtractInput},
-    conversation::ConversationSourceReader,
-};
+use crate::cognition::CognitionResult;
+use crate::cognition::extraction::ExtractInput;
+use butler_turn::conversation::ConversationSourceReader;
 
 const INPUT_REPAIR_RECEIPT_SCHEMA: &str = "butler.memory-candidate-input-repair-receipt.v1";
 const EXTRACT_INPUT_SCHEMA: &str = "butler.memory-extract-input.v2";

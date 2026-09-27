@@ -7,7 +7,7 @@ mod update;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::btcc::ResolvedProjectWorkScope;
+use butler_turn::btcc::ResolvedProjectWorkScope;
 
 use super::contracts::{
     ProjectLedgerRecordKind, ProjectLedgerRecordUpdate, ProjectWorkPublicationError,

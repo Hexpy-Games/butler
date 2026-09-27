@@ -17,7 +17,9 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 
 use crate::skills::Skills;
-use crate::workspace::{WorkspaceFiles, WorkspaceMutations, WorkspaceReference};
+use butler_turn::workspace::WorkspaceFiles;
+use butler_turn::workspace::WorkspaceMutations;
+use butler_turn::workspace::WorkspaceReference;
 
 pub(crate) use catalog::{
     BridgeCatalogTool, CatalogError, ToolCatalog, describe_native, search_native,

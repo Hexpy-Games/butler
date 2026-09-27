@@ -3,14 +3,18 @@
 
 use std::path::PathBuf;
 
-use crate::conversation::{
-    ConversationError, ConversationMessageWithParts, ConversationOriginKind, ConversationReadOrder,
-    ConversationRole, ConversationSourceReader, ReadCognitionMessagesInput, decode_message_scalars,
-};
 use crate::profile::{
     CanonicalProfileMessage, CanonicalProfilePart, CanonicalProfileScalar, CanonicalProfileScan,
     CanonicalProfileSourceFactory, CanonicalProfileSourceReader, ProfileError, ProfileResult,
 };
+use butler_turn::conversation::ConversationError;
+use butler_turn::conversation::ConversationMessageWithParts;
+use butler_turn::conversation::ConversationOriginKind;
+use butler_turn::conversation::ConversationReadOrder;
+use butler_turn::conversation::ConversationRole;
+use butler_turn::conversation::ConversationSourceReader;
+use butler_turn::conversation::ReadCognitionMessagesInput;
+use butler_turn::conversation::decode_message_scalars;
 
 pub(crate) struct ProfileConversationSources {
     path: PathBuf,

@@ -11,11 +11,21 @@ mod tests;
 use butler_core::tool_protocol::ToolName;
 use std::sync::Arc;
 
-use crate::btcc::{
-    AcceptedWorkResult, BatchDisposition, BtccError, CandidateDisposition, DurableWorkService,
-    DurableWorkStatus, GuidedInvocation, ModelRoundToolCall, PortFuture, ToolResult,
-    WorkFinalState, WorkPort, WorkStatus, WorkTurnScope, WorkView,
-};
+use butler_turn::btcc::AcceptedWorkResult;
+use butler_turn::btcc::BatchDisposition;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::CandidateDisposition;
+use butler_turn::btcc::DurableWorkService;
+use butler_turn::btcc::DurableWorkStatus;
+use butler_turn::btcc::GuidedInvocation;
+use butler_turn::btcc::ModelRoundToolCall;
+use butler_turn::btcc::PortFuture;
+use butler_turn::btcc::ToolResult;
+use butler_turn::btcc::WorkFinalState;
+use butler_turn::btcc::WorkPort;
+use butler_turn::btcc::WorkStatus;
+use butler_turn::btcc::WorkTurnScope;
+use butler_turn::btcc::WorkView;
 
 pub(crate) struct GuidedWorkAdapter {
     service: Arc<DurableWorkService>,
@@ -76,7 +86,7 @@ impl GuidedWorkAdapter {
             };
             if !self
                 .service
-                .claim_closeout_correction(crate::btcc::ClaimCloseoutCorrectionInput {
+                .claim_closeout_correction(butler_turn::btcc::ClaimCloseoutCorrectionInput {
                     scope: self.scope.clone(),
                     work_id: bound.work_id.clone(),
                 })

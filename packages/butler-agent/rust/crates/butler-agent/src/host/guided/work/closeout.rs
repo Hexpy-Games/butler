@@ -1,9 +1,13 @@
 //! Source runtime-owned open disposition for ordinary Turn closeout.
 
-use crate::btcc::{
-    BtccError, ClaimCloseoutCorrectionInput, DispositionInput, DispositionStatus,
-    DurableWorkStatus, RuntimeOwnedOpenGeneration, WorkView, disposition_material_fingerprint,
-};
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::ClaimCloseoutCorrectionInput;
+use butler_turn::btcc::DispositionInput;
+use butler_turn::btcc::DispositionStatus;
+use butler_turn::btcc::DurableWorkStatus;
+use butler_turn::btcc::RuntimeOwnedOpenGeneration;
+use butler_turn::btcc::WorkView;
+use butler_turn::btcc::disposition_material_fingerprint;
 
 use super::GuidedWorkAdapter;
 
@@ -37,7 +41,7 @@ pub(super) async fn settle_open(
         "btcc-guided-work-runtime-open.v2\0{}\0{}\0{}",
         adapter.scope.turn_id, bound.work_id, fingerprint
     );
-    let mutation_call_id = crate::btcc::digest_identity(&identity);
+    let mutation_call_id = butler_turn::btcc::digest_identity(&identity);
     let persisted = adapter
         .service
         .record_disposition(DispositionInput {

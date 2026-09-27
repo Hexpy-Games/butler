@@ -1,10 +1,10 @@
 use url::Url;
 
 use super::{ModelConfiguration, provider_error_for};
-use crate::btcc::ProviderRequestError;
 use crate::models::{
     HostedApiShape, RegisteredHostedModelConfig, default_hosted_provider_api_base_url,
 };
+use butler_turn::btcc::ProviderRequestError;
 
 pub(super) fn resolve(
     configuration: &ModelConfiguration,

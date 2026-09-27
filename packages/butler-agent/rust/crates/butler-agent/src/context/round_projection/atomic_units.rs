@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 use std::ops::Range;
 
-use crate::btcc::{BtccError, ModelRoundMessage, ModelRoundRole};
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::ModelRoundMessage;
+use butler_turn::btcc::ModelRoundRole;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct AtomicUnit {
@@ -95,7 +97,7 @@ fn apply_mandatory_rules(
     mark_latest(units, messages, |message| {
         message.request_segment_kind.as_deref() == Some("project_ledger_and_work_authority")
     });
-    let anchors = crate::btcc::latest_work_anchor_indices(messages);
+    let anchors = butler_turn::btcc::latest_work_anchor_indices(messages);
     for unit in units {
         if anchors.iter().any(|index| unit.range.contains(index)) {
             unit.mandatory = true;

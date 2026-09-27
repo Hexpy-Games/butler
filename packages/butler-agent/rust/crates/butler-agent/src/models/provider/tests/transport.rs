@@ -338,7 +338,7 @@ async fn structured_http_failure_preserves_provider_identity() {
 #[derive(Default)]
 struct StreamEvents(std::sync::Mutex<Vec<serde_json::Value>>);
 
-impl crate::btcc::ProviderStreamObserver for StreamEvents {
+impl butler_turn::btcc::ProviderStreamObserver for StreamEvents {
     fn event(&self, event: &serde_json::Value) {
         self.0.lock().unwrap().push(event.clone());
     }

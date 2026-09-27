@@ -43,7 +43,7 @@ pub(crate) struct MemoryRecall {
 impl MemoryRecall {
     pub(crate) async fn recall_tool(
         &self,
-        binding: crate::conversation::CanonicalMemoryReadBinding,
+        binding: butler_turn::conversation::CanonicalMemoryReadBinding,
         current_user_message: String,
         operation_id: String,
         args: serde_json::Value,

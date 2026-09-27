@@ -2,11 +2,14 @@
 
 use std::sync::Arc;
 
-use crate::{
-    btcc::{BtccError, DurableWorkRepository, PortFuture, ResolvedProjectWorkScope},
-    project_ledger::{ProjectLedger, ProjectWork, ProjectWorkScopeLookup},
-    workspace::StoredSessionBinding,
-};
+use crate::project_ledger::ProjectLedger;
+use crate::project_ledger::ProjectWork;
+use crate::project_ledger::ProjectWorkScopeLookup;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::DurableWorkRepository;
+use butler_turn::btcc::PortFuture;
+use butler_turn::btcc::ResolvedProjectWorkScope;
+use butler_turn::workspace::StoredSessionBinding;
 
 use crate::host::guided::scope_selected_work::ProjectWorkRepositoryProvider;
 
@@ -65,16 +68,16 @@ impl ProjectResultAuthority {
     }
 }
 
-impl crate::btcc::ProjectWorkResultAuthorityFactory for ProjectResultAuthority {
+impl butler_turn::btcc::ProjectWorkResultAuthorityFactory for ProjectResultAuthority {
     fn prepare(
         &self,
-        location: crate::btcc::ProjectWorkResultAuthorityLocation,
+        location: butler_turn::btcc::ProjectWorkResultAuthorityLocation,
     ) -> std::pin::Pin<
         Box<
             dyn std::future::Future<
                     Output = Result<
-                        Arc<dyn crate::btcc::ExactProjectWorkResultAuthority>,
-                        crate::btcc::StorageError,
+                        Arc<dyn butler_turn::btcc::ExactProjectWorkResultAuthority>,
+                        butler_turn::btcc::StorageError,
                     >,
                 > + Send
                 + '_,

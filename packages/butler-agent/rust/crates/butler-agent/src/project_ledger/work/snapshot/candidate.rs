@@ -4,8 +4,8 @@ use std::path::Path;
 
 use serde_json::Value;
 
-use crate::btcc::ResolvedProjectWorkScope;
 use butler_core::locale::LocaleCollation;
+use butler_turn::btcc::ResolvedProjectWorkScope;
 
 use super::super::super::publication::{
     ProjectLedgerRecordKind, ProjectLedgerRecordUpdate, ProjectWorkPublicationError,

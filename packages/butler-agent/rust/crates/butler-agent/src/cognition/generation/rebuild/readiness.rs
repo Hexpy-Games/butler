@@ -14,18 +14,22 @@ use super::super::{
     qualification_witness::{CandidateWitness, LiveWitness},
 };
 use super::{build_inventory, inventory};
-use crate::{
-    cognition::{
-        CognitionError, CognitionPathEnvironment, CognitionResult, MemoryGenerationHandle,
-        MemoryGenerationTarget, assert_mutation_authority, ensure_data_authority,
-        generation::cache::physical_entries,
-        generation_vectors::invalid_persisted_rebuild_vectors,
-        graph::{GraphRepository, StageReadiness},
-        resolve_generation,
-    },
-    conversation::ConversationSourceReader,
-    coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator},
-};
+use crate::cognition::CognitionError;
+use crate::cognition::CognitionPathEnvironment;
+use crate::cognition::CognitionResult;
+use crate::cognition::MemoryGenerationHandle;
+use crate::cognition::MemoryGenerationTarget;
+use crate::cognition::assert_mutation_authority;
+use crate::cognition::ensure_data_authority;
+use crate::cognition::generation::cache::physical_entries;
+use crate::cognition::generation_vectors::invalid_persisted_rebuild_vectors;
+use crate::cognition::graph::GraphRepository;
+use crate::cognition::graph::StageReadiness;
+use crate::cognition::resolve_generation;
+use crate::coordination::CognitionWaitClass;
+use crate::coordination::CognitionWriteAcquire;
+use crate::coordination::CognitionWriteCoordinator;
+use butler_turn::conversation::ConversationSourceReader;
 
 struct GraphFacts {
     registered: usize,

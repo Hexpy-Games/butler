@@ -6,8 +6,8 @@ use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
 use crate::context::{ContextError, ContextResult};
-use crate::conversation::*;
 use butler_core::json::stringify;
+use butler_turn::conversation::*;
 
 use super::parts::to_context_message;
 use super::types::*;

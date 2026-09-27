@@ -1,7 +1,7 @@
 use std::fs;
 
 use super::*;
-use crate::btcc::AdmissionModelCatalogPort;
+use butler_turn::btcc::AdmissionModelCatalogPort;
 use serde_json::json;
 
 struct Clock;

@@ -2,10 +2,12 @@ use indexmap::IndexMap;
 use unicode_normalization::UnicodeNormalization;
 
 use crate::context::{ContextError, ContextResult};
-use crate::conversation::{
-    AgentConversationStore, ConversationMessageWithParts, ConversationOriginKind, ReadAroundInput,
-    conversation_session_id_for_durable_session, text_for_message,
-};
+use butler_turn::conversation::AgentConversationStore;
+use butler_turn::conversation::ConversationMessageWithParts;
+use butler_turn::conversation::ConversationOriginKind;
+use butler_turn::conversation::ReadAroundInput;
+use butler_turn::conversation::conversation_session_id_for_durable_session;
+use butler_turn::conversation::text_for_message;
 
 use super::parts::{to_context_message, to_context_summary};
 use super::types::*;

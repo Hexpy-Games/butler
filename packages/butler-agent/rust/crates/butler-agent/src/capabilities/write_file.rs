@@ -5,7 +5,10 @@ pub(super) use definition::definition;
 use serde_json::{Value, json};
 
 use super::{CapabilityError, CapabilityInvocation, arguments, mutation_evidence};
-use crate::workspace::{MutationCommand, MutationOutcome, WorkspaceMutations, WriteMutation};
+use butler_turn::workspace::MutationCommand;
+use butler_turn::workspace::MutationOutcome;
+use butler_turn::workspace::WorkspaceMutations;
+use butler_turn::workspace::WriteMutation;
 
 pub(super) async fn execute(
     owner: &WorkspaceMutations,
@@ -164,10 +167,13 @@ fn safe_result_path(root: &std::path::Path, requested: &str) -> Option<String> {
     } else {
         requested.to_owned()
     };
-    crate::workspace::safe_workspace_path(&candidate).map(str::to_owned)
+    butler_turn::workspace::safe_workspace_path(&candidate).map(str::to_owned)
 }
 
-fn write_reference(committed: &crate::workspace::CommittedFile, create_parents: bool) -> Value {
+fn write_reference(
+    committed: &butler_turn::workspace::CommittedFile,
+    create_parents: bool,
+) -> Value {
     let mut reference = json!({"path":committed.path,"created":committed.created,
         "overwritten":!committed.created,"after_sha256":committed.after_sha256,
         "atomic_write":true,"create_parents":create_parents});
@@ -180,6 +186,6 @@ fn write_reference(committed: &crate::workspace::CommittedFile, create_parents: 
     reference
 }
 
-fn owner_error(error: crate::workspace::MutationOwnerError) -> CapabilityError {
+fn owner_error(error: butler_turn::workspace::MutationOwnerError) -> CapabilityError {
     CapabilityError::caused(error.code(), error)
 }

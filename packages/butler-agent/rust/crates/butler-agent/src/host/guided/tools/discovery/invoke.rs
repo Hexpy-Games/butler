@@ -1,10 +1,13 @@
 //! One inner native invocation under the outer bridge occurrence.
 
 use super::{GuidedTools, bridge_error, encoded, projection, text};
-use crate::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 use crate::capabilities::{describe_native, validate_native_arguments};
 use butler_core::json::JsonDocument;
 use butler_core::tool_protocol::ToolName;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::GuidedInvocation;
+use butler_turn::btcc::ModelRoundToolCall;
+use butler_turn::btcc::ToolExecutionError;
 use serde_json::{Value, json};
 
 pub(super) async fn run(

@@ -17,10 +17,10 @@ mod topic_branch;
 
 use std::sync::Arc;
 
-use crate::{
-    btcc::PrincipalAuthority,
-    gateway::{AppApprovalClaims, ApplicationFuture, GatewayApplicationError},
-};
+use crate::gateway::AppApprovalClaims;
+use crate::gateway::ApplicationFuture;
+use crate::gateway::GatewayApplicationError;
+use butler_turn::btcc::PrincipalAuthority;
 
 pub(crate) use admission::AppAdmission;
 pub(crate) use assets::AppAssets;

@@ -12,11 +12,11 @@ use super::{
     IngressError,
     bind::{self, Envelope},
 };
-use crate::{
-    btcc::{TurnOutcome, TurnOutcomeKind},
-    gateway::ClaimedInboundEvent,
-    workspace::{SessionTransportBinding, StoredSessionBinding},
-};
+use crate::gateway::ClaimedInboundEvent;
+use butler_turn::btcc::TurnOutcome;
+use butler_turn::btcc::TurnOutcomeKind;
+use butler_turn::workspace::SessionTransportBinding;
+use butler_turn::workspace::StoredSessionBinding;
 
 pub(super) fn actions(
     item: &ClaimedInboundEvent,

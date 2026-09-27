@@ -4,8 +4,8 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::context::apply_char_budget;
 use crate::context::to_context_message;
 use crate::context::to_context_summary;
-use crate::conversation::PublicMemorySnapshot;
 use butler_core::json;
+use butler_turn::conversation::PublicMemorySnapshot;
 
 use super::{
     ContextError, ContextResult,
@@ -79,8 +79,8 @@ pub(super) fn read(
             .filter(|row| {
                 matches!(
                     row.message.origin_kind,
-                    crate::conversation::ConversationOriginKind::UserInput
-                        | crate::conversation::ConversationOriginKind::AssistantPublic
+                    butler_turn::conversation::ConversationOriginKind::UserInput
+                        | butler_turn::conversation::ConversationOriginKind::AssistantPublic
                 )
             })
             .collect()

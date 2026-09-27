@@ -7,11 +7,11 @@ use tokio::sync::Notify;
 
 use super::super::support::{Root, service_with_parts};
 use super::super::*;
-use crate::btcc::ModelRoundError;
 use crate::models::{
     ProviderPromptFuture, ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest,
     ProviderPromptResult,
 };
+use butler_turn::btcc::ModelRoundError;
 
 fn message(text: &str) -> CanonicalProfileMessage {
     CanonicalProfileMessage {

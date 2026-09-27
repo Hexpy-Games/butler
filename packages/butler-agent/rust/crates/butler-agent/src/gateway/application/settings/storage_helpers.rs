@@ -1,7 +1,8 @@
 use serde_json::Value;
 
 use crate::gateway::application::storage::AppStorageCode;
-use crate::{btcc::AccessMode, gateway::application::storage::AppStorageError};
+use crate::gateway::application::storage::AppStorageError;
+use butler_turn::btcc::AccessMode;
 
 pub(super) fn parse_access(value: &str) -> Option<AccessMode> {
     match value {

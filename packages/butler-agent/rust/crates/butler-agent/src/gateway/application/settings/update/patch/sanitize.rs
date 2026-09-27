@@ -268,6 +268,6 @@ fn colors(value: &Value) -> Option<[String; 6]> {
     colors.try_into().ok()
 }
 
-fn reasoning(value: &str) -> Option<crate::btcc::ReasoningEffort> {
+fn reasoning(value: &str) -> Option<butler_turn::btcc::ReasoningEffort> {
     super::super::model::parse_reasoning(value)
 }

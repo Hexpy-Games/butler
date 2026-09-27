@@ -8,10 +8,10 @@ use serde_json::json;
 use tokio::signal::unix::{Signal, SignalKind, signal};
 use tokio::{sync::oneshot, task::JoinSet, time::MissedTickBehavior};
 
-use crate::btcc::BtccError;
 use crate::gateway::TranscriptWriter;
 use crate::models::ModelConfigurationClock;
 use crate::operations::ServiceReadiness;
+use butler_turn::btcc::BtccError;
 
 use crate::host::app::gateway_lifecycle::{
     ActiveAppEndpoint, AppGatewayLifecycle, GatewayControlServer,
@@ -363,7 +363,7 @@ struct PollOwners<'a> {
     queue: Arc<crate::gateway::InboundQueue>,
     progress: Arc<ProgressPublisher>,
     config: &'a ServiceConfiguration,
-    subsessions: &'a crate::btcc::SqliteSubsessionRepository,
+    subsessions: &'a butler_turn::btcc::SqliteSubsessionRepository,
     parent_client: &'a reqwest::Client,
     app_endpoint: &'a ActiveAppEndpoint,
     logs: ServiceLogMode,

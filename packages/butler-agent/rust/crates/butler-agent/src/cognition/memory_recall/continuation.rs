@@ -15,7 +15,7 @@ use crate::cognition::{
     recall::{RecallRequest, RecallResponse, RecallResultItem},
     sources::{RecallSourceHydration, RecallSourceResolution, hydrate_recall_sources},
 };
-use crate::conversation::ConversationSourceReader;
+use butler_turn::conversation::ConversationSourceReader;
 
 use super::{
     cursor::{CursorStore, Page},

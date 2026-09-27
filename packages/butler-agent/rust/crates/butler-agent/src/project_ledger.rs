@@ -22,8 +22,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{Notify, Semaphore};
 
-use crate::btcc::{ProjectWorkOperationIdentity, ResolvedProjectWorkScope};
 use butler_core::locale::LocaleCollation;
+use butler_turn::btcc::ProjectWorkOperationIdentity;
+use butler_turn::btcc::ResolvedProjectWorkScope;
 
 tokio::task_local! {
     static IN_PUBLICATION: ();

@@ -10,9 +10,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
-use crate::btcc::{
-    ProjectWorkOperationIdentity, ProjectWorkOperationKind, ResolvedProjectWorkScope,
-};
+use butler_turn::btcc::ProjectWorkOperationIdentity;
+use butler_turn::btcc::ProjectWorkOperationKind;
+use butler_turn::btcc::ResolvedProjectWorkScope;
 
 use super::contracts::{
     ProjectLedgerRecordUpdate, ProjectWorkPublicationError, ProjectWorkTarget,

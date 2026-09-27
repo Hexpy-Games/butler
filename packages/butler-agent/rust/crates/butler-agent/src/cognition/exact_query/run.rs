@@ -10,10 +10,10 @@ use sha2::{Digest, Sha256};
 use unicode_normalization::UnicodeNormalization;
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::conversation::CanonicalMemoryReadBinding;
-use crate::conversation::PublicMemorySnapshot;
-use crate::conversation::decode_message_scalars;
 use butler_core::json;
+use butler_turn::conversation::CanonicalMemoryReadBinding;
+use butler_turn::conversation::PublicMemorySnapshot;
+use butler_turn::conversation::decode_message_scalars;
 
 use super::{
     CognitionError, CognitionResult,
@@ -155,7 +155,7 @@ fn run(snapshot: &PublicMemorySnapshot, args: &QueryArgs) -> CognitionResult<Val
                         .collect::<String>();
                     results.push(json!({"conversation_session_id":row.message.session_id,"conversation_message_id":row.message.id,
                         "source_ref":source_ref,"read_args":read_args,"created_at":row.message.created_at,
-                        "speaker":if row.message.role == crate::conversation::ConversationRole::User {"user"} else {"butler"},
+                        "speaker":if row.message.role == butler_turn::conversation::ConversationRole::User {"user"} else {"butler"},
                         "excerpt":excerpt,"source":"conversation-store"}));
                     keys.push((
                         row.message.created_at.clone(),
@@ -309,6 +309,6 @@ fn failure(code: &str, diagnostics: &[&str]) -> Value {
     clippy::needless_pass_by_value,
     reason = "map_err/iterator adapter taking owned values"
 )]
-fn store_error(error: crate::conversation::ConversationError) -> CognitionError {
+fn store_error(error: butler_turn::conversation::ConversationError) -> CognitionError {
     CognitionError::new(CognitionCode::Store, error.to_string())
 }

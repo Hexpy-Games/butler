@@ -17,13 +17,16 @@ use std::sync::Arc;
 use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
 
-use crate::btcc::{AccessMode, BtccError};
 use crate::context::ToolOutput;
-use crate::workspace::{
-    Commands, GuidedAccess, GuidedCommandInput, LegacyShell, StructuredCommandInput,
-    WorkspaceReference,
-};
 use butler_core::json::JsonDocument;
+use butler_turn::btcc::AccessMode;
+use butler_turn::btcc::BtccError;
+use butler_turn::workspace::Commands;
+use butler_turn::workspace::GuidedAccess;
+use butler_turn::workspace::GuidedCommandInput;
+use butler_turn::workspace::LegacyShell;
+use butler_turn::workspace::StructuredCommandInput;
+use butler_turn::workspace::WorkspaceReference;
 use jobs::CommandJobs;
 
 pub(crate) struct GuidedCommand {
@@ -46,7 +49,7 @@ pub(crate) struct CommandScope<'a> {
 pub(crate) struct PreparedCommandEffect {
     pub target: String,
     pub input: Value,
-    pub adapter: Arc<dyn crate::btcc::EffectAdapter>,
+    pub adapter: Arc<dyn butler_turn::btcc::EffectAdapter>,
 }
 
 impl GuidedCommand {

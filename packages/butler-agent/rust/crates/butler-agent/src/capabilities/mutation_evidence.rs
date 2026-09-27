@@ -2,7 +2,7 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::workspace::safe_workspace_path;
+use butler_turn::workspace::safe_workspace_path;
 
 fn now() -> String {
     DateTime::<Utc>::from(std::time::SystemTime::now()).to_rfc3339_opts(SecondsFormat::Millis, true)

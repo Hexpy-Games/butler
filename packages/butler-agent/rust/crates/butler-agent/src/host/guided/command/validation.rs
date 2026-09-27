@@ -7,7 +7,7 @@ use uuid::Uuid;
 use super::artifacts::Artifact;
 use super::evidence;
 use super::structured_stdout::Validation;
-use crate::btcc::BtccError;
+use butler_turn::btcc::BtccError;
 
 struct SafeText {
     valid: String,

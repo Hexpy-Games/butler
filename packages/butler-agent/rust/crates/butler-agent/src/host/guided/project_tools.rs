@@ -16,13 +16,13 @@ use serde_json::{Map, Value, json};
 use tokio::sync::Semaphore;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
-use crate::btcc::BtccError;
 use crate::project_ledger::{
     LedgerCommand, LedgerCommandRequest, ProjectLedger, ProjectLedgerReadError,
     ProjectLedgerToolScopeLookup,
 };
-use crate::workspace::Commands;
 use butler_core::public_text::trim_js_whitespace;
+use butler_turn::btcc::BtccError;
+use butler_turn::workspace::Commands;
 
 pub(crate) struct ProjectToolScope {
     pub project_id: Option<String>,

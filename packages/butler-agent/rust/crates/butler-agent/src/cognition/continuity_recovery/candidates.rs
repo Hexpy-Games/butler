@@ -12,17 +12,17 @@ use regex::Regex;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use crate::{
-    cognition::{
-        CognitionError, CognitionPathEnvironment, CognitionResult,
-        mutable_paths::ensure_data_authority,
-    },
-    conversation::{
-        ConversationMessageWithParts, ConversationReadOrder, ConversationRole,
-        ConversationSourceReader, ReadCognitionMessagesInput, conversation_store_path,
-        text_for_message,
-    },
-};
+use crate::cognition::CognitionError;
+use crate::cognition::CognitionPathEnvironment;
+use crate::cognition::CognitionResult;
+use crate::cognition::mutable_paths::ensure_data_authority;
+use butler_turn::conversation::ConversationMessageWithParts;
+use butler_turn::conversation::ConversationReadOrder;
+use butler_turn::conversation::ConversationRole;
+use butler_turn::conversation::ConversationSourceReader;
+use butler_turn::conversation::ReadCognitionMessagesInput;
+use butler_turn::conversation::conversation_store_path;
+use butler_turn::conversation::text_for_message;
 
 use super::{
     SCHEMA, hot_cache,
@@ -323,7 +323,7 @@ fn sha256(value: &[u8]) -> String {
     format!("{:x}", Sha256::digest(value))
 }
 
-fn conversation_error(error: &crate::conversation::ConversationError) -> CognitionError {
+fn conversation_error(error: &butler_turn::conversation::ConversationError) -> CognitionError {
     CognitionError::new(
         CognitionCode::ContinuityRecoveryInventoryReadFailed,
         error.message(),

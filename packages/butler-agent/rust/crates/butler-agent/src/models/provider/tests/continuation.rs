@@ -1,7 +1,7 @@
 use super::*;
 use serde_json::Value;
 
-fn reference(id: &str) -> crate::btcc::OperationResultReference {
+fn reference(id: &str) -> butler_turn::btcc::OperationResultReference {
     serde_json::from_value(serde_json::json!({
         "version":"butler.operation-result-reference.v1",
         "kind":"operation_result",

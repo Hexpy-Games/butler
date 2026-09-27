@@ -13,15 +13,21 @@ use super::{
     ModelConfiguration, ModelConfigurationRead,
     auth::{AuthError, AuthOwner},
 };
-use crate::{
-    btcc::{BtccError, ModelRoundError, ProviderRequestError},
-    models::{
-        ModelCatalogSnapshot, PromptCacheRetention, ProviderAuth, ProviderAuthMethod,
-        ProviderConfigFuture, ProviderConfigRequest, ProviderPromptCachePolicy,
-        ProviderRequestConfig, ProviderRequestConfigPort, ProviderRoundPolicy,
-        RegisteredHostedModelConfig, parse_model_ref,
-    },
-};
+use crate::models::ModelCatalogSnapshot;
+use crate::models::PromptCacheRetention;
+use crate::models::ProviderAuth;
+use crate::models::ProviderAuthMethod;
+use crate::models::ProviderConfigFuture;
+use crate::models::ProviderConfigRequest;
+use crate::models::ProviderPromptCachePolicy;
+use crate::models::ProviderRequestConfig;
+use crate::models::ProviderRequestConfigPort;
+use crate::models::ProviderRoundPolicy;
+use crate::models::RegisteredHostedModelConfig;
+use crate::models::parse_model_ref;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::ModelRoundError;
+use butler_turn::btcc::ProviderRequestError;
 
 const DEFAULT_MODEL_REF: &str = "openai/gpt-5.5-codex";
 

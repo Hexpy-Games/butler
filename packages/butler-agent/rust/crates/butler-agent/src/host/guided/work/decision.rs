@@ -1,9 +1,12 @@
 //! Current durable disposition, not a successful tool result, grants report authority.
 
-use crate::btcc::{
-    AcceptedWorkResult, AcceptedWorkStatus, BtccError, DispositionStatus, DurableWorkStatus,
-    WorkView, disposition_material_fingerprint,
-};
+use butler_turn::btcc::AcceptedWorkResult;
+use butler_turn::btcc::AcceptedWorkStatus;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::DispositionStatus;
+use butler_turn::btcc::DurableWorkStatus;
+use butler_turn::btcc::WorkView;
+use butler_turn::btcc::disposition_material_fingerprint;
 
 pub(super) enum ReportDecision {
     Report(Option<AcceptedWorkResult>),

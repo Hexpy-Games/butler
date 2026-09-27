@@ -4,10 +4,10 @@ use serde_json::Value;
 
 use super::super::artifacts::Artifact;
 use super::super::{evidence, structured_stdout, validation};
-use crate::btcc::BtccError;
 use crate::context::BudgetedToolOutput;
-use crate::workspace::GuidedSummary;
 use butler_core::json::JsonDocument;
+use butler_turn::btcc::BtccError;
+use butler_turn::workspace::GuidedSummary;
 
 #[derive(Clone, Copy)]
 pub(super) struct Assembly<'a> {

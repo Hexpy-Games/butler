@@ -9,10 +9,10 @@ use super::{
     persistence::read_json,
     storage_helpers::{json_type, parse_access, safe_integer},
 };
-use crate::{
-    btcc::{AccessMode, ReasoningEffort},
-    gateway::{MessageSendRequest, application::storage::AppStorageError},
-};
+use crate::gateway::MessageSendRequest;
+use crate::gateway::application::storage::AppStorageError;
+use butler_turn::btcc::AccessMode;
+use butler_turn::btcc::ReasoningEffort;
 
 use super::persistence::write_json;
 use model::{

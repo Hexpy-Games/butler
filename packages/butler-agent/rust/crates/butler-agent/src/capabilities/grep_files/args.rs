@@ -1,6 +1,6 @@
 use serde_json::{Map, Value, json};
 
-use crate::workspace::WorkspaceListLimits;
+use butler_turn::workspace::WorkspaceListLimits;
 
 pub(super) struct Options {
     pub root: String,

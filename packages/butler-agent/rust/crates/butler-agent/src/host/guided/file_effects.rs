@@ -6,9 +6,13 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use crate::btcc::{BtccError, EffectAdapter, EffectJournal, WorkView, WorkspaceFileEffectAdapter};
 use crate::capabilities::Capabilities;
-use crate::workspace::EffectFileScope;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::EffectAdapter;
+use butler_turn::btcc::EffectJournal;
+use butler_turn::btcc::WorkView;
+use butler_turn::btcc::WorkspaceFileEffectAdapter;
+use butler_turn::workspace::EffectFileScope;
 
 use crate::host::{RegisteredEdit, RegisteredWrite, RegisteredWriteContext};
 
@@ -65,7 +69,7 @@ impl GuidedFileEffects {
         ));
         let input = adapter
             .normalize_input(args)
-            .map_err(crate::btcc::BtccError::from)?;
+            .map_err(butler_turn::btcc::BtccError::from)?;
         let path = input.get("path").and_then(Value::as_str).ok_or_else(|| {
             BtccError::relayed(
                 "write_file_effect_invalid",

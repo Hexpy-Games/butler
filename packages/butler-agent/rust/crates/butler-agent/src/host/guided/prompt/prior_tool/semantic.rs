@@ -2,9 +2,9 @@
 
 use std::collections::VecDeque;
 
-use crate::btcc::BtccError;
 use butler_core::json::raw_string_units;
 use butler_core::json::visit_raw_object;
+use butler_turn::btcc::BtccError;
 
 use super::{encode, json_error, value, write_string};
 

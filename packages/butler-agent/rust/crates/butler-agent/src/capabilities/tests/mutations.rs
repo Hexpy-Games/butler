@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use super::{CapabilityInvocation, Fixture};
-use crate::workspace::WorkspaceMutations;
+use butler_turn::workspace::WorkspaceMutations;
 
 async fn rust(
     fixture: &Fixture,
@@ -158,19 +158,20 @@ async fn admission_and_scope_precedence_is_branch_specific() {
 async fn dropped_caller_still_completes_and_close_drains() {
     let fixture = Fixture::new();
     let owner: Arc<WorkspaceMutations> = Arc::clone(&fixture.capabilities.mutations);
-    let command = crate::workspace::MutationCommand::Write(crate::workspace::WriteMutation {
-        context: crate::workspace::MutationContext {
-            root: fixture.root.clone(),
-            relative_only: false,
-            installation_root: None,
-            protected_roots: Vec::new(),
-        },
-        path: "detached.txt".into(),
-        content: "completed".into(),
-        overwrite: false,
-        create_parents: false,
-        expected_sha256: None,
-    });
+    let command =
+        butler_turn::workspace::MutationCommand::Write(butler_turn::workspace::WriteMutation {
+            context: butler_turn::workspace::MutationContext {
+                root: fixture.root.clone(),
+                relative_only: false,
+                installation_root: None,
+                protected_roots: Vec::new(),
+            },
+            path: "detached.txt".into(),
+            content: "completed".into(),
+            overwrite: false,
+            create_parents: false,
+            expected_sha256: None,
+        });
     let receiver = owner.submit(command).unwrap();
     drop(receiver);
     owner.close().await;

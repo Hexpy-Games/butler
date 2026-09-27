@@ -17,14 +17,17 @@ mod continuation;
 mod prompt;
 mod serialization;
 mod transport;
-use crate::btcc::{
-    ModelRoundError, ModelRoundMessage, ModelRoundPort, ModelRoundRequest, ModelRoundRole,
-    ProviderBodyAdmissionPort, ReasoningEffort,
-};
 use crate::models::{
     ModelCatalog, ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelProviderMetadata,
 };
 use butler_core::locale::LocaleCollation;
+use butler_turn::btcc::ModelRoundError;
+use butler_turn::btcc::ModelRoundMessage;
+use butler_turn::btcc::ModelRoundPort;
+use butler_turn::btcc::ModelRoundRequest;
+use butler_turn::btcc::ModelRoundRole;
+use butler_turn::btcc::ProviderBodyAdmissionPort;
+use butler_turn::btcc::ReasoningEffort;
 
 struct Config {
     metadata: ModelProviderMetadata,
@@ -90,7 +93,7 @@ impl ProviderObservationSink for Observations {
     fn response(&self, _: &str, _: &str) {
         self.responses.fetch_add(1, Ordering::SeqCst);
     }
-    fn failure(&self, _: &crate::btcc::ProviderRequestError) {
+    fn failure(&self, _: &butler_turn::btcc::ProviderRequestError) {
         self.failures.fetch_add(1, Ordering::SeqCst);
     }
 }

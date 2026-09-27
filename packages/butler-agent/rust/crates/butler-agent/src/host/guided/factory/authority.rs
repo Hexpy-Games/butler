@@ -1,7 +1,11 @@
 use std::sync::Arc;
 
-use crate::btcc::{AuthorityPort, BtccError, GuidedInvocation, GuidedPresentation, PortFuture};
 use crate::host::GuidedActivity;
+use butler_turn::btcc::AuthorityPort;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::GuidedInvocation;
+use butler_turn::btcc::GuidedPresentation;
+use butler_turn::btcc::PortFuture;
 
 pub(super) struct BoundAuthority {
     turn_id: String,

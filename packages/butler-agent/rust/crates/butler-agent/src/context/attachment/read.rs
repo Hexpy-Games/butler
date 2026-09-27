@@ -4,8 +4,9 @@ use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
-use crate::btcc::{AttachmentKind, AttachmentRef};
 use butler_core::public_text::trim_js_whitespace;
+use butler_turn::btcc::AttachmentKind;
+use butler_turn::btcc::AttachmentRef;
 
 use super::clip;
 

@@ -10,17 +10,27 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use crate::btcc::{
-    BtccError, BtccRepositories, EffectJournal, GuidedInvocation, GuidedPhaseSelection, GuidedWork,
-    ModelRoundTool, PortFuture, ProjectLedgerPlan, PromptPort, RenderedGuidedPrompt,
-    ToolJournalRepository, TurnRecord, UsageAttribution, render_accepted_project_plan,
-};
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::BtccRepositories;
+use butler_turn::btcc::EffectJournal;
+use butler_turn::btcc::GuidedInvocation;
+use butler_turn::btcc::GuidedPhaseSelection;
+use butler_turn::btcc::GuidedWork;
+use butler_turn::btcc::ModelRoundTool;
+use butler_turn::btcc::PortFuture;
+use butler_turn::btcc::ProjectLedgerPlan;
+use butler_turn::btcc::PromptPort;
+use butler_turn::btcc::RenderedGuidedPrompt;
+use butler_turn::btcc::ToolJournalRepository;
+use butler_turn::btcc::TurnRecord;
+use butler_turn::btcc::UsageAttribution;
+use butler_turn::btcc::render_accepted_project_plan;
 
 pub(crate) struct GuidedTextState {
     pub phase: GuidedPhaseSelection,
     pub work: GuidedWork,
-    pub work_service: Arc<crate::btcc::DurableWorkService>,
-    pub work_scope: crate::btcc::WorkTurnScope,
+    pub work_service: Arc<butler_turn::btcc::DurableWorkService>,
+    pub work_scope: butler_turn::btcc::WorkTurnScope,
     pub documents: BtccRepositories,
     pub journal: Arc<ToolJournalRepository>,
     pub attachment_context: Arc<crate::context::AttachmentContext>,
@@ -30,7 +40,7 @@ pub(crate) struct GuidedTextState {
     pub response_language: String,
     pub continuation_budget_enabled: bool,
     pub work_streams: Arc<crate::host::WorkStreams>,
-    pub subsessions: Arc<crate::btcc::SubsessionService>,
+    pub subsessions: Arc<butler_turn::btcc::SubsessionService>,
 }
 
 pub(crate) struct GuidedPrompt {
@@ -95,9 +105,9 @@ fn source_prompt(
         policy.role,
         policy.workspace_path,
         match policy.access_mode {
-            crate::btcc::AccessMode::ReadOnly => "read_only",
-            crate::btcc::AccessMode::AskFirst => "ask_first",
-            crate::btcc::AccessMode::FullAccess => "full_access",
+            butler_turn::btcc::AccessMode::ReadOnly => "read_only",
+            butler_turn::btcc::AccessMode::AskFirst => "ask_first",
+            butler_turn::btcc::AccessMode::FullAccess => "full_access",
         },
         work_storage,
     );
@@ -177,7 +187,7 @@ fn source_instructions(stable: &str, documents: &documents::DocumentProjection) 
     instructions
 }
 
-fn effect_context(records: &[crate::btcc::EffectRecord]) -> String {
+fn effect_context(records: &[butler_turn::btcc::EffectRecord]) -> String {
     records
         .iter()
         .take(12)
@@ -187,11 +197,11 @@ fn effect_context(records: &[crate::btcc::EffectRecord]) -> String {
                 record.identity.capability,
                 record.identity.sanitized_target,
                 match record.status {
-                    crate::btcc::EffectStatus::Prepared => "prepared",
-                    crate::btcc::EffectStatus::Dispatching => "dispatching",
-                    crate::btcc::EffectStatus::Applied => "applied",
-                    crate::btcc::EffectStatus::Uncertain => "uncertain",
-                    crate::btcc::EffectStatus::Failed => "failed",
+                    butler_turn::btcc::EffectStatus::Prepared => "prepared",
+                    butler_turn::btcc::EffectStatus::Dispatching => "dispatching",
+                    butler_turn::btcc::EffectStatus::Applied => "applied",
+                    butler_turn::btcc::EffectStatus::Uncertain => "uncertain",
+                    butler_turn::btcc::EffectStatus::Failed => "failed",
                 }
             );
             if let Some(receipt) = &record.receipt {
@@ -276,7 +286,7 @@ impl PromptPort for GuidedPrompt {
                     .effects
                     .list_for_work(work.work.work_id.clone(), None)
                     .await
-                    .map_err(crate::btcc::BtccError::from)?,
+                    .map_err(butler_turn::btcc::BtccError::from)?,
                 None => Vec::new(),
             };
             let effect_context = effect_context(&effects);

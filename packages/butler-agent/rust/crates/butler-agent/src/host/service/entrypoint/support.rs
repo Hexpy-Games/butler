@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use crate::btcc::BtccError;
 use crate::models::ModelConfigurationClock;
+use butler_turn::btcc::BtccError;
 
 use crate::host::{AgentRuntime, SystemIdentity};
 
 pub(super) async fn deliver_parent_results(
     client: &reqwest::Client,
-    repository: &crate::btcc::SqliteSubsessionRepository,
+    repository: &butler_turn::btcc::SqliteSubsessionRepository,
     base: &str,
     auth: &crate::gateway::LocalAuthConfig,
 ) -> Result<(), BtccError> {
@@ -16,7 +16,7 @@ pub(super) async fn deliver_parent_results(
         .await
         .map_err(|error| failure(error.code(), error.message()))?
     {
-        if pending.route != crate::btcc::ParentResultRoute::ButlerApp {
+        if pending.route != butler_turn::btcc::ParentResultRoute::ButlerApp {
             continue;
         }
         let body = serde_json::to_string(&pending.input).map_err(|error| {

@@ -2,11 +2,13 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::{
-    context::{ContextBudgetSnapshot, ContextResult, trim_text_to_token_budget},
-    conversation::{ConversationMessageWithParts, ConversationPartKind, ConversationRole},
-    models::TokenEstimateInput,
-};
+use crate::context::ContextBudgetSnapshot;
+use crate::context::ContextResult;
+use crate::context::trim_text_to_token_budget;
+use crate::models::TokenEstimateInput;
+use butler_turn::conversation::ConversationMessageWithParts;
+use butler_turn::conversation::ConversationPartKind;
+use butler_turn::conversation::ConversationRole;
 
 pub(super) struct CompactionWindow<'a> {
     pub(super) to_summarize: &'a [ConversationMessageWithParts],

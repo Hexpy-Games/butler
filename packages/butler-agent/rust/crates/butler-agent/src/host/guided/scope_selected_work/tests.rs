@@ -1,12 +1,19 @@
 use super::{ProjectWorkRepositoryProvider, ScopeSelectedWorkRepository, session_owned};
-use crate::btcc::{
-    BtccStorage, DurableWorkRepository, PortFuture, ResolvedProjectWorkScope,
-    SessionWorkRepository, TestStorageFixture, WorkTurnScope,
-};
-use crate::workspace::{
-    OwnOptional, SessionBindingStore, SessionBindingStoreConfig, SessionLifecycleState,
-    SessionRole, StoredSessionBinding, UpsertSessionBinding, WorkspaceStorageProfile,
-};
+use butler_turn::btcc::BtccStorage;
+use butler_turn::btcc::DurableWorkRepository;
+use butler_turn::btcc::PortFuture;
+use butler_turn::btcc::ResolvedProjectWorkScope;
+use butler_turn::btcc::SessionWorkRepository;
+use butler_turn::btcc::TestStorageFixture;
+use butler_turn::btcc::WorkTurnScope;
+use butler_turn::workspace::OwnOptional;
+use butler_turn::workspace::SessionBindingStore;
+use butler_turn::workspace::SessionBindingStoreConfig;
+use butler_turn::workspace::SessionLifecycleState;
+use butler_turn::workspace::SessionRole;
+use butler_turn::workspace::StoredSessionBinding;
+use butler_turn::workspace::UpsertSessionBinding;
+use butler_turn::workspace::WorkspaceStorageProfile;
 use serde_json::json;
 use std::sync::{
     Arc,

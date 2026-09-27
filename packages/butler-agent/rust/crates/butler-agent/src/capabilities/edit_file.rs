@@ -8,7 +8,9 @@ pub(super) use result::changed_file_value;
 use serde_json::{Map, Value, json};
 
 use super::{CapabilityError, CapabilityInvocation, arguments, mutation_evidence};
-use crate::workspace::{EditMutation, MutationCommand, WorkspaceMutations};
+use butler_turn::workspace::EditMutation;
+use butler_turn::workspace::MutationCommand;
+use butler_turn::workspace::WorkspaceMutations;
 
 pub(super) async fn execute(
     owner: &WorkspaceMutations,
@@ -154,9 +156,9 @@ fn safe_path(root: &std::path::Path, path: &str) -> Option<String> {
     } else {
         path.to_owned()
     };
-    crate::workspace::safe_workspace_path(&candidate).map(str::to_owned)
+    butler_turn::workspace::safe_workspace_path(&candidate).map(str::to_owned)
 }
 
-fn owner_error(error: crate::workspace::MutationOwnerError) -> CapabilityError {
+fn owner_error(error: butler_turn::workspace::MutationOwnerError) -> CapabilityError {
     CapabilityError::caused(error.code(), error)
 }

@@ -21,8 +21,8 @@ use super::{
     MemoryGenerationHandle, PreparedConversationSource, assert_mutation_authority,
     prepare_conversation_source, resolve_generation,
 };
-use crate::conversation::ConversationSourceReader;
 use crate::coordination::{CognitionWriteAcquire, CognitionWriteCoordinator, CognitionWriteLease};
+use butler_turn::conversation::ConversationSourceReader;
 
 use crate::cognition::CognitionCode;
 pub(crate) use projection::{ProjectSemanticWindowInput, ProjectionSourceNotice};

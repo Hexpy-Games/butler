@@ -6,7 +6,6 @@ use chrono::{DateTime, Utc};
 use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
 
-use crate::btcc::BtccError;
 use crate::cognition::BriefingGenerationError;
 use crate::cognition::BriefingGenerationService;
 use crate::cognition::BriefingInputFuture;
@@ -30,6 +29,7 @@ use crate::project_ledger::ProjectBriefingTarget;
 use crate::project_ledger::ProjectLedger;
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
+use butler_turn::btcc::BtccError;
 
 use crate::cognition::BriefingGenerationCode;
 use crate::host::{
@@ -79,7 +79,7 @@ impl BriefingGeneration {
             coordinator.clone(),
             Arc::new(SystemIdentity),
             Arc::new(ProfileConversationSources::new(
-                crate::conversation::conversation_store_path(&data_root),
+                butler_turn::conversation::conversation_store_path(&data_root),
             )),
             models.provider.clone(),
         ));

@@ -7,17 +7,19 @@ use tokio_util::sync::CancellationToken;
 
 use super::{Clock, ConversationRegistrationOutcome, RegisterConversationSourceInput};
 use crate::cognition::CognitionCode;
-use crate::{
-    cognition::{
-        CognitionError, CognitionPathEnvironment, CognitionResult, MemoryGenerationHandle,
-        PreparedConversationSource, assert_mutation_authority,
-        graph::{GraphRepository, InternalSupersessionInput},
-        prepare_conversation_source,
-        sources::projection_hash_for_graph,
-    },
-    conversation::{ConversationOriginKind, ConversationSourceReader},
-    coordination::CognitionWriteCoordinator,
-};
+use crate::cognition::CognitionError;
+use crate::cognition::CognitionPathEnvironment;
+use crate::cognition::CognitionResult;
+use crate::cognition::MemoryGenerationHandle;
+use crate::cognition::PreparedConversationSource;
+use crate::cognition::assert_mutation_authority;
+use crate::cognition::graph::GraphRepository;
+use crate::cognition::graph::InternalSupersessionInput;
+use crate::cognition::prepare_conversation_source;
+use crate::cognition::sources::projection_hash_for_graph;
+use crate::coordination::CognitionWriteCoordinator;
+use butler_turn::conversation::ConversationOriginKind;
+use butler_turn::conversation::ConversationSourceReader;
 
 pub(super) struct Input {
     pub environment: CognitionPathEnvironment,

@@ -3,8 +3,8 @@
 use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value};
 
-use crate::btcc::BtccError;
 use butler_core::public_text::trim_js_whitespace;
+use butler_turn::btcc::BtccError;
 
 pub(super) fn managed(name: &str) -> bool {
     matches!(

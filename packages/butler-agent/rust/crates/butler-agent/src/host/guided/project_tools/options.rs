@@ -3,9 +3,9 @@
 use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value};
 
-use crate::btcc::BtccError;
 use crate::project_ledger::LedgerCommand;
 use butler_core::public_text::trim_js_whitespace;
+use butler_turn::btcc::BtccError;
 
 pub(super) fn acceptance(args: &Map<String, Value>) -> Map<String, Value> {
     let mut args = args.clone();

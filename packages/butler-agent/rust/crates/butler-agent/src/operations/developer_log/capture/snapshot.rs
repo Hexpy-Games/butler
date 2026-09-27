@@ -1,6 +1,9 @@
 use serde_json::{Map, Value, json};
 
-use crate::btcc::{ModelRoundError, ModelRoundRequest, ModelRoundResult, RuntimeFailure};
+use butler_turn::btcc::ModelRoundError;
+use butler_turn::btcc::ModelRoundRequest;
+use butler_turn::btcc::ModelRoundResult;
+use butler_turn::btcc::RuntimeFailure;
 
 #[derive(Clone)]
 pub(super) struct RequestSnapshot {

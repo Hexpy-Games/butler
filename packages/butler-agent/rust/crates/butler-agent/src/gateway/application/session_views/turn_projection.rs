@@ -2,9 +2,12 @@ use serde::Serialize;
 use serde_json::Value;
 
 use super::super::{AppApplication, GatewayApplicationError};
-use crate::btcc::{ControlSource, ExecutionControls, ReasoningEffort, SubsessionResultContext};
 use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::{DeliveryState, TurnProgressSnapshotView, TurnRecord, TurnState};
+use butler_turn::btcc::ControlSource;
+use butler_turn::btcc::ExecutionControls;
+use butler_turn::btcc::ReasoningEffort;
+use butler_turn::btcc::SubsessionResultContext;
 
 #[derive(Clone, Serialize)]
 pub(super) struct SessionViewTurnProjection {

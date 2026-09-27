@@ -1,8 +1,9 @@
 //! One source catalog translated at host composition, with executable coverage
 //! checked separately from BTCC's authority and provider-surface selection.
 
-use crate::btcc::{BtccError, GuidedCatalogSnapshot};
 use crate::capabilities::{Capabilities, CatalogError, ToolCatalog};
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::GuidedCatalogSnapshot;
 
 #[derive(Debug)]
 pub(crate) enum GuidedCatalogError {

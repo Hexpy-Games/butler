@@ -25,7 +25,7 @@ pub(crate) use transport::provider_http_client;
 
 // Prompt clients receive the same typed error as the provider round adapter.
 // Expose it with the prompt API so lifecycle callbacks need no BTCC imports.
-pub(crate) use crate::btcc::ModelRoundError as ProviderPromptError;
+pub(crate) use butler_turn::btcc::ModelRoundError as ProviderPromptError;
 
 pub(crate) use prompt::{
     PromptAdapterEntry, PromptCallbackFuture, PromptInvocationIntent, PromptJsonSchema,

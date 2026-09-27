@@ -16,9 +16,9 @@ use serde_json::Value;
 use tokio::sync::{Semaphore, oneshot};
 use tokio_util::task::TaskTracker;
 
-use crate::conversation::{
-    CanonicalMemoryReadBinding, PublicMemorySnapshot, conversation_store_path,
-};
+use butler_turn::conversation::CanonicalMemoryReadBinding;
+use butler_turn::conversation::PublicMemorySnapshot;
+use butler_turn::conversation::conversation_store_path;
 
 use super::{ContextError, ContextResult, MemorySourceReferencePort, ResolvedMemorySource};
 use crate::context::ContextCode;
@@ -297,6 +297,6 @@ fn read_now(
     clippy::needless_pass_by_value,
     reason = "map_err/iterator adapter taking owned values"
 )]
-fn store_error(error: crate::conversation::ConversationError) -> ContextError {
+fn store_error(error: butler_turn::conversation::ConversationError) -> ContextError {
     ContextError::new(ContextCode::ConversationStoreUnavailable, error.to_string())
 }

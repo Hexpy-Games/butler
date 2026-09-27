@@ -4,10 +4,14 @@ use std::fs;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use crate::btcc::{
-    BtccError, DurableWorkStatus as WorkStatus, ProjectWorkLocateInput,
-    ProjectWorkOperationIdentity, ResolvedProjectWorkScope, WorkContext, WorkTurnScope, WorkView,
-};
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::DurableWorkStatus as WorkStatus;
+use butler_turn::btcc::ProjectWorkLocateInput;
+use butler_turn::btcc::ProjectWorkOperationIdentity;
+use butler_turn::btcc::ResolvedProjectWorkScope;
+use butler_turn::btcc::WorkContext;
+use butler_turn::btcc::WorkTurnScope;
+use butler_turn::btcc::WorkView;
 
 use super::super::{ProjectLedgerReadError, committed, records};
 use super::codec::Snapshot;

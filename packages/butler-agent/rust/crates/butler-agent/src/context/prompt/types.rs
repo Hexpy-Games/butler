@@ -5,9 +5,9 @@ use std::sync::Arc;
 
 use tokio_util::sync::CancellationToken;
 
-use crate::btcc::ContextSection;
 use crate::context::{ContextResult, PromptClock};
-use crate::workspace::StoredSessionBinding;
+use butler_turn::btcc::ContextSection;
+use butler_turn::workspace::StoredSessionBinding;
 
 pub(crate) type ContextFuture<'a, T> = Pin<Box<dyn Future<Output = ContextResult<T>> + Send + 'a>>;
 
@@ -91,6 +91,6 @@ pub(crate) struct PromptDependencies {
 
 pub(crate) struct SharedAssemblyInput<'a> {
     pub(crate) binding: &'a StoredSessionBinding,
-    pub(crate) request: &'a crate::btcc::TurnRequest,
+    pub(crate) request: &'a butler_turn::btcc::TurnRequest,
     pub(crate) role_configuration: Vec<ContextSection>,
 }

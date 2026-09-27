@@ -1,8 +1,10 @@
 use serde_json::{Value, json};
 
-use crate::btcc::{GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 use butler_core::json::JsonDocument;
 use butler_core::tool_protocol::ToolName;
+use butler_turn::btcc::GuidedInvocation;
+use butler_turn::btcc::ModelRoundToolCall;
+use butler_turn::btcc::ToolExecutionError;
 
 use super::super::GuidedTools;
 

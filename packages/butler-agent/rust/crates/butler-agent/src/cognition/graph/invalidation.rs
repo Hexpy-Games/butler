@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 use super::db_error;
 use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult, CognitionSourceRow};
-use crate::conversation::ConversationSourceReader;
+use butler_turn::conversation::ConversationSourceReader;
 
 #[derive(Clone, Copy)]
 pub(super) struct InvalidationInput<'a> {

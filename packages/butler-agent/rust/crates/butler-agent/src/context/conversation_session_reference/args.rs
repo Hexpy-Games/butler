@@ -1,8 +1,8 @@
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use crate::conversation::PublicMemoryScope;
 use butler_core::json;
+use butler_turn::conversation::PublicMemoryScope;
 
 use super::{ContextError, ContextResult};
 use crate::context::ContextCode;

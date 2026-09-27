@@ -9,15 +9,15 @@ use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
-use crate::btcc::AccessMode;
-use crate::btcc::GuidedInvocation;
-use crate::btcc::ModelRoundToolCall;
-use crate::btcc::ToolExecutionError;
 use crate::context::ImageCapabilityEvidence;
 use crate::context::ImageCarrierTuple;
 use crate::context::VisualAttachmentManifest;
 use butler_core::json::JsonDocument;
 use butler_core::public_text::trim_js_whitespace;
+use butler_turn::btcc::AccessMode;
+use butler_turn::btcc::GuidedInvocation;
+use butler_turn::btcc::ModelRoundToolCall;
+use butler_turn::btcc::ToolExecutionError;
 
 use super::GuidedTools;
 
@@ -344,7 +344,7 @@ fn scrub_text(value: &str, temp_root: &Path, temp_path: &Path) -> String {
 }
 
 fn integrity(code: &'static str, message: &'static str) -> ToolExecutionError {
-    ToolExecutionError::Integrity(crate::btcc::BtccError::relayed(code, message))
+    ToolExecutionError::Integrity(butler_turn::btcc::BtccError::relayed(code, message))
 }
 
 struct TempImageFile {

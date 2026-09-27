@@ -10,9 +10,9 @@ use tokio::{
 };
 use url::Url;
 
-use crate::btcc::ProviderRequestError;
 use crate::models::*;
 use butler_core::locale::LocaleCollation;
+use butler_turn::btcc::ProviderRequestError;
 
 mod lifecycle;
 
@@ -366,7 +366,8 @@ async fn actual_native_provider_applies_registered_semantic_window() {
     assert!(evidence.source_ref.starts_with("memory-source:v2:"));
     assert!(evidence.excerpt.contains("Straße"));
     let canonical =
-        crate::conversation::ConversationSourceReader::open(&fixture.canonical_path()).unwrap();
+        butler_turn::conversation::ConversationSourceReader::open(&fixture.canonical_path())
+            .unwrap();
     let original = canonical
         .read_message(evidence.conversation_message_id.as_deref().unwrap())
         .unwrap()

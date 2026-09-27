@@ -6,8 +6,9 @@ mod value;
 use butler_core::tool_protocol::ToolName;
 use sha2::{Digest, Sha256};
 
-use crate::btcc::{BtccError, ToolJournalRecord};
 use butler_core::json::visit_raw_object;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::ToolJournalRecord;
 
 const MAX_RECORD_BYTES: usize = 6_000;
 const MAX_TOTAL_BYTES: usize = 20_000;

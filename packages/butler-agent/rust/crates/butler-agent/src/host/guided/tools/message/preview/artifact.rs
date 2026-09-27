@@ -4,8 +4,8 @@ mod page;
 use butler_core::tool_protocol::ToolName;
 pub(super) use page::fit;
 
-use crate::btcc::BtccError;
 use butler_core::json::Utf16Prefix;
+use butler_turn::btcc::BtccError;
 
 use super::{append_field, failure, field};
 

@@ -3,9 +3,9 @@ use std::collections::HashSet;
 use serde_json::{Map, Value, json};
 
 use super::model;
-use crate::btcc::ReasoningEffort;
 use crate::gateway::application::AppSettingsFacts;
 use butler_core::public_text::trim_js_whitespace;
+use butler_turn::btcc::ReasoningEffort;
 
 const DEFAULT_ID: &str = "default";
 const MAX_PROFILES: usize = 12;

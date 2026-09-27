@@ -7,8 +7,8 @@ use std::{
 };
 
 use crate::cognition::{CognitionSourceRow, hydrate_conversation_source};
-use crate::conversation::ConversationMessageWithParts;
 use butler_core::segmentation::grapheme_segments;
+use butler_turn::conversation::ConversationMessageWithParts;
 
 use super::super::typed::{TypedMemoryRecord, read_typed_record};
 use super::{RecallSourceHydration, RecallSourceResolution, ResolvedRecallSource, current};

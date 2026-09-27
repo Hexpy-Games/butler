@@ -1,9 +1,11 @@
 use serde_json::{Value, json};
 
-use crate::btcc::{
-    BtccError, ContinueWorkCommand, ProjectWorkOperationIdentity, ProjectWorkOperationKind,
-    WorkTurnScope, WorkView,
-};
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::ContinueWorkCommand;
+use butler_turn::btcc::ProjectWorkOperationIdentity;
+use butler_turn::btcc::ProjectWorkOperationKind;
+use butler_turn::btcc::WorkTurnScope;
+use butler_turn::btcc::WorkView;
 
 use super::super::publication::{ProjectLedgerRecordKind, ProjectLedgerRecordUpdate};
 use super::codec::{self, Snapshot};

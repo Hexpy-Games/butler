@@ -1,6 +1,8 @@
 use super::*;
-use crate::btcc::model_route::{ModelExecution, ModelExecutionView};
-use crate::btcc::{ModelIdentity, ReasoningEffort};
+use butler_turn::btcc::ModelIdentity;
+use butler_turn::btcc::ReasoningEffort;
+use butler_turn::btcc::model_route::ModelExecution;
+use butler_turn::btcc::model_route::ModelExecutionView;
 
 struct DirectExecution<'a> {
     model: &'a dyn ModelRoundPort,
@@ -33,8 +35,8 @@ async fn nochange_compactor_selects_semantic_and_bounded_eviction_skips_steering
     let storage = BtccStorage::open(fixture.config("context-selection"))
         .await
         .unwrap();
-    let turn = crate::btcc::agent_loop::test_data::turn(None, "safe_fallback");
-    let claim = crate::btcc::agent_loop::test_data::claim();
+    let turn = butler_turn::btcc::agent_loop::test_data::turn(None, "safe_fallback");
+    let claim = butler_turn::btcc::agent_loop::test_data::claim();
     let ports = Fixture::new([]);
     let execution = DirectExecution {
         model: ports.as_ref(),

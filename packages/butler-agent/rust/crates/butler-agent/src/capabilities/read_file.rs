@@ -8,7 +8,10 @@ use std::time::Instant;
 use serde_json::{Value, json};
 
 use super::{CapabilityError, CapabilityInvocation, cursor, evidence, failure};
-use crate::workspace::{ReadFileInput, WorkspaceFileRead, WorkspaceFiles, utf8_prefix_end};
+use butler_turn::workspace::ReadFileInput;
+use butler_turn::workspace::WorkspaceFileRead;
+use butler_turn::workspace::WorkspaceFiles;
+use butler_turn::workspace::utf8_prefix_end;
 
 const DEFAULT_TOTAL_BYTES: usize = 1_048_576;
 
@@ -267,7 +270,7 @@ pub(super) async fn execute(
     }
     Ok(result)
 }
-fn owner_error(error: crate::workspace::FileOwnerError) -> CapabilityError {
+fn owner_error(error: butler_turn::workspace::FileOwnerError) -> CapabilityError {
     CapabilityError::caused(error.code(), error)
 }
 fn guard_io_error(error: std::io::Error) -> CapabilityError {

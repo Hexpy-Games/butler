@@ -18,7 +18,7 @@ use crate::cognition::{
     },
     sources::{RecallSourceHydration, RecallSourceResolution, hydrate_recall_sources},
 };
-use crate::conversation::ConversationSourceReader;
+use butler_turn::conversation::ConversationSourceReader;
 
 use super::{evidence, selection::Selection};
 

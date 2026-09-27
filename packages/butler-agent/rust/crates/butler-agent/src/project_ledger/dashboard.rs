@@ -17,7 +17,7 @@ pub(super) use managed::{decode_child_body, decode_manifest_body};
 
 pub(in crate::project_ledger) fn validate_managed_work(
     root: &Path,
-    scope: &crate::btcc::ResolvedProjectWorkScope,
+    scope: &butler_turn::btcc::ResolvedProjectWorkScope,
     work_id: &str,
     collation: &LocaleCollation,
 ) -> Result<(), ProjectLedgerReadError> {

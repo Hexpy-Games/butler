@@ -2,7 +2,8 @@ use std::time::Instant;
 
 use serde_json::{Value, json};
 
-use crate::workspace::{WorkspaceListRejection, WorkspaceListResult};
+use butler_turn::workspace::WorkspaceListRejection;
+use butler_turn::workspace::WorkspaceListResult;
 
 use super::super::evidence;
 use super::{args::Options, cursor::GrepCursor, search::SearchResult};

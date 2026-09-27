@@ -6,16 +6,18 @@ use std::time::{Duration, Instant};
 use sha2::{Digest, Sha256};
 
 use super::process::{Input, canonical_path, resolve_input_generation};
-use crate::{
-    cognition::{
-        CognitionConversationSourceNotice, CognitionError, CognitionResult,
-        ConversationRegistrationOutcome, MemoryGenerationTarget, RegisterConversationSourceInput,
-        assert_mutation_authority,
-        graph::{CatchupCursors, GraphRepository},
-    },
-    conversation::ConversationSourceReader,
-    coordination::{CognitionWaitClass, CognitionWriteAcquire},
-};
+use crate::cognition::CognitionConversationSourceNotice;
+use crate::cognition::CognitionError;
+use crate::cognition::CognitionResult;
+use crate::cognition::ConversationRegistrationOutcome;
+use crate::cognition::MemoryGenerationTarget;
+use crate::cognition::RegisterConversationSourceInput;
+use crate::cognition::assert_mutation_authority;
+use crate::cognition::graph::CatchupCursors;
+use crate::cognition::graph::GraphRepository;
+use crate::coordination::CognitionWaitClass;
+use crate::coordination::CognitionWriteAcquire;
+use butler_turn::conversation::ConversationSourceReader;
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct CatchupReport {
@@ -181,7 +183,7 @@ async fn run(input: &Input, force: bool) -> CognitionResult<CatchupReport> {
 }
 
 fn recovered_source_hash(
-    parts: &[crate::conversation::ConversationPart],
+    parts: &[butler_turn::conversation::ConversationPart],
 ) -> CognitionResult<String> {
     let mut encoded = String::from("[");
     for (index, part) in parts.iter().enumerate() {

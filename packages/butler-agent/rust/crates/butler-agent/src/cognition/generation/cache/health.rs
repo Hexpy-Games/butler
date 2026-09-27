@@ -5,10 +5,10 @@ use std::{fs, path::Path};
 use rusqlite::{Connection, OpenFlags};
 use serde_json::{Value, json};
 
-use crate::{
-    cognition::{MemoryGenerationHandle, graph::GraphRepository},
-    conversation::{ConversationSourceReader, conversation_store_path},
-};
+use crate::cognition::MemoryGenerationHandle;
+use crate::cognition::graph::GraphRepository;
+use butler_turn::conversation::ConversationSourceReader;
+use butler_turn::conversation::conversation_store_path;
 
 use super::physical_entries;
 

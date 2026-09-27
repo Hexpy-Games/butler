@@ -8,7 +8,7 @@ mod tests;
 use std::{collections::HashMap, path::Path, sync::Arc};
 
 use crate::cognition::{CognitionSourceRow, recall::RecallSourceEpisode};
-use crate::conversation::ConversationSourceReader;
+use butler_turn::conversation::ConversationSourceReader;
 
 pub(in crate::cognition) struct RecallSourceHydration<'a, N, C> {
     pub data_root: &'a Path,

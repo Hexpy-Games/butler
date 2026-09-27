@@ -6,7 +6,6 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
 };
 
-use crate::btcc::BtccError;
 use crate::mcp_client::McpClient;
 use crate::models::{
     ModelCatalog, ModelConfiguration, ModelConfigurationEnvironment, ModelProvider,
@@ -15,6 +14,7 @@ use crate::models::{
 use crate::operations::PromptUsageMetrics;
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
+use butler_turn::btcc::BtccError;
 
 use crate::host::SystemIdentity;
 
@@ -116,7 +116,7 @@ impl ProviderObservationSink for ProviderCounts {
     fn response(&self, _: &str, _: &str) {
         self.responses.fetch_add(1, Ordering::Relaxed);
     }
-    fn failure(&self, _: &crate::btcc::ProviderRequestError) {
+    fn failure(&self, _: &butler_turn::btcc::ProviderRequestError) {
         self.failures.fetch_add(1, Ordering::Relaxed);
     }
 }

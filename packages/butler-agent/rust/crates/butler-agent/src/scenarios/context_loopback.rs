@@ -9,16 +9,6 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
-use crate::btcc::model_route::{ModelExecutionFactory, ModelExecutionInput};
-use crate::btcc::storage::{
-    BtccRepositories, BtccStorage, ContextCompactionRepository, TestStorageFixture,
-};
-use crate::btcc::{
-    ContextMessages, ContextPort, ContextProjectionInput, GuidedContinuationBudgetFactory,
-    ModelRoundError, ModelRoundMessage, ModelRoundPort, ModelRoundRequest, ModelRouteRetryConfig,
-    PortFuture, SteeringObservation, TurnContinuationBudgetLimits, TurnModelExecutionFactory,
-    TurnSteeringPort, TurnStore,
-};
 use crate::context::ContextPortAdapter;
 use crate::models::{
     ModelCatalog, ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelProvider,
@@ -28,9 +18,30 @@ use crate::models::{
     ProviderRoundPolicy,
 };
 use butler_core::locale::LocaleCollation;
+use butler_turn::btcc::ContextMessages;
+use butler_turn::btcc::ContextPort;
+use butler_turn::btcc::ContextProjectionInput;
+use butler_turn::btcc::GuidedContinuationBudgetFactory;
+use butler_turn::btcc::ModelRoundError;
+use butler_turn::btcc::ModelRoundMessage;
+use butler_turn::btcc::ModelRoundPort;
+use butler_turn::btcc::ModelRoundRequest;
+use butler_turn::btcc::ModelRouteRetryConfig;
+use butler_turn::btcc::PortFuture;
+use butler_turn::btcc::SteeringObservation;
+use butler_turn::btcc::TurnContinuationBudgetLimits;
+use butler_turn::btcc::TurnModelExecutionFactory;
+use butler_turn::btcc::TurnSteeringPort;
+use butler_turn::btcc::TurnStore;
+use butler_turn::btcc::model_route::ModelExecutionFactory;
+use butler_turn::btcc::model_route::ModelExecutionInput;
+use butler_turn::btcc::storage::BtccRepositories;
+use butler_turn::btcc::storage::BtccStorage;
+use butler_turn::btcc::storage::ContextCompactionRepository;
+use butler_turn::btcc::storage::TestStorageFixture;
 
-use crate::btcc::agent_loop::guided_ports::GuidedInvocation;
-use crate::btcc::agent_loop::test_support::Fixture;
+use butler_turn::btcc::agent_loop::guided_ports::GuidedInvocation;
+use butler_turn::btcc::agent_loop::test_support::Fixture;
 
 struct Config {
     snapshot: Arc<ModelCatalogSnapshot>,
@@ -84,7 +95,7 @@ struct Observations;
 impl ProviderObservationSink for Observations {
     fn request(&self, _: ProviderObservation) {}
     fn response(&self, _: &str, _: &str) {}
-    fn failure(&self, _: &crate::btcc::ProviderRequestError) {}
+    fn failure(&self, _: &butler_turn::btcc::ProviderRequestError) {}
 }
 struct Metrics;
 impl PromptUsageMetricSink for Metrics {
@@ -219,7 +230,7 @@ async fn summary_persists_and_reopens_with_physical_request_admission() {
         .unwrap();
     let repositories = Arc::new(BtccRepositories::new(storage.clone(), Some(limits())));
     let (mut turn, _) = repositories
-        .load_or_admit(&crate::btcc::storage::test_prepared_turn())
+        .load_or_admit(&butler_turn::btcc::storage::test_prepared_turn())
         .await
         .unwrap();
     let claim = repositories.acquire_state_claim(&turn).await.unwrap();
@@ -241,11 +252,11 @@ async fn summary_persists_and_reopens_with_physical_request_admission() {
         TurnModelExecutionFactory::new(repositories.clone(), ModelRouteRetryConfig::new(0.0));
     let execution = execution_factory
         .create(ModelExecutionInput {
-            source_revision: crate::btcc::model_route::GuidedSourceRevision::from_turn(&turn),
+            source_revision: butler_turn::btcc::model_route::GuidedSourceRevision::from_turn(&turn),
             turn: &turn,
             claim: &claim,
             progress: progress.as_ref(),
-            model_round_observer: &crate::btcc::NOOP_MODEL_ROUND_OBSERVER,
+            model_round_observer: &butler_turn::btcc::NOOP_MODEL_ROUND_OBSERVER,
             cancellation: cancellation.clone(),
             base: model.as_ref(),
         })

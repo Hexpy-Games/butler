@@ -2,7 +2,8 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use crate::btcc::{ModelRoundError, ModelRoundRequest};
+use butler_turn::btcc::ModelRoundError;
+use butler_turn::btcc::ModelRoundRequest;
 
 use super::serialize::Carrier;
 
@@ -198,7 +199,7 @@ fn first_user_text<'a>(request: &'a ModelRoundRequest<'_>) -> &'a str {
     request
         .messages
         .iter()
-        .find(|message| matches!(message.role, crate::btcc::ModelRoundRole::User))
+        .find(|message| matches!(message.role, butler_turn::btcc::ModelRoundRole::User))
         .map(|message| message.content.as_ref())
         .unwrap_or("")
 }

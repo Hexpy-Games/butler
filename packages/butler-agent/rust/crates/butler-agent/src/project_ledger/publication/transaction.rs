@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::btcc::ResolvedProjectWorkScope;
+use butler_turn::btcc::ResolvedProjectWorkScope;
 
 use super::contracts::{ProjectLedgerRecordUpdate, ProjectWorkPublicationError, ProjectWorkTarget};
 use super::occurrence::{self, Attempt, Occurrence};

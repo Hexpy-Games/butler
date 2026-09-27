@@ -1,9 +1,13 @@
 use std::{collections::VecDeque, sync::Arc};
 
-use crate::btcc::{
-    BtccError, ContextCompactionRecord, ContextProjectionError, ContextProjectionRebaseIdentity,
-    ContextProjectionRebaseV1, ModelRoundMessage, ModelRoundRole, RollingContextV1,
-};
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::ContextCompactionRecord;
+use butler_turn::btcc::ContextProjectionError;
+use butler_turn::btcc::ContextProjectionRebaseIdentity;
+use butler_turn::btcc::ContextProjectionRebaseV1;
+use butler_turn::btcc::ModelRoundMessage;
+use butler_turn::btcc::ModelRoundRole;
+use butler_turn::btcc::RollingContextV1;
 
 use super::atomic_units::{self, AtomicUnit};
 use super::serialization::{

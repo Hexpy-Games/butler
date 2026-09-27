@@ -13,13 +13,6 @@ use tokio_util::sync::CancellationToken;
 use url::Url;
 
 use super::*;
-use crate::btcc::{
-    AgentLoop, AgentLoopProgress, BtccStorage, ContextDocumentInput, DurableWorkService,
-    GuidedContinuationBudgetFactory, ModelRoundError, ModelRouteEventWrite, ModelRouteRetryConfig,
-    ModelRouteWrite, PortFuture, ProductionAgentLoop, RuntimeTurnEventInput, SessionWorkRepository,
-    StorageEffectJournal, TestStorageFixture, ToolJournalRepository, TurnModelExecutionFactory,
-    TurnStore, test_prepared_turn,
-};
 use crate::host::{AcceptedPlanProducer, GuidedCatalog, SystemIdentity};
 use crate::models::{
     ModelCatalog, ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelProvider,
@@ -28,20 +21,43 @@ use crate::models::{
     ProviderPromptCachePolicy, ProviderRequestConfig, ProviderRequestConfigPort,
     ProviderRoundPolicy,
 };
-use crate::workspace::{
-    Commands, SessionBindingStore, SessionBindingStoreConfig, SessionWorkspaceRecovery,
-    WorkspaceFiles, WorkspaceMutations, WorkspaceStorageProfile,
-};
 use butler_core::locale::LocaleCollation;
+use butler_turn::btcc::AgentLoop;
+use butler_turn::btcc::AgentLoopProgress;
+use butler_turn::btcc::BtccStorage;
+use butler_turn::btcc::ContextDocumentInput;
+use butler_turn::btcc::DurableWorkService;
+use butler_turn::btcc::GuidedContinuationBudgetFactory;
+use butler_turn::btcc::ModelRoundError;
+use butler_turn::btcc::ModelRouteEventWrite;
+use butler_turn::btcc::ModelRouteRetryConfig;
+use butler_turn::btcc::ModelRouteWrite;
+use butler_turn::btcc::PortFuture;
+use butler_turn::btcc::ProductionAgentLoop;
+use butler_turn::btcc::RuntimeTurnEventInput;
+use butler_turn::btcc::SessionWorkRepository;
+use butler_turn::btcc::StorageEffectJournal;
+use butler_turn::btcc::TestStorageFixture;
+use butler_turn::btcc::ToolJournalRepository;
+use butler_turn::btcc::TurnModelExecutionFactory;
+use butler_turn::btcc::TurnStore;
+use butler_turn::btcc::test_prepared_turn;
+use butler_turn::workspace::Commands;
+use butler_turn::workspace::SessionBindingStore;
+use butler_turn::workspace::SessionBindingStoreConfig;
+use butler_turn::workspace::SessionWorkspaceRecovery;
+use butler_turn::workspace::WorkspaceFiles;
+use butler_turn::workspace::WorkspaceMutations;
+use butler_turn::workspace::WorkspaceStorageProfile;
 
 struct EmptyProfiles;
-impl crate::btcc::WorkerProfileReader for EmptyProfiles {
-    fn list(&self) -> PortFuture<'_, Vec<crate::btcc::WorkerProfile>> {
+impl butler_turn::btcc::WorkerProfileReader for EmptyProfiles {
+    fn list(&self) -> PortFuture<'_, Vec<butler_turn::btcc::WorkerProfile>> {
         Box::pin(async { Ok(vec![]) })
     }
-    fn read(&self, _: Option<String>) -> PortFuture<'_, crate::btcc::WorkerProfile> {
+    fn read(&self, _: Option<String>) -> PortFuture<'_, butler_turn::btcc::WorkerProfile> {
         Box::pin(async {
-            Err(crate::btcc::BtccError::relayed(
+            Err(butler_turn::btcc::BtccError::relayed(
                 "worker_profile_missing",
                 "missing",
             ))
@@ -97,7 +113,7 @@ struct Observations;
 impl ProviderObservationSink for Observations {
     fn request(&self, _: ProviderObservation) {}
     fn response(&self, _: &str, _: &str) {}
-    fn failure(&self, _: &crate::btcc::ProviderRequestError) {}
+    fn failure(&self, _: &butler_turn::btcc::ProviderRequestError) {}
 }
 struct Metrics;
 impl PromptUsageMetricSink for Metrics {

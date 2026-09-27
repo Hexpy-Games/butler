@@ -1,6 +1,8 @@
 use super::*;
-use crate::btcc::{EffectFuture, RegisteredEditPort, WorkspaceFileEditEffectAdapter};
-use crate::workspace::EffectFileScope;
+use butler_turn::btcc::EffectFuture;
+use butler_turn::btcc::RegisteredEditPort;
+use butler_turn::btcc::WorkspaceFileEditEffectAdapter;
+use butler_turn::workspace::EffectFileScope;
 
 struct UnusedRegisteredEdit;
 impl RegisteredEditPort for UnusedRegisteredEdit {

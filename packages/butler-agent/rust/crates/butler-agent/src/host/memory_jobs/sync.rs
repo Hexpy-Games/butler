@@ -11,7 +11,6 @@ use std::{
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
-use crate::btcc::BtccError;
 #[cfg(unix)]
 use crate::cognition::GenerationVectorAdapter;
 #[cfg(not(unix))]
@@ -24,6 +23,7 @@ use crate::coordination::CognitionWriteCoordinator;
 #[cfg(unix)]
 use crate::host::EmbeddingOwner;
 use crate::models::{ModelConfigurationClock, ModelProvider};
+use butler_turn::btcc::BtccError;
 
 use crate::host::SystemIdentity;
 

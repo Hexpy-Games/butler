@@ -9,17 +9,24 @@ mod tests;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::btcc::{
-    AgentLoopProgress, BoundGuidedTurn, BtccError, BtccRepositories, ContextCompactionRepository,
-    EffectJournal, GuidedPolicyDependencies, GuidedTurnFactory, GuidedTurnInputs, GuidedTurnStart,
-    ModelRoundPort, PortFuture,
-};
 use crate::capabilities::Capabilities;
 use crate::cognition::{
     CognitionPathEnvironment, CompletionPublisher, ExactMemoryQuery, MemoryRecall,
 };
 use crate::context::{ContextPortAdapter, ConversationSessionReference};
-use crate::conversation::CanonicalMemoryReadBinding;
+use butler_turn::btcc::AgentLoopProgress;
+use butler_turn::btcc::BoundGuidedTurn;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::BtccRepositories;
+use butler_turn::btcc::ContextCompactionRepository;
+use butler_turn::btcc::EffectJournal;
+use butler_turn::btcc::GuidedPolicyDependencies;
+use butler_turn::btcc::GuidedTurnFactory;
+use butler_turn::btcc::GuidedTurnInputs;
+use butler_turn::btcc::GuidedTurnStart;
+use butler_turn::btcc::ModelRoundPort;
+use butler_turn::btcc::PortFuture;
+use butler_turn::conversation::CanonicalMemoryReadBinding;
 
 use crate::host::{
     GuidedActivity, GuidedJournal, GuidedPreparation, GuidedPrompt, GuidedSteering,
@@ -44,17 +51,17 @@ pub(crate) struct GuidedTurnFactoryAdapter {
     pub conversation_tools: Arc<crate::context::ConversationTools>,
     pub compactions: ContextCompactionRepository,
     pub attachment_context: Arc<crate::context::AttachmentContext>,
-    pub verified_image_payload: Arc<dyn crate::btcc::VerifiedImagePayloadPort>,
+    pub verified_image_payload: Arc<dyn butler_turn::btcc::VerifiedImagePayloadPort>,
     pub butler_data: PathBuf,
     pub installation_root: PathBuf,
     pub protected_ledger_roots: Vec<PathBuf>,
-    pub subsessions: Arc<crate::btcc::SubsessionService>,
+    pub subsessions: Arc<butler_turn::btcc::SubsessionService>,
     pub work_streams: Arc<crate::host::WorkStreams>,
     pub automations: Arc<crate::operations::AutomationService>,
     pub mcp_client: Arc<crate::mcp_client::McpClient>,
     pub profile: Arc<crate::profile::ProfileService>,
     pub monitoring: Arc<crate::host::MonitoringReaders>,
-    pub session_worktrees: crate::workspace::SessionWorktrees,
+    pub session_worktrees: butler_turn::workspace::SessionWorktrees,
     pub web_access: Arc<crate::web_access::WebAccess>,
     pub app_endpoint: Arc<crate::host::ActiveAppEndpoint>,
 }
@@ -138,7 +145,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 self.capabilities.clone(),
                 self.command.clone(),
                 self.tool_artifacts.clone(),
-                Arc::new(crate::btcc::EffectService::new(
+                Arc::new(butler_turn::btcc::EffectService::new(
                     self.effects.clone(),
                     Arc::new(|| {
                         crate::models::ModelConfigurationClock::now_iso(
@@ -159,7 +166,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                         mutation_scope: None,
                         installation_root: Some(self.installation_root.clone()),
                     },
-                    crate::workspace::EffectFileScope {
+                    butler_turn::workspace::EffectFileScope {
                         workspace: workspace_path.clone(),
                         butler_data: self.butler_data.clone(),
                         protected_roots: self.protected_ledger_roots.clone(),
@@ -200,7 +207,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                         .map(str::to_owned),
                     access_mode: policy.access_mode.clone(),
                     enable_project_ledger_effects: policy.access_mode
-                        != crate::btcc::AccessMode::ReadOnly
+                        != butler_turn::btcc::AccessMode::ReadOnly
                         && policy.tracking_mode == "ledger"
                         && policy.project_id.is_some(),
                     owner_session_id: start.turn.session_id.clone(),

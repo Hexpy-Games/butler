@@ -2,21 +2,22 @@
 
 use std::sync::Arc;
 
-use crate::{
-    btcc::{
-        StorageProgressPublication, SubsessionCancelRequest, SubsessionResumeRequest,
-        SubsessionService,
-    },
-    conversation::{
-        AgentConversationStore, ConversationMessageWithParts, ConversationPartKind,
-        ConversationRole, ConversationStatus, conversation_session_id_for_durable_session,
-    },
-    gateway::{
-        AppSessionViewPage, AppSubsessionPort, ApplicationFuture, GatewayApplicationError,
-        OperationOutputChunk,
-    },
-    workspace::SessionRole,
-};
+use crate::gateway::AppSessionViewPage;
+use crate::gateway::AppSubsessionPort;
+use crate::gateway::ApplicationFuture;
+use crate::gateway::GatewayApplicationError;
+use crate::gateway::OperationOutputChunk;
+use butler_turn::btcc::StorageProgressPublication;
+use butler_turn::btcc::SubsessionCancelRequest;
+use butler_turn::btcc::SubsessionResumeRequest;
+use butler_turn::btcc::SubsessionService;
+use butler_turn::conversation::AgentConversationStore;
+use butler_turn::conversation::ConversationMessageWithParts;
+use butler_turn::conversation::ConversationPartKind;
+use butler_turn::conversation::ConversationRole;
+use butler_turn::conversation::ConversationStatus;
+use butler_turn::conversation::conversation_session_id_for_durable_session;
+use butler_turn::workspace::SessionRole;
 
 pub(crate) struct AppSubsessions {
     service: Arc<SubsessionService>,
@@ -241,7 +242,7 @@ fn turn_state(status: &str) -> &'static str {
     }
 }
 
-fn map_error(error: &crate::btcc::BtccError) -> GatewayApplicationError {
+fn map_error(error: &butler_turn::btcc::BtccError) -> GatewayApplicationError {
     let status = match error.code() {
         "active_steward_relation_not_found" | "steward_relation_not_found" => 404,
         "active_steward_relation_ambiguous"
@@ -269,10 +270,11 @@ fn map_error(error: &crate::btcc::BtccError) -> GatewayApplicationError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::conversation::{
-        ConversationMessage, ConversationOriginKind, ConversationPart, ConversationProvenance,
-        ConversationVisibility,
-    };
+    use butler_turn::conversation::ConversationMessage;
+    use butler_turn::conversation::ConversationOriginKind;
+    use butler_turn::conversation::ConversationPart;
+    use butler_turn::conversation::ConversationProvenance;
+    use butler_turn::conversation::ConversationVisibility;
 
     #[test]
     fn child_message_projection_keeps_every_text_content_block() {

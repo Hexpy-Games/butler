@@ -3,7 +3,10 @@ use std::sync::Arc;
 use bytes::Bytes;
 use reqwest::{Client, RequestBuilder};
 
-use crate::btcc::{ModelRoundError, ModelRoundPort, ModelRoundRequest, ModelRoundResult};
+use butler_turn::btcc::ModelRoundError;
+use butler_turn::btcc::ModelRoundPort;
+use butler_turn::btcc::ModelRoundRequest;
+use butler_turn::btcc::ModelRoundResult;
 
 use super::super::{
     HostedApiShape, ModelCatalog, TokenEstimateInput, diagnostics, request_admission, transport,
@@ -265,8 +268,8 @@ pub(super) fn safe_endpoint(endpoint: &url::Url) -> String {
 impl ModelRoundPort for ModelProvider {
     fn context_sizing<'a>(
         &'a self,
-        request: crate::btcc::ContextSizingRequest<'a>,
-    ) -> Result<Option<crate::btcc::ContextSizing<'a>>, ModelRoundError> {
+        request: butler_turn::btcc::ContextSizingRequest<'a>,
+    ) -> Result<Option<butler_turn::btcc::ContextSizing<'a>>, ModelRoundError> {
         let snapshot = self.config.sizing_snapshot(request.butler_data)?;
         let Some(metadata) = snapshot.find_model_metadata(Some(request.model)) else {
             return Ok(None);
@@ -280,7 +283,7 @@ impl ModelRoundPort for ModelProvider {
             .unwrap_or(0.0);
         let fixed_value = serde_json::json!({"instructions":request.instructions,"tools":request.tools,"tool_choice":"auto","model":request.model});
         let fixed_json = butler_core::json::stringify(&fixed_value).map_err(|error| {
-            ModelRoundError::Integrity(crate::btcc::BtccError::relayed(
+            ModelRoundError::Integrity(butler_turn::btcc::BtccError::relayed(
                 "context_serialization_failed",
                 error.to_string(),
             ))
@@ -294,7 +297,7 @@ impl ModelRoundPort for ModelProvider {
             )
             .map_err(|error| {
                 ModelRoundError::Integrity(
-                    crate::btcc::BtccError::relayed(
+                    butler_turn::btcc::BtccError::relayed(
                         "context_tokenization_failed",
                         error.to_string(),
                     )
@@ -313,7 +316,7 @@ impl ModelRoundPort for ModelProvider {
         let max_message_bytes = ((context - output - fixed) * 2.0).max(1.0);
         let catalog = Arc::clone(&self.catalog);
         let model = request.model.to_owned();
-        Ok(Some(crate::btcc::ContextSizing {
+        Ok(Some(butler_turn::btcc::ContextSizing {
             max_output_tokens: metadata.max_output_tokens,
             max_message_bytes,
             measure: Box::new(move |messages| {
@@ -321,7 +324,7 @@ impl ModelRoundPort for ModelProvider {
                     serde_json::Value::Array(serialize::bounded_items(messages))
                 } else {
                     serde_json::to_value(messages).map_err(|source| {
-                        crate::btcc::BtccError::relayed(
+                        butler_turn::btcc::BtccError::relayed(
                             "context_serialization_failed",
                             "Context serialization failed.",
                         )
@@ -329,7 +332,7 @@ impl ModelRoundPort for ModelProvider {
                     })?
                 };
                 let bytes = butler_core::json::stringify(&value).map_err(|source| {
-                    crate::btcc::BtccError::relayed(
+                    butler_turn::btcc::BtccError::relayed(
                         "context_serialization_failed",
                         "Context serialization failed.",
                     )
@@ -338,7 +341,7 @@ impl ModelRoundPort for ModelProvider {
                 let tokens = catalog
                     .estimate_tokens(&snapshot, TokenEstimateInput::Text(&bytes), Some(&model))
                     .map_err(|source| {
-                        crate::btcc::BtccError::relayed(
+                        butler_turn::btcc::BtccError::relayed(
                             "context_tokenization_failed",
                             "Context tokenization failed.",
                         )
@@ -372,7 +375,7 @@ impl ModelRoundPort for ModelProvider {
 
     fn stateless_message_bytes(
         &self,
-        messages: &[crate::btcc::ModelRoundMessage],
+        messages: &[butler_turn::btcc::ModelRoundMessage],
         _butler_data: Option<&str>,
     ) -> Result<Option<usize>, ModelRoundError> {
         butler_core::json::stringify(&serde_json::Value::Array(serialize::bounded_items(

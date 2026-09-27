@@ -9,10 +9,11 @@ use crate::cognition::recall::{RecallProjectFilter, RecallRequest, RecallScope, 
 use crate::cognition::{
     CognitionError, CognitionResult, MEMORY_SOURCE_WINDOW_BYTES, split_historical_source_spans,
 };
-use crate::conversation::{
-    ConversationOriginKind, ConversationRole, ConversationSourceReader, ConversationStatus,
-    decode_message_scalars,
-};
+use butler_turn::conversation::ConversationOriginKind;
+use butler_turn::conversation::ConversationRole;
+use butler_turn::conversation::ConversationSourceReader;
+use butler_turn::conversation::ConversationStatus;
+use butler_turn::conversation::decode_message_scalars;
 
 use super::identity::{projection_hash, recovered_parts_hash};
 use crate::cognition::CognitionCode;
@@ -210,7 +211,10 @@ impl Scan<'_> {
         }
         Ok(len)
     }
-    fn outcome(&mut self, outcome: &crate::conversation::RecallOutcomeRow) -> CognitionResult<()> {
+    fn outcome(
+        &mut self,
+        outcome: &butler_turn::conversation::RecallOutcomeRow,
+    ) -> CognitionResult<()> {
         let session = self
             .reader
             .read_session(&outcome.session_id)
@@ -336,7 +340,7 @@ impl Scan<'_> {
 
 fn entry(
     episode_id: &str,
-    scalars: &[crate::conversation::ConversationScalar<'_>],
+    scalars: &[butler_turn::conversation::ConversationScalar<'_>],
     tail: Value,
 ) -> CognitionResult<CanonicalInventoryEntry> {
     let mut parts = vec![Value::String("episode-revision".into())];

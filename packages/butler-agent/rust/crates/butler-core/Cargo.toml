@@ -13,6 +13,8 @@ uuid.workspace = true
 regex.workspace = true
 icu_collator.workspace = true
 icu_locid.workspace = true
+# Not used directly: its "sync" feature makes the ICU collator Send + Sync.
+icu_provider.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 ryu-js.workspace = true

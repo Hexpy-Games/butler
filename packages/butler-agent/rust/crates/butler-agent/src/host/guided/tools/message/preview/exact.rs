@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use base64::Engine;
 
-use crate::btcc::BtccError;
+use butler_turn::btcc::BtccError;
 
 use super::{append_field, field};
 

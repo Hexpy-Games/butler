@@ -12,12 +12,13 @@ use uuid::Uuid;
 
 use super::{Capabilities, CapabilityInvocation};
 use crate::skills::Skills;
-use crate::workspace::{WorkspaceFiles, WorkspaceReference};
+use butler_turn::workspace::WorkspaceFiles;
+use butler_turn::workspace::WorkspaceReference;
 
 impl Capabilities {
     pub(crate) fn new(
         files: Arc<WorkspaceFiles>,
-        mutations: Arc<crate::workspace::WorkspaceMutations>,
+        mutations: Arc<butler_turn::workspace::WorkspaceMutations>,
     ) -> Self {
         let root = std::env::temp_dir().join("butler-native-empty-skills");
         Self::with_skills(files, mutations, Arc::new(Skills::new(root.clone(), root)))
@@ -41,7 +42,7 @@ impl Fixture {
         let files = Arc::new(WorkspaceFiles::new(2));
         let capabilities = Capabilities::new(
             Arc::clone(&files),
-            Arc::new(crate::workspace::WorkspaceMutations::new()),
+            Arc::new(butler_turn::workspace::WorkspaceMutations::new()),
         );
         Self {
             root,

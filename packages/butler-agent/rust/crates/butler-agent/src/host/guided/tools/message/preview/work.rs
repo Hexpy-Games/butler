@@ -1,7 +1,7 @@
 //! Source Work receipt: public control facts only, copied from raw fields.
 
-use crate::btcc::BtccError;
 use butler_core::json::visit_raw_array;
+use butler_turn::btcc::BtccError;
 
 use super::{append_field, field};
 

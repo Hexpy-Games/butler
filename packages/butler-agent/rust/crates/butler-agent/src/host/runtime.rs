@@ -20,14 +20,6 @@ use super::{
     EmbeddingOwner, GuidedCatalog, GuidedPreparation, GuidedTurnFactoryAdapter,
     ProfileConversationSources, ResolvedInstallation, SystemIdentity, SystemPromptClock,
 };
-use crate::btcc::{
-    self, BtccError, BtccRepositories, ContextCompactionRepository, DefaultTurnPreparation,
-    DurableWorkService, GuidedContinuationBudgetFactory, HostDependencies, ModelRouteRetryConfig,
-    OperationResultRepository, PortFuture, PrincipalAuthority, ProductionAgentLoop,
-    SessionWorkRepository, SqliteProjectWorkRuntime, SqliteSubsessionRepository,
-    StorageEffectJournal, StorageProgressPublication, ToolJournalRepository,
-    TurnFacadeDependencies, TurnModelExecutionFactory,
-};
 #[cfg(unix)]
 use crate::cognition::GenerationVectorAdapter;
 use crate::cognition::{
@@ -38,7 +30,6 @@ use crate::context::{
     ContextBudgetOwner, ContextConversation, ConversationSessionReference, ConversationTools,
     PromptAssembler, PromptDependencies, PromptPaths, ToolOutput,
 };
-use crate::conversation::conversation_store_path;
 use crate::coordination::CognitionWriteCoordinator;
 use crate::host::memory_jobs::context_maintenance::ContextMaintenance;
 #[cfg(unix)]
@@ -50,12 +41,36 @@ use crate::models::ModelConfigurationClock;
 use crate::operations::MetricFiles;
 use crate::profile::{PersonaPresets, ProfileService};
 use crate::project_ledger::{ProjectLedger, ProjectWork};
-use crate::workspace::{
-    Commands, SessionWorkspaceRecovery, SessionWorktrees, WorkspaceFiles, WorkspaceMutations,
-};
 use boundary::{setup, validate_data_installation_boundary};
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
+use butler_turn::btcc;
+use butler_turn::btcc::BtccError;
+use butler_turn::btcc::BtccRepositories;
+use butler_turn::btcc::ContextCompactionRepository;
+use butler_turn::btcc::DefaultTurnPreparation;
+use butler_turn::btcc::DurableWorkService;
+use butler_turn::btcc::GuidedContinuationBudgetFactory;
+use butler_turn::btcc::HostDependencies;
+use butler_turn::btcc::ModelRouteRetryConfig;
+use butler_turn::btcc::OperationResultRepository;
+use butler_turn::btcc::PortFuture;
+use butler_turn::btcc::PrincipalAuthority;
+use butler_turn::btcc::ProductionAgentLoop;
+use butler_turn::btcc::SessionWorkRepository;
+use butler_turn::btcc::SqliteProjectWorkRuntime;
+use butler_turn::btcc::SqliteSubsessionRepository;
+use butler_turn::btcc::StorageEffectJournal;
+use butler_turn::btcc::StorageProgressPublication;
+use butler_turn::btcc::ToolJournalRepository;
+use butler_turn::btcc::TurnFacadeDependencies;
+use butler_turn::btcc::TurnModelExecutionFactory;
+use butler_turn::conversation::conversation_store_path;
+use butler_turn::workspace::Commands;
+use butler_turn::workspace::SessionWorkspaceRecovery;
+use butler_turn::workspace::SessionWorktrees;
+use butler_turn::workspace::WorkspaceFiles;
+use butler_turn::workspace::WorkspaceMutations;
 pub(crate) use contracts::{AgentRuntime, RuntimePaths};
 use owners::RuntimeOwners;
 use std::path::PathBuf;
@@ -68,7 +83,7 @@ impl AgentRuntime {
         installation: ResolvedInstallation,
         environment: ProcessEnvironment,
         locale: &str,
-        worker_profiles: Arc<dyn crate::btcc::WorkerProfileReader>,
+        worker_profiles: Arc<dyn butler_turn::btcc::WorkerProfileReader>,
         app_endpoint: Arc<ActiveAppEndpoint>,
     ) -> Result<Self, BtccError> {
         validate_data_installation_boundary(&paths.data_root, &paths.installation_root)?;
@@ -335,7 +350,7 @@ impl AgentRuntime {
         let inbound_queue = Arc::new(crate::gateway::InboundQueue::new(&paths.data_root.clone()));
         let automations =
             super::open_automation_service(&paths.data_root, date_parser, inbound_queue.clone());
-        let subsessions = Arc::new(crate::btcc::SubsessionService::new(
+        let subsessions = Arc::new(butler_turn::btcc::SubsessionService::new(
             SqliteSubsessionRepository::new(stores.btcc.clone()),
             stores.bindings.clone(),
             Arc::new(SubsessionQueue(inbound_queue.clone())),

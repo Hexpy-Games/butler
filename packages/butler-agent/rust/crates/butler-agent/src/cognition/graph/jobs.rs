@@ -6,7 +6,7 @@ use crate::cognition::CognitionCode;
 use crate::cognition::{
     CognitionError, CognitionResult, ConversationSourceNotice, assert_conversation_source_current,
 };
-use crate::conversation::ConversationSourceReader;
+use butler_turn::conversation::ConversationSourceReader;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct GraphProgress {
