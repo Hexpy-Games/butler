@@ -21,7 +21,7 @@ export const guidance: ShowcaseGuidance = {
     { when: "Confirming that an action finished", use: "SuccessCheck" },
     { when: "Layout placeholders while content loads", use: "Skeleton" },
   ],
-  recipes: [{ name: "Butler status mark", description: "Keep the mark mounted and flip state; done is the settle back to the logo.", render: () => <StatusMark busy /> }],
+  recipes: [{ name: "Butler status mark", description: "Keep the mark mounted and flip state: idle to working is one continuous morph into the halftone moon (outline, dots, colour and motion move together), and done is the same morph back, settling on the exact logo.", render: () => <StatusMark busy /> }],
   doDont: [
     {
       do: { caption: "Flip state on one mounted mark so idle and working animate in place.", render: () => <StatusMark busy={false} /> },

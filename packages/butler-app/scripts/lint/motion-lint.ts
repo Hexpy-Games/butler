@@ -257,7 +257,7 @@ export const CANVAS_MOTION_ENGINES: readonly CanvasMotionEngine[] = [
     prefix: "libs/design-system/components/ButlerThinkingMark/",
     justification: "Riso halftone thinking mark: a spring-driven morph and an orbiting-light simulation drawn per frame on a canvas.",
     constants: {
-      MORPH_SPRING: "Spring stiffness/damping of the logo-to-moon morph; a physical morph, not a UI transition (starts at zero velocity, so no first-frame jump).",
+      MORPH_SPRING: "Spring stiffness/damping of the single logo-to-moon morph (k 6, critically damped: ~1.9s to 95%, monotonic, no overshoot); one progress drives every channel, a physical morph, not a UI transition (starts at zero velocity, so no first-frame jump).",
       RISO_MOTION: "Ripple, ink-sweep and light-orbit rates of the simulation clock while working (the look of the mark, not UI timing).",
       FRAME_INTERVAL_MS: "Caps canvas drawing at 60fps on high-refresh displays; a performance budget, not a duration.",
       MAX_STEP_S: "Clamps the simulation step after a stalled frame so the spring stays stable.",

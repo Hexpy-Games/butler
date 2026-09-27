@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import {
   MorphSim,
   createRand,
-  mLocal,
   speedOf,
   spring,
 } from "../../packages/butler-app/client/ui/src/libs/design-system/components/ButlerThinkingMark/thinking-mark/motion.ts";
@@ -14,14 +13,14 @@ function step(sim: MorphSim, seconds: number, working: boolean) {
   for (let t = 0; t < seconds; t += DT) sim.update(DT, working);
 }
 
-test("morph spring converges to its target with under 2% overshoot", () => {
+test("morph spring converges to its target without overshoot", () => {
   const state = { x: 0, v: 0 };
   let peak = 0;
   for (let t = 0; t < 5; t += DT) {
     spring(state, 1, MORPH_SPRING.k, MORPH_SPRING.zeta, DT);
     peak = Math.max(peak, state.x);
   }
-  expect(peak).toBeLessThan(1.02);
+  expect(peak).toBeLessThanOrEqual(1);
   expect(Math.abs(state.x - 1)).toBeLessThan(0.001);
 });
 
@@ -78,7 +77,8 @@ test("reduced motion parks the morph at rest so leaving it never replays an exit
   expect(sim.idle).toBe(true);
 });
 
-test("speedOf is zero at rest, one when formed, and monotonic", () => {
+test("speedOf tracks the morph progress: zero at rest, one when formed, monotonic", () => {
+  expect(speedOf(0.5)).toBeCloseTo(0.5, 6);
   expect(speedOf(0)).toBe(0);
   expect(speedOf(1)).toBe(1);
   let previous = -1;
@@ -87,13 +87,6 @@ test("speedOf is zero at rest, one when formed, and monotonic", () => {
     expect(value).toBeGreaterThanOrEqual(previous);
     previous = value;
   }
-});
-
-test("mLocal granulates from the crossing outward", () => {
-  expect(mLocal(0, 0)).toBe(0);
-  expect(mLocal(1, 0)).toBe(1);
-  expect(mLocal(1, 1)).toBe(1);
-  expect(mLocal(0.3, 0)).toBeGreaterThan(mLocal(0.3, 0.8));
 });
 
 test("seeded rand is deterministic and in [0, 1)", () => {
