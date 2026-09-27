@@ -99,7 +99,7 @@
 }
 
 .item[data-tone="accent"] {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .item[data-tone="warning"] {

@@ -2217,7 +2217,7 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(renderer).toContain("prompt_body");
   expect(renderer).toContain("copy.queued");
   expect(appCopySource()).toContain(
-    'title: "자동화"',
+    'title: "예약 작업"',
   );
   expect(read("packages/butler-app/client/ui/src/app/utils.ts")).toContain(
     "return { title: appCopy.automations.title }",

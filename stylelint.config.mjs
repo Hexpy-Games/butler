@@ -1,6 +1,6 @@
 export default {
   extends: ["stylelint-config-standard"],
-  ignoreFiles: ["packages/butler-app/client/ui/dist/**/*.css"],
+  ignoreFiles: ["packages/butler-app/client/ui/dist/**/*.css", "packages/butler-app/client/ui/dist-ds-site/**/*.css"],
   rules: {
     "alpha-value-notation": null,
     "at-rule-empty-line-before": null,
