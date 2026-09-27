@@ -34,6 +34,24 @@ impl AppSettingsMutation {
         }
     }
 
+    /// The Settings model is the default model: `butler model status` and
+    /// every non-App reader of butler.config.json must agree with it.
+    async fn sync_default_model(
+        &self,
+        patch: &Value,
+        projection: &Value,
+    ) -> Result<(), GatewayApplicationError> {
+        if patch.get("model").is_some()
+            && let Some(model) = projection.get("model").and_then(Value::as_str)
+        {
+            self.configuration
+                .set_default_model(model)
+                .await
+                .map_err(GatewayApplicationError::internal_from)?;
+        }
+        Ok(())
+    }
+
     async fn apply_inner(
         &self,
         patch: Value,
@@ -80,16 +98,6 @@ impl AppSettingsMutation {
         {
             self.profile
                 .set_extractor_reasoning_effort(Some(effort.to_owned()))
-                .await
-                .map_err(GatewayApplicationError::internal_from)?;
-        }
-        // The Settings model is the default model: `butler model status` and
-        // every non-App reader of butler.config.json must agree with it.
-        if patch.contains_key("model")
-            && let Some(model) = projection.get("model").and_then(Value::as_str)
-        {
-            self.configuration
-                .set_default_model(model)
                 .await
                 .map_err(GatewayApplicationError::internal_from)?;
         }
@@ -165,7 +173,10 @@ impl AppSettingsMutationPort for AppSettingsMutation {
             installation: self.installation.clone(),
             data_root: self.data_root.clone(),
         };
-        Box::pin(async move { this.apply_inner(patch, projection).await })
+        Box::pin(async move {
+            this.apply_inner(patch.clone(), projection.clone()).await?;
+            this.sync_default_model(&patch, &projection).await
+        })
     }
 }
 

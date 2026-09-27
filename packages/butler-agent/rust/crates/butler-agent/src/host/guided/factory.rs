@@ -230,13 +230,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                         }),
                     },
                     project_id: policy.project_id.clone(),
-                    project_sources: start
-                        .turn
-                        .context
-                        .get("projectSources")
-                        .and_then(serde_json::Value::as_array)
-                        .cloned()
-                        .unwrap_or_default(),
+                    project_sources: project_sources(&start.turn.context),
                     visible_names: surface.iter().map(|t| t.name.clone()).collect(),
                     authorized_names: phase.authorized_names.iter().cloned().collect(),
                     required_names: policy.required_tools.iter().cloned().collect(),
@@ -313,6 +307,15 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
             }) as Box<dyn BoundGuidedTurn + 'a>)
         })
     }
+}
+
+/// The App's project source references of the turn (`projectSources`).
+fn project_sources(context: &serde_json::Value) -> Vec<serde_json::Value> {
+    context
+        .get("projectSources")
+        .and_then(serde_json::Value::as_array)
+        .cloned()
+        .unwrap_or_default()
 }
 
 fn error(code: &str) -> BtccError {

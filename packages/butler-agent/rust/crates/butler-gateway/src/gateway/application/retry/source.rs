@@ -54,9 +54,7 @@ pub(super) fn retry_snapshot(
         .optional()
         .map_err(AppStorageError::sqlite)?
         .ok_or_else(|| AppStorageError::new(AppStorageCode::TurnNotFound, "Turn not found."))?;
-    if !retryable(db, turn_id, &turn.2, turn.3, turn.6.as_deref())? {
-        return Err(not_retryable_error());
-    }
+    ensure_retryable(db, turn_id, &turn.2, turn.3, turn.6.as_deref())?;
     let user_message_id = turn.1.ok_or_else(|| {
         AppStorageError::new(
             AppStorageCode::TurnMissingUserMessage,
@@ -189,9 +187,7 @@ pub(super) fn current_controls_retry_source(
         .optional()
         .map_err(AppStorageError::sqlite)?
         .ok_or_else(|| AppStorageError::new(AppStorageCode::TurnNotFound, "Turn not found."))?;
-    if !retryable(db, turn_id, &state, retryable_flag, code.as_deref())? {
-        return Err(not_retryable_error());
-    }
+    ensure_retryable(db, turn_id, &state, retryable_flag, code.as_deref())?;
     let user_message_id = user_message_id.ok_or_else(|| {
         AppStorageError::new(
             AppStorageCode::TurnMissingUserMessage,
@@ -237,21 +233,25 @@ pub(super) fn current_controls_retry_source(
     })
 }
 
-/// A retryable runtime fault, or a turn interrupted by a service crash.
-fn retryable(
+/// Refuses all but a retryable runtime fault or a turn interrupted by a
+/// service crash.
+fn ensure_retryable(
     db: &Connection,
     turn_id: &str,
     state: &str,
     retryable: i64,
     safe_error_code: Option<&str>,
-) -> Result<bool, AppStorageError> {
-    if retryable != 1 {
-        return Ok(false);
-    }
-    match state {
-        "runtime_fault" => runtime_fault_retryable(db, turn_id),
-        "failed" => Ok(safe_error_code == Some(super::INTERRUPTED_TURN_CODE)),
-        _ => Ok(false),
+) -> Result<(), AppStorageError> {
+    let allowed = retryable == 1
+        && match state {
+            "runtime_fault" => runtime_fault_retryable(db, turn_id)?,
+            "failed" => safe_error_code == Some(super::INTERRUPTED_TURN_CODE),
+            _ => false,
+        };
+    if allowed {
+        Ok(())
+    } else {
+        Err(not_retryable_error())
     }
 }
 

@@ -22,7 +22,9 @@ async fn att_02_image_refusal_follows_the_app_language() -> Result<(), HarnessEr
         ("en", "can't read images"),
         ("ko", "이미지를 읽을 수 없습니다"),
     ] {
-        let reply = s.gw.patch("/settings", json!({"language": language})).await?;
+        let reply =
+            s.gw.patch("/settings", json!({"language": language}))
+                .await?;
         assert_eq!(reply.status, 200, "{}", reply.text);
         let png = media::digits_png("4821", 12);
         let upload =
@@ -33,9 +35,8 @@ async fn att_02_image_refusal_follows_the_app_language() -> Result<(), HarnessEr
             .as_str()
             .unwrap()
             .to_owned();
-        let reply = s
-            .gw
-            .post(
+        let reply =
+            s.gw.post(
                 "/messages",
                 json!({"chat_id": "general", "text": "What number is this?",
                     "attachments": [{"file_id": file_id}], "model": "qwen/qwen3.7-max",

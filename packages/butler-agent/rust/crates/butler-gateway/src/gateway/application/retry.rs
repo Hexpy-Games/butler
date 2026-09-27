@@ -43,29 +43,14 @@ impl AppApplication {
                     let snapshot = retry_snapshot(&transaction, &operation_turn)?;
                     let (verified, controls) = verified_execution_controls(&snapshot)?;
                     let status_label = retry_status_label(verified.subsession_result.as_ref());
-                    let attempt = snapshot.attempt.saturating_add(1);
-                    let changed = transaction
-                        .execute(
-                            "UPDATE turns SET state='retrying',safe_status_label=?1,\
-                         safe_status_label_key=NULL,safe_status_label_parameters_json=NULL,\
-                         safe_status_content_json=NULL,safe_error_code=NULL,retryable=0,\
-                         cancellable=?2,attempt=?3,updated_at=?4 \
-                         WHERE id=?5 AND retryable=1 AND attempt=?6 \
-                         AND (state='runtime_fault' OR (state='failed' AND safe_error_code=?7))",
-                            params![
-                                status_label,
-                                verified.subsession_result.is_none(),
-                                attempt,
-                                now,
-                                operation_turn,
-                                snapshot.attempt,
-                                INTERRUPTED_TURN_CODE
-                            ],
-                        )
-                        .map_err(AppStorageError::sqlite)?;
-                    if changed != 1 {
-                        return Err(not_retryable_error());
-                    }
+                    mark_retrying(
+                        &transaction,
+                        &operation_turn,
+                        &status_label,
+                        verified.subsession_result.is_none(),
+                        snapshot.attempt,
+                        &now,
+                    )?;
                     let turn = read_model::exact_turn(&transaction, &operation_turn)?.ok_or_else(
                         || AppStorageError::new(AppStorageCode::TurnNotFound, "Turn not found."),
                     )?;
@@ -187,6 +172,42 @@ impl AppApplication {
             source.user_message_id,
         )
         .await
+    }
+}
+
+/// Moves a retryable turn (a runtime fault or a crash interruption) at
+/// `attempt` to retrying at the next attempt.
+fn mark_retrying(
+    db: &Connection,
+    turn_id: &str,
+    status_label: &str,
+    cancellable: bool,
+    attempt: u64,
+    now: &str,
+) -> Result<(), AppStorageError> {
+    let changed = db
+        .execute(
+            "UPDATE turns SET state='retrying',safe_status_label=?1,\
+             safe_status_label_key=NULL,safe_status_label_parameters_json=NULL,\
+             safe_status_content_json=NULL,safe_error_code=NULL,retryable=0,\
+             cancellable=?2,attempt=?3,updated_at=?4 \
+             WHERE id=?5 AND retryable=1 AND attempt=?6 \
+             AND (state='runtime_fault' OR (state='failed' AND safe_error_code=?7))",
+            params![
+                status_label,
+                cancellable,
+                attempt.saturating_add(1),
+                now,
+                turn_id,
+                attempt,
+                INTERRUPTED_TURN_CODE
+            ],
+        )
+        .map_err(AppStorageError::sqlite)?;
+    if changed == 1 {
+        Ok(())
+    } else {
+        Err(not_retryable_error())
     }
 }
 

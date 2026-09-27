@@ -260,7 +260,10 @@ async fn set_03_per_message_override_leaves_settings() -> Result<(), HarnessErro
 #[tokio::test]
 async fn set_03_override_does_not_stick_to_next_message() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let s = Setup::new("SET-03-STICKY")?.cassette("SET-03").start().await?;
+    let s = Setup::new("SET-03-STICKY")?
+        .cassette("SET-03")
+        .start()
+        .await?;
     let accepted =
         s.gw.send_message(json!({
             "chat_id": "general",

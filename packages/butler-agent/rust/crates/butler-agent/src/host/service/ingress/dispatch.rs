@@ -129,30 +129,7 @@ pub(super) async fn one(item: ClaimedInboundEvent, deps: DispatchDependencies) -
     )
     .await;
     match result {
-        Ok(executed) => match queue.complete(
-            &item,
-            json!({
-                "source":"gateway/btcc/btcc-inbound-dispatcher.ts","dispatchStatus":"handled",
-                "handled":true,"delivered":executed.delivered,
-            }),
-        ) {
-            Ok(true) => {
-                if let Some(turn_id) = executed.eligible_turn_id
-                    && let Err(error) = restart_handoff.after_final(&turn_id).await
-                {
-                    eprintln!("[native-restart] handoff code={error}");
-                }
-                IngressPoll {
-                    handled: 1,
-                    delivered: executed.delivered,
-                    ..Default::default()
-                }
-            }
-            _ => IngressPoll {
-                interrupted: 1,
-                ..Default::default()
-            },
-        },
+        Ok(executed) => handled(&item, executed, &queue, &restart_handoff).await,
         Err(error) => {
             // BTCC supplies a stable code here, never the provider body or prompt.
             // Keep that cause observable when the outer queue error is generic.
@@ -186,6 +163,38 @@ pub(super) async fn one(item: ClaimedInboundEvent, deps: DispatchDependencies) -
                 ..Default::default()
             }
         }
+    }
+}
+
+/// Settles an executed item and hands a delivered final to restart handoff.
+async fn handled(
+    item: &ClaimedInboundEvent,
+    executed: Executed,
+    queue: &InboundQueue,
+    restart_handoff: &RestartHandoff,
+) -> IngressPoll {
+    let completed = queue.complete(
+        item,
+        json!({
+            "source":"gateway/btcc/btcc-inbound-dispatcher.ts","dispatchStatus":"handled",
+            "handled":true,"delivered":executed.delivered,
+        }),
+    );
+    if !matches!(completed, Ok(true)) {
+        return IngressPoll {
+            interrupted: 1,
+            ..Default::default()
+        };
+    }
+    if let Some(turn_id) = executed.eligible_turn_id
+        && let Err(error) = restart_handoff.after_final(&turn_id).await
+    {
+        eprintln!("[native-restart] handoff code={error}");
+    }
+    IngressPoll {
+        handled: 1,
+        delivered: executed.delivered,
+        ..Default::default()
     }
 }
 
@@ -243,7 +252,10 @@ async fn settle_interrupted(
     }
     .await;
     if let Err(error) = reported {
-        eprintln!("[native-btcc] interruption report unavailable code={}", error.code);
+        eprintln!(
+            "[native-btcc] interruption report unavailable code={}",
+            error.code
+        );
         return None;
     }
     let completed = queue.complete(

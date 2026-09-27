@@ -175,8 +175,19 @@ impl AppApplication {
         }).await.map_err(app_error)
     }
 
+    /// Visual admission whose image refusals speak the App's language.
+    pub(super) async fn admit_visual_localized(
+        &self,
+        request: crate::gateway::VisualAdmissionRequest,
+    ) -> Result<Value, GatewayApplicationError> {
+        match self.dependencies.admission.admit_visual(request).await {
+            Ok(value) => Ok(value),
+            Err(error) => Err(self.localized_admission_error(error).await),
+        }
+    }
+
     /// Gives an image admission refusal the App's language.
-    pub(super) async fn localized_admission_error(
+    async fn localized_admission_error(
         &self,
         error: GatewayApplicationError,
     ) -> GatewayApplicationError {

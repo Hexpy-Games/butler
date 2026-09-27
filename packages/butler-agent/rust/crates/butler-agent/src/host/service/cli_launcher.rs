@@ -99,15 +99,16 @@ fn is_executable(path: &Path) -> bool {
 
 fn write_atomic(path: &Path, contents: &[u8]) -> std::io::Result<()> {
     let staging = path.with_file_name(format!(".butler.launcher-{}", std::process::id()));
-    let result = (|| {
-        let mut file = fs::File::create(&staging)?;
-        file.write_all(contents)?;
-        file.sync_all()?;
-        fs::set_permissions(&staging, fs::Permissions::from_mode(0o755))?;
-        fs::rename(&staging, path)
-    })();
+    let result = write_executable(&staging, contents).and_then(|()| fs::rename(&staging, path));
     if result.is_err() {
         let _ = fs::remove_file(&staging);
     }
     result
+}
+
+fn write_executable(path: &Path, contents: &[u8]) -> std::io::Result<()> {
+    let mut file = fs::File::create(path)?;
+    file.write_all(contents)?;
+    file.sync_all()?;
+    fs::set_permissions(path, fs::Permissions::from_mode(0o755))
 }

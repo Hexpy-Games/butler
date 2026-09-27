@@ -186,9 +186,7 @@ impl AppApplication {
         };
         if inserted {
             let visual = self
-                .dependencies
-                .admission
-                .admit_visual(VisualAdmissionRequest {
+                .admit_visual_localized(VisualAdmissionRequest {
                     model_ref: prepared.controls.model.clone(),
                     files: inspected.files,
                 })
@@ -200,7 +198,7 @@ impl AppApplication {
                 }
                 Err(error) => {
                     self.fail_admission(&chat_id, &queued_id, &error).await?;
-                    return Err(self.localized_admission_error(error).await);
+                    return Err(error);
                 }
             }
         }

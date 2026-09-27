@@ -53,7 +53,7 @@ async fn ins_01_stale_launcher_is_replaced_at_start() -> Result<(), HarnessError
     let stale = run_launcher(&launcher, &home, &["auth", "status", "--json"])?;
     assert!(!stale.status.success(), "stale launcher stand-in succeeded");
 
-    let s = setup.start().await?;
+    let mut s = setup.start().await?;
     let output = run_launcher(&launcher, &home, &["auth", "status", "--json"])?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -73,8 +73,11 @@ async fn ins_01_stale_launcher_is_replaced_at_start() -> Result<(), HarnessError
 
     // A restart leaves the now-current launcher as it is.
     let current = fs::read(&launcher)?;
-    let mut s = s;
     s.restart().await?;
-    assert_eq!(fs::read(&launcher)?, current, "restart rewrote the launcher");
+    assert_eq!(
+        fs::read(&launcher)?,
+        current,
+        "restart rewrote the launcher"
+    );
     s.finish().await
 }
