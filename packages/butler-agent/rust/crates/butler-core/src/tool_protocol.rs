@@ -78,8 +78,8 @@ fn decode_segment(value: &str) -> Cow<'_, str> {
         return Cow::Borrowed(value);
     };
     let mut decoded = Vec::with_capacity(value.len());
-    decoded.extend_from_slice(&value.as_bytes()[..first_escape]);
-    let mut remaining = &value.as_bytes()[first_escape..];
+    let (head, mut remaining) = value.as_bytes().split_at(first_escape);
+    decoded.extend_from_slice(head);
     while let Some((&byte, tail)) = remaining.split_first() {
         if byte != b'%' {
             decoded.push(byte);

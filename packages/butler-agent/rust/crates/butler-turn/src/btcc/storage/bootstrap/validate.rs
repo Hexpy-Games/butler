@@ -3,6 +3,7 @@ mod references;
 
 pub(super) use activated::read_activated;
 
+use butler_core::json;
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::Value;
 
@@ -68,26 +69,30 @@ pub(super) fn receipt(db: &Connection, expected: &str) -> StorageResult<()> {
         .map_err(StorageError::sqlite)?;
     let value: Value = serde_json::from_str(&raw)
         .map_err(|source| error(StorageCode::AgentBtccStorageReceiptInvalid).with_source(source))?;
-    let tables = value["tables"]
+    let tables = json::at(&value, "/tables")
         .as_array()
         .ok_or_else(|| error(StorageCode::AgentBtccStorageReceiptInvalid))?;
     let matching = id == expected
         && expected == manifest_id()
-        && value["schema"] == "butler.agent-btcc-storage-migration.v1"
-        && value["manifestId"] == expected
-        && value["sourceKind"] == "fresh_install"
-        && value["sourceSchemaVersion"] == 0
-        && value["sourceSizeBytes"] == 0
-        && value["fence"]["fenceId"]
+        && *json::at(&value, "/schema") == "butler.agent-btcc-storage-migration.v1"
+        && *json::at(&value, "/manifestId") == expected
+        && *json::at(&value, "/sourceKind") == "fresh_install"
+        && *json::at(&value, "/sourceSchemaVersion") == 0
+        && *json::at(&value, "/sourceSizeBytes") == 0
+        && json::at(&value, "/fence/fenceId")
             .as_str()
             .is_some_and(|v| !v.trim().is_empty())
-        && value["fence"]["reconciledClaims"] == 0
-        && value["fence"]["parkedClaims"] == 0
-        && value["fence"]["claimDispositionSha256"] == digest(b"[]")
-        && value["completedAt"].as_str().is_some_and(|v| !v.is_empty())
+        && *json::at(&value, "/fence/reconciledClaims") == 0
+        && *json::at(&value, "/fence/parkedClaims") == 0
+        && *json::at(&value, "/fence/claimDispositionSha256") == digest(b"[]")
+        && json::at(&value, "/completedAt")
+            .as_str()
+            .is_some_and(|v| !v.is_empty())
         && tables.len() == TABLES.len()
         && tables.iter().zip(TABLES).all(|(entry, name)| {
-            entry["name"] == name && entry["rowCount"] == 0 && entry["contentSha256"] == digest(b"")
+            *json::at(entry, "/name") == name
+                && *json::at(entry, "/rowCount") == 0
+                && *json::at(entry, "/contentSha256") == digest(b"")
         });
     if !matching {
         return Err(error(StorageCode::AgentBtccStorageReceiptInvalid));
@@ -108,13 +113,15 @@ pub(super) fn readiness(db: &Connection, expected: &str) -> StorageResult<()> {
         error(StorageCode::AgentBtccStorageActivationInvalid).with_source(source)
     })?;
     if id != expected
-        || marker["schema"] != "butler.agent-btcc-storage-activation.v1"
-        || marker["manifestId"] != expected
-        || marker["storageContract"] != "split-v1"
-        || marker["firstActivatedAt"]
+        || *json::at(&marker, "/schema") != "butler.agent-btcc-storage-activation.v1"
+        || *json::at(&marker, "/manifestId") != expected
+        || *json::at(&marker, "/storageContract") != "split-v1"
+        || json::at(&marker, "/firstActivatedAt")
             .as_str()
             .is_none_or(str::is_empty)
-        || marker["activatedAt"].as_str().is_none_or(str::is_empty)
+        || json::at(&marker, "/activatedAt")
+            .as_str()
+            .is_none_or(str::is_empty)
     {
         return Err(error(StorageCode::AgentBtccStorageActivationInvalid));
     }

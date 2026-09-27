@@ -133,12 +133,15 @@ fn app_message(
 fn subsession_controls(raw: &str, row: &AppMessage) -> Option<bool> {
     let controls: Value = serde_json::from_str(raw).ok()?;
     super::queue::controls_valid(&controls).ok()?;
-    if controls["turn_id"].as_str() != row.app_turn.as_deref()
-        || controls["session_id"].as_str() != Some(&row.chat)
+    if butler_core::json::at(&controls, "/turn_id").as_str() != row.app_turn.as_deref()
+        || butler_core::json::at(&controls, "/session_id").as_str() != Some(&row.chat)
     {
         return None;
     }
-    Some(super::truthy(&controls["subsession_result"]))
+    Some(super::truthy(butler_core::json::at(
+        &controls,
+        "/subsession_result",
+    )))
 }
 
 fn session_hint(chat: &str) -> String {

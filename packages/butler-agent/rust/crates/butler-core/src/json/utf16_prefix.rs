@@ -33,7 +33,7 @@ impl<'a> Utf16Prefix<'a> {
         for (index, character) in self.text.char_indices() {
             if units + character.len_utf16() > max_units {
                 self.trailing_high = if units < max_units {
-                    Some(character.encode_utf16(&mut [0; 2])[0])
+                    character.encode_utf16(&mut [0; 2]).first().copied()
                 } else {
                     None
                 };

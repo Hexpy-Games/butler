@@ -43,6 +43,14 @@ pub fn pretty(value: &Value) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
 }
 
+/// The value at `pointer`, reading missing members as `null` the way chained
+/// `value["a"]["b"]` indexing does, without the panicking index operator.
+/// Pointer segments are plain member names (no `~` or `/` escapes needed).
+pub fn at<'a>(value: &'a Value, pointer: &str) -> &'a Value {
+    static NULL: Value = Value::Null;
+    value.pointer(pointer).unwrap_or(&NULL)
+}
+
 /// `value` as a mutable object; any other value is first replaced by `{}`.
 pub fn object_mut(value: &mut Value) -> &mut serde_json::Map<String, Value> {
     match value {
@@ -223,7 +231,10 @@ fn write_value(
                     },
                 }
             });
-            if children.windows(2).any(|pair| pair[0].0 == pair[1].0) {
+            if children
+                .windows(2)
+                .any(|pair| matches!(pair, [left, right] if left.0 == right.0))
+            {
                 return Err(JsonError::DuplicateNormalizedKey);
             }
             output.push('{');

@@ -116,8 +116,8 @@ impl<'a> Scanner<'a> {
         if byte >= b'A' && !white(byte) {
             let mut prefix = [0; 3];
             while self.byte() >= b'A' && !white(self.byte()) {
-                if self.offset - start < 3 {
-                    prefix[self.offset - start] = self.byte() | 0x20;
+                if let Some(slot) = prefix.get_mut(self.offset - start) {
+                    *slot = self.byte() | 0x20;
                 }
                 self.offset += 1;
             }

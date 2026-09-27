@@ -189,7 +189,8 @@ fn push_diagnostic(
 ) {
     let mut value = json!({"turnId": turn_id, "code": code, "detail": detail});
     if let Some(state) = state {
-        value["semanticState"] = Value::String(state.to_owned());
+        butler_core::json::object_mut(&mut value)
+            .insert("semanticState".into(), Value::String(state.to_owned()));
     }
     map.entry(turn_id.to_owned()).or_default().push(value);
 }

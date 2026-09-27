@@ -1,3 +1,4 @@
+use butler_core::json;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
@@ -25,7 +26,7 @@ async fn states(
 ) -> Result<Vec<(usize, String)>, EffectAdapterError> {
     let mut found = Vec::new();
     for entry in normalized::entries(input) {
-        let path = entry["path"].as_str().unwrap_or("");
+        let path = json::at(entry, "/path").as_str().unwrap_or("");
         let guarded = guard_effect_file(scope, path)
             .await
             .map_err(|failure| error(failure.code(), &failure.message()))?;
@@ -52,9 +53,9 @@ fn matches(input: &Value, states: &[(usize, String)], field: &str) -> bool {
 fn registered_input(input: &Value) -> Value {
     let convert = |entry: &Value| {
         json!({
-            "path":entry["path"],"start_line":entry["start_line"],
-            "old_text":entry["old_text"],"new_text":entry["new_text"],
-            "expected_sha256":entry["before_sha256"],
+            "path":json::at(entry, "/path"),"start_line":json::at(entry, "/start_line"),
+            "old_text":json::at(entry, "/old_text"),"new_text":json::at(entry, "/new_text"),
+            "expected_sha256":json::at(entry, "/before_sha256"),
         })
     };
     if let Some(edits) = input.get("edits").and_then(Value::as_array) {
@@ -76,21 +77,29 @@ fn applied(
             .zip(states)
             .enumerate()
             .map(|(index, (entry, (bytes, _)))| {
-                json!({"index":index,"start_line":entry["start_line"],"bytes":bytes,
-                "before_sha256":entry["before_sha256"],"after_sha256":entry["after_sha256"]})
+                json!({"index":index,"start_line":json::at(entry, "/start_line"),"bytes":bytes,
+                "before_sha256":json::at(entry, "/before_sha256"),"after_sha256":json::at(entry, "/after_sha256")})
             })
             .collect();
         let mut last = std::collections::HashMap::new();
         for (index, entry) in entries.iter().enumerate() {
-            if let Some(path) = entry["path"].as_str() {
+            if let Some(path) = json::at(entry, "/path").as_str() {
                 last.insert(path, index);
             }
         }
         let files = last
             .values()
-            .filter(|index| entries[**index]["before_sha256"] != entries[**index]["after_sha256"])
+            .filter(|index| {
+                entries.get(**index).is_some_and(|entry| {
+                    json::at(entry, "/before_sha256") != json::at(entry, "/after_sha256")
+                })
+            })
             .count();
-        let bytes: usize = last.values().map(|index| states[*index].0).sum();
+        let bytes: usize = last
+            .values()
+            .filter_map(|index| states.get(*index))
+            .map(|state| state.0)
+            .sum();
         let mut result = json!({"ok":true,"effect":"workspace_file_edit_batch","files":files,
             "bytes":bytes,"entries":rows,"target_observed":true});
         if let Some(details) = registered
@@ -98,26 +107,34 @@ fn applied(
             .and_then(Value::as_array)
             .filter(|array| !array.is_empty())
         {
-            result["changed_files"] = Value::Array(
-                details
-                    .iter()
-                    .filter(|value| value.is_object())
-                    .cloned()
-                    .collect(),
+            butler_core::json::object_mut(&mut result).insert(
+                "changed_files".into(),
+                Value::Array(
+                    details
+                        .iter()
+                        .filter(|value| value.is_object())
+                        .cloned()
+                        .collect(),
+                ),
             );
         }
         result
     } else {
-        let entry = entries[0];
-        let mut result = json!({"ok":true,"effect":"workspace_file_edit","path":entry["path"],
-            "start_line":entry["start_line"],"bytes":states[0].0,
-            "before_sha256":entry["before_sha256"],"after_sha256":entry["after_sha256"],
+        let (Some(entry), Some(state)) = (entries.first(), states.first()) else {
+            return Err(crate::btcc::effects::contracts::EffectFailure::adapter(
+                "workspace edit outcome has no observed entry".to_owned(),
+            ));
+        };
+        let mut result = json!({"ok":true,"effect":"workspace_file_edit","path":json::at(entry, "/path"),
+            "start_line":json::at(entry, "/start_line"),"bytes":state.0,
+            "before_sha256":json::at(entry, "/before_sha256"),"after_sha256":json::at(entry, "/after_sha256"),
             "target_observed":true});
         if let Some(detail) = registered
             .and_then(|value| value.get("changed_file"))
             .filter(|value| value.is_object())
         {
-            result["changed_file"] = detail.clone();
+            butler_core::json::object_mut(&mut result)
+                .insert("changed_file".into(), detail.clone());
         }
         result
     };

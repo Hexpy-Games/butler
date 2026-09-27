@@ -112,7 +112,10 @@ impl PublicMemorySnapshot {
                 .map_err(ConversationError::sqlite)?
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(ConversationError::sqlite)?;
-            (matches.len() == 1).then(|| matches[0].clone())
+            match matches.as_slice() {
+                [only] => Some(only.clone()),
+                _ => None,
+            }
         } else {
             None
         };

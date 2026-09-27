@@ -79,19 +79,26 @@ fn parse_canonical(value: &str) -> Option<i64> {
         _ => 4,
     };
     let b = value.as_bytes();
+    // `YYYY-MM-DDTHH:mm:ss.sssZ` separators, offset from the end of the year.
+    let separators = [
+        (0, b'-'),
+        (3, b'-'),
+        (6, b'T'),
+        (9, b':'),
+        (12, b':'),
+        (15, b'.'),
+        (19, b'Z'),
+    ];
     if b.len() != year_len + 20
-        || b[year_len] != b'-'
-        || b[year_len + 3] != b'-'
-        || b[year_len + 6] != b'T'
-        || b[year_len + 9] != b':'
-        || b[year_len + 12] != b':'
-        || b[year_len + 15] != b'.'
-        || b[year_len + 19] != b'Z'
+        || separators
+            .iter()
+            .any(|(offset, expected)| b.get(year_len + offset) != Some(expected))
     {
         return None;
     }
-    let unsigned_year = digits(&b[usize::from(year_len == 7)..year_len])?;
-    let year = if b[0] == b'-' {
+    let field = |start: usize, end: usize| b.get(start..end).and_then(digits);
+    let unsigned_year = field(usize::from(year_len == 7), year_len)?;
+    let year = if b.first() == Some(&b'-') {
         if unsigned_year == 0 {
             return None;
         }
@@ -99,12 +106,12 @@ fn parse_canonical(value: &str) -> Option<i64> {
     } else {
         unsigned_year
     };
-    let month = digits(&b[year_len + 1..year_len + 3])?;
-    let day = digits(&b[year_len + 4..year_len + 6])?;
-    let hour = digits(&b[year_len + 7..year_len + 9])?;
-    let minute = digits(&b[year_len + 10..year_len + 12])?;
-    let second = digits(&b[year_len + 13..year_len + 15])?;
-    let millis = digits(&b[year_len + 16..year_len + 19])?;
+    let month = field(year_len + 1, year_len + 3)?;
+    let day = field(year_len + 4, year_len + 6)?;
+    let hour = field(year_len + 7, year_len + 9)?;
+    let minute = field(year_len + 10, year_len + 12)?;
+    let second = field(year_len + 13, year_len + 15)?;
+    let millis = field(year_len + 16, year_len + 19)?;
     if !(1..=12).contains(&month)
         || !(1..=31).contains(&day)
         || hour > 24

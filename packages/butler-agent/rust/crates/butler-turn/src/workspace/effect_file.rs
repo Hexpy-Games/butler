@@ -192,7 +192,7 @@ pub async fn observe_effect_file(target: &GuardedEffectFile) -> EffectFileObserv
                 bytes = bytes
                     .checked_add(length)
                     .ok_or_else(|| std::io::Error::other("workspace target byte count overflow"))?;
-                sha256.update(&chunk[..length]);
+                sha256.update(chunk.get(..length).unwrap_or_default());
             }
             Ok(EffectFileObservation::File {
                 bytes,

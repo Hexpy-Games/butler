@@ -1,3 +1,4 @@
+use butler_core::json;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -171,10 +172,10 @@ fn read_admission(
     };
     let (record_hash, context) = verified_snapshot(db, &admission.snapshot_ref)?;
     let command: Value = serde_json::from_str(&admission.command_json).ok()?;
-    let kind = command["kind"].as_str().unwrap_or_default();
+    let kind = json::at(&command, "/kind").as_str().unwrap_or_default();
     let source_id = match kind {
-        "run" => command["message"]["messageId"].as_str(),
-        "wake" => command["trigger"]["triggerId"].as_str(),
+        "run" => json::at(&command, "/message/messageId").as_str(),
+        "wake" => json::at(&command, "/trigger/triggerId").as_str(),
         _ => None,
     };
     let TurnAdmission {
@@ -186,13 +187,13 @@ fn read_admission(
     } = &admission;
     let matched = matches!(kind, "run" | "wake")
         && session == external
-        && command["sessionId"].as_str() == Some(session)
+        && json::at(&command, "/sessionId").as_str() == Some(session)
         && turn_id == turn
-        && command["turnId"].as_str() == Some(turn_id)
+        && json::at(&command, "/turnId").as_str() == Some(turn_id)
         && admission.inbox_session == *session
         && admission.inbox_turn == *turn_id
         && admission.inbox_trigger == *trigger
-        && command["triggerKey"].as_str() == Some(trigger)
+        && json::at(&command, "/triggerKey").as_str() == Some(trigger)
         && candidate.request_id.as_deref() == Some(trigger)
         && source_ref == trigger
         && source_id == Some(original);
@@ -269,15 +270,16 @@ fn admission_evidence(
     snapshot_ref: String,
     record_hash: String,
 ) -> SourceEvidence {
-    let kind = command["kind"].as_str().unwrap_or_default();
-    let role = context["executionPolicy"]["role"]
+    let kind = json::at(command, "/kind").as_str().unwrap_or_default();
+    let role = json::at(context, "/executionPolicy/role")
         .as_str()
         .unwrap_or_default();
-    let subsession = super::truthy(&context["executionPolicy"]["subsession"])
-        || super::truthy(&context["nativeStewardContext"])
+    let subsession = super::truthy(json::at(context, "/executionPolicy/subsession"))
+        || super::truthy(json::at(context, "/nativeStewardContext"))
         || matches!(role, "worker" | "steward");
-    let authority = super::js_string(&context["authorityRequestRef"]);
-    let internal = kind == "wake" || subsession || super::truthy(&context["authorityRequestRef"]);
+    let authority = super::js_string(json::at(context, "/authorityRequestRef"));
+    let internal =
+        kind == "wake" || subsession || super::truthy(json::at(context, "/authorityRequestRef"));
     let mut evidence = vec![ConversationOriginEvidence {
         kind: "btcc_admission".into(),
         reference: snapshot_ref.clone(),
@@ -293,7 +295,7 @@ fn admission_evidence(
     if kind == "wake" {
         evidence.push(ConversationOriginEvidence {
             kind: "authorized_wake".into(),
-            reference: command["trigger"]["triggerId"]
+            reference: json::at(command, "/trigger/triggerId")
                 .as_str()
                 .unwrap_or_default()
                 .into(),

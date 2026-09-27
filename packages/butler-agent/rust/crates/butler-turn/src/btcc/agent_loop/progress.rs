@@ -92,7 +92,7 @@ async fn emit_output_chunks(
     for chunk_index in 0..chunk_count {
         let byte_start = chunk_index * OUTPUT_CHUNK_BYTES;
         let byte_end = bytes.len().min(byte_start + OUTPUT_CHUNK_BYTES);
-        let content = &bytes[byte_start..byte_end];
+        let content = bytes.get(byte_start..byte_end).unwrap_or_default();
         let mut event = RuntimeTurnEventInput::new("operation.output.chunk");
         event.payload = json!({
             "requestId": request_id,

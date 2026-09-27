@@ -232,7 +232,9 @@ async fn copy_pipe<R: AsyncRead + Unpin>(
         if count == 0 {
             break;
         }
-        writer.write_all(&bytes[..count]).await?;
+        writer
+            .write_all(bytes.get(..count).unwrap_or_default())
+            .await?;
     }
     writer.flush().await
 }
@@ -263,7 +265,7 @@ async fn copy_payload(path: &Path, payload: &mut File, size: &mut u64) -> Result
         if count == 0 {
             return Ok(());
         }
-        write_chunk(payload, size, &buffer[..count]).await?;
+        write_chunk(payload, size, buffer.get(..count).unwrap_or_default()).await?;
     }
 }
 

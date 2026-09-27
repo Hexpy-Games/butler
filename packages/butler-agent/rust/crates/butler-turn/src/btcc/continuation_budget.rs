@@ -120,12 +120,18 @@ fn admit_request(
     model_facing_bytes: u64,
     now: u64,
 ) -> Result<TurnContinuationBudgetState, TurnContinuationBudgetError> {
-    if let Some(index) = state
+    let admitted = state
         .admitted_requests
         .iter()
-        .position(|item| item.round_id == round_id)
-    {
-        if state.admitted_requests[index].request_digest != request_digest {
+        .find(|item| item.round_id == round_id)
+        .map(|item| {
+            (
+                item.request_digest == request_digest,
+                item.model_facing_bytes,
+            )
+        });
+    if let Some((same_request, admitted_bytes)) = admitted {
+        if !same_request {
             return exhaust(
                 state,
                 TurnContinuationBudgetTerminalReason::AdmissionChanged,
@@ -133,7 +139,7 @@ fn admit_request(
             );
         }
         let observed = integer(model_facing_bytes).map_err(TurnContinuationBudgetError::Invalid)?;
-        if observed <= state.admitted_requests[index].model_facing_bytes {
+        if observed <= admitted_bytes {
             return Ok(state);
         }
         if observed > state.limits.max_model_facing_bytes {
@@ -143,7 +149,7 @@ fn admit_request(
                 now,
             );
         }
-        let increment = observed - state.admitted_requests[index].model_facing_bytes;
+        let increment = observed - admitted_bytes;
         state.consumed_model_facing_bytes = safe_add(state.consumed_model_facing_bytes, increment);
         if state.consumed_model_facing_bytes > state.limits.max_cumulative_model_facing_bytes {
             return exhaust(
@@ -152,7 +158,13 @@ fn admit_request(
                 now,
             );
         }
-        state.admitted_requests[index].model_facing_bytes = observed;
+        if let Some(item) = state
+            .admitted_requests
+            .iter_mut()
+            .find(|item| item.round_id == round_id)
+        {
+            item.model_facing_bytes = observed;
+        }
         state.last_progress_at_ms = now;
         return Ok(state);
     }

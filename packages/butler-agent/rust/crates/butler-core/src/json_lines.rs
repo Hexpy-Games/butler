@@ -36,7 +36,7 @@ pub fn visit_json_lines(path: &Path, mut visit: impl FnMut(&Value)) -> JsonLineV
             .iter()
             .position(|byte| *byte == b'\n')
             .map_or(buffer.len(), |index| index + 1);
-        let chunk = &buffer[..end];
+        let chunk = buffer.get(..end).unwrap_or(buffer);
         if !oversize {
             if line.len().saturating_add(chunk.len()) <= MAX_JSON_LINE_BYTES {
                 line.extend_from_slice(chunk.strip_suffix(b"\n").unwrap_or(chunk));

@@ -190,7 +190,10 @@ fn is_sha256(value: &str) -> bool {
 }
 fn is_public_identity(value: &str) -> bool {
     (1..=160).contains(&value.len())
-        && value.as_bytes()[0].is_ascii_alphanumeric()
+        && value
+            .as_bytes()
+            .first()
+            .is_some_and(u8::is_ascii_alphanumeric)
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || b"._:@-".contains(&byte))

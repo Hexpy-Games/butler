@@ -1,5 +1,6 @@
 //! Read-only readiness validation for a previously activated current manifest.
 
+use butler_core::json;
 use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
@@ -38,11 +39,11 @@ pub(crate) fn read_activated(path: &Path) -> StorageResult<String> {
         error(StorageCode::AgentBtccStorageActivationInvalid).with_source(source)
     })?;
     if marker_id != expected
-        || marker["schema"] != "butler.agent-btcc-storage-activation.v1"
-        || marker["manifestId"] != expected
-        || marker["storageContract"] != "split-v1"
-        || !nonempty(&marker["firstActivatedAt"])
-        || !nonempty(&marker["activatedAt"])
+        || *json::at(&marker, "/schema") != "butler.agent-btcc-storage-activation.v1"
+        || *json::at(&marker, "/manifestId") != expected
+        || *json::at(&marker, "/storageContract") != "split-v1"
+        || !nonempty(json::at(&marker, "/firstActivatedAt"))
+        || !nonempty(json::at(&marker, "/activatedAt"))
     {
         return Err(error(StorageCode::AgentBtccStorageActivationInvalid));
     }
@@ -78,30 +79,31 @@ fn marker_row(
 }
 
 fn validate_receipt(value: &Value, expected: &str) -> StorageResult<()> {
-    let fence = &value["fence"];
-    let tables = value["tables"]
+    let fence = &json::at(value, "/fence");
+    let tables = json::at(value, "/tables")
         .as_array()
         .ok_or_else(|| error(StorageCode::AgentBtccStorageReceiptInvalid))?;
-    let source_kind = value["sourceKind"].as_str();
-    let completed_at = value["completedAt"]
+    let source_kind = json::at(value, "/sourceKind").as_str();
+    let completed_at = json::at(value, "/completedAt")
         .as_str()
         .and_then(|time| chrono::DateTime::parse_from_rfc3339(time).ok());
-    let valid = value["schema"] == "butler.agent-btcc-storage-migration.v1"
-        && value["manifestId"] == expected
+    let valid = *json::at(value, "/schema") == "butler.agent-btcc-storage-migration.v1"
+        && *json::at(value, "/manifestId") == expected
         && matches!(source_kind, Some("fresh_install" | "legacy_app_db"))
-        && safe_integer(&value["sourceSchemaVersion"])
-        && safe_integer(&value["sourceSizeBytes"])
-        && nonempty(&fence["fenceId"])
-        && safe_integer(&fence["reconciledClaims"])
-        && safe_integer(&fence["parkedClaims"])
-        && fence["parkedClaims"].as_u64() <= fence["reconciledClaims"].as_u64()
-        && digest(&fence["claimDispositionSha256"])
+        && safe_integer(json::at(value, "/sourceSchemaVersion"))
+        && safe_integer(json::at(value, "/sourceSizeBytes"))
+        && nonempty(json::at(fence, "/fenceId"))
+        && safe_integer(json::at(fence, "/reconciledClaims"))
+        && safe_integer(json::at(fence, "/parkedClaims"))
+        && json::at(fence, "/parkedClaims").as_u64()
+            <= json::at(fence, "/reconciledClaims").as_u64()
+        && digest(json::at(fence, "/claimDispositionSha256"))
         && completed_at.is_some()
         && tables.len() == TABLES.len()
         && tables.iter().zip(TABLES).all(|(table, name)| {
-            table["name"] == name
-                && safe_integer(&table["rowCount"])
-                && digest(&table["contentSha256"])
+            *json::at(table, "/name") == name
+                && safe_integer(json::at(table, "/rowCount"))
+                && digest(json::at(table, "/contentSha256"))
         });
     if !valid {
         return Err(error(StorageCode::AgentBtccStorageReceiptInvalid));

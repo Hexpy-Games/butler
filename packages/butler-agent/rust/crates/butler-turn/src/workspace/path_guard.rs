@@ -63,23 +63,30 @@ impl GuardResult {
             Some(candidate.replace('\\', "/"))
         }
     }
+    /// The model-facing rejection of a refused path.
     pub fn public_rejection(&self) -> Value {
-        let mut result = json!({ "ok": false });
+        let mut result = serde_json::Map::new();
+        result.insert("ok".into(), json!(false));
         if let Some(path) = self.safe_path() {
-            result["path"] = json!(path);
+            result.insert("path".into(), json!(path));
         }
         if let Some(reason) = self.reason {
-            result["reason"] = json!(reason);
+            result.insert("reason".into(), json!(reason));
         }
         if self.protected {
-            result["code"] = json!("protected_path");
-            result["message"] = json!(
-                "Project Ledger source records must be mutated through Project Ledger commands."
+            result.insert("code".into(), json!("protected_path"));
+            result.insert(
+                "message".into(),
+                json!(
+                    "Project Ledger source records must be mutated through Project Ledger commands."
+                ),
             );
-            result["next"] =
-                json!([{ "command": "project-ledger record update --id <id> --from FILE|-" }]);
+            result.insert(
+                "next".into(),
+                json!([{ "command": "project-ledger record update --id <id> --from FILE|-" }]),
+            );
         }
-        result
+        Value::Object(result)
     }
 }
 

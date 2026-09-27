@@ -11,6 +11,7 @@ mod worker;
 
 pub use control::{SubsessionCancelRequest, SubsessionDirectionRequest, SubsessionResumeRequest};
 
+use butler_core::json;
 use delegation::accepted_plan;
 use helpers::*;
 
@@ -267,14 +268,17 @@ impl SubsessionService {
                     .map_or(OwnOptional::Null, OwnOptional::Value),
                 workspace_path: parent.workspace_path.clone(),
                 runtime_adapter_id: "btcc-turn-runtime".into(),
-                model_provider_id: stored.packet["model_ref"]
+                model_provider_id: json::at(&stored.packet, "/model_ref")
                     .as_str()
                     .unwrap_or("")
                     .split('/')
                     .next()
                     .unwrap_or("")
                     .into(),
-                model_ref: stored.packet["model_ref"].as_str().unwrap_or("").into(),
+                model_ref: json::at(&stored.packet, "/model_ref")
+                    .as_str()
+                    .unwrap_or("")
+                    .into(),
                 runtime_session_ref: None,
                 provider_thread_ref: None,
                 transport_bindings: Vec::new(),
@@ -292,7 +296,7 @@ impl SubsessionService {
         &self,
         stored: &crate::btcc::StoredSubsessionDelegation,
     ) -> Result<(), BtccError> {
-        let (role, role_name) = match stored.packet["child_role"].as_str() {
+        let (role, role_name) = match json::at(&stored.packet, "/child_role").as_str() {
             Some("steward") => (SessionRole::Steward, "steward"),
             Some("worker") => (SessionRole::Worker, "worker"),
             _ => return Err(error(BtccCode::SubsessionChildRoleInvalid)),
@@ -314,7 +318,7 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?
             .ok_or_else(|| error(BtccCode::SubsessionParentBindingMissing))?;
-        let access = stored.packet["access_mode"]
+        let access = json::at(&stored.packet, "/access_mode")
             .as_str()
             .ok_or_else(|| error(BtccCode::SubsessionAccessModeInvalid))?;
         let metadata = child_metadata(role_name, &stored.packet, access, &parent);
@@ -386,7 +390,7 @@ impl SubsessionService {
             .start_work(StartWorkInput {
                 scope,
                 mutation_call_id: mutation,
-                objective: stored.packet["objective"]
+                objective: json::at(&stored.packet, "/objective")
                     .as_str()
                     .unwrap_or("Complete the bounded subsession task.")
                     .into(),

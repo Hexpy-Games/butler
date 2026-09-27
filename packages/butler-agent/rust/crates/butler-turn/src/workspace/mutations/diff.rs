@@ -19,80 +19,106 @@ pub(super) fn changed_file(
 
     let prefix = common_prefix(&old_lines, &new_lines);
     let suffix = common_suffix(&old_lines, &new_lines, prefix);
-    let old_middle = old_lines.len() - prefix - suffix;
-    let new_middle = new_lines.len() - prefix - suffix;
-    let mut decisions = DecisionBits::new(old_middle, new_middle)?;
-    let width = new_middle.checked_add(1)?;
-    let mut next = score_row(width)?;
-    let mut current = score_row(width)?;
-
-    for old_index in (0..old_middle).rev() {
-        current.fill(0);
-        for new_index in (0..new_middle).rev() {
-            if old_lines[prefix + old_index] == new_lines[prefix + new_index] {
-                current[new_index] = next[new_index + 1].checked_add(1)?;
-            } else {
-                let down = next[new_index];
-                let right = current[new_index + 1];
-                current[new_index] = down.max(right);
-                // The source chooses deletion when the two scores tie.
-                decisions.set(old_index, new_index, down >= right);
-            }
-        }
-        std::mem::swap(&mut next, &mut current);
-    }
-
-    let mut lines = Vec::new();
-    lines
-        .try_reserve(old_middle.checked_add(new_middle)?)
-        .ok()?;
-    let mut old_index = 0;
-    let mut new_index = 0;
-    let mut additions = 0;
-    let mut deletions = 0;
-    while old_index < old_middle || new_index < new_middle {
-        if old_index < old_middle
-            && new_index < new_middle
-            && old_lines[prefix + old_index] == new_lines[prefix + new_index]
-        {
-            old_index += 1;
-            new_index += 1;
-            continue;
-        }
-        if old_index < old_middle
-            && (new_index >= new_middle || decisions.get(old_index, new_index))
-        {
-            lines.push(ChangedLine {
-                kind: "deleted",
-                old_line: Some(prefix + old_index + 1),
-                new_line: None,
-                content: old_lines[prefix + old_index].to_owned(),
-            });
-            deletions += 1;
-            old_index += 1;
-        } else {
-            lines.push(ChangedLine {
-                kind: "added",
-                old_line: None,
-                new_line: Some(prefix + new_index + 1),
-                content: new_lines[prefix + new_index].to_owned(),
-            });
-            additions += 1;
-            new_index += 1;
-        }
-    }
-    if lines.is_empty() && !created {
+    let old_middle = old_lines.get(prefix..old_lines.len() - suffix)?;
+    let new_middle = new_lines.get(prefix..new_lines.len() - suffix)?;
+    let decisions = lcs_decisions(old_middle, new_middle)?;
+    let diff = changed_lines(old_middle, new_middle, prefix, &decisions)?;
+    if diff.lines.is_empty() && !created {
         return None;
     }
     Some(ChangedFile {
         path: path.to_owned(),
-        additions,
-        deletions,
-        lines,
+        additions: diff.additions,
+        deletions: diff.deletions,
+        lines: diff.lines,
         before_text,
         after_text,
         file_created: created,
     })
+}
+
+/// The LCS deletion decisions of the differing middle, computed bottom-up
+/// with two score rows.
+fn lcs_decisions(old: &[&str], new: &[&str]) -> Option<DecisionBits> {
+    let mut decisions = DecisionBits::new(old.len(), new.len())?;
+    let width = new.len().checked_add(1)?;
+    let mut next = score_row(width)?;
+    let mut current = score_row(width)?;
+    for (old_index, old_line) in old.iter().enumerate().rev() {
+        current.fill(0);
+        for (new_index, new_line) in new.iter().enumerate().rev() {
+            let down = *next.get(new_index)?;
+            let score = if old_line == new_line {
+                next.get(new_index + 1)?.checked_add(1)?
+            } else {
+                let right = *current.get(new_index + 1)?;
+                // The source chooses deletion when the two scores tie.
+                decisions.set(old_index, new_index, down >= right);
+                down.max(right)
+            };
+            *current.get_mut(new_index)? = score;
+        }
+        std::mem::swap(&mut next, &mut current);
+    }
+    Some(decisions)
+}
+
+/// The changed lines of a diff and their counts.
+struct Diff {
+    lines: Vec<ChangedLine>,
+    additions: usize,
+    deletions: usize,
+}
+
+/// Walks the decisions from the top: equal lines advance both sides,
+/// otherwise a deletion or addition is emitted with 1-based line numbers.
+fn changed_lines(
+    old: &[&str],
+    new: &[&str],
+    prefix: usize,
+    decisions: &DecisionBits,
+) -> Option<Diff> {
+    let mut diff = Diff {
+        lines: Vec::new(),
+        additions: 0,
+        deletions: 0,
+    };
+    diff.lines
+        .try_reserve(old.len().checked_add(new.len())?)
+        .ok()?;
+    let (mut old_index, mut new_index) = (0, 0);
+    loop {
+        match (old.get(old_index), new.get(new_index)) {
+            (None, None) => return Some(diff),
+            (Some(old_line), Some(new_line)) if old_line == new_line => {
+                old_index += 1;
+                new_index += 1;
+            }
+            (Some(old_line), new_line)
+                if new_line.is_none() || decisions.get(old_index, new_index) =>
+            {
+                diff.lines.push(ChangedLine {
+                    kind: "deleted",
+                    old_line: Some(prefix + old_index + 1),
+                    new_line: None,
+                    content: (*old_line).to_owned(),
+                });
+                diff.deletions += 1;
+                old_index += 1;
+            }
+            (_, Some(new_line)) => {
+                diff.lines.push(ChangedLine {
+                    kind: "added",
+                    old_line: None,
+                    new_line: Some(prefix + new_index + 1),
+                    content: (*new_line).to_owned(),
+                });
+                diff.additions += 1;
+                new_index += 1;
+            }
+            (Some(_), None) => return None,
+        }
+    }
 }
 
 fn split_lines(value: &str) -> Option<Vec<&str>> {
@@ -130,8 +156,11 @@ fn common_prefix(old: &[&str], new: &[&str]) -> usize {
 
 fn common_suffix(old: &[&str], new: &[&str], prefix: usize) -> usize {
     let max = old.len().min(new.len()) - prefix;
-    (0..max)
-        .take_while(|offset| old[old.len() - offset - 1] == new[new.len() - offset - 1])
+    old.iter()
+        .rev()
+        .zip(new.iter().rev())
+        .take(max)
+        .take_while(|(old, new)| old == new)
         .count()
 }
 
@@ -165,12 +194,16 @@ impl DecisionBits {
             return;
         }
         let bit = old_index * self.width + new_index;
-        self.bits[bit / 8] |= 1 << (bit % 8);
+        if let Some(byte) = self.bits.get_mut(bit / 8) {
+            *byte |= 1 << (bit % 8);
+        }
     }
 
     fn get(&self, old_index: usize, new_index: usize) -> bool {
         let bit = old_index * self.width + new_index;
-        self.bits[bit / 8] & (1 << (bit % 8)) != 0
+        self.bits
+            .get(bit / 8)
+            .is_some_and(|byte| byte & (1 << (bit % 8)) != 0)
     }
 }
 

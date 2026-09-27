@@ -33,7 +33,10 @@ pub(super) fn locate(
             break;
         };
         let offset = search_from + found;
-        line += text.as_bytes()[scanned_to..offset]
+        line += text
+            .as_bytes()
+            .get(scanned_to..offset)
+            .unwrap_or_default()
             .iter()
             .filter(|byte| **byte == b'\n')
             .count();
