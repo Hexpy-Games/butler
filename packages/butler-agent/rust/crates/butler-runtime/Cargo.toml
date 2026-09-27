@@ -48,6 +48,8 @@ nix.workspace = true
 test-support = []
 
 [dev-dependencies]
+# Integration tests use this crate's own test-support fixtures.
+butler-runtime = { path = ".", features = ["test-support"] }
 butler-models = { path = "../butler-models", features = ["test-support"] }
 butler-turn = { path = "../butler-turn", features = ["test-support"] }
 butler-test-support = { path = "../butler-test-support" }
