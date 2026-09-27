@@ -10,6 +10,9 @@ use super::super::result;
 use super::{current, import_id, invalid, valid_hash};
 use crate::btcc::StorageCode;
 
+/// Applies an observed legacy import: re-validates the snapshot against its
+/// source, records (or refreshes) the import identity and clears the Work's
+/// native revision history so the imported history replaces it.
 pub(super) fn apply(
     db: &Connection,
     input: &ProjectWorkLegacyObserveInput,
@@ -18,10 +21,51 @@ pub(super) fn apply(
     if !valid_hash(&input.canonical_head_sha256) {
         return Err(invalid(StorageCode::ProjectWorkLegacyObservationInvalid));
     }
+    validate_source(db, input)?;
+    verify_results(db, input)?;
+    let work_id = &input.snapshot.work.work_id;
+    let current_source = input.snapshot.source_kind == ProjectWorkLegacySourceKind::SqliteR3;
+    if current_source {
+        validate_observed_work(db, input)?;
+    }
+    let prior = current::import_row(db, work_id)?;
+    let id = prior.as_ref().map_or_else(
+        || {
+            import_id(
+                &input.snapshot.source_program_id,
+                &input.scope.session_id,
+                &input.resolved_scope.app_project_id,
+            )
+        },
+        |row| row.import_id.clone(),
+    );
+    if current_source {
+        ensure_current_identity(db, input, prior.as_ref(), &id)?;
+    }
+    record_import(db, input, prior.as_ref(), &id, &clock())?;
+    for table in [
+        "btcc_guided_work_plan_revisions",
+        "btcc_guided_work_checkpoint_revisions",
+        "btcc_guided_work_review_revisions",
+        "btcc_guided_work_disposition_revisions",
+        "btcc_guided_work_closeout_diagnostics",
+        "btcc_guided_work_disposition_commands",
+        "btcc_guided_work_mutations",
+        "btcc_guided_work_relation_commands",
+    ] {
+        db.execute(&format!("DELETE FROM {table} WHERE work_id=?1"), [work_id])
+            .map_err(StorageError::sqlite)?;
+    }
+    Ok(())
+}
+
+/// A raw R2 snapshot is re-validated against the stored Work; a current R3
+/// snapshot must still be what a fresh capture produces.
+fn validate_source(db: &Connection, input: &ProjectWorkLegacyObserveInput) -> StorageResult<()> {
     match input.snapshot.source_kind {
         ProjectWorkLegacySourceKind::RawR2 => {
             validate_observed_work(db, input)?;
-            validate_raw(db, input)?;
+            validate_raw(db, input)
         }
         ProjectWorkLegacySourceKind::SqliteR3 => {
             let current = current::capture(
@@ -37,52 +81,47 @@ pub(super) fn apply(
             {
                 return Err(invalid(StorageCode::ProjectWorkLegacySourceChanged));
             }
+            Ok(())
         }
     }
-    verify_results(db, input)?;
+}
+
+/// A current source keeps its prior import identity exactly, or claims an
+/// unused one.
+fn ensure_current_identity(
+    db: &Connection,
+    input: &ProjectWorkLegacyObserveInput,
+    prior: Option<&current::LegacyImportRow>,
+    id: &str,
+) -> StorageResult<()> {
+    let Some(prior) = prior else {
+        if import_id_exists(db, id)? {
+            return Err(invalid(StorageCode::ProjectWorkLegacyIdentityConflict));
+        }
+        return Ok(());
+    };
+    if prior.legacy_program_id != input.snapshot.source_program_id
+        || prior.session_id != input.scope.session_id
+        || prior.scope_kind != "project"
+        || prior.scope_ref != input.resolved_scope.app_project_id
+        || prior.source_authority != "project_ledger"
+        || prior.work_id != input.snapshot.work.work_id
+    {
+        return Err(invalid(StorageCode::ProjectWorkLegacyIdentityConflict));
+    }
+    Ok(())
+}
+
+/// Refreshes the prior import row's source revision, or inserts the import.
+fn record_import(
+    db: &Connection,
+    input: &ProjectWorkLegacyObserveInput,
+    prior: Option<&current::LegacyImportRow>,
+    id: &str,
+    now: &str,
+) -> StorageResult<()> {
     let work_id = &input.snapshot.work.work_id;
-    if input.snapshot.source_kind == ProjectWorkLegacySourceKind::SqliteR3 {
-        validate_observed_work(db, input)?;
-    }
-    let prior = current::import_row(db, work_id)?;
-    let id = prior.as_ref().map_or_else(
-        || {
-            import_id(
-                &input.snapshot.source_program_id,
-                &input.scope.session_id,
-                &input.resolved_scope.app_project_id,
-            )
-        },
-        |row| row.import_id.clone(),
-    );
-    if input.snapshot.source_kind == ProjectWorkLegacySourceKind::SqliteR3 {
-        if let Some(prior) = &prior {
-            if prior.legacy_program_id != input.snapshot.source_program_id
-                || prior.session_id != input.scope.session_id
-                || prior.scope_kind != "project"
-                || prior.scope_ref != input.resolved_scope.app_project_id
-                || prior.source_authority != "project_ledger"
-                || prior.work_id != *work_id
-            {
-                return Err(invalid(StorageCode::ProjectWorkLegacyIdentityConflict));
-            }
-        } else if import_id_exists(db, &id)? {
-            return Err(invalid(StorageCode::ProjectWorkLegacyIdentityConflict));
-        }
-    }
-    let now = clock();
-    if prior.is_some() {
-        let changed = db.execute(
-            "UPDATE btcc_guided_work_legacy_imports SET source_revision=?1,imported_at=?2 \
-             WHERE import_id=?3 AND legacy_program_id=?4 AND session_id=?5 AND scope_kind='project' \
-             AND scope_ref=?6 AND source_authority='project_ledger' AND work_id=?7",
-            params![input.snapshot.source_sha256, now, id, input.snapshot.source_program_id,
-                input.scope.session_id, input.resolved_scope.app_project_id, work_id],
-        ).map_err(StorageError::sqlite)?;
-        if changed != 1 {
-            return Err(invalid(StorageCode::ProjectWorkLegacyIdentityConflict));
-        }
-    } else {
+    if prior.is_none() {
         db.execute(
             "INSERT INTO btcc_guided_work_legacy_imports \
              (import_id,legacy_program_id,session_id,scope_kind,scope_ref,source_authority,source_revision,work_id,imported_at) \
@@ -90,19 +129,17 @@ pub(super) fn apply(
             params![id, input.snapshot.source_program_id, input.scope.session_id,
                 input.resolved_scope.app_project_id, input.snapshot.source_sha256, work_id, now],
         ).map_err(StorageError::sqlite)?;
+        return Ok(());
     }
-    for table in [
-        "btcc_guided_work_plan_revisions",
-        "btcc_guided_work_checkpoint_revisions",
-        "btcc_guided_work_review_revisions",
-        "btcc_guided_work_disposition_revisions",
-        "btcc_guided_work_closeout_diagnostics",
-        "btcc_guided_work_disposition_commands",
-        "btcc_guided_work_mutations",
-        "btcc_guided_work_relation_commands",
-    ] {
-        db.execute(&format!("DELETE FROM {table} WHERE work_id=?1"), [work_id])
-            .map_err(StorageError::sqlite)?;
+    let changed = db.execute(
+        "UPDATE btcc_guided_work_legacy_imports SET source_revision=?1,imported_at=?2 \
+         WHERE import_id=?3 AND legacy_program_id=?4 AND session_id=?5 AND scope_kind='project' \
+         AND scope_ref=?6 AND source_authority='project_ledger' AND work_id=?7",
+        params![input.snapshot.source_sha256, now, id, input.snapshot.source_program_id,
+            input.scope.session_id, input.resolved_scope.app_project_id, work_id],
+    ).map_err(StorageError::sqlite)?;
+    if changed != 1 {
+        return Err(invalid(StorageCode::ProjectWorkLegacyIdentityConflict));
     }
     Ok(())
 }

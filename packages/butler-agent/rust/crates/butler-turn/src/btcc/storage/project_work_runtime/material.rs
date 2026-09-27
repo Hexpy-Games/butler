@@ -81,97 +81,33 @@ pub(super) fn capture(
     })
 }
 
+/// The material snapshot of a Work: the plan, progress, checkpoint, reviews
+/// and results a disposition is decided on, with enums as their wire text.
 pub(in crate::btcc) fn snapshot(
     work: &WorkView,
     material_fingerprint: String,
     effect_watermark: Option<String>,
     effect_blockers: Vec<ProjectWorkMaterialBlocker>,
 ) -> StorageResult<ProjectWorkMaterialSnapshot> {
-    let progress = |items: &[crate::btcc::work::ActionProgress]| -> StorageResult<Vec<_>> {
-        items
-            .iter()
-            .map(|item| {
-                Ok(ProjectWorkMaterialProgress {
-                    action_key: item.action_key.clone(),
-                    status: enum_text(item.status)?,
-                    note: item.note.clone(),
-                })
-            })
-            .collect()
-    };
-    let current_plan = work
-        .current_plan
-        .as_ref()
-        .map(|plan| -> StorageResult<_> {
-            Ok(ProjectWorkMaterialPlan {
-                plan_revision_id: plan.plan_revision_id.clone(),
-                revision: plan.revision,
-                objective: plan.objective.clone(),
-                governing_refs: plan.governing_refs.clone(),
-                execution_mode: plan.execution_mode.map(enum_text).transpose()?,
-                actions: plan
-                    .actions
-                    .iter()
-                    .map(|action| ProjectWorkMaterialAction {
-                        action_key: action.action_key.clone(),
-                        description: action.description.clone(),
-                        dependency_keys: action.dependency_keys.clone(),
-                        effect: action.effect.clone(),
-                    })
-                    .collect(),
-                checks: plan.checks.clone(),
-                origin_turn_id: plan.origin_turn_id.clone(),
-                created_at: plan.created_at.clone(),
-            })
-        })
-        .transpose()?;
-    let latest_checkpoint = work
-        .latest_checkpoint
-        .as_ref()
-        .map(|checkpoint| -> StorageResult<_> {
-            Ok(ProjectWorkMaterialCheckpoint {
-                revision: checkpoint.revision,
-                plan_revision_id: checkpoint.plan_revision_id.clone(),
-                stage: enum_text(checkpoint.stage)?,
-                action_progress: progress(&checkpoint.action_progress)?,
-                result_sequence: checkpoint.referenced_result_refs.len(),
-                referenced_result_refs: checkpoint.referenced_result_refs.clone(),
-            })
-        })
-        .transpose()?;
     let reviews = [
         work.latest_plan_review.as_ref(),
         work.latest_result_review.as_ref(),
         work.latest_completion_validation.as_ref(),
     ]
     .into_iter()
-    .map(|review| {
-        review
-            .map(|review| -> StorageResult<_> {
-                Ok(ProjectWorkMaterialReview {
-                    review_revision_id: review.review_revision_id.clone(),
-                    revision: review.revision,
-                    verdict: enum_text(review.verdict)?,
-                    bound_plan_revision_id: review.bound_plan_revision_id.clone(),
-                    bound_result_review_revision_id: review.bound_result_review_revision_id.clone(),
-                    bound_action_progress: review
-                        .bound_action_progress
-                        .as_ref()
-                        .map(|items| progress(items))
-                        .transpose()?,
-                    bound_result_refs: review.bound_result_refs.clone(),
-                })
-            })
-            .transpose()
-    })
+    .map(|review| review.map(material_review).transpose())
     .collect::<StorageResult<Vec<_>>>()?;
     Ok(ProjectWorkMaterialSnapshot {
         material_fingerprint,
         work_id: work.work_id.clone(),
         status: work.status,
-        current_plan,
-        action_progress: progress(&work.action_progress)?,
-        latest_checkpoint,
+        current_plan: work.current_plan.as_ref().map(material_plan).transpose()?,
+        action_progress: material_progress(&work.action_progress)?,
+        latest_checkpoint: work
+            .latest_checkpoint
+            .as_ref()
+            .map(material_checkpoint)
+            .transpose()?,
         reviews,
         result_refs: work
             .result_refs
@@ -185,6 +121,75 @@ pub(in crate::btcc) fn snapshot(
             .collect(),
         effect_watermark,
         effect_blockers,
+    })
+}
+
+fn material_progress(
+    items: &[crate::btcc::work::ActionProgress],
+) -> StorageResult<Vec<ProjectWorkMaterialProgress>> {
+    items
+        .iter()
+        .map(|item| {
+            Ok(ProjectWorkMaterialProgress {
+                action_key: item.action_key.clone(),
+                status: enum_text(item.status)?,
+                note: item.note.clone(),
+            })
+        })
+        .collect()
+}
+
+fn material_plan(plan: &crate::btcc::work::WorkPlan) -> StorageResult<ProjectWorkMaterialPlan> {
+    Ok(ProjectWorkMaterialPlan {
+        plan_revision_id: plan.plan_revision_id.clone(),
+        revision: plan.revision,
+        objective: plan.objective.clone(),
+        governing_refs: plan.governing_refs.clone(),
+        execution_mode: plan.execution_mode.map(enum_text).transpose()?,
+        actions: plan
+            .actions
+            .iter()
+            .map(|action| ProjectWorkMaterialAction {
+                action_key: action.action_key.clone(),
+                description: action.description.clone(),
+                dependency_keys: action.dependency_keys.clone(),
+                effect: action.effect.clone(),
+            })
+            .collect(),
+        checks: plan.checks.clone(),
+        origin_turn_id: plan.origin_turn_id.clone(),
+        created_at: plan.created_at.clone(),
+    })
+}
+
+fn material_checkpoint(
+    checkpoint: &crate::btcc::work::Checkpoint,
+) -> StorageResult<ProjectWorkMaterialCheckpoint> {
+    Ok(ProjectWorkMaterialCheckpoint {
+        revision: checkpoint.revision,
+        plan_revision_id: checkpoint.plan_revision_id.clone(),
+        stage: enum_text(checkpoint.stage)?,
+        action_progress: material_progress(&checkpoint.action_progress)?,
+        result_sequence: checkpoint.referenced_result_refs.len(),
+        referenced_result_refs: checkpoint.referenced_result_refs.clone(),
+    })
+}
+
+fn material_review(
+    review: &crate::btcc::work::WorkReview,
+) -> StorageResult<ProjectWorkMaterialReview> {
+    Ok(ProjectWorkMaterialReview {
+        review_revision_id: review.review_revision_id.clone(),
+        revision: review.revision,
+        verdict: enum_text(review.verdict)?,
+        bound_plan_revision_id: review.bound_plan_revision_id.clone(),
+        bound_result_review_revision_id: review.bound_result_review_revision_id.clone(),
+        bound_action_progress: review
+            .bound_action_progress
+            .as_deref()
+            .map(material_progress)
+            .transpose()?,
+        bound_result_refs: review.bound_result_refs.clone(),
     })
 }
 

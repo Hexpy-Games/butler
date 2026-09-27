@@ -159,6 +159,11 @@ pub(super) fn program_ids(
     Ok(sorted)
 }
 
+/// The raw R2 legacy timestamp: imported revisions predate every native one.
+const LEGACY_EPOCH: &str = "1970-01-01T00:00:00.000Z";
+
+/// Projects one raw R2 legacy program into a Work snapshot owned by the turn
+/// that originated it; a program already imported for the scope is refused.
 fn project(
     db: &Connection,
     input: &ProjectWorkLegacyInput,
@@ -169,26 +174,80 @@ fn project(
         return Err(invalid(StorageCode::ProjectWorkLegacySourceRevisionInvalid));
     }
     let projection = project_external_legacy_work(source)?;
-    let origin = origin_turn(
-        db,
-        &input.scope.session_id,
-        &source.source_program_id,
-        projection.original_message_id.as_deref(),
-    )?
-    .ok_or_else(|| invalid(StorageCode::ProjectWorkLegacyTurnOwnershipInvalid))?;
-    if projection
-        .original_message_id
-        .as_ref()
-        .is_some_and(|id| id != &origin.original_message_id)
-    {
-        return Err(invalid(StorageCode::ProjectWorkLegacyOriginMessageInvalid));
-    }
+    let origin = verified_origin(db, input, source, projection.original_message_id.as_deref())?;
     let import_id = import_id(
         &source.source_program_id,
         &input.scope.session_id,
         &input.resolved_scope.app_project_id,
     );
     let work_id = record_id("work", &import_id);
+    ensure_unimported(db, input, source, &import_id, &work_id)?;
+    let plan = (!projection.actions.is_empty()).then(|| WorkPlan {
+        plan_revision_id: record_id("plan", &import_id),
+        revision: 1,
+        objective: projection.objective.clone(),
+        governing_refs: Vec::new(),
+        execution_mode: None,
+        actions: projection.actions.clone(),
+        checks: projection.checks.clone(),
+        origin_turn_id: origin.turn_id.clone(),
+        created_at: LEGACY_EPOCH.to_owned(),
+    });
+    let checkpoint = projection
+        .checkpoint
+        .as_ref()
+        .zip(plan.as_ref())
+        .map(|(projected, plan)| Checkpoint {
+            checkpoint_revision_id: record_id("checkpoint", &import_id),
+            revision: 1,
+            plan_revision_id: plan.plan_revision_id.clone(),
+            stage: projected.stage,
+            action_progress: projected.actions.clone(),
+            public_summary: projected.summary.clone(),
+            next_step: projected.next.clone(),
+            referenced_result_refs: Vec::new(),
+            origin_turn_id: origin.turn_id.clone(),
+            created_at: LEGACY_EPOCH.to_owned(),
+        });
+    let work = initial_work_view(
+        input,
+        work_id,
+        &origin,
+        projection.objective,
+        plan.as_ref(),
+        checkpoint.as_ref(),
+    );
+    legacy_snapshot(source, program_ids, work, plan, checkpoint, origin)
+}
+
+/// The turn that originated the program, which must carry the program's
+/// original message when the source names one.
+fn verified_origin(
+    db: &Connection,
+    input: &ProjectWorkLegacyInput,
+    source: &LegacyProjectWorkSourceSnapshot,
+    original_message_id: Option<&str>,
+) -> StorageResult<ProjectWorkLegacyTurn> {
+    let origin = origin_turn(
+        db,
+        &input.scope.session_id,
+        &source.source_program_id,
+        original_message_id,
+    )?
+    .ok_or_else(|| invalid(StorageCode::ProjectWorkLegacyTurnOwnershipInvalid))?;
+    if original_message_id.is_some_and(|id| id != origin.original_message_id) {
+        return Err(invalid(StorageCode::ProjectWorkLegacyOriginMessageInvalid));
+    }
+    Ok(origin)
+}
+
+fn ensure_unimported(
+    db: &Connection,
+    input: &ProjectWorkLegacyInput,
+    source: &LegacyProjectWorkSourceSnapshot,
+    import_id: &str,
+    work_id: &str,
+) -> StorageResult<()> {
     let exists = db.query_row(
         "SELECT 1 FROM btcc_guided_work_legacy_imports WHERE import_id=?1 OR work_id=?2 \
          OR (legacy_program_id=?3 AND session_id=?4 AND scope_kind='project' AND scope_ref=?5) LIMIT 1",
@@ -198,58 +257,34 @@ fn project(
     if exists.is_some() {
         return Err(invalid(StorageCode::ProjectWorkLegacyIdentityConflict));
     }
-    let plan_id = (!projection.actions.is_empty()).then(|| record_id("plan", &import_id));
-    let checkpoint_id = projection
-        .checkpoint
-        .as_ref()
-        .map(|_| record_id("checkpoint", &import_id));
-    let at = "1970-01-01T00:00:00.000Z".to_owned();
-    let plan = plan_id.as_ref().map(|id| WorkPlan {
-        plan_revision_id: id.clone(),
-        revision: 1,
-        objective: projection.objective.clone(),
-        governing_refs: Vec::new(),
-        execution_mode: None,
-        actions: projection.actions.clone(),
-        checks: projection.checks.clone(),
-        origin_turn_id: origin.turn_id.clone(),
-        created_at: at.clone(),
-    });
-    let checkpoint = projection
-        .checkpoint
-        .as_ref()
-        .zip(checkpoint_id.as_ref())
-        .zip(plan.as_ref())
-        .map(|((projected, id), plan)| Checkpoint {
-            checkpoint_revision_id: id.clone(),
-            revision: 1,
-            plan_revision_id: plan.plan_revision_id.clone(),
-            stage: projected.stage,
-            action_progress: projected.actions.clone(),
-            public_summary: projected.summary.clone(),
-            next_step: projected.next.clone(),
-            referenced_result_refs: Vec::new(),
-            origin_turn_id: origin.turn_id.clone(),
-            created_at: at.clone(),
-        });
-    let progress = checkpoint.as_ref().map_or_else(
-        || {
-            plan.as_ref().map_or_else(Vec::new, |plan| {
-                plan.actions
-                    .iter()
-                    .map(|action| ActionProgress {
-                        action_key: action.action_key.clone(),
-                        status: ActionStatus::Pending,
-                        note: None,
-                    })
-                    .collect()
-            })
-        },
-        |checkpoint| checkpoint.action_progress.clone(),
-    );
-    let stage = checkpoint.as_ref().map(|checkpoint| checkpoint.stage);
-    let work = WorkView {
-        work_id: work_id.clone(),
+    Ok(())
+}
+
+/// The open project Work the legacy program becomes.
+fn initial_work_view(
+    input: &ProjectWorkLegacyInput,
+    work_id: String,
+    origin: &ProjectWorkLegacyTurn,
+    objective: String,
+    plan: Option<&WorkPlan>,
+    checkpoint: Option<&Checkpoint>,
+) -> WorkView {
+    let progress = match checkpoint {
+        Some(checkpoint) => checkpoint.action_progress.clone(),
+        None => plan.map_or_else(Vec::new, |plan| {
+            plan.actions
+                .iter()
+                .map(|action| ActionProgress {
+                    action_key: action.action_key.clone(),
+                    status: ActionStatus::Pending,
+                    note: None,
+                })
+                .collect()
+        }),
+    };
+    let stage = checkpoint.map(|checkpoint| checkpoint.stage);
+    WorkView {
+        work_id,
         session_id: input.scope.session_id.clone(),
         scope: WorkScope::Project {
             project_ref: input.resolved_scope.app_project_id.clone(),
@@ -258,13 +293,13 @@ fn project(
             turn_id: origin.turn_id.clone(),
             message_id: origin.original_message_id.clone(),
         },
-        objective: projection.objective,
+        objective,
         status: WorkStatus::Open,
         current_stage: stage,
         allowed_next_stages: crate::btcc::work::policy::allowed_next_work_stages(stage),
         action_progress: progress,
-        current_plan: plan.clone(),
-        latest_checkpoint: checkpoint.clone(),
+        current_plan: plan.cloned(),
+        latest_checkpoint: checkpoint.cloned(),
         latest_plan_review: None,
         latest_result_review: None,
         latest_completion_validation: None,
@@ -272,14 +307,27 @@ fn project(
         effect_watermark: Some(crate::btcc::identity::digest("[]")),
         effect_blockers: None,
         result_refs: Vec::new(),
-        created_at: at.clone(),
-        updated_at: at.clone(),
-    };
+        created_at: LEGACY_EPOCH.to_owned(),
+        updated_at: LEGACY_EPOCH.to_owned(),
+    }
+}
+
+/// The snapshot and its source digest. The digest covers the persisted
+/// semantic JSON, so its field order is part of the import identity.
+fn legacy_snapshot(
+    source: &LegacyProjectWorkSourceSnapshot,
+    program_ids: &[String],
+    work: WorkView,
+    plan: Option<WorkPlan>,
+    checkpoint: Option<Checkpoint>,
+    origin: ProjectWorkLegacyTurn,
+) -> StorageResult<ProjectWorkLegacySnapshot> {
+    let work_id = &work.work_id;
     let binding = ProjectWorkBinding {
         binding_revision_id: record_id("binding", &format!("{}\0{}\0{work_id}", origin.turn_id, 1)),
         turn_id: origin.turn_id.clone(),
         revision: 1,
-        bound_at: at,
+        bound_at: LEGACY_EPOCH.to_owned(),
         is_current: true,
     };
     let raw_source = json!({

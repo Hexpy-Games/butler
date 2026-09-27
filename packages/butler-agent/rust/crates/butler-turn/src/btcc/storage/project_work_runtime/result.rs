@@ -82,6 +82,8 @@ pub(super) fn read_committed(
     })
 }
 
+/// Persists observed project Works after verifying every referenced result
+/// against its committed tool result and the projection's ownership.
 pub(super) fn observe_works(db: &Connection, input: &ProjectWorkObserveWorks) -> StorageResult<()> {
     if !valid_hash(&input.canonical_head_sha256) {
         return Err(invalid(StorageCode::ProjectWorkRuntimeHeadInvalid));
@@ -91,13 +93,36 @@ pub(super) fn observe_works(db: &Connection, input: &ProjectWorkObserveWorks) ->
         .iter()
         .map(|item| item.work.work_id.as_str())
         .collect();
+    let evidence = committed_evidence(db, input)?;
+    assert_projection_ownership(db, input, &work_ids)?;
+    for item in &input.works {
+        write_observed_work(db, input, item, &evidence)?;
+    }
+    let Some(head) = input
+        .works
+        .iter()
+        .find(|item| item.work.work_id == input.session_head_work_id)
+    else {
+        return Err(invalid(StorageCode::ProjectWorkRuntimeHeadInvalid));
+    };
+    db.execute(
+        "INSERT INTO btcc_guided_work_session_heads(session_id,work_id,updated_at) VALUES(?1,?2,?3) \
+         ON CONFLICT(session_id) DO UPDATE SET work_id=excluded.work_id,updated_at=excluded.updated_at",
+        params![head.work.session_id, head.work.work_id, head.work.updated_at],
+    ).map_err(StorageError::sqlite)?;
+    Ok(())
+}
+
+/// The committed tool-result evidence of every referenced result, keyed by
+/// result ref; each reference must match its committed tool and digest.
+fn committed_evidence<'a>(
+    db: &Connection,
+    input: &'a ProjectWorkObserveWorks,
+) -> StorageResult<HashMap<&'a str, ProjectWorkToolResultEvidence>> {
     let mut evidence = HashMap::new();
     for item in &input.works {
         let work = &item.work;
-        let WorkScope::Project { project_ref } = &work.scope else {
-            return Err(invalid(StorageCode::ProjectWorkRuntimeProjectionMismatch));
-        };
-        if project_ref.is_empty() {
+        if !matches!(&work.scope, WorkScope::Project { project_ref } if !project_ref.is_empty()) {
             return Err(invalid(StorageCode::ProjectWorkRuntimeProjectionMismatch));
         }
         for reference in &work.result_refs {
@@ -117,62 +142,57 @@ pub(super) fn observe_works(db: &Connection, input: &ProjectWorkObserveWorks) ->
             evidence.insert(reference.result_ref.as_str(), committed);
         }
     }
-    assert_projection_ownership(db, input, &work_ids)?;
-    for item in &input.works {
-        let work = &item.work;
-        let WorkScope::Project { project_ref } = &work.scope else {
-            return Err(invalid(StorageCode::ProjectWorkRuntimeProjectionMismatch));
-        };
-        db.execute(
-            "INSERT INTO btcc_guided_works(work_id,session_id,scope_kind,scope_ref,ledger_project_id, \
-             canonical_head_sha256,origin_turn_id,origin_message_id,objective,status, \
-             current_plan_revision_id,created_at,updated_at) \
-             VALUES(?1,?2,'project',?3,?4,?5,?6,?7,?8,?9,NULL,?10,?11) \
-             ON CONFLICT(work_id) DO UPDATE SET session_id=excluded.session_id, \
-             scope_kind=excluded.scope_kind,scope_ref=excluded.scope_ref, \
-             ledger_project_id=excluded.ledger_project_id,canonical_head_sha256=excluded.canonical_head_sha256, \
-             origin_turn_id=excluded.origin_turn_id,origin_message_id=excluded.origin_message_id, \
-             objective=excluded.objective,status=excluded.status,current_plan_revision_id=NULL, \
-             created_at=excluded.created_at,updated_at=excluded.updated_at",
-            params![work.work_id, work.session_id, project_ref, input.ledger_project_id,
-                input.canonical_head_sha256, work.origin.turn_id, work.origin.message_id,
-                work.objective, enum_text(work.status)?, work.created_at, work.updated_at],
-        ).map_err(StorageError::sqlite)?;
-        for binding in &item.bindings {
-            db.execute(
-                "INSERT INTO btcc_guided_turn_work_bindings(binding_revision_id,turn_id,session_id, \
-                 work_id,revision,is_current,bound_at) VALUES(?1,?2,?3,?4,?5,?6,?7) \
-                 ON CONFLICT(binding_revision_id) DO UPDATE SET turn_id=excluded.turn_id, \
-                 session_id=excluded.session_id,work_id=excluded.work_id,revision=excluded.revision, \
-                 is_current=excluded.is_current,bound_at=excluded.bound_at",
-                params![binding.binding_revision_id, binding.turn_id, work.session_id, work.work_id,
-                    binding.revision, i64::from(binding.is_current), binding.bound_at],
-            ).map_err(StorageError::sqlite)?;
-        }
-        for (index, reference) in work.result_refs.iter().enumerate() {
-            repair_result(
-                db,
-                &work.work_id,
-                index as u64 + 1,
-                reference,
-                evidence
-                    .get(reference.result_ref.as_str())
-                    .ok_or_else(|| invalid(StorageCode::ProjectWorkResultReferenceMismatch))?,
-            )?;
-        }
-    }
-    let Some(head) = input
-        .works
-        .iter()
-        .find(|item| item.work.work_id == input.session_head_work_id)
-    else {
-        return Err(invalid(StorageCode::ProjectWorkRuntimeHeadInvalid));
+    Ok(evidence)
+}
+
+/// Upserts one Work row, its turn bindings and its result rows.
+fn write_observed_work(
+    db: &Connection,
+    input: &ProjectWorkObserveWorks,
+    item: &crate::btcc::work::ProjectWorkObserveWork,
+    evidence: &HashMap<&str, ProjectWorkToolResultEvidence>,
+) -> StorageResult<()> {
+    let work = &item.work;
+    let WorkScope::Project { project_ref } = &work.scope else {
+        return Err(invalid(StorageCode::ProjectWorkRuntimeProjectionMismatch));
     };
     db.execute(
-        "INSERT INTO btcc_guided_work_session_heads(session_id,work_id,updated_at) VALUES(?1,?2,?3) \
-         ON CONFLICT(session_id) DO UPDATE SET work_id=excluded.work_id,updated_at=excluded.updated_at",
-        params![head.work.session_id, head.work.work_id, head.work.updated_at],
+        "INSERT INTO btcc_guided_works(work_id,session_id,scope_kind,scope_ref,ledger_project_id, \
+         canonical_head_sha256,origin_turn_id,origin_message_id,objective,status, \
+         current_plan_revision_id,created_at,updated_at) \
+         VALUES(?1,?2,'project',?3,?4,?5,?6,?7,?8,?9,NULL,?10,?11) \
+         ON CONFLICT(work_id) DO UPDATE SET session_id=excluded.session_id, \
+         scope_kind=excluded.scope_kind,scope_ref=excluded.scope_ref, \
+         ledger_project_id=excluded.ledger_project_id,canonical_head_sha256=excluded.canonical_head_sha256, \
+         origin_turn_id=excluded.origin_turn_id,origin_message_id=excluded.origin_message_id, \
+         objective=excluded.objective,status=excluded.status,current_plan_revision_id=NULL, \
+         created_at=excluded.created_at,updated_at=excluded.updated_at",
+        params![work.work_id, work.session_id, project_ref, input.ledger_project_id,
+            input.canonical_head_sha256, work.origin.turn_id, work.origin.message_id,
+            work.objective, enum_text(work.status)?, work.created_at, work.updated_at],
     ).map_err(StorageError::sqlite)?;
+    for binding in &item.bindings {
+        db.execute(
+            "INSERT INTO btcc_guided_turn_work_bindings(binding_revision_id,turn_id,session_id, \
+             work_id,revision,is_current,bound_at) VALUES(?1,?2,?3,?4,?5,?6,?7) \
+             ON CONFLICT(binding_revision_id) DO UPDATE SET turn_id=excluded.turn_id, \
+             session_id=excluded.session_id,work_id=excluded.work_id,revision=excluded.revision, \
+             is_current=excluded.is_current,bound_at=excluded.bound_at",
+            params![binding.binding_revision_id, binding.turn_id, work.session_id, work.work_id,
+                binding.revision, i64::from(binding.is_current), binding.bound_at],
+        ).map_err(StorageError::sqlite)?;
+    }
+    for (index, reference) in work.result_refs.iter().enumerate() {
+        repair_result(
+            db,
+            &work.work_id,
+            index as u64 + 1,
+            reference,
+            evidence
+                .get(reference.result_ref.as_str())
+                .ok_or_else(|| invalid(StorageCode::ProjectWorkResultReferenceMismatch))?,
+        )?;
+    }
     Ok(())
 }
 
