@@ -38,7 +38,7 @@ pub use mutations::{
     WriteMutation,
 };
 pub use mutations::{net_changed_file_detail, prepare_exact_text};
-pub use path_guard::safe_workspace_path;
+pub use path_guard::{PathForm, safe_workspace_path};
 pub use reference::WorkspaceReference;
 pub use session_recovery::{
     ProjectWorkspaceInspection, SessionWorkspaceAuthority, SessionWorkspaceRecovery,

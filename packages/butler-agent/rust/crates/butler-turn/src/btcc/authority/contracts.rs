@@ -120,6 +120,7 @@ pub struct AuthorityAdmissionInput {
     pub model_ref: String,
     pub reasoning_effort: String,
     pub category: Option<String>,
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub normalized_input: Value,
 }
 
@@ -129,12 +130,13 @@ pub enum AuthorityAdmissionResult {
     Granted,
     Pending {
         request_ref: String,
-        projection: Value,
+        projection: AuthorityRequestProjection,
     },
     Allowed {
         request_ref: String,
         source_work_id: String,
         normalized_target: String,
+        // Passthrough: tool arguments/results/schemas, shaped by each tool.
         normalized_input: Value,
     },
     Denied {
@@ -166,7 +168,7 @@ pub struct AuthorityDecisionResult {
     pub(crate) schedule_input_text: String,
     pub(crate) model_ref: String,
     pub(crate) reasoning_effort: String,
-    pub decision: String,
+    pub decision: RequestDecision,
 }
 /// Claims execution of an allowed request.
 #[derive(Clone, Debug)]
@@ -191,10 +193,12 @@ pub struct AuthorityStoredExecution {
     pub capability: String,
     pub normalized_target: String,
     pub(crate) category: String,
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub normalized_input: Value,
-    pub decision: String,
+    pub decision: RequestDecision,
     pub(crate) alternative_input: Option<String>,
-    pub(crate) outcome: String,
+    pub(crate) outcome: RequestOutcome,
+    // Passthrough: tool/effect receipts, shaped by the capability.
     pub(crate) outcome_receipt: Option<Value>,
 }
 /// The outcome of an allowed operation.
@@ -204,6 +208,7 @@ pub struct AuthorityOutcomeInput {
     pub owner_session_id: String,
     pub source_work_id: String,
     pub status: String,
+    // Passthrough: tool/effect receipts, shaped by the capability.
     pub receipt: Option<Value>,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -219,7 +224,30 @@ pub struct AuthorityResumeSource {
     pub original_event_id: String,
     pub original_message_id: String,
     pub original_message: String,
-    pub destination: Option<Value>,
+    pub destination: Option<crate::btcc::ProgressDestination>,
+}
+
+/// The public projection of a pending authority request (shown to the user
+/// and to the model).
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AuthorityRequestProjection {
+    pub request_ref: String,
+    pub category: String,
+    pub reason: String,
+    pub executable: String,
+    pub command_count: u32,
+    pub scope: AuthorityScopeProjection,
+    pub source_turn_id: String,
+    pub source_session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_call_id: Option<String>,
+}
+
+/// The title and description of the permission a request would grant.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AuthorityScopeProjection {
+    pub title: String,
+    pub description: String,
 }
 #[derive(Clone, Debug)]
 pub(crate) struct AuthorityRecord {
@@ -244,12 +272,12 @@ pub(crate) struct AuthorityRecord {
     pub(crate) reason: String,
     pub(crate) executable: String,
     pub(crate) command_count: i64,
-    pub(crate) decision: String,
+    pub(crate) decision: RequestDecision,
     pub(crate) allow_scope: String,
     pub(crate) schedule_client_message_id: String,
     pub(crate) schedule_input_text: String,
     pub(crate) private_alternative_input: Option<String>,
-    pub(crate) outcome: String,
+    pub(crate) outcome: RequestOutcome,
     pub(crate) outcome_receipt_json: Option<String>,
     pub(crate) close_reason: Option<String>,
     pub(crate) close_scope: Option<String>,
@@ -268,6 +296,70 @@ pub struct ConversationPermission {
     pub description: String,
     pub(crate) created_at: String,
 }
+/// The stored decision of an authority request (`btcc_authority_requests.decision`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RequestDecision {
+    Pending,
+    Allowed,
+    Denied,
+    Modified,
+}
+
+impl RequestDecision {
+    /// The stored decision text.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Allowed => "allowed",
+            Self::Denied => "denied",
+            Self::Modified => "modified",
+        }
+    }
+
+    /// The decision of stored text (the column's CHECK admits only these).
+    pub(crate) fn parse(value: &str) -> Option<Self> {
+        match value {
+            "pending" => Some(Self::Pending),
+            "allowed" => Some(Self::Allowed),
+            "denied" => Some(Self::Denied),
+            "modified" => Some(Self::Modified),
+            _ => None,
+        }
+    }
+}
+
+/// The stored outcome of an allowed request (`btcc_authority_requests.outcome`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RequestOutcome {
+    Pending,
+    Applied,
+    Failed,
+    Uncertain,
+}
+
+impl RequestOutcome {
+    /// The stored outcome text.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Applied => "applied",
+            Self::Failed => "failed",
+            Self::Uncertain => "uncertain",
+        }
+    }
+
+    /// The outcome of stored text (the column's CHECK admits only these).
+    pub(crate) fn parse(value: &str) -> Option<Self> {
+        match value {
+            "pending" => Some(Self::Pending),
+            "applied" => Some(Self::Applied),
+            "failed" => Some(Self::Failed),
+            "uncertain" => Some(Self::Uncertain),
+            _ => None,
+        }
+    }
+}
+
 /// The user's answer to an authority request as received (`allow`, `deny`,
 /// `modify`). Any other answer is recorded like a modification without an
 /// alternative, as the source does.
@@ -290,11 +382,11 @@ impl AuthorityAction {
     }
 
     /// The stored request decision.
-    pub(crate) fn decision(self) -> &'static str {
+    pub(crate) fn decision(self) -> RequestDecision {
         match self {
-            Self::Allow => "allowed",
-            Self::Deny => "denied",
-            Self::Modify | Self::Unrecognized => "modified",
+            Self::Allow => RequestDecision::Allowed,
+            Self::Deny => RequestDecision::Denied,
+            Self::Modify | Self::Unrecognized => RequestDecision::Modified,
         }
     }
 

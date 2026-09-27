@@ -229,11 +229,10 @@ async fn summary_persists_and_reopens_with_physical_request_admission() {
         .await
         .unwrap();
     let claim = repositories.acquire_state_claim(&turn).await.unwrap();
-    turn.model_selection = json!({"provider":"openai","model":"gpt-5.5",
-        "reasoningEffort":"medium","controls":{},"controlsHash":"hash"});
-    let started = turn.continuation_budget.as_ref().unwrap()["startedAtMs"]
-        .as_u64()
-        .unwrap();
+    turn.model_selection = serde_json::from_value(json!({"provider":"openai","model":"gpt-5.5",
+        "reasoningEffort":"medium","controls":{},"controlsHash":"hash"}))
+    .unwrap();
+    let started = turn.continuation_budget.as_ref().unwrap().started_at_ms;
     let budget_factory = GuidedContinuationBudgetFactory::new(
         Some(repositories.clone()),
         Arc::new(move || started + 1),
@@ -371,7 +370,7 @@ async fn summary_persists_and_reopens_with_physical_request_admission() {
         .unwrap()
         .unwrap();
     assert_eq!(
-        persisted.continuation_budget.unwrap()["admittedRequests"][0]["modelFacingBytes"],
+        json!(persisted.continuation_budget.unwrap().admitted_requests[0].model_facing_bytes),
         physical_bytes
     );
     assert_eq!(

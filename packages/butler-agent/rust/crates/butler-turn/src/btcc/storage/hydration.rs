@@ -90,18 +90,20 @@ fn hydrate(connection: &Connection, row: TurnRow) -> StorageResult<TurnRecord> {
         .transpose()?;
     let turn = TurnRecord {
         wake_identity: load_wake_identity(connection, &row.turn_id)?,
-        model_selection: json(
+        model_selection: typed(
             &row.model_selection_json,
             StorageCode::InvalidModelSelection,
         )?,
-        model_route: parse_optional_json(
-            row.route_state_json.as_deref(),
-            StorageCode::InvalidModelRoute,
-        )?,
-        continuation_budget: parse_optional_json(
-            row.continuation_budget_json.as_deref(),
-            StorageCode::InvalidContinuationBudget,
-        )?,
+        model_route: row
+            .route_state_json
+            .as_deref()
+            .map(|json| typed(json, StorageCode::InvalidModelRoute))
+            .transpose()?,
+        continuation_budget: row
+            .continuation_budget_json
+            .as_deref()
+            .map(|json| typed(json, StorageCode::InvalidContinuationBudget))
+            .transpose()?,
         context: json(&row.context_json, StorageCode::InvalidTurnContext)?,
         progress_destination: row
             .progress_destination_json
@@ -109,10 +111,11 @@ fn hydrate(connection: &Connection, row: TurnRow) -> StorageResult<TurnRecord> {
             .map(hydrate_legacy_progress_projection)
             .transpose()?,
         suspension: parse_suspension(row.suspension_reason.as_deref())?,
-        authority_continuation: parse_optional_json(
-            row.authority_continuation_json.as_deref(),
-            StorageCode::InvalidAuthorityContinuation,
-        )?,
+        authority_continuation: row
+            .authority_continuation_json
+            .as_deref()
+            .map(|json| typed(json, StorageCode::InvalidAuthorityContinuation))
+            .transpose()?,
         route: parse_route(row.route.as_deref())?,
         final_disposition: parse_disposition(row.final_disposition.as_deref())?,
         turn_id: row.turn_id,
@@ -133,11 +136,9 @@ fn hydrate(connection: &Connection, row: TurnRow) -> StorageResult<TurnRecord> {
     Ok(turn)
 }
 
-fn parse_optional_json(
-    value: Option<&str>,
-    code: StorageCode,
-) -> StorageResult<Option<serde_json::Value>> {
-    value.map(|value| json(value, code)).transpose()
+fn typed<T: serde::de::DeserializeOwned>(value: &str, code: StorageCode) -> StorageResult<T> {
+    serde_json::from_str(value)
+        .map_err(|source| StorageError::new(code, source.to_string()).with_source(source))
 }
 
 fn load_checkpoint(
@@ -214,17 +215,12 @@ fn load_outbox(
                 "BTCC R3 delivery Outbox is missing",
             )
         })?;
-    let status = match row.5.as_str() {
-        "pending" => DeliveryStatus::Pending,
-        "inserted" => DeliveryStatus::Inserted,
-        "observed" => DeliveryStatus::Observed,
-        _ => {
-            return Err(error(
-                StorageCode::OutboxInvalid,
-                "BTCC R3 delivery Outbox is invalid",
-            ));
-        }
-    };
+    let status = delivery_status(&row.5).ok_or_else(|| {
+        error(
+            StorageCode::OutboxInvalid,
+            "BTCC R3 delivery Outbox is invalid",
+        )
+    })?;
     Ok(Some(DeliveryOutbox {
         outbox_id: row.0,
         final_payload_ref: ContentRef {
@@ -397,4 +393,14 @@ fn assert_record(turn: &TurnRecord) -> StorageResult<()> {
         ));
     }
     Ok(())
+}
+
+/// The delivery status of stored outbox text.
+fn delivery_status(value: &str) -> Option<DeliveryStatus> {
+    match value {
+        "pending" => Some(DeliveryStatus::Pending),
+        "inserted" => Some(DeliveryStatus::Inserted),
+        "observed" => Some(DeliveryStatus::Observed),
+        _ => None,
+    }
 }

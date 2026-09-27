@@ -6,6 +6,7 @@ use super::types::*;
 use super::{ConversationError, ConversationIdentityClock, ConversationResult};
 use crate::conversation::ConversationCode;
 
+// Passthrough: generic JSON canonicalization/hashing over arbitrary documents.
 pub(super) fn stringify(value: &Value) -> ConversationResult<String> {
     butler_core::json::stringify(value).map_err(ConversationError::json)
 }

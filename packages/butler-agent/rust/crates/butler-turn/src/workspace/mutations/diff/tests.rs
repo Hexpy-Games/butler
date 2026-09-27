@@ -1,9 +1,14 @@
 use sha2::{Digest, Sha256};
 
-use super::{ChangedFile, ChangedLine, changed_file};
+use super::{ChangedFile, ChangedLine, FileOrigin, changed_file};
 
 fn detail(before: &[u8], after: &[u8], created: bool) -> ChangedFile {
-    changed_file("synthetic.txt", before, after, created).expect("changed detail")
+    let origin = if created {
+        FileOrigin::Created
+    } else {
+        FileOrigin::Existing
+    };
+    changed_file("synthetic.txt", before, after, origin).expect("changed detail")
 }
 
 fn line(
@@ -80,7 +85,15 @@ fn keeps_lone_cr_and_replaces_invalid_utf8_like_buffer_to_string() {
             line("added", None, Some(1), "b\r"),
         ],
     );
-    assert!(changed_file("synthetic.txt", &[0xff, b'a'], &[0xfe, b'a'], false).is_none());
+    assert!(
+        changed_file(
+            "synthetic.txt",
+            &[0xff, b'a'],
+            &[0xfe, b'a'],
+            FileOrigin::Existing
+        )
+        .is_none()
+    );
     let replacement = detail(&[0xe1, 0x80, b'A'], &[0xe1, 0x80, b'B'], false);
     assert_eq!(replacement.before_text, "�A");
     assert_eq!(replacement.after_text, "�B");
@@ -88,7 +101,7 @@ fn keeps_lone_cr_and_replaces_invalid_utf8_like_buffer_to_string() {
 
 #[test]
 fn distinguishes_created_empty_file_and_unchanged_existing_file() {
-    assert!(changed_file("synthetic.txt", b"same\n", b"same\n", false).is_none());
+    assert!(changed_file("synthetic.txt", b"same\n", b"same\n", FileOrigin::Existing).is_none());
     let value = detail(b"", b"", true);
     assert_eq!(value.additions, 0);
     assert_eq!(value.deletions, 0);
@@ -123,7 +136,12 @@ fn source_repeated_line_oracle_matches_exhaustive_digest() {
     let mut checked = 0;
     for before in &values {
         for after in &values {
-            let detail = changed_file("synthetic.txt", before.as_bytes(), after.as_bytes(), false);
+            let detail = changed_file(
+                "synthetic.txt",
+                before.as_bytes(),
+                after.as_bytes(),
+                FileOrigin::Existing,
+            );
             update_digest(&mut hash, before, after, detail.as_ref());
             checked += 1;
         }

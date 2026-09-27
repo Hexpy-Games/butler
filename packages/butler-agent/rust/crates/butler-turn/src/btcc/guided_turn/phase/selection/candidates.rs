@@ -105,16 +105,16 @@ pub(super) fn add_role_tools(
     catalog: &GuidedCatalogSnapshot,
     policy: &GuidedExecutionPolicy,
 ) {
-    if policy.role == "butler" {
+    if policy.role == PolicyRole::Butler {
         names.extend(["delegate_to_steward", "steer_steward", "cancel_steward"].map(str::to_owned));
         if policy.access_mode == AccessMode::FullAccess && policy.project_id.is_some() {
             names.insert("bind_session_git_worktree".into());
         }
     }
-    if policy.role == "steward" {
+    if policy.role == PolicyRole::Steward {
         names.extend(["delegate_to_worker", "steer_worker", "wait_for_worker"].map(str::to_owned));
     }
-    if policy.role == "butler" {
+    if policy.role == PolicyRole::Butler {
         names.retain(|name| {
             catalog
                 .tool(name)
@@ -127,7 +127,9 @@ pub(super) fn phase(
     policy: &GuidedExecutionPolicy,
     catalog: &GuidedCatalogSnapshot,
 ) -> GuidedPhase {
-    if policy.tracking_mode != "none" && (policy.role == "butler" || policy.subsession.is_some()) {
+    if policy.tracking_mode != "none"
+        && (policy.role == PolicyRole::Butler || policy.subsession.is_some())
+    {
         return GuidedPhase::Execution;
     }
     let workspace = policy
@@ -140,7 +142,7 @@ pub(super) fn phase(
                 .is_some_and(|tool| matches!(tool.category.as_deref(), Some("command" | "file")))
         });
     if !policy.has_project_id() && !workspace {
-        return if policy.role == "butler" && policy.tracking_mode != "none" {
+        return if policy.role == PolicyRole::Butler && policy.tracking_mode != "none" {
             GuidedPhase::Execution
         } else {
             GuidedPhase::Direct
@@ -173,7 +175,9 @@ pub(super) fn ineligible_profile(
         None => format!("required tool profile is ineligible for {phase} phase: {profile}"),
     })
 }
+// Passthrough: tool arguments/results/schemas, shaped by each tool.
 pub(super) fn without_defaults(mut value: Value) -> Value {
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub(super) fn clean(value: &mut Value) {
         match value {
             Value::Object(map) => {

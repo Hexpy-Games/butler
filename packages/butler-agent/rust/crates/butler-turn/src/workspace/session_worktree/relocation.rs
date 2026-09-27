@@ -355,7 +355,7 @@ fn validate_plan(plan: &RelocationWorkspacePlan) -> WorkspaceResult<()> {
     if marker.schema != MARKER_SCHEMA
         || marker.ownership != "session"
         || !Path::new(&marker.repository_anchor_path).is_absolute()
-        || !path::safe_ref(&marker.branch, false)
+        || !path::safe_ref(&marker.branch, path::Head::Rejected)
         || plan.operation_id.is_empty()
     {
         return Err(workspace_error(WorkspaceCode::RelocationPlanInvalid));

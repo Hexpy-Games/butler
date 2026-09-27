@@ -250,8 +250,8 @@ fn compiler_validates_session_refs_and_bounds_tool_labels() {
             status: ConversationStatus::Failed,
         },
     ];
-    let with_tools = text_for_message(&value, true);
-    let without = text_for_message(&value, false);
+    let with_tools = text_for_message(&value, butler_turn::conversation::ToolParts::Include);
+    let without = text_for_message(&value, butler_turn::conversation::ToolParts::Exclude);
     assert_eq!(
         with_tools,
         "[user session references: [{\"type\":\"session_ref\",\"sessionId\":\"prior\",\"titleSnapshot\":\"Prior\"}]] [tool_call:search:call-1] [tool_result:failed:call-1]"

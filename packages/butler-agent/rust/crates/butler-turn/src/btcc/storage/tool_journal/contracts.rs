@@ -10,6 +10,7 @@ pub struct ToolJournalStart {
     pub call_id: String,
     pub tool_name: String,
     pub raw_arguments: String,
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub arguments: Value,
 }
 
@@ -18,6 +19,7 @@ pub struct ToolJournalFinish {
     pub call_id: String,
     pub status: ToolJournalFinishStatus,
     pub result: Option<JsonDocument>,
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub changed_files: Option<Vec<Value>>,
     pub error_code: Option<String>,
 }
@@ -47,12 +49,14 @@ pub struct ToolJournalRecord {
     pub journal_ordinal: Option<f64>,
     pub tool_name: String,
     pub raw_arguments: String,
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub arguments: Value,
     pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<JsonDocument>,
     /// Runtime-private mutation detail, excluded by the replay projection owner.
     #[serde(skip_serializing_if = "Option::is_none")]
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub changed_files: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result_sha256: Option<String>,
@@ -81,5 +85,6 @@ pub struct ToolJournalSignature {
     pub call_id: String,
     pub tool_name: String,
     pub raw_arguments: String,
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub arguments: Value,
 }

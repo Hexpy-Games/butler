@@ -289,7 +289,12 @@ impl EffectJournal for StorageEffectJournal {
             storage
                 .execute(move |db| {
                     Ok::<_, super::StorageError>(write::record_error(
-                        db, &effect_id, revision, &error, false, &*clock,
+                        db,
+                        &effect_id,
+                        revision,
+                        &error,
+                        write::ErrorOutcome::Uncertain,
+                        &*clock,
                     ))
                 })
                 .await
@@ -308,7 +313,12 @@ impl EffectJournal for StorageEffectJournal {
             storage
                 .execute(move |db| {
                     Ok::<_, super::StorageError>(write::record_error(
-                        db, &effect_id, revision, &error, true, &*clock,
+                        db,
+                        &effect_id,
+                        revision,
+                        &error,
+                        write::ErrorOutcome::Failed,
+                        &*clock,
                     ))
                 })
                 .await

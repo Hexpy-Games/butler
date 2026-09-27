@@ -25,11 +25,22 @@ pub(super) fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-pub(super) fn observe(
-    path: GuardedPath,
-    create_parents: bool,
-) -> Result<Snapshot, MutationFailure> {
-    if !create_parents {
+/// Whether a write may create a missing parent directory.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Parent {
+    MustExist,
+    CreateMissing,
+}
+
+/// Whether replacing an existing file requires the caller's expected digest.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Replacement {
+    Unguarded,
+    RequiresExpectedDigest,
+}
+
+pub(super) fn observe(path: GuardedPath, parent: Parent) -> Result<Snapshot, MutationFailure> {
+    if parent == Parent::MustExist {
         check_parent(&path)?;
     }
     let metadata = match fs::symlink_metadata(&path.absolute) {
@@ -74,9 +85,9 @@ pub(super) fn prepare(
     snapshot: Snapshot,
     data: Vec<u8>,
     expected_sha256: Option<&str>,
-    require_expected_for_existing: bool,
+    replacement: Replacement,
 ) -> Result<Prepared, MutationFailure> {
-    prepare_guard(&snapshot, expected_sha256, require_expected_for_existing)?;
+    prepare_guard(&snapshot, expected_sha256, replacement)?;
     Ok(Prepared {
         before: snapshot,
         data,
@@ -86,10 +97,10 @@ pub(super) fn prepare(
 pub(super) fn prepare_guard(
     snapshot: &Snapshot,
     expected_sha256: Option<&str>,
-    require_expected_for_existing: bool,
+    replacement: Replacement,
 ) -> Result<(), MutationFailure> {
     if snapshot.exists {
-        if require_expected_for_existing && expected_sha256.is_none() {
+        if replacement == Replacement::RequiresExpectedDigest && expected_sha256.is_none() {
             return Err(failure::new(
                 Some(snapshot.path.public.clone()),
                 "expected_sha256_required",
@@ -234,7 +245,7 @@ pub(super) fn commit(
             absolute: prepared.before.path.absolute.clone(),
             real: prepared.before.path.real.clone(),
         },
-        false,
+        Parent::MustExist,
     );
     let current = match current {
         Ok(value) => value,
@@ -288,7 +299,7 @@ pub(super) fn commit(
         &prepared.before.path.public,
         &prepared.before.bytes,
         &prepared.data,
-        !prepared.before.exists,
+        prepared.before.origin(),
     );
     Ok(CommittedFile {
         path: prepared.before.path.public,
@@ -323,5 +334,16 @@ fn atomic_replace(
         fs::hard_link(temporary, &prepared.before.path.absolute)?;
         observer.after_link(temporary);
         Ok(fs::remove_file(temporary).is_err())
+    }
+}
+
+impl Snapshot {
+    /// Whether the committed file existed before the commit.
+    fn origin(&self) -> diff::FileOrigin {
+        if self.exists {
+            diff::FileOrigin::Existing
+        } else {
+            diff::FileOrigin::Created
+        }
     }
 }

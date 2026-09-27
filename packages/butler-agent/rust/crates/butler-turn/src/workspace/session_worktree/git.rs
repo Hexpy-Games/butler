@@ -238,18 +238,7 @@ impl<'a> GitWorktrees<'a> {
             Ok(value) => value,
             Err(code) => return Ok(Err(code)),
         };
-        let mut found = false;
-        for entry in listed {
-            if entry.branch.as_deref() == Some(branch)
-                && self
-                    .same_path(&entry.path.to_string_lossy(), target)
-                    .await?
-            {
-                found = true;
-                break;
-            }
-        }
-        if !found {
+        if !self.lists_branch_at(listed, branch, target).await? {
             return Ok(Err(WorkspaceCode::PartialCreation));
         }
         let symbolic = self
@@ -285,6 +274,25 @@ impl<'a> GitWorktrees<'a> {
             path: canonical.to_string_lossy().into_owned(),
             dirty,
         }))
+    }
+
+    /// Whether a listed worktree has `branch` checked out at `target`.
+    async fn lists_branch_at(
+        &self,
+        listed: Vec<WorktreeEntry>,
+        branch: &str,
+        target: &str,
+    ) -> WorkspaceResult<bool> {
+        for entry in listed {
+            if entry.branch.as_deref() == Some(branch)
+                && self
+                    .same_path(&entry.path.to_string_lossy(), target)
+                    .await?
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     pub(super) async fn dirty(

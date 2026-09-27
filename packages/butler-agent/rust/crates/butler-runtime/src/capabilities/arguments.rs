@@ -56,9 +56,18 @@ pub(super) fn context(input: &CapabilityInvocation<'_>, root: PathBuf) -> Mutati
     let installation_root = input.installation_root.map(Path::to_path_buf);
     MutationContext {
         root,
-        relative_only: input.allowed_tools_and_effects.is_some(),
+        path_form: path_form(input),
         installation_root,
         protected_roots: input.protected_ledger_roots.to_vec(),
+    }
+}
+
+/// Delegated subsessions (with an effect allow-list) address workspace-relative paths only.
+pub(super) fn path_form(input: &CapabilityInvocation<'_>) -> butler_turn::workspace::PathForm {
+    if input.allowed_tools_and_effects.is_some() {
+        butler_turn::workspace::PathForm::RelativeOnly
+    } else {
+        butler_turn::workspace::PathForm::RelativeOrAbsolute
     }
 }
 

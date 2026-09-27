@@ -1,18 +1,16 @@
-use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::Value;
-
-use super::common::{error, json, stringify};
+use super::common::{error, stringify};
 use super::model::events::assert_claim;
 use super::{StorageError, StorageResult};
 use crate::btcc::StorageCode;
 use crate::btcc::continuation_budget::{
-    TurnContinuationBudgetError, TurnContinuationBudgetEvent, parse_turn_continuation_budget_state,
-    transition_turn_continuation_budget,
+    TurnContinuationBudgetError, TurnContinuationBudgetState, transition_turn_continuation_budget,
+    validate_turn_continuation_budget_state,
 };
 use crate::btcc::turn::ContinuationBudgetTransition;
+use rusqlite::{Connection, OptionalExtension, params};
 
 pub(super) struct TransitionResult {
-    pub(super) state: Value,
+    pub(super) state: TurnContinuationBudgetState,
     pub(super) terminal: Option<TurnContinuationBudgetError>,
 }
 
@@ -43,15 +41,11 @@ pub(super) fn transition(
             "turn_continuation_dependency_missing",
         )
     })?;
-    let current = parse_turn_continuation_budget_state(
-        json(&raw, StorageCode::InvalidContinuationBudget)?,
-        &write.binding.turn_id,
-    )
-    .map_err(|e| error(StorageCode::InvalidContinuationBudget, e.message()).with_source(e))?;
-    let event: TurnContinuationBudgetEvent =
-        serde_json::from_value(write.event.clone()).map_err(|e| {
-            error(StorageCode::InvalidContinuationBudgetEvent, e.to_string()).with_source(e)
-        })?;
+    let decoded: TurnContinuationBudgetState = serde_json::from_str(&raw)
+        .map_err(|e| error(StorageCode::InvalidContinuationBudget, e.to_string()).with_source(e))?;
+    let current = validate_turn_continuation_budget_state(decoded, &write.binding.turn_id)
+        .map_err(|e| error(StorageCode::InvalidContinuationBudget, e.message()).with_source(e))?;
+    let event = write.event.clone();
     let (next, terminal) = match transition_turn_continuation_budget(current, event, write.now_ms) {
         Ok(next) => (next, None),
         Err(error @ TurnContinuationBudgetError::Exhausted(_)) => (
@@ -96,7 +90,7 @@ pub(super) fn transition(
     }
     tx.commit().map_err(StorageError::sqlite)?;
     Ok(TransitionResult {
-        state: value,
+        state: next,
         terminal,
     })
 }

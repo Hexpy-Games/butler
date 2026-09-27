@@ -34,7 +34,7 @@ pub(super) fn find(
         .query_row(
             &format!("SELECT {FIELDS} FROM btcc_guided_tool_calls WHERE call_id=?1 AND turn_id=?2"),
             [call_id, turn_id],
-            |row| stored(row, false),
+            stored,
         )
         .optional()
         .map_err(StorageError::sqlite)?;
@@ -81,7 +81,7 @@ pub(super) fn recent_for_prompt(
         )
         .map_err(StorageError::sqlite)?;
     let rows = statement
-        .query_map([turn_id], |row| stored(row, true))
+        .query_map([turn_id], stored_with_ordinal)
         .map_err(StorageError::sqlite)?;
     rows.map(|row| hydrate(row.map_err(StorageError::sqlite)?))
         .collect()
@@ -200,9 +200,17 @@ pub(super) fn completed_call_identities(
         .collect()
 }
 
-fn stored(row: &Row<'_>, include_ordinal: bool) -> rusqlite::Result<StoredRecord> {
+/// A journal row selected with its ordinal (column 12).
+fn stored_with_ordinal(row: &Row<'_>) -> rusqlite::Result<StoredRecord> {
     Ok(StoredRecord {
-        ordinal: if include_ordinal { row.get(12)? } else { None },
+        ordinal: row.get(12)?,
+        ..stored(row)?
+    })
+}
+
+fn stored(row: &Row<'_>) -> rusqlite::Result<StoredRecord> {
+    Ok(StoredRecord {
+        ordinal: None,
         call_id: row.get(0)?,
         tool_name: row.get(1)?,
         raw_arguments: row.get(2)?,

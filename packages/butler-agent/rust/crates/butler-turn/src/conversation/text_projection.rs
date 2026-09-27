@@ -6,13 +6,20 @@ use butler_core::json::stringify;
 
 use super::{ConversationMessageWithParts, ConversationPart, ConversationPartKind};
 
+/// Whether a message's text includes its tool call and result parts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ToolParts {
+    Include,
+    Exclude,
+}
+
 /// A message's text, optionally with its tool parts.
-pub fn text_for_message(message: &ConversationMessageWithParts, include_tools: bool) -> String {
+pub fn text_for_message(message: &ConversationMessageWithParts, tools: ToolParts) -> String {
     message
         .parts
         .iter()
         .filter(|part| {
-            include_tools
+            tools == ToolParts::Include
                 || !matches!(
                     part.kind,
                     ConversationPartKind::ToolCall | ConversationPartKind::ToolResult
@@ -81,6 +88,7 @@ pub fn text_for_part(part: &ConversationPart) -> Option<String> {
     }
 }
 
+// Passthrough: conversation part content keyed by part kind; tool/provider payloads.
 fn message_content_references(value: &Value) -> Option<String> {
     let object = value.as_object()?;
     if object.get("version").and_then(Value::as_f64) != Some(1.0) {
@@ -105,6 +113,7 @@ fn message_content_references(value: &Value) -> Option<String> {
     }
 }
 
+// Passthrough: conversation part content keyed by part kind; tool/provider payloads.
 fn valid_message_part(value: &Value) -> bool {
     let Some(object) = value.as_object() else {
         return false;

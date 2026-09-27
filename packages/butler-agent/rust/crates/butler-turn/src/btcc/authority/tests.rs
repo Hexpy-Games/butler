@@ -127,7 +127,23 @@ async fn real_turn_work_journal_authority_resume_outcome_and_reopen() {
     else {
         panic!("pending authority")
     };
-    assert_eq!(projection["executable"], "echo");
+    assert_eq!(projection.executable, "echo");
+    // KEEP: the pending request projection's key order is part of its wire form.
+    let encoded = serde_json::to_value(&projection).unwrap();
+    assert_eq!(
+        encoded.as_object().unwrap().keys().collect::<Vec<_>>(),
+        [
+            "request_ref",
+            "category",
+            "reason",
+            "executable",
+            "command_count",
+            "scope",
+            "source_turn_id",
+            "source_session_id",
+            "source_call_id"
+        ]
+    );
     let call_status: String = storage
         .execute(|db| {
             db.query_row(
@@ -146,7 +162,9 @@ async fn real_turn_work_journal_authority_resume_outcome_and_reopen() {
             &claim,
             &TurnTransition::Suspend {
                 reason: SuspensionReason::AuthorityPending,
-                authority_continuation: Some(json!({"requestRef":request_ref,"callId":"call-1"})),
+                authority_continuation: Some(Box::new(
+                    crate::btcc::AuthorityLoopContinuation::fixture(&request_ref, "call-1"),
+                )),
             },
         )
         .await
@@ -163,7 +181,7 @@ async fn real_turn_work_journal_authority_resume_outcome_and_reopen() {
         })
         .await
         .unwrap();
-    assert_eq!(decided.decision, "allowed");
+    assert_eq!(decided.decision, crate::btcc::RequestDecision::Allowed);
     assert_eq!(
         authority
             .resume_source(request_ref.clone())
@@ -213,7 +231,7 @@ async fn real_turn_work_journal_authority_resume_outcome_and_reopen() {
         })
         .await
         .unwrap();
-    assert_eq!(persisted.outcome, "applied");
+    assert_eq!(persisted.outcome, crate::btcc::RequestOutcome::Applied);
     assert_eq!(persisted.outcome_receipt.unwrap()["dispatchAttempt"], 1);
     reopened.close().await.unwrap();
 }

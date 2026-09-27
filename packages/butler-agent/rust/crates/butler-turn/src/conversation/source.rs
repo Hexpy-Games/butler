@@ -4,8 +4,8 @@ mod reader;
 mod scalar;
 
 pub use reader::{
-    CanonicalMemoryReadBinding, ConversationSourceReader, PublicMemoryScope, PublicMemorySnapshot,
-    PublicSessionRow, RecallOutcomeRow,
+    Archived, CanonicalMemoryReadBinding, ConversationSourceReader, MessageOrigins, PageOrder,
+    PublicMemoryScope, PublicMemorySnapshot, PublicSessionRow, RecallOutcomeRow,
 };
 pub use scalar::{ConversationScalar, decode_message_scalars, scalar_for_part};
 

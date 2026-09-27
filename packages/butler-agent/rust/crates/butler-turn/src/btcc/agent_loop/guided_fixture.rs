@@ -256,7 +256,6 @@ impl JournalPort for Fixture {
             Ok(JournalCloseout {
                 artifacts: vec![],
                 changed_files: vec![],
-                plan: None,
             })
         })
     }

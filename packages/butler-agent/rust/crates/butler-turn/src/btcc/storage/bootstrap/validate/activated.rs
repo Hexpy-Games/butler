@@ -78,6 +78,7 @@ fn marker_row(
     .ok_or_else(|| error(missing))
 }
 
+// Passthrough: parse boundary validating untyped JSON into typed values.
 fn validate_receipt(value: &Value, expected: &str) -> StorageResult<()> {
     let fence = &json::at(value, "/fence");
     let tables = json::at(value, "/tables")
@@ -111,12 +112,14 @@ fn validate_receipt(value: &Value, expected: &str) -> StorageResult<()> {
     Ok(())
 }
 
+// Passthrough: parse boundary validating untyped JSON into typed values.
 fn safe_integer(value: &Value) -> bool {
     value
         .as_u64()
         .is_some_and(|number| number <= 9_007_199_254_740_991)
 }
 
+// Passthrough: parse boundary validating untyped JSON into typed values.
 fn digest(value: &Value) -> bool {
     value.as_str().is_some_and(|text| {
         text.len() == 64
@@ -126,6 +129,7 @@ fn digest(value: &Value) -> bool {
     })
 }
 
+// Passthrough: parse boundary validating untyped JSON into typed values.
 fn nonempty(value: &Value) -> bool {
     value.as_str().is_some_and(|text| !text.trim().is_empty())
 }

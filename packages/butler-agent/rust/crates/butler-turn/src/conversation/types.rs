@@ -148,6 +148,7 @@ pub struct ConversationPart {
     pub message_id: String,
     pub part_index: u64,
     pub kind: ConversationPartKind,
+    // Passthrough: conversation part content keyed by part kind; tool/provider payloads.
     pub content_json: Value,
     pub tool_call_id: Option<String>,
     pub parent_tool_call_id: Option<String>,
@@ -204,6 +205,7 @@ pub struct TurnOutcomeCapsule {
     pub model_ref: Option<String>,
     pub evidence_refs: Vec<String>,
     pub unresolved_obligations: Vec<String>,
+    // Passthrough: provider payload, opaque to BTCC.
     pub continuation: Option<Map<String, Value>>,
     pub safe_code: Option<String>,
     pub created_at: String,
@@ -222,6 +224,7 @@ pub struct TurnOutcomeCapsuleInput {
     pub model_ref: Option<String>,
     pub evidence_refs: Vec<String>,
     pub unresolved_obligations: Vec<String>,
+    // Passthrough: provider payload, opaque to BTCC.
     pub continuation: Option<Map<String, Value>>,
     pub safe_code: Option<String>,
     pub created_at: Option<String>,
@@ -244,6 +247,7 @@ pub struct BeginTurnInput {
 #[derive(Clone, Debug, PartialEq)]
 pub struct MessagePartInput {
     pub kind: ConversationPartKind,
+    // Passthrough: conversation part content keyed by part kind; tool/provider payloads.
     pub content_json: Value,
     pub tool_call_id: Option<String>,
     pub parent_tool_call_id: Option<String>,
@@ -274,6 +278,7 @@ pub struct AppendMessageInput {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct AppendToolPartInput {
     pub message_id: String,
+    // Passthrough: conversation part content keyed by part kind; tool/provider payloads.
     pub content_json: Value,
     pub tool_call_id: String,
     pub parent_tool_call_id: Option<String>,
@@ -308,12 +313,31 @@ pub struct ReadMessagesInput {
     pub limit: Option<f64>,
     pub include_compacted: bool,
 }
+/// Which messages around an anchor a read returns.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AroundDirection {
+    Before,
+    After,
+    Around,
+}
+
+impl AroundDirection {
+    /// The direction named `value`; any other name reads around the anchor.
+    pub fn parse(value: &str) -> Self {
+        match value {
+            "before" => Self::Before,
+            "after" => Self::After,
+            _ => Self::Around,
+        }
+    }
+}
+
 /// Reads messages before or after an anchor message.
 #[derive(Clone, Debug)]
 pub struct ReadAroundInput {
     pub session_id: String,
     pub anchor_message_id: Option<String>,
-    pub direction: Option<String>,
+    pub direction: Option<AroundDirection>,
     pub limit: Option<f64>,
     pub include_compacted: bool,
 }

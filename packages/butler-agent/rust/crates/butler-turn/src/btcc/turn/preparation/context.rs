@@ -184,6 +184,7 @@ async fn persist_sections(
 
 /// Authority request/message references of the request and the binding's plan id.
 fn insert_request_refs(
+    // Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
     context: &mut Map<String, Value>,
     binding: &StoredSessionBinding,
     request: &TurnRequest,
@@ -427,6 +428,7 @@ fn authority_value<'a>(
         _ => None,
     }
 }
+// Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
 fn string_array(value: Option<&Value>) -> Vec<String> {
     value
         .and_then(Value::as_array)

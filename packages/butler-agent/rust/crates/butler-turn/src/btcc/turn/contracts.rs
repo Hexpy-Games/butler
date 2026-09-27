@@ -2,8 +2,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::btcc::{
-    AcceptedWorkResult, AlreadyDeliveredOutcome, ExecutionOutcome, FinalArtifact, ModelIdentity,
-    ProgressDestination, RuntimeFailure, TurnRequest, WorkStatus,
+    AcceptedWorkResult, AdmittedModelSelection, AlreadyDeliveredOutcome, AuthorityLoopContinuation,
+    ChangedFileSummary, ExecutionOutcome, FinalArtifact, ModelIdentity, ModelRoundResult,
+    ProgressDestination, RouteState, RuntimeFailure, TurnContinuationBudgetEvent,
+    TurnContinuationBudgetState, TurnRequest, WorkStatus,
 };
 
 /// The durable lifecycle state of a turn.
@@ -22,7 +24,7 @@ pub enum TurnSemanticState {
 pub struct PreparedTurn {
     pub preparation_id: String,
     pub request: TurnRequest,
-    pub command: Value,
+    pub command: crate::btcc::TurnCommand,
     pub admission_input_hash: String,
     pub is_fresh: bool,
 }
@@ -39,11 +41,12 @@ pub struct TurnRecord {
     pub original_message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wake_identity: Option<WakeIdentity>,
-    pub model_selection: Value,
+    pub model_selection: AdmittedModelSelection,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub model_route: Option<Value>,
+    pub model_route: Option<RouteState>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub continuation_budget: Option<Value>,
+    pub continuation_budget: Option<TurnContinuationBudgetState>,
+    // Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
     pub context: Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub progress_destination: Option<ProgressDestination>,
@@ -51,7 +54,7 @@ pub struct TurnRecord {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suspension: Option<SuspensionReason>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub authority_continuation: Option<Value>,
+    pub authority_continuation: Option<Box<AuthorityLoopContinuation>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub checkpoint: Option<TurnCheckpoint>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -143,12 +146,14 @@ pub struct FinalPayload {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub artifacts: Vec<FinalArtifact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub changed_files: Vec<Value>,
+    pub changed_files: Vec<ChangedFileSummary>,
+    /// Passthrough: only pre-cutover payloads carry a plan; it is relayed as stored.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_identity: Option<ModelIdentity>,
     #[serde(flatten)]
+    // Passthrough: unknown fields kept for forward compatibility.
     pub extensions: serde_json::Map<String, Value>,
 }
 
@@ -180,11 +185,12 @@ pub struct ModelRouteWrite {
     pub expected_revision: u64,
     pub execution_fence: u64,
     pub claim_id: String,
-    pub route: Value,
+    /// The route state to persist with the write, if any.
+    pub route: Option<RouteState>,
 }
 
 /// A model-route event recorded under the turn's claim; `binding.route`
-/// replaces the persisted route state when it is not `null`.
+/// replaces the persisted route state when present.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModelRouteEventWrite {
     pub binding: ModelRouteWrite,
@@ -327,14 +333,14 @@ pub struct ModelRoundAcceptanceWrite {
     pub binding: ModelRouteWrite,
     pub key: ModelRoundKey,
     pub transport_attempt: u32,
-    pub result: Value,
+    pub result: Box<ModelRoundResult>,
 }
 
 /// Applies a continuation-budget event under the turn claim.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ContinuationBudgetTransition {
     pub binding: ModelRouteWrite,
-    pub event: Value,
+    pub event: TurnContinuationBudgetEvent,
     pub now_ms: u64,
 }
 
@@ -345,13 +351,12 @@ pub struct AgentLoopResult {
     pub content: String,
     pub terminal_outcome: Option<TerminalOutcome>,
     pub suspension: Option<SuspensionReason>,
-    pub authority_continuation: Option<Value>,
+    pub authority_continuation: Option<Box<AuthorityLoopContinuation>>,
     pub work_status: Option<WorkStatus>,
     pub accepted_work_result: Option<AcceptedWorkResult>,
     pub runtime_failure: Option<RuntimeFailure>,
     pub artifacts: Vec<FinalArtifact>,
-    pub changed_files: Vec<Value>,
-    pub plan: Option<Value>,
+    pub changed_files: Vec<ChangedFileSummary>,
     pub model_identity: Option<ModelIdentity>,
 }
 
@@ -375,7 +380,7 @@ pub enum ExecutionRoute {
 pub enum TurnTransition {
     Suspend {
         reason: SuspensionReason,
-        authority_continuation: Option<Value>,
+        authority_continuation: Option<Box<AuthorityLoopContinuation>>,
     },
     AcceptFinal {
         route: ExecutionRoute,

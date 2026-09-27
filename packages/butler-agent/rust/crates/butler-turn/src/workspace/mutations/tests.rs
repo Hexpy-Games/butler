@@ -71,7 +71,7 @@ async fn batch_retains_first_commit_and_reports_second_external_change() {
     let command = MutationCommand::Edit(EditMutation {
         context: MutationContext {
             root: root.clone(),
-            relative_only: false,
+            path_form: crate::workspace::PathForm::RelativeOrAbsolute,
             installation_root: None,
             protected_roots: Vec::new(),
         },
@@ -107,10 +107,16 @@ fn exclusive_create_race_keeps_external_bytes_and_cleans_temp() {
             absolute: absolute.clone(),
             real: absolute.clone(),
         },
-        false,
+        io::Parent::MustExist,
     )
     .unwrap();
-    let prepared = io::prepare(snapshot, b"ours".to_vec(), None, true).unwrap();
+    let prepared = io::prepare(
+        snapshot,
+        b"ours".to_vec(),
+        None,
+        io::Replacement::RequiresExpectedDigest,
+    )
+    .unwrap();
     let external = At((Point::BeforeReplace, |path: &Path| {
         std::fs::write(path, b"external").unwrap();
     }));
@@ -134,10 +140,16 @@ fn committed_hardlink_cleanup_failure_remains_applied_success() {
             absolute: absolute.clone(),
             real: absolute.clone(),
         },
-        false,
+        io::Parent::MustExist,
     )
     .unwrap();
-    let prepared = io::prepare(snapshot, b"committed".to_vec(), None, true).unwrap();
+    let prepared = io::prepare(
+        snapshot,
+        b"committed".to_vec(),
+        None,
+        io::Replacement::RequiresExpectedDigest,
+    )
+    .unwrap();
     let locked = root.clone();
     let lock_directory = At((Point::AfterLink, move |_: &Path| {
         std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o500)).unwrap();
@@ -158,7 +170,7 @@ async fn close_drains_running_and_queued_mutations_after_callers_drop() {
     std::fs::write(root.join("second.txt"), b"two").unwrap();
     let context = || MutationContext {
         root: root.clone(),
-        relative_only: false,
+        path_form: crate::workspace::PathForm::RelativeOrAbsolute,
         installation_root: None,
         protected_roots: Vec::new(),
     };

@@ -21,7 +21,7 @@ src/context/conversation_session_reference.rs	read_now	182
 src/context/conversation_session_reference/session.rs	read	118
 src/context/conversation_session_reference/source.rs	paginate	125
 src/context/conversation_session_reference/source.rs	read	95
-src/context/conversation_tools/list.rs	read	149
+src/context/conversation_tools/list.rs	read	144
 src/context/conversation_tools/list/args.rs	parse	119
 src/context/conversation_tools/tests.rs	canonical_write_lists_and_reads_legacy_context	92
 src/context/image/tests.rs	sanitizes_real_codecs_and_keeps_legacy_source_record_verifiable	95
@@ -45,7 +45,7 @@ src/context/tool_output/tests/integration.rs	real_k2_structured_and_guided_outpu
 src/context/tool_output/tests/lifecycle.rs	bounded_queue_drops_waiting_caller_and_close_rejects_pending_submission	88
 src/context/tool_output/tests/reader_cases.rs	early_return_retained_original_reopen_utf16_and_explicit_prune	94
 src/operations/automation/tests.rs	tool_claim_does_not_enqueue_and_scheduler_restart_does_not_duplicate	83
-src/operations/developer_log/capture/entry.rs	terminal_entry	154
+src/operations/developer_log/capture/entry.rs	terminal_entry	147
 src/operations/status_summary/context.rs	read_context_for_session	87
 src/operations/status_summary/health.rs	read_health	94
 src/operations/status_summary/usage.rs	read_usage	135
@@ -65,8 +65,8 @@ src/web_access/read.rs	bounded_result	83
 src/web_access/read/lightpanda.rs	run_dump	101
 src/web_access/search.rs	WebSession::web_search	172
 src/web_access/search.rs	execute_planned	98
-tests/context_loopback/failure.rs	summary_failure_drops_turn_owner_without_saving	93
-tests/context_loopback/main.rs	summary_persists_and_reopens_with_physical_request_admission	201
+tests/context_loopback/failure.rs	summary_failure_drops_turn_owner_without_saving	94
+tests/context_loopback/main.rs	summary_persists_and_reopens_with_physical_request_admission	200
 tests/context_loopback/selection.rs	nochange_compactor_selects_semantic_and_bounded_eviction_skips_steering_recheck	85
-tests/provider_loopback.rs	provider_context_and_replay_share_one_turn_owner	182
+tests/provider_loopback.rs	provider_context_and_replay_share_one_turn_owner	183
 tests/registered_write_effect.rs	actual_registered_write_commits_then_effect_reopens_without_second_write	93

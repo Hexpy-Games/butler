@@ -1,21 +1,25 @@
-use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::{Map, Value};
-
 use crate::btcc::identity::digest;
-use crate::btcc::storage::common::{canonical_json, error};
+use crate::btcc::storage::common::{canonical_record, error};
 use crate::btcc::storage::{StorageError, StorageResult};
+use rusqlite::{Connection, OptionalExtension, params};
 
-use super::types::{Inbox, kind, object, optional_text_object, text, text_object};
-use crate::btcc::StorageCode;
+use super::types::{Fresh, Inbox, Source, inbox_row, text};
+use crate::btcc::{CommandTrigger, StorageCode, TurnCommand};
 
 pub(super) fn record_inbound(
     connection: &mut Connection,
-    command: &Value,
+    command: &TurnCommand,
     hash: &str,
 ) -> StorageResult<Inbox> {
     let transaction = connection.transaction().map_err(StorageError::sqlite)?;
-    let session_id = text(command, "sessionId")?;
-    let trigger_key = text(command, "triggerKey")?;
+    let fresh = Fresh::of(command).ok_or_else(|| {
+        error(
+            StorageCode::InvalidTurnCommand,
+            "Fresh BTCC command must be run or wake",
+        )
+    })?;
+    let session_id = text(fresh.session_id, "sessionId")?;
+    let trigger_key = text(fresh.trigger_key, "triggerKey")?;
     if let Some(existing) = find_inbox(&transaction, session_id, trigger_key)? {
         if existing.admission_input_hash != hash {
             return Err(error(
@@ -27,9 +31,9 @@ pub(super) fn record_inbound(
         return Ok(existing);
     }
     let inbox_id = digest(&format!("btcc-inbox.v1\0{session_id}\0{trigger_key}"));
-    insert_canonical_trigger(&transaction, command)?;
-    let command_json = canonical_json(command)?;
-    let turn_id = text(command, "turnId")?;
+    insert_canonical_trigger(&transaction, &fresh)?;
+    let command_json = canonical_record(command)?;
+    let turn_id = text(fresh.turn_id, "turnId")?;
     transaction
         .execute(
             "INSERT INTO btcc_inbound_inbox (inbox_id, session_id, trigger_key, turn_id, \
@@ -64,35 +68,22 @@ pub(super) fn find_inbox(
             "SELECT inbox_id, turn_id, admission_input_hash, status, command_json \
          FROM btcc_inbound_inbox WHERE session_id = ?1 AND trigger_key = ?2",
             [session_id, trigger_key],
-            |row| {
-                Ok(Inbox {
-                    inbox_id: row.get(0)?,
-                    turn_id: row.get(1)?,
-                    admission_input_hash: row.get(2)?,
-                    status: row.get(3)?,
-                    command_json: row.get(4)?,
-                })
-            },
+            inbox_row,
         )
         .optional()
         .map_err(StorageError::sqlite)
 }
 
-fn insert_canonical_trigger(connection: &Connection, command: &Value) -> StorageResult<()> {
-    match kind(command)? {
-        "run" => insert_user_message(connection, command),
-        "wake" => insert_wake(connection, command),
-        _ => Err(error(
-            StorageCode::InvalidTurnCommand,
-            "Fresh BTCC command must be run or wake",
-        )),
+fn insert_canonical_trigger(connection: &Connection, command: &Fresh<'_>) -> StorageResult<()> {
+    match command.source {
+        Source::Message(_) => insert_user_message(connection, command),
+        Source::Trigger(trigger) => insert_wake(connection, command, trigger),
     }
 }
 
-fn insert_user_message(connection: &Connection, command: &Value) -> StorageResult<()> {
-    let message = object(command, "message")?;
-    let message_id = text_object(message, "messageId")?;
-    let content = text_object(message, "content")?;
+fn insert_user_message(connection: &Connection, command: &Fresh<'_>) -> StorageResult<()> {
+    let message_id = command.message_id()?;
+    let content = command.content()?;
     let existing = connection
         .query_row(
             "SELECT content FROM btcc_messages WHERE message_id = ?1",
@@ -109,19 +100,25 @@ fn insert_user_message(connection: &Connection, command: &Value) -> StorageResul
             )
         });
     }
+    let session_id = text(command.session_id, "sessionId")?;
+    let turn_id = text(command.turn_id, "turnId")?;
+    let trigger_key = text(command.trigger_key, "triggerKey")?;
     connection.execute(
         "INSERT INTO btcc_messages (message_id, session_id, turn_id, role, content, idempotency_key, created_at) \
          VALUES (?1, ?2, ?3, 'user', ?4, ?5, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
-        params![message_id, text(command, "sessionId")?, text(command, "turnId")?, content,
-            format!("inbound:{}:{}", text(command, "sessionId")?, text(command, "triggerKey")?)],
+        params![message_id, session_id, turn_id, content,
+            format!("inbound:{session_id}:{trigger_key}")],
     ).map_err(StorageError::sqlite)?;
     Ok(())
 }
 
-fn insert_wake(connection: &Connection, command: &Value) -> StorageResult<()> {
-    let trigger = object(command, "trigger")?;
-    let trigger_id = text_object(trigger, "triggerId")?;
-    let content = text_object(trigger, "content")?;
+fn insert_wake(
+    connection: &Connection,
+    command: &Fresh<'_>,
+    trigger: &CommandTrigger,
+) -> StorageResult<()> {
+    let trigger_id = text(&trigger.trigger_id, "triggerId")?;
+    let content = text(&trigger.content, "content")?;
     let existing = connection
         .query_row(
             "SELECT content FROM btcc_continuation_triggers WHERE trigger_id = ?1",
@@ -137,13 +134,17 @@ fn insert_wake(connection: &Connection, command: &Value) -> StorageResult<()> {
         ));
     }
     if existing.is_none() {
+        let session_id = text(command.session_id, "sessionId")?;
+        let turn_id = text(command.turn_id, "turnId")?;
+        let source_turn_id = text(&trigger.source_turn_id, "sourceTurnId")?;
+        let authorization_ref = text(&trigger.authorization_ref, "authorizationRef")?;
+        let trigger_key = text(command.trigger_key, "triggerKey")?;
         connection.execute(
             "INSERT INTO btcc_continuation_triggers (trigger_id, session_id, turn_id, source_turn_id, \
              authorization_ref, content, idempotency_key, created_at) VALUES \
              (?1, ?2, ?3, ?4, ?5, ?6, ?7, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
-            params![trigger_id, text(command, "sessionId")?, text(command, "turnId")?,
-                text_object(trigger, "sourceTurnId")?, text_object(trigger, "authorizationRef")?, content,
-                format!("wake:{}:{}", text(command, "sessionId")?, text(command, "triggerKey")?)],
+            params![trigger_id, session_id, turn_id, source_turn_id, authorization_ref, content,
+                format!("wake:{session_id}:{trigger_key}")],
         ).map_err(StorageError::sqlite)?;
     }
     insert_wake_fact(connection, command, trigger)
@@ -151,16 +152,16 @@ fn insert_wake(connection: &Connection, command: &Value) -> StorageResult<()> {
 
 fn insert_wake_fact(
     connection: &Connection,
-    command: &Value,
-    trigger: &Map<String, Value>,
+    command: &Fresh<'_>,
+    trigger: &CommandTrigger,
 ) -> StorageResult<()> {
-    let turn_id = text(command, "turnId")?;
+    let turn_id = text(command.turn_id, "turnId")?;
     let identity = (
-        text_object(trigger, "triggerId")?,
-        text_object(trigger, "sourceTurnId")?,
-        text_object(trigger, "authorizationRef")?,
-        optional_text_object(trigger, "resultScopeRef")?.unwrap_or(""),
-        text_object(trigger, "content")?,
+        text(&trigger.trigger_id, "triggerId")?,
+        text(&trigger.source_turn_id, "sourceTurnId")?,
+        text(&trigger.authorization_ref, "authorizationRef")?,
+        trigger.result_scope_ref.as_deref().unwrap_or(""),
+        text(&trigger.content, "content")?,
     );
     let existing = connection
         .query_row(
@@ -214,8 +215,8 @@ fn insert_wake_fact(
          (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
             params![
                 turn_id,
-                text(command, "sessionId")?,
-                text(command, "triggerKey")?,
+                text(command.session_id, "sessionId")?,
+                text(command.trigger_key, "triggerKey")?,
                 identity.0,
                 identity.1,
                 identity.2,

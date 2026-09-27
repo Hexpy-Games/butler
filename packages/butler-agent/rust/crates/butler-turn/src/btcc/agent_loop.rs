@@ -21,7 +21,10 @@ mod turn_binding;
 pub mod fixture_binding;
 
 use crate::btcc::BtccCode;
-pub use contracts::SemanticTurn;
+pub use contracts::{
+    AdmittedModelSelection, ButlerContext, EmptyResponsePolicy, ExecutionPolicy, SemanticTurn,
+    TrackingMode,
+};
 pub use turn_binding::{BoundGuidedTurn, GuidedTurnFactory, GuidedTurnInputs, GuidedTurnStart};
 
 #[cfg(test)]

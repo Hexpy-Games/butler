@@ -260,11 +260,7 @@ fn classify_app_projection(
     let conversation_session_id = clean_opt(row.conversation_session_id.as_deref());
     let conversation_turn_id = clean_opt(row.conversation_turn_id.as_deref());
     let conversation_message_id = clean_opt(row.conversation_message_id.as_deref());
-    let role = match row.role.as_str() {
-        "user" => Some(Role::User),
-        "assistant" => Some(Role::Assistant),
-        _ => None,
-    };
+    let role = app_role(&row.role);
     let build_decision = |provenance, reason, role, text| {
         decision(DecisionInput {
             kind: SourceKind::AppProjection,
@@ -284,26 +280,13 @@ fn classify_app_projection(
         return build_decision(
             Provenance::Ambiguous,
             "missing_stable_app_projection_identity",
-            role,
+            role.ok(),
             None,
         );
     }
-    let Some(role) = role else {
-        let discarded = ["system_event", "activity", "tool_summary"].contains(&row.role.as_str());
-        return build_decision(
-            if discarded {
-                Provenance::Discarded
-            } else {
-                Provenance::Ambiguous
-            },
-            if discarded {
-                "app_activity_projection_not_semantic"
-            } else {
-                "unknown_app_projection_role"
-            },
-            None,
-            None,
-        );
+    let role = match role {
+        Ok(role) => role,
+        Err((provenance, reason)) => return build_decision(provenance, reason, None, None),
     };
     let text = row.text.as_deref().unwrap_or("").trim();
     if text.is_empty() {
@@ -329,6 +312,19 @@ fn classify_app_projection(
         Some(role),
         Some(text.into()),
     )
+}
+
+/// The conversation role of an App projection row, or why it is not recovered.
+fn app_role(role: &str) -> Result<Role, (Provenance, &'static str)> {
+    match role {
+        "user" => Ok(Role::User),
+        "assistant" => Ok(Role::Assistant),
+        "system_event" | "activity" | "tool_summary" => Err((
+            Provenance::Discarded,
+            "app_activity_projection_not_semantic",
+        )),
+        _ => Err((Provenance::Ambiguous, "unknown_app_projection_role")),
+    }
 }
 
 fn decision(input: DecisionInput) -> Decision {

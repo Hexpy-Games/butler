@@ -6,7 +6,7 @@ use super::super::path_guard::GuardResult;
 /// Where a mutation may write.
 pub struct MutationContext {
     pub root: PathBuf,
-    pub relative_only: bool,
+    pub path_form: crate::workspace::PathForm,
     pub installation_root: Option<PathBuf>,
     pub protected_roots: Vec<PathBuf>,
 }

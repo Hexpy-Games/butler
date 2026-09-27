@@ -43,7 +43,9 @@ pub(crate) struct SubsessionMetadata {
     pub project_context: Option<SubsessionProjectContext>,
 }
 
+// Passthrough: parse boundary validating untyped JSON into typed values.
 pub(crate) fn read_subsession_metadata(
+    // Passthrough: parse boundary validating untyped JSON into typed values.
     value: Option<&Value>,
 ) -> Result<Option<SubsessionMetadata>, BtccError> {
     let Some(value) = value else { return Ok(None) };
@@ -165,7 +167,9 @@ fn normalize_scope_path(value: &str) -> Option<String> {
     })
 }
 
+// Passthrough: parse boundary validating untyped JSON into typed values.
 fn read_project_context(
+    // Passthrough: parse boundary validating untyped JSON into typed values.
     value: Option<&Value>,
 ) -> Result<Option<SubsessionProjectContext>, BtccError> {
     let Some(value) = value else { return Ok(None) };
@@ -180,6 +184,7 @@ fn read_project_context(
     }))
 }
 
+// Passthrough: parse boundary validating untyped JSON into typed values.
 fn string_array(value: Option<&Value>) -> Result<Vec<String>, BtccError> {
     let Some(Value::Array(values)) = value else {
         return Ok(Vec::new());

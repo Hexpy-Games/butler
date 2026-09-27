@@ -31,7 +31,14 @@ pub(crate) fn to_context_message(
             ConversationRole::User => "user",
         },
         role: message.message.role,
-        text: butler_turn::conversation::text_for_message(message, include_tools),
+        text: butler_turn::conversation::text_for_message(
+            message,
+            if include_tools {
+                butler_turn::conversation::ToolParts::Include
+            } else {
+                butler_turn::conversation::ToolParts::Exclude
+            },
+        ),
         parts,
     }
 }

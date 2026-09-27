@@ -409,7 +409,7 @@ fn validate_request(
     abort: &CancellationToken,
 ) -> Result<Option<String>, BindSessionWorktreeResult> {
     let action = input.action;
-    if !safe_ref(branch, false) {
+    if !safe_ref(branch, path::Head::Rejected) {
         return Err(failure(action, None, "invalid_branch"));
     }
     if action == SessionWorktreeAction::Select && input.start_point.is_some() {
@@ -419,7 +419,7 @@ fn validate_request(
     if action == SessionWorktreeAction::Create
         && start_point
             .as_ref()
-            .is_some_and(|value| !safe_ref(value, true))
+            .is_some_and(|value| !safe_ref(value, path::Head::Allowed))
     {
         return Err(failure(action, Some(branch), "invalid_start_point"));
     }

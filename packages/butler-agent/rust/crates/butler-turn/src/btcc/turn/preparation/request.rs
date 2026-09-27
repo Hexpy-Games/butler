@@ -4,7 +4,9 @@ use super::{js_truthy, object};
 use crate::btcc::BtccCode;
 use crate::btcc::identity::digest;
 use crate::btcc::{
-    BtccError, ProgressDestination, SessionRole as BtccRole, TurnRecord, TurnRequest, TurnTrigger,
+    BtccError, CommandMessage, CommandModelSelection, CommandTrigger, ProgressDestination,
+    ResumeCommand, RunCommand, SessionRole as BtccRole, TurnCommand, TurnRecord, TurnRequest,
+    TurnTrigger, WakeCommand,
 };
 use crate::conversation::{ConversationEnvelope, DurableSessionBinding};
 use crate::workspace::{SessionLifecycleState, SessionRole as WorkspaceRole, StoredSessionBinding};
@@ -95,14 +97,9 @@ pub(super) fn replay_binding(
         Some("worker") => WorkspaceRole::Worker,
         _ => WorkspaceRole::Butler,
     };
-    let selection = turn.model_selection.as_object().ok_or_else(|| {
-        BtccError::detected(
-            BtccCode::TurnReplayModelInvalid,
-            "BTCC replay model selection is invalid",
-        )
-    })?;
-    let provider = required_string(selection, "provider")?;
-    let model = required_string(selection, "model")?;
+    let selection = &turn.model_selection;
+    let provider = selection.provider.clone();
+    let model = &selection.model;
     let mut metadata = Map::new();
     metadata.insert(
         "accessMode".into(),
@@ -114,10 +111,7 @@ pub(super) fn replay_binding(
     );
     metadata.insert(
         "reasoning_effort".into(),
-        selection
-            .get("reasoningEffort")
-            .cloned()
-            .unwrap_or(Value::Null),
+        serde_json::to_value(&selection.reasoning_effort).map_err(json_error)?,
     );
     Ok(StoredSessionBinding {
         session_id: turn.session_id.clone(),
@@ -148,105 +142,116 @@ pub(super) fn replay_binding(
     })
 }
 
-pub(super) fn resume_command(request: &TurnRequest) -> Value {
-    let mut command = Map::new();
-    command.insert("kind".into(), "resume".into());
-    command.insert("turnId".into(), request.turn_id.clone().into());
-    if let Some(attempt) = request.recovery_attempt.filter(|value| *value != 0) {
-        command.insert("recoveryAttempt".into(), attempt.into());
-    }
-    Value::Object(command)
+pub(super) fn resume_command(request: &TurnRequest) -> TurnCommand {
+    TurnCommand::Resume(ResumeCommand {
+        turn_id: request.turn_id.clone(),
+        recovery_attempt: recovery_attempt(request),
+    })
 }
 
+fn recovery_attempt(request: &TurnRequest) -> Option<u32> {
+    request.recovery_attempt.filter(|value| *value != 0)
+}
+
+// Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
 pub(super) fn fresh_command(
     request: &TurnRequest,
-    model_selection: Value,
+    model_selection: CommandModelSelection,
     mut context: Value,
-) -> Result<Value, BtccError> {
+) -> Result<TurnCommand, BtccError> {
     apply_request_context(request, &mut context)?;
-    let mut command = Map::new();
-    match &request.trigger {
-        TurnTrigger::UserMessage => {
-            command.insert("kind".into(), "run".into());
-        }
-        TurnTrigger::AuthorizedWake { .. } => {
-            command.insert("kind".into(), "wake".into());
-        }
-    }
-    command.insert("turnId".into(), request.turn_id.clone().into());
-    if let Some(attempt) = request.recovery_attempt.filter(|value| *value != 0) {
-        command.insert("recoveryAttempt".into(), attempt.into());
-    }
-    command.insert("sessionId".into(), request.session_id.clone().into());
-    command.insert("triggerKey".into(), request.event_id.clone().into());
-    match &request.trigger {
-        TurnTrigger::UserMessage => {
-            command.insert(
-                "message".into(),
-                Value::Object(Map::from_iter([
-                    ("messageId".into(), request.message.id.clone().into()),
-                    ("content".into(), request.message.content.clone().into()),
-                ])),
-            );
-        }
+    let turn_id = request.turn_id.clone();
+    let session_id = request.session_id.clone();
+    let trigger_key = request.event_id.clone();
+    Ok(match &request.trigger {
+        TurnTrigger::UserMessage => TurnCommand::Run(RunCommand {
+            turn_id,
+            recovery_attempt: recovery_attempt(request),
+            session_id,
+            trigger_key,
+            message: CommandMessage {
+                message_id: request.message.id.clone(),
+                content: request.message.content.clone(),
+            },
+            model_selection,
+            progress_destination: Some(destination(request)),
+            context,
+        }),
         TurnTrigger::AuthorizedWake {
             trigger_id,
             source_turn_id,
             authorization_ref,
             result_scope_ref,
         } => {
-            let mut trigger = Map::new();
-            trigger.insert("triggerId".into(), trigger_id.clone().into());
-            trigger.insert("sourceTurnId".into(), source_turn_id.clone().into());
-            trigger.insert("authorizationRef".into(), authorization_ref.clone().into());
-            if let Some(reference) = result_scope_ref.as_ref().filter(|value| !value.is_empty()) {
-                trigger.insert("resultScopeRef".into(), reference.clone().into());
+            let result_scope_ref = result_scope_ref
+                .as_ref()
+                .filter(|value| !value.is_empty())
+                .cloned();
+            if let Some(reference) = &result_scope_ref {
                 append_unique(&mut context, "baselineObservationScopeRefs", reference)?;
             }
-            trigger.insert("content".into(), request.message.content.clone().into());
-            command.insert("trigger".into(), Value::Object(trigger));
+            TurnCommand::Wake(WakeCommand {
+                turn_id,
+                recovery_attempt: recovery_attempt(request),
+                session_id,
+                trigger_key,
+                trigger: CommandTrigger {
+                    trigger_id: trigger_id.clone(),
+                    source_turn_id: source_turn_id.clone(),
+                    authorization_ref: authorization_ref.clone(),
+                    result_scope_ref,
+                    content: request.message.content.clone(),
+                },
+                model_selection,
+                progress_destination: Some(destination(request)),
+                context,
+            })
         }
-    }
-    command.insert("modelSelection".into(), model_selection);
-    command.insert("progressDestination".into(), destination(request)?);
-    command.insert("context".into(), context);
-    Ok(Value::Object(command))
+    })
 }
 
-pub(super) fn admission_hash(command: &Value) -> Result<String, BtccError> {
-    let command = command
-        .as_object()
-        .ok_or_else(|| BtccError::detected(BtccCode::CommandInvalid, "BTCC command is invalid"))?;
-    if command.get("kind").and_then(Value::as_str) == Some("resume") {
-        return Ok(String::new());
-    }
-    let mut identity = Map::new();
-    for key in ["turnId", "sessionId", "triggerKey"] {
-        identity.insert(key.into(), command.get(key).cloned().unwrap_or(Value::Null));
-    }
-    let source = if command.get("kind").and_then(Value::as_str) == Some("run") {
-        "message"
-    } else {
-        "trigger"
+/// The fields of a fresh command its admission identity is hashed over.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AdmissionIdentity<'a> {
+    turn_id: &'a str,
+    session_id: &'a str,
+    trigger_key: &'a str,
+    source: AdmissionSource<'a>,
+    model_selection: &'a CommandModelSelection,
+    // Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
+    context: &'a Value,
+}
+
+#[derive(serde::Serialize)]
+#[serde(untagged)]
+enum AdmissionSource<'a> {
+    Message(&'a CommandMessage),
+    Trigger(&'a CommandTrigger),
+}
+
+pub(super) fn admission_hash(command: &TurnCommand) -> Result<String, BtccError> {
+    let identity = match command {
+        TurnCommand::Resume(_) => return Ok(String::new()),
+        TurnCommand::Run(run) => AdmissionIdentity {
+            turn_id: &run.turn_id,
+            session_id: &run.session_id,
+            trigger_key: &run.trigger_key,
+            source: AdmissionSource::Message(&run.message),
+            model_selection: &run.model_selection,
+            context: &run.context,
+        },
+        TurnCommand::Wake(wake) => AdmissionIdentity {
+            turn_id: &wake.turn_id,
+            session_id: &wake.session_id,
+            trigger_key: &wake.trigger_key,
+            source: AdmissionSource::Trigger(&wake.trigger),
+            model_selection: &wake.model_selection,
+            context: &wake.context,
+        },
     };
-    identity.insert(
-        "source".into(),
-        command.get(source).cloned().unwrap_or(Value::Null),
-    );
-    identity.insert(
-        "modelSelection".into(),
-        command
-            .get("modelSelection")
-            .cloned()
-            .unwrap_or(Value::Null),
-    );
-    identity.insert(
-        "context".into(),
-        command.get("context").cloned().unwrap_or(Value::Null),
-    );
-    Ok(digest(
-        &stringify(&Value::Object(identity)).map_err(json_error)?,
-    ))
+    let identity = serde_json::to_value(identity).map_err(json_error)?;
+    Ok(digest(&stringify(&identity).map_err(json_error)?))
 }
 
 pub(super) fn conversation_binding(binding: &StoredSessionBinding) -> DurableSessionBinding {
@@ -267,6 +272,7 @@ pub(super) fn conversation_envelope(request: &TurnRequest) -> ConversationEnvelo
     }
 }
 
+// Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
 fn apply_request_context(request: &TurnRequest, context: &mut Value) -> Result<(), BtccError> {
     let fields = context
         .as_object_mut()
@@ -315,32 +321,26 @@ fn apply_request_context(request: &TurnRequest, context: &mut Value) -> Result<(
     Ok(())
 }
 
-fn destination(request: &TurnRequest) -> Result<Value, BtccError> {
-    let value = request
-        .progress_destination
-        .clone()
-        .unwrap_or_else(|| ProgressDestination {
-            transport: request.transport.clone(),
-            account_id: request.account_id.clone(),
-            peer: request.peer.clone(),
-            reply_to_message_id: request.message.id.clone(),
-            app_queue_claim_id: None,
-        });
-    let mut value = serde_json::to_value(value).map_err(json_error)?;
+fn destination(request: &TurnRequest) -> ProgressDestination {
+    let mut destination =
+        request
+            .progress_destination
+            .clone()
+            .unwrap_or_else(|| ProgressDestination {
+                transport: request.transport.clone(),
+                account_id: request.account_id.clone(),
+                peer: request.peer.clone(),
+                reply_to_message_id: request.message.id.clone(),
+                app_queue_claim_id: None,
+            });
     if let Some(claim) = request
         .app_queue_claim_id
         .as_ref()
         .filter(|value| !value.is_empty())
     {
-        let Some(object) = value.as_object_mut() else {
-            return Err(BtccError::detected(
-                BtccCode::BtccJsonError,
-                "progress destination is not an object",
-            ));
-        };
-        object.insert("appQueueClaimId".into(), claim.clone().into());
+        destination.app_queue_claim_id = Some(claim.clone());
     }
-    Ok(value)
+    destination
 }
 
 fn append_required_tool(fields: &mut Map<String, Value>, tool: &str) {
@@ -360,6 +360,7 @@ fn append_required_tool(fields: &mut Map<String, Value>, tool: &str) {
         values.push(tool.into());
     }
 }
+// Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
 fn append_unique(context: &mut Value, field: &str, value: &str) -> Result<(), BtccError> {
     let object = context
         .as_object_mut()
@@ -384,18 +385,6 @@ fn message_content(request: &TurnRequest) -> Option<&Value> {
         .as_ref()?
         .as_object()?
         .get("contentParts")
-}
-fn required_string(object: &Map<String, Value>, key: &str) -> Result<String, BtccError> {
-    object
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-        .ok_or_else(|| {
-            BtccError::detected(
-                BtccCode::TurnReplayModelInvalid,
-                "BTCC replay model selection is invalid",
-            )
-        })
 }
 fn role_text(role: &WorkspaceRole) -> &str {
     match role {

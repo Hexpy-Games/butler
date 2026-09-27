@@ -8,11 +8,13 @@ use crate::btcc::continuation_budget::{
     create_turn_continuation_budget_state,
 };
 use crate::btcc::identity::digest;
-use crate::btcc::storage::common::{canonical_json, column_exists, error, stringify};
+use crate::btcc::storage::common::{
+    canonical_json, canonical_record, column_exists, error, stringify,
+};
 use crate::btcc::storage::runtime_owner::RuntimeOwner;
 use crate::btcc::storage::{StorageError, StorageResult};
 
-use super::types::{AdmissionClaim, Inbox, kind, object, text, text_object};
+use super::types::{AdmissionClaim, Fresh, Inbox, decode, inbox_row, text};
 use crate::btcc::{BtccCode, StorageCode};
 
 pub(super) fn construct_turn(
@@ -28,15 +30,7 @@ pub(super) fn construct_turn(
             "SELECT inbox_id, turn_id, admission_input_hash, status, command_json \
          FROM btcc_inbound_inbox WHERE inbox_id=?1",
             [&inbox.inbox_id],
-            |row| {
-                Ok(Inbox {
-                    inbox_id: row.get(0)?,
-                    turn_id: row.get(1)?,
-                    admission_input_hash: row.get(2)?,
-                    status: row.get(3)?,
-                    command_json: row.get(4)?,
-                })
-            },
+            inbox_row,
         )
         .optional()
         .map_err(StorageError::sqlite)?
@@ -105,28 +99,22 @@ fn insert_initial_turn(
     command_json: &str,
     limits: Option<TurnContinuationBudgetLimits>,
 ) -> StorageResult<()> {
-    let command: Value = serde_json::from_str(command_json).map_err(|error| {
-        StorageError::new(StorageCode::InvalidTurnCommand, error.to_string()).with_source(error)
+    let command = decode(command_json)?;
+    let command = Fresh::of(&command).ok_or_else(|| {
+        error(
+            StorageCode::InvalidTurnCommand,
+            "Fresh BTCC command must be run or wake",
+        )
     })?;
-    let run = kind(&command)? == "run";
-    let source = if run {
-        object(&command, "message")?
-    } else {
-        object(&command, "trigger")?
-    };
-    let context = command
-        .get("context")
-        .ok_or_else(|| error(StorageCode::InvalidTurnCommand, "missing context"))?;
-    let model = object(&command, "modelSelection")?;
+    let context = command.context;
+    let model = command.model_selection;
     let context_json = canonical_json(context)?;
     let snapshot_ref = persist_admission_snapshot(connection, context)?;
-    let turn_id = text(&command, "turnId")?;
+    let turn_id = text(command.turn_id, "turnId")?;
     let checkpoint_id = digest(&format!("btcc-checkpoint.v1\0{turn_id}\0{}\0admitted", 0));
     let stopped = stopped_before_admission(connection, turn_id)?;
-    let mut admitted_model = model.clone();
-    let route = admitted_model.shift_remove("modelRoute");
     let budget = limits
-        .map(|limits| initial_budget_json(limits, model, turn_id))
+        .map(|limits| initial_budget_json(limits, model.selection.context_window_tokens, turn_id))
         .transpose()?;
     let sql = insert_turn_sql(connection)?;
     connection
@@ -134,23 +122,23 @@ fn insert_initial_turn(
             sql,
             params![
                 turn_id,
-                text(&command, "sessionId")?,
+                text(command.session_id, "sessionId")?,
                 inbox_id,
-                text(&command, "triggerKey")?,
-                if run {
-                    text_object(source, "messageId")?
-                } else {
-                    text_object(source, "triggerId")?
-                },
-                text_object(source, "content")?,
+                text(command.trigger_key, "triggerKey")?,
+                command.message_id()?,
+                command.content()?,
                 snapshot_ref,
-                canonical_json(&Value::Object(admitted_model))?,
-                route.as_ref().map(canonical_json).transpose()?,
+                canonical_record(&model.selection)?,
+                model
+                    .model_route
+                    .as_ref()
+                    .map(canonical_record)
+                    .transpose()?,
                 budget,
                 context_json,
                 command
-                    .get("progressDestination")
-                    .map(canonical_json)
+                    .progress_destination
+                    .map(canonical_record)
                     .transpose()?,
                 if stopped { "cancelled" } else { "admitted" },
                 if stopped {
@@ -205,6 +193,7 @@ fn activate_admitted_checkpoint(
 
 /// Stores the admission snapshot (`{"context": ..}`) as an immutable record
 /// and returns its reference.
+// Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
 fn persist_admission_snapshot(connection: &Connection, context: &Value) -> StorageResult<String> {
     let snapshot_json = canonical_json(&json!({"context": context}))?;
     let snapshot_sha = digest(&snapshot_json);
@@ -235,7 +224,7 @@ fn stopped_before_admission(connection: &Connection, turn_id: &str) -> StorageRe
 /// The serialized initial continuation budget, sized for the model's context window.
 fn initial_budget_json(
     limits: TurnContinuationBudgetLimits,
-    model: &serde_json::Map<String, Value>,
+    context_window: Option<f64>,
     turn_id: &str,
 ) -> StorageResult<String> {
     let now_ms = u64::try_from(
@@ -248,7 +237,6 @@ fn initial_budget_json(
             .as_millis(),
     )
     .unwrap_or(u64::MAX);
-    let context_window = model.get("contextWindowTokens").and_then(Value::as_f64);
     create_turn_continuation_budget_state(
         turn_id.to_owned(),
         continuation_limits_for_model(limits, context_window),

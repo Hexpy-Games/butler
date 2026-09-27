@@ -19,7 +19,7 @@ pub(crate) use contracts::{CommitObserver, Unobserved};
 
 /// The line diff between two file contents; `None` when unchanged.
 pub fn net_changed_file_detail(path: &str, before: &[u8], after: &[u8]) -> Option<ChangedFile> {
-    diff::changed_file(path, before, after, false)
+    diff::changed_file(path, before, after, diff::FileOrigin::Existing)
 }
 
 pub use edit::prepare_exact_text;

@@ -353,7 +353,7 @@ pub(super) fn guarded_directory(
     let result = resolve_workspace_path_guard(GuardInput {
         root,
         requested,
-        relative_only: false,
+        path_form: crate::workspace::PathForm::RelativeOrAbsolute,
         allow_directories: true,
         protected_roots: &[],
     })

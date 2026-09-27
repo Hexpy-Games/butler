@@ -367,10 +367,10 @@ pub(in crate::conversation) fn around(
         )
         .map_err(ConversationError::sqlite)?;
     let anchor = anchor.unwrap_or(max.unwrap_or(0));
-    let (direction_start, direction_end) = match input.direction.as_deref() {
-        Some("before") => (anchor.saturating_sub(limit - 1).max(1), anchor),
-        Some("after") => (anchor, anchor + limit - 1),
-        _ => (
+    let (direction_start, direction_end) = match input.direction {
+        Some(AroundDirection::Before) => (anchor.saturating_sub(limit - 1).max(1), anchor),
+        Some(AroundDirection::After) => (anchor, anchor + limit - 1),
+        Some(AroundDirection::Around) | None => (
             anchor.saturating_sub((limit - 1) / 2).max(1),
             anchor + limit - (limit - 1) / 2 - 1,
         ),
