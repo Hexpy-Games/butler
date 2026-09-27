@@ -1,3 +1,5 @@
+//! Reading claim requirement conditions for recall.
+
 use rusqlite::{Connection, params_from_iter, types::Value};
 use serde::Deserialize;
 

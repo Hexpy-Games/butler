@@ -1,3 +1,5 @@
+//! The sources a project capsule is refreshed from.
+
 mod evidence;
 mod graph;
 mod tasks;

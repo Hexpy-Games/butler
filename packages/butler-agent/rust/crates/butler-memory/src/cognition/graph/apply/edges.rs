@@ -1,3 +1,5 @@
+//! Applying plan edges and their evidence to the graph.
+
 use std::collections::HashMap;
 
 use rusqlite::{Connection, params};

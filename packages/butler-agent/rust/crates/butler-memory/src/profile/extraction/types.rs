@@ -1,3 +1,5 @@
+//! Source windows, extracted candidates, correction targets and usage of profile extraction.
+
 use std::collections::HashMap;
 use std::sync::Arc;
 

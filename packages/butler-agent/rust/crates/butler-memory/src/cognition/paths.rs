@@ -1,3 +1,5 @@
+//! Where the cognition and memory stores live.
+
 use std::path::{Path, PathBuf};
 
 /// Where the cognition and memory stores live; relative to the data root unless overridden.

@@ -1,3 +1,5 @@
+//! The profile extractor model settings in `butler.config.json`.
+
 use std::fs;
 use std::path::Path;
 

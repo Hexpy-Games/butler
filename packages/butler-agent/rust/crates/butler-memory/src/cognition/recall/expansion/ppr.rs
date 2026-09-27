@@ -1,3 +1,5 @@
+//! Personalized PageRank over the expanded recall graph.
+
 use indexmap::IndexMap;
 
 use super::{RecallEdge, is_navigation, is_positive};

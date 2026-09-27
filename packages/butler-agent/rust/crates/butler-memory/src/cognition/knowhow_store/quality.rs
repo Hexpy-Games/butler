@@ -1,3 +1,5 @@
+//! Source quality summaries aggregated from know-how feedback.
+
 use std::{
     collections::HashMap,
     fs::{self, File},

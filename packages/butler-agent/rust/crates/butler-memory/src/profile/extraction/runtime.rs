@@ -1,3 +1,5 @@
+//! Running profile extraction work: the blocking pool, the writer gate and model batches.
+
 use tokio_util::sync::CancellationToken;
 
 use super::super::contracts::*;

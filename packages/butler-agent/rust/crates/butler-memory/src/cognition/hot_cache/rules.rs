@@ -1,3 +1,5 @@
+//! Rule-based entity extraction for the legacy graph.
+
 use crate::cognition::CognitionResult;
 use butler_core::public_text::{fixed_regex, fixed_regex_ci};
 use std::{collections::HashSet, fs, path::Path, sync::OnceLock};

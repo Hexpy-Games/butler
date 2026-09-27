@@ -1,3 +1,5 @@
+//! Writing briefing artifacts atomically with private permissions.
+
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,

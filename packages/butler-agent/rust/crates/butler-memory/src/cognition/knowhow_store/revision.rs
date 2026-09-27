@@ -1,3 +1,5 @@
+//! Revising know-how entries from routed feedback.
+
 use std::{
     collections::HashMap,
     time::{SystemTime, UNIX_EPOCH},

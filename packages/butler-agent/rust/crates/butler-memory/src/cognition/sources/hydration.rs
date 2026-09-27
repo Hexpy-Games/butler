@@ -1,3 +1,5 @@
+//! Hydrating a source row back to its current conversation text.
+
 use std::borrow::Cow;
 
 use sha2::{Digest, Sha256};

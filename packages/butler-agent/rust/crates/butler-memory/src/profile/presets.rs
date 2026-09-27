@@ -1,3 +1,5 @@
+//! Persona presets read from the resources directory.
+
 use std::{collections::HashSet, fs, path::PathBuf};
 
 use serde::Serialize;

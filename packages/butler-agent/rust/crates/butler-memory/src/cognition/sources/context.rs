@@ -1,3 +1,5 @@
+//! Prior public conversation context for an extraction window.
+
 use butler_core::segmentation::grapheme_segments;
 use butler_turn::conversation::{
     ConversationOriginKind, ConversationPartKind, ConversationRole, ConversationSourceReader,

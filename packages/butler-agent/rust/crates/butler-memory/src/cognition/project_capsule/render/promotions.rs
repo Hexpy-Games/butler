@@ -1,3 +1,5 @@
+//! Promoting statements repeated across sources into capsule sections.
+
 use butler_core::public_text::fixed_regex_ci;
 use std::{collections::HashMap, sync::OnceLock};
 

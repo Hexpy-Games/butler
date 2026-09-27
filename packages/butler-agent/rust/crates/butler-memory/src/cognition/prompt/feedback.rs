@@ -1,3 +1,5 @@
+//! Feedback that applies to a prompt, ranked and compacted.
+
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 

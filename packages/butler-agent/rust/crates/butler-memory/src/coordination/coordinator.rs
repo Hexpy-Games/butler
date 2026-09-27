@@ -1,3 +1,5 @@
+//! The memory writer coordinator and its leases.
+
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

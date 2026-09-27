@@ -1,3 +1,5 @@
+//! Session ids as the legacy stores key them.
+
 use sha2::{Digest, Sha256};
 
 /// The session id as the legacy stores key it.

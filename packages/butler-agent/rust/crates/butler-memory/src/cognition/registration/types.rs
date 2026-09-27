@@ -1,3 +1,5 @@
+//! Conversation source registration inputs and outcomes.
+
 use std::path::PathBuf;
 
 use tokio_util::sync::CancellationToken;

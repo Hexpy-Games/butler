@@ -1,3 +1,5 @@
+//! Applying plan nodes, aliases and claims to the graph.
+
 use rusqlite::{Connection, params};
 use serde_json::Value;
 use std::collections::HashSet;

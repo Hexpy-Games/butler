@@ -1,3 +1,6 @@
+//! Box item manifests: the stored item record, its classes and files, read and written with unknown
+//! fields kept.
+
 use std::{
     fs::{self, OpenOptions},
     io::{BufReader, Write},

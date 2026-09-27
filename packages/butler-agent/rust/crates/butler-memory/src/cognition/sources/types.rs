@@ -1,3 +1,5 @@
+//! Conversation source notices, plans and rows.
+
 use std::borrow::Cow;
 
 /// Which conversation source a memory registration covers.

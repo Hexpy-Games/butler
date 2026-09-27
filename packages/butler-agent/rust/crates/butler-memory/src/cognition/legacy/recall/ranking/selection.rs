@@ -1,3 +1,5 @@
+//! The score gate that selects legacy recall items.
+
 use super::{LegacyRecallScoreBreakdown, LegacyRecallSource, evidence::ActivePolicy};
 
 pub(super) const LOW_CONFIDENCE_RECALL_FLOOR: f64 = 0.0001;

@@ -1,3 +1,5 @@
+//! Memory generation targets, handles and embedding metadata.
+
 use std::path::PathBuf;
 
 use crate::lenient::set_field;

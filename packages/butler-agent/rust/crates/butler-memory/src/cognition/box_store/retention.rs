@@ -1,3 +1,5 @@
+//! Box retention: marking expired items forgotten and removing their box-owned files.
+
 use std::{fs, path::Path};
 
 use serde::Serialize;

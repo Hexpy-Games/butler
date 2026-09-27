@@ -1,3 +1,5 @@
+//! Coverage of source windows by the profile extractor: claims, completion and failure.
+
 use parking_lot::Mutex;
 use std::collections::HashSet;
 use std::path::Path;

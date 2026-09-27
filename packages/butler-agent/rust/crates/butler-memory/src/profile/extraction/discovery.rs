@@ -1,3 +1,5 @@
+//! Discovering user text the profile extractor has not read yet.
+
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;

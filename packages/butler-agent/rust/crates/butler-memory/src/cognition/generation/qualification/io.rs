@@ -1,3 +1,5 @@
+//! Qualification file IO: stable file identities and the capture store.
+
 use std::{
     collections::BTreeMap,
     fs::{self, File},

@@ -1,3 +1,5 @@
+//! Validating the recall performance evidence of a qualification.
+
 use std::collections::{HashMap, HashSet};
 
 use crate::cognition::CognitionResult;

@@ -1,3 +1,5 @@
+//! Host facts, lock requests and lock states of the writer coordinator.
+
 use std::path::PathBuf;
 
 use serde::Serialize;

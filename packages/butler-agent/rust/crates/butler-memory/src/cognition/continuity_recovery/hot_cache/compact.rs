@@ -1,3 +1,5 @@
+//! Compacting a hot cache to its byte budget: structured entries first, then legacy text.
+
 use butler_core::public_text::fixed_regex;
 use std::collections::HashSet;
 

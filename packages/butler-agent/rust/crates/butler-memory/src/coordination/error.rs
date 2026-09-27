@@ -1,3 +1,5 @@
+//! Failures of the memory writer gate.
+
 use std::sync::Arc;
 
 /// Failures of the shared Cognition memory write gate.

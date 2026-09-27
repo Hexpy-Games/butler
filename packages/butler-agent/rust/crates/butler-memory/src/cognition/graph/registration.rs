@@ -1,3 +1,5 @@
+//! Registering conversation sources, episodes and projection jobs in the graph.
+
 use crate::cognition::graph::StageWrite;
 use std::collections::HashMap;
 

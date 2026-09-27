@@ -1,3 +1,5 @@
+//! Alias and lexical channels, and semantic seed selection by reciprocal-rank fusion.
+
 use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

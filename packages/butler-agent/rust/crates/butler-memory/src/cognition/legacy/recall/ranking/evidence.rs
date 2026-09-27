@@ -1,3 +1,5 @@
+//! Evidence policies and scores of legacy recall.
+
 mod verification;
 
 use super::super::types::{

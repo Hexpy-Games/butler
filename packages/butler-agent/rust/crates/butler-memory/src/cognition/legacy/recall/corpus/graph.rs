@@ -1,3 +1,5 @@
+//! Graph mentions of recall seeds in the legacy graph.
+
 use std::{collections::HashMap, path::Path};
 
 use rusqlite::{Connection, OpenFlags, params};

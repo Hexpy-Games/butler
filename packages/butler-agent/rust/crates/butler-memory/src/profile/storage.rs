@@ -1,3 +1,5 @@
+//! The profile database: consent, candidates, stable entries and runtime projections.
+
 use std::fs;
 use std::path::{Path, PathBuf};
 

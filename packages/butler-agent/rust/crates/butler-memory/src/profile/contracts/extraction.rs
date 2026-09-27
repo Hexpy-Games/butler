@@ -1,3 +1,5 @@
+//! Options and results of profile capture and third-party import.
+
 use serde::Serialize;
 use tokio_util::sync::CancellationToken;
 

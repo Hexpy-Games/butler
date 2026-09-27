@@ -1,3 +1,5 @@
+//! Lexical seeds and scores of legacy recall.
+
 use butler_core::public_text::fixed_regex;
 use std::{
     collections::{HashMap, HashSet},

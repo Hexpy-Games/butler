@@ -1,3 +1,5 @@
+//! Profile capture and import entry points of the profile service.
+
 use super::super::contracts::*;
 use super::super::extraction;
 use super::ProfileService;

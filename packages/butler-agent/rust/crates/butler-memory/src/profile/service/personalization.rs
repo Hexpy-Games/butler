@@ -1,3 +1,5 @@
+//! Persona and end-of-life documents and persona presets.
+
 use std::{fs, path::Path};
 
 use super::ProfileService;

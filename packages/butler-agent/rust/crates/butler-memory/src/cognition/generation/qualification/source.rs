@@ -1,3 +1,5 @@
+//! The source inventory a qualification is checked against.
+
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::Deserialize;
 use serde_json::{Value, json};

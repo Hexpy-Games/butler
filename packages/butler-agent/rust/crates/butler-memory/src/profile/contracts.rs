@@ -1,3 +1,5 @@
+//! Public profile types: host and source ports, names, consent, onboarding and projections.
+
 use serde::{Deserialize, Serialize};
 
 use super::understanding::{

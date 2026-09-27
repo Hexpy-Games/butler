@@ -1,3 +1,5 @@
+//! The profile section of prompts.
+
 use super::super::contracts::ProfileError;
 use super::super::{naming, projection};
 use super::ProfileService;

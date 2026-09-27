@@ -1,3 +1,5 @@
+//! Planning the registration of a conversation source: eligibility, revision and source rows.
+
 use butler_turn::conversation::{
     ConversationMessageWithParts, ConversationOriginKind, ConversationProvenance, ConversationRole,
     ConversationSourceReader, ConversationStatus, decode_message_scalars,

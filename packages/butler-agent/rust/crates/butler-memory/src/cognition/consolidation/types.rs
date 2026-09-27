@@ -1,3 +1,5 @@
+//! Consolidation phases, checkpoint and cycle states, and phase results.
+
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 

@@ -1,3 +1,5 @@
+//! Finding recoverable turns: completed turns missing from the hot cache, and the ones quarantined.
+
 use crate::cognition::CognitionCode;
 use butler_core::public_text::fixed_regex;
 use std::{

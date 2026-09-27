@@ -1,3 +1,5 @@
+//! Graph rows of typed source registrations.
+
 use crate::cognition::graph::StageWrite;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;

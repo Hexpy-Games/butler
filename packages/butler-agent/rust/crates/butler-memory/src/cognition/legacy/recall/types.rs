@@ -1,3 +1,5 @@
+//! Legacy recall requests, policies, candidates and responses.
+
 use serde::{Deserialize, Serialize};
 
 /// A legacy memory recall request.

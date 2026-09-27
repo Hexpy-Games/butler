@@ -1,3 +1,5 @@
+//! Identity hashes of projection records, episode revisions and recovered sources.
+
 use sha2::{Digest, Sha256};
 
 use super::types::CognitionSourceError;

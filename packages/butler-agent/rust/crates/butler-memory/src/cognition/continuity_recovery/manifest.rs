@@ -1,3 +1,5 @@
+//! Continuity recovery manifests: planned, approved, applied and rolled-back recoveries.
+
 use std::{collections::BTreeMap, fs, io::Write, path::Path};
 
 use crate::cognition::CognitionCode;

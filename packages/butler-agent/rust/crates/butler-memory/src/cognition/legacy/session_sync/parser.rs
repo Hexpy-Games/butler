@@ -1,3 +1,5 @@
+//! Parsing legacy session transcripts into messages and indexing chunks.
+
 use serde_json::{Value, json};
 
 use super::session_id::normalize_session_id_for_storage;

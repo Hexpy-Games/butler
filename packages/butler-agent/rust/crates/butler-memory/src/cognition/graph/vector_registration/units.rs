@@ -1,3 +1,5 @@
+//! Registering vector units for episodes and nodes, superseding obsolete ones.
+
 mod nodes;
 
 use crate::cognition::graph::StageWrite;

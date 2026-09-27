@@ -1,3 +1,5 @@
+//! Inspecting a project capsule: headings, source counts and refresh failures.
+
 use std::{
     fs,
     path::Path,

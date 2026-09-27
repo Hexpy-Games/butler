@@ -1,3 +1,5 @@
+//! Model usage of a briefing run and its estimated cost.
+
 use serde::Serialize;
 
 use butler_models::models::PromptUsageReport;

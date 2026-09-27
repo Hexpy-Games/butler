@@ -1,3 +1,5 @@
+//! The first-chat onboarding guidance added to prompts while onboarding is pending.
+
 use std::path::Path;
 
 use super::super::contracts::{FirstChatOnboardingState, PersonalizationProfile};

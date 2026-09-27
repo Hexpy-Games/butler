@@ -1,3 +1,5 @@
+//! Indexing legacy transcript lines for exact queries.
+
 use std::{
     fs,
     path::Path,

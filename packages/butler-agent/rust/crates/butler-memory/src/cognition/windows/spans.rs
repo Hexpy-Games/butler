@@ -1,3 +1,5 @@
+//! Grapheme-aligned byte spans of historical source text.
+
 use butler_core::segmentation::grapheme_segments;
 
 use super::ByteSpan;

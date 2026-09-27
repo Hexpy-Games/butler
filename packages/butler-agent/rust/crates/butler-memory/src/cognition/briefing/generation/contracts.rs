@@ -1,3 +1,5 @@
+//! Inputs of new-chat briefing generation and the port that supplies them.
+
 use std::{future::Future, pin::Pin};
 
 use serde::Serialize;

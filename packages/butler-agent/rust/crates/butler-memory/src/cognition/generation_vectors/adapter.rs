@@ -1,3 +1,5 @@
+//! Vector search over a memory generation for recall and candidate selection.
+
 use std::{path::PathBuf, sync::Arc};
 
 use crate::cognition::CognitionCode;

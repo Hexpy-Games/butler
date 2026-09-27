@@ -1,3 +1,5 @@
+//! Hot-cache, continuity and capsule text for prompts.
+
 use std::fs;
 use std::path::{Path, PathBuf};
 

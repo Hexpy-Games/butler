@@ -1,3 +1,5 @@
+//! Running an exact memory query: the paged scan over the canonical store and the tool response.
+
 use std::{
     path::Path,
     time::{Duration, Instant},

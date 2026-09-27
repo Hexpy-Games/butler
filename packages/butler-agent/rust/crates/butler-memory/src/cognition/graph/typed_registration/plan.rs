@@ -1,3 +1,5 @@
+//! Validating the registration plan of a typed source.
+
 use rusqlite::Connection;
 
 use super::{TypedRegistrationInput, source_changed};

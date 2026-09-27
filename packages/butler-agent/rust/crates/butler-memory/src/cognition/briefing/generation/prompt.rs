@@ -1,3 +1,5 @@
+//! The briefing model request: the prompt JSON, the instructions and the time-of-day moment.
+
 use crate::lenient::set_field;
 use chrono::{DateTime, Utc};
 use serde_json::json;

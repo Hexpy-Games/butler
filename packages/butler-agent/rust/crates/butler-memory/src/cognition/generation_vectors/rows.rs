@@ -1,3 +1,5 @@
+//! Generation vector rows and the LanceDB store they are written to.
+
 use std::{
     path::{Path, PathBuf},
     sync::Arc,

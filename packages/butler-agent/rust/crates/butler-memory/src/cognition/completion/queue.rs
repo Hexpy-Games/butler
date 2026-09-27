@@ -1,3 +1,5 @@
+//! The memory sync queue: idempotent appends, reads and removal of processed entries.
+
 use crate::lenient::JsonField;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};

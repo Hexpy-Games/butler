@@ -1,3 +1,5 @@
+//! The profile extractor request: budgeted batches of observations and instructions.
+
 use serde::Serialize;
 
 use super::super::contracts::ProfilingMode;

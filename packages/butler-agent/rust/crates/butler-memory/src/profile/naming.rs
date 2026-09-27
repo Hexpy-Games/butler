@@ -1,3 +1,5 @@
+//! The names Butler and the user go by, and private JSON writes.
+
 use std::fs;
 use std::path::{Path, PathBuf};
 

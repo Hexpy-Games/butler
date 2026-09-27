@@ -1,3 +1,5 @@
+//! Graph evidence about a project.
+
 use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags};
