@@ -3,8 +3,6 @@ use tokio::{
     net::TcpStream,
 };
 
-use super::*;
-
 /// Sends a raw request; `host: localhost` names the listener's port, as the
 /// gateway answers loopback names only with their bound port.
 pub(in crate::gateway::tests) async fn request(

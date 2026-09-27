@@ -71,12 +71,13 @@ async fn sec_01_cli_started_agent_owns_and_enforces_its_token() -> Result<(), Ha
     assert!(!std::fs::read_to_string(&secret)?.trim().is_empty());
     assert_eq!(file_mode(&secret), 0o600, "folder secret not private");
 
-    for token in [None, Some("wrong-token")] {
-        let reply =
-            s.gw.send_with(Method::GET, "/settings", None, token, &[])
-                .await?;
-        assert_eq!(reply.status, 401, "{token:?}: {}", reply.text);
-        assert_eq!(reply.error_code(), Some("local_auth_required"));
+    // An API path ending in an asset extension is not a public asset.
+    for path in ["/settings", "/sessions/general.json"] {
+        for token in [None, Some("wrong-token")] {
+            let reply = s.gw.send_with(Method::GET, path, None, token, &[]).await?;
+            assert_eq!(reply.status, 401, "{path} {token:?}: {}", reply.text);
+            assert_eq!(reply.error_code(), Some("local_auth_required"));
+        }
     }
     assert_eq!(s.gw.get("/settings").await?.status, 200);
 

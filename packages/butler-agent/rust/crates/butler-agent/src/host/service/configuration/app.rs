@@ -12,7 +12,7 @@ use butler_core::json::number_from_string;
 use butler_core::public_text::trim_js_whitespace;
 use butler_gateway::gateway::{GatewayConfig, LocalAuthConfig};
 
-use super::local_credentials::LocalCredentials;
+use super::local_credentials::{CredentialFiles, LocalCredentials};
 
 const MAX_SIGNED_URL_TTL_SECONDS: u64 = 600;
 
@@ -56,7 +56,13 @@ impl AppCapturedDependencies {
 }
 
 impl AppServiceConfiguration {
+    /// The App gateway facts of `data_root`; credential files are only read.
     pub(crate) fn capture(data_root: &Path) -> Self {
+        Self::capture_with(data_root, CredentialFiles::ReadOnly)
+    }
+
+    /// The same, creating missing credential files when `files` allows.
+    pub(crate) fn capture_with(data_root: &Path, files: CredentialFiles) -> Self {
         let settings = fs::read(data_root.join("gateways/app.json"))
             .ok()
             .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
@@ -94,7 +100,7 @@ impl AppServiceConfiguration {
             .unwrap_or_else(|| data_root.join("app-server/butler-client.sqlite"));
         // Local auth is enforced whoever started the agent: the token (and
         // the folder secret) belong to the data folder.
-        let credentials = LocalCredentials::load(data_root);
+        let credentials = LocalCredentials::load(data_root, files);
         Self {
             host,
             port,

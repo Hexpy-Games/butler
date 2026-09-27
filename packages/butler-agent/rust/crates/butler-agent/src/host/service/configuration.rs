@@ -9,9 +9,11 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 use crate::host::installation::ResolvedInstallation;
+use crate::host::runtime::storage_bootstrap::is_unsupported_legacy_data;
 use butler_models::models::{DEFAULT_MODEL_REF, parse_model_ref};
 use butler_turn::btcc::BtccError;
 use butler_turn::workspace::StoredSessionBinding;
+use local_credentials::CredentialFiles;
 
 pub(crate) use app::{AppCapturedDependencies, AppServiceConfiguration};
 
@@ -90,7 +92,14 @@ impl ServiceConfiguration {
                 ))
             })
             .collect();
-        let app = AppServiceConfiguration::capture(&data_root);
+        // The service (and the command that starts it) owns the data
+        // folder's credentials, except in a folder it will refuse to run on.
+        let files = if is_unsupported_legacy_data(&data_root) {
+            CredentialFiles::ReadOnly
+        } else {
+            CredentialFiles::CreateMissing
+        };
+        let app = AppServiceConfiguration::capture_with(&data_root, files);
         Ok(Self {
             app,
             installation: installation.clone(),

@@ -60,6 +60,16 @@ pub(crate) enum LocalCredentialError {
     Unusable { path: PathBuf },
 }
 
+/// Whether loading may create the credential files.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CredentialFiles {
+    /// Only read them (CLI commands, listener reconfiguration).
+    ReadOnly,
+    /// Create missing or unusable ones (the service and its start command,
+    /// for a data folder Butler will run on).
+    CreateMissing,
+}
+
 /// The gateway token and the folder-selection secret for one data folder.
 pub(crate) struct LocalCredentials {
     /// The bearer token every gateway client presents.
@@ -69,21 +79,23 @@ pub(crate) struct LocalCredentials {
 }
 
 impl LocalCredentials {
-    /// Reads (creating when missing) both credentials; environment
-    /// overrides win.
-    pub(crate) fn load(data_root: &Path) -> Self {
+    /// Reads both credentials, creating them when `files` allows;
+    /// environment overrides win.
+    pub(crate) fn load(data_root: &Path, files: CredentialFiles) -> Self {
         let token = match env_value("BUTLER_APP_LOCAL_AUTH_FILE") {
             Some(path) => read_token_override(Path::new(&path)),
-            None => ensure(
+            None => load_file(
                 &data_root.join(LOCAL_AUTH_FILE),
+                files,
                 usable_token,
                 new_token_file,
             ),
         };
         let folder_secret = match env_value("BUTLER_PROJECT_FOLDER_TOKEN_SECRET") {
             Some(secret) => Ok(secret),
-            None => ensure(
+            None => load_file(
                 &data_root.join(FOLDER_SECRET_FILE),
+                files,
                 usable_secret,
                 new_secret_file,
             ),
@@ -164,17 +176,20 @@ fn new_secret_file() -> Result<Vec<u8>, LocalCredentialError> {
     Ok(format!("{}\n", uuid::Uuid::new_v4()).into_bytes())
 }
 
-/// The usable value at `path`, creating the file with `create` when it is
-/// missing or unusable.
-fn ensure(
+/// The usable value at `path`; when it is missing or unusable and `files`
+/// allows, the file is created with `create`.
+fn load_file(
     path: &Path,
+    files: CredentialFiles,
     usable: fn(&[u8]) -> Option<String>,
     create: fn() -> Result<Vec<u8>, LocalCredentialError>,
 ) -> Result<String, LocalCredentialError> {
     if let Some(value) = read_usable(path, usable)? {
         return Ok(value);
     }
-    publish(path, &create()?, usable)?;
+    if files == CredentialFiles::CreateMissing {
+        publish(path, &create()?, usable)?;
+    }
     read_usable(path, usable)?.ok_or_else(|| LocalCredentialError::Unusable {
         path: path.to_path_buf(),
     })

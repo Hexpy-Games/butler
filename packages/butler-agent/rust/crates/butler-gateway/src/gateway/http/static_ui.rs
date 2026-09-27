@@ -21,10 +21,17 @@ fn mime(path: &str) -> Option<&'static str> {
     }
 }
 
-/// Scripts, styles, images and data files of the UI bundle are public; its
-/// HTML documents are served only to an authenticated browser.
+/// Scripts, styles, images and data files of the UI bundle (`/assets/..` or
+/// a root file) are public; its HTML documents are served only to an
+/// authenticated browser. API paths, which all have two or more segments
+/// outside `/assets/`, never become public by ending in an extension.
 pub(super) fn is_public_asset(method: &Method, path: &str) -> bool {
-    *method == Method::GET && mime(path).is_some_and(|mime| !mime.starts_with("text/html"))
+    let bundle_path = path
+        .strip_prefix('/')
+        .is_some_and(|rest| rest.starts_with("assets/") || !rest.contains('/'));
+    *method == Method::GET
+        && bundle_path
+        && mime(path).is_some_and(|mime| !mime.starts_with("text/html"))
 }
 
 fn is_static_path(path: &str) -> bool {
