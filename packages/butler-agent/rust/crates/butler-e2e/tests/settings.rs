@@ -247,15 +247,13 @@ async fn set_03_per_message_override_leaves_settings() -> Result<(), HarnessErro
     s.finish().await
 }
 
-/// SET-03 (same-session part) — the next plain message returns to Settings.
+/// SET-03 (same-session part, owner decision) — a per-message override does
+/// not change the session model: the next plain message returns to Settings.
+/// Replays the SET-03 recording (same two model rounds).
 #[tokio::test]
-#[ignore = "product gap: SET-03-STICKY — a per-message model override is persisted as the session's controls (source session_override), so the next plain message in that session keeps the override instead of the Settings model; needs an owner decision"]
 async fn set_03_override_does_not_stick_to_next_message() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let s = Setup::new("SET-03-STICKY")?
-        .cassette("SET-03-STICKY")
-        .start()
-        .await?;
+    let s = Setup::new("SET-03-STICKY")?.cassette("SET-03").start().await?;
     let accepted =
         s.gw.send_message(json!({
             "chat_id": "general",

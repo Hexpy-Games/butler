@@ -80,16 +80,13 @@ pub(super) fn resolve_for_message_send(
         .and_then(|v| v.as_object().cloned())
         .unwrap_or_default();
     let mut controls = inherited_controls(&settings, &stored, facts, explicit);
+    // A per-message override applies to this message only: the session keeps
+    // its own controls (PATCH /sessions/{id}/controls changes those).
     let message_override = has_message_override(request);
     if message_override {
         merge_message_controls(&mut controls, request);
         assert_selectable(&controls.model, available_models(facts))?;
         controls = normalize_controls(controls, available_models(facts));
-        write_json(db, &controls_key, &controls_json(&controls), now)?;
-        write_json(db, &explicit_key, &Value::Bool(true), now)?;
-        let revision = revision(db, &revision_key)?.saturating_add(1);
-        write_json(db, &revision_key, &Value::from(revision), now)?;
-        append_controls_event(db, subscribers, chat_id, &controls, revision, facts, now)?;
     }
     assert_selectable(&controls.model, available_models(facts))?;
     let revision = revision(db, &revision_key)?;
