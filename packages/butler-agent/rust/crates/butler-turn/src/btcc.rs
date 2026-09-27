@@ -131,6 +131,12 @@ pub use storage::{
     ToolJournalRepository, ToolJournalSignature, ToolJournalStart, WorkStatusObservation,
     bootstrap_fresh_storage, read_activated_storage_manifest,
 };
+pub use storage::{
+    ChildEnvelope, ChildRole, DispatchIntent, DispatchMetadata, EnvelopeMessage, EnvelopePeer,
+    EnvelopeRaw, EnvelopeRouting, EnvelopeSender, NativeStewardContext, PacketExecutionMode,
+    PacketPlanAction, PacketWorkerProfile, ParentResultInput, ParentWorkRef, StewardResultInput,
+    SubsessionPacket, WorkerResultInput,
+};
 #[cfg(any(test, feature = "test-support"))]
 pub use storage::{ContextDocumentInput, TestStorageFixture, test_prepared_turn};
 pub use subsessions::{

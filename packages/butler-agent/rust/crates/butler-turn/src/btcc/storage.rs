@@ -43,8 +43,11 @@ pub use project_work_runtime::SqliteProjectWorkRuntime;
 pub(in crate::btcc) use project_work_runtime::material::snapshot as project_work_material_snapshot;
 pub use repository::BtccRepositories;
 pub use subsessions::{
-    ParentResultRoute, SqliteSubsessionRepository, StoredSubsessionDelegation,
-    StoredSubsessionDirection, SubsessionCreate,
+    ChildEnvelope, ChildRole, DispatchIntent, DispatchMetadata, EnvelopeMessage, EnvelopePeer,
+    EnvelopeRaw, EnvelopeRouting, EnvelopeSender, NativeStewardContext, PacketExecutionMode,
+    PacketPlanAction, PacketWorkerProfile, ParentResultInput, ParentResultRoute, ParentWorkRef,
+    SqliteSubsessionRepository, StewardResultInput, StoredSubsessionDelegation,
+    StoredSubsessionDirection, SubsessionCreate, SubsessionPacket, WorkerResultInput,
 };
 pub use tool_journal::{
     ToolJournalCloseoutRow, ToolJournalFinish, ToolJournalFinishStatus, ToolJournalRecord,

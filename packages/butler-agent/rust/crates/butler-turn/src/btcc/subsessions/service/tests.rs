@@ -56,8 +56,14 @@ fn steward_child_inherits_normalized_runtime_policy_while_worker_stays_local() {
             "customPolicy":"preserved"
         }}),
     );
-    let packet = json!({"reasoning_effort":"medium"});
-    let steward = child_metadata("steward", &packet, "read_only", &parent);
+    let packet =
+        crate::btcc::SubsessionPacket::fixture(crate::btcc::ChildRole::Steward, "Complete task.");
+    let steward = child_metadata(
+        crate::btcc::ChildRole::Steward,
+        &packet,
+        "read_only",
+        &parent,
+    );
     let policy = &steward["runtimePolicy"];
     assert_eq!(policy["accessMode"], "read_only");
     assert_eq!(policy["trackingMode"], "ledger");
@@ -75,7 +81,12 @@ fn steward_child_inherits_normalized_runtime_policy_while_worker_stays_local() {
     assert_eq!(policy["authority_source"], "parent_session");
     assert_eq!(policy["customPolicy"], "preserved");
 
-    let worker = child_metadata("worker", &packet, "full_access", &parent);
+    let worker = child_metadata(
+        crate::btcc::ChildRole::Worker,
+        &packet,
+        "full_access",
+        &parent,
+    );
     let policy = &worker["runtimePolicy"];
     assert_eq!(policy["trackingMode"], "local");
     assert_eq!(policy["tracking_mode"], "local");
@@ -100,8 +111,11 @@ fn child_root_work_scope_uses_steward_ledger_binding_but_keeps_worker_local() {
         child_session_id: steward.session_id.clone(),
         child_turn_id: "child-turn".into(),
         root_work_id: "root-work".into(),
-        packet: json!({"child_role":"steward"}),
-        dispatch_intent: json!({}),
+        packet: crate::btcc::SubsessionPacket::fixture(
+            crate::btcc::ChildRole::Steward,
+            "Complete task.",
+        ),
+        dispatch_intent: crate::btcc::DispatchIntent::fixture(),
         anchor_message_id: "anchor".into(),
         ordinal: 1,
         safe_title: "Task".into(),
@@ -116,7 +130,10 @@ fn child_root_work_scope_uses_steward_ledger_binding_but_keeps_worker_local() {
     );
     let stored = crate::btcc::StoredSubsessionDelegation {
         child_session_id: worker.session_id.clone(),
-        packet: json!({"child_role":"worker"}),
+        packet: crate::btcc::SubsessionPacket::fixture(
+            crate::btcc::ChildRole::Worker,
+            "Complete task.",
+        ),
         ..stored
     };
     let scope = child_work_scope(&stored, &worker, "child-turn").unwrap();
@@ -197,15 +214,11 @@ async fn cancelled_child_abandons_bound_work_and_commits_cancelled_result() {
                 anchor_message_id: "anchor".into(),
                 safe_title: "Delegated task".into(),
                 root_work_id: root_work.work_id,
-                packet: json!({
-                    "objective":"Complete the delegated task.",
-                    "model_ref":"provider/model",
-                    "reasoning_effort":"medium",
-                    "access_mode":"full_access",
-                    "child_role":"steward",
-                    "parent_chat_id":"parent-chat"
-                }),
-                dispatch_intent: json!({}),
+                packet: crate::btcc::SubsessionPacket::fixture(
+                    crate::btcc::ChildRole::Steward,
+                    "Complete the delegated task.",
+                ),
+                dispatch_intent: crate::btcc::DispatchIntent::fixture(),
                 created_at: "now".into(),
             })
             .await
@@ -275,12 +288,10 @@ async fn cancelled_child_abandons_bound_work_and_commits_cancelled_result() {
     let pending = repository.pending_parent_inputs().await.unwrap();
     assert_eq!(pending.len(), 1);
     assert_eq!(pending[0].route, crate::btcc::ParentResultRoute::ButlerApp);
-    assert!(
-        pending[0].input["text"]
-            .as_str()
-            .unwrap()
-            .contains("status: cancelled")
-    );
+    let crate::btcc::ParentResultInput::ButlerApp(input) = &pending[0].input else {
+        panic!("expected a butler App result");
+    };
+    assert!(input.text.contains("status: cancelled"));
 
     drop(service);
     drop(repository);
@@ -290,3 +301,33 @@ async fn cancelled_child_abandons_bound_work_and_commits_cancelled_result() {
 }
 
 mod child_work;
+
+/// KEEP: delegation ids are digests of these identity encodings.
+#[test]
+fn delegation_identities_are_byte_stable() {
+    let steward = super::helpers::StewardIdentity {
+        parent_session_id: "ps",
+        parent_turn_id: "pt",
+        request: "req",
+        work_id: "w",
+        plan_revision_id: "p",
+        review_revision_id: "r",
+    };
+    assert_eq!(
+        serde_json::to_string(&steward).unwrap(),
+        r#"{"parent_session_id":"ps","parent_turn_id":"pt","request":"req","work_id":"w","plan_revision_id":"p","review_revision_id":"r"}"#
+    );
+    let worker = super::helpers::WorkerIdentity {
+        parent_session_id: "ps",
+        parent_turn_id: "pt",
+        action_key: "a",
+        objective: "o",
+        acceptance_criteria: &["c".to_owned()],
+        implementation_brief: "b",
+        profile_id: "id",
+    };
+    assert_eq!(
+        serde_json::to_string(&worker).unwrap(),
+        r#"{"parent_session_id":"ps","parent_turn_id":"pt","action_key":"a","objective":"o","acceptance_criteria":["c"],"implementation_brief":"b","profile_id":"id"}"#
+    );
+}
