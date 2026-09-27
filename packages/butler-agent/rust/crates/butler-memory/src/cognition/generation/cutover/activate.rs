@@ -19,9 +19,7 @@ use crate::{
         CognitionPathEnvironment, CognitionResult, MemoryGenerationHandle, MemoryGenerationTarget,
         ensure_data_authority, resolve_generation,
     },
-    coordination::{
-        CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator, CognitionWriteLease,
-    },
+    coordination::{CognitionWriteCoordinator, CognitionWriteLease},
 };
 
 use super::super::{
@@ -92,28 +90,9 @@ pub async fn activate(
         stamp.verified_commit,
     )?;
     qualification.assert_current()?;
-    let lock = environment.consolidation_lock(data_root);
-    ensure_data_authority(data_root, &[&lock, &path])?;
-    if cancellation.is_cancelled() {
-        return Err(error(CognitionCode::MemoryOperationAborted));
-    }
-    let lease = coordinator
-        .acquire(
-            CognitionWriteAcquire {
-                lock_path: lock.clone(),
-                purpose: Some("cutover".into()),
-                deadline_at_epoch_ms: None,
-                cancellation: Some(cancellation.clone()),
-            },
-            CognitionWaitClass::Background,
-        )
-        .await
-        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
-        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
-    let commit = Activation {
+    Activation {
         data_root,
         environment,
-        lock: &lock,
         path: &path,
         generation_id,
         descriptor: &descriptor,
@@ -123,16 +102,9 @@ pub async fn activate(
         witnesses: (&live, &candidate, &handle),
         qualification: &qualification,
         now: stamp.now,
-    };
-    let mut cas_committed = false;
-    let result = commit.run(&lease, cancellation, &mut cas_committed).await;
-    let released = lease
-        .release(cas_committed)
-        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
-    result.and_then(|value| {
-        released?;
-        Ok(value)
-    })
+    }
+    .commit(&coordinator, cancellation)
+    .await
 }
 
 /// The stored readiness of a v2 candidate that is `ready` and still bound to
@@ -156,7 +128,6 @@ fn qualified_readiness(manifest: &GenerationManifest) -> CognitionResult<&Genera
 struct Activation<'a> {
     data_root: &'a Path,
     environment: &'a CognitionPathEnvironment,
-    lock: &'a Path,
     path: &'a Path,
     generation_id: &'a str,
     descriptor: &'a descriptor::DescriptorCapture,
@@ -173,14 +144,47 @@ struct Activation<'a> {
 }
 
 impl Activation<'_> {
+    /// Takes the cutover lease and runs [`Self::run`]; the lease commits once
+    /// the descriptor CAS has been written.
+    async fn commit(
+        &self,
+        coordinator: &CognitionWriteCoordinator,
+        cancellation: &CancellationToken,
+    ) -> CognitionResult<ActiveDescriptor> {
+        let lock = self.environment.consolidation_lock(self.data_root);
+        ensure_data_authority(self.data_root, &[&lock, self.path])?;
+        if cancellation.is_cancelled() {
+            return Err(error(CognitionCode::MemoryOperationAborted));
+        }
+        let lease = crate::cognition::generation::stage::acquire(
+            coordinator,
+            &lock,
+            "cutover",
+            cancellation,
+        )
+        .await?;
+        let mut cas_committed = false;
+        let result = self
+            .run(&lease, &lock, cancellation, &mut cas_committed)
+            .await;
+        let released = lease
+            .release(cas_committed)
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
+        result.and_then(|descriptor| {
+            released?;
+            Ok(descriptor)
+        })
+    }
+
     async fn run(
         &self,
         lease: &CognitionWriteLease,
+        lock: &Path,
         cancellation: &CancellationToken,
         cas_committed: &mut bool,
     ) -> CognitionResult<ActiveDescriptor> {
         lease
-            .assert_for_path(self.lock)
+            .assert_for_path(lock)
             .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
         if cancellation.is_cancelled() {
             return Err(error(CognitionCode::MemoryOperationAborted));

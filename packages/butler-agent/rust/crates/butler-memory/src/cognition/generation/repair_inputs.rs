@@ -14,7 +14,7 @@ use crate::cognition::{
     CognitionError, CognitionPathEnvironment, CognitionResult, assert_mutation_authority,
     ensure_data_authority, resolve_generation,
 };
-use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator};
+use crate::coordination::CognitionWriteCoordinator;
 use butler_turn::conversation::ConversationSourceReader;
 
 pub struct CandidateInputRepairRequest<'a> {
@@ -75,19 +75,13 @@ pub async fn run(request: CandidateInputRepairRequest<'_>) -> CognitionResult<Va
             &lock,
         ],
     )?;
-    let lease = coordinator
-        .acquire(
-            CognitionWriteAcquire {
-                lock_path: lock.clone(),
-                purpose: Some("projection".into()),
-                deadline_at_epoch_ms: None,
-                cancellation: Some(cancellation.clone()),
-            },
-            CognitionWaitClass::Background,
-        )
-        .await
-        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
-        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
+    let lease = crate::cognition::generation::stage::acquire(
+        &coordinator,
+        &lock,
+        "projection",
+        cancellation,
+    )
+    .await?;
     let data_root = data_root.to_owned();
     let environment = environment.to_owned();
     let generation_id = generation_id.to_owned();

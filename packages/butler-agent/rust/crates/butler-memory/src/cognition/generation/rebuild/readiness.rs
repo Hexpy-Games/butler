@@ -31,7 +31,7 @@ use crate::cognition::{
     CognitionError, CognitionPathEnvironment, CognitionResult, MemoryGenerationHandle,
     MemoryGenerationTarget, assert_mutation_authority, ensure_data_authority, resolve_generation,
 };
-use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator};
+use crate::coordination::CognitionWriteCoordinator;
 use butler_turn::conversation::ConversationSourceReader;
 
 /// Source, graph, and cache facts gathered on the blocking pool.
@@ -105,19 +105,13 @@ pub async fn record(
     if cancellation.is_cancelled() {
         return Err(error(CognitionCode::MemoryOperationAborted));
     }
-    let lease = coordinator
-        .acquire(
-            CognitionWriteAcquire {
-                lock_path: lock.clone(),
-                purpose: Some("rebuild_readiness".into()),
-                deadline_at_epoch_ms: None,
-                cancellation: Some(cancellation.clone()),
-            },
-            CognitionWaitClass::Background,
-        )
-        .await
-        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
-        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
+    let lease = crate::cognition::generation::stage::acquire(
+        &coordinator,
+        &lock,
+        "rebuild_readiness",
+        cancellation,
+    )
+    .await?;
     let witnesses = (&live, &candidate, &handle);
     let result = async {
         lease

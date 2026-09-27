@@ -13,7 +13,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     cognition::{CognitionError, CognitionPathEnvironment, CognitionResult, ensure_data_authority},
-    coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator},
+    coordination::CognitionWriteCoordinator,
 };
 
 pub use activate::activate;
@@ -65,19 +65,9 @@ pub(crate) async fn repair_pending(
     if target_manifest.state != active && previous_manifest.state != active {
         return Err(error(CognitionCode::MemoryGenerationChanged));
     }
-    let lease = coordinator
-        .acquire(
-            CognitionWriteAcquire {
-                lock_path: lock,
-                purpose: Some("cutover".into()),
-                deadline_at_epoch_ms: None,
-                cancellation: Some(cancellation.clone()),
-            },
-            CognitionWaitClass::Background,
-        )
-        .await
-        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
-        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
+    let lease =
+        crate::cognition::generation::stage::acquire(&coordinator, &lock, "cutover", cancellation)
+            .await?;
     let result = if cancellation.is_cancelled() {
         Err(error(CognitionCode::MemoryOperationAborted))
     } else {

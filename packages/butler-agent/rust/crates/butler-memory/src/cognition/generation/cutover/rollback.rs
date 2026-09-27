@@ -28,9 +28,7 @@ use crate::{
         CognitionPathEnvironment, CognitionResult, MemoryGenerationHandle, MemoryGenerationTarget,
         ensure_data_authority, resolve_generation,
     },
-    coordination::{
-        CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator, CognitionWriteLease,
-    },
+    coordination::{CognitionWriteCoordinator, CognitionWriteLease},
 };
 
 /// What the operator must do before a pending rollback can commit.
@@ -141,42 +139,17 @@ pub async fn rollback(
     let path = manifest_path(data_root, environment, &previous_id)?;
     let (previous, previous_sha) = read_manifest(&path, &previous_id)?;
     let kind = Predecessor::of(&previous)?;
-    if kind == Predecessor::Qualified {
-        let settled = previous
-            .readiness
-            .as_ref()
-            .is_some_and(GenerationReadiness::settled);
-        if !settled
-            || !live_inventory_matches(
-                data_root,
-                environment,
-                &previous_id,
-                &previous,
-                cancellation,
-            )?
-        {
-            resume_for_build(
-                data_root,
-                environment,
-                coordinator.clone(),
-                &descriptor,
-                &previous_id,
-                cancellation,
-            )
-            .await?;
-            return Ok(RollbackOutcome::pending(
-                &previous_id,
-                RollbackStep::Build,
-                None,
-            ));
-        }
-        if previous.acceptance_binding.is_none() {
-            return Ok(RollbackOutcome::pending(
-                &previous_id,
-                RollbackStep::Validate,
-                previous.readiness,
-            ));
-        }
+    if kind == Predecessor::Qualified
+        && let Some(pending) = qualified_pending_step(
+            data_root,
+            environment,
+            &coordinator,
+            (&descriptor, &previous_id, &previous),
+            cancellation,
+        )
+        .await?
+    {
+        return Ok(pending);
     }
     let live = LiveWitness::open(data_root)?;
     let (candidate, qualification) = match kind {
@@ -201,28 +174,9 @@ pub async fn rollback(
     if let Some(qualification) = &qualification {
         qualification.assert_current()?;
     }
-    let lock = environment.consolidation_lock(data_root);
-    ensure_data_authority(data_root, &[&lock, &path])?;
-    if cancellation.is_cancelled() {
-        return Err(error(CognitionCode::MemoryOperationAborted));
-    }
-    let lease = coordinator
-        .acquire(
-            CognitionWriteAcquire {
-                lock_path: lock.clone(),
-                purpose: Some("cutover".into()),
-                deadline_at_epoch_ms: None,
-                cancellation: Some(cancellation.clone()),
-            },
-            CognitionWaitClass::Background,
-        )
-        .await
-        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
-        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
-    let swap = Swap {
+    let installed = Swap {
         data_root,
         environment,
-        lock: &lock,
         path: &path,
         previous_id: &previous_id,
         previous_sha: &previous_sha,
@@ -234,24 +188,60 @@ pub async fn rollback(
             .format
             .map_or(ProjectionMode::Paused, ProjectionMode::for_format),
         now: stamp.now,
-    };
-    let mut cas_committed = false;
-    let result = swap.run(&lease, cancellation, &mut cas_committed).await;
-    let released = lease
-        .release(cas_committed)
-        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
-    result.and_then(|descriptor| {
-        released?;
-        Ok(RollbackOutcome::Committed {
-            descriptor,
-            rollback_pending: kind == Predecessor::Bootstrap,
-            readiness: if kind == Predecessor::Bootstrap {
-                None
-            } else {
-                previous.readiness
-            },
-        })
+    }
+    .commit(&coordinator, cancellation)
+    .await?;
+    let bootstrap = kind == Predecessor::Bootstrap;
+    Ok(RollbackOutcome::Committed {
+        descriptor: installed,
+        rollback_pending: bootstrap,
+        readiness: if bootstrap { None } else { previous.readiness },
     })
+}
+
+/// A qualified predecessor whose readiness is unsettled or whose sources
+/// changed is resumed for a rebuild; one without a binding needs validation.
+async fn qualified_pending_step(
+    data_root: &Path,
+    environment: &CognitionPathEnvironment,
+    coordinator: &Arc<CognitionWriteCoordinator>,
+    (descriptor, previous_id, previous): (
+        &descriptor::DescriptorCapture,
+        &str,
+        &GenerationManifest,
+    ),
+    cancellation: &CancellationToken,
+) -> CognitionResult<Option<RollbackOutcome>> {
+    let settled = previous
+        .readiness
+        .as_ref()
+        .is_some_and(GenerationReadiness::settled);
+    if !settled
+        || !live_inventory_matches(data_root, environment, previous_id, previous, cancellation)?
+    {
+        resume_for_build(
+            data_root,
+            environment,
+            coordinator.clone(),
+            descriptor,
+            previous_id,
+            cancellation,
+        )
+        .await?;
+        return Ok(Some(RollbackOutcome::pending(
+            previous_id,
+            RollbackStep::Build,
+            None,
+        )));
+    }
+    if previous.acceptance_binding.is_none() {
+        return Ok(Some(RollbackOutcome::pending(
+            previous_id,
+            RollbackStep::Validate,
+            previous.readiness.clone(),
+        )));
+    }
+    Ok(None)
 }
 
 /// The bootstrap generation serves live sources directly; witness its files.
@@ -328,7 +318,6 @@ async fn qualified_witness(
 struct Swap<'a> {
     data_root: &'a Path,
     environment: &'a CognitionPathEnvironment,
-    lock: &'a Path,
     path: &'a Path,
     previous_id: &'a str,
     previous_sha: &'a str,
@@ -341,14 +330,47 @@ struct Swap<'a> {
 }
 
 impl Swap<'_> {
+    /// Takes the cutover lease and runs [`Self::run`]; the lease commits once
+    /// the descriptor CAS has been written.
+    async fn commit(
+        &self,
+        coordinator: &CognitionWriteCoordinator,
+        cancellation: &CancellationToken,
+    ) -> CognitionResult<ActiveDescriptor> {
+        let lock = self.environment.consolidation_lock(self.data_root);
+        ensure_data_authority(self.data_root, &[&lock, self.path])?;
+        if cancellation.is_cancelled() {
+            return Err(error(CognitionCode::MemoryOperationAborted));
+        }
+        let lease = crate::cognition::generation::stage::acquire(
+            coordinator,
+            &lock,
+            "cutover",
+            cancellation,
+        )
+        .await?;
+        let mut cas_committed = false;
+        let result = self
+            .run(&lease, &lock, cancellation, &mut cas_committed)
+            .await;
+        let released = lease
+            .release(cas_committed)
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
+        result.and_then(|descriptor| {
+            released?;
+            Ok(descriptor)
+        })
+    }
+
     async fn run(
         &self,
         lease: &CognitionWriteLease,
+        lock: &Path,
         cancellation: &CancellationToken,
         cas_committed: &mut bool,
     ) -> CognitionResult<ActiveDescriptor> {
         lease
-            .assert_for_path(self.lock)
+            .assert_for_path(lock)
             .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
         if cancellation.is_cancelled() {
             return Err(error(CognitionCode::MemoryOperationAborted));
@@ -423,19 +445,13 @@ async fn resume_for_build(
     let path = manifest_path(data_root, environment, generation_id)?;
     let lock = environment.consolidation_lock(data_root);
     ensure_data_authority(data_root, &[&path, &lock])?;
-    let lease = coordinator
-        .acquire(
-            CognitionWriteAcquire {
-                lock_path: lock.clone(),
-                purpose: Some("rebuild_prepare".into()),
-                deadline_at_epoch_ms: None,
-                cancellation: Some(cancellation.clone()),
-            },
-            CognitionWaitClass::Background,
-        )
-        .await
-        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
-        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
+    let lease = crate::cognition::generation::stage::acquire(
+        &coordinator,
+        &lock,
+        "rebuild_prepare",
+        cancellation,
+    )
+    .await?;
     let data_root = data_root.to_owned();
     let environment = environment.to_owned();
     let expected = expected_descriptor.stringified.clone();

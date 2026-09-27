@@ -14,7 +14,7 @@ use crate::{
         graph::{GraphRepository, VectorRepairRequest},
         resolve_generation,
     },
-    coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator},
+    coordination::CognitionWriteCoordinator,
 };
 
 pub async fn run(
@@ -46,19 +46,13 @@ pub async fn run(
     if cancellation.is_cancelled() {
         return Err(error(CognitionCode::MemoryOperationAborted));
     }
-    let lease = coordinator
-        .acquire(
-            CognitionWriteAcquire {
-                lock_path: lock.clone(),
-                purpose: Some("projection".into()),
-                deadline_at_epoch_ms: None,
-                cancellation: Some(cancellation.clone()),
-            },
-            CognitionWaitClass::Background,
-        )
-        .await
-        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
-        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
+    let lease = crate::cognition::generation::stage::acquire(
+        &coordinator,
+        &lock,
+        "projection",
+        cancellation,
+    )
+    .await?;
     let data_root = data_root.to_owned();
     let environment = environment.to_owned();
     let generation_id = generation_id.to_owned();

@@ -84,13 +84,7 @@ pub async fn advance(
             assert_mutation_authority(&data_root, &environment, &target, &current)?;
             run_claimed(&data_root, &current, &cache, &cancellation)
         })();
-        let released = lease
-            .release(result.is_ok())
-            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
-        result.and_then(|value| {
-            released?;
-            Ok(value)
-        })
+        crate::cognition::generation::stage::finish(lease, result)
     })
     .await
     .map_err(|source| error(CognitionCode::MemoryCacheOperationFailed).with_source(source))?

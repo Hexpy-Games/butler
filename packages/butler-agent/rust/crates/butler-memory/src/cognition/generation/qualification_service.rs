@@ -31,9 +31,7 @@ use crate::{
         CognitionError, CognitionPathEnvironment, CognitionResult, compute_rebuild_readiness,
         ensure_data_authority, resolve_generation,
     },
-    coordination::{
-        CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator, CognitionWriteLease,
-    },
+    coordination::{CognitionWriteCoordinator, CognitionWriteLease},
 };
 
 struct StagedBundle(Option<PathBuf>);
@@ -61,6 +59,19 @@ struct BoundVersions {
     inventory_hash: String,
     extraction_version: String,
     embedding_version: String,
+}
+
+impl BoundVersions {
+    fn of(manifest: &GenerationManifest) -> CognitionResult<Self> {
+        Ok(Self {
+            inventory_hash: required(manifest.source_inventory_hash.as_deref())?.to_owned(),
+            extraction_version: required(manifest.extraction_version.as_deref())?.to_owned(),
+            embedding_version: manifest
+                .embedding_version()
+                .ok_or_else(|| error(CognitionCode::MemoryAcceptanceVersionMismatch))?
+                .to_owned(),
+        })
+    }
 }
 
 /// Qualifies a building candidate against the acceptance bundle at
@@ -93,14 +104,7 @@ pub async fn validate(
     if !readiness.ready {
         return Err(error(CognitionCode::MemoryGenerationNotReady));
     }
-    let versions = BoundVersions {
-        inventory_hash: required(manifest.source_inventory_hash.as_deref())?.to_owned(),
-        extraction_version: required(manifest.extraction_version.as_deref())?.to_owned(),
-        embedding_version: manifest
-            .embedding_version()
-            .ok_or_else(|| error(CognitionCode::MemoryAcceptanceVersionMismatch))?
-            .to_owned(),
-    };
+    let versions = BoundVersions::of(&manifest)?;
     let evidence =
         validate_acceptance(acceptance_path, &versions, verified_implementation_commit).await?;
     if cancellation.is_cancelled() {
@@ -111,29 +115,20 @@ pub async fn validate(
     assert_evidence_current(&evidence, acceptance_path, &evidence_root)?;
     witness.assert_current(&candidate.handle).await?;
     live.assert_current()?;
-    let fresh =
-        compute_rebuild_readiness(data_root, environment, &candidate.target, cancellation).await?;
-    if !fresh.same_as(&readiness) {
-        return Err(error(CognitionCode::MemoryGenerationNotReady));
-    }
+    assert_readiness_unchanged(data_root, environment, &candidate, &readiness, cancellation)
+        .await?;
     witness.assert_current(&candidate.handle).await?;
     live.assert_current()?;
     if cancellation.is_cancelled() {
         return Err(error(CognitionCode::MemoryOperationAborted));
     }
-    let lease = coordinator
-        .acquire(
-            CognitionWriteAcquire {
-                lock_path: candidate.lock.clone(),
-                purpose: Some("rebuild_validate".into()),
-                deadline_at_epoch_ms: None,
-                cancellation: Some(cancellation.clone()),
-            },
-            CognitionWaitClass::Background,
-        )
-        .await
-        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
-        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
+    let lease = crate::cognition::generation::stage::acquire(
+        &coordinator,
+        &candidate.lock,
+        "rebuild_validate",
+        cancellation,
+    )
+    .await?;
     let commit = Commit {
         data_root,
         candidate: &candidate,
@@ -154,6 +149,23 @@ pub async fn validate(
     }
     released?;
     Ok(manifest)
+}
+
+/// Staging took time; the candidate must still have exactly the readiness
+/// the evidence was validated against.
+async fn assert_readiness_unchanged(
+    data_root: &Path,
+    environment: &CognitionPathEnvironment,
+    candidate: &Candidate,
+    readiness: &GenerationReadiness,
+    cancellation: &CancellationToken,
+) -> CognitionResult<()> {
+    let fresh =
+        compute_rebuild_readiness(data_root, environment, &candidate.target, cancellation).await?;
+    if !fresh.same_as(readiness) {
+        return Err(error(CognitionCode::MemoryGenerationNotReady));
+    }
+    Ok(())
 }
 
 fn open_candidate(

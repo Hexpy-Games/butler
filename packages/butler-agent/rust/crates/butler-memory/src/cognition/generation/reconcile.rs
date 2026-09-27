@@ -17,7 +17,7 @@ use crate::{
         graph::GraphRepository,
         resolve_generation,
     },
-    coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator},
+    coordination::CognitionWriteCoordinator,
 };
 
 pub async fn run(
@@ -112,19 +112,13 @@ pub(in crate::cognition::generation) async fn commit_prepared(
         prepared,
     } = input;
     let lock = environment.consolidation_lock(data_root);
-    let lease = coordinator
-        .acquire(
-            CognitionWriteAcquire {
-                lock_path: lock.clone(),
-                purpose: Some("rebuild_vector_representative".into()),
-                deadline_at_epoch_ms: None,
-                cancellation: Some(cancellation.clone()),
-            },
-            CognitionWaitClass::Background,
-        )
-        .await
-        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
-        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
+    let lease = crate::cognition::generation::stage::acquire(
+        &coordinator,
+        &lock,
+        "rebuild_vector_representative",
+        cancellation,
+    )
+    .await?;
     let outcome = async {
         lease.assert_for_path(&lock).map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
         if cancellation.is_cancelled() { return Err(error(CognitionCode::MemoryOperationAborted)); }

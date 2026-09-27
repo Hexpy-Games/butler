@@ -22,19 +22,13 @@ pub(super) async fn ensure(
         return validate_active_descriptor(data_root, &descriptor);
     }
     let first = inventory::read(data_root, canonical, now, cancellation)?;
-    let lease = coordinator
-        .acquire(
-            CognitionWriteAcquire {
-                lock_path: lock.to_owned(),
-                purpose: Some("cutover".into()),
-                deadline_at_epoch_ms: None,
-                cancellation: Some(cancellation.clone()),
-            },
-            CognitionWaitClass::Background,
-        )
-        .await
-        .map_err(gate_error)?
-        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
+    let lease = crate::cognition::generation::stage::acquire_abortable(
+        &coordinator,
+        lock,
+        "cutover",
+        cancellation,
+    )
+    .await?;
     let adoption = Adoption {
         data_root: data_root.to_owned(),
         memory_root: memory_root.to_owned(),

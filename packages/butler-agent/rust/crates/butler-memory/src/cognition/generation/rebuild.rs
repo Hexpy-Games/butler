@@ -41,7 +41,7 @@ use crate::{
         CognitionError, CognitionPathEnvironment, CognitionResult, ensure_data_authority,
         graph::GraphRepository,
     },
-    coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator},
+    coordination::CognitionWriteCoordinator,
 };
 
 /// Identity of a freshly prepared rebuild candidate.
@@ -59,6 +59,18 @@ impl Drop for StagedCleanup {
         }
     }
 }
+/// Rebuilds support only the default memory root under DATA.
+fn default_memory_root(
+    data_root: &Path,
+    environment: &CognitionPathEnvironment,
+) -> CognitionResult<PathBuf> {
+    let memory_root = environment.memory_root(data_root);
+    if memory_root != data_root.join("cognition/memory") {
+        return Err(error(CognitionCode::MemoryRebuildPathOverrideUnsupported));
+    }
+    Ok(memory_root)
+}
+
 /// Stages a snapshot-backed rebuild candidate and publishes it as `building`.
 /// Preparation never activates it.
 pub async fn prepare(
@@ -76,10 +88,7 @@ pub async fn prepare(
     if unicode_version.is_empty() || icu_version.is_empty() {
         return Err(error(CognitionCode::MemoryRuntimeVersionUnavailable));
     }
-    let memory_root = environment.memory_root(&data_root);
-    if memory_root != data_root.join("cognition/memory") {
-        return Err(error(CognitionCode::MemoryRebuildPathOverrideUnsupported));
-    }
+    let memory_root = default_memory_root(&data_root, &environment)?;
     let generations = memory_root.join("generations");
     let lock = environment.consolidation_lock(&data_root);
     let canonical = data_root.join("runtime/conversation-store.sqlite");
@@ -98,21 +107,14 @@ pub async fn prepare(
     let staged = generations.join(format!(".prepare-{generation_id}"));
     let published = generations.join(&generation_id);
     ensure_data_authority(&data_root, &[&staged, &published])?;
-    let (stage_data, stage_path, stage_id, stage_now, stage_cancel) = (
+    let (stage_data, stage_path, stage_now, stage_cancel) = (
         data_root.clone(),
         staged.clone(),
-        generation_id.clone(),
         now.clone(),
         cancellation.clone(),
     );
     let snapshot = tokio::task::spawn_blocking(move || {
-        stage(
-            &stage_data,
-            &stage_path,
-            &stage_id,
-            &stage_now,
-            &stage_cancel,
-        )
+        stage(&stage_data, &stage_path, &stage_now, &stage_cancel)
     })
     .await
     .map_err(|source| error(CognitionCode::MemoryRebuildPrepareFailed).with_source(source))??;
@@ -120,19 +122,13 @@ pub async fn prepare(
     if cancellation.is_cancelled() {
         return Err(error(CognitionCode::MemoryOperationAborted));
     }
-    let lease = coordinator
-        .acquire(
-            CognitionWriteAcquire {
-                lock_path: lock.clone(),
-                purpose: Some("rebuild_prepare".into()),
-                deadline_at_epoch_ms: None,
-                cancellation: Some(cancellation.clone()),
-            },
-            CognitionWaitClass::Background,
-        )
-        .await
-        .map_err(gate_error)?
-        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
+    let lease = crate::cognition::generation::stage::acquire_abortable(
+        &coordinator,
+        &lock,
+        "rebuild_prepare",
+        &cancellation,
+    )
+    .await?;
     let publication = Publication {
         data_root,
         canonical,
@@ -262,94 +258,96 @@ struct Staged {
     duration_ms: u64,
 }
 
+/// Copies the live sources into `staged/source-snapshot`, proves the copy has
+/// the live inventory, and creates the empty candidate graph. Removes
+/// `staged` on failure.
 fn stage(
     data_root: &Path,
     staged: &Path,
-    generation_id: &str,
     as_of: &str,
     cancellation: &CancellationToken,
 ) -> CognitionResult<Staged> {
-    let result = (|| {
-        if staged.exists() {
-            return Err(error(CognitionCode::MemoryGenerationChanged));
-        }
-        let live_path = data_root.join("runtime/conversation-store.sqlite");
-        let live = inventory::read(data_root, &live_path, as_of, cancellation)?;
-        let snapshot_root = staged.join("source-snapshot");
-        let snapshot_path = snapshot_root.join("runtime/conversation-store.sqlite");
-        durable::create_dir(
-            snapshot_path
-                .parent()
-                .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?,
-        )?;
-        let start = SystemTime::now();
-        let db = Connection::open_with_flags(&live_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
-        let path = snapshot_path
-            .to_str()
-            .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
-        db.execute("VACUUM INTO ?1", params![path])
-            .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
-        db.close().map_err(|(_, source)| {
-            error(CognitionCode::MemorySnapshotChanged).with_source(source)
-        })?;
-        File::open(&snapshot_path)
-            .and_then(|file| file.sync_all())
-            .map_err(io_error)?;
-        if let Some(directory) = snapshot_path.parent() {
-            File::open(directory)
-                .and_then(|dir| dir.sync_all())
-                .map_err(io_error)?;
-        }
-        if cancellation.is_cancelled() {
-            return Err(error(CognitionCode::MemoryOperationAborted));
-        }
-        typed_snapshot::copy_typed_sources(data_root, &snapshot_root)?;
-        if cancellation.is_cancelled() {
-            return Err(error(CognitionCode::MemoryOperationAborted));
-        }
-        let snapshot = inventory::read(&snapshot_root, &snapshot_path, as_of, cancellation)?;
-        if snapshot.hash != live.hash
-            || snapshot.inventory != live.inventory
-            || snapshot.canonical_revision != live.canonical_revision
-        {
-            return Err(error(CognitionCode::MemorySnapshotChanged));
-        }
-        durable::write_json(
-            &snapshot_root.join("memory-source-inventory.json"),
-            &live.inventory,
-        )?;
-        GraphRepository::create_fresh(&staged.join("graph.sqlite"), as_of)?;
-        File::open(staged.join("graph.sqlite"))
-            .and_then(|file| file.sync_all())
-            .map_err(io_error)?;
-        File::open(staged)
-            .and_then(|dir| dir.sync_all())
-            .map_err(io_error)?;
-        let canonical_bytes = fs::metadata(&snapshot_path).map_err(io_error)?.len();
-        let canonical_sha256 = hash_file(&snapshot_path)?;
-        let duration_ms = u64::try_from(
-            start
-                .elapsed()
-                .unwrap_or_default()
-                .as_millis()
-                .min(u128::from(u64::MAX)),
-        )
-        .unwrap_or(u64::MAX);
-        let _ = generation_id;
-        Ok(Staged {
-            source_inventory_hash: live.hash,
-            source_count: live.source_count,
-            canonical_revision: live.canonical_revision,
-            canonical_sha256,
-            canonical_bytes,
-            duration_ms,
-        })
-    })();
+    let result = stage_snapshot(data_root, staged, as_of, cancellation);
     if result.is_err() {
         let _ = fs::remove_dir_all(staged);
     }
     result
+}
+
+fn stage_snapshot(
+    data_root: &Path,
+    staged: &Path,
+    as_of: &str,
+    cancellation: &CancellationToken,
+) -> CognitionResult<Staged> {
+    if staged.exists() {
+        return Err(error(CognitionCode::MemoryGenerationChanged));
+    }
+    let live_path = data_root.join("runtime/conversation-store.sqlite");
+    let live = inventory::read(data_root, &live_path, as_of, cancellation)?;
+    let snapshot_root = staged.join("source-snapshot");
+    let snapshot_path = snapshot_root.join("runtime/conversation-store.sqlite");
+    let start = SystemTime::now();
+    vacuum_snapshot(&live_path, &snapshot_path)?;
+    if cancellation.is_cancelled() {
+        return Err(error(CognitionCode::MemoryOperationAborted));
+    }
+    typed_snapshot::copy_typed_sources(data_root, &snapshot_root)?;
+    if cancellation.is_cancelled() {
+        return Err(error(CognitionCode::MemoryOperationAborted));
+    }
+    let snapshot = inventory::read(&snapshot_root, &snapshot_path, as_of, cancellation)?;
+    if snapshot.hash != live.hash
+        || snapshot.inventory != live.inventory
+        || snapshot.canonical_revision != live.canonical_revision
+    {
+        return Err(error(CognitionCode::MemorySnapshotChanged));
+    }
+    durable::write_json(
+        &snapshot_root.join("memory-source-inventory.json"),
+        &live.inventory,
+    )?;
+    GraphRepository::create_fresh(&staged.join("graph.sqlite"), as_of)?;
+    sync(&staged.join("graph.sqlite"))?;
+    sync(staged)?;
+    Ok(Staged {
+        source_inventory_hash: live.hash,
+        source_count: live.source_count,
+        canonical_revision: live.canonical_revision,
+        canonical_sha256: hash_file(&snapshot_path)?,
+        canonical_bytes: fs::metadata(&snapshot_path).map_err(io_error)?.len(),
+        duration_ms: elapsed_ms(start),
+    })
+}
+
+/// Writes a consistent copy of the SQLite store at `source` to `target` with
+/// `VACUUM INTO`, then syncs the copy and its directory.
+fn vacuum_snapshot(source: &Path, target: &Path) -> CognitionResult<()> {
+    let parent = target
+        .parent()
+        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
+    durable::create_dir(parent)?;
+    let snapshot_changed = |source| error(CognitionCode::MemorySnapshotChanged).with_source(source);
+    let db = Connection::open_with_flags(source, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(snapshot_changed)?;
+    let path = target
+        .to_str()
+        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
+    db.execute("VACUUM INTO ?1", params![path])
+        .map_err(snapshot_changed)?;
+    db.close().map_err(|(_, source)| snapshot_changed(source))?;
+    sync(target)?;
+    sync(parent)
+}
+
+fn sync(path: &Path) -> CognitionResult<()> {
+    File::open(path)
+        .and_then(|file| file.sync_all())
+        .map_err(io_error)
+}
+
+fn elapsed_ms(start: SystemTime) -> u64 {
+    u64::try_from(start.elapsed().unwrap_or_default().as_millis()).unwrap_or(u64::MAX)
 }
 
 /// Vector unit counts of a candidate graph.
@@ -574,20 +572,6 @@ fn hash_file(path: &Path) -> CognitionResult<String> {
 fn io_error(error: std::io::Error) -> CognitionError {
     CognitionError::new(CognitionCode::MemoryRebuildIoError, error.to_string()).with_source(error)
 }
-/// A caller cancellation observed while waiting for the write gate is an abort,
-/// not contention: `memory_write_busy` is retryable for callers.
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
-fn gate_error(failure: crate::coordination::CoordinationError) -> CognitionError {
-    if matches!(failure, crate::coordination::CoordinationError::Aborted) {
-        error(CognitionCode::MemoryOperationAborted)
-    } else {
-        error(CognitionCode::MemoryWriteBusy)
-    }
-}
-
 fn error(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, code.as_str())
 }

@@ -14,7 +14,7 @@ use crate::{
         graph::{GraphRepository, ProjectionModelPolicyInput},
         resolve_generation,
     },
-    coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator},
+    coordination::CognitionWriteCoordinator,
 };
 
 pub async fn run(
@@ -44,19 +44,13 @@ pub async fn run(
         data_root,
         &[&memory_root, &manifest_path, &handle.graph_path, &lock],
     )?;
-    let lease = coordinator
-        .acquire(
-            CognitionWriteAcquire {
-                lock_path: lock.clone(),
-                purpose: Some("projection".into()),
-                deadline_at_epoch_ms: None,
-                cancellation: Some(cancellation.clone()),
-            },
-            CognitionWaitClass::Background,
-        )
-        .await
-        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
-        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
+    let lease = crate::cognition::generation::stage::acquire(
+        &coordinator,
+        &lock,
+        "projection",
+        cancellation,
+    )
+    .await?;
     let data_root = data_root.to_owned();
     let environment = environment.to_owned();
     let policy = policy.to_owned();
