@@ -18,10 +18,17 @@ import type {
   SpaceView,
 } from "@/app/types.ts";
 import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
+import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 
-// First-run language choices switch the app locale; hand it back unchanged.
+// First-run language choices switch the app locale and the model step drives
+// the real settings UI store (model route, draft); hand both back unchanged so
+// later files in the same bun process (e.g. SettingsSectionHeaders) start clean.
 const initialAppLocale = getAppLocale();
-afterAll(() => setAppCopyLanguage(initialAppLocale));
+const initialSettingsUIState = useSettingsUIStore.getState();
+afterAll(() => {
+  setAppCopyLanguage(initialAppLocale);
+  useSettingsUIStore.setState(initialSettingsUIState, true);
+});
 
 interface TestStoreState {
   navigation: { space: SpaceView };
