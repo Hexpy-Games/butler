@@ -702,8 +702,23 @@ try {
     contextPopoverGlass.menuTop >= contextPopoverGlass.titlebarSafeTop - 1,
     `context popover should stay below titlebar safe area: ${JSON.stringify(contextPopoverGlass)}`,
   );
+  // Click pins the context popover (it stays when the pointer leaves); Escape
+  // closes it. Context details live in the inspector's Context tab.
   await page
     .getByRole("button", { name: appCopy.composer.contextDetails })
+    .click();
+  await page.locator(`${testClass("context-popover")}[data-pinned="true"]`).waitFor({ state: "visible" });
+  await page.mouse.move(260, 120);
+  await page.waitForTimeout(160);
+  assert(
+    await page.locator(testClass("context-popover")).isVisible(),
+    "pinned context popover should stay open when the pointer leaves",
+  );
+  await page.keyboard.press("Escape");
+  await page.locator(testClass("context-popover")).waitFor({ state: "hidden" });
+  await page
+    .getByRole("button", { name: appCopy.inspector.tabs.context, exact: true })
+    .first()
     .click();
   await page
     .getByRole("heading", { name: "Context details" })

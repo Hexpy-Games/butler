@@ -681,6 +681,19 @@ export interface AppCopy {
     deleteFailedMessage: string;
     queuedPosition: (position: number, total: number) => string;
     contextDetails: string;
+    usage: {
+      details: string;
+      input: string;
+      cached: string;
+      output: string;
+      reasoning: string;
+      cost: string;
+      estimate: string;
+      left: (percent: string) => string;
+      unavailable: string;
+      loading: string;
+      updated: (time: string) => string;
+    };
     approval: {
       title: string;
       titleEffect: string;

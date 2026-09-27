@@ -1,0 +1,36 @@
+---
+import type { NavSectionItem } from "../../../site/nav";
+import type { Locale } from "../../../site/sections";
+import { Button } from "../../components/Button";
+import { Close } from "../../components/Icons";
+import Brand from "../Brand/Brand.astro";
+import LanguageSwitch from "../LanguageSwitch/LanguageSwitch.astro";
+import { SidebarNav } from "../SidebarNav/SidebarNav";
+import ThemeToggle from "../ThemeToggle/ThemeToggle.astro";
+import styles from "./SiteSidebar.module.css";
+
+interface Props {
+  nav: NavSectionItem[];
+  homeHref: string;
+  locale: Locale;
+  alternates: Partial<Record<Locale, string | null>>;
+}
+
+const { nav, homeHref, locale, alternates } = Astro.props;
+---
+<aside aria-label="문서 탐색" class={styles.sidebar} data-drawer data-pagefind-ignore id="site-nav">
+  <div class={styles.brandRow}>
+    <Brand href={homeHref} product="사용 설명서" />
+    <span class={styles.close}>
+      <Button aria-label="메뉴 닫기" data-drawer-close size="icon" variant="ghost"><Close /></Button>
+    </span>
+  </div>
+  <nav aria-label="문서" class={styles.nav} data-scroll-fade="y">
+    <SidebarNav plannedBadge="예정" plannedReason="준비 중인 문서" sections={nav} />
+  </nav>
+  <div class={styles.controls}>
+    <LanguageSwitch alternates={alternates} locale={locale} />
+    <ThemeToggle />
+  </div>
+</aside>
+<div aria-hidden="true" class={styles.scrim} data-drawer-close data-drawer-scrim></div>
