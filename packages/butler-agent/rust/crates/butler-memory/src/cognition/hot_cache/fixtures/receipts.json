@@ -1,0 +1,6 @@
+{
+  "hot_stats": "{\n  \"table\": \"butler_memory\",\n  \"row_count\": 7,\n  \"updated_at\": \"<time>\",\n  \"last_session_id\": \"hot_session\",\n  \"last_source_session_id\": \"hot_session\",\n  \"last_source_message_ids\": [],\n  \"last_chunk_count\": 3\n}\n",
+  "legacy_stats": "{\n  \"table\": \"butler_memory\",\n  \"row_count\": 9,\n  \"updated_at\": \"<time>\",\n  \"last_session_id\": \"legacy_session\",\n  \"last_source_session_id\": \"source \\\"quoted\\\"\",\n  \"last_source_message_ids\": [],\n  \"last_chunk_count\": 2\n}\n",
+  "provenance": "{\"session_id\":\"hot_session\",\"source_session_id\":\"hot_session\",\"project\":\"butler\",\"source\":\"hot-cache\",\"topic\":null,\"source_message_ids\":[],\"indexed_at\":\"<time>\",\"chunk_count\":3}\n{\"session_id\":\"legacy_session\",\"source_session_id\":\"source \\\"quoted\\\"\",\"project\":\"alpha\",\"source\":\"session\",\"topic\":\"Topic ✓\",\"source_message_ids\":[],\"indexed_at\":\"<time>\",\"chunk_count\":2}\n",
+  "log": "[<time>] index.ts | project=butler session=hot_session | chunks=3\n[<time>] index.ts | project=alpha session=legacy_session | chunks=2\n"
+}

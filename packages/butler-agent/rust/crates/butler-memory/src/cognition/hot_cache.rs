@@ -3,6 +3,8 @@
 mod import;
 mod legacy_graph;
 mod receipts;
+#[cfg(test)]
+mod receipts_pin;
 mod rules;
 mod transcript_index;
 
