@@ -179,7 +179,7 @@ async fn cancelled_first_close_does_not_abandon_owner_completion() {
         .expect("blocking job started");
     let first_storage = storage.clone();
     let first_close = tokio::spawn(async move { first_storage.close().await });
-    crate::testing::eventually("close to detach the lane sender", || {
+    butler_test_support::eventually("close to detach the lane sender", || {
         storage
             .inner
             .lane

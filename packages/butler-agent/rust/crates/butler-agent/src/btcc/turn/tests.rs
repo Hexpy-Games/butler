@@ -370,7 +370,7 @@ async fn stop_bypasses_run_queue_and_fences_before_repository() {
     let assembly = crate::btcc::assemble(&harness.dependencies());
     let btcc = assembly.btcc.clone();
     let running = tokio::spawn(async move { btcc.run_turn(request("turn-1", "session-1")).await });
-    crate::testing::eventually("agent loop entry", || {
+    butler_test_support::eventually("agent loop entry", || {
         harness.calls.load(Ordering::SeqCst) > 0
     })
     .await;
@@ -398,7 +398,7 @@ async fn duplicate_turn_id_shares_one_active_execution() {
     let second_btcc = assembly.btcc.clone();
     let first =
         tokio::spawn(async move { first_btcc.run_turn(request("turn-1", "session-1")).await });
-    crate::testing::eventually("agent loop entry", || {
+    butler_test_support::eventually("agent loop entry", || {
         harness.calls.load(Ordering::SeqCst) > 0
     })
     .await;
@@ -430,13 +430,13 @@ async fn close_drains_same_session_tail_then_closes_dependencies_once() {
     let second_btcc = assembly.btcc.clone();
     let first =
         tokio::spawn(async move { first_btcc.run_turn(request("turn-1", "session-1")).await });
-    crate::testing::eventually("agent loop entry", || {
+    butler_test_support::eventually("agent loop entry", || {
         harness.calls.load(Ordering::SeqCst) > 0
     })
     .await;
     let second =
         tokio::spawn(async move { second_btcc.run_turn(request("turn-2", "session-1")).await });
-    crate::testing::eventually("second active turn", || {
+    butler_test_support::eventually("second active turn", || {
         assembly.btcc.inner.active_count() == 2
     })
     .await;
@@ -445,7 +445,7 @@ async fn close_drains_same_session_tail_then_closes_dependencies_once() {
     tokio::task::yield_now().await;
     assert_eq!(harness.closes.load(Ordering::SeqCst), 0);
     harness.permits.add_permits(1);
-    crate::testing::eventually("second turn entry", || {
+    butler_test_support::eventually("second turn entry", || {
         harness.calls.load(Ordering::SeqCst) == 2
     })
     .await;

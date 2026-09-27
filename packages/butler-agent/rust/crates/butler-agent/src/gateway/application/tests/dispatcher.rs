@@ -44,7 +44,7 @@ async fn fifo_dispatcher_starts_next_message_after_terminal_wake() {
         .wake_chat("general".into())
         .await
         .unwrap();
-    crate::testing::eventually("second queued message dispatch", || {
+    butler_test_support::eventually("second queued message dispatch", || {
         native.0.lock().unwrap().len() == 2
     })
     .await;

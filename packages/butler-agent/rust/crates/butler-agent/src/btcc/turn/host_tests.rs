@@ -25,7 +25,7 @@ async fn close_drains_caller_aborted_stop_and_panicking_stop_without_retention()
             })
             .await
     });
-    crate::testing::eventually("both stops persisting", || {
+    butler_test_support::eventually("both stops persisting", || {
         harness.stop_calls.load(Ordering::SeqCst) == 2
     })
     .await;
@@ -56,7 +56,7 @@ async fn close_drains_caller_aborted_stop_and_panicking_stop_without_retention()
             })
             .await
     });
-    crate::testing::eventually("panicking stop started", || {
+    butler_test_support::eventually("panicking stop started", || {
         panic_harness.stop_started.load(Ordering::SeqCst)
     })
     .await;
@@ -80,7 +80,7 @@ async fn panicking_owned_turn_settles_duplicates_and_close_without_retention() {
     let duplicate_btcc = assembly.btcc.clone();
     let first =
         tokio::spawn(async move { first_btcc.run_turn(request("turn-1", "session-1")).await });
-    crate::testing::eventually("agent loop entry", || {
+    butler_test_support::eventually("agent loop entry", || {
         harness.calls.load(Ordering::SeqCst) > 0
     })
     .await;

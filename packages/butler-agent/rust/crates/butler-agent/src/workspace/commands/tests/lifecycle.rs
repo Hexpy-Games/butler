@@ -26,7 +26,7 @@ async fn guided_normal_close_kills_owned_background_descendant() {
         .trim()
         .parse()
         .unwrap();
-    crate::testing::eventually("the owned descendant to exit", || {
+    butler_test_support::eventually("the owned descendant to exit", || {
         kill(Pid::from_raw(pid), None) == Err(Errno::ESRCH)
     })
     .await;
@@ -263,7 +263,7 @@ async fn partial_pipeline_spawn_failure_reaps_term_ignoring_descendant() {
     input.timeout_ms = Some(60_000.0);
     let receiver = owner.submit_structured(input).unwrap();
     let mut pid = None;
-    crate::testing::eventually("the TERM-ignoring descendant", || {
+    butler_test_support::eventually("the TERM-ignoring descendant", || {
         pid = std::fs::read_to_string(&pid_path)
             .ok()
             .and_then(|pid| pid.trim().parse::<i32>().ok());
@@ -277,7 +277,7 @@ async fn partial_pipeline_spawn_failure_reaps_term_ignoring_descendant() {
         .unwrap()
         .unwrap();
     assert_eq!(result.error.unwrap().code(), "command_spawn_failed");
-    crate::testing::eventually("the descendant to be reaped", || {
+    butler_test_support::eventually("the descendant to be reaped", || {
         kill(Pid::from_raw(pid), None) == Err(Errno::ESRCH)
     })
     .await;

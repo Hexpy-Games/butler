@@ -20,7 +20,7 @@ async fn canonical_change_while_waiting_rolls_back_and_close_waits_for_operation
         let input = fixture.input("completion");
         tokio::spawn(async move { service.register_conversation_source(input).await })
     };
-    crate::testing::eventually("registration to wait for the write gate", || {
+    butler_test_support::eventually("registration to wait for the write gate", || {
         facts.now_calls.load(AtomicOrdering::Acquire) != calls_before_registration
     })
     .await;
@@ -72,7 +72,7 @@ async fn caller_drop_does_not_detach_wait_and_close_cancels_and_drains_it() {
         let input = fixture.input("completion");
         tokio::spawn(async move { service.register_conversation_source(input).await })
     };
-    crate::testing::eventually("registration to wait for the write gate", || {
+    butler_test_support::eventually("registration to wait for the write gate", || {
         facts.now_calls.load(AtomicOrdering::Acquire) != calls_before_registration
     })
     .await;

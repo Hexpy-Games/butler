@@ -1,4 +1,6 @@
-//! Shared test synchronization helpers.
+//! Test-only helpers shared by every Butler crate (dev-dependency only).
+//!
+//! [`eventually`] bounds waits on conditions that another task must reach.
 
 use std::time::Duration;
 
@@ -9,7 +11,7 @@ const DEADLINE: Duration = Duration::from_secs(10);
 ///
 /// Replaces unbounded `while !condition { yield_now().await }` spins and
 /// sleep-then-assert sequences: a regression fails with `what` instead of hanging.
-pub(crate) async fn eventually(what: &str, mut condition: impl FnMut() -> bool) {
+pub async fn eventually(what: &str, mut condition: impl FnMut() -> bool) {
     let wait = async {
         while !condition() {
             tokio::time::sleep(Duration::from_millis(1)).await;

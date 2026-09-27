@@ -260,7 +260,7 @@ async fn caller_drop_does_not_cancel_owned_child() {
     let marker = fixture.0.join("done");
     let command = format!("sleep 0.05; printf x > '{}'", marker.display());
     drop(owner.submit_guided(fixture.guided(&command)).unwrap());
-    crate::testing::eventually("the dropped command to finish", || {
+    butler_test_support::eventually("the dropped command to finish", || {
         owner.active_count() == 0
     })
     .await;
@@ -355,7 +355,7 @@ async fn signalling_a_group_of_only_zombies_succeeds() {
         .unwrap();
     let pid = leader.id();
     // Not reaped: the exited leader stays a zombie of this process.
-    crate::testing::eventually("the unreaped leader to exit", || {
+    butler_test_support::eventually("the unreaped leader to exit", || {
         pidinfo::<BSDInfo>(i32::try_from(pid).unwrap_or(i32::MAX), 0).is_err()
     })
     .await;

@@ -697,6 +697,7 @@ dependencies = [
  "arrow-schema",
  "axum",
  "base64 0.22.1",
+ "butler-test-support",
  "bytes",
  "chrono",
  "dom_smoothie",
@@ -749,6 +750,13 @@ version = "0.0.0"
 dependencies = [
  "proc-macro2",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "butler-test-support"
+version = "0.0.0"
+dependencies = [
+ "tokio",
 ]
 
 [[package]]
