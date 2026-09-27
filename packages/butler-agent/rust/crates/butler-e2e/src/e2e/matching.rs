@@ -58,8 +58,40 @@ pub fn user_request(text: &str, placeholders: &Placeholders) -> String {
         .map_or(0, |index| index + "User request:".len());
     let rest = &text[start..];
     let end = rest.find("Current scope:").unwrap_or(rest.len());
-    let span = placeholders.hide(&rest[..end]);
+    let span = normalize_volatile(&placeholders.hide(&rest[..end]));
     span.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Values the product writes into background prompts that differ on every
+/// run (clock readings, consolidation run ids, the local time of day) are
+/// named, so a recording matches the same request made at another time.
+fn normalize_volatile(text: &str) -> String {
+    static PATTERNS: std::sync::OnceLock<Vec<(regex::Regex, &'static str)>> =
+        std::sync::OnceLock::new();
+    let patterns = PATTERNS.get_or_init(|| {
+        [
+            (
+                r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})",
+                "{{TIME}}",
+            ),
+            (
+                r"\bcr_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
+                "{{RUN_ID}}",
+            ),
+            (
+                r#""time_of_day": "(?:morning|afternoon|evening|night)""#,
+                r#""time_of_day": "{{TIME_OF_DAY}}""#,
+            ),
+        ]
+        .into_iter()
+        .filter_map(|(pattern, name)| regex::Regex::new(pattern).ok().map(|regex| (regex, name)))
+        .collect()
+    });
+    let mut out = text.to_owned();
+    for (regex, name) in patterns {
+        out = regex.replace_all(&out, *name).into_owned();
+    }
+    out
 }
 
 fn item_kind(item: &Value) -> Option<String> {
