@@ -13,13 +13,46 @@ pub struct GuidedExecutionPolicy {
     pub required_tools: Vec<String>,
     pub workspace_path: String,
     pub project_id: Option<String>,
-    pub(crate) subsession: Option<Value>,
+    pub(crate) subsession: Option<SubsessionPolicy>,
+}
+
+/// The delegated-subsession part of an execution policy.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SubsessionPolicy {
+    /// `executionMode`, when it is a string.
+    pub(crate) execution_mode: Option<String>,
+    /// `mutationScope`, when it is an array of strings.
+    pub(crate) mutation_scope: Option<Vec<String>>,
+}
+
+impl SubsessionPolicy {
+    /// Reads the policy's `subsession` entry (parse boundary: the context
+    /// document is untyped JSON).
+    fn read(value: &Value) -> Self {
+        let mutation_scope = value
+            .get("mutationScope")
+            .and_then(Value::as_array)
+            .and_then(|values| {
+                values
+                    .iter()
+                    .map(|value| value.as_str().map(str::to_owned))
+                    .collect::<Option<Vec<_>>>()
+            });
+        Self {
+            execution_mode: value
+                .get("executionMode")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+            mutation_scope,
+        }
+    }
 }
 
 impl GuidedExecutionPolicy {
     /// Reads the turn's execution policy, or the butler default when the
     /// context carries none, never widening the access mode the model
-    /// selection admitted.
+    /// selection admitted. The context document is untyped JSON (passthrough
+    /// of the context assembler), so this is its parse boundary.
     pub(crate) fn from_turn(
         turn: &TurnRecord,
         default_workspace: &str,
@@ -39,11 +72,18 @@ impl GuidedExecutionPolicy {
             .get("projectRef")
             .and_then(Value::as_str)
             .filter(|value| !value.is_empty());
-        let mut raw = context
+        let Some(mut raw) = context
             .get("executionPolicy")
             .filter(|value| !value.is_null())
             .cloned()
-            .unwrap_or_else(|| default_policy(context, &admitted, project_ref, default_workspace));
+        else {
+            return Ok(default_policy(
+                context,
+                admitted,
+                project_ref,
+                default_workspace,
+            ));
+        };
         let policy = raw
             .as_object_mut()
             .ok_or(GuidedPreparationError::Contract("invalid_execution_policy"))?;
@@ -76,19 +116,20 @@ impl GuidedExecutionPolicy {
             subsession: policy
                 .get("subsession")
                 .filter(|value| truthy(value))
-                .cloned(),
+                .map(SubsessionPolicy::read),
         })
     }
 }
 
 /// The butler policy of a turn without one: ledger tracking with a project,
 /// local tracking otherwise, in the baseline workspace scope.
+/// (The context document is untyped JSON; see [`GuidedExecutionPolicy::from_turn`].)
 fn default_policy(
     context: &Map<String, Value>,
-    admitted: &AccessMode,
+    admitted: AccessMode,
     project_ref: Option<&str>,
     default_workspace: &str,
-) -> Value {
+) -> GuidedExecutionPolicy {
     let workspace = context
         .get("baselineObservationScopeRefs")
         .and_then(Value::as_array)
@@ -99,22 +140,21 @@ fn default_policy(
                 .find_map(|value| value.strip_prefix("workspace:"))
         })
         .unwrap_or(default_workspace);
-    let mut result = Map::new();
-    result.insert("role".into(), Value::String("butler".into()));
-    result.insert("accessMode".into(), Value::String(admitted.as_str().into()));
     let tracking = if project_ref.is_some() {
         "ledger"
     } else {
         "local"
     };
-    result.insert("trackingMode".into(), Value::String(tracking.into()));
-    result.insert("requiredNativeToolProfiles".into(), Value::Array(vec![]));
-    result.insert("requiredNativeTools".into(), Value::Array(vec![]));
-    result.insert("workspacePath".into(), Value::String(workspace.into()));
-    if let Some(project) = project_ref {
-        result.insert("projectId".into(), Value::String(project.into()));
+    GuidedExecutionPolicy {
+        role: "butler".into(),
+        access_mode: admitted,
+        tracking_mode: tracking.into(),
+        required_profiles: Vec::new(),
+        required_tools: Vec::new(),
+        workspace_path: workspace.into(),
+        project_id: project_ref.map(str::to_owned),
+        subsession: None,
     }
-    Value::Object(result)
 }
 
 impl GuidedExecutionPolicy {

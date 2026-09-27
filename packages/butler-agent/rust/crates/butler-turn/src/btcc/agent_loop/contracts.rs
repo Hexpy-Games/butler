@@ -54,7 +54,8 @@ pub struct ExecutionPolicy {
     pub required_native_tools: Vec<String>,
     pub workspace_path: String,
     pub project_id: Option<String>,
-    pub subsession: Option<Value>,
+    /// Unknown fields, including the delegated `subsession` (read through
+    /// the guided execution policy), kept for newer writers.
     #[serde(flatten)]
     pub extensions: Map<String, Value>,
 }
