@@ -29,11 +29,14 @@ function PopoverContent({
   onCloseAutoFocus,
   onOpenAutoFocus,
   theme,
+  width = "default",
   ...props
 }: DsBaseProps<React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>> & {
   ref?: React.Ref<HTMLDivElement>;
   /** App theme for the portalled surface (it renders outside the themed shell). */
   theme?: AdaptiveShellTheme;
+  /** `narrow`: min(280px, 100vw - 32px), for compact readouts such as usage. */
+  width?: "default" | "narrow";
 }) {
   const contentRef = usePopperExitFreezeRef(ref);
   return (
@@ -43,6 +46,7 @@ function PopoverContent({
         data-slot="popover-content"
         data-glass="popover"
         data-radius="popover"
+        data-popover-width={width === "default" ? undefined : width}
         align={align}
         collisionPadding={floatingContentCollisionPadding}
         sideOffset={sideOffset}
