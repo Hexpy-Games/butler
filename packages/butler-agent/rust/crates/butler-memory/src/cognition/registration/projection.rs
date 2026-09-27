@@ -318,8 +318,8 @@ async fn execute_claimed(
     let current_clock = operation.clock.clone();
     let pinned = operation
         .read(move |state| {
-            let input = if let Some(value) = &prepared_claim.pinned_input {
-                serde_json::from_value(value.clone()).map_err(json_error)?
+            let input = if let Some(saved) = &prepared_claim.pinned_input {
+                serde_json::from_str(saved).map_err(json_error)?
             } else {
                 state.graph.build_extract_input(
                     &state.canonical,
@@ -342,7 +342,7 @@ async fn execute_claimed(
             state.graph.pin_projection_input(
                 &pin_claim.window_ref,
                 &pin_claim.owner_nonce,
-                &serde_json::to_value(&pin_input).map_err(json_error)?,
+                &pin_input,
                 None,
             )
         })

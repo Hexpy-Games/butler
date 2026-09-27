@@ -35,7 +35,7 @@ fn fixture() -> (BindingBatch, ExtractOutput, ExtractInput) {
         occurrence: 0,
     };
     let batch = BindingBatch {
-        prompt: json!({"targets":[],"evidence":[]}),
+        prompt: BindingPrompt::default(),
         targets: vec![Target {
             local_ref: "f0".into(),
             candidates: HashMap::from([("f0c0".into(), candidate.clone())]),
@@ -100,8 +100,8 @@ fn correction_rejects_cross_candidate_evidence_and_unresolved_is_explicit() {
     )
     .unwrap();
     assert_eq!(
-        warning,
-        vec![json!({"code":"correction_unresolved","target_ref":"f0"})]
+        serde_json::to_value(&warning).unwrap(),
+        json!([{"code":"correction_unresolved","target_ref":"f0"}])
     );
     assert!(output.corrections.is_empty());
 }

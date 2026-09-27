@@ -387,7 +387,7 @@ impl GraphRepository {
         &self,
         window_ref: &str,
         owner_nonce: &str,
-        input: &serde_json::Value,
+        input: &crate::cognition::extraction::ExtractInput,
         migration_note: Option<&str>,
     ) -> CognitionResult<()> {
         projection::pin_input(
@@ -437,8 +437,8 @@ impl GraphRepository {
         &mut self,
         window: &str,
         nonce: &str,
-        output: &serde_json::Value,
-        evidence: &serde_json::Value,
+        output: &crate::cognition::extraction::ExtractOutput,
+        evidence: &crate::cognition::extraction::RunEvidence,
         now: &str,
     ) -> CognitionResult<()> {
         stages::save_result(self.connection_mut()?, window, nonce, output, evidence, now)
@@ -448,8 +448,8 @@ impl GraphRepository {
         job: &str,
         window: &str,
         nonce: &str,
-        output: &serde_json::Value,
-        plan: &serde_json::Value,
+        output: &crate::cognition::extraction::ExtractOutput,
+        plan: &NormalizedPlan,
     ) -> CognitionResult<()> {
         stages::save_plan(self.connection()?, job, window, nonce, output, plan)
     }

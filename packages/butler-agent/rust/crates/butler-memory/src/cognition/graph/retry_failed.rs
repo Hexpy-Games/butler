@@ -6,7 +6,6 @@ use std::collections::HashSet;
 
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use super::db_error;
@@ -275,31 +274,44 @@ fn read_repair_unit(
         .map_err(db_error)
 }
 
+/// The identity fields of a completed vector receipt; a field of another
+/// type reads as absent.
+#[derive(Deserialize)]
+struct CompletedReceipt {
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    generation: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    embedding_version: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    vector_keys: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    row_count: Option<f64>,
+}
+
+/// A readable receipt of this generation and embedding whose keys are
+/// consistent yet miss the unit's expected vector key.
 fn completed_receipt_lacks_expected_identity(
     unit: &RepairUnitSnapshot,
     generation: &str,
     embedding_version: &str,
     receipt_json: &str,
 ) -> bool {
-    let Ok(receipt) = serde_json::from_str::<Value>(receipt_json) else {
+    let Ok(receipt) = serde_json::from_str::<CompletedReceipt>(receipt_json) else {
         return false;
     };
-    if receipt.get("generation").and_then(Value::as_str) != Some(generation)
-        || receipt.get("embedding_version").and_then(Value::as_str) != Some(embedding_version)
+    if receipt.generation.as_deref() != Some(generation)
+        || receipt.embedding_version.as_deref() != Some(embedding_version)
     {
         return false;
     }
-    let Some(keys) = receipt.get("vector_keys").and_then(Value::as_array) else {
+    let Some(keys) = &receipt.vector_keys else {
         return false;
     };
-    let mut unique_keys = HashSet::with_capacity(keys.len());
-    for key in keys {
-        let Some(key) = key.as_str().filter(|key| !key.is_empty()) else {
-            return false;
-        };
-        unique_keys.insert(key);
+    if keys.iter().any(String::is_empty) {
+        return false;
     }
-    let Some(row_count) = receipt.get("row_count").and_then(Value::as_f64) else {
+    let unique_keys = keys.iter().map(String::as_str).collect::<HashSet<_>>();
+    let Some(row_count) = receipt.row_count else {
         return false;
     };
     if !row_count.is_finite() || row_count.fract() != 0.0 || row_count != unique_keys.len() as f64 {
@@ -318,13 +330,9 @@ fn completed_receipt_lacks_expected_identity(
 }
 
 fn recovery_revision(generation_id: &str, now: &str) -> CognitionResult<String> {
-    let source = stringify(&json!(["memory-retry-failed", generation_id, now]))?;
+    let source = crate::js_json::stringify(&("memory-retry-failed", generation_id, now))
+        .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))?;
     Ok(format!("{:x}", Sha256::digest(source.as_bytes())))
-}
-
-fn stringify(value: &Value) -> CognitionResult<String> {
-    butler_core::json::stringify(value)
-        .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))
 }
 
 fn error(code: CognitionCode) -> CognitionError {

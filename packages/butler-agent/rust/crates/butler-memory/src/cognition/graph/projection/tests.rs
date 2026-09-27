@@ -38,14 +38,12 @@ fn claim_pins_exact_input_and_enforces_nonce() {
     assert_eq!(claimed.previous_state, PreviousWindowState::Pending);
     assert_eq!(claimed.source_refs, ["source"]);
     assert_eq!(claimed.model, "policy/model");
-    pin_input(
-        &connection,
-        "window",
-        "nonce",
-        &json!({"schema":"butler.memory-extract-input.v2"}),
-        None,
-    )
+    let input: crate::cognition::extraction::ExtractInput = serde_json::from_value(json!({
+        "schema":"butler.memory-extract-input.v2","episode_ref":"e","revision":"r",
+        "window_ref":"window","bound_project_id":null,"source_units":[],"context_units":[],
+        "candidates":[]}))
     .unwrap();
+    pin_input(&connection, "window", "nonce", &input, None).unwrap();
     let stored: String = connection
         .query_row(
             "SELECT input_json FROM memory_projection_windows",
@@ -53,9 +51,12 @@ fn claim_pins_exact_input_and_enforces_nonce() {
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(stored, "{\"schema\":\"butler.memory-extract-input.v2\"}");
     assert_eq!(
-        pin_input(&connection, "window", "wrong", &json!({}), None)
+        stored,
+        r#"{"schema":"butler.memory-extract-input.v2","episode_ref":"e","revision":"r","window_ref":"window","bound_project_id":null,"source_units":[],"context_units":[],"candidates":[]}"#
+    );
+    assert_eq!(
+        pin_input(&connection, "window", "wrong", &input, None)
             .unwrap_err()
             .code(),
         "memory_projection_window_changed"

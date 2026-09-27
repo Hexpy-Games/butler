@@ -174,7 +174,7 @@ async fn claimed_window_meaning_and_bound_apply_are_durable() {
         .pin_projection_input(
             &claim.window_ref,
             &claim.owner_nonce,
-            &serde_json::to_value(&input).unwrap(),
+            &input,
             None,
         )
         .unwrap();
@@ -223,8 +223,8 @@ async fn claimed_window_meaning_and_bound_apply_are_durable() {
             &claim.job_id,
             &claim.window_ref,
             &claim.owner_nonce,
-            &serde_json::to_value(&output).unwrap(),
-            &serde_json::to_value(&plan).unwrap(),
+            &output,
+            &plan,
         )
         .unwrap();
     graph

@@ -62,8 +62,8 @@ pub(super) fn attach(
         }
         input.context_units = original_context.iter().cloned().chain(excerpts).collect();
         input.context_expansion = Some(f64::from(expansion));
-        match source_passages(input).and_then(|parts| meaning_prompt(input, &parts)) {
-            Ok(_) => return Ok(()),
+        match source_passages(input).and_then(|parts| meaning_prompt(input, &parts).map(drop)) {
+            Ok(()) => return Ok(()),
             Err(problem)
                 if problem.code() == "memory_extract_source_window_exceeds_budget" && width > 0 => {
             }

@@ -126,14 +126,16 @@ impl StoredInput {
             .collect()
     }
 
-    fn with_candidates(&self, candidates: Value) -> Self {
+    fn with_candidates(&self, candidates: &[ExtractCandidate]) -> CognitionResult<Self> {
         let mut repaired = self.0.clone();
+        let candidates = serde_json::to_value(candidates)
+            .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))?;
         repaired.insert("candidates".into(), candidates);
-        Self(repaired)
+        Ok(Self(repaired))
     }
 
     fn stringify(&self) -> CognitionResult<String> {
-        stringify(&Value::Object(self.0.clone()))
+        stringify(&self.0)
     }
 }
 
@@ -145,7 +147,8 @@ struct RefreshedWindow<'a> {
     prior_sha: String,
     pinned: StoredInput,
     refreshed: Vec<ExtractCandidate>,
-    refreshed_value: Value,
+    /// `JSON.stringify` of `refreshed`, compared with the pinned candidates.
+    refreshed_json: String,
     serialized: String,
     digest: String,
 }
@@ -238,11 +241,8 @@ fn refresh_window<'a>(
         &candidate_ids,
         remaining_candidate_bytes(&pinned)?,
     )?;
-    let refreshed_value = serde_json::to_value(&refreshed)
-        .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))?;
-    let serialized = pinned
-        .with_candidates(refreshed_value.clone())
-        .stringify()?;
+    let refreshed_json = stringify(&refreshed)?;
+    let serialized = pinned.with_candidates(&refreshed)?.stringify()?;
     if serialized.len() > MAX_EXTRACT_INPUT_BYTES {
         return Err(error(CognitionCode::MemoryExtractInputExceedsBudget));
     }
@@ -264,7 +264,7 @@ fn refresh_window<'a>(
         prior_sha,
         pinned,
         refreshed,
-        refreshed_value,
+        refreshed_json,
         serialized,
     })
 }
@@ -286,7 +286,7 @@ impl RefreshedWindow<'_> {
     /// reloaded candidates are identical to the pinned ones.
     fn apply(self, tx: &Transaction<'_>, now: &str) -> CognitionResult<RepairReceipt> {
         let window_ref = self.expected.window_ref.clone();
-        if stringify(self.pinned.field("candidates")?)? == stringify(&self.refreshed_value)? {
+        if stringify(self.pinned.field("candidates")?)? == self.refreshed_json {
             return Ok(RepairReceipt {
                 window_ref,
                 state: RepairState::Unchanged,
@@ -342,10 +342,7 @@ impl RefreshedWindow<'_> {
                 .unwrap_or_else(|| self.prior_sha.clone()),
             repaired_at: now.to_owned(),
         };
-        let receipt = stringify(
-            &serde_json::to_value(&receipt)
-                .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))?,
-        )?;
+        let receipt = stringify(&receipt)?;
         tx.execute(
             "INSERT INTO memory_projection_attempts \
              (attempt_ref,window_ref,job_id,attempt_count,state,error_code,input_sha256,recorded_at, \
@@ -504,10 +501,7 @@ struct ArchivedPrior {
 }
 
 fn remaining_candidate_bytes(pinned: &StoredInput) -> CognitionResult<usize> {
-    let base = pinned
-        .with_candidates(Value::Array(Vec::new()))
-        .stringify()?
-        .len();
+    let base = pinned.with_candidates(&[])?.stringify()?.len();
     MAX_EXTRACT_INPUT_BYTES
         .checked_sub(base)
         .and_then(|remaining| remaining.checked_add(2))
@@ -532,8 +526,8 @@ fn repair_receipt_ref(
     ))
 }
 
-fn stringify(value: &Value) -> CognitionResult<String> {
-    butler_core::json::stringify(value)
+fn stringify(value: &(impl Serialize + ?Sized)) -> CognitionResult<String> {
+    crate::js_json::stringify(value)
         .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))
 }
 

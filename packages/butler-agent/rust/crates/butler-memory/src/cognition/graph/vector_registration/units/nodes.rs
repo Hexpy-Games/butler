@@ -6,7 +6,7 @@ use std::collections::HashSet;
 
 use super::super::{
     CognitionError, CognitionResult, NODE_CHUNK_BYTES, OVERSIZED_GRAPHEME, db_error, digest,
-    json_array, json_error, json_string, option_value, source_changed, stringify,
+    json_array, json_error, json_string, source_changed, stringify,
 };
 use super::{chunks, vector_unit_id};
 use crate::cognition::CognitionCode;
@@ -96,7 +96,7 @@ pub(super) fn register(
         let node_revision = digest(&(
             "node-vector",
             &node.id,
-            option_value(project_id),
+            project_id,
             &node.origin_kind,
             &projection,
         ))?;
@@ -161,6 +161,8 @@ pub(super) fn register(
 struct Claim {
     statement: Option<String>,
     condition: Option<String>,
+    /// Passthrough: the stored `memory_claims.requirement` JSON, re-encoded
+    /// verbatim into the projection text (older rows need not be complete).
     requirement: Option<Value>,
     polarity: Option<String>,
 }
@@ -219,6 +221,7 @@ fn node_projection(
     Ok(fields.join("\n"))
 }
 
+/// Passthrough: JavaScript truthiness of the stored requirement JSON.
 fn js_truthy(value: &Value) -> bool {
     match value {
         Value::Null => false,

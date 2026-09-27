@@ -53,7 +53,7 @@ pub(super) fn prune_expired(root: &Path, now_epoch_ms: i64) -> CognitionResult<B
                 Err(_) => return Err(error(CognitionCode::MemoryBoxRetentionDeleteFailed)),
             }
         }
-        manifest::write_manifest_value(&manifest_target, &forgotten)?;
+        manifest::write_manifest(&manifest_target, &forgotten)?;
         report.pruned_box_owned_count += 1;
         Ok(())
     })?;

@@ -6,7 +6,6 @@ mod units;
 
 use crate::cognition::graph::{StageState, StageStatus, StageWrite};
 use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::Value;
 use std::path::Path;
 
 use super::db_error;
@@ -206,24 +205,18 @@ fn digest(parts: &(impl serde::Serialize + ?Sized)) -> CognitionResult<String> {
 }
 
 fn json_array(values: &[String]) -> CognitionResult<String> {
-    stringify(&Value::Array(
-        values.iter().cloned().map(Value::String).collect(),
-    ))
+    stringify(values)
 }
 
 fn json_string(value: Option<&str>) -> CognitionResult<String> {
-    stringify(&value.map_or(Value::Null, |value| Value::String(value.to_owned())))
+    stringify(&value)
 }
 
-fn stringify(value: &Value) -> CognitionResult<String> {
-    butler_core::json::stringify(value).map_err(|error| {
+fn stringify(value: &(impl serde::Serialize + ?Sized)) -> CognitionResult<String> {
+    crate::js_json::stringify(value).map_err(|error| {
         CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string())
             .with_source(error)
     })
-}
-
-fn option_value(value: Option<&str>) -> Value {
-    value.map_or(Value::Null, |value| Value::String(value.to_owned()))
 }
 
 fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {

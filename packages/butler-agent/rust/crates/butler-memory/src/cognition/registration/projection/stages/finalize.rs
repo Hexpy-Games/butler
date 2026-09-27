@@ -1,12 +1,16 @@
-use super::*;
+//! Plan validation, final graph apply and vector registration of a window.
 
+use super::*;
+use crate::cognition::extraction::RunEvidence;
+
+/// Normalizes and saves the window's plan. A fresh run (`evidence` present)
+/// first saves its output and evidence as the attempt result.
 pub(super) async fn validate_and_save(
     operation: &Operation,
     claim: &ClaimedProjectionWindow,
     input: &ExtractInput,
     output: &ExtractOutput,
-    // Present when the attempt result must be saved with its evidence.
-    evidence: Option<serde_json::Value>,
+    evidence: Option<RunEvidence>,
 ) -> CognitionResult<NormalizedPlan> {
     let job = claim.job_id.clone();
     let window = claim.window_ref.clone();
@@ -21,22 +25,14 @@ pub(super) async fn validate_and_save(
                 state
                     .graph
                     .pin_binding_candidates(&window, &nonce, &input)?;
-                state.graph.save_attempt_result(
-                    &window,
-                    &nonce,
-                    &serde_json::to_value(&output).map_err(json_error)?,
-                    evidence,
-                    &clock(),
-                )?;
+                state
+                    .graph
+                    .save_attempt_result(&window, &nonce, &output, evidence, &clock())?;
             }
             let plan = state.graph.normalize_plan(&input, &output)?;
-            state.graph.save_validated_plan(
-                &job,
-                &window,
-                &nonce,
-                &serde_json::to_value(&output).map_err(json_error)?,
-                &serde_json::to_value(&plan).map_err(json_error)?,
-            )?;
+            state
+                .graph
+                .save_validated_plan(&job, &window, &nonce, &output, &plan)?;
             Ok(plan)
         })
         .await
