@@ -17,10 +17,10 @@ pub(crate) trait ProcessLiveness: Send + Sync + 'static {
     fn is_alive(&self, identity: &RuntimeOwnerIdentity) -> bool;
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) struct ConservativeProcessLiveness;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl ProcessLiveness for ConservativeProcessLiveness {
     fn is_alive(&self, _identity: &RuntimeOwnerIdentity) -> bool {
         true

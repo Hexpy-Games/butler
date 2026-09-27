@@ -18,7 +18,7 @@ pub(super) struct GuidedPolicy {
 }
 
 impl GuidedPolicy {
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(super) fn new(
         dependencies: GuidedPolicyDependencies,
         authority_decision: Option<super::contracts::AuthorityDecision>,

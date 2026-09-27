@@ -64,7 +64,7 @@ use rusqlite::{Connection, OptionalExtension};
 use serde_json::Value;
 use tokio::sync::{Mutex as AsyncMutex, mpsc, oneshot};
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) use runtime_owner::ConservativeProcessLiveness;
 use runtime_owner::RuntimeOwner;
 pub(crate) use runtime_owner::{ProcessLiveness, RuntimeOwnerIdentity};
@@ -77,7 +77,7 @@ type DatabaseOperation = Box<dyn FnOnce(&mut Connection, &RuntimeOwner) + Send +
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum StorageProfile {
     Durable,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     Ephemeral,
 }
 
@@ -101,9 +101,9 @@ pub(crate) struct BtccStorage {
 
 struct StorageInner {
     lane: AsyncMutex<LaneState>,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     owner_id: String,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     owner_generation: u64,
 }
 
@@ -166,20 +166,20 @@ impl BtccStorage {
                     close_result: None,
                     close_waiters: Vec::new(),
                 }),
-                #[cfg(test)]
+                #[cfg(any(test, feature = "test-support"))]
                 owner_id: owner.0,
-                #[cfg(test)]
+                #[cfg(any(test, feature = "test-support"))]
                 owner_generation: owner.1,
             }),
         })
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn owner_id(&self) -> &str {
         &self.inner.owner_id
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn owner_generation(&self) -> u64 {
         self.inner.owner_generation
     }
@@ -365,7 +365,7 @@ fn configure(connection: &Connection, profile: StorageProfile) -> StorageResult<
             "journal_mode",
             match profile {
                 StorageProfile::Durable => "WAL",
-                #[cfg(test)]
+                #[cfg(any(test, feature = "test-support"))]
                 StorageProfile::Ephemeral => "DELETE",
             },
         )

@@ -70,7 +70,7 @@ pub(crate) fn session_store_path(butler_data: &Path) -> PathBuf {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum WorkspaceStorageProfile {
     Durable,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     Ephemeral,
 }
 
@@ -274,7 +274,7 @@ fn run_connection_lane(
             .map_err(WorkspaceError::sqlite)?;
         let journal_mode = match profile {
             WorkspaceStorageProfile::Durable => "WAL",
-            #[cfg(test)]
+            #[cfg(any(test, feature = "test-support"))]
             WorkspaceStorageProfile::Ephemeral => "DELETE",
         };
         connection

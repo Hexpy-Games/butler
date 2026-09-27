@@ -1,9 +1,3 @@
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    reason = "test fixtures abort the test that uses them on setup failure"
-)]
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 

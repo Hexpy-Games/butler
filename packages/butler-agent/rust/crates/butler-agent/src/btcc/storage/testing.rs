@@ -1,11 +1,5 @@
 //! Storage fixtures shared by BTCC tests and, through the `test-support`
 //! feature, by scenario tests in dependent crates.
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    reason = "test fixtures abort the test that uses them on setup failure"
-)]
 
 use std::path::PathBuf;
 use std::sync::Arc;

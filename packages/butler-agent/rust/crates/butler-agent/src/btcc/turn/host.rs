@@ -181,17 +181,17 @@ impl Coordinator {
         close.wait().await
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(super) fn active_count(&self) -> usize {
         self.state.lock().active.len()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(super) fn session_tail_count(&self) -> usize {
         self.state.lock().session_tails.len()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(super) fn active_stop_count(&self) -> usize {
         self.state.lock().active_stops.len()
     }

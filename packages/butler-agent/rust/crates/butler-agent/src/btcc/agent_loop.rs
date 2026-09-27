@@ -26,13 +26,13 @@ pub(crate) use turn_binding::{
 
 #[cfg(test)]
 mod failure_tests;
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 mod guided_fixture;
 #[cfg(test)]
 mod round_contract_tests;
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) mod test_data;
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 mod test_execution;
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) mod test_support;
@@ -66,18 +66,18 @@ pub(crate) use guided_ports::{
     JournalPort, PromptPort, RenderedGuidedPrompt, ToolPort, TurnContextProjection,
     TurnSteeringPort, WorkFinalState, WorkPort,
 };
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) use operation_result_replay::OperationResultReference;
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) use operation_result_replay::TurnWorkScopePort;
 pub(crate) use operation_result_replay::{
     ExactResultReplaySelection, OperationResultMessageReferences, OperationResultReplayFactory,
     OperationResultRuntime, OperationResultRuntimeFactory, OperationResultScope, ReplayMode,
     latest_work_anchor_indices,
 };
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) use ports::NoopModelRoundObserver;
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) static NOOP_MODEL_ROUND_OBSERVER: NoopModelRoundObserver = NoopModelRoundObserver;
 pub(crate) use ports::{
     AgentLoopObserver, ContextProjectionError, ModelRoundError, ModelRoundObserver, ModelRoundPort,
@@ -154,7 +154,7 @@ impl AgentLoop for ProductionAgentLoop {
                 .map_err(AgentLoopError::Propagate)?;
             run(driver::Invocation {
                 turn,
-                #[cfg(test)]
+                #[cfg(any(test, feature = "test-support"))]
                 claim,
                 recovery_attempt,
                 progress: owner.progress(),

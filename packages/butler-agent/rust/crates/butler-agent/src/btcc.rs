@@ -42,15 +42,15 @@ pub(crate) use turn::{
     TurnCheckpoint, TurnDeveloperLogCapturePort, TurnDeveloperLogExecution, TurnDeveloperLogFuture,
     TurnFacadeDependencies, TurnRecord, TurnSemanticState, TurnStore, WakeIdentity,
 };
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) use turn::{
     CanonicalMessageStore, DeliveryStatus, FinalPayload, PreparedTurn, ProgressEventRepository,
     ProgressWrite, StopPersistenceOutcome, StorageReadiness, TransitionCommitError, TurnTransition,
 };
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) use agent_loop::NOOP_MODEL_ROUND_OBSERVER;
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) use agent_loop::OperationResultReference;
 pub(crate) use agent_loop::{
     ActivityGroup, AuthorityDecision, AuthorityLoopContinuation, AuthorityPort, BatchDisposition,
@@ -74,7 +74,7 @@ pub(crate) use authority::contracts::{
     AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityDecisionInput, AuthorityError,
     AuthorityExecutionInput, AuthorityOutcomeInput, PrincipalAuthority,
 };
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) use continuation_budget::TurnContinuationBudgetLimits;
 pub(crate) use continuation_budget::select_turn_continuation_budget;
 pub(crate) use effects::contracts::{
@@ -125,7 +125,7 @@ pub(crate) use storage::{
     ToolJournalRepository, ToolJournalSignature, ToolJournalStart, WorkStatusObservation,
     bootstrap_fresh_storage, read_activated_storage_manifest,
 };
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) use storage::{ContextDocumentInput, TestStorageFixture, test_prepared_turn};
 pub(crate) use subsessions::{
     InterruptedSubsessionEvent, StewardDelegationRequest, SubsessionCancelRequest,

@@ -6,9 +6,9 @@ mod import;
 mod input;
 mod report;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) use identity::historical_source_ref;
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) use input::{HistoricalAppProjectionRow, HistoricalTranscriptRow};
 pub(crate) use input::{
     HistoricalRecoveryInput, read_historical_app_rows, read_historical_transcript_rows,

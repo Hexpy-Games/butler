@@ -101,23 +101,23 @@ pub(crate) trait TurnDeveloperLogCapturePort: Send + Sync {
     fn start_execution(&self) -> Box<dyn TurnDeveloperLogExecution>;
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) struct NoopTurnDeveloperLogCapturePort;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 struct NoopTurnDeveloperLogExecution;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl TurnDeveloperLogCapturePort for NoopTurnDeveloperLogCapturePort {
     fn start_execution(&self) -> Box<dyn TurnDeveloperLogExecution> {
         Box::new(NoopTurnDeveloperLogExecution)
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl crate::btcc::ModelRoundObserver for NoopTurnDeveloperLogExecution {}
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl TurnDeveloperLogExecution for NoopTurnDeveloperLogExecution {
     fn capture<'a>(
         &'a self,

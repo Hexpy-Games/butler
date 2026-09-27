@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::btcc::{BtccError, PortFuture};
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 use crate::btcc::{StateExecutionClaim, TurnRecord};
 
 use super::super::contracts::{ModelRoundMessage, ModelRoundResult};
@@ -45,7 +45,7 @@ pub(crate) struct OperationResultScope {
     pub work_id: Option<String>,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) trait TurnWorkScopePort: Send + Sync {
     fn initial_work_id<'a>(
         &'a self,

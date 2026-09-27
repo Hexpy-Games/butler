@@ -16,7 +16,7 @@ pub(crate) struct OperationResultRepository {
 }
 
 impl OperationResultRepository {
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn new(
         storage: BtccStorage,
         authority: Option<Arc<dyn ExactProjectWorkResultAuthority>>,

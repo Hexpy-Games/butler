@@ -10,7 +10,7 @@ mod projection;
 mod receipt;
 mod service;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) use contracts::{
     AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityDecisionInput,
     AuthorityExecutionInput, AuthorityOutcomeInput, PrincipalAuthority,

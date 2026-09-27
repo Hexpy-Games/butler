@@ -183,7 +183,7 @@ impl TurnExecutionSupervisor {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(super) fn registration_count(&self) -> usize {
         self.inner.lock().turns.len()
     }

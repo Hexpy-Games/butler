@@ -134,10 +134,10 @@ pub(crate) trait ModelRoundObserver: Send + Sync {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) struct NoopModelRoundObserver;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl ModelRoundObserver for NoopModelRoundObserver {}
 
 pub(crate) trait VerifiedImagePayloadPort: Send + Sync {

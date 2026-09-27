@@ -26,7 +26,7 @@ pub(crate) struct GuidedPhaseInput<'a> {
 
 #[derive(Debug)]
 pub(crate) struct GuidedPhaseSelection {
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) mode: &'static str,
     pub(crate) phase: &'static str,
     pub(crate) execution_policy: GuidedExecutionPolicy,
@@ -81,7 +81,7 @@ pub(crate) fn select_phase(
             }
         }
         return Ok(GuidedPhaseSelection {
-            #[cfg(test)]
+            #[cfg(any(test, feature = "test-support"))]
             mode: "legacy",
             phase,
             execution_policy: policy.clone(),
@@ -230,7 +230,7 @@ pub(crate) fn select_phase(
         "instructionPrefix":stable_instruction_prefix,
     }));
     Ok(GuidedPhaseSelection {
-        #[cfg(test)]
+        #[cfg(any(test, feature = "test-support"))]
         mode: "phase_minimal",
         phase,
         execution_policy: policy.clone(),

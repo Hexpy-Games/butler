@@ -1,9 +1,3 @@
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    reason = "test fixtures abort the test that uses them on setup failure"
-)]
 use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use std::pin::Pin;

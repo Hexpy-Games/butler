@@ -10,7 +10,7 @@ mod routed;
 mod source_revision;
 mod support;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 mod test_support;
 #[cfg(test)]
 mod tests;
@@ -19,7 +19,7 @@ pub(crate) use admission::{
     ModelRequestAdmissionCode, ModelRequestAdmissionError, ModelRequestContextPlan,
     RequestContextAdmission, RequestContextMeasurement,
 };
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) use contracts::ModelExecutionView;
 pub(crate) use contracts::{
     ContextSizing, ContextSizingRequest, ModelExecution, ModelExecutionFactory,

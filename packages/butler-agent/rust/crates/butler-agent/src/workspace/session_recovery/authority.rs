@@ -120,7 +120,7 @@ pub(super) fn public_workspace_label(branch: &str) -> String {
         .collect()
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(super) fn safe_workspace_basename(path: Option<&str>) -> String {
     let basename = path
         .filter(|path| !path.is_empty())

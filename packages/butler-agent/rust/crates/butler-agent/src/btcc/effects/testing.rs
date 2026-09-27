@@ -1,11 +1,5 @@
 //! Durable Work fixtures for effect tests, shared with dependent crates'
 //! scenario tests through the `test-support` feature.
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    reason = "test fixtures abort the test that uses them on setup failure"
-)]
 
 use std::sync::Arc;
 

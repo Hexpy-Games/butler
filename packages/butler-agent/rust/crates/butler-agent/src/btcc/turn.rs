@@ -9,7 +9,7 @@ mod preparation;
 mod progress;
 mod runtime;
 mod supervisor;
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 mod test_support;
 #[cfg(test)]
 mod tests;
@@ -30,7 +30,7 @@ pub(crate) use contracts::{
     StateExecutionClaim, StopPersistenceOutcome, SuspensionReason, TerminalOutcome, TurnCheckpoint,
     TurnRecord, TurnSemanticState, TurnTransition, WakeIdentity,
 };
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) use ports::NoopTurnDeveloperLogCapturePort;
 pub(crate) use ports::{
     AgentLoop, AgentLoopError, AgentLoopProgress, CanonicalMessageStore, HostDependencies,

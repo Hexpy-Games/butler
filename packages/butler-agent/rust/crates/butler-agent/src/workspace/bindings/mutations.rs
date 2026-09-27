@@ -66,7 +66,7 @@ impl SessionBindingStore {
         .await
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) async fn touch_session(
         &self,
         session_id: &str,

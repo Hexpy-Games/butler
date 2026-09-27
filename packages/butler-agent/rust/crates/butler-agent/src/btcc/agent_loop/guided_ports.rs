@@ -2,7 +2,7 @@ use std::{future::Future, pin::Pin, sync::Arc};
 
 use serde_json::Value;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 use crate::btcc::StateExecutionClaim;
 use crate::btcc::{
     AcceptedWorkResult, AgentLoopProgress, FinalArtifact, PortFuture, TurnRecord, WorkStatus,
@@ -19,9 +19,9 @@ use super::ports::{ContextProjectionFuture, ToolExecutionError};
 #[derive(Clone, Copy)]
 pub(crate) struct GuidedInvocation<'a> {
     pub turn: &'a TurnRecord,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub claim: &'a StateExecutionClaim,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub recovery_attempt: u32,
     pub progress: &'a dyn AgentLoopProgress,
     pub cancellation: &'a tokio_util::sync::CancellationToken,
@@ -33,9 +33,9 @@ impl<'a, 'input: 'a> From<&'a super::driver::Invocation<'input>> for GuidedInvoc
     fn from(input: &'a super::driver::Invocation<'input>) -> Self {
         Self {
             turn: input.turn,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "test-support"))]
             claim: input.claim,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "test-support"))]
             recovery_attempt: input.recovery_attempt,
             progress: input.progress,
             cancellation: &input.cancellation,

@@ -2,7 +2,7 @@ use crate::btcc::BtccCode;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 use crate::btcc::StateExecutionClaim;
 use crate::btcc::{
     AgentLoopError, AgentLoopProgress, AgentLoopResult, SuspensionReason, TurnRecord,
@@ -28,7 +28,7 @@ use super::tool_batch;
 
 pub(super) struct Invocation<'a> {
     pub turn: &'a TurnRecord,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub claim: &'a StateExecutionClaim,
     pub recovery_attempt: u32,
     pub progress: &'a dyn AgentLoopProgress,
