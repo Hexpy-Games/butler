@@ -13,7 +13,7 @@ test("server kind fallbacks become localized kind labels", () => {
   expect(commandResultSubtitle(result("project", "Project"), labels)).toBe("프로젝트");
   expect(commandResultSubtitle(result("group", "스페이스"), labels)).toBe("스페이스");
   expect(commandResultSubtitle(result("settings", "Settings"), labels)).toBe("설정");
-  expect(commandResultSubtitle(result("automation"), labels)).toBe("자동화");
+  expect(commandResultSubtitle(result("automation"), labels)).toBe("예약 작업");
   expect(commandResultSubtitle(result("group", "스페이스"), getAppCopy("en-US").commandPalette.kindLabels)).toBe("Space");
 });
 

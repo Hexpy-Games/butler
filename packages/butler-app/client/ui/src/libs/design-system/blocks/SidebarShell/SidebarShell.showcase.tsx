@@ -14,11 +14,11 @@ export const meta: ShowcaseMeta = {
 
 const copy = {
   "en-US": {
-    newChat: "New chat", search: "Search", automations: "Automations", settings: "Settings", filter: "All · Recent · Running", aria: "Sidebar",
+    newChat: "New chat", search: "Search", automations: "Schedules", settings: "Settings", filter: "All · Recent · Running", aria: "Sidebar",
     sessions: ["Desktop client polish", "Settings hierarchy", "Release notes draft", "General chat", "Weekly review", "Travel plan", "Reading list", "Budget check", "Interview prep", "Bug triage"],
   },
   "ko-KR": {
-    newChat: "새 대화", search: "검색", automations: "자동화", settings: "설정", filter: "전체 · 최근 · 실행 중", aria: "사이드바",
+    newChat: "새 대화", search: "검색", automations: "예약 작업", settings: "설정", filter: "전체 · 최근 · 실행 중", aria: "사이드바",
     sessions: ["데스크톱 앱 다듬기", "설정 화면 위계", "릴리스 노트 초안", "일반 대화", "주간 회고", "여행 계획", "읽을거리", "예산 점검", "면접 준비", "버그 분류"],
   },
 } as const;

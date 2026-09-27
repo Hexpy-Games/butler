@@ -16,13 +16,13 @@ export const meta: ShowcaseMeta = {
 
 const labels = {
   "en-US": {
-    artifacts: "Artifacts", automations: "Automations", plans: "Plans", specs: "Specs", add: "New automation",
+    artifacts: "Artifacts", automations: "Schedules", plans: "Plans", specs: "Specs", add: "New schedule",
     description: "Files Butler created or changed in this conversation.", viewAll: "View all",
     items: ["release-notes.md", "design-review.png"], nightly: "Nightly release notes", every: "Every day 07:00",
     empty: "No specs yet.",
   },
   "ko-KR": {
-    artifacts: "산출물", automations: "자동화", plans: "계획", specs: "명세", add: "새 자동화",
+    artifacts: "산출물", automations: "예약 작업", plans: "계획", specs: "명세", add: "새 예약 작업",
     description: "이 대화에서 Butler가 만들거나 바꾼 파일입니다.", viewAll: "모두 보기",
     items: ["release-notes.md", "design-review.png"], nightly: "야간 릴리스 노트", every: "매일 07:00",
     empty: "아직 명세가 없습니다.",
