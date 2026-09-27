@@ -64,6 +64,8 @@ pub(super) fn replay_result(
     }
 }
 
+/// Appends the approved candidates of a manifest to its hot cache, restoring
+/// the cache when a write fails; replaying an applied manifest is a no-op.
 pub(super) fn apply(
     data_root: &Path,
     paths: &CognitionPathEnvironment,
@@ -99,34 +101,7 @@ pub(super) fn apply(
     if sha256(before_body.as_bytes()) != manifest.before.sha256 {
         return Err(error(CognitionCode::ContinuityRecoverySnapshotConflict));
     }
-    let approved = manifest
-        .approved_candidate_ids
-        .iter()
-        .collect::<std::collections::HashSet<_>>();
-    let result = (|| {
-        let mut current = before_body.clone();
-        for candidate in &manifest.candidates {
-            if !approved.contains(&candidate.candidate_id) {
-                continue;
-            }
-            current = append_semantic_entry(
-                &current,
-                cache,
-                SemanticEntry {
-                    project_id: &manifest.project_id,
-                    manifest_id: &manifest.manifest_id,
-                    session_id: &candidate.conversation_session_id,
-                    candidate_id: &candidate.candidate_id,
-                    body: &candidate.body,
-                    created_at: &candidate.completed_at,
-                },
-            )?;
-        }
-        write_atomic(cache, &current)?;
-        ensure_project_gitignore(cache)?;
-        Ok(current)
-    })();
-    let after_body = match result {
+    let after_body = match append_approved(&manifest, cache, &before_body) {
         Ok(value) => value,
         Err(failure) => {
             let _ = write_atomic(cache, &before_body);
@@ -144,6 +119,40 @@ pub(super) fn apply(
         manifest: super::view(manifest),
         replayed: false,
     })
+}
+
+/// Writes `before_body` plus an entry for each approved candidate to the
+/// cache; the new body.
+fn append_approved(
+    manifest: &ContinuityRecoveryManifest,
+    cache: &Path,
+    before_body: &str,
+) -> CognitionResult<String> {
+    let approved = manifest
+        .approved_candidate_ids
+        .iter()
+        .collect::<std::collections::HashSet<_>>();
+    let mut current = before_body.to_owned();
+    for candidate in &manifest.candidates {
+        if !approved.contains(&candidate.candidate_id) {
+            continue;
+        }
+        current = append_semantic_entry(
+            &current,
+            cache,
+            SemanticEntry {
+                project_id: &manifest.project_id,
+                manifest_id: &manifest.manifest_id,
+                session_id: &candidate.conversation_session_id,
+                candidate_id: &candidate.candidate_id,
+                body: &candidate.body,
+                created_at: &candidate.completed_at,
+            },
+        )?;
+    }
+    write_atomic(cache, &current)?;
+    ensure_project_gitignore(cache)?;
+    Ok(current)
 }
 
 pub(super) fn rollback(

@@ -46,6 +46,8 @@ pub(super) struct ExtractionResult {
     pub(super) edges: Vec<ExtractedEdge>,
 }
 
+/// Projects, tools, decisions, concepts and interests named in `text`, with
+/// the edges between them.
 pub(super) fn extract(
     data_root: &Path,
     text: &str,
@@ -111,6 +113,13 @@ pub(super) fn extract(
         add_entity(&mut result, &mut seen, "concept", "learning", Some(project));
     }
 
+    link_projects_to_tools(&mut result);
+    Ok(result)
+}
+
+/// Adds a `works_on` edge from every extracted project to every extracted
+/// tool.
+fn link_projects_to_tools(result: &mut ExtractionResult) {
     let project_names = result
         .entities
         .iter()
@@ -134,7 +143,6 @@ pub(super) fn extract(
             });
         }
     }
-    Ok(result)
 }
 
 pub(super) fn mention_snippet(text: &str) -> String {

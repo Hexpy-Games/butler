@@ -2,26 +2,16 @@
 # Split a function and regenerate: cargo run -p butler-source-check -- --bless .
 # Entries may only shrink or disappear; new entries need review.
 src/cognition/briefing/generation/tests.rs	project_briefing_keeps_source_context_filters_exclusions_and_has_no_project_cap	86
-src/cognition/continuity_recovery/hot_cache.rs	apply	81
 src/cognition/feedback_buffer/tests.rs	counts_apply_source_defaults_expiry_and_active_profile_filter	83
 src/cognition/generation/rebuild/tests.rs	readiness_rejects_candidate_change_while_waiting_for_commit_gate	86
 src/cognition/generation/rebuild/tests.rs	representative_commit_rejects_changed_candidate_after_gate_wait	95
-src/cognition/generation_vectors/rows.rs	GenerationVectorStore::upsert	81
-src/cognition/graph/candidates/selection.rs	lexical	88
 src/cognition/graph/candidates/selection/tests.rs	real_schema_selector_matches_bun_alias_lexical_fusion_golden	103
 src/cognition/graph/internal_supersession/tests.rs	supersession_marks_only_canonical_sources_recomputes_claims_and_bumps_once	95
-src/cognition/graph/recall/claims/requirements.rs	requirements	84
 src/cognition/graph/recall/semantic/tests.rs	fixture	148
 src/cognition/graph/recall/vectors/tests.rs	episode_vector_receipt_and_finite_distance_are_required	82
 src/cognition/graph/recall/vectors/tests.rs	node_vector_second_filter_requires_complete_current_unit_and_scoped_source	87
-src/cognition/graph/vector_registration/units.rs	register_episodes	81
-src/cognition/hot_cache/rules.rs	extract	90
-src/cognition/knowhow_store/quality.rs	aggregate	81
 src/cognition/knowhow_store/tests.rs	aggregation_builds_index_and_revision_resolves_each_target_without_holding_lock	95
-src/cognition/legacy/session_sync/parser.rs	parse_and_chunk	82
-src/cognition/legacy/session_sync/query.rs	index	85
 src/cognition/memory_health/tests.rs	vector_snapshot_and_maintenance_status_drive_source_diagnostics	81
-src/cognition/project_capsule/source.rs	prepare	81
 src/cognition/recall/tests.rs	graph_expansion_matches_unchanged_bun_source	104
 src/cognition/registration/tests.rs	Fixture::seed_pair_with_origin	100
 src/cognition/registration/tests/cases.rs	claimed_window_meaning_and_bound_apply_are_durable	123
@@ -30,7 +20,6 @@ src/cognition/registration/tests/semantic/ranked.rs	two_window_binding_prefers_e
 src/cognition/sources/recall/tests.rs	canonical_writer_original_source_hydrates_and_changed_scalar_fails	86
 src/cognition/sources/tests.rs	canonical_writer_turn_prepares_ordered_windows_hydration_and_prior_context	201
 src/coordination/tests.rs	real_exclusive_gate_preserves_fence_and_release_projection	94
-src/profile/projection.rs	reflective	81
 src/profile/tests.rs	candidate_duplicate_and_promoted_stable_merge_preserve_source_history	102
 src/profile/tests/extraction/provider.rs	actual_native_provider_loopback_reaches_profile_commit	93
 src/profile/tests/legacy_candidates.rs	consolidation_hydrates_legacy_rows_and_expires_after_promotion_pass	100

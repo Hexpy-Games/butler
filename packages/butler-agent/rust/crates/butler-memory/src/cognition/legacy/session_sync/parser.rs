@@ -45,6 +45,8 @@ struct Message {
     timestamp_ms: Option<i64>,
 }
 
+/// The messages of a legacy transcript and their chunks for storage and
+/// indexing.
 pub(super) fn parse_and_chunk(lines: &[String], fallback_session_id: &str) -> ParsedTranscript {
     let mut source_session_id = None;
     let mut messages: Vec<Message> = Vec::new();
@@ -82,24 +84,7 @@ pub(super) fn parse_and_chunk(lines: &[String], fallback_session_id: &str) -> Pa
     }
 
     let source_session_id = source_session_id.unwrap_or_else(|| fallback_session_id.to_owned());
-    let mut groups: Vec<Vec<Message>> = Vec::new();
-    for message in messages {
-        let split = groups
-            .last()
-            .and_then(|group| group.last())
-            .and_then(
-                |previous| match (previous.timestamp_ms, message.timestamp_ms) {
-                    (Some(previous), Some(current)) => Some(current - previous > CHUNK_GAP_MS),
-                    _ => None,
-                },
-            )
-            .unwrap_or(false);
-        match groups.last_mut() {
-            Some(group) if !split => group.push(message),
-            _ => groups.push(vec![message]),
-        }
-    }
-
+    let groups = group_by_gap(messages);
     let normalized_id = normalize_session_id_for_storage(&source_session_id);
     let chunks = groups
         .into_iter()
@@ -126,6 +111,29 @@ pub(super) fn parse_and_chunk(lines: &[String], fallback_session_id: &str) -> Pa
         message_count,
         chunks,
     }
+}
+
+/// Consecutive messages grouped into chunks, split wherever two timestamped
+/// messages are more than the chunk gap apart.
+fn group_by_gap(messages: Vec<Message>) -> Vec<Vec<Message>> {
+    let mut groups: Vec<Vec<Message>> = Vec::new();
+    for message in messages {
+        let split = groups
+            .last()
+            .and_then(|group| group.last())
+            .and_then(
+                |previous| match (previous.timestamp_ms, message.timestamp_ms) {
+                    (Some(previous), Some(current)) => Some(current - previous > CHUNK_GAP_MS),
+                    _ => None,
+                },
+            )
+            .unwrap_or(false);
+        match groups.last_mut() {
+            Some(group) if !split => group.push(message),
+            _ => groups.push(vec![message]),
+        }
+    }
+    groups
 }
 
 struct TranscriptEvent<'a> {

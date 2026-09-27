@@ -40,28 +40,11 @@ struct Accumulator {
     last_observed_at: Option<String>,
 }
 
+/// One summary per (tool, source) pair in the source-quality log, best
+/// score first; nothing when there is no log.
 pub(super) fn aggregate(root: &Path) -> CognitionResult<Vec<SourceQualitySummary>> {
-    let path = root.join("source-quality.jsonl");
-    let file = match fs::symlink_metadata(&path) {
-        Ok(metadata) if metadata.file_type().is_file() => {
-            let canonical_root = fs::canonicalize(root).map_err(|source| {
-                error(CognitionCode::MemorySourceQualityReadFailed).with_source(source)
-            })?;
-            let canonical = fs::canonicalize(&path).map_err(|source| {
-                error(CognitionCode::MemorySourceQualityReadFailed).with_source(source)
-            })?;
-            if !canonical.starts_with(&canonical_root) {
-                return Err(error(CognitionCode::MemorySourceQualityPathUnsafe));
-            }
-            File::open(canonical).map_err(|source| {
-                error(CognitionCode::MemorySourceQualityReadFailed).with_source(source)
-            })?
-        }
-        Ok(_) => return Err(error(CognitionCode::MemorySourceQualityPathUnsafe)),
-        Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(Vec::new());
-        }
-        Err(_) => return Err(error(CognitionCode::MemorySourceQualityReadFailed)),
+    let Some(file) = open_log(root)? else {
+        return Ok(Vec::new());
     };
 
     let mut groups: IndexMap<(String, String), Accumulator> = IndexMap::new();
@@ -120,6 +103,30 @@ pub(super) fn aggregate(root: &Path) -> CognitionResult<Vec<SourceQualitySummary
         .collect::<Vec<_>>();
     summaries.sort_by(|left, right| right.score.total_cmp(&left.score));
     Ok(summaries)
+}
+
+/// The source-quality log, when it is a regular file inside `root`.
+fn open_log(root: &Path) -> CognitionResult<Option<File>> {
+    let path = root.join("source-quality.jsonl");
+    match fs::symlink_metadata(&path) {
+        Ok(metadata) if metadata.file_type().is_file() => {
+            let canonical_root = fs::canonicalize(root).map_err(|source| {
+                error(CognitionCode::MemorySourceQualityReadFailed).with_source(source)
+            })?;
+            let canonical = fs::canonicalize(&path).map_err(|source| {
+                error(CognitionCode::MemorySourceQualityReadFailed).with_source(source)
+            })?;
+            if !canonical.starts_with(&canonical_root) {
+                return Err(error(CognitionCode::MemorySourceQualityPathUnsafe));
+            }
+            File::open(canonical).map(Some).map_err(|source| {
+                error(CognitionCode::MemorySourceQualityReadFailed).with_source(source)
+            })
+        }
+        Ok(_) => Err(error(CognitionCode::MemorySourceQualityPathUnsafe)),
+        Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(_) => Err(error(CognitionCode::MemorySourceQualityReadFailed)),
+    }
 }
 
 fn summarize(

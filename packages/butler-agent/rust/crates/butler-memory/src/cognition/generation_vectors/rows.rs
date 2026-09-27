@@ -101,16 +101,7 @@ impl GenerationVectorStore {
             .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
         async move {
             lease_check?;
-            if rows.is_empty()
-                || rows.len() > 4
-                || rows.iter().any(|row| {
-                    row.generation != generation.generation_id
-                        || row.vector.len() != DIMENSION
-                        || row.vector.iter().any(|value| !value.is_finite())
-                        || row.vector_key.len() != 64
-                        || row.embedding_chunk_id.len() != 64
-                })
-            {
+            if !valid_rows(rows, generation) {
                 return Err(error(CognitionCode::MemoryVectorRowsInvalid));
             }
             assert_mutation_authority(&self.data_root, &self.paths, target, generation)?;
@@ -169,6 +160,19 @@ impl GenerationVectorStore {
             Ok(receipt)
         }
     }
+}
+
+/// One to four rows of this generation, each with a finite vector of the
+/// model dimension and full-length keys.
+fn valid_rows(rows: &[GenerationVectorRow], generation: &MemoryGenerationHandle) -> bool {
+    (1..=4).contains(&rows.len())
+        && rows.iter().all(|row| {
+            row.generation == generation.generation_id
+                && row.vector.len() == DIMENSION
+                && row.vector.iter().all(|value| value.is_finite())
+                && row.vector_key.len() == 64
+                && row.embedding_chunk_id.len() == 64
+        })
 }
 
 pub(crate) async fn persisted_receipt(

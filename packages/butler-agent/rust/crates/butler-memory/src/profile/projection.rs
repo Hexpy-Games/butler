@@ -231,6 +231,7 @@ pub(super) fn render(value: &RuntimeProfileProjection) -> String {
     lines.join("\n")
 }
 
+/// A reflective summary of the stable profile in the user's locale.
 pub(super) fn reflective(
     data_root: &Path,
     locale: &str,
@@ -264,21 +265,40 @@ pub(super) fn reflective(
         ));
     }
     let count = entries.len();
-    let order = [
-        "cares",
-        "values",
-        "epistemic_style",
-        "communication",
-        "aesthetics",
-        "boundaries",
-        "agency",
-        "identity",
-        "narrative",
-        "affective_landscape",
-        "relationships",
-    ];
+    let bullets = reflective_bullets(&entries, locale);
+    Ok(summary(
+        true,
+        consent.mode,
+        count,
+        if locale == "ko" {
+            "지금까지의 명시 피드백과 반복 관찰을 바탕으로 Butler가 조심스럽게 형성한 이해입니다. 단정이 아니라 현재까지의 작업 가설입니다."
+        } else {
+            "This is Butler's careful current understanding from explicit feedback and repeated observations. It is a working interpretation, not a fixed judgment."
+        },
+        bullets,
+    ))
+}
+
+/// The order categories are summarized in.
+const REFLECTIVE_ORDER: [&str; 11] = [
+    "cares",
+    "values",
+    "epistemic_style",
+    "communication",
+    "aesthetics",
+    "boundaries",
+    "agency",
+    "identity",
+    "narrative",
+    "affective_landscape",
+    "relationships",
+];
+
+/// Up to eight bullets of stable entries, in category order, labeled in
+/// the locale.
+fn reflective_bullets(entries: &[StoredEntry], locale: &str) -> Vec<String> {
     let mut bullets = Vec::new();
-    for category in order {
+    for category in REFLECTIVE_ORDER {
         for entry in entries.iter().filter(|entry| entry.category == category) {
             let facet = entry.understanding.facet_text();
             let label = if locale == "ko" {
@@ -300,18 +320,9 @@ pub(super) fn reflective(
             break;
         }
     }
-    Ok(summary(
-        true,
-        consent.mode,
-        count,
-        if locale == "ko" {
-            "지금까지의 명시 피드백과 반복 관찰을 바탕으로 Butler가 조심스럽게 형성한 이해입니다. 단정이 아니라 현재까지의 작업 가설입니다."
-        } else {
-            "This is Butler's careful current understanding from explicit feedback and repeated observations. It is a working interpretation, not a fixed judgment."
-        },
-        bullets,
-    ))
+    bullets
 }
+
 fn summary(
     enabled: bool,
     mode: ProfilingMode,

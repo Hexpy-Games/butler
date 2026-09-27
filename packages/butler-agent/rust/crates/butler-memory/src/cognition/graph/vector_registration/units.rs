@@ -53,6 +53,8 @@ pub(super) fn refresh(
     result.map_err(|error| (stage, error))
 }
 
+/// Registers the vector units of an episode's sources, split into chunks;
+/// every unit id they need.
 fn register_episodes(
     tx: &Transaction<'_>,
     job_id: &str,
@@ -101,38 +103,58 @@ fn register_episodes(
                 }
             }
             Err(()) => {
-                let chunk_revision = digest(&(
-                    "episode-vector-oversized",
-                    &episode_id,
-                    &revision,
-                    &source.source_id,
-                    &source.byte_start,
-                ))?;
-                let unit_id = vector_unit_id(job_id, "episode", episode_id, &chunk_revision)?;
-                desired.insert(unit_id.clone());
-                let byte_end =
-                    source.byte_start + i64::try_from(source.text.len()).unwrap_or(i64::MAX);
-                tx.execute(
-                        "INSERT OR IGNORE INTO memory_vector_units                      (unit_id,job_id,record_kind,owner_id,owner_revision,project_id,origin_kind,projection_text,state,error_code,source_ids_json,source_byte_start,source_byte_end,source_role)                      VALUES(?1,?2,'episode',?3,?4,?5,?6,'','failed',?7,?8,?9,?10,?11)",
-                    params![
-                        unit_id,
-                        job_id,
-                        episode_id,
-                        chunk_revision,
-                        project_id,
-                        origin_kind,
-                        OVERSIZED_GRAPHEME,
-                        json_array(std::slice::from_ref(&source.source_id))?,
-                        source.byte_start,
-                        byte_end,
-                        source.role,
-                    ],
-                )
-                .map_err(db_error)?;
+                desired.insert(register_oversized(
+                    tx,
+                    job_id,
+                    episode_id,
+                    revision,
+                    project_id,
+                    origin_kind,
+                    source,
+                )?);
             }
         }
     }
     Ok(desired)
+}
+
+/// Registers a source too large to embed as one failed unit; its id.
+fn register_oversized(
+    tx: &Transaction<'_>,
+    job_id: &str,
+    episode_id: &str,
+    revision: &str,
+    project_id: Option<&str>,
+    origin_kind: &str,
+    source: &EpisodeProjectionSource,
+) -> CognitionResult<String> {
+    let chunk_revision = digest(&(
+        "episode-vector-oversized",
+        &episode_id,
+        &revision,
+        &source.source_id,
+        &source.byte_start,
+    ))?;
+    let unit_id = vector_unit_id(job_id, "episode", episode_id, &chunk_revision)?;
+    let byte_end = source.byte_start + i64::try_from(source.text.len()).unwrap_or(i64::MAX);
+    tx.execute(
+                "INSERT OR IGNORE INTO memory_vector_units                      (unit_id,job_id,record_kind,owner_id,owner_revision,project_id,origin_kind,projection_text,state,error_code,source_ids_json,source_byte_start,source_byte_end,source_role)                      VALUES(?1,?2,'episode',?3,?4,?5,?6,'','failed',?7,?8,?9,?10,?11)",
+            params![
+                unit_id,
+                job_id,
+                episode_id,
+                chunk_revision,
+                project_id,
+                origin_kind,
+                OVERSIZED_GRAPHEME,
+                json_array(std::slice::from_ref(&source.source_id))?,
+                source.byte_start,
+                byte_end,
+                source.role,
+            ],
+        )
+        .map_err(db_error)?;
+    Ok(unit_id)
 }
 
 fn vector_unit_id(
