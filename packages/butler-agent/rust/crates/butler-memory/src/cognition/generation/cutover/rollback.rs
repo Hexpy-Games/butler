@@ -188,13 +188,12 @@ pub async fn rollback(
         if current_sha != previous_sha {
             return Err(error(CognitionCode::MemoryGenerationChanged));
         }
-        let next = json!({
-            "schema":"butler.memory-active-generation.v2",
-            "generation_id":previous_id,
-            "previous_generation_id":descriptor.fields.generation_id,
-            "activated_at":stamp.now,
-            "projection_mode":if format == "v2" {"running"} else {"paused"},
-        });
+        let next = descriptor::next_descriptor(
+            previous_id,
+            &descriptor.fields.generation_id,
+            stamp.now,
+            if format == "v2" { "running" } else { "paused" },
+        );
         let transitioned = descriptor::commit_descriptor_transition(
             data_root,
             environment,

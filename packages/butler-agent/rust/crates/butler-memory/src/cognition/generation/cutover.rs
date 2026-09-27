@@ -27,6 +27,8 @@ pub struct CutoverStamp<'a> {
     pub verified_commit: Option<&'a str>,
 }
 pub use rollback::rollback;
+#[cfg(test)]
+pub(super) use descriptor::next_descriptor as next_descriptor_for_pin;
 
 pub(crate) async fn repair_pending(
     data_root: &Path,

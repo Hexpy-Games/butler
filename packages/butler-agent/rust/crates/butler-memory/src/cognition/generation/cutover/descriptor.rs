@@ -191,6 +191,22 @@ pub(super) fn reconcile_committed_manifest_states(
     Ok(())
 }
 
+/// The descriptor that makes `generation_id` the serving generation.
+pub(in crate::cognition::generation) fn next_descriptor(
+    generation_id: &str,
+    previous_generation_id: &str,
+    activated_at: &str,
+    projection_mode: &str,
+) -> Value {
+    serde_json::json!({
+        "schema":ACTIVE_DESCRIPTOR_SCHEMA,
+        "generation_id":generation_id,
+        "previous_generation_id":previous_generation_id,
+        "activated_at":activated_at,
+        "projection_mode":projection_mode,
+    })
+}
+
 fn assert_cutover_lease(
     data_root: &Path,
     environment: &CognitionPathEnvironment,

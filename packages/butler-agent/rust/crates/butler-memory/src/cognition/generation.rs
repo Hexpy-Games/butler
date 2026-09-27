@@ -43,4 +43,6 @@ pub use types::{GenerationEmbedding, MemoryGenerationHandle, MemoryGenerationTar
 
 mod embedding_binding;
 #[cfg(test)]
+mod format_pin;
+#[cfg(test)]
 mod tests;

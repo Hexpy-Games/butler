@@ -2,7 +2,7 @@
 
 use std::{path::Path, sync::Arc};
 
-use serde_json::{Value, json};
+use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
 use super::{
@@ -123,13 +123,12 @@ pub async fn activate(
         {
             return Err(error(CognitionCode::ActivationRequiresCatchup));
         }
-        let next = json!({
-            "schema":"butler.memory-active-generation.v2",
-            "generation_id":generation_id,
-            "previous_generation_id":descriptor.fields.generation_id,
-            "activated_at":stamp.now,
-            "projection_mode":"running",
-        });
+        let next = descriptor::next_descriptor(
+            generation_id,
+            &descriptor.fields.generation_id,
+            stamp.now,
+            "running",
+        );
         let transitioned = descriptor::commit_descriptor_transition(
             data_root,
             environment,

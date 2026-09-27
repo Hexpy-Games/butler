@@ -203,22 +203,7 @@ pub async fn validate(
             }
             return Err(error(CognitionCode::MemoryQualificationIoError));
         }
-        current["state"] = json!("ready");
-        current["registered_source_count"] = readiness["registered"].clone();
-        current["unaccounted_source_count"] = readiness["unaccounted"].clone();
-        current["required_acceptance_passed"] = json!(true);
-        current["readiness"] = readiness.clone();
-        current["acceptance_binding"] = json!({
-            "qualification_sha256":evidence.acceptance_sha256,
-            "qualification_ref":"qualification/acceptance.json",
-            "verification_root_ref":"qualification/evidence",
-            "implementation_commit":evidence.implementation_commit,
-            "verification_generation_id":evidence.verification_generation_id,
-            "target_generation_id":generation_id,
-            "target_source_inventory_hash":inventory_hash,
-            "target_readiness_sha256":readiness["sha256"],
-            "target_evidence_sha256":readiness["evidence_sha256"],
-        });
+        qualify_manifest(&mut current, &readiness, &evidence, generation_id, inventory_hash);
         // The helper may fail after replacing the manifest but before its
         // directory sync. Keep the complete evidence bundle in either case;
         // removing it could leave a ready manifest with a broken binding.
@@ -235,6 +220,33 @@ pub async fn validate(
     }
     released?;
     Ok(manifest)
+}
+
+/// Marks a building manifest ready and binds it to the validated evidence and
+/// the readiness it was qualified against.
+pub(super) fn qualify_manifest(
+    current: &mut Value,
+    readiness: &Value,
+    evidence: &super::qualification::ValidatedEvidence,
+    generation_id: &str,
+    inventory_hash: &str,
+) {
+    current["state"] = json!("ready");
+    current["registered_source_count"] = readiness["registered"].clone();
+    current["unaccounted_source_count"] = readiness["unaccounted"].clone();
+    current["required_acceptance_passed"] = json!(true);
+    current["readiness"] = readiness.clone();
+    current["acceptance_binding"] = json!({
+        "qualification_sha256":evidence.acceptance_sha256,
+        "qualification_ref":"qualification/acceptance.json",
+        "verification_root_ref":"qualification/evidence",
+        "implementation_commit":evidence.implementation_commit,
+        "verification_generation_id":evidence.verification_generation_id,
+        "target_generation_id":generation_id,
+        "target_source_inventory_hash":inventory_hash,
+        "target_readiness_sha256":readiness["sha256"],
+        "target_evidence_sha256":readiness["evidence_sha256"],
+    });
 }
 
 fn stage_bundle(
