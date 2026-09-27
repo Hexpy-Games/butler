@@ -68,6 +68,15 @@
   text-decoration: none;
 }
 
+.item[data-blocked="true"] .name,
+.item[data-blocked="true"] .icon {
+  color: var(--interactive-disabled-fg);
+}
+
+.item[data-blocked="true"] .thumbnail img {
+  filter: grayscale(1);
+}
+
 .meta,
 .empty {
   color: var(--text-tertiary);

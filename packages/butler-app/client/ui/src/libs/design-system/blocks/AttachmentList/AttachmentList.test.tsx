@@ -91,3 +91,23 @@ test("ordinary files keep their icon and chip metadata follows the chip containe
   expect(chipQuery).toMatch(/\.meta\s*\{[\s\S]*?display:\s*none/su);
   expect(css).not.toMatch(/container-name:\s*attachment-list/u);
 });
+
+test("a blocked item keeps its chip, is marked blocked, and states the short reason", () => {
+  const html = renderToStaticMarkup(
+    <AttachmentList
+      items={[
+        { id: "image", name: "a.png", blockedReason: "Model doesn't accept images" },
+        { id: "doc", name: "a.pdf" },
+      ]}
+      onRemove={() => undefined}
+      variant="chips"
+    />,
+  );
+  const document = new JSDOM(html).window.document;
+  const [image, doc] = Array.from(document.querySelectorAll('[data-slot="attachment-item"]'));
+  expect(image?.getAttribute("data-blocked")).toBe("true");
+  expect(image?.querySelector('[data-slot="attachment-name"]')?.getAttribute("aria-label"))
+    .toBe("a.png, Model doesn't accept images");
+  expect(doc?.hasAttribute("data-blocked")).toBe(false);
+  expect(readStyles()).toMatch(/\.item\[data-blocked="true"\] \.name[^{]*\{[^}]*color:\s*var\(--interactive-disabled-fg\)/u);
+});

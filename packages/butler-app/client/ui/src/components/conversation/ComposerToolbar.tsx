@@ -15,6 +15,7 @@ import { ModelMenu } from "./ModelMenu";
 import { ComposerCompactPreview } from "./ComposerCompactPreview";
 import { ComposerPlanModeBadge } from "./ComposerPlanModeBadge";
 import { ComposerWorkspaceSelect } from "./ComposerWorkspaceSelect";
+import { imageRefusalLabel } from "./composerImagePolicy";
 
 export function ComposerToolbar() {
   useAppLocale();
@@ -22,6 +23,7 @@ export function ComposerToolbar() {
   const activeTurn = useComposerStore((store) => store.activeTurn);
   const canSend = useComposerStore((store) => store.canSend);
   const canStop = useComposerStore((store) => store.canStop);
+  const [blockedImage] = useComposerStore((store) => store.blockedAttachments).values();
   const onStop = useComposerStore((store) => store.onStop);
   const reconnecting = useButlerStore((store) => store.liveConnectionLost);
 
@@ -51,6 +53,7 @@ export function ComposerToolbar() {
           <ComposerSendButton
             aria-label={appCopy.composer.send}
             disabled={!canSend}
+            disabledReason={blockedImage ? imageRefusalLabel(blockedImage) : undefined}
           />
         </ComposerCardExpandedControls>
       )}

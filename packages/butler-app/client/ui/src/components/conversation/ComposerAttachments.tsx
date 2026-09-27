@@ -10,11 +10,13 @@ import { appCopy } from "@/app/copy.ts";
 import { useComposerStore } from "./composerStore";
 import type { ComposerAttachment } from "./hooks/useFileAttachments";
 import { formatFileSize, messageFileUrl } from "./conversationUtils";
+import { imageRefusalLabel } from "./composerImagePolicy";
 
 export function ComposerAttachments() {
   useAppLocale();
   const attachments = useComposerStore((store) => store.attachments);
   const removeAttachment = useComposerStore((store) => store.removeAttachment);
+  const blockedAttachments = useComposerStore((store) => store.blockedAttachments);
 
   if (attachments.length === 0) return null;
 
@@ -27,6 +29,7 @@ export function ComposerAttachments() {
         meta: formatFileSize(attachment.file.size_bytes),
         href: messageFileUrl(attachment.file),
         icon: attachmentIcon(attachment),
+        blockedReason: blockedLabel(blockedAttachments.get(attachment.id)),
         thumbnail:
           attachment.kind === "image"
             ? {
@@ -47,4 +50,8 @@ function attachmentIcon(attachment: ComposerAttachment) {
   if (attachment.kind === "image") return <ImageIcon size="sm" />;
   if (attachment.kind === "text") return <FileText size="sm" />;
   return <Paperclip size="sm" />;
+}
+
+function blockedLabel(refusal: Parameters<typeof imageRefusalLabel>[0] | undefined) {
+  return refusal ? imageRefusalLabel(refusal) : undefined;
 }

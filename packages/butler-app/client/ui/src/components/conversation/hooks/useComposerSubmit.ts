@@ -55,6 +55,7 @@ export function useComposerSubmit({
       const value = text.trim();
       if (
         (!value && attachments.length === 0) ||
+        useComposerStore.getState().blockedAttachments.size > 0 ||
         (isSending && !activeTurn) ||
         uploadingCount > 0
       ) {

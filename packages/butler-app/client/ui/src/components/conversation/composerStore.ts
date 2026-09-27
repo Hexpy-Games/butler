@@ -2,11 +2,13 @@ import type {
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
 } from "react";
+import { flushSync } from "react-dom";
 import { create } from "zustand";
 import type { KeyboardEventLike } from "./hooks/composerEventTypes";
 import { writeCachedComposerDraft } from "@/app/composerDraftCache.ts";
 import type { ComposerStore } from "./composerStoreContract";
 import { messageContentText } from "@/app/messageContent";
+import { NO_BLOCKED_ATTACHMENTS } from "./composerImagePolicy";
 
 const noop = () => {};
 const noopAsync = async () => {};
@@ -60,6 +62,8 @@ export const useComposerStore = create<ComposerStore>((set, get) => ({
     get().setAttachments((current) =>
       current.filter((attachment) => attachment.id !== id),
     ),
+  blockedAttachments: NO_BLOCKED_ATTACHMENTS,
+  pickerKind: "files",
   uploadingCount: 0,
   addFiles: noop,
   addProjectDocument: noopAsync,
@@ -94,6 +98,10 @@ export const useComposerStore = create<ComposerStore>((set, get) => ({
   handleReasoningChange: noop,
   onStop: noop,
   onOpenContext: noop,
-  openAttachmentPicker: () => get().fileInputRef?.current?.click(),
+  openAttachmentPicker: (pickerKind = "files") => {
+    // Render the picker's accept filter before the native dialog opens.
+    flushSync(() => set({ pickerKind }));
+    get().fileInputRef?.current?.click();
+  },
   setSnapshot: (snapshot) => set(snapshot),
 }));
