@@ -17,38 +17,7 @@ impl ProjectLedger {
         input: ProjectWorkScopeLookup,
     ) -> Result<ResolvedProjectWorkScope, ProjectWorkPublicationError> {
         let scope = self
-            .run(move |data_root, _| {
-                let projects_root = data_root.join("project-ledger/projects");
-                let ledger_root = match input.ledger_project_id.filter(|id| !id.is_empty()) {
-                    Some(id) => {
-                        if !active_reference::safe_id(&id) {
-                            return Err(ProjectLedgerReadError::resolution(
-                                "work_scope_project_resolution_mismatch",
-                            ));
-                        }
-                        let root = projects_root.join(id);
-                        active_reference::canonical_containment(&projects_root, &root)?;
-                        root
-                    }
-                    None => active_reference::resolve_workspace(
-                        data_root,
-                        &input.workspace_path,
-                        &input.app_project_id,
-                    )?,
-                };
-                let ledger_project_id = ledger_root
-                    .file_name()
-                    .and_then(|id| id.to_str())
-                    .ok_or(ProjectLedgerReadError::resolution(
-                        "active_project_ledger_unresolved",
-                    ))?
-                    .to_owned();
-                Ok(ResolvedProjectWorkScope {
-                    app_project_id: input.app_project_id,
-                    ledger_project_id,
-                    ledger_root,
-                })
-            })
+            .run(move |data_root, _| resolve(data_root, input))
             .await
             .map_err(read_error)?;
         // Source initialization uses the Ledger id when no presentation name was captured.
@@ -90,4 +59,41 @@ fn read_error(error: ProjectLedgerReadError) -> ProjectWorkPublicationError {
             ProjectWorkPublicationError::Uncertain { source: None }
         }
     }
+}
+
+/// The Ledger an explicit id names, or the one the workspace resolves to.
+fn resolve(
+    data_root: &std::path::Path,
+    input: ProjectWorkScopeLookup,
+) -> Result<ResolvedProjectWorkScope, ProjectLedgerReadError> {
+    let projects_root = data_root.join("project-ledger/projects");
+    let ledger_root = match input.ledger_project_id.filter(|id| !id.is_empty()) {
+        Some(id) => {
+            if !active_reference::safe_id(&id) {
+                return Err(ProjectLedgerReadError::resolution(
+                    "work_scope_project_resolution_mismatch",
+                ));
+            }
+            let root = projects_root.join(id);
+            active_reference::canonical_containment(&projects_root, &root)?;
+            root
+        }
+        None => active_reference::resolve_workspace(
+            data_root,
+            &input.workspace_path,
+            &input.app_project_id,
+        )?,
+    };
+    let ledger_project_id = ledger_root
+        .file_name()
+        .and_then(|id| id.to_str())
+        .ok_or(ProjectLedgerReadError::resolution(
+            "active_project_ledger_unresolved",
+        ))?
+        .to_owned();
+    Ok(ResolvedProjectWorkScope {
+        app_project_id: input.app_project_id,
+        ledger_project_id,
+        ledger_root,
+    })
 }

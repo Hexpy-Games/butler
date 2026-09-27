@@ -9,7 +9,7 @@ use super::super::publication::ProjectLedgerRecordOperation;
 use super::super::publication::{ProjectLedgerRecordKind, ProjectLedgerRecordUpdate};
 use super::codec::{self, Snapshot};
 use super::publication::Projection;
-use super::relation::{has_binding, is_open};
+use super::relation::is_open;
 use super::{ProjectWorkRepository, invalid};
 
 impl ProjectWorkRepository {
@@ -19,7 +19,8 @@ impl ProjectWorkRepository {
         &self,
         turn_id: String,
     ) -> Result<Option<WorkView>, BtccError> {
-        let Some(candidate) = self.bound_candidate(&turn_id).await? else {
+        let ids = self.ids_for_turn(&turn_id).await?;
+        let Some(candidate) = self.single_binding(ids, &turn_id).await? else {
             return Ok(None);
         };
         let relation = self
@@ -55,22 +56,6 @@ impl ProjectWorkRepository {
         self.publish_abandonment(&turn_id, &current.view.work_id, revision)
             .await
             .map(Some)
-    }
-
-    /// The single Work carrying a binding for `turn_id`, if any.
-    async fn bound_candidate(&self, turn_id: &str) -> Result<Option<Snapshot>, BtccError> {
-        let mut candidate = None;
-        for id in self.ids_for_turn(turn_id).await? {
-            let snapshot = self.require_current(&id).await?;
-            if !has_binding(&snapshot, turn_id) {
-                continue;
-            }
-            if candidate.is_some() {
-                return Err(invalid("project_work_managed_record_invalid"));
-            }
-            candidate = Some(snapshot);
-        }
-        Ok(candidate)
     }
 
     async fn publish_abandonment(

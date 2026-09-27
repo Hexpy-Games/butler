@@ -180,9 +180,7 @@ fn file_revision(metadata: &Metadata) -> String {
         .and_then(epoch_millis)
         .map(number_string)
         .unwrap_or_else(|| "null".into());
-    let changed = change_time_millis(metadata)
-        .map(number_string)
-        .unwrap_or_else(|| "null".into());
+    let changed = change_time(metadata);
     format!(
         "{}:{}:{modified}:{changed}",
         path_identity(metadata),
@@ -190,15 +188,22 @@ fn file_revision(metadata: &Metadata) -> String {
     )
 }
 
+/// The inode change time in epoch milliseconds.
 #[cfg(unix)]
-fn change_time_millis(metadata: &Metadata) -> Option<f64> {
+fn change_time(metadata: &Metadata) -> String {
     use std::os::unix::fs::MetadataExt;
-    Some(metadata.ctime() as f64 * 1000.0 + metadata.ctime_nsec() as f64 / 1_000_000.0)
+    number_string(metadata.ctime() as f64 * 1000.0 + metadata.ctime_nsec() as f64 / 1_000_000.0)
 }
 
+/// The creation time in epoch milliseconds, or `null`.
 #[cfg(not(unix))]
-fn change_time_millis(metadata: &Metadata) -> Option<f64> {
-    metadata.created().ok().and_then(epoch_millis)
+fn change_time(metadata: &Metadata) -> String {
+    metadata
+        .created()
+        .ok()
+        .and_then(epoch_millis)
+        .map(number_string)
+        .unwrap_or_else(|| "null".into())
 }
 
 fn epoch_millis(value: std::time::SystemTime) -> Option<f64> {

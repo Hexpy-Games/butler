@@ -151,7 +151,11 @@ pub(super) fn reference(record: &Value, reason: Option<&str>) -> Value {
         "path":record.get("path"),
     });
     if let Some(reason) = reason {
-        result["reason"] = Value::String(reason.into());
+        crate::project_ledger::work_json::set_field(
+            &mut result,
+            "reason",
+            Value::String(reason.into()),
+        );
     }
     result
 }

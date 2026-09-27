@@ -203,7 +203,7 @@ pub(super) struct WorkViewUpdates<'a> {
     pub current: &'a Snapshot,
     pub view: &'a WorkView,
     pub identity: &'a ProjectWorkOperationIdentity,
-    pub revisions: &'a Value,
+    pub revisions: &'a codec::Revisions,
     pub children: Vec<Value>,
     pub operation: ProjectLedgerRecordOperation,
     pub leading: Vec<ProjectLedgerRecordUpdate>,
@@ -215,7 +215,7 @@ pub(super) struct ManifestPublicationInput<'a> {
     pub identity: &'a ProjectWorkOperationIdentity,
     pub binding_refs: Value,
     pub session_head: bool,
-    pub revisions: &'a Value,
+    pub revisions: &'a codec::Revisions,
     pub operation: ProjectLedgerRecordOperation,
 }
 

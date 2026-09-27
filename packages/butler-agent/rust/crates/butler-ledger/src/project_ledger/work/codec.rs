@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use serde_json::{Map, Value};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use butler_turn::btcc::{
@@ -153,7 +153,7 @@ pub(super) struct ManifestViewInput<'a> {
     pub binding_refs: Value,
     pub session_head: bool,
     pub material: &'a butler_turn::btcc::ProjectWorkCapturedMaterial,
-    pub revisions: &'a Value,
+    pub revisions: &'a Revisions,
 }
 
 /// The persisted Project Work manifest (`butler.btcc-project-work.v1`).
@@ -182,7 +182,7 @@ struct Manifest<'a, R> {
     created_at: &'a Value,
     updated_at: &'a str,
     #[serde(flatten)]
-    revisions: &'a Map<String, Value>,
+    revisions: &'a Revisions,
     #[serde(skip_serializing_if = "Option::is_none")]
     current_stage: Option<WorkStage>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -246,9 +246,7 @@ pub(super) fn manifest_for_view(
             .and_then(|value| value.get("createdAt"))
             .unwrap_or(&created_at),
         updated_at: &view.updated_at,
-        revisions: revisions
-            .as_object()
-            .ok_or_else(|| invalid("project_work_managed_record_invalid"))?,
+        revisions,
         current_stage: view.current_stage,
         current_plan_revision_id: view
             .current_plan
@@ -279,21 +277,28 @@ pub(super) fn manifest_for_view(
         .map_err(|source| invalid("project_work_managed_record_invalid").with_source(source))
 }
 
-pub(super) fn revisions(manifest: &Value) -> Value {
-    let mut values = Map::new();
-    for key in [
-        "planRevision",
-        "checkpointRevision",
-        "checkpointResultSequence",
-        "reviewRevision",
-        "dispositionRevision",
-    ] {
-        values.insert(
-            key.into(),
-            manifest.get(key).cloned().unwrap_or(Value::from(0)),
-        );
+/// A manifest's revision counters: each child kind's latest revision and
+/// the result sequence the latest checkpoint covered.
+#[derive(Clone, Copy, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct Revisions {
+    pub plan_revision: u64,
+    pub checkpoint_revision: u64,
+    pub checkpoint_result_sequence: u64,
+    pub review_revision: u64,
+    pub disposition_revision: u64,
+}
+
+/// The manifest's counters; a missing counter is zero.
+pub(super) fn revisions(manifest: &Value) -> Revisions {
+    let counter = |key: &str| manifest.get(key).and_then(Value::as_u64).unwrap_or(0);
+    Revisions {
+        plan_revision: counter("planRevision"),
+        checkpoint_revision: counter("checkpointRevision"),
+        checkpoint_result_sequence: counter("checkpointResultSequence"),
+        review_revision: counter("reviewRevision"),
+        disposition_revision: counter("dispositionRevision"),
     }
-    Value::Object(values)
 }
 
 pub(super) fn work_update(

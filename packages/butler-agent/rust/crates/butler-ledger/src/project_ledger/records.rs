@@ -126,10 +126,11 @@ fn infer_kind(relative: &str) -> &'static str {
     }
     if relative.starts_with("work/") {
         let segments: Vec<_> = relative.split('/').collect();
-        if segments.len() >= 6 && segments[2] == "tasks" && segments[4] == "attempts" {
+        let at = |index: usize| segments.get(index).copied();
+        if segments.len() >= 6 && at(2) == Some("tasks") && at(4) == Some("attempts") {
             return "attempt";
         }
-        if segments.len() >= 4 && segments[2] == "tasks" {
+        if segments.len() >= 4 && at(2) == Some("tasks") {
             return "task";
         }
         return "work";

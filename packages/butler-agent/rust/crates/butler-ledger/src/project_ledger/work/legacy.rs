@@ -270,14 +270,18 @@ impl ProjectWorkRepository {
     }
 }
 
-fn legacy_revisions(snapshot: &ProjectWorkLegacySnapshot) -> Value {
-    json!({
-        "planRevision":snapshot.plans.last().map(|item| item.revision).unwrap_or(0),
-        "checkpointRevision":snapshot.checkpoints.last().map(|item| item.checkpoint.revision).unwrap_or(0),
-        "checkpointResultSequence":snapshot.checkpoints.last().map(|item| item.to_result_sequence).unwrap_or(0),
-        "reviewRevision":snapshot.reviews.last().map(|item| item.revision).unwrap_or(0),
-        "dispositionRevision":snapshot.dispositions.last().map(|item| item.disposition.revision).unwrap_or(0),
-    })
+fn legacy_revisions(snapshot: &ProjectWorkLegacySnapshot) -> codec::Revisions {
+    let checkpoint = snapshot.checkpoints.last();
+    codec::Revisions {
+        plan_revision: snapshot.plans.last().map_or(0, |item| item.revision),
+        checkpoint_revision: checkpoint.map_or(0, |item| item.checkpoint.revision),
+        checkpoint_result_sequence: checkpoint.map_or(0, |item| item.to_result_sequence),
+        review_revision: snapshot.reviews.last().map_or(0, |item| item.revision),
+        disposition_revision: snapshot
+            .dispositions
+            .last()
+            .map_or(0, |item| item.disposition.revision),
+    }
 }
 
 fn legacy_children(
@@ -322,7 +326,7 @@ fn legacy_children(
     for (index, result) in work.result_refs.iter().enumerate() {
         let mut item = serde_json::to_value(result)
             .map_err(|source| invalid("project_work_legacy_result_invalid").with_source(source))?;
-        item["sequence"] = Value::from(index + 1);
+        crate::project_ledger::work_json::set_field(&mut item, "sequence", Value::from(index + 1));
         children.push(json!({"schema":"butler.btcc-project-work-result-reference.v1","workId":work.work_id,
             "sessionId":work.session_id,"scope":{"appProjectId":repo.scope.app_project_id,"ledgerProjectId":repo.scope.ledger_project_id},
             "operationIdentity":codec::identity_value(identity),"result":item}));

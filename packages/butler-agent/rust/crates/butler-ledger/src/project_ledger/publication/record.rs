@@ -117,7 +117,9 @@ pub(super) fn capture(
             target.raw_record_sha256 = Some(head::sha(raw.as_bytes()));
         }
     }
-    if addressed[updates.len()..]
+    if addressed
+        .get(updates.len()..)
+        .unwrap_or_default()
         .iter()
         .any(|target| target.state != super::contracts::ProjectWorkTargetState::Absent)
     {

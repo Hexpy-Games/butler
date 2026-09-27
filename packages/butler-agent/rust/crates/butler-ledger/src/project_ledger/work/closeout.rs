@@ -86,7 +86,7 @@ impl ProjectWorkRepository {
         }
         view.updated_at = at.clone();
         let mut revisions = trail.revisions();
-        revisions["reviewRevision"] = Value::from(review_revision);
+        revisions.review_revision = review_revision;
         self.view_updates(super::write::WorkViewUpdates {
             current: &current,
             view: &view,
@@ -189,7 +189,7 @@ impl ProjectWorkRepository {
         );
         provisional.latest_disposition = Some(disposition);
         let mut revisions = trail.revisions();
-        revisions["dispositionRevision"] = Value::from(revision);
+        revisions.disposition_revision = revision;
         self.disposed_updates(
             &current,
             identity,
@@ -209,7 +209,7 @@ impl ProjectWorkRepository {
         identity: &ProjectWorkOperationIdentity,
         view: &WorkView,
         material: &butler_turn::btcc::ProjectWorkCapturedMaterial,
-        revisions: &Value,
+        revisions: &codec::Revisions,
         children: Vec<Value>,
     ) -> Result<Vec<ProjectLedgerRecordUpdate>, BtccError> {
         let manifest = codec::manifest_for_view(codec::ManifestViewInput {

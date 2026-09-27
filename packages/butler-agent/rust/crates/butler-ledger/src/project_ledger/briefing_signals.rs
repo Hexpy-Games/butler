@@ -187,28 +187,13 @@ fn event_summary(path: &Path) -> Result<Vec<String>, ProjectLedgerReadError> {
         if read == 0 {
             break;
         }
-        if let Ok(value) = serde_json::from_slice::<Value>(&line) {
-            let parts = ["type", "kind", "status"]
-                .iter()
-                .filter_map(|key| value[*key].as_str())
-                .collect::<Vec<_>>();
-            if value["type"].is_string() {
-                if lines.len() == 80 {
-                    lines.pop_front();
-                }
-                lines.push_back(parts.join(":"));
-            } else if !line.iter().all(u8::is_ascii_whitespace) {
-                if lines.len() == 80 {
-                    lines.pop_front();
-                }
-                lines.push_back(String::new());
-            }
-        } else if !line.iter().all(u8::is_ascii_whitespace) {
-            if lines.len() == 80 {
-                lines.pop_front();
-            }
-            lines.push_back(String::new());
+        let Some(entry) = event_key(&line) else {
+            continue;
+        };
+        if lines.len() == 80 {
+            lines.pop_front();
         }
+        lines.push_back(entry);
     }
     let mut counts = Vec::<(String, usize)>::new();
     for line in lines.into_iter().filter(|line| !line.is_empty()) {
@@ -224,6 +209,23 @@ fn event_summary(path: &Path) -> Result<Vec<String>, ProjectLedgerReadError> {
         .take(12)
         .map(|(key, count)| format!("{key} x{count}"))
         .collect())
+}
+
+/// An event line's `type:kind:status` key. Other non-blank lines still take
+/// a slot in the recent window as an empty key; blank lines take none.
+fn event_key(line: &[u8]) -> Option<String> {
+    let blank = line.iter().all(u8::is_ascii_whitespace);
+    let Ok(value) = serde_json::from_slice::<Value>(line) else {
+        return (!blank).then(String::new);
+    };
+    if !value.get("type").is_some_and(Value::is_string) {
+        return (!blank).then(String::new);
+    }
+    let parts = ["type", "kind", "status"]
+        .iter()
+        .filter_map(|key| value.get(*key).and_then(Value::as_str))
+        .collect::<Vec<_>>();
+    Some(parts.join(":"))
 }
 
 fn work_titles(project_root: &Path) -> Result<(Vec<String>, Vec<String>), ProjectLedgerReadError> {
@@ -317,7 +319,11 @@ fn excluded_topics(consolidation_root: &Path, project_id: &str) -> Vec<String> {
     let Some(policy) = read_json(&consolidation_root.join("briefing-exclusions.json")) else {
         return vec![];
     };
-    let Some(values) = policy["projects"][project_id].as_array() else {
+    let Some(values) = policy
+        .get("projects")
+        .and_then(|projects| projects.get(project_id))
+        .and_then(Value::as_array)
+    else {
         return vec![];
     };
     unique_strings(

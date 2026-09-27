@@ -138,7 +138,15 @@ pub(super) fn admit(
     };
     locked(data_root, &id, || {
         if let Some(existing) = read(data_root, scope, effect_key, request_sha256)? {
-            if existing.attempts[0].publication_id != candidate.attempts[0].publication_id {
+            if existing
+                .attempts
+                .first()
+                .map(|attempt| &attempt.publication_id)
+                != candidate
+                    .attempts
+                    .first()
+                    .map(|attempt| &attempt.publication_id)
+            {
                 return Err(LedgerEffectError::Conflict);
             }
             return Ok(existing);

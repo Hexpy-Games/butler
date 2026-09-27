@@ -65,7 +65,7 @@ pub(super) fn refresh_after_mutation(root: &Path, record: Value) -> Value {
             }],
         }),
     };
-    result["derived"] = derived;
+    crate::project_ledger::work_json::set_field(&mut result, "derived", derived);
     result
 }
 
@@ -120,8 +120,16 @@ pub(super) fn read_index(root: &Path) -> Result<Option<Value>, CliFailure> {
         CliFailure::new("invalid_json", "Invalid Project Ledger index JSON").with_source(source)
     })?;
     let source_mtime = freshness::source_max_mtime(root)?;
-    index["views"] = freshness::views(root, source_mtime)?;
-    index["index"] = freshness::index(root, source_mtime)?;
+    crate::project_ledger::work_json::set_field(
+        &mut index,
+        "views",
+        freshness::views(root, source_mtime)?,
+    );
+    crate::project_ledger::work_json::set_field(
+        &mut index,
+        "index",
+        freshness::index(root, source_mtime)?,
+    );
     Ok(Some(index))
 }
 
@@ -157,10 +165,14 @@ fn write_unlocked(root: &Path) -> Result<Value, CliFailure> {
     fs::create_dir_all(path.parent().ok_or_else(io_failure)?)
         .map_err(|source| io_failure().with_source(source))?;
     let generated_at = now_iso()?;
-    index["index"] = json!({
-        "available":true,"stale":false,"generatedAt":generated_at,
-        "path":display_path(root, Path::new(INDEX_PATH)),
-    });
+    crate::project_ledger::work_json::set_field(
+        &mut index,
+        "index",
+        json!({
+            "available":true,"stale":false,"generatedAt":generated_at,
+            "path":display_path(root, Path::new(INDEX_PATH)),
+        }),
+    );
     let mut bytes =
         serde_json::to_vec_pretty(&index).map_err(|source| io_failure().with_source(source))?;
     bytes.push(b'\n');

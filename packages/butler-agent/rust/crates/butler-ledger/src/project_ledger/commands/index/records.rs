@@ -98,7 +98,7 @@ pub(super) fn count(records: &[Value]) -> Value {
         if let Some(kind) = record.get("kind").and_then(Value::as_str)
             && let Some(value) = counts.get(kind).and_then(Value::as_u64)
         {
-            counts[kind] = json!(value + 1);
+            crate::project_ledger::work_json::set_field(&mut counts, kind, json!(value + 1));
         }
     }
     counts

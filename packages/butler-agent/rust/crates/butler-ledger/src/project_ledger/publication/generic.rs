@@ -151,7 +151,11 @@ fn result(
         .map(|update| {
             let mut record = json!({"id":update.id});
             if let Some(kind) = &update.kind {
-                record["kind"] = Value::String(kind.as_str().into());
+                crate::project_ledger::work_json::set_field(
+                    &mut record,
+                    "kind",
+                    Value::String(kind.as_str().into()),
+                );
             }
             record
         })

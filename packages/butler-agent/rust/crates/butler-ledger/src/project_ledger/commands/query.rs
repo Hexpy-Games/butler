@@ -208,7 +208,11 @@ fn issue_records(index: &Value, code: &str) -> Vec<Value> {
         .filter_map(|issue| {
             let record = issue.get("record").filter(|record| !record.is_null())?;
             let mut row = record.clone();
-            row["reason"] = issue.get("message").cloned().unwrap_or(Value::Null);
+            crate::project_ledger::work_json::set_field(
+                &mut row,
+                "reason",
+                issue.get("message").cloned().unwrap_or(Value::Null),
+            );
             Some(row)
         })
         .collect()

@@ -83,14 +83,17 @@ impl CandidateReader<'_> {
         let dependencies =
             dependencies::refs(&manifest, &children).map_err(ProjectWorkPublicationError::Work)?;
         for (child_id, kind, schema) in dependencies {
-            if let Some(existing) = children.get(&child_id) {
-                if existing.get("schema").and_then(Value::as_str) != Some(schema) {
-                    return Err(managed_invalid());
+            let existing_schema = children
+                .get(&child_id)
+                .map(|existing| existing.get("schema").and_then(Value::as_str));
+            match existing_schema {
+                Some(found) if found != Some(schema) => return Err(managed_invalid()),
+                Some(_) => {}
+                None => {
+                    let child = self.child(id, &child_id, kind, schema)?;
+                    children.insert(child_id, child);
                 }
-                continue;
             }
-            let child = self.child(id, &child_id, kind, schema)?;
-            children.insert(child_id, child);
         }
         hydrate(&manifest, &children).map_err(ProjectWorkPublicationError::Work)?;
         Ok(())

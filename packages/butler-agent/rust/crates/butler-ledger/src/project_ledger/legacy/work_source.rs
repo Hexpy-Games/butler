@@ -25,21 +25,26 @@ impl LegacyProjectWorkSource for ProjectLedger {
         Box::pin(async move {
             self.run(move |data, collation| read(data, &project_ref, program_ids, collation))
                 .await
-                .map_err(|error| {
-                    let code = match error {
-                        ProjectLedgerReadError::Resolution { code, .. }
-                        | ProjectLedgerReadError::RecordShow { code, .. }
-                        | ProjectLedgerReadError::Owner { code, .. }
-                        | ProjectLedgerReadError::DashboardInternal { code, .. }
-                        | ProjectLedgerReadError::DashboardUnavailable { code, .. } => code,
-                        ProjectLedgerReadError::DashboardChanged => {
-                            "project_work_legacy_source_changed"
-                        }
-                    };
-                    BtccError::relayed(code, code)
-                })
+                .map_err(source_error)
         })
     }
+}
+
+/// A read failure as the relayed BTCC error the legacy port reports.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err adapter taking the owned error"
+)]
+fn source_error(error: ProjectLedgerReadError) -> BtccError {
+    let code = match error {
+        ProjectLedgerReadError::Resolution { code, .. }
+        | ProjectLedgerReadError::RecordShow { code, .. }
+        | ProjectLedgerReadError::Owner { code, .. }
+        | ProjectLedgerReadError::DashboardInternal { code, .. }
+        | ProjectLedgerReadError::DashboardUnavailable { code, .. } => code,
+        ProjectLedgerReadError::DashboardChanged => "project_work_legacy_source_changed",
+    };
+    BtccError::relayed(code, code)
 }
 
 /// The one open legacy program among `ids`, read against a stable source
@@ -162,13 +167,14 @@ fn goal_contract(root: &Path, source: &Value) -> Result<Value, ProjectLedgerRead
     let logical_id = format!("ledger-record:{id}");
     let body = reference_body(root, &logical_id)?.ok_or_else(invalid)?;
     let logical = canonical_body(&body)?;
-    let record = logical["record"].as_object().ok_or_else(invalid)?;
-    if logical["ref"]["id"].as_str() != Some(logical_id.as_str())
-        || logical["sourceId"].as_str() != Some(id)
+    let field = |key: &str| logical.get(key).unwrap_or(&Value::Null);
+    let record = field("record").as_object().ok_or_else(invalid)?;
+    if field("ref").get("id").and_then(Value::as_str) != Some(logical_id.as_str())
+        || field("sourceId").as_str() != Some(id)
     {
         return Err(invalid());
     }
-    let encoded = js::canonical_json(&logical["record"], js::CanonicalKeyOrder::Utf16Lexical)
+    let encoded = js::canonical_json(field("record"), js::CanonicalKeyOrder::Utf16Lexical)
         .map_err(|source| invalid().with_source(source))?;
     let sha = digest_identity(&encoded);
     if source["sha256"].as_str() != Some(sha.as_str())
@@ -209,7 +215,11 @@ fn decode_items(
         .flatten()
         .map(|item| {
             let mut content = item[key].as_object().ok_or_else(invalid)?.clone();
-            let reference = decode_ref(&item[key]["ref"])?;
+            let reference = decode_ref(
+                item.get(key)
+                    .and_then(|value| value.get("ref"))
+                    .unwrap_or(&Value::Null),
+            )?;
             let id = text(&reference, "id")?.to_owned();
             content.insert("ref".into(), reference);
             Ok(LegacyProjectWorkRecord {

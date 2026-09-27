@@ -112,7 +112,15 @@ pub(super) fn admit(
     };
     with_lock(data_root, &occurrence_id, || {
         if let Some(stored) = read(data_root, scope, identity)? {
-            if stored.attempts[0].publication_id != candidate.attempts[0].publication_id {
+            if stored
+                .attempts
+                .first()
+                .map(|attempt| &attempt.publication_id)
+                != candidate
+                    .attempts
+                    .first()
+                    .map(|attempt| &attempt.publication_id)
+            {
                 return Err(conflict());
             }
             return Ok(stored);

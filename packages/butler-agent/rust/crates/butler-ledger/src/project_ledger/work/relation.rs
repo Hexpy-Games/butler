@@ -67,27 +67,12 @@ impl ProjectWorkRepository {
     ) -> Result<Relation, BtccError> {
         for _attempt in 0..3 {
             let before = self.source_version(hints.clone()).await?;
-            let ids = match &hints {
-                Some(ids) => ids.clone(),
-                None => self.ids_for_session(session_id).await?,
-            };
-            let mut works = Vec::new();
-            for id in ids.into_iter().collect::<HashSet<_>>() {
-                let current = self.require_current(&id).await?;
-                if current.view.session_id == session_id {
-                    works.push(current);
-                }
-            }
+            let works = self.session_works(session_id, hints.as_deref()).await?;
             let after = self.source_version(hints.clone()).await?;
             if before != after {
                 continue;
             }
-            let heads = works
-                .iter()
-                .filter(|work| {
-                    work.manifest.get("sessionHead").and_then(Value::as_bool) == Some(true)
-                })
-                .count();
+            let heads = works.iter().filter(|work| is_session_head(work)).count();
             if hints.is_some() && heads == 0 {
                 return Box::pin(self.relation_from_ids(session_id, turn_id, None)).await;
             }
@@ -101,12 +86,7 @@ impl ProjectWorkRepository {
             if binding_count > 1 {
                 return Err(invalid("project_work_managed_record_invalid"));
             }
-            let head = works
-                .iter()
-                .find(|work| {
-                    work.manifest.get("sessionHead").and_then(Value::as_bool) == Some(true)
-                })
-                .cloned();
+            let head = works.iter().find(|work| is_session_head(work)).cloned();
             let binding = works
                 .iter()
                 .find(|work| turn_id.is_some_and(|turn| has_binding(work, turn)))
@@ -114,6 +94,46 @@ impl ProjectWorkRepository {
             return Ok(Relation { head, binding });
         }
         Err(invalid("project_work_snapshot_unstable"))
+    }
+
+    /// The session's Work among `hints` (or all Work), read once each.
+    async fn session_works(
+        &self,
+        session_id: &str,
+        hints: Option<&[String]>,
+    ) -> Result<Vec<Snapshot>, BtccError> {
+        let ids = match hints {
+            Some(ids) => ids.to_vec(),
+            None => self.ids_for_session(session_id).await?,
+        };
+        let mut works = Vec::new();
+        for id in ids.into_iter().collect::<HashSet<_>>() {
+            let current = self.require_current(&id).await?;
+            if current.view.session_id == session_id {
+                works.push(current);
+            }
+        }
+        Ok(works)
+    }
+
+    /// The one Work among `ids` bound to `turn_id`; two is corrupt.
+    pub(super) async fn single_binding(
+        &self,
+        ids: impl IntoIterator<Item = String>,
+        turn_id: &str,
+    ) -> Result<Option<Snapshot>, BtccError> {
+        let mut candidate = None;
+        for id in ids {
+            let snapshot = self.require_current(&id).await?;
+            if !has_binding(&snapshot, turn_id) {
+                continue;
+            }
+            if candidate.is_some() {
+                return Err(invalid("project_work_managed_record_invalid"));
+            }
+            candidate = Some(snapshot);
+        }
+        Ok(candidate)
     }
 
     pub(super) async fn current_for_scope(
@@ -168,17 +188,8 @@ impl ProjectWorkRepository {
             Some(id) => vec![id],
             None => self.ids_for_turn(&turn_id).await?,
         };
-        let mut candidate = None;
-        for id in ids.into_iter().collect::<HashSet<_>>() {
-            let snapshot = self.require_current(&id).await?;
-            if has_binding(&snapshot, &turn_id) {
-                if candidate.is_some() {
-                    return Err(invalid("project_work_managed_record_invalid"));
-                }
-                candidate = Some(snapshot);
-            }
-        }
-        let Some(candidate) = candidate else {
+        let unique = ids.into_iter().collect::<HashSet<_>>();
+        let Some(candidate) = self.single_binding(unique, &turn_id).await? else {
             return Ok(None);
         };
         let relation = self
@@ -282,6 +293,10 @@ impl ProjectWorkRepository {
     }
 }
 
+fn is_session_head(work: &Snapshot) -> bool {
+    work.manifest.get("sessionHead").and_then(Value::as_bool) == Some(true)
+}
+
 pub(super) fn is_open(view: &WorkView) -> bool {
     matches!(view.status, WorkStatus::Open | WorkStatus::Blocked)
 }
@@ -302,37 +317,9 @@ fn work_paths(
     scope: &ResolvedProjectWorkScope,
     ids: Option<&[String]>,
 ) -> Result<Vec<String>, ProjectLedgerReadError> {
-    let ids = if let Some(ids) = ids {
-        ids.to_vec()
-    } else {
-        match fs::read_dir(scope.ledger_root.join("work")) {
-            Ok(entries) => {
-                let mut ids = Vec::new();
-                for entry in entries {
-                    let entry = entry.map_err(|source| {
-                        ProjectLedgerReadError::record_show("project_ledger_record_io_error")
-                            .with_source(source)
-                    })?;
-                    if entry
-                        .file_type()
-                        .map_err(|source| {
-                            ProjectLedgerReadError::record_show("project_ledger_record_io_error")
-                                .with_source(source)
-                        })?
-                        .is_dir()
-                    {
-                        ids.push(entry.file_name().to_string_lossy().into_owned());
-                    }
-                }
-                ids
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
-            Err(_) => {
-                return Err(ProjectLedgerReadError::record_show(
-                    "project_ledger_record_io_error",
-                ));
-            }
-        }
+    let ids = match ids {
+        Some(ids) => ids.to_vec(),
+        None => work_directories(scope)?,
     };
     let mut paths = ids
         .into_iter()
@@ -342,6 +329,32 @@ fn work_paths(
         .collect::<Vec<_>>();
     paths.sort();
     Ok(paths)
+}
+
+/// Every directory under `work/`; none when it does not exist.
+fn work_directories(
+    scope: &ResolvedProjectWorkScope,
+) -> Result<Vec<String>, ProjectLedgerReadError> {
+    let io_error = |source: std::io::Error| {
+        ProjectLedgerReadError::record_show("project_ledger_record_io_error").with_source(source)
+    };
+    let entries = match fs::read_dir(scope.ledger_root.join("work")) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(_) => {
+            return Err(ProjectLedgerReadError::record_show(
+                "project_ledger_record_io_error",
+            ));
+        }
+    };
+    let mut ids = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(io_error)?;
+        if entry.file_type().map_err(io_error)?.is_dir() {
+            ids.push(entry.file_name().to_string_lossy().into_owned());
+        }
+    }
+    Ok(ids)
 }
 
 fn locate_ids(

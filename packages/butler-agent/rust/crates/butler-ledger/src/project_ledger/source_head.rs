@@ -91,7 +91,11 @@ fn semantic_record(
         .unwrap_or_default();
     let mut record = json!({"kind":kind,"id":id,"metadata":metadata});
     if path.extension().and_then(|v| v.to_str()) == Some("md") {
-        record["body"] = records::frontmatter_body_ref(&raw).into();
+        crate::project_ledger::work_json::set_field(
+            &mut record,
+            "body",
+            records::frontmatter_body_ref(&raw).into(),
+        );
     }
     let normalized = normalize(&record);
     let mut encoded = String::new();
@@ -113,18 +117,27 @@ fn storage_digest(entries: &[(String, PathBuf, bool)]) -> Result<String, Project
         storage.update(relative.nfc().collect::<String>().as_bytes());
         storage.update(b"\0");
         if !directory {
-            let mut file = File::open(path).map_err(io)?;
-            loop {
-                let size = file.read(&mut buffer).map_err(io)?;
-                let Some(chunk) = buffer.get(..size).filter(|chunk| !chunk.is_empty()) else {
-                    break;
-                };
-                storage.update(chunk);
-            }
+            hash_file(&mut storage, path, &mut buffer)?;
         }
         storage.update(b"\0");
     }
     Ok(format!("{:x}", storage.finalize()))
+}
+
+/// Feeds the file's bytes to `digest` through `buffer`.
+fn hash_file(
+    digest: &mut Sha256,
+    path: &Path,
+    buffer: &mut [u8],
+) -> Result<(), ProjectLedgerReadError> {
+    let mut file = File::open(path).map_err(io)?;
+    loop {
+        let size = file.read(buffer).map_err(io)?;
+        let Some(chunk) = buffer.get(..size).filter(|chunk| !chunk.is_empty()) else {
+            return Ok(());
+        };
+        digest.update(chunk);
+    }
 }
 
 fn record_data(path: &Path) -> Result<(String, Value), ProjectLedgerReadError> {

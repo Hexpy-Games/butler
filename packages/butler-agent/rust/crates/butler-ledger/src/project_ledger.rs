@@ -42,7 +42,8 @@ pub use dashboard::{
 pub use project_work_plan::{ProjectWorkPlanFacts, ProjectWorkPlanRead};
 pub use publication::{
     LedgerEffectError, LedgerEffectReconciliation, LedgerEffectRequest, ProjectLedgerRecordUpdate,
-    ProjectWorkPublicationError, ProjectWorkPublicationOutcome, RecordEvidence, RecordSections,
+    ProjectWorkPublicationError, ProjectWorkPublicationOutcome, ProjectWorkTarget,
+    ProjectWorkTargetState, RecordEvidence, RecordSections,
 };
 pub(crate) use records::PlanRecordShow;
 pub use result_authority::prepare_exact_project_work_result_authority;

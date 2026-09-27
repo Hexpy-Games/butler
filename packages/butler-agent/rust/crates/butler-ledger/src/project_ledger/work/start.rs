@@ -7,7 +7,7 @@ use butler_turn::btcc::{
 
 use super::super::publication::ProjectLedgerRecordOperation;
 use super::super::publication::{ProjectLedgerRecordKind, ProjectLedgerRecordUpdate};
-use super::codec;
+use super::codec::{self, Snapshot};
 use super::publication::Projection;
 use super::relation::is_open;
 use super::{ProjectWorkRepository, invalid};
@@ -24,51 +24,111 @@ impl ProjectWorkRepository {
         let repo = self.clone();
         let prepare_identity = identity.clone();
         let requested_id = work_id.clone();
-        self.publish(identity, move || async move {
-            let relation = repo.relation(&command.input.scope).await?;
-            if relation.binding.is_some() { return Err(invalid("project_work_turn_already_bound")); }
-            if repo.read_current(&requested_id).await?.is_some() {
-                return Err(invalid("project_work_occurrence_receipt_missing"));
-            }
-            let at = repo.recorded_at(prepare_identity.clone()).await?;
-            let original = repo.shared.projection.load_original_request(command.input.scope.clone()).await?;
-            if original.turn_id != command.input.scope.turn_id {
-                return Err(invalid("project_work_origin_turn_mismatch"));
-            }
-            let view = opening_view(&repo, &command.input.scope, &command.input.objective, &requested_id, &original.message_id, &at);
-            let (binding_id, binding) = binding_child(&command.input.scope.turn_id, &command.input.scope.session_id, &requested_id, 1, &prepare_identity, &at);
-            let mut updates = Vec::<ProjectLedgerRecordUpdate>::new();
-            if let Some(prior) = relation.head {
-                let mut prior_view = prior.view.clone();
-                if is_open(&prior_view) { prior_view.status = WorkStatus::Abandoned; }
-                prior_view.updated_at = at.clone();
-                updates.push(repo.manifest_update(super::write::ManifestPublicationInput {
-                    prior: Some(&prior),
-                    view: &prior_view,
-                    identity: &prepare_identity,
-                    binding_refs: prior.manifest.get("bindingRefs").cloned()
-                        .ok_or_else(|| invalid("project_work_managed_record_invalid"))?,
-                    session_head: false,
-                    revisions: &codec::revisions(&prior.manifest),
-                    operation: ProjectLedgerRecordOperation::Update,
-                }).await?);
-            }
-            updates.push(repo.manifest_update(super::write::ManifestPublicationInput {
+        self.publish(
+            identity,
+            move || async move {
+                repo.start_updates(&command, &requested_id, &prepare_identity)
+                    .await
+                    .map(Some)
+            },
+            Projection::Recover,
+        )
+        .await?;
+        Ok(self.require_current(&work_id).await?.view)
+    }
+
+    /// A new open Work bound to the turn (with its binding child), after
+    /// abandoning the session's previous head.
+    async fn start_updates(
+        &self,
+        command: &StartWorkCommand,
+        work_id: &str,
+        identity: &ProjectWorkOperationIdentity,
+    ) -> Result<Vec<ProjectLedgerRecordUpdate>, BtccError> {
+        let scope = &command.input.scope;
+        let relation = self.relation(scope).await?;
+        if relation.binding.is_some() {
+            return Err(invalid("project_work_turn_already_bound"));
+        }
+        if self.read_current(work_id).await?.is_some() {
+            return Err(invalid("project_work_occurrence_receipt_missing"));
+        }
+        let at = self.recorded_at(identity.clone()).await?;
+        let original = self
+            .shared
+            .projection
+            .load_original_request(scope.clone())
+            .await?;
+        if original.turn_id != scope.turn_id {
+            return Err(invalid("project_work_origin_turn_mismatch"));
+        }
+        let view = opening_view(
+            self,
+            scope,
+            &command.input.objective,
+            work_id,
+            &original.message_id,
+            &at,
+        );
+        let (binding_id, binding) =
+            binding_child(&scope.turn_id, &scope.session_id, work_id, 1, identity, &at);
+        let mut updates = Vec::<ProjectLedgerRecordUpdate>::new();
+        if let Some(prior) = relation.head {
+            updates.push(self.abandon_prior_head(&prior, identity, &at).await?);
+        }
+        updates.push(
+            self.manifest_update(super::write::ManifestPublicationInput {
                 prior: None,
                 view: &view,
-                identity: &prepare_identity,
-                binding_refs: json!([{"bindingRevisionId":binding_id,"turnId":command.input.scope.turn_id,"revision":1}]),
+                identity,
+                binding_refs: json!([{"bindingRevisionId":binding_id,"turnId":scope.turn_id,"revision":1}]),
                 session_head: true,
-                revisions: &json!({"planRevision":0,"checkpointRevision":0,"checkpointResultSequence":0,"reviewRevision":0,"dispositionRevision":0}),
+                revisions: &codec::Revisions::default(),
                 operation: ProjectLedgerRecordOperation::Create,
-            }).await?);
-            if let Some(child) = repo.child_update(&requested_id, &binding_id, ProjectLedgerRecordKind::Reference,
-                "Guided Work Turn binding 1".into(), binding).await? {
-                updates.push(child);
-            }
-            Ok(Some(updates))
-        }, Projection::Recover).await?;
-        Ok(self.require_current(&work_id).await?.view)
+            })
+            .await?,
+        );
+        if let Some(child) = self
+            .child_update(
+                work_id,
+                &binding_id,
+                ProjectLedgerRecordKind::Reference,
+                "Guided Work Turn binding 1".into(),
+                binding,
+            )
+            .await?
+        {
+            updates.push(child);
+        }
+        Ok(updates)
+    }
+
+    /// The session's previous head, no longer head and abandoned if open.
+    pub(super) async fn abandon_prior_head(
+        &self,
+        prior: &Snapshot,
+        identity: &ProjectWorkOperationIdentity,
+        at: &str,
+    ) -> Result<ProjectLedgerRecordUpdate, BtccError> {
+        let mut prior_view = prior.view.clone();
+        if is_open(&prior_view) {
+            prior_view.status = WorkStatus::Abandoned;
+        }
+        prior_view.updated_at = at.to_owned();
+        self.manifest_update(super::write::ManifestPublicationInput {
+            prior: Some(prior),
+            view: &prior_view,
+            identity,
+            binding_refs: prior
+                .manifest
+                .get("bindingRefs")
+                .cloned()
+                .ok_or_else(|| invalid("project_work_managed_record_invalid"))?,
+            session_head: false,
+            revisions: &codec::revisions(&prior.manifest),
+            operation: ProjectLedgerRecordOperation::Update,
+        })
+        .await
     }
 }
 

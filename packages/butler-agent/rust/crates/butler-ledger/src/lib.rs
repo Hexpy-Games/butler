@@ -18,4 +18,12 @@
     allow(dead_code, unused_imports)
 )]
 
+// Every slice/array/Value access is checked, every fallible signature can
+// fail, and blocks nest at most four deep (clippy.toml sets the threshold).
+#![deny(
+    clippy::indexing_slicing,
+    clippy::unnecessary_wraps,
+    clippy::excessive_nesting
+)]
+
 pub mod project_ledger;

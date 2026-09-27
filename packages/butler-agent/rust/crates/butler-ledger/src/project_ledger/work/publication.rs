@@ -10,7 +10,7 @@ use butler_turn::btcc::{
 
 use super::super::publication::{
     ProjectLedgerRecordKind, ProjectLedgerRecordUpdate, ProjectWorkPublicationError,
-    ProjectWorkPublicationOutcome,
+    ProjectWorkPublicationOutcome, ProjectWorkTarget,
 };
 use super::codec::Snapshot;
 use super::{ProjectWorkRepository, invalid};
@@ -45,75 +45,36 @@ impl ProjectWorkRepository {
             .await
             .map_err(publication_error)?;
         if !outcome.skipped && projection == Projection::Recover {
-            let mut work_ids = Vec::new();
-            let mut seen = HashSet::new();
-            for target in &outcome.targets {
-                if target.kind == ProjectLedgerRecordKind::Work {
-                    if seen.insert(target.id.clone()) {
-                        work_ids.push(target.id.clone());
-                    }
-                } else if let Some(parent) = &target.parent_id
-                    && seen.insert(parent.clone())
-                {
-                    work_ids.push(parent.clone());
-                }
-            }
-            self.observe_stable(work_ids, &identity).await?;
+            self.observe_stable(affected_work_ids(&outcome.targets), &identity)
+                .await?;
         }
         Ok(outcome)
     }
 
+    /// Observes the affected Work and their session heads into the runtime
+    /// projection, from a read the Ledger did not change during (at most
+    /// three attempts).
     async fn observe_stable(
         &self,
         ids: Vec<String>,
         identity: &ProjectWorkOperationIdentity,
     ) -> Result<(), BtccError> {
-        for attempt in 1..=3 {
+        for _attempt in 1..=3 {
             let before = self.source_version(Some(ids.clone())).await?;
             let mut affected = Vec::with_capacity(ids.len());
             for id in &ids {
                 affected.push(self.require_current(id).await?);
             }
-            let mut heads = Vec::new();
-            let mut sessions = HashSet::new();
-            for item in &affected {
-                if sessions.insert(item.view.session_id.clone()) {
-                    let head = if item.manifest.get("sessionHead").and_then(Value::as_bool)
-                        == Some(true)
-                    {
-                        item.clone()
-                    } else {
-                        self.relation_from_ids(&item.view.session_id, None, None)
-                            .await?
-                            .head
-                            .ok_or_else(|| invalid("project_work_session_head_invalid"))?
-                    };
-                    heads.push((item.view.session_id.clone(), head));
-                }
-            }
+            let heads = self.session_heads(&affected).await?;
             let after = self.source_version(Some(ids.clone())).await?;
             if before != after {
-                if attempt == 3 {
-                    return Err(invalid("project_work_snapshot_unstable"));
-                }
                 continue;
             }
+            let claim = (identity.kind == ProjectWorkOperationKind::LegacyImport && ids.len() == 1)
+                .then(|| ids.first().cloned())
+                .flatten();
             for (session_id, head) in heads {
-                let mut snapshots = affected
-                    .iter()
-                    .filter(|item| item.view.session_id == session_id)
-                    .cloned()
-                    .collect::<Vec<_>>();
-                if !snapshots
-                    .iter()
-                    .any(|item| item.view.work_id == head.view.work_id)
-                {
-                    snapshots.push(head.clone());
-                }
-                let works = snapshots
-                    .into_iter()
-                    .map(observed_work)
-                    .collect::<Result<Vec<_>, _>>()?;
+                let works = session_works(&affected, &session_id, &head)?;
                 self.shared
                     .projection
                     .observe_canonical_works(ProjectWorkObserveWorks {
@@ -121,10 +82,7 @@ impl ProjectWorkRepository {
                         session_head_work_id: head.view.work_id,
                         ledger_project_id: self.scope.ledger_project_id.clone(),
                         canonical_head_sha256: after.clone(),
-                        legacy_import_claim_work_id: (identity.kind
-                            == ProjectWorkOperationKind::LegacyImport
-                            && ids.len() == 1)
-                            .then(|| ids[0].clone()),
+                        legacy_import_claim_work_id: claim.clone(),
                     })
                     .await?;
             }
@@ -132,6 +90,69 @@ impl ProjectWorkRepository {
         }
         Err(invalid("project_work_snapshot_unstable"))
     }
+
+    /// Each affected session's head Work, in first-seen order.
+    async fn session_heads(
+        &self,
+        affected: &[Snapshot],
+    ) -> Result<Vec<(String, Snapshot)>, BtccError> {
+        let mut heads = Vec::new();
+        let mut sessions = HashSet::new();
+        for item in affected {
+            if !sessions.insert(item.view.session_id.clone()) {
+                continue;
+            }
+            let head = if item.manifest.get("sessionHead").and_then(Value::as_bool) == Some(true) {
+                item.clone()
+            } else {
+                self.relation_from_ids(&item.view.session_id, None, None)
+                    .await?
+                    .head
+                    .ok_or_else(|| invalid("project_work_session_head_invalid"))?
+            };
+            heads.push((item.view.session_id.clone(), head));
+        }
+        Ok(heads)
+    }
+}
+
+/// The affected Work of one session plus its head, as observed Work.
+fn session_works(
+    affected: &[Snapshot],
+    session_id: &str,
+    head: &Snapshot,
+) -> Result<Vec<ProjectWorkObserveWork>, BtccError> {
+    let mut snapshots = affected
+        .iter()
+        .filter(|item| item.view.session_id == session_id)
+        .cloned()
+        .collect::<Vec<_>>();
+    if !snapshots
+        .iter()
+        .any(|item| item.view.work_id == head.view.work_id)
+    {
+        snapshots.push(head.clone());
+    }
+    snapshots.into_iter().map(observed_work).collect()
+}
+
+/// The Work each published target belongs to, without repeats.
+fn affected_work_ids(targets: &[ProjectWorkTarget]) -> Vec<String> {
+    let mut work_ids = Vec::new();
+    let mut seen = HashSet::new();
+    for target in targets {
+        let id = if target.kind == ProjectLedgerRecordKind::Work {
+            Some(&target.id)
+        } else {
+            target.parent_id.as_ref()
+        };
+        if let Some(id) = id
+            && seen.insert(id.clone())
+        {
+            work_ids.push(id.clone());
+        }
+    }
+    work_ids
 }
 
 fn observed_work(snapshot: Snapshot) -> Result<ProjectWorkObserveWork, BtccError> {
@@ -159,10 +180,13 @@ fn observed_work(snapshot: Snapshot) -> Result<ProjectWorkObserveWork, BtccError
             .get("binding")
             .ok_or_else(|| invalid("project_work_managed_record_invalid"))?;
         let mut value = binding.clone();
-        value["isCurrent"] = Value::Bool(
-            current_refs
-                .iter()
-                .any(|item| item.get("bindingRevisionId") == binding.get("bindingRevisionId")),
+        let is_current = current_refs
+            .iter()
+            .any(|item| item.get("bindingRevisionId") == binding.get("bindingRevisionId"));
+        crate::project_ledger::work_json::set_field(
+            &mut value,
+            "isCurrent",
+            Value::Bool(is_current),
         );
         bindings.push(
             serde_json::from_value::<ProjectWorkBinding>(value).map_err(|source| {

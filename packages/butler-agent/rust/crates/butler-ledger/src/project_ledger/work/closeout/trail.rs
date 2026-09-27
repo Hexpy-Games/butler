@@ -40,7 +40,7 @@ impl<'a> Trail<'a> {
     }
 
     fn push(&mut self, input: CheckpointChildInput<'_>) -> Result<(), BtccError> {
-        let child = checkpoint_child(input)?;
+        let child = checkpoint_child(input);
         self.latest =
             Some(codec::typed(child.get("checkpoint").cloned().ok_or_else(
                 || invalid("project_work_managed_record_invalid"),
@@ -118,12 +118,11 @@ impl<'a> Trail<'a> {
     }
 
     /// The manifest revisions after these checkpoints.
-    pub(super) fn revisions(&self) -> Value {
+    pub(super) fn revisions(&self) -> codec::Revisions {
         let mut revisions = codec::revisions(&self.current.manifest);
-        revisions["checkpointRevision"] = Value::from(self.revision);
+        revisions.checkpoint_revision = self.revision;
         if self.latest.is_some() {
-            revisions["checkpointResultSequence"] =
-                Value::from(self.current.view.result_refs.len() as u64);
+            revisions.checkpoint_result_sequence = self.current.view.result_refs.len() as u64;
         }
         revisions
     }

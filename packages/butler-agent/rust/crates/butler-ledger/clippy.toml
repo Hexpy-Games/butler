@@ -1,0 +1,10 @@
+# butler-ledger lints with the workspace settings (keep in sync with
+# ../../clippy.toml) plus a four-deep block nesting limit for
+# clippy::excessive_nesting, which src/lib.rs denies. Clippy reads the nearest
+# clippy.toml, so this file replaces the workspace one for this crate only.
+# Test code may assert with unwrap/expect/panic; production code may not.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true
+excessive-nesting-threshold = 4
