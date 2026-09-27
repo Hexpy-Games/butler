@@ -5,32 +5,38 @@ const generalFallback: BriefingFallbackCopy = {
     description: "짧게 열어볼 만한 시작점 몇 가지가 있습니다.",
     suggestions: [
       {
-        id: "daily-briefing",
-        title: "오늘 볼 만한 소식",
-        description:
-          "주요 이슈와 공개 자료를 짧게 훑어두면 하루의 방향을 잡는 데 도움이 됩니다.",
-        text: "오늘 볼 만한 주요 이슈와 공개 자료를 짧게 브리핑해줘.",
+        id: "summarize-document",
+        title: "문서 요약하기",
+        description: "파일을 첨부하거나 글을 붙여 넣으면 핵심만 정리합니다.",
+        text: "이 내용을 핵심만 요약해줘: ",
+        template: true,
       },
       {
-        id: "open-source-trends",
-        title: "요즘 뜨는 오픈소스",
-        description:
-          "최근 주목받는 오픈소스 프로젝트를 살펴보고 영감을 얻을 수 있도록 정리해봐요.",
-        text: "최근 주목받는 오픈소스 프로젝트를 이유와 활용처 중심으로 정리해줘.",
+        id: "draft-reply",
+        title: "답장 초안 쓰기",
+        description: "메모를 바탕으로 이메일이나 메시지를 씁니다.",
+        text: "이 메모로 답장 초안을 써줘: ",
+        template: true,
       },
       {
-        id: "search-strategy",
-        title: "검색어를 어떻게 나눌까",
-        description:
-          "넓은 질문을 몇 갈래로 나누면 빠르게 훑을 부분과 깊게 볼 부분을 더 잘 구분할 수 있습니다.",
-        text: "넓은 검색 요청을 빠른 검색과 깊은 검색으로 나누는 기준을 정리해줘.",
+        id: "morning-briefing",
+        title: "아침 뉴스 브리핑",
+        description: "매일 아침 실행되는 예약 작업을 만듭니다.",
+        text: "매일 아침 8시에 오늘의 주요 뉴스를 짧게 브리핑해줘.",
+        template: true,
       },
       {
-        id: "web-standards-rendering",
-        title: "브라우저마다 다르게 보이는 이유",
-        description:
-          "CSS 스펙과 실제 구현 차이를 같이 보면 UI 문제가 어디에서 생기는지 더 빨리 좁힐 수 있습니다.",
-        text: "CSS 스펙과 브라우저별 렌더링 차이를 비교해서 설명해줘.",
+        id: "plan-week",
+        title: "이번 주 계획 세우기",
+        description: "할 일을 간단한 계획으로 정리합니다.",
+        text: "이번 주 계획을 같이 세워줘. 먼저 할 일이 뭔지 물어봐줘.",
+      },
+      {
+        id: "explain-simply",
+        title: "쉽게 설명 듣기",
+        description: "어려운 내용을 쉬운 말로 풀어 줍니다.",
+        text: "이걸 쉽게 설명해줘: ",
+        template: true,
       },
     ],
   };
@@ -61,7 +67,7 @@ const firstRun = {
     safetyItems: [
       "파일 변경, 명령 실행, 외부 요청은 사용자의 지시 안에서만 진행됩니다.",
       "민감한 경로나 토큰이 포함된 요청은 실행 전에 한 번 더 확인하세요.",
-      "자동화 결과는 App 안의 기록과 진단 로그로 확인할 수 있습니다.",
+      "예약 작업 결과는 App 안의 기록과 진단 로그로 확인할 수 있습니다.",
     ],
     accept: "동의",
     installTitle: "Butler Agent를 준비합니다",
@@ -93,63 +99,35 @@ function koreanProjectFallbackSuggestions(
 ): NewChatBriefingSuggestion[] {
   return [
     {
-      id: "review-commits",
-      title: "위험한 부분 먼저 보기",
-      description: "최근 변경사항에서 놓친 검증과 되돌아볼 지점을 찾습니다.",
-      text: "최근 변경사항의 위험과 빠진 검증을 훑어줘",
+      id: "folder-tour",
+      title: "폴더 둘러보기",
+      description: `${projectName}에 무엇이 있는지 빠르게 살펴봅니다.`,
+      text: "이 프로젝트 폴더에 무엇이 있고 어떻게 구성되어 있는지 설명해줘.",
     },
     {
-      id: "today-plan",
-      title: "오늘의 순서 세우기",
-      description: "열린 일들을 실행 가능한 순서로 다시 얇게 펼칩니다.",
-      text: "오늘 이어갈 일을 실행 순서로 정리해줘",
+      id: "organize-files",
+      title: "파일 정리하기",
+      description: "원하는 기준으로 파일을 나누거나 이름을 바꿉니다.",
+      text: "이 폴더의 파일을 정리해줘: ",
+      template: true,
+    },
+    {
+      id: "recent-changes",
+      title: "최근 변경 보기",
+      description: "최근에 무엇이 바뀌었는지 확인합니다.",
+      text: `${projectName}에서 최근에 바뀐 내용을 알려줘.`,
+    },
+    {
+      id: "remaining-work",
+      title: "남은 일 보기",
+      description: "아직 해야 할 일을 정리합니다.",
+      text: `${projectName}에 남은 일을 정리해줘.`,
     },
     {
       id: "project-blockers",
-      title: "막힌 곳에 표시하기",
-      description: `${projectName} 안에서 결정이 멈춘 지점을 좁힙니다.`,
-      text: `${projectName}에서 막힌 지점을 찾아줘`,
-    },
-    {
-      id: "briefing-seed",
-      title: "남겨둔 생각 꺼내기",
-      description: "아이디어와 메모를 다음 행동으로 옮길 수 있게 접습니다.",
-      text: "남겨둔 아이디어를 작업 카드로 바꿔줘",
-    },
-  ];
-}
-
-function koreanSkillFallbackSuggestions(
-  projectName: string,
-): NewChatBriefingSuggestion[] {
-  return [
-    {
-      id: "recent-skill",
-      title: "반복된 부탁 찾기",
-      description: "최근 대화에서 다시 설명한 절차와 취향을 골라냅니다.",
-      text: "최근 대화에서 스킬로 만들어보면 유용한 게 어떤 게 있을까?",
-    },
-    {
-      id: "useful-skill",
-      title: "쓸모의 형태 정하기",
-      description: "작은 자동화로 남길지, 스킬로 굳힐지 기준을 세웁니다.",
-      text: "유용한 스킬이 뭐가 있을까?",
-    },
-    {
-      id: "skill-candidates",
-      title: "후보를 작업 카드로",
-      description: "흩어진 반복 작업을 바로 검토할 수 있는 목록으로 만듭니다.",
-      text: "최근 반복한 일을 스킬 후보로 골라줘",
-    },
-    {
-      id: "project-skill",
-      title: projectName ? "프로젝트 규칙 남기기" : "내 방식 남기기",
-      description: projectName
-        ? `${projectName}에서 반복되는 운영 방식을 정리합니다.`
-        : "자주 하는 일을 다음에도 바로 꺼낼 수 있게 정리합니다.",
-      text: projectName
-        ? "이 프로젝트에 맞는 반복 작업을 스킬로 정리해줘"
-        : "내가 자주 하는 반복 작업을 스킬로 정리해줘",
+      title: "막힌 곳 찾기",
+      description: `${projectName}에서 진행이 멈춘 곳을 찾습니다.`,
+      text: `${projectName}에서 막힌 부분을 찾아줘.`,
     },
   ];
 }
@@ -169,9 +147,9 @@ export const koKrCopy: AppCopy = {
     duration: "요청 처리에 걸린 시간", durationHelp: "요청 생성부터 기록된 종료 상태까지, 대기를 포함한 경과 시간입니다. 사람의 작업 시간이나 순수 모델 실행 시간은 아닙니다.",
     usage: "모델 사용량", usageHelp: "이 화면에 연결된 프로젝트별 토큰·비용 기록은 아직 없습니다. 미수집은 사용량 0이 아니며, 구독 사용량을 API 요금으로 환산하지 않습니다.",
     empty: "선택한 범위에 기록이 없습니다.", unavailable: "이 데이터를 확인할 수 없습니다.",
-    historyUnavailable: "원장 전체 이력을 읽지 못해 작업·문서 추이는 집계하지 않습니다.",
+    historyUnavailable: "프로젝트 기록 전체 이력을 읽지 못해 작업·문서 추이는 집계하지 않습니다.",
     sessionUnavailable: "대화 이력을 읽지 못해 대화 활동·전달된 첨부·요청 결과는 집계하지 않습니다.",
-    taskCompletionUnavailable: "Task 완료 시각은 기존 원장 이력에 별도로 남지 않아 완료 추이를 집계할 수 없습니다. 등록 추이와 현재 단계만 표시합니다.",
+    taskCompletionUnavailable: "Task 완료 시각은 기존 프로젝트 기록에 별도로 남지 않아 완료 추이를 집계할 수 없습니다. 등록 추이와 현재 단계만 표시합니다.",
     selected: "선택한 기록", all: "전체", partialDay: "오늘은 현재까지의 기록입니다.", excluded: (count) => `근거가 충분하지 않은 기록 ${count}개 제외`,
     age: (days) => `갱신 후 ${days}일`, changes: (count) => `변경 ${count}건`, sources: (count) => `기록 ${count}개`,
     labels: { types: "종류별", changes: "변경별", spec: "명세", plan: "계획", report: "보고서",
@@ -187,7 +165,7 @@ export const koKrCopy: AppCopy = {
     importantMaterialsHelp: "고정한 자료와 남은 작업에 명시적으로 연결된 계획·기준·최신 보고입니다.",
     sessionUnconfirmed: "대화 연결 미확인",
     reviewed: "검토 기록", disposition: "상태 판정 기록", result: "도구 결과 등록",
-    reported: "공개 답변", historyLedgerUnavailable: "원장 이력은 확인하지 못했습니다. 대화에서 전달된 공개 답변만 표시합니다.", linkedResults: (count) => `결과 자료 ${count}개`,
+    reported: "공개 답변", historyLedgerUnavailable: "프로젝트 기록 이력은 확인하지 못했습니다. 대화에서 전달된 공개 답변만 표시합니다.", linkedResults: (count) => `결과 자료 ${count}개`,
     currentPlan: "유효한 계획", disconnected: "연결이 끊겨 마지막으로 확인한 상태를 표시합니다.",
     reportQuestion: "이 보고의 내용과 미검증 사항에 관해 확인하기",
     parentWork: "상위 Work", allWork: "모든 Work",
@@ -204,12 +182,12 @@ export const koKrCopy: AppCopy = {
     results: "공개된 결과 자료", noResults: "대화에서 공개된 결과 자료가 아직 없습니다.",
     created: "생성", updated: "갱신", recordedCompletion: "완료 기록", noHistory: "아직 기록이 없습니다.",
     description: "프로젝트 소개", editDescription: "소개 편집", pin: "주요 자료로 고정", unpin: "고정 해제",
-    overview: "개요", work: "Work", materials: "자료", history: "기록", statistics: "통계",
+    overview: "개요", work: "작업", materials: "자료", history: "기록", statistics: "통계",
     position: "진행 상황", remaining: "남아 있는 일", completed: "실행 완료", open: "남은 작업",
     blocked: "막힌 작업", abandoned: "종료한 작업", unknown: "확인하지 못한 작업", registered: "등록된 작업",
-    noWork: "아직 등록된 작업이 없습니다.", unbound: "이 프로젝트에 연결된 원장이 없습니다.",
-    unavailable: "원장 정보를 확인하지 못했습니다. 완료 여부를 추정하지 않습니다.",
-    noRemaining: "기록상 남아 있는 작업이 없습니다.", tasks: "하위 Task", recorded: "원장에 등록된 작업 기준", loadMore: "더 보기",
+    noWork: "아직 등록된 작업이 없습니다.", unbound: "이 프로젝트에 연결된 기록이 없습니다.",
+    unavailable: "프로젝트 기록을 확인하지 못했습니다. 완료 여부를 추정하지 않습니다.",
+    noRemaining: "기록상 남아 있는 작업이 없습니다.", tasks: "하위 Task", recorded: "등록된 작업 기준", loadMore: "더 보기",
   },
   projectDocumentMetadata: {
     active: "진행 중", other: "기타", roadmap: "로드맵",
@@ -292,8 +270,8 @@ export const koKrCopy: AppCopy = {
     messages7d: "최근 7일 메시지",
     messages30d: "최근 30일 메시지",
     noProjectChats: "프로젝트 대화가 없습니다",
-    noPlans: "프로젝트 원장에 계획이 없습니다",
-    noSpecs: "프로젝트 원장에 스펙이 없습니다",
+    noPlans: "프로젝트 기록에 계획이 없습니다",
+    noSpecs: "프로젝트 기록에 스펙이 없습니다",
     uiCrashed: "버틀러 화면에 오류가 발생했습니다.",
     reload: "창을 새로고침하거나 버틀러를 다시 열어 주세요.",
     custom: "직접 지정",
@@ -347,10 +325,10 @@ export const koKrCopy: AppCopy = {
     skills: "스킬",
   },
   progress: {
-    operations: { read_project_source: "조회: 첨부한 프로젝트 원문을 확인 중", delegate_to_worker: "Worker 호출", edit_file: "수정: 계획한 파일 변경을 적용 중", grep_files: "검색: 관련 구현을 찾는 중", list_files: "조회: 관련 파일 목록을 확인 중", project_ledger_read: "조회: 작업 원장을 확인 중", promote_reviewed_candidate: "적용: 검토된 변경을 반영 중", read_file: "조회: 관련 파일 내용을 확인 중", read_operation_result: "확인: 저장된 작업 결과를 검토 중", run_command: "명령 실행", update_onboarding_profile: "설정: 온보딩 답변을 반영 중", web_read: "조회: 공개 자료를 확인 중", web_search: "검색: 공개 자료를 찾는 중", write_file: "작성: 계획한 파일 변경을 적용 중" },
+    operations: { read_project_source: "조회: 첨부한 프로젝트 원문을 확인 중", delegate_to_worker: "Worker 호출", edit_file: "수정: 계획한 파일 변경을 적용 중", grep_files: "검색: 관련 구현을 찾는 중", list_files: "조회: 관련 파일 목록을 확인 중", project_ledger_read: "조회: 프로젝트 기록을 확인 중", promote_reviewed_candidate: "적용: 검토된 변경을 반영 중", read_file: "조회: 관련 파일 내용을 확인 중", read_operation_result: "확인: 저장된 작업 결과를 검토 중", run_command: "명령 실행", update_onboarding_profile: "설정: 온보딩 답변을 반영 중", web_read: "조회: 공개 자료를 확인 중", web_search: "검색: 공개 자료를 찾는 중", write_file: "작성: 계획한 파일 변경을 적용 중" },
     fallback: "작업: 계획한 도구를 사용 중", storageRecovery: "저장소 쓰기 순서를 조정하고 있습니다", reconnecting: "재연결 중", stopping: "요청을 중지하고 있습니다",
   },
-  briefing: { general: generalFallback, onboarding: onboardingFallback, projectSuggestions: koreanProjectFallbackSuggestions, skillSuggestions: koreanSkillFallbackSuggestions, onboardingMoment: "온보딩", projectMoment: "프로젝트", projectTitle: name => `${name}에서 이어가기`, projectDescription: name => `${name}에서 열어볼 만한 시작점 몇 가지가 있습니다.` },
+  briefing: { general: generalFallback, onboarding: onboardingFallback, projectSuggestions: koreanProjectFallbackSuggestions, onboardingMoment: "온보딩", projectMoment: "프로젝트", projectTitle: name => `${name}에서 이어가기`, projectDescription: name => `${name}에서 열어볼 만한 시작점 몇 가지가 있습니다.` },
   interfaceTemplates: {
     relativeAge: seconds => seconds < 60 ? "지금" : seconds < 3600 ? `${Math.floor(seconds / 60)}분` : seconds < 86400 ? `${Math.floor(seconds / 3600)}시간` : `${Math.floor(seconds / 86400)}일`,
     workedFor: duration => `${duration} 동안 작업`,
@@ -751,7 +729,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     newChat: "새 대화",
     newSessionStarting: "새 세션 시작중...",
     search: "검색",
-    automations: "자동화",
+    automations: "예약 작업",
     projects: "프로젝트",
     chats: "대화",
     settings: "설정",
@@ -815,7 +793,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     modelErrorHint: "모델 목록을 불러오지 못했습니다. 설정의 모델에서 확인해 주세요.",
     gitMissingTitle: "Git이 설치되어 있지 않습니다",
     gitMissingMessage:
-      "Butler는 계속 사용할 수 있지만 브랜치, 커밋, Ledger 커밋 증거 기능은 사용할 수 없습니다.",
+      "Butler는 계속 사용할 수 있지만 브랜치와 커밋 기능은 사용할 수 없습니다.",
     gitInstallAction: "Git 설치 안내",
     gitMissingDismiss: "Git 안내 닫기",
     reasoning: "추론",
@@ -834,6 +812,19 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     deleteFailedMessage: "실패 메시지 삭제",
     queuedPosition: (position, total) => `대기 중 · ${total}개 중 ${position}번째`,
     contextDetails: "컨텍스트 세부정보 표시",
+    usage: {
+      details: "자세히",
+      input: "입력",
+      cached: "캐시",
+      output: "출력",
+      reasoning: "추론",
+      cost: "비용",
+      estimate: "추정",
+      left: percent => `${percent} 남음`,
+      unavailable: "사용량 확인 불가",
+      loading: "사용량 불러오는 중",
+      updated: time => `${time} 기준`,
+    },
     approval: {
       title: "승인 대기 중인 명령",
       titleEffect: "변경 승인 대기 중",
@@ -864,12 +855,12 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     readOnlyDesc: "파일 읽기만 가능",
   },
   automations: {
-    title: "자동화",
+    title: "예약 작업",
     scheduledCount: (count) => `예약된 프롬프트 ${count}개`,
-    empty: "아직 자동화가 없습니다",
-    new: "새 자동화",
+    empty: "아직 예약 작업이 없습니다",
+    new: "새 예약 작업",
     detailFallback: "상세",
-    backLabel: "자동화 목록으로 돌아가기",
+    backLabel: "예약 작업 목록으로 돌아가기",
     runNow: "지금 실행",
     resume: "재개",
     pause: "일시정지",
@@ -884,7 +875,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       runs: "실행 기록",
     },
     placeholders: {
-      title: "자동화 제목",
+      title: "예약 작업 제목",
       prompt: "프롬프트 내용",
     },
     runs: {
@@ -898,7 +889,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       notRun: "실행 전",
     },
     inspector: {
-      empty: "이 세션을 대상으로 하는 자동화가 없습니다",
+      empty: "이 대화의 예약 작업이 없습니다",
     },
   },
   artifacts: {
@@ -919,7 +910,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       activity: "활동",
       context: "맥락",
       artifacts: "아티팩트",
-      automations: "자동화",
+      automations: "예약 작업",
       workers: "Worker",
     },
     workers: {
@@ -952,8 +943,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     searchEmpty: (query) => `일치하는 설정이 없습니다: ${query}`,
     groups: {
       preferences: "환경 설정",
-      modelsAndExtensions: "모델 및 확장 기능",
       appAndSystem: "앱 및 시스템",
+      advanced: "고급",
     },
     sections: {
       general: "일반",
@@ -973,7 +964,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     },
     sectionDescriptions: {
       general: "언어, 시간대, 대화 입력과 검색 기본값을 설정합니다.",
-      models: "버틀러와 Worker 모델, 예비 모델을 관리합니다.",
+      models: "버틀러 모델, 예비 모델과 권한을 설정합니다.",
       appearance: "앱의 테마와 화면 표시 방식을 설정합니다.",
       server: "버틀러 서버 연결과 새 프로젝트 폴더를 설정합니다.",
       updates: "버틀러를 확인하고 업데이트합니다.",
@@ -1026,7 +1017,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       learning: "학습",
       import: "가져오기",
       butlerModel: "버틀러 모델",
-      fallbackConsolidation: "예비·정리 모델",
+      backupModels: "예비 모델",
+      memoryCleanup: "기억 정리",
       permissions: "권한",
       workerProfiles: "Worker 프로필",
       connection: "연결",
@@ -1043,7 +1035,6 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       sidebar: "사이드바가 대화를 정리하는 방식입니다.",
       homeScreen: "새 채팅 첫 화면의 배경입니다.",
       learning: "버틀러가 로컬 대화에서 사용자에 대해 학습하는 범위입니다.",
-      fallbackConsolidation: "현재 모델이 실패할 때 이어받을 모델과 기억을 정리할 모델입니다.",
     },
     panels: {
       butlerModel: "모델 설정",
@@ -1081,6 +1072,15 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       empty: "등록된 예비 모델이 없습니다.",
       noCandidates: "추가할 수 있는 모델이 없습니다.",
       limitReached: "예비 모델은 최대 5개까지 등록할 수 있습니다.",
+      summaryDescription: "현재 모델이 실패하면 이어받습니다.",
+      off: "사용 안 함",
+      edit: "편집",
+      editLabel: "예비 모델 편집",
+      done: "완료",
+    },
+    modelsAdvanced: {
+      title: "고급",
+      contents: "기억 정리 모델과 Worker 프로필",
     },
     workerProfilesPanel: {
       add: "Worker 프로필 추가",
@@ -1588,12 +1588,12 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
   },
   commandPalette: {
     label: "명령 팔레트",
-    placeholder: "대화, 프로젝트, 자동화, 설정 검색",
+    placeholder: "대화, 프로젝트, 예약 작업, 설정 검색",
     close: "명령 팔레트 닫기",
     loading: "검색 중입니다.",
     empty: "일치하는 항목이 없습니다. 다른 이름이나 제목으로 검색해 보세요.",
     failed: "검색하지 못했습니다. 연결을 확인하고 다시 시도해 주세요.",
-    kindLabels: { chat: "대화", project: "프로젝트", project_session: "프로젝트 대화", group: "스페이스", automation: "자동화", settings: "설정" },
+    kindLabels: { chat: "대화", project: "프로젝트", project_session: "프로젝트 대화", group: "스페이스", automation: "예약 작업", settings: "설정" },
     settingsSections: { general: "일반", appearance: "모양", "server-bridge": "서버", "models-access": "모델 및 접근 권한", "privacy-data": "개인정보 및 데이터", diagnostics: "진단", "system-events": "시스템 이벤트", archived: "아카이브" },
   },
   feedback: {

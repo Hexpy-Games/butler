@@ -7,7 +7,7 @@
 //! | `TruncateAfter(k)` | Send the first `k` chunks, then end the body cleanly (EOF without the completion event). |
 //! | `ResetAfter(k)` | Send `k` chunks, then abort the connection (body error). |
 //! | `StallAfter(k)` | Send `k` chunks, then send nothing until the client gives up. |
-//! | `MutateToolArgs(op)` | Rewrite the recorded function-call `arguments` (as the product reads them from `response.output_item.done`) or tool `name`: truncate, wrong types, unknown tool, or substring replace. Streamed argument deltas (UI-only) are left as recorded. |
+//! | `MutateToolArgs(op)` | Rewrite the recorded function-call `arguments` (as the product reads them from `response.output_item.done`) or tool `name`: truncate, wrong types, unknown tool, substring replace or verbatim edits. Streamed argument deltas (UI-only) are left as recorded. |
 
 use serde_json::Value;
 
@@ -36,6 +36,9 @@ pub enum ArgsMutation {
     /// Replace a substring inside the arguments JSON text (e.g. a recorded
     /// relative path by an escaping one). `to` is JSON-escaped.
     Replace { from: String, to: String },
+    /// Replace substrings of the arguments JSON text verbatim, in order
+    /// (e.g. swap one requested file and widen a recorded read limit).
+    Edits(Vec<(String, String)>),
 }
 
 /// Which requests a fault applies to.
@@ -230,6 +233,9 @@ fn mutate_arguments(text: &str, mutation: &ArgsMutation) -> String {
             let quoted = Value::String(to.clone()).to_string();
             text.replace(from.as_str(), &quoted[1..quoted.len() - 1])
         }
+        ArgsMutation::Edits(edits) => edits
+            .iter()
+            .fold(text.to_owned(), |text, (from, to)| text.replace(from, to)),
         ArgsMutation::UnknownTool | ArgsMutation::OnlyTool { .. } => text.to_owned(),
     }
 }

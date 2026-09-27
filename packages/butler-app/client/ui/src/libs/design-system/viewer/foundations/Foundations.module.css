@@ -824,7 +824,11 @@
 
 .borderRow {
   display: grid;
-  grid-template-columns: 6rem auto minmax(0, 1fr);
+  /* The sample line gives way first, so the token and its value fit at 320. */
+  grid-template-columns: minmax(var(--space-2xl), 6rem) auto minmax(
+      max-content,
+      1fr
+    );
   gap: var(--space-md);
   align-items: center;
 }

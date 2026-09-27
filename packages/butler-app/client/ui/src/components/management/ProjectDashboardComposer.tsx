@@ -5,7 +5,6 @@ import { prepareDashboardSend, useProjectDashboardState } from "@/app/projectDas
 import { projectDraftId } from "@/app/utils.ts";
 import type { ComposerControls } from "@/app/types.ts";
 
-const noop = () => {};
 export function ProjectDashboardComposer({ projectId, onReserveChange }: {
   projectId: string; onReserveChange: (height: number) => void;
 }) {
@@ -27,7 +26,7 @@ export function ProjectDashboardComposer({ projectId, onReserveChange }: {
       } });
     } finally { inFlight.current = false; setSending(false); }
   };
-  return <Composer large={false} onOpenContext={noop} onReserveChange={onReserveChange} scope={{
+  return <Composer large={false} onReserveChange={onReserveChange} scope={{
       draftKey: `dashboard:${projectId}`, targetChatId: projectDraftId(projectId), isSending: sending, onSend: send,
     }} />;
 }

@@ -1,28 +1,30 @@
 import type { SettingsSectionId } from "../../app/types.ts";
 
+// Everyday pages first; agent-level pages (the Advanced group) last.
 const BASE_SETTINGS_SECTION_IDS: SettingsSectionId[] = [
   "general",
-  "models",
   "appearance",
-  "server",
-  "updates",
-  "mcp",
-  "skills",
-  "usage",
   "personalization",
+  "models",
+  "updates",
+  "usage",
   "privacy",
   "system",
   "archives",
   "about",
+  "mcp",
+  "skills",
+  "server",
 ];
 
 export function visibleSettingsSectionIds(
   developerModeEnabled = false,
 ): SettingsSectionId[] {
   if (!developerModeEnabled) return [...BASE_SETTINGS_SECTION_IDS];
+  const afterUsage = BASE_SETTINGS_SECTION_IDS.indexOf("usage") + 1;
   return [
-    ...BASE_SETTINGS_SECTION_IDS.slice(0, 8),
+    ...BASE_SETTINGS_SECTION_IDS.slice(0, afterUsage),
     "logs",
-    ...BASE_SETTINGS_SECTION_IDS.slice(8),
+    ...BASE_SETTINGS_SECTION_IDS.slice(afterUsage),
   ];
 }

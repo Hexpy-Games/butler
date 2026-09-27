@@ -38,7 +38,7 @@ export function ViewerCommandPalette({ entries, open, onClose, onOpen }: {
       onClose={close}
       onQueryChange={setQuery}
       open={open}
-      placeholder="Search components, tokens, patterns, or describe what you need"
+      placeholder="Search the design system"
       query={query}
     />
   );

@@ -192,6 +192,7 @@ async fn turn_01_reply_is_streamed_incrementally() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("TURN-01-STREAM")?
         .cassette("TURN-01")
+        .replay_only()
         .start()
         .await?;
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
@@ -375,6 +376,7 @@ async fn turn_03_stop_keeps_partial_text_marked_stopped() -> Result<(), HarnessE
     butler_e2e::gate!();
     let s = Setup::new("TURN-03-PARTIAL")?
         .cassette("TURN-03")
+        .replay_only()
         .start()
         .await?;
     s.provider()?.set_pacing(Pacing {

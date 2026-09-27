@@ -4,25 +4,46 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { ComposerWorkspaceSelect } from "./ComposerWorkspaceSelect.tsx";
 import { useComposerStore } from "./composerStore.ts";
+import { useButlerStore } from "@/app/store.ts";
 import { projectDraftId } from "@/app/utils.ts";
 
-test("both new conversation surfaces use the composer control style, default to local, and lock during send", async () => {
+async function withRoot(run: (container: Element, render: (draftId: string) => Promise<void>) => Promise<void>) {
   const dom = new JSDOM('<div id="root"></div>');
   const globals = ["window", "document", "navigator", "HTMLElement", "DocumentFragment", "IS_REACT_ACT_ENVIRONMENT"] as const;
   const previous = globals.map((key) => Object.getOwnPropertyDescriptor(globalThis, key));
-  const state = useComposerStore.getState();
+  const composerState = useComposerStore.getState();
+  const butlerState = useButlerStore.getState();
   Object.assign(globalThis, { window: dom.window, document: dom.window.document,
     navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement,
     DocumentFragment: dom.window.DocumentFragment, IS_REACT_ACT_ENVIRONMENT: true });
   const container = dom.window.document.querySelector("#root")!;
   const root = createRoot(container);
+  const render = async (draftId: string) => {
+    await act(async () => {
+      useComposerStore.getState().activateDraftSession(draftId, "");
+      useComposerStore.setState({ isSending: false });
+      root.render(<ComposerWorkspaceSelect />);
+    });
+  };
   try {
+    await run(container, render);
+  } finally {
+    await act(async () => root.unmount());
+    useComposerStore.setState(composerState);
+    useButlerStore.setState(butlerState, true);
+    globals.forEach((key, index) => {
+      if (previous[index]) Object.defineProperty(globalThis, key, previous[index]!);
+      else Reflect.deleteProperty(globalThis, key);
+    });
+    dom.window.close();
+  }
+}
+
+test("Git projects use the composer control style, default to local, and lock during send", async () => {
+  await withRoot(async (container, render) => {
+    useButlerStore.setState({ projectWorkspaceKinds: { "project-one": "git" } });
     for (const draftId of [projectDraftId("project-one"), "dashboard:project-one"]) {
-      await act(async () => {
-        useComposerStore.getState().activateDraftSession(draftId, "");
-        useComposerStore.setState({ isSending: false });
-        root.render(<ComposerWorkspaceSelect />);
-      });
+      await render(draftId);
       const trigger = container.querySelector<HTMLButtonElement>('[role="combobox"]')!;
       expect(trigger.textContent).toBe("Local");
       // Same control style as the access-mode control beside it, not a glass pill.
@@ -35,21 +56,21 @@ test("both new conversation surfaces use the composer control style, default to 
       await act(async () => useComposerStore.setState({ isSending: true }));
       expect(trigger.disabled).toBe(true);
     }
-    await act(async () => {
-      useComposerStore.getState().activateDraftSession("draft:chat", "");
-      useComposerStore.setState({ isSending: false });
-    });
-    const trigger = container.querySelector<HTMLButtonElement>('[role="combobox"]')!;
-    expect(trigger.textContent).toBe("Local");
-    await act(async () => { useComposerStore.getState().activateDraftSession("existing-session", ""); });
-    expect(container.querySelector('[role="combobox"]')).toBeNull();
-  } finally {
-    await act(async () => root.unmount());
-    useComposerStore.setState(state);
-    globals.forEach((key, index) => {
-      if (previous[index]) Object.defineProperty(globalThis, key, previous[index]!);
-      else Reflect.deleteProperty(globalThis, key);
-    });
-    dom.window.close();
-  }
+  });
+});
+
+test("the picker stays hidden outside Git projects", async () => {
+  await withRoot(async (container, render) => {
+    useButlerStore.setState({ projectWorkspaceKinds: { "folder-project": "folder" } });
+    for (const draftId of [
+      "draft:chat",
+      projectDraftId("folder-project"),
+      "dashboard:folder-project",
+      projectDraftId("unknown-project"),
+      "existing-session",
+    ]) {
+      await render(draftId);
+      expect(container.querySelector('[role="combobox"]'), draftId).toBeNull();
+    }
+  });
 });

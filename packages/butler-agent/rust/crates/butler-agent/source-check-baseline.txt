@@ -1,4 +1,4 @@
-# Functions over 80 lines, ratcheted by tools/source-check.
+# Production functions over 80 lines, ratcheted by tools/source-check.
 # Split a function and regenerate: cargo run -p butler-source-check -- --bless .
 # Entries may only shrink or disappear; new entries need review.
 src/host/app/monitoring/events.rs	run_events	94
@@ -21,7 +21,6 @@ src/host/cli/cognition/knowhow.rs	run	149
 src/host/cli/cognition/metadata.rs	run	86
 src/host/cli/cognition/parser.rs	parse	159
 src/host/cli/cognition/recovery.rs	run	143
-src/host/cli/command.rs	tests::command_families_claim_their_commands_after_common_options	82
 src/host/cli/consolidation.rs	parse	83
 src/host/cli/consolidation.rs	run_native_consolidation_cli	218
 src/host/cli/context.rs	parse	113
@@ -47,8 +46,6 @@ src/host/embedding/worker/assets.rs	acquire	82
 src/host/guided/activity.rs	new_group	99
 src/host/guided/activity/content.rs	content	160
 src/host/guided/activity/snapshot.rs	restore	97
-src/host/guided/catalog/tests.rs	image_tool_requires_current_full_access_image_admission	108
-src/host/guided/catalog/tests.rs	phase_selection_enforces_execution_policy_access_and_required_tools	142
 src/host/guided/command.rs	GuidedCommand::execute_observation	196
 src/host/guided/command/artifacts.rs	declared	84
 src/host/guided/command/effect.rs	<CommandEffectAdapter as EffectAdapter>::dispatch	96
@@ -56,7 +53,6 @@ src/host/guided/command/evidence.rs	capability_receipts	85
 src/host/guided/command/output.rs	from_streams	175
 src/host/guided/command/output/assemble.rs	assemble	149
 src/host/guided/factory.rs	<GuidedTurnFactoryAdapter as GuidedTurnFactory>::bind_pre_model	227
-src/host/guided/factory/tests/journaled_factory.rs	factory_reads_physical_file_journals_result_and_continues_provider	411
 src/host/guided/file_effects/edit.rs	decode	115
 src/host/guided/file_effects/edit.rs	recover	149
 src/host/guided/file_effects/edit/legacy.rs	recover	90
@@ -70,7 +66,6 @@ src/host/guided/prompt.rs	<GuidedPrompt as PromptPort>::render	190
 src/host/guided/prompt/documents.rs	read	113
 src/host/guided/prompt/prior_tool/semantic.rs	facts	93
 src/host/guided/prompt/work_context.rs	render	267
-src/host/guided/scope_selected_work/tests.rs	store_for_scope_routes_local_worker_to_session_and_ledger_steward_to_project	118
 src/host/guided/tools.rs	GuidedTools::new	101
 src/host/guided/tools/discovery.rs	search	82
 src/host/guided/tools/discovery/invoke.rs	run	148
@@ -84,10 +79,8 @@ src/host/guided/tools/execute.rs	execute	141
 src/host/guided/tools/image.rs	admitted_image	96
 src/host/guided/tools/image.rs	execute	100
 src/host/guided/tools/message/preview.rs	fit	85
-src/host/guided/tools/message/preview/tests.rs	structured_previews_drop_private_fields_and_bound_artifact_pages	83
 src/host/guided/tools/message/preview/work.rs	project_raw	99
 src/host/guided/tools/occurrence.rs	occurrence	100
-src/host/guided/work/tests.rs	real_sqlite_work_final_reconcile_persists_current_open_disposition	167
 src/host/guided/work_streams/prompt.rs	render	92
 src/host/guided/work_streams/storage.rs	Store::update_todo	101
 src/host/installation.rs	ResolvedInstallation::payload_provenance	82
@@ -95,11 +88,9 @@ src/host/mcp/registry_cli.rs	run	162
 src/host/memory_jobs/briefing.rs	<BriefingSource as BriefingInputSource>::snapshot	110
 src/host/memory_jobs/consolidation_phase.rs	<CyclePhases as PhaseExecutor>::execute	116
 src/host/memory_jobs/daily.rs	DailyCognitionJobs::new	90
-src/host/memory_jobs/daily_schedule/tests.rs	failure_and_success_both_suppress_same_local_day	99
 src/host/memory_jobs/maintain.rs	run	133
 src/host/memory_jobs/maintain.rs	run_active	82
 src/host/memory_jobs/profile_consolidation.rs	ProfileConsolidation::consolidate	84
-src/host/memory_jobs/profile_sources/tests.rs	actual_canonical_writer_to_profile_facts_preserves_source_identity	102
 src/host/memory_jobs/rebuild.rs	run	251
 src/host/memory_jobs/rebuild/build.rs	run	89
 src/host/memory_jobs/rebuild/build.rs	work	122
@@ -111,11 +102,8 @@ src/host/memory_jobs/transcript_sync/hot.rs	LegacyHot::save	125
 src/host/memory_jobs/transcript_sync/hot.rs	commit	99
 src/host/runtime.rs	AgentRuntime::open	432
 src/host/runtime/environment.rs	ProcessEnvironment::capture	100
-src/host/runtime/storage_bootstrap/tests.rs	fresh_root_bootstraps_real_receipt_activation_and_storage_owner	82
-src/host/service/conversation_observer/tests.rs	canonical_completion_publishes_one_observation_and_one_queue_job_then_drains	98
 src/host/service/entrypoint.rs	serve	186
 src/host/service/ingress.rs	IngressDispatcher::poll	86
-src/host/service/ingress/action/tests.rs	app_final_projects_bounded_rich_result_then_source_ordered_cancellation	127
 src/host/service/ingress/bind.rs	bind_and_request	141
 src/host/service/ingress/bind.rs	control_request	89
 src/host/service/ingress/bind/internal_subsession.rs	bind	92

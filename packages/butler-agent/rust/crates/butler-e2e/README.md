@@ -19,7 +19,7 @@ always runs.
 # stub tier: replays committed cassettes, live tests show as ignored
 BUTLER_E2E_TIER=stub cargo test -p butler-e2e
 
-# live tier against the owner's ChatGPT subscription (Codex auth.json, read-only)
+# live tier against the owner's test-only subscription login (~/.butler-e2e-auth)
 BUTLER_E2E_TIER=live cargo test -p butler-e2e --test live -- --ignored --test-threads=1
 
 # re-record cassettes for one test file (live provider, clean traffic)
@@ -33,9 +33,9 @@ The harness builds `butler-agent` itself (`cargo build -p butler-agent`) unless
 |----------|---------|
 | `BUTLER_E2E_TIER` | unset: scenarios skipped; `stub`, `live` (missing credentials fail), `all` (missing credentials: `SKIPPED (no credentials: …)`) |
 | `BUTLER_E2E_PROVIDER` | `openai-subscription` (default), `openai`, `opencode-go`, … |
-| `BUTLER_E2E_MODEL` / `BUTLER_E2E_MODEL_MATRIX` | `provider/model@effort`; defaults `openai/gpt-6-sol@low` and `openai/gpt-6-sol@low,openai/gpt-6-luna@max` |
-| `BUTLER_E2E_CODEX_PROFILE` | Butler OAuth test profile (default `~/.butler-e2e-auth/auth/openai-codex.json`, optional; needed only for LIVE-10) |
-| `BUTLER_E2E_CODEX_AUTH_JSON` / `CODEX_AUTH_JSON` | Codex CLI auth file (default `~/.codex/auth.json`), passed by path; never read by the harness |
+| `BUTLER_E2E_MODEL` / `BUTLER_E2E_MODEL_MATRIX` | `provider/model@effort`; both default to `openai/gpt-6-luna@max` (owner decision: automated real calls never use gpt-6-sol or -astra) |
+| `BUTLER_E2E_CODEX_PROFILE` | Butler OAuth test profile, the default live credential (default `~/.butler-e2e-auth/auth/openai-codex.json`); refreshable, so LIVE-10 runs against it |
+| `BUTLER_E2E_CODEX_AUTH_JSON` / `CODEX_AUTH_JSON` | Fallback when no test profile exists: Codex CLI auth file (default `~/.codex/auth.json`), passed by path, read-only; never read by the harness |
 | `BUTLER_E2E_API_KEY_ENV` | name of the variable holding an API key (API-key providers) |
 | `BUTLER_E2E_BASE_URL` | upstream override |
 | `BUTLER_E2E_RECORD=1` | record mode |
@@ -44,10 +44,14 @@ The harness builds `butler-agent` itself (`cargo build -p butler-agent`) unless
 | `BUTLER_E2E_KEEP_DATA=1` | keep scenario sandboxes (logs, data dir) |
 | `BUTLER_E2E_REPORT` | file that collects live `PASSED`/`SKIPPED` lines |
 
-The live tier sets `CODEX_AUTH_JSON` (or `BUTLER_CODEX_AUTH_PROFILE`) for the
-agent and unsets `OPENAI_API_KEY` so the subscription is used. A dedicated
-test-only login (`butler auth login --data ~/.butler-e2e-auth`) is optional and
-needs the owner's browser.
+The live tier passes the test profile to the agent as an absolute
+`BUTLER_CODEX_AUTH_PROFILE` (refreshes are written back to it; the harness
+never reads the token values) and runs without `OPENAI_API_KEY`, so the
+subscription is used. The profile comes from a separate test-only login
+(`butler auth login --data ~/.butler-e2e-auth`, owner's browser); without
+it the harness falls back to the read-only Codex CLI file and LIVE-10 is
+SKIPPED. Run the live tier with `--test-threads=1` so two refreshes of the
+one profile cannot race.
 
 ## Record / replay
 
