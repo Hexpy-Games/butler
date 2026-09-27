@@ -4,7 +4,7 @@ use serde_json::json;
 
 use super::{
     io::{safe_ref, valid_git_commit, valid_sha},
-    source::memory_inventory_hash,
+    source::EvidenceInventory,
     validate_evidence,
 };
 
@@ -20,7 +20,10 @@ fn memory_inventory_hash_matches_source_ecmascript_projection() {
         "history": []
     });
     assert_eq!(
-        memory_inventory_hash(&inventory).unwrap(),
+        serde_json::from_value::<EvidenceInventory>(inventory)
+            .unwrap()
+            .hash()
+            .unwrap(),
         "f476671143536ff9272e0a756593a9da40e89532328016b3f51ce5e0e690715e"
     );
 }

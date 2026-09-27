@@ -60,3 +60,23 @@ pub(crate) fn object<T: serde::de::DeserializeOwned>(raw: &str) -> Option<T> {
         .then(|| serde_json::from_value(value).ok())
         .flatten()
 }
+
+/// Reads the string items of an array, skipping items of other types;
+/// `None` when the value is not an array.
+pub(crate) fn strings<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let Value::Array(items) = Value::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+    Ok(Some(
+        items
+            .into_iter()
+            .filter_map(|item| match item {
+                Value::String(text) => Some(text),
+                _ => None,
+            })
+            .collect(),
+    ))
+}

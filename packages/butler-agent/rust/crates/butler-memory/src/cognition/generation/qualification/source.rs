@@ -1,4 +1,5 @@
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::cognition::CognitionResult;
@@ -6,7 +7,9 @@ use crate::cognition::CognitionResult;
 use super::{
     CaptureStore, invalid,
     io::{self, sha256},
-    types::{QueryObservation, SourceBinding, SourceIdentity, SourceObservation, SourceRead},
+    types::{
+        QueryObservation, SourceBinding, SourceIdentity, SourceObservation, SourceRead, SourceRow,
+    },
 };
 use crate::cognition::CognitionCode;
 
@@ -16,40 +19,145 @@ pub(super) struct ReturnedResult<'a> {
     pub observations: &'a [QueryObservation],
 }
 
-pub(super) fn memory_inventory_hash(inventory: &Value) -> CognitionResult<String> {
-    let origin_version = inventory
-        .get("origin")
-        .and_then(|value| value.get("version"))
-        .cloned()
-        .unwrap_or(Value::Null);
-    let mut normalized = serde_json::Map::new();
-    if let Some(schema) = inventory.get("schema") {
-        normalized.insert("schema".to_owned(), schema.clone());
-    }
-    normalized.insert("origin_version".to_owned(), origin_version);
-    for (field, fallback) in [
-        ("exclusions", json!({})),
-        ("entries", json!([])),
-        ("typed", json!([])),
-        ("typed_lifecycle", json!([])),
-        ("history", json!([])),
-    ] {
-        let value = inventory
-            .get(field)
-            .filter(|value| !value.is_null())
+/// Passthrough: a source inventory captured as acceptance evidence, kept
+/// verbatim because its hash covers every stored field.
+#[derive(serde::Deserialize)]
+#[serde(transparent)]
+pub(super) struct EvidenceInventory(Value);
+
+impl EvidenceInventory {
+    /// The memory inventory hash: `as_of` is excluded, `origin.version` stands
+    /// for the origin, and missing collections hash as empty.
+    pub(super) fn hash(&self) -> CognitionResult<String> {
+        let inventory = &self.0;
+        let origin_version = inventory
+            .get("origin")
+            .and_then(|value| value.get("version"))
             .cloned()
-            .unwrap_or(fallback);
-        normalized.insert(field.to_owned(), value);
+            .unwrap_or(Value::Null);
+        let mut normalized = serde_json::Map::new();
+        if let Some(schema) = inventory.get("schema") {
+            normalized.insert("schema".to_owned(), schema.clone());
+        }
+        normalized.insert("origin_version".to_owned(), origin_version);
+        for (field, fallback) in [
+            ("exclusions", json!({})),
+            ("entries", json!([])),
+            ("typed", json!([])),
+            ("typed_lifecycle", json!([])),
+            ("history", json!([])),
+        ] {
+            let value = inventory
+                .get(field)
+                .filter(|value| !value.is_null())
+                .cloned()
+                .unwrap_or(fallback);
+            normalized.insert(field.to_owned(), value);
+        }
+        let serialized =
+            butler_core::json::stringify(&Value::Object(normalized)).map_err(|source| {
+                invalid(CognitionCode::MemoryAcceptanceEvidenceInvalid).with_source(source)
+            })?;
+        Ok(sha256(serialized.as_bytes()))
     }
-    let serialized =
-        butler_core::json::stringify(&Value::Object(normalized)).map_err(|source| {
-            invalid(CognitionCode::MemoryAcceptanceEvidenceInvalid).with_source(source)
-        })?;
-    Ok(sha256(serialized.as_bytes()))
+
+    /// Whether a conversation entry, typed record, or history row lists the
+    /// source leaf with this revision and hash.
+    fn contains_raw_source_fact(&self, fact: &RawSourceFact<'_>) -> bool {
+        let records = |field: &str| {
+            self.0
+                .get(field)
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter(|entry| entry.is_object())
+                .filter_map(|entry| InventoryRecord::deserialize(entry).ok())
+        };
+        let text = |value: &Option<String>, expected: &str| value.as_deref() == Some(expected);
+        let lists = |values: &Option<Vec<String>>, expected: &str| {
+            values.iter().flatten().any(|item| item == expected)
+        };
+        records("entries").any(|entry| {
+            text(&entry.episode_id, fact.episode_id)
+                && text(&entry.revision, fact.revision)
+                && lists(&entry.source_ids, fact.source_id)
+                && lists(&entry.source_hashes, fact.source_hash)
+        }) || records("typed").any(|entry| {
+            text(&entry.revision, fact.revision)
+                && text(&entry.content_hash, fact.source_hash)
+                && lists(&entry.typed_source_ids, fact.source_id)
+        }) || records("history").any(|entry| {
+            text(&entry.source_ref, fact.source_id)
+                && text(&entry.revision, fact.revision)
+                && text(&entry.history_source_hash, fact.source_hash)
+        })
+    }
+}
+
+/// Lenient view of any inventory record: entries, typed records, and
+/// history rows share this reader.
+#[derive(serde::Deserialize)]
+struct InventoryRecord {
+    #[serde(
+        default,
+        rename = "episodeId",
+        deserialize_with = "crate::lenient::option"
+    )]
+    episode_id: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    revision: Option<String>,
+    #[serde(
+        default,
+        rename = "sourceIds",
+        deserialize_with = "crate::lenient::strings"
+    )]
+    source_ids: Option<Vec<String>>,
+    #[serde(
+        default,
+        rename = "sourceHashes",
+        deserialize_with = "crate::lenient::strings"
+    )]
+    source_hashes: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    content_hash: Option<String>,
+    #[serde(
+        default,
+        rename = "source_ids",
+        deserialize_with = "crate::lenient::strings"
+    )]
+    typed_source_ids: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    source_ref: Option<String>,
+    #[serde(
+        default,
+        rename = "source_hash",
+        deserialize_with = "crate::lenient::option"
+    )]
+    history_source_hash: Option<String>,
+}
+
+/// A source leaf an inventory must list.
+struct RawSourceFact<'a> {
+    source_id: &'a str,
+    revision: &'a str,
+    source_hash: &'a str,
+    episode_id: &'a str,
+}
+
+impl<'a> RawSourceFact<'a> {
+    /// The leaf `source_id` carrying the row's revision, hash, and episode.
+    fn of(row: &'a SourceRow, source_id: &'a str) -> Self {
+        Self {
+            source_id,
+            revision: &row.revision,
+            source_hash: &row.content_hash,
+            episode_id: &row.episode_id,
+        }
+    }
 }
 
 pub(super) fn inventory_contains_source_observation(
-    inventory: &Value,
+    inventory: &EvidenceInventory,
     source: &SourceObservation,
     generation_id: &str,
     results: &[ReturnedResult<'_>],
@@ -165,9 +273,11 @@ pub(super) fn binding_returned_by_result(
     }
 }
 
+/// A binding belongs to an inventory when its returned handle decodes to a
+/// source leaf (directly or through split ancestry) that the inventory lists.
 pub(super) fn source_binding_belongs_to_inventory(
     binding: &SourceBinding,
-    inventory: &Value,
+    inventory: &EvidenceInventory,
     generation_id: &str,
 ) -> bool {
     if binding.schema != "butler.memory-source-binding-evidence.v1"
@@ -183,196 +293,164 @@ pub(super) fn source_binding_belongs_to_inventory(
     {
         return false;
     }
-
-    if binding.observation_kind == "source_ref"
-        && let Some(source_ref) = binding.returned_source_ref.as_deref()
-        && source_ref.starts_with("memory-source:v2:")
-    {
-        let parts = source_ref.split(':').collect::<Vec<_>>();
-        if parts.len() != 4 || decode_base64url(parts[2]).as_deref() != Some(generation_id) {
-            return false;
+    match (
+        binding.observation_kind.as_str(),
+        binding.returned_source_ref.as_deref(),
+    ) {
+        ("source_ref", Some(source_ref)) if source_ref.starts_with("memory-source:v2:") => {
+            memory_source_belongs(binding, source_ref, inventory, generation_id)
         }
-        let Some(source_id) = decode_base64url(parts[3]) else {
-            return false;
-        };
-        let Some(row) = binding.source_row.as_ref() else {
-            return false;
-        };
-        if row.source_id != source_id
-            || row.revision != binding.revision
-            || row.content_hash != binding.source_hash
-            || binding.chunk.as_ref().is_none_or(|chunk| {
-                chunk.current_revision != row.revision || chunk.status != "active"
-            })
-            || row.episode_id.is_empty()
-            || row.observed_at != binding.observed_at
-            || !valid_timestamp(&row.conversation_start)
-            || !valid_timestamp(&row.conversation_end)
-            || row.byte_start < 0
-            || row.byte_end <= row.byte_start
-        {
-            return false;
+        ("source_ref", Some(source_ref)) if source_ref.starts_with("conversation-source:v2:") => {
+            conversation_source_belongs(binding, source_ref, inventory)
         }
-        if row.conversation_message_id.is_some()
-            && binding.canonical.as_ref().is_none_or(|canonical| {
-                Some(canonical.message_id.as_str()) != row.conversation_message_id.as_deref()
-                    || Some(canonical.part_id.as_str()) != row.part_id.as_deref()
-                    || Some(canonical.scalar_pointer.as_str()) != row.scalar_pointer.as_deref()
-                    || canonical.scalar_hash != row.content_hash
-                    || canonical.revision != row.revision
-            })
-        {
-            return false;
-        }
-        if inventory_contains_raw_source_fact(
-            inventory,
-            &source_id,
-            &row.revision,
-            &row.content_hash,
-            &row.episode_id,
-        ) {
-            return true;
-        }
-        let mut child_id = source_id.clone();
-        let (mut child_start, mut child_end) = (row.byte_start, row.byte_end);
-        for ancestor in binding.split_ancestry.as_deref().unwrap_or_default() {
-            if !io::valid_sha(&ancestor.revision)
-                || !io::valid_sha(&ancestor.content_hash)
-                || ancestor.episode_id != row.episode_id
-                || ancestor.revision != row.revision
-                || ancestor.content_hash != row.content_hash
-                || ancestor.conversation_session_id != row.conversation_session_id
-                || ancestor.conversation_message_id != row.conversation_message_id
-                || ancestor.part_id != row.part_id
-                || ancestor.scalar_pointer != row.scalar_pointer
-                || !ancestor.child_source_ids.contains(&child_id)
-                || ancestor.byte_start > child_start
-                || ancestor.byte_end < child_end
-            {
-                return false;
-            }
-            child_id = ancestor.source_id.clone();
-            child_start = ancestor.byte_start;
-            child_end = ancestor.byte_end;
-        }
-        return child_id != source_id
-            && inventory_contains_raw_source_fact(
-                inventory,
-                &child_id,
-                &row.revision,
-                &row.content_hash,
-                &row.episode_id,
-            );
+        ("session_message", _) => session_message_belongs(binding, inventory),
+        _ => false,
     }
-
-    if binding.observation_kind == "source_ref"
-        && let Some(source_ref) = binding.returned_source_ref.as_deref()
-        && source_ref.starts_with("conversation-source:v2:")
-    {
-        let parts = source_ref.split(':').collect::<Vec<_>>();
-        let Some(canonical) = binding.canonical.as_ref() else {
-            return false;
-        };
-        if parts.len() != 6
-            || parts[5] != binding.source_hash
-            || decode_base64url(parts[2]).as_deref() != Some(canonical.message_id.as_str())
-            || decode_base64url(parts[3]).as_deref() != Some(canonical.part_id.as_str())
-            || decode_base64url(parts[4]).as_deref() != Some(canonical.scalar_pointer.as_str())
-            || canonical.scalar_hash != binding.source_hash
-            || canonical.revision != binding.revision
-        {
-            return false;
-        }
-        let Some(row) = binding.source_row.as_ref() else {
-            return false;
-        };
-        return row.revision == binding.revision
-            && row.content_hash == binding.source_hash
-            && row.observed_at == binding.observed_at
-            && row.conversation_message_id.as_deref() == Some(canonical.message_id.as_str())
-            && row.part_id.as_deref() == Some(canonical.part_id.as_str())
-            && row.scalar_pointer.as_deref() == Some(canonical.scalar_pointer.as_str())
-            && inventory_contains_raw_source_fact(
-                inventory,
-                &row.source_id,
-                &row.revision,
-                &row.content_hash,
-                &row.episode_id,
-            );
-    }
-
-    if binding.observation_kind == "session_message" {
-        let (Some(message_id), Some(canonical), Some(row)) = (
-            binding.returned_message_id.as_deref(),
-            binding.canonical.as_ref(),
-            binding.source_row.as_ref(),
-        ) else {
-            return false;
-        };
-        return message_id == canonical.message_id
-            && canonical.revision == binding.revision
-            && canonical.scalar_hash == binding.source_hash
-            && row.revision == canonical.revision
-            && row.content_hash == canonical.scalar_hash
-            && row.observed_at == binding.observed_at
-            && row.conversation_message_id.as_deref() == Some(canonical.message_id.as_str())
-            && row.part_id.as_deref() == Some(canonical.part_id.as_str())
-            && row.scalar_pointer.as_deref() == Some(canonical.scalar_pointer.as_str())
-            && inventory_contains_raw_source_fact(
-                inventory,
-                &row.source_id,
-                &row.revision,
-                &row.content_hash,
-                &row.episode_id,
-            );
-    }
-    false
 }
 
-fn inventory_contains_raw_source_fact(
-    inventory: &Value,
-    source_id: &str,
-    revision: &str,
-    source_hash: &str,
-    episode_id: &str,
+/// `memory-source:v2:<generation>:<source id>`: the row must be current and,
+/// for a split leaf, its ancestry must reach an inventory leaf.
+fn memory_source_belongs(
+    binding: &SourceBinding,
+    source_ref: &str,
+    inventory: &EvidenceInventory,
+    generation_id: &str,
 ) -> bool {
-    inventory
-        .get("entries")
-        .and_then(Value::as_array)
-        .is_some_and(|entries| {
-            entries.iter().any(|entry| {
-                entry.get("episodeId").and_then(Value::as_str) == Some(episode_id)
-                    && entry.get("revision").and_then(Value::as_str) == Some(revision)
-                    && string_array_contains(entry.get("sourceIds"), source_id)
-                    && string_array_contains(entry.get("sourceHashes"), source_hash)
-            })
-        })
-        || inventory
-            .get("typed")
-            .and_then(Value::as_array)
-            .is_some_and(|entries| {
-                entries.iter().any(|entry| {
-                    entry.get("revision").and_then(Value::as_str) == Some(revision)
-                        && entry.get("content_hash").and_then(Value::as_str) == Some(source_hash)
-                        && string_array_contains(entry.get("source_ids"), source_id)
-                })
-            })
-        || inventory
-            .get("history")
-            .and_then(Value::as_array)
-            .is_some_and(|entries| {
-                entries.iter().any(|entry| {
-                    entry.get("source_ref").and_then(Value::as_str) == Some(source_id)
-                        && entry.get("revision").and_then(Value::as_str) == Some(revision)
-                        && entry.get("source_hash").and_then(Value::as_str) == Some(source_hash)
-                })
-            })
+    let parts = source_ref.split(':').collect::<Vec<_>>();
+    let [_, _, generation, source_id] = parts.as_slice() else {
+        return false;
+    };
+    if decode_base64url(generation).as_deref() != Some(generation_id) {
+        return false;
+    }
+    let (Some(source_id), Some(row)) = (decode_base64url(source_id), binding.source_row.as_ref())
+    else {
+        return false;
+    };
+    if !memory_row_current(binding, row, &source_id) {
+        return false;
+    }
+    if inventory.contains_raw_source_fact(&RawSourceFact::of(row, &source_id)) {
+        return true;
+    }
+    split_root(binding, row, &source_id).is_some_and(|root| {
+        root != source_id && inventory.contains_raw_source_fact(&RawSourceFact::of(row, &root))
+    })
 }
 
-fn string_array_contains(value: Option<&Value>, expected: &str) -> bool {
-    value
-        .and_then(Value::as_array)
-        .is_some_and(|items| items.iter().any(|item| item.as_str() == Some(expected)))
+fn memory_row_current(binding: &SourceBinding, row: &SourceRow, source_id: &str) -> bool {
+    if row.source_id != source_id
+        || row.revision != binding.revision
+        || row.content_hash != binding.source_hash
+        || binding
+            .chunk
+            .as_ref()
+            .is_none_or(|chunk| chunk.current_revision != row.revision || chunk.status != "active")
+        || row.episode_id.is_empty()
+        || row.observed_at != binding.observed_at
+        || !valid_timestamp(&row.conversation_start)
+        || !valid_timestamp(&row.conversation_end)
+        || row.byte_start < 0
+        || row.byte_end <= row.byte_start
+    {
+        return false;
+    }
+    row.conversation_message_id.is_none()
+        || binding.canonical.as_ref().is_some_and(|canonical| {
+            Some(canonical.message_id.as_str()) == row.conversation_message_id.as_deref()
+                && Some(canonical.part_id.as_str()) == row.part_id.as_deref()
+                && Some(canonical.scalar_pointer.as_str()) == row.scalar_pointer.as_deref()
+                && canonical.scalar_hash == row.content_hash
+                && canonical.revision == row.revision
+        })
+}
+
+/// Walks the split ancestry up from the leaf; each ancestor must share the
+/// leaf's source and contain its child. Returns the topmost source id.
+fn split_root(binding: &SourceBinding, row: &SourceRow, source_id: &str) -> Option<String> {
+    let mut child_id = source_id.to_owned();
+    let (mut child_start, mut child_end) = (row.byte_start, row.byte_end);
+    for ancestor in binding.split_ancestry.as_deref().unwrap_or_default() {
+        if !io::valid_sha(&ancestor.revision)
+            || !io::valid_sha(&ancestor.content_hash)
+            || ancestor.episode_id != row.episode_id
+            || ancestor.revision != row.revision
+            || ancestor.content_hash != row.content_hash
+            || ancestor.conversation_session_id != row.conversation_session_id
+            || ancestor.conversation_message_id != row.conversation_message_id
+            || ancestor.part_id != row.part_id
+            || ancestor.scalar_pointer != row.scalar_pointer
+            || !ancestor.child_source_ids.contains(&child_id)
+            || ancestor.byte_start > child_start
+            || ancestor.byte_end < child_end
+        {
+            return None;
+        }
+        child_id.clone_from(&ancestor.source_id);
+        child_start = ancestor.byte_start;
+        child_end = ancestor.byte_end;
+    }
+    Some(child_id)
+}
+
+/// `conversation-source:v2:<message>:<part>:<pointer>:<hash>`: the canonical
+/// scalar and the row must name the same source.
+fn conversation_source_belongs(
+    binding: &SourceBinding,
+    source_ref: &str,
+    inventory: &EvidenceInventory,
+) -> bool {
+    let parts = source_ref.split(':').collect::<Vec<_>>();
+    let [_, _, message, part, pointer, hash] = parts.as_slice() else {
+        return false;
+    };
+    let Some(canonical) = binding.canonical.as_ref() else {
+        return false;
+    };
+    if *hash != binding.source_hash
+        || decode_base64url(message).as_deref() != Some(canonical.message_id.as_str())
+        || decode_base64url(part).as_deref() != Some(canonical.part_id.as_str())
+        || decode_base64url(pointer).as_deref() != Some(canonical.scalar_pointer.as_str())
+        || canonical.scalar_hash != binding.source_hash
+        || canonical.revision != binding.revision
+    {
+        return false;
+    }
+    binding.source_row.as_ref().is_some_and(|row| {
+        row.revision == binding.revision
+            && row.content_hash == binding.source_hash
+            && canonical_row_listed(binding, canonical, row, inventory)
+    })
+}
+
+/// A returned session message must be the canonical scalar of the row.
+fn session_message_belongs(binding: &SourceBinding, inventory: &EvidenceInventory) -> bool {
+    let (Some(message_id), Some(canonical), Some(row)) = (
+        binding.returned_message_id.as_deref(),
+        binding.canonical.as_ref(),
+        binding.source_row.as_ref(),
+    ) else {
+        return false;
+    };
+    message_id == canonical.message_id
+        && canonical.revision == binding.revision
+        && canonical.scalar_hash == binding.source_hash
+        && row.revision == canonical.revision
+        && row.content_hash == canonical.scalar_hash
+        && canonical_row_listed(binding, canonical, row, inventory)
+}
+
+fn canonical_row_listed(
+    binding: &SourceBinding,
+    canonical: &super::types::CanonicalSource,
+    row: &SourceRow,
+    inventory: &EvidenceInventory,
+) -> bool {
+    row.observed_at == binding.observed_at
+        && row.conversation_message_id.as_deref() == Some(canonical.message_id.as_str())
+        && row.part_id.as_deref() == Some(canonical.part_id.as_str())
+        && row.scalar_pointer.as_deref() == Some(canonical.scalar_pointer.as_str())
+        && inventory.contains_raw_source_fact(&RawSourceFact::of(row, &row.source_id))
 }
 
 fn decode_base64url(value: &str) -> Option<String> {
