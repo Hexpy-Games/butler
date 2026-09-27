@@ -3,7 +3,7 @@ use crate::btcc::storage::common::{canonical_record, error};
 use crate::btcc::storage::{StorageError, StorageResult};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::types::{Fresh, Inbox, Source, text};
+use super::types::{Fresh, Inbox, Source, inbox_row, text};
 use crate::btcc::{CommandTrigger, StorageCode, TurnCommand};
 
 pub(super) fn record_inbound(
@@ -68,15 +68,7 @@ pub(super) fn find_inbox(
             "SELECT inbox_id, turn_id, admission_input_hash, status, command_json \
          FROM btcc_inbound_inbox WHERE session_id = ?1 AND trigger_key = ?2",
             [session_id, trigger_key],
-            |row| {
-                Ok(Inbox {
-                    inbox_id: row.get(0)?,
-                    turn_id: row.get(1)?,
-                    admission_input_hash: row.get(2)?,
-                    status: row.get(3)?,
-                    command_json: row.get(4)?,
-                })
-            },
+            inbox_row,
         )
         .optional()
         .map_err(StorageError::sqlite)

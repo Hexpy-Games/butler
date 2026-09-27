@@ -190,6 +190,7 @@ fn validate_plan_action(action: &PlanAction, index: usize) -> Result<(), BtccErr
     Ok(())
 }
 
+// Passthrough: plan-action effect markers kept losslessly (truthiness vs presence).
 fn effect_is_truthy(value: &serde_json::Value) -> bool {
     match value {
         serde_json::Value::Null => false,

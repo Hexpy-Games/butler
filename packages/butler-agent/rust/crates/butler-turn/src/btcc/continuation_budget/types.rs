@@ -15,6 +15,7 @@ pub struct TurnContinuationBudgetLimits {
     pub max_elapsed_ms: u64,
     pub max_idle_ms: u64,
     #[serde(flatten)]
+    // Passthrough: unknown fields kept for forward compatibility.
     pub extensions: Map<String, Value>,
 }
 
@@ -49,6 +50,7 @@ pub struct TurnContinuationBudgetTerminal {
     pub reason: TurnContinuationBudgetTerminalReason,
     pub exhausted_at_ms: u64,
     #[serde(flatten)]
+    // Passthrough: unknown fields kept for forward compatibility.
     pub extensions: Map<String, Value>,
 }
 
@@ -68,6 +70,7 @@ pub struct TurnContinuationBudgetState {
     pub last_progress_at_ms: u64,
     pub terminal: Option<TurnContinuationBudgetTerminal>,
     #[serde(flatten)]
+    // Passthrough: unknown fields kept for forward compatibility.
     pub extensions: Map<String, Value>,
 }
 

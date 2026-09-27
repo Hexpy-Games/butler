@@ -30,6 +30,7 @@ const R2_STATES: &[&str] = &[
 ];
 const R3_STATES: &[&str] = &["admitted", "delivery_committed", "delivered", "cancelled"];
 
+// Passthrough: generic JSON canonicalization/hashing over arbitrary documents.
 fn stable_json(value: &Value) -> StorageResult<String> {
     btcc_stable_json(value).map_err(|error| {
         StorageError::new(StorageCode::CanonicalJson, error.message()).with_source(error)
@@ -181,6 +182,7 @@ fn diagnostics(
 }
 
 fn push_diagnostic(
+    // Passthrough: legacy/historical records of unknown shape.
     map: &mut BTreeMap<String, Vec<Value>>,
     turn_id: &str,
     code: &str,
@@ -197,6 +199,7 @@ fn push_diagnostic(
 
 fn record_quarantines(
     db: &Connection,
+    // Passthrough: legacy/historical records of unknown shape.
     diagnostics: &BTreeMap<String, Vec<Value>>,
     at: &str,
 ) -> StorageResult<()> {

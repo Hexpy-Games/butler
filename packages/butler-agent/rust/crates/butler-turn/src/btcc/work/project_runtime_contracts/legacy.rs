@@ -12,6 +12,7 @@ use super::identity::{ProjectWorkBinding, ResolvedProjectWorkScope};
 pub struct LegacyProjectWorkRecord {
     pub record_id: String,
     pub status: String,
+    // Passthrough: legacy/historical records of unknown shape.
     pub content: Value,
 }
 
@@ -21,7 +22,9 @@ pub struct LegacyProjectWorkRecord {
 pub struct LegacyProjectWorkSourceSnapshot {
     pub source_program_id: String,
     pub source_revision: String,
+    // Passthrough: legacy/historical records of unknown shape.
     pub goal_contract: Value,
+    // Passthrough: legacy/historical records of unknown shape.
     pub plan: Value,
     pub works: Vec<LegacyProjectWorkRecord>,
     pub tasks: Vec<LegacyProjectWorkRecord>,
@@ -33,6 +36,7 @@ pub struct LegacyProjectWorkSourceSnapshot {
 #[serde(rename_all = "camelCase")]
 pub struct LegacyProjectWorkReferencedRecord {
     pub record_id: String,
+    // Passthrough: legacy/historical records of unknown shape.
     pub content: Value,
 }
 

@@ -231,6 +231,21 @@ pub struct StewardResultInput {
     pub timestamp: String,
 }
 
+/// The route of an outbox row, read before the row is decoded.
+#[derive(serde::Deserialize)]
+pub(super) struct RouteTag {
+    pub(super) route: Option<OutboxRoute>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum OutboxRoute {
+    StewardQueue,
+    ButlerApp,
+    #[serde(other)]
+    Unknown,
+}
+
 #[cfg(any(test, feature = "test-support"))]
 impl SubsessionPacket {
     /// A minimal packet of `role` for fixtures.

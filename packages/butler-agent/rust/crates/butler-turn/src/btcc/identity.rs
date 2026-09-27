@@ -8,6 +8,7 @@ pub(super) fn digest(value: &str) -> String {
     format!("{:x}", Sha256::digest(value.as_bytes()))
 }
 
+// Passthrough: generic JSON canonicalization/hashing over arbitrary documents.
 pub(super) fn content_ref(kind: &str, body: &Value) -> Result<ContentRef, BtccError> {
     let sha256 = digest(&stable_json(body)?);
     Ok(ContentRef {
@@ -23,11 +24,13 @@ pub(super) fn json_value<T: serde::Serialize + ?Sized>(value: &T) -> Result<Valu
     })
 }
 
+// Passthrough: generic JSON canonicalization/hashing over arbitrary documents.
 pub(super) fn stable_json(value: &Value) -> Result<String, BtccError> {
     butler_core::json::canonical_json(value, butler_core::json::CanonicalKeyOrder::Utf16Lexical)
         .map_err(identity_error)
 }
 
+// Passthrough: generic JSON canonicalization/hashing over arbitrary documents.
 pub(super) fn sqlite_stable_json(value: &Value) -> Result<String, BtccError> {
     butler_core::json::canonical_json(
         value,
@@ -36,6 +39,7 @@ pub(super) fn sqlite_stable_json(value: &Value) -> Result<String, BtccError> {
     .map_err(identity_error)
 }
 
+// Passthrough: generic JSON canonicalization/hashing over arbitrary documents.
 pub(super) fn json_stringify_without(value: &Value, field: &str) -> Result<String, BtccError> {
     butler_core::json::stringify_without(value, field).map_err(identity_error)
 }

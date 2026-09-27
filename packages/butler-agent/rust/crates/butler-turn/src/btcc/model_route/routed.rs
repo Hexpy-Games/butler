@@ -73,6 +73,7 @@ struct RoundCursor<'r> {
     loaded_key: Option<String>,
     attempt: u32,
     /// The provider continuation; dropped when the route falls back.
+    // Passthrough: provider payload, opaque to BTCC.
     continuation: Option<&'r Value>,
     dispatch_budget: usize,
     dispatches: usize,

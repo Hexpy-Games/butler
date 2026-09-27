@@ -40,17 +40,21 @@ impl EffectAdapter for WorkspaceFileEditEffectAdapter {
     fn sanitize_target(&self, target: &str) -> EffectResult<String> {
         Ok(target.into())
     }
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     fn normalize_input(&self, input: &Value) -> EffectResult<Value> {
         let normalized = normalized::input(input, &self.scope)?;
         serde_json::to_value(normalized).map_err(|source| invalid_input(&source))
     }
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     fn recovery_hint(&self, input: &Value) -> EffectResult<Option<RecoveryHint>> {
         let input = EditInput::decode(input).map_err(|source| invalid_input(&source))?;
         Ok(Some(normalized::recovery_hint(&input)))
     }
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     fn dispatch<'a>(
         &'a self,
         target: &'a str,
+        // Passthrough: EffectAdapter input is capability-generic tool input.
         input: &'a Value,
         _key: &'a str,
         signal: &'a CancellationToken,
@@ -63,9 +67,11 @@ impl EffectAdapter for WorkspaceFileEditEffectAdapter {
             outcome::dispatch(&self.scope, &*self.registered, target, &input, signal).await
         })
     }
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     fn reconcile<'a>(
         &'a self,
         target: &'a str,
+        // Passthrough: EffectAdapter input is capability-generic tool input.
         input: &'a Value,
         _key: &'a str,
         _signal: &'a CancellationToken,

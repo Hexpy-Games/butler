@@ -95,32 +95,40 @@ pub trait EffectAdapter: Send + Sync {
     /// The target as it may be shown publicly.
     fn sanitize_target(&self, target: &str) -> EffectResult<String>;
     /// The canonical input used in the effect identity.
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     fn normalize_input(&self, input: &Value) -> EffectResult<Value>;
     /// What reconciliation needs to recognize this input's write, if anything.
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     fn recovery_hint(&self, _input: &Value) -> EffectResult<Option<RecoveryHint>> {
         Ok(None)
     }
     /// How a legacy blocker relates to the current target and input.
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     fn classify<'a>(
         &'a self,
         _blocker: &'a EffectBlocker,
         _target: &'a str,
+        // Passthrough: EffectAdapter input is capability-generic tool input.
         _input: &'a Value,
     ) -> Option<EffectFuture<'a, BlockerRelation>> {
         None
     }
     /// Performs the effect once for `key`.
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     fn dispatch<'a>(
         &'a self,
         target: &'a str,
+        // Passthrough: EffectAdapter input is capability-generic tool input.
         input: &'a Value,
         key: &'a str,
         signal: &'a CancellationToken,
     ) -> EffectFuture<'a, AdapterOutcome>;
     /// Observes whether an earlier dispatch for `key` was applied.
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     fn reconcile<'a>(
         &'a self,
         target: &'a str,
+        // Passthrough: EffectAdapter input is capability-generic tool input.
         input: &'a Value,
         key: &'a str,
         signal: &'a CancellationToken,
@@ -136,6 +144,7 @@ pub struct ExecuteEffect {
     pub occurrence_id: Option<String>,
     pub signal: CancellationToken,
     pub target: String,
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     pub input: Value,
     pub adapter: Arc<dyn EffectAdapter>,
 }

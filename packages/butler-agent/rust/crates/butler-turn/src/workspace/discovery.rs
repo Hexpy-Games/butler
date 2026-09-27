@@ -56,6 +56,7 @@ pub struct WorkspaceListLimits {
 pub struct WorkspaceListRejection {
     pub reason: &'static str,
     pub safe_path: Option<String>,
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub guard: Value,
 }
 

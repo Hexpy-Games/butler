@@ -55,6 +55,7 @@ impl EditEntry {
 
 impl EditInput {
     /// Decodes a journaled normalized input.
+    // Passthrough: parse boundary validating untyped JSON into typed values.
     pub(super) fn decode(input: &Value) -> Result<Self, serde_json::Error> {
         Self::deserialize(input)
     }
@@ -110,6 +111,7 @@ pub(super) fn input(value: &Value, scope: &EffectFileScope) -> EffectResult<Edit
     normalize_entry(value, scope).map(EditInput::Single)
 }
 
+// Passthrough: parse boundary validating untyped JSON into typed values.
 fn normalize_entry(value: &Value, scope: &EffectFileScope) -> EffectResult<EditEntry> {
     let object = value
         .as_object()
@@ -161,6 +163,7 @@ fn normalize_entry(value: &Value, scope: &EffectFileScope) -> EffectResult<EditE
     })
 }
 
+// Passthrough: parse boundary validating untyped JSON into typed values.
 fn sha(value: Option<&Value>, field: &str) -> EffectResult<String> {
     value
         .and_then(Value::as_str)

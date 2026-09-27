@@ -14,7 +14,7 @@ use crate::btcc::storage::common::{
 use crate::btcc::storage::runtime_owner::RuntimeOwner;
 use crate::btcc::storage::{StorageError, StorageResult};
 
-use super::types::{AdmissionClaim, Fresh, Inbox, decode, text};
+use super::types::{AdmissionClaim, Fresh, Inbox, decode, inbox_row, text};
 use crate::btcc::{BtccCode, StorageCode};
 
 pub(super) fn construct_turn(
@@ -30,15 +30,7 @@ pub(super) fn construct_turn(
             "SELECT inbox_id, turn_id, admission_input_hash, status, command_json \
          FROM btcc_inbound_inbox WHERE inbox_id=?1",
             [&inbox.inbox_id],
-            |row| {
-                Ok(Inbox {
-                    inbox_id: row.get(0)?,
-                    turn_id: row.get(1)?,
-                    admission_input_hash: row.get(2)?,
-                    status: row.get(3)?,
-                    command_json: row.get(4)?,
-                })
-            },
+            inbox_row,
         )
         .optional()
         .map_err(StorageError::sqlite)?
@@ -201,6 +193,7 @@ fn activate_admitted_checkpoint(
 
 /// Stores the admission snapshot (`{"context": ..}`) as an immutable record
 /// and returns its reference.
+// Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
 fn persist_admission_snapshot(connection: &Connection, context: &Value) -> StorageResult<String> {
     let snapshot_json = canonical_json(&json!({"context": context}))?;
     let snapshot_sha = digest(&snapshot_json);

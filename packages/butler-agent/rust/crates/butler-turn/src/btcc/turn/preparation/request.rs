@@ -153,6 +153,7 @@ fn recovery_attempt(request: &TurnRequest) -> Option<u32> {
     request.recovery_attempt.filter(|value| *value != 0)
 }
 
+// Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
 pub(super) fn fresh_command(
     request: &TurnRequest,
     model_selection: CommandModelSelection,
@@ -218,6 +219,7 @@ struct AdmissionIdentity<'a> {
     trigger_key: &'a str,
     source: AdmissionSource<'a>,
     model_selection: &'a CommandModelSelection,
+    // Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
     context: &'a Value,
 }
 
@@ -270,6 +272,7 @@ pub(super) fn conversation_envelope(request: &TurnRequest) -> ConversationEnvelo
     }
 }
 
+// Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
 fn apply_request_context(request: &TurnRequest, context: &mut Value) -> Result<(), BtccError> {
     let fields = context
         .as_object_mut()
@@ -357,6 +360,7 @@ fn append_required_tool(fields: &mut Map<String, Value>, tool: &str) {
         values.push(tool.into());
     }
 }
+// Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
 fn append_unique(context: &mut Value, field: &str, value: &str) -> Result<(), BtccError> {
     let object = context
         .as_object_mut()

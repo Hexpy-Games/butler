@@ -109,11 +109,7 @@ fn run(snapshot: &PublicMemorySnapshot, args: &QueryArgs) -> CognitionResult<Val
                 &args.scope,
                 args.role,
                 args.time.as_ref().map(|(a, b)| (a.as_str(), b.as_str())),
-                if args.latest {
-                    butler_turn::conversation::PageOrder::Latest
-                } else {
-                    butler_turn::conversation::PageOrder::Oldest
-                },
+                page_order(args.latest),
                 last.as_ref().map(|(a, b)| (a.as_str(), b.as_str())),
                 PAGE,
             )
@@ -174,11 +170,7 @@ fn run(snapshot: &PublicMemorySnapshot, args: &QueryArgs) -> CognitionResult<Val
                         &args.scope,
                         args.role,
                         args.time.as_ref().map(|(a, b)| (a.as_str(), b.as_str())),
-                        if args.latest {
-                            butler_turn::conversation::PageOrder::Latest
-                        } else {
-                            butler_turn::conversation::PageOrder::Oldest
-                        },
+                        page_order(args.latest),
                         last.as_ref().map(|(a, b)| (a.as_str(), b.as_str())),
                         1,
                     )
@@ -319,4 +311,12 @@ fn failure(code: &str, diagnostics: &[&str]) -> Value {
 )]
 fn store_error(error: butler_turn::conversation::ConversationError) -> CognitionError {
     CognitionError::new(CognitionCode::Store, error.to_string())
+}
+
+fn page_order(latest: bool) -> butler_turn::conversation::PageOrder {
+    if latest {
+        butler_turn::conversation::PageOrder::Latest
+    } else {
+        butler_turn::conversation::PageOrder::Oldest
+    }
 }

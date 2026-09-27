@@ -6,7 +6,9 @@ use super::contracts::{AuthorityAdmissionInput, AuthorityError, AuthorityResult}
 pub(super) fn digest(value: &str) -> String {
     format!("{:x}", Sha256::digest(value.as_bytes()))
 }
+// Passthrough: generic JSON canonicalization/hashing over arbitrary documents.
 pub(super) fn canonical(
+    // Passthrough: generic JSON canonicalization/hashing over arbitrary documents.
     value: &Value,
     collation: &butler_core::locale::LocaleCollation,
 ) -> AuthorityResult<String> {

@@ -20,12 +20,13 @@ use std::sync::Arc;
 use crate::btcc::BtccCode;
 use crate::btcc::{
     ActionStatus, BtccError, ChildRole, DispatchIntent, DispatchMetadata, DurableWorkService,
-    ExecutionMode, PacketExecutionMode, ParentResultRoute, PortFuture, SqliteSubsessionRepository,
-    StartWorkInput, SubsessionCreate, SubsessionPacket, WorkTurnScope, WorkView,
+    ExecutionMode, ParentResultRoute, PortFuture, SqliteSubsessionRepository, StartWorkInput,
+    SubsessionCreate, WorkTurnScope, WorkView,
 };
 use crate::workspace::{OwnOptional, SessionBindingStore, SessionRole, UpsertSessionBinding};
 
 mod lifecycle;
+mod packets;
 
 /// A child dispatch that was interrupted and can be recovered.
 #[derive(Clone, Debug)]
@@ -164,44 +165,14 @@ impl SubsessionService {
             .find(|binding| binding.transport == "app" && !binding.peer_id.trim().is_empty())
             .map(|binding| binding.peer_id.clone())
             .ok_or_else(|| error(BtccCode::ParentAppBindingRequired))?;
-        let identity = StewardIdentity {
-            parent_session_id: &request.parent_session_id,
-            parent_turn_id: &request.parent_turn_id,
-            request: &request.request,
-            work_id: &reviewed.work_id,
-            plan_revision_id: &plan.plan_revision_id,
-            review_revision_id: &review.review_revision_id,
-        };
+        let identity = packets::steward_identity(&request, reviewed, (plan, review));
         let delegation_id = delegation::delegation_id(&delegation::STEWARD, &identity)?;
         if let Some(existing) = self.replay_existing(&delegation_id).await? {
             return Ok(delegation_output(&existing));
         }
         let ids = delegation::DelegationIds::derive(&delegation::STEWARD, delegation_id);
         let now = (self.now)();
-        let packet = SubsessionPacket {
-            child_role: ChildRole::Steward,
-            delegation_id: ids.delegation_id.clone(),
-            source_tool_call_id: None,
-            task_id: ids.task_id.clone(),
-            parent_session_id: request.parent_session_id.clone(),
-            parent_turn_id: request.parent_turn_id.clone(),
-            parent_chat_id: Some(parent_chat_id),
-            relation_id: ids.relation_id.clone(),
-            access_mode: request.access_mode.clone(),
-            execution_mode: PacketExecutionMode::for_access(&request.access_mode),
-            objective: request.request.clone(),
-            acceptance_criteria: plan.checks.clone(),
-            implementation_brief: None,
-            plan_action: None,
-            task_or_plan_refs: vec![plan.plan_revision_id.clone()],
-            constraints_and_non_goals: Vec::new(),
-            allowed_tools_and_effects: allowed_effects(&request.access_mode),
-            mutation_scope: mutation_scope(&request.access_mode),
-            parent_work_ref: parent_work_ref(reviewed, &request.parent_turn_id, plan, review),
-            worker_profile: None,
-            model_ref: request.model_ref.clone(),
-            reasoning_effort: request.reasoning_effort.clone(),
-        };
+        let packet = packets::steward(&ids, &request, parent_chat_id, reviewed, (plan, review));
         let envelope = child_envelope(ChildEnvelopeInput {
             role: "steward",
             delegation: &ids.delegation_id,
@@ -303,6 +274,7 @@ impl SubsessionService {
         stored: &crate::btcc::StoredSubsessionDelegation,
         parent: &crate::workspace::StoredSessionBinding,
         role: SessionRole,
+        // Passthrough: free-form session-binding metadata shared with the App runtime policy.
         metadata: Map<String, Value>,
     ) -> Result<(), BtccError> {
         self.bindings

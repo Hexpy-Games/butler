@@ -120,6 +120,7 @@ pub struct AuthorityAdmissionInput {
     pub model_ref: String,
     pub reasoning_effort: String,
     pub category: Option<String>,
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub normalized_input: Value,
 }
 
@@ -135,6 +136,7 @@ pub enum AuthorityAdmissionResult {
         request_ref: String,
         source_work_id: String,
         normalized_target: String,
+        // Passthrough: tool arguments/results/schemas, shaped by each tool.
         normalized_input: Value,
     },
     Denied {
@@ -191,10 +193,12 @@ pub struct AuthorityStoredExecution {
     pub capability: String,
     pub normalized_target: String,
     pub(crate) category: String,
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub normalized_input: Value,
     pub decision: RequestDecision,
     pub(crate) alternative_input: Option<String>,
     pub(crate) outcome: RequestOutcome,
+    // Passthrough: tool/effect receipts, shaped by the capability.
     pub(crate) outcome_receipt: Option<Value>,
 }
 /// The outcome of an allowed operation.
@@ -204,6 +208,7 @@ pub struct AuthorityOutcomeInput {
     pub owner_session_id: String,
     pub source_work_id: String,
     pub status: String,
+    // Passthrough: tool/effect receipts, shaped by the capability.
     pub receipt: Option<Value>,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]

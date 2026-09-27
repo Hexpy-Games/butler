@@ -29,6 +29,7 @@ pub struct AdmittedModelSelection {
     pub controls_hash: String,
     pub context_window_tokens: Option<f64>,
     #[serde(flatten)]
+    // Passthrough: unknown fields kept for forward compatibility.
     pub extensions: Map<String, Value>,
 }
 
@@ -57,6 +58,7 @@ pub struct ExecutionPolicy {
     /// Unknown fields, including the delegated `subsession` (read through
     /// the guided execution policy), kept for newer writers.
     #[serde(flatten)]
+    // Passthrough: unknown fields kept for forward compatibility.
     pub extensions: Map<String, Value>,
 }
 
@@ -68,12 +70,16 @@ pub struct ExecutionPolicy {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ButlerContext {
+    // Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
     pub branch_seed: Option<Value>,
     pub app_session_id: Option<String>,
+    // Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
     pub message_content: Option<Value>,
     #[serde(default)]
+    // Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
     pub session_references: Vec<Value>,
     #[serde(default)]
+    // Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
     pub project_sources: Vec<Value>,
     pub user_ref: String,
     pub project_ref: Option<String>,
@@ -90,12 +96,15 @@ pub struct ButlerContext {
     pub empty_response_policy: Option<EmptyResponsePolicy>,
     pub execution_policy: Option<ExecutionPolicy>,
     #[serde(default)]
+    // Passthrough: image admission and attachment documents owned by butler-runtime.
     pub attachments: Vec<Value>,
+    // Passthrough: image admission and attachment documents owned by butler-runtime.
     pub image_admission: Option<Value>,
     pub authority_request_ref: Option<String>,
     pub authority_client_message_id: Option<String>,
     pub plan_id: Option<String>,
     #[serde(flatten)]
+    // Passthrough: unknown fields kept for forward compatibility.
     pub extensions: Map<String, Value>,
 }
 
@@ -216,6 +225,7 @@ pub struct ModelRoundTool {
     pub name: String,
     pub description: String,
     /// The tool's JSON Schema, forwarded to the provider unchanged.
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub parameters: Map<String, Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub concurrency_safe: Option<bool>,
@@ -238,19 +248,27 @@ pub struct ModelRoundRequest<'a> {
     pub tool_choice: Option<ToolChoice>,
     pub reasoning_effort: &'a ReasoningEffort,
     pub cancellation: CancellationToken,
+    // Passthrough: image admission and attachment documents owned by butler-runtime.
     pub attachments: &'a [Value],
+    // Passthrough: image admission and attachment documents owned by butler-runtime.
     pub image_carrier: Option<&'a Value>,
+    // Passthrough: image admission and attachment documents owned by butler-runtime.
     pub image_capability: Option<&'a Value>,
+    // Passthrough: image admission and attachment documents owned by butler-runtime.
     pub image_manifests: &'a [Value],
     pub verified_image_payload: Option<&'a dyn super::ports::VerifiedImagePayloadPort>,
     pub butler_data: Option<&'a str>,
     pub usage_attribution: Option<&'a UsageAttribution>,
     pub cache_scope: Option<&'a str>,
+    // Passthrough: provider payload, opaque to BTCC.
     pub stable_provider_cache_prefix: Option<&'a Value>,
+    // Passthrough: provider payload, opaque to BTCC.
     pub route_context: Option<&'a Value>,
     pub provider_retry_attempts: Option<f64>,
     pub route_transport_attempt_ordinal: Option<u32>,
+    // Passthrough: provider payload, opaque to BTCC.
     pub continuation: Option<&'a Value>,
+    // Passthrough: provider payload, opaque to BTCC.
     pub bounded_continuation: Option<&'a Value>,
     pub provider_body_admission: Option<&'a dyn super::ports::ProviderBodyAdmissionPort>,
     pub stream_observer: Option<&'a dyn super::ports::ProviderStreamObserver>,

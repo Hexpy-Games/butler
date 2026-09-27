@@ -249,31 +249,32 @@ fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
     }
 }
 
+/// Tools every legacy surface shows.
+const LEGACY_BASE: [&str; 16] = [
+    "tool_search",
+    "tool_describe",
+    "tool_call",
+    "web_search",
+    "web_read",
+    "read_file",
+    "grep_files",
+    "list_files",
+    "recall_memory",
+    "query_memory",
+    "list_conversation_sessions",
+    "read_conversation_session",
+    "read_project_source",
+    "project_ledger_status",
+    "update_todo_list",
+    "list_todo_list",
+];
+
 pub(super) fn legacy_visible<'a>(
     authorized: &[&'a GuidedCatalogTool],
     policy: &GuidedExecutionPolicy,
 ) -> Vec<&'a GuidedCatalogTool> {
     let project = policy.tracking_mode == "ledger" && policy.has_project_id();
-    let mut names: HashSet<&str> = [
-        "tool_search",
-        "tool_describe",
-        "tool_call",
-        "web_search",
-        "web_read",
-        "read_file",
-        "grep_files",
-        "list_files",
-        "recall_memory",
-        "query_memory",
-        "list_conversation_sessions",
-        "read_conversation_session",
-        "read_project_source",
-        "project_ledger_status",
-        "update_todo_list",
-        "list_todo_list",
-    ]
-    .into_iter()
-    .collect();
+    let mut names: HashSet<&str> = LEGACY_BASE.into_iter().collect();
     names.extend(
         authorized
             .iter()

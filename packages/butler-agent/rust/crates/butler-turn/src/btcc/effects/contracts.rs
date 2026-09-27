@@ -207,6 +207,7 @@ pub struct EffectReceipt {
     pub result: JsonDocument,
     pub applied_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    // Passthrough: tool/effect receipts, shaped by the capability.
     pub dispatch_attempt: Option<Value>,
 }
 
@@ -259,6 +260,7 @@ pub struct EffectBlocker {
     pub work_id: String,
     pub capability: String,
     pub target: String,
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     pub input: Value,
     pub input_sha256: String,
     pub idempotency_key: String,

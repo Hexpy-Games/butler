@@ -229,6 +229,7 @@ pub(super) fn work_matches_scope(work: &crate::btcc::WorkView, scope: &WorkTurnS
     }
 }
 
+// Passthrough: free-form session-binding metadata shared with the App runtime policy.
 fn string_values(value: Option<&Value>) -> Value {
     let mut values = Vec::new();
     if let Some(items) = value.and_then(Value::as_array) {

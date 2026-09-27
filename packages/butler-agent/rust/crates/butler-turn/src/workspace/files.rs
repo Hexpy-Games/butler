@@ -20,6 +20,7 @@ pub struct ReadFileInput {
 /// A file read's model-facing result and cursor facts.
 #[derive(Debug)]
 pub struct WorkspaceFileRead {
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub result: Value,
     pub sha256: Option<String>,
     pub output_bytes: usize,
@@ -30,6 +31,7 @@ pub struct WorkspaceFileRead {
     pub next_offset: Option<usize>,
 }
 impl WorkspaceFileRead {
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     fn failed(result: Value) -> Self {
         Self {
             result,
@@ -189,6 +191,7 @@ struct BytesRead {
 }
 
 impl BytesRead {
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     fn rejected(&self, result: Value, start_offset: Option<usize>) -> WorkspaceFileRead {
         WorkspaceFileRead {
             sha256: Some(self.sha256.clone()),
@@ -198,6 +201,7 @@ impl BytesRead {
         }
     }
 
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     fn cursor_rejected(&self, result: Value) -> WorkspaceFileRead {
         WorkspaceFileRead {
             cursor_invalid: true,

@@ -116,11 +116,13 @@ impl RoutedRound<'_> {
         Ok(())
     }
 
+    // Passthrough: image admission and attachment documents owned by butler-runtime.
     pub(super) async fn fallback(
         &self,
         route: &mut RouteState,
         round: &str,
         key: &str,
+        // Passthrough: image admission and attachment documents owned by butler-runtime.
         image: Option<&Value>,
     ) -> Result<(), ModelRoundError> {
         if image.is_some() {

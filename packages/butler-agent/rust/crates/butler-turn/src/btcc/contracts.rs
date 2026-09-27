@@ -72,6 +72,7 @@ pub struct AttachmentRef {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub local_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    // Passthrough: image admission and attachment documents owned by butler-runtime.
     pub visual_manifest: Option<Value>,
 }
 
@@ -109,6 +110,7 @@ pub struct TurnMessage {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attachments: Vec<AttachmentRef>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    // Passthrough: image admission and attachment documents owned by butler-runtime.
     pub image_admission: Option<Value>,
 }
 
@@ -185,6 +187,7 @@ pub struct TurnRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub empty_response_policy: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    // Passthrough: App turn context relayed from the App.
     pub app_turn_context: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub authority_request_ref: Option<String>,

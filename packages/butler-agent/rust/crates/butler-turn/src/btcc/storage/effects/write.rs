@@ -9,6 +9,7 @@ use super::{receipt_json, row};
 fn sql(error: rusqlite::Error) -> EffectFailure {
     EffectFailure::storage("sqlite_error", error.to_string()).with_source(error)
 }
+// Passthrough: generic JSON canonicalization/hashing over arbitrary documents.
 fn json(value: &Value) -> EffectResult<String> {
     butler_core::json::stringify(value).map_err(|error| {
         EffectFailure::policy("effect_journal_json", error.to_string()).with_source(error)

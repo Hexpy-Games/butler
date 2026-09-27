@@ -53,6 +53,7 @@ fn matches(input: &EditInput, states: &[(usize, String)], side: Side) -> bool {
 fn applied(
     input: &EditInput,
     states: &[(usize, String)],
+    // Passthrough: tool/effect receipts, shaped by the capability.
     registered: Option<&Value>,
 ) -> EffectResult<AdapterOutcome> {
     let entries = input.entries();

@@ -3,6 +3,7 @@ use super::super::common::{error, stringify};
 use crate::btcc::StorageCode;
 use serde_json::{Map, Value};
 
+// Passthrough: provider payload, opaque to BTCC.
 pub(super) fn normalize(value: &Value) -> StorageResult<Value> {
     let source = value.as_object().ok_or_else(|| {
         error(
@@ -39,18 +40,9 @@ pub(super) fn normalize(value: &Value) -> StorageResult<Value> {
         }
         out.insert("textToolCallNames".into(), names.clone());
     }
-    let bounded = source
-        .get("continuation")
-        .and_then(Value::as_object)
-        .is_some_and(|v| {
-            v.contains_key("deliveredThroughOrdinal") || v.contains_key("boundedItemKeys")
-        });
+    let provider_data = provider_data(source);
+    let bounded = provider_data == ProviderData::Drop;
     if let Some(v) = source.get("assistantMessage") {
-        let provider_data = if bounded {
-            ProviderData::Drop
-        } else {
-            ProviderData::Retain
-        };
         out.insert("assistantMessage".into(), assistant(v, provider_data)?);
     }
     if let Some(v) = source.get("continuation") {
@@ -91,6 +83,7 @@ pub(super) fn normalize(value: &Value) -> StorageResult<Value> {
     Ok(Value::Object(out))
 }
 
+// Passthrough: provider payload, opaque to BTCC.
 fn tool_call(v: &Value) -> StorageResult<Value> {
     let o = v
         .as_object()
@@ -121,6 +114,21 @@ fn tool_call(v: &Value) -> StorageResult<Value> {
     }
     Ok(Value::Object(n))
 }
+/// Bounded (stateless) continuations drop the assistant's provider data.
+fn provider_data(source: &Map<String, Value>) -> ProviderData {
+    let bounded = source
+        .get("continuation")
+        .and_then(Value::as_object)
+        .is_some_and(|v| {
+            v.contains_key("deliveredThroughOrdinal") || v.contains_key("boundedItemKeys")
+        });
+    if bounded {
+        ProviderData::Drop
+    } else {
+        ProviderData::Retain
+    }
+}
+
 /// Whether the persisted assistant message keeps its provider data.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ProviderData {
@@ -128,6 +136,7 @@ enum ProviderData {
     Drop,
 }
 
+// Passthrough: provider payload, opaque to BTCC.
 fn assistant(v: &Value, provider_data: ProviderData) -> StorageResult<Value> {
     let o = v.as_object().ok_or_else(|| {
         error(
@@ -174,6 +183,7 @@ fn assistant(v: &Value, provider_data: ProviderData) -> StorageResult<Value> {
     }
     Ok(Value::Object(n))
 }
+// Passthrough: provider payload, opaque to BTCC.
 fn provider_identity(v: &Value) -> StorageResult<Value> {
     let o = v.as_object().ok_or_else(|| {
         error(
@@ -193,6 +203,7 @@ fn provider_identity(v: &Value) -> StorageResult<Value> {
     }
     Ok(Value::Object(n))
 }
+// Passthrough: provider payload, opaque to BTCC.
 fn bounded_continuation(v: &Value) -> StorageResult<Value> {
     let o = v.as_object().ok_or_else(|| {
         error(
@@ -257,6 +268,7 @@ fn bounded_continuation(v: &Value) -> StorageResult<Value> {
     Ok(Value::Object(n))
 }
 
+// Passthrough: provider payload, opaque to BTCC.
 fn provider_route_identity(value: &Value) -> StorageResult<Value> {
     let o = value.as_object().ok_or_else(|| {
         error(
@@ -315,6 +327,7 @@ fn provider_route_identity(value: &Value) -> StorageResult<Value> {
     json_clone(value)
 }
 
+// Passthrough: provider payload, opaque to BTCC.
 fn context_projection(value: &Value) -> StorageResult<Value> {
     let o = value.as_object().ok_or_else(|| {
         error(
@@ -364,6 +377,7 @@ fn digest(value: &str) -> bool {
 fn utf16_len(value: &str) -> usize {
     value.encode_utf16().count()
 }
+// Passthrough: provider payload, opaque to BTCC.
 fn json_clone(v: &Value) -> StorageResult<Value> {
     let bytes = stringify(v)?;
     serde_json::from_str(&bytes)

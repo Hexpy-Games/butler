@@ -61,6 +61,7 @@ pub struct ProjectWorkMaterialAction {
     pub description: String,
     pub dependency_keys: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    // Passthrough: plan-action effect markers kept losslessly (truthiness vs presence).
     pub effect: Option<serde_json::Value>,
 }
 

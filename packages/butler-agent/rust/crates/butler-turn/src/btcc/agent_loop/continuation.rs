@@ -18,10 +18,12 @@ pub struct AuthorityLoopContinuation {
     pub messages: Vec<ModelRoundMessage>,
     pub next_item_ordinal: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
+    // Passthrough: provider payload, opaque to BTCC.
     pub provider_continuation: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub instructions: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    // Passthrough: provider payload, opaque to BTCC.
     pub stable_provider_cache_prefix: Option<Value>,
     pub model_round_index: u32,
     pub iteration: u32,
@@ -31,6 +33,7 @@ pub struct AuthorityLoopContinuation {
     pub presentation: Option<GuidedPresentation>,
     pub batch: AuthorityBatch,
     #[serde(flatten)]
+    // Passthrough: unknown fields kept for forward compatibility.
     pub extensions: Map<String, Value>,
 }
 
@@ -105,6 +108,7 @@ pub struct GuidedActivitySnapshot {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pending_execution: Option<bool>,
     #[serde(flatten)]
+    // Passthrough: unknown fields kept for forward compatibility.
     pub extensions: Map<String, Value>,
 }
 
@@ -123,6 +127,7 @@ pub struct ActivityGroup {
     pub title: String,
     pub summary: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    // Passthrough: UI content rendered by the client.
     pub interface_content: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rationale: Option<String>,
@@ -138,6 +143,7 @@ pub struct ActivityGroup {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub following_ids: Vec<String>,
     #[serde(flatten)]
+    // Passthrough: unknown fields kept for forward compatibility.
     pub extensions: Map<String, Value>,
 }
 

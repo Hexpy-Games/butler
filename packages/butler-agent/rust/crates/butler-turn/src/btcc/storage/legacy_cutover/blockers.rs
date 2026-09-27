@@ -11,6 +11,7 @@ use super::{digest, stable_json};
 
 #[derive(Clone)]
 pub(super) struct Blocker {
+    // Passthrough: legacy/historical records of unknown shape.
     pub(super) public: Value,
     reconciliation: Option<Reconciliation>,
 }
@@ -20,6 +21,7 @@ struct Reconciliation {
     source_occurrence_id: String,
     capability: String,
     target: String,
+    // Passthrough: legacy/historical records of unknown shape.
     input: Value,
     idempotency_key: String,
 }
@@ -96,23 +98,7 @@ fn pending_checkpoint(
     let Some(checkpoint_id) = checkpoint_id else {
         return Ok(Vec::new());
     };
-    if !table_exists(db, "btcc_phase_checkpoint_revisions").map_err(StorageError::sqlite)? {
-        return Ok(Vec::new());
-    }
-    let raw = db
-        .query_row(
-            "SELECT revision.pending_operation_json FROM btcc_checkpoints checkpoint \
-             LEFT JOIN btcc_phase_checkpoint_revisions revision \
-             ON revision.checkpoint_id = checkpoint.checkpoint_id \
-             AND revision.checkpoint_revision = checkpoint.checkpoint_revision \
-             WHERE checkpoint.checkpoint_id = ?1 AND checkpoint.is_active = 1",
-            [checkpoint_id],
-            |row| row.get::<_, Option<String>>(0),
-        )
-        .optional()
-        .map_err(StorageError::sqlite)?
-        .flatten();
-    let Some(raw) = raw else {
+    let Some(raw) = pending_operation_json(db, checkpoint_id)? else {
         return Ok(Vec::new());
     };
     let value: Value = match serde_json::from_str(&raw) {
@@ -170,9 +156,30 @@ fn pending_checkpoint(
     Ok(blockers)
 }
 
+/// The active checkpoint's pending operations, when the legacy revision table exists.
+fn pending_operation_json(db: &Connection, checkpoint_id: &str) -> StorageResult<Option<String>> {
+    if !table_exists(db, "btcc_phase_checkpoint_revisions").map_err(StorageError::sqlite)? {
+        return Ok(None);
+    }
+    Ok(db
+        .query_row(
+            "SELECT revision.pending_operation_json FROM btcc_checkpoints checkpoint \
+             LEFT JOIN btcc_phase_checkpoint_revisions revision \
+             ON revision.checkpoint_id = checkpoint.checkpoint_id \
+             AND revision.checkpoint_revision = checkpoint.checkpoint_revision \
+             WHERE checkpoint.checkpoint_id = ?1 AND checkpoint.is_active = 1",
+            [checkpoint_id],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .optional()
+        .map_err(StorageError::sqlite)?
+        .flatten())
+}
+
 fn external_effect(
     turn_id: &str,
     request_id: &str,
+    // Passthrough: legacy/historical records of unknown shape.
     request: &serde_json::Map<String, Value>,
 ) -> Vec<Blocker> {
     let capability = request.get("capabilityRef").and_then(Value::as_str);
@@ -230,6 +237,7 @@ fn external_effect(
         .collect()
 }
 
+// Passthrough: legacy/historical records of unknown shape.
 fn exact_targets(capability: &str, source: &str, input: &Value) -> Vec<String> {
     if capability != ToolName::ProjectLedgerUpdate {
         return vec![source.to_owned()];

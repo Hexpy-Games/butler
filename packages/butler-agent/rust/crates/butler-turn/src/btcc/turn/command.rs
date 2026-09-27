@@ -43,6 +43,7 @@ pub struct RunCommand {
     pub progress_destination: Option<ProgressDestination>,
     /// The assembled context document, persisted verbatim as
     /// `btcc_turns.context_json`; typed readers use `ButlerContext`.
+    // Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
     pub context: Value,
 }
 
@@ -61,6 +62,7 @@ pub struct WakeCommand {
     pub progress_destination: Option<ProgressDestination>,
     /// The assembled context document, persisted verbatim as
     /// `btcc_turns.context_json`; typed readers use `ButlerContext`.
+    // Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
     pub context: Value,
 }
 
@@ -144,11 +146,13 @@ impl TurnCommand {
 #[cfg(any(test, feature = "test-support"))]
 impl TurnCommand {
     /// A run command for fixtures, with a minimal unrouted model selection.
+    // Passthrough: test-support fixture helper over command JSON.
     pub fn fixture_run(
         turn_id: &str,
         session_id: &str,
         trigger_key: &str,
         message: CommandMessage,
+        // Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
         context: Value,
     ) -> Self {
         Self::Run(RunCommand {
@@ -168,6 +172,7 @@ impl TurnCommand {
     /// # Panics
     /// When the edited JSON is no longer a command.
     #[allow(clippy::missing_panics_doc)]
+    // Passthrough: test-support fixture helper over command JSON.
     pub fn edit_json(&mut self, edit: impl FnOnce(&mut Value)) {
         let mut value = serde_json::to_value(&*self).expect("command encodes");
         edit(&mut value);

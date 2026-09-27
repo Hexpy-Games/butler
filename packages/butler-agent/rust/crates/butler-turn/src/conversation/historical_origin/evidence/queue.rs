@@ -126,6 +126,7 @@ fn read_record(path: &Path) -> ConversationResult<Value> {
 
 /// Whether the record's routing matches the candidate and whether its
 /// envelope is internal control, with the envelope digest as evidence.
+// Passthrough: legacy/historical records of unknown shape.
 fn record_match(record: &Value, locator: &HistoricalOriginCandidate) -> ConversationResult<Match> {
     let envelope = &butler_core::json::at(record, "/envelope");
     let matched = butler_core::json::at(envelope, "/routingHints/sessionId").as_str()
@@ -160,6 +161,7 @@ fn record_match(record: &Value, locator: &HistoricalOriginCandidate) -> Conversa
     })
 }
 
+// Passthrough: legacy/historical records of unknown shape.
 pub(super) fn controls_valid(value: &Value) -> ConversationResult<bool> {
     if butler_core::json::at(value, "/schema_version") != "butler.turn-execution-controls.v1"
         || !nonempty(butler_core::json::at(value, "/turn_id"))
@@ -217,14 +219,17 @@ pub(super) fn controls_valid(value: &Value) -> ConversationResult<bool> {
     Ok(true)
 }
 
+// Passthrough: legacy/historical records of unknown shape.
 fn nonempty(value: &Value) -> bool {
     value
         .as_str()
         .is_some_and(|text| !butler_core::public_text::trim_js_whitespace(text).is_empty())
 }
+// Passthrough: legacy/historical records of unknown shape.
 fn model_ref(value: &Value) -> bool {
     nonempty(value) && value.as_str().is_some_and(|text| text.contains('/'))
 }
+// Passthrough: legacy/historical records of unknown shape.
 fn fallback_valid(value: &Value) -> bool {
     value.is_object()
         && butler_core::json::at(value, "/enabled").is_boolean()
@@ -232,6 +237,7 @@ fn fallback_valid(value: &Value) -> bool {
             .as_array()
             .is_some_and(|models| models.iter().all(model_ref))
 }
+// Passthrough: legacy/historical records of unknown shape.
 fn subsession_valid(value: &Value) -> bool {
     value.is_object()
         && ["relation_id", "result_id", "safe_title"]

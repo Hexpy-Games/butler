@@ -86,17 +86,7 @@ fn read(
         .as_ref()
         .map(|cursor| (cursor.last_at.as_str(), cursor.session_id.as_str()));
     let rows = snapshot
-        .session_page(
-            &parsed.scope,
-            if parsed.include_archived {
-                Archived::Include
-            } else {
-                Archived::Exclude
-            },
-            time,
-            after,
-            1001,
-        )
+        .session_page(&parsed.scope, archived(parsed), time, after, 1001)
         .map_err(store_error)?;
     let ids = rows.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
     let (labels, diagnostics) = catalog::read(data_root, &ids);
@@ -117,16 +107,7 @@ fn read(
     let mut sessions = Vec::with_capacity(parsed.limit);
     for row in selected.iter().take(parsed.limit) {
         let previews = snapshot
-            .preview_messages(
-                &row.id,
-                if parsed.scope.include_internal {
-                    MessageOrigins::IncludeInternal
-                } else {
-                    MessageOrigins::PublicOnly
-                },
-                time,
-                parsed.preview_messages,
-            )
+            .preview_messages(&row.id, origins(parsed), time, parsed.preview_messages)
             .map_err(store_error)?;
         let previews = previews
             .iter()
@@ -291,4 +272,20 @@ fn failure(code: &str, diagnostics: &[&str]) -> Value {
 )]
 fn store_error(error: butler_turn::conversation::ConversationError) -> ContextError {
     ContextError::new(ContextCode::ConversationStoreUnavailable, error.to_string())
+}
+
+fn archived(parsed: &args::ListArgs) -> Archived {
+    if parsed.include_archived {
+        Archived::Include
+    } else {
+        Archived::Exclude
+    }
+}
+
+fn origins(parsed: &args::ListArgs) -> MessageOrigins {
+    if parsed.scope.include_internal {
+        MessageOrigins::IncludeInternal
+    } else {
+        MessageOrigins::PublicOnly
+    }
 }

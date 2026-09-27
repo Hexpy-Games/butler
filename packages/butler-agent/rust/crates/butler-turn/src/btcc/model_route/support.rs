@@ -70,6 +70,7 @@ pub(super) fn validate(route: &RouteState) -> Result<(), BtccError> {
     }
     Ok(())
 }
+// Passthrough: image admission and attachment documents owned by butler-runtime.
 pub(super) fn visual_freeze(image: Option<&Value>, model: &str) -> Result<(), ModelRoundError> {
     let Some(image) = image else {
         return Ok(());
@@ -90,8 +91,11 @@ pub(super) fn visual_freeze(image: Option<&Value>, model: &str) -> Result<(), Mo
     }
     Ok(())
 }
+// Passthrough: provider payload, opaque to BTCC.
 pub(super) fn rebase_continuation<'a>(
+    // Passthrough: provider payload, opaque to BTCC.
     bounded: Option<&Value>,
+    // Passthrough: provider payload, opaque to BTCC.
     continuation: Option<&'a Value>,
 ) -> Result<Option<&'a Value>, ModelRoundError> {
     let Some(current) = bounded.and_then(|v| v.get("contextProjection")) else {
@@ -154,6 +158,7 @@ pub(super) fn attach_surface(
     Ok(result)
 }
 
+// Passthrough: generic JSON canonicalization/hashing over arbitrary documents.
 fn projection_identity(value: &Value) -> bool {
     let Some(value) = value.as_object() else {
         return false;

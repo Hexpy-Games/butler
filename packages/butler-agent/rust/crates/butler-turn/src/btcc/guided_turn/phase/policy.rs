@@ -64,6 +64,7 @@ pub(crate) struct SubsessionPolicy {
 impl SubsessionPolicy {
     /// Reads the policy's `subsession` entry (parse boundary: the context
     /// document is untyped JSON).
+    // Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
     fn read(value: &Value) -> Self {
         let mutation_scope = value
             .get("mutationScope")
@@ -161,6 +162,7 @@ impl GuidedExecutionPolicy {
 /// local tracking otherwise, in the baseline workspace scope.
 /// (The context document is untyped JSON; see [`GuidedExecutionPolicy::from_turn`].)
 fn default_policy(
+    // Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
     context: &Map<String, Value>,
     admitted: AccessMode,
     project_ref: Option<&str>,
@@ -249,6 +251,7 @@ fn strings(map: &Map<String, Value>, key: &str) -> Vec<String> {
         })
         .unwrap_or_default()
 }
+// Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
 fn truthy(value: &Value) -> bool {
     !matches!(value, Value::Null | Value::Bool(false))
         && !matches!(value, Value::String(text) if text.is_empty())

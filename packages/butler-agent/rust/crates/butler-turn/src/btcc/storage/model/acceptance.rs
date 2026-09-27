@@ -59,6 +59,17 @@ pub(in crate::btcc::storage) fn load_acceptance(
     .transpose()
 }
 
+/// The accepted response as JSON, which is normalized for persistence.
+fn encoded(write: &ModelRoundAcceptanceWrite) -> StorageResult<Value> {
+    serde_json::to_value(&write.result).map_err(|source| {
+        error(
+            StorageCode::ModelResponseInvalid,
+            "cannot encode accepted response",
+        )
+        .with_source(source)
+    })
+}
+
 pub(in crate::btcc::storage) fn record_acceptance(
     connection: &mut Connection,
     write: &ModelRoundAcceptanceWrite,
@@ -87,14 +98,7 @@ pub(in crate::btcc::storage) fn record_acceptance(
         ));
     }
     assert_checkpoint(&tx, &write.key.turn_id, checkpoint_id, checkpoint_revision)?;
-    // The accepted response is normalized for persistence as JSON.
-    let result = serde_json::to_value(&write.result).map_err(|source| {
-        error(
-            StorageCode::ModelResponseInvalid,
-            "cannot encode accepted response",
-        )
-        .with_source(source)
-    })?;
+    let result = encoded(write)?;
     let normalized = normalize(&result)?;
     let provider = result.get("providerIdentity").map(stringify).transpose()?;
     let acceptance_id = format!(
@@ -125,6 +129,21 @@ pub(in crate::btcc::storage) fn record_acceptance(
         ],
     )
     .map_err(StorageError::sqlite)?;
+    record_succeeded_event(&tx, write)?;
+    project_execution_model(
+        &tx,
+        &write.key.turn_id,
+        &write.key.model_ref,
+        normalized.get("providerIdentity"),
+    )?;
+    tx.commit().map_err(StorageError::sqlite)
+}
+
+/// The route event of the accepted attempt.
+fn record_succeeded_event(
+    tx: &rusqlite::Transaction<'_>,
+    write: &ModelRoundAcceptanceWrite,
+) -> StorageResult<()> {
     let event_id = format!(
         "{}:model.attempt.succeeded:{}:{}:{}:{}",
         write.key.turn_id,
@@ -139,13 +158,7 @@ pub(in crate::btcc::storage) fn record_acceptance(
         strftime('%Y-%m-%dT%H:%M:%fZ','now'))",params![event_id,write.key.turn_id,
             write.key.route_digest,write.key.round_id,write.key.candidate_index,
             write.transport_attempt,write.key.model_ref]).map_err(StorageError::sqlite)?;
-    project_execution_model(
-        &tx,
-        &write.key.turn_id,
-        &write.key.model_ref,
-        normalized.get("providerIdentity"),
-    )?;
-    tx.commit().map_err(StorageError::sqlite)
+    Ok(())
 }
 
 fn checkpoint(key: &ModelRoundKey) -> StorageResult<(&str, u64)> {
@@ -182,10 +195,12 @@ fn assert_checkpoint(
     }
     Ok(())
 }
+// Passthrough: provider payload, opaque to BTCC.
 fn project_execution_model(
     connection: &Connection,
     turn_id: &str,
     model_ref: &str,
+    // Passthrough: provider payload, opaque to BTCC.
     identity: Option<&Value>,
 ) -> StorageResult<()> {
     let table = connection
@@ -243,6 +258,7 @@ fn project_execution_model(
     connection.execute("UPDATE turns SET execution_model_json=?1,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?2",params![stringify(&Value::Object(value))?,turn_id]).map_err(StorageError::sqlite)?;
     Ok(())
 }
+// Passthrough: provider payload, opaque to BTCC.
 fn normalize_provider_identity(value: &Value) -> StorageResult<Value> {
     let o = value.as_object().ok_or_else(|| {
         error(

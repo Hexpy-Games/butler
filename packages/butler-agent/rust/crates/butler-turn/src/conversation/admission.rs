@@ -34,6 +34,7 @@ pub enum AdmissionEventVisibility {
 #[derive(Clone, Copy, Debug)]
 pub struct RuntimeAdmissionEvent<'a> {
     pub kind: &'a str,
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub payload: Option<&'a Map<String, Value>>,
     pub visibility: Option<AdmissionEventVisibility>,
 }
@@ -102,6 +103,7 @@ pub struct ConversationEnvelope {
     pub transport: String,
     pub event_id: String,
     pub message_text: String,
+    // Passthrough: App turn context relayed from the App.
     pub content_parts: Option<Value>,
 }
 
@@ -306,6 +308,7 @@ impl ConversationAdmissionTurn {
 fn provider_id(model: &str) -> String {
     model.split('/').next().unwrap_or("").into()
 }
+// Passthrough: tool arguments/results/schemas, shaped by each tool.
 fn collect_evidence(value: &Value, refs: &mut IndexSet<String>) {
     match value {
         Value::Array(items) => items.iter().for_each(|v| collect_evidence(v, refs)),
@@ -325,6 +328,7 @@ fn collect_evidence(value: &Value, refs: &mut IndexSet<String>) {
         _ => {}
     }
 }
+// Passthrough: tool arguments/results/schemas, shaped by each tool.
 fn stringify_optional(value: Option<&Value>) -> ConversationResult<String> {
     match value {
         Some(value) => butler_core::json::stringify(value).map_err(ConversationError::json),

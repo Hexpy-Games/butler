@@ -292,32 +292,7 @@ impl PublicMemorySnapshot {
             "SELECT m.id FROM conversation_messages m JOIN conversation_sessions s ON s.id=m.session_id WHERE m.visibility='model' AND m.status IN ('complete','compacted') AND m.role IN ('user','assistant') AND s.status!='deleted'",
         );
         let mut values: Vec<Value> = Vec::new();
-        if !scope.include_internal {
-            sql.push_str(" AND m.origin_kind IN ('user_input','assistant_public')");
-        }
-        if scope.kind == "current_session" {
-            sql.push_str(" AND m.session_id=?");
-            values.push(scope.current_session_id.clone().into());
-        }
-        if scope.kind == "current_project" {
-            sql.push_str(" AND s.project_id=?");
-            values.push(scope.current_project_id.clone().unwrap_or_default().into());
-        }
-        if !scope.session_ids.is_empty() {
-            sql.push_str(" AND m.session_id IN (");
-            placeholders(&mut sql, scope.session_ids.len());
-            sql.push(')');
-            values.extend(scope.session_ids.iter().cloned().map(Value::from));
-        }
-        if scope.project_filter == "unassigned" {
-            sql.push_str(" AND s.project_id IS NULL");
-        }
-        if scope.project_filter == "selected" {
-            sql.push_str(" AND s.project_id IN (");
-            placeholders(&mut sql, scope.project_ids.len());
-            sql.push(')');
-            values.extend(scope.project_ids.iter().cloned().map(Value::from));
-        }
+        scope_filter(&mut sql, &mut values, scope);
         if let Some(role) = role {
             sql.push_str(" AND m.role=?");
             values.push(role.to_owned().into());
@@ -359,6 +334,37 @@ impl PublicMemorySnapshot {
             .map(|id| self.reader.read_message(id))
             .collect::<ConversationResult<Vec<_>>>()
             .map(|rows| rows.into_iter().flatten().collect())
+    }
+}
+
+/// Restricts a message page to the scope's sessions and projects.
+// Passthrough: SQL parameter values.
+fn scope_filter(sql: &mut String, values: &mut Vec<Value>, scope: &PublicMemoryScope) {
+    if !scope.include_internal {
+        sql.push_str(" AND m.origin_kind IN ('user_input','assistant_public')");
+    }
+    if scope.kind == "current_session" {
+        sql.push_str(" AND m.session_id=?");
+        values.push(scope.current_session_id.clone().into());
+    }
+    if scope.kind == "current_project" {
+        sql.push_str(" AND s.project_id=?");
+        values.push(scope.current_project_id.clone().unwrap_or_default().into());
+    }
+    if !scope.session_ids.is_empty() {
+        sql.push_str(" AND m.session_id IN (");
+        placeholders(sql, scope.session_ids.len());
+        sql.push(')');
+        values.extend(scope.session_ids.iter().cloned().map(Value::from));
+    }
+    if scope.project_filter == "unassigned" {
+        sql.push_str(" AND s.project_id IS NULL");
+    }
+    if scope.project_filter == "selected" {
+        sql.push_str(" AND s.project_id IN (");
+        placeholders(sql, scope.project_ids.len());
+        sql.push(')');
+        values.extend(scope.project_ids.iter().cloned().map(Value::from));
     }
 }
 

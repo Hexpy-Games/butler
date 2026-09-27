@@ -476,21 +476,6 @@ fn direction_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredSubsessionDi
     })
 }
 
-/// The route of an outbox row, read before the row is decoded.
-#[derive(serde::Deserialize)]
-struct RouteTag {
-    route: Option<OutboxRoute>,
-}
-
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum OutboxRoute {
-    StewardQueue,
-    ButlerApp,
-    #[serde(other)]
-    Unknown,
-}
-
 fn required_packet_string<'a>(value: &'a str, key: &str) -> Result<&'a str, StorageError> {
     Some(value)
         .filter(|value| !value.is_empty())

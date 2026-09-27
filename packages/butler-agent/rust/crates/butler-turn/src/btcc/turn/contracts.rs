@@ -46,6 +46,7 @@ pub struct TurnRecord {
     pub model_route: Option<RouteState>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub continuation_budget: Option<TurnContinuationBudgetState>,
+    // Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
     pub context: Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub progress_destination: Option<ProgressDestination>,
@@ -152,6 +153,7 @@ pub struct FinalPayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_identity: Option<ModelIdentity>,
     #[serde(flatten)]
+    // Passthrough: unknown fields kept for forward compatibility.
     pub extensions: serde_json::Map<String, Value>,
 }
 

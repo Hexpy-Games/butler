@@ -283,25 +283,9 @@ impl OperationResultRuntime for OperationResultReplayRuntime {
 
     fn list_tool<'a>(&'a self, args: &'a Map<String, Value>) -> PortFuture<'a, Value> {
         Box::pin(async move {
-            let cursor = args
-                .get("cursor")
-                .filter(|value| !value.is_null())
-                .map(butler_core::json::coerce_number)
-                .transpose()
-                .map_err(numeric_argument_error)?
-                .unwrap_or(0.0);
-            let through = args
-                .get("through")
-                .filter(|value| !value.is_null())
-                .map(butler_core::json::coerce_number)
-                .transpose()
-                .map_err(numeric_argument_error)?;
-            let limit = args
-                .get("limit")
-                .filter(|value| !value.is_null())
-                .map(butler_core::json::coerce_number)
-                .transpose()
-                .map_err(numeric_argument_error)?
+            let cursor = optional_number(args, "cursor")?.unwrap_or(0.0);
+            let through = optional_number(args, "through")?;
+            let limit = optional_number(args, "limit")?
                 .unwrap_or(5.0)
                 .clamp(1.0, 10.0);
             let page = self

@@ -88,6 +88,7 @@ pub fn text_for_part(part: &ConversationPart) -> Option<String> {
     }
 }
 
+// Passthrough: conversation part content keyed by part kind; tool/provider payloads.
 fn message_content_references(value: &Value) -> Option<String> {
     let object = value.as_object()?;
     if object.get("version").and_then(Value::as_f64) != Some(1.0) {
@@ -112,6 +113,7 @@ fn message_content_references(value: &Value) -> Option<String> {
     }
 }
 
+// Passthrough: conversation part content keyed by part kind; tool/provider payloads.
 fn valid_message_part(value: &Value) -> bool {
     let Some(object) = value.as_object() else {
         return false;

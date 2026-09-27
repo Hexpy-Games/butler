@@ -8,6 +8,7 @@ use serde_json::Value;
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GuidedCatalogTool {
     pub(super) name: String,
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub(super) definition: Value,
     pub(super) effect_boundary: Option<String>,
     pub(super) category: Option<String>,
@@ -71,6 +72,15 @@ impl GuidedCatalogSnapshot {
     pub fn builtin_tool(&self, name: &str) -> Option<GuidedCatalogRead<'_>> {
         self.builtin_tools().find(|tool| tool.name == name)
     }
+    /// A builtin tool the native bridge exposes.
+    pub fn bridge_tool(
+        &self,
+        name: &str,
+        ledger_effects: LedgerEffects,
+    ) -> Option<GuidedCatalogRead<'_>> {
+        self.builtin_tool(name)
+            .filter(|_| !self.hidden_native_bridge_tool(name, ledger_effects))
+    }
     /// Whether a native bridge tool is hidden from the surface.
     pub fn hidden_native_bridge_tool(&self, name: &str, ledger_effects: LedgerEffects) -> bool {
         self.work_tracking.contains(name)
@@ -108,6 +118,7 @@ impl GuidedCatalogSnapshot {
 #[derive(Clone, Copy)]
 pub struct GuidedCatalogRead<'a> {
     pub name: &'a str,
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub definition: &'a Value,
     pub category: Option<&'a str>,
     pub tags: &'a [String],

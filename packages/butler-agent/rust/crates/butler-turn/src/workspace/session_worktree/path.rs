@@ -63,6 +63,7 @@ pub(super) fn marker(anchor: &str, branch: &str, now: &str) -> Value {
 }
 
 pub(super) fn read_marker(
+    // Passthrough: free-form session-binding metadata shared with the App runtime policy.
     metadata: Option<&Map<String, Value>>,
 ) -> Result<Option<BindingMarker>, ()> {
     let Some(raw) = metadata.and_then(|metadata| metadata.get("sessionWorkspace")) else {

@@ -168,6 +168,7 @@ impl PublicMemorySnapshot {
     }
 }
 
+// Passthrough: SQL parameter values.
 fn append_in(sql: &mut String, column: &str, ids: &[String], values: &mut Vec<Value>) {
     sql.push_str(" AND ");
     sql.push_str(column);

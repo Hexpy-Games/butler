@@ -33,12 +33,16 @@ pub struct RenderedGuidedPrompt {
 #[derive(Clone, Debug, Default)]
 pub struct PromptImages {
     /// The admitted image attachments.
+    // Passthrough: image admission and attachment documents owned by butler-runtime.
     pub attachments: Vec<Value>,
     /// The admission tuple naming the carrier the provider must use.
+    // Passthrough: image admission and attachment documents owned by butler-runtime.
     pub carrier: Option<Value>,
     /// The model's admitted visual capability.
+    // Passthrough: image admission and attachment documents owned by butler-runtime.
     pub capability: Option<Value>,
     /// Visual manifests of the attachments, in attachment order.
+    // Passthrough: image admission and attachment documents owned by butler-runtime.
     pub manifests: Vec<Value>,
 }
 

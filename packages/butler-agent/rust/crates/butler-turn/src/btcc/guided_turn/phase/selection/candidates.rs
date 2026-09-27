@@ -175,7 +175,9 @@ pub(super) fn ineligible_profile(
         None => format!("required tool profile is ineligible for {phase} phase: {profile}"),
     })
 }
+// Passthrough: tool arguments/results/schemas, shaped by each tool.
 pub(super) fn without_defaults(mut value: Value) -> Value {
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub(super) fn clean(value: &mut Value) {
         match value {
             Value::Object(map) => {

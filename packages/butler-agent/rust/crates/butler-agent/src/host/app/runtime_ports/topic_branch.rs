@@ -1,5 +1,6 @@
 //! App branch reads and summaries on the existing Conversation and model owners.
 
+use butler_turn::conversation::{AroundDirection, ToolParts};
 use std::sync::Arc;
 
 use serde_json::Value;
@@ -123,7 +124,7 @@ impl AppBranchConversationReader for AppBranchConversations {
                 .read_messages_around(ReadAroundInput {
                     session_id: session_id.clone(),
                     anchor_message_id: Some(message_id.clone()),
-                    direction: Some(butler_turn::conversation::AroundDirection::Before),
+                    direction: Some(AroundDirection::Before),
                     limit: Some(100.0),
                     include_compacted: true,
                 })
@@ -174,10 +175,7 @@ impl AppBranchConversationReader for AppBranchConversations {
                 };
                 format!(
                     "{role}: {}",
-                    butler_runtime::context::text_for_message(
-                        message,
-                        butler_turn::conversation::ToolParts::Exclude,
-                    )
+                    butler_runtime::context::text_for_message(message, ToolParts::Exclude)
                 )
             }));
             Ok(Some(sections.join("\n\n")))

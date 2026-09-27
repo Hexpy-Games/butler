@@ -57,6 +57,7 @@ pub(super) struct WriteInput {
 
 impl WriteInput {
     /// Decodes a journaled normalized input.
+    // Passthrough: parse boundary validating untyped JSON into typed values.
     fn decode(input: &Value) -> Result<Self, EffectAdapterError> {
         Self::deserialize(input).map_err(|error| {
             adapter_error(
@@ -138,6 +139,7 @@ fn caller_precondition(
 /// dispatch, with the registered tool's receipt (passthrough JSON).
 struct Observed<'a> {
     created: bool,
+    // Passthrough: tool/effect receipts, shaped by the capability.
     registered: Option<&'a Value>,
 }
 
@@ -213,14 +215,17 @@ impl EffectAdapter for WorkspaceFileEffectAdapter {
     fn sanitize_target(&self, target: &str) -> EffectResult<String> {
         Ok(target.into())
     }
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     fn normalize_input(&self, input: &Value) -> EffectResult<Value> {
         let normalized = path::input(input, &self.scope.workspace)?;
         serde_json::to_value(normalized)
             .map_err(|source| EffectFailure::policy("effect_request_invalid", source.to_string()))
     }
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     fn dispatch<'a>(
         &'a self,
         target: &'a str,
+        // Passthrough: EffectAdapter input is capability-generic tool input.
         input: &'a Value,
         _key: &'a str,
         signal: &'a CancellationToken,
@@ -287,9 +292,11 @@ impl EffectAdapter for WorkspaceFileEffectAdapter {
             Ok(AdapterOutcome::Uncertain(Some(observation_error(after))))
         })
     }
+    // Passthrough: EffectAdapter input is capability-generic tool input.
     fn reconcile<'a>(
         &'a self,
         target: &'a str,
+        // Passthrough: EffectAdapter input is capability-generic tool input.
         input: &'a Value,
         _key: &'a str,
         _signal: &'a CancellationToken,

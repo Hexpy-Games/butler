@@ -299,11 +299,7 @@ pub(super) fn commit(
         &prepared.before.path.public,
         &prepared.before.bytes,
         &prepared.data,
-        if prepared.before.exists {
-            diff::FileOrigin::Existing
-        } else {
-            diff::FileOrigin::Created
-        },
+        prepared.before.origin(),
     );
     Ok(CommittedFile {
         path: prepared.before.path.public,
@@ -338,5 +334,16 @@ fn atomic_replace(
         fs::hard_link(temporary, &prepared.before.path.absolute)?;
         observer.after_link(temporary);
         Ok(fs::remove_file(temporary).is_err())
+    }
+}
+
+impl Snapshot {
+    /// Whether the committed file existed before the commit.
+    fn origin(&self) -> diff::FileOrigin {
+        if self.exists {
+            diff::FileOrigin::Existing
+        } else {
+            diff::FileOrigin::Created
+        }
     }
 }

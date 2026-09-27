@@ -15,6 +15,18 @@ pub(super) struct Inbox {
     pub(super) command_json: String,
 }
 
+/// An inbox row selected as `inbox_id, turn_id, admission_input_hash,
+/// status, command_json`.
+pub(super) fn inbox_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Inbox> {
+    Ok(Inbox {
+        inbox_id: row.get(0)?,
+        turn_id: row.get(1)?,
+        admission_input_hash: row.get(2)?,
+        status: row.get(3)?,
+        command_json: row.get(4)?,
+    })
+}
+
 pub(super) struct AdmissionClaim {
     pub(super) claim_id: String,
 }
@@ -32,6 +44,7 @@ pub(super) struct Fresh<'a> {
     pub(super) source: Source<'a>,
     pub(super) model_selection: &'a CommandModelSelection,
     pub(super) progress_destination: Option<&'a ProgressDestination>,
+    // Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
     pub(super) context: &'a Value,
 }
 

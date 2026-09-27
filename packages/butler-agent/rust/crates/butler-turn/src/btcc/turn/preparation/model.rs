@@ -98,22 +98,7 @@ pub(super) fn admit(
         None => digest(&stringify(&Value::Object(admitted_controls.clone())).map_err(json_error)?),
     };
     let route = build_route(&refs, &reasoning, controls, catalog)?;
-    let configured = binding
-        .metadata
-        .as_ref()
-        .and_then(|v| v.get("context_window_tokens"))
-        .and_then(Value::as_f64)
-        .filter(|v| v.is_finite() && *v > 0.0)
-        .map(f64::trunc);
-    let context_window = configured
-        .or_else(|| {
-            metadata(catalog, trim_js_whitespace(primary))
-                .and_then(|value| value.context_window_tokens)
-        })
-        .unwrap_or(200_000.0);
-    if !context_window.is_finite() {
-        return Err(number_error());
-    }
+    let context_window = context_window(binding, catalog, primary)?;
     let (provider, model) = primary.split_at(separator);
     Ok(CommandModelSelection {
         selection: AdmittedModelSelection {
@@ -127,6 +112,32 @@ pub(super) fn admit(
         },
         model_route: Some(route),
     })
+}
+
+/// The binding's configured context window, else the catalog's, else 200k.
+fn context_window(
+    binding: &StoredSessionBinding,
+    catalog: &AdmissionModelCatalogSnapshot,
+    primary: &str,
+) -> Result<f64, BtccError> {
+    let configured = binding
+        .metadata
+        .as_ref()
+        .and_then(|v| v.get("context_window_tokens"))
+        .and_then(Value::as_f64)
+        .filter(|v| v.is_finite() && *v > 0.0)
+        .map(f64::trunc);
+    let context_window = configured
+        .or_else(|| {
+            metadata(catalog, trim_js_whitespace(primary))
+                .and_then(|value| value.context_window_tokens)
+        })
+        .unwrap_or(200_000.0);
+    if context_window.is_finite() {
+        Ok(context_window)
+    } else {
+        Err(number_error())
+    }
 }
 
 fn build_route(
@@ -271,6 +282,7 @@ fn number_error() -> BtccError {
 fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> BtccError {
     BtccError::detected(BtccCode::BtccJsonError, error.to_string()).with_source(error)
 }
+// Passthrough: free-form session-binding metadata shared with the App runtime policy.
 fn js_string(value: &Value) -> String {
     match value {
         Value::Null => "null".into(),
