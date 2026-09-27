@@ -89,7 +89,7 @@
 }
 
 .markdown a {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .markdown img {
