@@ -4,14 +4,13 @@ import { EmptyLine } from "../blocks/EmptyLine";
 import { NavRow } from "../blocks/NavRow";
 import { NavSection } from "../blocks/NavSection";
 import {
-  Activity, Blocks, BookOpenText, Folder, FolderOpen, ImageIcon, LayoutDashboard, MagicWand, Palette, Sparkles,
+  Blocks, BookOpenText, Folder, FolderOpen, ImageIcon, LayoutDashboard, MagicWand, Palette, Sparkles,
 } from "../components/Icons";
 import { Input } from "../components/Input";
 import { Stack } from "../components/Stack";
 import { Typo } from "../components/Typo";
 import type { ShowcaseEntry } from "../showcase/collectShowcaseEntries";
-import { TOKEN_CATEGORIES } from "./foundations/tokenCatalog";
-import { TOKEN_CATEGORY_TITLES } from "./pageTrail";
+import { chapterPage, FOUNDATION_CHAPTERS } from "./foundations/chapters";
 import { PATTERNS } from "./patterns";
 import { filterEntries, groupEntries } from "./viewerNavigation";
 import styles from "./DesignSystemViewer.module.css";
@@ -100,9 +99,8 @@ export function ViewerSidebar({ entries, page, query, onQueryChange, onOpen }: V
             {row("recipes", "Build a screen", <LayoutDashboard size="md" />)}
           </NavSection>
           <NavSection title="Foundations">
-            {row("foundations", "All tokens", <Palette size="md" />)}
-            {TOKEN_CATEGORIES.map((category) => row(`foundations/${category}`, TOKEN_CATEGORY_TITLES[category] ?? category))}
-            {row("motion", "Motion", <Activity size="md" />)}
+            {row("foundations", "Guidebook", <Palette size="md" />)}
+            {FOUNDATION_CHAPTERS.map((chapter) => row(chapterPage(chapter), `${chapter.number}  ${chapter.title}`))}
           </NavSection>
           <NavSection title="Components">
             {row("components", "All components")}
