@@ -165,6 +165,21 @@ pub(super) async fn one(item: ClaimedInboundEvent, deps: DispatchDependencies) -
             {
                 eprintln!("[native-btcc] interrupted code={}", error.message);
             }
+            // A turn that is interrupted again in the replacement process
+            // ends failed with retry available instead of replacing the
+            // process forever.
+            if replaced_once(&item.record)
+                && let Some(poll) = settle_interrupted(
+                    &item,
+                    &queue,
+                    &bindings,
+                    delivery.as_ref(),
+                    "replacement-interrupted",
+                )
+                .await
+            {
+                return poll;
+            }
             let _ = queue.park_for_process_replacement(&item, error.code);
             IngressPoll {
                 interrupted: 1,
@@ -183,6 +198,11 @@ fn interrupted_by_crash(record: &QueuedInboundEvent) -> bool {
             .and_then(serde_json::Value::as_str)
             == Some("processing_owner_dead")
         && plain_turn(record)
+}
+
+/// A turn already parked once for process replacement after an interruption.
+fn replaced_once(record: &QueuedInboundEvent) -> bool {
+    metadata_flag(record, "recoveredFromRuntimeInterruption") && plain_turn(record)
 }
 
 fn metadata_flag(record: &QueuedInboundEvent, key: &str) -> bool {

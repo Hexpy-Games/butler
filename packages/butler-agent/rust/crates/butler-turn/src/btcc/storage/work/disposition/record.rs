@@ -44,13 +44,17 @@ pub(in crate::btcc::storage::work) fn record(
             "Durable Work disposition target is not bound to this Turn",
         ));
     }
+    // The caller's expected material may predate this command's own
+    // attachment of the Turn's completed tool results (a Turn resumed after a
+    // crash can have results that were never attached).
+    let before_attach = material_fingerprint(&read::view(db, &work.id)?)?;
     attach_current_turn(db, &work.id, command, clock)?;
     let current = read::view(db, &work.id)?;
     let transition = runtime_completed_transition(command, &current)?;
     if transition == RuntimeTransition::FreshCompleted {
         return Ok(current);
     }
-    validate_expected_material(command, &current)?;
+    validate_expected_material(command, &current, &before_attach)?;
     let action_progress = updated_action_progress(command, &current)?;
     let normalized = NormalizedDisposition {
         runtime_owned_open,
@@ -273,8 +277,10 @@ fn runtime_completed_transition(
 fn validate_expected_material(
     command: &DispositionCommand,
     current: &WorkView,
+    before_attach: &str,
 ) -> StorageResult<()> {
     if let Some(expected) = &command.input.expected_material_fingerprint
+        && expected != before_attach
         && material_fingerprint(current)? != *expected
     {
         return Err(common::error(
