@@ -101,6 +101,7 @@ export function writeAppForegroundMigration(
   input: Record<string, unknown>,
   now?: () => Date,
 ): Record<string, unknown>;
+export const AGENT_RECOVERY_BUDGET: Readonly<{ maxAttempts: number; windowMs: number }>;
 export function createRecoveryBudget(input?: { maxAttempts?: number; windowMs?: number }): {
   record(nowMs?: number): boolean;
   remaining(nowMs?: number): number;

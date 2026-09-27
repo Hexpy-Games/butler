@@ -464,6 +464,8 @@ export function createBundledAgentSupervisor({
     phase = "stopping";
     const stopping = child;
     recordAppStopIntent(stopping, reason);
+    // TODO(#223): on Windows, child.kill() terminates the Agent without a clean
+    // exit. Stop it with `butler-agent service stop --requested-by app` there.
     stopping.kill("SIGTERM");
     shutdownKillTimer = setKillTimer(() => {
       if (child === stopping) stopping.kill("SIGKILL");
