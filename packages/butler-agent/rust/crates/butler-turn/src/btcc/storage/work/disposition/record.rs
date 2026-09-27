@@ -44,14 +44,15 @@ pub(in crate::btcc::storage::work) fn record(
             "Durable Work disposition target is not bound to this Turn",
         ));
     }
-    let before_attach = material_fingerprint(&read::view(db, &work.id)?)?;
+    // The material the caller read, before this command's own attachment.
+    let observed = material_fingerprint(&read::view(db, &work.id)?)?;
     attach_current_turn(db, &work.id, command, clock)?;
     let current = read::view(db, &work.id)?;
     let transition = runtime_completed_transition(command, &current)?;
     if transition == RuntimeTransition::FreshCompleted {
         return Ok(current);
     }
-    validate_expected_material(command, &current, &before_attach)?;
+    validate_expected_material(command, &observed)?;
     let action_progress = updated_action_progress(command, &current)?;
     let normalized = NormalizedDisposition {
         runtime_owned_open,
@@ -271,17 +272,14 @@ fn runtime_completed_transition(
     })
 }
 
-/// The caller's expected material may match the Work before this command
-/// attached the Turn's completed tool results itself (a Turn resumed after a
-/// crash can have results that were never attached) or after.
-fn validate_expected_material(
-    command: &DispositionCommand,
-    current: &WorkView,
-    before_attach: &str,
-) -> StorageResult<()> {
+/// Compare-and-swap: the caller's expected material must equal `observed`,
+/// the Work as it was before this command attached the Turn's completed tool
+/// results. Those attachments are the command's own effect (results are
+/// attached lazily, at the next Work mutation); any other difference is a
+/// concurrent change.
+fn validate_expected_material(command: &DispositionCommand, observed: &str) -> StorageResult<()> {
     if let Some(expected) = &command.input.expected_material_fingerprint
-        && expected != before_attach
-        && material_fingerprint(current)? != *expected
+        && expected != observed
     {
         return Err(common::error(
             StorageCode::DurableWorkMaterialChanged,
