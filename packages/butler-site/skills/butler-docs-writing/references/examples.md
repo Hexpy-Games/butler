@@ -19,11 +19,11 @@ The first sentence only announced the page.
 
 Before:
 
-> [첫 실행](/docs/getting-started/first-run/#설치)의 **설치** 단계에서 "Butler Agent를 준비하지 못했습니다."가 표시되는 경우입니다.
+> [첫 실행](/help/getting-started/first-run/#설치)의 **설치** 단계에서 "Butler Agent를 준비하지 못했습니다."가 표시되는 경우입니다.
 
 After:
 
-> [첫 실행](/docs/getting-started/first-run/#설치)의 **설치** 단계에서 **Butler Agent를 준비하지 못했습니다.** 메시지가 표시되면 다음 순서로 시도합니다.
+> [첫 실행](/help/getting-started/first-run/#설치)의 **설치** 단계에서 **Butler Agent를 준비하지 못했습니다.** 메시지가 표시되면 다음 순서로 시도합니다.
 
 Condition + action, and the on-screen message is bold, exact (`ko.ts`
 `installFailed`), with its period. The space and `메시지가` after the closing

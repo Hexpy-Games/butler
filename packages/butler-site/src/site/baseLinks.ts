@@ -1,5 +1,5 @@
 /**
- * Docs content links pages root-relative (/docs/<slug>/); the MDX `a`
+ * Docs content links pages root-relative (/help/<slug>/); the MDX `a`
  * override (DocLink.tsx) adds the deploy base so content never hardcodes it.
  */
 import { withBase } from "./nav";

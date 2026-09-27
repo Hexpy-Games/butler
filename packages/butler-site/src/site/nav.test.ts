@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildNav, docHref, docSlug, pageContext, withBase, type DocEntryLike } from "./nav";
+import { buildNav, designSystemRoot, docHref, docsRoot, docSlug, pageContext, withBase, type DocEntryLike } from "./nav";
 
 function entry(id: string, section: string, order: number, status: "published" | "planned" = "published"): DocEntryLike {
   return { id, data: { title: id.split("/").at(-1) ?? id, description: "", section, order, status } } as DocEntryLike;
@@ -15,18 +15,26 @@ const entries: DocEntryLike[] = [
 
 describe("paths", () => {
   test("joins the base path without doubling slashes", () => {
-    expect(withBase("/", "docs/")).toBe("/docs/");
-    expect(withBase("/butler", "/docs/")).toBe("/butler/docs/");
-    expect(withBase("/butler/", "docs/a/")).toBe("/butler/docs/a/");
+    expect(withBase("/", "help/")).toBe("/help/");
+    expect(withBase("/preview", "/help/")).toBe("/preview/help/");
+    expect(withBase("/preview/", "help/a/")).toBe("/preview/help/a/");
   });
 
   test("strips the locale from entry ids", () => {
     expect(docSlug("ko/getting-started/install")).toBe("getting-started/install");
   });
 
-  test("keeps the default locale unprefixed", () => {
-    expect(docHref("/butler/", "ko", "getting-started/install")).toBe("/butler/docs/getting-started/install/");
-    expect(docHref("/", "en", "models/cloud")).toBe("/en/docs/models/cloud/");
+  test("serves the manual under /help/ and keeps the default locale unprefixed", () => {
+    expect(docsRoot("/", "ko")).toBe("/help/");
+    expect(docsRoot("/", "en")).toBe("/en/help/");
+    expect(docHref("/", "ko", "getting-started/install")).toBe("/help/getting-started/install/");
+    expect(docHref("/", "en", "models/cloud")).toBe("/en/help/models/cloud/");
+    expect(docHref("/preview/", "ko", "models/cloud")).toBe("/preview/help/models/cloud/");
+  });
+
+  test("serves the DS Viewer under /ds/", () => {
+    expect(designSystemRoot("/")).toBe("/ds/");
+    expect(designSystemRoot("/preview/")).toBe("/preview/ds/");
   });
 });
 
@@ -41,7 +49,7 @@ describe("buildNav", () => {
 
   test("planned pages have no link and the current page is active", () => {
     const [install, firstRun] = nav[0].rows;
-    expect(install).toMatchObject({ href: "/docs/getting-started/install/", active: true, planned: false });
+    expect(install).toMatchObject({ href: "/help/getting-started/install/", active: true, planned: false });
     expect(firstRun).toMatchObject({ href: null, active: false, planned: true });
   });
 

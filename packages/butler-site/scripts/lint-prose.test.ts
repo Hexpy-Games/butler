@@ -60,11 +60,11 @@ describe("sentence-ending", () => {
     const source = [
       "**대화의 작업 위치를 변경할까요?** 확인 창이 열립니다.",
       "",
-      "먼저 모델을 등록합니다([클라우드 모델](/docs/models/cloud/), [Custom 모델](/docs/models/custom/)).",
+      "먼저 모델을 등록합니다([클라우드 모델](/help/models/cloud/), [Custom 모델](/help/models/custom/)).",
       "",
       "\"다시 연결하고 있어요.\"가 표시되면 기다립니다.",
       "",
-      "자세한 내용은 [문제 해결](/docs/troubleshooting/#로그-확인)을 참고합니다.",
+      "자세한 내용은 [문제 해결](/help/troubleshooting/#로그-확인)을 참고합니다.",
       "",
     ].join("\n");
     expect(lint(source)).toEqual([]);
@@ -120,7 +120,7 @@ describe("banned-phrase", () => {
   });
 
   test("ignores phrases inside bold UI labels, inline code, quotes and link URLs", () => {
-    const source = "**다양한 모델**을 고릅니다. `것입니다`를 씁니다. \"간편하게\"가 표시됩니다. [문서](/docs/다양한/)를 참고합니다.\n";
+    const source = "**다양한 모델**을 고릅니다. `것입니다`를 씁니다. \"간편하게\"가 표시됩니다. [문서](/help/다양한/)를 참고합니다.\n";
     expect(lint(source)).toEqual([]);
   });
 
@@ -176,7 +176,7 @@ describe("bold-flanking", () => {
   });
 
   test("accepts bold followed by a space, punctuation or nothing", () => {
-    const source = "**준비하지 못했습니다.** 메시지가 표시됩니다. (**모델 검색...**)을 엽니다. [**아카이브**](/docs/settings/#아카이브)를 엽니다.\n";
+    const source = "**준비하지 못했습니다.** 메시지가 표시됩니다. (**모델 검색...**)을 엽니다. [**아카이브**](/help/settings/#아카이브)를 엽니다.\n";
     expect(lint(source)).toEqual([]);
   });
 });

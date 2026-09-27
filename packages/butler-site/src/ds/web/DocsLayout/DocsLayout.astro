@@ -1,7 +1,7 @@
 ---
 import "../../base.css";
 import { THEME_STORAGE_KEY } from "../client/theme";
-import type { NavSectionItem } from "../../../site/nav";
+import { designSystemRoot, type NavSectionItem } from "../../../site/nav";
 import { BUTLER_VERSION, REPOSITORY_URL } from "../../../site/meta";
 import type { Locale } from "../../../site/sections";
 import SearchDialog from "../SearchDialog/SearchDialog.astro";
@@ -17,11 +17,13 @@ interface Props {
   nav: NavSectionItem[];
   homeHref: string;
   alternates: Partial<Record<Locale, string | null>>;
+  /** Pages that are not a URL of their own (404): no canonical, not indexed. */
+  noindex?: boolean;
 }
 
-const { title, description, locale, nav, homeHref, alternates } = Astro.props;
+const { title, description, locale, nav, homeHref, alternates, noindex = false } = Astro.props;
 const base = import.meta.env.BASE_URL;
-const canonical = Astro.site ? new URL(Astro.url.pathname, Astro.site).href : undefined;
+const canonical = Astro.site && !noindex ? new URL(Astro.url.pathname, Astro.site).href : undefined;
 ---
 <!doctype html>
 <html lang={locale}>
@@ -31,6 +33,8 @@ const canonical = Astro.site ? new URL(Astro.url.pathname, Astro.site).href : un
     <title>{title} · Butler</title>
     <meta content={description} name="description" />
     {canonical && <link href={canonical} rel="canonical" />}
+    {noindex && <meta content="noindex" name="robots" />}
+    <slot name="head" />
     <link href={`${base.replace(/\/?$/u, "/")}favicon.svg`} rel="icon" type="image/svg+xml" />
     <meta content="light dark" name="color-scheme" />
     <script define:vars={{ key: THEME_STORAGE_KEY }} is:inline>
@@ -50,7 +54,7 @@ const canonical = Astro.site ? new URL(Astro.url.pathname, Astro.site).href : un
         <div class={styles.page}>
           <main class={styles.main} id="content">
             <slot />
-            <SiteFooter repositoryUrl={REPOSITORY_URL} version={BUTLER_VERSION} />
+            <SiteFooter designSystemHref={designSystemRoot(base)} repositoryUrl={REPOSITORY_URL} version={BUTLER_VERSION} />
           </main>
           <aside class={styles.toc} data-pagefind-ignore>
             <slot name="toc" />

@@ -1,15 +1,29 @@
 import mdx from "@astrojs/mdx";
 import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
+import type { AstroIntegration } from "astro";
 import { defineConfig } from "astro/config";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { resolveDeployTarget } from "./scripts/deploy-target";
 import { syntaxRoleTransformer, syntaxTheme } from "./src/ds/lib/highlight";
+import { isManualPage } from "./src/site/redirects";
 
-// GitHub Pages project page (owner/repo from GITHUB_REPOSITORY or the git
-// remote); SITE_URL / SITE_BASE override.
-const { site, base } = resolveDeployTarget();
+// Root of the GitHub Pages custom domain (butler.hexpy.games; SITE_DOMAIN,
+// SITE_URL and SITE_BASE override). `/` and the old /docs/ URLs are redirect
+// pages into the manual at /help/; /ds/ (the DS Viewer) is added after the
+// build by scripts/build-ds.ts.
+const { domain, site, base } = resolveDeployTarget();
 const version = readFileSync(new URL("../../VERSION", import.meta.url), "utf8").trim();
+
+/** dist/CNAME for the custom domain, from the same setting as the site URL. */
+function cname(): AstroIntegration {
+  return {
+    name: "butler-cname",
+    hooks: {
+      "astro:build:done": ({ dir }) => writeFileSync(new URL("CNAME", dir), `${domain}\n`),
+    },
+  };
+}
 
 export default defineConfig({
   site,
@@ -20,9 +34,7 @@ export default defineConfig({
     locales: ["ko", "en"],
     routing: { prefixDefaultLocale: false },
   },
-  // The intro page comes later; the root opens the docs for now.
-  redirects: { "/": `${base}docs/` },
-  integrations: [react(), mdx(), sitemap()],
+  integrations: [react(), mdx(), sitemap({ filter: (page) => isManualPage(page, base) }), cname()],
   vite: {
     define: { "import.meta.env.BUTLER_VERSION": JSON.stringify(version) },
   },

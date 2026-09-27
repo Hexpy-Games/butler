@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build && pagefind --site dist",
+    "build": "bun run build:help && bun run build:ds && bun run check:dist",
+    "build:help": "astro build && pagefind --site dist",
+    "build:ds": "bun run scripts/build-ds.ts",
+    "check:dist": "bun run scripts/check-dist.ts",
     "preview": "astro preview",
     "lint": "bun run scripts/lint-site-styles.ts",
     "lint:prose": "bun run scripts/lint-prose.ts",

@@ -44,8 +44,16 @@ export function docSlug(id: string): string {
   return id.split("/").slice(1).join("/");
 }
 
+/** The manual lives under /help/ (/<locale>/help/ for other locales); the site root is kept for an intro page. */
+export const MANUAL_SEGMENT = "help";
+
 export function docsRoot(base: string, locale: Locale): string {
-  return withBase(base, locale === DEFAULT_LOCALE ? "docs/" : `${locale}/docs/`);
+  return withBase(base, locale === DEFAULT_LOCALE ? `${MANUAL_SEGMENT}/` : `${locale}/${MANUAL_SEGMENT}/`);
+}
+
+/** The DS Viewer (packages/butler-app/client/ui ds-site build), added to the site by scripts/build-ds.ts. */
+export function designSystemRoot(base: string): string {
+  return withBase(base, "ds/");
 }
 
 export function docHref(base: string, locale: Locale, slug: string): string {

@@ -1,39 +1,26 @@
 import { describe, expect, test } from "bun:test";
-import { parseGitHubRemote, resolveDeployTarget } from "./deploy-target";
-
-describe("parseGitHubRemote", () => {
-  test("reads owner and repo from https and ssh remotes", () => {
-    expect(parseGitHubRemote("https://github.com/Hexpy-Games/butler.git")).toEqual({ owner: "Hexpy-Games", repo: "butler" });
-    expect(parseGitHubRemote("git@github.com:Hexpy-Games/butler.git")).toEqual({ owner: "Hexpy-Games", repo: "butler" });
-    expect(parseGitHubRemote("https://github.com/owner/repo")).toEqual({ owner: "owner", repo: "repo" });
-  });
-
-  test("ignores non-GitHub remotes", () => {
-    expect(parseGitHubRemote("https://gitlab.com/a/b.git")).toBeUndefined();
-  });
-});
+import { DEFAULT_SITE_DOMAIN, resolveDeployTarget } from "./deploy-target";
 
 describe("resolveDeployTarget", () => {
-  test("derives the GitHub Pages project URL from the remote", () => {
-    expect(resolveDeployTarget({}, () => "git@github.com:Hexpy-Games/butler.git"))
-      .toEqual({ site: "https://hexpy-games.github.io", base: "/butler/" });
+  test("serves the site from the root of butler.hexpy.games by default", () => {
+    expect(DEFAULT_SITE_DOMAIN).toBe("butler.hexpy.games");
+    expect(resolveDeployTarget({})).toEqual({ domain: "butler.hexpy.games", site: "https://butler.hexpy.games", base: "/" });
   });
 
-  test("a user/organization pages repository is served from the root", () => {
-    expect(resolveDeployTarget({}, () => "https://github.com/octo/octo.github.io.git"))
-      .toEqual({ site: "https://octo.github.io", base: "/" });
+  test("SITE_DOMAIN switches the custom domain and the site URL together", () => {
+    expect(resolveDeployTarget({ SITE_DOMAIN: " docs.example.com \n" }))
+      .toEqual({ domain: "docs.example.com", site: "https://docs.example.com", base: "/" });
+    expect(resolveDeployTarget({ SITE_DOMAIN: "" }).domain).toBe("butler.hexpy.games");
   });
 
-  test("GITHUB_REPOSITORY wins over the remote, and SITE_URL / SITE_BASE win over both", () => {
-    expect(resolveDeployTarget({ GITHUB_REPOSITORY: "acme/docs" }, () => "git@github.com:x/y.git"))
-      .toEqual({ site: "https://acme.github.io", base: "/docs/" });
-    expect(resolveDeployTarget({ SITE_URL: "https://docs.example.com/", SITE_BASE: "/" }, () => undefined))
-      .toEqual({ site: "https://docs.example.com", base: "/" });
-    expect(resolveDeployTarget({ SITE_BASE: "guide" }, () => "git@github.com:a/b.git"))
-      .toEqual({ site: "https://a.github.io", base: "/guide/" });
+  test("SITE_URL and SITE_BASE override the URL and base path (previews)", () => {
+    expect(resolveDeployTarget({ SITE_URL: "http://localhost:4321/", SITE_BASE: "preview" }))
+      .toEqual({ domain: "butler.hexpy.games", site: "http://localhost:4321", base: "/preview/" });
+    expect(resolveDeployTarget({ SITE_BASE: "/" }).base).toBe("/");
   });
 
-  test("falls back to a local root without a remote", () => {
-    expect(resolveDeployTarget({}, () => undefined)).toEqual({ site: "http://localhost:4321", base: "/" });
+  test("rejects a domain that is not a bare host name", () => {
+    expect(() => resolveDeployTarget({ SITE_DOMAIN: "https://butler.hexpy.games" })).toThrow("SITE_DOMAIN");
+    expect(() => resolveDeployTarget({ SITE_DOMAIN: "butler.hexpy.games/help" })).toThrow("SITE_DOMAIN");
   });
 });

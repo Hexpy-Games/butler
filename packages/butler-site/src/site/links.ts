@@ -1,11 +1,11 @@
 /**
  * Source-level link check for docs MDX: DocCard slugs, markdown links and
  * href attributes must point at published pages (and existing headings).
- * Internal links are written root-relative as /docs/<slug>/ (the build adds
+ * Internal links are written root-relative as /help/<slug>/ (the build adds
  * the base path, see baseLinks.ts).
  */
-import { docLocale } from "./nav";
-import { DEFAULT_LOCALE } from "./sections";
+import { docLocale, docsRoot } from "./nav";
+import { DEFAULT_LOCALE, type Locale } from "./sections";
 
 export interface DocSource {
   /** Collection id: <locale>/<slug>. */
@@ -80,7 +80,7 @@ export function docLinks(source: string): DocLink[] {
   const links: DocLink[] = [];
   for (const { text, line } of proseLines(source)) {
     const prose = text.replace(/`[^`]*`/gu, "");
-    for (const match of prose.matchAll(CARD_SLUG)) links.push({ target: `/docs/${match[1]}/`, line });
+    for (const match of prose.matchAll(CARD_SLUG)) links.push({ target: `${docsRoot("/", DEFAULT_LOCALE)}${match[1]}/`, line });
     for (const pattern of [MARKDOWN_LINK, HREF]) {
       for (const match of prose.matchAll(pattern)) {
         if (!EXTERNAL.test(match[1])) links.push({ target: match[1], line });
@@ -91,7 +91,7 @@ export function docLinks(source: string): DocLink[] {
 }
 
 function docsPrefix(locale: string): string {
-  return locale === DEFAULT_LOCALE ? "/docs/" : `/${locale}/docs/`;
+  return docsRoot("/", locale as Locale);
 }
 
 /** One problem string per broken internal link in published pages. */

@@ -1,8 +1,8 @@
 name: DS site
 
-# Publishes the Butler Design System viewer as a static site on GitHub Pages
-# (https://butler-design.hexpy.games). Independent of the Rust and app release workflows.
-# Pull requests only build and check; pushes to main (and manual runs) also deploy.
+# Builds and checks the static Butler Design System viewer (leak check and smoke).
+# It does not deploy: the viewer ships at https://butler.hexpy.games/ds/ from site.yml,
+# the repository's one GitHub Pages deployment.
 
 on:
   push:
@@ -24,7 +24,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ds-site-${{ github.event_name == 'pull_request' && github.ref || 'pages' }}
+  group: ds-site-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -66,8 +66,7 @@ jobs:
         timeout-minutes: 5
         run: bun run tests/smoke/ds-site-smoke.ts
 
-      # Sub-path build (/ds/) for a combined site: checked only, never deployed from here.
-      # It goes to dist-ds-site-ds/, so the Pages artifact below stays the base "/" build.
+      # Sub-path build (/ds/), the one site.yml deploys at butler.hexpy.games/ds/.
       - name: Build the DS site under /ds/
         run: npm --prefix packages/butler-app/client/ui run build:ds-site:ds
 
@@ -79,24 +78,3 @@ jobs:
         env:
           DS_SITE_BASE: /ds/
         run: bun run tests/smoke/ds-site-smoke.ts
-
-      - name: Upload Pages artifact
-        if: github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: packages/butler-app/client/ui/dist-ds-site
-
-  deploy:
-    if: github.event_name != 'pull_request'
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4

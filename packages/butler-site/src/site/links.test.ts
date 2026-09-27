@@ -40,17 +40,17 @@ describe("docLinks", () => {
   test("collects cards, markdown links and hrefs outside code", () => {
     const links = docLinks([
       '<DocCard slug="models/cloud" />',
-      "[Custom 모델](/docs/models/custom/#연결하기)과 [외부](https://example.com)",
+      "[Custom 모델](/help/models/custom/#연결하기)과 [외부](https://example.com)",
       '<DocCard href="https://github.com" title="t" description="d" />',
-      "`[코드](/docs/nope/)`",
+      "`[코드](/help/nope/)`",
       "```md",
-      "[펜스](/docs/fenced/)",
+      "[펜스](/help/fenced/)",
       "```",
       "[같은 문서](#연결하기)",
     ].join("\n"));
     expect(links.map((link) => [link.target, link.line])).toEqual([
-      ["/docs/models/cloud/", 1],
-      ["/docs/models/custom/#연결하기", 2],
+      ["/help/models/cloud/", 1],
+      ["/help/models/custom/#연결하기", 2],
       ["#연결하기", 8],
     ]);
   });
@@ -58,29 +58,30 @@ describe("docLinks", () => {
 
 describe("checkDocLinks", () => {
   const docs = [
-    page("ko/models/cloud", "## 모델 등록하기\n\n[없는 문서](/docs/models/nope/)\n[예정 문서](/docs/models/backup/)"),
-    page("ko/models/custom", "## 연결하기\n\n[기본 모델](/docs/models/cloud/#모델-등록하기)\n[없는 제목](/docs/models/cloud/#없음)"),
+    page("ko/models/cloud", "## 모델 등록하기\n\n[없는 문서](/help/models/nope/)\n[예정 문서](/help/models/backup/)"),
+    page("ko/models/custom", "## 연결하기\n\n[기본 모델](/help/models/cloud/#모델-등록하기)\n[없는 제목](/help/models/cloud/#없음)"),
     page("ko/models/backup", "", "planned"),
-    page("ko/basics/conversation", "[슬래시 없음](/docs/models/cloud)\n[상대](../models/cloud/)\n[같은 문서](#없는-제목)\n<DocCard slug=\"models/backup\" />"),
+    page("ko/basics/conversation", "[슬래시 없음](/help/models/cloud)\n[상대](../models/cloud/)\n[같은 문서](#없는-제목)\n<DocCard slug=\"models/backup\" />\n[옛 경로](/docs/models/cloud/)"),
   ];
 
   test("accepts published pages and existing anchors", () => {
     const valid = [
-      page("ko/a", "## 모델 등록하기\n\n[b](/docs/b/#연결하기)\n<DocCard slug=\"b\" />"),
-      page("ko/b", "## 연결하기\n\n[a](/docs/a/#모델-등록하기)\n[여기](#연결하기)"),
+      page("ko/a", "## 모델 등록하기\n\n[b](/help/b/#연결하기)\n<DocCard slug=\"b\" />"),
+      page("ko/b", "## 연결하기\n\n[a](/help/a/#모델-등록하기)\n[여기](#연결하기)"),
     ];
     expect(checkDocLinks(valid)).toEqual([]);
   });
 
-  test("flags missing, planned, relative and slash-less targets", () => {
+  test("flags missing, planned, relative, slash-less and legacy /docs/ targets", () => {
     expect(checkDocLinks(docs)).toEqual([
-      "ko/models/cloud:11 /docs/models/nope/: no docs page",
-      "ko/models/cloud:12 /docs/models/backup/: page is planned",
-      "ko/models/custom:12 /docs/models/cloud/#없음: no heading #없음",
-      "ko/basics/conversation:9 /docs/models/cloud: internal links are /docs/<slug>/",
-      "ko/basics/conversation:10 ../models/cloud/: internal links are /docs/<slug>/",
+      "ko/models/cloud:11 /help/models/nope/: no docs page",
+      "ko/models/cloud:12 /help/models/backup/: page is planned",
+      "ko/models/custom:12 /help/models/cloud/#없음: no heading #없음",
+      "ko/basics/conversation:9 /help/models/cloud: internal links are /help/<slug>/",
+      "ko/basics/conversation:10 ../models/cloud/: internal links are /help/<slug>/",
       "ko/basics/conversation:11 #없는-제목: no heading #없는-제목",
-      "ko/basics/conversation:12 /docs/models/backup/: page is planned",
+      "ko/basics/conversation:12 /help/models/backup/: page is planned",
+      "ko/basics/conversation:13 /docs/models/cloud/: internal links are /help/<slug>/",
     ]);
   });
 });
