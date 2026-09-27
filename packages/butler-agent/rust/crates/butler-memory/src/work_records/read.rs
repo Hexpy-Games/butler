@@ -101,7 +101,7 @@ pub(super) struct PlanRecord {
 #[derive(Debug)]
 pub(super) enum ReviewFile {
     Null,
-    Document(ReviewRecord),
+    Document(Box<ReviewRecord>),
 }
 
 /// The reviewer's verdict on a planned task attempt.
@@ -148,7 +148,7 @@ impl ReviewFile {
         if value.is_null() {
             Self::Null
         } else {
-            Self::Document(crate::lenient::view(value))
+            Self::Document(Box::new(crate::lenient::view(value)))
         }
     }
 

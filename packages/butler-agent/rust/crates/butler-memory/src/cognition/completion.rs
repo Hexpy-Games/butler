@@ -1,6 +1,8 @@
 //! Durable source-shaped completion observation publication.
 
 mod consumer;
+#[cfg(test)]
+mod format_pin;
 mod observation;
 mod queue;
 mod typed_notice;

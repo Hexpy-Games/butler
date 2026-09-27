@@ -70,7 +70,9 @@ pub(crate) enum Arg<T> {
     Missing,
     Null,
     Valid(T),
-    Invalid,
+    /// Passthrough: the value as sent, kept so comparisons and echoes of a
+    /// wrong-typed field behave as they did on the raw record.
+    Invalid(Value),
 }
 
 impl<T> Arg<T> {
@@ -78,7 +80,21 @@ impl<T> Arg<T> {
     pub(crate) fn valid(&self) -> Option<&T> {
         match self {
             Self::Valid(value) => Some(value),
-            Self::Missing | Self::Null | Self::Invalid => None,
+            Self::Missing | Self::Null | Self::Invalid(_) => None,
+        }
+    }
+
+    /// Whether both fields hold the same JSON (missing reads as `null`), as
+    /// comparing the raw records would.
+    pub(crate) fn same_json(&self, other: &Self) -> bool
+    where
+        T: PartialEq,
+    {
+        match (self, other) {
+            (Self::Missing | Self::Null, Self::Missing | Self::Null) => true,
+            (Self::Valid(left), Self::Valid(right)) => left == right,
+            (Self::Invalid(left), Self::Invalid(right)) => left == right,
+            _ => false,
         }
     }
 }
@@ -89,7 +105,21 @@ impl<'de, T: serde::de::DeserializeOwned> Deserialize<'de> for Arg<T> {
         if value.is_null() {
             return Ok(Self::Null);
         }
-        Ok(serde_json::from_value(value).map_or(Self::Invalid, Self::Valid))
+        match serde_json::from_value(value.clone()) {
+            Ok(valid) => Ok(Self::Valid(valid)),
+            Err(_) => Ok(Self::Invalid(value)),
+        }
+    }
+}
+
+/// Serializes the field as it was sent (`null` when missing).
+impl<T: serde::Serialize> serde::Serialize for Arg<T> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Missing | Self::Null => serializer.serialize_none(),
+            Self::Valid(value) => value.serialize(serializer),
+            Self::Invalid(value) => value.serialize(serializer),
+        }
     }
 }
 

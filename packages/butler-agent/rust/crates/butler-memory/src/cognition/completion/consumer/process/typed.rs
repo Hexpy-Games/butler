@@ -1,26 +1,25 @@
 //! Delivery of task-report and explicit-rule queue notices to the active graph.
 
-use serde_json::Value;
-
-use super::{Input, dead_letter, error};
+use super::{Input, SyncRequest, SyncSource, dead_letter, error};
 use crate::cognition::CognitionCode;
 use crate::cognition::{
     ConsumeTypedLifecycleInput, MemoryGenerationTarget, RegisterTypedSourceInput,
     resolve_active_generation,
     sources::{TypedMemoryLifecycle, read_typed_memory_lifecycle, read_typed_record},
 };
+use crate::lenient::Arg;
 
 pub(super) async fn process(
     input: &Input,
     root: &std::path::Path,
-    entry: &Value,
+    request: &SyncRequest,
     job_id: &str,
 ) -> crate::cognition::CognitionResult<bool> {
-    match process_current(input, root, entry, job_id).await {
+    match process_current(input, root, request.source(), job_id).await {
         Ok(processed) => Ok(processed),
         Err(_failure) if input.shutdown.is_cancelled() => Ok(false),
         Err(failure) => {
-            dead_letter(root, entry, failure.code(), &(input.clock)())?;
+            dead_letter(root, request, failure.code(), &(input.clock)())?;
             Ok(false)
         }
     }
@@ -29,18 +28,21 @@ pub(super) async fn process(
 async fn process_current(
     input: &Input,
     root: &std::path::Path,
-    entry: &Value,
+    source: &SyncSource,
     job_id: &str,
 ) -> crate::cognition::CognitionResult<bool> {
-    let source = &entry["source"];
-    let kind = match source["kind"].as_str() {
+    let kind = match source.kind.valid().map(String::as_str) {
         Some("task_report") => "task_report",
-        Some("explicit_record") if source["record_kind"] == "rule" => "explicit_record",
+        Some("explicit_record")
+            if source.record_kind.valid().map(String::as_str) == Some("rule") =>
+        {
+            "explicit_record"
+        }
         _ => return Err(error(CognitionCode::MemorySyncSourceUnavailable)),
     };
-    let record_id = required(source, "record_id")?;
-    let revision = required(source, "revision")?;
-    let operation_id = required(source, "operation_id")?;
+    let record_id = required(&source.record_id)?;
+    let revision = required(&source.revision)?;
+    let operation_id = required(&source.operation_id)?;
     let active = resolve_active_generation(&input.data_root, &input.environment)?;
     let memory_root = input.environment.memory_root(&input.data_root);
     let owner = read_typed_record(&input.data_root, &memory_root, kind, record_id)?;
@@ -100,9 +102,10 @@ async fn process_current(
     super::super::super::queue::ack(root, job_id)
 }
 
-fn required<'a>(source: &'a Value, key: &str) -> crate::cognition::CognitionResult<&'a str> {
-    source[key]
-        .as_str()
+fn required(field: &Arg<String>) -> crate::cognition::CognitionResult<&str> {
+    field
+        .valid()
+        .map(String::as_str)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| error(CognitionCode::MemorySyncEntryInvalid))
 }

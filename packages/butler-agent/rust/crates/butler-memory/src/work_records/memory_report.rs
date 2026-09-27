@@ -164,7 +164,7 @@ fn review_accepted(binding: &Value, current: &Snapshot) -> Result<bool, WorkReco
         return Ok(false);
     }
     let goal_review = match &review.goal_review {
-        Arg::Missing | Arg::Null | Arg::Invalid => return Err(WorkRecordReadError::Malformed),
+        Arg::Missing | Arg::Null | Arg::Invalid(_) => return Err(WorkRecordReadError::Malformed),
         Arg::Valid(Obj(goal_review)) => goal_review,
     };
     if trim(required(&goal_review.goal)?) != plan_goal(&current.plan)? {
@@ -199,7 +199,7 @@ fn plan_goal(plan: &PlanRecord) -> Result<&str, WorkRecordReadError> {
     let internal_goal = match &plan.internal_goal {
         Arg::Missing | Arg::Null => "",
         Arg::Valid(goal) => trim(goal),
-        Arg::Invalid => return Err(WorkRecordReadError::Malformed),
+        Arg::Invalid(_) => return Err(WorkRecordReadError::Malformed),
     };
     if internal_goal.is_empty() {
         Ok(trim(required(&plan.goal)?))
@@ -257,7 +257,7 @@ fn current_disposition(review: &ReviewRecord) -> Result<&'static str, WorkRecord
         let goal_verdict = match &review.goal_review {
             Arg::Missing | Arg::Null => return Err(WorkRecordReadError::Malformed),
             Arg::Valid(Obj(goal)) => goal.verdict.valid().map(String::as_str),
-            Arg::Invalid => None,
+            Arg::Invalid(_) => None,
         };
         if goal_verdict == Some("PASS")
             && criteria(review)?.iter().all(|criterion| {
