@@ -21,8 +21,14 @@ fn mime(path: &str) -> Option<&'static str> {
     }
 }
 
-pub(super) fn is_public_static_request(method: &Method, path: &str) -> bool {
-    *method == Method::GET && (path == "/" || mime(path).is_some())
+/// Scripts, styles, images and data files of the UI bundle are public; its
+/// HTML documents are served only to an authenticated browser.
+pub(super) fn is_public_asset(method: &Method, path: &str) -> bool {
+    *method == Method::GET && mime(path).is_some_and(|mime| !mime.starts_with("text/html"))
+}
+
+fn is_static_path(path: &str) -> bool {
+    path == "/" || mime(path).is_some()
 }
 
 pub(super) fn accepts_html(headers: &HeaderMap) -> bool {
@@ -66,7 +72,7 @@ pub(super) async fn serve(
     let candidate = root.join(&relative);
     let file = match tokio::fs::canonicalize(candidate).await {
         Ok(file) if file.starts_with(&root) && file.is_file() => file,
-        _ if accepts_html || is_public_static_request(&Method::GET, pathname) => {
+        _ if accepts_html || is_static_path(pathname) => {
             let index = root.join("index.html");
             match tokio::fs::canonicalize(index).await {
                 Ok(file) if file.starts_with(&root) && file.is_file() => file,

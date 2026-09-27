@@ -38,7 +38,14 @@ pub(super) async fn start_with_config(
     serve_gateway(listener, application, config).unwrap()
 }
 
+/// Sends a raw request; `host: localhost` names the listener's port, as the
+/// gateway answers loopback names only with their bound port.
 pub(super) async fn request(address: std::net::SocketAddr, request: &str) -> String {
+    let request = request.replacen(
+        "host: localhost\r\n",
+        &format!("host: localhost:{}\r\n", address.port()),
+        1,
+    );
     let mut stream = TcpStream::connect(address).await.unwrap();
     stream.write_all(request.as_bytes()).await.unwrap();
     let mut response = Vec::new();

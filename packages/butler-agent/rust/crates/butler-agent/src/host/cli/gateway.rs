@@ -261,6 +261,17 @@ async fn status_value(
     Ok(view)
 }
 
+/// The App gateway URL of the ready service that owns `data_root`, if any.
+pub(crate) fn running_app_endpoint(
+    data_root: &std::path::Path,
+    installation: &ResolvedInstallation,
+) -> Result<Option<String>, crate::host::HostError> {
+    Ok(control::verified_instance(data_root, installation)?
+        .filter(|record| record.state == "ready" && record.app_enabled)
+        .and_then(|record| record.app_endpoint)
+        .filter(|endpoint| !endpoint.is_empty()))
+}
+
 async fn start_service(
     installation: &ResolvedInstallation,
     data_root: &std::path::Path,
@@ -282,7 +293,9 @@ async fn start_service(
     }
 }
 
-fn resolve_data(
+/// The data folder `--data`, `BUTLER_DATA` or `~/.butler` names, validated
+/// against the installation.
+pub(crate) fn resolve_data(
     explicit: Option<&str>,
     installation: &ResolvedInstallation,
 ) -> Result<PathBuf, crate::host::HostError> {

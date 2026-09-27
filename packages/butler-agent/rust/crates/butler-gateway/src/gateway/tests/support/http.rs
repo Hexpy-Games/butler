@@ -7,7 +7,7 @@ pub(in crate::gateway::tests) async fn authorized_json(
     request(
         address,
         &format!(
-            "POST /messages HTTP/1.1\r\nhost: localhost\r\nauthorization: Bearer secret\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+            "POST /messages HTTP/1.1\r\nhost: localhost\r\nauthorization: Bearer secret\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
             body.len()
         ),
     )

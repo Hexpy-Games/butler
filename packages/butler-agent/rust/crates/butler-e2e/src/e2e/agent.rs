@@ -22,9 +22,14 @@ pub struct Launch {
     pub tmp: PathBuf,
     pub logs: PathBuf,
     pub port: u16,
+    /// The gateway token; empty until read from the data folder when the
+    /// agent owns it (see [`Launch::use_data_folder_token`]).
     pub token: String,
     pub env: Vec<(String, String)>,
 }
+
+/// Where the agent keeps its gateway token when no override names a file.
+pub const DATA_FOLDER_TOKEN_FILE: &str = "app/runtime/auth/local-agent-auth.json";
 
 impl Launch {
     pub fn new(sandbox: &Sandbox) -> Result<Self, HarnessError> {
@@ -63,6 +68,22 @@ impl Launch {
 
     pub fn remove_env(&mut self, key: &str) {
         self.env.retain(|(existing, _)| existing != key);
+    }
+
+    /// Starts the agent as the CLI does: no token variables, so the agent
+    /// reads (or creates) the token in its data folder, and the harness
+    /// reads it from there.
+    pub fn use_data_folder_token(&mut self) {
+        self.remove_env("BUTLER_APP_LOCAL_AUTH_REQUIRED");
+        self.remove_env("BUTLER_APP_LOCAL_AUTH_FILE");
+        self.token.clear();
+    }
+
+    /// The token the agent keeps in its data folder, once it exists.
+    pub fn data_folder_token(&self) -> Option<String> {
+        let bytes = fs::read(self.data.join(DATA_FOLDER_TOKEN_FILE)).ok()?;
+        let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+        value["token"].as_str().map(str::to_owned)
     }
 
     /// A command for the agent binary with the scenario's isolated environment.
@@ -123,13 +144,18 @@ impl Agent {
             .stderr(stderr)
             .spawn()?;
         self.child = Some(child);
-        let gateway = Gateway::new(
-            format!("http://127.0.0.1:{}", self.launch.port),
-            self.launch.token.clone(),
-        );
         let deadline = Instant::now() + Duration::from_secs(90);
         loop {
-            if gateway.healthy().await {
+            if self.launch.token.is_empty()
+                && let Some(token) = self.launch.data_folder_token()
+            {
+                self.launch.token = token;
+            }
+            let gateway = Gateway::new(
+                format!("http://127.0.0.1:{}", self.launch.port),
+                self.launch.token.clone(),
+            );
+            if !self.launch.token.is_empty() && gateway.healthy().await {
                 return Ok(gateway);
             }
             if let Some(status) = self

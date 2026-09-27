@@ -44,6 +44,12 @@ impl Gateway {
         }
     }
 
+    /// The HTTP client, for requests the helpers below do not shape (raw
+    /// Host, Origin, Content-Type or Cookie headers).
+    pub fn http(&self) -> &reqwest::Client {
+        &self.client
+    }
+
     pub async fn healthy(&self) -> bool {
         self.get("/health")
             .await
