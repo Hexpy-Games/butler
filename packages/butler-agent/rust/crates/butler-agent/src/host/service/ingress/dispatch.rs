@@ -103,11 +103,10 @@ pub(super) async fn one(item: ClaimedInboundEvent, deps: DispatchDependencies) -
         subsessions,
         restart_handoff,
     } = deps;
-    // Owner decision: a turn a crashed process was running is not resumed.
-    // Without a session binding or App target the turn never started for the
-    // App, and it runs as a new turn.
-    if interrupted_by_crash(&item.record)
-        && let Some(poll) = settle_interrupted(
+    // Owner decision: a turn a crashed process was running is not resumed;
+    // it runs only when its session was never bound (BTCC never started it).
+    if interrupted::by_crash(&item.record)
+        && let Some(poll) = interrupted::settle(
             &item,
             &queue,
             &bindings,
@@ -145,8 +144,8 @@ pub(super) async fn one(item: ClaimedInboundEvent, deps: DispatchDependencies) -
             // A turn that is interrupted again in the replacement process
             // ends failed with retry available instead of replacing the
             // process forever.
-            if replaced_once(&item.record)
-                && let Some(poll) = settle_interrupted(
+            if interrupted::replaced_once(&item.record)
+                && let Some(poll) = interrupted::settle(
                     &item,
                     &queue,
                     &bindings,
@@ -196,87 +195,6 @@ async fn handled(
         delivered: executed.delivered,
         ..Default::default()
     }
-}
-
-/// A turn that a crashed process (dead queue claim owner) was running.
-fn interrupted_by_crash(record: &QueuedInboundEvent) -> bool {
-    metadata_flag(record, "recoveredFromProcessing")
-        && record
-            .metadata
-            .get("recoveryReason")
-            .and_then(serde_json::Value::as_str)
-            == Some("processing_owner_dead")
-        && plain_turn(record)
-}
-
-/// A turn already parked once for process replacement after an interruption.
-fn replaced_once(record: &QueuedInboundEvent) -> bool {
-    metadata_flag(record, "recoveredFromRuntimeInterruption") && plain_turn(record)
-}
-
-fn metadata_flag(record: &QueuedInboundEvent, key: &str) -> bool {
-    record
-        .metadata
-        .get(key)
-        .and_then(serde_json::Value::as_bool)
-        == Some(true)
-}
-
-fn plain_turn(record: &QueuedInboundEvent) -> bool {
-    Envelope::from_record(record).is_ok_and(|envelope| envelope.control.is_none())
-}
-
-/// Reports the interrupted turn to the App as failed and retryable
-/// (`turn_interrupted`) and settles the queue item. The turn keeps its
-/// durable state, so a retry resumes it without running finished tool
-/// effects again. None when the App cannot be told (no binding or target).
-async fn settle_interrupted(
-    item: &ClaimedInboundEvent,
-    queue: &InboundQueue,
-    bindings: &SessionBindingStore,
-    delivery: &dyn IngressDelivery,
-    status: &str,
-) -> Option<IngressPoll> {
-    let reported: Result<(), super::IngressError> = async {
-        let envelope = Envelope::from_record(&item.record)?;
-        let binding = bind::existing_control_binding(&envelope, bindings).await?;
-        let report = action::crash_interrupted(item, &envelope, &binding)?;
-        if delivery.deliver(binding.session_id.clone(), report).await? {
-            Ok(())
-        } else {
-            Err(super::IngressError::new(
-                "inbound_delivery_interrupted",
-                "App result delivery unavailable",
-            ))
-        }
-    }
-    .await;
-    if let Err(error) = reported {
-        eprintln!(
-            "[native-btcc] interruption report unavailable code={}",
-            error.code
-        );
-        return None;
-    }
-    let completed = queue.complete(
-        item,
-        json!({
-            "source":"gateway/btcc/btcc-inbound-dispatcher.ts",
-            "dispatchStatus":status,"handled":true,"delivered":1,
-        }),
-    );
-    Some(if matches!(completed, Ok(true)) {
-        IngressPoll {
-            handled: 1,
-            delivered: 1,
-            ..Default::default()
-        }
-    } else {
-        IngressPoll {
-            interrupted: 1,
-            ..Default::default()
-        }
-    })
 }
 
 async fn execute(
@@ -452,5 +370,6 @@ async fn complete_subsession_child(
         .map_err(|error| super::IngressError::new("subsession_result_commit_failed", error.code()))
 }
 
+mod interrupted;
 #[cfg(test)]
 mod tests;

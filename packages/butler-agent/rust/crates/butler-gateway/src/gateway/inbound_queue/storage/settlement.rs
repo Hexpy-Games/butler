@@ -1,6 +1,10 @@
 //! Terminal fencing and runtime-interruption recovery.
 
-use std::{fs, path::Path, time::SystemTime};
+use std::{
+    fs,
+    path::Path,
+    time::{Duration, SystemTime},
+};
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde_json::Value;
@@ -101,6 +105,48 @@ pub(in crate::gateway::inbound_queue) fn park(
     );
     atomic_write(&record_path(root, "pending", &record.queue_id), &record)?;
     let _ = fs::rename(&item.path, item.path.with_extension("json.interrupted"));
+    Ok(true)
+}
+
+/// First and longest wait before a deferred record is claimable again.
+const DEFER_FIRST: Duration = Duration::from_secs(1);
+const DEFER_MAX: Duration = Duration::from_secs(60);
+
+/// Returns a claimed record to pending with its metadata, claimable again
+/// once a backoff has passed (1 s, doubling per deferral, at most 60 s).
+pub(in crate::gateway::inbound_queue) fn defer(
+    root: &Path,
+    item: &ClaimedInboundEvent,
+    error: &str,
+) -> QueueResult<bool> {
+    if !owns(item)? {
+        return Ok(false);
+    }
+    let mut record = item.record.clone();
+    record.processing = None;
+    let deferrals = record
+        .metadata
+        .get("deferrals")
+        .and_then(Value::as_u64)
+        .unwrap_or(0)
+        .saturating_add(1);
+    let wait = DEFER_FIRST
+        .saturating_mul(1 << deferrals.saturating_sub(1).min(6))
+        .min(DEFER_MAX);
+    let not_before: DateTime<Utc> = (SystemTime::now() + wait).into();
+    record.metadata.insert("deferrals".into(), deferrals.into());
+    record.metadata.insert(
+        "notBefore".into(),
+        not_before
+            .to_rfc3339_opts(SecondsFormat::Millis, true)
+            .into(),
+    );
+    record.metadata.insert(
+        "deferredError".into(),
+        error.chars().take(500).collect::<String>().into(),
+    );
+    atomic_write(&record_path(root, "pending", &record.queue_id), &record)?;
+    let _ = fs::rename(&item.path, item.path.with_extension("json.deferred"));
     Ok(true)
 }
 
