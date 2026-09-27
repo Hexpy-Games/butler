@@ -642,7 +642,7 @@ test("electron shell injects a minimal preload-only app API contract", () => {
   expect(electronMain).toContain("BUTLER_APP_UI_URL");
   expect(electronMain).toContain("rendererUrl");
   expect(electronMain).toContain("defaultRendererUrl");
-  expect(electronMain).toContain("resolveStaticRendererUrl");
+  expect(electronMain).toContain("resolveStaticRendererDist");
   expect(electronMain).toContain('join(process.resourcesPath, "app-client")');
   expect(electronMain).toContain("serverHealthUrl");
   expect(electronMain).toContain('new URL("/health", serverUrl).toString()');
