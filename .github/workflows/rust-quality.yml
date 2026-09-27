@@ -1,5 +1,9 @@
 name: Rust quality
 
+# Fast checks (format, source rules, clippy) run on every PR. Tests need the
+# static ONNX Runtime and a full debug build, so they run on pushes to main,
+# on PRs into main, and on stacked PRs labelled `full-ci`; intermediate stacked
+# PRs are re-verified when the stack lands on a PR into main.
 on:
   push:
     branches: [main]
@@ -7,6 +11,7 @@ on:
       - "packages/butler-agent/rust/**"
       - ".github/workflows/rust-quality.yml"
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
     paths:
       - "packages/butler-agent/rust/**"
       - ".github/workflows/rust-quality.yml"
@@ -15,19 +20,24 @@ permissions:
   contents: read
 
 concurrency:
-  group: rust-quality-${{ github.ref }}
+  group: rust-quality-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: short
+
+defaults:
+  run:
+    working-directory: packages/butler-agent/rust
+
 jobs:
-  quality:
-    # The agent links a static ONNX Runtime built by the repository recipe,
-    # which (like the shipped agent) targets macOS arm64 only.
-    name: Rust quality (macOS arm64)
-    runs-on: macos-latest
-    timeout-minutes: 150
-    defaults:
-      run:
-        working-directory: packages/butler-agent/rust
+  source:
+    name: Format and source rules
+    # Adding an unrelated label must not re-run the workflow.
+    if: github.event.action != 'labeled' || github.event.label.name == 'full-ci'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -36,21 +46,96 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.91.0
-          components: rustfmt, clippy
+          components: rustfmt
 
       - name: Check formatting
         run: cargo fmt --all -- --check
+
+      # File size caps, domain architecture and the function-length ratchet
+      # (per-crate source-check-baseline.txt). Builds only syn.
+      - name: Check Rust source rules
+        run: cargo run --locked -p butler-source-check -- .
+
+  clippy:
+    # Test builds enable the crates' test-support features, which relax
+    # fixture lints (unwrap/expect/panic, dead code) on the libraries, so the
+    # production targets are linted in their own feature set. The two passes
+    # run in parallel rather than one after the other.
+    name: Clippy (${{ matrix.pass }})
+    if: github.event.action != 'labeled' || github.event.label.name == 'full-ci'
+    # The agent (and its protobuf build scripts) target macOS arm64 only.
+    runs-on: macos-15
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pass: production
+            targets: --lib --bins
+          - pass: all-targets
+            targets: --all-targets
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.91.0
+          components: clippy
 
       - name: Set up Python for the ORT recipe
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      # The recipe fingerprints the lock, the script, the Rust toolchain and the
-      # host SDK/clang/Python; the runner image version stands in for the host.
-      - name: Identify runner image
-        id: image
-        run: echo "version=${ImageOS:-unknown}-${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
+      # Checking never links ORT; the Lance build scripts only need protoc.
+      - name: Prepare pinned protoc
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/ort-cache
+        run: |
+          set -euo pipefail
+          prepared="$(python scripts/prepare-static-ort-macos-arm64.py --protoc-only)"
+          echo "PROTOC=$(jq -r .protoc <<<"$prepared")" >> "$GITHUB_ENV"
+
+      - name: Cache Cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/butler-agent/rust
+          shared-key: clippy-${{ matrix.pass }}
+          cache-on-failure: true
+
+      - name: Run Clippy
+        run: cargo clippy --workspace ${{ matrix.targets }} --locked -- -D warnings
+
+  test:
+    name: Tests
+    if: >-
+      (github.event.action != 'labeled' || github.event.label.name == 'full-ci') &&
+      (github.event_name == 'push' || github.base_ref == 'main' ||
+       contains(github.event.pull_request.labels.*.name, 'full-ci'))
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.91.0
+
+      - name: Set up Python for the ORT recipe
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The recipe's own fingerprint (lock, script, toolchain, SDK, clang,
+      # Python) is the cache key, so a runner image update that changes none
+      # of them still hits the cache.
+      - name: Fingerprint static ONNX Runtime
+        id: ort
+        run: echo "fingerprint=$(python scripts/prepare-static-ort-macos-arm64.py --fingerprint)" >> "$GITHUB_OUTPUT"
 
       - name: Restore static ONNX Runtime cache
         id: ort-cache
@@ -58,7 +143,7 @@ jobs:
         with:
           # Outside the Cargo target so rust-cache and `cargo clean` never touch it.
           path: ${{ runner.temp }}/ort-cache/native-deps
-          key: static-ort-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.version }}-${{ hashFiles('packages/butler-agent/rust/scripts/static-ort-macos-arm64.lock.json', 'packages/butler-agent/rust/scripts/prepare-static-ort-macos-arm64.py', 'packages/butler-agent/rust/rust-toolchain.toml') }}
+          key: static-ort-${{ runner.os }}-${{ runner.arch }}-${{ steps.ort.outputs.fingerprint }}
 
       - name: Prepare pinned static ONNX Runtime and protoc
         env:
@@ -85,18 +170,25 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: packages/butler-agent/rust
+          shared-key: test
           cache-on-failure: true
 
-      - name: Run Clippy
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
 
-      # Test builds enable the crates' test-support features, which relax
-      # fixture lints; the libraries alone are linted without them.
-      - name: Run Clippy on libraries without test features
-        run: cargo clippy --workspace --lib --locked -- -D warnings
-
-      - name: Check Rust source sizes and architecture
-        run: cargo run --locked -p butler-source-check -- .
+      - name: Build tests
+        run: cargo nextest run --workspace --locked --no-run
 
       - name: Run tests
-        run: cargo test --workspace --locked
+        run: cargo nextest run --workspace --locked --no-fail-fast
+
+      # nextest does not run doctests; the crates currently have none.
+      - name: Run doctests
+        run: |
+          if grep -rqE '^[[:space:]]*//[/!][[:space:]]*```' crates; then
+            cargo test --workspace --doc --locked
+          else
+            echo "No documentation code blocks; no doctests to run."
+          fi
