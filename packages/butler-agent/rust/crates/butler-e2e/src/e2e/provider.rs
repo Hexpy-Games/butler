@@ -147,7 +147,11 @@ impl Provider {
         matches!(self.state.mode, Mode::Record { .. })
     }
 
+    /// Adds a fault. Record mode ignores faults: it captures clean traffic.
     pub fn inject(&self, fault: Fault) -> Result<(), HarnessError> {
+        if self.is_recording() {
+            return Ok(());
+        }
         if let Transform::ErrorFromLibrary(name) = &fault.transform {
             let known = lock(&self.state.library).iter().any(|(n, _)| n == name);
             if !known {
@@ -163,6 +167,22 @@ impl Provider {
         }
         lock(&self.state.faults).push(fault);
         Ok(())
+    }
+
+    /// Index of the first recorded exchange whose user request contains
+    /// `text` and whose tool round has `round_len` items (0 in record mode).
+    pub fn exchange_for(&self, text: &str, round_len: usize) -> Result<usize, HarnessError> {
+        match &self.state.mode {
+            Mode::Record { .. } => Ok(0),
+            Mode::Replay(cassette) => cassette
+                .exchanges
+                .iter()
+                .position(|exchange| {
+                    exchange.request.key.user_request.contains(text)
+                        && exchange.request.key.round.len() == round_len
+                })
+                .ok_or_else(|| harness_error(format!("no recorded exchange for {text:?}"))),
+        }
     }
 
     pub fn clear_faults(&self) {
