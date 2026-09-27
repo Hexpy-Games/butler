@@ -10,8 +10,8 @@ export const meta: ShowcaseMeta = {
 };
 
 const labels = {
-  "en-US": { settings: "Loading settings", turn: "Preparing the response", automations: "Loading automations" },
-  "ko-KR": { settings: "설정을 불러오는 중", turn: "응답을 준비하는 중", automations: "자동화를 불러오는 중" },
+  "en-US": { settings: "Loading settings", turn: "Preparing the response", automations: "Loading schedules" },
+  "ko-KR": { settings: "설정을 불러오는 중", turn: "응답을 준비하는 중", automations: "예약 작업을 불러오는 중" },
 } as const;
 
 function text({ locale }: ShowcaseRenderContext) {
