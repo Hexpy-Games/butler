@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { uploadMessageFile } from "@/app/api.ts";
 import { browserRandomUUID } from "@/app/id.ts";
-import { notifyError } from "@/app/notifications.ts";
+import { notifyError, notifyStatus } from "@/app/notifications.ts";
+import {
+  composerImagePolicy,
+  imageRefusal,
+  imageRefusalLabel,
+  type ComposerImagePolicy,
+  type ImageRefusal,
+} from "../composerImagePolicy";
 import { appCopy } from "@/app/copy.ts";
 import { projectDocumentFileName } from "@/app/projectDocuments.ts";
 import { completeProjectDocument, readProjectDocumentPage } from "@/app/projectDocumentSource.ts";
@@ -17,11 +24,16 @@ export interface ComposerAttachment {
   kind: "project-document" | MessageFileRef["kind"];
 }
 
-export function useFileAttachments(activeChatId: string) {
+export function useFileAttachments(
+  activeChatId: string,
+  imagePolicy: ComposerImagePolicy = composerImagePolicy(null),
+) {
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [uploadingCount, setUploadingCount] = useState(0);
   const isMountedRef = useRef(true);
   const uploadEpochRef = useRef(0);
+  const imagePolicyRef = useRef(imagePolicy);
+  imagePolicyRef.current = imagePolicy;
 
   useEffect(() => {
     return () => {
@@ -37,7 +49,16 @@ export function useFileAttachments(activeChatId: string) {
   }, [activeChatId]);
 
   async function addFiles(fileList: FileList | null) {
-    const files = Array.from(fileList ?? []);
+    const refusals = new Set<ImageRefusal>();
+    const files = Array.from(fileList ?? []).filter((file) => {
+      const refusal = imageRefusal(file, imagePolicyRef.current);
+      if (refusal) refusals.add(refusal);
+      return !refusal;
+    });
+    const [refusal] = refusals;
+    if (refusal) {
+      notifyStatus(imageRefusalLabel(refusal), { id: `attachment-image-${activeChatId}`, duration: 2000 });
+    }
     if (files.length === 0) return;
     const uploadEpoch = uploadEpochRef.current;
     const accepted: ComposerAttachment[] = [];

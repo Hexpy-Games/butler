@@ -201,7 +201,8 @@
     opacity var(--motion-fast) var(--motion-ease-standard);
 }
 
-.sendButton:disabled {
+.sendButton:disabled,
+.sendButton[aria-disabled="true"] {
   background: var(--send-disabled-bg);
   cursor: not-allowed;
   opacity: 0.56;

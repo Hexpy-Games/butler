@@ -107,6 +107,10 @@ export interface AppModelSummary {
   credential_id?: string;
   credential_label?: string;
   credential_masked_value?: string;
+  /** Catalog image capability; absent means unknown. */
+  image_input_support?: "supported" | "unsupported" | "unknown";
+  image_accepted_mime_types?: string[];
+  image_max_inline_bytes?: number;
 }
 
 export type ProviderAuthMethod = "api_key" | "codex_oauth";

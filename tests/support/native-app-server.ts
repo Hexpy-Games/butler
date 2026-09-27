@@ -5,7 +5,7 @@
 // local release build. Each handle owns a temporary installation copy, BUTLER_DATA,
 // HOME and CODEX_HOME, a private loopback port, and a stub OpenAI-compatible
 // "Custom" model endpoint, so no real provider or live Butler state is touched.
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { createServer as createNetServer } from "node:net";
@@ -34,6 +34,132 @@ export type NativeAppServerHandle = {
 };
 
 const repositoryRoot = resolve(import.meta.dir, "../..");
+
+// ---------------------------------------------------------------------------
+// Process tracking: a spawned gateway must never outlive its owner.
+//
+// Each tracked child is spawned detached, so it leads its own process group and
+// anything it forks is signalled with it; signals target only that exact PID's
+// group (never a name pattern). Cleanup runs on `stop()`, on normal exit, on
+// SIGINT/SIGTERM, after an uncaught exception, and in bun:test teardown.
+// ---------------------------------------------------------------------------
+
+export type TrackedProcess = {
+  child: ChildProcess;
+  pid: number;
+  /** SIGTERM the group, SIGKILL after the grace period, wait for exit, remove cleanup paths. */
+  stop(graceMs?: number): Promise<void>;
+};
+
+type TrackedEntry = { child: ChildProcess; pid: number; cleanupPaths: string[]; stopping?: Promise<void> };
+
+const tracked = new Map<number, TrackedEntry>();
+let exitHooksInstalled = false;
+
+function hasExited(child: ChildProcess): boolean {
+  return child.exitCode !== null || child.signalCode !== null;
+}
+
+function signalGroup(entry: TrackedEntry, signal: NodeJS.Signals): void {
+  try {
+    process.kill(-entry.pid, signal);
+  } catch {
+    // ESRCH: the group is already gone.
+  }
+}
+
+async function waitForExit(child: ChildProcess, timeoutMs: number): Promise<boolean> {
+  if (hasExited(child)) return true;
+  return await new Promise<boolean>((done) => {
+    const timer = setTimeout(() => done(hasExited(child)), timeoutMs);
+    child.once("exit", () => { clearTimeout(timer); done(true); });
+  });
+}
+
+function removeCleanupPaths(entry: TrackedEntry): void {
+  for (const path of entry.cleanupPaths) rmSync(path, { recursive: true, force: true });
+}
+
+async function stopTracked(entry: TrackedEntry, graceMs = 15_000): Promise<void> {
+  entry.stopping ??= (async () => {
+    if (!hasExited(entry.child)) {
+      signalGroup(entry, "SIGTERM");
+      if (!(await waitForExit(entry.child, graceMs))) {
+        signalGroup(entry, "SIGKILL");
+        await waitForExit(entry.child, 5_000);
+      }
+    }
+    // Anything the leader forked and left behind in its group.
+    signalGroup(entry, "SIGKILL");
+    removeCleanupPaths(entry);
+    tracked.delete(entry.pid);
+  })();
+  await entry.stopping;
+}
+
+/** Synchronous last resort for `exit`: no waiting is possible there. */
+function killAllTrackedSync(): void {
+  for (const entry of tracked.values()) {
+    signalGroup(entry, "SIGKILL");
+    removeCleanupPaths(entry);
+  }
+  tracked.clear();
+}
+
+export async function stopAllTrackedProcesses(graceMs?: number): Promise<void> {
+  await Promise.all([...tracked.values()].map((entry) => stopTracked(entry, graceMs)));
+}
+
+export function liveTrackedProcessIds(): number[] {
+  return [...tracked.keys()];
+}
+
+function installExitHooks(): void {
+  if (exitHooksInstalled) return;
+  exitHooksInstalled = true;
+  process.on("exit", killAllTrackedSync);
+  // Node emits this before crashing; Bun skips it but still emits `exit`.
+  process.on("uncaughtExceptionMonitor", killAllTrackedSync);
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    const onSignal = () => {
+      void stopAllTrackedProcesses(3_000).finally(() => {
+        process.off(signal, onSignal);
+        // Keep the default outcome (terminate by this signal) unless the owner handles it.
+        if (process.listenerCount(signal) === 0) process.kill(process.pid, signal);
+      });
+    };
+    process.on(signal, onSignal);
+  }
+}
+
+export function spawnTrackedProcess(
+  command: string,
+  args: string[],
+  options: Omit<SpawnOptions, "detached"> & { cleanupPaths?: string[] } = {},
+): TrackedProcess {
+  installExitHooks();
+  const { cleanupPaths = [], ...spawnOptions } = options;
+  const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"], ...spawnOptions, detached: true });
+  if (child.pid === undefined) {
+    for (const path of cleanupPaths) rmSync(path, { recursive: true, force: true });
+    throw new Error(`Failed to spawn ${command}`);
+  }
+  const entry: TrackedEntry = { child, pid: child.pid, cleanupPaths };
+  tracked.set(entry.pid, entry);
+  child.once("exit", () => {
+    // A child that exits on its own still leaves its temp dirs until stop/exit.
+    if (!entry.stopping) signalGroup(entry, "SIGKILL");
+  });
+  return { child, pid: entry.pid, stop: (graceMs) => stopTracked(entry, graceMs) };
+}
+
+// Test-runner teardown: inside `bun test`, stop whatever a file left running.
+try {
+  const { afterAll } = await import("bun:test");
+  afterAll(() => stopAllTrackedProcesses());
+} catch {
+  // Not running under the bun test runner (smoke scripts): exit hooks cover it.
+}
 
 export function nativeAgentExecutable(): string {
   const configured = process.env.BUTLER_NATIVE_AGENT_EXECUTABLE?.trim();
@@ -137,12 +263,12 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
   }
 
   const port = await freePort();
-  const child: ChildProcess = spawn(
+  const gateway = spawnTrackedProcess(
     join(installation, "bin/butler-agent"),
     ["--installation-root", installation, "--resource-root", resources],
     {
       cwd: butlerData,
-      stdio: ["ignore", "pipe", "pipe"],
+      cleanupPaths: [scratch],
       env: {
         PATH: process.env.PATH ?? "/usr/bin:/bin",
         HOME: home,
@@ -155,19 +281,27 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
       },
     },
   );
+  const child = gateway.child;
+  const stop = async (): Promise<void> => {
+    await gateway.stop();
+    await new Promise<void>((done) => stub.server.close(() => done()));
+  };
   let output = "";
   child.stdout?.on("data", (chunk) => { output += String(chunk); });
   child.stderr?.on("data", (chunk) => { output += String(chunk); });
   const url = `http://127.0.0.1:${port}/`;
   const deadline = Date.now() + (options.readyTimeoutMs ?? 60_000);
   for (;;) {
-    if (child.exitCode !== null) throw new Error(`Native gateway exited (${child.exitCode}):\n${output.slice(-4000)}`);
+    if (child.exitCode !== null) {
+      await stop();
+      throw new Error(`Native gateway exited (${child.exitCode}):\n${output.slice(-4000)}`);
+    }
     try {
       const response = await fetch(`${url}health`);
       if (response.ok) break;
     } catch { /* not listening yet */ }
     if (Date.now() > deadline) {
-      child.kill("SIGKILL");
+      await stop();
       throw new Error(`Native gateway did not become ready on ${url}:\n${output.slice(-4000)}`);
     }
     await new Promise((done) => setTimeout(done, 200));
@@ -188,16 +322,6 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
       const parsed = text ? JSON.parse(text) : null;
       return (parsed && typeof parsed === "object" && "data" in parsed ? parsed.data : parsed) as T;
     },
-    async stop(): Promise<void> {
-      if (child.exitCode === null) {
-        const exited = new Promise<void>((done) => child.once("exit", () => done()));
-        child.kill("SIGTERM");
-        const timer = setTimeout(() => child.kill("SIGKILL"), 15_000);
-        await exited;
-        clearTimeout(timer);
-      }
-      await new Promise<void>((done) => stub.server.close(() => done()));
-      rmSync(scratch, { recursive: true, force: true });
-    },
+    stop,
   };
 }

@@ -2,6 +2,7 @@ import type { DsPrivateStyleProps, DsBaseProps } from "../../lib/dsProps";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import type { PermissionTone } from "../../lib/permissionTone";
+import { Tooltip } from "../../components/Tooltip";
 import styles from "./OptionMenu.module.css";
 
 export interface OptionMenuProps extends DsPrivateStyleProps {
@@ -65,6 +66,11 @@ export interface OptionMenuItemProps extends DsBaseProps<ButtonHTMLAttributes<HT
   tone?: "default" | "accent" | "warning" | "muted";
   /** Access-mode colors for the label and icon (overrides `tone`'s color). */
   permissionTone?: PermissionTone;
+  /**
+   * Disables the item and names why in a short tooltip (a few words, no
+   * explanation). The item stays hoverable and focusable so the tooltip opens.
+   */
+  disabledReason?: string;
 }
 
 export function OptionMenuItem({
@@ -75,11 +81,13 @@ export function OptionMenuItem({
   selected = false,
   tone = "default",
   permissionTone,
+  disabledReason,
   type = "button",
   className,
+  onClick,
   ...props
 }: OptionMenuItemProps) {
-  return (
+  const item = (
     <button
       aria-current={selected ? "true" : undefined}
       className={cn(styles.item, className)}
@@ -91,7 +99,10 @@ export function OptionMenuItem({
       data-tone={tone}
       data-permission-tone={permissionTone}
       data-slot="option-menu-item"
+      data-disabled={disabledReason ? "true" : undefined}
+      aria-disabled={disabledReason ? "true" : undefined}
       type={type}
+      onClick={disabledReason ? (event) => event.preventDefault() : onClick}
       {...props}
     >
       {icon ? (
@@ -114,4 +125,5 @@ export function OptionMenuItem({
       </span>
     </button>
   );
+  return disabledReason ? <Tooltip label={disabledReason}>{item}</Tooltip> : item;
 }

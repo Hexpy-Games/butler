@@ -47,7 +47,7 @@ export function ComposerEditorPlugin() {
           if (JSON.stringify(content) !== JSON.stringify(existing)) state.setContentParts(content);
         });
       }),
-      registerComposerClipboard(editor, knownSession),
+      registerComposerClipboard(editor, knownSession, (files) => useComposerStore.getState().addFiles(files)),
       editor.registerCommand(DRAGOVER_COMMAND, event => {
         if (!event.dataTransfer?.types.includes(SESSION_REFERENCE_MIME)) return false;
         event.preventDefault(); event.dataTransfer.dropEffect = "copy"; return true;
