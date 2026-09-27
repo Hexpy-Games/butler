@@ -109,8 +109,9 @@ pub use execution_controls::{
 pub use guided_budget::{GuidedContinuationBudgetFactory, TurnContinuationBudgetPort};
 pub use guided_turn::{
     GuidedAuthorityDecision, GuidedCatalogRead, GuidedCatalogSnapshot, GuidedPhase,
-    GuidedPhaseInput, GuidedPhaseSelection, GuidedPreparationError, GuidedWork, SurfaceMode,
-    guided_authority_loop_decision, load_guided_turn_work, select_phase, work_scope_for_turn,
+    GuidedPhaseInput, GuidedPhaseSelection, GuidedPreparationError, GuidedWork, LedgerEffects,
+    SurfaceMode, guided_authority_loop_decision, load_guided_turn_work, select_phase,
+    work_scope_for_turn,
 };
 pub use model_route::{
     ContextSizing, ContextSizingRequest, GuidedSourceRevision, ModelRequestAdmissionCode,

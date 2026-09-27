@@ -3,6 +3,20 @@ use rusqlite::{params, params_from_iter, types::Value};
 use super::{PublicMemoryScope, PublicMemorySnapshot};
 use crate::conversation::{ConversationError, ConversationMessageWithParts, ConversationResult};
 
+/// Whether a session page includes archived sessions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Archived {
+    Include,
+    Exclude,
+}
+
+/// Whether previews include internal (non user/public-assistant) messages.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MessageOrigins {
+    PublicOnly,
+    IncludeInternal,
+}
+
 /// A session as public memory lists it.
 #[derive(Clone, Debug)]
 pub struct PublicSessionRow {
@@ -22,7 +36,7 @@ impl PublicMemorySnapshot {
     pub fn session_page(
         &self,
         scope: &PublicMemoryScope,
-        include_archived: bool,
+        archived: Archived,
         time: Option<(&str, &str)>,
         after: Option<(&str, &str)>,
         limit: usize,
@@ -54,7 +68,7 @@ impl PublicMemorySnapshot {
             "selected" => append_in(&mut sql, "s.project_id", &scope.project_ids, &mut values),
             _ => {}
         }
-        if !include_archived {
+        if archived == Archived::Exclude {
             sql.push_str(" AND s.status!='archived'");
         }
         if let Some((from, to)) = time {
@@ -100,7 +114,7 @@ impl PublicMemorySnapshot {
     pub fn preview_messages(
         &self,
         session_id: &str,
-        include_internal: bool,
+        messages: MessageOrigins,
         time: Option<(&str, &str)>,
         limit: usize,
     ) -> ConversationResult<Vec<ConversationMessageWithParts>> {
@@ -108,7 +122,7 @@ impl PublicMemorySnapshot {
             "SELECT m.id FROM conversation_messages m WHERE m.session_id=? AND m.visibility='model' AND m.status IN ('complete','compacted') AND m.role IN ('user','assistant')",
         );
         let mut values: Vec<Value> = vec![session_id.to_owned().into()];
-        if !include_internal {
+        if messages == MessageOrigins::PublicOnly {
             sql.push_str(" AND m.origin_kind IN ('user_input','assistant_public')");
         }
         if let Some((from, to)) = time {

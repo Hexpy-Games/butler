@@ -19,6 +19,13 @@ pub(crate) struct GuidedCatalogTool {
     pub(super) durable: bool,
 }
 
+/// Whether project ledger effects are enabled for the session.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LedgerEffects {
+    Enabled,
+    Disabled,
+}
+
 /// The guided tool catalog: tools, profiles and role restrictions.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -65,14 +72,11 @@ impl GuidedCatalogSnapshot {
         self.builtin_tools().find(|tool| tool.name == name)
     }
     /// Whether a native bridge tool is hidden from the surface.
-    pub fn hidden_native_bridge_tool(
-        &self,
-        name: &str,
-        enable_project_ledger_effects: bool,
-    ) -> bool {
+    pub fn hidden_native_bridge_tool(&self, name: &str, ledger_effects: LedgerEffects) -> bool {
         self.work_tracking.contains(name)
             || (self.project_mutations.contains(name)
-                && !(enable_project_ledger_effects && self.managed_ledger_effects.contains(name)))
+                && !(ledger_effects == LedgerEffects::Enabled
+                    && self.managed_ledger_effects.contains(name)))
     }
     /// Required profiles are checked against concrete Host executors at admission.
     pub fn profile_tool_names(&self, name: &str) -> Option<&[String]> {

@@ -109,7 +109,11 @@ fn run(snapshot: &PublicMemorySnapshot, args: &QueryArgs) -> CognitionResult<Val
                 &args.scope,
                 args.role,
                 args.time.as_ref().map(|(a, b)| (a.as_str(), b.as_str())),
-                args.latest,
+                if args.latest {
+                    butler_turn::conversation::PageOrder::Latest
+                } else {
+                    butler_turn::conversation::PageOrder::Oldest
+                },
                 last.as_ref().map(|(a, b)| (a.as_str(), b.as_str())),
                 PAGE,
             )
@@ -170,7 +174,11 @@ fn run(snapshot: &PublicMemorySnapshot, args: &QueryArgs) -> CognitionResult<Val
                         &args.scope,
                         args.role,
                         args.time.as_ref().map(|(a, b)| (a.as_str(), b.as_str())),
-                        args.latest,
+                        if args.latest {
+                            butler_turn::conversation::PageOrder::Latest
+                        } else {
+                            butler_turn::conversation::PageOrder::Oldest
+                        },
                         last.as_ref().map(|(a, b)| (a.as_str(), b.as_str())),
                         1,
                     )

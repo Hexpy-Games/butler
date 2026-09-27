@@ -208,14 +208,22 @@ pub(super) fn record_applied(
         Ok(None)
     }
 }
+/// Whether an effect error leaves the effect uncertain or failed.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum ErrorOutcome {
+    Uncertain,
+    Failed,
+}
+
 pub(super) fn record_error(
     db: &Connection,
     effect_id: &str,
     revision: i64,
     error: &EffectError,
-    failed: bool,
+    outcome: ErrorOutcome,
     clock: &dyn Fn() -> String,
 ) -> EffectResult<Option<EffectRecord>> {
+    let failed = outcome == ErrorOutcome::Failed;
     let status = if failed { "failed" } else { "uncertain" };
     let updated = db
         .execute(

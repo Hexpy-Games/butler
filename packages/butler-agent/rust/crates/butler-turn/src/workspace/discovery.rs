@@ -33,7 +33,7 @@ const EXCLUDED_DIRS: &[&str] = &[
 pub struct WorkspaceListInput {
     pub root: PathBuf,
     pub requested_root: String,
-    pub relative_only: bool,
+    pub path_form: super::PathForm,
     pub protected_roots: Vec<PathBuf>,
     pub include_globs: Vec<String>,
     pub exclude_globs: Vec<String>,
@@ -114,7 +114,7 @@ pub(super) fn list_blocking(input: &WorkspaceListInput) -> std::io::Result<Works
     let mut guard = resolve_workspace_path_guard(GuardInput {
         root: &input.root,
         requested: &input.requested_root,
-        relative_only: input.relative_only,
+        path_form: input.path_form,
         allow_directories: true,
         protected_roots: &input.protected_roots,
     })?;

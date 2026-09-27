@@ -10,7 +10,7 @@ use super::path_guard::{GuardInput, resolve_workspace_path_guard, safe_cursor_pa
 pub struct ReadFileInput {
     pub root: PathBuf,
     pub path: String,
-    pub relative_only: bool,
+    pub path_form: super::PathForm,
     pub protected_roots: Vec<PathBuf>,
     pub start_line: Option<usize>,
     pub limit_lines: Option<usize>,
@@ -135,12 +135,12 @@ fn admitted_file(input: &ReadFileInput) -> std::io::Result<Result<PathBuf, Value
     let guard = resolve_workspace_path_guard(GuardInput {
         root: &input.root,
         requested: &input.path,
-        relative_only: input.relative_only,
+        path_form: input.path_form,
         allow_directories: false,
         protected_roots: &input.protected_roots,
     })?;
     let Some((_, file)) = guard.accepted() else {
-        let safe = if input.relative_only {
+        let safe = if input.path_form == super::PathForm::RelativeOnly {
             guard.safe_path().unwrap_or_else(|| ".".into())
         } else {
             input.path.clone()

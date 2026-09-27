@@ -88,7 +88,11 @@ pub(super) async fn execute(
         .list_files(WorkspaceListInput {
             root: PathBuf::from(&workspace_root),
             requested_root: root,
-            relative_only: input.allowed_tools_and_effects.is_some(),
+            path_form: if input.allowed_tools_and_effects.is_some() {
+                butler_turn::workspace::PathForm::RelativeOnly
+            } else {
+                butler_turn::workspace::PathForm::RelativeOrAbsolute
+            },
             protected_roots: input.protected_ledger_roots.to_vec(),
             include_globs: include.clone(),
             exclude_globs: exclude.clone(),

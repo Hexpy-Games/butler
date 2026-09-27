@@ -245,8 +245,14 @@ fn recovery_candidate(turn: &CanonicalTurnInventory) -> CandidateResult {
     let (Some(user), Some(assistant)) = (user, assistant) else {
         return CandidateResult::Incomplete;
     };
-    let user_text = compact(&text_for_message(user, false), 280);
-    let assistant_text = compact(&text_for_message(assistant, false), 360);
+    let user_text = compact(
+        &text_for_message(user, butler_turn::conversation::ToolParts::Exclude),
+        280,
+    );
+    let assistant_text = compact(
+        &text_for_message(assistant, butler_turn::conversation::ToolParts::Exclude),
+        360,
+    );
     if user_text.is_empty() || assistant_text.is_empty() {
         return CandidateResult::Incomplete;
     }

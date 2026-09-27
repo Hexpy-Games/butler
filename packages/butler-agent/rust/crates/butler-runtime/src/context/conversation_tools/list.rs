@@ -10,7 +10,8 @@ use crate::context::ContextCode;
 use args::{ListCursor, encode_cursor};
 use butler_core::json;
 use butler_turn::conversation::{
-    CanonicalMemoryReadBinding, PublicMemorySnapshot, decode_message_scalars,
+    Archived, CanonicalMemoryReadBinding, MessageOrigins, PublicMemorySnapshot,
+    decode_message_scalars,
 };
 
 pub(super) fn run(
@@ -85,7 +86,17 @@ fn read(
         .as_ref()
         .map(|cursor| (cursor.last_at.as_str(), cursor.session_id.as_str()));
     let rows = snapshot
-        .session_page(&parsed.scope, parsed.include_archived, time, after, 1001)
+        .session_page(
+            &parsed.scope,
+            if parsed.include_archived {
+                Archived::Include
+            } else {
+                Archived::Exclude
+            },
+            time,
+            after,
+            1001,
+        )
         .map_err(store_error)?;
     let ids = rows.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
     let (labels, diagnostics) = catalog::read(data_root, &ids);
@@ -108,7 +119,11 @@ fn read(
         let previews = snapshot
             .preview_messages(
                 &row.id,
-                parsed.scope.include_internal,
+                if parsed.scope.include_internal {
+                    MessageOrigins::IncludeInternal
+                } else {
+                    MessageOrigins::PublicOnly
+                },
                 time,
                 parsed.preview_messages,
             )

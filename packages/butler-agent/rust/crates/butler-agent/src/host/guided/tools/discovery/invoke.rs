@@ -39,7 +39,14 @@ pub(super) async fn run(
     };
     let catalog = owner.catalog.snapshot();
     let Some(tool) = catalog.builtin_tool(name).filter(|_| {
-        !catalog.hidden_native_bridge_tool(name, owner.binding.enable_project_ledger_effects)
+        !catalog.hidden_native_bridge_tool(
+            name,
+            if owner.binding.enable_project_ledger_effects {
+                butler_turn::btcc::LedgerEffects::Enabled
+            } else {
+                butler_turn::btcc::LedgerEffects::Disabled
+            },
+        )
     }) else {
         let mut error = bridge_error(
             "unknown_tool_catalog_id",

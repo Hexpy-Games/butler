@@ -126,8 +126,8 @@ pub async fn guard_effect_file(
         let guarded = resolve_workspace_mutation_guard(MutationGuardInput {
             root: &scope.workspace,
             requested: &path,
-            relative_only: false,
-            allow_missing_leaf: true,
+            path_form: super::path_guard::PathForm::RelativeOrAbsolute,
+            leaf: super::path_guard::Leaf::MayBeMissing,
             installation_root: scope.installation_root.as_deref(),
             protected_roots: &protected,
         })

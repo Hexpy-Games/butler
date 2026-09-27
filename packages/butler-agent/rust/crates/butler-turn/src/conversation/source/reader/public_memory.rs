@@ -3,7 +3,7 @@
 use std::path::Path;
 
 mod sessions;
-pub use sessions::PublicSessionRow;
+pub use sessions::{Archived, MessageOrigins, PublicSessionRow};
 
 use rusqlite::{OptionalExtension, params_from_iter, types::Value};
 
@@ -32,6 +32,13 @@ pub struct PublicMemoryScope {
     pub project_filter: String,
     pub project_ids: Vec<String>,
     pub include_internal: bool,
+}
+
+/// Whether a message page starts from the oldest or the latest message.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PageOrder {
+    Oldest,
+    Latest,
 }
 
 /// A consistent read transaction over public conversation memory.
@@ -277,7 +284,7 @@ impl PublicMemorySnapshot {
         scope: &PublicMemoryScope,
         role: Option<&str>,
         time: Option<(&str, &str)>,
-        latest: bool,
+        order: PageOrder,
         after: Option<(&str, &str)>,
         limit: usize,
     ) -> ConversationResult<Vec<ConversationMessageWithParts>> {
@@ -321,7 +328,7 @@ impl PublicMemorySnapshot {
             values.push(to.to_owned().into());
         }
         if let Some((at, id)) = after {
-            sql.push_str(if latest {
+            sql.push_str(if order == PageOrder::Latest {
                 " AND (m.created_at<? OR (m.created_at=? AND m.id<?))"
             } else {
                 " AND (m.created_at>? OR (m.created_at=? AND m.id>?))"
@@ -332,7 +339,7 @@ impl PublicMemorySnapshot {
                 id.to_owned().into(),
             ]);
         }
-        sql.push_str(if latest {
+        sql.push_str(if order == PageOrder::Latest {
             " ORDER BY m.created_at DESC,m.id DESC LIMIT ?"
         } else {
             " ORDER BY m.created_at ASC,m.id ASC LIMIT ?"

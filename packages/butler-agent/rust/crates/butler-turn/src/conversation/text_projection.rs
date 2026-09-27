@@ -6,13 +6,20 @@ use butler_core::json::stringify;
 
 use super::{ConversationMessageWithParts, ConversationPart, ConversationPartKind};
 
+/// Whether a message's text includes its tool call and result parts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ToolParts {
+    Include,
+    Exclude,
+}
+
 /// A message's text, optionally with its tool parts.
-pub fn text_for_message(message: &ConversationMessageWithParts, include_tools: bool) -> String {
+pub fn text_for_message(message: &ConversationMessageWithParts, tools: ToolParts) -> String {
     message
         .parts
         .iter()
         .filter(|part| {
-            include_tools
+            tools == ToolParts::Include
                 || !matches!(
                     part.kind,
                     ConversationPartKind::ToolCall | ConversationPartKind::ToolResult

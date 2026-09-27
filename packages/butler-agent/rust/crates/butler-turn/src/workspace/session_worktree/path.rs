@@ -18,12 +18,19 @@ pub(super) fn normalize_ref(value: &str) -> String {
     trim_js_whitespace(value).to_owned()
 }
 
-pub(super) fn safe_ref(value: &str, allow_head: bool) -> bool {
+/// Whether a git ref may be `HEAD`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Head {
+    Allowed,
+    Rejected,
+}
+
+pub(super) fn safe_ref(value: &str, head: Head) -> bool {
     !value.is_empty()
         && !value.starts_with('-')
         && !value.starts_with("refs/")
         && !value.contains(['\0', '\r', '\n'])
-        && (allow_head || value != "HEAD")
+        && (head == Head::Allowed || value != "HEAD")
         && !["..", "@{", "~", "^"]
             .into_iter()
             .any(|part| value.contains(part))
@@ -77,7 +84,7 @@ pub(super) fn read_marker(
         || object.get("ownership").and_then(Value::as_str) != Some("session")
         || !Path::new(anchor).is_absolute()
         || normalize_ref(branch).is_empty()
-        || !safe_ref(&normalize_ref(branch), false)
+        || !safe_ref(&normalize_ref(branch), Head::Rejected)
         || normalize_ref(bound_at).is_empty()
     {
         return Err(());

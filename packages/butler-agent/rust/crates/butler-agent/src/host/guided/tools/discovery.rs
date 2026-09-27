@@ -134,7 +134,11 @@ async fn search(
             .filter(|tool| {
                 !catalog.hidden_native_bridge_tool(
                     tool.name,
-                    owner.binding.enable_project_ledger_effects,
+                    if owner.binding.enable_project_ledger_effects {
+                        butler_turn::btcc::LedgerEffects::Enabled
+                    } else {
+                        butler_turn::btcc::LedgerEffects::Disabled
+                    },
                 )
             })
             .map(|tool| projection(owner, tool)),
@@ -197,7 +201,14 @@ async fn describe(
             continue;
         };
         let catalog = owner.catalog.snapshot();
-        if catalog.hidden_native_bridge_tool(name, owner.binding.enable_project_ledger_effects) {
+        if catalog.hidden_native_bridge_tool(
+            name,
+            if owner.binding.enable_project_ledger_effects {
+                butler_turn::btcc::LedgerEffects::Enabled
+            } else {
+                butler_turn::btcc::LedgerEffects::Disabled
+            },
+        ) {
             missing.push(json!({"id":id,"error":"unknown_tool_catalog_id"}));
             continue;
         }

@@ -46,7 +46,12 @@ pub(super) fn normalize(value: &Value) -> StorageResult<Value> {
             v.contains_key("deliveredThroughOrdinal") || v.contains_key("boundedItemKeys")
         });
     if let Some(v) = source.get("assistantMessage") {
-        out.insert("assistantMessage".into(), assistant(v, !bounded)?);
+        let provider_data = if bounded {
+            ProviderData::Drop
+        } else {
+            ProviderData::Retain
+        };
+        out.insert("assistantMessage".into(), assistant(v, provider_data)?);
     }
     if let Some(v) = source.get("continuation") {
         out.insert(
@@ -116,7 +121,14 @@ fn tool_call(v: &Value) -> StorageResult<Value> {
     }
     Ok(Value::Object(n))
 }
-fn assistant(v: &Value, retain: bool) -> StorageResult<Value> {
+/// Whether the persisted assistant message keeps its provider data.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ProviderData {
+    Retain,
+    Drop,
+}
+
+fn assistant(v: &Value, provider_data: ProviderData) -> StorageResult<Value> {
     let o = v.as_object().ok_or_else(|| {
         error(
             StorageCode::ModelResponseInvalid,
@@ -155,7 +167,9 @@ fn assistant(v: &Value, retain: bool) -> StorageResult<Value> {
             Value::Array(calls.iter().map(tool_call).collect::<StorageResult<_>>()?),
         );
     }
-    if retain && let Some(p) = o.get("providerData") {
+    if provider_data == ProviderData::Retain
+        && let Some(p) = o.get("providerData")
+    {
         n.insert("providerData".into(), json_clone(p)?);
     }
     Ok(Value::Object(n))

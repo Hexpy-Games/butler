@@ -103,7 +103,11 @@ pub(super) async fn execute(
                 .guard(
                     PathBuf::from(supplied),
                     request.path.clone(),
-                    input.allowed_tools_and_effects.is_some(),
+                    if input.allowed_tools_and_effects.is_some() {
+                        butler_turn::workspace::PathForm::RelativeOnly
+                    } else {
+                        butler_turn::workspace::PathForm::RelativeOrAbsolute
+                    },
                     input.protected_ledger_roots.to_vec(),
                 )
                 .await
@@ -142,7 +146,11 @@ pub(super) async fn execute(
             .read_one(ReadFileInput {
                 root: root.clone(),
                 path: request.path.clone(),
-                relative_only: input.allowed_tools_and_effects.is_some(),
+                path_form: if input.allowed_tools_and_effects.is_some() {
+                    butler_turn::workspace::PathForm::RelativeOnly
+                } else {
+                    butler_turn::workspace::PathForm::RelativeOrAbsolute
+                },
                 protected_roots: input.protected_ledger_roots.to_vec(),
                 start_line: request.start_line,
                 limit_lines: request.limit_lines,

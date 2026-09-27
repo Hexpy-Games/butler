@@ -174,7 +174,10 @@ impl AppBranchConversationReader for AppBranchConversations {
                 };
                 format!(
                     "{role}: {}",
-                    butler_runtime::context::text_for_message(message, false)
+                    butler_runtime::context::text_for_message(
+                        message,
+                        butler_turn::conversation::ToolParts::Exclude,
+                    )
                 )
             }));
             Ok(Some(sections.join("\n\n")))

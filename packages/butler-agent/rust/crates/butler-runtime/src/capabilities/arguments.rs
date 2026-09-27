@@ -56,7 +56,11 @@ pub(super) fn context(input: &CapabilityInvocation<'_>, root: PathBuf) -> Mutati
     let installation_root = input.installation_root.map(Path::to_path_buf);
     MutationContext {
         root,
-        relative_only: input.allowed_tools_and_effects.is_some(),
+        path_form: if input.allowed_tools_and_effects.is_some() {
+            butler_turn::workspace::PathForm::RelativeOnly
+        } else {
+            butler_turn::workspace::PathForm::RelativeOrAbsolute
+        },
         installation_root,
         protected_roots: input.protected_ledger_roots.to_vec(),
     }

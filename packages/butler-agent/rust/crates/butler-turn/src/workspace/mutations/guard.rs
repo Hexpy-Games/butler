@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use super::super::path_guard::{MutationGuardInput, resolve_workspace_mutation_guard};
+use super::super::path_guard::{Leaf, MutationGuardInput, resolve_workspace_mutation_guard};
 use super::contracts::{
     BatchResult, EditFailure, EditFailureData, EditMutation, GuardedCommand, GuardedEdit,
     GuardedPath, MutationCommand, MutationContext, MutationOutcome,
@@ -13,7 +13,7 @@ pub(super) fn prepare(
 ) -> std::io::Result<Result<GuardedCommand, MutationOutcome>> {
     match command {
         MutationCommand::Write(write) => {
-            let guarded = path(&write.context, &write.path, true)?;
+            let guarded = path(&write.context, &write.path, Leaf::MayBeMissing)?;
             Ok(match guarded {
                 Ok(path) => Ok(GuardedCommand::Write(write, path)),
                 Err(guard) => Err(MutationOutcome::Write(Err(failure::guard(guard)))),
@@ -27,7 +27,7 @@ pub(super) fn prepare(
                     "invalid_arguments",
                 )))));
             };
-            let guarded = path(&edit.context, &first.path, false)?;
+            let guarded = path(&edit.context, &first.path, Leaf::MustExist)?;
             Ok(match guarded {
                 Ok(path) => {
                     let input = edit.edits.remove(0);
@@ -68,7 +68,7 @@ fn batch(mut edit: EditMutation) -> std::io::Result<Result<GuardedCommand, Mutat
     let mut targets: HashMap<PathBuf, String> = HashMap::new();
     let requested = std::mem::take(&mut edit.edits);
     for item in requested {
-        match path(&edit.context, &item.path, false)? {
+        match path(&edit.context, &item.path, Leaf::MustExist)? {
             Ok(mut path) => {
                 let safe_path = path.public.clone();
                 let key = target_key(&path.real);
@@ -118,13 +118,13 @@ fn batch(mut edit: EditMutation) -> std::io::Result<Result<GuardedCommand, Mutat
 fn path(
     context: &MutationContext,
     requested: &str,
-    allow_missing_leaf: bool,
+    leaf: Leaf,
 ) -> std::io::Result<Result<GuardedPath, super::super::path_guard::GuardResult>> {
     let guard = resolve_workspace_mutation_guard(MutationGuardInput {
         root: &context.root,
         requested,
-        relative_only: context.relative_only,
-        allow_missing_leaf,
+        path_form: context.path_form,
+        leaf,
         installation_root: context.installation_root.as_deref(),
         protected_roots: &context.protected_roots,
     })?;

@@ -29,11 +29,11 @@ pub use historical_recovery::{
     read_historical_transcript_rows,
 };
 pub use source::{
-    CanonicalMemoryReadBinding, ConversationScalar, ConversationSourceReader, PublicMemoryScope,
-    PublicMemorySnapshot, PublicSessionRow, RecallOutcomeRow, decode_message_scalars,
-    scalar_for_part,
+    Archived, CanonicalMemoryReadBinding, ConversationScalar, ConversationSourceReader,
+    MessageOrigins, PageOrder, PublicMemoryScope, PublicMemorySnapshot, PublicSessionRow,
+    RecallOutcomeRow, decode_message_scalars, scalar_for_part,
 };
-pub use text_projection::{text_for_message, text_for_part};
+pub use text_projection::{ToolParts, text_for_message, text_for_part};
 pub use types::*;
 
 use std::cmp::Ordering;

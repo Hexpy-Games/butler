@@ -4,7 +4,7 @@ use unicode_normalization::UnicodeNormalization;
 use crate::context::{ContextError, ContextResult};
 use butler_turn::conversation::{
     AgentConversationStore, ConversationMessageWithParts, ConversationOriginKind, ReadAroundInput,
-    conversation_session_id_for_durable_session, text_for_message,
+    ToolParts, conversation_session_id_for_durable_session, text_for_message,
 };
 
 use super::parts::{to_context_message, to_context_summary};
@@ -195,7 +195,7 @@ async fn select_messages(
         .read_context_query_selected(
             session.to_owned(),
             move |message| {
-                let haystack = normalize(&text_for_message(message, false));
+                let haystack = normalize(&text_for_message(message, ToolParts::Exclude));
                 terms.iter().any(|term| haystack.contains(term))
             },
             move |all| {

@@ -103,8 +103,7 @@ impl OperationResultReplayRuntime {
             })
             .await
             .map_err(storage)?;
-        reference(record, stored, self.selection.exact_read_capability)
-            .map_err(OperationResultError::Contract)
+        reference(record, stored, self.selection).map_err(OperationResultError::Contract)
     }
 
     fn replacement_saves(
