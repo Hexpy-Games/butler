@@ -36,8 +36,10 @@ test("thinking mark stops background work without waking sibling marks", () => {
 
 test("thinking mark stops its frame loop once settled", () => {
   const tick = source.slice(source.indexOf("const tick ="), source.indexOf("const startLoop ="));
-  expect(tick).toContain("settled()");
-  expect(tick).toContain("animationFrame = 0;");
+  expect(tick).toContain("return !settled();");
+  // One shared requestAnimationFrame for every mark; it stops when no mark moves.
+  expect(source.match(/requestAnimationFrame\(/gu)?.length).toBe(2);
+  expect(source).toContain("if (moving.size > 0) sharedFrame = window.requestAnimationFrame(runFrame);");
   expect(source).toContain("Math.min(window.devicePixelRatio || 1, 2)");
 });
 
@@ -65,7 +67,7 @@ test("assistant status animates idle and active in place with one mark", () => {
 test("thinking mark pauses offscreen, when hidden and under reduced motion", () => {
   expect(source).toContain("new IntersectionObserver(");
   const tick = source.slice(source.indexOf("const tick ="), source.indexOf("const startLoop ="));
-  expect(tick).toContain("if (paused()) return;");
+  expect(tick).toContain("if (paused()) return false;");
   expect(source).toContain('const paused = () => stopped || !inView || document.visibilityState === "hidden";');
   // Reduced motion never runs the frame loop: the still logo is drawn once.
   expect(source).toContain("const settled = () => inputs.isReduced() || (!inputs.isWorking() && sim.idle);");
