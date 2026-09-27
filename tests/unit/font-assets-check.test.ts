@@ -60,3 +60,10 @@ test("missing slices or license notices fail", () => {
   expect(inspectFontAssets(fixture({ notices: null })).ok).toBe(false);
   expect(inspectFontAssets(fixture({ notices: "Pretendard only" })).ok).toBe(false);
 });
+
+test("root-absolute url()s resolve against the build base", () => {
+  const dist = fixture();
+  writeFileSync(join(dist, "assets", "sub-e1.css"), "@font-face{src:url(/ds/assets/IBMPlexMono-Regular-Latin1-b1.woff2)}");
+  expect(inspectFontAssets(dist, "/ds/").ok).toBe(true);
+  expect(inspectFontAssets(dist, "/").missing).toEqual(["ds/assets/IBMPlexMono-Regular-Latin1-b1.woff2"]);
+});

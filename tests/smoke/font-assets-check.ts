@@ -18,7 +18,8 @@ export interface FontAssetsReport {
   notices: boolean;
 }
 
-export function inspectFontAssets(distDir: string): FontAssetsReport {
+/** `base` is the build's public base; root-absolute url()s resolve against it. */
+export function inspectFontAssets(distDir: string, base = "/"): FontAssetsReport {
   const assets = readdirSync(join(distDir, "assets"));
   const size = (name: string) => statSync(join(distDir, "assets", name)).size;
   const slices = assets.filter((name) => /^PretendardVariable\.subset\.\d+-[\w-]+\.woff2$/u.test(name));
@@ -33,7 +34,9 @@ export function inspectFontAssets(distDir: string): FontAssetsReport {
         external.push(ref);
         continue;
       }
-      const path = posix.normalize(posix.join("assets", ref));
+      const path = ref.startsWith("/")
+        ? (ref.startsWith(base) ? posix.normalize(ref.slice(base.length)) : ref)
+        : posix.normalize(posix.join("assets", ref));
       if (!existsSync(join(distDir, path))) missing.push(path);
     }
   }
@@ -60,7 +63,7 @@ if (import.meta.main) {
   if (!existsSync(join(distDir, "index.html"))) {
     throw new Error("UI dist is missing. Run `npm --prefix packages/butler-app/client/ui run build` first.");
   }
-  const report = inspectFontAssets(distDir);
+  const report = inspectFontAssets(distDir, process.env.DS_SITE_BASE ?? "/");
   console.log(JSON.stringify(report, null, 2));
   if (!report.ok) throw new Error("Bundled font assets are incomplete; see the report above.");
 }

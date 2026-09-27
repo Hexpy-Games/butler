@@ -1,75 +1,94 @@
-import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { createServer } from "node:net";
-import { join, resolve } from "node:path";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { join, normalize, resolve, sep } from "node:path";
 import { chromium, type Page } from "playwright";
 
-// Static DS site (dist-ds-site/, the GitHub Pages artifact) served by `vite preview`: Overview renders
-// at "/", query deep links (?page=components/Button, #anchors) open item pages, and the page never
-// requests anything outside its own origin (no gateway, no 127.0.0.1 API, no telemetry).
+// Static DS site smoke. Serves a ds-site build the way GitHub Pages does (real files, directory
+// index + trailing-slash redirect, 404.html with a 404 status) and checks, under the build's base:
+// Overview renders, query deep links (?page=components/Button, theme=dark) open item pages, sidebar
+// navigation stays under the base, path-style links (<base>components/Button) are redirected onto the
+// query form by the 404 helper, and the page never requests anything outside its own origin.
+//
+//   DS_SITE_BASE=/     (default) dist-ds-site/: a standalone site; its own 404.html + CNAME.
+//   DS_SITE_BASE=/ds/  dist-ds-site-ds/: mounted at /ds/ of a combined-site fixture whose single
+//                      404.html includes /ds/ds-404-redirect.js (the build emits no CNAME/404.html).
+// An explicit dist dir may be passed as the first argument.
 
 const uiRoot = resolve(process.cwd(), "packages", "butler-app", "client", "ui");
-const distDir = join(uiRoot, "dist-ds-site");
+const segments = (process.env.DS_SITE_BASE ?? "").split("/").filter(Boolean);
+const base = segments.length ? `/${segments.join("/")}/` : "/";
+const standalone = base === "/";
+const distDir = resolve(process.argv[2] ?? join(uiRoot, standalone ? "dist-ds-site" : `dist-ds-site-${segments.join("-")}`));
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      server.close(() => (typeof address === "object" && address ? resolvePort(address.port) : reject(new Error("no port"))));
-    });
-  });
+assert(existsSync(join(distDir, "index.html")), `missing ${distDir}/index.html; run build:ds-site (DS_SITE_BASE=${base}) first`);
+for (const file of ["LICENSE.txt", "third-party-licenses.txt", "ds-404-redirect.js"]) {
+  assert(existsSync(join(distDir, file)), `${distDir} is missing ${file}`);
+}
+for (const file of ["CNAME", "404.html"]) {
+  assert(existsSync(join(distDir, file)) === standalone,
+    standalone ? `${distDir} is missing ${file}` : `a sub-path build must not emit the host-owned ${file}`);
 }
 
-async function waitForServer(url: string, timeoutMs = 30_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      if ((await fetch(url)).ok) return;
-    } catch {
-      // not up yet
+// The combined site's own pages when the DS site is mounted under a sub-path.
+const combinedIndex = "<!doctype html><title>Combined site</title><p data-combined-home>home</p>";
+const combined404 = `<!doctype html><title>Not found</title><script src="${base}ds-404-redirect.js"></script><p data-combined-404>not found</p>`;
+
+function html(body: string, status = 200): Response {
+  return new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8" } });
+}
+
+function fileUnder(root: string, relativePath: string): string | null {
+  const full = normalize(join(root, relativePath));
+  if (full !== root && !full.startsWith(root + sep)) return null;
+  return existsSync(full) ? full : null;
+}
+
+/** GitHub Pages-like static hosting of distDir at `base`. */
+function serve(pathname: string): Response {
+  if (!standalone && pathname === "/") return html(combinedIndex);
+  if (pathname === base.slice(0, -1) && base !== "/") return Response.redirect(base, 301);
+  if (pathname.startsWith(base)) {
+    const relativePath = decodeURIComponent(pathname.slice(base.length));
+    const found = fileUnder(distDir, relativePath);
+    if (found && statSync(found).isDirectory()) {
+      if (!pathname.endsWith("/")) return Response.redirect(`${pathname}/`, 301);
+      const index = fileUnder(found, "index.html");
+      if (index) return new Response(Bun.file(index));
+    } else if (found) {
+      return new Response(Bun.file(found));
     }
-    await new Promise((done) => setTimeout(done, 200));
   }
-  throw new Error(`vite preview did not start at ${url}`);
+  return standalone ? html(readFileSync(join(distDir, "404.html"), "utf8"), 404) : html(combined404, 404);
+}
+
+const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: (request) => serve(new URL(request.url).pathname) });
+const origin = `http://127.0.0.1:${server.port}`;
+const siteUrl = `${origin}${base}`;
+
+function param(page: Page, name: string): string | null {
+  return new URL(page.url()).searchParams.get(name);
 }
 
 async function visit(page: Page, url: string, selector: string, label: string): Promise<void> {
   await page.goto(url, { waitUntil: "networkidle" });
   await page.locator(selector).first().waitFor({ state: "visible", timeout: 15_000 })
-    .catch(() => { throw new Error(`${label}: ${selector} did not render at ${url}`); });
+    .catch(() => { throw new Error(`${label}: ${selector} did not render at ${url} (now ${page.url()})`); });
 }
 
-assert(existsSync(join(distDir, "index.html")), `missing ${distDir}/index.html; run build:ds-site first`);
-for (const file of ["CNAME", "404.html", "LICENSE.txt", "third-party-licenses.txt"]) {
-  assert(existsSync(join(distDir, file)), `dist-ds-site is missing ${file}`);
+function assertUnderBase(page: Page, label: string): void {
+  const { pathname } = new URL(page.url());
+  assert(pathname === base || pathname === `${base}index.html`, `${label}: expected to stay at ${base}, got ${pathname}`);
 }
-
-const port = await freePort();
-const origin = `http://127.0.0.1:${port}`;
-// Spawn vite's own entry (not npx) so killing this child stops the server and nothing outlives the test.
-const viteBin = join(uiRoot, "node_modules", "vite", "bin", "vite.js");
-const preview = spawn(
-  "node",
-  [viteBin, "preview", "--config", "vite.ds-site.config.ts", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
-  { cwd: uiRoot, stdio: ["ignore", "pipe", "pipe"] },
-);
-let previewLog = "";
-preview.stdout?.on("data", (chunk) => { previewLog += chunk; });
-preview.stderr?.on("data", (chunk) => { previewLog += chunk; });
 
 const browser = await chromium.launch({ headless: true });
 try {
-  await waitForServer(`${origin}/`);
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const foreign: string[] = [];
   const errors: string[] = [];
-  // Anything outside the preview origin is blocked and recorded: the static site must be self-contained.
+  // Anything outside the served origin is blocked and recorded: the static site must be self-contained.
   await context.route("**/*", (route) => {
     const url = route.request().url();
     if (url.startsWith(`${origin}/`) || url.startsWith("data:") || url.startsWith("blob:")) return route.continue();
@@ -78,19 +97,53 @@ try {
   });
   const page = await context.newPage();
   page.on("pageerror", (error) => errors.push(error.message));
-  page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+  // A path-style link's document 404s by design (the helper then redirects); any failed subresource
+  // (asset, font, helper script) is a real error. Load failures are tracked here, not via the console.
+  page.on("response", (response) => {
+    if (response.status() >= 400 && response.request().resourceType() !== "document") {
+      errors.push(`${response.status()} ${response.url()}`);
+    }
+  });
+  page.on("console", (message) => {
+    if (message.type() === "error" && !message.text().startsWith("Failed to load resource")) errors.push(message.text());
+  });
 
-  await visit(page, `${origin}/`, "[data-ds-overview]", "root");
+  await visit(page, siteUrl, "[data-ds-overview]", "overview");
   assert((await page.title()).includes("Butler Design System"), "site title is missing");
+  assertUnderBase(page, "overview");
 
-  await visit(page, `${origin}/?page=components/Button`, '[data-ds-detail="Button"]', "item deep link");
+  await visit(page, `${siteUrl}?page=components/Button`, '[data-ds-detail="Button"]', "item deep link");
   const stories = await page.locator('[data-ds-detail="Button"] [data-ds-story]').count();
   assert(stories >= 2, `item deep link rendered ${stories} stories`);
+  assertUnderBase(page, "item deep link");
 
-  await visit(page, `${origin}/?page=foundations/color&theme=dark`, '[data-ds-foundations="color"]', "foundations deep link");
+  await visit(page, `${siteUrl}?page=foundations/color&theme=dark`, '[data-ds-foundations="color"]', "foundations deep link");
   assert(await page.evaluate(() => document.body.classList.contains("theme-dark")), "theme=dark deep link did not apply");
 
-  await visit(page, `${origin}/?page=patterns`, "[data-ds-patterns]", "patterns deep link");
+  await visit(page, `${siteUrl}?page=patterns`, "[data-ds-patterns]", "patterns deep link");
+
+  // In-app navigation rewrites only the query, so it stays under the base.
+  await visit(page, siteUrl, "[data-ds-overview]", "overview (nav)");
+  const blocksRow = page.locator('[data-ds-nav-item="blocks"]');
+  if (!(await blocksRow.isVisible())) await page.getByRole("button", { name: "Toggle navigation" }).click();
+  await blocksRow.click();
+  await page.locator('[data-ds-gallery="blocks"]').waitFor({ state: "visible" });
+  assert(param(page, "page") === "blocks", "sidebar navigation did not write the page param");
+  assertUnderBase(page, "sidebar navigation");
+
+  // Path-style links 404 on a static host; the helper maps them onto the query form.
+  await visit(page, `${siteUrl}components/Button?theme=dark`, '[data-ds-detail="Button"]', "path redirect");
+  assertUnderBase(page, "path redirect");
+  assert(param(page, "page") === "components/Button", `path redirect landed on ${page.url()}`);
+  assert(await page.evaluate(() => document.body.classList.contains("theme-dark")), "path redirect dropped the query");
+
+  if (!standalone) {
+    // The helper only acts on its own base: other paths of the combined site keep their 404 page.
+    await visit(page, `${origin}/help/missing`, "[data-combined-404]", "foreign 404");
+    assert(new URL(page.url()).pathname === "/help/missing", `foreign 404 was redirected to ${page.url()}`);
+    // A bare /ds (no trailing slash) still reaches the viewer.
+    await visit(page, `${origin}${base.slice(0, -1)}`, "[data-ds-overview]", "base without trailing slash");
+  }
 
   // Bundled typefaces load from the site itself (Typeface Contract).
   const fonts = await page.evaluate(async () => {
@@ -107,13 +160,12 @@ try {
 
   assert(foreign.length === 0, `static site requested foreign URLs:\n${foreign.join("\n")}`);
   assert(errors.length === 0, `static site logged errors:\n${errors.join("\n")}`);
-  console.log(`ds-site smoke passed: overview + 3 deep links, 0 foreign requests (${origin})`);
+  console.log(`ds-site smoke passed (base ${base}): overview, 3 deep links, sidebar nav, path redirect, 0 foreign requests`);
 } catch (error) {
-  if (previewLog) console.error(previewLog);
   console.error(error);
   process.exitCode = 1;
 } finally {
   await browser.close();
-  preview.kill();
+  server.stop(true);
 }
 process.exit();
