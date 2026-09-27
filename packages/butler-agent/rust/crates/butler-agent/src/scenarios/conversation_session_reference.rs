@@ -15,7 +15,7 @@ use butler_turn::conversation::ConversationOriginKind;
 use butler_turn::conversation::ConversationRole;
 use butler_turn::conversation::ConversationStoreConfig;
 
-use super::ConversationSessionReference;
+use crate::context::ConversationSessionReference;
 
 struct Clock;
 impl ConversationIdentityClock for Clock {

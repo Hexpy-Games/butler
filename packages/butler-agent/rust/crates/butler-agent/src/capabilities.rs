@@ -141,5 +141,7 @@ fn failure(error: &str, message: &str, recovery_hint: &str) -> Value {
         "evidence_capability_receipts": evidence::limitation(error) })
 }
 
+mod registered_write;
 #[cfg(test)]
 mod tests;
+pub(crate) use registered_write::{RegisteredWrite, RegisteredWriteContext};

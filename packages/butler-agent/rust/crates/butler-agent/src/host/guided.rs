@@ -12,7 +12,6 @@ pub(super) mod project_tools;
 pub(super) mod project_work_provider;
 pub(super) mod prompt;
 pub(super) mod registered_edit;
-pub(super) mod registered_write;
 pub(super) mod scope_selected_work;
 pub(super) mod steering;
 pub(super) mod tool_artifact;

@@ -18,8 +18,14 @@ use butler_models::models::ProviderPromptLifecycle;
 use butler_models::models::ProviderPromptPort;
 use butler_models::models::ProviderPromptRequest;
 use butler_models::models::ProviderPromptResult;
+use butler_models::models::{
+    ModelCatalog, ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
+    ModelProvider, PromptUsageMetricInput, PromptUsageMetricSink, ProviderClock,
+    ProviderObservation, ProviderObservationSink, provider_http_client,
+};
+use butler_turn::btcc::ModelRoundError;
 
-use super::super::WebAccess;
+use crate::web_access::WebAccess;
 
 struct Reply {
     status: u16,
@@ -122,7 +128,7 @@ async fn tavily_uses_exact_data_key_and_rereads_private_environment() {
             },
         ],
     );
-    let access = super::access(root.clone(), &format!("{base}/search"));
+    let access = crate::web_access::tests::access(root.clone(), &format!("{base}/search"));
     let session = access.session_for_turn(String::new());
     let first = session
         .web_search(&json!({"query":"first query"}), &CancellationToken::new())
@@ -180,7 +186,7 @@ async fn brave_provider_failure_falls_back_to_duckduckgo() {
             },
         ],
     );
-    let access = super::access(root.clone(), &format!("{base}/search"));
+    let access = crate::web_access::tests::access(root.clone(), &format!("{base}/search"));
     let result = access
         .session_for_turn(String::new())
         .web_search(&json!({"query":"fallback test"}), &CancellationToken::new())
@@ -223,17 +229,11 @@ async fn auto_uses_data_openai_key_without_process_environment() {
             body,
         }],
     );
-    let models = crate::host::ProcessModels::new(
-        root.clone(),
-        butler_models::models::ModelConfigurationEnvironment::default(),
-        Arc::new(butler_core::configuration::ConfigurationWrites::new()),
-        Arc::new(butler_core::locale::LocaleCollation::new("en-US").unwrap()),
-    )
-    .unwrap();
+    let (configuration, provider) = model_stack(root.clone());
     let access = WebAccess::new(
         root.clone(),
-        models.configuration.clone(),
-        models.provider.clone(),
+        configuration,
+        provider,
         Arc::new(crate::operations::WebSearchMetrics::new(root.clone())),
     )
     .unwrap();
@@ -256,6 +256,59 @@ async fn auto_uses_data_openai_key_without_process_environment() {
             .contains("authorization: bearer fixture-openai-key")
     );
     let _ = fs::remove_dir_all(root);
+}
+
+/// The real model configuration and provider over `root`, with a wall clock
+/// and discarded observations.
+fn model_stack(root: PathBuf) -> (Arc<ModelConfiguration>, Arc<ModelProvider>) {
+    struct Clock;
+    impl ModelConfigurationClock for Clock {
+        fn now_iso(&self) -> String {
+            butler_core::js_date::iso_from_system_time(std::time::SystemTime::now())
+        }
+        fn now_epoch_millis(&self) -> i64 {
+            chrono::Utc::now().timestamp_millis()
+        }
+    }
+    impl ProviderClock for Clock {
+        fn now_epoch_millis(&self) -> i64 {
+            chrono::Utc::now().timestamp_millis()
+        }
+    }
+    struct Discard;
+    impl ProviderObservationSink for Discard {
+        fn request(&self, _: ProviderObservation) {}
+        fn response(&self, _: &str, _: &str) {}
+        fn failure(&self, _: &butler_turn::btcc::ProviderRequestError) {}
+    }
+    impl PromptUsageMetricSink for Discard {
+        fn append(&self, _: PromptUsageMetricInput<'_>) -> Result<(), ModelRoundError> {
+            Ok(())
+        }
+    }
+    let client = provider_http_client().unwrap();
+    let catalog = Arc::new(ModelCatalog::new().unwrap());
+    let configuration = Arc::new(
+        ModelConfiguration::new(
+            root,
+            ModelConfigurationEnvironment::default(),
+            Arc::new(Clock),
+            catalog.clone(),
+            Arc::new(butler_core::locale::LocaleCollation::new("en-US").unwrap()),
+            client.clone(),
+            Arc::new(butler_core::configuration::ConfigurationWrites::new()),
+        )
+        .unwrap(),
+    );
+    let provider = Arc::new(ModelProvider::new(
+        client,
+        configuration.clone(),
+        Arc::new(Discard),
+        catalog,
+        Arc::new(Clock),
+        Arc::new(Discard),
+    ));
+    (configuration, provider)
 }
 
 struct PlannerFixture {
@@ -311,8 +364,11 @@ async fn planner_uses_turn_context_executes_plan_then_uses_direct_follow_up() {
     })
     .to_string();
     let prompt = Arc::new(PlannerFixture::new([plan]));
-    let access =
-        super::access_with_prompt(root.clone(), "http://127.0.0.1:9/search", prompt.clone());
+    let access = crate::web_access::tests::access_with_prompt(
+        root.clone(),
+        "http://127.0.0.1:9/search",
+        prompt.clone(),
+    );
     let session = access.session_for_turn("Compare Alpha and Beta with evidence sources.".into());
     let planned = session
         .web_search(&json!({"query":"alpha beta"}), &CancellationToken::new())

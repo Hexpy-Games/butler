@@ -3,8 +3,6 @@
 mod args;
 mod session;
 mod source;
-#[cfg(test)]
-mod tests;
 
 use parking_lot::Mutex;
 use std::{

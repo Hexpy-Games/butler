@@ -11,6 +11,7 @@ pub(crate) use crate::host::guided::tool_artifact::ToolArtifactReader;
 pub(crate) use crate::host::memory_jobs::source::MemorySourceReader;
 mod runtime;
 
+pub(crate) use crate::capabilities::{RegisteredWrite, RegisteredWriteContext};
 #[cfg(unix)]
 pub(crate) use crate::host::app::monitoring::AppMonitoring;
 #[cfg(unix)]
@@ -35,7 +36,6 @@ pub(crate) use crate::host::guided::prompt::{
     GuidedPrompt, GuidedTextState, resolve_guided_response_language,
 };
 pub(crate) use crate::host::guided::registered_edit::RegisteredEdit;
-pub(crate) use crate::host::guided::registered_write::{RegisteredWrite, RegisteredWriteContext};
 pub(crate) use crate::host::guided::steering::GuidedSteering;
 use crate::host::guided::tools::MonitoringReaders;
 pub(crate) use crate::host::guided::tools::{GuidedToolBinding, GuidedTools};
