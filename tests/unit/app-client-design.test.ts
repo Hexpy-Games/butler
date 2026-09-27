@@ -2545,6 +2545,7 @@ test("app client enforces tokenized styling and modular store architecture", () 
   expect(designLint).toContain("isSourceColorTokenName");
   expect(designLint).toContain("inCssVariableDefinition");
   expect(designLint).toContain("stripCssCommentsFromLine");
+  expect(designLint).toContain("inFontFace");
   expect(cssGlobalLint).toContain(":global selector in component CSS module");
   expect(cssGlobalLint).not.toContain("top-level :global");
   for (const file of listUiSourceFiles(
