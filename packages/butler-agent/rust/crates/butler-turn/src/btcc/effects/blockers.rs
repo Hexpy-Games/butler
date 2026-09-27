@@ -9,149 +9,39 @@ struct Classified {
     custom: bool,
 }
 
+/// What one legacy blocker says about the current effect.
+enum Verdict {
+    /// The effect settles now with this outcome.
+    Settled(EffectOutcome),
+    /// The current effect must still be dispatched.
+    Dispatch,
+    /// The prior occurrence was not applied; its blockers resolve as such.
+    NotApplied(String),
+    /// An equivalent prior occurrence was applied with this result.
+    Adopt(butler_core::json::JsonDocument),
+}
+
+/// Reconciles the Work's legacy effect blockers related to the current
+/// effect. Returns the settled outcome, or `None` when the effect must still
+/// be dispatched (or is already applied).
 pub(super) async fn reconcile(
     context: &execution::Context<'_>,
     current: &EffectRecord,
 ) -> EffectResult<Option<EffectOutcome>> {
-    let blockers = context
-        .journal
-        .blockers(context.resolved.identity.work_id.clone())
-        .await?;
-    let mut matching = Vec::new();
-    for blocker in blockers {
-        let (relation, custom) = classify(context, &blocker).await;
-        if relation != BlockerRelation::Unrelated {
-            matching.push(Classified {
-                blocker,
-                relation,
-                custom,
-            });
-        }
-    }
-    if matching.is_empty() {
+    let related = related_blockers(context).await?;
+    if related.is_empty() {
         return Ok(None);
-    }
-    let mut grouped: Vec<Classified> = Vec::new();
-    let mut positions: HashMap<String, usize> = HashMap::new();
-    for item in matching {
-        if let Some(index) = positions.get(&item.blocker.source_occurrence_id) {
-            let prior = &mut grouped[*index];
-            if rank(item.relation) > rank(prior.relation) {
-                prior.relation = item.relation;
-            }
-        } else {
-            positions.insert(item.blocker.source_occurrence_id.clone(), grouped.len());
-            grouped.push(item);
-        }
     }
     let mut not_applied = Vec::new();
     let mut must_dispatch = false;
-    let mut adopted_result: Option<butler_core::json::JsonDocument> = None;
-    for Classified {
-        blocker,
-        relation,
-        custom,
-    } in grouped
-    {
-        let prior_input = match context.input.adapter.normalize_input(&blocker.input) {
-            Ok(value) => value,
-            Err(error) => {
-                if blocker.status == "applied" && relation == BlockerRelation::Overlapping {
-                    must_dispatch = true;
-                    continue;
-                }
-                return Ok(Some(prior_error(&error)));
-            }
-        };
-        let prior_target = match context.input.adapter.normalize_target(&blocker.target) {
-            Ok(value) => value,
-            Err(error) => {
-                if !custom {
-                    return Ok(Some(prior_error(&error)));
-                }
-                context.resolved.normalized_target.clone()
-            }
-        };
-        let observed = context
-            .input
-            .adapter
-            .reconcile(
-                &prior_target,
-                &prior_input,
-                &blocker.idempotency_key,
-                &context.input.signal,
-                1,
-                None,
-            )
-            .await;
-        let observed = match observed {
-            Ok(value) => value,
-            Err(error) => {
-                if blocker.status == "applied" && relation == BlockerRelation::Overlapping {
-                    must_dispatch = true;
-                    continue;
-                }
-                return Ok(Some(prior_error(&error)));
-            }
-        };
-        match observed {
-            AdapterOutcome::Uncertain(error) => {
-                if blocker.status == "applied" && relation == BlockerRelation::Overlapping {
-                    must_dispatch = true;
-                    continue;
-                }
-                return Ok(Some(outcomes::uncertain(
-                    reconcile_error(error.as_ref()),
-                    None,
-                )));
-            }
-            AdapterOutcome::NotApplied(_) => {
-                if blocker.status == "applied" {
-                    if relation == BlockerRelation::Overlapping {
-                        must_dispatch = true;
-                        continue;
-                    }
-                    return Ok(Some(outcomes::uncertain(
-                        EffectError::new(
-                            "effect_reconciliation_required",
-                            "Durable legacy evidence says the prior effect was applied, but its original occurrence can no longer confirm that result.",
-                        ),
-                        None,
-                    )));
-                }
-                not_applied.push(blocker.source_occurrence_id);
-            }
-            AdapterOutcome::Applied(result) => {
-                if blocker.status == "unresolved" {
-                    context
-                        .journal
-                        .resolve_blockers(
-                            context.resolved.identity.work_id.clone(),
-                            blocker.source_occurrence_id.clone(),
-                            "applied".into(),
-                        )
-                        .await?;
-                    context
-                        .fault
-                        .reached("after_blocker_resolution", &context.resolved.identity)
-                        .await?;
-                }
-                if relation == BlockerRelation::Ambiguous {
-                    return Ok(Some(outcomes::uncertain(
-                        EffectError::new(
-                            "effect_reconciliation_required",
-                            "A prior effect was applied, but its legacy target cannot be mapped uniquely to the current target.",
-                        ),
-                        None,
-                    )));
-                }
-                if relation == BlockerRelation::Equivalent {
-                    if adopted_result.is_none() {
-                        adopted_result = Some(result);
-                    }
-                } else {
-                    must_dispatch = true;
-                }
+    let mut adopted_result = None;
+    for classified in related {
+        match reconcile_blocker(context, classified).await? {
+            Verdict::Settled(outcome) => return Ok(Some(outcome)),
+            Verdict::Dispatch => must_dispatch = true,
+            Verdict::NotApplied(occurrence) => not_applied.push(occurrence),
+            Verdict::Adopt(result) => {
+                adopted_result.get_or_insert(result);
             }
         }
     }
@@ -174,6 +64,128 @@ pub(super) async fn reconcile(
     Ok(Some(
         execution::record_applied(context, current, result).await?,
     ))
+}
+
+/// The Work's blockers related to the current effect, one per source
+/// occurrence with its strongest relation.
+async fn related_blockers(context: &execution::Context<'_>) -> EffectResult<Vec<Classified>> {
+    let blockers = context
+        .journal
+        .blockers(context.resolved.identity.work_id.clone())
+        .await?;
+    let mut grouped: Vec<Classified> = Vec::new();
+    let mut positions: HashMap<String, usize> = HashMap::new();
+    for blocker in blockers {
+        let (relation, custom) = classify(context, &blocker).await;
+        if relation == BlockerRelation::Unrelated {
+            continue;
+        }
+        let prior = positions
+            .get(&blocker.source_occurrence_id)
+            .and_then(|index| grouped.get_mut(*index));
+        if let Some(prior) = prior {
+            if rank(relation) > rank(prior.relation) {
+                prior.relation = relation;
+            }
+            continue;
+        }
+        positions.insert(blocker.source_occurrence_id.clone(), grouped.len());
+        grouped.push(Classified {
+            blocker,
+            relation,
+            custom,
+        });
+    }
+    Ok(grouped)
+}
+
+/// Asks the adapter whether the blocker's prior occurrence was applied. An
+/// applied overlapping blocker that cannot be confirmed only forces dispatch.
+async fn reconcile_blocker(
+    context: &execution::Context<'_>,
+    classified: Classified,
+) -> EffectResult<Verdict> {
+    let Classified {
+        blocker,
+        relation,
+        custom,
+    } = classified;
+    let overlapping_applied =
+        blocker.status == "applied" && relation == BlockerRelation::Overlapping;
+    let unconfirmed = |outcome: EffectOutcome| {
+        if overlapping_applied {
+            Verdict::Dispatch
+        } else {
+            Verdict::Settled(outcome)
+        }
+    };
+    let adapter = &context.input.adapter;
+    let prior_input = match adapter.normalize_input(&blocker.input) {
+        Ok(value) => value,
+        Err(error) => return Ok(unconfirmed(prior_error(&error))),
+    };
+    let prior_target = match adapter.normalize_target(&blocker.target) {
+        Ok(value) => value,
+        Err(error) if !custom => return Ok(Verdict::Settled(prior_error(&error))),
+        Err(_) => context.resolved.normalized_target.clone(),
+    };
+    let observed = adapter
+        .reconcile(
+            &prior_target,
+            &prior_input,
+            &blocker.idempotency_key,
+            &context.input.signal,
+            1,
+            None,
+        )
+        .await;
+    let result = match observed {
+        Err(error) => return Ok(unconfirmed(prior_error(&error))),
+        Ok(AdapterOutcome::Uncertain(error)) => {
+            return Ok(unconfirmed(outcomes::uncertain(
+                reconcile_error(error.as_ref()),
+                None,
+            )));
+        }
+        Ok(AdapterOutcome::NotApplied(_)) if blocker.status == "applied" => {
+            return Ok(unconfirmed(outcomes::uncertain(
+                EffectError::new(
+                    "effect_reconciliation_required",
+                    "Durable legacy evidence says the prior effect was applied, but its original occurrence can no longer confirm that result.",
+                ),
+                None,
+            )));
+        }
+        Ok(AdapterOutcome::NotApplied(_)) => {
+            return Ok(Verdict::NotApplied(blocker.source_occurrence_id));
+        }
+        Ok(AdapterOutcome::Applied(result)) => result,
+    };
+    if blocker.status == "unresolved" {
+        context
+            .journal
+            .resolve_blockers(
+                context.resolved.identity.work_id.clone(),
+                blocker.source_occurrence_id.clone(),
+                "applied".into(),
+            )
+            .await?;
+        context
+            .fault
+            .reached("after_blocker_resolution", &context.resolved.identity)
+            .await?;
+    }
+    Ok(match relation {
+        BlockerRelation::Ambiguous => Verdict::Settled(outcomes::uncertain(
+            EffectError::new(
+                "effect_reconciliation_required",
+                "A prior effect was applied, but its legacy target cannot be mapped uniquely to the current target.",
+            ),
+            None,
+        )),
+        BlockerRelation::Equivalent => Verdict::Adopt(result),
+        BlockerRelation::Overlapping | BlockerRelation::Unrelated => Verdict::Dispatch,
+    })
 }
 
 fn prior_error(error: &EffectFailure) -> EffectOutcome {

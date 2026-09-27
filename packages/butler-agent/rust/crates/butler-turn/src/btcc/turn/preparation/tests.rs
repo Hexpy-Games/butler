@@ -229,6 +229,11 @@ async fn actual_sqlite_fresh_and_replay_skip_changed_context_and_catalog() {
     );
     let request = request();
     let first = preparation.prepare(request.clone()).await.unwrap();
+    // KEEP: pins the persisted `btcc_turns.context_json` of a butler turn.
+    assert_eq!(
+        butler_core::json::stringify(&first.turn.command["context"]).unwrap(),
+        BUTLER_CONTEXT_GOLDEN
+    );
     assert!(first.turn.is_fresh);
     assert_eq!(first.turn.command["kind"], "run");
     assert_eq!(
@@ -400,6 +405,11 @@ async fn actual_sqlite_fresh_and_replay_skip_changed_context_and_catalog() {
     }));
     let subsession = preparation.prepare(subsession_request).await.unwrap();
     let subsession_context = &subsession.turn.command["context"];
+    // KEEP: pins the persisted `btcc_turns.context_json` of a steward subsession turn.
+    assert_eq!(
+        butler_core::json::stringify(subsession_context).unwrap(),
+        SUBSESSION_CONTEXT_GOLDEN
+    );
     assert_eq!(subsession_context["userRef"], "steward-role");
     assert_eq!(
         subsession_context["baselineObservationScopeRefs"],
@@ -461,6 +471,9 @@ async fn actual_sqlite_fresh_and_replay_skip_changed_context_and_catalog() {
     repositories.close().await.unwrap();
     let _ = std::fs::remove_dir_all(root);
 }
+
+const BUTLER_CONTEXT_GOLDEN: &str = r#"{"userRef":"local-principal","projectRef":"project-1","profileRefs":["684e90a6eb7356496122d54509ff218ebfda082f5089e8865ee6b33798b1b427"],"recentFeedbackRefs":[],"mandatoryHotCacheRefs":[],"optionalHotCacheRefs":[],"baselineObservationScopeRefs":["workspace:/workspace","web:current","memory:local-principal","ledger:project-1"],"executionPolicy":{"role":"butler","accessMode":"read_only","trackingMode":"ledger","requiredNativeToolProfiles":[],"requiredNativeTools":[],"workspacePath":"/workspace","projectId":"project-1"},"appSessionId":"app-session","messageContent":[{"text":"hello","type":"text"}]}"#;
+const SUBSESSION_CONTEXT_GOLDEN: &str = r#"{"userRef":"steward-role","projectRef":"sub-project","profileRefs":["85fbd7259784b3f72c0f11eabd76f3f86f0943d5d07f2d1616fbb290c07a8d83"],"recentFeedbackRefs":["feedback"],"mandatoryHotCacheRefs":["mandatory"],"optionalHotCacheRefs":["optional"],"baselineObservationScopeRefs":[],"executionPolicy":{"role":"steward","accessMode":"full_access","trackingMode":"ledger","requiredNativeToolProfiles":[],"requiredNativeTools":["read_project_source","read_conversation_session"],"workspacePath":"/workspace","subsession":{"relationId":"relation","delegationId":"delegation","taskId":"task","executionMode":"read_only","mutationScope":[],"allowedToolsAndEffects":["grep_files:workspace","list_files:workspace","read_file:workspace","web_read:network","web_search:network"],"recentFeedbackRefs":["feedback"],"projectContext":{"projectId":"sub-project","mandatoryHotCacheRefs":["mandatory"],"optionalHotCacheRefs":["optional"]}},"projectId":"project-1"},"attachments":[{"id":"image","kind":"image","mimeType":"image/png","sizeBytes":-4.5},{"id":"text","kind":"document","mimeType":"text/plain","fileName":"note.txt","sizeBytes":8.25,"localPath":"/workspace/note.txt"},{"id":"non-finite","kind":"binary"}],"appSessionId":"app-subsession","projectSources":[{"id":"source"}],"sessionReferences":[{"id":"prior"}]}"#;
 
 mod contracts;
 mod fixtures;
