@@ -15,7 +15,7 @@ impl<'a> Utf16Slice<'a> {
     /// Callers normalize negative/nonfinite JavaScript arguments before this API.
     pub fn new(text: &'a str, start: usize, end: usize) -> Self {
         let mut output = Self {
-            body: &text[..0],
+            body: "",
             leading_low: None,
             trailing_high: None,
             units: 0,
@@ -33,25 +33,29 @@ impl<'a> Utf16Slice<'a> {
             let next = offset + character.len_utf16();
             let left = start.max(offset);
             let right = end.min(next);
-            if left < right {
-                output.units += right - left;
-                if left == offset && right == next {
-                    body_start.get_or_insert(byte);
-                    body_end = byte + character.len_utf8();
-                } else {
-                    let mut pair = [0; 2];
-                    character.encode_utf16(&mut pair);
-                    if left > offset {
-                        output.leading_low = Some(pair[1]);
-                    } else {
-                        output.trailing_high = Some(pair[0]);
-                    }
-                }
-            }
+            let begin = offset;
             offset = next;
+            if left >= right {
+                continue;
+            }
+            output.units += right - left;
+            if left == begin && right == next {
+                body_start.get_or_insert(byte);
+                body_end = byte + character.len_utf8();
+                continue;
+            }
+            // The range cuts a surrogate pair: keep the half inside it.
+            let mut pair = [0; 2];
+            character.encode_utf16(&mut pair);
+            let [high, low] = pair;
+            if left > begin {
+                output.leading_low = Some(low);
+            } else {
+                output.trailing_high = Some(high);
+            }
         }
-        if let Some(start) = body_start {
-            output.body = &text[start..body_end];
+        if let Some(body) = body_start.and_then(|start| text.get(start..body_end)) {
+            output.body = body;
         }
         output
     }
