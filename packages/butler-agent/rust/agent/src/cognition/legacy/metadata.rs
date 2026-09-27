@@ -11,9 +11,10 @@ use std::{
 use rusqlite::{Connection, OpenFlags, params};
 use tokio::sync::mpsc;
 
-use super::{
+use crate::cognition::box_store::BoxStoreService;
+use crate::cognition::mutable_paths::ensure_data_authority;
+use crate::cognition::{
     CognitionError, CognitionPathEnvironment, CognitionResult, FeedbackBufferService,
-    box_store::BoxStoreService, mutable_paths::ensure_data_authority,
 };
 use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator};
 

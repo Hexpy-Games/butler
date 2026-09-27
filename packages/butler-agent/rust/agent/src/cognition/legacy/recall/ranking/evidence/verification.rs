@@ -1,15 +1,15 @@
 use super::ActivePolicy;
-use crate::cognition::legacy_recall::types::{
+use crate::cognition::legacy::recall::types::{
     LegacyRecallEvidencePolicy, LegacyRecallEvidenceRequirement, LegacyRecallItem,
     LegacyRecallOriginalSource, LegacyRecallSource,
 };
 
-pub(in crate::cognition::legacy_recall::ranking) struct Verification {
-    pub(in crate::cognition::legacy_recall::ranking) items: Vec<LegacyRecallItem>,
-    pub(in crate::cognition::legacy_recall::ranking) diagnostics: Vec<String>,
+pub(in crate::cognition::legacy::recall::ranking) struct Verification {
+    pub(in crate::cognition::legacy::recall::ranking) items: Vec<LegacyRecallItem>,
+    pub(in crate::cognition::legacy::recall::ranking) diagnostics: Vec<String>,
 }
 
-pub(in crate::cognition::legacy_recall::ranking) fn verify_evidence(
+pub(in crate::cognition::legacy::recall::ranking) fn verify_evidence(
     items: Vec<LegacyRecallItem>,
     policy: Option<&LegacyRecallEvidencePolicy>,
 ) -> Verification {

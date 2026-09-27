@@ -12,7 +12,7 @@ use arrow_array::{
 };
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 
-use super::{
+use crate::cognition::{
     CognitionError, CognitionPathEnvironment, CognitionResult, ensure_data_authority, lance_store,
 };
 use crate::coordination::CognitionWriteLease;

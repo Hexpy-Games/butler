@@ -1,6 +1,7 @@
 use super::super::contracts::{
     ActionProgress, DispositionCommand, OriginalRequest, WorkResultFact, WorkView,
 };
+use super::ProjectWorkToolResultEvidence;
 use super::identity::{
     ProjectWorkBinding, ProjectWorkCanonicalLocation, ProjectWorkOperationIdentity,
     ResolvedProjectWorkScope,
@@ -10,7 +11,6 @@ use super::legacy::{
     ProjectWorkLegacyObserveInput, ProjectWorkLegacySnapshot,
 };
 use super::material::{ProjectWorkCapturedMaterial, ProjectWorkMaterialInput};
-use super::result::ProjectWorkToolResultEvidence;
 use crate::btcc::{PortFuture, WorkTurnScope};
 
 #[derive(Clone, Debug)]

@@ -8,7 +8,7 @@ use regex::Regex;
 use unicode_normalization::UnicodeNormalization;
 
 use super::clamp01;
-use crate::cognition::legacy_recall::types::LegacyRecallCandidate;
+use crate::cognition::legacy::recall::types::LegacyRecallCandidate;
 
 const RECALL_SEED_MIN_CHARS: usize = 2;
 const RECALL_SEED_MAX_TERMS: usize = 24;

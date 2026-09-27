@@ -4,7 +4,7 @@ use std::{fs, path::Path};
 
 use serde_json::{Map, Value, json};
 
-use super::{
+use crate::project_ledger::{
     ProjectLedger, ProjectLedgerReadError, active_reference, committed, records, source_head,
 };
 use crate::{

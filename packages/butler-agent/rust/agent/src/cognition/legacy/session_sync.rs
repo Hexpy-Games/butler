@@ -4,8 +4,7 @@ mod parser;
 mod query;
 mod session_id;
 
-use super::{CognitionError, CognitionResult, ensure_data_authority};
-use crate::cognition::CognitionCode;
+use crate::cognition::{CognitionCode, CognitionError, CognitionResult, ensure_data_authority};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{

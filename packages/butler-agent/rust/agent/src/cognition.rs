@@ -22,11 +22,7 @@ mod graph_consolidation;
 mod hot_cache;
 mod knowhow_store;
 mod lance_store;
-mod legacy_lance_writer;
-mod legacy_memory_import;
-mod legacy_metadata;
-mod legacy_recall;
-mod legacy_session_sync;
+mod legacy;
 mod lexical;
 #[cfg(unix)]
 mod mcp_graph;
@@ -44,6 +40,19 @@ mod sources;
 mod vector_optimize;
 mod windows;
 
+pub(crate) use crate::cognition::legacy::lance_writer::{LegacyLanceWriter, LegacyVectorRow};
+pub(crate) use crate::cognition::legacy::memory_import::{
+    LegacyMemoryImportChunk, LegacyMemoryImportPlan, LegacyMemoryImportService,
+};
+pub(crate) use crate::cognition::legacy::metadata::{
+    LegacyMetadataIntegrityService, MissingBoxRef, MissingFeedbackRef,
+};
+pub(crate) use crate::cognition::legacy::recall::{LegacyRecallRequest, recall_legacy};
+pub(crate) use crate::cognition::legacy::session_sync::{
+    LegacySessionOffsets, append_legacy_session_diagnostic, index_legacy_transcript_query,
+    legacy_hot_prefix, normalize_session_id_for_storage, prepare_legacy_transcript,
+    read_legacy_new_lines,
+};
 pub(crate) use box_store::BoxStoreService;
 pub(crate) use briefing::{
     BriefingGenerationCode, BriefingGenerationError, BriefingGenerationService,
@@ -90,19 +99,6 @@ pub(crate) use graph::{GraphProgress, ProjectionModelPolicyInput};
 pub(crate) use graph_consolidation::GraphConsolidationService;
 pub(crate) use hot_cache::{LegacyIndexService, extract_legacy_import_transcript};
 pub(crate) use knowhow_store::{FeedbackResolvePort, KnowHowService};
-pub(crate) use legacy_lance_writer::{LegacyLanceWriter, LegacyVectorRow};
-pub(crate) use legacy_memory_import::{
-    LegacyMemoryImportChunk, LegacyMemoryImportPlan, LegacyMemoryImportService,
-};
-pub(crate) use legacy_metadata::{
-    LegacyMetadataIntegrityService, MissingBoxRef, MissingFeedbackRef,
-};
-pub(crate) use legacy_recall::{LegacyRecallRequest, recall_legacy};
-pub(crate) use legacy_session_sync::{
-    LegacySessionOffsets, append_legacy_session_diagnostic, index_legacy_transcript_query,
-    legacy_hot_prefix, normalize_session_id_for_storage, prepare_legacy_transcript,
-    read_legacy_new_lines,
-};
 #[cfg(unix)]
 pub(crate) use mcp_graph::read_mcp_legacy_graph;
 pub(crate) use memory_health::{MemoryHealthReport, MemoryHealthService};

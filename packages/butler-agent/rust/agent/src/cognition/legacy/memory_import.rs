@@ -5,7 +5,7 @@ use std::{fs, io::Write, path::PathBuf};
 
 use serde_json::Value;
 
-use super::{
+use crate::cognition::{
     CognitionError, CognitionPathEnvironment, CognitionResult, ensure_data_authority,
     legacy_hot_prefix, prepare_legacy_transcript,
 };

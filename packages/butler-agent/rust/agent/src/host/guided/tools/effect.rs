@@ -4,7 +4,6 @@ mod authority;
 mod automation;
 mod ledger;
 mod ledger_input;
-mod ledger_legacy;
 mod mcp;
 mod restart;
 mod session_worktree;

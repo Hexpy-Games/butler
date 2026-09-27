@@ -11,8 +11,9 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use super::{CognitionError, CognitionPathEnvironment, CognitionResult, ensure_data_authority};
-use crate::cognition::CognitionCode;
+use crate::cognition::{
+    CognitionCode, CognitionError, CognitionPathEnvironment, CognitionResult, ensure_data_authority,
+};
 use crate::public_text::trim_js_whitespace;
 
 pub(crate) fn recall_legacy(

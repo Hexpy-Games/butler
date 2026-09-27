@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use super::{clamp01, js_max, js_min};
-use crate::cognition::legacy_recall::types::{
+use crate::cognition::legacy::recall::types::{
     LegacyRecallCandidate, LegacyRecallContext, LegacyRecallCorpus,
 };
 

@@ -5,7 +5,6 @@ mod briefing_signals;
 mod commands;
 mod committed;
 mod dashboard;
-mod legacy_work_source;
 mod project_work_plan;
 mod publication;
 mod records;
@@ -44,6 +43,7 @@ pub(crate) use publication::{
 pub(crate) use records::PlanRecordShow;
 pub(crate) use result_authority::prepare_exact_project_work_result_authority;
 pub(crate) use tool_scope::ProjectLedgerToolScopeLookup;
+mod legacy;
 mod read_error;
 pub(crate) use read_error::ProjectLedgerReadError;
 pub(crate) use work::ProjectWork;

@@ -9,7 +9,7 @@ use crate::btcc::{BlockerRelation, EffectBlocker, EffectFailure, effect_input_sh
 use crate::project_ledger::{ProjectLedger, ProjectLedgerRecordUpdate};
 use crate::public_text::trim_js_whitespace;
 
-pub(super) fn updates(
+pub(in crate::host::guided::tools::effect) fn updates(
     input: &Value,
 ) -> Result<Option<Vec<ProjectLedgerRecordUpdate>>, EffectFailure> {
     let Some(values) = input.get("updates").and_then(Value::as_array) else {
@@ -25,7 +25,7 @@ pub(super) fn updates(
         .map(Some)
 }
 
-pub(super) async fn classify(
+pub(in crate::host::guided::tools::effect) async fn classify(
     ledger: &ProjectLedger,
     root: PathBuf,
     capability: &str,

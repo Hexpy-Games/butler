@@ -8,9 +8,6 @@ use crate::btcc::BtccSource;
 use crate::btcc::work::WorkView;
 use crate::json::JsonDocument;
 
-mod fault;
-pub(crate) use fault::{EffectFaultHook, NoEffectFault};
-
 pub(crate) type EffectResult<T> = Result<T, EffectFailure>;
 pub(crate) type EffectFuture<'a, T> = Pin<Box<dyn Future<Output = EffectResult<T>> + Send + 'a>>;
 
@@ -430,4 +427,22 @@ pub(crate) enum EffectOutcome {
         error: EffectError,
         evidence: Option<UncertainEvidence>,
     },
+}
+
+pub(crate) trait EffectFaultHook: Send + Sync {
+    fn reached<'a>(
+        &'a self,
+        point: &'static str,
+        identity: &'a EffectIdentity,
+    ) -> EffectFuture<'a, ()>;
+}
+pub(crate) struct NoEffectFault;
+impl EffectFaultHook for NoEffectFault {
+    fn reached<'a>(
+        &'a self,
+        _point: &'static str,
+        _identity: &'a EffectIdentity,
+    ) -> EffectFuture<'a, ()> {
+        Box::pin(async { Ok(()) })
+    }
 }

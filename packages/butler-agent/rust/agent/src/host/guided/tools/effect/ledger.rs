@@ -1,5 +1,6 @@
 //! Reviewed Project Ledger record effects over the existing durable EffectService.
 
+pub(super) mod legacy;
 use crate::tool_protocol::ToolName;
 use std::path::{Path, PathBuf};
 
@@ -18,7 +19,8 @@ use crate::project_ledger::{
 use crate::workspace::WorkspaceReference;
 
 use super::super::GuidedTools;
-use super::{ledger_input, ledger_legacy};
+use super::ledger_input;
+use crate::host::guided::tools::effect::ledger::legacy as ledger_legacy;
 
 pub(super) async fn prepare(
     owner: &GuidedTools,

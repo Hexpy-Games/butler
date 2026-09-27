@@ -6,9 +6,6 @@ use crate::tool_protocol::ToolName;
 use super::catalog::{GuidedCatalogSnapshot, GuidedCatalogTool};
 use super::policy::GuidedExecutionPolicy;
 
-mod image_admission;
-pub(super) use image_admission::turn_admits_zai_image_tool;
-
 const DISCOVERY: &[&str] = &[
     "tool_search",
     "tool_describe",
@@ -343,4 +340,12 @@ pub(super) fn profile_initial<'a>(
             .collect();
     }
     tools
+}
+
+pub(super) fn turn_admits_zai_image_tool(policy: &GuidedExecutionPolicy) -> bool {
+    policy.access_mode == AccessMode::FullAccess
+        && policy
+            .required_tools
+            .iter()
+            .any(|name| name == ToolName::AnalyzeAttachedImage)
 }

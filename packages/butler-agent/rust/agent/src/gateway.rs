@@ -9,7 +9,6 @@ mod auth;
 mod http;
 mod image_files;
 mod live;
-mod message_files;
 mod message_validation;
 mod mutations;
 mod protocol;
@@ -26,6 +25,7 @@ use tokio_util::sync::CancellationToken;
 pub(crate) use crate::gateway::inbound_queue::{
     ClaimedInboundEvent, InboundQueue, InboundQueueCode, InboundQueueError, QueuedInboundEvent,
 };
+pub(crate) use crate::gateway::message_file_store::AppMessageFiles;
 pub(crate) use application::{
     AppAdmissionAuthority, AppApplication, AppApplicationConfig, AppApplicationDependencies,
     AppApprovalClaims, AppArtifactMaterializer, AppAuthorityDecision, AppAuthorityDecisionInput,
@@ -83,7 +83,6 @@ pub(crate) use application::{app_work_status, app_worker_activity};
 pub(crate) use application::{read_new_chat_briefing_projects, read_new_chat_briefing_settings};
 pub(crate) use auth::LocalAuthConfig;
 pub(crate) use image_files::AppImageFiles;
-pub(crate) use message_files::AppMessageFiles;
 pub(crate) use protocol::{
     AppEventEnvelope, ArtifactKind, ArtifactOpenAction, ChangedFileDetail, DeliveryState,
     EventReplayView, HealthView, MessageContent, MessageContentPart, MessageFileKind,
@@ -482,5 +481,6 @@ pub(crate) async fn serve_gateway(
 }
 
 mod inbound_queue;
+mod message_file_store;
 #[cfg(test)]
 mod tests;

@@ -1,7 +1,5 @@
 //! Physical provider request snapshots resolved from current filesystem state.
 
-mod status;
-
 mod dynamic;
 mod endpoint;
 mod policy;
@@ -390,5 +388,13 @@ fn provider_error_for(
         provider_error_code: None,
         provider_error_type: None,
         provider_error_details: None,
+    }
+}
+
+impl ModelConfiguration {
+    /// Reads the cache policy without resolving auth or preparing a request.
+    pub(crate) fn status_prompt_cache_policy(&self) -> ProviderPromptCachePolicy {
+        let config = super::read_object_sync(&self.data_root.join("butler.config.json"));
+        self.prompt_cache_from_config(&config, &self.data_root)
     }
 }
