@@ -10,14 +10,17 @@ use crate::btcc::{
 };
 
 use super::continuation::AuthorityLoopContinuation;
+use super::guided_types::{FinalSynthesis, PromptImages, RoundRequestOptions};
 use crate::btcc::BtccCode;
 
+/// The model admitted for a turn, as persisted in `TurnRecord::model_selection`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AdmittedModelSelection {
     pub provider: String,
     pub model: String,
     pub reasoning_effort: ReasoningEffort,
+    /// Provider-specific execution controls (passthrough JSON hashed into `controls_hash`).
     #[serde(default)]
     pub controls: Map<String, Value>,
     pub controls_hash: String,
@@ -26,6 +29,7 @@ pub struct AdmittedModelSelection {
     pub extensions: Map<String, Value>,
 }
 
+/// Where a turn records its Work: the shared ledger, a local store, or nowhere.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TrackingMode {
@@ -34,6 +38,7 @@ pub enum TrackingMode {
     None,
 }
 
+/// The admitted execution policy of a turn: role, access and tool requirements.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExecutionPolicy {
@@ -51,6 +56,11 @@ pub struct ExecutionPolicy {
     pub extensions: Map<String, Value>,
 }
 
+/// The admitted Butler context of a turn, as persisted in `TurnRecord::context`.
+///
+/// Branch seeds, message content, references, sources, attachments and image
+/// admission are passthrough JSON owned by the context assembler and image
+/// admission; this contract only carries them.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ButlerContext {
@@ -85,6 +95,7 @@ pub struct ButlerContext {
     pub extensions: Map<String, Value>,
 }
 
+/// What a turn does when the model ends without visible content.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EmptyResponsePolicy {
@@ -92,6 +103,7 @@ pub enum EmptyResponsePolicy {
     TypedTerminal,
 }
 
+/// The typed view of a turn record the agent loop runs on.
 pub struct SemanticTurn {
     pub model: AdmittedModelSelection,
     pub context: ButlerContext,
@@ -99,6 +111,7 @@ pub struct SemanticTurn {
 }
 
 impl SemanticTurn {
+    /// Decodes the persisted model selection, context and authority continuation.
     pub fn parse(turn: &TurnRecord) -> Result<Self, BtccError> {
         let model =
             AdmittedModelSelection::deserialize(&turn.model_selection).map_err(|source| {
@@ -123,6 +136,7 @@ impl SemanticTurn {
     }
 }
 
+/// The author of a model-round message.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelRoundRole {
@@ -132,17 +146,20 @@ pub enum ModelRoundRole {
     Tool,
 }
 
+/// A tool call the model requested.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelRoundToolCall {
     pub id: String,
     pub name: String,
+    /// Tool arguments are passthrough JSON validated by the tool that runs them.
     pub arguments: Map<String, Value>,
     pub raw_arguments: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub origin: Option<ToolCallOrigin>,
 }
 
+/// Whether a tool call came from the provider's native tool channel or was parsed from text.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolCallOrigin {
@@ -150,6 +167,7 @@ pub enum ToolCallOrigin {
     Text,
 }
 
+/// One transcript message of the loop, persisted inside authority continuations.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelRoundMessage {
@@ -161,8 +179,10 @@ pub struct ModelRoundMessage {
     pub name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ModelRoundToolCall>>,
+    /// Admitted image attachments (provider passthrough JSON).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub image_attachments: Vec<Value>,
+    /// Provider-owned raw data echoed back on the next request (passthrough JSON).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_data: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -177,6 +197,7 @@ pub struct ModelRoundMessage {
 }
 
 impl ModelRoundMessage {
+    /// A user message, optionally tagged with the request segment it belongs to.
     pub fn user(content: String, segment: Option<String>) -> Self {
         Self {
             role: ModelRoundRole::User,
@@ -194,11 +215,13 @@ impl ModelRoundMessage {
     }
 }
 
+/// A tool offered to the model.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelRoundTool {
     pub name: String,
     pub description: String,
+    /// The tool's JSON Schema, forwarded to the provider unchanged.
     pub parameters: Map<String, Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub concurrency_safe: Option<bool>,
@@ -206,6 +229,10 @@ pub struct ModelRoundTool {
     pub tool_contract_version: Option<u8>,
 }
 
+/// One provider request of the loop, borrowed from the loop state for the round.
+///
+/// Attachments, image carrier/capability/manifests, route context and provider
+/// continuations are provider passthrough JSON owned by the provider serializer.
 pub struct ModelRoundRequest<'a> {
     pub max_output_tokens: Option<f64>,
     pub round_id: Option<&'a str>,
@@ -236,6 +263,7 @@ pub struct ModelRoundRequest<'a> {
     pub identity_observer: Option<&'a dyn super::ports::ProviderIdentityObserver>,
 }
 
+/// Which turn, phase and round a provider usage record is billed to.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UsageAttribution {
@@ -247,6 +275,7 @@ pub struct UsageAttribution {
     pub round_index: Option<u32>,
 }
 
+/// Whether the model may answer without a tool call.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolChoice {
@@ -254,22 +283,28 @@ pub enum ToolChoice {
     Required,
 }
 
+/// The accepted outcome of one provider round.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelRoundResult {
     pub text: Option<String>,
     #[serde(default)]
     pub tool_calls: Vec<ModelRoundToolCall>,
+    /// Tool names the model wrote as text instead of calling natively.
     #[serde(default)]
     pub text_tool_call_names: Vec<String>,
     pub assistant_message: Option<ModelRoundMessage>,
+    /// Provider continuation handle for the next request (passthrough JSON).
     pub continuation: Option<Value>,
+    /// Provider usage report (passthrough JSON).
     pub usage: Option<Value>,
     pub provider_identity: Option<ProviderIdentity>,
+    /// Raw provider response data (passthrough JSON).
     pub raw: Option<Value>,
     pub accepted_checkpoint: Option<AcceptedCheckpoint>,
 }
 
+/// The route checkpoint that accepted a round: which candidate and transport attempt answered.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AcceptedCheckpoint {
@@ -279,6 +314,7 @@ pub struct AcceptedCheckpoint {
     pub model_ref: String,
 }
 
+/// The model a provider reported serving, next to the one that was configured.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderIdentity {
@@ -287,6 +323,7 @@ pub struct ProviderIdentity {
     pub reported_model: String,
 }
 
+/// The recorded result of one tool call, persisted inside authority continuations.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolResult {
@@ -299,6 +336,7 @@ pub struct ToolResult {
     pub output: Option<butler_core::json::JsonDocument>,
 }
 
+/// Why a tool call failed, in the model-facing error shape.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolError {
     pub code: String,
@@ -307,24 +345,33 @@ pub struct ToolError {
     pub field: Option<String>,
 }
 
+/// A tool result that ends the loop early.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ToolOutcome {
     Suspend(crate::btcc::SuspensionReason),
 }
 
+/// What the loop does after a tool batch settles.
 #[derive(Clone, Debug, PartialEq)]
 pub enum BatchDisposition {
+    /// Ask the model for its next round.
     Continue,
+    /// Execution is settled: ask the model for the final report without tools.
     FinalReport,
+    /// Suspend the turn until a worker finishes.
     Wait,
 }
 
+/// The Work review of a final-answer candidate.
 #[derive(Clone, Debug, PartialEq)]
 pub enum CandidateDisposition {
+    /// Accept the answer, optionally replacing its content.
     Accepted(Option<String>),
+    /// Reject it and send this observation to the model.
     Continue(String),
 }
 
+/// Diagnostic events the loop reports to its observer, in execution order.
 #[derive(Clone, Debug, PartialEq)]
 pub enum AgentLoopEvent {
     ModelCall {
@@ -348,31 +395,47 @@ pub enum AgentLoopEvent {
     },
 }
 
+/// The policy's preparation of a turn: the rendered prompt plus the decision
+/// and provider ports bound for this execution.
 pub(crate) struct PreparedPolicy {
     pub prompt: String,
     pub instructions: Option<String>,
     pub tools: Vec<ModelRoundTool>,
     pub tool_choice: Option<ToolChoice>,
-    pub route_context: Option<Value>,
-    pub authority_decision: Option<AuthorityDecision>,
     pub resumed_tool_call: Option<ModelRoundToolCall>,
-    pub max_output_tokens: Option<f64>,
-    pub attachments: Vec<Value>,
-    pub image_carrier: Option<Value>,
-    pub image_capability: Option<Value>,
-    pub image_manifests: Vec<Value>,
-    pub butler_data: Option<String>,
-    pub usage_attribution: Option<UsageAttribution>,
-    pub cache_scope: Option<String>,
-    pub stable_provider_cache_prefix: Option<Value>,
-    pub route_transport_attempt_ordinal: Option<u32>,
+    pub authority_decision: Option<AuthorityDecision>,
+    pub images: PromptImages,
+    pub request: RoundRequestOptions,
+    pub ports: ProviderRoundPorts,
+    pub final_synthesis: FinalSynthesis,
+}
+
+/// Provider-side ports a round request borrows: image payload reads and stream/identity observers.
+#[derive(Clone, Default)]
+pub(crate) struct ProviderRoundPorts {
     pub verified_image_payload: Option<Arc<dyn super::ports::VerifiedImagePayloadPort>>,
     pub stream_observer: Option<Arc<dyn super::ports::ProviderStreamObserver>>,
     pub identity_observer: Option<Arc<dyn super::ports::ProviderIdentityObserver>>,
-    pub synthesize_after_tool_candidate: bool,
-    pub synthesize_after_tool_empty: bool,
 }
 
+/// Whether the loop is still working with tools or has settled and only asks
+/// the model for its final report (no tools, no forced tool choice).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LoopPhase {
+    #[default]
+    Working,
+    FinalReport,
+}
+
+/// The tools offered for one round, with the digest of that surface when the
+/// tool port publishes one for provider caching.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ToolSurface {
+    pub tools: Vec<ModelRoundTool>,
+    pub digest: Option<String>,
+}
+
+/// The user's answer to a pending authority request.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum AuthorityDecision {
@@ -381,6 +444,7 @@ pub enum AuthorityDecision {
     Modify { input: String },
 }
 
+/// The context-budget envelope attached to a bounded provider request.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BoundedContinuationEnvelope {
@@ -392,12 +456,14 @@ pub struct BoundedContinuationEnvelope {
     pub context_projection: Option<ContextProjectionRebaseIdentity>,
 }
 
+/// Schema tag of [`BoundedContinuationEnvelope`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BoundedEnvelopeV1 {
     #[serde(rename = "butler.turn-context-envelope.v1")]
     V1,
 }
 
+/// Identifies the rolling-context projection a request was rebased onto.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContextProjectionRebaseIdentity {
@@ -407,18 +473,21 @@ pub struct ContextProjectionRebaseIdentity {
     pub projected_through_ordinal: usize,
 }
 
+/// Schema tag of [`ContextProjectionRebaseIdentity`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ContextProjectionRebaseV1 {
     #[serde(rename = "butler.context-projection-rebase.v1")]
     V1,
 }
 
+/// Revision tag of the rolling-context projection.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RollingContextV1 {
     #[serde(rename = "butler.rolling-context.v1")]
     V1,
 }
 
+/// What the context port needs to project one round's messages.
 pub struct ContextProjectionInput<'a> {
     pub round_id: &'a str,
     pub response_item_id: &'a str,
@@ -428,23 +497,37 @@ pub struct ContextProjectionInput<'a> {
     pub instructions: Option<&'a str>,
     pub tools: &'a [ModelRoundTool],
     pub tool_choice: Option<ToolChoice>,
+    /// Admitted image attachments (provider passthrough JSON).
     pub attachments: &'a [Value],
     pub butler_data: Option<&'a str>,
     pub max_model_facing_bytes: u64,
 }
 
+/// Which message list a projected round sends to the provider.
 pub enum ContextMessages {
+    /// The loop's semantic transcript as is.
     Semantic,
+    /// The operation-result replay of the transcript.
     Transport,
+    /// A projection-owned (compacted or rebased) transcript.
     Owned(Vec<ModelRoundMessage>),
 }
 
+/// Whether a projection moved the rolling context, and whether steering must
+/// be re-read before the request because the rebase may hide a new user turn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContextRebase {
+    NotRequired,
+    Required,
+    RequiredWithSteeringRecheck,
+}
+
+/// The context port's projection of one round.
 pub struct ContextProjection {
     pub messages: ContextMessages,
     pub bounded_continuation: Option<BoundedContinuationEnvelope>,
     pub provider_body_admission: Option<Box<dyn super::ports::ProviderBodyAdmissionPort>>,
-    pub requires_rebase: bool,
-    pub recheck_steering_on_rebase: bool,
+    pub rebase: ContextRebase,
 }
 
 pub(crate) struct CloseoutInput<'a> {
@@ -458,23 +541,27 @@ pub(crate) struct GuidedCloseout {
     pub accepted_work_result: Option<AcceptedWorkResult>,
     pub runtime_failure: Option<RuntimeFailure>,
     pub artifacts: Vec<FinalArtifact>,
+    /// Journal-owned change and plan records, forwarded to the final payload unchanged.
     pub changed_files: Vec<Value>,
     pub plan: Option<Value>,
     pub model_identity: Option<ModelIdentity>,
     pub has_final_work: bool,
 }
 
+/// A user message that arrived while the turn was running.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SteeringObservation {
     pub content: String,
     pub request_segment_kind: String,
 }
 
+/// The operation-result replay of a round's transcript, when the runtime rewrote it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ReplayPreparation {
     pub messages: Option<Vec<ModelRoundMessage>>,
 }
 
+/// The journal's verdict on tool calls written as text.
 #[derive(Clone, Debug, PartialEq)]
 pub enum TextCallDisposition {
     Fail(BtccError),

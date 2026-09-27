@@ -36,6 +36,7 @@ pub struct ProviderRequestError {
     pub provider_error_details: Option<Box<Value>>,
 }
 
+/// What context sizing needs to know about a request.
 pub struct ContextSizingRequest<'a> {
     pub model: &'a str,
     pub instructions: Option<&'a str>,
@@ -45,6 +46,7 @@ pub struct ContextSizingRequest<'a> {
     pub butler_data: Option<&'a str>,
 }
 
+/// The message budget of a request and how to measure messages.
 pub struct ContextSizing<'a> {
     pub max_output_tokens: Option<f64>,
     pub max_message_bytes: f64,
@@ -54,6 +56,7 @@ pub struct ContextSizing<'a> {
 pub(crate) type ContextMeasure<'a> =
     dyn Fn(&[ModelRoundMessage]) -> Result<f64, BtccError> + Send + Sync + 'a;
 
+/// What a model execution borrows from the turn.
 pub struct ModelExecutionInput<'a> {
     pub turn: &'a TurnRecord,
     pub claim: &'a StateExecutionClaim,
@@ -64,12 +67,14 @@ pub struct ModelExecutionInput<'a> {
     pub source_revision: super::GuidedSourceRevision,
 }
 
+/// Retry backoff of the model route.
 #[derive(Clone, Copy, Debug)]
 pub struct ModelRouteRetryConfig {
     pub base_delay_ms: f64,
 }
 
 impl ModelRouteRetryConfig {
+    /// A config with `base_delay_ms` (non-finite values use 750 ms).
     pub fn new(base_delay_ms: f64) -> Self {
         Self {
             base_delay_ms: if base_delay_ms.is_finite() {
@@ -81,7 +86,9 @@ impl ModelRouteRetryConfig {
     }
 }
 
+/// Creates the model execution of a turn.
 pub trait ModelExecutionFactory: Send + Sync {
+    /// The execution for the turn's admitted route.
     fn create<'a>(&self, input: ModelExecutionInput<'a>) -> ModelExecutionFuture<'a>;
 }
 
@@ -94,8 +101,11 @@ pub trait ModelExecutionView: Send + Sync {
     fn accepted_model_identity(&self) -> Option<ModelIdentity>;
 }
 
+/// A turn's model execution: the routed port and the base port.
 pub trait ModelExecution: ModelExecutionView {
+    /// The port that applies the route (retries, fallback, acceptance).
     fn routed(&self) -> &dyn ModelRoundPort;
+    /// The underlying provider port.
     fn base(&self) -> &dyn ModelRoundPort;
 }
 
@@ -119,44 +129,4 @@ pub(super) struct RouteCandidate {
     pub reasoning_effort: ReasoningEffort,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(super) enum FailureDisposition {
-    Retry,
-    Advance,
-    Surface,
-}
-
-impl FailureDisposition {
-    /// The serde (`snake_case`) name.
-    pub(super) fn as_str(self) -> &'static str {
-        match self {
-            Self::Retry => "retry",
-            Self::Advance => "advance",
-            Self::Surface => "surface",
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct AttemptHistory {
-    #[serde(default)]
-    pub started: Vec<u32>,
-    #[serde(default)]
-    pub failed: Vec<u32>,
-    #[serde(default)]
-    pub failed_details: Vec<FailureRecord>,
-    #[serde(default)]
-    pub succeeded: Vec<u32>,
-    #[serde(default)]
-    pub abandoned: Vec<u32>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct FailureRecord {
-    pub transport_attempt: u32,
-    pub error_code: String,
-    pub disposition: FailureDisposition,
-}
+pub(super) use crate::btcc::turn::{AttemptHistory, FailureDisposition, FailureRecord};

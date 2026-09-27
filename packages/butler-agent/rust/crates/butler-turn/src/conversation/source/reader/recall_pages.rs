@@ -5,6 +5,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use crate::conversation::codec::read_message;
 use crate::conversation::{ConversationError, ConversationMessageWithParts, ConversationResult};
 
+/// A turn outcome row for recall.
 #[derive(Clone, Debug)]
 pub struct RecallOutcomeRow {
     pub id: String,

@@ -3,34 +3,25 @@ use serde_json::Value;
 use crate::btcc::agent_loop::{ModelRoundError, ModelRoundRequest, ModelRoundResult};
 use crate::btcc::{BtccError, ModelIdentity, ReasoningEffort};
 
-use super::contracts::{AttemptHistory, FailureDisposition, FailureRecord, RouteState};
+use super::contracts::{AttemptHistory, FailureRecord, RouteState};
 use crate::btcc::BtccCode;
+use crate::btcc::{ModelRouteEvent, ModelRouteEventKind};
 
 pub(super) fn event(
-    kind: &str,
+    kind: ModelRouteEventKind,
     round: &str,
     candidate: u32,
     attempt: Option<u32>,
     model: &str,
-    failure: Option<(&str, FailureDisposition)>,
-) -> Value {
-    let mut object = butler_core::json::json_object!(
-        {"type":kind,"roundId":round,"candidateIndex":candidate,"modelRef":model}
-    );
-    if let Some(attempt) = attempt {
-        object.insert("transportAttempt".into(), Value::from(attempt));
+) -> ModelRouteEvent {
+    ModelRouteEvent {
+        kind,
+        round_id: round.into(),
+        candidate_index: candidate,
+        model_ref: model.into(),
+        transport_attempt: attempt,
+        failure: None,
     }
-    if let Some((code, disposition)) = failure {
-        object.insert("errorCode".into(), Value::String(code.into()));
-        object.insert(
-            "failureDisposition".into(),
-            Value::String(disposition.as_str().into()),
-        );
-    }
-    Value::Object(object)
-}
-pub(super) fn status(value: Option<&Value>) -> Option<&str> {
-    value.as_ref()?.get("status")?.as_str()
 }
 pub(super) fn max_attempt(history: &AttemptHistory) -> u32 {
     history
@@ -53,7 +44,7 @@ pub(super) fn latest_failure(history: &AttemptHistory) -> Option<&FailureRecord>
 pub(super) fn recovered(value: &FailureRecord) -> ModelRoundError {
     ModelRoundError::Recovered {
         failure_code: value.error_code.clone(),
-        disposition: format!("{:?}", value.disposition).to_lowercase(),
+        disposition: value.disposition.as_str().into(),
     }
 }
 

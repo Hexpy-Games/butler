@@ -114,6 +114,7 @@ pub(crate) fn resolve_work_review_transition(
     Ok((entry_stage, next_stage))
 }
 
+/// The accepted result review bound to the current plan, if any.
 pub fn accepted_current_result_review(work: &WorkView) -> Option<&WorkReview> {
     let review = work.latest_result_review.as_ref()?;
     if work.current_plan.is_none() || review.verdict != ReviewVerdict::Accept {
@@ -143,6 +144,7 @@ pub fn accepted_current_result_review(work: &WorkView) -> Option<&WorkReview> {
         .then_some(review)
 }
 
+/// The stages Work may move to from `stage`.
 pub fn allowed_next_work_stages(stage: Option<WorkStage>) -> Vec<WorkStage> {
     match stage {
         None => vec![WorkStage::Conception],
@@ -163,6 +165,7 @@ pub fn allowed_next_work_stages(stage: Option<WorkStage>) -> Vec<WorkStage> {
     }
 }
 
+/// The fingerprint of the Work material a disposition is decided on.
 pub fn disposition_material_fingerprint(work: &WorkView) -> Result<String, BtccError> {
     let action_progress = |actions: &[ActionProgress]| {
         actions

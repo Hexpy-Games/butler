@@ -67,6 +67,7 @@ impl AuthorityError {
         }
     }
 
+    /// The wire code.
     pub fn code(&self) -> &str {
         match self {
             Self::Policy { code, .. } | Self::Storage { code, .. } => code,
@@ -101,6 +102,7 @@ impl From<crate::btcc::StorageError> for AuthorityError {
 }
 pub(crate) type AuthorityResult<T> = Result<T, AuthorityError>;
 
+/// A reviewed operation that needs the user's authority.
 #[derive(Clone, Debug)]
 pub struct AuthorityAdmissionInput {
     pub public_action_title: Option<String>,
@@ -121,6 +123,7 @@ pub struct AuthorityAdmissionInput {
     pub normalized_input: Value,
 }
 
+/// Whether an operation may run, waits for the user, or was answered.
 #[derive(Clone, Debug, PartialEq)]
 pub enum AuthorityAdmissionResult {
     Granted,
@@ -143,6 +146,7 @@ pub enum AuthorityAdmissionResult {
     },
 }
 
+/// The user's answer to an authority request (`allow`, `deny` or `modify`).
 #[derive(Clone, Debug)]
 pub struct AuthorityDecisionInput {
     pub owner_session_id: String,
@@ -164,6 +168,7 @@ pub struct AuthorityDecisionResult {
     pub(crate) reasoning_effort: String,
     pub decision: String,
 }
+/// Claims execution of an allowed request.
 #[derive(Clone, Debug)]
 pub struct AuthorityExecutionInput {
     pub owner_session_id: String,
@@ -192,6 +197,7 @@ pub struct AuthorityStoredExecution {
     pub(crate) outcome: String,
     pub(crate) outcome_receipt: Option<Value>,
 }
+/// The outcome of an allowed operation.
 #[derive(Clone, Debug)]
 pub struct AuthorityOutcomeInput {
     pub request_ref: String,
@@ -262,12 +268,52 @@ pub struct ConversationPermission {
     pub description: String,
     pub(crate) created_at: String,
 }
+/// The user's answer to an authority request as received (`allow`, `deny`,
+/// `modify`). Any other answer is recorded like a modification without an
+/// alternative, as the source does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AuthorityAction {
+    Allow,
+    Deny,
+    Modify,
+    Unrecognized,
+}
+
+impl AuthorityAction {
+    pub(crate) fn parse(action: &str) -> Self {
+        match action {
+            "allow" => Self::Allow,
+            "deny" => Self::Deny,
+            "modify" => Self::Modify,
+            _ => Self::Unrecognized,
+        }
+    }
+
+    /// The stored request decision.
+    pub(crate) fn decision(self) -> &'static str {
+        match self {
+            Self::Allow => "allowed",
+            Self::Deny => "denied",
+            Self::Modify | Self::Unrecognized => "modified",
+        }
+    }
+
+    /// The input scheduled to continue the source turn.
+    pub(crate) fn schedule_text(self) -> &'static str {
+        match self {
+            Self::Allow => "Continue the approved operation exactly once.",
+            Self::Deny => "The reviewed command was denied.",
+            Self::Modify | Self::Unrecognized => "Continue with the reviewed alternative.",
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct DecisionWrite {
     pub(crate) request_ref: String,
     pub(crate) owner_session_id: String,
     pub(crate) source_session_id: String,
-    pub(crate) action: String,
+    pub(crate) action: AuthorityAction,
     pub(crate) permission: Option<ConversationPermission>,
     pub(crate) alternative_input: Option<String>,
     pub(crate) now: String,
@@ -308,6 +354,7 @@ pub(crate) trait AuthorityRepository {
     fn close_self(&mut self, session: &str, reason: &str, now: &str) -> AuthorityResult<usize>;
 }
 
+/// The user's authority over reviewed operations: requests, decisions and standing permissions.
 #[derive(Clone)]
 pub struct PrincipalAuthority {
     pub(super) storage: BtccStorage,

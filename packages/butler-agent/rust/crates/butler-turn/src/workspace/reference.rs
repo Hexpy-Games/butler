@@ -2,6 +2,7 @@ use parking_lot::Mutex;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+/// The shared, updatable workspace path of a session (or why it is unavailable).
 #[derive(Clone, Debug)]
 pub struct WorkspaceReference(Arc<Mutex<ReferenceState>>);
 
@@ -32,14 +33,17 @@ impl WorkspaceReferenceError {
 }
 
 impl WorkspaceReference {
+    /// A reference to `path`.
     pub fn new(path: &Path) -> Self {
         Self(Arc::new(Mutex::new(ReferenceState::Path(resolve(path)))))
     }
 
+    /// A reference that reports `code` until set.
     pub fn unavailable(code: &'static str) -> Self {
         Self(Arc::new(Mutex::new(ReferenceState::Unavailable(code))))
     }
 
+    /// The current path.
     pub fn get(&self) -> Result<PathBuf, WorkspaceReferenceError> {
         match &*self.0.lock() {
             ReferenceState::Path(path) => Ok(path.clone()),
@@ -47,6 +51,7 @@ impl WorkspaceReference {
         }
     }
 
+    /// Points the reference at `path`.
     pub fn set(&self, path: &str) -> Result<(), WorkspaceReferenceError> {
         let trimmed = butler_core::public_text::trim_js_whitespace(path);
         if trimmed.is_empty() {

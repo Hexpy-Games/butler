@@ -5,6 +5,7 @@ use serde_json::{Map, Value, json};
 
 use super::{ProgressEvent, TurnSemanticState};
 
+/// A runtime progress event of a turn.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeTurnEventInput {
@@ -26,6 +27,7 @@ pub struct RuntimeTurnEventInput {
 }
 
 impl RuntimeTurnEventInput {
+    /// An event of `kind` without payload.
     pub fn new(kind: impl Into<String>) -> Self {
         Self {
             kind: kind.into(),
@@ -40,6 +42,7 @@ impl RuntimeTurnEventInput {
     }
 }
 
+/// Whether an event is shown to the user.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EventVisibility {

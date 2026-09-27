@@ -5,61 +5,18 @@ use super::failure::runtime_failure_message;
 use crate::btcc::BtccError;
 use crate::btcc::identity::{content_ref, digest, json_value};
 
+/// Accepts the agent's final answer: the payload (content-addressed by its
+/// body digest) and the Outbox that delivers it as the canonical message.
 pub(super) fn guided_final(
     turn: &TurnRecord,
     result: super::contracts::AgentLoopResult,
 ) -> Result<TurnTransition, BtccError> {
-    let content = if result.terminal_outcome == Some(super::contracts::TerminalOutcome::NoVisible) {
-        String::new()
-    } else {
-        let trimmed = butler_core::public_text::trim_js_whitespace(&result.content);
-        if trimmed.is_empty() {
-            runtime_failure_message(
-                &turn.original_message,
-                &crate::btcc::RuntimeFailure {
-                    code: "runtime_error".into(),
-                    retryable: false,
-                },
-            )
-        } else {
-            trimmed.to_owned()
-        }
-    };
+    let content = final_content(turn, &result);
     let content_sha256 = digest(&content);
-    let mut body = Map::new();
-    body.insert("turnId".into(), Value::String(turn.turn_id.clone()));
-    body.insert(
-        "contentSha256".into(),
-        Value::String(content_sha256.clone()),
-    );
-    body.insert("route".into(), json_value(&result.route)?);
-    body.insert("disposition".into(), Value::String("completed".into()));
-    body.insert("content".into(), Value::String(content.clone()));
-    if let Some(value) = &result.work_status {
-        body.insert("workStatus".into(), json_value(value)?);
-    }
-    if let Some(value) = &result.accepted_work_result {
-        body.insert("acceptedWorkResult".into(), json_value(value)?);
-    }
-    if let Some(value) = &result.runtime_failure {
-        body.insert("runtimeFailure".into(), json_value(value)?);
-    }
-    if !result.artifacts.is_empty() {
-        body.insert("artifacts".into(), json_value(&result.artifacts)?);
-    }
-    if !result.changed_files.is_empty() {
-        body.insert(
-            "changedFiles".into(),
-            Value::Array(result.changed_files.clone()),
-        );
-    }
-    if let Some(value) = &result.plan {
-        body.insert("plan".into(), value.clone());
-    }
-    if let Some(value) = &result.model_identity {
-        body.insert("modelIdentity".into(), json_value(value)?);
-    }
-    let reference = content_ref("payload", &Value::Object(body))?;
+    let reference = content_ref(
+        "payload",
+        &payload_body(turn, &result, &content, &content_sha256)?,
+    )?;
     let outbox_id = digest(&format!(
         "btcc-canonical-delivery.v1\0{}\0{}\0{}",
         turn.turn_id,
@@ -94,4 +51,64 @@ pub(super) fn guided_final(
             status: DeliveryStatus::Pending,
         }),
     })
+}
+
+/// The delivered content: empty for a no-visible terminal outcome, the
+/// trimmed answer, or the runtime-error message when the answer is blank.
+fn final_content(turn: &TurnRecord, result: &super::contracts::AgentLoopResult) -> String {
+    if result.terminal_outcome == Some(super::contracts::TerminalOutcome::NoVisible) {
+        return String::new();
+    }
+    let trimmed = butler_core::public_text::trim_js_whitespace(&result.content);
+    if !trimmed.is_empty() {
+        return trimmed.to_owned();
+    }
+    runtime_failure_message(
+        &turn.original_message,
+        &crate::btcc::RuntimeFailure {
+            code: "runtime_error".into(),
+            retryable: false,
+        },
+    )
+}
+
+/// The digested payload body. Its key order and omissions determine the
+/// payload reference and outbox id, so they are part of the stored format.
+fn payload_body(
+    turn: &TurnRecord,
+    result: &super::contracts::AgentLoopResult,
+    content: &str,
+    content_sha256: &str,
+) -> Result<Value, BtccError> {
+    let mut body = Map::new();
+    body.insert("turnId".into(), Value::String(turn.turn_id.clone()));
+    body.insert("contentSha256".into(), Value::String(content_sha256.into()));
+    body.insert("route".into(), json_value(&result.route)?);
+    body.insert("disposition".into(), Value::String("completed".into()));
+    body.insert("content".into(), Value::String(content.into()));
+    if let Some(value) = &result.work_status {
+        body.insert("workStatus".into(), json_value(value)?);
+    }
+    if let Some(value) = &result.accepted_work_result {
+        body.insert("acceptedWorkResult".into(), json_value(value)?);
+    }
+    if let Some(value) = &result.runtime_failure {
+        body.insert("runtimeFailure".into(), json_value(value)?);
+    }
+    if !result.artifacts.is_empty() {
+        body.insert("artifacts".into(), json_value(&result.artifacts)?);
+    }
+    if !result.changed_files.is_empty() {
+        body.insert(
+            "changedFiles".into(),
+            Value::Array(result.changed_files.clone()),
+        );
+    }
+    if let Some(value) = &result.plan {
+        body.insert("plan".into(), value.clone());
+    }
+    if let Some(value) = &result.model_identity {
+        body.insert("modelIdentity".into(), json_value(value)?);
+    }
+    Ok(Value::Object(body))
 }

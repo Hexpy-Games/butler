@@ -3,6 +3,7 @@ use serde_json::Value;
 
 use butler_core::json::JsonDocument;
 
+/// A tool call being started.
 #[derive(Clone)]
 pub struct ToolJournalStart {
     pub turn_id: String,
@@ -12,6 +13,7 @@ pub struct ToolJournalStart {
     pub arguments: Value,
 }
 
+/// A tool call's result.
 pub struct ToolJournalFinish {
     pub call_id: String,
     pub status: ToolJournalFinishStatus,
@@ -20,6 +22,7 @@ pub struct ToolJournalFinish {
     pub error_code: Option<String>,
 }
 
+/// How a journaled call finished.
 #[derive(Clone, Copy)]
 pub enum ToolJournalFinishStatus {
     Completed,
@@ -35,6 +38,7 @@ impl ToolJournalFinishStatus {
     }
 }
 
+/// A journaled tool call.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolJournalRecord {

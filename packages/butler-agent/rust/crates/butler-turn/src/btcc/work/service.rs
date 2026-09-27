@@ -13,38 +13,54 @@ use crate::btcc::{BtccError, PortFuture};
 use super::contracts::*;
 use crate::btcc::BtccCode;
 
+/// Durable Work storage; each command is idempotent by its mutation call id.
 pub trait DurableWorkRepository: Send + Sync {
+    /// The turn's bound Work with its request and results.
     fn load_context(&self, scope: WorkTurnScope) -> PortFuture<'_, Option<WorkContext>>;
+    /// Imports the scope's open legacy Work, if any.
     fn import_open_legacy_work(&self, scope: WorkTurnScope)
     -> PortFuture<'_, Option<LegacyImport>>;
+    /// Binds the turn to the session's open Work (optionally a specific one).
     fn bind_open_work(
         &self,
         scope: WorkTurnScope,
         expected_work_id: Option<String>,
     ) -> PortFuture<'_, Option<WorkView>>;
+    /// Starts new Work for the turn.
     fn start_work(&self, command: StartWorkCommand) -> PortFuture<'_, WorkView>;
+    /// Continues existing Work in the turn.
     fn continue_work(&self, command: ContinueWorkCommand) -> PortFuture<'_, WorkView>;
+    /// Records a new plan revision.
     fn replace_plan(&self, command: ReplacePlanCommand) -> PortFuture<'_, WorkView>;
+    /// Records a progress checkpoint.
     fn record_checkpoint(&self, command: CheckpointCommand) -> PortFuture<'_, WorkView>;
+    /// Records a review.
     fn record_review(&self, command: ReviewCommand) -> PortFuture<'_, WorkView>;
+    /// Records a disposition.
     fn record_disposition(&self, command: DispositionCommand) -> PortFuture<'_, WorkView>;
+    /// Claims the one closeout correction of a turn's Work.
     fn claim_closeout_correction(
         &self,
         input: ClaimCloseoutCorrectionInput,
     ) -> PortFuture<'_, bool>;
+    /// The Work bound to a turn.
     fn bound_work_for_turn(&self, turn_id: String) -> PortFuture<'_, Option<WorkView>>;
+    /// Abandons the turn's bound open Work.
     fn abandon_bound_work_for_turn(&self, turn_id: String) -> PortFuture<'_, Option<WorkView>>;
 }
 
+/// Validates Work commands, fingerprints them for idempotency and applies them.
 pub struct DurableWorkService {
     repository: Arc<dyn DurableWorkRepository>,
 }
 
 impl DurableWorkService {
+    /// A service over the Work repository.
     pub fn new(repository: Arc<dyn DurableWorkRepository>) -> Self {
         Self { repository }
     }
 
+    /// The turn's bound Work context.
     pub async fn load_context(
         &self,
         scope: WorkTurnScope,
@@ -61,6 +77,7 @@ impl DurableWorkService {
         self.repository.import_open_legacy_work(scope).await
     }
 
+    /// Binds the turn to the session's open Work.
     pub async fn bind_open_work(
         &self,
         scope: WorkTurnScope,
@@ -75,6 +92,7 @@ impl DurableWorkService {
             .await
     }
 
+    /// The Work bound to a turn.
     pub async fn bound_work_for_turn(
         &self,
         turn_id: String,

@@ -7,6 +7,7 @@ use crate::btcc::BtccCode;
 use crate::btcc::{BtccError, StoredSubsessionDelegation};
 
 impl SubsessionService {
+    /// Prompt lines describing the parent's worker tasks.
     pub async fn worker_prompt_lines(
         &self,
         parent_session_id: String,
@@ -55,6 +56,7 @@ impl SubsessionService {
         Ok(lines)
     }
 
+    /// The App projection of a session's subsessions.
     pub async fn app_projection(&self, session_id: &str) -> Result<Value, BtccError> {
         let children = self
             .repository

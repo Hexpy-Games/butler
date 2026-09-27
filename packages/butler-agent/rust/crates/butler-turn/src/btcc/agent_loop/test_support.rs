@@ -182,24 +182,17 @@ impl GuidedPolicyPort for Fixture {
                     tool("start_work", true),
                 ],
                 tool_choice: Some(ToolChoice::Auto),
-                route_context: None,
-                authority_decision: self.authority.lock().unwrap().clone(),
                 resumed_tool_call: None,
-                max_output_tokens: None,
-                attachments: vec![],
-                image_carrier: None,
-                image_capability: None,
-                image_manifests: vec![],
-                butler_data: Some("/tmp/butler".into()),
-                usage_attribution: self.usage_attribution.lock().unwrap().clone(),
-                cache_scope: Some(format!("btcc-guided:{}", invocation.turn.session_id)),
-                stable_provider_cache_prefix: None,
-                route_transport_attempt_ordinal: None,
-                verified_image_payload: None,
-                stream_observer: None,
-                identity_observer: None,
-                synthesize_after_tool_candidate: false,
-                synthesize_after_tool_empty: false,
+                authority_decision: self.authority.lock().unwrap().clone(),
+                images: super::guided_types::PromptImages::default(),
+                request: super::guided_types::RoundRequestOptions {
+                    butler_data: Some("/tmp/butler".into()),
+                    usage_attribution: self.usage_attribution.lock().unwrap().clone(),
+                    cache_scope: Some(format!("btcc-guided:{}", invocation.turn.session_id)),
+                    ..Default::default()
+                },
+                ports: ProviderRoundPorts::default(),
+                final_synthesis: super::guided_types::FinalSynthesis::Never,
             })
         })
     }
@@ -222,22 +215,23 @@ impl GuidedPolicyPort for Fixture {
         &'a self,
         _invocation: GuidedInvocation<'a>,
         fallback: &'a [ModelRoundTool],
-        final_report: bool,
-    ) -> PortFuture<'a, (Vec<ModelRoundTool>, Option<String>)> {
+        phase: LoopPhase,
+    ) -> PortFuture<'a, ToolSurface> {
         Box::pin(async move {
+            let final_report = phase == LoopPhase::FinalReport;
             self.note(if final_report {
                 "surface:final"
             } else {
                 "surface:ordinary"
             });
-            Ok((
-                if final_report {
+            Ok(ToolSurface {
+                tools: if final_report {
                     vec![]
                 } else {
                     fallback.to_vec()
                 },
-                Some("a".repeat(64)),
-            ))
+                digest: Some("a".repeat(64)),
+            })
         })
     }
 
@@ -475,8 +469,11 @@ impl TurnContextProjection for FixturePolicyContext<'_> {
                 messages: ContextMessages::Transport,
                 bounded_continuation: None,
                 provider_body_admission: None,
-                requires_rebase: std::mem::take(&mut *self.0.rebase_once.lock().unwrap()),
-                recheck_steering_on_rebase: true,
+                rebase: if std::mem::take(&mut *self.0.rebase_once.lock().unwrap()) {
+                    ContextRebase::RequiredWithSteeringRecheck
+                } else {
+                    ContextRebase::NotRequired
+                },
             })
         })
     }

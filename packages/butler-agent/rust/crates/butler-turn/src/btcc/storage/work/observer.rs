@@ -22,6 +22,7 @@ pub enum SessionPlanObservation {
 }
 
 impl SessionWorkRepository {
+    /// The plan observation of the session's current Work.
     pub async fn observe_session_plan(
         &self,
         session_id: String,
@@ -38,31 +39,13 @@ struct BoundWork {
     current_plan: Option<String>,
 }
 
+/// The plan observation of the session's current Work: a project Work's
+/// ledger binding, or a session Work's plan actions, completed actions and
+/// whether its current plan was accepted.
 fn observe(db: &Connection, session_id: &str) -> StorageResult<Option<SessionPlanObservation>> {
-    let work = db
-        .query_row(
-            "SELECT work.work_id, work.scope_kind, work.scope_ref,
-                work.ledger_project_id, work.current_plan_revision_id
-         FROM btcc_guided_turn_work_bindings binding
-         JOIN btcc_guided_works work ON work.work_id = binding.work_id
-           AND work.session_id = binding.session_id
-         WHERE binding.turn_id = (
-           SELECT turn_id FROM btcc_turns WHERE session_id = ? ORDER BY rowid DESC LIMIT 1
-         ) AND binding.is_current = 1",
-            [session_id],
-            |row| {
-                Ok(BoundWork {
-                    id: row.get(0)?,
-                    scope: row.get(1)?,
-                    scope_ref: row.get(2)?,
-                    ledger_project_id: row.get(3)?,
-                    current_plan: row.get(4)?,
-                })
-            },
-        )
-        .optional()
-        .map_err(StorageError::sqlite)?;
-    let Some(work) = work else { return Ok(None) };
+    let Some(work) = current_work(db, session_id)? else {
+        return Ok(None);
+    };
     if work.scope == "project" {
         return Ok(work
             .ledger_project_id
@@ -94,17 +77,53 @@ fn observe(db: &Connection, session_id: &str) -> StorageResult<Option<SessionPla
     if action_keys.is_empty() {
         return Ok(None);
     }
+    let completed_action_keys = completed_actions(db, &work.id, &revision)?;
+    Ok(Some(SessionPlanObservation::Session {
+        approved: plan_accepted(db, &work.id, &revision)?,
+        action_keys,
+        completed_action_keys,
+    }))
+}
+
+/// The Work bound current to the session's latest turn.
+fn current_work(db: &Connection, session_id: &str) -> StorageResult<Option<BoundWork>> {
+    db.query_row(
+        "SELECT work.work_id, work.scope_kind, work.scope_ref,
+            work.ledger_project_id, work.current_plan_revision_id
+     FROM btcc_guided_turn_work_bindings binding
+     JOIN btcc_guided_works work ON work.work_id = binding.work_id
+       AND work.session_id = binding.session_id
+     WHERE binding.turn_id = (
+       SELECT turn_id FROM btcc_turns WHERE session_id = ? ORDER BY rowid DESC LIMIT 1
+     ) AND binding.is_current = 1",
+        [session_id],
+        |row| {
+            Ok(BoundWork {
+                id: row.get(0)?,
+                scope: row.get(1)?,
+                scope_ref: row.get(2)?,
+                ledger_project_id: row.get(3)?,
+                current_plan: row.get(4)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(StorageError::sqlite)
+}
+
+/// Done or skipped actions of the latest checkpoint, when it is bound to `revision`.
+fn completed_actions(db: &Connection, work_id: &str, revision: &str) -> StorageResult<Vec<String>> {
     let checkpoint: Option<(String, String)> = db
         .query_row(
             "SELECT plan_revision_id, action_states_json FROM btcc_guided_work_checkpoint_revisions
          WHERE work_id = ? ORDER BY revision DESC LIMIT 1",
-            [&work.id],
+            [work_id],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()
         .map_err(StorageError::sqlite)?;
-    let completed_action_keys = checkpoint
-        .filter(|(bound, _)| *bound == revision)
+    Ok(checkpoint
+        .filter(|(bound, _)| bound == revision)
         .map(|(_, states)| {
             records(&states)
                 .filter_map(|action| {
@@ -115,23 +134,22 @@ fn observe(db: &Connection, session_id: &str) -> StorageResult<Option<SessionPla
                 })
                 .collect()
         })
-        .unwrap_or_default();
+        .unwrap_or_default())
+}
+
+/// Whether the latest plan review accepted `revision`.
+fn plan_accepted(db: &Connection, work_id: &str, revision: &str) -> StorageResult<bool> {
     let review: Option<(String, Option<String>)> = db
         .query_row(
             "SELECT verdict, bound_plan_revision_id FROM btcc_guided_work_review_revisions
          WHERE work_id = ? AND subject = 'plan' ORDER BY revision DESC LIMIT 1",
-            [&work.id],
+            [work_id],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()
         .map_err(StorageError::sqlite)?;
-    let approved = review
-        .is_some_and(|(verdict, bound)| verdict == "accept" && bound.as_deref() == Some(&revision));
-    Ok(Some(SessionPlanObservation::Session {
-        approved,
-        action_keys,
-        completed_action_keys,
-    }))
+    Ok(review
+        .is_some_and(|(verdict, bound)| verdict == "accept" && bound.as_deref() == Some(revision)))
 }
 
 fn records(raw: &str) -> impl Iterator<Item = Value> {

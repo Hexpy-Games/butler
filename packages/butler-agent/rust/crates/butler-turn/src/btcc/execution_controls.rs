@@ -10,10 +10,12 @@ use crate::btcc::BtccCode;
 const SCHEMA: &str = "butler.turn-execution-controls.v1";
 const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
 
+/// The persisted execution controls of a turn (`butler.turn-execution-controls.v1`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ExecutionControls(Value);
 
+/// Where the controls were chosen.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ControlSource {
@@ -22,12 +24,14 @@ pub enum ControlSource {
     GlobalDefault,
 }
 
+/// The fallback models of a turn.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModelFallback {
     pub enabled: bool,
     pub models: Vec<String>,
 }
 
+/// The subsession result a turn reports.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubsessionResultContext {
     pub relation_id: String,
@@ -35,6 +39,7 @@ pub struct SubsessionResultContext {
     pub safe_title: String,
 }
 
+/// Execution controls after schema and hash verification.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VerifiedExecutionControls {
     pub turn_id: String,
@@ -67,6 +72,7 @@ pub struct ControlResolution {
 }
 
 impl ExecutionControls {
+    /// Controls resolved for a turn.
     pub fn create(
         turn_id: &str,
         session_id: &str,
@@ -111,6 +117,7 @@ impl ExecutionControls {
         Ok(Self(Value::Object(fields)))
     }
 
+    /// Verifies the schema and content of the stored controls.
     pub fn verify(&self) -> Result<VerifiedExecutionControls, BtccError> {
         let fields = self.0.as_object().ok_or_else(invalid)?;
         if fields.get("schema_version").and_then(Value::as_str) != Some(SCHEMA) {
@@ -173,6 +180,7 @@ impl ExecutionControls {
         Ok(verified)
     }
 
+    /// The stored JSON form.
     pub fn as_json(&self) -> &Value {
         &self.0
     }

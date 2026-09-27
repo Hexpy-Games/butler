@@ -5,6 +5,7 @@ use crate::conversation::types::{
     ConversationOriginDecision, ConversationOriginEvidence, ConversationOriginKind,
 };
 
+/// The evidence an origin classification is decided on.
 pub struct ConversationOriginFacts {
     pub reference: Option<String>,
     pub public_ingress: bool,
@@ -13,6 +14,7 @@ pub struct ConversationOriginFacts {
     pub evidence: Vec<ConversationOriginEvidence>,
 }
 
+/// Classifies a message's origin from its evidence.
 pub fn classify_conversation_origin(
     collation: &dyn ConversationLocaleCollation,
     mut facts: ConversationOriginFacts,
@@ -56,6 +58,7 @@ pub fn classify_conversation_origin(
     }
 }
 
+/// The canonical conversation session id of a durable session.
 pub fn conversation_session_id_for_durable_session(id: &str) -> String {
     let mut hash = Sha256::new();
     hash.update(id.as_bytes());

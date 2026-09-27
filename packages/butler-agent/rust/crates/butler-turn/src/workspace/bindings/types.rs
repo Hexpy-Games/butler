@@ -1,5 +1,6 @@
 use serde_json::{Map, Value};
 
+/// A session's role; unknown stored roles are kept verbatim.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SessionRole {
     Butler,
@@ -28,6 +29,7 @@ impl SessionRole {
     }
 }
 
+/// A session's lifecycle state.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SessionLifecycleState {
     Active,
@@ -63,6 +65,7 @@ impl SessionLifecycleState {
     }
 }
 
+/// A transport conversation a session is bound to.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SessionTransportBinding {
     pub transport: String,
@@ -71,6 +74,7 @@ pub struct SessionTransportBinding {
     pub thread_id: Option<String>,
 }
 
+/// A stored session binding.
 #[derive(Clone, Debug, PartialEq)]
 pub struct StoredSessionBinding {
     pub session_id: String,
@@ -92,6 +96,7 @@ pub struct StoredSessionBinding {
     pub metadata: Option<Map<String, Value>>,
 }
 
+/// An optional upsert field: keep the stored value, clear it, or set it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum OwnOptional<T> {
     #[default]
@@ -100,6 +105,7 @@ pub enum OwnOptional<T> {
     Value(T),
 }
 
+/// A session binding to insert or update.
 #[derive(Clone, Debug)]
 pub struct UpsertSessionBinding {
     pub session_id: String,
@@ -130,6 +136,7 @@ pub(crate) struct RebindWorkspaceInput {
     pub updated_at: Option<String>,
 }
 
+/// A compare-and-set of a session's execution context.
 #[derive(Clone, Debug)]
 pub struct ExecutionContextInput {
     pub session_id: String,
@@ -142,6 +149,7 @@ pub struct ExecutionContextInput {
     pub metadata: Map<String, Value>,
 }
 
+/// The result of a compare-and-set rebinding.
 #[derive(Clone, Debug, PartialEq)]
 pub enum RebindWorkspaceResult {
     Applied(StoredSessionBinding),

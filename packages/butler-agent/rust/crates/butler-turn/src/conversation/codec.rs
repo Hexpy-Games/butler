@@ -192,7 +192,7 @@ impl SourceHasher {
         }
         self.first = false;
         self.hash
-            .update(stringify(&source_payload(message)?)?.as_bytes());
+            .update(stringify(&source_payload(message))?.as_bytes());
         Ok(())
     }
 
@@ -202,7 +202,7 @@ impl SourceHasher {
     }
 }
 
-fn source_payload(message: &ConversationMessageWithParts) -> ConversationResult<Value> {
+fn source_payload(message: &ConversationMessageWithParts) -> Value {
     let mut object = Map::new();
     object.insert("id".into(), Value::String(message.message.id.clone()));
     object.insert(
@@ -242,7 +242,7 @@ fn source_payload(message: &ConversationMessageWithParts) -> ConversationResult<
         "parts".into(),
         Value::Array(message.parts.iter().map(part_payload).collect()),
     );
-    Ok(Value::Object(object))
+    Value::Object(object)
 }
 
 fn part_payload(part: &ConversationPart) -> Value {

@@ -9,6 +9,8 @@ use serde_json::value::RawValue;
 
 use crate::json::JsonError;
 
+/// Calls `field` with each member's key and encoded value of a JSON object,
+/// without decoding the values.
 pub fn visit_raw_object<'a>(
     encoded: &'a str,
     field: impl FnMut(&'a str, &'a str) -> Result<(), JsonError>,
@@ -34,6 +36,7 @@ pub fn visit_raw_object<'a>(
         .map_err(JsonError::from)
 }
 
+/// Calls `item` with each encoded element of a JSON array, without decoding it.
 pub fn visit_raw_array<'a>(
     encoded: &'a str,
     item: impl FnMut(&'a str) -> Result<(), JsonError>,
@@ -99,18 +102,24 @@ pub fn bound_raw_string(raw: &str, max_chars: usize) -> Result<String, JsonError
         append_units(&head, &mut output);
     } else {
         let side = ((max_chars.saturating_sub(CONTENT_MARKER.len())) / 2).max(1);
-        append_units(&head[..side.min(head.len())], &mut output);
+        append_units(head.get(..side).unwrap_or(&head), &mut output);
         append_units(
             &CONTENT_MARKER.encode_utf16().collect::<Vec<_>>(),
             &mut output,
         );
         let tail = tail.make_contiguous();
-        append_units(&tail[tail.len().saturating_sub(side)..], &mut output);
+        append_units(
+            tail.get(tail.len().saturating_sub(side)..)
+                .unwrap_or_default(),
+            &mut output,
+        );
     }
     output.push('"');
     Ok(output)
 }
 
+/// Whether an encoded JSON string contains any of `markers`, compared as
+/// UTF-16 units so escaped content matches.
 pub fn raw_string_contains_any(raw: &str, markers: &[&str]) -> bool {
     let patterns = markers
         .iter()
@@ -171,12 +180,12 @@ impl Iterator for RawUnits<'_> {
             return None;
         }
         let bytes = self.raw.as_bytes();
-        if bytes[self.at] == b'\\' {
-            let escaped = bytes[self.at + 1];
+        if bytes.get(self.at) == Some(&b'\\') {
+            let escaped = *bytes.get(self.at + 1)?;
             self.at += 2;
             return Some(match escaped {
                 b'u' => {
-                    let code = u16::from_str_radix(&self.raw[self.at..self.at + 4], 16).ok()?;
+                    let code = u16::from_str_radix(self.raw.get(self.at..self.at + 4)?, 16).ok()?;
                     self.at += 4;
                     code
                 }
@@ -188,27 +197,31 @@ impl Iterator for RawUnits<'_> {
                 other => u16::from(other),
             });
         }
-        let character = self.raw[self.at..].chars().next()?;
+        let character = self.raw.get(self.at..)?.chars().next()?;
         self.at += character.len_utf8();
         let mut units = [0u16; 2];
-        let written = character.encode_utf16(&mut units);
-        if written.len() == 2 {
-            self.pending = Some(units[1]);
+        match *character.encode_utf16(&mut units) {
+            [first, second] => {
+                self.pending = Some(second);
+                Some(first)
+            }
+            [first] => Some(first),
+            _ => None,
         }
-        Some(units[0])
     }
 }
 
 fn append_units(units: &[u16], output: &mut String) {
     let mut at = 0;
-    while at < units.len() {
-        let unit = units[at];
+    while let Some(&unit) = units.get(at) {
+        let low = units
+            .get(at + 1)
+            .copied()
+            .filter(|low| (0xdc00..=0xdfff).contains(low));
         if (0xd800..=0xdbff).contains(&unit)
-            && at + 1 < units.len()
-            && (0xdc00..=0xdfff).contains(&units[at + 1])
+            && let Some(low) = low
         {
-            let scalar = 0x10000
-                + (((u32::from(unit) - 0xd800) << 10) | (u32::from(units[at + 1]) - 0xdc00));
+            let scalar = 0x10000 + (((u32::from(unit) - 0xd800) << 10) | (u32::from(low) - 0xdc00));
             output.push(char::from_u32(scalar).unwrap_or(char::REPLACEMENT_CHARACTER));
             at += 2;
             continue;

@@ -26,6 +26,7 @@ struct SessionRow {
 }
 
 impl SessionBindingStore {
+    /// A session binding.
     pub async fn get_by_session_id(
         &self,
         session_id: &str,
@@ -35,6 +36,7 @@ impl SessionBindingStore {
             .await
     }
 
+    /// Session bindings, optionally filtered by lifecycle state.
     pub async fn list_sessions(
         &self,
         lifecycle_states: Option<Vec<SessionLifecycleState>>,

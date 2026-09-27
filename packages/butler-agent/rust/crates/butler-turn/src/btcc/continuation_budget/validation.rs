@@ -10,6 +10,7 @@ const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
 use super::{TURN_CONTINUATION_BUDGET_SCHEMA, TURN_CONTINUATION_EXHAUSTED_CODE};
 use crate::btcc::BtccCode;
 
+/// The continuation budget limits configured in the environment, if enabled.
 pub fn select_turn_continuation_budget(
     read_env: impl Fn(&str) -> Option<String>,
 ) -> Result<Option<TurnContinuationBudgetLimits>, BtccError> {

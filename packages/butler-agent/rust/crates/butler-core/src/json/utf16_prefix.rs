@@ -5,12 +5,15 @@ use std::borrow::Cow;
 
 use super::JsonError;
 
+/// The first UTF-16 units of a string, keeping a split surrogate pair's
+/// high half the way a JavaScript `slice` would.
 pub struct Utf16Prefix<'a> {
     text: Cow<'a, str>,
     trailing_high: Option<u16>,
 }
 
 impl<'a> Utf16Prefix<'a> {
+    /// The prefix of at most `max_units` UTF-16 units of `text`.
     pub fn new(text: impl Into<Cow<'a, str>>, max_units: usize) -> Self {
         Self {
             text: text.into(),
@@ -19,21 +22,24 @@ impl<'a> Utf16Prefix<'a> {
         .prefix(max_units)
     }
 
+    /// Length in UTF-16 units, counting a retained high surrogate.
     pub fn len_utf16(&self) -> usize {
         self.text.encode_utf16().count() + usize::from(self.trailing_high.is_some())
     }
 
+    /// Whether the prefix holds no units at all.
     pub fn is_empty(&self) -> bool {
         self.text.is_empty() && self.trailing_high.is_none()
     }
 
+    /// Shortens the prefix further to at most `max_units` UTF-16 units.
     #[must_use]
     pub fn prefix(mut self, max_units: usize) -> Self {
         let mut units = 0;
         for (index, character) in self.text.char_indices() {
             if units + character.len_utf16() > max_units {
                 self.trailing_high = if units < max_units {
-                    Some(character.encode_utf16(&mut [0; 2])[0])
+                    character.encode_utf16(&mut [0; 2]).first().copied()
                 } else {
                     None
                 };

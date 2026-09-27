@@ -17,6 +17,9 @@ struct Ready {
     prepared: Prepared,
 }
 
+/// Applies a batch of guarded edits all-or-nothing per preflight: every file
+/// is snapshotted, guarded and edited in memory before any commit, and a
+/// commit conflict leaves the remaining targets unattempted.
 pub(super) fn execute(edits: &[GuardedEdit], observer: &dyn CommitObserver) -> BatchResult {
     let mut outcome = BatchResult {
         applied: Vec::new(),
@@ -26,61 +29,91 @@ pub(super) fn execute(edits: &[GuardedEdit], observer: &dyn CommitObserver) -> B
         not_attempted: Vec::new(),
         error: None,
     };
-    let mut snapshots: HashMap<String, Snapshot> = HashMap::new();
-    let mut texts: HashMap<String, String> = HashMap::new();
+    let mut files = snapshot_files(edits, &mut outcome.preflight_failures);
+    if !outcome.preflight_failures.is_empty() {
+        return preflight_failed(outcome, edits);
+    }
+    let targets = match apply_in_memory(edits, &mut files.texts) {
+        Ok(targets) => targets,
+        Err(failure) => {
+            outcome.preflight_failures.push(failure);
+            return preflight_failed(outcome, edits);
+        }
+    };
+    let ready = prepare_targets(targets, &mut files, &mut outcome);
+    if !outcome.preflight_failures.is_empty() {
+        return preflight_failed(outcome, edits);
+    }
+    commit_targets(ready, observer, outcome)
+}
+
+/// The snapshot and decoded text of every edited file, keyed by public path.
+struct Files {
+    snapshots: HashMap<String, Snapshot>,
+    texts: HashMap<String, String>,
+}
+
+/// Snapshots and decodes each file once and checks every edit's expected
+/// digest; failures are collected for all edits.
+fn snapshot_files(edits: &[GuardedEdit], failures: &mut Vec<EditFailure>) -> Files {
+    let mut files = Files {
+        snapshots: HashMap::new(),
+        texts: HashMap::new(),
+    };
     for edit in edits {
         let key = &edit.path.public;
-        if !snapshots.contains_key(key) {
-            let path = super::super::contracts::GuardedPath {
-                public: key.clone(),
-                absolute: edit.path.absolute.clone(),
-                real: edit.path.real.clone(),
-            };
-            let snapshot = match io::observe(path, false) {
-                Ok(snapshot) => snapshot,
-                Err(error) => {
-                    outcome
-                        .preflight_failures
-                        .push(edit_failure(edit.input.index, error));
+        if !files.snapshots.contains_key(key) {
+            match snapshot_file(edit) {
+                Ok((snapshot, text)) => {
+                    files.texts.insert(key.clone(), text);
+                    files.snapshots.insert(key.clone(), snapshot);
+                }
+                Err(failure) => {
+                    failures.push(failure);
                     continue;
                 }
-            };
-            if !snapshot.exists {
-                outcome.preflight_failures.push(EditFailure::new(
-                    edit.input.index,
-                    Some(key.clone()),
-                    "not_found",
-                ));
-                continue;
             }
-            let text = match decode(&snapshot.bytes) {
-                Ok(text) => text.to_owned(),
-                Err(error) => {
-                    outcome.preflight_failures.push(EditFailure::new(
-                        edit.input.index,
-                        Some(key.clone()),
-                        error.code(),
-                    ));
-                    continue;
-                }
-            };
-            texts.insert(key.clone(), text);
-            snapshots.insert(key.clone(), snapshot);
         }
-        let Some(snapshot) = snapshots.get(key) else {
+        let Some(snapshot) = files.snapshots.get(key) else {
             continue;
         };
         if let Err(error) =
             io::prepare_guard(snapshot, edit.input.expected_sha256.as_deref(), false)
         {
-            outcome
-                .preflight_failures
-                .push(edit_failure(edit.input.index, error));
+            failures.push(edit_failure(edit.input.index, error));
         }
     }
-    if !outcome.preflight_failures.is_empty() {
-        return preflight_failed(outcome, edits);
+    files
+}
+
+fn snapshot_file(edit: &GuardedEdit) -> Result<(Snapshot, String), EditFailure> {
+    let key = &edit.path.public;
+    let path = super::super::contracts::GuardedPath {
+        public: key.clone(),
+        absolute: edit.path.absolute.clone(),
+        real: edit.path.real.clone(),
+    };
+    let snapshot =
+        io::observe(path, false).map_err(|error| edit_failure(edit.input.index, error))?;
+    if !snapshot.exists {
+        return Err(EditFailure::new(
+            edit.input.index,
+            Some(key.clone()),
+            "not_found",
+        ));
     }
+    let text = decode(&snapshot.bytes)
+        .map_err(|error| EditFailure::new(edit.input.index, Some(key.clone()), error.code()))?
+        .to_owned();
+    Ok((snapshot, text))
+}
+
+/// Applies the edits to the decoded texts in order and groups them by file;
+/// the first edit whose old text cannot be located fails the batch.
+fn apply_in_memory(
+    edits: &[GuardedEdit],
+    texts: &mut HashMap<String, String>,
+) -> Result<Vec<Target>, EditFailure> {
     let mut targets = Vec::<Target>::new();
     let mut target_indices = HashMap::<String, usize>::new();
     for edit in edits {
@@ -88,38 +121,50 @@ pub(super) fn execute(edits: &[GuardedEdit], observer: &dyn CommitObserver) -> B
         let Some(text) = texts.get_mut(key) else {
             continue;
         };
-        let location = match locator::locate(text, &edit.input.old_text, edit.input.start_line) {
-            Ok(location) => location,
-            Err(failure) => {
+        let location = locator::locate(text, &edit.input.old_text, edit.input.start_line).map_err(
+            |failure| {
                 let mut error =
                     EditFailure::new(edit.input.index, Some(key.clone()), failure.error);
                 error.occurrences = Some(failure.occurrences);
-                outcome.preflight_failures.push(error);
-                return preflight_failed(outcome, edits);
-            }
-        };
+                error
+            },
+        )?;
         text.replace_range(
             location.offset..location.offset + edit.input.old_text.len(),
             &edit.input.new_text,
         );
-        if let Some(position) = target_indices.get(key) {
-            targets[*position].edit_indexes.push(edit.input.index);
-        } else {
-            target_indices.insert(key.clone(), targets.len());
-            targets.push(Target {
-                path: key.clone(),
-                first_index: edit.input.index,
-                edit_indexes: vec![edit.input.index],
-                start_line: location.start_line,
-                expected_sha256: edit.input.expected_sha256.clone(),
-            });
+        if let Some(target) = target_indices
+            .get(key)
+            .and_then(|position| targets.get_mut(*position))
+        {
+            target.edit_indexes.push(edit.input.index);
+            continue;
         }
+        target_indices.insert(key.clone(), targets.len());
+        targets.push(Target {
+            path: key.clone(),
+            first_index: edit.input.index,
+            edit_indexes: vec![edit.input.index],
+            start_line: location.start_line,
+            expected_sha256: edit.input.expected_sha256.clone(),
+        });
     }
+    Ok(targets)
+}
+
+/// Prepares the commit of every changed file; files whose text did not
+/// change are reported unchanged.
+fn prepare_targets(
+    targets: Vec<Target>,
+    files: &mut Files,
+    outcome: &mut BatchResult,
+) -> Vec<Ready> {
     let mut ready = Vec::new();
     for target in targets {
-        let (Some(snapshot), Some(after)) =
-            (snapshots.remove(&target.path), texts.remove(&target.path))
-        else {
+        let (Some(snapshot), Some(after)) = (
+            files.snapshots.remove(&target.path),
+            files.texts.remove(&target.path),
+        ) else {
             continue;
         };
         if snapshot.bytes == after.as_bytes() {
@@ -138,44 +183,49 @@ pub(super) fn execute(edits: &[GuardedEdit], observer: &dyn CommitObserver) -> B
                 .push(edit_failure(target.first_index, error)),
         }
     }
-    if !outcome.preflight_failures.is_empty() {
-        return preflight_failed(outcome, edits);
-    }
+    ready
+}
+
+/// Commits the prepared files in order; the first conflict stops the batch.
+fn commit_targets(
+    ready: Vec<Ready>,
+    observer: &dyn CommitObserver,
+    mut outcome: BatchResult,
+) -> BatchResult {
     let mut remaining = ready.into_iter();
-    while let Some(ready_target) = remaining.next() {
-        observer.before_target(
-            ready_target.target.first_index,
-            &ready_target.prepared.before.path.absolute,
-        );
-        match io::commit(ready_target.prepared, observer) {
-            Ok(committed) => outcome.applied.push(EditedFile {
-                index: ready_target.target.first_index,
-                edit_indexes: ready_target.target.edit_indexes,
-                start_line: ready_target.target.start_line,
-                committed,
-            }),
-            Err(failure) => {
-                let error = failure.error;
-                outcome
-                    .conflicting
-                    .push(edit_failure(ready_target.target.first_index, failure));
-                outcome.not_attempted = remaining
-                    .map(|target| {
-                        (
-                            target.target.first_index,
-                            Some(target.target.path),
-                            target.target.edit_indexes,
-                        )
-                    })
-                    .collect();
-                outcome.error = Some(if outcome.applied.is_empty() {
-                    error
-                } else {
-                    "partial_apply"
+    while let Some(Ready { target, prepared }) = remaining.next() {
+        observer.before_target(target.first_index, &prepared.before.path.absolute);
+        let failure = match io::commit(prepared, observer) {
+            Ok(committed) => {
+                outcome.applied.push(EditedFile {
+                    index: target.first_index,
+                    edit_indexes: target.edit_indexes,
+                    start_line: target.start_line,
+                    committed,
                 });
-                return outcome;
+                continue;
             }
-        }
+            Err(failure) => failure,
+        };
+        let error = failure.error;
+        outcome
+            .conflicting
+            .push(edit_failure(target.first_index, failure));
+        outcome.not_attempted = remaining
+            .map(|ready| {
+                (
+                    ready.target.first_index,
+                    Some(ready.target.path),
+                    ready.target.edit_indexes,
+                )
+            })
+            .collect();
+        outcome.error = Some(if outcome.applied.is_empty() {
+            error
+        } else {
+            "partial_apply"
+        });
+        return outcome;
     }
     outcome
 }

@@ -1,3 +1,4 @@
+use butler_core::json;
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde_json::json;
 
@@ -26,7 +27,7 @@ pub(super) fn append(connection: &mut Connection, write: ProgressWrite) -> Stora
     let event = serde_json::to_value(event)
         .map_err(|cause| error(StorageCode::ProgressEvent, cause.to_string()).with_source(cause))?;
     let fingerprint = digest(&canonical_json(
-        &json!({"kind":event["kind"],"visibility":event["visibility"],"payload":event.get("payload").cloned().unwrap_or_else(||json!({}))}),
+        &json!({"kind":json::at(&event, "/kind"),"visibility":json::at(&event, "/visibility"),"payload":event.get("payload").cloned().unwrap_or_else(||json!({}))}),
     )?);
     let destination = serde_json::to_value(&write.destination)
         .map_err(|e| error(StorageCode::ProgressDestination, e.to_string()).with_source(e))?;

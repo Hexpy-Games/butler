@@ -59,7 +59,7 @@ pub(super) fn request(
         .as_deref()
         .filter(|value| !value.is_empty())
     {
-        output["source_call_id"] = json!(call);
+        butler_core::json::object_mut(&mut output).insert("source_call_id".into(), json!(call));
     }
     Ok(output)
 }

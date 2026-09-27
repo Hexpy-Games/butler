@@ -148,32 +148,15 @@ pub(super) fn preflight(
     }
 }
 
+/// Captures the session's single open current (R3) project Work as a legacy
+/// snapshot with its full revision history, bindings and turns.
 pub(super) fn capture(
     db: &Connection,
     input: &ProjectWorkLegacyInput,
 ) -> StorageResult<Option<ProjectWorkLegacySnapshot>> {
-    let rows = locate(db, input)?;
-    if rows.len() > 1 {
-        return Err(invalid(StorageCode::ProjectWorkLegacyMultipleOpenWorks));
-    }
-    let Some(row) = rows.first() else {
+    let Some(row) = capturable_work(db, input)? else {
         return Ok(None);
     };
-    if !has_semantic_rows(db, &row.work_id)?
-        && row
-            .ledger_project_id
-            .as_deref()
-            .is_some_and(|value| !value.is_empty())
-    {
-        return Ok(None);
-    }
-    if row
-        .ledger_project_id
-        .as_deref()
-        .is_some_and(|id| !id.is_empty() && id != input.resolved_scope.ledger_project_id)
-    {
-        return Err(invalid(StorageCode::ProjectWorkLegacyScopeConflict));
-    }
     let mut work = hydrate_work_view(db, &row.work_id)?;
     let bindings = bindings(db, &row.work_id, &input.scope.session_id)?;
     let required_turn_ids = required_turn_ids(db, &work, &bindings)?;
@@ -185,24 +168,19 @@ pub(super) fn capture(
     }
     let plans = history::plans(db, &row.work_id)?;
     let checkpoints = history::checkpoints(db, &row.work_id, &plans)?;
-    let source_reviews = history::reviews(db, &row.work_id, &checkpoints, false)?;
-    let reviews = history::reviews(db, &row.work_id, &checkpoints, true)?;
-    work.latest_checkpoint = checkpoints.last().map(|item| item.checkpoint.clone());
-    work.latest_plan_review = reviews
-        .iter()
-        .rev()
-        .find(|v| matches!(v.subject, crate::btcc::work::ReviewSubject::Plan))
-        .cloned();
-    work.latest_result_review = reviews
-        .iter()
-        .rev()
-        .find(|v| matches!(v.subject, crate::btcc::work::ReviewSubject::Result))
-        .cloned();
-    work.latest_completion_validation = reviews
-        .iter()
-        .rev()
-        .find(|v| matches!(v.subject, crate::btcc::work::ReviewSubject::Completion))
-        .cloned();
+    let source_reviews = history::reviews(
+        db,
+        &row.work_id,
+        &checkpoints,
+        history::ResultActionProgress::Stored,
+    )?;
+    let reviews = history::reviews(
+        db,
+        &row.work_id,
+        &checkpoints,
+        history::ResultActionProgress::FromCheckpoint,
+    )?;
+    attach_latest_revisions(&mut work, &checkpoints, &reviews);
     let dispositions = history::dispositions(db, &work, &plans, &checkpoints, &source_reviews)?;
     let turns = turns(db, &required_turn_ids, &input.scope.session_id)?;
     let prior = import_row(db, &row.work_id)?;
@@ -223,6 +201,7 @@ pub(super) fn capture(
     } else {
         format!("current-r3:{}", row.work_id)
     };
+    // The digest covers this JSON, so its field order is part of the import identity.
     let semantic = json!({
         "sourceProgramId":source_program_id,"sourceIdentity":source_identity,"work":work,
         "plans":plans,"checkpoints":checkpoints,"reviews":reviews,
@@ -243,6 +222,50 @@ pub(super) fn capture(
         bindings,
         turns,
     }))
+}
+
+/// The single open Work to capture; `None` when there is none or it is
+/// already bound to a ledger without semantic history. More than one open
+/// Work, or one bound to another ledger project, is refused.
+fn capturable_work(
+    db: &Connection,
+    input: &ProjectWorkLegacyInput,
+) -> StorageResult<Option<LegacyWorkLocator>> {
+    let rows = locate(db, input)?;
+    if rows.len() > 1 {
+        return Err(invalid(StorageCode::ProjectWorkLegacyMultipleOpenWorks));
+    }
+    let Some(row) = rows.into_iter().next() else {
+        return Ok(None);
+    };
+    let ledger = row.ledger_project_id.as_deref().filter(|id| !id.is_empty());
+    if !has_semantic_rows(db, &row.work_id)? && ledger.is_some() {
+        return Ok(None);
+    }
+    if ledger.is_some_and(|id| id != input.resolved_scope.ledger_project_id) {
+        return Err(invalid(StorageCode::ProjectWorkLegacyScopeConflict));
+    }
+    Ok(Some(row))
+}
+
+/// Sets the latest checkpoint and the latest review of each subject.
+fn attach_latest_revisions(
+    work: &mut crate::btcc::work::WorkView,
+    checkpoints: &[crate::btcc::work::ProjectWorkLegacyCheckpoint],
+    reviews: &[crate::btcc::work::WorkReview],
+) {
+    use crate::btcc::work::ReviewSubject;
+    let latest = |subject: ReviewSubject| {
+        reviews
+            .iter()
+            .rev()
+            .find(|review| review.subject == subject)
+            .cloned()
+    };
+    work.latest_checkpoint = checkpoints.last().map(|item| item.checkpoint.clone());
+    work.latest_plan_review = latest(ReviewSubject::Plan);
+    work.latest_result_review = latest(ReviewSubject::Result);
+    work.latest_completion_validation = latest(ReviewSubject::Completion);
 }
 
 pub(super) fn bindings(

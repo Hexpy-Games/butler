@@ -57,34 +57,35 @@ impl TurnExecutionSupervisor {
     ) -> Result<ExecutionPermit, BtccError> {
         let mut state = self.inner.lock();
         let permit_generation = next_generation(&mut state);
-        let registration_generation = if let Some(registration) = state.turns.get_mut(turn_id) {
-            let allowed = registration.fence == FenceState::Open
-                || (registration.fence == FenceState::FinalizingOnly
-                    && semantic_state == TurnSemanticState::DeliveryCommitted);
-            if !allowed || registration.permit_generation.is_some() {
-                return Err(BtccError::detected(
-                    BtccCode::TurnFenced,
-                    "Turn execution is fenced",
-                ));
-            }
-            registration.permit_generation = Some(permit_generation);
-            registration.generation
-        } else {
-            let generation = next_generation(&mut state);
-            state.turns.insert(
-                turn_id.to_owned(),
-                Registration {
-                    generation,
-                    stop_attempt_generation: 0,
-                    permit_generation: Some(permit_generation),
-                    token: CancellationToken::new(),
-                    fence: FenceState::Open,
-                    durable_terminal: false,
-                },
-            );
-            generation
-        };
-        let token = state.turns[turn_id].token.clone();
+        let (registration_generation, token) =
+            if let Some(registration) = state.turns.get_mut(turn_id) {
+                let allowed = registration.fence == FenceState::Open
+                    || (registration.fence == FenceState::FinalizingOnly
+                        && semantic_state == TurnSemanticState::DeliveryCommitted);
+                if !allowed || registration.permit_generation.is_some() {
+                    return Err(BtccError::detected(
+                        BtccCode::TurnFenced,
+                        "Turn execution is fenced",
+                    ));
+                }
+                registration.permit_generation = Some(permit_generation);
+                (registration.generation, registration.token.clone())
+            } else {
+                let generation = next_generation(&mut state);
+                let token = CancellationToken::new();
+                state.turns.insert(
+                    turn_id.to_owned(),
+                    Registration {
+                        generation,
+                        stop_attempt_generation: 0,
+                        permit_generation: Some(permit_generation),
+                        token: token.clone(),
+                        fence: FenceState::Open,
+                        durable_terminal: false,
+                    },
+                );
+                (generation, token)
+            };
         Ok(ExecutionPermit {
             turn_id: turn_id.to_owned(),
             registration_generation,

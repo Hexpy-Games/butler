@@ -31,8 +31,9 @@ use butler_turn::btcc::storage::{
     ToolJournalStart,
 };
 use butler_turn::btcc::{
-    AgentLoop, ModelRoundError, ModelRouteEventWrite, ModelRouteRetryConfig, ModelRouteWrite,
-    PortFuture, TurnModelExecutionFactory, TurnSteeringPort, TurnStore,
+    AgentLoop, ModelRoundError, ModelRouteEvent, ModelRouteEventKind, ModelRouteEventWrite,
+    ModelRouteRetryConfig, ModelRouteWrite, PortFuture, TurnModelExecutionFactory,
+    TurnSteeringPort, TurnStore,
 };
 
 use butler_turn::btcc::agent_loop::contracts::SteeringObservation;
@@ -191,7 +192,14 @@ async fn provider_context_and_replay_share_one_turn_owner() {
                 claim_id: claim.claim_id.clone(),
                 route: route.clone(),
             },
-            event: json!({"type":"model.route.updated","roundId":"route-state","candidateIndex":0,"modelRef":"openai/gpt-5.5"}),
+            event: ModelRouteEvent {
+                kind: ModelRouteEventKind::FallbackSelected,
+                round_id: "route-state".into(),
+                candidate_index: 0,
+                model_ref: "openai/gpt-5.5".into(),
+                transport_attempt: None,
+                failure: None,
+            },
         })
         .await
         .unwrap();

@@ -20,7 +20,7 @@ pub(in crate::btcc::storage::work) fn record_checkpoint(
     )? {
         return read::view(db, &work_id);
     }
-    let work = relation::require_bound(db, &input.scope, false)?;
+    let work = relation::require_bound(db, &input.scope, relation::BoundState::Open)?;
     if work.current_plan_revision_id.as_deref() != Some(&command.expected_plan_revision_id) {
         return Err(common::error(
             StorageCode::DurableWorkPlanChanged,

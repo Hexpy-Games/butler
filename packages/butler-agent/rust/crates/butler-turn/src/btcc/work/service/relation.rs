@@ -7,6 +7,7 @@ use crate::btcc::BtccCode;
 use crate::btcc::work::contracts::*;
 
 impl DurableWorkService {
+    /// Validates and starts new Work.
     pub async fn start_work(&self, input: StartWorkInput) -> Result<WorkView, BtccError> {
         super::super::validation::validate_start(&input)?;
         let mut identity = serialized(&input)?;
@@ -20,6 +21,7 @@ impl DurableWorkService {
             .await
     }
 
+    /// Validates and continues existing Work.
     pub async fn continue_work(&self, input: ContinueWorkInput) -> Result<WorkView, BtccError> {
         super::super::validation::validate_continue(&input)?;
         let mut identity = serialized(&input)?;
@@ -33,6 +35,7 @@ impl DurableWorkService {
             .await
     }
 
+    /// Validates and records a plan revision.
     pub async fn replace_plan(&self, input: ReplacePlanInput) -> Result<WorkView, BtccError> {
         super::super::validation::validate_replace(&input)?;
         let start_new = input.start_new.unwrap_or(false);

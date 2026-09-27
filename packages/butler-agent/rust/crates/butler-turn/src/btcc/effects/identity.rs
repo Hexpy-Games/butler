@@ -26,6 +26,7 @@ pub(super) fn digest(text: &str) -> String {
     format!("{:x}", Sha256::digest(text.as_bytes()))
 }
 
+/// The effect id of an accepted-plan effect occurrence.
 pub fn accepted_plan_effect_id(
     work_id: &str,
     plan_revision_id: &str,
@@ -40,6 +41,7 @@ pub fn accepted_plan_effect_id(
     Ok(format!("guided-effect-{}", digest(&stable(&slot)?)))
 }
 
+/// The digest of an effect input's stable JSON.
 pub fn effect_input_sha256(value: &Value) -> EffectResult<String> {
     Ok(digest(&stable(value)?))
 }

@@ -50,47 +50,9 @@ pub(in crate::btcc::storage::work) fn replace_plan(
     if let Some(expected) = command.expected_progress_revision {
         assert_progress_revision(db, &work.id, expected)?;
     }
-    let revision = common::next_revision(db, "btcc_guided_work_plan_revisions", &work.id)?;
-    let plan_id = common::record_id("plan", &input.mutation_call_id);
     let now = clock();
-    db.execute("INSERT INTO btcc_guided_work_plan_revisions (plan_revision_id, work_id, revision, objective, governing_refs_json, execution_mode, actions_json, checks_json, origin_turn_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)", params![plan_id, work.id, revision, input.objective, common::stable(&command.governing_refs)?, input.execution_mode.map(common::enum_text).transpose()?, common::stable(&input.actions)?, common::stable(&input.checks)?, input.scope.turn_id, now]).map_err(StorageError::sqlite)?;
-    let result_sequence = common::latest_result_sequence(db, &work.id)?;
-    let next = input
-        .actions
-        .first()
-        .map_or("", |action| action.description.as_str());
-    if command.opening_plan {
-        insert_progress(
-            db,
-            ProgressInput {
-                work_id: &work.id,
-                plan_revision_id: &plan_id,
-                stage: WorkStage::Conception,
-                actions: &command.action_progress,
-                summary: &input.objective,
-                next,
-                result_sequence,
-                origin_turn_id: &input.scope.turn_id,
-                identity: &format!("{}\0conception", input.mutation_call_id),
-                now: &now,
-            },
-        )?;
-    }
-    insert_progress(
-        db,
-        ProgressInput {
-            work_id: &work.id,
-            plan_revision_id: &plan_id,
-            stage: WorkStage::Planning,
-            actions: &command.action_progress,
-            summary: &input.objective,
-            next,
-            result_sequence,
-            origin_turn_id: &input.scope.turn_id,
-            identity: &format!("{}\0plan", input.mutation_call_id),
-            now: &now,
-        },
-    )?;
+    let plan_id = insert_plan_revision(db, &work.id, command, &now)?;
+    record_plan_progress(db, &work.id, &plan_id, command, &now)?;
     let status = if command
         .action_progress
         .iter()
@@ -118,4 +80,57 @@ pub(in crate::btcc::storage::work) fn replace_plan(
         clock,
     )?;
     read::view(db, &work.id)
+}
+
+/// Inserts the next Plan revision and returns its id.
+fn insert_plan_revision(
+    db: &Connection,
+    work_id: &str,
+    command: &ReplacePlanCommand,
+    now: &str,
+) -> StorageResult<String> {
+    let input = &command.input;
+    let revision = common::next_revision(db, "btcc_guided_work_plan_revisions", work_id)?;
+    let plan_id = common::record_id("plan", &input.mutation_call_id);
+    db.execute("INSERT INTO btcc_guided_work_plan_revisions (plan_revision_id, work_id, revision, objective, governing_refs_json, execution_mode, actions_json, checks_json, origin_turn_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)", params![plan_id, work_id, revision, input.objective, common::stable(&command.governing_refs)?, input.execution_mode.map(common::enum_text).transpose()?, common::stable(&input.actions)?, common::stable(&input.checks)?, input.scope.turn_id, now]).map_err(StorageError::sqlite)?;
+    Ok(plan_id)
+}
+
+/// Records Planning progress, preceded by Conception when the Plan opens the Work.
+fn record_plan_progress(
+    db: &Connection,
+    work_id: &str,
+    plan_id: &str,
+    command: &ReplacePlanCommand,
+    now: &str,
+) -> StorageResult<()> {
+    let input = &command.input;
+    let result_sequence = common::latest_result_sequence(db, work_id)?;
+    let next = input
+        .actions
+        .first()
+        .map_or("", |action| action.description.as_str());
+    let stages = [
+        (WorkStage::Conception, "conception"),
+        (WorkStage::Planning, "plan"),
+    ];
+    let skip = usize::from(!command.opening_plan);
+    for (stage, identity) in stages.into_iter().skip(skip) {
+        insert_progress(
+            db,
+            ProgressInput {
+                work_id,
+                plan_revision_id: plan_id,
+                stage,
+                actions: &command.action_progress,
+                summary: &input.objective,
+                next,
+                result_sequence,
+                origin_turn_id: &input.scope.turn_id,
+                identity: &format!("{}\0{identity}", input.mutation_call_id),
+                now,
+            },
+        )?;
+    }
+    Ok(())
 }

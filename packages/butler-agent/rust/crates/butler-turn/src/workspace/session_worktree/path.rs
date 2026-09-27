@@ -36,6 +36,7 @@ pub(super) fn public_label(branch: &str) -> String {
         .collect()
 }
 
+/// The deterministic short worktree branch name of a session.
 pub fn short_session_worktree_branch(session_id: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(b"butler.worktree-branch.v1\0session\0");

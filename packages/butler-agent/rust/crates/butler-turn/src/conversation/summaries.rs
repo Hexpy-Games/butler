@@ -12,6 +12,7 @@ use super::{
 };
 
 impl AgentConversationStore {
+    /// Stores a summary.
     pub async fn write_summary(
         &self,
         input: ConversationSummaryInput,
@@ -21,6 +22,7 @@ impl AgentConversationStore {
         self.execute(move |connection| write(connection, clock.as_ref(), input, &now))
             .await
     }
+    /// A session's summaries.
     pub async fn read_summaries(
         &self,
         session_id: &str,
@@ -33,6 +35,7 @@ impl AgentConversationStore {
         })
         .await
     }
+    /// What a session's prompt is built from.
     pub async fn read_prompt_material(
         &self,
         session_id: &str,

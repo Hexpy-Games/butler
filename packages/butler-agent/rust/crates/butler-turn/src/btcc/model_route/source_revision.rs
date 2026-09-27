@@ -11,6 +11,7 @@ use crate::btcc::TurnRecord;
 pub struct GuidedSourceRevision(Arc<AtomicU64>);
 
 impl GuidedSourceRevision {
+    /// Starts from the revision a suspended turn's presentation reached.
     pub fn from_turn(turn: &TurnRecord) -> Self {
         let restored = turn
             .authority_continuation
@@ -22,10 +23,12 @@ impl GuidedSourceRevision {
         Self(Arc::new(AtomicU64::new(restored)))
     }
 
+    /// Advances and returns the next revision.
     pub fn next(&self) -> u64 {
         self.0.fetch_add(1, Ordering::Relaxed) + 1
     }
 
+    /// The current revision.
     pub fn current(&self) -> u64 {
         self.0.load(Ordering::Relaxed)
     }

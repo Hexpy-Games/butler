@@ -35,20 +35,14 @@ impl PromptPort for Fixture {
                 instructions: Some("guided".into()),
                 tools: vec![super::test_data::tool("read_file", false)],
                 tool_choice: Some(ToolChoice::Auto),
-                route_context: None,
                 resumed_tool_call: None,
-                max_output_tokens: None,
-                attachments: vec![],
-                image_carrier: None,
-                image_capability: None,
-                image_manifests: vec![],
-                butler_data: Some("/tmp/butler".into()),
-                usage_attribution: None,
-                cache_scope: Some(format!("btcc-guided:{}", invocation.turn.session_id)),
-                stable_provider_cache_prefix: None,
-                route_transport_attempt_ordinal: None,
-                synthesize_after_tool_candidate: false,
-                synthesize_after_tool_empty: false,
+                images: PromptImages::default(),
+                request: RoundRequestOptions {
+                    butler_data: Some("/tmp/butler".into()),
+                    cache_scope: Some(format!("btcc-guided:{}", invocation.turn.session_id)),
+                    ..Default::default()
+                },
+                final_synthesis: FinalSynthesis::Never,
             })
         })
     }
@@ -102,8 +96,11 @@ impl TurnContextProjection for BorrowedContext<'_> {
                 messages: ContextMessages::Transport,
                 bounded_continuation: None,
                 provider_body_admission: None,
-                requires_rebase: std::mem::take(&mut *self.0.rebase_once.lock().unwrap()),
-                recheck_steering_on_rebase: true,
+                rebase: if std::mem::take(&mut *self.0.rebase_once.lock().unwrap()) {
+                    ContextRebase::RequiredWithSteeringRecheck
+                } else {
+                    ContextRebase::NotRequired
+                },
             })
         })
     }
@@ -114,17 +111,16 @@ impl ToolPort for Fixture {
         &'a self,
         _invocation: GuidedInvocation<'a>,
         fallback: &'a [ModelRoundTool],
-        final_report: bool,
-    ) -> PortFuture<'a, (Vec<ModelRoundTool>, Option<String>)> {
+        phase: LoopPhase,
+    ) -> PortFuture<'a, ToolSurface> {
         Box::pin(async move {
-            Ok((
-                if final_report {
-                    vec![]
-                } else {
-                    fallback.to_vec()
+            Ok(ToolSurface {
+                tools: match phase {
+                    LoopPhase::Working => fallback.to_vec(),
+                    LoopPhase::FinalReport => vec![],
                 },
-                Some("a".repeat(64)),
-            ))
+                digest: Some("a".repeat(64)),
+            })
         })
     }
     fn execute<'a>(

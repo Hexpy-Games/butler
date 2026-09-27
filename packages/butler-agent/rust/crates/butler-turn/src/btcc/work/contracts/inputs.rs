@@ -5,6 +5,7 @@ use super::view::{
     ReviewSubject, ReviewVerdict, WorkStage,
 };
 
+/// The turn (and optional project) a Work command acts in.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkTurnScope {
@@ -14,6 +15,7 @@ pub struct WorkTurnScope {
     pub project_ref: Option<String>,
 }
 
+/// Starts new Work.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StartWorkInput {
@@ -25,6 +27,7 @@ pub struct StartWorkInput {
     pub backfill_tool_call_ids: Option<Vec<String>>,
 }
 
+/// Continues existing Work.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContinueWorkInput {
@@ -36,6 +39,7 @@ pub struct ContinueWorkInput {
     pub backfill_tool_call_ids: Option<Vec<String>>,
 }
 
+/// Replaces the Work's plan.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReplacePlanInput {
@@ -55,6 +59,7 @@ pub struct ReplacePlanInput {
     pub checks: Vec<String>,
 }
 
+/// Records progress.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CheckpointInput {
@@ -71,6 +76,7 @@ pub struct CheckpointInput {
     pub next_step: Option<String>,
 }
 
+/// Which stage a revise verdict sends the Work back to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CorrectionScope {
@@ -78,6 +84,7 @@ pub enum CorrectionScope {
     Execution,
 }
 
+/// Records a review.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReviewInput {
@@ -96,6 +103,7 @@ pub struct ReviewInput {
     pub next_stage: Option<WorkStage>,
 }
 
+/// Records a disposition.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DispositionInput {
@@ -123,11 +131,13 @@ pub struct DispositionInput {
     pub runtime_owned_open_generation: Option<RuntimeOwnedOpenGeneration>,
 }
 
+/// Marks an open disposition owned by the runtime (may reopen completed Work).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeOwnedOpenGeneration {
     pub version: u8,
 }
 
+/// Claims a closeout correction for a Work.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClaimCloseoutCorrectionInput {
@@ -136,16 +146,19 @@ pub struct ClaimCloseoutCorrectionInput {
     pub work_id: String,
 }
 
+/// A validated start with its request fingerprint.
 #[derive(Clone, Debug)]
 pub struct StartWorkCommand {
     pub input: StartWorkInput,
     pub request_sha256: String,
 }
+/// A validated continuation with its request fingerprint.
 #[derive(Clone, Debug)]
 pub struct ContinueWorkCommand {
     pub input: ContinueWorkInput,
     pub request_sha256: String,
 }
+/// A validated plan replacement with the progress it resets.
 #[derive(Clone, Debug)]
 pub struct ReplacePlanCommand {
     pub input: ReplacePlanInput,
@@ -157,6 +170,7 @@ pub struct ReplacePlanCommand {
     pub action_progress: Vec<ActionProgress>,
     pub opening_plan: bool,
 }
+/// A validated checkpoint with the revisions it expects.
 #[derive(Clone, Debug)]
 pub struct CheckpointCommand {
     pub input: CheckpointInput,
@@ -168,6 +182,7 @@ pub struct CheckpointCommand {
     pub public_summary: String,
     pub next_step: String,
 }
+/// A validated review with the revisions it expects and its stage transition.
 #[derive(Clone, Debug)]
 pub struct ReviewCommand {
     pub input: ReviewInput,
@@ -182,6 +197,7 @@ pub struct ReviewCommand {
     pub action_progress: Vec<ActionProgress>,
     pub progress_changed: bool,
 }
+/// A validated disposition with its normalized content and expected material.
 #[derive(Clone, Debug)]
 pub struct DispositionCommand {
     pub input: DispositionInput,

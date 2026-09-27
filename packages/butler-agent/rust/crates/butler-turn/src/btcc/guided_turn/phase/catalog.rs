@@ -19,6 +19,7 @@ pub(crate) struct GuidedCatalogTool {
     pub(super) durable: bool,
 }
 
+/// The guided tool catalog: tools, profiles and role restrictions.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GuidedCatalogSnapshot {
@@ -34,6 +35,7 @@ pub struct GuidedCatalogSnapshot {
 }
 
 impl GuidedCatalogSnapshot {
+    /// Every catalog tool.
     pub fn capability_tools(&self) -> impl Iterator<Item = GuidedCatalogRead<'_>> {
         self.tools.iter().map(|tool| GuidedCatalogRead {
             name: &tool.name,
@@ -44,6 +46,7 @@ impl GuidedCatalogSnapshot {
         })
     }
 
+    /// The non-durable (built-in) tools.
     pub fn builtin_tools(&self) -> impl Iterator<Item = GuidedCatalogRead<'_>> {
         self.tools
             .iter()
@@ -57,9 +60,11 @@ impl GuidedCatalogSnapshot {
             })
     }
 
+    /// A built-in tool by name.
     pub fn builtin_tool(&self, name: &str) -> Option<GuidedCatalogRead<'_>> {
         self.builtin_tools().find(|tool| tool.name == name)
     }
+    /// Whether a native bridge tool is hidden from the surface.
     pub fn hidden_native_bridge_tool(
         &self,
         name: &str,
@@ -73,6 +78,7 @@ impl GuidedCatalogSnapshot {
     pub fn profile_tool_names(&self, name: &str) -> Option<&[String]> {
         self.profiles.get(name).map(Vec::as_slice)
     }
+    /// Parses the catalog JSON.
     pub fn parse(json: &str) -> Result<Self, crate::btcc::BtccError> {
         serde_json::from_str(json).map_err(|error| {
             crate::btcc::BtccError::detected(BtccCode::GuidedCatalogInvalid, error.to_string())
@@ -94,6 +100,7 @@ impl GuidedCatalogSnapshot {
     }
 }
 
+/// A borrowed view of one catalog tool.
 #[derive(Clone, Copy)]
 pub struct GuidedCatalogRead<'a> {
     pub name: &'a str,

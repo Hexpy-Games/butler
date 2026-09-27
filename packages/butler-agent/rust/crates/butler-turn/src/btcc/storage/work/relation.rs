@@ -194,6 +194,9 @@ pub(super) fn abandon_bound_turn(
     read::view(db, &bound.id).map(Some)
 }
 
+/// The Work a Plan update applies to: the turn's bound (or the session
+/// head's) open Work, or a new Work when the update starts new work or none
+/// is open. Records the start/continue relation mutation it implies.
 pub(super) fn select_for_plan(
     db: &Connection,
     command: &ReplacePlanCommand,
@@ -203,10 +206,46 @@ pub(super) fn select_for_plan(
     let turn = common::relation_turn(db, &input.scope)?;
     let bound = common::bound(db, &input.scope.turn_id)?;
     let head = common::head(db, &input.scope.session_id)?;
+    check_plan_relation(db, command, bound.as_ref(), head.as_ref())?;
+    let current = bound.as_ref().or(head.as_ref());
+    if command.start_new {
+        if let Some(current) = current
+            && current.is_open()
+        {
+            abandon(db, &current.id, clock)?;
+        }
+        return start_plan_work(db, command, &turn, clock);
+    }
+    let Some(current) = current.filter(|current| current.is_open()) else {
+        return start_plan_work(db, command, &turn, clock);
+    };
+    if bound.is_none() {
+        bind(db, &turn, &current.id, clock)?;
+        record(
+            db,
+            &input.mutation_call_id,
+            "continue_work",
+            &command.request_sha256,
+            &current.id,
+            clock,
+        )?;
+    }
+    Ok(current.clone())
+}
+
+/// Refuses switching the turn's already selected Work, continuing a
+/// terminal or non-head Work, and continuing across a scope change.
+fn check_plan_relation(
+    db: &Connection,
+    command: &ReplacePlanCommand,
+    bound: Option<&common::WorkRow>,
+    head: Option<&common::WorkRow>,
+) -> StorageResult<()> {
+    let scope = &command.input.scope;
     if command.start_new
-        && let Some(bound) = &bound
+        && let Some(bound) = bound
     {
-        if turn_committed(db, &input.scope.turn_id, &bound.id)? {
+        if turn_committed(db, &scope.turn_id, &bound.id)? {
             return Err(common::error(
                 StorageCode::DurableWorkRelationCommitted,
                 "Durable Work continuation is already committed for this Turn; continue the current Work or start new Work in a fresh Turn",
@@ -217,15 +256,14 @@ pub(super) fn select_for_plan(
             "Durable Work relation is already selected for this Turn; startNew cannot switch Work; continue the current Work or start new Work in a fresh Turn",
         ));
     }
-    if bound.as_ref().is_some_and(|work| !work.is_open()) {
+    if bound.is_some_and(|work| !work.is_open()) {
         return Err(common::error(
             StorageCode::DurableWorkTerminalRelation,
             "Durable Work relation is already selected for a terminal Work; start new Work in a fresh Turn",
         ));
     }
     if bound
-        .as_ref()
-        .zip(head.as_ref())
+        .zip(head)
         .is_some_and(|(bound, head)| bound.id != head.id)
     {
         return Err(common::error(
@@ -233,62 +271,31 @@ pub(super) fn select_for_plan(
             "Durable Work Turn binding is no longer the Session head",
         ));
     }
-    let current = bound.as_ref().or(head.as_ref());
-    if let Some(current) = current
+    if let Some(current) = bound.or(head)
         && !command.start_new
-        && !common::matches_scope(current, &input.scope)
+        && !common::matches_scope(current, scope)
     {
         return Err(common::error(
             StorageCode::DurableWorkScopeChanged,
             "Durable Work scope changed; startNew is required",
         ));
     }
-    if command.start_new {
-        if let Some(current) = current
-            && current.is_open()
-        {
-            abandon(db, &current.id, clock)?;
-        }
-        let work = create_and_bind(
-            db,
-            &input.scope,
-            &input.mutation_call_id,
-            &input.objective,
-            &turn,
-            clock,
-        )?;
-        record(
-            db,
-            &input.mutation_call_id,
-            "start_work",
-            &command.request_sha256,
-            &work.id,
-            clock,
-        )?;
-        return Ok(work);
-    }
-    if let Some(current) = current
-        && current.is_open()
-    {
-        if bound.is_none() {
-            bind(db, &turn, &current.id, clock)?;
-            record(
-                db,
-                &input.mutation_call_id,
-                "continue_work",
-                &command.request_sha256,
-                &current.id,
-                clock,
-            )?;
-        }
-        return Ok(current.clone());
-    }
+    Ok(())
+}
+
+fn start_plan_work(
+    db: &Connection,
+    command: &ReplacePlanCommand,
+    turn: &common::TurnRow,
+    clock: &dyn Fn() -> String,
+) -> StorageResult<common::WorkRow> {
+    let input = &command.input;
     let work = create_and_bind(
         db,
         &input.scope,
         &input.mutation_call_id,
         &input.objective,
-        &turn,
+        turn,
         clock,
     )?;
     record(
@@ -302,10 +309,21 @@ pub(super) fn select_for_plan(
     Ok(work)
 }
 
+/// Which Work states a bound-Work mutation accepts.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum BoundState {
+    /// Only open (or blocked) Work.
+    Open,
+    /// Open Work, or Work already completed (dispositions and closeouts).
+    OpenOrCompleted,
+}
+
+/// The Work bound to the turn, which must be the session head, in an
+/// accepted state and in the turn's scope.
 pub(super) fn require_bound(
     db: &Connection,
     scope: &WorkTurnScope,
-    allow_completed: bool,
+    accepted: BoundState,
 ) -> StorageResult<common::WorkRow> {
     common::relation_turn(db, scope)?;
     let bound = common::bound(db, &scope.turn_id)?.ok_or_else(|| {
@@ -320,7 +338,8 @@ pub(super) fn require_bound(
             "Durable Work Turn binding is no longer the Session head",
         ));
     }
-    if !(bound.is_open() || allow_completed && bound.status == "completed") {
+    if !(bound.is_open() || accepted == BoundState::OpenOrCompleted && bound.status == "completed")
+    {
         return Err(common::error(
             StorageCode::DurableWorkNotOpen,
             format!("Durable Work is not open: {}", bound.id),

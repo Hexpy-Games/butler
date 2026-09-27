@@ -35,7 +35,7 @@ pub(super) async fn read_stream<R: AsyncRead + Unpin>(
                 StreamKind::Stdout => StreamKind::Stdout,
                 StreamKind::Stderr(index) => StreamKind::Stderr(index),
             },
-            bytes: bytes[..count].to_vec(),
+            bytes: bytes.get(..count).unwrap_or_default().to_vec(),
             end: false,
         };
         if tx.send(event).await.is_err() {

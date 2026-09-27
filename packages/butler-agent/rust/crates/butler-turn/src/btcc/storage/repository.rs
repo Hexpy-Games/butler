@@ -16,6 +16,7 @@ use super::{
 };
 use crate::btcc::StorageCode;
 
+/// The turn store and the repositories that share its storage.
 #[derive(Clone)]
 pub struct BtccRepositories {
     pub(super) storage: BtccStorage,
@@ -119,7 +120,7 @@ impl TurnStore for BtccRepositories {
     fn record_model_route_event(
         &self,
         write: ModelRouteEventWrite,
-    ) -> PortFuture<'_, Option<Value>> {
+    ) -> PortFuture<'_, crate::btcc::RouteEventStatus> {
         let storage = self.storage.clone();
         Box::pin(async move {
             storage
@@ -128,7 +129,10 @@ impl TurnStore for BtccRepositories {
                 .map_err(BtccError::from)
         })
     }
-    fn load_model_route_attempt_history(&self, key: ModelRoundKey) -> PortFuture<'_, Value> {
+    fn load_model_route_attempt_history(
+        &self,
+        key: ModelRoundKey,
+    ) -> PortFuture<'_, crate::btcc::AttemptHistory> {
         let storage = self.storage.clone();
         Box::pin(async move {
             storage
@@ -222,6 +226,7 @@ impl HostDependencies for BtccRepositories {
 }
 
 impl BtccRepositories {
+    /// Repositories over the store with the configured continuation limits.
     pub fn new(
         storage: BtccStorage,
         continuation_limits: Option<TurnContinuationBudgetLimits>,
@@ -232,10 +237,12 @@ impl BtccRepositories {
         }
     }
 
+    /// The context compaction repository.
     pub fn context_compactions(&self) -> super::ContextCompactionRepository {
         super::ContextCompactionRepository::new(self.storage.clone())
     }
 
+    /// Closes the shared store.
     pub async fn close(&self) -> Result<(), StorageError> {
         self.storage.close().await
     }

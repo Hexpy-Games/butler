@@ -1,6 +1,6 @@
 use super::contracts::{
-    AuthorityDecisionInput, AuthorityDecisionResult, AuthorityError, AuthorityRecord,
-    AuthorityRepository, AuthorityResult, DecisionWrite,
+    AuthorityAction, AuthorityDecisionInput, AuthorityDecisionResult, AuthorityError,
+    AuthorityRecord, AuthorityRepository, AuthorityResult, DecisionWrite,
 };
 use super::{permission, projection};
 
@@ -10,7 +10,8 @@ pub(super) fn decide(
     collation: &butler_core::locale::LocaleCollation,
     clock: &dyn Fn() -> String,
 ) -> AuthorityResult<AuthorityDecisionResult> {
-    let alternative = if input.action == "modify" {
+    let action = AuthorityAction::parse(&input.action);
+    let alternative = if action == AuthorityAction::Modify {
         let value = input.alternative_input.as_deref().unwrap_or("");
         if butler_core::public_text::trim_js_whitespace(value).is_empty() {
             return Err(AuthorityError::policy("authority_modify_input_missing"));
@@ -37,7 +38,7 @@ pub(super) fn decide(
             return projection::decision(&current);
         }
         return Err(AuthorityError::policy(
-            if input.action == "modify" && current.decision == "modified" {
+            if action == AuthorityAction::Modify && current.decision == "modified" {
                 "authority_modify_identity_mismatch"
             } else {
                 "authority_decision_conflict"
@@ -47,19 +48,20 @@ pub(super) fn decide(
     if !repository.source_work_eligible(&current.source_session_id, &current.source_work_id)? {
         return Err(AuthorityError::policy("authority_request_not_found"));
     }
-    let permission =
-        if input.action == "allow" && input.allow_scope.as_deref() == Some("conversation") {
-            let mut grant = permission::for_record(&current, collation)?;
-            grant.created_at = clock();
-            Some(grant)
-        } else {
-            None
-        };
+    let permission = if action == AuthorityAction::Allow
+        && input.allow_scope.as_deref() == Some("conversation")
+    {
+        let mut grant = permission::for_record(&current, collation)?;
+        grant.created_at = clock();
+        Some(grant)
+    } else {
+        None
+    };
     let write = DecisionWrite {
         request_ref: input.request_ref.clone(),
         owner_session_id: input.owner_session_id.clone(),
         source_session_id: current.source_session_id,
-        action: input.action.clone(),
+        action,
         permission,
         alternative_input: alternative.clone(),
         now: clock(),
@@ -80,13 +82,10 @@ fn same(
     input: &AuthorityDecisionInput,
     alternative: Option<&str>,
 ) -> bool {
-    let expected = match input.action.as_str() {
-        "allow" => "allowed",
-        "deny" => "denied",
-        _ => "modified",
-    };
-    record.decision == expected
-        && (input.action != "allow"
+    let action = AuthorityAction::parse(&input.action);
+    record.decision == action.decision()
+        && (action != AuthorityAction::Allow
             || record.allow_scope == input.allow_scope.as_deref().unwrap_or("once"))
-        && (input.action != "modify" || record.private_alternative_input.as_deref() == alternative)
+        && (action != AuthorityAction::Modify
+            || record.private_alternative_input.as_deref() == alternative)
 }

@@ -20,12 +20,14 @@ use std::sync::Arc;
 use tokio::sync::{Notify, oneshot};
 use tokio_util::sync::CancellationToken;
 
+/// What a guided command may do: anything inside the containment, or only observe.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GuidedAccess {
     FullAccessContained,
     ReadOnlyObservation,
 }
 
+/// A guided shell command with its workspace, timeout and access.
 pub struct GuidedCommandInput {
     pub command: String,
     pub cwd: Option<String>,
@@ -37,6 +39,7 @@ pub struct GuidedCommandInput {
     pub abort: CancellationToken,
 }
 
+/// How a guided command ended (the header of its spooled payload).
 #[derive(Clone, Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GuidedSummary {
@@ -56,18 +59,21 @@ pub struct SpooledPayload {
     pub stderr_len: u64,
 }
 
+/// A finished guided command and its spooled output.
 #[derive(Clone, Debug)]
 pub struct GuidedCommandOutput {
     pub summary: GuidedSummary,
     pub payload_source: SpooledPayload,
 }
 
+/// One executable step of a structured pipeline.
 #[derive(Clone, Debug)]
 pub struct CommandStep {
     pub executable: String,
     pub arguments: Vec<String>,
 }
 
+/// A structured command pipeline (or legacy shell command) to run.
 pub struct StructuredCommandInput {
     pub steps: Vec<CommandStep>,
     pub cwd: Option<PathBuf>,
@@ -80,12 +86,14 @@ pub struct StructuredCommandInput {
     pub legacy: Option<LegacyShell>,
 }
 
+/// A legacy shell command run through bash for compatibility.
 pub struct LegacyShell {
     pub command: String,
     pub pipefail: bool,
     pub read_only_installation_root: Option<PathBuf>,
 }
 
+/// The captured output of a structured pipeline.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StructuredCommandOutput {
     pub stdout: String,
@@ -97,6 +105,7 @@ pub struct StructuredCommandOutput {
     pub error: Option<CommandError>,
 }
 
+/// Owns running commands: admits submissions and cancels them on close.
 #[derive(Clone)]
 pub struct Commands {
     inner: Arc<Owner>,
@@ -133,18 +142,21 @@ impl Default for Commands {
 }
 
 impl Commands {
+    /// The guarded working directory a guided command would run in.
     pub fn guarded_directory(
         root: &std::path::Path,
         cwd: Option<&str>,
     ) -> Result<PathBuf, CommandError> {
         guided::guarded_directory(root, cwd)
     }
+    /// The environment guided commands run with.
     pub fn tool_environment(
         host: &HashMap<String, String>,
         butler_data: &std::path::Path,
     ) -> Result<HashMap<String, String>, CommandError> {
         environment::guided_environment(host, butler_data)
     }
+    /// An owner that runs real processes.
     pub fn new() -> Self {
         Self::with_host(Arc::new(SystemProcesses))
     }
@@ -194,6 +206,7 @@ impl Commands {
         self.inner.state.lock().active.len()
     }
 
+    /// Starts a guided command; the receiver resolves with its result.
     pub fn submit_guided(
         &self,
         input: GuidedCommandInput,
@@ -211,6 +224,7 @@ impl Commands {
         Ok(rx)
     }
 
+    /// Starts a structured pipeline; the receiver resolves with its output.
     pub fn submit_structured(
         &self,
         input: StructuredCommandInput,
@@ -228,6 +242,7 @@ impl Commands {
         Ok(rx)
     }
 
+    /// Cancels running commands and waits until every one is reaped.
     pub async fn close(&self) {
         let tokens = {
             let mut state = self.inner.state.lock();

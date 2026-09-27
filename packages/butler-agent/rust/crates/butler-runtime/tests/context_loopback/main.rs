@@ -29,10 +29,10 @@ use butler_turn::btcc::storage::{
     BtccRepositories, BtccStorage, ContextCompactionRepository, TestStorageFixture,
 };
 use butler_turn::btcc::{
-    ContextMessages, ContextPort, ContextProjectionInput, GuidedContinuationBudgetFactory,
-    ModelRoundError, ModelRoundMessage, ModelRoundPort, ModelRoundRequest, ModelRouteRetryConfig,
-    PortFuture, SteeringObservation, TurnContinuationBudgetLimits, TurnModelExecutionFactory,
-    TurnSteeringPort, TurnStore,
+    ContextMessages, ContextPort, ContextProjectionInput, ContextRebase,
+    GuidedContinuationBudgetFactory, ModelRoundError, ModelRoundMessage, ModelRoundPort,
+    ModelRoundRequest, ModelRouteRetryConfig, PortFuture, SteeringObservation,
+    TurnContinuationBudgetLimits, TurnModelExecutionFactory, TurnSteeringPort, TurnStore,
 };
 
 use butler_turn::btcc::agent_loop::guided_ports::GuidedInvocation;
@@ -300,8 +300,10 @@ async fn summary_persists_and_reopens_with_physical_request_admission() {
         )
         .await
         .unwrap();
-    assert!(projection.requires_rebase);
-    assert!(projection.recheck_steering_on_rebase);
+    assert_eq!(
+        projection.rebase,
+        ContextRebase::RequiredWithSteeringRecheck
+    );
     let ContextMessages::Owned(projected) = &projection.messages else {
         panic!("summary must materialize")
     };

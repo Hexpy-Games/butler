@@ -93,45 +93,8 @@ impl ConversationAdmissionTurn {
         {
             return self.accept_existing(existing, role, &text).await;
         }
-        let origin_kind = if role == ConversationRole::Assistant
-            && self.input.origin.kind != ConversationOriginKind::InternalControl
-        {
-            ConversationOriginKind::AssistantPublic
-        } else {
-            self.input.origin.kind
-        };
-        let origin_reason = if role == ConversationRole::Assistant {
-            if origin_kind == ConversationOriginKind::InternalControl {
-                "verified_internal_control"
-            } else {
-                "verified_public_ingress"
-            }
-        } else {
-            &self.input.origin.reason
-        };
-        let parts = (role == ConversationRole::User)
-            .then(|| self.input.envelope.content_parts.clone())
-            .flatten()
-            .map(|content| {
-                vec![
-                    MessagePartInput {
-                        kind: ConversationPartKind::Text,
-                        content_json: json!({"text":text}),
-                        tool_call_id: None,
-                        parent_tool_call_id: None,
-                        provider_shape: None,
-                        status: None,
-                    },
-                    MessagePartInput {
-                        kind: ConversationPartKind::MessageContent,
-                        content_json: content,
-                        tool_call_id: None,
-                        parent_tool_call_id: None,
-                        provider_shape: None,
-                        status: None,
-                    },
-                ]
-            });
+        let (origin_kind, origin_reason) = self.message_origin(role);
+        let parts = self.user_parts(role, &text);
         let input = AppendMessageInput {
             session_id: self.turn.session_id.clone(),
             turn_id: Some(self.turn.id.clone()),
@@ -145,7 +108,7 @@ impl ConversationAdmissionTurn {
             source_ref,
             origin_kind: Some(origin_kind),
             origin_ref: self.input.origin.reference.clone(),
-            origin_reason: Some(origin_reason.into()),
+            origin_reason: Some(origin_reason),
             origin_version: Some(self.input.origin.version.clone()),
             origin_evidence: Some(self.input.origin.evidence.clone()),
             now: None,
@@ -165,6 +128,43 @@ impl ConversationAdmissionTurn {
             state.public_assistant_message_id = Some(message.message.id);
         }
         Ok(())
+    }
+
+    /// The origin recorded on an appended message: assistant messages are
+    /// public unless the turn is internal control.
+    fn message_origin(&self, role: ConversationRole) -> (ConversationOriginKind, String) {
+        let origin = &self.input.origin;
+        if role != ConversationRole::Assistant {
+            return (origin.kind, origin.reason.clone());
+        }
+        if origin.kind == ConversationOriginKind::InternalControl {
+            (origin.kind, "verified_internal_control".into())
+        } else {
+            (
+                ConversationOriginKind::AssistantPublic,
+                "verified_public_ingress".into(),
+            )
+        }
+    }
+
+    /// A user message with rich content keeps its text and the original
+    /// content parts.
+    fn user_parts(&self, role: ConversationRole, text: &str) -> Option<Vec<MessagePartInput>> {
+        let content = (role == ConversationRole::User)
+            .then(|| self.input.envelope.content_parts.clone())
+            .flatten()?;
+        let part = |kind, content_json| MessagePartInput {
+            kind,
+            content_json,
+            tool_call_id: None,
+            parent_tool_call_id: None,
+            provider_shape: None,
+            status: None,
+        };
+        Some(vec![
+            part(ConversationPartKind::Text, json!({"text":text})),
+            part(ConversationPartKind::MessageContent, content),
+        ])
     }
 
     async fn accept_existing(
@@ -218,7 +218,33 @@ impl ConversationAdmissionTurn {
         Ok(())
     }
 
+    /// Appends a tool call (to the turn's tool message, created on first use)
+    /// or a tool result (only once a tool message exists).
     async fn append_tool(&self, input: AppendToolInput<'_>) -> ConversationResult<()> {
+        if input.kind == ConversationPartKind::ToolCall {
+            return self.append_tool_call(input).await;
+        }
+        let mut state = self.state.lock().await;
+        let Some(message) = state.tool_message_id.clone() else {
+            return Ok(());
+        };
+        collect_evidence(&input.content_json, &mut state.evidence_refs);
+        drop(state);
+        self.input
+            .store
+            .append_tool_result(AppendToolPartInput {
+                message_id: message,
+                content_json: input.content_json,
+                tool_call_id: input.tool_call_id,
+                parent_tool_call_id: input.parent_tool_call_id,
+                provider_shape: Some(input.provider_shape),
+                status: Some(input.status),
+            })
+            .await?;
+        Ok(())
+    }
+
+    async fn append_tool_call(&self, input: AppendToolInput<'_>) -> ConversationResult<()> {
         let AppendToolInput {
             kind,
             tool_call_id,
@@ -228,80 +254,59 @@ impl ConversationAdmissionTurn {
             status,
             event_kind,
         } = input;
-        let mut state = self.state.lock().await;
-        if kind == ConversationPartKind::ToolCall {
-            let existing = state.tool_message_id.clone();
-            drop(state);
-            let message_id = if let Some(message) = existing {
-                self.input
-                    .store
-                    .append_tool_call(AppendToolPartInput {
-                        message_id: message.clone(),
+        let existing = self.state.lock().await.tool_message_id.clone();
+        let message_id = if let Some(message) = existing {
+            self.input
+                .store
+                .append_tool_call(AppendToolPartInput {
+                    message_id: message.clone(),
+                    content_json: content,
+                    tool_call_id: tool_call_id.clone(),
+                    parent_tool_call_id: parent,
+                    provider_shape: Some(provider),
+                    status: Some(status),
+                })
+                .await?;
+            message
+        } else {
+            let message = self
+                .input
+                .store
+                .append_assistant_message(AppendMessageInput {
+                    session_id: self.turn.session_id.clone(),
+                    turn_id: Some(self.turn.id.clone()),
+                    text: String::new(),
+                    message_id: None,
+                    role: ConversationRole::Assistant,
+                    status: None,
+                    visibility: None,
+                    provenance: None,
+                    source_gateway: Some(self.input.envelope.transport.clone()),
+                    source_ref: Some(format!(
+                        "{}:{event_kind}:{tool_call_id}",
+                        self.input.turn_id
+                    )),
+                    origin_kind: None,
+                    origin_ref: None,
+                    origin_reason: None,
+                    origin_version: None,
+                    origin_evidence: None,
+                    now: None,
+                    parts: Some(vec![MessagePartInput {
+                        kind,
                         content_json: content,
-                        tool_call_id: tool_call_id.clone(),
+                        tool_call_id: Some(tool_call_id.clone()),
                         parent_tool_call_id: parent,
                         provider_shape: Some(provider),
                         status: Some(status),
-                    })
-                    .await?;
-                message
-            } else {
-                let message = self
-                    .input
-                    .store
-                    .append_assistant_message(AppendMessageInput {
-                        session_id: self.turn.session_id.clone(),
-                        turn_id: Some(self.turn.id.clone()),
-                        text: String::new(),
-                        message_id: None,
-                        role: ConversationRole::Assistant,
-                        status: None,
-                        visibility: None,
-                        provenance: None,
-                        source_gateway: Some(self.input.envelope.transport.clone()),
-                        source_ref: Some(format!(
-                            "{}:{event_kind}:{tool_call_id}",
-                            self.input.turn_id
-                        )),
-                        origin_kind: None,
-                        origin_ref: None,
-                        origin_reason: None,
-                        origin_version: None,
-                        origin_evidence: None,
-                        now: None,
-                        parts: Some(vec![MessagePartInput {
-                            kind,
-                            content_json: content,
-                            tool_call_id: Some(tool_call_id.clone()),
-                            parent_tool_call_id: parent,
-                            provider_shape: Some(provider),
-                            status: Some(status),
-                        }]),
-                    })
-                    .await?;
-                message.message.id
-            };
-            state = self.state.lock().await;
-            state.tool_message_id.get_or_insert(message_id);
-            state.known_tool_call_ids.insert(tool_call_id);
-            return Ok(());
-        }
-        let Some(message) = state.tool_message_id.clone() else {
-            return Ok(());
+                    }]),
+                })
+                .await?;
+            message.message.id
         };
-        collect_evidence(&content, &mut state.evidence_refs);
-        drop(state);
-        self.input
-            .store
-            .append_tool_result(AppendToolPartInput {
-                message_id: message,
-                content_json: content,
-                tool_call_id,
-                parent_tool_call_id: parent,
-                provider_shape: Some(provider),
-                status: Some(status),
-            })
-            .await?;
+        let mut state = self.state.lock().await;
+        state.tool_message_id.get_or_insert(message_id);
+        state.known_tool_call_ids.insert(tool_call_id);
         Ok(())
     }
 }

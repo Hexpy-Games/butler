@@ -3,6 +3,7 @@ use crate::btcc::authority::contracts::{AuthorityExecutionInput, PrincipalAuthor
 
 use super::work::GuidedPreparationError;
 
+/// The decision a suspended guided turn resumes with.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GuidedAuthorityDecision {
     Allow,
@@ -10,6 +11,7 @@ pub enum GuidedAuthorityDecision {
     Modify(String),
 }
 
+/// The decision for the turn's pending authority request, if it was decided.
 pub async fn guided_authority_loop_decision(
     authority: Option<&PrincipalAuthority>,
     turn: &TurnRecord,

@@ -10,6 +10,7 @@ use crate::btcc::{ProgressDestination, RuntimeTurnEventInput};
 #[cfg(test)]
 mod operation_output_tests;
 
+/// A committed progress event awaiting publication.
 pub struct CommittedProgressEvent {
     pub event_id: String,
     pub action_id: String,
@@ -21,12 +22,14 @@ pub struct CommittedProgressEvent {
     pub destination: ProgressDestination,
 }
 
+/// Publishes committed progress events in source order.
 #[derive(Clone)]
 pub struct StorageProgressPublication {
     storage: BtccStorage,
 }
 
 impl StorageProgressPublication {
+    /// A publisher over the store.
     pub fn new(storage: BtccStorage) -> Self {
         Self { storage }
     }
@@ -44,6 +47,7 @@ impl StorageProgressPublication {
             .await
     }
 
+    /// Marks an event published.
     pub async fn mark_published(&self, event_id: &str) -> StorageResult<()> {
         let event_id = event_id.to_owned();
         self.storage
