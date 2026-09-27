@@ -37,6 +37,8 @@ export function AssistantResponseFooter({
   useAppLocale();
   const markTheme = useButlerMarkTheme();
   const terminalStatus = terminalAssistantStatus(status);
+  // A live (e.g. streaming) answer has not finished: no worked-for duration or finish time yet.
+  const settledMeta = status && NON_TERMINAL_ASSISTANT_STATUSES.has(status) ? null : meta;
   return (
     <>
       <MessageFooter>
@@ -48,10 +50,10 @@ export function AssistantResponseFooter({
           onCopy={onCopy}
         />
         {actions}
-        {meta?.durationLabel && <span>{appCopy.interfaceTemplates.workedFor(meta.durationLabel)}</span>}
-        {meta?.timeLabel && (
-          <Typo.Text as="time" dateTime={meta.completedAtIso ?? undefined} numeric="tabular">
-            {meta.timeLabel}
+        {settledMeta?.durationLabel && <span>{appCopy.interfaceTemplates.workedFor(settledMeta.durationLabel)}</span>}
+        {settledMeta?.timeLabel && (
+          <Typo.Text as="time" dateTime={settledMeta.completedAtIso ?? undefined} numeric="tabular">
+            {settledMeta.timeLabel}
           </Typo.Text>
         )}
       </MessageFooter>
