@@ -1,141 +1,25 @@
 //! The source inventory a qualification is checked against.
 
+mod inventory;
+
+pub(super) use inventory::EvidenceInventory;
+
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use serde::Deserialize;
-use serde_json::{Value, json};
 
 use crate::cognition::CognitionResult;
 
 use super::{
-    CaptureStore, invalid,
+    CaptureStore,
     io::{self, sha256},
     types::{
         QueryObservation, SourceBinding, SourceIdentity, SourceObservation, SourceRead, SourceRow,
     },
 };
-use crate::cognition::CognitionCode;
 
 pub(super) struct ReturnedResult<'a> {
     pub result_id: &'a str,
     pub source_handles: &'a [String],
     pub observations: &'a [QueryObservation],
-}
-
-/// Passthrough: a source inventory captured as acceptance evidence, kept
-/// verbatim because its hash covers every stored field.
-#[derive(serde::Deserialize)]
-#[serde(transparent)]
-pub(super) struct EvidenceInventory(Value);
-
-impl EvidenceInventory {
-    /// The memory inventory hash: `as_of` is excluded, `origin.version` stands
-    /// for the origin, and missing collections hash as empty.
-    pub(super) fn hash(&self) -> CognitionResult<String> {
-        let inventory = &self.0;
-        let origin_version = inventory
-            .get("origin")
-            .and_then(|value| value.get("version"))
-            .cloned()
-            .unwrap_or(Value::Null);
-        let mut normalized = serde_json::Map::new();
-        if let Some(schema) = inventory.get("schema") {
-            normalized.insert("schema".to_owned(), schema.clone());
-        }
-        normalized.insert("origin_version".to_owned(), origin_version);
-        for (field, fallback) in [
-            ("exclusions", json!({})),
-            ("entries", json!([])),
-            ("typed", json!([])),
-            ("typed_lifecycle", json!([])),
-            ("history", json!([])),
-        ] {
-            let value = inventory
-                .get(field)
-                .filter(|value| !value.is_null())
-                .cloned()
-                .unwrap_or(fallback);
-            normalized.insert(field.to_owned(), value);
-        }
-        let serialized =
-            butler_core::json::stringify(&Value::Object(normalized)).map_err(|source| {
-                invalid(CognitionCode::MemoryAcceptanceEvidenceInvalid).with_source(source)
-            })?;
-        Ok(sha256(serialized.as_bytes()))
-    }
-
-    /// Whether a conversation entry, typed record, or history row lists the
-    /// source leaf with this revision and hash.
-    fn contains_raw_source_fact(&self, fact: &RawSourceFact<'_>) -> bool {
-        let records = |field: &str| {
-            self.0
-                .get(field)
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter(|entry| entry.is_object())
-                .filter_map(|entry| InventoryRecord::deserialize(entry).ok())
-        };
-        let text = |value: &Option<String>, expected: &str| value.as_deref() == Some(expected);
-        let lists = |values: &Option<Vec<String>>, expected: &str| {
-            values.iter().flatten().any(|item| item == expected)
-        };
-        records("entries").any(|entry| {
-            text(&entry.episode_id, fact.episode_id)
-                && text(&entry.revision, fact.revision)
-                && lists(&entry.source_ids, fact.source_id)
-                && lists(&entry.source_hashes, fact.source_hash)
-        }) || records("typed").any(|entry| {
-            text(&entry.revision, fact.revision)
-                && text(&entry.content_hash, fact.source_hash)
-                && lists(&entry.typed_source_ids, fact.source_id)
-        }) || records("history").any(|entry| {
-            text(&entry.source_ref, fact.source_id)
-                && text(&entry.revision, fact.revision)
-                && text(&entry.history_source_hash, fact.source_hash)
-        })
-    }
-}
-
-/// Lenient view of any inventory record: entries, typed records, and
-/// history rows share this reader.
-#[derive(serde::Deserialize)]
-struct InventoryRecord {
-    #[serde(
-        default,
-        rename = "episodeId",
-        deserialize_with = "crate::lenient::option"
-    )]
-    episode_id: Option<String>,
-    #[serde(default, deserialize_with = "crate::lenient::option")]
-    revision: Option<String>,
-    #[serde(
-        default,
-        rename = "sourceIds",
-        deserialize_with = "crate::lenient::strings"
-    )]
-    source_ids: Option<Vec<String>>,
-    #[serde(
-        default,
-        rename = "sourceHashes",
-        deserialize_with = "crate::lenient::strings"
-    )]
-    source_hashes: Option<Vec<String>>,
-    #[serde(default, deserialize_with = "crate::lenient::option")]
-    content_hash: Option<String>,
-    #[serde(
-        default,
-        rename = "source_ids",
-        deserialize_with = "crate::lenient::strings"
-    )]
-    typed_source_ids: Option<Vec<String>>,
-    #[serde(default, deserialize_with = "crate::lenient::option")]
-    source_ref: Option<String>,
-    #[serde(
-        default,
-        rename = "source_hash",
-        deserialize_with = "crate::lenient::option"
-    )]
-    history_source_hash: Option<String>,
 }
 
 /// A source leaf an inventory must list.
