@@ -2,9 +2,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::btcc::{
-    AcceptedWorkResult, AlreadyDeliveredOutcome, AuthorityLoopContinuation, ExecutionOutcome,
-    FinalArtifact, ModelIdentity, ProgressDestination, RouteState, RuntimeFailure, TurnRequest,
-    WorkStatus,
+    AcceptedWorkResult, AlreadyDeliveredOutcome, AuthorityLoopContinuation, ChangedFileSummary,
+    ExecutionOutcome, FinalArtifact, ModelIdentity, ProgressDestination, RouteState,
+    RuntimeFailure, TurnRequest, WorkStatus,
 };
 
 /// The durable lifecycle state of a turn.
@@ -144,7 +144,8 @@ pub struct FinalPayload {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub artifacts: Vec<FinalArtifact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub changed_files: Vec<Value>,
+    pub changed_files: Vec<ChangedFileSummary>,
+    /// Passthrough: only pre-cutover payloads carry a plan; it is relayed as stored.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -352,8 +353,7 @@ pub struct AgentLoopResult {
     pub accepted_work_result: Option<AcceptedWorkResult>,
     pub runtime_failure: Option<RuntimeFailure>,
     pub artifacts: Vec<FinalArtifact>,
-    pub changed_files: Vec<Value>,
-    pub plan: Option<Value>,
+    pub changed_files: Vec<ChangedFileSummary>,
     pub model_identity: Option<ModelIdentity>,
 }
 

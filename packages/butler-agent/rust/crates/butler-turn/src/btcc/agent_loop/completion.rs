@@ -147,7 +147,6 @@ pub(super) async fn finish(
             .or_else(|| state.runtime_failure.clone()),
         artifacts: closeout.artifacts,
         changed_files: closeout.changed_files,
-        plan: closeout.plan,
         model_identity: closeout.model_identity,
     })
 }

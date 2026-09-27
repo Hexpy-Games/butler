@@ -428,7 +428,6 @@ impl GuidedPolicyPort for Fixture {
                 runtime_failure: None,
                 artifacts: Vec::<FinalArtifact>::new(),
                 changed_files: vec![],
-                plan: None,
                 model_identity: Some(ModelIdentity {
                     requested_model_ref: "openai/model".into(),
                     effective_model_ref: "openai/model".into(),

@@ -420,7 +420,6 @@ fn runtime_failure_result(
         runtime_failure: Some(failure),
         artifacts: Vec::new(),
         changed_files: Vec::new(),
-        plan: None,
         model_identity: None,
     }
 }

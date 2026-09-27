@@ -25,10 +25,11 @@ use std::sync::Arc;
 
 pub use contracts::{
     AcceptedWorkResult, AcceptedWorkStatus, AccessMode, AdmissionKind, AlreadyDeliveredOutcome,
-    ArtifactKind, AttachmentKind, AttachmentRef, DeliveredOutcome, ExecutionOutcome, FinalArtifact,
-    ModelIdentity, Peer, PeerKind, ProgressDestination, ReasoningEffort, RuntimeFailure, Sender,
-    SessionRole, StopRequest, TurnMessage, TurnOutcome, TurnOutcomeKind, TurnRequest, TurnRoute,
-    TurnTrigger, WorkStatus,
+    ArtifactKind, AttachmentKind, AttachmentRef, ChangedFileLine, ChangedFileSummary,
+    ChangedLineKind, DeliveredOutcome, ExecutionOutcome, FinalArtifact, ModelIdentity, Peer,
+    PeerKind, ProgressDestination, ReasoningEffort, RuntimeFailure, Sender, SessionRole,
+    StopRequest, TurnMessage, TurnOutcome, TurnOutcomeKind, TurnRequest, TurnRoute, TurnTrigger,
+    WorkStatus,
 };
 pub use error::{BtccCode, BtccError, BtccSource};
 
