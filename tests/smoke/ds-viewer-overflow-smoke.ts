@@ -12,7 +12,9 @@ import { createNativeAppServer } from "../support/native-app-server.ts";
 // Portaled overlays render outside the cell and are not checked here. A Grid
 // (`[data-columns]`) must never be wider than itself: its tracks shrink with
 // the container whatever the content. A keyboard-focused NativeSelect rings
-// its control box only, never the chevron.
+// its control box only, never the chevron. The page itself never scrolls
+// sideways: the viewer's main scroller (and the document) stay within the
+// viewport width, so nothing escapes a cell's own scroller (states matrices).
 // `bun tests/smoke/ds-viewer-overflow-smoke.ts [ItemName...]` narrows the run.
 
 const uiRoot = resolve(process.cwd(), "packages", "butler-app", "client", "ui", "dist");
@@ -125,7 +127,14 @@ function auditPage(tolerance: number) {
     const actual = getComputedStyle(scope).color;
     return actual === expected ? [] : [{ cell: `theme scope ${scope.className}`, element: "color", overflow: `${actual} != ${expected}` }];
   });
-  return [...offenders, ...foreignScopes];
+  // The page never scrolls sideways (an absolutely positioned descendant that
+  // escapes a scrolling cell widens the page scroller).
+  const pageScroll = [document.documentElement, document.querySelector("main")].flatMap((scroller) => {
+    if (!scroller) return [{ cell: "page", element: "main", overflow: "missing" }];
+    const excess = scroller.scrollWidth - scroller.clientWidth;
+    return excess > tolerance ? [{ cell: "page", element: scroller.tagName.toLowerCase(), overflow: `scrolls sideways +${excess}px` }] : [];
+  });
+  return [...offenders, ...foreignScopes, ...pageScroll];
 }
 
 /** Keyboard-focuses each NativeSelect: the ring belongs on the trigger box, never on the chevron. */

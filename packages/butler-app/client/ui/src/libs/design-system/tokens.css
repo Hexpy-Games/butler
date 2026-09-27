@@ -269,19 +269,22 @@
   --neutral-white: #ffffff;
   --neutral-light-text-primary: #222326;
   --neutral-light-text-secondary: #696d73;
+  --neutral-light-text-tertiary: #6d7279;
   --neutral-light-text-disabled: #a7abb0;
-  --neutral-light-placeholder: #6e7278;
+  --neutral-light-placeholder: #6a6e74;
   --neutral-dark-text-secondary: #b5b8bd;
-  --neutral-dark-text-tertiary: #858991;
+  --neutral-dark-text-tertiary: #8b8f97;
   --neutral-dark-text-disabled: #5a5d64;
   --neutral-dark-icon-muted: #c5c7cb;
-  --neutral-dark-placeholder: #8e9197;
+  --neutral-dark-placeholder: #969a9f;
   --neutral-dark-send-stop: #e8e9eb;
 
   --orange-06: #c85f1b;
 
   --green-worker-active: #20c052;
   --amber-worker-warning: #d19a19;
+  /* Warning text on light surfaces (amber-08 read 3.2:1 on its tint). */
+  --amber-warning-text: #8f6500;
 
   /* Raw Palette Tokens */
   --grayscale-01: #f8f9fa;
@@ -344,7 +347,7 @@
   /* Semantic Color Tokens */
   --color-text-primary: var(--neutral-light-text-primary);
   --color-text-secondary: var(--neutral-light-text-secondary);
-  --color-text-tertiary: var(--grayscale-07);
+  --color-text-tertiary: var(--neutral-light-text-tertiary);
   --color-text-disabled: var(--neutral-light-text-disabled);
   /* Disabled tone for rows, menu items and options: text color, not opacity. */
   --interactive-disabled-fg: var(--color-text-disabled);
@@ -352,6 +355,9 @@
   --color-text-inverse: var(--neutral-white);
 
   --color-action-primary: var(--blue-06);
+  /* Accent used as text (links, accent tags): AA on every surface; the
+     accent fill (--color-action-primary) stays the brand blue. */
+  --color-accent-text: var(--blue-07);
 
   --color-success: var(--green-06);
   --color-success-bg: var(--green-01);
@@ -360,9 +366,9 @@
   --color-danger: var(--red-07);
   --color-danger-bg: var(--red-01);
   --color-success-border: var(--green-02);
-  --color-success-text: var(--color-success);
+  --color-success-text: var(--green-08);
   --color-warning-border: var(--amber-02);
-  --color-warning-text: var(--amber-08);
+  --color-warning-text: var(--amber-warning-text);
   --color-danger-border: var(--red-02);
   --color-danger-text: var(--color-danger);
   --color-info-bg: var(--blue-01);
@@ -565,6 +571,7 @@
   --selection: rgba(32, 35, 39, 0.07);
   --selection-strong: rgba(32, 35, 39, 0.1);
   --accent: var(--color-action-primary);
+  --accent-text: var(--color-accent-text);
   --ok: var(--color-success);
   --danger: var(--color-danger);
   --icon-muted: var(--grayscale-08);
@@ -576,7 +583,7 @@
   --worker-active: var(--green-worker-active);
   --worker-warning: var(--amber-worker-warning);
   --access-full: var(--orange-06);
-  --access-ask: var(--accent);
+  --access-ask: var(--accent-text);
   --access-read: var(--text-primary);
   --access-read-icon: var(--text-tertiary);
   --switch-thumb: var(--neutral-white);
@@ -786,6 +793,7 @@
   --color-text-inverse: var(--grayscale-11);
 
   --color-action-primary: var(--blue-06);
+  --color-accent-text: var(--blue-04);
 
   --color-success: var(--green-05);
   --color-success-bg: rgba(42, 159, 72, 0.12);
@@ -929,9 +937,9 @@
   --color-danger: var(--red-07);
   --color-danger-bg: var(--red-01);
   --color-success-border: var(--green-02);
-  --color-success-text: var(--color-success);
+  --color-success-text: var(--green-08);
   --color-warning-border: var(--amber-02);
-  --color-warning-text: var(--amber-08);
+  --color-warning-text: var(--amber-warning-text);
   --color-danger-border: var(--red-02);
   --color-danger-text: var(--color-danger);
   --color-info-bg: var(--blue-01);
@@ -941,7 +949,7 @@
   --color-surface-overlay: rgba(255, 255, 255, 0.98);
   --color-text-primary: var(--neutral-light-text-primary);
   --color-text-secondary: var(--neutral-light-text-secondary);
-  --color-text-tertiary: var(--grayscale-07);
+  --color-text-tertiary: var(--neutral-light-text-tertiary);
   --color-text-disabled: var(--neutral-light-text-disabled);
   /* Disabled tone for rows, menu items and options: text color, not opacity. */
   --interactive-disabled-fg: var(--color-text-disabled);
@@ -949,6 +957,7 @@
 
   /* Re-declared so a light scope inside a dark one resolves light values. */
   --color-action-primary: var(--blue-06);
+  --color-accent-text: var(--blue-07);
   --color-border-default: var(--grayscale-03);
   --color-border-strong: var(--grayscale-04);
   --color-border-interactive: var(--blue-06);
@@ -1062,9 +1071,10 @@
 .theme-light {
   --menu-group-label-color: var(--text-tertiary);
   --accent: var(--color-action-primary);
+  --accent-text: var(--color-accent-text);
   --ok: var(--color-success);
   --danger: var(--color-danger);
-  --access-ask: var(--accent);
+  --access-ask: var(--accent-text);
   --access-read: var(--text-primary);
   --access-read-icon: var(--text-tertiary);
   --context-chart-1: var(--accent);

@@ -20,7 +20,7 @@
 
 .tag[data-tone="accent"] {
   border-color: color-mix(in srgb, var(--accent) 36%, transparent);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .tag[data-tone="success"] {
