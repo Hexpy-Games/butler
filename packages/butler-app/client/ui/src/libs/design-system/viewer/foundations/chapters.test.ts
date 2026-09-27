@@ -5,7 +5,7 @@ import { ICON_SIZE } from "../../components/Icons/Icons";
 import { chapterById, chapterForToken, chapterPage, chapterTokens, FOUNDATION_CHAPTERS } from "./chapters";
 import { paletteFamilies } from "./paletteFamilies";
 import { buildTokenCatalog, parseTokenDefinitions, TOKEN_CATEGORIES } from "./tokenCatalog";
-import { fontFamilies, fontWeights, typeRoles } from "./typeScale";
+import { BUNDLED_FACES, fontFamilies, fontWeights, typefaceTitle, typeRoles, WEIGHT_AXIS } from "./typeScale";
 
 const css = readFileSync(new URL("../../tokens.css", import.meta.url), "utf8");
 const catalog = buildTokenCatalog(parseTokenDefinitions(css));
@@ -49,6 +49,18 @@ describe("specimens are derived from tokens.css", () => {
     const families = fontFamilies(byName.get("--font-body")!.light);
     expect(families.length).toBeGreaterThan(0);
     expect(families.some((family) => /^(ui-|system-ui|sans-serif|-apple-system|BlinkMacSystemFont)/u.test(family))).toBe(false);
+  });
+
+  test("the typeface hero names the bundled face and its served weight axis", () => {
+    const families = fontFamilies(byName.get("--font-body")!.light);
+    expect(typefaceTitle(families)).toBe("Pretendard Variable");
+    expect(BUNDLED_FACES["Pretendard Variable"]).toContain("45–920");
+    expect(fontFamilies(byName.get("--font-family-code")!.light)[0]).toBe("IBM Plex Mono");
+    // Official @font-face range is 45 920; samples stay inside it.
+    expect(Math.min(...WEIGHT_AXIS)).toBe(45);
+    expect(Math.max(...WEIGHT_AXIS)).toBe(920);
+    // A stack without a bundled face still pairs the lead with a Hangul face.
+    expect(typefaceTitle(["Inter", "Apple SD Gothic Neo"])).toBe("Inter + Apple SD Gothic Neo");
   });
 
   test("palette ramps group every numbered step", () => {
