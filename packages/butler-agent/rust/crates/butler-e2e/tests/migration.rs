@@ -10,18 +10,22 @@ use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::fixtures::legacy_manifest;
 use butler_e2e::e2e::scenario::{Scenario, Setup};
 
-/// MIG-01 (owner decision: pre-BTCC data folders are not supported) — a data
-/// dir whose App DB predates the BTCC runtime store (no
+/// MIG-01 — a data dir whose App DB predates the BTCC runtime store (no
 /// `agent-runtime/btcc.sqlite`) is refused at start with a message that names
-/// the folder, says it is unsupported and says what to do; the legacy content
-/// stays in place.
+/// the folder, says it is unsupported and says what to do, and the refused
+/// start writes nothing into it.
+///
+/// This replaces SCENARIOS.md's "legacy dir opens with all content migrated":
+/// owner decision of 2026-09-27 that pre-BTCC data folders need not be
+/// supported (recorded in the crate README, "Scenario decisions").
 #[tokio::test]
-async fn mig_01_pre_btcc_data_dir_is_refused_with_actionable_message() -> Result<(), HarnessError> {
+async fn mig_01_pre_btcc_data_dir_is_refused_without_writes() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let manifest = legacy_manifest()?;
     let setup = Setup::new("MIG-01")?;
     let data = setup.sandbox.data.clone();
     butler_e2e::e2e::fixtures::legacy(&data, "openai/gpt-6-sol")?;
+    let before = tree(&data);
     let launch = butler_e2e::e2e::agent::Launch::new(&setup.sandbox)?;
     let output = launch
         .command()
@@ -47,33 +51,6 @@ async fn mig_01_pre_btcc_data_dir_is_refused_with_actionable_message() -> Result
             "legacy file {file} removed"
         );
     }
-    assert!(
-        data.join("app-server/butler-client.sqlite").is_file(),
-        "legacy App DB removed"
-    );
-    Ok(())
-}
-
-/// MIG-01 (current behavior) — the refused legacy dir is left untouched and
-/// the refusal names the problem.
-#[tokio::test]
-async fn mig_01_unsupported_legacy_dir_is_refused_without_writes() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let setup = Setup::new("MIG-01-REFUSE")?;
-    let data = setup.sandbox.data.clone();
-    butler_e2e::e2e::fixtures::legacy(&data, "openai/gpt-6-sol")?;
-    let before = tree(&data);
-    let launch = butler_e2e::e2e::agent::Launch::new(&setup.sandbox)?;
-    let output = launch
-        .command()
-        .stdin(std::process::Stdio::null())
-        .output()?;
-    assert!(!output.status.success(), "legacy dir accepted?");
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("legacy") && stderr.contains("unsupported"),
-        "unclear refusal: {stderr}"
-    );
     assert_eq!(
         tree(&data),
         before,

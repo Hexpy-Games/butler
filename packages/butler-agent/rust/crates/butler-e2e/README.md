@@ -72,3 +72,15 @@ needs the owner's browser.
   stall after chunk k, and tool-call argument mutations. Argument mutations of
   the first call of one tool also apply while recording, so the model's real
   reaction to the resulting tool error is what the cassette holds.
+
+## Scenario decisions
+
+Owner decisions that change what a `SCENARIOS.md` scenario asserts. The
+scenario's doc comment cites its decision.
+
+| Scenario | Decision | Recorded |
+|----------|----------|----------|
+| MIG-01 | Data folders from releases before the BTCC runtime store (an App DB without `agent-runtime/btcc.sqlite`) need not be supported ("옛데이터 폴더 지원 안해도돼"). MIG-01 asserts a refusal that names the folder, says what to do and writes nothing, instead of "opens with all content migrated". | Owner, 2026-09-27, to the session running the E2E product-gap work (#213) |
+| TURN-03 | Stop keeps the partial text, marked stopped. | Owner, #211 |
+| REC-02, REC-03 | A crash-interrupted turn is not resumed automatically; it ends failed with retry available, and no tool effect runs twice. | Owner, #211 |
+| Q-02 | Stopping the running turn pauses the session queue; the next user input resumes it in order. | Owner, #211 |
