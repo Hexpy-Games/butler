@@ -86,6 +86,12 @@ describe("DS Viewer bundle check", () => {
     expect(pkg.scripts["app:design-system:smoke"]).toContain("tests/smoke/ds-viewer-bundle-check.ts");
   });
 
+  test("the design-system smoke audits every item page for cell overflow", () => {
+    const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { scripts: Record<string, string> };
+
+    expect(pkg.scripts["app:design-system:smoke"]).toContain("tests/smoke/ds-viewer-overflow-smoke.ts");
+  });
+
   test("the motion trace has its own script and runs with the design-system smoke", () => {
     const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { scripts: Record<string, string> };
 

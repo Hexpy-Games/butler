@@ -427,17 +427,27 @@
   align-items: stretch;
   min-width: 0;
   overflow-x: auto;
+  /* A theme scope: its text color resolves here, not in the chrome. */
+  color: var(--text-primary);
 }
 
+/* The cell sizes to the grid track; content fits it (truncates) instead. */
 .matrixCell {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
   min-width: 0;
+  container-type: inline-size;
   min-height: 4.5rem;
   padding: var(--space-md);
   border: var(--border-hairline) solid var(--line);
   border-radius: var(--radius-control);
   background: var(--surface);
+}
+
+.matrixCell > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .matrixHead {
