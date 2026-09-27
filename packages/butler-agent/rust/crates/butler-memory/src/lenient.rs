@@ -61,13 +61,14 @@ pub(crate) fn object<T: serde::de::DeserializeOwned>(raw: &str) -> Option<T> {
         .flatten()
 }
 
-/// A tool argument as the caller sent it: missing, readable as `T`, or
-/// present with another shape (`null` included). Use with
-/// `#[serde(default)]` so a missing key reads as [`Arg::Missing`].
+/// A field as a record or tool call sent it: missing, `null`, readable as
+/// `T`, or present with another shape. Use with `#[serde(default)]` so a
+/// missing key reads as [`Arg::Missing`].
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) enum Arg<T> {
     #[default]
     Missing,
+    Null,
     Valid(T),
     Invalid,
 }
@@ -77,7 +78,7 @@ impl<T> Arg<T> {
     pub(crate) fn valid(&self) -> Option<&T> {
         match self {
             Self::Valid(value) => Some(value),
-            Self::Missing | Self::Invalid => None,
+            Self::Missing | Self::Null | Self::Invalid => None,
         }
     }
 }
@@ -85,15 +86,35 @@ impl<T> Arg<T> {
 impl<'de, T: serde::de::DeserializeOwned> Deserialize<'de> for Arg<T> {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let value = Value::deserialize(deserializer)?;
+        if value.is_null() {
+            return Ok(Self::Null);
+        }
         Ok(serde_json::from_value(value).map_or(Self::Invalid, Self::Valid))
     }
 }
 
-/// Reads tool arguments into `T`; arguments that are not an object read as
-/// no arguments at all.
-pub(crate) fn arguments<T: serde::de::DeserializeOwned + Default>(args: &Value) -> T {
-    if args.is_object() {
-        serde_json::from_value(args.clone()).unwrap_or_default()
+/// A nested record that must be a JSON object (serde would also read a
+/// struct from an array, positionally).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct Obj<T>(pub T);
+
+impl<'de, T: serde::de::DeserializeOwned> Deserialize<'de> for Obj<T> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = Value::deserialize(deserializer)?;
+        if !value.is_object() {
+            return Err(serde::de::Error::custom("expected an object"));
+        }
+        serde_json::from_value(value)
+            .map(Obj)
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+/// Reads a record or tool arguments into `T` (whose fields all default);
+/// a value that is not an object reads as all fields missing.
+pub(crate) fn view<T: serde::de::DeserializeOwned + Default>(value: &Value) -> T {
+    if value.is_object() {
+        serde_json::from_value(value.clone()).unwrap_or_default()
     } else {
         T::default()
     }

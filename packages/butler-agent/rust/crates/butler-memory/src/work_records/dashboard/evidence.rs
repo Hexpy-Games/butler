@@ -11,6 +11,7 @@ use std::{
 };
 
 use regex::Regex;
+use serde::Deserialize;
 use serde_json::Value;
 
 use butler_core::public_text::fixed_regex;
@@ -128,7 +129,9 @@ pub(super) fn direct(directory: &Path, status: &str, request: &str) -> Safety {
     }
 }
 
-pub(super) fn planned(status: &str, review: Option<&Value>) -> Safety {
+/// Safety of a planned task from its status; a reported task may claim
+/// completion only when its review verdict passed.
+pub(super) fn planned(status: &str, review_verdict: Option<&str>) -> Safety {
     let mode = match status {
         "PLANNED" => "planning",
         "PLANNED_RUNNING" => "executing",
@@ -157,10 +160,7 @@ pub(super) fn planned(status: &str, review: Option<&Value>) -> Safety {
         "REPORTED" => Safety {
             mode,
             safe: true,
-            completion: review
-                .and_then(|value| value.get("verdict"))
-                .and_then(Value::as_str)
-                == Some("PASS"),
+            completion: review_verdict == Some("PASS"),
             guard: None,
         },
         _ => Safety {
@@ -230,29 +230,98 @@ fn classification(directory: &Path, request: &str) -> &'static str {
     "implementation-required"
 }
 
+/// A line of `worker_activity_events.jsonl`.
+#[derive(Default, Deserialize)]
+struct ActivityEvent {
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    semantic_phase: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    action_kind: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    status_line: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    decision_summary: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    completion_review: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    event: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    completion_contract: Option<CompletionContract>,
+    #[serde(default, deserialize_with = "crate::lenient::strings")]
+    evidence_refs: Option<Vec<String>>,
+}
+
+/// What a worker declared about its own completion.
+#[derive(Default, Deserialize)]
+struct CompletionContract {
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    has_execution_evidence: Option<bool>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    has_commit_evidence: Option<bool>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    has_blocker_evidence: Option<bool>,
+}
+
+/// A line of an evidence receipt log.
+#[derive(Default, Deserialize)]
+struct Receipt {
+    #[serde(
+        default,
+        rename = "receiptType",
+        deserialize_with = "crate::lenient::option"
+    )]
+    receipt_type: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::strings")]
+    satisfies: Option<Vec<String>>,
+}
+
+/// A line of the worker session transcript.
+#[derive(Default, Deserialize)]
+struct TranscriptEvent {
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    kind: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    payload: Option<ToolPayload>,
+}
+
+/// A tool call or result in the transcript.
+#[derive(Default, Deserialize)]
+struct ToolPayload {
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    name: Option<String>,
+    /// Passthrough: the tool's result, shaped by each tool; matched as text.
+    #[serde(default)]
+    result: Option<Value>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    arguments: Option<ToolArguments>,
+}
+
+#[derive(Default, Deserialize)]
+struct ToolArguments {
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    command: Option<String>,
+}
+
+/// The completion facts a tool result may state.
+#[derive(Default, Deserialize)]
+struct ToolResultFacts {
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    command: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    written_files: Option<Vec<serde::de::IgnoredAny>>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    verified_output_files: Option<Vec<serde::de::IgnoredAny>>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    durable_artifact_created: Option<bool>,
+}
+
+/// Every durable trace of the worker: result and log text, activity events,
+/// evidence receipts and the worker session transcript.
 fn collect(directory: &Path) -> Facts {
     let mut facts = Facts {
-        refs: directory
-            .join("result.md")
-            .metadata()
-            .is_ok_and(|metadata| metadata.len() > 0)
-            || [
-                "worker_activity_events.jsonl",
-                "worker_activity.json",
-                "worker-preflight.md",
-            ]
-            .iter()
-            .any(|name| directory.join(name).exists()),
+        refs: file_refs(directory),
         ..Facts::default()
     };
-    if let Ok(entries) = std::fs::read_dir(directory) {
-        facts.refs |= entries.flatten().any(|entry| {
-            let name = entry.file_name().to_string_lossy().to_lowercase();
-            ["patch", "diff", "commit", "evidence"]
-                .iter()
-                .any(|prefix| name.starts_with(prefix))
-        });
-    }
     let result = read(&directory.join("result.md"));
     let log = read(&directory.join("log.txt"));
     let text = format!("{log}\n{result}");
@@ -269,35 +338,7 @@ fn collect(directory: &Path) -> Facts {
     );
     facts.environment_blocker |= environment_blocker(&result);
     for line in json_lines(&directory.join("worker_activity_events.jsonl")) {
-        let semantic = field(&line, "semantic_phase");
-        let action = field(&line, "action_kind");
-        let phrase = format!(
-            "{} {}",
-            field(&line, "status_line"),
-            field(&line, "decision_summary")
-        )
-        .to_lowercase();
-        let contract = line.get("completion_contract").unwrap_or(&Value::Null);
-        facts.execution |= semantic == "executing"
-            || contract.get("has_execution_evidence") == Some(&Value::Bool(true));
-        facts.report |= semantic == "reporting";
-        facts.implementation |= contract.get("has_commit_evidence") == Some(&Value::Bool(true))
-            || matches_fixed(
-                r"(?i)(apply_patch|patch|edit_file|write_file|file_modified|modify|create_file|file_created|git_diff|diff|test|typecheck|lint|verify|commit|검증|modified|updated|edited|wrote|created|added)",
-                &format!("{action} {phrase}"),
-            );
-        let blocked = semantic == "blocked"
-            || field(&line, "completion_review") == "blocked"
-            || contract.get("has_blocker_evidence") == Some(&Value::Bool(true));
-        let terminal = blocked
-            && (["worker_failed", "worker_finished"].contains(&field(&line, "event"))
-                || field(&line, "completion_review") == "blocked");
-        facts.final_blocker |= terminal;
-        facts.environment_blocker |= terminal && environment_blocker(&phrase);
-        facts.refs |= line
-            .get("evidence_refs")
-            .and_then(Value::as_array)
-            .is_some_and(|values| values.iter().any(Value::is_string));
+        activity_facts(&mut facts, &crate::lenient::view(&line));
     }
     for name in [
         "evidence-receipts.jsonl",
@@ -305,78 +346,149 @@ fn collect(directory: &Path) -> Facts {
         "worker_evidence.jsonl",
     ] {
         for receipt in json_lines(&directory.join(name)) {
-            let satisfies = receipt
-                .get("satisfies")
-                .and_then(Value::as_array)
-                .map(Vec::as_slice)
-                .unwrap_or(&[]);
-            facts.execution |= field(&receipt, "receiptType") == "execution"
-                || satisfies
+            receipt_facts(&mut facts, &crate::lenient::view(&receipt));
+        }
+    }
+    transcript_facts(&mut facts, directory);
+    facts
+}
+
+/// A non-empty result, a worker activity or preflight file, or a patch,
+/// diff, commit or evidence file.
+fn file_refs(directory: &Path) -> bool {
+    let files = directory
+        .join("result.md")
+        .metadata()
+        .is_ok_and(|metadata| metadata.len() > 0)
+        || [
+            "worker_activity_events.jsonl",
+            "worker_activity.json",
+            "worker-preflight.md",
+        ]
+        .iter()
+        .any(|name| directory.join(name).exists());
+    files
+        || std::fs::read_dir(directory).is_ok_and(|entries| {
+            entries.flatten().any(|entry| {
+                let name = entry.file_name().to_string_lossy().to_lowercase();
+                ["patch", "diff", "commit", "evidence"]
                     .iter()
-                    .any(|value| value.as_str() == Some("command_executed"));
-            facts.implementation |= satisfies.iter().filter_map(Value::as_str).any(|value| matches_fixed(r"file_created|file_modified|durable_artifact|patch|diff|test|validation|typecheck|lint|commit",value));
+                    .any(|prefix| name.starts_with(prefix))
+            })
+        })
+}
+
+fn activity_facts(facts: &mut Facts, line: &ActivityEvent) {
+    let field = |value: &Option<String>| value.as_deref().unwrap_or("").to_owned();
+    let semantic = field(&line.semantic_phase);
+    let action = field(&line.action_kind);
+    let phrase = format!(
+        "{} {}",
+        field(&line.status_line),
+        field(&line.decision_summary)
+    )
+    .to_lowercase();
+    let contract = line.completion_contract.as_ref();
+    let declared =
+        |fact: fn(&CompletionContract) -> Option<bool>| contract.and_then(fact) == Some(true);
+    facts.execution |= semantic == "executing" || declared(|c| c.has_execution_evidence);
+    facts.report |= semantic == "reporting";
+    facts.implementation |= declared(|c| c.has_commit_evidence)
+        || matches_fixed(
+            r"(?i)(apply_patch|patch|edit_file|write_file|file_modified|modify|create_file|file_created|git_diff|diff|test|typecheck|lint|verify|commit|검증|modified|updated|edited|wrote|created|added)",
+            &format!("{action} {phrase}"),
+        );
+    let review = field(&line.completion_review);
+    let blocked =
+        semantic == "blocked" || review == "blocked" || declared(|c| c.has_blocker_evidence);
+    let terminal = blocked
+        && (["worker_failed", "worker_finished"].contains(&field(&line.event).as_str())
+            || review == "blocked");
+    facts.final_blocker |= terminal;
+    facts.environment_blocker |= terminal && environment_blocker(&phrase);
+    facts.refs |= line
+        .evidence_refs
+        .as_ref()
+        .is_some_and(|values| !values.is_empty());
+}
+
+fn receipt_facts(facts: &mut Facts, receipt: &Receipt) {
+    let satisfies = receipt.satisfies.as_deref().unwrap_or(&[]);
+    facts.execution |= receipt.receipt_type.as_deref() == Some("execution")
+        || satisfies.iter().any(|value| value == "command_executed");
+    facts.implementation |= satisfies.iter().any(|value| {
+        matches_fixed(
+            r"file_created|file_modified|durable_artifact|patch|diff|test|validation|typecheck|lint|commit",
+            value,
+        )
+    });
+    facts.refs = true;
+}
+
+/// Tool calls and results of the worker session's transcript
+/// (`transcripts/worker/<session>.jsonl` under the data root).
+fn transcript_facts(facts: &mut Facts, directory: &Path) {
+    let session = read(&directory.join("session_id"));
+    if session.is_empty() {
+        return;
+    }
+    let sanitized = format!("worker/{}", trim(&session))
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    let Some(data) = directory.parent().and_then(Path::parent) else {
+        return;
+    };
+    for event in json_lines(&data.join("transcripts").join(format!("{sanitized}.jsonl"))) {
+        let event: TranscriptEvent = crate::lenient::view(&event);
+        let kind = event.kind.as_deref().unwrap_or("");
+        if !matches!(kind, "tool_result" | "tool_call") {
+            continue;
+        }
+        tool_facts(facts, &event.payload.unwrap_or_default());
+        if kind == "tool_result" {
             facts.refs = true;
         }
     }
-    let session = read(&directory.join("session_id"));
-    if !session.is_empty() {
-        let sanitized = format!("worker/{}", trim(&session))
-            .chars()
-            .map(|c| {
-                if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
-                    c
-                } else {
-                    '_'
-                }
-            })
-            .collect::<String>();
-        if let Some(data) = directory.parent().and_then(Path::parent) {
-            for event in json_lines(&data.join("transcripts").join(format!("{sanitized}.jsonl"))) {
-                if !matches!(field(&event, "kind"), "tool_result" | "tool_call") {
-                    continue;
-                }
-                let payload = event.get("payload").unwrap_or(&Value::Null);
-                let result = payload.get("result").unwrap_or(&Value::Null);
-                let command = result
-                    .get("command")
-                    .and_then(Value::as_str)
-                    .or_else(|| {
-                        payload
-                            .pointer("/arguments/command")
-                            .and_then(Value::as_str)
-                    })
-                    .unwrap_or("");
-                let text = format!("{}\n{}\n{}", field(payload, "name"), command, result);
-                facts.execution |= field(payload, "name") == ToolName::RunCommand;
-                facts.implementation |= result
-                    .get("written_files")
-                    .and_then(Value::as_array)
-                    .is_some_and(|items| !items.is_empty())
-                    || result
-                        .get("verified_output_files")
-                        .and_then(Value::as_array)
-                        .is_some_and(|items| !items.is_empty())
-                    || result.get("durable_artifact_created") == Some(&Value::Bool(true))
-                    || matches_fixed(
-                        r"(?i)\b(apply_patch|patch\s+-p|git apply|git\s+diff|diff\s+-|bun test|npm test|pnpm test|yarn test|vitest|jest|playwright|typecheck|lint|tsc|git\s+commit|committed)\b",
-                        &text,
-                    );
-                if field(&event, "kind") == "tool_result" {
-                    facts.refs = true;
-                }
-            }
-        }
-    }
-    facts
+}
+
+fn tool_facts(facts: &mut Facts, payload: &ToolPayload) {
+    let result = payload.result.as_ref().unwrap_or(&Value::Null);
+    let stated: ToolResultFacts = crate::lenient::view(result);
+    let command = stated
+        .command
+        .as_deref()
+        .or_else(|| {
+            payload
+                .arguments
+                .as_ref()
+                .and_then(|arguments| arguments.command.as_deref())
+        })
+        .unwrap_or("");
+    let name = payload.name.as_deref().unwrap_or("");
+    let text = format!("{name}\n{command}\n{result}");
+    facts.execution |= name == ToolName::RunCommand;
+    facts.implementation |= stated.written_files.is_some_and(|items| !items.is_empty())
+        || stated
+            .verified_output_files
+            .is_some_and(|items| !items.is_empty())
+        || stated.durable_artifact_created == Some(true)
+        || matches_fixed(
+            r"(?i)\b(apply_patch|patch\s+-p|git apply|git\s+diff|diff\s+-|bun test|npm test|pnpm test|yarn test|vitest|jest|playwright|typecheck|lint|tsc|git\s+commit|committed)\b",
+            &text,
+        );
 }
 
 fn read(path: &Path) -> String {
     std::fs::read(path)
         .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
         .unwrap_or_default()
-}
-fn field<'a>(value: &'a Value, key: &str) -> &'a str {
-    value.get(key).and_then(Value::as_str).unwrap_or("")
 }
 fn json_lines(path: &Path) -> impl Iterator<Item = Value> {
     File::open(path)

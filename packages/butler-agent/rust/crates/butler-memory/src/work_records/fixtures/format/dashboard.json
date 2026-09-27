@@ -1,0 +1,1485 @@
+{
+  "dashboard": {
+    "counts": {
+      "active": 1,
+      "recoverable": 1,
+      "failed": 1,
+      "reportReady": 23,
+      "pendingDelivery": 1,
+      "failedDelivery": 1
+    },
+    "active": [
+      {
+        "label": "Work 1",
+        "status": "REVIEWING",
+        "task_type": "planned",
+        "work_mode": "reviewing",
+        "safe_to_report": false,
+        "completion_claim_allowed": false,
+        "guard_reason": "Review evidence is not complete enough for public completion.",
+        "summary": "사용자 목표: planned work was recorded as in progress; current execution is unverified.",
+        "next_step": "Answer from durable task state and avoid exposing internal ids unless asked.",
+        "actions": [
+          {
+            "action": "view_result",
+            "label": "View result",
+            "enabled": false,
+            "reason": "No result evidence is available yet."
+          },
+          {
+            "action": "resume",
+            "label": "Resume",
+            "enabled": false,
+            "reason": "No native execution owner is available for legacy tasks."
+          },
+          {
+            "action": "cancel",
+            "label": "Cancel",
+            "enabled": false,
+            "reason": "No native execution owner is available to cancel legacy tasks."
+          }
+        ]
+      }
+    ],
+    "recoverable": [],
+    "failed": [],
+    "reportReady": [
+      {
+        "label": "Work 1",
+        "status": "PUBLIC_REPORT_READY",
+        "task_type": "planned",
+        "work_mode": "reporting",
+        "safe_to_report": true,
+        "completion_claim_allowed": true,
+        "guard_reason": null,
+        "summary": "内部 목표: reviewed report is ready for delivery.",
+        "next_step": "No native delivery owner is available to deliver this legacy report.",
+        "actions": [
+          {
+            "action": "view_result",
+            "label": "View result",
+            "enabled": false,
+            "reason": "No result evidence is available yet."
+          },
+          {
+            "action": "resume",
+            "label": "Resume",
+            "enabled": false,
+            "reason": "No native execution owner is available for legacy tasks."
+          },
+          {
+            "action": "cancel",
+            "label": "Cancel",
+            "enabled": false,
+            "reason": "No native execution owner is available to cancel legacy tasks."
+          }
+        ]
+      },
+      {
+        "label": "Work 2",
+        "status": "PUBLIC_REPORT_READY",
+        "task_type": "planned",
+        "work_mode": "reporting",
+        "safe_to_report": true,
+        "completion_claim_allowed": true,
+        "guard_reason": null,
+        "summary": "사용자 목표: reviewed report is ready for delivery.",
+        "next_step": "No native delivery owner is available to deliver this legacy report.",
+        "actions": [
+          {
+            "action": "view_result",
+            "label": "View result",
+            "enabled": false,
+            "reason": "No result evidence is available yet."
+          },
+          {
+            "action": "resume",
+            "label": "Resume",
+            "enabled": false,
+            "reason": "No native execution owner is available for legacy tasks."
+          },
+          {
+            "action": "cancel",
+            "label": "Cancel",
+            "enabled": false,
+            "reason": "No native execution owner is available to cancel legacy tasks."
+          }
+        ]
+      },
+      {
+        "label": "Work 3",
+        "status": "PUBLIC_REPORT_READY",
+        "task_type": "planned",
+        "work_mode": "reporting",
+        "safe_to_report": true,
+        "completion_claim_allowed": true,
+        "guard_reason": null,
+        "summary": "사용자 목표: reviewed report is ready for delivery.",
+        "next_step": "No native delivery owner is available to deliver this legacy report.",
+        "actions": [
+          {
+            "action": "view_result",
+            "label": "View result",
+            "enabled": false,
+            "reason": "No result evidence is available yet."
+          },
+          {
+            "action": "resume",
+            "label": "Resume",
+            "enabled": false,
+            "reason": "No native execution owner is available for legacy tasks."
+          },
+          {
+            "action": "cancel",
+            "label": "Cancel",
+            "enabled": false,
+            "reason": "No native execution owner is available to cancel legacy tasks."
+          }
+        ]
+      },
+      {
+        "label": "Work 4",
+        "status": "FAILED_PUBLIC_REPORT_READY",
+        "task_type": "planned",
+        "work_mode": "reporting",
+        "safe_to_report": true,
+        "completion_claim_allowed": false,
+        "guard_reason": "Only a failure or partial-outcome report is ready; do not claim completion.",
+        "summary": "사용자 목표: reviewed report is ready for delivery.",
+        "next_step": "No native delivery owner is available to deliver this legacy report.",
+        "actions": [
+          {
+            "action": "view_result",
+            "label": "View result",
+            "enabled": false,
+            "reason": "No result evidence is available yet."
+          },
+          {
+            "action": "resume",
+            "label": "Resume",
+            "enabled": false,
+            "reason": "No native execution owner is available for legacy tasks."
+          },
+          {
+            "action": "cancel",
+            "label": "Cancel",
+            "enabled": false,
+            "reason": "No native execution owner is available to cancel legacy tasks."
+          }
+        ]
+      },
+      {
+        "label": "Work 5",
+        "status": "FAILED_PUBLIC_REPORT_READY",
+        "task_type": "planned",
+        "work_mode": "reporting",
+        "safe_to_report": true,
+        "completion_claim_allowed": false,
+        "guard_reason": "Only a failure or partial-outcome report is ready; do not claim completion.",
+        "summary": "사용자 목표: reviewed report is ready for delivery.",
+        "next_step": "No native delivery owner is available to deliver this legacy report.",
+        "actions": [
+          {
+            "action": "view_result",
+            "label": "View result",
+            "enabled": false,
+            "reason": "No result evidence is available yet."
+          },
+          {
+            "action": "resume",
+            "label": "Resume",
+            "enabled": false,
+            "reason": "No native execution owner is available for legacy tasks."
+          },
+          {
+            "action": "cancel",
+            "label": "Cancel",
+            "enabled": false,
+            "reason": "No native execution owner is available to cancel legacy tasks."
+          }
+        ]
+      },
+      {
+        "label": "Work 6",
+        "status": "PUBLIC_REPORT_READY",
+        "task_type": "planned",
+        "work_mode": "reporting",
+        "safe_to_report": true,
+        "completion_claim_allowed": true,
+        "guard_reason": null,
+        "summary": "사용자 목표: reviewed report is ready for delivery.",
+        "next_step": "No native delivery owner is available to deliver this legacy report.",
+        "actions": [
+          {
+            "action": "view_result",
+            "label": "View result",
+            "enabled": false,
+            "reason": "No result evidence is available yet."
+          },
+          {
+            "action": "resume",
+            "label": "Resume",
+            "enabled": false,
+            "reason": "No native execution owner is available for legacy tasks."
+          },
+          {
+            "action": "cancel",
+            "label": "Cancel",
+            "enabled": false,
+            "reason": "No native execution owner is available to cancel legacy tasks."
+          }
+        ]
+      },
+      {
+        "label": "Work 7",
+        "status": "PUBLIC_REPORT_READY",
+        "task_type": "planned",
+        "work_mode": "reporting",
+        "safe_to_report": true,
+        "completion_claim_allowed": true,
+        "guard_reason": null,
+        "summary": "사용자 목표: reviewed report is ready for delivery.",
+        "next_step": "No native delivery owner is available to deliver this legacy report.",
+        "actions": [
+          {
+            "action": "view_result",
+            "label": "View result",
+            "enabled": false,
+            "reason": "No result evidence is available yet."
+          },
+          {
+            "action": "resume",
+            "label": "Resume",
+            "enabled": false,
+            "reason": "No native execution owner is available for legacy tasks."
+          },
+          {
+            "action": "cancel",
+            "label": "Cancel",
+            "enabled": false,
+            "reason": "No native execution owner is available to cancel legacy tasks."
+          }
+        ]
+      },
+      {
+        "label": "Work 8",
+        "status": "PUBLIC_REPORT_READY",
+        "task_type": "planned",
+        "work_mode": "reporting",
+        "safe_to_report": true,
+        "completion_claim_allowed": true,
+        "guard_reason": null,
+        "summary": "사용자 목표: reviewed report is ready for delivery.",
+        "next_step": "No native delivery owner is available to deliver this legacy report.",
+        "actions": [
+          {
+            "action": "view_result",
+            "label": "View result",
+            "enabled": false,
+            "reason": "No result evidence is available yet."
+          },
+          {
+            "action": "resume",
+            "label": "Resume",
+            "enabled": false,
+            "reason": "No native execution owner is available for legacy tasks."
+          },
+          {
+            "action": "cancel",
+            "label": "Cancel",
+            "enabled": false,
+            "reason": "No native execution owner is available to cancel legacy tasks."
+          }
+        ]
+      },
+      {
+        "label": "Work 9",
+        "status": "PUBLIC_REPORT_READY",
+        "task_type": "planned",
+        "work_mode": "reporting",
+        "safe_to_report": true,
+        "completion_claim_allowed": true,
+        "guard_reason": null,
+        "summary": "사용자 목표: reviewed report is ready for delivery.",
+        "next_step": "No native delivery owner is available to deliver this legacy report.",
+        "actions": [
+          {
+            "action": "view_result",
+            "label": "View result",
+            "enabled": false,
+            "reason": "No result evidence is available yet."
+          },
+          {
+            "action": "resume",
+            "label": "Resume",
+            "enabled": false,
+            "reason": "No native execution owner is available for legacy tasks."
+          },
+          {
+            "action": "cancel",
+            "label": "Cancel",
+            "enabled": false,
+            "reason": "No native execution owner is available to cancel legacy tasks."
+          }
+        ]
+      },
+      {
+        "label": "Work 10",
+        "status": "PUBLIC_REPORT_READY",
+        "task_type": "planned",
+        "work_mode": "reporting",
+        "safe_to_report": true,
+        "completion_claim_allowed": true,
+        "guard_reason": null,
+        "summary": "사용자 목표: reviewed report is ready for delivery.",
+        "next_step": "No native delivery owner is available to deliver this legacy report.",
+        "actions": [
+          {
+            "action": "view_result",
+            "label": "View result",
+            "enabled": false,
+            "reason": "No result evidence is available yet."
+          },
+          {
+            "action": "resume",
+            "label": "Resume",
+            "enabled": false,
+            "reason": "No native execution owner is available for legacy tasks."
+          },
+          {
+            "action": "cancel",
+            "label": "Cancel",
+            "enabled": false,
+            "reason": "No native execution owner is available to cancel legacy tasks."
+          }
+        ]
+      }
+    ],
+    "delivery": [
+      {
+        "label": "Delivery 1",
+        "status": "failed",
+        "summary": "Failed work",
+        "actions": [
+          {
+            "action": "retry_delivery",
+            "label": "Retry delivery",
+            "enabled": false,
+            "reason": "No native delivery owner is available to retry legacy notifications."
+          }
+        ]
+      },
+      {
+        "label": "Delivery 2",
+        "status": "pending",
+        "summary": "direct-done",
+        "actions": [
+          {
+            "action": "retry_delivery",
+            "label": "Retry delivery",
+            "enabled": false,
+            "reason": "No native delivery owner is available to retry legacy notifications."
+          }
+        ]
+      }
+    ],
+    "debug": false
+  },
+  "debug_dashboard": {
+    "counts": {
+      "active": 1,
+      "recoverable": 1,
+      "failed": 1,
+      "reportReady": 23,
+      "pendingDelivery": 1,
+      "failedDelivery": 1
+    },
+    "active": [
+      {
+        "label": "planned-02",
+        "status": "REVIEWING",
+        "task_type": "planned",
+        "work_mode": "reviewing",
+        "safe_to_report": false,
+        "completion_claim_allowed": false,
+        "guard_reason": "Review evidence is not complete enough for public completion.",
+        "summary": "사용자 목표: planned work was recorded as in progress; current execution is unverified.",
+        "next_step": "Answer from durable task state and avoid exposing internal ids unless asked.",
+        "actions": [
+          {
+            "action": "view_result",
+            "label": "View result",
+            "enabled": false,
+            "reason": "No result evidence is available yet.",
+            "task_id": "planned-02"
+          },
+          {
+            "action": "resume",
+            "label": "Resume",
+            "enabled": false,
+            "reason": "No native execution owner is available for legacy tasks.",
+            "task_id": "planned-02"
+          },
+          {
+            "action": "cancel",
+            "label": "Cancel",
+            "enabled": false,
+            "reason": "No native execution owner is available to cancel legacy tasks.",
+            "task_id": "planned-02"
+          }
+        ],
+        "raw_id": "planned-02"
+      }
+    ],
+    "recoverable": [],
+    "failed": [],
+    "reportReady": [
+      {
+        "label": "planned-26",
+        "status": "PUBLIC_REPORT_READY",
+        "task_type": "planned",
+        "work_mode": "reporting",
+        "safe_to_report": true,
+        "completion_claim_allowed": true,
+        "guard_reason": null,
+        "summary": "内部 목표: reviewed report is ready for delivery.",
+        "next_step": "No native delivery owner is available to deliver this legacy report.",
+        "actions": [
+          {
+            "action": "view_result",
+            "label": "View result",
+            "enabled": false,
+            "reason": "No result evidence is available yet.",
+            "task_id": "planned-26"
+          },
+          {
+            "action": "resume",
+            "label": "Resume",
+            "enabled": false,
+            "reason": "No native execution owner is available for legacy tasks.",
+            "task_id": "planned-26"
+          },
+          {
+            "action": "cancel",
+            "label": "Cancel",
+            "enabled": false,
+            "reason": "No native execution owner is available to cancel legacy tasks.",
+            "task_id": "planned-26"
+          }
+        ],
+        "raw_id": "planned-26"
+      },
+      {
+        "label": "planned-25",
+        "status": "PUBLIC_REPORT_READY",
+        "task_type": "planned",
+        "work_mode": "reporting",
+        "safe_to_report": true,
+        "completion_claim_allowed": true,
+        "guard_reason": null,
+        "summary": "사용자 목표: reviewed report is ready for delivery.",
+        "next_step": "No native delivery owner is available to deliver this legacy report.",
+        "actions": [
+          {
+            "action": "view_result",
+            "label": "View result",
+            "enabled": false,
+            "reason": "No result evidence is available yet.",
+            "task_id": "planned-25"
+          },
+          {
+            "action": "resume",
+            "label": "Resume",
+            "enabled": false,
+            "reason": "No native execution owner is available for legacy tasks.",
+            "task_id": "planned-25"
+          },
+          {
+            "action": "cancel",
+            "label": "Cancel",
+            "enabled": false,
+            "reason": "No native execution owner is available to cancel legacy tasks.",
+            "task_id": "planned-25"
+          }
+        ],
+        "raw_id": "planned-25"
+      },
+      {
+        "label": "planned-24",
+        "status": "PUBLIC_REPORT_READY",
+        "task_type": "planned",
+        "work_mode": "reporting",
+        "safe_to_report": true,
+        "completion_claim_allowed": true,
+        "guard_reason": null,
+        "summary": "사용자 목표: reviewed report is ready for delivery.",
+        "next_step": "No native delivery owner is available to deliver this legacy report.",
+        "actions": [
+          {
+            "action": "view_result",
+            "label": "View result",
+            "enabled": false,
+            "reason": "No result evidence is available yet.",
+            "task_id": "planned-24"
+          },
+          {
+            "action": "resume",
+            "label": "Resume",
+            "enabled": false,
+            "reason": "No native execution owner is available for legacy tasks.",
+            "task_id": "planned-24"
+          },
+          {
+            "action": "cancel",
+            "label": "Cancel",
+            "enabled": false,
+            "reason": "No native execution owner is available to cancel legacy tasks.",
+            "task_id": "planned-24"
+          }
+        ],
+        "raw_id": "planned-24"
+      }
+    ],
+    "delivery": [
+      {
+        "label": "n2",
+        "status": "failed",
+        "summary": "Failed work",
+        "actions": [
+          {
+            "action": "retry_delivery",
+            "label": "Retry delivery",
+            "enabled": false,
+            "reason": "No native delivery owner is available to retry legacy notifications.",
+            "task_id": "direct-failed",
+            "notification_id": "n2"
+          }
+        ],
+        "raw_id": "n2"
+      },
+      {
+        "label": "n1",
+        "status": "pending",
+        "summary": "direct-done",
+        "actions": [
+          {
+            "action": "retry_delivery",
+            "label": "Retry delivery",
+            "enabled": false,
+            "reason": "No native delivery owner is available to retry legacy notifications.",
+            "task_id": "direct-done",
+            "notification_id": "n1"
+          }
+        ],
+        "raw_id": "n1"
+      }
+    ],
+    "debug": true
+  },
+  "cli": [
+    {
+      "task_id": "planned-26",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-25",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-24",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-23",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "FAILED_PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": false,
+      "can_resume": false,
+      "user_summary": "planned work state is FAILED_PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": "Only a failure or partial-outcome report is ready; do not claim completion.",
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-22",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "FAILED_PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": false,
+      "can_resume": false,
+      "user_summary": "planned work state is FAILED_PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": "Only a failure or partial-outcome report is ready; do not claim completion.",
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-21",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-20",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-19",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-18",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-17",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-16",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-15",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-14",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-13",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-12",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-11",
+      "task_type": "direct",
+      "status": "UNKNOWN",
+      "planned_status": null,
+      "work_mode": "failed",
+      "safe_to_report": false,
+      "completion_claim_allowed": false,
+      "can_resume": false,
+      "user_summary": "direct work needs failure review (UNKNOWN).",
+      "next_step": "Answer from durable task state and avoid exposing internal ids unless asked.",
+      "guard_reason": "Worker state is unknown; inspect durable evidence before reporting.",
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-10",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-09",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-08",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-07",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-06",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-05",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-04",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-03",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    {
+      "task_id": "planned-02",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "REVIEWING",
+      "work_mode": "reviewing",
+      "safe_to_report": false,
+      "completion_claim_allowed": false,
+      "can_resume": false,
+      "user_summary": "planned work state is REVIEWING.",
+      "next_step": "Answer from durable task state and avoid exposing internal ids unless asked.",
+      "guard_reason": "Review evidence is not complete enough for public completion.",
+      "has_result": false,
+      "has_log": false
+    }
+  ],
+  "cli_failed": [
+    {
+      "task_id": "planned-11",
+      "task_type": "direct",
+      "status": "UNKNOWN",
+      "planned_status": null,
+      "work_mode": "failed",
+      "safe_to_report": false,
+      "completion_claim_allowed": false,
+      "can_resume": false,
+      "user_summary": "direct work needs failure review (UNKNOWN).",
+      "next_step": "Answer from durable task state and avoid exposing internal ids unless asked.",
+      "guard_reason": "Worker state is unknown; inspect durable evidence before reporting.",
+      "has_result": false,
+      "has_log": false
+    }
+  ],
+  "by_id": {
+    "planned-00": {
+      "task_id": "planned-00",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-01": {
+      "task_id": "planned-01",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "REPORTED",
+      "work_mode": "complete",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work has completed (REPORTED).",
+      "next_step": "Answer from durable task state and avoid exposing internal ids unless asked.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-02": {
+      "task_id": "planned-02",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "REVIEWING",
+      "work_mode": "reviewing",
+      "safe_to_report": false,
+      "completion_claim_allowed": false,
+      "can_resume": false,
+      "user_summary": "planned work state is REVIEWING.",
+      "next_step": "Answer from durable task state and avoid exposing internal ids unless asked.",
+      "guard_reason": "Review evidence is not complete enough for public completion.",
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-03": {
+      "task_id": "planned-03",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-04": {
+      "task_id": "planned-04",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-05": {
+      "task_id": "planned-05",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-06": {
+      "task_id": "planned-06",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-07": {
+      "task_id": "planned-07",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-08": {
+      "task_id": "planned-08",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-09": {
+      "task_id": "planned-09",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-10": {
+      "task_id": "planned-10",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-11": {
+      "task_id": "planned-11",
+      "task_type": "direct",
+      "status": "UNKNOWN",
+      "planned_status": null,
+      "work_mode": "failed",
+      "safe_to_report": false,
+      "completion_claim_allowed": false,
+      "can_resume": false,
+      "user_summary": "direct work needs failure review (UNKNOWN).",
+      "next_step": "Answer from durable task state and avoid exposing internal ids unless asked.",
+      "guard_reason": "Worker state is unknown; inspect durable evidence before reporting.",
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-12": {
+      "task_id": "planned-12",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-13": {
+      "task_id": "planned-13",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-14": {
+      "task_id": "planned-14",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-15": {
+      "task_id": "planned-15",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-16": {
+      "task_id": "planned-16",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-17": {
+      "task_id": "planned-17",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-18": {
+      "task_id": "planned-18",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-19": {
+      "task_id": "planned-19",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-20": {
+      "task_id": "planned-20",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-21": {
+      "task_id": "planned-21",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-22": {
+      "task_id": "planned-22",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "FAILED_PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": false,
+      "can_resume": false,
+      "user_summary": "planned work state is FAILED_PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": "Only a failure or partial-outcome report is ready; do not claim completion.",
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-23": {
+      "task_id": "planned-23",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "FAILED_PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": false,
+      "can_resume": false,
+      "user_summary": "planned work state is FAILED_PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": "Only a failure or partial-outcome report is ready; do not claim completion.",
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-24": {
+      "task_id": "planned-24",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-25": {
+      "task_id": "planned-25",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "planned-26": {
+      "task_id": "planned-26",
+      "task_type": "planned",
+      "status": "UNKNOWN",
+      "planned_status": "PUBLIC_REPORT_READY",
+      "work_mode": "reporting",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "planned work state is PUBLIC_REPORT_READY.",
+      "next_step": "No native delivery owner is available to deliver this legacy report.",
+      "guard_reason": null,
+      "has_result": false,
+      "has_log": false
+    },
+    "direct-running": {
+      "task_id": "direct-running",
+      "task_type": "direct",
+      "status": "RUNNING",
+      "planned_status": null,
+      "work_mode": "executing",
+      "safe_to_report": false,
+      "completion_claim_allowed": false,
+      "can_resume": false,
+      "user_summary": "direct work is recorded as executing (RUNNING); current execution is unverified.",
+      "next_step": "The legacy status says RUNNING; no native execution owner is available to verify or control it.",
+      "guard_reason": "Legacy state records approved or running work; current execution is unverified. Do not claim completion.",
+      "has_result": false,
+      "has_log": false
+    },
+    "direct-recoverable": {
+      "task_id": "direct-recoverable",
+      "task_type": "direct",
+      "status": "RECOVERABLE",
+      "planned_status": null,
+      "work_mode": "repairing",
+      "safe_to_report": false,
+      "completion_claim_allowed": false,
+      "can_resume": true,
+      "user_summary": "direct work is recoverable (RECOVERABLE).",
+      "next_step": "No native execution owner is available to resume this legacy task.",
+      "guard_reason": "Legacy state records an interrupted worker; no native execution owner can resume it. Do not claim completion.",
+      "has_result": false,
+      "has_log": false
+    },
+    "direct-done": {
+      "task_id": "direct-done",
+      "task_type": "direct",
+      "status": "DONE",
+      "planned_status": null,
+      "work_mode": "complete",
+      "safe_to_report": true,
+      "completion_claim_allowed": true,
+      "can_resume": false,
+      "user_summary": "direct work has completed (DONE).",
+      "next_step": "Answer from durable task state and avoid exposing internal ids unless asked.",
+      "guard_reason": null,
+      "has_result": true,
+      "has_log": true
+    },
+    "direct-done-empty": {
+      "task_id": "direct-done-empty",
+      "task_type": "direct",
+      "status": "REVIEWED",
+      "planned_status": null,
+      "work_mode": "reviewing",
+      "safe_to_report": false,
+      "completion_claim_allowed": false,
+      "can_resume": false,
+      "user_summary": "direct work state is REVIEWED.",
+      "next_step": "Answer from durable task state and avoid exposing internal ids unless asked.",
+      "guard_reason": "Worker task has no durable evidence to review.",
+      "has_result": false,
+      "has_log": false
+    },
+    "direct-failed": {
+      "task_id": "direct-failed",
+      "task_type": "direct",
+      "status": "FAILED",
+      "planned_status": null,
+      "work_mode": "failed",
+      "safe_to_report": true,
+      "completion_claim_allowed": false,
+      "can_resume": false,
+      "user_summary": "direct work needs failure review (FAILED).",
+      "next_step": "Summarize the failure from durable result/log evidence.",
+      "guard_reason": "Only a failure report is safe; do not claim completion.",
+      "has_result": true,
+      "has_log": false
+    },
+    "direct-killed": {
+      "task_id": "direct-killed",
+      "task_type": "direct",
+      "status": "KILLED",
+      "planned_status": null,
+      "work_mode": "cancelled",
+      "safe_to_report": false,
+      "completion_claim_allowed": false,
+      "can_resume": false,
+      "user_summary": "direct work state is KILLED.",
+      "next_step": "Answer from durable task state and avoid exposing internal ids unless asked.",
+      "guard_reason": "Worker was stopped before completion.",
+      "has_result": false,
+      "has_log": false
+    },
+    "direct-odd": {
+      "task_id": "direct-odd",
+      "task_type": "direct",
+      "status": "UNKNOWN",
+      "planned_status": null,
+      "work_mode": "failed",
+      "safe_to_report": false,
+      "completion_claim_allowed": false,
+      "can_resume": false,
+      "user_summary": "direct work needs failure review (UNKNOWN).",
+      "next_step": "Answer from durable task state and avoid exposing internal ids unless asked.",
+      "guard_reason": "Worker state is unknown; inspect durable evidence before reporting.",
+      "has_result": false,
+      "has_log": false
+    }
+  }
+}

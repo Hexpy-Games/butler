@@ -75,7 +75,7 @@ impl MemoryRecall {
         operation_id: String,
         args: serde_json::Value,
     ) -> CognitionResult<serde_json::Value> {
-        let args: RecallToolArgs = crate::lenient::arguments(&args);
+        let args: RecallToolArgs = crate::lenient::view(&args);
         let permit = self
             .admission
             .clone()

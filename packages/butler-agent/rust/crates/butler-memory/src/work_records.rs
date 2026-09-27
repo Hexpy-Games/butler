@@ -8,6 +8,7 @@ mod memory_projection;
 mod memory_report;
 mod read;
 
+pub use dashboard::DashboardDetail;
 pub(crate) use memory_projection::TaskMemoryProjection;
 pub(crate) use memory_report::PlannedTaskMemoryReport;
 pub use read::{ReadAvailability, WorkRecordReadError};
@@ -29,13 +30,15 @@ impl WorkRecordReader {
         }
     }
 
+    /// The Work Dashboard over the newest tasks (`limit` rows per group,
+    /// 10 by default).
     pub fn dashboard(
         &self,
-        debug: bool,
+        detail: DashboardDetail,
         limit: Option<f64>,
         collation: &LocaleCollation,
     ) -> Result<Value, WorkRecordReadError> {
-        dashboard::project(&self.tasks, debug, limit, collation)
+        dashboard::project(&self.tasks, detail, limit, collation)
     }
 
     pub fn cli_task_summaries(
@@ -116,5 +119,7 @@ pub(crate) fn task_id_from_memory_record_id(record_id: &str) -> Option<String> {
     (!task_id.is_empty() && task_memory_record_id(&task_id) == record_id).then_some(task_id)
 }
 
+#[cfg(test)]
+mod format_pin;
 #[cfg(test)]
 mod tests;

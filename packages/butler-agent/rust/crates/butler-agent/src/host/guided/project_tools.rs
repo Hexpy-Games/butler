@@ -139,10 +139,14 @@ impl GuidedProjectTools {
         if name == ToolName::GetWorkDashboard {
             let reader = self.work_records.clone();
             let collation = self.collation.clone();
-            let debug = args.get("debug") == Some(&Value::Bool(true));
+            let detail = if args.get("debug") == Some(&Value::Bool(true)) {
+                butler_memory::work_records::DashboardDetail::Debug
+            } else {
+                butler_memory::work_records::DashboardDetail::Public
+            };
             let limit = args.get("limit").and_then(Value::as_f64);
             let mut result =
-                tokio::task::spawn_blocking(move || reader.dashboard(debug, limit, &collation))
+                tokio::task::spawn_blocking(move || reader.dashboard(detail, limit, &collation))
                     .await
                     .map_err(|source| error("work_dashboard_worker_failed").with_source(source))?
                     .map_err(|source| error("work_dashboard_unavailable").with_source(source))?;

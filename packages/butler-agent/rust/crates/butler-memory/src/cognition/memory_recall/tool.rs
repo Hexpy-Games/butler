@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::cognition::recall::{RecallProjectFilter, RecallRuntime, RecallScope, RecallTime};
 use crate::cognition::{CognitionError, CognitionResult, RecallRequest};
-use crate::lenient::Arg;
+use crate::lenient::{Arg, Obj};
 use butler_core::public_text::trim_js_whitespace;
 use butler_core::segmentation::grapheme_segments;
 use butler_turn::conversation::{
@@ -39,7 +39,7 @@ pub(super) struct RecallToolArgs {
     #[serde(default)]
     include_vector: Arg<bool>,
     #[serde(default)]
-    time: Arg<RecallTime>,
+    time: Arg<Obj<RecallTime>>,
     #[serde(default)]
     seed_phrases: Arg<Vec<String>>,
     #[serde(default)]
@@ -108,8 +108,8 @@ pub(super) fn prepare(
     let public_scope = public_scope(args, &snapshot, &binding)?;
     let time = match &args.time {
         Arg::Missing => None,
-        Arg::Valid(time) => Some(time.clone()),
-        Arg::Invalid => return Err(failure(CognitionCode::RecallMemoryInvalidTime)),
+        Arg::Valid(time) => Some(time.0.clone()),
+        Arg::Null | Arg::Invalid => return Err(failure(CognitionCode::RecallMemoryInvalidTime)),
     };
     let runtime = RecallRuntime {
         session_id: snapshot.current_session_id.clone(),
@@ -149,7 +149,7 @@ fn limit(limit: &Arg<f64>) -> CognitionResult<usize> {
         Arg::Valid(value) if value.fract() == 0.0 && (1.0..=20.0).contains(value) => {
             Ok(butler_core::json::saturating_usize(*value))
         }
-        Arg::Valid(_) | Arg::Invalid => Err(failure(CognitionCode::InvalidArguments)),
+        Arg::Valid(_) | Arg::Null | Arg::Invalid => Err(failure(CognitionCode::InvalidArguments)),
     }
 }
 
@@ -179,12 +179,12 @@ fn public_scope(
         }
         Arg::Missing => RecallScope::AllUserSessions,
         Arg::Valid(scope) => *scope,
-        Arg::Invalid => return Err(failure(CognitionCode::InvalidArguments)),
+        Arg::Null | Arg::Invalid => return Err(failure(CognitionCode::InvalidArguments)),
     };
     let project_filter = match &args.project_filter {
         Arg::Missing => RecallProjectFilter::Any,
         Arg::Valid(filter) => *filter,
-        Arg::Invalid => return Err(failure(CognitionCode::InvalidArguments)),
+        Arg::Null | Arg::Invalid => return Err(failure(CognitionCode::InvalidArguments)),
     };
     let project_ids = strings(&args.project_ids, 16, 512)?;
     let session_ids = strings(&args.session_ids, 32, 512)?;
@@ -222,7 +222,9 @@ fn strings(
     let values = match value {
         Arg::Missing => return Ok(Vec::new()),
         Arg::Valid(values) if values.len() <= max_items => values,
-        Arg::Valid(_) | Arg::Invalid => return Err(failure(CognitionCode::InvalidArguments)),
+        Arg::Valid(_) | Arg::Null | Arg::Invalid => {
+            return Err(failure(CognitionCode::InvalidArguments));
+        }
     };
     values
         .iter()

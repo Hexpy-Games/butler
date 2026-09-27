@@ -1,7 +1,5 @@
 //! Read-only task facts needed to publish reviewed outcome memory.
 
-use serde_json::Value;
-
 use super::{
     PlannedTaskMemoryReport, ReadAvailability, WorkRecordReadError, WorkRecordReader, read,
 };
@@ -31,11 +29,14 @@ pub(super) fn read(
     let Some(review) = snapshot.review.as_ref() else {
         return Ok(None);
     };
+    let review_attempt = review
+        .document()
+        .and_then(|review| review.attempt.valid().copied());
     if !matches!(
         snapshot.status.as_str(),
         "PUBLIC_REPORT_READY" | "FAILED_PUBLIC_REPORT_READY" | "REPORTED"
-    ) || review["attempt"].as_f64() != Some(report.attempt)
-        || snapshot.plan["project"].as_str() != Some(report.project_id.as_str())
+    ) || review_attempt != Some(report.attempt)
+        || snapshot.plan.project.valid() != Some(&report.project_id)
     {
         return Ok(None);
     }
@@ -51,43 +52,16 @@ pub(super) fn read(
         .map(|value| butler_core::public_text::trim_js_whitespace(&value).to_owned())
         .filter(|value| !value.is_empty());
     let origin = read::json(&directory.join("origin.json"), ReadAvailability::BestEffort)?
-        .filter(valid_origin);
+        .map(|value| crate::lenient::view::<read::Origin>(&value))
+        .filter(read::Origin::valid)
+        .unwrap_or_default();
     Ok(Some(TaskMemoryProjection {
         report,
         request,
-        origin_task_summary: origin
-            .as_ref()
-            .and_then(|value| value.get("task_summary"))
-            .and_then(Value::as_str)
-            .map(str::to_owned),
-        origin_session_id: origin
-            .as_ref()
-            .and_then(|value| value.get("origin_session_id"))
-            .and_then(Value::as_str)
-            .map(str::to_owned),
-        origin_event_id: origin
-            .as_ref()
-            .and_then(|value| value.get("origin_inbound_event_id"))
-            .and_then(Value::as_str)
-            .map(str::to_owned),
-        plan_origin_session_id: snapshot
-            .plan
-            .get("origin_session_id")
-            .and_then(Value::as_str)
-            .map(str::to_owned),
-        plan_origin_event_id: snapshot
-            .plan
-            .get("origin_event_id")
-            .and_then(Value::as_str)
-            .map(str::to_owned),
+        origin_task_summary: origin.task_summary,
+        origin_session_id: origin.origin_session_id,
+        origin_event_id: origin.origin_inbound_event_id,
+        plan_origin_session_id: snapshot.plan.origin_session_id.valid().cloned(),
+        plan_origin_event_id: snapshot.plan.origin_event_id.valid().cloned(),
     }))
-}
-
-fn valid_origin(origin: &Value) -> bool {
-    origin["version"].as_i64() == Some(1)
-        && origin["origin_session_id"].is_string()
-        && origin["task_summary"].is_string()
-        && origin
-            .pointer("/transcript_ref/path")
-            .is_some_and(Value::is_string)
 }
