@@ -26,6 +26,7 @@ use crate::{
 pub(crate) use inspect::ProjectCapsuleInspectReport;
 pub(crate) use types::ProjectCapsuleMaintenanceResult;
 
+/// Maintains the per-project memory capsules.
 pub struct ProjectCapsuleService {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
@@ -33,6 +34,7 @@ pub struct ProjectCapsuleService {
 }
 
 impl ProjectCapsuleService {
+    /// A capsule service over `data_root`.
     pub fn new(
         data_root: PathBuf,
         paths: CognitionPathEnvironment,
@@ -45,6 +47,7 @@ impl ProjectCapsuleService {
         }
     }
 
+    /// The project's capsule, as the operator sees it.
     pub async fn inspect(&self, project_id: &str) -> CognitionResult<ProjectCapsuleInspectReport> {
         let project_id = butler_core::public_text::trim_js_whitespace(project_id).to_owned();
         if project_id.is_empty() {
@@ -135,6 +138,7 @@ impl ProjectCapsuleService {
         .map_err(|source| error(CognitionCode::ProjectCapsuleWorkerFailed).with_source(source))?
     }
 
+    /// Refreshes the capsules of up to `max_projects` registered projects.
     pub async fn refresh_registered(
         &self,
         max_projects: usize,

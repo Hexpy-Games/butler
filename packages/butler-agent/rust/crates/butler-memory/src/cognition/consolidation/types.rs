@@ -4,19 +4,31 @@ use serde_json::{Map, Value};
 pub(crate) const CHECKPOINT_SCHEMA: &str = "butler.cognition.consolidation.checkpoint.v1";
 pub(crate) const USAGE_RATE_SOURCE: &str = "openai_codex_rate_card_2026_05";
 
+/// Phases of a consolidation cycle, in run order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Phase {
+    /// Check the rate budget and the stores before starting.
     Preflight,
+    /// Route buffered feedback to its owners.
     FeedbackTriage,
+    /// Promote profile candidates and refresh the runtime projection.
     ProfileConsolidation,
+    /// Write the new-chat briefings.
     NewChatBriefing,
+    /// Rebuild the box item index.
     BoxIndex,
+    /// Check memory metadata links.
     MemoryMetadataIntegrity,
+    /// Aggregate source quality feedback.
     SourceQualityAggregation,
+    /// Revise know-how entries from feedback.
     KnowhowRevision,
+    /// Record memory health.
     MemoryHealth,
+    /// Apply box retention.
     BoxRetention,
+    /// Summarize the cycle metrics.
     MetricsSummary,
 }
 
@@ -62,13 +74,19 @@ pub(crate) enum CheckpointStatus {
     CompletedWithErrors,
 }
 
+/// How a consolidation cycle ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CycleStatus {
+    /// Every phase succeeded.
     Completed,
+    /// The rate budget was too low to start.
     DeferredRateLimited,
+    /// The rate budget ran low mid-cycle; the cycle resumes later.
     PausedRateLimited,
+    /// Another writer held the consolidation lock.
     LockHeld,
+    /// Every phase ran, but some failed.
     CompletedWithErrors,
 }
 

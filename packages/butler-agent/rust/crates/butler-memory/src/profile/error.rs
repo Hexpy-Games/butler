@@ -33,14 +33,22 @@ pub enum ProfileError {
     /// A profile check failed: invalid input or stored record, missing profile,
     /// busy or closed owner. Nothing lower-level failed.
     #[error("{code}: {message}")]
-    Detected { code: ProfileCode, message: String },
+    Detected {
+        /// What failed.
+        code: ProfileCode,
+        /// Details.
+        message: String,
+    },
     /// A port implemented outside Profile (Conversation sources, the model
     /// provider, the write gate) failed; `code` and `message` are that
     /// implementation's own.
     #[error("{code}: {message}")]
     Port {
+        /// The port's code.
         code: &'static str,
+        /// The port's message.
         message: String,
+        /// The port's error, when it has one.
         #[source]
         source: Option<ProfileSource>,
     },
@@ -48,14 +56,18 @@ pub enum ProfileError {
     /// `code` names what the profile owner was doing and `source` is the cause.
     #[error("{code}: {message}")]
     Failed {
+        /// What the profile was doing.
         code: ProfileCode,
+        /// Details.
         message: String,
+        /// The cause.
         #[source]
         source: ProfileSource,
     },
 }
 
 impl ProfileError {
+    /// A detected failure.
     pub fn new(code: ProfileCode, message: impl Into<String>) -> Self {
         Self::Detected {
             code,
@@ -100,6 +112,7 @@ impl ProfileError {
         }
     }
 
+    /// The stable code of the failure.
     pub fn code(&self) -> &'static str {
         match self {
             Self::Detected { code, .. } | Self::Failed { code, .. } => code.as_str(),

@@ -12,24 +12,33 @@ pub enum CoordinationError {
     /// SQLite reported the coordinator database busy: another writer holds it.
     #[error("{source}")]
     Busy {
+        /// The SQLite error.
         #[source]
         source: Arc<rusqlite::Error>,
     },
     /// A legacy writer may still be live, so the gate cannot bind its fence.
     #[error("{reason}")]
-    LegacyBlocked { reason: &'static str },
+    LegacyBlocked {
+        /// Why the fence cannot be bound.
+        reason: &'static str,
+    },
     /// The coordinator database or fence failed a consistency check.
     #[error("{detail}")]
-    GateInvalid { detail: &'static str },
+    GateInvalid {
+        /// What was inconsistent.
+        detail: &'static str,
+    },
     /// Reading or writing the coordinator database, fence or host identity failed.
     #[error("{source}")]
     GateIo {
+        /// The cause.
         #[source]
         source: Arc<dyn std::error::Error + Send + Sync>,
     },
 }
 
 impl CoordinationError {
+    /// The stable code of the failure.
     pub fn code(&self) -> &'static str {
         match self {
             Self::Aborted => "memory_write_aborted",
@@ -56,6 +65,7 @@ impl CoordinationError {
     }
 }
 
+/// Result of a coordination operation.
 pub type CoordinationResult<T> = Result<T, CoordinationError>;
 
 pub(super) fn invalid(detail: &'static str) -> CoordinationError {

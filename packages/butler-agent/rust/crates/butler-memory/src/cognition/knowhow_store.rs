@@ -44,10 +44,13 @@ pub struct KnowHowRevisionReport {
 pub(crate) type FeedbackResolveFuture<'a> =
     Pin<Box<dyn Future<Output = CognitionResult<()>> + Send + 'a>>;
 
+/// Tells whether feedback was applied to its target.
 pub trait FeedbackResolvePort: Send + Sync {
+    /// Resolves the feedback with `feedback_id`.
     fn resolve_applied<'a>(&'a self, feedback_id: &'a str) -> FeedbackResolveFuture<'a>;
 }
 
+/// Aggregates know-how feedback and keeps the know-how index current.
 pub struct KnowHowService {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
@@ -55,6 +58,7 @@ pub struct KnowHowService {
 }
 
 impl KnowHowService {
+    /// A know-how service over `data_root`.
     pub fn new(
         data_root: PathBuf,
         paths: CognitionPathEnvironment,
@@ -67,6 +71,7 @@ impl KnowHowService {
         }
     }
 
+    /// Aggregates feedback into know-how entries and rebuilds the index.
     pub async fn aggregate_and_rebuild(&self) -> CognitionResult<KnowHowAggregateReport> {
         self.with_lease("knowhow_aggregation", |root| {
             let quality = quality::aggregate(&root)?;
@@ -79,11 +84,13 @@ impl KnowHowService {
         .await
     }
 
+    /// Know-how entries in the index.
     pub async fn count_entries(&self) -> CognitionResult<usize> {
         self.with_lease("knowhow_count", |root| entries::count_files(&root))
             .await
     }
 
+    /// Revises know-how entries from the active feedback.
     pub async fn revise(
         &self,
         active_feedback: &[FeedbackTarget],

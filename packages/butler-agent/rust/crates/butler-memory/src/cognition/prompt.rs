@@ -24,13 +24,18 @@ pub struct ScopedPromptFeedback {
     pub content: String,
 }
 
+/// Whether a project capsule exists for the prompt.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CapsulePresence {
+    /// No project was given.
     Skipped,
+    /// The capsule exists.
     Present,
+    /// The project has no capsule yet.
     Missing,
 }
 
+/// Reads the memory context prompts are built from.
 pub struct CognitionPromptReader {
     data_root: PathBuf,
     environment: CognitionPathEnvironment,
@@ -38,6 +43,7 @@ pub struct CognitionPromptReader {
 }
 
 impl CognitionPromptReader {
+    /// A reader over `data_root`.
     pub fn new(
         data_root: PathBuf,
         environment: CognitionPathEnvironment,
@@ -50,6 +56,7 @@ impl CognitionPromptReader {
         }
     }
 
+    /// Feedback that applies to the session and project.
     pub async fn scoped_feedback(
         &self,
         session: String,
@@ -61,6 +68,7 @@ impl CognitionPromptReader {
             .await
     }
 
+    /// The active generation's hot cache for the project, when readable.
     pub async fn generation_hot_cache(
         &self,
         project: Option<String>,
@@ -78,6 +86,7 @@ impl CognitionPromptReader {
             .await
     }
 
+    /// The continuity notes of `session`.
     pub async fn session_continuity(&self, session: String) -> CognitionResult<Option<String>> {
         let root = self.environment.memory_root(&self.data_root);
         self.owner
@@ -85,6 +94,7 @@ impl CognitionPromptReader {
             .await
     }
 
+    /// The project's memory capsule.
     pub async fn project_capsule(
         &self,
         project: Option<String>,
@@ -95,6 +105,7 @@ impl CognitionPromptReader {
             .await
     }
 
+    /// Whether the project's memory capsule exists.
     pub async fn project_capsule_status(
         &self,
         project: Option<String>,
@@ -105,6 +116,7 @@ impl CognitionPromptReader {
             .await
     }
 
+    /// Stops admitting reads and waits for running ones.
     pub async fn close(&self) {
         self.owner.close().await;
     }

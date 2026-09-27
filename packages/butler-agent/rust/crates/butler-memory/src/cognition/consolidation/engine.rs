@@ -39,6 +39,7 @@ pub struct PhaseError {
 }
 
 impl PhaseError {
+    /// A phase failure with `code` and `message`.
     pub fn new(code: &'static str, message: impl Into<String>) -> Self {
         Self {
             code,
@@ -71,7 +72,9 @@ impl PhaseError {
     }
 }
 
+/// Runs one consolidation phase.
 pub trait PhaseExecutor: Send + Sync {
+    /// Runs `phase` of run `run_id`; the phase's metrics, or its failure.
     fn execute<'a>(
         &'a self,
         phase: Phase,
@@ -95,10 +98,15 @@ impl CycleEventSink for butler_runtime::operations::CycleMetrics {
     }
 }
 
+/// How to run a consolidation cycle.
 pub struct RunCycle {
+    /// Run id; a new one when absent.
     pub run_id: Option<String>,
+    /// Resume an existing run from its checkpoint.
     pub resume: bool,
+    /// Stops the cycle when cancelled.
     pub cancellation: CancellationToken,
+    /// The model rate budget, checked before each phase.
     pub rate_budget: Arc<dyn Fn() -> Option<RateBudget> + Send + Sync>,
 }
 
@@ -113,6 +121,7 @@ impl Default for RunCycle {
     }
 }
 
+/// Runs consolidation cycles phase by phase with a durable checkpoint.
 pub struct CycleService {
     data_root: PathBuf,
     environment: CognitionPathEnvironment,
@@ -125,6 +134,7 @@ pub struct CycleService {
 }
 
 impl CycleService {
+    /// A cycle service over `data_root`.
     pub fn new(
         data_root: PathBuf,
         environment: CognitionPathEnvironment,

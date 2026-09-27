@@ -24,6 +24,7 @@ use crate::{
     coordination::CognitionWriteLease,
 };
 
+/// Binds a native embedding identity to a generation that has none yet.
 pub fn bind_native_embedding_identity(
     data_root: &Path,
     environment: &CognitionPathEnvironment,

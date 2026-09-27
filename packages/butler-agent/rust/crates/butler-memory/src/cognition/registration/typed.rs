@@ -17,20 +17,31 @@ use crate::cognition::{
 use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator};
 use butler_turn::conversation::{ConversationSourceReader, conversation_store_path};
 
+/// A typed memory source (task report or explicit rule) to register.
 #[derive(Clone)]
 pub struct RegisterTypedSourceInput {
+    /// Butler data root.
     pub data_root: PathBuf,
+    /// Generation to register in.
     pub target: MemoryGenerationTarget,
+    /// `task_report` or `explicit_record`.
     pub source_kind: String,
+    /// Record id.
     pub record_id: String,
+    /// Record revision.
     pub revision: String,
+    /// Operation that wrote the record.
     pub operation_id: String,
+    /// Hash of the record text.
     pub content_hash: String,
+    /// Completion job that published the source.
     pub completion_id: String,
+    /// Stops the registration when cancelled.
     pub cancellation: CancellationToken,
 }
 
 impl CognitionRegistrationService {
+    /// Registers the typed source; its projection progress.
     pub async fn register_typed_source(
         &self,
         input: RegisterTypedSourceInput,

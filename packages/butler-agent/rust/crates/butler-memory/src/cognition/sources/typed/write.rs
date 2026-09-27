@@ -20,32 +20,52 @@ use crate::cognition::{
     TypedMemorySourceNotice, ensure_data_authority,
 };
 
+/// An explicit rule to remember.
 #[derive(Clone, Debug, Default)]
 pub struct ExplicitMemoryUpdateInput {
+    /// Rule text.
     pub text: String,
+    /// Idempotency key; a retry with the same id replays the first write.
     pub operation_id: Option<String>,
+    /// Rule record id; derived from the operation when absent.
     pub record_id: Option<String>,
+    /// Project the rule belongs to.
     pub project_id: Option<String>,
+    /// Conversation session the rule came from.
     pub conversation_session_id: Option<String>,
+    /// Message the rule came from.
     pub conversation_message_id: Option<String>,
 }
 
+/// What an explicit rule update wrote.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExplicitMemoryUpdateResult {
+    /// Path of the rule text.
     pub path: PathBuf,
+    /// Rule record id.
     pub record_id: String,
+    /// Rule revision.
     pub revision: String,
+    /// Operation id.
     pub operation_id: String,
+    /// The operation had already written this revision.
     pub replayed: bool,
+    /// Projection job published for the rule.
     pub job_id: String,
 }
 
+/// What ingesting a reviewed task outcome wrote.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TaskMemoryIngestionResult {
+    /// Task id.
     pub task_id: String,
+    /// Path of the task memory.
     pub memory_path: PathBuf,
+    /// Session the task came from.
     pub origin_session_id: Option<String>,
+    /// Event the task came from.
     pub origin_event_id: Option<String>,
+    /// Projection job published for the task report.
     pub job_id: String,
 }
 

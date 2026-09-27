@@ -29,6 +29,7 @@ enum EmbeddingCheck {
     Skip,
 }
 
+/// The generation `target` names, checked to still be the one it names.
 pub fn resolve_generation(
     data_root: &Path,
     environment: &CognitionPathEnvironment,
@@ -101,6 +102,7 @@ fn snapshot_source_root(snapshot: Option<&Path>) -> Result<PathBuf, CognitionErr
         .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))
 }
 
+/// The active memory generation.
 pub fn resolve_active_generation(
     data_root: &Path,
     environment: &CognitionPathEnvironment,
@@ -182,6 +184,7 @@ pub(super) fn candidate_target(
     })
 }
 
+/// Whether an active generation descriptor exists.
 pub fn active_memory_descriptor_exists(
     data_root: &Path,
     environment: &CognitionPathEnvironment,

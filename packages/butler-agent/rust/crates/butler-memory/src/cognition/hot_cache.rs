@@ -40,6 +40,7 @@ pub struct HotCacheBackfillOutcome {
     pub(crate) raw_text_included: bool,
 }
 
+/// Indexes legacy hot-cache blocks and transcripts into the legacy vector store.
 pub struct LegacyIndexService {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
@@ -49,6 +50,7 @@ pub struct LegacyIndexService {
 }
 
 impl LegacyIndexService {
+    /// An index service over `data_root`.
     pub fn new(
         data_root: PathBuf,
         paths: CognitionPathEnvironment,
@@ -65,6 +67,7 @@ impl LegacyIndexService {
         }
     }
 
+    /// Indexes every hot-cache markdown block.
     pub async fn backfill(
         &self,
         cancellation: &CancellationToken,

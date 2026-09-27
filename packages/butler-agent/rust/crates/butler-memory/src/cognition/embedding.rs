@@ -52,8 +52,11 @@ impl EmbeddingFailure {
     }
 }
 
+/// What produced an embedding: model, runtime, tokenizer, pooling and their hashes. `version`
+/// hashes the rest, so vectors from different identities never mix.
 #[derive(Clone, Deserialize, Serialize)]
 pub struct EmbeddingIdentity {
+    /// Identity schema.
     pub schema: String,
     pub(crate) model: String,
     pub(crate) runtime: String,
@@ -64,25 +67,36 @@ pub struct EmbeddingIdentity {
     pub(crate) tokenizer_asset_sha256: String,
     pub(crate) model_asset_sha256: String,
     pub(crate) preprocessing: String,
+    /// Pooling (`cls` or `attention-mask-mean`).
     pub pooling: String,
+    /// How overlong input is handled.
     pub truncation: String,
     pub(crate) normalize: bool,
     pub(crate) max_tokens: usize,
+    /// Vector dimension.
     pub dimension: usize,
+    /// Hash of every other field.
     pub version: String,
 }
 
+/// Embeddings of a request.
 #[derive(Deserialize, Serialize)]
 pub struct EmbeddingResult {
+    /// One normalized vector per embedded text.
     pub embeddings: Vec<Vec<f32>>,
+    /// Tokens per embedded text.
     pub token_counts: Vec<usize>,
+    /// The texts embedded, after any resplitting.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub embedded_texts: Option<Vec<String>>,
+    /// Texts left out by the embedding limit.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub omitted_count: Option<usize>,
+    /// Identity of the embedding.
     pub metadata: EmbeddingIdentity,
 }
 
+/// Token ids of tokenized texts.
 #[derive(Deserialize, Serialize)]
 pub struct Tokenization {
     pub(crate) token_ids: Vec<Vec<u32>>,
@@ -172,6 +186,7 @@ fn identity(mut identity: EmbeddingIdentity) -> Result<EmbeddingIdentity, Embedd
     Ok(identity)
 }
 
+/// The local BGE-M3 tokenizer and ONNX model.
 pub struct EmbeddingEngine {
     strict_tokenizer: Tokenizer,
     session: Session,
@@ -237,6 +252,7 @@ impl EmbeddingEngine {
         })
     }
 
+    /// Token ids of each text, with special tokens.
     pub fn tokenize(&self, texts: &[String]) -> Result<Tokenization, EmbeddingFailure> {
         let mut token_ids = Vec::with_capacity(texts.len());
         let mut token_counts = Vec::with_capacity(texts.len());
@@ -252,6 +268,7 @@ impl EmbeddingEngine {
         })
     }
 
+    /// Embeds the texts with the given pooling.
     pub fn embed(
         &mut self,
         texts: &[String],

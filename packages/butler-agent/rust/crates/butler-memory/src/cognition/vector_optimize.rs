@@ -22,20 +22,30 @@ use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWr
 
 const DELETE_BATCH: usize = 100;
 
+/// What a vector optimize run did.
 #[derive(Debug, PartialEq, Eq)]
 pub enum VectorOptimizeOutcome {
+    /// The vector store could not be opened.
     Unavailable {
+        /// Why.
         reason: &'static str,
+        /// Vectors pruned before the store became unavailable.
         vectors_pruned: usize,
     },
+    /// The run finished.
     Metrics {
+        /// Caches compacted (always 0; kept for the legacy report).
         caches_compacted: usize,
+        /// Summaries re-embedded (always 0; kept for the legacy report).
         summaries_re_embedded: usize,
+        /// Vectors of removed units deleted.
         vectors_pruned: usize,
+        /// Whether the table files were compacted.
         lancedb_compacted: bool,
     },
 }
 
+/// Prunes vectors of removed units from the active generation and compacts the table.
 pub struct VectorOptimizeService {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
@@ -44,6 +54,7 @@ pub struct VectorOptimizeService {
 }
 
 impl VectorOptimizeService {
+    /// An optimize service over `data_root`.
     pub fn new(
         data_root: PathBuf,
         paths: CognitionPathEnvironment,
@@ -57,6 +68,7 @@ impl VectorOptimizeService {
         }
     }
 
+    /// Runs one optimize pass within the deadline.
     pub async fn run(
         &self,
         cancellation: &CancellationToken,

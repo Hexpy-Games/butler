@@ -154,6 +154,7 @@ fn valid_artifact(value: &Value, scope: &str, project_id: Option<&str>, locale: 
         })
 }
 
+/// The id of the latest completed consolidation run (on `date`, when given).
 pub fn latest_completed_briefing_run_id(data_root: &Path, date: Option<&str>) -> Option<String> {
     let mut best: Option<(SystemTime, String)> = None;
     for entry in fs::read_dir(data_root.join("cognition/consolidation/runs"))

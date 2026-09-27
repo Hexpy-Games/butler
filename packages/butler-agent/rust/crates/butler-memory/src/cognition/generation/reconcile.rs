@@ -20,6 +20,7 @@ use crate::{
     coordination::CognitionWriteCoordinator,
 };
 
+/// Reconciles a rebuild candidate's vector representatives; the report.
 pub async fn run(
     data_root: &Path,
     environment: &CognitionPathEnvironment,

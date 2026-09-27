@@ -18,12 +18,14 @@ use std::path::{Path, PathBuf};
 use butler_core::locale::LocaleCollation;
 use serde_json::Value;
 
+/// Reads the durable records of tasks and their reviews.
 #[derive(Clone)]
 pub struct WorkRecordReader {
     tasks: PathBuf,
 }
 
 impl WorkRecordReader {
+    /// A reader over the Butler data directory.
     pub fn new(butler_data: &Path) -> Self {
         Self {
             tasks: butler_data.join("tasks"),
@@ -41,6 +43,7 @@ impl WorkRecordReader {
         dashboard::project(&self.tasks, detail, limit, collation)
     }
 
+    /// Summaries of every task, for the CLI.
     pub fn cli_task_summaries(
         &self,
         status: Option<&str>,
@@ -49,6 +52,7 @@ impl WorkRecordReader {
         dashboard::cli_summaries(&self.tasks, status, collation)
     }
 
+    /// The summary of one task, for the CLI.
     pub fn cli_task_summary(&self, task_id: &str) -> Result<Option<Value>, WorkRecordReadError> {
         if !self
             .task_ids()?

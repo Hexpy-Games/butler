@@ -12,6 +12,7 @@ use crate::{
     work_records::WorkRecordReader,
 };
 
+/// Writes a reviewed task's outcome as task memory and publishes it.
 pub fn ingest_task_outcome_memory(
     data_root: &Path,
     environment: &CognitionPathEnvironment,

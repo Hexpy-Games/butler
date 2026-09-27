@@ -1,5 +1,6 @@
 use sha2::{Digest, Sha256};
 
+/// The session id as the legacy stores key it.
 pub fn normalize_session_id_for_storage(session_id: &str) -> String {
     let trimmed = session_id.trim_matches(is_js_trim_char);
     let normalized: String = trimmed

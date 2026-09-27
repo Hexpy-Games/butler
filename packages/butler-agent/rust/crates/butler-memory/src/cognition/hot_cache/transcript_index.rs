@@ -20,6 +20,7 @@ struct LegacyTranscriptInput<'a> {
 }
 
 impl LegacyIndexService {
+    /// Indexes a session transcript into the legacy vector store.
     pub async fn index_transcript(
         &self,
         text: &str,
@@ -44,6 +45,7 @@ impl LegacyIndexService {
         .await
     }
 
+    /// Indexes one hot-cache entry into the legacy vector store.
     pub async fn index_hot_entry(
         &self,
         text: &str,

@@ -86,6 +86,7 @@ pub struct FeedbackCounts {
     pub active_profile_candidate_count: usize,
 }
 
+/// The feedback buffer: user feedback waiting to be routed to its owners.
 pub struct FeedbackBufferService {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
@@ -93,6 +94,7 @@ pub struct FeedbackBufferService {
 }
 
 impl FeedbackBufferService {
+    /// A feedback buffer over `data_root`.
     pub fn new(
         data_root: PathBuf,
         paths: CognitionPathEnvironment,
@@ -105,6 +107,7 @@ impl FeedbackBufferService {
         }
     }
 
+    /// Entry counts at `now_epoch_ms`.
     pub fn counts(&self, now_epoch_ms: i64) -> CognitionResult<FeedbackCounts> {
         let path = self
             .paths

@@ -25,7 +25,9 @@ use super::manifest::{GenerationManifest, GenerationState};
 /// must name (`None` for builds that cannot claim one).
 #[derive(Clone, Copy)]
 pub struct CutoverStamp<'a> {
+    /// Now, as an ISO 8601 time.
     pub now: &'a str,
+    /// The implementation commit the qualification names.
     pub verified_commit: Option<&'a str>,
 }
 #[cfg(test)]

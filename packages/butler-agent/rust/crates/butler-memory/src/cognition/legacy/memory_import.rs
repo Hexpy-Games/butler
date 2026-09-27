@@ -10,32 +10,46 @@ use crate::cognition::{
     legacy_hot_prefix, prepare_legacy_transcript,
 };
 
+/// Imports a legacy session transcript into memory.
 pub struct LegacyMemoryImportService {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
 }
 
+/// What importing a legacy session will write.
 pub struct LegacyMemoryImportPlan {
+    /// Transcript format (`butler-transcript`, …).
     pub format: String,
+    /// Session being imported.
     pub session_id: String,
+    /// Project the session belongs to.
     pub project: String,
     path_hint: String,
+    /// Path of the transcript.
     pub transcript_path: PathBuf,
+    /// Messages in the transcript.
     pub message_count: usize,
+    /// Chunks to index.
     pub chunks: Vec<LegacyMemoryImportChunk>,
 }
 
+/// One chunk of an imported transcript.
 pub struct LegacyMemoryImportChunk {
+    /// Chunk id.
     pub chunk_id: String,
+    /// Conversation text of the chunk.
     pub conversation_text: String,
+    /// Text written to the hot cache for the chunk.
     pub hot_text: String,
 }
 
 impl LegacyMemoryImportService {
+    /// An import service over `data_root`.
     pub fn new(data_root: PathBuf, paths: CognitionPathEnvironment) -> Self {
         Self { data_root, paths }
     }
 
+    /// Plans the import of `requested_session_id`.
     pub fn plan(&self, requested_session_id: &str) -> CognitionResult<LegacyMemoryImportPlan> {
         let file_name = transcript_file_name(requested_session_id);
         let transcript_root = self.data_root.join("transcripts");
@@ -98,6 +112,8 @@ impl LegacyMemoryImportService {
         })
     }
 
+    /// Sets the plan project: `project_id` for a Butler transcript, else the project resolved from
+    /// the transcript path.
     pub fn resolve_project(
         &self,
         plan: &mut LegacyMemoryImportPlan,
@@ -114,6 +130,7 @@ impl LegacyMemoryImportService {
         Ok(())
     }
 
+    /// Whether the session was already imported.
     pub fn already_imported(&self, session_id: &str) -> CognitionResult<bool> {
         let path = self.imported_marker_path();
         ensure_data_authority(&self.data_root, &[&path])?;
@@ -127,6 +144,7 @@ impl LegacyMemoryImportService {
             .any(|line| butler_core::public_text::trim_js_whitespace(line) == session_id))
     }
 
+    /// Creates the directories an import writes to.
     pub fn prepare_apply(&self) -> CognitionResult<()> {
         let memory_root = self.paths.memory_root(&self.data_root);
         let db_root = memory_root.join("db");
@@ -136,6 +154,7 @@ impl LegacyMemoryImportService {
         })
     }
 
+    /// Records that the session was imported.
     pub fn mark_imported(&self, session_id: &str) -> CognitionResult<()> {
         let path = self.imported_marker_path();
         let parent = path

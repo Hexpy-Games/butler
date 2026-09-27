@@ -11,6 +11,7 @@ use super::types::{
 use crate::cognition::CognitionCode;
 use crate::cognition::{MEMORY_SOURCE_WINDOW_BYTES, split_historical_source_spans};
 
+/// Prepares the registration plan of a conversation source.
 pub fn prepare_conversation_source(
     reader: &ConversationSourceReader,
     notice: ConversationSourceNotice<'_>,

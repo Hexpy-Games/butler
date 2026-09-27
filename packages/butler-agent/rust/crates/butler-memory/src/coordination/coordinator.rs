@@ -16,6 +16,7 @@ use super::types::{
     ConsolidationLockInspection, LockInfo,
 };
 
+/// Serializes memory writers across processes through a SQLite gate beside each lock file.
 #[derive(Clone)]
 pub struct CognitionWriteCoordinator {
     pub(super) inner: Arc<CoordinatorInner>,
@@ -34,6 +35,7 @@ pub(super) struct LocalRegistration {
     pub(super) owner: LockInfo,
 }
 
+/// A held memory writer lock; released explicitly or when dropped.
 pub struct CognitionWriteLease {
     inner: Arc<CoordinatorInner>,
     lock_path: PathBuf,
@@ -43,6 +45,7 @@ pub struct CognitionWriteLease {
 }
 
 impl CognitionWriteCoordinator {
+    /// A coordinator for this process.
     pub fn new(host: Arc<dyn CognitionCoordinationHost>) -> CoordinationResult<Self> {
         let pid = host.process_id();
         let hostname = host.hostname()?;
@@ -63,6 +66,7 @@ impl CognitionWriteCoordinator {
         self.inner.try_acquire(request)
     }
 
+    /// Waits for the writer lock; `None` when the request gives up.
     pub async fn acquire(
         &self,
         mut request: CognitionWriteAcquire,
@@ -277,6 +281,7 @@ impl CognitionWriteLease {
         Ok(())
     }
 
+    /// Releases the lock; `commit` records whether the writer finished its work.
     pub fn release(mut self, commit: bool) -> CoordinationResult<()> {
         self.finish(commit)
     }

@@ -11,6 +11,7 @@ pub struct PersonalizationDocuments {
 }
 
 impl ProfileService {
+    /// The persona and end-of-life documents.
     pub async fn read_personalization_documents(
         &self,
     ) -> super::super::contracts::ProfileResult<PersonalizationDocuments> {
@@ -24,6 +25,7 @@ impl ProfileService {
         .await
     }
 
+    /// Writes the persona and end-of-life documents.
     pub async fn update_personalization_documents(
         &self,
         persona: Option<String>,
@@ -57,6 +59,7 @@ impl ProfileService {
         .await
     }
 
+    /// The persona presets in `locale`.
     pub async fn read_persona_presets(
         &self,
         locale: &str,

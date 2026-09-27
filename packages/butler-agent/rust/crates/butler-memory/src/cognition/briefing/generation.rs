@@ -90,6 +90,7 @@ impl Tally {
     }
 }
 
+/// Writes the new-chat briefings after consolidation.
 pub struct BriefingGenerationService {
     data_root: PathBuf,
     coordinator: Arc<CognitionWriteCoordinator>,
@@ -98,6 +99,7 @@ pub struct BriefingGenerationService {
 }
 
 impl BriefingGenerationService {
+    /// A briefing service over `data_root`.
     pub fn new(
         data_root: PathBuf,
         coordinator: Arc<CognitionWriteCoordinator>,

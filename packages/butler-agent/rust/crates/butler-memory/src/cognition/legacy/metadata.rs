@@ -25,6 +25,7 @@ use crate::cognition::CognitionCode;
 pub(crate) use inspect::LegacyMemoryChunkWithRefs;
 use inspect::read_chunk_with_refs;
 
+/// Checks and repairs the links of the legacy memory metadata database.
 pub struct LegacyMetadataIntegrityService {
     data_root: PathBuf,
     path: PathBuf,
@@ -46,13 +47,19 @@ pub struct LegacyMetadataIntegrityReport {
     pub missing_feedback_refs: Vec<MissingFeedbackRef>,
 }
 
+/// A chunk link to a box item that no longer exists.
 pub struct MissingBoxRef {
+    /// Chunk with the link.
     pub memory_chunk_id: String,
+    /// Missing box item.
     pub box_item_id: String,
 }
 
+/// A chunk link to feedback that no longer exists.
 pub struct MissingFeedbackRef {
+    /// Chunk with the link.
     pub memory_chunk_id: String,
+    /// Missing feedback.
     pub feedback_id: String,
 }
 
@@ -69,6 +76,7 @@ struct ChunkRefs {
 }
 
 impl LegacyMetadataIntegrityService {
+    /// An integrity service over the legacy metadata database.
     pub fn new(
         data_root: &Path,
         paths: CognitionPathEnvironment,
@@ -84,6 +92,7 @@ impl LegacyMetadataIntegrityService {
         }
     }
 
+    /// A chunk with every reference that points at it.
     pub async fn inspect(
         &self,
         memory_chunk_id: &str,
@@ -99,6 +108,7 @@ impl LegacyMetadataIntegrityService {
         .map_err(|source| metadata_error().with_source(source))?
     }
 
+    /// Counts the chunks and their broken links.
     pub async fn check(&self) -> CognitionResult<LegacyMetadataIntegrityCounts> {
         Ok(self.check_inner(References::Counted).await?.counts)
     }
@@ -185,6 +195,7 @@ impl LegacyMetadataIntegrityService {
         .map_err(|source| metadata_error().with_source(source))?
     }
 
+    /// Lists the broken links.
     pub async fn check_with_references(&self) -> CognitionResult<LegacyMetadataIntegrityReport> {
         let integrity = self.check_inner(References::Listed).await?;
         Ok(LegacyMetadataIntegrityReport {

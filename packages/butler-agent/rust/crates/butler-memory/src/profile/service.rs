@@ -25,6 +25,7 @@ use butler_models::models::ProviderPromptPort;
 
 const LOCAL_OPERATION_LIMIT: usize = 4;
 
+/// The user profile: names, onboarding, profiling consent, candidate capture and consolidation.
 pub struct ProfileService {
     data_root: PathBuf,
     cognition_root: PathBuf,
@@ -61,6 +62,7 @@ impl ProfileService {
         clippy::too_many_arguments,
         reason = "constructs the profile service from its required runtime collaborators"
     )]
+    /// A profile service over `data_root`.
     pub fn new(
         data_root: PathBuf,
         cognition_root: PathBuf,
@@ -89,6 +91,7 @@ impl ProfileService {
         }
     }
 
+    /// Stops admitting operations and waits for running ones.
     pub async fn close(&self) {
         {
             let mut lifecycle = self.lifecycle.lock();
@@ -101,11 +104,13 @@ impl ProfileService {
         self.operations.wait().await;
     }
 
+    /// The names Butler and the user go by.
     pub async fn read_personalization_profile(&self) -> ProfileResult<PersonalizationProfile> {
         let root = self.data_root.clone();
         self.run(move || Ok(naming::read(&root))).await
     }
 
+    /// Changes the names.
     pub async fn update_personalization_profile(
         &self,
         input: PersonalizationProfileUpdate,
@@ -142,6 +147,8 @@ impl ProfileService {
             .await
     }
 
+    /// Records first-chat onboarding answers, applies the persona and consent, and consolidates
+    /// when there is something to learn.
     pub async fn update_first_chat_onboarding(
         &self,
         input: FirstChatOnboardingUpdate,
@@ -162,11 +169,13 @@ impl ProfileService {
         .await
     }
 
+    /// The profiling consent in effect.
     pub async fn read_profiling_consent(&self) -> ProfileResult<ProfilingConsentSnapshot> {
         let root = self.data_root.clone();
         self.run(move || Ok(storage::read_consent(&root))).await
     }
 
+    /// Sets the profiling mode.
     pub async fn set_profiling_mode(
         &self,
         mode: ProfilingMode,
@@ -177,16 +186,19 @@ impl ProfileService {
             .await
     }
 
+    /// Removes every candidate, stable entry and projection.
     pub async fn clear_profiling_data(&self) -> ProfileResult<ClearProfilingResult> {
         let root = self.data_root.clone();
         self.run(move || storage::clear(&root)).await
     }
 
+    /// The profile extractor model.
     pub async fn read_extractor_model(&self) -> ProfileResult<ProfilingExtractorModelSnapshot> {
         let root = self.data_root.clone();
         self.run(move || Ok(extractor_config::read(&root))).await
     }
 
+    /// Sets (or clears) the extractor model.
     pub async fn set_extractor_model(
         &self,
         model: Option<String>,
@@ -206,6 +218,7 @@ impl ProfileService {
         .await
     }
 
+    /// Sets the extractor reasoning effort.
     pub async fn set_extractor_reasoning_effort(
         &self,
         effort: Option<String>,
@@ -225,6 +238,7 @@ impl ProfileService {
         .await
     }
 
+    /// The runtime projection for prompts, when profiling is on.
     pub async fn read_runtime_profile_projection(
         &self,
     ) -> ProfileResult<Option<RuntimeProfileProjection>> {
@@ -241,6 +255,7 @@ impl ProfileService {
         }
     }
 
+    /// Butler's current understanding of the user, in `locale`.
     pub async fn reflective_summary(
         &self,
         locale: &str,
@@ -251,6 +266,7 @@ impl ProfileService {
             .await
     }
 
+    /// Promotes ready candidates and refreshes the runtime projection.
     pub async fn consolidate_profile_candidates(
         &self,
     ) -> ProfileResult<ProfileConsolidationResult> {

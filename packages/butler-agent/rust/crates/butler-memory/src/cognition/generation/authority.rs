@@ -8,6 +8,7 @@ use super::read::{error, read_descriptor, read_manifest};
 use super::{MemoryGenerationHandle, MemoryGenerationTarget};
 use crate::cognition::{CognitionCode, CognitionError, CognitionPathEnvironment};
 
+/// Checks that `handle` is still the generation `target` may mutate.
 pub fn assert_mutation_authority(
     data_root: &Path,
     environment: &CognitionPathEnvironment,

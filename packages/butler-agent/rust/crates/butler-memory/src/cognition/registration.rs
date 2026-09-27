@@ -32,14 +32,23 @@ pub use types::{ConversationRegistrationOutcome, RegisterConversationSourceInput
 mod stages;
 use stages::Stages;
 
+/// A typed-memory lifecycle change (retraction or supersession) to apply to the graph.
 pub struct ConsumeTypedLifecycleInput {
+    /// Butler data root.
     pub data_root: PathBuf,
+    /// Generation the caller saw as active.
     pub expected_generation: String,
+    /// `task_report` or `explicit_record`.
     pub source_kind: String,
+    /// Record id.
     pub record_id: String,
+    /// Record revision.
     pub revision: String,
+    /// Operation that changed the lifecycle.
     pub operation_id: String,
+    /// The new lifecycle.
     pub disposition: super::sources::TypedMemoryLifecycle,
+    /// Stops the operation when cancelled.
     pub cancellation: CancellationToken,
 }
 
@@ -47,6 +56,8 @@ const OPERATION_LIMIT: usize = 4;
 
 type Clock = Arc<dyn Fn() -> String + Send + Sync>;
 
+/// Registers conversation and typed sources in a memory generation and projects them into the
+/// graph.
 pub struct CognitionRegistrationService {
     environment: CognitionPathEnvironment,
     coordinator: Arc<CognitionWriteCoordinator>,
@@ -92,6 +103,7 @@ impl CognitionRegistrationService {
         }
     }
 
+    /// A registration service that can also project semantic windows with the extractor model.
     pub fn with_projection(
         environment: CognitionPathEnvironment,
         coordinator: Arc<CognitionWriteCoordinator>,
@@ -149,6 +161,7 @@ impl CognitionRegistrationService {
         })?
     }
 
+    /// Stops admitting registrations and waits for running ones.
     pub async fn close(&self) {
         {
             let mut lifecycle = self.lifecycle.lock();

@@ -33,12 +33,17 @@ impl BuildTypedRecord {
     }
 }
 
+/// The sources a rebuild must register, from its stored inventory.
 pub struct BuildInventory {
+    /// Typed records.
     pub typed: Vec<BuildTypedRecord>,
+    /// Conversation sources.
     pub conversations: Vec<BuildConversationRecord>,
+    /// Sources the rebuild must end with.
     pub expected_source_count: usize,
 }
 
+/// Reads the stored inventory of the rebuild candidate and checks it against the snapshot.
 pub fn read(
     data_root: &Path,
     handle: &crate::cognition::MemoryGenerationHandle,
@@ -105,6 +110,7 @@ pub fn read(
     })
 }
 
+/// Checks every inventoried source is registered in the candidate graph.
 pub fn assert_registered(
     handle: &crate::cognition::MemoryGenerationHandle,
     inventory: &BuildInventory,
@@ -141,6 +147,7 @@ pub fn assert_registered(
     })
 }
 
+/// The candidate's typed registration cursor for the snapshot.
 pub fn typed_cursor(
     handle: &crate::cognition::MemoryGenerationHandle,
     snapshot_id: &str,

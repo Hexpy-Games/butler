@@ -24,18 +24,30 @@ use self::manifest::{
 
 const SCHEMA: &str = "butler.continuity-recovery-manifest.v1";
 
+/// A continuity recovery manifest, as shown to the operator.
 #[derive(Clone, Debug, Serialize)]
 pub struct ContinuityRecoveryManifestView {
+    /// Manifest id.
     pub manifest_id: String,
+    /// Project the recovery is for.
     pub project_id: String,
+    /// Manifest state (`planned`, `approved`, `applied`, …).
     pub status: String,
+    /// Recoverable turns found per project.
     pub inventory_by_project: std::collections::BTreeMap<String, usize>,
+    /// Candidates in the manifest.
     pub candidate_count: usize,
+    /// Candidates approved for apply.
     pub approved_count: usize,
+    /// Turns quarantined instead of offered.
     pub quarantine_count: usize,
+    /// The hot cache before applying.
     pub before: RecoveryBeforeView,
+    /// The hot cache after applying, once applied.
     pub after: Option<RecoveryAfter>,
+    /// Recoverable turns.
     pub candidates: Vec<RecoveryCandidateView>,
+    /// Quarantined turns and why.
     pub quarantine: Vec<RecoveryQuarantine>,
 }
 
@@ -59,12 +71,16 @@ pub struct RecoveryCandidateView {
     pub body_sha256: String,
 }
 
+/// The manifest after an apply or rollback.
 #[derive(Clone, Debug, Serialize)]
 pub struct ContinuityRecoveryAction {
+    /// The manifest.
     pub manifest: ContinuityRecoveryManifestView,
+    /// The action had already been done.
     pub replayed: bool,
 }
 
+/// Recovers conversation continuity into project hot caches, with operator review.
 pub struct ContinuityRecoveryService {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
@@ -72,6 +88,7 @@ pub struct ContinuityRecoveryService {
 }
 
 impl ContinuityRecoveryService {
+    /// A recovery service over `data_root`.
     pub fn new(
         data_root: PathBuf,
         paths: CognitionPathEnvironment,
@@ -84,6 +101,7 @@ impl ContinuityRecoveryService {
         }
     }
 
+    /// Plans a recovery of `project_id` from the conversations in `workspace`.
     pub async fn plan(
         &self,
         project_id: &str,
@@ -103,6 +121,7 @@ impl ContinuityRecoveryService {
         })?
     }
 
+    /// The manifest with `manifest_id`, when it exists.
     pub async fn inspect(
         &self,
         manifest_id: &str,
@@ -119,6 +138,7 @@ impl ContinuityRecoveryService {
         })?
     }
 
+    /// Approves the manifest, or only `candidate_ids` of it.
     pub async fn approve(
         &self,
         manifest_id: &str,
@@ -158,6 +178,7 @@ impl ContinuityRecoveryService {
         })?
     }
 
+    /// Applies an approved manifest to the hot cache.
     pub async fn apply(
         &self,
         manifest_id: &str,
@@ -166,6 +187,7 @@ impl ContinuityRecoveryService {
         self.mutate(manifest_id, workspace, false).await
     }
 
+    /// Restores the hot cache to its state before the manifest was applied.
     pub async fn rollback(
         &self,
         manifest_id: &str,

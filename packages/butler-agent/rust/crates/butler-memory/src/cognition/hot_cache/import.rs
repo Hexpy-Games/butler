@@ -146,6 +146,7 @@ impl CacheFiles {
     }
 }
 
+/// Extracts the legacy graph from an imported transcript chunk; the entities saved.
 pub fn extract_legacy_import_transcript(
     data_root: &Path,
     paths: &CognitionPathEnvironment,

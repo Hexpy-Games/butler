@@ -15,18 +15,28 @@ use std::sync::Arc;
 
 use crate::cognition::{CognitionPathEnvironment, CognitionResult};
 
+/// A completed conversation turn, published for memory projection.
 #[derive(Clone, Debug)]
 pub struct CompletionNotice {
+    /// Project of the conversation, when any.
     pub project_id: Option<String>,
+    /// Runtime session that ran the turn.
     pub runtime_session_id: String,
+    /// Conversation session.
     pub conversation_session_id: String,
+    /// Turn id.
     pub conversation_turn_id: String,
+    /// The user message that started the turn.
     pub inbound_message_id: String,
+    /// The public answer.
     pub outbound_message_id: String,
+    /// Generation of the turn outcome.
     pub outcome_generation: f64,
+    /// When the turn completed.
     pub completed_at: String,
 }
 
+/// Publishes completed turns and typed sources to the memory sync queue.
 #[derive(Clone)]
 pub struct CompletionPublisher {
     memory_root: PathBuf,
@@ -34,6 +44,7 @@ pub struct CompletionPublisher {
 }
 
 impl CompletionPublisher {
+    /// A publisher over `data_root`.
     pub fn new(
         data_root: &Path,
         paths: &CognitionPathEnvironment,
@@ -45,6 +56,7 @@ impl CompletionPublisher {
         }
     }
 
+    /// Queues the turn for memory projection.
     pub fn publish(&self, notice: &CompletionNotice) -> CognitionResult<()> {
         let observation = observation::publish(&self.memory_root, notice)?;
         queue::append(

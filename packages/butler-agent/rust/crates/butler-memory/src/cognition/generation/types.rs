@@ -11,13 +11,19 @@ use crate::cognition::{CognitionError, embedding::EmbeddingIdentity};
 pub(super) const NATIVE_EMBEDDING_SCHEMA: &str = "butler.native-embedding-identity.v1";
 const CHECKED_PREPROCESSING: &str = "tokenizer-json-special-tokens-checked-v1";
 
+/// Which memory generation an operation writes to.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MemoryGenerationTarget {
+    /// The active generation, when it is still the expected one.
     Active {
+        /// Generation the caller saw as active.
         expected_generation: String,
     },
+    /// A rebuild candidate.
     Rebuild {
+        /// Candidate generation.
         generation_id: String,
+        /// Canonical conversation snapshot the rebuild reads.
         canonical_snapshot_id: String,
     },
 }
@@ -41,7 +47,9 @@ pub struct JavaScriptGenerationEmbedding {
 /// explicitly identified native identity. The variants add no wrapper keys.
 #[derive(Clone)]
 pub enum GenerationEmbedding {
+    /// Metadata written by the JavaScript runtime.
     JavaScript(JavaScriptGenerationEmbedding),
+    /// A native embedding identity.
     Native(EmbeddingIdentity),
 }
 
@@ -144,13 +152,20 @@ impl PartialEq for GenerationEmbedding {
     }
 }
 
+/// A resolved memory generation.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MemoryGenerationHandle {
+    /// Generation id.
     pub generation_id: String,
+    /// Graph database.
     pub graph_path: PathBuf,
+    /// Generation directory.
     pub root: PathBuf,
+    /// Embedding identity bound to the generation, once vectors exist.
     pub embedding: Option<GenerationEmbedding>,
+    /// Data root the generation reads sources from.
     pub source_root: PathBuf,
+    /// Canonical conversation snapshot, for a rebuild.
     pub canonical_snapshot_path: Option<PathBuf>,
 }
 

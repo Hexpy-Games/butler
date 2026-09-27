@@ -6,7 +6,7 @@
 //! records of completed work; [`coordination`] serializes memory writers
 //! across processes.
 
-#![deny(clippy::indexing_slicing, clippy::unnecessary_wraps)]
+#![deny(missing_docs, clippy::indexing_slicing, clippy::unnecessary_wraps)]
 
 #[macro_use]
 extern crate butler_core;

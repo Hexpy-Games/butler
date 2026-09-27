@@ -23,6 +23,7 @@ use crate::cognition::{
 use super::{FeedbackBufferService, operator::read_entries};
 
 impl FeedbackBufferService {
+    /// Records an operator exclusion of a memory source from every user session.
     pub async fn operator_quality_exclusion(
         &self,
         feedback_id: &str,

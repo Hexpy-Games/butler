@@ -16,6 +16,7 @@ use crate::{
     coordination::CognitionWriteCoordinator,
 };
 
+/// Sets the projection model policy of a generation.
 pub async fn run(
     data_root: &Path,
     environment: &CognitionPathEnvironment,

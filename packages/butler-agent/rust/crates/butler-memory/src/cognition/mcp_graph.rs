@@ -34,6 +34,7 @@ pub enum LegacyGraphReadError {
     Json(#[from] serde_json::Error),
 }
 
+/// Answers the MCP graph query from the legacy graph, as JSON text.
 pub fn read_mcp_legacy_graph(
     data_root: &Path,
     query: &str,

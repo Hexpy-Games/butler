@@ -3,6 +3,7 @@ use super::super::extraction;
 use super::ProfileService;
 
 impl ProfileService {
+    /// Reads new user messages and asks the extractor model for profile candidates.
     pub async fn capture_profile_candidates_from_transcripts_with_model(
         &self,
         options: ProfileModelTranscriptCaptureOptions,
@@ -15,6 +16,7 @@ impl ProfileService {
         .await
     }
 
+    /// Imports profile candidates from another assistant's export.
     pub async fn import_profile_candidates_from_third_party_dump_with_model(
         &self,
         options: ProfileThirdPartyImportOptions,

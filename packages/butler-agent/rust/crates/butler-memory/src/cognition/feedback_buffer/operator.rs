@@ -20,6 +20,7 @@ use super::{
 };
 
 impl FeedbackBufferService {
+    /// Every feedback entry, for the operator.
     pub async fn operator_entries(&self) -> CognitionResult<Vec<Value>> {
         let data_root = self.data_root.clone();
         let path = feedback_path(self);
@@ -33,6 +34,7 @@ impl FeedbackBufferService {
         })?
     }
 
+    /// The entry with `id`, when it exists.
     pub async fn operator_read(&self, id: &str) -> CognitionResult<Option<Value>> {
         let data_root = self.data_root.clone();
         let path = feedback_path(self);
@@ -52,6 +54,7 @@ impl FeedbackBufferService {
         })?
     }
 
+    /// Adds a feedback entry; the stored entry.
     pub async fn operator_add(
         &self,
         text: String,
@@ -88,6 +91,7 @@ impl FeedbackBufferService {
         .await
     }
 
+    /// Sets the status of the entry with `id`; the updated entry.
     pub async fn operator_resolve(&self, id: &str, status: &str) -> CognitionResult<Value> {
         let next_status = match status {
             "applied" => FeedbackStatus::Applied,
@@ -113,6 +117,7 @@ impl FeedbackBufferService {
         .await
     }
 
+    /// Removes resolved entries; how many were removed and kept.
     pub async fn operator_clear_resolved(&self) -> CognitionResult<(usize, usize)> {
         self.mutate("feedback_clear", move |path| {
             let entries = read_entries(&path)?;
