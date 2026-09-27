@@ -1,10 +1,14 @@
+import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import type { HTMLAttributes, ReactNode } from "react";
 import { Clickable } from "../../components/Clickable";
 import { cn } from "../../lib/utils";
+import { windowDragClassName, type WindowDragProps } from "../../lib/windowDrag";
 import styles from "./NavRow.module.css";
 import { NavRowContent } from "./NavRowContent";
+import type { SidebarDensity } from "../SidebarShell/SidebarShell";
+import { dsClass } from "../../lib/internal";
 
-export interface NavRowProps {
+export interface NavRowProps extends DsPrivateStyleProps, WindowDragProps {
   /** Icon element to display at the start */
   icon?: ReactNode;
   /** Expose a supplied icon action to keyboard and assistive technology. */
@@ -25,8 +29,6 @@ export interface NavRowProps {
   actions?: ReactNode;
   /** Visibility mode for actions: always visible or only on hover */
   actionsVisibility?: "visible" | "hover" | "hover-compact-hidden";
-  /** Additional CSS class */
-  className?: string;
   /** Test identifier */
   dataTestClass?: string;
   /** Click handler */
@@ -37,6 +39,10 @@ export interface NavRowProps {
   ariaLabel?: string;
   /** Expanded state for tree-like navigation rows */
   ariaExpanded?: boolean;
+  /** Row density; omit inside a SidebarShell to follow the shell's density. */
+  density?: SidebarDensity;
+  /** Keep an empty icon column so the label aligns with iconned rows. */
+  reserveIcon?: boolean;
 }
 
 export function NavRow({
@@ -56,10 +62,13 @@ export function NavRow({
   onContextMenu,
   ariaLabel,
   ariaExpanded,
+  density,
+  reserveIcon = false,
+  windowDrag,
 }: NavRowProps) {
   const hasHoverActions = Boolean(actions && actionsVisibility !== "visible");
   const content = (
-    <NavRowContent icon={icon} iconInteractive={iconInteractive} label={label}
+    <NavRowContent icon={icon} reserveIcon={reserveIcon} iconInteractive={iconInteractive} label={label}
       badge={badge} actions={actions} actionsVisibility={actionsVisibility} meta={meta} />
   );
 
@@ -69,6 +78,7 @@ export function NavRow({
     active && styles.active,
     disabled && styles.disabled,
     onClick && styles.interactive,
+    windowDragClassName(windowDrag),
     className,
   );
 
@@ -81,9 +91,10 @@ export function NavRow({
         aria-current={active ? "page" : undefined}
         aria-label={accessibleLabel}
         aria-disabled={disabled}
-        className={rowClassName}
+        className={dsClass(rowClassName)}
         data-has-hover-actions={hasHoverActions ? "true" : undefined}
         data-test-class={dataTestClass}
+        data-sidebar-density={density}
         title={accessibleLabel}
         aria-expanded={ariaExpanded}
         stretch
@@ -99,6 +110,7 @@ export function NavRow({
     <div
       className={rowClassName}
       data-test-class={dataTestClass}
+      data-sidebar-density={density}
       title={accessibleLabel}
       aria-disabled={disabled}
       aria-expanded={ariaExpanded}

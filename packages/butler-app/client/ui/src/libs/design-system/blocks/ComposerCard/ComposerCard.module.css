@@ -5,9 +5,7 @@
   width: min(100%, var(--conversation-content-width, 760px));
   max-width: 920px;
   margin: 0 auto;
-  transition:
-    bottom 180ms ease,
-    max-width 180ms ease;
+  transition: translate var(--motion-base) var(--motion-ease-standard);
 }
 
 .floating {
@@ -36,8 +34,12 @@
   display: none;
 }
 
+/* The large (new chat) composer sits 34px from the bottom, lifted by a
+   translate from the floating position so the switch moves on the
+   compositor. */
 .floating.large {
-  bottom: 34px;
+  translate: 0
+    calc(22px + var(--safe-area-bottom) + var(--keyboard-inset-bottom) - 34px);
 }
 
 .card {
@@ -48,8 +50,6 @@
   width: 100%;
   border-radius: var(--adaptive-composer-radius);
   pointer-events: auto;
-  transition: min-height var(--adaptive-panel-duration)
-    var(--adaptive-panel-easing);
 }
 
 .card[data-drop-active="true"] {
@@ -60,25 +60,9 @@
     inset 0 1px 0 var(--tinted-glass-highlight);
 }
 
+/* Height and opacity reveal come from the DS Collapsible (keepMounted). */
 .expandedBody {
-  display: grid;
   min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  grid-template-rows: 1fr;
-  opacity: 1;
-  transform: translateY(0);
-  transition:
-    grid-template-rows var(--adaptive-panel-duration)
-      var(--adaptive-panel-easing),
-    opacity 160ms ease,
-    transform var(--adaptive-panel-duration) var(--adaptive-panel-easing);
-}
-
-.expandedBodyInner {
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
 }
 
 .adjunct {
@@ -192,8 +176,8 @@
   font-size: var(--font-size-2);
   cursor: pointer;
   transition:
-    background-color 120ms ease,
-    color 120ms ease;
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    color var(--motion-fast) var(--motion-ease-standard);
 }
 
 .planToggle:hover {
@@ -213,8 +197,8 @@
   color: var(--send-fg);
   cursor: pointer;
   transition:
-    background-color 120ms ease,
-    opacity 120ms ease;
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    opacity var(--motion-fast) var(--motion-ease-standard);
 }
 
 .sendButton:disabled {
@@ -229,13 +213,6 @@
 
 .stop {
   background: var(--send-stop-bg);
-}
-
-.card[data-expanded="false"] .expandedBody {
-  grid-template-rows: 0fr;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(var(--space-xs));
 }
 
 .card[data-expanded="false"] .adjunct {
@@ -289,15 +266,14 @@
 }
 
 @media (width <= 640px) {
+  /* Phones: large sits 18px above the safe area, 4px below the floating spot. */
   .floating.large {
-    bottom: calc(18px + var(--safe-area-bottom) + var(--keyboard-inset-bottom));
+    translate: 0 4px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .wrap,
-  .card,
-  .expandedBody,
   .sendButton {
     transition: none;
   }

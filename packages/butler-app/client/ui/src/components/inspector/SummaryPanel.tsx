@@ -3,19 +3,19 @@ import { appCopy } from "@/app/copy.ts";
 import type { ReactElement } from "react";
 import {
   ActivityFeed,
-  CheckCircle2,
   Circle,
   CircleAlert,
   CircleX,
+  ICON_SIZE,
+  InspectorInset,
   InspectorPanel,
   KeyValueRow,
-  Spinner,
+  LoadingIndicator,
 } from "@/butler-ds";
 import { Artifact, EmptyPanelLine } from "@/components/common/Display.tsx";
 import { contextTooltip } from "@/app/utils.ts";
 import { summaryProgressRows } from "@/app/conversation-progress";
 import type { SessionSummaryView, StatusPill } from "@/app/types.ts";
-import { inspectorInset } from "./inspectorLayout.ts";
 
 export function SummaryPanel({
   status,
@@ -31,17 +31,18 @@ export function SummaryPanel({
   const skillsUsed = summary?.skills_used ?? [];
   return (
     <>
-      <ActivityFeed
-        data-test-class="summary-progress-panel"
-        title={appCopy.interfacePanels.progress}
-        emptyLabel={appCopy.interfacePanels.noProgress}
-        style={inspectorInset}
-        items={progressRows.map((item, index) => ({
-          id: `${item.id}:${index}`,
-          icon: progressStateIcon(item.state),
-          title: item.safe_label,
-        }))}
-      />
+      <InspectorInset>
+        <ActivityFeed
+          data-test-class="summary-progress-panel"
+          title={appCopy.interfacePanels.progress}
+          emptyLabel={appCopy.interfacePanels.noProgress}
+          items={progressRows.map((item, index) => ({
+            id: `${item.id}:${index}`,
+            icon: progressStateIcon(item.state),
+            title: item.safe_label,
+          }))}
+        />
+      </InspectorInset>
       <InspectorPanel title={appCopy.interfacePanels.branchDetails}>
         <KeyValueRow label={appCopy.interfacePanels.gateway} value={status.label} />
         <KeyValueRow
@@ -101,7 +102,7 @@ function workspaceValue(
     return appCopy.interfacePanels.worktree;
   }
   if (branch.workspace_binding === "project") {
-    return appCopy.settings.options.local;
+    return appCopy.composer.workspaceLocal;
   }
   if (branch.workspace_mode === "none") return appCopy.interfacePanels.noWorkspace;
   if (branch.workspace_mode === "folder") return appCopy.interfacePanels.projectFolder;
@@ -147,9 +148,10 @@ function progressStateTone(state?: string): string {
 
 function progressStateIcon(state?: string): ReactElement {
   const tone = progressStateTone(state);
-  if (tone === "complete") return <CheckCircle2 size={18} />;
-  if (tone === "failed") return <CircleAlert size={18} />;
-  if (tone === "cancelled") return <CircleX size={18} />;
-  if (tone === "running") return <Spinner size={18} />;
-  return <Circle size={18} />;
+  // Running and complete share one LoadingIndicator, so running -> complete draws the check.
+  if (tone === "complete") return <LoadingIndicator state="done" size={ICON_SIZE.lg} />;
+  if (tone === "failed") return <CircleAlert size="lg" />;
+  if (tone === "cancelled") return <CircleX size="lg" />;
+  if (tone === "running") return <LoadingIndicator state="loading" size={ICON_SIZE.lg} />;
+  return <Circle size="lg" />;
 }

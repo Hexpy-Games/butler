@@ -29,7 +29,7 @@ export function FailureNotice({
     >
       <Notice
         tone="error"
-        icon={<AlertCircle size={16} />}
+        icon={<AlertCircle size="md" />}
         title={appCopy.conversation.failure.title}
         message={reason}
         action={

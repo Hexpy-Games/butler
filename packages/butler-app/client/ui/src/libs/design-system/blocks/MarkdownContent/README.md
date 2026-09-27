@@ -24,6 +24,11 @@ Major headings following content have section spacing. Only the document's
 first heading is flush with the container; nested first-child headings must
 not accidentally lose their section margin.
 
+While text streams, pass `useStreamingReveal(text, streaming)` as
+react-markdown `rehypePlugins`: recently appended chunks are wrapped in spans
+that fade in (opacity only, no layout shift) and settled text renders as
+plain markdown.
+
 ## Wrong use cases
 Do not use it for chat message chrome or editable rich text. Use MessageRow or an editor-specific block instead.
 

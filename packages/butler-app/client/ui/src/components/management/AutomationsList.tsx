@@ -7,6 +7,7 @@ import {
   ListRow,
   ManagementPage,
   Plus,
+  SkeletonRows,
   Stack,
 } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
@@ -14,6 +15,8 @@ import type { AutomationSummary } from "@/app/types.ts";
 
 interface AutomationsListProps {
   automations: AutomationSummary[];
+  /** False until the first load settles: show skeleton rows, not the empty line. */
+  loaded?: boolean;
   selectedId?: string | null;
   onSelectAutomation: (automationId: string) => void;
   onNewAutomation: () => void;
@@ -21,6 +24,7 @@ interface AutomationsListProps {
 
 export function AutomationsList({
   automations,
+  loaded = true,
   selectedId,
   onSelectAutomation,
   onNewAutomation,
@@ -35,12 +39,14 @@ export function AutomationsList({
         meta={copy.scheduledCount(automations.length)}
         action={
           <Button type="button" variant="outline" onClick={onNewAutomation}>
-            <Plus size={16} /> {copy.new}
+            <Plus size="md" /> {copy.new}
           </Button>
         }
       />
       <Stack gap="xs">
-        {automations.length > 0 ? (
+        {!loaded ? (
+          <SkeletonRows rows={3} label={appCopy.settings.sectionState.loading} />
+        ) : automations.length > 0 ? (
           automations.map((automation) => (
             <Clickable
               aria-current={selectedId === automation.id ? "page" : undefined}

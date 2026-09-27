@@ -1,0 +1,17 @@
+.strip {
+  --activity-strip-gap: 2px;
+
+  display: flex;
+  height: var(--space-sm);
+  gap: var(--activity-strip-gap);
+}
+
+.day {
+  min-width: 0;
+  flex: 1;
+  background: var(--line);
+}
+
+.day[data-active="true"] {
+  background: var(--context-chart-1);
+}

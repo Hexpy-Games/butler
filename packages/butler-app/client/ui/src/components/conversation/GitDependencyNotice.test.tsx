@@ -1,6 +1,6 @@
 /// <reference types="bun" />
 
-import { afterEach, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, expect, mock, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -8,6 +8,12 @@ import { setAppCopyLanguage } from "@/app/copy.ts";
 import type { SessionSummaryView } from "@/app/types.ts";
 
 const storeState: { summary: SessionSummaryView | null } = { summary: null };
+
+// mock.module is process-wide in bun; put the real module back for later test files.
+const originalAppStoreTs = { ...(await import("@/app/store.ts")) };
+afterAll(() => {
+  mock.module("@/app/store.ts", () => originalAppStoreTs);
+});
 
 mock.module("@/app/store.ts", () => ({
   useButlerStore<T>(selector: (state: typeof storeState) => T): T {

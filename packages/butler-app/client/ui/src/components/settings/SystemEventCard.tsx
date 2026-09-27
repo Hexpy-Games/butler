@@ -1,7 +1,7 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { SystemEventSummary } from "@/app/types.ts";
-import { Stack, SurfacePanel, Typo } from "@/butler-ds";
+import { Stack, Typo } from "@/butler-ds";
 
 export function SystemEventCard({ event }: { event: SystemEventSummary }) {
   useAppLocale();
@@ -22,7 +22,6 @@ export function SystemEventCard({ event }: { event: SystemEventSummary }) {
     .slice(0, 8);
 
   return (
-    <SurfacePanel elevation="none">
       <Stack gap="sm">
         <Stack align="row" cross="center" justify="between" gap="md" wrap>
           <Stack gap="xs">
@@ -43,7 +42,6 @@ export function SystemEventCard({ event }: { event: SystemEventSummary }) {
           <Typo.Caption>{formatMetrics(metrics, eventLabels)}</Typo.Caption>
         )}
       </Stack>
-    </SurfacePanel>
   );
 }
 

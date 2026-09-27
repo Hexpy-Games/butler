@@ -30,7 +30,7 @@ export function artifactCardActions(
         id: "save",
         label: appCopy.artifacts.save,
         ariaLabel: `${appCopy.artifacts.save}: ${title}`,
-        icon: <Save size={13} />,
+        icon: <Save size="sm" />,
         onClick: () => {
           void saveDesktopArtifact(artifact.file_id!, title);
         },
@@ -47,7 +47,7 @@ export function artifactCardActions(
             ariaLabel: `${appCopy.artifacts.save}: ${title}`,
             href: url,
             download: title,
-            icon: <Save size={13} />,
+            icon: <Save size="sm" />,
           },
         ]
       : []),

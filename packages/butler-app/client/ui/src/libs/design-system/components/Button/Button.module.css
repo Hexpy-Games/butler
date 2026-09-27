@@ -1,14 +1,10 @@
-.fixture {
-  min-width: 0;
-}
-
 .button {
   display: inline-flex;
   flex: 0 0 auto;
   width: max-content;
   max-width: 100%;
-  height: 30px;
-  min-height: 30px;
+  height: var(--control-height-md);
+  min-height: var(--control-height-md);
   align-items: center;
   justify-content: center;
   gap: 5px;
@@ -20,13 +16,14 @@
   font: inherit;
   font-size: var(--font-size-3);
   font-weight: var(--font-weight-regular);
+  text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
   outline: none;
   transition:
-    background-color 120ms ease,
-    color 120ms ease,
-    transform 120ms ease;
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    color var(--motion-fast) var(--motion-ease-standard),
+    scale var(--motion-fast) var(--motion-ease-standard);
 }
 
 .button[data-stretch="true"] {
@@ -42,8 +39,17 @@
   background: var(--selection);
 }
 
+/* Press feedback: a quick press-in, released on --motion-fast. The scale
+   token is 1 under reduced motion. The `scale` property composes with the
+   transform a caller positions the button with (transform would replace it). */
+.button:active:not(:disabled) {
+  scale: var(--motion-scale-press);
+  transition-duration: var(--motion-instant);
+}
+
 .button:focus-visible {
-  box-shadow: 0 0 0 3px var(--ring);
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .variantDefault:hover:not(:disabled) {
@@ -73,6 +79,7 @@
 }
 
 .variantSecondary {
+  border: var(--border-hairline) solid var(--secondary-border);
   background: var(--secondary);
   color: var(--secondary-foreground);
 }
@@ -88,20 +95,20 @@
 }
 
 .sizeXs {
-  height: 24px;
-  min-height: 24px;
-  padding: 0 8px;
+  height: var(--control-height-xs);
+  min-height: var(--control-height-xs);
+  padding: 0 var(--space-sm);
   font-size: var(--font-size-2);
 }
 
 .sizeSm {
-  height: 28px;
-  min-height: 28px;
+  height: var(--control-height-sm);
+  min-height: var(--control-height-sm);
 }
 
 .sizeLg {
-  height: 34px;
-  min-height: 34px;
+  height: var(--control-height-lg);
+  min-height: var(--control-height-lg);
 }
 
 .sizeIcon,
@@ -112,27 +119,27 @@
 }
 
 .sizeIcon {
-  width: 30px;
-  height: 30px;
-  min-height: 30px;
+  width: var(--control-height-md);
+  height: var(--control-height-md);
+  min-height: var(--control-height-md);
 }
 
 .sizeIconXs {
-  width: 24px;
-  height: 24px;
-  min-height: 24px;
+  width: var(--control-height-xs);
+  height: var(--control-height-xs);
+  min-height: var(--control-height-xs);
 }
 
 .sizeIconSm {
-  width: 28px;
-  height: 28px;
-  min-height: 28px;
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  min-height: var(--control-height-sm);
 }
 
 .sizeIconLg {
-  width: 34px;
-  height: 34px;
-  min-height: 34px;
+  width: var(--control-height-lg);
+  height: var(--control-height-lg);
+  min-height: var(--control-height-lg);
 }
 
 .button.variantInline {

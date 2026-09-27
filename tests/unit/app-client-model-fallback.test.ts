@@ -72,7 +72,6 @@ test("backup model feature stays within the Butler DS boundary", () => {
     "BackupModelsSettings.tsx",
     "BackupModelPicker.tsx",
     "BackupModelCards.tsx",
-    "BackupModelsDescription.tsx",
     "backupModelsUtils.ts",
   ];
   for (const fileName of featureFiles) {

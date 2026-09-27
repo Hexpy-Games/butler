@@ -1,0 +1,40 @@
+.split {
+  display: inline-flex;
+  flex: none;
+  max-width: 100%;
+  gap: 0;
+}
+
+/* The halves join: square inner corners, one shared seam. Two classes beat
+   a surrounding surface's button radius. */
+.split > .action {
+  min-width: 0;
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.split > .arrow {
+  min-inline-size: var(--control-hit-target);
+  padding-inline: var(--space-2);
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+}
+
+/* Primary: a hairline seam in the button's own foreground. */
+.split > .arrow[data-variant="default"] {
+  box-shadow: inset var(--border-hairline) 0 0
+    color-mix(in srgb, var(--primary-foreground) 24%, transparent);
+}
+
+/* Outline: the arrow's border overlaps the action's, so the seam is one line. */
+.split > .arrow[data-variant="outline"] {
+  margin-inline-start: calc(-1 * var(--border-hairline));
+}
+
+.split > .arrow[data-variant="default"]:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.menu {
+  max-width: calc(100vw - var(--space-6));
+}

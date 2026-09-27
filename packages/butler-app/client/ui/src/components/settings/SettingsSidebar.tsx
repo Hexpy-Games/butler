@@ -2,7 +2,7 @@ import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import {
-  ArrowLeft, Input, NavRow, NavSection, ScrollArea, SettingsNav, Stack, Typo,
+  ArrowLeft, Input, NavRow, ScrollArea, SettingsNav, Stack, Typo,
 } from "@/butler-ds";
 import type { SettingsSectionId } from "@/app/types.ts";
 import { filterSettingsSectionGroups } from "./settingsSections";
@@ -64,18 +64,18 @@ export function SettingsSidebar({
         as="header"
         align="row"
         cross="center"
-        className="settings-header settings-titlebar drag-region"
+        windowDrag="drag"
         data-test-class="settings-header settings-titlebar"
       >
         <NavRow
           ariaLabel={backLabel}
-          className="settings-back-button no-drag"
-          icon={<ArrowLeft size={18} />}
+          windowDrag="no-drag"
+          icon={<ArrowLeft size="lg" />}
           label={backLabel}
           onClick={onClose}
         />
       </Stack>
-      <NavSection title={settingsCopy.searchLabel}>
+      <Stack role="search" gap="none">
         <Input
           id="settings-navigation-search"
           type="search"
@@ -85,7 +85,7 @@ export function SettingsSidebar({
           onChange={(event) => setSearchQuery(event.currentTarget.value)}
           data-test-class="settings-navigation-search"
         />
-      </NavSection>
+      </Stack>
       {searchQuery.trim() && filteredGroups.length === 0 ? (
         <Typo.Caption
           role="status"
@@ -97,7 +97,7 @@ export function SettingsSidebar({
       ) : null}
       <ScrollArea
         fill
-        className="no-drag"
+        windowDrag="no-drag"
         dataTestClass="settings-navigation-scroll"
       >
         <Stack gap="lg">

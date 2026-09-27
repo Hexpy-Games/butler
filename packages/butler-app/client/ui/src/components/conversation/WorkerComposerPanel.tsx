@@ -18,6 +18,7 @@ function activityRow(worker: WorkerActivitySummary, depth = 0) {
     description: workerActivityDescription(worker),
     meta: workerActivityMeta(worker),
     phase: worker.semantic_phase ?? worker.phase,
+    phaseRailLabel: appCopy.interfaceStatus.workerPhase,
     depth,
   };
 }

@@ -1,6 +1,6 @@
 /// <reference types="bun" />
 
-import { afterEach, expect, test } from "bun:test";
+import { afterAll, afterEach, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -18,6 +18,21 @@ import type {
   WorkerProfile,
 } from "@/app/types.ts";
 import { FirstRunSetup } from "./FirstRunSetup";
+import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
+
+import { useButlerStore } from "@/app/store.ts";
+import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
+
+// First-run applies the chosen language and saved settings to the app-wide
+// locale and stores; hand them back unchanged for later test files.
+const initialAppLocale = getAppLocale();
+const initialButlerState = useButlerStore.getState();
+const initialSettingsUIState = useSettingsUIStore.getState();
+afterAll(() => {
+  setAppCopyLanguage(initialAppLocale);
+  useButlerStore.setState(initialButlerState, true);
+  useSettingsUIStore.setState(initialSettingsUIState, true);
+});
 
 interface RenderedFirstRun {
   calls: string[];
@@ -83,7 +98,7 @@ test("first-run setup renders the minimal Electron setup order", async () => {
     "기본 모델과 연결 방식을 설정하세요.",
   );
   expect(rendered.container.querySelector("select")).toBeNull();
-  await waitForText(rendered.container, "API key");
+  await waitForText(rendered.container, "API 키");
   expect(buttonByLabel(rendered.container, "저장하고 시작")).toBeUndefined();
   expect(
     rendered.container.querySelector('[data-test-class="settings-model-route-nav"]'),
@@ -358,7 +373,7 @@ test("first-run model setup waits for a newly added model before completion", as
     { settings: { ...EMPTY_SETTINGS, model: "missing/model" } },
   );
 
-  await waitForText(rendered.container, "API key");
+  await waitForText(rendered.container, "API 키");
   expect(buttonByLabel(rendered.container, "저장하고 시작")).toBeUndefined();
   await addHostedModelAndFinish(rendered);
   expect(rendered.settingsPatches.some((patch) =>
@@ -378,7 +393,7 @@ test("first-run model setup waits for a newly added model before completion", as
   expect(selectedModelPatch?.worker_profiles).toEqual([
     {
       id: "default",
-      label: "Default",
+      label: "기본",
       enabled: true,
       job: { kind: "builtin", job: "coding" },
       model: "openai/gpt-5.5",
@@ -519,7 +534,7 @@ test("first-run model setup retries default-save failure after adding a model", 
     },
   );
 
-  await waitForText(rendered.container, "API key");
+  await waitForText(rendered.container, "API 키");
   await clickButton(rendered.container, "추가");
   await waitForText(rendered.container, "모델 설정을 저장하지 못했습니다.");
   expect(rendered.calls).toContain("registerHostedModel");
@@ -839,7 +854,7 @@ async function clickButton(container: HTMLElement, label: string): Promise<void>
 async function addHostedModelAndFinish(
   rendered: RenderedFirstRun,
 ): Promise<void> {
-  await waitForText(rendered.container, "API key");
+  await waitForText(rendered.container, "API 키");
   await clickButton(rendered.container, "추가");
   expect(rendered.calls).toContain("registerHostedModel");
   await waitForCompletion(rendered);

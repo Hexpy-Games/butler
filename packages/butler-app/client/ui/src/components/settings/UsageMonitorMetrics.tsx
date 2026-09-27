@@ -13,41 +13,41 @@ export function UsageMonitorMetrics({ view }: { view: UsageMonitorView | null })
   return (
     <MetricGrid>
       <MetricCard
-        value={formatCompact(model?.requestCount ?? 0)}
+        value={model?.requestCount ?? 0} format={formatCompact}
         label={appCopy.interfaceStatus.modelRequests}
       />
       <MetricCard
-        value={formatCompact(model?.promptTokens ?? 0)}
+        value={model?.promptTokens ?? 0} format={formatCompact}
         label={appCopy.interfaceStatus.inputTokens}
       />
       <MetricCard
-        value={formatCompact(model?.cachedTokens ?? 0)}
+        value={model?.cachedTokens ?? 0} format={formatCompact}
         label={appCopy.interfaceStatus.cachedInput}
         change={formatPercent(model?.cacheHitRatio ?? 0)}
         trend="neutral"
       />
       <MetricCard
-        value={formatCompact(model?.uncachedTokens ?? 0)}
+        value={model?.uncachedTokens ?? 0} format={formatCompact}
         label={appCopy.interfaceStatus.uncachedInput}
       />
       <MetricCard
-        value={formatCompact(model?.outputTokens ?? 0)}
+        value={model?.outputTokens ?? 0} format={formatCompact}
         label={appCopy.interfaceStatus.outputTokens}
       />
       <MetricCard
-        value={formatCompact(webSearch?.requestCount ?? 0)}
+        value={webSearch?.requestCount ?? 0} format={formatCompact}
         label={appCopy.interfaceStatus.webSearch}
         change={webSearch?.lastProvider ?? undefined}
         trend="neutral"
       />
       <MetricCard
-        value={formatCompact(tools?.calls ?? 0)}
+        value={tools?.calls ?? 0} format={formatCompact}
         label={appCopy.interfaceStatus.toolCalls}
         change={`${formatCount(tools?.successes ?? 0)} ok · ${formatCount(tools?.failures ?? 0)} fail`}
         trend="neutral"
       />
       <MetricCard
-        value={formatCompact(model?.totalTokens ?? 0)}
+        value={model?.totalTokens ?? 0} format={formatCompact}
         label={appCopy.interfaceStatus.totalTokens}
         change={formatMissingTotals(model)}
         trend="neutral"

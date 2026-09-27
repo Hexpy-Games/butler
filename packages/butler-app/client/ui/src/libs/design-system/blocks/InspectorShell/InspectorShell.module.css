@@ -62,8 +62,8 @@
   white-space: nowrap;
   cursor: pointer;
   transition:
-    background-color 120ms ease,
-    color 120ms ease;
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    color var(--motion-fast) var(--motion-ease-standard);
 }
 
 @media (width <= 640px), (pointer: coarse) {
@@ -101,6 +101,7 @@
 .content {
   display: grid;
   flex: 1 1 auto;
+  align-content: start;
   gap: var(--space-md);
   min-width: 0;
   min-height: 0;
@@ -120,4 +121,17 @@
   .tabs button {
     transition: none;
   }
+}
+
+.inset {
+  box-sizing: border-box;
+  min-width: 0;
+  padding-inline: var(--inspector-inline-padding);
+}
+
+.inset[data-fill="true"] {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
 }

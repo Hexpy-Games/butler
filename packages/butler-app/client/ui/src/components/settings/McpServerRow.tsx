@@ -43,7 +43,7 @@ export function McpServerRow({
             aria-label={copy.actions.testMcpServer}
             onClick={onProbe}
           >
-            <RefreshCcw size={13} />
+            <RefreshCcw size="sm" />
           </Button>
           <Button type="button" size="xs" variant="outline" onClick={onToggle}>
             {toggleLabel}
@@ -55,7 +55,7 @@ export function McpServerRow({
             aria-label={copy.actions.editMcpServer}
             onClick={onEdit}
           >
-            <PencilLine size={13} />
+            <PencilLine size="sm" />
           </Button>
           <Button
             type="button"
@@ -64,7 +64,7 @@ export function McpServerRow({
             aria-label={copy.actions.deleteMcpServer}
             onClick={onRemove}
           >
-            <Trash2 size={13} />
+            <Trash2 size="sm" />
           </Button>
         </ButtonContainer>
       }

@@ -1,0 +1,51 @@
+.check {
+  display: inline-block;
+  flex: none;
+  vertical-align: middle;
+}
+
+/* The ring starts at twelve o'clock, like the Spinner arc. */
+.ring {
+  transform-box: view-box;
+  transform-origin: center;
+  transform: rotate(-90deg);
+}
+
+/* Completion: pop and fade over --motion-base; the ring draws over
+   --motion-slow and the check follows one menu beat later (~310ms total). */
+.check[data-animate="true"] {
+  animation: success-check-pop var(--motion-base) var(--motion-ease-standard)
+    both;
+}
+
+.check[data-animate="true"] .ring {
+  animation: success-check-draw var(--motion-slow) var(--motion-ease-standard)
+    both;
+}
+
+.check[data-animate="true"] .mark {
+  animation: success-check-draw var(--motion-slow) var(--motion-ease-standard)
+    var(--motion-menu) both;
+}
+
+@keyframes success-check-draw {
+  from {
+    stroke-dashoffset: 100;
+  }
+}
+
+@keyframes success-check-pop {
+  from {
+    opacity: 0;
+    transform: scale(var(--motion-scale-check));
+  }
+}
+
+/* Reduced motion: no stroke travel; the pop scale token is 1, so only the
+   fade remains. */
+@media (prefers-reduced-motion: reduce) {
+  .check[data-animate="true"] .ring,
+  .check[data-animate="true"] .mark {
+    animation: none;
+  }
+}

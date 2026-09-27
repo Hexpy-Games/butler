@@ -1,11 +1,12 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes, ReactNode } from "react";
-import { cn } from "../../lib/utils";
 import { ComposerAdjunctPanel } from "../ComposerAdjunctPanel";
 import {
   WorkerActivityRow,
   type WorkerActivityRowProps,
 } from "../WorkerActivityRow";
 import styles from "./WorkerActivityPanel.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface WorkerActivityPanelItem extends Omit<
   WorkerActivityRowProps,
@@ -15,7 +16,7 @@ export interface WorkerActivityPanelItem extends Omit<
 }
 
 export interface WorkerActivityPanelProps extends Omit<
-  HTMLAttributes<HTMLElement>,
+  DsBaseProps<HTMLAttributes<HTMLElement>>,
   "title"
 > {
   heading?: ReactNode;
@@ -34,7 +35,7 @@ export function WorkerActivityPanel({
 
   return (
     <ComposerAdjunctPanel
-      className={cn(styles.panel, className)}
+      className={dsClass(styles.panel, className)}
       heading={heading}
       collapsedSummary={collapsedSummary}
       {...props}

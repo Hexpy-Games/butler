@@ -1,5 +1,16 @@
 .root {
+  /* One title line: chevron and icon boxes, and the panel's text inset. */
+  --disclosure-line: calc(var(--font-size-3) * var(--line-height-body));
+  --disclosure-inset: var(--space-sm);
+
   border-radius: var(--radius-control);
+}
+
+/* Plain rows sit flush with the surrounding text (dialogs, readers). */
+.plain {
+  --disclosure-inset: 0px;
+
+  background: transparent;
 }
 
 .root + .root {
@@ -10,19 +21,22 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-sm);
-  align-items: center;
+  align-items: start;
   width: 100%;
+  padding: var(--disclosure-inset);
+  border-radius: inherit;
 }
 
 .trigger[data-slot="clickable"] {
   display: grid;
 }
 
+/* Chevron and icon stay on the title line when a description wraps below. */
 .labelRegion {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr);
   gap: var(--space-sm);
-  align-items: center;
+  align-items: start;
   min-width: 0;
 }
 
@@ -33,22 +47,15 @@
 .chevron,
 .icon {
   display: inline-grid;
-  width: 1lh;
-  height: 1lh;
+  width: var(--disclosure-line);
+  height: var(--disclosure-line);
   place-items: center;
   color: var(--text-tertiary);
-  font-size: var(--font-size-3);
-  line-height: var(--line-height-body);
 }
 
 .chevron svg,
 .icon svg {
   display: block;
-}
-
-.withDescription {
-  align-self: start;
-  margin-top: 2px;
 }
 
 .content,
@@ -68,16 +75,18 @@
   color: var(--text-tertiary);
 }
 
+/* The panel starts under the title column (after the chevron) and keeps
+   the trigger's inset on the other sides. */
 .panel {
-  padding: var(--space-sm) var(--space-sm) var(--space-sm)
-    calc(var(--space-sm) * 3);
+  padding: 0 var(--disclosure-inset) var(--disclosure-inset)
+    calc(var(--disclosure-inset) + var(--disclosure-line) + var(--space-sm));
   color: var(--text-secondary);
+}
+
+.plain .panel {
+  padding-block: var(--space-xs) 0;
 }
 
 .open:not(.plain) {
   background: var(--selection);
-}
-
-.plain {
-  background: transparent;
 }

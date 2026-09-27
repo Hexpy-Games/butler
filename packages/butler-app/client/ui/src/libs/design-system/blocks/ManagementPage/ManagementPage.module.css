@@ -33,18 +33,26 @@
   );
 }
 
+/* PageContainer owns the page width and inline gutter. */
 .content {
-  display: grid;
-  gap: var(--space-2xl);
   min-width: 0;
   width: 100%;
-  padding: var(--space-xl) clamp(var(--space-lg), 3vw, 40px) 56px;
+  padding-block: var(--space-xl) 56px;
+  padding-inline: 0;
+}
+
+.pageContent {
+  display: grid;
+  gap: var(--space-2xl);
 }
 
 @media (width <= 700px) {
   .content {
-    gap: var(--space-lg);
-    padding: var(--space-lg) var(--adaptive-page-gutter)
+    padding-block: var(--space-lg)
       max(48px, calc(var(--safe-area-bottom) + var(--space-2xl)));
+  }
+
+  .pageContent {
+    gap: var(--space-lg);
   }
 }

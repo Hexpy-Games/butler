@@ -58,4 +58,17 @@ export default tseslint.config(
       "@stylistic/comma-spacing": ["warn", { before: false, after: true }],
     },
   },
+  {
+    // DS styling capability (dsClass / dsStyle, DsClassName / DsStyle) stays inside the design system.
+    files: ["packages/butler-app/client/ui/src/**/*.{ts,tsx}"],
+    ignores: ["packages/butler-app/client/ui/src/libs/design-system/**"],
+    rules: {
+      "no-restricted-imports": ["error", {
+        patterns: [{
+          regex: "(^|/)(butler-ds|libs/design-system)/lib/internal(\\.ts)?$",
+          message: "lib/internal is private to the design system; style DS components through their props (or UNSAFE_style for allowlisted geometry).",
+        }],
+      }],
+    },
+  },
 );

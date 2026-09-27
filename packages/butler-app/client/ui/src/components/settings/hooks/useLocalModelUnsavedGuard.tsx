@@ -9,6 +9,7 @@ interface LocalModelUnsavedGuardProps {
   isEditing: boolean;
   platform: LocalModelDiscoveryRequest["platform"];
   serverUrl: string;
+  apiKey?: string;
   modelId: string;
   displayName: string;
   context: string;
@@ -19,6 +20,7 @@ export function useLocalModelUnsavedGuard({
   isEditing,
   platform,
   serverUrl,
+  apiKey,
   modelId,
   displayName,
   context,
@@ -31,7 +33,8 @@ export function useLocalModelUnsavedGuard({
   const hasUnsavedChanges = Boolean(
     isEditing &&
       baseline &&
-      (platform !== baseline.platform ||
+      (apiKey !== undefined ||
+        platform !== baseline.platform ||
         serverUrl !== baseline.serverUrl ||
         modelId !== baseline.modelId ||
         displayName !== baseline.displayName ||
@@ -67,7 +70,7 @@ function localModelBaseline(model: AppModelSummary | null) {
   if (!model) return null;
   return {
     platform: model.platform ?? "llama_cpp",
-    serverUrl: model.server_url ?? "",
+    serverUrl: model.api_base_url ?? model.server_url ?? "",
     modelId: model.model_id,
     displayName: model.display_name,
     context: String(model.context_window_tokens),

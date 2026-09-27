@@ -29,3 +29,18 @@ Do not use it for indeterminate loading. Use an activity/status row.
 
 ## Tags
 progress, meter, status, inspector
+
+## Bare variant
+
+`bare` renders only the 4px track and fill, without the label row, for inline
+bars inside rows and statistics lists. Name it with `ariaLabel`:
+
+```tsx
+<ProgressMeter bare value={percent} ariaLabel={copy.changes(count)} />
+```
+
+Product code must not rebuild bars with `track`/`fill` spans and inline widths.
+
+
+## Motion
+The fill spans the track and scales with `transform: scaleX(value)` from the inline start over `--motion-deliberate` (decelerate), so value changes never animate `width`. Reduced motion changes it instantly.

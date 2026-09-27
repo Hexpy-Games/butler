@@ -5,6 +5,26 @@
   gap: var(--space-3);
 }
 
+.root[data-gap="sm"] {
+  gap: var(--space-sm);
+}
+
+.root[data-gap="md"] {
+  gap: var(--space-md);
+}
+
+.root[data-gap="lg"] {
+  gap: var(--space-lg);
+}
+
+.root[data-gap="xl"] {
+  gap: var(--space-xl);
+}
+
+.root[data-gap="2xl"] {
+  gap: var(--space-2xl);
+}
+
 .orientation-horizontal {
   flex-direction: column;
 }
@@ -49,10 +69,38 @@
 }
 
 .variant-line {
+  position: relative;
   min-height: 30px;
   padding: 0;
   border-radius: 0;
   background: transparent;
+}
+
+/* Sliding underline: a 1px bar moved with translateX and sized with scaleX
+   (see TabsIndicator), so tab switches never animate layout. */
+.indicator {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  height: var(--border-width-strong);
+  background: var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  transform-origin: left center;
+  transition: transform var(--motion-base) var(--motion-ease-decelerate);
+}
+
+.variant-line:not([data-indicator-ready]) .indicator {
+  transition: none;
+}
+
+.variant-line[data-indicator-ready] .indicator {
+  opacity: 1;
+}
+
+.variant-line[data-indicator-ready] .trigger[data-state="active"] {
+  box-shadow: none;
 }
 
 .trigger {
@@ -75,8 +123,8 @@
   cursor: pointer;
   outline: none;
   transition:
-    background-color 120ms ease,
-    color 120ms ease;
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    color var(--motion-fast) var(--motion-ease-standard);
 }
 
 .trigger:hover {
@@ -93,6 +141,29 @@
   background: var(--selection);
   color: var(--text-primary);
   font-weight: var(--font-weight-medium);
+}
+
+.variant-line .trigger {
+  flex-shrink: 0;
+  padding-block: var(--space-xs) var(--tabs-line-indicator-gap);
+  border-radius: 0;
+  transition:
+    color var(--motion-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-fast) var(--motion-ease-standard);
+}
+
+.variant-line .trigger:hover {
+  background: transparent;
+}
+
+.variant-line .trigger[data-state="active"] {
+  background: transparent;
+  box-shadow: inset 0 calc(-1 * var(--border-width-strong)) 0 var(--accent);
+}
+
+.variant-line .trigger:focus-visible {
+  background: transparent;
+  box-shadow: var(--focus-ring);
 }
 
 .trigger[data-disabled] {
@@ -128,7 +199,7 @@
 }
 
 .content[data-state="active"] {
-  animation: tabs-content-enter 120ms ease-out;
+  animation: tabs-content-enter var(--motion-fast) var(--motion-ease-decelerate);
 }
 
 @keyframes tabs-content-enter {
@@ -145,6 +216,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .trigger,
+  .indicator,
   .content[data-state="active"] {
     animation: none;
     transition: none;

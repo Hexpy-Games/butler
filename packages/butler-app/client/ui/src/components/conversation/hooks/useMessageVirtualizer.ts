@@ -10,6 +10,8 @@ interface UseMessageVirtualizerOptions {
   bottomReserve: number;
   scrollRef: RefObject<HTMLDivElement | null>;
   headerHeight?: number;
+  /** Queued follow-ups listed after the messages and the activity row. */
+  queuedKeys?: readonly string[];
 }
 
 export function useMessageVirtualizer({
@@ -19,21 +21,27 @@ export function useMessageVirtualizer({
   bottomReserve,
   scrollRef,
   headerHeight = 0,
+  queuedKeys = NO_QUEUED_KEYS,
 }: UseMessageVirtualizerOptions) {
+  const queuedStart = visibleMessages.length + (showTurnActivity ? 1 : 0);
   const getScrollElement = useCallback(() => scrollRef.current, [scrollRef]);
   const getItemKey = useCallback(
     (index: number) =>
-      showTurnActivity && index === visibleMessages.length
+      index >= queuedStart
+        ? `queued-${queuedKeys[index - queuedStart] ?? index}`
+        : showTurnActivity && index === visibleMessages.length
         ? "active-turn-activity"
         : (visibleMessages[index]?.id ?? `message-${index}`),
-    [showTurnActivity, visibleMessages],
+    [queuedKeys, queuedStart, showTurnActivity, visibleMessages],
   );
   const estimateSize = useCallback(
     (index: number) =>
-      estimateMessageRowSize(visibleMessages[index], {
-        isActivity: showTurnActivity && index === visibleMessages.length,
-      }),
-    [showTurnActivity, visibleMessages],
+      index >= queuedStart
+        ? QUEUED_ROW_ESTIMATE
+        : estimateMessageRowSize(visibleMessages[index], {
+          isActivity: showTurnActivity && index === visibleMessages.length,
+        }),
+    [queuedStart, showTurnActivity, visibleMessages],
   );
 
   const rowVirtualizer = useVirtualizer({
@@ -75,6 +83,10 @@ export function useMessageVirtualizer({
     latestMessageVersion,
   };
 }
+
+const NO_QUEUED_KEYS: readonly string[] = [];
+/** Status line, one-line bubble and controls row of a QueuedMessage. */
+const QUEUED_ROW_ESTIMATE = 112;
 
 function keepScrollOffsetOnSizeChange() {
   return false;

@@ -1,10 +1,16 @@
 /// <reference types="bun" />
 
-import { expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ProgressRow } from "@/app/types.ts";
 import { TurnActivityPanel } from "./TurnActivityPanel";
+import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
+
+// These expectations are the Korean copy; pin the locale instead of inheriting it.
+const previousLocale = getAppLocale();
+beforeAll(() => setAppCopyLanguage("ko-KR"));
+afterAll(() => setAppCopyLanguage(previousLocale));
 
 test("turn activity panel replaces an opening decision with the latest work", () => {
   const html = renderPanel([

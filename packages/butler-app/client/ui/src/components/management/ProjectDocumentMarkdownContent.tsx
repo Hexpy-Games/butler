@@ -1,11 +1,8 @@
 import type { AnchorHTMLAttributes } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { MarkdownContent, Stack, SurfacePanel, Typo } from "@/butler-ds";
-import {
-  projectDocumentDialogLayout,
-  projectDocumentMarkdownView,
-} from "@/app/projectDocuments.ts";
+import { Grid, MarkdownContent, Stack, SurfacePanel, Typo } from "@/butler-ds";
+import { projectDocumentMarkdownView } from "@/app/projectDocuments.ts";
 
 const MARKDOWN_COMPONENTS = {
   a({ href, children, ...props }: AnchorHTMLAttributes<HTMLAnchorElement>) {
@@ -30,21 +27,17 @@ export function ProjectDocumentMarkdownContent({
         <SurfacePanel
           data-test-class="project-document-frontmatter"
           elevation="none"
-          style={projectDocumentDialogLayout.metadataPanel}
         >
           <Stack gap="xs">
             {view.frontmatter.map((entry) => (
-              <div
-                key={entry.key}
-                style={projectDocumentDialogLayout.metadataRow}
-              >
-                <Typo.Caption style={projectDocumentDialogLayout.metadataLabel}>
+              <Grid key={entry.key} columns="label-value" gap="sm">
+                <Typo.Caption tone="tertiary">
                   {entry.label}
                 </Typo.Caption>
-                <Typo.Caption style={projectDocumentDialogLayout.metadataValue}>
+                <Typo.Caption tone="secondary" wrap="anywhere">
                   {entry.value}
                 </Typo.Caption>
-              </div>
+              </Grid>
             ))}
           </Stack>
         </SurfacePanel>

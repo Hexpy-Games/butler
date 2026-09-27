@@ -18,7 +18,7 @@ export function MessageAvatar({
       role="system"
       data-test-class="message-avatar"
     >
-      <Bot size={16} />
+      <Bot size="md" />
     </MessageAvatarBlock>
   );
 }

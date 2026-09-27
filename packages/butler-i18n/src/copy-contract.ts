@@ -116,6 +116,7 @@ export interface AppCopy {
     reportQuestion: string;
     parentWork: string; allWork: string;
     periodDays: (days: number) => string; statisticsZone: (zone: string) => string;
+    boardKind: string; period: string; statisticsKind: string; materialsView: string;
     briefing: string; suggestions: string; briefingPending: string; briefingUnavailable: string; summarized: string; addToComposer: string;
     briefingCoverage: (works: number, total: number, documents: number, reports: number, excluded: number) => string;
     conversationTarget: string; newProjectConversation: string; pendingConversation: string; sourceQuestion: string;
@@ -205,6 +206,8 @@ export interface AppCopy {
   };
   interfacePanels: {
     projectChats: string;
+    messages7d: string;
+    messages30d: string;
     noProjectChats: string;
     noPlans: string;
     noSpecs: string;
@@ -265,6 +268,8 @@ export interface AppCopy {
   interfaceTemplates: {
     relativeAge: (seconds: number) => string;
     workedFor: (duration: string) => string;
+    workedDuration: (totalSeconds: number) => string;
+    emptyLane: (label: string) => string;
     contextMetric: (kind: "full" | "used" | "budget" | "available" | "compact", value: string | number) => string;
     activityHistory: (live: boolean, label: string, count: number) => string;
     pendingApprovals: (count: number) => string;
@@ -477,6 +482,7 @@ export interface AppCopy {
     read: string;
     review: string;
     phase: string;
+    workerPhase: string;
     branchProject: string;
     branchChat: string;
     branchDescription: string;
@@ -648,6 +654,7 @@ export interface AppCopy {
     modelLoading: string;
     modelUnavailable: string;
     modelError: string;
+    modelErrorHint: string;
     gitMissingTitle: string;
     gitMissingMessage: string;
     gitInstallAction: string;
@@ -666,6 +673,7 @@ export interface AppCopy {
     failedMessageStatus: string;
     retryFailedMessage: string;
     deleteFailedMessage: string;
+    queuedPosition: (position: number, total: number) => string;
     contextDetails: string;
     approval: {
       title: string;
@@ -760,7 +768,10 @@ export interface AppCopy {
     back: string;
     confirm: string;
     close: string;
+    open: string;
     more: string;
+    /** Accessible name of a breadcrumb trail. */
+    breadcrumb: string;
     refresh: string;
     save: string;
     create: string;
@@ -778,14 +789,12 @@ export interface AppCopy {
     searchPlaceholder: string;
     searchEmpty: (query: string) => string;
     groups: {
-      general: string;
+      preferences: string;
       modelsAndExtensions: string;
       appAndSystem: string;
     };
     sections: {
       general: string;
-      notifications: string;
-      desktopShell: string;
       models: string;
       appearance: string;
       server: string;
@@ -832,17 +841,19 @@ export interface AppCopy {
       archives: string[];
       about: string[];
     };
+    sectionState: { loading: string; error: string; retry: string; empty: string };
+    updateComponents: { app: string; service: string };
+    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "fallbackConsolidation" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview", string>;
+    pageSectionDescriptions: Record<"notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning" | "fallbackConsolidation", string>;
     panels: {
       butlerModel: string;
       workerProfiles: string;
       backupModels: string;
-      serverBridge: string;
       updates: string;
       mcpServers: string;
       skills: string;
       usageMonitor: string;
       developerLogs: string;
-      privacyDiagnostics: string;
       systemEvents: string;
       archives: string;
       about: string;
@@ -906,7 +917,6 @@ export interface AppCopy {
       mainScreenThemePreset: string;
       mainScreenThemeColors: string;
       mainScreenThemeColor: (index: number) => string;
-      themeSamples: string;
       translucentSidebar: string;
       desktopNotifications: string;
       desktopNotificationAssistantMessages: string;
@@ -1189,6 +1199,11 @@ export interface AppCopy {
       loadDeveloperLogs: string;
     };
     localModels: {
+      apiKey: string;
+      apiKeyDescription: string;
+      apiKeyPlaceholder: string;
+      apiKeyRemoved: string;
+      removeApiKey: string;
       title: string;
       description: string;
       provider: string;
@@ -1298,6 +1313,9 @@ export interface AppCopy {
     loading: string;
     empty: string;
     failed: string;
+    kindLabels: Record<"chat" | "project" | "project_session" | "group" | "automation" | "settings", string>;
+    /** Keyed by the stable settings result id suffix (`settings:<key>`). */
+    settingsSections: Record<string, string>;
   };
   feedback: {
     retry: string;

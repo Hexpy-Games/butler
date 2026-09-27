@@ -13,6 +13,7 @@ type TreeIntent = SpaceCommand extends infer T
 export type SpaceIntent = TreeIntent | { action: "relocate"; sessionId: string; operationId: string; targetKey: string | null; position: "inside" | "before" | "after" };
 export type SpaceDialog =
   | { kind: "create"; parentKey: string | null }
+  | { kind: "group"; sourceKey: string; targetKey: string }
   | { kind: "rename"; groupId: string; title: string }
   | { kind: "move"; sourceKey: string }
   | { kind: "relocate"; sourceKey: string; targetKey: string | null; position: "inside" | "before" | "after"; operationId: string }
@@ -105,20 +106,16 @@ export const useOrganization = create<OrganizationUi>((set, get) => ({
       const app = useButlerStore.getState();
       app.noteNavigationEvent();
       app.setNavigation({ ...app.navigation, space: result.space });
-      await app.refreshNavigation();
+      if (intent.action !== "group") await app.refreshNavigation();
       set({
         pending: false,
-        dialog:
-          intent.action === "group" && result.groupId
-            ? { kind: "rename", groupId: result.groupId, title: appCopy.space.newGroup }
-            : null,
+        dialog: null,
         undoToken: result.undoToken ?? null,
         undoRevision: result.space.revision,
       });
       return true;
     } catch (error) {
       notifyError(error, appCopy.space.saveFailed);
-      await useButlerStore.getState().refreshNavigation();
       set({
         pending: false,
         error:
@@ -126,6 +123,7 @@ export const useOrganization = create<OrganizationUi>((set, get) => ({
             ? error.message
             : appCopy.space.saveFailed,
       });
+      void useButlerStore.getState().refreshNavigation();
       return false;
     }
   },

@@ -1,9 +1,10 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes } from "react";
 import { ListChecks } from "../../components/Icons";
-import { cn } from "../../lib/utils";
 import { ComposerAdjunctPanel } from "../ComposerAdjunctPanel";
 import styles from "./TodoProgressPanel.module.css";
 import { TodoProgressItemRow } from "./TodoProgressItemRow";
+import { dsClass } from "../../lib/internal";
 
 export type TodoProgressPanelItemState =
   | "pending"
@@ -24,7 +25,7 @@ export interface TodoProgressPanelItem {
 }
 
 export interface TodoProgressPanelProps extends Omit<
-  HTMLAttributes<HTMLElement>,
+  DsBaseProps<HTMLAttributes<HTMLElement>>,
   "title"
 > {
   heading: string;
@@ -53,10 +54,10 @@ export function TodoProgressPanel({
   return (
     <ComposerAdjunctPanel
       role="region"
-      className={cn(styles.panel, className)}
+      className={dsClass(styles.panel, className)}
       aria-label={ariaLabel ?? heading}
       heading={heading}
-      icon={<ListChecks size={15} />}
+      icon={<ListChecks size="md" />}
       collapsedSummary={collapsedSummary}
       {...props}
     >

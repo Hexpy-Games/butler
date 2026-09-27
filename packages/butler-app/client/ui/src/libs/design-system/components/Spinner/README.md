@@ -35,7 +35,9 @@ Reduced motion disables rotation and retains the open-ring silhouette. Keep
 the status label visible. The caller owns busy state, disabling, completion,
 failure, and cancellation. Mount only while needed and remove promptly when
 the existing operation leaves that state; do not delay completion to finish a
-revolution or add an unconditional success check.
+revolution or add an unconditional success check. When success replaces the
+spinner in the same slot, use `LoadingIndicator` (`state="loading" | "done"`),
+which draws the ringed `SuccessCheck` only after it was loading.
 
 ## Where and why
 
@@ -46,8 +48,8 @@ animating independent loading icons. `ComposerSendButton` already composes it
 when `busy` is true.
 
 Use `Skeleton` for layout placeholders and `ProgressMeter` when the total is
-known. Keep the existing `ButlerThinkingMark` for agent identity/activity.
-Do not stack a second spinning ring around that waveform or turn static refresh
+known. Use `ButlerThinkingMark` when Butler itself is thinking (identity and
+activity). Do not stack a second spinning ring around that mark or turn static refresh
 actions into continuous spinners. Do not reintroduce `LoaderCircle`, dashed
 `Circle` imitations, or feature-local spin keyframes.
 

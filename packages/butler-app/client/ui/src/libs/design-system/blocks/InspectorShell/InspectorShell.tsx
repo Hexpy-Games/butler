@@ -1,5 +1,7 @@
+import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import type { ReactNode } from "react";
 import { cn } from "../../lib/utils";
+import { useScrollEdges } from "../../lib/useScrollEdges";
 import styles from "./InspectorShell.module.css";
 
 export interface InspectorShellTab {
@@ -8,14 +10,13 @@ export interface InspectorShellTab {
   icon?: ReactNode;
 }
 
-export interface InspectorShellProps {
+export interface InspectorShellProps extends DsPrivateStyleProps {
   id?: string;
   open?: boolean;
   activeTab: string;
   tabs: InspectorShellTab[];
   onTabChange: (tabId: string) => void;
   children: ReactNode;
-  className?: string;
 }
 
 export function InspectorShell({
@@ -27,13 +28,14 @@ export function InspectorShell({
   children,
   className,
 }: InspectorShellProps) {
+  const tabsFadeRef = useScrollEdges("x");
   return (
     <aside
       className={cn(styles.shell, open ? styles.open : styles.collapsed, className)}
       data-test-class={`right-inspector${open ? " right-inspector-open" : ""}`}
       id={id}
     >
-      <div className={styles.tabs}>
+      <div ref={tabsFadeRef} className={styles.tabs}>
         {tabs.map((tab) => (
           <button
             aria-current={activeTab === tab.id ? "page" : undefined}

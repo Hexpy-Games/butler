@@ -14,7 +14,7 @@ export function ProjectActivityPanel({
   return (
     <Section
       gap="lg"
-      icon={<Activity size={16} />}
+      icon={<Activity size="md" />}
       title={appCopy.interfacePanels.recentActivity}
     >
       {days.length > 0 ? (

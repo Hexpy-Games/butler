@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
 import type { ActiveChatView, NewChatBriefingView } from "@/app/types.ts";
 import { useButlerStore } from "@/app/store.ts";
-import type { ButlerMarkTheme } from "@/components/common/butlerMarkTheme.ts";
+import type { ButlerMarkTheme } from "@/butler-ds";
 import butlerMarkDarkSrc from "@/assets/butler-mark-white.png";
 import butlerMarkLightSrc from "@/assets/butler-mark.png";
 import {

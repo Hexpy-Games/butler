@@ -42,7 +42,7 @@ export function PersonalizationActions({
           : copy.actions.clearProfile}
       </Button>
       <Button type="button" onClick={onSave} disabled={saving || !hasChanges}>
-        <Globe2 size={15} /> {copy.actions.applyPersonalization}
+        <Globe2 size="md" /> {copy.actions.applyPersonalization}
       </Button>
     </ButtonContainer>
   );

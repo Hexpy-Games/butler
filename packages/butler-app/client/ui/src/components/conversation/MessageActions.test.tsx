@@ -60,8 +60,11 @@ test("user message folding follows rendered height and keeps More/Less while exp
   expect(button.getAttribute("data-variant")).toBe("inline");
   expect(button.getAttribute("aria-controls")).toBe(content.id);
   expect(button.getAttribute("aria-expanded")).toBe("false");
+  expect(content.getAttribute("data-line-clamp")).toBe("5");
+  expect(content.getAttribute("data-wrap")).toBe("pre");
   await act(async () => button.click());
   await act(async () => measure());
+  expect(content.hasAttribute("data-line-clamp")).toBe(false);
   expect(button.getAttribute("aria-expanded")).toBe("true");
   expect(button.textContent).toBe(appCopy.conversation.messageActions.showLess);
   expect(content.textContent).toBe(text);

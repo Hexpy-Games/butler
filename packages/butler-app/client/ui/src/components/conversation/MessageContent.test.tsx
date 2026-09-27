@@ -1,11 +1,17 @@
 /// <reference types="bun" />
 
-import { afterEach, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { MessageRecord } from "@/app/types.ts";
 import { MessageContent } from "./MessageContent";
+import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
+
+// These expectations are the Korean copy; pin the locale instead of inheriting it.
+const previousLocale = getAppLocale();
+beforeAll(() => setAppCopyLanguage("ko-KR"));
+afterAll(() => setAppCopyLanguage(previousLocale));
 
 afterEach(() => {
   delete (globalThis as { window?: unknown }).window;
@@ -106,5 +112,94 @@ test("failed Steward result text stays a normal answer without a system error co
 
   expect(container.textContent).toContain("확인한 내용과 남은 문제를 보고합니다.");
   expect(container.querySelector(".failure-notice")).toBeNull();
+  await act(async () => root.unmount());
+});
+
+test("markdown code blocks render an in-block header with language and copy", async () => {
+  const dom = new JSDOM("<div id=\"root\"></div>", { url: "http://localhost" });
+  Object.assign(globalThis, {
+    window: dom.window,
+    document: dom.window.document,
+    navigator: dom.window.navigator,
+    HTMLElement: dom.window.HTMLElement,
+    Node: dom.window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
+  const container = dom.window.document.querySelector("#root");
+  if (!(container instanceof dom.window.HTMLElement)) throw new Error("Missing root.");
+  const root = createRoot(container);
+  const message: MessageRecord = {
+    id: "assistant-code",
+    role: "assistant",
+    text: "Code:\n\n```ts\nconst ok = true;\n```\n\n```\nplain\n```",
+    status: "delivered",
+  };
+
+  await act(async () => {
+    root.render(
+      <MessageContent
+        message={message}
+        copied={false}
+        footerMeta={null}
+        onCopyAssistantMessage={() => undefined}
+      />,
+    );
+  });
+
+  const blocks = [...container.querySelectorAll('[data-test-class~="code-block"]')];
+  expect(blocks).toHaveLength(2);
+  const [typed, plain] = blocks;
+  const header = typed!.querySelector('[data-test-class~="code-block-header"]');
+  expect(header).not.toBeNull();
+  expect(header!.firstElementChild?.textContent).toBe("ts");
+  expect(header!.querySelector("button[aria-label]")).not.toBeNull();
+  expect(typed!.firstElementChild).toBe(header);
+  expect(typed!.querySelector("pre")?.textContent).toContain("const ok = true;");
+  expect(plain!.querySelector('[data-test-class~="code-block-header"] button')).not.toBeNull();
+  expect(container.querySelector('[data-test-class="code-block-actions"]')).toBeNull();
+  await act(async () => root.unmount());
+});
+
+test("markdown code blocks load syntax highlighting for known languages", async () => {
+  const dom = new JSDOM("<div id=\"root\"></div>", { url: "http://localhost" });
+  Object.assign(globalThis, {
+    window: dom.window,
+    document: dom.window.document,
+    navigator: dom.window.navigator,
+    HTMLElement: dom.window.HTMLElement,
+    Node: dom.window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
+  const container = dom.window.document.querySelector("#root");
+  if (!(container instanceof dom.window.HTMLElement)) throw new Error("Missing root.");
+  const root = createRoot(container);
+  const message: MessageRecord = {
+    id: "assistant-highlight",
+    role: "assistant",
+    text: "```ts\nconst ok: number = 1; // done\n```\n\n```unknownlang\nconst raw = 1;\n```",
+    status: "delivered",
+  };
+
+  await act(async () => {
+    root.render(
+      <MessageContent
+        message={message}
+        copied={false}
+        footerMeta={null}
+        onCopyAssistantMessage={() => undefined}
+      />,
+    );
+  });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  });
+
+  const [typed, unknown] = [...container.querySelectorAll("pre")];
+  const keyword = typed!.querySelector('[data-syntax="keyword"]');
+  expect(keyword?.textContent).toBe("const");
+  expect(typed!.querySelector('[data-syntax="comment"]')?.textContent).toBe("// done");
+  expect(typed!.textContent).toBe("const ok: number = 1; // done\n");
+  expect(unknown!.querySelector("[data-syntax]")).toBeNull();
+  expect(unknown!.textContent).toBe("const raw = 1;\n");
   await act(async () => root.unmount());
 });

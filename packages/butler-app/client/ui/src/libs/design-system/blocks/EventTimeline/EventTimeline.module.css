@@ -1,0 +1,30 @@
+/* EventTimeline: a marker column (one --space-2xl icon slot) beside the
+   event content; a hairline joins each marker to the next event. */
+.timeline {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.event {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--space-2xl) minmax(0, 1fr);
+  gap: var(--space-sm);
+}
+
+.event:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--space-md) - var(--border-hairline));
+  top: var(--space-3xl);
+  bottom: calc(-1 * var(--space-md));
+  width: var(--border-hairline);
+  background: var(--line);
+}
+
+.marker {
+  display: flex;
+  justify-content: center;
+  padding-top: var(--space-md);
+  color: var(--text-tertiary);
+}

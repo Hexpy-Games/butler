@@ -94,7 +94,7 @@ export function McpSecretRows({
             >
               {appCopy.interfaceDetails.applyAllSources}</Button>
             <Button type="button" size="xs" variant="outline" onClick={addRow}>
-              <Plus size={13} />
+              <Plus size="sm" />
               {addLabel}
             </Button>
           </ButtonContainer>
@@ -146,7 +146,7 @@ export function McpSecretRows({
               label={appCopy.interfaceTemplates.deleteRow(title)}
               onClick={() => deleteRow(row.id)}
             >
-              <Trash2 size={14} />
+              <Trash2 size="sm" />
             </IconButton>
           }
         />

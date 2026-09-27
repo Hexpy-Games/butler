@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { prepareBundledAgentResource } from "../../packages/butler-app/scripts/release/package-app-release.ts";
 
 const root = process.cwd();
 const electronBin = resolve(
@@ -147,6 +148,7 @@ async function connectToElectronPage(
 ): Promise<CdpClient> {
   const origin = new URL(appUrl).origin;
   const startedAt = Date.now();
+  let lastTargets: CdpTarget[] = [];
   while (Date.now() - startedAt < 60_000) {
     if (electronProcess && electronProcess.exitCode !== null) {
       throw new Error(
@@ -156,6 +158,7 @@ async function connectToElectronPage(
     try {
       const targets = (await fetch(`http://127.0.0.1:${debugPort}/json/list`)
         .then((response) => response.json())) as CdpTarget[];
+      lastTargets = targets;
       const target = targets.find((item) =>
         item.type === "page" &&
         (
@@ -176,7 +179,10 @@ async function connectToElectronPage(
     }
     await new Promise((resolveWait) => setTimeout(resolveWait, 150));
   }
-  throw new Error(`Timed out waiting for Electron page target at ${origin}.`);
+  const seen = lastTargets.map((item) => `${item.type ?? "?"} ${item.url ?? ""}`);
+  throw new Error(
+    `Timed out waiting for Electron page target at ${origin}. Last targets: ${JSON.stringify(seen)}`,
+  );
 }
 
 async function connectCdp(url: string): Promise<CdpClient> {
@@ -386,6 +392,14 @@ async function main(): Promise<void> {
   const debugPort = await freePort();
   assertPortAvailable(serverPort);
   assertPortAvailable(debugPort);
+  // Unpackaged Electron runs the foreground lifecycle, which only opens a window
+  // once the BTCC executor reports ready. The dev `butler gateway app` fallback
+  // never starts an executor, so stage the bundled agent like
+  // app-first-run-test-env.ts does.
+  const bundledAgentResourceDir = prepareBundledAgentResource(
+    root,
+    join(tempDir, "bundled-agent-resource"),
+  ).resourceDir;
   const nodePath = spawnSync("which", ["node"], { encoding: "utf8" }).stdout.trim();
   const smokePath = nodePath
     ? `${dirname(nodePath)}:/usr/bin:/bin:/usr/sbin:/sbin`
@@ -396,6 +410,7 @@ async function main(): Promise<void> {
     BUTLER_DATA: dataDir,
     BUTLER_HOME: root,
     BUTLER_APP_GATEWAY_PID_FILE: "off",
+    BUTLER_APP_BUNDLED_AGENT_DIR: bundledAgentResourceDir,
     BUTLER_APP_SERVER_PORT: String(serverPort),
     LANG: "ko_KR.UTF-8",
     LC_ALL: "ko_KR.UTF-8",
@@ -457,6 +472,25 @@ async function main(): Promise<void> {
     "system language did not preselect Korean",
   );
 
+  await cdp.send("Emulation.setEmulatedMedia", {
+    features: [{ name: "prefers-color-scheme", value: "dark" }],
+  });
+  await waitForExpression(
+    cdp,
+    "document.body.classList.contains('theme-dark')",
+    "first-run dark theme class",
+  );
+  const firstRunDarkText = await evaluateString(
+    cdp,
+    `getComputedStyle(document.querySelector(${JSON.stringify(firstRunSelector)})).color`,
+  );
+  const darkTextChannels = firstRunDarkText.match(/\d+(?:\.\d+)?/gu)?.slice(0, 3).map(Number) ?? [];
+  assert(
+    darkTextChannels.length === 3 && darkTextChannels.every((channel) => channel > 180),
+    `first-run text should use dark-theme foreground, got ${firstRunDarkText}`,
+  );
+  await cdp.send("Emulation.setEmulatedMedia", { features: [] });
+
   await clickButton(cdp, "계속");
   await waitForHeading(cdp, "안전고지");
   await expectNoForbiddenCopy(cdp);
@@ -475,7 +509,7 @@ async function main(): Promise<void> {
 
   await waitForHeading(cdp, "모델 설정");
   await waitForHeading(cdp, "모델 추가");
-  await waitForText(cdp, "API key");
+  await waitForText(cdp, "API 키");
   await expectNoForbiddenCopy(cdp, new Set(["이름"]));
   assert(
     await evaluateBoolean(
@@ -514,6 +548,7 @@ async function main(): Promise<void> {
       "electron-first-run-visible",
       "first-run-drag-lane",
       "system-language-ko-preselected",
+      "first-run-honors-dark-theme",
       "language-safety-install-model-order",
       "agent-progress-title",
       "no-normal-gateway-selector",

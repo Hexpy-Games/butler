@@ -1,7 +1,5 @@
 import type { ReactNode } from "react";
-import { ButlerMarkIcon } from "@/components/common/ButlerMarkIcon.tsx";
-import { ButlerThinkingMark } from "@/components/common/ButlerThinkingMark.tsx";
-import { MessageStatusLabel } from "@/butler-ds";
+import { ButlerThinkingMark, MessageStatusLabel } from "@/butler-ds";
 
 export type AssistantStatusVisualState =
   | "active"
@@ -25,13 +23,13 @@ export function AssistantStatusLabel({
       dataTestClass="assistant-status-label"
       mark={
         <span data-test-class={`assistant-status-mark-${state}`}>
-          {state === "active" ? (
-            <ButlerThinkingMark state="working" theme={markTheme} />
-          ) : (
-            <ButlerMarkIcon theme={markTheme} title="" />
-          )}
+          <ButlerThinkingMark
+            state={state === "active" ? "working" : "idle"}
+            theme={markTheme}
+          />
         </span>
       }
+      shimmer={state === "active"}
       title={label}
     >
       {children}

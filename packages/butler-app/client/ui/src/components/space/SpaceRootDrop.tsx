@@ -1,10 +1,10 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useState } from "react";
+import { NavRootDropZone } from "@/butler-ds";
 import { useSpaceDrag, canDrop } from "@/app/space/drag";
 import { requestSpaceMove } from "@/app/space/move";
 import type { SpaceRowData } from "@/app/space/projection";
-import styles from "./SpaceInteractions.module.css";
 
 export function SpaceRootDrop({ rows }: { rows: Map<string, SpaceRowData> }) {
   useAppLocale();
@@ -12,9 +12,8 @@ export function SpaceRootDrop({ rows }: { rows: Map<string, SpaceRowData> }) {
   const [active, setActive] = useState(false);
   if (!source || !canDrop(rows, source, null, "inside")) return null;
   return (
-    <div
-      className={styles.rootDrop}
-      data-active={active}
+    <NavRootDropZone
+      active={active}
       onDragOver={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -30,6 +29,7 @@ export function SpaceRootDrop({ rows }: { rows: Map<string, SpaceRowData> }) {
         useSpaceDrag.getState().end();
       }}
     >
-      {appCopy.space.moveToRoot}</div>
+      {appCopy.space.moveToRoot}
+    </NavRootDropZone>
   );
 }

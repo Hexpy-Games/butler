@@ -6,6 +6,8 @@ import { LocalModelConfigForm } from "./LocalModelConfigForm";
 import { SettingsSection } from "./SettingsFormComponents";
 
 interface LocalModelApiSectionProps {
+  apiKey: string | undefined;
+  setApiKey: (value: string) => void;
   platform: LocalModelDiscoveryRequest["platform"];
   setPlatform: (value: LocalModelDiscoveryRequest["platform"]) => void;
   serverUrl: string;
@@ -18,6 +20,8 @@ interface LocalModelApiSectionProps {
 }
 
 export function LocalModelApiSection({
+  apiKey,
+  setApiKey,
   platform,
   setPlatform,
   serverUrl,
@@ -32,9 +36,11 @@ export function LocalModelApiSection({
   const copy = appCopy.settings.localModels;
 
   return (
-    <SettingsSection title={copy.apiInfoTitle} description={copy.description}>
+    <SettingsSection id="local-model-api" kind="form" title={copy.apiInfoTitle} description={copy.description}>
       <Stack gap="md">
         <LocalModelConfigForm
+          apiKey={apiKey}
+          setApiKey={setApiKey}
           platform={platform}
           setPlatform={setPlatform}
           serverUrl={serverUrl}
@@ -48,7 +54,7 @@ export function LocalModelApiSection({
           disabled={!canDiscover}
           onClick={onDiscover}
         >
-          <RefreshCcw size={15} />{" "}
+          <RefreshCcw size="md" />{" "}
           {discovering ? copy.discovering : copy.discoverModels}
         </Button>
       </Stack>

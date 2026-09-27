@@ -24,7 +24,7 @@ Design-system blocks and Butler product containers can use Slider through `@/but
 - Do not use sliders for unbounded or categorical choices.
 
 ## Wrong use cases
-- Do not use it for tags or token lists; use `TokenInputControl`.
+- Do not use it for a token budget or a percentage setting; use `TokenInputControl` or `PercentInputControl`.
 - Do not use it for model or permission choices; use `Select` or `FilteredSelectPopover`.
 
 ## Tags

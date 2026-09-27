@@ -1,32 +1,9 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { ActivityReadModel } from "@/app/conversation-progress";
-import { Stack, Typo } from "@/butler-ds";
+import { Box, Stack, Typo } from "@/butler-ds";
 
 type DecisionReadModel = Extract<ActivityReadModel, { type: "decision" }>;
-
-const rowStyle = {
-  boxSizing: "border-box",
-  maxWidth: "100%",
-  minWidth: 0,
-  padding: "0 0 0 var(--space-6)",
-} as const;
-
-const summaryStyle = {
-  minWidth: 0,
-  margin: 0,
-  overflowWrap: "anywhere",
-  color: "var(--text-primary)",
-  fontWeight: "var(--font-weight-medium)",
-} as const;
-
-const detailStyle = {
-  minWidth: 0,
-  margin: 0,
-  overflowWrap: "anywhere",
-  color: "var(--text-secondary)",
-  fontWeight: "var(--font-weight-regular)",
-} as const;
 
 export function TurnDecisionRow({ decision }: { decision: DecisionReadModel }) {
   useAppLocale();
@@ -35,16 +12,18 @@ export function TurnDecisionRow({ decision }: { decision: DecisionReadModel }) {
   );
 
   return (
-    <Stack
+    <Box
       as="article"
-      gap="xs"
-      style={rowStyle}
+      paddingStart="2xl"
       data-test-class="turn-decision-row"
       aria-label={appCopy.interfacePanels.assistantDecision}
     >
+      <Stack gap="xs">
       <Typo.Body
         as="p"
-        style={summaryStyle}
+        tone="primary"
+        weight="medium"
+        wrap="anywhere"
         data-test-class="turn-decision-summary"
       >
         {decision.summary}
@@ -52,13 +31,16 @@ export function TurnDecisionRow({ decision }: { decision: DecisionReadModel }) {
       {details.map((line, index) => (
         <Typo.Body
           as="p"
-          style={detailStyle}
+          tone="secondary"
+          weight="regular"
+          wrap="anywhere"
           data-test-class="turn-decision-detail"
           key={`${decision.summary}:detail:${index}`}
         >
           {line}
         </Typo.Body>
       ))}
-    </Stack>
+      </Stack>
+    </Box>
   );
 }

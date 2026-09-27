@@ -1,17 +1,12 @@
-.fixture {
-  min-width: 0;
-}
-
 .content {
-  z-index: 90;
+  z-index: var(--z-popover);
   min-width: 8rem;
   overflow: hidden;
   padding: 6px;
   color: var(--text-primary);
-}
 
-.content[data-state="open"] {
-  animation: context-menu-open 90ms ease-out;
+  --context-menu-enter-x: 0px;
+  --context-menu-enter-y: calc(-1 * var(--motion-distance-xs));
   transform-origin: var(
     --radix-context-menu-content-transform-origin,
     center top
@@ -21,33 +16,75 @@
 .item {
   position: relative;
   display: flex;
-  min-height: 31px;
+  min-height: var(--menu-item-height);
   align-items: center;
-  gap: 8px;
-  padding: 6px 9px;
-  border-radius: 8px;
+  gap: var(--space-sm);
+  padding: 0 9px;
+  padding-block: var(--menu-item-padding-block);
+  line-height: var(--menu-item-line-height);
+  border-radius: var(--radius-control);
   color: var(--text-primary);
   cursor: pointer;
   outline: none;
 }
 
-.item:focus,
-.item:hover {
+.item:not([data-disabled]):focus,
+.item:not([data-disabled]):hover {
   background: var(--selection);
+}
+
+/* Disabled items keep their place but read as unavailable (DS disabled tone). */
+.item[data-disabled] {
+  color: var(--interactive-disabled-fg);
+  cursor: var(--interactive-disabled-cursor);
 }
 
 .item[data-variant="destructive"] {
   color: var(--danger);
 }
 
-@keyframes context-menu-open {
+.content[data-side="bottom"] {
+  --context-menu-enter-y: calc(-1 * var(--motion-distance-xs));
+}
+
+.content[data-side="top"] {
+  --context-menu-enter-y: var(--motion-distance-xs);
+}
+
+.content[data-side="left"] {
+  --context-menu-enter-x: var(--motion-distance-xs);
+  --context-menu-enter-y: 0px;
+}
+
+.content[data-side="right"] {
+  --context-menu-enter-x: calc(-1 * var(--motion-distance-xs));
+  --context-menu-enter-y: 0px;
+}
+
+.content[data-state="open"] {
+  animation: context-menu-enter var(--motion-enter-menu)
+    var(--motion-ease-enter);
+}
+
+.content[data-state="closed"] {
+  animation: context-menu-exit var(--motion-exit-menu)
+    var(--motion-ease-accelerate) forwards;
+}
+
+@keyframes context-menu-enter {
   from {
     opacity: 0;
-    transform: translateY(-2px) scale(0.985);
+    transform: translate(
+        var(--context-menu-enter-x),
+        var(--context-menu-enter-y)
+      )
+      scale(var(--motion-scale-menu));
   }
+}
 
+@keyframes context-menu-exit {
   to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
+    opacity: 0;
+    transform: scale(var(--motion-scale-menu));
   }
 }

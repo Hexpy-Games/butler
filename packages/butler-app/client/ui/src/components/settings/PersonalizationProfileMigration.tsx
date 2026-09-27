@@ -7,14 +7,7 @@ import {
 } from "@/app/profileMigrationFeedback.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
-import {
-  Button,
-  Field,
-  FieldLabel,
-  SettingsField,
-  Stack,
-  Textarea,
-} from "@/butler-ds";
+import { Button, SettingsField, Stack, Textarea } from "@/butler-ds";
 import { useProfileMigrationPrompt } from "./useProfileMigrationPrompt";
 
 export function PersonalizationProfileMigration() {
@@ -75,6 +68,7 @@ export function PersonalizationProfileMigration() {
     <>
       <SettingsField
         id="profile-migration-import"
+        settingId="profile-migration"
         data-test-class="settings-field"
         label={settingsFields.profileMigrationImport}
         description={settingsDescriptions.profileMigration}
@@ -109,22 +103,28 @@ export function PersonalizationProfileMigration() {
       />
       {migrationExpanded ? (
         <Stack id="profile-migration-fields" gap="xl">
-          <Field data-test-class="settings-field">
-            <FieldLabel htmlFor="profile-migration-prompt">{settingsFields.profileMigrationPrompt}</FieldLabel>
+          <SettingsField
+            id="profile-migration-prompt"
+            settingId="profile-migration-prompt"
+            data-test-class="settings-field"
+            label={settingsFields.profileMigrationPrompt}
+            controlWidth="full"
+            control={<>
             <Textarea id="profile-migration-prompt" value={migrationPrompt} rows={8} readOnly />
             <Stack align="row" justify="end">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={copyMigrationPrompt}
-                disabled={!migrationPrompt}
-              >
+              <Button type="button" variant="outline" onClick={copyMigrationPrompt} disabled={!migrationPrompt}>
                 {settingsCopy.actions.copyMigrationPrompt}
               </Button>
             </Stack>
-          </Field>
-          <Field data-test-class="settings-field">
-            <FieldLabel htmlFor="profile-migration-dump">{settingsFields.profileMigrationDump}</FieldLabel>
+            </>}
+          />
+          <SettingsField
+            id="profile-migration-dump"
+            settingId="profile-migration-dump"
+            data-test-class="settings-field"
+            label={settingsFields.profileMigrationDump}
+            controlWidth="full"
+            control={<>
             <Textarea
               id="profile-migration-dump"
               value={migrationDump}
@@ -140,19 +140,15 @@ export function PersonalizationProfileMigration() {
               <Button
                 type="button"
                 onClick={submitProfileMigration}
-                disabled={
-                  saving ||
-                  migrationSubmitting ||
-                  !personalization ||
-                  !migrationDump.trim()
-                }
+                disabled={saving || migrationSubmitting || !personalization || !migrationDump.trim()}
               >
                 {migrationSubmitting
                   ? settingsCopy.actions.importProfileMigrationRunning
                   : settingsCopy.actions.importProfileMigration}
               </Button>
             </Stack>
-          </Field>
+            </>}
+          />
         </Stack>
       ) : null}
     </>

@@ -40,6 +40,9 @@ Search inputs should expose a clear button when populated, and filter chips
 should have enough breathing room to read as a separate control row.
 The result region should keep a stable fixed height around 200px and scroll
 internally, including when search has no matches.
+When the popover opens, the selected row is scrolled into view inside the
+results region. The selected row shows a trailing check mark and exposes
+`aria-current="true"`.
 
 ## Wrong Use Cases
 

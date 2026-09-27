@@ -1,15 +1,16 @@
+import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import type { ReactNode } from "react";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
 import styles from "./SettingsHeader.module.css";
+import { dsClass } from "../../lib/internal";
 
-export interface SettingsHeaderProps {
+export interface SettingsHeaderProps extends DsPrivateStyleProps {
   title: ReactNode;
   description?: ReactNode;
   secondary?: ReactNode;
   action?: ReactNode;
-  className?: string;
 }
 
 export function SettingsHeader({
@@ -21,10 +22,10 @@ export function SettingsHeader({
 }: SettingsHeaderProps) {
   return (
     <header className={cn(styles.header, className)}>
-      <Stack gap="xs" className={styles.copy}>
-        <Typo.PanelTitle className={styles.title}>{title}</Typo.PanelTitle>
+      <Stack gap="xs" className={dsClass(styles.copy)}>
+        <Typo.H2 as="h2" className={dsClass(styles.title)}>{title}</Typo.H2>
         {description ? (
-          <Typo.Body className={styles.description}>{description}</Typo.Body>
+          <Typo.Body className={dsClass(styles.description)}>{description}</Typo.Body>
         ) : null}
         {secondary ? (
           <div className={cn(styles.secondary, "no-drag")}>{secondary}</div>

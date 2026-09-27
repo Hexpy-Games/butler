@@ -241,3 +241,15 @@ test("DS owns keyboard sensor and reduced-motion behavior", () => {
   expect(itemSource).toContain("Separator");
   expect(styles).toContain("prefers-reduced-motion: reduce");
 });
+
+test("the drag overlay lifts (scale, shadow, spring) and neighbors slide with DS motion tokens", () => {
+  const css = require("node:fs").readFileSync(new URL("./SortableCardList.module.css", import.meta.url), "utf8").replace(/\s+/gu, " ");
+  const item = require("node:fs").readFileSync(new URL("./SortableCardItem.tsx", import.meta.url), "utf8");
+  expect(css).toMatch(/\.overlay \{[^}]*animation: [^;]*var\(--motion-ease-spring\)/u);
+  const lift = /@keyframes lift \{[^@]*/u.exec(css)?.[0] ?? "";
+  expect(lift).toContain("scale: var(--motion-scale-lift)");
+  expect(lift).toContain("box-shadow: var(--shadow-drag-lift)");
+  expect(css).not.toContain("var(--shadow-lg)");
+  expect(item).toContain('motionDuration("base")');
+  expect(item).toContain("var(--motion-ease-standard)");
+});

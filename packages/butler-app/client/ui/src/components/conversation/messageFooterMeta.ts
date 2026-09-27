@@ -1,3 +1,5 @@
+import { getAppCopy, getAppLocale, type AppLocale } from "@/app/copy.ts";
+import { formatClock } from "@/app/formatClock";
 import type { MessageRecord } from "@/app/types.ts";
 
 export interface AssistantFooterMeta {
@@ -8,6 +10,7 @@ export interface AssistantFooterMeta {
 
 export function buildAssistantFooterMetaById(
   messages: MessageRecord[],
+  locale: AppLocale = getAppLocale(),
 ): Map<string, AssistantFooterMeta> {
   const metaById = new Map<string, AssistantFooterMeta>();
   for (let index = 0; index < messages.length; index += 1) {
@@ -15,7 +18,7 @@ export function buildAssistantFooterMetaById(
     if (!message || message.role !== "assistant") continue;
     metaById.set(
       message.id,
-      assistantFooterMeta(message, findTurnUserMessage(messages, index, message.turn_id)),
+      assistantFooterMeta(message, findTurnUserMessage(messages, index, message.turn_id), locale),
     );
   }
   return metaById;
@@ -24,15 +27,16 @@ export function buildAssistantFooterMetaById(
 function assistantFooterMeta(
   message: MessageRecord,
   userMessage: MessageRecord | undefined,
+  locale: AppLocale,
 ): AssistantFooterMeta {
   const completedAt = parseMessageDate(message.updated_at ?? message.created_at);
   const startedAt = parseMessageDate(userMessage?.created_at ?? message.created_at);
   return {
     durationLabel:
       completedAt && startedAt
-        ? formatWorkedDuration(completedAt.getTime() - startedAt.getTime())
+        ? formatWorkedDuration(completedAt.getTime() - startedAt.getTime(), locale)
         : null,
-    timeLabel: completedAt ? formatMessageClock(completedAt) : null,
+    timeLabel: completedAt ? formatClock(completedAt, locale) : null,
     completedAtIso: completedAt?.toISOString() ?? null,
   };
 }
@@ -56,16 +60,7 @@ function parseMessageDate(value?: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function formatWorkedDuration(milliseconds: number): string {
+function formatWorkedDuration(milliseconds: number, locale: AppLocale): string {
   const totalSeconds = Math.max(0, Math.round(milliseconds / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes.toString().padStart(2, "0")}m ${seconds.toString().padStart(2, "0")}s`;
-}
-
-function formatMessageClock(date: Date): string {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+  return getAppCopy(locale).interfaceTemplates.workedDuration(totalSeconds);
 }

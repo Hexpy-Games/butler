@@ -1,3 +1,4 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 
@@ -10,11 +11,15 @@ import styles from "../../components/Breadcrumb/Breadcrumb.module.css";
 
 function Breadcrumb({
   className,
+  label,
   ...props
-}: React.ComponentPropsWithoutRef<"nav">) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"nav">> & {
+  /** Localized accessible name of the trail (app copy `common.breadcrumb`). */
+  label: string;
+}) {
   return (
     <nav
-      aria-label="breadcrumb"
+      aria-label={label}
       data-slot="breadcrumb"
       className={cn(className)}
       {...props}
@@ -25,7 +30,7 @@ function Breadcrumb({
 function BreadcrumbList({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<"ol">) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"ol">>) {
   return (
     <ol
       data-slot="breadcrumb-list"
@@ -38,7 +43,7 @@ function BreadcrumbList({
 function BreadcrumbItem({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<"li">) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"li">>) {
   return (
     <li
       data-slot="breadcrumb-item"
@@ -52,7 +57,7 @@ function BreadcrumbLink({
   asChild,
   className,
   ...props
-}: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
+}: DsBaseProps<React.AnchorHTMLAttributes<HTMLAnchorElement>> & {
   asChild?: boolean;
 }) {
   const Comp = asChild ? Slot : "a";
@@ -66,10 +71,26 @@ function BreadcrumbLink({
   );
 }
 
+/** A breadcrumb step that navigates in-app (no URL): a real button styled as a link. */
+function BreadcrumbButton({
+  className,
+  type = "button",
+  ...props
+}: DsBaseProps<React.ButtonHTMLAttributes<HTMLButtonElement>>) {
+  return (
+    <button
+      data-slot="breadcrumb-link"
+      type={type}
+      className={cn(styles.link, className)}
+      {...props}
+    />
+  );
+}
+
 function BreadcrumbPage({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<"span">) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"span">>) {
   return (
     <span
       data-slot="breadcrumb-page"
@@ -86,7 +107,7 @@ function BreadcrumbSeparator({
   children,
   className,
   ...props
-}: React.ComponentPropsWithoutRef<"li">) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"li">>) {
   return (
     <li
       data-slot="breadcrumb-separator"
@@ -102,8 +123,12 @@ function BreadcrumbSeparator({
 
 function BreadcrumbEllipsis({
   className,
+  label,
   ...props
-}: React.ComponentPropsWithoutRef<"span">) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"span">> & {
+  /** Localized name of the collapsed steps (app copy `common.more`). */
+  label: string;
+}) {
   return (
     <span
       data-slot="breadcrumb-ellipsis"
@@ -113,7 +138,7 @@ function BreadcrumbEllipsis({
       {...props}
     >
       <MoreHorizontalIcon />
-      <span className="sr-only">More</span>
+      <span className="sr-only">{label}</span>
     </span>
   );
 }
@@ -123,6 +148,7 @@ export {
   BreadcrumbList,
   BreadcrumbItem,
   BreadcrumbLink,
+  BreadcrumbButton,
   BreadcrumbPage,
   BreadcrumbSeparator,
   BreadcrumbEllipsis,

@@ -19,10 +19,15 @@ Pass an icon, label, optional detail, active state, and click handler.
 Product UI containers and design-system blocks.
 
 ## Best practice
+Pass `tone="danger"` for an error state (for example a model that failed to
+load); pair it with an alert icon and a tooltip that explains the error.
 Keep labels short and move domain formatting into the caller.
 In a narrow composer, `compact="icon"` keeps a square touch target and centers
 the icon on both axes. Hide the whole text slot from layout while retaining its
 accessible label; no empty text gap or icon-plus-text padding should remain.
+On touch widths the pill keeps its visual control height
+(`--control-height-md`); a transparent hit area extends it to
+`--control-hit-target` (44px) so the toolbar does not grow taller.
 
 ## Wrong use cases
 Do not use it for destructive or page-level actions. Use `Button` instead.
