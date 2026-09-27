@@ -1,6 +1,7 @@
 import type { RisoInks } from "../butlerMarkTheme";
 import { GRAIN_TILE, RHO, type SizeClass } from "./constants";
 import { createFrameParams, latticeFor, type FrameParams, type HalftoneLayer } from "./halftone-model";
+import { OUTLINE_RAYS } from "./morph-outline";
 import { createRand } from "./motion";
 import { sizeClass, traceRibbon } from "./ribbon-geometry";
 
@@ -16,6 +17,8 @@ export interface MarkSurface {
   cls: SizeClass;
   layers: HalftoneLayer[];
   params: FrameParams;
+  /** Morphing outline radii per ray, reused every frame. */
+  outline: Float32Array;
   lctx: Ctx;
   rctx: Ctx;
   mctx: Ctx;
@@ -31,7 +34,7 @@ function offscreen(): Ctx {
 
 export function createSurface(ctx: Ctx, ink: string, riso: RisoInks): MarkSurface {
   return {
-    ctx, ink, riso, px: 0, k: 0, cls: 0, layers: latticeFor(0), params: createFrameParams(),
+    ctx, ink, riso, px: 0, k: 0, cls: 0, layers: latticeFor(0), params: createFrameParams(), outline: new Float32Array(OUTLINE_RAYS),
     lctx: offscreen(), rctx: offscreen(), mctx: offscreen(), grain: null, rand: createRand(20260925),
   };
 }
