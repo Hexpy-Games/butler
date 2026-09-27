@@ -102,8 +102,36 @@ jobs:
       - name: Build the agent binary under test
         run: cargo build --locked -p butler-agent --bin butler-agent
 
+      # The local embedding model memory recall needs (MEM-*), pinned to the
+      # revision and SHA-256 values in butler-agent/src/host/embedding/worker/assets.rs.
+      - name: Restore embedding model cache
+        id: embedding-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/e2e-models/bge-m3
+          key: bge-m3-4de13258303883538bd53b696b452bf8099f0858
+
+      - name: Fetch embedding model
+        if: steps.embedding-cache.outputs.cache-hit != 'true'
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          base=https://huggingface.co/Xenova/bge-m3/resolve/4de13258303883538bd53b696b452bf8099f0858
+          dir=e2e-models/bge-m3
+          mkdir -p "$dir/onnx"
+          while read -r sha file; do
+            curl -fsSL --retry 3 -o "$dir/$file" "$base/$file"
+            echo "$sha  $dir/$file" | shasum -a 256 -c -
+          done <<'LIST'
+          6710678b12670bc442b99edc952c4d996ae309a7020c1fa0096dd245c2faf790 tokenizer.json
+          7e4c1cc848840aeccdd763458c18dd525eb0f795c992e00ebe9c28554e7db2d4 tokenizer_config.json
+          734a79bf12d388c1467a4e3ab625f45de7f6906cffcfb93a1eca1787504bed95 config.json
+          0826f8c1ab9edf1801db86c61919d4d108e8bfc0b809ec823ad366882ff0b77d onnx/model_quantized.onnx
+          LIST
+
       - name: Run the stub tier
         env:
+          BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
           BUTLER_E2E_TIER: stub
           BUTLER_E2E_SKIP_BUILD: "1"
           BUTLER_E2E_REPORT: ${{ runner.temp }}/e2e-report.txt

@@ -110,3 +110,40 @@ pub fn legacy_manifest() -> Result<serde_json::Value, HarnessError> {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/F3-legacy/manifest.json"),
     )?)?)
 }
+
+/// Files of the local BGE-M3 embedding model the product loads from
+/// `D/cache/models/Xenova/bge-m3` (and otherwise downloads on first use).
+pub const EMBEDDING_ASSETS: [&str; 4] = [
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "config.json",
+    "onnx/model_quantized.onnx",
+];
+
+/// Installs the embedding model from `BUTLER_E2E_EMBEDDING_ASSETS` (a dir
+/// holding [`EMBEDDING_ASSETS`]) into the data dir, hard-linked when
+/// possible. Returns false when the assets are not available.
+pub fn embedding_assets(data: &Path) -> Result<bool, HarnessError> {
+    let Some(source) =
+        super::config::nonempty("BUTLER_E2E_EMBEDDING_ASSETS").map(std::path::PathBuf::from)
+    else {
+        return Ok(false);
+    };
+    if !EMBEDDING_ASSETS
+        .iter()
+        .all(|asset| source.join(asset).is_file())
+    {
+        return Ok(false);
+    }
+    let target = data.join("cache/models/Xenova/bge-m3");
+    for asset in EMBEDDING_ASSETS {
+        let to = target.join(asset);
+        if let Some(parent) = to.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        if fs::hard_link(source.join(asset), &to).is_err() {
+            fs::copy(source.join(asset), &to)?;
+        }
+    }
+    Ok(true)
+}
