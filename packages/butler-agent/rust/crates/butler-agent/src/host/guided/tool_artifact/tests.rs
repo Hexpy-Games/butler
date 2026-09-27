@@ -5,16 +5,13 @@ use serde_json::json;
 use super::ToolArtifactReader;
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
-use butler_models::models::ModelCatalog;
-use butler_models::models::ModelConfiguration;
-use butler_models::models::ModelConfigurationClock;
-use butler_models::models::ModelConfigurationEnvironment;
-use butler_runtime::context::BudgetToolOutputInput;
-use butler_runtime::context::ContextBudgetEnvironment;
-use butler_runtime::context::ContextBudgetOwner;
-use butler_runtime::context::OutputModeInput;
-use butler_runtime::context::ShellCommandResult;
-use butler_runtime::context::ToolOutputIdentity;
+use butler_models::models::{
+    ModelCatalog, ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
+};
+use butler_runtime::context::{
+    BudgetToolOutputInput, ContextBudgetEnvironment, ContextBudgetOwner, OutputModeInput,
+    ShellCommandResult, ToolOutputIdentity,
+};
 
 struct Clock;
 impl ModelConfigurationClock for Clock {

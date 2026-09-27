@@ -1,9 +1,9 @@
 use butler_gateway::gateway::GatewayApplicationError;
 use butler_models::mcp_client::McpClient;
-use butler_models::models::ModelConfiguration;
-use butler_models::models::ModelProviderMetadata;
-use butler_models::models::ProviderVisualCapabilityFuture;
-use butler_models::models::ProviderVisualCapabilityPort;
+use butler_models::models::{
+    ModelConfiguration, ModelProviderMetadata, ProviderVisualCapabilityFuture,
+    ProviderVisualCapabilityPort,
+};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 

@@ -5,11 +5,10 @@ use std::sync::{Arc, LazyLock};
 
 use regex::Regex;
 
-use butler_gateway::gateway::AppBoundWorkStatusFact;
-use butler_gateway::gateway::AppWorkOperationalNoticeFact;
-use butler_gateway::gateway::GatewayApplicationError;
-use butler_turn::btcc::SessionWorkRepository;
-use butler_turn::btcc::WorkStatusObservation;
+use butler_gateway::gateway::{
+    AppBoundWorkStatusFact, AppWorkOperationalNoticeFact, GatewayApplicationError,
+};
+use butler_turn::btcc::{SessionWorkRepository, WorkStatusObservation};
 
 pub(super) async fn read(
     session_work: Arc<SessionWorkRepository>,

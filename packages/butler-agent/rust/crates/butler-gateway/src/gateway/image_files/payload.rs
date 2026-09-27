@@ -5,9 +5,7 @@ use serde_json::Value;
 use super::{AppImageFiles, GatewayApplicationError, files};
 use butler_core::public_text::trim_js_whitespace;
 use butler_runtime::context::VisualAttachmentManifest;
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::PortFuture;
-use butler_turn::btcc::VerifiedImagePayloadPort;
+use butler_turn::btcc::{BtccError, PortFuture, VerifiedImagePayloadPort};
 
 impl VerifiedImagePayloadPort for AppImageFiles {
     fn read<'a>(&'a self, reference: &'a Value) -> PortFuture<'a, Vec<u8>> {

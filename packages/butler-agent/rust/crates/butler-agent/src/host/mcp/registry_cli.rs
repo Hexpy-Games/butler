@@ -6,8 +6,7 @@ use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 use butler_core::configuration::ConfigurationWrites;
-use butler_models::mcp_client::McpClient;
-use butler_models::mcp_client::RegistryPathGuard;
+use butler_models::mcp_client::{McpClient, RegistryPathGuard};
 
 use super::super::ResolvedInstallation;
 

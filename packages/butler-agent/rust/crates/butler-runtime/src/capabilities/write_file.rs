@@ -5,10 +5,7 @@ pub(super) use definition::definition;
 use serde_json::{Value, json};
 
 use super::{CapabilityError, CapabilityInvocation, arguments, mutation_evidence};
-use butler_turn::workspace::MutationCommand;
-use butler_turn::workspace::MutationOutcome;
-use butler_turn::workspace::WorkspaceMutations;
-use butler_turn::workspace::WriteMutation;
+use butler_turn::workspace::{MutationCommand, MutationOutcome, WorkspaceMutations, WriteMutation};
 
 pub(super) async fn execute(
     owner: &WorkspaceMutations,

@@ -20,21 +20,15 @@ use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
 use super::{Clock, CognitionRegistrationService, closed};
-use crate::cognition::CognitionCode;
-use crate::cognition::CognitionError;
-use crate::cognition::CognitionPathEnvironment;
-use crate::cognition::CognitionResult;
-use crate::cognition::GraphProgress;
-use crate::cognition::MemoryGenerationHandle;
-use crate::cognition::MemoryGenerationTarget;
-use crate::cognition::assert_mutation_authority;
-use crate::cognition::resolve_generation;
+use crate::cognition::{
+    CognitionCode, CognitionError, CognitionPathEnvironment, CognitionResult, GraphProgress,
+    MemoryGenerationHandle, MemoryGenerationTarget, assert_mutation_authority, resolve_generation,
+};
 use crate::cognition::{extraction::CognitionVectorSearch, graph::GraphRepository};
-use crate::coordination::CognitionCoordinationHost;
-use crate::coordination::CognitionWaitClass;
-use crate::coordination::CognitionWriteAcquire;
-use crate::coordination::CognitionWriteCoordinator;
-use crate::coordination::CognitionWriteLease;
+use crate::coordination::{
+    CognitionCoordinationHost, CognitionWaitClass, CognitionWriteAcquire,
+    CognitionWriteCoordinator, CognitionWriteLease,
+};
 use butler_models::models::ProviderPromptPort;
 use butler_turn::conversation::ConversationSourceReader;
 

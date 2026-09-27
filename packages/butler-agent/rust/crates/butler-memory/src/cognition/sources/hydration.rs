@@ -3,11 +3,10 @@ use std::borrow::Cow;
 use sha2::{Digest, Sha256};
 
 use butler_core::segmentation::grapheme_segments;
-use butler_turn::conversation::ConversationMessageWithParts;
-use butler_turn::conversation::ConversationOriginKind;
-use butler_turn::conversation::ConversationRole;
-use butler_turn::conversation::ConversationStatus;
-use butler_turn::conversation::scalar_for_part;
+use butler_turn::conversation::{
+    ConversationMessageWithParts, ConversationOriginKind, ConversationRole, ConversationStatus,
+    scalar_for_part,
+};
 
 use super::types::{CognitionSourceError, CognitionSourceRow, HydratedConversationSource};
 use crate::cognition::CognitionCode;

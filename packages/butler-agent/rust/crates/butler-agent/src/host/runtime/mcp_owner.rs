@@ -1,8 +1,7 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use butler_core::configuration::ConfigurationWrites;
-use butler_models::mcp_client::McpClient;
-use butler_models::mcp_client::RegistryPathGuard;
+use butler_models::mcp_client::{McpClient, RegistryPathGuard};
 
 pub(super) fn for_runtime(
     paths: &super::RuntimePaths,

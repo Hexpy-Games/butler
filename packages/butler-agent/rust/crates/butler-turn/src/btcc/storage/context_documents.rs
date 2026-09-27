@@ -4,9 +4,8 @@ use crate::btcc::BtccError;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{BtccRepositories, StorageError, StorageResult};
-use crate::btcc::PortFuture;
-use crate::btcc::StorageCode;
 use crate::btcc::identity::digest;
+use crate::btcc::{PortFuture, StorageCode};
 
 #[derive(Clone, Debug)]
 pub struct ContextDocumentInput {

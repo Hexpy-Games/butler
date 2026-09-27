@@ -10,9 +10,7 @@ mod work;
 use butler_core::json::JsonDocument;
 use butler_core::json::visit_raw_object;
 use butler_core::tool_protocol::ToolName;
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::OperationResultMessageReferences;
-use butler_turn::btcc::ToolResult;
+use butler_turn::btcc::{BtccError, OperationResultMessageReferences, ToolResult};
 
 const MAX_BYTES: usize = 50 * 1024;
 

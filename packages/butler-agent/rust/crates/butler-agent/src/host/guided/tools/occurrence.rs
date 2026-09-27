@@ -1,8 +1,7 @@
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use butler_core::json::CanonicalKeyOrder;
-use butler_core::json::canonical_json;
+use butler_core::json::{CanonicalKeyOrder, canonical_json};
 use butler_core::public_text::trim_js_whitespace;
 use butler_turn::btcc::ModelRoundToolCall;
 

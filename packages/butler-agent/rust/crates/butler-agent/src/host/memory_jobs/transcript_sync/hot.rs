@@ -15,15 +15,13 @@ use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
 use butler_core::public_text::trim_js_whitespace;
-use butler_memory::cognition::CognitionPathEnvironment;
-use butler_memory::cognition::ensure_data_authority;
-use butler_memory::coordination::CognitionWaitClass;
-use butler_memory::coordination::CognitionWriteAcquire;
-use butler_memory::coordination::CognitionWriteCoordinator;
-use butler_models::models::ModelProvider;
-use butler_models::models::ProviderPromptLifecycle;
-use butler_models::models::ProviderPromptPort;
-use butler_models::models::ProviderPromptRequest;
+use butler_memory::cognition::{CognitionPathEnvironment, ensure_data_authority};
+use butler_memory::coordination::{
+    CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator,
+};
+use butler_models::models::{
+    ModelProvider, ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest,
+};
 
 pub(super) struct LegacyHot {
     data_root: PathBuf,

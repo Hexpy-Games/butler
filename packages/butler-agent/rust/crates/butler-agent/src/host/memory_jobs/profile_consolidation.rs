@@ -5,11 +5,8 @@ use std::sync::Arc;
 use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
 
-use butler_memory::cognition::FeedbackBufferService;
-use butler_memory::cognition::PhaseError;
-use butler_memory::profile::ProfileModelTranscriptCaptureOptions;
-use butler_memory::profile::ProfileService;
-use butler_memory::profile::ProfilingMode;
+use butler_memory::cognition::{FeedbackBufferService, PhaseError};
+use butler_memory::profile::{ProfileModelTranscriptCaptureOptions, ProfileService, ProfilingMode};
 
 pub(in crate::host) struct ProfileConsolidation {
     pub(in crate::host) profile: Arc<ProfileService>,

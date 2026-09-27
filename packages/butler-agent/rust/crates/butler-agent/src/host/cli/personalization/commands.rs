@@ -4,15 +4,11 @@ use std::{ffi::OsString, io::Read, path::PathBuf};
 
 use serde_json::{Value, json};
 
-use butler_memory::profile::ClearProfilingResult;
-use butler_memory::profile::PersonalizationProfile;
-use butler_memory::profile::PersonalizationProfileUpdate;
-use butler_memory::profile::ProfileService;
-use butler_memory::profile::ProfileThirdPartyImportOptions;
-use butler_memory::profile::ProfilingConsentSnapshot;
-use butler_memory::profile::ProfilingExtractorModelSnapshot;
-use butler_memory::profile::ProfilingMode;
-use butler_memory::profile::third_party_migration_prompt;
+use butler_memory::profile::{
+    ClearProfilingResult, PersonalizationProfile, PersonalizationProfileUpdate, ProfileService,
+    ProfileThirdPartyImportOptions, ProfilingConsentSnapshot, ProfilingExtractorModelSnapshot,
+    ProfilingMode, third_party_migration_prompt,
+};
 
 use super::{CliError, Options};
 

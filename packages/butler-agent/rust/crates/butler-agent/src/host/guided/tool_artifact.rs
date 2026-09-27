@@ -8,11 +8,9 @@ use std::path::PathBuf;
 use serde_json::Value;
 
 use butler_core::json::JsonDocument;
-use butler_runtime::context::ArtifactStream;
-use butler_runtime::context::ContextResult;
-use butler_runtime::context::ReadToolEvidenceInput;
-use butler_runtime::context::ReadToolOutputInput;
-use butler_runtime::context::ToolOutput;
+use butler_runtime::context::{
+    ArtifactStream, ContextResult, ReadToolEvidenceInput, ReadToolOutputInput, ToolOutput,
+};
 
 #[derive(Clone)]
 pub(crate) struct ToolArtifactReader {

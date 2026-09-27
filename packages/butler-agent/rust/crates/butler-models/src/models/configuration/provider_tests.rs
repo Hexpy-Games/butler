@@ -3,11 +3,9 @@ use std::{fs, path::PathBuf, sync::Arc};
 use serde_json::{Value, json};
 
 use super::*;
-use crate::models::ModelCatalog;
-use crate::models::ProviderAuth;
-use crate::models::ProviderAuthMode;
-use crate::models::ProviderConfigRequest;
-use crate::models::ProviderRequestConfigPort;
+use crate::models::{
+    ModelCatalog, ProviderAuth, ProviderAuthMode, ProviderConfigRequest, ProviderRequestConfigPort,
+};
 use butler_core::locale::LocaleCollation;
 use butler_turn::btcc::ModelRoundError;
 

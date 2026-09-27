@@ -4,9 +4,7 @@ use bytes::Bytes;
 use serde_json::{Value, json};
 
 use super::*;
-use crate::models::ModelCatalogSnapshotInput;
-use crate::models::ProviderConfigFuture;
-use crate::models::ProviderConfigRequest;
+use crate::models::{ModelCatalogSnapshotInput, ProviderConfigFuture, ProviderConfigRequest};
 use butler_core::locale::LocaleCollation;
 
 struct SnapshotPort(Arc<ModelCatalogSnapshot>);

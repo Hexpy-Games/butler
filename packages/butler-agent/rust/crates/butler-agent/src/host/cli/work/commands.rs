@@ -3,8 +3,7 @@ use std::path::Path;
 use serde_json::{Value, json};
 
 use butler_core::locale::LocaleCollation;
-use butler_memory::work_records::WorkRecordReadError;
-use butler_memory::work_records::WorkRecordReader;
+use butler_memory::work_records::{WorkRecordReadError, WorkRecordReader};
 
 use super::{options::Options, output};
 

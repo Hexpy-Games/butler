@@ -2,8 +2,7 @@ use std::collections::HashSet;
 
 use serde_json::{Map, Value};
 
-use crate::btcc::BtccCode;
-use crate::btcc::BtccError;
+use crate::btcc::{BtccCode, BtccError};
 use butler_core::public_text::trim_js_whitespace;
 
 const MUTATION_EFFECTS: &[&str] = &[

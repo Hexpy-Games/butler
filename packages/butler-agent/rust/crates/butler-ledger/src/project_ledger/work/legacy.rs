@@ -3,16 +3,11 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::LegacyImport;
-use butler_turn::btcc::ProjectWorkLegacyInput;
-use butler_turn::btcc::ProjectWorkLegacyObserveInput;
-use butler_turn::btcc::ProjectWorkLegacySnapshot;
-use butler_turn::btcc::ProjectWorkMaterialInput;
-use butler_turn::btcc::ProjectWorkOperationIdentity;
-use butler_turn::btcc::ProjectWorkOperationKind;
-use butler_turn::btcc::WorkTurnScope;
-use butler_turn::btcc::WorkView;
+use butler_turn::btcc::{
+    BtccError, LegacyImport, ProjectWorkLegacyInput, ProjectWorkLegacyObserveInput,
+    ProjectWorkLegacySnapshot, ProjectWorkMaterialInput, ProjectWorkOperationIdentity,
+    ProjectWorkOperationKind, WorkTurnScope, WorkView,
+};
 
 use super::super::publication::ProjectLedgerRecordKind;
 use super::codec;

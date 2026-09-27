@@ -9,25 +9,16 @@ mod tests;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use butler_memory::cognition::CognitionPathEnvironment;
-use butler_memory::cognition::CompletionPublisher;
-use butler_memory::cognition::ExactMemoryQuery;
-use butler_memory::cognition::MemoryRecall;
+use butler_memory::cognition::{
+    CognitionPathEnvironment, CompletionPublisher, ExactMemoryQuery, MemoryRecall,
+};
 use butler_runtime::capabilities::Capabilities;
-use butler_runtime::context::ContextPortAdapter;
-use butler_runtime::context::ConversationSessionReference;
-use butler_turn::btcc::AgentLoopProgress;
-use butler_turn::btcc::BoundGuidedTurn;
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::BtccRepositories;
-use butler_turn::btcc::ContextCompactionRepository;
-use butler_turn::btcc::EffectJournal;
-use butler_turn::btcc::GuidedPolicyDependencies;
-use butler_turn::btcc::GuidedTurnFactory;
-use butler_turn::btcc::GuidedTurnInputs;
-use butler_turn::btcc::GuidedTurnStart;
-use butler_turn::btcc::ModelRoundPort;
-use butler_turn::btcc::PortFuture;
+use butler_runtime::context::{ContextPortAdapter, ConversationSessionReference};
+use butler_turn::btcc::{
+    AgentLoopProgress, BoundGuidedTurn, BtccError, BtccRepositories, ContextCompactionRepository,
+    EffectJournal, GuidedPolicyDependencies, GuidedTurnFactory, GuidedTurnInputs, GuidedTurnStart,
+    ModelRoundPort, PortFuture,
+};
 use butler_turn::conversation::CanonicalMemoryReadBinding;
 
 use crate::host::{

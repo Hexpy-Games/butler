@@ -5,9 +5,7 @@ use std::sync::Arc;
 
 use tokio_util::sync::CancellationToken;
 
-use butler_turn::workspace::CommandStep;
-use butler_turn::workspace::Commands;
-use butler_turn::workspace::StructuredCommandInput;
+use butler_turn::workspace::{CommandStep, Commands, StructuredCommandInput};
 
 pub(in crate::host::guided::command) type GitSnapshot = IndexMap<String, String>;
 

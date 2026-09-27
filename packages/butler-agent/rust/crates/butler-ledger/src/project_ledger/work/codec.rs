@@ -4,10 +4,9 @@ use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
-use butler_turn::btcc::ProjectWorkOperationIdentity;
-use butler_turn::btcc::ProjectWorkOperationKind;
-use butler_turn::btcc::ResolvedProjectWorkScope;
-use butler_turn::btcc::WorkView;
+use butler_turn::btcc::{
+    ProjectWorkOperationIdentity, ProjectWorkOperationKind, ResolvedProjectWorkScope, WorkView,
+};
 
 use super::super::publication::{
     ProjectLedgerRecordKind, ProjectLedgerRecordOperation, ProjectLedgerRecordUpdate,

@@ -2,9 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use serde_json::Value;
 
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::ProjectWorkMaterialSnapshot;
-use butler_turn::btcc::WorkView;
+use butler_turn::btcc::{BtccError, ProjectWorkMaterialSnapshot, WorkView};
 
 use super::super::{codec, invalid};
 

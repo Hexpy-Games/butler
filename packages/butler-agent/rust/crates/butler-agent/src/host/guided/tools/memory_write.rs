@@ -4,17 +4,14 @@ use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
 use butler_core::json::JsonDocument;
-use butler_memory::cognition::ExplicitMemoryUpdateInput;
-use butler_memory::cognition::TaskMemoryIngestionResult;
-use butler_memory::cognition::ingest_task_outcome_memory;
-use butler_memory::cognition::update_explicit_memory;
-use butler_turn::btcc::AccessMode;
-use butler_turn::btcc::GuidedInvocation;
-use butler_turn::btcc::ModelRoundToolCall;
-use butler_turn::btcc::ToolExecutionError;
-use butler_turn::conversation::CanonicalMemoryReadBinding;
-use butler_turn::conversation::PublicMemorySnapshot;
-use butler_turn::conversation::conversation_store_path;
+use butler_memory::cognition::{
+    ExplicitMemoryUpdateInput, TaskMemoryIngestionResult, ingest_task_outcome_memory,
+    update_explicit_memory,
+};
+use butler_turn::btcc::{AccessMode, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
+use butler_turn::conversation::{
+    CanonicalMemoryReadBinding, PublicMemorySnapshot, conversation_store_path,
+};
 
 use super::GuidedTools;
 

@@ -9,24 +9,14 @@ use tokio_util::sync::CancellationToken;
 use crate::host::{EmbeddingOwner, ProcessEnvironment, ProcessModels, SystemIdentity};
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
-use butler_memory::cognition::CognitionError;
-use butler_memory::cognition::CognitionPathEnvironment;
-use butler_memory::cognition::CognitionRegistrationService;
-use butler_memory::cognition::CognitionResult;
-use butler_memory::cognition::GenerationVectorAdapter;
-use butler_memory::cognition::MemoryGenerationTarget;
-use butler_memory::cognition::MemorySyncConsumer;
-use butler_memory::cognition::MemorySyncPoll;
-use butler_memory::cognition::RegisterTypedSourceInput;
-use butler_memory::cognition::advance_rebuild_cache;
-use butler_memory::cognition::assert_rebuild_sources_registered;
-use butler_memory::cognition::inspect_memory_rebuild;
-use butler_memory::cognition::read_build_inventory;
-use butler_memory::cognition::rebuild_typed_cursor;
-use butler_memory::cognition::reconcile_rebuild_vector_representatives;
-use butler_memory::cognition::record_rebuild_readiness;
-use butler_memory::cognition::refresh_memory_rebuild_snapshot;
-use butler_memory::cognition::resolve_generation;
+use butler_memory::cognition::{
+    CognitionError, CognitionPathEnvironment, CognitionRegistrationService, CognitionResult,
+    GenerationVectorAdapter, MemoryGenerationTarget, MemorySyncConsumer, MemorySyncPoll,
+    RegisterTypedSourceInput, advance_rebuild_cache, assert_rebuild_sources_registered,
+    inspect_memory_rebuild, read_build_inventory, rebuild_typed_cursor,
+    reconcile_rebuild_vector_representatives, record_rebuild_readiness,
+    refresh_memory_rebuild_snapshot, resolve_generation,
+};
 use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_models::models::ModelConfigurationClock;
 

@@ -5,8 +5,7 @@ use std::process::ExitCode;
 use serde_json::{Value, json};
 
 use super::{Options, ResolvedInstallation, settings_cli};
-use butler_runtime::operations::AgentArchiveUpdateService;
-use butler_runtime::operations::AgentUpdateRequest;
+use butler_runtime::operations::{AgentArchiveUpdateService, AgentUpdateRequest};
 
 pub(super) async fn run(installation: ResolvedInstallation, options: &Options) -> ExitCode {
     if options.check && options.apply {

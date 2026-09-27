@@ -11,10 +11,7 @@ use std::sync::Arc;
 
 use serde_json::{Map, Value, json};
 
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::DurableWorkService;
-use butler_turn::btcc::WorkTurnScope;
-use butler_turn::btcc::WorkView;
+use butler_turn::btcc::{BtccError, DurableWorkService, WorkTurnScope, WorkView};
 
 use decode::Command;
 

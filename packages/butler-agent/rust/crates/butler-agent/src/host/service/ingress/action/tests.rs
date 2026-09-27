@@ -5,13 +5,10 @@ use serde_json::{Value, json};
 use super::*;
 use butler_core::json::JsonDocument;
 use butler_gateway::gateway::InboundQueue;
-use butler_turn::btcc::AlreadyDeliveredOutcome;
-use butler_turn::btcc::ArtifactKind;
-use butler_turn::btcc::DeliveredOutcome;
-use butler_turn::btcc::FinalArtifact;
-use butler_turn::btcc::TurnOutcome;
-use butler_turn::workspace::SessionLifecycleState;
-use butler_turn::workspace::SessionRole;
+use butler_turn::btcc::{
+    AlreadyDeliveredOutcome, ArtifactKind, DeliveredOutcome, FinalArtifact, TurnOutcome,
+};
+use butler_turn::workspace::{SessionLifecycleState, SessionRole};
 
 #[test]
 fn app_final_projects_bounded_rich_result_then_source_ordered_cancellation() {

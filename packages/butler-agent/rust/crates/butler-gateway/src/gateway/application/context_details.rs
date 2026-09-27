@@ -7,8 +7,9 @@ use super::{
     settings,
 };
 use crate::gateway::MessageRole;
-use butler_runtime::context::WORKING_CONTEXT_AUTO_COMPACT_RATIO;
-use butler_runtime::context::WORKING_CONTEXT_HARD_PRESSURE_RATIO;
+use butler_runtime::context::{
+    WORKING_CONTEXT_AUTO_COMPACT_RATIO, WORKING_CONTEXT_HARD_PRESSURE_RATIO,
+};
 
 const MESSAGE_LIMIT: usize = 16;
 const RECENT_CHAR_LIMIT: usize = 32_000;

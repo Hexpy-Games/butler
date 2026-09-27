@@ -5,14 +5,10 @@ use std::{future::Future, pin::Pin, sync::Arc};
 use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
-use butler_memory::cognition::BoxStoreService;
-use butler_memory::cognition::FeedbackBufferService;
-use butler_memory::cognition::KnowHowService;
-use butler_memory::cognition::LegacyMetadataIntegrityService;
-use butler_memory::cognition::MemoryHealthService;
-use butler_memory::cognition::Phase;
-use butler_memory::cognition::PhaseError;
-use butler_memory::cognition::PhaseExecutor;
+use butler_memory::cognition::{
+    BoxStoreService, FeedbackBufferService, KnowHowService, LegacyMetadataIntegrityService,
+    MemoryHealthService, Phase, PhaseError, PhaseExecutor,
+};
 use butler_runtime::operations::CycleMetrics;
 
 use crate::host::memory_jobs::briefing::BriefingGeneration;

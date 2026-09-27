@@ -6,9 +6,9 @@ use std::sync::Arc;
 use serde_json::{Map, Value, json};
 
 use crate::host::ResolvedInstallation;
-use butler_gateway::gateway::AppSettingsMutationPort;
-use butler_gateway::gateway::ApplicationFuture;
-use butler_gateway::gateway::GatewayApplicationError;
+use butler_gateway::gateway::{
+    AppSettingsMutationPort, ApplicationFuture, GatewayApplicationError,
+};
 use butler_memory::profile::ProfileService;
 use butler_models::models::ModelConfiguration;
 

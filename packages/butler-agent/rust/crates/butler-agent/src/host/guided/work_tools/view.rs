@@ -4,11 +4,9 @@ use std::collections::HashMap;
 
 use serde_json::{Value, json};
 
-use butler_turn::btcc::ActionStatus;
-use butler_turn::btcc::ReviewSubject;
-use butler_turn::btcc::WorkStage;
-use butler_turn::btcc::WorkView;
-use butler_turn::btcc::accepted_current_result_review;
+use butler_turn::btcc::{
+    ActionStatus, ReviewSubject, WorkStage, WorkView, accepted_current_result_review,
+};
 
 pub(super) fn success(work: &WorkView) -> Value {
     let unresolved = unresolved(work);

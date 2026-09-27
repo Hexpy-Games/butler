@@ -5,15 +5,11 @@ use std::{sync::Arc, time::Duration};
 use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
 
-use crate::host::ActiveAppEndpoint;
-use crate::host::GuidedTools;
+use crate::host::{ActiveAppEndpoint, GuidedTools};
 use butler_core::json::JsonDocument;
-use butler_turn::btcc::AdapterOutcome;
-use butler_turn::btcc::EffectAdapter;
-use butler_turn::btcc::EffectAdapterError;
-use butler_turn::btcc::EffectFailure;
-use butler_turn::btcc::EffectFuture;
-use butler_turn::btcc::PlanBinding;
+use butler_turn::btcc::{
+    AdapterOutcome, EffectAdapter, EffectAdapterError, EffectFailure, EffectFuture, PlanBinding,
+};
 
 const CAPABILITY: &str = "start_topic_conversation";
 const SOURCE_TARGET: &str = "conversation-branch";

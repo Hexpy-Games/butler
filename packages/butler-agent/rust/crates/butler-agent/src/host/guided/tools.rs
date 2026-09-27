@@ -27,22 +27,14 @@ use std::sync::Arc;
 use serde_json::Value;
 
 use crate::host::{GuidedActivity, GuidedWorkTools};
-use butler_memory::cognition::ExactMemoryQuery;
-use butler_memory::cognition::MemoryRecall;
+use butler_memory::cognition::{ExactMemoryQuery, MemoryRecall};
 use butler_runtime::capabilities::Capabilities;
 use butler_runtime::context::ConversationSessionReference;
-use butler_turn::btcc::AuthorityLoopContinuation;
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::GuidedInvocation;
-use butler_turn::btcc::ModelRoundMessage;
-use butler_turn::btcc::ModelRoundTool;
-use butler_turn::btcc::ModelRoundToolCall;
-use butler_turn::btcc::PortFuture;
-use butler_turn::btcc::ToolExecutionError;
-use butler_turn::btcc::ToolJournalRepository;
-use butler_turn::btcc::ToolPort;
-use butler_turn::btcc::ToolResult;
-use butler_turn::btcc::TurnRecord;
+use butler_turn::btcc::{
+    AuthorityLoopContinuation, BtccError, GuidedInvocation, ModelRoundMessage, ModelRoundTool,
+    ModelRoundToolCall, PortFuture, ToolExecutionError, ToolJournalRepository, ToolPort,
+    ToolResult, TurnRecord,
+};
 use butler_turn::conversation::CanonicalMemoryReadBinding;
 use butler_turn::workspace::WorkspaceReference;
 use resume::ResumePool;

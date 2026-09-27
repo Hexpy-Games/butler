@@ -7,20 +7,14 @@ use super::{
 };
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
-use butler_models::models::ModelCatalog;
-use butler_models::models::ModelConfiguration;
-use butler_models::models::ModelConfigurationClock;
-use butler_models::models::ModelConfigurationEnvironment;
-use butler_turn::conversation::AgentConversationStore;
-use butler_turn::conversation::AppendMessageInput;
-use butler_turn::conversation::BeginTurnInput;
-use butler_turn::conversation::CanonicalMemoryReadBinding;
-use butler_turn::conversation::ConversationIdentityClock;
-use butler_turn::conversation::ConversationLocaleCollation;
-use butler_turn::conversation::ConversationOriginKind;
-use butler_turn::conversation::ConversationRole;
-use butler_turn::conversation::ConversationStoreConfig;
-use butler_turn::conversation::conversation_session_id_for_durable_session;
+use butler_models::models::{
+    ModelCatalog, ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
+};
+use butler_turn::conversation::{
+    AgentConversationStore, AppendMessageInput, BeginTurnInput, CanonicalMemoryReadBinding,
+    ConversationIdentityClock, ConversationLocaleCollation, ConversationOriginKind,
+    ConversationRole, ConversationStoreConfig, conversation_session_id_for_durable_session,
+};
 
 struct Clock;
 impl ConversationIdentityClock for Clock {

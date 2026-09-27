@@ -4,12 +4,10 @@ mod preview;
 pub(in crate::host) use preview::structured_raw;
 
 use butler_core::tool_protocol::ToolName;
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::ModelRoundMessage;
-use butler_turn::btcc::ModelRoundRole;
-use butler_turn::btcc::OperationResultMessageReferences;
-use butler_turn::btcc::ToolResult;
-use butler_turn::btcc::TurnRecord;
+use butler_turn::btcc::{
+    BtccError, ModelRoundMessage, ModelRoundRole, OperationResultMessageReferences, ToolResult,
+    TurnRecord,
+};
 
 use super::GuidedTools;
 

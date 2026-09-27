@@ -4,17 +4,12 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 
-use butler_models::models::HostedApiShape;
-use butler_models::models::ModelProviderMetadata;
-use butler_runtime::context::ImageSanitizerInput;
-use butler_runtime::context::ImageSanitizerLimits;
-use butler_runtime::context::ImageSourceRecord;
-use butler_runtime::context::VisualImageAdmissionResult;
-use butler_runtime::context::admit_visual_image_request;
-use butler_runtime::context::assert_visual_carrier_matches_catalog;
-use butler_runtime::context::image_admission_for_catalog_entry;
-use butler_runtime::context::sanitize_image;
-use butler_runtime::context::verify_visual_manifest_source;
+use butler_models::models::{HostedApiShape, ModelProviderMetadata};
+use butler_runtime::context::{
+    ImageSanitizerInput, ImageSanitizerLimits, ImageSourceRecord, VisualImageAdmissionResult,
+    admit_visual_image_request, assert_visual_carrier_matches_catalog,
+    image_admission_for_catalog_entry, sanitize_image, verify_visual_manifest_source,
+};
 
 use super::files::{self, Stage};
 use super::{AppMessageFileSnapshot, GatewayApplicationError, image_error, public};

@@ -3,9 +3,9 @@
 use std::collections::VecDeque;
 use std::io::{Read, Result as IoResult};
 
-use butler_core::public_text::is_js_whitespace;
-use butler_core::public_text::trim_js_whitespace_end;
-use butler_core::public_text::trim_js_whitespace_start;
+use butler_core::public_text::{
+    is_js_whitespace, trim_js_whitespace_end, trim_js_whitespace_start,
+};
 
 const MARKER: &str = "\n[...attachment content trimmed...]\n";
 

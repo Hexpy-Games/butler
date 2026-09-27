@@ -1,8 +1,7 @@
-use butler_models::models::ProviderPromptFuture;
-use butler_models::models::ProviderPromptLifecycle;
-use butler_models::models::ProviderPromptPort;
-use butler_models::models::ProviderPromptRequest;
-use butler_models::models::ProviderPromptResult;
+use butler_models::models::{
+    ProviderPromptFuture, ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest,
+    ProviderPromptResult,
+};
 
 pub(super) struct Provider;
 

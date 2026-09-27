@@ -3,9 +3,7 @@
 
 use std::cmp::Ordering;
 
-use butler_runtime::context::ContextCode;
-use butler_runtime::context::ContextError;
-use butler_runtime::context::ContextResult;
+use butler_runtime::context::{ContextCode, ContextError, ContextResult};
 
 fn failure(message: impl Into<String>) -> ContextError {
     ContextError::new(ContextCode::PromptTimeFormatError, message)

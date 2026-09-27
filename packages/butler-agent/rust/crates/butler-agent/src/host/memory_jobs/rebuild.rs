@@ -13,22 +13,18 @@ use serde_json::json;
 use tokio_util::sync::CancellationToken;
 
 use butler_core::locale::LocaleCollation;
-use butler_memory::cognition::CognitionError;
-use butler_memory::cognition::CognitionPathEnvironment;
-use butler_memory::cognition::CutoverStamp;
-use butler_memory::cognition::activate_memory_rebuild;
-use butler_memory::cognition::ensure_data_authority;
-use butler_memory::cognition::inspect_memory_rebuild;
-use butler_memory::cognition::prepare_memory_rebuild;
-use butler_memory::cognition::validate_memory_rebuild;
-use butler_memory::coordination::CognitionWaitClass;
-use butler_memory::coordination::CognitionWriteAcquire;
-use butler_memory::coordination::CognitionWriteCoordinator;
+use butler_memory::cognition::{
+    CognitionError, CognitionPathEnvironment, CutoverStamp, activate_memory_rebuild,
+    ensure_data_authority, inspect_memory_rebuild, prepare_memory_rebuild, validate_memory_rebuild,
+};
+use butler_memory::coordination::{
+    CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator,
+};
 use butler_models::models::ModelConfigurationClock;
-use butler_turn::conversation::AgentConversationStore;
-use butler_turn::conversation::ConversationStoreConfig;
-use butler_turn::conversation::classify_historical_origins;
-use butler_turn::conversation::conversation_store_path;
+use butler_turn::conversation::{
+    AgentConversationStore, ConversationStoreConfig, classify_historical_origins,
+    conversation_store_path,
+};
 
 use crate::host::cli::consolidation::ConsolidationCliResult;
 use crate::host::memory_jobs::maintain::signals;

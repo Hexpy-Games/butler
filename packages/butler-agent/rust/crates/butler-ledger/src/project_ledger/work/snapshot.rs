@@ -11,9 +11,7 @@ mod validation;
 pub(in crate::project_ledger) use candidate::validate_publication_candidate;
 
 use butler_core::locale::LocaleCollation;
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::ResolvedProjectWorkScope;
-use butler_turn::btcc::WorkView;
+use butler_turn::btcc::{BtccError, ResolvedProjectWorkScope, WorkView};
 
 use super::super::{ProjectLedgerReadError, committed, dashboard, records};
 use super::codec::{self, Snapshot};

@@ -1,9 +1,7 @@
 //! Native fixed en-US prompt time formatting. The formatter owns immutable
 //! locale data; timezone transitions are borrowed from the compiled database.
 
-use butler_runtime::context::ContextError;
-use butler_runtime::context::ContextResult;
-use butler_runtime::context::PromptClock;
+use butler_runtime::context::{ContextError, ContextResult, PromptClock};
 
 mod timezone_names;
 use crate::host::time::timezone_data::TimeZoneData;

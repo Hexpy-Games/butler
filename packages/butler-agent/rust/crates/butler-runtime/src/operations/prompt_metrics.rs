@@ -7,9 +7,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use butler_models::models::PromptUsageMetricInput;
-use butler_models::models::PromptUsageMetricSink;
-use butler_models::models::ProviderClock;
+use butler_models::models::{PromptUsageMetricInput, PromptUsageMetricSink, ProviderClock};
 use butler_turn::btcc::ModelRoundError;
 
 pub struct PromptUsageMetrics {

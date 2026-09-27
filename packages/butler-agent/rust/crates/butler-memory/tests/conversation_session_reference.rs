@@ -9,18 +9,12 @@ use std::{cmp::Ordering, sync::Arc};
 
 use serde_json::json;
 
-use butler_memory::cognition::CognitionPathEnvironment;
-use butler_memory::cognition::ExactMemoryQuery;
-use butler_memory::cognition::MemorySourceReader;
-use butler_turn::conversation::AgentConversationStore;
-use butler_turn::conversation::AppendMessageInput;
-use butler_turn::conversation::BeginTurnInput;
-use butler_turn::conversation::CanonicalMemoryReadBinding;
-use butler_turn::conversation::ConversationIdentityClock;
-use butler_turn::conversation::ConversationLocaleCollation;
-use butler_turn::conversation::ConversationOriginKind;
-use butler_turn::conversation::ConversationRole;
-use butler_turn::conversation::ConversationStoreConfig;
+use butler_memory::cognition::{CognitionPathEnvironment, ExactMemoryQuery, MemorySourceReader};
+use butler_turn::conversation::{
+    AgentConversationStore, AppendMessageInput, BeginTurnInput, CanonicalMemoryReadBinding,
+    ConversationIdentityClock, ConversationLocaleCollation, ConversationOriginKind,
+    ConversationRole, ConversationStoreConfig,
+};
 
 use butler_runtime::context::ConversationSessionReference;
 

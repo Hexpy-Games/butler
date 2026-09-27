@@ -13,8 +13,7 @@ use crate::btcc::storage::runtime_owner::RuntimeOwner;
 use crate::btcc::storage::{StorageError, StorageResult};
 
 use super::types::{AdmissionClaim, Inbox, kind, object, text, text_object};
-use crate::btcc::BtccCode;
-use crate::btcc::StorageCode;
+use crate::btcc::{BtccCode, StorageCode};
 
 pub(super) fn construct_turn(
     connection: &mut Connection,

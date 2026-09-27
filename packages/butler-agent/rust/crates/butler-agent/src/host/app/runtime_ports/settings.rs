@@ -6,15 +6,14 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use butler_gateway::gateway::AppModelFallbackFacts;
-use butler_gateway::gateway::AppModelMetadata;
-use butler_gateway::gateway::AppSettingsFacts;
-use butler_gateway::gateway::AppSettingsFactsProvider;
-use butler_gateway::gateway::GatewayApplicationError;
+use butler_gateway::gateway::{
+    AppModelFallbackFacts, AppModelMetadata, AppSettingsFacts, AppSettingsFactsProvider,
+    GatewayApplicationError,
+};
 use butler_memory::profile::ProfileService;
-use butler_models::models::ModelConfiguration;
-use butler_models::models::ModelProviderMetadata;
-use butler_models::models::ReasoningEffort as ModelReasoningEffort;
+use butler_models::models::{
+    ModelConfiguration, ModelProviderMetadata, ReasoningEffort as ModelReasoningEffort,
+};
 use butler_turn::btcc::ReasoningEffort as BtccReasoningEffort;
 
 pub(crate) struct AppSettingsFactsAdapter {

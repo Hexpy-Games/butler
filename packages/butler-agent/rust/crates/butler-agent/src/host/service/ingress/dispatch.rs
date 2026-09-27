@@ -13,13 +13,8 @@ use super::{
     bind::{self, Envelope},
 };
 use crate::host::service::restart_handoff::RestartHandoff;
-use butler_gateway::gateway::ClaimedInboundEvent;
-use butler_gateway::gateway::InboundQueue;
-use butler_gateway::gateway::QueuedInboundEvent;
-use butler_turn::btcc::Btcc;
-use butler_turn::btcc::StopRequest;
-use butler_turn::btcc::TurnOutcomeKind;
-use butler_turn::btcc::WorkStatus;
+use butler_gateway::gateway::{ClaimedInboundEvent, InboundQueue, QueuedInboundEvent};
+use butler_turn::btcc::{Btcc, StopRequest, TurnOutcomeKind, WorkStatus};
 use butler_turn::workspace::SessionBindingStore;
 
 struct Executed {

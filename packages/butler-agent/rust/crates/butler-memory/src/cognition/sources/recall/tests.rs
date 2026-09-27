@@ -3,11 +3,10 @@ use crate::cognition::sources::{
     ConversationSourceNotice, PreparedConversationSource, prepare_conversation_source,
     tests::{Fixture, begin, message, part},
 };
-use butler_turn::conversation::ConversationOriginKind;
-use butler_turn::conversation::ConversationPartKind;
-use butler_turn::conversation::ConversationProvenance;
-use butler_turn::conversation::ConversationRole;
-use butler_turn::conversation::ConversationSourceReader;
+use butler_turn::conversation::{
+    ConversationOriginKind, ConversationPartKind, ConversationProvenance, ConversationRole,
+    ConversationSourceReader,
+};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 

@@ -10,11 +10,9 @@ use serde_json::{Map, Value};
 
 use crate::context::ContextCode;
 use crate::context::{ContextError, ContextResult};
-use butler_models::models::ModelCatalog;
-use butler_models::models::ModelCatalogSnapshot;
-use butler_models::models::ModelConfiguration;
-use butler_models::models::TokenEstimate;
-use butler_models::models::TokenEstimateInput;
+use butler_models::models::{
+    ModelCatalog, ModelCatalogSnapshot, ModelConfiguration, TokenEstimate, TokenEstimateInput,
+};
 
 pub const WORKING_CONTEXT_AUTO_COMPACT_RATIO: f64 = 0.94;
 pub const WORKING_CONTEXT_HARD_PRESSURE_RATIO: f64 = 0.985;

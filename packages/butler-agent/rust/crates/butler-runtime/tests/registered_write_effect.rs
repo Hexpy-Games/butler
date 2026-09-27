@@ -13,20 +13,13 @@ use tokio_util::sync::CancellationToken;
 use butler_runtime::capabilities::Capabilities;
 use butler_runtime::capabilities::{RegisteredWrite, RegisteredWriteContext};
 use butler_turn::btcc::effects::EffectService;
-use butler_turn::btcc::effects::contracts::Access;
-use butler_turn::btcc::effects::contracts::EffectAdapter;
-use butler_turn::btcc::effects::contracts::EffectOutcome;
-use butler_turn::btcc::effects::contracts::ExecuteEffect;
-use butler_turn::btcc::effects::testing::clock;
-use butler_turn::btcc::effects::testing::ready;
+use butler_turn::btcc::effects::contracts::{Access, EffectAdapter, EffectOutcome, ExecuteEffect};
+use butler_turn::btcc::effects::testing::{clock, ready};
 use butler_turn::btcc::effects::workspace_file::WorkspaceFileEffectAdapter;
-use butler_turn::btcc::storage::BtccStorage;
-use butler_turn::btcc::storage::StorageEffectJournal;
-use butler_turn::btcc::storage::ToolJournalRepository;
-use butler_turn::btcc::storage::ToolJournalStart;
-use butler_turn::workspace::EffectFileScope;
-use butler_turn::workspace::WorkspaceFiles;
-use butler_turn::workspace::WorkspaceMutations;
+use butler_turn::btcc::storage::{
+    BtccStorage, StorageEffectJournal, ToolJournalRepository, ToolJournalStart,
+};
+use butler_turn::workspace::{EffectFileScope, WorkspaceFiles, WorkspaceMutations};
 
 struct WorkspaceRoot(std::path::PathBuf);
 impl Drop for WorkspaceRoot {

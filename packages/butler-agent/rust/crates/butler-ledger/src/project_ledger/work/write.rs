@@ -1,9 +1,8 @@
 use serde_json::Value;
 
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::ProjectWorkMaterialInput;
-use butler_turn::btcc::ProjectWorkOperationIdentity;
-use butler_turn::btcc::WorkView;
+use butler_turn::btcc::{
+    BtccError, ProjectWorkMaterialInput, ProjectWorkOperationIdentity, WorkView,
+};
 
 use super::super::publication::{
     ProjectLedgerRecordKind, ProjectLedgerRecordOperation, ProjectLedgerRecordUpdate,

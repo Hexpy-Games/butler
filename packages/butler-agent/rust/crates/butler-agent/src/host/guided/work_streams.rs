@@ -12,10 +12,9 @@ use std::{path::PathBuf, sync::Arc, thread::JoinHandle};
 use serde_json::Value;
 use tokio::sync::{Mutex, mpsc, oneshot};
 
-use butler_gateway::gateway::AppWorkStreamQuery;
-use butler_gateway::gateway::AppWorkStreamReader;
-use butler_gateway::gateway::AppWorkStreamTurnOutcome;
-use butler_gateway::gateway::ApplicationFuture;
+use butler_gateway::gateway::{
+    AppWorkStreamQuery, AppWorkStreamReader, AppWorkStreamTurnOutcome, ApplicationFuture,
+};
 use butler_turn::btcc::BtccError;
 
 const CAPACITY: usize = 32;

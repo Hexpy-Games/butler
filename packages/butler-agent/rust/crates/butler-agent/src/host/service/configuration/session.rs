@@ -5,12 +5,10 @@ use serde_json::{Map, Value};
 
 use butler_core::locale::LocaleCollation;
 use butler_turn::btcc::BtccError;
-use butler_turn::workspace::OwnOptional;
-use butler_turn::workspace::SessionBindingStore;
-use butler_turn::workspace::SessionLifecycleState;
-use butler_turn::workspace::SessionRole;
-use butler_turn::workspace::StoredSessionBinding;
-use butler_turn::workspace::UpsertSessionBinding;
+use butler_turn::workspace::{
+    OwnOptional, SessionBindingStore, SessionLifecycleState, SessionRole, StoredSessionBinding,
+    UpsertSessionBinding,
+};
 
 use super::{ServiceBootstrap, ServiceConfiguration};
 

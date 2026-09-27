@@ -1,8 +1,7 @@
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 
-use crate::gateway::application::storage::AppStorageCode;
-use crate::gateway::application::storage::AppStorageError;
+use crate::gateway::application::storage::{AppStorageCode, AppStorageError};
 use butler_core::public_text::trim_js_whitespace;
 
 pub(super) fn revision(db: &Connection, key: &str) -> Result<u64, AppStorageError> {

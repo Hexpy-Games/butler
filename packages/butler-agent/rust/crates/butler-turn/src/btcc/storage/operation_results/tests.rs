@@ -3,12 +3,11 @@ use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
 use super::*;
-use crate::btcc::StorageCode;
-use crate::btcc::TurnStore;
 use crate::btcc::storage::{
     BtccRepositories, StorageError, ToolJournalFinish, ToolJournalFinishStatus,
     ToolJournalRepository, ToolJournalStart, testing::Fixture,
 };
+use crate::btcc::{StorageCode, TurnStore};
 
 fn digest(value: &str) -> String {
     format!("{:x}", Sha256::digest(value.as_bytes()))

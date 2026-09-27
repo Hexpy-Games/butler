@@ -8,8 +8,7 @@ use crate::cognition::{
     CognitionError, CognitionPathEnvironment, CognitionResult,
     generation::physical_hot_cache_entries, graph::GraphRepository, resolve_active_generation,
 };
-use butler_turn::conversation::ConversationSourceReader;
-use butler_turn::conversation::conversation_store_path;
+use butler_turn::conversation::{ConversationSourceReader, conversation_store_path};
 
 use super::CapsulePresence;
 use crate::cognition::CognitionCode;

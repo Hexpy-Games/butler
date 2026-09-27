@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use butler_memory::cognition::CognitionNamespaceMigrationService;
-use butler_memory::cognition::CognitionPathEnvironment;
+use butler_memory::cognition::{CognitionNamespaceMigrationService, CognitionPathEnvironment};
 use butler_memory::coordination::CognitionWriteCoordinator;
 
 use super::CliError;

@@ -4,15 +4,10 @@ use serde_json::json;
 
 use super::collect;
 use butler_core::json::JsonDocument;
-use butler_turn::btcc::BtccRepositories;
-use butler_turn::btcc::BtccStorage;
-use butler_turn::btcc::TestStorageFixture;
-use butler_turn::btcc::ToolJournalFinish;
-use butler_turn::btcc::ToolJournalFinishStatus;
-use butler_turn::btcc::ToolJournalRepository;
-use butler_turn::btcc::ToolJournalStart;
-use butler_turn::btcc::TurnStore;
-use butler_turn::btcc::test_prepared_turn;
+use butler_turn::btcc::{
+    BtccRepositories, BtccStorage, TestStorageFixture, ToolJournalFinish, ToolJournalFinishStatus,
+    ToolJournalRepository, ToolJournalStart, TurnStore, test_prepared_turn,
+};
 
 #[tokio::test]
 async fn completed_command_artifact_projects_from_reopened_real_journal() {

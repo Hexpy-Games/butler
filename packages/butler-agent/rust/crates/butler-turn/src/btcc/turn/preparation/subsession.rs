@@ -1,7 +1,6 @@
 use super::ContextAssembly;
-use crate::btcc::BtccCode;
-use crate::btcc::BtccError;
 use crate::btcc::subsessions::{SubsessionMetadata, read_subsession_metadata};
+use crate::btcc::{BtccCode, BtccError};
 use crate::workspace::StoredSessionBinding;
 use butler_core::public_text::trim_js_whitespace;
 

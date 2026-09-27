@@ -1,7 +1,6 @@
 use std::{future::Future, pin::Pin};
 
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::ModelRoundError;
+use butler_turn::btcc::{BtccError, ModelRoundError};
 
 pub(super) struct SummarySizing<'a> {
     pub max_bytes: f64,

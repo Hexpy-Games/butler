@@ -4,13 +4,10 @@ mod serialize;
 
 use bytes::Bytes;
 
-use crate::models::PromptUsageMetricInput;
-use crate::models::ProviderConfigRequest;
-use crate::models::ProviderPromptFuture;
-use crate::models::ProviderPromptLifecycle;
-use crate::models::ProviderPromptPort;
-use crate::models::ProviderPromptRequest;
-use crate::models::ProviderPromptResult;
+use crate::models::{
+    PromptUsageMetricInput, ProviderConfigRequest, ProviderPromptFuture, ProviderPromptLifecycle,
+    ProviderPromptPort, ProviderPromptRequest, ProviderPromptResult,
+};
 use butler_turn::btcc::ModelRoundError;
 
 use super::{ModelProvider, ProviderObservation, serialize::Carrier};

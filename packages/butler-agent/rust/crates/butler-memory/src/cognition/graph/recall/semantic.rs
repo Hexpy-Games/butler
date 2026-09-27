@@ -9,11 +9,10 @@ mod vectors;
 
 use rusqlite::Connection;
 
-use crate::cognition::CognitionCode;
-use crate::cognition::CognitionResult;
 use crate::cognition::recall::{
     RecallRequest, RecallVectorMatch, SemanticSelection, select_semantic_seeds,
 };
+use crate::cognition::{CognitionCode, CognitionResult};
 
 fn json_error(error: serde_json::Error) -> crate::cognition::CognitionError {
     crate::cognition::CognitionError::new(CognitionCode::MemoryGraphFailed, error.to_string())

@@ -12,15 +12,10 @@ use std::{
 use chrono::{DateTime, Local, Utc};
 use sha2::{Digest, Sha256};
 
-use crate::cognition::CognitionError;
-use crate::cognition::CognitionPathEnvironment;
-use crate::cognition::CognitionResult;
 use crate::cognition::mutable_paths::ensure_data_authority;
-use crate::coordination::CognitionWaitClass;
-use crate::coordination::CognitionWriteAcquire;
-use crate::coordination::CognitionWriteCoordinator;
-use butler_core::public_text::trim_js_whitespace;
-use butler_core::public_text::trim_js_whitespace_end;
+use crate::cognition::{CognitionError, CognitionPathEnvironment, CognitionResult};
+use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator};
+use butler_core::public_text::{trim_js_whitespace, trim_js_whitespace_end};
 
 use super::{LegacyIndexService, legacy_graph};
 

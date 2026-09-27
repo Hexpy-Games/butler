@@ -6,16 +6,13 @@ use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 use crate::host::ResolvedInstallation;
-use butler_gateway::gateway::AppModelCatalogCommand;
-use butler_gateway::gateway::AppModelCatalogPort;
-use butler_gateway::gateway::ApplicationFuture;
-use butler_gateway::gateway::GatewayApplicationError;
-use butler_models::models::HostedModelMutation;
-use butler_models::models::LocalModelMutation;
-use butler_models::models::ModelCatalogError;
-use butler_models::models::ModelConfiguration;
-use butler_models::models::ProviderAuthMethod;
-use butler_models::models::ProviderCredentialMutation;
+use butler_gateway::gateway::{
+    AppModelCatalogCommand, AppModelCatalogPort, ApplicationFuture, GatewayApplicationError,
+};
+use butler_models::models::{
+    HostedModelMutation, LocalModelMutation, ModelCatalogError, ModelConfiguration,
+    ProviderAuthMethod, ProviderCredentialMutation,
+};
 
 use super::AppSettingsFactsAdapter;
 

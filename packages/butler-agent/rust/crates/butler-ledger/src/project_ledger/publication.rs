@@ -12,8 +12,7 @@ use std::sync::Arc;
 
 use tokio::sync::Semaphore;
 
-use butler_turn::btcc::ProjectWorkOperationIdentity;
-use butler_turn::btcc::ResolvedProjectWorkScope;
+use butler_turn::btcc::{ProjectWorkOperationIdentity, ResolvedProjectWorkScope};
 
 pub(crate) use contracts::{ProjectLedgerRecordKind, ProjectLedgerRecordOperation};
 pub use contracts::{

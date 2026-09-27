@@ -5,8 +5,7 @@ mod identity;
 mod io;
 mod settlement;
 
-pub(super) use claim::claim;
-pub(super) use claim::recover_stale;
+pub(super) use claim::{claim, recover_stale};
 pub(super) use identity::{enqueue_idempotent, find_idempotent};
 pub(super) use settlement::{park, recover_runtime_interruptions, settle};
 

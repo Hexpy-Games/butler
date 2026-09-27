@@ -1,7 +1,6 @@
 //! One command-owned serving catchup after a bootstrap rollback.
 
-use butler_memory::cognition::CognitionCode;
-use butler_memory::cognition::CutoverStamp;
+use butler_memory::cognition::{CognitionCode, CutoverStamp};
 use std::{path::Path, sync::Arc};
 
 use serde_json::{Value, json};
@@ -11,14 +10,10 @@ use super::build;
 use crate::host::{EmbeddingOwner, ProcessEnvironment, ProcessModels, SystemIdentity};
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
-use butler_memory::cognition::CognitionError;
-use butler_memory::cognition::CognitionPathEnvironment;
-use butler_memory::cognition::CognitionRegistrationService;
-use butler_memory::cognition::CognitionResult;
-use butler_memory::cognition::GenerationVectorAdapter;
-use butler_memory::cognition::MemorySyncConsumer;
-use butler_memory::cognition::inspect_memory_rebuild;
-use butler_memory::cognition::rollback_memory_rebuild;
+use butler_memory::cognition::{
+    CognitionError, CognitionPathEnvironment, CognitionRegistrationService, CognitionResult,
+    GenerationVectorAdapter, MemorySyncConsumer, inspect_memory_rebuild, rollback_memory_rebuild,
+};
 use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_models::models::ModelConfigurationClock;
 

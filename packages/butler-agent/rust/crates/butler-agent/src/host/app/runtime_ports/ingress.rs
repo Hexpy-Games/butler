@@ -5,13 +5,10 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 
 use butler_core::json::JsonDocument;
-use butler_gateway::gateway::AppCancellation;
-use butler_gateway::gateway::AppNativeIngress;
-use butler_gateway::gateway::AppTurn;
-use butler_gateway::gateway::ApplicationFuture;
-use butler_gateway::gateway::EnqueueReceipt;
-use butler_gateway::gateway::GatewayApplicationError;
-use butler_gateway::gateway::InboundQueue;
+use butler_gateway::gateway::{
+    AppCancellation, AppNativeIngress, AppTurn, ApplicationFuture, EnqueueReceipt,
+    GatewayApplicationError, InboundQueue,
+};
 
 pub(crate) struct AppIngress {
     queue: Arc<InboundQueue>,

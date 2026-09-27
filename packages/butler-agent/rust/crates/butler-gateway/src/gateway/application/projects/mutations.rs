@@ -1,6 +1,5 @@
 use rusqlite::{Connection, params};
-use serde::Deserialize;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::{AppApplication, AppProjectSummary, rows};
 use crate::gateway::GatewayApplicationError;

@@ -3,10 +3,7 @@ use std::sync::Arc;
 use bytes::Bytes;
 use reqwest::{Client, RequestBuilder};
 
-use butler_turn::btcc::ModelRoundError;
-use butler_turn::btcc::ModelRoundPort;
-use butler_turn::btcc::ModelRoundRequest;
-use butler_turn::btcc::ModelRoundResult;
+use butler_turn::btcc::{ModelRoundError, ModelRoundPort, ModelRoundRequest, ModelRoundResult};
 
 use super::super::{
     HostedApiShape, ModelCatalog, TokenEstimateInput, diagnostics, request_admission, transport,

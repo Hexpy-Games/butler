@@ -4,8 +4,7 @@ use serde_json::Value;
 
 use crate::host::GuidedWorkTools;
 use crate::host::guided::tools::GuidedTools;
-use butler_turn::btcc::ModelRoundToolCall;
-use butler_turn::btcc::ToolExecutionError;
+use butler_turn::btcc::{ModelRoundToolCall, ToolExecutionError};
 
 pub(in crate::host::guided::tools) async fn execute_work(
     owner: &GuidedTools,

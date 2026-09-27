@@ -7,18 +7,14 @@ use serde_json::{Value, to_value};
 use tokio_util::sync::CancellationToken;
 
 use super::read;
-use crate::cognition::CognitionError;
-use crate::cognition::CognitionPathEnvironment;
-use crate::cognition::CognitionResult;
-use crate::cognition::MemoryGenerationTarget;
-use crate::cognition::assert_mutation_authority;
-use crate::cognition::ensure_data_authority;
-use crate::cognition::graph::CandidateInputRepairRequest as GraphCandidateInputRepairRequest;
-use crate::cognition::graph::GraphRepository;
-use crate::cognition::resolve_generation;
-use crate::coordination::CognitionWaitClass;
-use crate::coordination::CognitionWriteAcquire;
-use crate::coordination::CognitionWriteCoordinator;
+use crate::cognition::graph::{
+    CandidateInputRepairRequest as GraphCandidateInputRepairRequest, GraphRepository,
+};
+use crate::cognition::{
+    CognitionError, CognitionPathEnvironment, CognitionResult, MemoryGenerationTarget,
+    assert_mutation_authority, ensure_data_authority, resolve_generation,
+};
+use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator};
 use butler_turn::conversation::ConversationSourceReader;
 
 pub struct CandidateInputRepairRequest<'a> {

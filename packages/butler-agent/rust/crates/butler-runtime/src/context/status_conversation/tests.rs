@@ -8,15 +8,11 @@ use std::{
     },
 };
 
-use butler_turn::conversation::AgentConversationStore;
-use butler_turn::conversation::AppendMessageInput;
-use butler_turn::conversation::BeginTurnInput;
-use butler_turn::conversation::ConversationIdentityClock;
-use butler_turn::conversation::ConversationLocaleCollation;
-use butler_turn::conversation::ConversationOriginKind;
-use butler_turn::conversation::ConversationRole;
-use butler_turn::conversation::ConversationStoreConfig;
-use butler_turn::conversation::ConversationSummaryInput;
+use butler_turn::conversation::{
+    AgentConversationStore, AppendMessageInput, BeginTurnInput, ConversationIdentityClock,
+    ConversationLocaleCollation, ConversationOriginKind, ConversationRole, ConversationStoreConfig,
+    ConversationSummaryInput,
+};
 
 use super::{StatusFact, read_status_conversation_facts, read_status_transcript_summary};
 

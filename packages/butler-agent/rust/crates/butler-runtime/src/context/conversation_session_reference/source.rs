@@ -5,9 +5,9 @@ use sha2::{Digest, Sha256};
 use unicode_segmentation::UnicodeSegmentation;
 
 use butler_core::json;
-use butler_turn::conversation::ConversationOriginKind;
-use butler_turn::conversation::PublicMemorySnapshot;
-use butler_turn::conversation::decode_message_scalars;
+use butler_turn::conversation::{
+    ConversationOriginKind, PublicMemorySnapshot, decode_message_scalars,
+};
 
 use super::{
     ContextError, ContextResult, ResolvedMemorySource,

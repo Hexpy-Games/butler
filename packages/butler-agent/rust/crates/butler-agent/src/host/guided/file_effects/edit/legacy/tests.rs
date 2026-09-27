@@ -1,7 +1,5 @@
 use super::*;
-use butler_turn::btcc::EffectFuture;
-use butler_turn::btcc::RegisteredEditPort;
-use butler_turn::btcc::WorkspaceFileEditEffectAdapter;
+use butler_turn::btcc::{EffectFuture, RegisteredEditPort, WorkspaceFileEditEffectAdapter};
 use butler_turn::workspace::EffectFileScope;
 
 struct UnusedRegisteredEdit;

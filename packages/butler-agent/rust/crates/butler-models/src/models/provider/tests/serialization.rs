@@ -1,7 +1,5 @@
 use super::*;
-use butler_turn::btcc::ModelRoundTool;
-use butler_turn::btcc::ToolCallOrigin;
-use butler_turn::btcc::ToolChoice;
+use butler_turn::btcc::{ModelRoundTool, ToolCallOrigin, ToolChoice};
 use serde_json::Map;
 
 #[test]

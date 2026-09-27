@@ -8,24 +8,17 @@ use serde_json::json;
 use super::*;
 use crate::context::{ContextBudgetEnvironment, ContextConversation, ContextError};
 use butler_core::locale::LocaleCollation;
-use butler_models::models::ModelCatalog;
-use butler_models::models::ModelConfiguration;
-use butler_models::models::ModelConfigurationClock;
-use butler_models::models::ModelConfigurationEnvironment;
-use butler_turn::btcc::AttachmentKind;
-use butler_turn::btcc::AttachmentRef;
-use butler_turn::btcc::Peer;
-use butler_turn::btcc::PeerKind;
-use butler_turn::btcc::Sender;
-use butler_turn::btcc::SessionRole;
-use butler_turn::btcc::TurnMessage;
-use butler_turn::btcc::TurnRequest;
-use butler_turn::btcc::TurnRoute;
-use butler_turn::btcc::TurnTrigger;
+use butler_models::models::{
+    ModelCatalog, ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
+};
+use butler_turn::btcc::{
+    AttachmentKind, AttachmentRef, Peer, PeerKind, Sender, SessionRole, TurnMessage, TurnRequest,
+    TurnRoute, TurnTrigger,
+};
 use butler_turn::conversation::*;
-use butler_turn::workspace::SessionLifecycleState;
-use butler_turn::workspace::SessionRole as WorkspaceRole;
-use butler_turn::workspace::StoredSessionBinding;
+use butler_turn::workspace::{
+    SessionLifecycleState, SessionRole as WorkspaceRole, StoredSessionBinding,
+};
 
 mod integration;
 mod support;

@@ -4,11 +4,10 @@
 use std::path::PathBuf;
 
 use crate::cognition::{CognitionPathEnvironment, MemorySourceReference};
-use butler_runtime::context::ContextError;
-use butler_runtime::context::ContextResult;
-use butler_runtime::context::MemorySourceCandidate;
-use butler_runtime::context::MemorySourceReferencePort;
-use butler_runtime::context::ResolvedMemorySource;
+use butler_runtime::context::{
+    ContextError, ContextResult, MemorySourceCandidate, MemorySourceReferencePort,
+    ResolvedMemorySource,
+};
 
 pub struct MemorySourceReader {
     source: MemorySourceReference,

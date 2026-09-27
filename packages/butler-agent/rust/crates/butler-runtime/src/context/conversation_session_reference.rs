@@ -14,9 +14,9 @@ use serde_json::Value;
 use tokio::sync::{Semaphore, oneshot};
 use tokio_util::task::TaskTracker;
 
-use butler_turn::conversation::CanonicalMemoryReadBinding;
-use butler_turn::conversation::PublicMemorySnapshot;
-use butler_turn::conversation::conversation_store_path;
+use butler_turn::conversation::{
+    CanonicalMemoryReadBinding, PublicMemorySnapshot, conversation_store_path,
+};
 
 use super::{ContextError, ContextResult, MemorySourceReferencePort, ResolvedMemorySource};
 use crate::context::ContextCode;

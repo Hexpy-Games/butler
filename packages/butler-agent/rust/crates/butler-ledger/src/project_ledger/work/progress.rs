@@ -2,15 +2,10 @@ use std::collections::HashMap;
 
 use serde_json::{Value, json};
 
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::Checkpoint;
-use butler_turn::btcc::CheckpointCommand;
-use butler_turn::btcc::DurableWorkStatus as WorkStatus;
-use butler_turn::btcc::ProjectWorkOperationIdentity;
-use butler_turn::btcc::ReplacePlanCommand;
-use butler_turn::btcc::WorkPlan;
-use butler_turn::btcc::WorkStage;
-use butler_turn::btcc::WorkView;
+use butler_turn::btcc::{
+    BtccError, Checkpoint, CheckpointCommand, DurableWorkStatus as WorkStatus,
+    ProjectWorkOperationIdentity, ReplacePlanCommand, WorkPlan, WorkStage, WorkView,
+};
 
 use super::super::publication::ProjectLedgerRecordUpdate;
 use super::codec::{self, Snapshot};

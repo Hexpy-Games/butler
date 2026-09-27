@@ -12,8 +12,7 @@ use super::fixture_binding::FixtureAgentLoop;
 use super::guided_ports::GuidedPolicyDependencies;
 use super::ports::ModelRoundError;
 use super::test_data::{call, result, run, turn};
-use super::test_support::Fixture;
-use super::test_support::FixtureOperationFactory;
+use super::test_support::{Fixture, FixtureOperationFactory};
 
 #[tokio::test]
 async fn guided_constructor_runs_real_policy_and_scoped_progress() {

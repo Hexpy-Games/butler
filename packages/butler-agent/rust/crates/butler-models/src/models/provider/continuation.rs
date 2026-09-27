@@ -1,8 +1,6 @@
 use serde_json::Value;
 
-use butler_turn::btcc::ModelRoundMessage;
-use butler_turn::btcc::ModelRoundRequest;
-use butler_turn::btcc::ModelRoundRole;
+use butler_turn::btcc::{ModelRoundMessage, ModelRoundRequest, ModelRoundRole};
 
 pub(super) struct LegacyPreparation {
     pub request_items: Value,

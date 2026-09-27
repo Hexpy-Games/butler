@@ -5,8 +5,7 @@ use sha2::{Digest, Sha256};
 
 use super::super::super::super::AppStorageError;
 use super::types::{Fact, Followup, FollowupReference};
-use crate::gateway::MessageContent;
-use crate::gateway::MessageContentPart;
+use crate::gateway::{MessageContent, MessageContentPart};
 use butler_core::public_text::sanitize_public_text;
 use butler_runtime::context::prefix_utf16;
 

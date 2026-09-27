@@ -6,13 +6,10 @@ use tokio_util::sync::CancellationToken;
 
 use butler_core::json::JsonDocument;
 use butler_runtime::operations::AutomationService;
-use butler_turn::btcc::AdapterOutcome;
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::EffectAdapter;
-use butler_turn::btcc::EffectAdapterError;
-use butler_turn::btcc::EffectFailure;
-use butler_turn::btcc::EffectFuture;
-use butler_turn::btcc::PlanBinding;
+use butler_turn::btcc::{
+    AdapterOutcome, BtccError, EffectAdapter, EffectAdapterError, EffectFailure, EffectFuture,
+    PlanBinding,
+};
 
 use super::super::GuidedTools;
 

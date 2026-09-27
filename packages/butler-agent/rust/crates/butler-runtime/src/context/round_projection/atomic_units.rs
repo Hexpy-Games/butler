@@ -1,9 +1,7 @@
 use std::collections::HashSet;
 use std::ops::Range;
 
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::ModelRoundMessage;
-use butler_turn::btcc::ModelRoundRole;
+use butler_turn::btcc::{BtccError, ModelRoundMessage, ModelRoundRole};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct AtomicUnit {

@@ -1,8 +1,7 @@
 use rusqlite::{Connection, OptionalExtension, Row};
 
 use super::contracts::{AutomationRunSummary, AutomationSummary};
-use crate::gateway::application::storage::AppStorageCode;
-use crate::gateway::application::storage::AppStorageError;
+use crate::gateway::application::storage::{AppStorageCode, AppStorageError};
 
 const COLUMNS: &str = "a.id,a.title,a.prompt_body,a.target_kind,a.target_session_id,a.interval_seconds,a.state,a.next_run_at,a.last_run_at,a.last_run_state,a.last_safe_error_code,a.run_count,a.consecutive_failure_count,a.created_at,a.updated_at,COALESCE(c.title,'Unavailable session')";
 

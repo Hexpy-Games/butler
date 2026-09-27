@@ -8,10 +8,10 @@ use std::{
     sync::Arc,
 };
 
-use butler_runtime::operations::DeveloperDiagnosticsSettingsPort;
-use butler_runtime::operations::DeveloperLogStore;
-use butler_runtime::operations::DeveloperLogWriteAuthority;
-use butler_runtime::operations::OperationsDeveloperLogCapture;
+use butler_runtime::operations::{
+    DeveloperDiagnosticsSettingsPort, DeveloperLogStore, DeveloperLogWriteAuthority,
+    OperationsDeveloperLogCapture,
+};
 
 use crate::host::ResolvedInstallation;
 

@@ -14,21 +14,15 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
-use crate::cognition::CognitionError;
-use crate::cognition::CognitionResult;
-use crate::cognition::RecallRequest;
-use crate::cognition::ensure_data_authority;
-use crate::cognition::recall::RecallAdmittedChannels;
-use crate::cognition::recall::RecallProjectFilter;
-use crate::cognition::recall::RecallRuntime;
-use crate::cognition::recall::RecallScope;
-use crate::cognition::sources::read_canonical_inventory;
-use crate::cognition::sources::read_explicit_record;
-use crate::cognition::sources::read_task_report;
-use crate::cognition::split_historical_source_spans;
-use crate::work_records::ReadAvailability;
-use crate::work_records::WorkRecordReader;
-use crate::work_records::task_memory_record_id;
+use crate::cognition::recall::{
+    RecallAdmittedChannels, RecallProjectFilter, RecallRuntime, RecallScope,
+};
+use crate::cognition::sources::{read_canonical_inventory, read_explicit_record, read_task_report};
+use crate::cognition::{
+    CognitionError, CognitionResult, RecallRequest, ensure_data_authority,
+    split_historical_source_spans,
+};
+use crate::work_records::{ReadAvailability, WorkRecordReader, task_memory_record_id};
 use butler_core::locale::LocaleCollation;
 use butler_turn::conversation::ConversationSourceReader;
 

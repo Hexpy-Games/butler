@@ -16,10 +16,8 @@ use serde_json::Value;
 use tokio::{sync::Mutex, task::JoinSet};
 
 use crate::host::service::restart_handoff::RestartHandoff;
-use butler_gateway::gateway::InboundQueue;
-use butler_gateway::gateway::InboundQueueError;
-use butler_turn::btcc::Btcc;
-use butler_turn::btcc::PrincipalAuthority;
+use butler_gateway::gateway::{InboundQueue, InboundQueueError};
+use butler_turn::btcc::{Btcc, PrincipalAuthority};
 use butler_turn::workspace::SessionBindingStore;
 
 pub(crate) type DeliveryFuture = Pin<Box<dyn Future<Output = Result<bool, IngressError>> + Send>>;

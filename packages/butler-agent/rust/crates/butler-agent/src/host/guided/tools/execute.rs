@@ -3,15 +3,10 @@ use serde_json::{Value, json};
 use crate::host::GuidedWorkTools;
 use butler_core::json::JsonDocument;
 use butler_core::tool_protocol::ToolName;
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::GuidedInvocation;
-use butler_turn::btcc::ModelRoundToolCall;
-use butler_turn::btcc::ToolExecutionError;
-use butler_turn::btcc::ToolJournalFinish;
-use butler_turn::btcc::ToolJournalFinishStatus;
-use butler_turn::btcc::ToolJournalRecord;
-use butler_turn::btcc::ToolJournalStart;
-use butler_turn::btcc::ToolResult;
+use butler_turn::btcc::{
+    BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError, ToolJournalFinish,
+    ToolJournalFinishStatus, ToolJournalRecord, ToolJournalStart, ToolResult,
+};
 
 use super::GuidedTools;
 use super::occurrence::{Occurrence, occurrence};

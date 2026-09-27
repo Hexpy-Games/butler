@@ -4,9 +4,8 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 
-use crate::work_records::WorkRecordReadError;
-use crate::work_records::read;
 use crate::work_records::read::ReadAvailability;
+use crate::work_records::{WorkRecordReadError, read};
 use butler_core::locale::LocaleCollation;
 use butler_core::public_text::trim_js_whitespace as trim;
 

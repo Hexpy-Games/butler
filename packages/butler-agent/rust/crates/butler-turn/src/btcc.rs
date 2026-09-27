@@ -73,8 +73,7 @@ pub use authority::contracts::{
     AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityDecisionInput, AuthorityError,
     AuthorityExecutionInput, AuthorityOutcomeInput, PrincipalAuthority,
 };
-pub use continuation_budget::TurnContinuationBudgetLimits;
-pub use continuation_budget::select_turn_continuation_budget;
+pub use continuation_budget::{TurnContinuationBudgetLimits, select_turn_continuation_budget};
 pub use effects::contracts::{
     Access as EffectAccess, AdapterOutcome, BlockerRelation, EffectAdapter, EffectAdapterError,
     EffectBlocker, EffectError, EffectFailure, EffectFuture, EffectJournal, EffectOutcome,

@@ -9,15 +9,13 @@ use super::artifacts::{self, Snapshot};
 use super::jobs::CommandJobs;
 use super::{registered_artifacts, structured_stdout};
 use butler_core::json::JsonDocument;
-use butler_runtime::context::BudgetToolOutputInput;
-use butler_runtime::context::OutputModeInput;
-use butler_runtime::context::ShellCommandResult;
-use butler_runtime::context::ToolOutput;
+use butler_runtime::context::{
+    BudgetToolOutputInput, OutputModeInput, ShellCommandResult, ToolOutput,
+};
 use butler_turn::btcc::BtccError;
-use butler_turn::workspace::Commands;
-use butler_turn::workspace::GuidedCommandOutput;
-use butler_turn::workspace::GuidedSummary;
-use butler_turn::workspace::StructuredCommandOutput;
+use butler_turn::workspace::{
+    Commands, GuidedCommandOutput, GuidedSummary, StructuredCommandOutput,
+};
 use tokio_util::sync::CancellationToken;
 
 mod assemble;

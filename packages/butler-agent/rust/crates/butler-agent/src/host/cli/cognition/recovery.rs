@@ -7,11 +7,10 @@ use std::{
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use serde_json::Value;
 
-use butler_memory::cognition::CognitionPathEnvironment;
-use butler_memory::cognition::ContinuityRecoveryAction;
-use butler_memory::cognition::ContinuityRecoveryManifestView;
-use butler_memory::cognition::ContinuityRecoveryService;
-use butler_memory::cognition::ensure_data_authority;
+use butler_memory::cognition::{
+    CognitionPathEnvironment, ContinuityRecoveryAction, ContinuityRecoveryManifestView,
+    ContinuityRecoveryService, ensure_data_authority,
+};
 use butler_memory::coordination::CognitionWriteCoordinator;
 
 use super::CliError;

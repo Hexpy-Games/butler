@@ -5,8 +5,7 @@ use serde_json::{Value, json};
 use tokio::{io::AsyncReadExt, io::AsyncWriteExt, net::TcpListener};
 
 use super::*;
-use crate::models::ModelCatalog;
-use crate::models::ProviderAuth;
+use crate::models::{ModelCatalog, ProviderAuth};
 use butler_core::locale::LocaleCollation;
 
 struct Clock;

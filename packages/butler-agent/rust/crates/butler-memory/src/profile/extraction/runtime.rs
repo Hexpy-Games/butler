@@ -6,9 +6,7 @@ use super::types::{self, CorrectionTargets, SourceWindow, add_usage};
 use super::{Dependencies, coverage, parser, prompt};
 use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire};
 use crate::profile::ProfileCode;
-use butler_models::models::ProviderPromptLifecycle;
-use butler_models::models::ProviderPromptRequest;
-use butler_models::models::ReasoningEffort;
+use butler_models::models::{ProviderPromptLifecycle, ProviderPromptRequest, ReasoningEffort};
 
 pub(super) struct BatchInput<'a> {
     pub(super) windows: &'a [SourceWindow],

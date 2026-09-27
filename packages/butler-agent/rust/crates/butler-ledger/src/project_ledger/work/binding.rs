@@ -1,11 +1,9 @@
 use serde_json::{Value, json};
 
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::ContinueWorkCommand;
-use butler_turn::btcc::ProjectWorkOperationIdentity;
-use butler_turn::btcc::ProjectWorkOperationKind;
-use butler_turn::btcc::WorkTurnScope;
-use butler_turn::btcc::WorkView;
+use butler_turn::btcc::{
+    BtccError, ContinueWorkCommand, ProjectWorkOperationIdentity, ProjectWorkOperationKind,
+    WorkTurnScope, WorkView,
+};
 
 use super::super::publication::{ProjectLedgerRecordKind, ProjectLedgerRecordUpdate};
 use super::codec::{self, Snapshot};

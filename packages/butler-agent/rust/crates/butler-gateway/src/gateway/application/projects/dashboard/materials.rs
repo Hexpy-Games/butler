@@ -6,8 +6,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use super::super::{AppApplication, GatewayApplicationError, app_error};
-use super::artifacts::DashboardArtifact;
-use super::artifacts::read_artifact;
+use super::artifacts::{DashboardArtifact, read_artifact};
 use super::contracts::{
     AppProjectDashboardPageQuery, invalid_request, source_changed, unavailable,
 };

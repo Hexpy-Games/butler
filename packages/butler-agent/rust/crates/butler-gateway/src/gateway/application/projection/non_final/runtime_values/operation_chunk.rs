@@ -4,8 +4,7 @@ use base64::{Engine, alphabet, engine::general_purpose};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
-use crate::gateway::application::storage::AppStorageCode;
-use crate::gateway::application::storage::AppStorageError;
+use crate::gateway::application::storage::{AppStorageCode, AppStorageError};
 
 const CHUNK_BYTES: usize = 32 * 1024;
 const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;

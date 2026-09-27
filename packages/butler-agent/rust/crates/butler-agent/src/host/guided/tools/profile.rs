@@ -6,12 +6,8 @@ use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
 use butler_core::json::JsonDocument;
-use butler_memory::profile::FirstChatOnboardingUpdate;
-use butler_memory::profile::ProfileError;
-use butler_memory::profile::ProfilingMode;
-use butler_turn::btcc::AccessMode;
-use butler_turn::btcc::ModelRoundToolCall;
-use butler_turn::btcc::ToolExecutionError;
+use butler_memory::profile::{FirstChatOnboardingUpdate, ProfileError, ProfilingMode};
+use butler_turn::btcc::{AccessMode, ModelRoundToolCall, ToolExecutionError};
 
 use super::GuidedTools;
 use butler_memory::profile::ProfileCode;

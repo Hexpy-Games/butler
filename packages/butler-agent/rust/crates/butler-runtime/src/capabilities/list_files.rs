@@ -8,10 +8,9 @@ use std::time::Instant;
 use serde_json::{Value, json};
 
 use super::{CapabilityError, CapabilityInvocation, evidence};
-use butler_turn::workspace::WorkspaceFiles;
-use butler_turn::workspace::WorkspaceListInput;
-use butler_turn::workspace::WorkspaceListLimits;
-use butler_turn::workspace::WorkspaceListOutcome;
+use butler_turn::workspace::{
+    WorkspaceFiles, WorkspaceListInput, WorkspaceListLimits, WorkspaceListOutcome,
+};
 
 pub(super) fn definition() -> Value {
     json!({

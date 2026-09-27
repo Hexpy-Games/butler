@@ -4,12 +4,9 @@ use std::time::Instant;
 
 use regress::Regex;
 
-use butler_turn::workspace::GrepCandidate;
-use butler_turn::workspace::GrepMatch;
-use butler_turn::workspace::GrepRead;
-use butler_turn::workspace::WorkspaceFiles;
-use butler_turn::workspace::WorkspaceListEntry;
-use butler_turn::workspace::WorkspaceListResult;
+use butler_turn::workspace::{
+    GrepCandidate, GrepMatch, GrepRead, WorkspaceFiles, WorkspaceListEntry, WorkspaceListResult,
+};
 
 pub(super) struct CandidateResult {
     pub path: String,

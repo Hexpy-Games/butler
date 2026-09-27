@@ -10,8 +10,7 @@ use serde_json::Value;
 
 use butler_core::json::number_from_string;
 use butler_core::public_text::trim_js_whitespace;
-use butler_gateway::gateway::GatewayConfig;
-use butler_gateway::gateway::LocalAuthConfig;
+use butler_gateway::gateway::{GatewayConfig, LocalAuthConfig};
 
 pub(crate) struct AppServiceConfiguration {
     pub(crate) host: String,

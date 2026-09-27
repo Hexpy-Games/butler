@@ -5,30 +5,17 @@ use std::{path::PathBuf, sync::Arc, time::SystemTime};
 use tokio_util::sync::CancellationToken;
 
 use butler_ledger::project_ledger::ProjectLedger;
-use butler_memory::cognition::BoxStoreService;
-use butler_memory::cognition::CognitionPathEnvironment;
-use butler_memory::cognition::ConfiguredCycleOptions;
-use butler_memory::cognition::ConfiguredCycleResult;
-use butler_memory::cognition::ConfiguredCycleService;
-use butler_memory::cognition::CycleService;
-use butler_memory::cognition::CycleStatus;
-use butler_memory::cognition::FeedbackBufferService;
-use butler_memory::cognition::GraphConsolidationService;
-use butler_memory::cognition::KnowHowService;
-use butler_memory::cognition::LegacyMetadataIntegrityService;
-use butler_memory::cognition::MemoryHealthService;
-use butler_memory::cognition::MemorySyncConsumer;
-use butler_memory::cognition::ProjectCapsuleService;
-use butler_memory::cognition::RunCycle;
-use butler_memory::cognition::VectorOptimizeService;
-use butler_memory::cognition::active_memory_descriptor_exists;
-use butler_memory::cognition::resolve_active_generation;
+use butler_memory::cognition::{
+    BoxStoreService, CognitionPathEnvironment, ConfiguredCycleOptions, ConfiguredCycleResult,
+    ConfiguredCycleService, CycleService, CycleStatus, FeedbackBufferService,
+    GraphConsolidationService, KnowHowService, LegacyMetadataIntegrityService, MemoryHealthService,
+    MemorySyncConsumer, ProjectCapsuleService, RunCycle, VectorOptimizeService,
+    active_memory_descriptor_exists, resolve_active_generation,
+};
 use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_memory::profile::ProfileService;
-use butler_models::models::ModelConfiguration;
-use butler_models::models::ModelProvider;
-use butler_runtime::operations::CycleMetrics;
-use butler_runtime::operations::MetricFiles;
+use butler_models::models::{ModelConfiguration, ModelProvider};
+use butler_runtime::operations::{CycleMetrics, MetricFiles};
 use butler_turn::workspace::SessionBindingStore;
 
 use crate::host::memory_jobs::briefing::BriefingGeneration;

@@ -1,7 +1,6 @@
 use super::*;
 use crate::gateway::SessionControlState;
-use butler_turn::btcc::AccessMode;
-use butler_turn::btcc::ReasoningEffort;
+use butler_turn::btcc::{AccessMode, ReasoningEffort};
 use rusqlite::OptionalExtension;
 
 use super::super::AppSessionControlUpdate;

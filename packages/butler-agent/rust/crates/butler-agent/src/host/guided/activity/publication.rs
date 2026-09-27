@@ -2,9 +2,7 @@
 
 use serde_json::{Map, json};
 
-use butler_turn::btcc::AgentLoopProgress;
-use butler_turn::btcc::GuidedSourceRevision;
-use butler_turn::btcc::RuntimeTurnEventInput;
+use butler_turn::btcc::{AgentLoopProgress, GuidedSourceRevision, RuntimeTurnEventInput};
 
 use super::State;
 

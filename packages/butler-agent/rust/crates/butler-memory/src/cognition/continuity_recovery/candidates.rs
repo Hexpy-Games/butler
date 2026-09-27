@@ -12,17 +12,13 @@ use regex::Regex;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use crate::cognition::CognitionError;
-use crate::cognition::CognitionPathEnvironment;
-use crate::cognition::CognitionResult;
 use crate::cognition::mutable_paths::ensure_data_authority;
-use butler_turn::conversation::ConversationMessageWithParts;
-use butler_turn::conversation::ConversationReadOrder;
-use butler_turn::conversation::ConversationRole;
-use butler_turn::conversation::ConversationSourceReader;
-use butler_turn::conversation::ReadCognitionMessagesInput;
-use butler_turn::conversation::conversation_store_path;
-use butler_turn::conversation::text_for_message;
+use crate::cognition::{CognitionError, CognitionPathEnvironment, CognitionResult};
+use butler_turn::conversation::{
+    ConversationMessageWithParts, ConversationReadOrder, ConversationRole,
+    ConversationSourceReader, ReadCognitionMessagesInput, conversation_store_path,
+    text_for_message,
+};
 
 use super::{
     SCHEMA, hot_cache,

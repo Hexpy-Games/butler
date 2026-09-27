@@ -2,8 +2,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use butler_turn::btcc::ModelRoundError;
-use butler_turn::btcc::ModelRoundRequest;
+use butler_turn::btcc::{ModelRoundError, ModelRoundRequest};
 
 use super::serialize::Carrier;
 

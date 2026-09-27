@@ -11,8 +11,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use super::{Capabilities, CapabilityInvocation};
-use butler_turn::workspace::WorkspaceFiles;
-use butler_turn::workspace::WorkspaceReference;
+use butler_turn::workspace::{WorkspaceFiles, WorkspaceReference};
 
 struct Fixture {
     root: PathBuf,

@@ -4,8 +4,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
 use super::error;
-use crate::cognition::CognitionCode;
-use crate::cognition::CognitionResult;
+use crate::cognition::{CognitionCode, CognitionResult};
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ProjectionModelPolicyInput {

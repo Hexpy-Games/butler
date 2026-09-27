@@ -10,21 +10,11 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::BtccRepositories;
-use butler_turn::btcc::EffectJournal;
-use butler_turn::btcc::GuidedInvocation;
-use butler_turn::btcc::GuidedPhaseSelection;
-use butler_turn::btcc::GuidedWork;
-use butler_turn::btcc::ModelRoundTool;
-use butler_turn::btcc::PortFuture;
-use butler_turn::btcc::ProjectLedgerPlan;
-use butler_turn::btcc::PromptPort;
-use butler_turn::btcc::RenderedGuidedPrompt;
-use butler_turn::btcc::ToolJournalRepository;
-use butler_turn::btcc::TurnRecord;
-use butler_turn::btcc::UsageAttribution;
-use butler_turn::btcc::render_accepted_project_plan;
+use butler_turn::btcc::{
+    BtccError, BtccRepositories, EffectJournal, GuidedInvocation, GuidedPhaseSelection, GuidedWork,
+    ModelRoundTool, PortFuture, ProjectLedgerPlan, PromptPort, RenderedGuidedPrompt,
+    ToolJournalRepository, TurnRecord, UsageAttribution, render_accepted_project_plan,
+};
 
 pub(crate) struct GuidedTextState {
     pub phase: GuidedPhaseSelection,

@@ -7,16 +7,13 @@ use std::{
 
 use serde_json::Value;
 
-use butler_gateway::gateway::AppContextBudgetFacts;
-use butler_gateway::gateway::AppContextReadFacts;
-use butler_gateway::gateway::AppContextReadPort;
-use butler_gateway::gateway::AppContextReadQuery;
-use butler_gateway::gateway::AppContextUsage;
-use butler_gateway::gateway::ApplicationFuture;
-use butler_gateway::gateway::GatewayApplicationError;
-use butler_runtime::context::ContextBudgetOverrides;
-use butler_runtime::context::ContextBudgetOwner;
-use butler_runtime::context::WorkingContextBudgetInput;
+use butler_gateway::gateway::{
+    AppContextBudgetFacts, AppContextReadFacts, AppContextReadPort, AppContextReadQuery,
+    AppContextUsage, ApplicationFuture, GatewayApplicationError,
+};
+use butler_runtime::context::{
+    ContextBudgetOverrides, ContextBudgetOwner, WorkingContextBudgetInput,
+};
 use butler_turn::btcc::ContextCompactionRepository;
 
 const MAX_COMPACTION_SUMMARY_CHARS: usize = 32_000;

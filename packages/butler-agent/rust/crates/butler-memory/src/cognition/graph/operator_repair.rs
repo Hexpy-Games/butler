@@ -12,8 +12,7 @@ pub(in crate::cognition) use request::CandidateInputRepairRequest;
 use crate::cognition::CognitionCode;
 use std::path::Path;
 
-use crate::cognition::CognitionError;
-use crate::cognition::CognitionResult;
+use crate::cognition::{CognitionError, CognitionResult};
 use butler_turn::conversation::ConversationSourceReader;
 
 impl super::GraphRepository {

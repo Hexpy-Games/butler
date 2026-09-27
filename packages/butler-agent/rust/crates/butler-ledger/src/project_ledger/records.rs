@@ -3,8 +3,7 @@ use std::path::Path;
 
 use serde_json::{Map, Value};
 
-use super::ProjectLedgerReadError;
-use super::committed;
+use super::{ProjectLedgerReadError, committed};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PlanRecordShow {

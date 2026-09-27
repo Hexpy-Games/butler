@@ -2,10 +2,7 @@ use std::collections::HashSet;
 
 use serde_json::Value;
 
-use butler_turn::btcc::ArtifactKind;
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::FinalArtifact;
-use butler_turn::btcc::ToolJournalCloseoutRow;
+use butler_turn::btcc::{ArtifactKind, BtccError, FinalArtifact, ToolJournalCloseoutRow};
 
 use super::{invalid, safe_path, trimmed};
 

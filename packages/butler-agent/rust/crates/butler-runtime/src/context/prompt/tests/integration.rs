@@ -1,9 +1,8 @@
 use super::*;
 use butler_turn::btcc::AdmissionContextPort;
-use butler_turn::conversation::AppendMessageInput;
-use butler_turn::conversation::BeginTurnInput;
-use butler_turn::conversation::ConversationOriginKind;
-use butler_turn::conversation::ConversationRole;
+use butler_turn::conversation::{
+    AppendMessageInput, BeginTurnInput, ConversationOriginKind, ConversationRole,
+};
 use butler_turn::workspace::SessionRole as WorkspaceRole;
 
 #[tokio::test]

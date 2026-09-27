@@ -6,19 +6,12 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::EffectAdapter;
-use butler_turn::btcc::EffectJournal;
-use butler_turn::btcc::EffectRecord;
-use butler_turn::btcc::RecoveryHint;
-use butler_turn::btcc::WorkView;
-use butler_turn::btcc::WorkspaceFileEditEffectAdapter;
-use butler_turn::btcc::accepted_plan_effect_id;
-use butler_turn::btcc::effect_input_sha256;
-use butler_turn::btcc::normalized_workspace_effect_path;
-use butler_turn::btcc::workspace_edit_batch_target;
-use butler_turn::workspace::prepare_exact_text;
-use butler_turn::workspace::read_effect_edit_target;
+use butler_turn::btcc::{
+    BtccError, EffectAdapter, EffectJournal, EffectRecord, RecoveryHint, WorkView,
+    WorkspaceFileEditEffectAdapter, accepted_plan_effect_id, effect_input_sha256,
+    normalized_workspace_effect_path, workspace_edit_batch_target,
+};
+use butler_turn::workspace::{prepare_exact_text, read_effect_edit_target};
 
 use super::{GuidedFileEffects, PreparedGuidedFileEffect};
 

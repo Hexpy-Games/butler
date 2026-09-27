@@ -7,8 +7,7 @@ use serde_json::{Value, json};
 
 use crate::cognition::MemoryGenerationHandle;
 use crate::cognition::graph::GraphRepository;
-use butler_turn::conversation::ConversationSourceReader;
-use butler_turn::conversation::conversation_store_path;
+use butler_turn::conversation::{ConversationSourceReader, conversation_store_path};
 
 use super::physical_entries;
 

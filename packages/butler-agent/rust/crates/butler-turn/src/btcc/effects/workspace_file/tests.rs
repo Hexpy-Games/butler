@@ -1,5 +1,4 @@
-use super::path;
-use super::*;
+use super::{path, *};
 
 struct WritesThenReject(std::path::PathBuf);
 impl RegisteredWritePort for WritesThenReject {

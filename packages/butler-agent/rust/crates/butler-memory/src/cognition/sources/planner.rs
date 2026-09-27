@@ -1,12 +1,9 @@
 use serde_json::{Number, Value};
 
-use butler_turn::conversation::ConversationMessageWithParts;
-use butler_turn::conversation::ConversationOriginKind;
-use butler_turn::conversation::ConversationProvenance;
-use butler_turn::conversation::ConversationRole;
-use butler_turn::conversation::ConversationSourceReader;
-use butler_turn::conversation::ConversationStatus;
-use butler_turn::conversation::decode_message_scalars;
+use butler_turn::conversation::{
+    ConversationMessageWithParts, ConversationOriginKind, ConversationProvenance, ConversationRole,
+    ConversationSourceReader, ConversationStatus, decode_message_scalars,
+};
 
 use super::identity::{projection_hash, recovered_parts_hash};
 use super::types::{

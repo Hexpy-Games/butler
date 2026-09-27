@@ -6,25 +6,16 @@ use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
 use super::{CognitionRegistrationService, closed, join_error};
-use crate::cognition::CognitionCode;
-use crate::cognition::CognitionError;
-use crate::cognition::CognitionPathEnvironment;
-use crate::cognition::CognitionResult;
-use crate::cognition::MemoryGenerationTarget;
-use crate::cognition::assert_mutation_authority;
-use crate::cognition::ensure_data_authority;
-use crate::cognition::graph::GraphRepository;
-use crate::cognition::graph::TypedRegistrationInput;
-use crate::cognition::resolve_generation;
-use crate::cognition::sources::TypedMemoryRecord;
-use crate::cognition::sources::TypedPlan;
-use crate::cognition::sources::prepare_typed_source;
-use crate::cognition::sources::read_typed_record;
-use crate::coordination::CognitionWaitClass;
-use crate::coordination::CognitionWriteAcquire;
-use crate::coordination::CognitionWriteCoordinator;
-use butler_turn::conversation::ConversationSourceReader;
-use butler_turn::conversation::conversation_store_path;
+use crate::cognition::graph::{GraphRepository, TypedRegistrationInput};
+use crate::cognition::sources::{
+    TypedMemoryRecord, TypedPlan, prepare_typed_source, read_typed_record,
+};
+use crate::cognition::{
+    CognitionCode, CognitionError, CognitionPathEnvironment, CognitionResult,
+    MemoryGenerationTarget, assert_mutation_authority, ensure_data_authority, resolve_generation,
+};
+use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator};
+use butler_turn::conversation::{ConversationSourceReader, conversation_store_path};
 
 #[derive(Clone)]
 pub struct RegisterTypedSourceInput {

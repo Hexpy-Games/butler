@@ -3,9 +3,7 @@
 use butler_core::tool_protocol::ToolName;
 use std::collections::HashSet;
 
-use butler_core::json::raw_string_units;
-use butler_core::json::visit_raw_array;
-use butler_core::json::visit_raw_object;
+use butler_core::json::{raw_string_units, visit_raw_array, visit_raw_object};
 use butler_turn::btcc::BtccError;
 
 use super::{append_field, failure, field};

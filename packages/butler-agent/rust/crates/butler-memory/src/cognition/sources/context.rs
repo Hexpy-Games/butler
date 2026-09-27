@@ -1,9 +1,8 @@
 use butler_core::segmentation::grapheme_segments;
-use butler_turn::conversation::ConversationOriginKind;
-use butler_turn::conversation::ConversationPartKind;
-use butler_turn::conversation::ConversationRole;
-use butler_turn::conversation::ConversationSourceReader;
-use butler_turn::conversation::ConversationStatus;
+use butler_turn::conversation::{
+    ConversationOriginKind, ConversationPartKind, ConversationRole, ConversationSourceReader,
+    ConversationStatus,
+};
 
 use super::types::{CognitionSourceError, CognitionSourceRow, PriorPublicContext};
 use crate::cognition::CognitionCode;

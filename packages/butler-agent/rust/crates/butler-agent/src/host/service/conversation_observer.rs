@@ -6,21 +6,13 @@ use std::thread::JoinHandle;
 
 use tokio::sync::{Mutex, mpsc, oneshot};
 
-use butler_memory::cognition::CognitionPathEnvironment;
-use butler_memory::cognition::CompletionNotice;
-use butler_memory::cognition::CompletionPublisher;
-use butler_runtime::operations::AdmissionMeasure;
-use butler_runtime::operations::ConversationMetrics;
-use butler_runtime::operations::MetricFiles;
-use butler_turn::conversation::AdmissionMetric;
-use butler_turn::conversation::AdmissionSource;
-use butler_turn::conversation::CompletionMetric;
-use butler_turn::conversation::CompletionObservation;
-use butler_turn::conversation::ConversationAdmissionObserver;
-use butler_turn::conversation::ConversationCode;
-use butler_turn::conversation::ConversationError;
-use butler_turn::conversation::ConversationIdentityClock;
-use butler_turn::conversation::ConversationObserverFuture;
+use butler_memory::cognition::{CognitionPathEnvironment, CompletionNotice, CompletionPublisher};
+use butler_runtime::operations::{AdmissionMeasure, ConversationMetrics, MetricFiles};
+use butler_turn::conversation::{
+    AdmissionMetric, AdmissionSource, CompletionMetric, CompletionObservation,
+    ConversationAdmissionObserver, ConversationCode, ConversationError, ConversationIdentityClock,
+    ConversationObserverFuture,
+};
 
 const CAPACITY: usize = 64;
 

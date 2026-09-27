@@ -8,27 +8,18 @@ use tokio_util::sync::CancellationToken;
 
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
-use butler_gateway::gateway::read_new_chat_briefing_projects;
-use butler_gateway::gateway::read_new_chat_briefing_settings;
-use butler_ledger::project_ledger::ProjectBriefingTarget;
-use butler_ledger::project_ledger::ProjectLedger;
-use butler_memory::cognition::BriefingGenerationError;
-use butler_memory::cognition::BriefingGenerationService;
-use butler_memory::cognition::BriefingInputFuture;
-use butler_memory::cognition::BriefingInputSnapshot;
-use butler_memory::cognition::BriefingInputSource;
-use butler_memory::cognition::BriefingPersona;
-use butler_memory::cognition::BriefingProjectSignal;
-use butler_memory::cognition::BriefingSettings;
-use butler_memory::cognition::CognitionPathEnvironment;
+use butler_gateway::gateway::{read_new_chat_briefing_projects, read_new_chat_briefing_settings};
+use butler_ledger::project_ledger::{ProjectBriefingTarget, ProjectLedger};
+use butler_memory::cognition::{
+    BriefingGenerationError, BriefingGenerationService, BriefingInputFuture, BriefingInputSnapshot,
+    BriefingInputSource, BriefingPersona, BriefingProjectSignal, BriefingSettings,
+    CognitionPathEnvironment,
+};
 use butler_memory::coordination::CognitionWriteCoordinator;
-use butler_memory::profile::PersonaPresets;
-use butler_memory::profile::ProfileService;
-use butler_memory::profile::active_briefing_persona;
-use butler_models::models::ModelConfiguration;
-use butler_models::models::ModelProvider;
-use butler_models::models::ProviderAuthMethod;
-use butler_models::models::ReasoningEffort;
+use butler_memory::profile::{PersonaPresets, ProfileService, active_briefing_persona};
+use butler_models::models::{
+    ModelConfiguration, ModelProvider, ProviderAuthMethod, ReasoningEffort,
+};
 use butler_turn::btcc::BtccError;
 
 use crate::host::{

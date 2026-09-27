@@ -1,9 +1,7 @@
 use serde_json::{Value, json};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::context::apply_char_budget;
-use crate::context::to_context_message;
-use crate::context::to_context_summary;
+use crate::context::{apply_char_budget, to_context_message, to_context_summary};
 use butler_core::json;
 use butler_turn::conversation::PublicMemorySnapshot;
 

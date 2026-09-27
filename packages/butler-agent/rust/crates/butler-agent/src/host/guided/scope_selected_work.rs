@@ -2,26 +2,13 @@
 
 use std::sync::Arc;
 
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::CheckpointCommand;
-use butler_turn::btcc::ClaimCloseoutCorrectionInput;
-use butler_turn::btcc::ContinueWorkCommand;
-use butler_turn::btcc::DispositionCommand;
-use butler_turn::btcc::DurableWorkRepository;
-use butler_turn::btcc::LegacyImport;
-use butler_turn::btcc::PersistedWorkTurnScope;
-use butler_turn::btcc::PortFuture;
-use butler_turn::btcc::ReplacePlanCommand;
-use butler_turn::btcc::ResolvedProjectWorkScope;
-use butler_turn::btcc::ReviewCommand;
-use butler_turn::btcc::SessionWorkRepository;
-use butler_turn::btcc::StartWorkCommand;
-use butler_turn::btcc::WorkContext;
-use butler_turn::btcc::WorkTurnScope;
-use butler_turn::btcc::WorkView;
-use butler_turn::workspace::SessionBindingStore;
-use butler_turn::workspace::SessionRole;
-use butler_turn::workspace::StoredSessionBinding;
+use butler_turn::btcc::{
+    BtccError, CheckpointCommand, ClaimCloseoutCorrectionInput, ContinueWorkCommand,
+    DispositionCommand, DurableWorkRepository, LegacyImport, PersistedWorkTurnScope, PortFuture,
+    ReplacePlanCommand, ResolvedProjectWorkScope, ReviewCommand, SessionWorkRepository,
+    StartWorkCommand, WorkContext, WorkTurnScope, WorkView,
+};
+use butler_turn::workspace::{SessionBindingStore, SessionRole, StoredSessionBinding};
 
 /// Host binds the actual Ledger resolver and canonical repository; neither is optional.
 pub(in crate::host) trait ProjectWorkRepositoryProvider: Send + Sync {

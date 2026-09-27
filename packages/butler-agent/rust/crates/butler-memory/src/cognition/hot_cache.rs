@@ -26,9 +26,7 @@ use super::{
 use super::{
     CognitionError, CognitionPathEnvironment, CognitionResult, mutable_paths::ensure_data_authority,
 };
-use crate::coordination::CognitionWaitClass;
-use crate::coordination::CognitionWriteAcquire;
-use crate::coordination::CognitionWriteCoordinator;
+use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator};
 use butler_core::public_text::trim_js_whitespace;
 
 #[derive(Default, serde::Serialize)]

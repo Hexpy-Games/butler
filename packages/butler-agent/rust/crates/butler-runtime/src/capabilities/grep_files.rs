@@ -13,9 +13,7 @@ use regress::{Flags, Regex};
 use serde_json::{Value, json};
 
 use super::{CapabilityError, CapabilityInvocation, arguments, evidence};
-use butler_turn::workspace::WorkspaceFiles;
-use butler_turn::workspace::WorkspaceListInput;
-use butler_turn::workspace::WorkspaceListOutcome;
+use butler_turn::workspace::{WorkspaceFiles, WorkspaceListInput, WorkspaceListOutcome};
 
 pub(super) fn definition() -> Value {
     json!({

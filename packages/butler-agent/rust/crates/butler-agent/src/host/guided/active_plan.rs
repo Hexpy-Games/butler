@@ -3,12 +3,8 @@
 #[cfg(test)]
 use std::path::Path;
 
-use butler_ledger::project_ledger::PlanRecordRead;
-use butler_ledger::project_ledger::ProjectLedger;
-use butler_ledger::project_ledger::ProjectLedgerReadError;
-use butler_turn::btcc::ProjectLedgerPlan;
-use butler_turn::btcc::ProjectLedgerPlanInput;
-use butler_turn::btcc::accepted_project_plan;
+use butler_ledger::project_ledger::{PlanRecordRead, ProjectLedger, ProjectLedgerReadError};
+use butler_turn::btcc::{ProjectLedgerPlan, ProjectLedgerPlanInput, accepted_project_plan};
 
 #[derive(Clone)]
 pub(crate) struct AcceptedPlanProducer {

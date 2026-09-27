@@ -3,9 +3,7 @@
 //! the process timezone explicitly; there is no silent UTC fallback.
 
 use crate::host::time::timezone_data::TimeZoneData;
-use butler_runtime::context::ContextCode;
-use butler_runtime::context::ContextError;
-use butler_runtime::context::ContextResult;
+use butler_runtime::context::{ContextCode, ContextError, ContextResult};
 
 pub(crate) struct DateParser {
     zone: tz::TimeZone,

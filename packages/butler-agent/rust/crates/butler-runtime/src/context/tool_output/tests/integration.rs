@@ -3,11 +3,9 @@ use super::*;
 #[cfg(unix)]
 #[tokio::test]
 async fn real_k2_structured_and_guided_outputs_feed_persisted_context_artifacts() {
-    use butler_turn::workspace::CommandStep;
-    use butler_turn::workspace::Commands;
-    use butler_turn::workspace::GuidedAccess;
-    use butler_turn::workspace::GuidedCommandInput;
-    use butler_turn::workspace::StructuredCommandInput;
+    use butler_turn::workspace::{
+        CommandStep, Commands, GuidedAccess, GuidedCommandInput, StructuredCommandInput,
+    };
     use tokio_util::sync::CancellationToken;
 
     let fixture = Fixture::new();

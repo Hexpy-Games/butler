@@ -1,8 +1,6 @@
 use super::*;
-use butler_turn::btcc::ModelIdentity;
-use butler_turn::btcc::ReasoningEffort;
-use butler_turn::btcc::model_route::ModelExecution;
-use butler_turn::btcc::model_route::ModelExecutionView;
+use butler_turn::btcc::model_route::{ModelExecution, ModelExecutionView};
+use butler_turn::btcc::{ModelIdentity, ReasoningEffort};
 
 struct DirectExecution<'a> {
     model: &'a dyn ModelRoundPort,

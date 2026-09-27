@@ -2,13 +2,8 @@
 
 use std::sync::Arc;
 
-use butler_ledger::project_ledger::ProjectLedger;
-use butler_ledger::project_ledger::ProjectWork;
-use butler_ledger::project_ledger::ProjectWorkScopeLookup;
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::DurableWorkRepository;
-use butler_turn::btcc::PortFuture;
-use butler_turn::btcc::ResolvedProjectWorkScope;
+use butler_ledger::project_ledger::{ProjectLedger, ProjectWork, ProjectWorkScopeLookup};
+use butler_turn::btcc::{BtccError, DurableWorkRepository, PortFuture, ResolvedProjectWorkScope};
 use butler_turn::workspace::StoredSessionBinding;
 
 use crate::host::guided::scope_selected_work::ProjectWorkRepositoryProvider;

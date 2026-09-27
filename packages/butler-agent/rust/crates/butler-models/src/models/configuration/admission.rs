@@ -1,10 +1,8 @@
 use super::ModelConfiguration;
-use butler_turn::btcc::AdmissionModelCatalogPort;
-use butler_turn::btcc::AdmissionModelCatalogSnapshot;
-use butler_turn::btcc::AdmissionModelMetadata;
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::PortFuture;
-use butler_turn::btcc::ReasoningEffort;
+use butler_turn::btcc::{
+    AdmissionModelCatalogPort, AdmissionModelCatalogSnapshot, AdmissionModelMetadata, BtccError,
+    PortFuture, ReasoningEffort,
+};
 
 impl AdmissionModelCatalogPort for ModelConfiguration {
     fn snapshot(

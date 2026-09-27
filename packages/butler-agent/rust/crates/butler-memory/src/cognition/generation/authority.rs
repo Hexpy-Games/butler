@@ -2,9 +2,7 @@ use std::path::Path;
 
 use super::read::{error, read_descriptor, read_manifest};
 use super::{MemoryGenerationHandle, MemoryGenerationTarget};
-use crate::cognition::CognitionCode;
-use crate::cognition::CognitionError;
-use crate::cognition::CognitionPathEnvironment;
+use crate::cognition::{CognitionCode, CognitionError, CognitionPathEnvironment};
 
 pub fn assert_mutation_authority(
     data_root: &Path,

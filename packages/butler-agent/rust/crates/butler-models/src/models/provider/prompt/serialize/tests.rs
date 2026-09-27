@@ -5,14 +5,10 @@ use tokio_util::sync::CancellationToken;
 use url::Url;
 
 use super::*;
-use crate::models::ModelCatalog;
-use crate::models::ModelCatalogSnapshotInput;
-use crate::models::PromptCacheBoundary;
-use crate::models::PromptJsonSchema;
-use crate::models::PromptUsageAttribution;
-use crate::models::ProviderAuth;
-use crate::models::ProviderPromptCachePolicy;
-use crate::models::ProviderRoundPolicy;
+use crate::models::{
+    ModelCatalog, ModelCatalogSnapshotInput, PromptCacheBoundary, PromptJsonSchema,
+    PromptUsageAttribution, ProviderAuth, ProviderPromptCachePolicy, ProviderRoundPolicy,
+};
 use butler_core::locale::LocaleCollation;
 
 fn config(model_ref: &str) -> ProviderRequestConfig {

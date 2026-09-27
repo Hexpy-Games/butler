@@ -6,9 +6,7 @@ use std::path::Path;
 use serde_json::{Map, Value, json};
 
 use super::command;
-use butler_ledger::project_ledger::LedgerCommand;
-use butler_ledger::project_ledger::ProjectLedger;
-use butler_ledger::project_ledger::ProjectLedgerReadError;
+use butler_ledger::project_ledger::{LedgerCommand, ProjectLedger, ProjectLedgerReadError};
 
 mod closeout;
 pub(super) use closeout::closeout;

@@ -9,18 +9,12 @@ use crate::host::memory_jobs::briefing::BriefingGeneration;
 use crate::host::memory_jobs::consolidation_phase::CyclePhases;
 use crate::host::memory_jobs::profile_consolidation::ProfileConsolidation;
 use crate::host::{ProcessEnvironment, ResolvedInstallation, SystemIdentity};
-use butler_memory::cognition::BoxStoreService;
-use butler_memory::cognition::CognitionPathEnvironment;
-use butler_memory::cognition::CycleService;
-use butler_memory::cognition::CycleStatus;
-use butler_memory::cognition::FeedbackBufferService;
-use butler_memory::cognition::KnowHowService;
-use butler_memory::cognition::LegacyMetadataIntegrityService;
-use butler_memory::cognition::MemoryHealthService;
-use butler_memory::cognition::RunCycle;
+use butler_memory::cognition::{
+    BoxStoreService, CognitionPathEnvironment, CycleService, CycleStatus, FeedbackBufferService,
+    KnowHowService, LegacyMetadataIntegrityService, MemoryHealthService, RunCycle,
+};
 use butler_memory::coordination::CognitionWriteCoordinator;
-use butler_runtime::operations::CycleMetrics;
-use butler_runtime::operations::MetricFiles;
+use butler_runtime::operations::{CycleMetrics, MetricFiles};
 
 pub(crate) struct ConsolidationCliResult {
     pub stdout: String,

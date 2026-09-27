@@ -10,10 +10,7 @@ use serde_json::{Value, json};
 
 use crate::host::ResolvedInstallation;
 use crate::host::installation::realpath_or_nearest;
-use butler_runtime::operations::LogEntry;
-use butler_runtime::operations::LogFile;
-use butler_runtime::operations::LogFollower;
-use butler_runtime::operations::tail_log_entries;
+use butler_runtime::operations::{LogEntry, LogFile, LogFollower, tail_log_entries};
 
 pub(super) fn read(
     data_root: &Path,

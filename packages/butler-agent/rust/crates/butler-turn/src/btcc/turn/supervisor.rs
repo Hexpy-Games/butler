@@ -5,8 +5,7 @@ use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 use super::contracts::{StopPersistenceOutcome, TurnSemanticState};
-use crate::btcc::BtccCode;
-use crate::btcc::BtccError;
+use crate::btcc::{BtccCode, BtccError};
 
 #[derive(Clone, Default)]
 pub(super) struct TurnExecutionSupervisor {

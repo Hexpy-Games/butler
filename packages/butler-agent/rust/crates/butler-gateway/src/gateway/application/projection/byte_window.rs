@@ -7,8 +7,7 @@ use std::{
 };
 
 use super::{TranscriptEvent, checkpoint::Checkpoint};
-use crate::gateway::application::storage::AppStorageCode;
-use crate::gateway::application::storage::AppStorageError;
+use crate::gateway::application::storage::{AppStorageCode, AppStorageError};
 
 const BYTE_WINDOW: usize = 64 * 1024;
 const ANCHOR_BYTES: u64 = 64;

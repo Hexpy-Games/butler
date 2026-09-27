@@ -6,16 +6,11 @@ use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
 
 use butler_runtime::context::ToolOutput;
-use butler_turn::btcc::AdapterOutcome;
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::EffectAdapter;
-use butler_turn::btcc::EffectAdapterError;
-use butler_turn::btcc::EffectError;
-use butler_turn::btcc::EffectFuture;
-use butler_turn::btcc::PlanBinding;
-use butler_turn::workspace::Commands;
-use butler_turn::workspace::GuidedAccess;
-use butler_turn::workspace::GuidedCommandInput;
+use butler_turn::btcc::{
+    AdapterOutcome, BtccError, EffectAdapter, EffectAdapterError, EffectError, EffectFuture,
+    PlanBinding,
+};
+use butler_turn::workspace::{Commands, GuidedAccess, GuidedCommandInput};
 
 use super::{CommandScope, GuidedCommand, PreparedCommandEffect, active_root, error, output};
 

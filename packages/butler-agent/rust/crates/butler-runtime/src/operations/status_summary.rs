@@ -11,9 +11,7 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 
-use butler_models::models::ModelCatalog;
-use butler_models::models::ModelConfiguration;
-use butler_models::models::StatusModels;
+use butler_models::models::{ModelCatalog, ModelConfiguration, StatusModels};
 use std::sync::Arc;
 
 pub async fn read_context_tool(

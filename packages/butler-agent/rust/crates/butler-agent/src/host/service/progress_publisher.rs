@@ -4,13 +4,10 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 
-use butler_gateway::gateway::TranscriptWriter;
-use butler_gateway::gateway::normalize_committed_turn_event;
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::CommittedProgressEvent;
-use butler_turn::btcc::EventVisibility;
-use butler_turn::btcc::PeerKind;
-use butler_turn::btcc::StorageProgressPublication;
+use butler_gateway::gateway::{TranscriptWriter, normalize_committed_turn_event};
+use butler_turn::btcc::{
+    BtccError, CommittedProgressEvent, EventVisibility, PeerKind, StorageProgressPublication,
+};
 
 const PAGE_SIZE: usize = 32;
 

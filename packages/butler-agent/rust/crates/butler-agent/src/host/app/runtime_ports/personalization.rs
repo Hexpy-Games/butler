@@ -5,18 +5,14 @@ use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 use crate::host::ResolvedInstallation;
-use butler_gateway::gateway::AppPersonalizationCommand;
-use butler_gateway::gateway::AppPersonalizationEvent;
-use butler_gateway::gateway::AppPersonalizationPort;
-use butler_gateway::gateway::AppPersonalizationResult;
-use butler_gateway::gateway::ApplicationFuture;
-use butler_gateway::gateway::GatewayApplicationError;
-use butler_memory::profile::ClearProfilingResult;
-use butler_memory::profile::PersonalizationProfileUpdate;
-use butler_memory::profile::ProfileService;
-use butler_memory::profile::ProfileThirdPartyImportOptions;
-use butler_memory::profile::ProfilingMode;
-use butler_memory::profile::third_party_migration_prompt;
+use butler_gateway::gateway::{
+    AppPersonalizationCommand, AppPersonalizationEvent, AppPersonalizationPort,
+    AppPersonalizationResult, ApplicationFuture, GatewayApplicationError,
+};
+use butler_memory::profile::{
+    ClearProfilingResult, PersonalizationProfileUpdate, ProfileService,
+    ProfileThirdPartyImportOptions, ProfilingMode, third_party_migration_prompt,
+};
 use butler_models::models::ModelConfiguration;
 
 mod errors;

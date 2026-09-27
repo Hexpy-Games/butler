@@ -5,11 +5,9 @@ mod stable;
 use serde_json::{Map, Value};
 
 use crate::models::ModelProviderMetadata;
-use butler_turn::btcc::ModelRoundMessage;
-use butler_turn::btcc::ModelRoundRequest;
-use butler_turn::btcc::ModelRoundRole;
-use butler_turn::btcc::ModelRoundTool;
-use butler_turn::btcc::ToolChoice;
+use butler_turn::btcc::{
+    ModelRoundMessage, ModelRoundRequest, ModelRoundRole, ModelRoundTool, ToolChoice,
+};
 
 use super::continuation::{self, LegacyPreparation, LegacyProjection};
 use super::contracts::{PromptCacheRetention, ProviderAuthMode, ProviderRequestConfig};

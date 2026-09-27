@@ -3,12 +3,10 @@ use std::future::Future;
 
 use serde_json::Value;
 
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::ProjectWorkBinding;
-use butler_turn::btcc::ProjectWorkObserveWork;
-use butler_turn::btcc::ProjectWorkObserveWorks;
-use butler_turn::btcc::ProjectWorkOperationIdentity;
-use butler_turn::btcc::ProjectWorkOperationKind;
+use butler_turn::btcc::{
+    BtccError, ProjectWorkBinding, ProjectWorkObserveWork, ProjectWorkObserveWorks,
+    ProjectWorkOperationIdentity, ProjectWorkOperationKind,
+};
 
 use super::super::publication::{
     ProjectLedgerRecordKind, ProjectLedgerRecordUpdate, ProjectWorkPublicationError,

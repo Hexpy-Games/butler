@@ -29,55 +29,32 @@ use crate::host::runtime::stores::RuntimeStores;
 use boundary::{setup, validate_data_installation_boundary};
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
-use butler_ledger::project_ledger::ProjectLedger;
-use butler_ledger::project_ledger::ProjectWork;
-use butler_memory::cognition::CognitionPromptReader;
-use butler_memory::cognition::CompletionPublisher;
-use butler_memory::cognition::ExactMemoryQuery;
+use butler_ledger::project_ledger::{ProjectLedger, ProjectWork};
 #[cfg(unix)]
 use butler_memory::cognition::GenerationVectorAdapter;
-use butler_memory::cognition::MemoryRecall;
-use butler_memory::cognition::ProjectCapsuleService;
+use butler_memory::cognition::{CognitionPromptReader, CompletionPublisher, ExactMemoryQuery};
+use butler_memory::cognition::{MemoryRecall, ProjectCapsuleService};
 use butler_memory::coordination::CognitionWriteCoordinator;
-use butler_memory::profile::PersonaPresets;
-use butler_memory::profile::ProfileService;
+use butler_memory::profile::{PersonaPresets, ProfileService};
 use butler_models::models::ModelConfigurationClock;
-use butler_runtime::context::ContextBudgetOwner;
-use butler_runtime::context::ContextConversation;
-use butler_runtime::context::ConversationSessionReference;
-use butler_runtime::context::ConversationTools;
-use butler_runtime::context::PromptAssembler;
-use butler_runtime::context::PromptDependencies;
-use butler_runtime::context::PromptPaths;
-use butler_runtime::context::ToolOutput;
+use butler_runtime::context::{
+    ContextBudgetOwner, ContextConversation, ConversationSessionReference, ConversationTools,
+    PromptAssembler, PromptDependencies, PromptPaths, ToolOutput,
+};
 use butler_runtime::operations::MetricFiles;
 use butler_turn::btcc;
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::BtccRepositories;
-use butler_turn::btcc::ContextCompactionRepository;
-use butler_turn::btcc::DefaultTurnPreparation;
-use butler_turn::btcc::DurableWorkService;
-use butler_turn::btcc::GuidedContinuationBudgetFactory;
-use butler_turn::btcc::HostDependencies;
-use butler_turn::btcc::ModelRouteRetryConfig;
-use butler_turn::btcc::OperationResultRepository;
-use butler_turn::btcc::PortFuture;
-use butler_turn::btcc::PrincipalAuthority;
-use butler_turn::btcc::ProductionAgentLoop;
-use butler_turn::btcc::SessionWorkRepository;
-use butler_turn::btcc::SqliteProjectWorkRuntime;
-use butler_turn::btcc::SqliteSubsessionRepository;
-use butler_turn::btcc::StorageEffectJournal;
-use butler_turn::btcc::StorageProgressPublication;
-use butler_turn::btcc::ToolJournalRepository;
-use butler_turn::btcc::TurnFacadeDependencies;
-use butler_turn::btcc::TurnModelExecutionFactory;
+use butler_turn::btcc::{
+    BtccError, BtccRepositories, ContextCompactionRepository, DefaultTurnPreparation,
+    DurableWorkService, GuidedContinuationBudgetFactory, HostDependencies, ModelRouteRetryConfig,
+    OperationResultRepository, PortFuture, PrincipalAuthority, ProductionAgentLoop,
+    SessionWorkRepository, SqliteProjectWorkRuntime, SqliteSubsessionRepository,
+    StorageEffectJournal, StorageProgressPublication, ToolJournalRepository,
+    TurnFacadeDependencies, TurnModelExecutionFactory,
+};
 use butler_turn::conversation::conversation_store_path;
-use butler_turn::workspace::Commands;
-use butler_turn::workspace::SessionWorkspaceRecovery;
-use butler_turn::workspace::SessionWorktrees;
-use butler_turn::workspace::WorkspaceFiles;
-use butler_turn::workspace::WorkspaceMutations;
+use butler_turn::workspace::{
+    Commands, SessionWorkspaceRecovery, SessionWorktrees, WorkspaceFiles, WorkspaceMutations,
+};
 pub(crate) use contracts::{AgentRuntime, RuntimePaths};
 use owners::RuntimeOwners;
 use std::path::PathBuf;

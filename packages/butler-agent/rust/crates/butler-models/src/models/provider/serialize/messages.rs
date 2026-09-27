@@ -1,8 +1,6 @@
 use serde_json::{Map, Value};
 
-use butler_turn::btcc::ModelRoundMessage;
-use butler_turn::btcc::ModelRoundRequest;
-use butler_turn::btcc::ModelRoundRole;
+use butler_turn::btcc::{ModelRoundMessage, ModelRoundRequest, ModelRoundRole};
 
 pub(super) fn bounded_items(messages: &[ModelRoundMessage]) -> Vec<Value> {
     messages

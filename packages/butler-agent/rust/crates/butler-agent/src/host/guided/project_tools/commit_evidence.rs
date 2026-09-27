@@ -9,9 +9,7 @@ use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
 use butler_core::public_text::trim_js_whitespace;
-use butler_turn::workspace::CommandStep;
-use butler_turn::workspace::Commands;
-use butler_turn::workspace::StructuredCommandInput;
+use butler_turn::workspace::{CommandStep, Commands, StructuredCommandInput};
 
 const INSTALL_URL: &str = "https://git-scm.com/downloads";
 

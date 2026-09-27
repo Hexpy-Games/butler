@@ -13,10 +13,8 @@ use super::{
     bind::{self, Envelope},
 };
 use butler_gateway::gateway::ClaimedInboundEvent;
-use butler_turn::btcc::TurnOutcome;
-use butler_turn::btcc::TurnOutcomeKind;
-use butler_turn::workspace::SessionTransportBinding;
-use butler_turn::workspace::StoredSessionBinding;
+use butler_turn::btcc::{TurnOutcome, TurnOutcomeKind};
+use butler_turn::workspace::{SessionTransportBinding, StoredSessionBinding};
 
 pub(super) fn actions(
     item: &ClaimedInboundEvent,

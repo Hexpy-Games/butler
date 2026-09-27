@@ -5,8 +5,7 @@ use std::collections::HashSet;
 use serde_json::Value;
 
 use super::error;
-use crate::cognition::CognitionCode;
-use crate::cognition::CognitionResult;
+use crate::cognition::{CognitionCode, CognitionResult};
 
 const INPUT_REPAIR_SCHEMA: &str = "butler.memory-candidate-input-repair.v1";
 const MAX_REPAIR_REQUEST_BYTES: usize = 32 * 1024;

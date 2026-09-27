@@ -26,8 +26,7 @@ use std::sync::Arc;
 use tokio::sync::{Notify, Semaphore};
 
 use butler_core::locale::LocaleCollation;
-use butler_turn::btcc::ProjectWorkOperationIdentity;
-use butler_turn::btcc::ResolvedProjectWorkScope;
+use butler_turn::btcc::{ProjectWorkOperationIdentity, ResolvedProjectWorkScope};
 
 tokio::task_local! {
     static IN_PUBLICATION: ();

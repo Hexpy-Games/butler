@@ -1,7 +1,6 @@
 use tokio_util::sync::CancellationToken;
 
-use crate::models::ModelProviderMetadata;
-use crate::models::ProviderVisualCapabilityPort;
+use crate::models::{ModelProviderMetadata, ProviderVisualCapabilityPort};
 use butler_turn::btcc::ModelRoundError;
 
 const ZAI_PROVIDER: &str = "zai";

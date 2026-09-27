@@ -2,21 +2,17 @@
 
 use std::sync::Arc;
 
-use butler_gateway::gateway::AppSessionViewPage;
-use butler_gateway::gateway::AppSubsessionPort;
-use butler_gateway::gateway::ApplicationFuture;
-use butler_gateway::gateway::GatewayApplicationError;
-use butler_gateway::gateway::OperationOutputChunk;
-use butler_turn::btcc::StorageProgressPublication;
-use butler_turn::btcc::SubsessionCancelRequest;
-use butler_turn::btcc::SubsessionResumeRequest;
-use butler_turn::btcc::SubsessionService;
-use butler_turn::conversation::AgentConversationStore;
-use butler_turn::conversation::ConversationMessageWithParts;
-use butler_turn::conversation::ConversationPartKind;
-use butler_turn::conversation::ConversationRole;
-use butler_turn::conversation::ConversationStatus;
-use butler_turn::conversation::conversation_session_id_for_durable_session;
+use butler_gateway::gateway::{
+    AppSessionViewPage, AppSubsessionPort, ApplicationFuture, GatewayApplicationError,
+    OperationOutputChunk,
+};
+use butler_turn::btcc::{
+    StorageProgressPublication, SubsessionCancelRequest, SubsessionResumeRequest, SubsessionService,
+};
+use butler_turn::conversation::{
+    AgentConversationStore, ConversationMessageWithParts, ConversationPartKind, ConversationRole,
+    ConversationStatus, conversation_session_id_for_durable_session,
+};
 use butler_turn::workspace::SessionRole;
 
 pub(crate) struct AppSubsessions {
@@ -270,11 +266,10 @@ fn map_error(error: &butler_turn::btcc::BtccError) -> GatewayApplicationError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use butler_turn::conversation::ConversationMessage;
-    use butler_turn::conversation::ConversationOriginKind;
-    use butler_turn::conversation::ConversationPart;
-    use butler_turn::conversation::ConversationProvenance;
-    use butler_turn::conversation::ConversationVisibility;
+    use butler_turn::conversation::{
+        ConversationMessage, ConversationOriginKind, ConversationPart, ConversationProvenance,
+        ConversationVisibility,
+    };
 
     #[test]
     fn child_message_projection_keeps_every_text_content_block() {

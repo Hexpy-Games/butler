@@ -15,8 +15,7 @@ use super::{
     ReadConversationContextInput,
 };
 use crate::context::ContextCode;
-use butler_turn::conversation::CanonicalMemoryReadBinding;
-use butler_turn::conversation::conversation_store_path;
+use butler_turn::conversation::{CanonicalMemoryReadBinding, conversation_store_path};
 
 pub struct ConversationTools {
     path: PathBuf,

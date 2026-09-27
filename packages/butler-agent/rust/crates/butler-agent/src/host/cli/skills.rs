@@ -8,10 +8,7 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::host::ResolvedInstallation;
-use butler_runtime::skills::SkillError;
-use butler_runtime::skills::SkillSettingsView;
-use butler_runtime::skills::Skills;
-use butler_runtime::skills::StagedSkillArchive;
+use butler_runtime::skills::{SkillError, SkillSettingsView, Skills, StagedSkillArchive};
 use output::{CommandError, failure, render_error, render_success};
 
 pub(crate) use output::SkillCliResult;

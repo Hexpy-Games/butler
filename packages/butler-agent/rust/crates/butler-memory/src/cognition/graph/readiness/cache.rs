@@ -9,12 +9,11 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 
 use super::{GraphRepository, db_error, hydrate, source};
-use crate::cognition::CognitionResult;
-use crate::cognition::CognitionSourceRow;
-use crate::cognition::ConversationSourceNotice;
-use crate::cognition::assert_conversation_source_current;
-use crate::cognition::feedback::FeedbackSourceRow;
-use crate::cognition::feedback::excluded_source_ids;
+use crate::cognition::feedback::{FeedbackSourceRow, excluded_source_ids};
+use crate::cognition::{
+    CognitionResult, CognitionSourceRow, ConversationSourceNotice,
+    assert_conversation_source_current,
+};
 use butler_turn::conversation::ConversationSourceReader;
 
 impl GraphRepository {

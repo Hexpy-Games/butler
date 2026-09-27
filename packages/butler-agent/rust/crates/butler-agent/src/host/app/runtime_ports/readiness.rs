@@ -5,9 +5,9 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
-use butler_gateway::gateway::AppExecutorReadiness;
-use butler_gateway::gateway::GatewayApplicationError;
-use butler_gateway::gateway::RuntimeReadinessView;
+use butler_gateway::gateway::{
+    AppExecutorReadiness, GatewayApplicationError, RuntimeReadinessView,
+};
 use butler_runtime::operations::ServiceReadiness;
 
 pub(crate) struct AppReadiness {

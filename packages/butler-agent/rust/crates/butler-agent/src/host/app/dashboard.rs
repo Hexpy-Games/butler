@@ -1,29 +1,18 @@
 //! Host translation between App dashboard facts and the Project Ledger owner.
 
-use butler_gateway::gateway::AppProjectDashboardActionProgress;
-use butler_gateway::gateway::AppProjectDashboardCheckpoint;
-use butler_gateway::gateway::AppProjectDashboardDisposition;
-use butler_gateway::gateway::AppProjectDashboardLedgerError;
-use butler_gateway::gateway::AppProjectDashboardLedgerEvent;
-use butler_gateway::gateway::AppProjectDashboardLedgerFuture;
-use butler_gateway::gateway::AppProjectDashboardLedgerHistory;
-use butler_gateway::gateway::AppProjectDashboardLedgerPort;
-use butler_gateway::gateway::AppProjectDashboardLedgerRecord;
-use butler_gateway::gateway::AppProjectDashboardManagedPlan;
-use butler_gateway::gateway::AppProjectDashboardManagedWork;
-use butler_gateway::gateway::AppProjectDashboardReview;
-use butler_gateway::gateway::AppProjectDashboardSnapshot;
-use butler_gateway::gateway::AppProjectDashboardSource;
-use butler_gateway::gateway::AppProjectDashboardWork;
-use butler_gateway::gateway::AppProjectDashboardWorkHistoryEntry;
-use butler_ledger::project_ledger::DashboardLedgerRecord;
-use butler_ledger::project_ledger::DashboardLedgerSnapshot;
-use butler_ledger::project_ledger::DashboardLedgerSource;
-use butler_ledger::project_ledger::DashboardManagedWorkView;
-use butler_ledger::project_ledger::DashboardWorkHistoryEntry;
-use butler_ledger::project_ledger::ProjectLedger;
-use butler_ledger::project_ledger::ProjectLedgerBinding;
-use butler_ledger::project_ledger::ProjectLedgerReadError;
+use butler_gateway::gateway::{
+    AppProjectDashboardActionProgress, AppProjectDashboardCheckpoint,
+    AppProjectDashboardDisposition, AppProjectDashboardLedgerError, AppProjectDashboardLedgerEvent,
+    AppProjectDashboardLedgerFuture, AppProjectDashboardLedgerHistory,
+    AppProjectDashboardLedgerPort, AppProjectDashboardLedgerRecord, AppProjectDashboardManagedPlan,
+    AppProjectDashboardManagedWork, AppProjectDashboardReview, AppProjectDashboardSnapshot,
+    AppProjectDashboardSource, AppProjectDashboardWork, AppProjectDashboardWorkHistoryEntry,
+};
+use butler_ledger::project_ledger::{
+    DashboardLedgerRecord, DashboardLedgerSnapshot, DashboardLedgerSource,
+    DashboardManagedWorkView, DashboardWorkHistoryEntry, ProjectLedger, ProjectLedgerBinding,
+    ProjectLedgerReadError,
+};
 
 pub(crate) struct AppDashboardLedger {
     ledger: ProjectLedger,

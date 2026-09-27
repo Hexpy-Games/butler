@@ -7,15 +7,11 @@ use std::{
 
 use serde_json::{Value, json};
 
-use butler_gateway::gateway::AppImageFiles;
-use butler_gateway::gateway::AppNativeAssetResolver;
-use butler_gateway::gateway::ApplicationFuture;
-use butler_gateway::gateway::ClaimedNativeSnapshot;
-use butler_gateway::gateway::GatewayApplicationError;
-use butler_gateway::gateway::ResolvedNativeAssets;
-use butler_gateway::gateway::resolve_session_references;
-use butler_models::models::ModelConfiguration;
-use butler_models::models::VisualImageAdmissionResult;
+use butler_gateway::gateway::{
+    AppImageFiles, AppNativeAssetResolver, ApplicationFuture, ClaimedNativeSnapshot,
+    GatewayApplicationError, ResolvedNativeAssets, resolve_session_references,
+};
+use butler_models::models::{ModelConfiguration, VisualImageAdmissionResult};
 use butler_turn::conversation::AgentConversationStore;
 
 pub(crate) struct AppAssets {

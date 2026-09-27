@@ -1,9 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::models::ProviderPromptRequest;
-use butler_turn::btcc::AttachmentKind;
-use butler_turn::btcc::AttachmentRef;
-use butler_turn::btcc::ModelRoundError;
+use butler_turn::btcc::{AttachmentKind, AttachmentRef, ModelRoundError};
 
 const MAX_ATTACHMENT_TEXT_UNITS: usize = 24_000;
 const MAX_TOTAL_TEXT_UNITS: usize = 60_000;

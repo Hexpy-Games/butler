@@ -10,9 +10,8 @@ use super::{
     error,
     request::{CandidateInputRepairExpected, CandidateInputRepairRequest},
 };
-use crate::cognition::CognitionCode;
-use crate::cognition::CognitionResult;
 use crate::cognition::extraction::ExtractInput;
+use crate::cognition::{CognitionCode, CognitionResult};
 use butler_turn::conversation::ConversationSourceReader;
 
 const INPUT_REPAIR_RECEIPT_SCHEMA: &str = "butler.memory-candidate-input-repair-receipt.v1";

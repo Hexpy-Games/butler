@@ -1,10 +1,7 @@
 use chrono::{SecondsFormat, Utc};
 use serde_json::{Map, Value, json};
 
-use butler_turn::btcc::AgentLoopError;
-use butler_turn::btcc::AgentLoopResult;
-use butler_turn::btcc::RuntimeFailure;
-use butler_turn::btcc::TurnRecord;
+use butler_turn::btcc::{AgentLoopError, AgentLoopResult, RuntimeFailure, TurnRecord};
 
 use super::super::redaction;
 use super::CaptureState;

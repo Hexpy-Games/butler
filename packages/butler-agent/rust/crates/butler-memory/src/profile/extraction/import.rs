@@ -12,8 +12,7 @@ use super::super::{candidates, extractor_config, storage};
 use super::{Dependencies, parser, prompt, runtime};
 use crate::profile::ProfileCode;
 use butler_core::json::Utf16Prefix;
-use butler_models::models::ProviderPromptLifecycle;
-use butler_models::models::ProviderPromptRequest;
+use butler_models::models::{ProviderPromptLifecycle, ProviderPromptRequest};
 
 pub(super) async fn run(
     dependencies: Dependencies,

@@ -5,30 +5,19 @@ use std::collections::HashSet;
 use serde_json::{Map, Value};
 
 use super::AppSessionWorkspaces;
-use butler_gateway::gateway::AppRelocationBinding;
-use butler_gateway::gateway::AppRelocationBindingResult;
-use butler_gateway::gateway::AppRelocationBindingSeed;
-use butler_gateway::gateway::AppRelocationBindingUpdate;
-use butler_gateway::gateway::AppRelocationCanonicalUpdate;
-use butler_gateway::gateway::AppRelocationHost;
-use butler_gateway::gateway::AppRelocationSnapshot;
-use butler_gateway::gateway::AppRelocationTransportBinding;
-use butler_gateway::gateway::AppRelocationWorkspaceMarker;
-use butler_gateway::gateway::AppRelocationWorkspacePlan;
-use butler_gateway::gateway::AppRelocationWorkspaceRequest;
-use butler_gateway::gateway::ApplicationFuture;
-use butler_gateway::gateway::GatewayApplicationError;
+use butler_gateway::gateway::{
+    AppRelocationBinding, AppRelocationBindingResult, AppRelocationBindingSeed,
+    AppRelocationBindingUpdate, AppRelocationCanonicalUpdate, AppRelocationHost,
+    AppRelocationSnapshot, AppRelocationTransportBinding, AppRelocationWorkspaceMarker,
+    AppRelocationWorkspacePlan, AppRelocationWorkspaceRequest, ApplicationFuture,
+    GatewayApplicationError,
+};
 use butler_turn::btcc::SubsessionService;
-use butler_turn::workspace::ExecutionContextInput;
-use butler_turn::workspace::OwnOptional;
-use butler_turn::workspace::RebindWorkspaceResult;
-use butler_turn::workspace::RelocationWorkspaceInput;
-use butler_turn::workspace::RelocationWorkspaceMarker;
-use butler_turn::workspace::RelocationWorkspacePlan;
-use butler_turn::workspace::SessionLifecycleState;
-use butler_turn::workspace::SessionRole;
-use butler_turn::workspace::UpsertSessionBinding;
-use butler_turn::workspace::WorkspaceError;
+use butler_turn::workspace::{
+    ExecutionContextInput, OwnOptional, RebindWorkspaceResult, RelocationWorkspaceInput,
+    RelocationWorkspaceMarker, RelocationWorkspacePlan, SessionLifecycleState, SessionRole,
+    UpsertSessionBinding, WorkspaceError,
+};
 
 impl AppRelocationHost for AppSessionWorkspaces {
     fn inspect(&self, runtime_session_id: String) -> ApplicationFuture<AppRelocationSnapshot> {

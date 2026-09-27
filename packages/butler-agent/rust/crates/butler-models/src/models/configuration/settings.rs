@@ -9,9 +9,7 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use serde_json::Value;
 
 use super::ModelConfiguration;
-use crate::models::ParsedModelRef;
-use crate::models::ParsedModelRefSource;
-use crate::models::parse_model_ref;
+use crate::models::{ParsedModelRef, ParsedModelRefSource, parse_model_ref};
 use butler_core::configuration;
 
 /// Failures of user-settings, default-model, private-environment and

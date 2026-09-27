@@ -5,15 +5,11 @@ use std::{sync::Arc, time::SystemTime};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use butler_memory::cognition::ConfiguredPhase;
-use butler_memory::cognition::ConfiguredPhaseExecutor;
-use butler_memory::cognition::ConfiguredPhaseFuture;
-use butler_memory::cognition::GraphConsolidationService;
-use butler_memory::cognition::MemoryHealthService;
-use butler_memory::cognition::MemorySyncConsumer;
-use butler_memory::cognition::ProjectCapsuleService;
-use butler_memory::cognition::VectorOptimizeOutcome;
-use butler_memory::cognition::VectorOptimizeService;
+use butler_memory::cognition::{
+    ConfiguredPhase, ConfiguredPhaseExecutor, ConfiguredPhaseFuture, GraphConsolidationService,
+    MemoryHealthService, MemorySyncConsumer, ProjectCapsuleService, VectorOptimizeOutcome,
+    VectorOptimizeService,
+};
 
 pub(in crate::host) struct ConfiguredPhases {
     pub consumer: Arc<MemorySyncConsumer>,

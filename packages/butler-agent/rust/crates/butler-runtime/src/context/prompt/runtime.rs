@@ -1,11 +1,8 @@
 use serde_json::{Map, Value};
 
 use crate::context::{ContextResult, ProjectCapsuleStatus, PromptClock, PromptEnvironment};
-use butler_turn::btcc::AttachmentKind;
-use butler_turn::btcc::ContextSection;
-use butler_turn::btcc::TurnRequest;
-use butler_turn::workspace::SessionRole;
-use butler_turn::workspace::StoredSessionBinding;
+use butler_turn::btcc::{AttachmentKind, ContextSection, TurnRequest};
+use butler_turn::workspace::{SessionRole, StoredSessionBinding};
 
 use super::files::{safe_config_string, safe_config_text};
 

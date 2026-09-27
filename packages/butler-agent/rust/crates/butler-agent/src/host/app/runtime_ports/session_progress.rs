@@ -2,14 +2,11 @@
 
 use std::{collections::HashSet, sync::Arc};
 
-use butler_gateway::gateway::AppSessionWorkProgress;
-use butler_gateway::gateway::AppWorkProgress;
-use butler_gateway::gateway::ApplicationFuture;
-use butler_gateway::gateway::GatewayApplicationError;
-use butler_ledger::project_ledger::ProjectLedger;
-use butler_ledger::project_ledger::ProjectWorkPlanRead;
-use butler_turn::btcc::SessionPlanObservation;
-use butler_turn::btcc::SessionWorkRepository;
+use butler_gateway::gateway::{
+    AppSessionWorkProgress, AppWorkProgress, ApplicationFuture, GatewayApplicationError,
+};
+use butler_ledger::project_ledger::{ProjectLedger, ProjectWorkPlanRead};
+use butler_turn::btcc::{SessionPlanObservation, SessionWorkRepository};
 
 pub(crate) struct AppSessionProgress {
     session_work: Arc<SessionWorkRepository>,

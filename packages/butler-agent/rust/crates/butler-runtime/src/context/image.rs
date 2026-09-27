@@ -4,12 +4,11 @@ mod contracts;
 mod manifest;
 mod sanitize;
 
-pub use butler_models::models::ImageCapabilityEvidence;
-pub use butler_models::models::ImageCarrierTuple;
-pub use butler_models::models::VisualImageAdmissionResult;
-pub use butler_models::models::admit_visual_image_request;
-pub use butler_models::models::assert_visual_carrier_matches_catalog;
-pub use butler_models::models::image_admission_for_catalog_entry;
+pub use butler_models::models::{
+    ImageCapabilityEvidence, ImageCarrierTuple, VisualImageAdmissionResult,
+    admit_visual_image_request, assert_visual_carrier_matches_catalog,
+    image_admission_for_catalog_entry,
+};
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use contracts::SanitizedImage;
 pub use contracts::{

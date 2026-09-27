@@ -4,15 +4,11 @@ use serde_json::Value;
 
 use super::*;
 use butler_core::locale::LocaleCollation;
-use butler_turn::conversation::AgentConversationStore;
-use butler_turn::conversation::ConversationAdmissionTurn;
-use butler_turn::conversation::ConversationAdmissionTurnInput;
-use butler_turn::conversation::ConversationEnvelope;
-use butler_turn::conversation::ConversationOriginEvidence;
-use butler_turn::conversation::ConversationOriginFacts;
-use butler_turn::conversation::ConversationStoreConfig;
-use butler_turn::conversation::DurableSessionBinding;
-use butler_turn::conversation::classify_conversation_origin;
+use butler_turn::conversation::{
+    AgentConversationStore, ConversationAdmissionTurn, ConversationAdmissionTurnInput,
+    ConversationEnvelope, ConversationOriginEvidence, ConversationOriginFacts,
+    ConversationStoreConfig, DurableSessionBinding, classify_conversation_origin,
+};
 
 #[tokio::test]
 async fn canonical_completion_publishes_one_observation_and_one_queue_job_then_drains() {

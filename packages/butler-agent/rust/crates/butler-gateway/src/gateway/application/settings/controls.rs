@@ -11,8 +11,7 @@ use super::{
 };
 use crate::gateway::MessageSendRequest;
 use crate::gateway::application::storage::AppStorageError;
-use butler_turn::btcc::AccessMode;
-use butler_turn::btcc::ReasoningEffort;
+use butler_turn::btcc::{AccessMode, ReasoningEffort};
 
 use super::persistence::write_json;
 use model::{

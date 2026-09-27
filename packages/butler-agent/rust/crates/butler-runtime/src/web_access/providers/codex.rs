@@ -5,10 +5,8 @@ use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
-use crate::web_access::service::WebAccess;
-use crate::web_access::service::WebAccessError;
-use butler_models::models::ProviderAuth;
-use butler_models::models::ProviderAuthMode;
+use crate::web_access::service::{WebAccess, WebAccessError};
+use butler_models::models::{ProviderAuth, ProviderAuthMode};
 
 use super::{
     contracts::{SearchInput, SearchOutput, SearchProvider, SearchResult, filter_results},

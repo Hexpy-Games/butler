@@ -3,8 +3,7 @@ use std::collections::HashMap;
 use butler_core::tool_protocol::ToolName;
 use serde_json::{Value, json};
 
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::ToolJournalCloseoutRow;
+use butler_turn::btcc::{BtccError, ToolJournalCloseoutRow};
 
 use super::{invalid, safe_path};
 

@@ -3,8 +3,7 @@
 use rusqlite::OptionalExtension;
 
 use super::{SessionWorkRepository, StorageError, common::error};
-use crate::btcc::BtccError;
-use crate::btcc::StorageCode;
+use crate::btcc::{BtccError, StorageCode};
 
 pub enum PersistedWorkTurnScope {
     Unbound {

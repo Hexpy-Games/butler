@@ -2,8 +2,7 @@
 
 use serde_json::{Number, Value};
 
-use butler_models::models::ParsedModelRefSource;
-use butler_models::models::parse_model_ref;
+use butler_models::models::{ParsedModelRefSource, parse_model_ref};
 
 pub(super) const SAFE_CONFIG_PATHS: &[&str] = &[
     "user.language",

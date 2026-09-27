@@ -5,9 +5,9 @@ use std::{path::Path, sync::Arc};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use butler_memory::cognition::CognitionError;
-use butler_memory::cognition::CognitionPathEnvironment;
-use butler_memory::cognition::retry_failed_memory_generation;
+use butler_memory::cognition::{
+    CognitionError, CognitionPathEnvironment, retry_failed_memory_generation,
+};
 use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_models::models::ModelConfigurationClock;
 

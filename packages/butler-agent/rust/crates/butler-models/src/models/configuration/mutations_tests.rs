@@ -3,9 +3,7 @@ use std::{fs, path::PathBuf, sync::Arc};
 use serde_json::Value;
 
 use super::*;
-use crate::models::LocalModelSource;
-use crate::models::ModelCatalog;
-use crate::models::ProviderAuthMethod;
+use crate::models::{LocalModelSource, ModelCatalog, ProviderAuthMethod};
 use butler_core::locale::LocaleCollation;
 
 struct Clock;

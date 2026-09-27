@@ -5,12 +5,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::cognition::CognitionError;
-use crate::cognition::CognitionPathEnvironment;
-use crate::cognition::CognitionResult;
-use crate::cognition::ensure_data_authority;
-use butler_core::public_text::is_js_whitespace;
-use butler_core::public_text::trim_js_whitespace;
+use crate::cognition::{
+    CognitionError, CognitionPathEnvironment, CognitionResult, ensure_data_authority,
+};
+use butler_core::public_text::{is_js_whitespace, trim_js_whitespace};
 
 use super::types::{
     LegacyRecallCandidate, LegacyRecallCorpus, LegacyRecallOriginalSource, LegacyRecallSource,

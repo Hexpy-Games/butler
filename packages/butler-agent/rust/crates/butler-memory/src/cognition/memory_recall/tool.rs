@@ -9,10 +9,9 @@ use serde_json::{Value, json};
 use crate::cognition::{CognitionError, CognitionResult, RecallRequest};
 use butler_core::public_text::trim_js_whitespace;
 use butler_core::segmentation::grapheme_segments;
-use butler_turn::conversation::CanonicalMemoryReadBinding;
-use butler_turn::conversation::PublicMemoryScope;
-use butler_turn::conversation::PublicMemorySnapshot;
-use butler_turn::conversation::conversation_store_path;
+use butler_turn::conversation::{
+    CanonicalMemoryReadBinding, PublicMemoryScope, PublicMemorySnapshot, conversation_store_path,
+};
 
 use crate::cognition::recall::{RecallRuntime, RecallScope};
 

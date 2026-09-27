@@ -2,9 +2,7 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 
-use butler_memory::cognition::CognitionPathEnvironment;
-use butler_memory::cognition::LegacyRecallRequest;
-use butler_memory::cognition::recall_legacy;
+use butler_memory::cognition::{CognitionPathEnvironment, LegacyRecallRequest, recall_legacy};
 
 use super::CliError;
 

@@ -4,10 +4,8 @@ use super::types::{
     ActiveDescriptor, GenerationEmbedding, GenerationManifest, MemoryGenerationHandle,
     MemoryGenerationTarget, validate_generation_embedding,
 };
-use crate::cognition::CognitionCode;
-use crate::cognition::CognitionError;
-use crate::cognition::CognitionPathEnvironment;
 use crate::cognition::paths::node_join;
+use crate::cognition::{CognitionCode, CognitionError, CognitionPathEnvironment};
 use serde_json::Value;
 
 pub fn resolve_generation(

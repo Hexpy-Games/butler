@@ -8,10 +8,8 @@ use std::{
 use rusqlite::{Connection, OpenFlags};
 use serde_json::{Value, json};
 
-use crate::cognition::CognitionPathEnvironment;
-use crate::cognition::CognitionResult;
-use crate::coordination::CognitionWriteCoordinator;
-use crate::coordination::ConsolidationLockState;
+use crate::cognition::{CognitionPathEnvironment, CognitionResult};
+use crate::coordination::{CognitionWriteCoordinator, ConsolidationLockState};
 use butler_core::js_date;
 
 use super::{MaintenanceStatus, MemoryHealthReport, error, maintenance};

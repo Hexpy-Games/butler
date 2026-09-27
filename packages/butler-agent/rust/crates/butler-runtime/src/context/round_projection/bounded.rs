@@ -4,9 +4,7 @@ use serde_json::{Map, Value};
 
 use super::atomic_units::AtomicUnit;
 use super::serialization::{MessageProjection, message_json, messages_json};
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::ModelRoundMessage;
-use butler_turn::btcc::ModelRoundRole;
+use butler_turn::btcc::{BtccError, ModelRoundMessage, ModelRoundRole};
 
 pub(super) struct BoundedProjection {
     pub messages: Option<Vec<ModelRoundMessage>>,

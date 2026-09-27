@@ -7,11 +7,10 @@ use tokio::sync::Notify;
 
 use super::super::support::{Root, service_with_parts};
 use super::super::*;
-use butler_models::models::ProviderPromptFuture;
-use butler_models::models::ProviderPromptLifecycle;
-use butler_models::models::ProviderPromptPort;
-use butler_models::models::ProviderPromptRequest;
-use butler_models::models::ProviderPromptResult;
+use butler_models::models::{
+    ProviderPromptFuture, ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest,
+    ProviderPromptResult,
+};
 use butler_turn::btcc::ModelRoundError;
 
 fn message(text: &str) -> CanonicalProfileMessage {

@@ -5,13 +5,12 @@ use std::{path::Path, sync::Arc};
 use serde_json::{Value, json};
 
 use butler_core::locale::LocaleCollation;
-use butler_runtime::context::compact_transcript;
-use butler_runtime::context::compaction_snapshot_path;
+use butler_runtime::context::{compact_transcript, compaction_snapshot_path};
 use butler_runtime::operations::MetricFiles;
-use butler_turn::conversation::AgentConversationStore;
-use butler_turn::conversation::ConversationStoreConfig;
-use butler_turn::conversation::conversation_session_id_for_durable_session;
-use butler_turn::conversation::conversation_store_path;
+use butler_turn::conversation::{
+    AgentConversationStore, ConversationStoreConfig, conversation_session_id_for_durable_session,
+    conversation_store_path,
+};
 
 use super::{
     CliError, ResolvedInstallation, context_budget_owner, open_status_models, unavailable,

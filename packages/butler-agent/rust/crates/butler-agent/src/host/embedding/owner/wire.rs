@@ -7,14 +7,10 @@ use tokio::{
     process::{Child, ChildStdin, ChildStdout, Command},
 };
 
-use butler_memory::cognition::CognitionError;
-use butler_memory::cognition::CognitionResult;
-use butler_memory::cognition::EmbeddingMode;
-use butler_memory::cognition::EmbeddingResult;
-use butler_memory::cognition::WorkerOperation;
-use butler_memory::cognition::WorkerRequest;
-use butler_memory::cognition::WorkerResponse;
-use butler_memory::cognition::WorkerResult;
+use butler_memory::cognition::{
+    CognitionError, CognitionResult, EmbeddingMode, EmbeddingResult, WorkerOperation,
+    WorkerRequest, WorkerResponse, WorkerResult,
+};
 
 use super::{error, queue::Pending};
 use butler_memory::cognition::CognitionCode;

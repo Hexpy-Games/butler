@@ -6,8 +6,7 @@ use std::collections::HashMap;
 use rusqlite::{Connection, Transaction};
 use serde_json::{Map, Number, Value};
 
-use crate::cognition::CognitionError;
-use crate::cognition::CognitionResult;
+use crate::cognition::{CognitionError, CognitionResult};
 use butler_core::js_date;
 
 #[cfg(test)]

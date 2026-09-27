@@ -5,8 +5,7 @@ mod operation_chunk;
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Map, Value};
 
-use crate::gateway::application::storage::AppStorageCode;
-use crate::gateway::application::storage::AppStorageError;
+use crate::gateway::application::storage::{AppStorageCode, AppStorageError};
 
 pub(super) fn next_sequence(
     db: &Connection,

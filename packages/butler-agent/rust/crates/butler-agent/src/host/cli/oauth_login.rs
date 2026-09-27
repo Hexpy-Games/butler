@@ -9,9 +9,7 @@ use tokio::{
 
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
-use butler_models::models::ModelCatalog;
-use butler_models::models::ModelConfiguration;
-use butler_models::models::provider_http_client;
+use butler_models::models::{ModelCatalog, ModelConfiguration, provider_http_client};
 
 use crate::host::installation::realpath_or_nearest;
 use crate::host::{ProcessEnvironment, ResolvedInstallation, SystemIdentity};

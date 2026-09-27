@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 
-use crate::btcc::BtccCode;
-use crate::btcc::BtccError;
+use crate::btcc::{BtccCode, BtccError};
 use butler_core::public_text::trim_js_whitespace;
 
 use super::contracts::{

@@ -7,10 +7,9 @@ use serde_json::{Map, json};
 
 use super::*;
 use butler_core::locale::LocaleCollation;
-use butler_models::models::ModelCatalog;
-use butler_models::models::ModelConfiguration;
-use butler_models::models::ModelConfigurationClock;
-use butler_models::models::ModelConfigurationEnvironment;
+use butler_models::models::{
+    ModelCatalog, ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
+};
 use butler_turn::btcc::ContextAssembly;
 use butler_turn::conversation::*;
 

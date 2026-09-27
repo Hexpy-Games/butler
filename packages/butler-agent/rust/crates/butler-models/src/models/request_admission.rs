@@ -3,12 +3,10 @@
 use bytes::Bytes;
 use sha2::{Digest, Sha256};
 
-use butler_turn::btcc::ModelRequestAdmissionCode;
-use butler_turn::btcc::ModelRequestAdmissionError;
-use butler_turn::btcc::ModelRequestContextPlan;
-use butler_turn::btcc::ModelRoundError;
-use butler_turn::btcc::RequestContextAdmission;
-use butler_turn::btcc::RequestContextMeasurement;
+use butler_turn::btcc::{
+    ModelRequestAdmissionCode, ModelRequestAdmissionError, ModelRequestContextPlan,
+    ModelRoundError, RequestContextAdmission, RequestContextMeasurement,
+};
 
 use super::{
     ModelCatalog, ModelCatalogSnapshot, ProviderRequestConfigPort, TokenEstimateInput,

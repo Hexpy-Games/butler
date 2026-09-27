@@ -1,7 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use butler_turn::btcc::WorkContext;
-use butler_turn::btcc::WorkView;
+use butler_turn::btcc::{WorkContext, WorkView};
 
 fn word<T: serde::Serialize>(value: &T) -> String {
     serde_json::to_value(value)

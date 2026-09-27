@@ -5,8 +5,7 @@ use std::sync::Arc;
 use rusqlite::{Connection, params};
 
 use super::{BtccStorage, StorageError, StorageResult};
-use crate::btcc::BtccError;
-use crate::btcc::StorageCode;
+use crate::btcc::{BtccError, StorageCode};
 
 const LOAD: &str = "SELECT source_digest, covered_units, summary \
     FROM btcc_context_compactions WHERE turn_id=?1 ORDER BY covered_units DESC";

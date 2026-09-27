@@ -8,15 +8,10 @@ use std::sync::{
 
 use tokio::net::TcpListener;
 
-use butler_gateway::gateway::AppApplication;
-use butler_gateway::gateway::AppApplicationConfig;
-use butler_gateway::gateway::AppApplicationDependencies;
-use butler_gateway::gateway::AppIdentityClock;
-use butler_gateway::gateway::AppMessageFiles;
-use butler_gateway::gateway::GatewayApplicationError;
-use butler_gateway::gateway::GatewayServer;
-use butler_gateway::gateway::InboundQueue;
-use butler_gateway::gateway::serve_gateway;
+use butler_gateway::gateway::{
+    AppApplication, AppApplicationConfig, AppApplicationDependencies, AppIdentityClock,
+    AppMessageFiles, GatewayApplicationError, GatewayServer, InboundQueue, serve_gateway,
+};
 use butler_runtime::operations::ServiceReadiness;
 use butler_turn::btcc::BtccError;
 

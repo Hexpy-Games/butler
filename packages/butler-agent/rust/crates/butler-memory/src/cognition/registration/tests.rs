@@ -12,21 +12,12 @@ use crate::coordination::{
     CognitionCoordinationHost, CognitionProcessStatus, CognitionWaitClass, CognitionWriteAcquire,
     CognitionWriteCoordinator, CoordinationResult,
 };
-use butler_turn::conversation::AgentConversationStore;
-use butler_turn::conversation::AppendMessageInput;
-use butler_turn::conversation::BeginTurnInput;
-use butler_turn::conversation::ConversationIdentityClock;
-use butler_turn::conversation::ConversationLocaleCollation;
-use butler_turn::conversation::ConversationOriginKind;
-use butler_turn::conversation::ConversationPartKind;
-use butler_turn::conversation::ConversationProvenance;
-use butler_turn::conversation::ConversationRole;
-use butler_turn::conversation::ConversationStatus;
-use butler_turn::conversation::ConversationStoreConfig;
-use butler_turn::conversation::FinalizeTurnInput;
-use butler_turn::conversation::MessagePartInput;
-use butler_turn::conversation::TurnOutcomeCapsuleInput;
-use butler_turn::conversation::TurnOutcomeKind;
+use butler_turn::conversation::{
+    AgentConversationStore, AppendMessageInput, BeginTurnInput, ConversationIdentityClock,
+    ConversationLocaleCollation, ConversationOriginKind, ConversationPartKind,
+    ConversationProvenance, ConversationRole, ConversationStatus, ConversationStoreConfig,
+    FinalizeTurnInput, MessagePartInput, TurnOutcomeCapsuleInput, TurnOutcomeKind,
+};
 
 const GENERATION: &str = "11111111-1111-1111-1111-111111111111";
 const NOW: &str = "2026-09-14T00:00:04.000Z";

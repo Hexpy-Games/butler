@@ -11,13 +11,10 @@ use sha2::{Digest, Sha256};
 
 use butler_core::json::JsonDocument;
 use butler_core::public_text::trim_js_whitespace;
-use butler_runtime::context::ImageCapabilityEvidence;
-use butler_runtime::context::ImageCarrierTuple;
-use butler_runtime::context::VisualAttachmentManifest;
-use butler_turn::btcc::AccessMode;
-use butler_turn::btcc::GuidedInvocation;
-use butler_turn::btcc::ModelRoundToolCall;
-use butler_turn::btcc::ToolExecutionError;
+use butler_runtime::context::{
+    ImageCapabilityEvidence, ImageCarrierTuple, VisualAttachmentManifest,
+};
+use butler_turn::btcc::{AccessMode, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 
 use super::GuidedTools;
 

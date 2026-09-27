@@ -7,18 +7,14 @@ use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
 use butler_core::json::JsonDocument;
-use butler_turn::btcc::AdapterOutcome;
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::EffectAdapter;
-use butler_turn::btcc::EffectAdapterError;
-use butler_turn::btcc::EffectFailure;
-use butler_turn::btcc::EffectFuture;
-use butler_turn::btcc::PlanBinding;
-use butler_turn::workspace::BindSessionWorktreeInput;
-use butler_turn::workspace::BindSessionWorktreeResult;
-use butler_turn::workspace::SessionWorktreeAction;
-use butler_turn::workspace::SessionWorktrees;
-use butler_turn::workspace::WorkspaceReference;
+use butler_turn::btcc::{
+    AdapterOutcome, BtccError, EffectAdapter, EffectAdapterError, EffectFailure, EffectFuture,
+    PlanBinding,
+};
+use butler_turn::workspace::{
+    BindSessionWorktreeInput, BindSessionWorktreeResult, SessionWorktreeAction, SessionWorktrees,
+    WorkspaceReference,
+};
 
 use super::super::GuidedTools;
 

@@ -9,12 +9,10 @@ use super::{
 };
 use butler_core::json::Utf16Prefix;
 use butler_core::public_text::trim_js_whitespace;
-use butler_turn::conversation::AgentConversationStore;
-use butler_turn::conversation::ConversationMessageWithParts;
-use butler_turn::conversation::ConversationPartKind;
-use butler_turn::conversation::ConversationReadOrder;
-use butler_turn::conversation::ConversationRole;
-use butler_turn::conversation::ReadCognitionMessagesInput;
+use butler_turn::conversation::{
+    AgentConversationStore, ConversationMessageWithParts, ConversationPartKind,
+    ConversationReadOrder, ConversationRole, ReadCognitionMessagesInput,
+};
 
 pub async fn resolve_session_references(
     content: Option<&MessageContent>,

@@ -5,8 +5,7 @@ mod plan;
 #[cfg(test)]
 mod window_tests;
 
-use std::collections::BTreeMap;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::de::DeserializeOwned;

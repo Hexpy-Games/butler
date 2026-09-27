@@ -2,9 +2,9 @@ use std::{ffi::OsString, path::PathBuf, sync::Arc};
 
 use serde_json::{Value, json};
 
-use butler_memory::cognition::CognitionPathEnvironment;
-use butler_memory::cognition::CompletionPublisher;
-use butler_memory::cognition::FeedbackBufferService;
+use butler_memory::cognition::{
+    CognitionPathEnvironment, CompletionPublisher, FeedbackBufferService,
+};
 use butler_memory::coordination::CognitionWriteCoordinator;
 
 use super::{CliError, parser};

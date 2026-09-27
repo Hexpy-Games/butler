@@ -3,8 +3,7 @@ use std::sync::Arc;
 use butler_runtime::capabilities::Capabilities;
 use butler_runtime::skills::Skills;
 use butler_turn::btcc::BtccError;
-use butler_turn::workspace::WorkspaceFiles;
-use butler_turn::workspace::WorkspaceMutations;
+use butler_turn::workspace::{WorkspaceFiles, WorkspaceMutations};
 
 use super::{GuidedCatalog, RuntimePaths};
 

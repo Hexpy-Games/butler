@@ -5,9 +5,7 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::EffectAdapter;
-use butler_turn::btcc::effect_input_sha256;
+use butler_turn::btcc::{BtccError, EffectAdapter, effect_input_sha256};
 
 use super::{Edit, State, rejected, sha};
 

@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 
-use butler_memory::cognition::BoxStoreService;
-use butler_memory::cognition::CognitionPathEnvironment;
-use butler_memory::cognition::FeedbackBufferService;
-use butler_memory::cognition::LegacyMetadataIntegrityService;
+use butler_memory::cognition::{
+    BoxStoreService, CognitionPathEnvironment, FeedbackBufferService,
+    LegacyMetadataIntegrityService,
+};
 use butler_memory::coordination::CognitionWriteCoordinator;
 
 use super::CliError;

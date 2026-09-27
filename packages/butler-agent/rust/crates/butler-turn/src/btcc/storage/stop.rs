@@ -3,10 +3,9 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::common::error;
 use super::hydration::hydrate_final_payload;
 use super::{StorageError, StorageResult};
-use crate::btcc::AlreadyDeliveredOutcome;
-use crate::btcc::StorageCode;
 use crate::btcc::identity::digest;
 use crate::btcc::turn::StopPersistenceOutcome;
+use crate::btcc::{AlreadyDeliveredOutcome, StorageCode};
 
 struct ControlRow {
     session_id: String,

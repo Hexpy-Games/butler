@@ -1,18 +1,11 @@
 use serde_json::{Value, json};
 
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::ClaimCloseoutCorrectionInput;
-use butler_turn::btcc::DispositionCommand;
-use butler_turn::btcc::DispositionStatus;
-use butler_turn::btcc::DurableWorkStatus as WorkStatus;
-use butler_turn::btcc::ProjectWorkDispositionPreparation;
-use butler_turn::btcc::ProjectWorkOperationIdentity;
-use butler_turn::btcc::ProjectWorkOperationKind;
-use butler_turn::btcc::ReviewCommand;
-use butler_turn::btcc::ReviewSubject;
-use butler_turn::btcc::WorkDisposition;
-use butler_turn::btcc::WorkReview;
-use butler_turn::btcc::WorkView;
+use butler_turn::btcc::{
+    BtccError, ClaimCloseoutCorrectionInput, DispositionCommand, DispositionStatus,
+    DurableWorkStatus as WorkStatus, ProjectWorkDispositionPreparation,
+    ProjectWorkOperationIdentity, ProjectWorkOperationKind, ReviewCommand, ReviewSubject,
+    WorkDisposition, WorkReview, WorkView,
+};
 
 use super::super::publication::ProjectLedgerRecordKind;
 use super::codec;

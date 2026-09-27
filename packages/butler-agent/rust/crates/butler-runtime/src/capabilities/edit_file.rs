@@ -8,9 +8,7 @@ pub(super) use result::changed_file_value;
 use serde_json::{Map, Value, json};
 
 use super::{CapabilityError, CapabilityInvocation, arguments, mutation_evidence};
-use butler_turn::workspace::EditMutation;
-use butler_turn::workspace::MutationCommand;
-use butler_turn::workspace::WorkspaceMutations;
+use butler_turn::workspace::{EditMutation, MutationCommand, WorkspaceMutations};
 
 pub(super) async fn execute(
     owner: &WorkspaceMutations,

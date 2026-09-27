@@ -11,9 +11,9 @@ use unicode_normalization::UnicodeNormalization;
 use unicode_segmentation::UnicodeSegmentation;
 
 use butler_core::json;
-use butler_turn::conversation::CanonicalMemoryReadBinding;
-use butler_turn::conversation::PublicMemorySnapshot;
-use butler_turn::conversation::decode_message_scalars;
+use butler_turn::conversation::{
+    CanonicalMemoryReadBinding, PublicMemorySnapshot, decode_message_scalars,
+};
 
 use super::{
     CognitionError, CognitionResult,

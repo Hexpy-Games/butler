@@ -35,22 +35,11 @@ pub(super) enum WorkArgumentError {
 
 use serde_json::{Map, Value, json};
 
-use butler_turn::btcc::ActionProgress;
-use butler_turn::btcc::ActionStatus;
-use butler_turn::btcc::CheckpointInput;
-use butler_turn::btcc::ContinueWorkInput;
-use butler_turn::btcc::CorrectionScope;
-use butler_turn::btcc::DispositionActionUpdate;
-use butler_turn::btcc::DispositionInput;
-use butler_turn::btcc::DispositionStatus;
-use butler_turn::btcc::ExecutionMode;
-use butler_turn::btcc::PlanAction;
-use butler_turn::btcc::ReplacePlanInput;
-use butler_turn::btcc::ReviewInput;
-use butler_turn::btcc::ReviewSubject;
-use butler_turn::btcc::ReviewVerdict;
-use butler_turn::btcc::StartWorkInput;
-use butler_turn::btcc::WorkTurnScope;
+use butler_turn::btcc::{
+    ActionProgress, ActionStatus, CheckpointInput, ContinueWorkInput, CorrectionScope,
+    DispositionActionUpdate, DispositionInput, DispositionStatus, ExecutionMode, PlanAction,
+    ReplacePlanInput, ReviewInput, ReviewSubject, ReviewVerdict, StartWorkInput, WorkTurnScope,
+};
 
 pub(super) enum Command {
     Start(StartWorkInput),

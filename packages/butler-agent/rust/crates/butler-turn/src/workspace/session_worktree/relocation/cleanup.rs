@@ -1,8 +1,7 @@
 //! Identity-checked cleanup for a prepared relocation worktree.
 
 use super::{Owner, RelocationWorkspacePlan};
-use crate::workspace::WorkspaceCode;
-use crate::workspace::WorkspaceResult;
+use crate::workspace::{WorkspaceCode, WorkspaceResult};
 
 pub(super) async fn discard(owner: &Owner, plan: RelocationWorkspacePlan) -> WorkspaceResult<bool> {
     let session_id = plan.runtime_session_id.clone();

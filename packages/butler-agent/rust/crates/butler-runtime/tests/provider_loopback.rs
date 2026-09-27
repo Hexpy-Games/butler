@@ -17,50 +17,32 @@ use tokio_util::sync::CancellationToken;
 use url::Url;
 
 use butler_core::locale::LocaleCollation;
-use butler_models::models::ModelCatalog;
-use butler_models::models::ModelCatalogSnapshot;
-use butler_models::models::ModelCatalogSnapshotInput;
-use butler_models::models::ModelProvider;
-use butler_models::models::PromptUsageMetricInput;
-use butler_models::models::PromptUsageMetricSink;
-use butler_models::models::ProviderAuth;
-use butler_models::models::ProviderClock;
-use butler_models::models::ProviderConfigFuture;
-use butler_models::models::ProviderConfigRequest;
-use butler_models::models::ProviderObservation;
-use butler_models::models::ProviderObservationSink;
-use butler_models::models::ProviderPromptCachePolicy;
-use butler_models::models::ProviderRequestConfig;
-use butler_models::models::ProviderRequestConfigPort;
-use butler_models::models::ProviderRoundPolicy;
+use butler_models::models::{
+    ModelCatalog, ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelProvider,
+    PromptUsageMetricInput, PromptUsageMetricSink, ProviderAuth, ProviderClock,
+    ProviderConfigFuture, ProviderConfigRequest, ProviderObservation, ProviderObservationSink,
+    ProviderPromptCachePolicy, ProviderRequestConfig, ProviderRequestConfigPort,
+    ProviderRoundPolicy,
+};
 use butler_runtime::context::ContextPortAdapter;
-use butler_turn::btcc::AgentLoop;
-use butler_turn::btcc::ModelRoundError;
-use butler_turn::btcc::ModelRouteEventWrite;
-use butler_turn::btcc::ModelRouteRetryConfig;
-use butler_turn::btcc::ModelRouteWrite;
-use butler_turn::btcc::PortFuture;
-use butler_turn::btcc::TurnModelExecutionFactory;
-use butler_turn::btcc::TurnSteeringPort;
-use butler_turn::btcc::TurnStore;
-use butler_turn::btcc::storage::BtccRepositories;
-use butler_turn::btcc::storage::BtccStorage;
-use butler_turn::btcc::storage::ContextCompactionRepository;
-use butler_turn::btcc::storage::OperationResultRepository;
-use butler_turn::btcc::storage::TestStorageFixture;
-use butler_turn::btcc::storage::ToolJournalFinish;
-use butler_turn::btcc::storage::ToolJournalFinishStatus;
-use butler_turn::btcc::storage::ToolJournalRepository;
-use butler_turn::btcc::storage::ToolJournalStart;
+use butler_turn::btcc::storage::{
+    BtccRepositories, BtccStorage, ContextCompactionRepository, OperationResultRepository,
+    TestStorageFixture, ToolJournalFinish, ToolJournalFinishStatus, ToolJournalRepository,
+    ToolJournalStart,
+};
+use butler_turn::btcc::{
+    AgentLoop, ModelRoundError, ModelRouteEventWrite, ModelRouteRetryConfig, ModelRouteWrite,
+    PortFuture, TurnModelExecutionFactory, TurnSteeringPort, TurnStore,
+};
 
 use butler_turn::btcc::agent_loop::contracts::SteeringObservation;
 use butler_turn::btcc::agent_loop::fixture_binding::FixtureAgentLoop;
-use butler_turn::btcc::agent_loop::guided_ports::ContextPort;
-use butler_turn::btcc::agent_loop::guided_ports::GuidedInvocation;
-use butler_turn::btcc::agent_loop::guided_ports::GuidedPolicyDependencies;
-use butler_turn::btcc::agent_loop::operation_result_replay::ExactResultReplaySelection;
-use butler_turn::btcc::agent_loop::operation_result_replay::OperationResultReplayFactory;
-use butler_turn::btcc::agent_loop::operation_result_replay::ReplayMode;
+use butler_turn::btcc::agent_loop::guided_ports::{
+    ContextPort, GuidedInvocation, GuidedPolicyDependencies,
+};
+use butler_turn::btcc::agent_loop::operation_result_replay::{
+    ExactResultReplaySelection, OperationResultReplayFactory, ReplayMode,
+};
 use butler_turn::btcc::agent_loop::test_support::Fixture;
 
 struct Config {

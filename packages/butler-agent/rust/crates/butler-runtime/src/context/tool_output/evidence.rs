@@ -9,8 +9,7 @@ use super::{
     ReadToolOutputInput, reader, wire,
 };
 use crate::context::ContextCode;
-use crate::context::tool_artifact_slice::SliceInput;
-use crate::context::tool_artifact_slice::slice_tool_artifact_text;
+use crate::context::tool_artifact_slice::{SliceInput, slice_tool_artifact_text};
 use butler_core::json::JsonDocument;
 
 const SCHEMA: &str = "butler.raw-tool-artifact.v1";

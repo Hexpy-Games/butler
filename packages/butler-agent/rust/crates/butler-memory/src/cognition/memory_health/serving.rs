@@ -9,18 +9,11 @@ use std::{
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use serde_json::{Value, json};
 
-use crate::cognition::CognitionCode;
-use crate::cognition::CognitionPathEnvironment;
-use crate::cognition::feedback::FeedbackSourceRow;
-use crate::cognition::feedback::excluded_source_ids;
-use crate::cognition::recall::RecallProjectFilter;
-use crate::cognition::recall::RecallRequest;
-use crate::cognition::recall::RecallRuntime;
-use crate::cognition::recall::RecallScope;
-use crate::cognition::resolve_active_generation;
+use crate::cognition::feedback::{FeedbackSourceRow, excluded_source_ids};
+use crate::cognition::recall::{RecallProjectFilter, RecallRequest, RecallRuntime, RecallScope};
 use crate::cognition::sources::read_canonical_inventory;
-use butler_turn::conversation::ConversationSourceReader;
-use butler_turn::conversation::conversation_store_path;
+use crate::cognition::{CognitionCode, CognitionPathEnvironment, resolve_active_generation};
+use butler_turn::conversation::{ConversationSourceReader, conversation_store_path};
 
 pub(super) fn read(
     data_root: &Path,

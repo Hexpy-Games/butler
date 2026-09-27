@@ -6,12 +6,10 @@ use sha2::{Digest, Sha256};
 use super::*;
 use crate::host::SystemIdentity;
 use butler_core::locale::LocaleCollation;
-use butler_turn::conversation::AgentConversationStore;
-use butler_turn::conversation::AppendMessageInput;
-use butler_turn::conversation::BeginTurnInput;
-use butler_turn::conversation::ConversationPartKind;
-use butler_turn::conversation::ConversationStoreConfig;
-use butler_turn::conversation::MessagePartInput;
+use butler_turn::conversation::{
+    AgentConversationStore, AppendMessageInput, BeginTurnInput, ConversationPartKind,
+    ConversationStoreConfig, MessagePartInput,
+};
 
 struct Directory(PathBuf);
 impl Drop for Directory {

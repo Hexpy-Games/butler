@@ -5,8 +5,7 @@ use std::{ffi::OsString, path::PathBuf, sync::Arc};
 use serde_json::json;
 
 use butler_core::locale::LocaleCollation;
-use butler_memory::cognition::CognitionPathEnvironment;
-use butler_memory::cognition::initialize_empty_memory_generation;
+use butler_memory::cognition::{CognitionPathEnvironment, initialize_empty_memory_generation};
 use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_models::models::ModelConfigurationClock;
 

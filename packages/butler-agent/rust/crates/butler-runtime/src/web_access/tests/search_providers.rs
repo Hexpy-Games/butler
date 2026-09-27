@@ -13,15 +13,14 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use butler_models::models::ProviderPromptFuture;
-use butler_models::models::ProviderPromptLifecycle;
-use butler_models::models::ProviderPromptPort;
-use butler_models::models::ProviderPromptRequest;
-use butler_models::models::ProviderPromptResult;
 use butler_models::models::{
     ModelCatalog, ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
     ModelProvider, PromptUsageMetricInput, PromptUsageMetricSink, ProviderClock,
     ProviderObservation, ProviderObservationSink, provider_http_client,
+};
+use butler_models::models::{
+    ProviderPromptFuture, ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest,
+    ProviderPromptResult,
 };
 use butler_turn::btcc::ModelRoundError;
 

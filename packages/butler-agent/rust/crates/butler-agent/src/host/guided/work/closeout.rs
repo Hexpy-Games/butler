@@ -1,13 +1,9 @@
 //! Source runtime-owned open disposition for ordinary Turn closeout.
 
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::ClaimCloseoutCorrectionInput;
-use butler_turn::btcc::DispositionInput;
-use butler_turn::btcc::DispositionStatus;
-use butler_turn::btcc::DurableWorkStatus;
-use butler_turn::btcc::RuntimeOwnedOpenGeneration;
-use butler_turn::btcc::WorkView;
-use butler_turn::btcc::disposition_material_fingerprint;
+use butler_turn::btcc::{
+    BtccError, ClaimCloseoutCorrectionInput, DispositionInput, DispositionStatus,
+    DurableWorkStatus, RuntimeOwnedOpenGeneration, WorkView, disposition_material_fingerprint,
+};
 
 use super::GuidedWorkAdapter;
 

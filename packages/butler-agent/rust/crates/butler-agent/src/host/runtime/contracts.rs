@@ -5,17 +5,12 @@ use butler_core::locale::LocaleCollation;
 use butler_ledger::project_ledger::ProjectLedger;
 use butler_runtime::context::ContextBudgetOwner;
 use butler_runtime::skills::Skills;
-use butler_turn::btcc::Btcc;
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::BtccHost;
-use butler_turn::btcc::ContextCompactionRepository;
-use butler_turn::btcc::PrincipalAuthority;
-use butler_turn::btcc::SessionWorkRepository;
-use butler_turn::btcc::StorageProgressPublication;
+use butler_turn::btcc::{
+    Btcc, BtccError, BtccHost, ContextCompactionRepository, PrincipalAuthority,
+    SessionWorkRepository, StorageProgressPublication,
+};
 use butler_turn::conversation::AgentConversationStore;
-use butler_turn::workspace::SessionBindingStore;
-use butler_turn::workspace::SessionWorkspaceRecovery;
-use butler_turn::workspace::SessionWorktrees;
+use butler_turn::workspace::{SessionBindingStore, SessionWorkspaceRecovery, SessionWorktrees};
 
 use super::super::{ProcessModels, WorkStreams};
 

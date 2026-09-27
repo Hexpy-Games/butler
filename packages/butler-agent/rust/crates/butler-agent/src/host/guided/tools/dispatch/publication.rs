@@ -1,6 +1,5 @@
 use crate::host::GuidedWorkTools;
-use butler_turn::btcc::GuidedInvocation;
-use butler_turn::btcc::ToolExecutionError;
+use butler_turn::btcc::{GuidedInvocation, ToolExecutionError};
 
 use super::GuidedTools;
 

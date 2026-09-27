@@ -4,8 +4,7 @@ use rusqlite::{Connection, ErrorCode};
 use tokio_util::sync::CancellationToken;
 
 use super::{BtccStorage, StorageError, StorageResult};
-use crate::btcc::BtccCode;
-use crate::btcc::BtccError;
+use crate::btcc::{BtccCode, BtccError};
 
 const PROBE_TIMEOUT: Duration = Duration::from_millis(250);
 const OWNER_TIMEOUT: Duration = Duration::from_millis(5_000);

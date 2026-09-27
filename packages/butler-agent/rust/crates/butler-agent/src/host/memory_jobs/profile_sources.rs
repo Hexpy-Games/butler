@@ -3,22 +3,14 @@
 
 use std::path::PathBuf;
 
-use butler_memory::profile::CanonicalProfileMessage;
-use butler_memory::profile::CanonicalProfilePart;
-use butler_memory::profile::CanonicalProfileScalar;
-use butler_memory::profile::CanonicalProfileScan;
-use butler_memory::profile::CanonicalProfileSourceFactory;
-use butler_memory::profile::CanonicalProfileSourceReader;
-use butler_memory::profile::ProfileError;
-use butler_memory::profile::ProfileResult;
-use butler_turn::conversation::ConversationError;
-use butler_turn::conversation::ConversationMessageWithParts;
-use butler_turn::conversation::ConversationOriginKind;
-use butler_turn::conversation::ConversationReadOrder;
-use butler_turn::conversation::ConversationRole;
-use butler_turn::conversation::ConversationSourceReader;
-use butler_turn::conversation::ReadCognitionMessagesInput;
-use butler_turn::conversation::decode_message_scalars;
+use butler_memory::profile::{
+    CanonicalProfileMessage, CanonicalProfilePart, CanonicalProfileScalar, CanonicalProfileScan,
+    CanonicalProfileSourceFactory, CanonicalProfileSourceReader, ProfileError, ProfileResult,
+};
+use butler_turn::conversation::{
+    ConversationError, ConversationMessageWithParts, ConversationOriginKind, ConversationReadOrder,
+    ConversationRole, ConversationSourceReader, ReadCognitionMessagesInput, decode_message_scalars,
+};
 
 pub(crate) struct ProfileConversationSources {
     path: PathBuf,

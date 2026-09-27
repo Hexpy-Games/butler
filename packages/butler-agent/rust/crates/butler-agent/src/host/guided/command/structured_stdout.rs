@@ -3,9 +3,7 @@
 use indexmap::IndexSet;
 use serde_json::value::RawValue;
 
-use butler_core::json::raw_string_units;
-use butler_core::json::visit_raw_array;
-use butler_core::json::visit_raw_object;
+use butler_core::json::{raw_string_units, visit_raw_array, visit_raw_object};
 
 const PATH_KEYS: &[&str] = &[
     "artifact_file",

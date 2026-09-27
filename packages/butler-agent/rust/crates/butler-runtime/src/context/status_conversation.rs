@@ -6,12 +6,12 @@ use std::{
 
 use serde_json::Value;
 
-use butler_turn::conversation::ConversationSourceReader;
-use butler_turn::conversation::conversation_session_id_for_durable_session;
-use butler_turn::conversation::conversation_store_path;
-use butler_turn::workspace::StatusSessionIdentity;
-use butler_turn::workspace::read_active_butler_session;
-use butler_turn::workspace::session_store_path;
+use butler_turn::conversation::{
+    ConversationSourceReader, conversation_session_id_for_durable_session, conversation_store_path,
+};
+use butler_turn::workspace::{
+    StatusSessionIdentity, read_active_butler_session, session_store_path,
+};
 
 const SEMANTIC_TAIL_LIMIT: u64 = 200;
 const MAX_TRANSCRIPT_LINE_BYTES: usize = 4 * 1024 * 1024;

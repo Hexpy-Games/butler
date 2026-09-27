@@ -2,9 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use butler_runtime::context::ContextBudgetOwner;
-use butler_runtime::context::ToolOutput;
-use butler_runtime::context::ToolOutputIdentity;
+use butler_runtime::context::{ContextBudgetOwner, ToolOutput, ToolOutputIdentity};
 use butler_runtime::operations::MetricFiles;
 
 pub(crate) struct SystemToolOutputIdentity;

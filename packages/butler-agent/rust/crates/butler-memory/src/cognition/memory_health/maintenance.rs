@@ -7,8 +7,7 @@ use std::{
 use serde_json::Value;
 
 use super::{MaintenanceStatus, error};
-use crate::cognition::CognitionCode;
-use crate::cognition::CognitionResult;
+use crate::cognition::{CognitionCode, CognitionResult};
 use butler_core::js_date;
 
 const STALE_AFTER_MS: i64 = 7 * 24 * 60 * 60 * 1_000;

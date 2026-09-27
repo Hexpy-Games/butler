@@ -3,15 +3,14 @@ use serde_json::Value;
 mod lifecycle;
 mod provider;
 mod ranked;
-use crate::cognition::extraction::CandidateSearchInput;
-use crate::cognition::extraction::CognitionVectorSearch;
-use crate::cognition::extraction::VectorSearchFuture;
+use crate::cognition::extraction::{
+    CandidateSearchInput, CognitionVectorSearch, VectorSearchFuture,
+};
 use crate::cognition::registration::projection::ProjectSemanticWindowInput;
-use butler_models::models::ProviderPromptFuture;
-use butler_models::models::ProviderPromptLifecycle;
-use butler_models::models::ProviderPromptPort;
-use butler_models::models::ProviderPromptRequest;
-use butler_models::models::ProviderPromptResult;
+use butler_models::models::{
+    ProviderPromptFuture, ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest,
+    ProviderPromptResult,
+};
 
 struct NoVectors;
 impl CognitionVectorSearch for NoVectors {

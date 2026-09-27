@@ -2,9 +2,8 @@ use super::super::{
     AppStorageError, GatewayApplicationError, MessageContent, SessionQueueUpdateRequest, app_error,
     queue_view,
 };
-use crate::gateway::MessageContentPart;
-use crate::gateway::MessageSendRequest;
 use crate::gateway::application::storage::AppStorageCode;
+use crate::gateway::{MessageContentPart, MessageSendRequest};
 use butler_core::public_text::trim_js_whitespace;
 use serde_json::Value;
 

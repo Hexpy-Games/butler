@@ -14,8 +14,7 @@ use crate::btcc::work::{
 use super::super::super::{StorageError, StorageResult, work::project_external_legacy_work};
 use super::super::SqliteProjectWorkRuntime;
 use super::{import_id, invalid, record_id, require_turn, source_hash, valid_hash};
-use crate::btcc::BtccCode;
-use crate::btcc::StorageCode;
+use crate::btcc::{BtccCode, StorageCode};
 
 pub(super) async fn capture(
     runtime: &SqliteProjectWorkRuntime,

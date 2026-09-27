@@ -2,10 +2,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::ModelRoundMessage;
-use butler_turn::btcc::ModelRoundTool;
-use butler_turn::btcc::ToolChoice;
+use butler_turn::btcc::{BtccError, ModelRoundMessage, ModelRoundTool, ToolChoice};
 
 #[derive(Clone, Copy)]
 pub(super) enum MessageProjection {

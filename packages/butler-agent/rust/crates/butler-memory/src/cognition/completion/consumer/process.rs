@@ -10,25 +10,17 @@ use tokio_util::sync::CancellationToken;
 use super::{MemorySyncPoll, catchup, paused};
 mod typed;
 mod vector;
-use crate::cognition::CognitionConversationSourceNotice;
-use crate::cognition::CognitionEmbeddingPort;
-use crate::cognition::CognitionError;
-use crate::cognition::CognitionPathEnvironment;
-use crate::cognition::CognitionRegistrationService;
-use crate::cognition::CognitionResult;
-use crate::cognition::ConversationRegistrationOutcome;
-use crate::cognition::MemoryGenerationTarget;
-use crate::cognition::RegisterConversationSourceInput;
-use crate::cognition::generation::resolve_active_generation;
-use crate::cognition::generation::resolve_generation;
+use crate::cognition::generation::{resolve_active_generation, resolve_generation};
 use crate::cognition::graph::GraphRepository;
-use crate::cognition::registration::ProjectSemanticWindowInput;
-use crate::cognition::registration::ProjectionSourceNotice;
+use crate::cognition::registration::{ProjectSemanticWindowInput, ProjectionSourceNotice};
 use crate::cognition::sources::read_typed_record;
-use crate::coordination::CognitionWaitClass;
-use crate::coordination::CognitionWriteCoordinator;
-use butler_turn::conversation::ConversationSourceReader;
-use butler_turn::conversation::conversation_store_path;
+use crate::cognition::{
+    CognitionConversationSourceNotice, CognitionEmbeddingPort, CognitionError,
+    CognitionPathEnvironment, CognitionRegistrationService, CognitionResult,
+    ConversationRegistrationOutcome, MemoryGenerationTarget, RegisterConversationSourceInput,
+};
+use crate::coordination::{CognitionWaitClass, CognitionWriteCoordinator};
+use butler_turn::conversation::{ConversationSourceReader, conversation_store_path};
 
 pub(super) struct Input {
     pub data_root: PathBuf,

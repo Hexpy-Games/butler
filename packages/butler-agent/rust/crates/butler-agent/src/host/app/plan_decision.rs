@@ -2,15 +2,13 @@
 
 use serde_json::json;
 
-use butler_gateway::gateway::AppPlanDecisionLedgerError;
-use butler_gateway::gateway::AppPlanDecisionLedgerFuture;
-use butler_gateway::gateway::AppPlanDecisionLedgerPort;
-use butler_gateway::gateway::AppPlanDecisionPlan;
-use butler_gateway::gateway::AppPlanDecisionStatus;
-use butler_ledger::project_ledger::LedgerCommand;
-use butler_ledger::project_ledger::LedgerCommandRequest;
-use butler_ledger::project_ledger::PlanRecordRead;
-use butler_ledger::project_ledger::ProjectLedger;
+use butler_gateway::gateway::{
+    AppPlanDecisionLedgerError, AppPlanDecisionLedgerFuture, AppPlanDecisionLedgerPort,
+    AppPlanDecisionPlan, AppPlanDecisionStatus,
+};
+use butler_ledger::project_ledger::{
+    LedgerCommand, LedgerCommandRequest, PlanRecordRead, ProjectLedger,
+};
 
 pub(crate) struct AppPlanDecisionLedger {
     ledger: ProjectLedger,

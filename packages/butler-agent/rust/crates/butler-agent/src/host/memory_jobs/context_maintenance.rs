@@ -13,8 +13,7 @@ use serde_json::{Value, json};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
-use butler_runtime::context::PruneToolOutputInput;
-use butler_runtime::context::ToolOutput;
+use butler_runtime::context::{PruneToolOutputInput, ToolOutput};
 use butler_runtime::operations::MetricFiles;
 
 use crate::host::DateParser;

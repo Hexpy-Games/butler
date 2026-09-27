@@ -1,7 +1,6 @@
 use crate::context::ContextCode;
 use crate::context::{ContextConversation, ContextResult, PromptMaterialRenderOptions};
-use butler_turn::btcc::ContextAssembly;
-use butler_turn::btcc::ContextSection;
+use butler_turn::btcc::{ContextAssembly, ContextSection};
 
 pub(crate) struct RecentConversationInput<'a> {
     pub transport: &'a str,

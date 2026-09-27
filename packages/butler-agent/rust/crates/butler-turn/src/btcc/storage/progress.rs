@@ -3,11 +3,9 @@ use serde_json::json;
 
 use super::common::{canonical_json, error, json as parse_json};
 use super::{StorageError, StorageResult};
-use crate::btcc::EventVisibility;
-use crate::btcc::ProgressDestination;
-use crate::btcc::StorageCode;
 use crate::btcc::identity::digest;
 use crate::btcc::turn::ProgressWrite;
+use crate::btcc::{EventVisibility, ProgressDestination, StorageCode};
 
 pub(super) fn append(connection: &mut Connection, write: ProgressWrite) -> StorageResult<()> {
     let tx = connection

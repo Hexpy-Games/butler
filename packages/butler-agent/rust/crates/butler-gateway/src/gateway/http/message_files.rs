@@ -15,8 +15,7 @@ use serde_json::json;
 
 use super::{HttpError, HttpState, MAX_REQUEST_BODY_SIZE, json, read_body_with_limit};
 use crate::gateway::AppFileUpload;
-use crate::gateway::protocol::APP_PROTOCOL_VERSION;
-use crate::gateway::protocol::ApiEnvelope;
+use crate::gateway::protocol::{APP_PROTOCOL_VERSION, ApiEnvelope};
 use butler_core::public_text::trim_js_whitespace;
 
 // Retain one extra byte to preserve App's size-error ordering after owner checks.

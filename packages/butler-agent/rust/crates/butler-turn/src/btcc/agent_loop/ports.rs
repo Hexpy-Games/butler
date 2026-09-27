@@ -11,8 +11,7 @@ use super::contracts::{
     ModelRoundToolCall, PreparedPolicy, SteeringObservation, TextCallDisposition, ToolOutcome,
     ToolResult,
 };
-use super::guided_ports::GuidedInvocation;
-use super::guided_ports::TurnContextProjection;
+use super::guided_ports::{GuidedInvocation, TurnContextProjection};
 
 /// Failures of one model round. The agent loop reduces these to an
 /// operational runtime failure or an integrity error (`failure::reduce`).

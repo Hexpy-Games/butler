@@ -13,8 +13,7 @@ use serde_json::Value;
 use tokio::sync::{Semaphore, oneshot};
 use tokio_util::task::TaskTracker;
 
-use butler_turn::conversation::CanonicalMemoryReadBinding;
-use butler_turn::conversation::conversation_store_path;
+use butler_turn::conversation::{CanonicalMemoryReadBinding, conversation_store_path};
 
 use super::{CognitionError, CognitionResult};
 use crate::cognition::CognitionCode;

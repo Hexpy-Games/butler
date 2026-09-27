@@ -6,17 +6,13 @@ use std::time::{Duration, Instant};
 use sha2::{Digest, Sha256};
 
 use super::process::{Input, canonical_path, resolve_input_generation};
-use crate::cognition::CognitionConversationSourceNotice;
-use crate::cognition::CognitionError;
-use crate::cognition::CognitionResult;
-use crate::cognition::ConversationRegistrationOutcome;
-use crate::cognition::MemoryGenerationTarget;
-use crate::cognition::RegisterConversationSourceInput;
-use crate::cognition::assert_mutation_authority;
-use crate::cognition::graph::CatchupCursors;
-use crate::cognition::graph::GraphRepository;
-use crate::coordination::CognitionWaitClass;
-use crate::coordination::CognitionWriteAcquire;
+use crate::cognition::graph::{CatchupCursors, GraphRepository};
+use crate::cognition::{
+    CognitionConversationSourceNotice, CognitionError, CognitionResult,
+    ConversationRegistrationOutcome, MemoryGenerationTarget, RegisterConversationSourceInput,
+    assert_mutation_authority,
+};
+use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire};
 use butler_turn::conversation::ConversationSourceReader;
 
 #[derive(Clone, Debug, Default)]

@@ -3,10 +3,7 @@
 use serde_json::Value;
 
 use butler_gateway::gateway::LocalAuthConfig;
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::PortFuture;
-use butler_turn::btcc::WorkerProfile;
-use butler_turn::btcc::WorkerProfileReader;
+use butler_turn::btcc::{BtccError, PortFuture, WorkerProfile, WorkerProfileReader};
 
 use crate::host::service::configuration::AppServiceConfiguration;
 

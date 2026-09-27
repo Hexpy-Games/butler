@@ -8,11 +8,9 @@ use std::{
 use tokio::{sync::oneshot, time::Instant};
 use tokio_util::sync::CancellationToken;
 
-use butler_memory::cognition::CognitionResult;
-use butler_memory::cognition::EmbeddingMode;
-use butler_memory::cognition::EmbeddingRequest;
-use butler_memory::cognition::EmbeddingRequestClass;
-use butler_memory::cognition::EmbeddingResult;
+use butler_memory::cognition::{
+    CognitionResult, EmbeddingMode, EmbeddingRequest, EmbeddingRequestClass, EmbeddingResult,
+};
 
 use super::error;
 use butler_memory::cognition::CognitionCode;

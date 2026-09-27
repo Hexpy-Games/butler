@@ -5,16 +5,11 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 
 use butler_core::json::JsonDocument;
-use butler_gateway::gateway::AppAuthorityDecision;
-use butler_gateway::gateway::AppAuthorityDecisionInput;
-use butler_gateway::gateway::AppAuthorityHandoff;
-use butler_gateway::gateway::AppAuthorityPage;
-use butler_gateway::gateway::ApplicationFuture;
-use butler_gateway::gateway::GatewayApplicationError;
-use butler_gateway::gateway::InboundQueue;
-use butler_turn::btcc::AuthorityDecisionInput;
-use butler_turn::btcc::AuthorityError;
-use butler_turn::btcc::PrincipalAuthority;
+use butler_gateway::gateway::{
+    AppAuthorityDecision, AppAuthorityDecisionInput, AppAuthorityHandoff, AppAuthorityPage,
+    ApplicationFuture, GatewayApplicationError, InboundQueue,
+};
+use butler_turn::btcc::{AuthorityDecisionInput, AuthorityError, PrincipalAuthority};
 
 #[derive(Clone)]
 pub(crate) struct AuthorityHandoff {

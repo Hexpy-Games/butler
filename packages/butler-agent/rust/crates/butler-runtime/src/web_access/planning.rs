@@ -6,11 +6,8 @@ use tokio_util::sync::CancellationToken;
 
 use crate::web_access::WebAccessCode;
 use crate::web_access::providers::contracts::SearchInput;
-use crate::web_access::service::WebAccess;
-use crate::web_access::service::WebAccessError;
-use butler_models::models::ProviderPromptLifecycle;
-use butler_models::models::ProviderPromptPort;
-use butler_models::models::ProviderPromptRequest;
+use crate::web_access::service::{WebAccess, WebAccessError};
+use butler_models::models::{ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest};
 
 pub(super) struct PlanningResult {
     pub plan: Option<SearchPlan>,

@@ -6,9 +6,8 @@ use super::{
     AppApplication, AppFileDownload, AppFileUpload, AppMessageFileSnapshot, AppStorageError,
     GatewayApplicationError, app_error, public, read_model,
 };
-use crate::gateway::AppFileWrite;
-use crate::gateway::MessageFileRef;
 use crate::gateway::application::storage::AppStorageCode;
+use crate::gateway::{AppFileWrite, MessageFileRef};
 use butler_core::public_text::trim_js_whitespace;
 
 impl AppApplication {

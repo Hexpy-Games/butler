@@ -15,11 +15,9 @@ use super::{
     },
     summary::{SummaryPort, SummaryRequest, SummarySizing},
 };
-use butler_turn::btcc::ContextCompactionRecord;
-use butler_turn::btcc::ModelRoundError;
-use butler_turn::btcc::ModelRoundMessage;
-use butler_turn::btcc::ModelRoundRole;
-use butler_turn::btcc::ModelRoundToolCall;
+use butler_turn::btcc::{
+    ContextCompactionRecord, ModelRoundError, ModelRoundMessage, ModelRoundRole, ModelRoundToolCall,
+};
 
 fn message(role: ModelRoundRole, content: &str) -> ModelRoundMessage {
     ModelRoundMessage {

@@ -1,9 +1,6 @@
 //! Explicit coverage of the first executable native slice, not full tool parity.
 
-use butler_turn::btcc::BtccError;
-use butler_turn::btcc::GuidedCatalogSnapshot;
-use butler_turn::btcc::GuidedPhaseSelection;
-use butler_turn::btcc::ModelRoundTool;
+use butler_turn::btcc::{BtccError, GuidedCatalogSnapshot, GuidedPhaseSelection, ModelRoundTool};
 
 pub(super) fn with_worker_profile_choices(
     phase: &mut GuidedPhaseSelection,
