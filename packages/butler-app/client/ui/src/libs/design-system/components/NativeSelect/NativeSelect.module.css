@@ -61,9 +61,12 @@
   transform: translateY(-50%);
 }
 
-.select:focus-visible + .icon,
+/* Like Input: accent border on focus, the ring on keyboard focus, both on the control box only. */
 .wrapper:focus-within .trigger {
   border-color: color-mix(in srgb, var(--accent) 52%, var(--line));
+}
+
+.wrapper:has(.select:focus-visible) .trigger {
   box-shadow: var(--focus-ring);
 }
 

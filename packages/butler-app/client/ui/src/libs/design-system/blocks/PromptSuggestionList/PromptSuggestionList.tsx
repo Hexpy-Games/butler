@@ -30,6 +30,7 @@ export interface PromptSuggestionListProps extends DsPrivateStyleProps {
   fluidBackground?: boolean;
   fluidPalette?: FluidPalette;
   fluidPaletteOptions?: readonly PromptFluidPaletteOption[];
+  /** Omit to follow the nearest theme scope. */
   fluidTone?: FluidTone;
   fluidVariant?: FluidVariant;
   moment?: ReactNode;
@@ -44,7 +45,7 @@ export function PromptSuggestionList({
   fluidBackground = false,
   fluidPalette,
   fluidPaletteOptions,
-  fluidTone = "light",
+  fluidTone,
   fluidVariant = "bloom",
   moment,
   titleIcon,
