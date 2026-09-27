@@ -115,7 +115,7 @@ struct Planner<'a> {
     selected: IndexMap<String, &'a ExtractCandidate>,
 }
 
-impl<'a> Planner<'a> {
+impl Planner<'_> {
     /// Validates each node and claim resolution and assigns its stable id:
     /// nodes hash their label, claims their content without resolution.
     fn assign_refs(&mut self) -> CognitionResult<()> {
