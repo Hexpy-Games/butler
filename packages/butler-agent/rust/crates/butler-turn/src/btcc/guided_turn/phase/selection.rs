@@ -335,6 +335,9 @@ fn require_profiles_offered(
     Ok(())
 }
 
+/// Names of the tools the provider surface offers: initial tools of the
+/// always-on and required profiles, memory startup tools, required tools,
+/// bridges, Work tools where Work is tracked, and the role's delegation tools.
 fn provider_candidates(
     catalog: &GuidedCatalogSnapshot,
     authorized: &[&GuidedCatalogTool],
@@ -343,23 +346,62 @@ fn provider_candidates(
     required_profiles: &[String],
     image_tool_admitted: bool,
 ) -> HashSet<String> {
-    let mut names = HashSet::new();
-    for profile in [
-        "public-web",
-        if phase == GuidedPhase::Direct {
-            ""
-        } else {
-            "workspace"
-        },
-        if authorized
-            .iter()
-            .any(|tool| tool.category.as_deref() == Some("project"))
+    let mut names = profile_candidates(catalog, authorized, policy, phase, required_profiles);
+    if image_tool_admitted {
+        names.insert("analyze_attached_image".to_owned());
+    }
+    for tool in authorized {
+        if tool.name == ToolName::UpdateTodoList {
+            names.insert(tool.name.clone());
+        }
+        if tool.category.as_deref() == Some("control")
+            && tool.tags.iter().any(|tag| tag == "bridge")
         {
-            "project"
-        } else {
-            ""
-        },
-    ] {
+            names.insert(tool.name.clone());
+        }
+    }
+    let tracked = policy.tracking_mode != "none";
+    if phase == GuidedPhase::Execution || policy.subsession.is_some() && tracked {
+        names.extend(
+            catalog
+                .tools
+                .iter()
+                .filter(|tool| tool.durable)
+                .map(|tool| tool.name.clone()),
+        );
+    }
+    if phase == GuidedPhase::Execution && tracked {
+        names.extend(catalog.profile("workTracking").iter().cloned());
+    }
+    add_role_tools(&mut names, catalog, policy);
+    names
+}
+
+/// Initial tools of the public-web, workspace (outside the direct phase),
+/// project (when a project tool is authorized) and required profiles, the
+/// startup memory tools and the required tools.
+fn profile_candidates(
+    catalog: &GuidedCatalogSnapshot,
+    authorized: &[&GuidedCatalogTool],
+    policy: &GuidedExecutionPolicy,
+    phase: GuidedPhase,
+    required_profiles: &[String],
+) -> HashSet<String> {
+    let mut names = HashSet::new();
+    let workspace = if phase == GuidedPhase::Direct {
+        ""
+    } else {
+        "workspace"
+    };
+    let project = if authorized
+        .iter()
+        .any(|tool| tool.category.as_deref() == Some("project"))
+    {
+        "project"
+    } else {
+        ""
+    };
+    for profile in ["public-web", workspace, project] {
         names.extend(
             profile_initial(catalog, profile, phase)
                 .iter()
@@ -386,33 +428,17 @@ fn provider_candidates(
                 .map(|tool| tool.name.clone()),
         );
     }
-    if image_tool_admitted {
-        names.insert("analyze_attached_image".to_owned());
-    }
-    for tool in authorized {
-        if tool.name == ToolName::UpdateTodoList {
-            names.insert(tool.name.clone());
-        }
-        if tool.category.as_deref() == Some("control")
-            && tool.tags.iter().any(|tag| tag == "bridge")
-        {
-            names.insert(tool.name.clone());
-        }
-    }
-    if phase == GuidedPhase::Execution
-        || policy.subsession.is_some() && policy.tracking_mode != "none"
-    {
-        names.extend(
-            catalog
-                .tools
-                .iter()
-                .filter(|tool| tool.durable)
-                .map(|tool| tool.name.clone()),
-        );
-    }
-    if phase == GuidedPhase::Execution && policy.tracking_mode != "none" {
-        names.extend(catalog.profile("workTracking").iter().cloned());
-    }
+    names
+}
+
+/// The butler delegates to stewards (and may bind a worktree with full
+/// project access) and never sees non-durable project tools; a steward
+/// delegates to workers.
+fn add_role_tools(
+    names: &mut HashSet<String>,
+    catalog: &GuidedCatalogSnapshot,
+    policy: &GuidedExecutionPolicy,
+) {
     if policy.role == "butler" {
         names.extend(["delegate_to_steward", "steer_steward", "cancel_steward"].map(str::to_owned));
         if policy.access_mode == AccessMode::FullAccess && policy.project_id.is_some() {
@@ -429,7 +455,6 @@ fn provider_candidates(
                 .is_none_or(|tool| tool.category.as_deref() != Some("project") || tool.durable)
         });
     }
-    names
 }
 
 fn phase(policy: &GuidedExecutionPolicy, catalog: &GuidedCatalogSnapshot) -> GuidedPhase {

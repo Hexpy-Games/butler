@@ -196,81 +196,21 @@ impl OperationResultRuntime for OperationResultReplayRuntime {
             let anchors = super::anchors::latest_work_anchor_indices(messages);
             let mut projected: Option<Vec<ModelRoundMessage>> = None;
             for (index, message) in messages.iter().enumerate() {
-                let Some(call_id) = message.tool_call_id.as_deref() else {
+                if anchors.contains(&index) {
+                    continue;
+                }
+                let replay = Replay {
+                    round_id,
+                    model,
+                    butler_data,
+                };
+                let Some(candidate) = self.project_tool_result(message, &replay).await? else {
                     continue;
                 };
-                if message.role != ModelRoundRole::Tool
-                    || call_id.is_empty()
-                    || anchors.contains(&index)
-                {
-                    continue;
-                }
-                let lookup = message
-                    .operation_result_call_id
-                    .as_deref()
-                    .unwrap_or(call_id);
-                let Some(mut record) = self.record(lookup).await? else {
-                    continue;
-                };
-                if !durable(&record) {
-                    continue;
-                }
-                let result_reference = self.reference_for(&record).await?;
-                let value = serde_json::to_value(&result_reference).map_err(|source| {
-                    OperationResultError::Contract(
-                        contract(BtccCode::OperationResultSerializationFailed).with_source(source),
-                    )
-                })?;
-                let content = crate::btcc::identity::stable_json(&value)
-                    .map_err(OperationResultError::Contract)?;
-                let mut candidate = message.clone();
-                candidate.content = content.into();
-                candidate.request_segment_kind = Some("older_tool_result_projection".into());
-                if record.delivery_state.is_none() {
-                    if !self.replacement_saves(message, &candidate, model, butler_data)? {
-                        continue;
-                    }
-                    self.journal
-                        .admit_delivery(self.scope.turn_id.clone(), record.call_id.clone())
-                        .await
-                        .map_err(storage)?;
-                    record = self.record(&record.call_id).await?.ok_or_else(|| {
-                        OperationResultError::Contract(contract(
-                            BtccCode::OperationResultDeliveryAdmissionFailed,
-                        ))
-                    })?;
-                }
-                match record.delivery_state.as_deref() {
-                    Some("pending_delivery") => {
-                        self.journal
-                            .begin_delivery(
-                                self.scope.turn_id.clone(),
-                                record.call_id,
-                                round_id.into(),
-                            )
-                            .await
-                            .map_err(storage)?;
-                        continue;
-                    }
-                    Some("in_flight") if record.delivery_round_id.as_deref() == Some(round_id) => {
-                        continue;
-                    }
-                    Some("in_flight") => {
-                        return Err(OperationResultError::Contract(contract(
-                            BtccCode::OperationResultDeliveryInFlightMismatch,
-                        )));
-                    }
-                    Some("acknowledged") => self
-                        .journal
-                        .promote_acknowledged(self.scope.turn_id.clone(), record.call_id)
-                        .await
-                        .map_err(storage)?,
-                    Some("reference_only") => {}
-                    _ => continue,
-                }
                 let target = projected.get_or_insert_with(|| messages.to_vec());
-                candidate.operation_result_reference = Some(result_reference);
-                target[index] = candidate;
+                if let Some(slot) = target.get_mut(index) {
+                    *slot = candidate;
+                }
             }
             Ok(ReplayPreparation {
                 messages: projected,
@@ -464,6 +404,120 @@ impl OperationResultRuntime for OperationResultReplayRuntime {
                 exact_read,
             })
         })
+    }
+}
+
+/// What a transcript replay borrows for the round being prepared.
+struct Replay<'a> {
+    round_id: &'a str,
+    model: &'a dyn ModelRoundPort,
+    butler_data: Option<&'a str>,
+}
+
+/// Delivery states of a durable tool result in the journal.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DeliveryState {
+    PendingDelivery,
+    InFlight,
+    Acknowledged,
+    ReferenceOnly,
+    Unknown,
+}
+
+impl DeliveryState {
+    fn parse(value: Option<&str>) -> Option<Self> {
+        Some(match value? {
+            "pending_delivery" => Self::PendingDelivery,
+            "in_flight" => Self::InFlight,
+            "acknowledged" => Self::Acknowledged,
+            "reference_only" => Self::ReferenceOnly,
+            _ => Self::Unknown,
+        })
+    }
+}
+
+impl OperationResultReplayRuntime {
+    /// The reference projection of an older durable tool result, when its
+    /// delivery lets this round replace it: pending results start delivery
+    /// in this round, in-flight ones stay until acknowledged.
+    async fn project_tool_result(
+        &self,
+        message: &ModelRoundMessage,
+        replay: &Replay<'_>,
+    ) -> Result<Option<ModelRoundMessage>, OperationResultError> {
+        let Some(call_id) = message.tool_call_id.as_deref() else {
+            return Ok(None);
+        };
+        if message.role != ModelRoundRole::Tool || call_id.is_empty() {
+            return Ok(None);
+        }
+        let lookup = message
+            .operation_result_call_id
+            .as_deref()
+            .unwrap_or(call_id);
+        let Some(mut record) = self.record(lookup).await? else {
+            return Ok(None);
+        };
+        if !durable(&record) {
+            return Ok(None);
+        }
+        let result_reference = self.reference_for(&record).await?;
+        let value = serde_json::to_value(&result_reference).map_err(|source| {
+            OperationResultError::Contract(
+                contract(BtccCode::OperationResultSerializationFailed).with_source(source),
+            )
+        })?;
+        let content =
+            crate::btcc::identity::stable_json(&value).map_err(OperationResultError::Contract)?;
+        let mut candidate = message.clone();
+        candidate.content = content.into();
+        candidate.request_segment_kind = Some("older_tool_result_projection".into());
+        if record.delivery_state.is_none() {
+            if !self.replacement_saves(message, &candidate, replay.model, replay.butler_data)? {
+                return Ok(None);
+            }
+            self.journal
+                .admit_delivery(self.scope.turn_id.clone(), record.call_id.clone())
+                .await
+                .map_err(storage)?;
+            record = self.record(&record.call_id).await?.ok_or_else(|| {
+                OperationResultError::Contract(contract(
+                    BtccCode::OperationResultDeliveryAdmissionFailed,
+                ))
+            })?;
+        }
+        match DeliveryState::parse(record.delivery_state.as_deref()) {
+            Some(DeliveryState::PendingDelivery) => {
+                self.journal
+                    .begin_delivery(
+                        self.scope.turn_id.clone(),
+                        record.call_id,
+                        replay.round_id.into(),
+                    )
+                    .await
+                    .map_err(storage)?;
+                return Ok(None);
+            }
+            Some(DeliveryState::InFlight)
+                if record.delivery_round_id.as_deref() == Some(replay.round_id) =>
+            {
+                return Ok(None);
+            }
+            Some(DeliveryState::InFlight) => {
+                return Err(OperationResultError::Contract(contract(
+                    BtccCode::OperationResultDeliveryInFlightMismatch,
+                )));
+            }
+            Some(DeliveryState::Acknowledged) => self
+                .journal
+                .promote_acknowledged(self.scope.turn_id.clone(), record.call_id)
+                .await
+                .map_err(storage)?,
+            Some(DeliveryState::ReferenceOnly) => {}
+            Some(DeliveryState::Unknown) | None => return Ok(None),
+        }
+        candidate.operation_result_reference = Some(result_reference);
+        Ok(Some(candidate))
     }
 }
 

@@ -17,6 +17,8 @@ struct ClaimRow {
     status: String,
 }
 
+/// Acquires (or adopts) the execution claim of the turn's active checkpoint
+/// for this runtime owner and activates it on the checkpoint.
 pub(super) fn acquire(
     connection: &mut Connection,
     owner: &RuntimeOwner,
@@ -53,41 +55,14 @@ pub(super) fn acquire(
         params![claim_id, turn.turn_id, turn.revision, state, checkpoint.checkpoint_id,
             checkpoint.checkpoint_revision, turn.execution_fence, owner.owner_id(), owner.generation()],
     ).map_err(StorageError::sqlite)?;
-    let current = find(&transaction, &claim_id)?.ok_or_else(|| {
-        error(
-            StorageCode::StateClaimMissing,
-            "BTCC state claim was not persisted",
-        )
-    })?;
-    if current.status == "relinquished"
-        || current.owner_id != owner.owner_id()
-        || current.owner_generation != owner.generation()
-    {
-        adopt(
-            &transaction,
-            owner,
-            &claim_id,
-            &current,
-            checkpoint.checkpoint_revision,
-        )?;
-    }
-    let claimed = find(&transaction, &claim_id)?.ok_or_else(|| {
-        error(
-            StorageCode::StateClaimMissing,
-            "BTCC state claim was not persisted",
-        )
-    })?;
-    if claimed.owner_id != owner.owner_id()
-        || claimed.owner_generation != owner.generation()
-        || claimed.status != "active"
-        || claimed.checkpoint_revision != checkpoint.checkpoint_revision
-        || claimed.execution_fence != turn.execution_fence
-    {
-        return Err(error(
-            StorageCode::StateClaimInactive,
-            "BTCC state is not actively owned by this runtime",
-        ));
-    }
+    take_ownership(&transaction, owner, &claim_id, checkpoint.checkpoint_revision)?;
+    assert_owned(
+        &transaction,
+        owner,
+        &claim_id,
+        checkpoint.checkpoint_revision,
+        turn.execution_fence,
+    )?;
     let activated = transaction.execute(
         "UPDATE btcc_checkpoints SET active_claim_id = ?1 WHERE checkpoint_id = ?2 \
          AND checkpoint_revision = ?3 AND is_active = 1 AND (active_claim_id IS NULL OR active_claim_id = ?1)",
@@ -109,6 +84,56 @@ pub(super) fn acquire(
         checkpoint_revision: checkpoint.checkpoint_revision,
         execution_fence: turn.execution_fence,
     })
+}
+
+/// Adopts a relinquished claim, or one held by another owner or generation.
+fn take_ownership(
+    connection: &Connection,
+    owner: &RuntimeOwner,
+    claim_id: &str,
+    checkpoint_revision: u64,
+) -> StorageResult<()> {
+    let current = find(connection, claim_id)?.ok_or_else(|| {
+        error(
+            StorageCode::StateClaimMissing,
+            "BTCC state claim was not persisted",
+        )
+    })?;
+    if current.status == "relinquished"
+        || current.owner_id != owner.owner_id()
+        || current.owner_generation != owner.generation()
+    {
+        adopt(connection, owner, claim_id, &current, checkpoint_revision)?;
+    }
+    Ok(())
+}
+
+/// The claim must now be this owner's, active, at the checkpoint revision and fence.
+fn assert_owned(
+    connection: &Connection,
+    owner: &RuntimeOwner,
+    claim_id: &str,
+    checkpoint_revision: u64,
+    execution_fence: u64,
+) -> StorageResult<()> {
+    let claimed = find(connection, claim_id)?.ok_or_else(|| {
+        error(
+            StorageCode::StateClaimMissing,
+            "BTCC state claim was not persisted",
+        )
+    })?;
+    if claimed.owner_id != owner.owner_id()
+        || claimed.owner_generation != owner.generation()
+        || claimed.status != "active"
+        || claimed.checkpoint_revision != checkpoint_revision
+        || claimed.execution_fence != execution_fence
+    {
+        return Err(error(
+            StorageCode::StateClaimInactive,
+            "BTCC state is not actively owned by this runtime",
+        ));
+    }
+    Ok(())
 }
 
 fn adopt(
