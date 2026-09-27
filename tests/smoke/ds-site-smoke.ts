@@ -148,6 +148,19 @@ try {
     await visit(page, `${origin}${base.slice(0, -1)}`, "[data-ds-overview]", "base without trailing slash");
   }
 
+  // Bundled typefaces load from the site itself (Typeface Contract).
+  const fonts = await page.evaluate(async () => {
+    await document.fonts.load('14px "Pretendard Variable"', "Butler 버틀러");
+    await document.fonts.load('13px "IBM Plex Mono"', "const");
+    const woff2 = performance.getEntriesByType("resource").map((entry) => entry.name).filter((name) => name.endsWith(".woff2"));
+    return {
+      pretendard: document.fonts.check('14px "Pretendard Variable"', "Butler 버틀러"),
+      plex: document.fonts.check('13px "IBM Plex Mono"', "const"),
+      sameOrigin: woff2.length > 0 && woff2.every((name) => name.startsWith(location.origin)),
+    };
+  });
+  assert(fonts.pretendard && fonts.plex && fonts.sameOrigin, `bundled fonts did not load same-origin: ${JSON.stringify(fonts)}`);
+
   assert(foreign.length === 0, `static site requested foreign URLs:\n${foreign.join("\n")}`);
   assert(errors.length === 0, `static site logged errors:\n${errors.join("\n")}`);
 
