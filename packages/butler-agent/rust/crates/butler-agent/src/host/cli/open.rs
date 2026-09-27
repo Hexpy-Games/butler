@@ -7,8 +7,7 @@ use std::ffi::OsString;
 use std::process::{Command as Process, ExitCode, Stdio};
 use std::time::Duration;
 
-use serde::Deserialize;
-use serde_json::{Value, json};
+use serde::{Deserialize, Serialize};
 
 use crate::host::ResolvedInstallation;
 use crate::host::cli::error::CliError;
@@ -46,6 +45,48 @@ struct Envelope {
     data: ConnectionLink,
 }
 
+/// `butler open --json` data: the link, its code and whether a browser
+/// opened it.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenResult {
+    url: String,
+    code: String,
+    expires_at: String,
+    browser_opened: bool,
+}
+
+/// `butler open --help --json` data.
+#[derive(Serialize)]
+struct Usage {
+    usage: &'static str,
+}
+
+/// The CLI JSON envelope `butler open --json` prints.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Report<'a, T> {
+    ok: bool,
+    command: &'static str,
+    data: Option<T>,
+    error: Option<ReportedError<'a>>,
+    privacy: Privacy,
+}
+
+#[derive(Serialize)]
+struct ReportedError<'a> {
+    code: &'a str,
+    message: &'a str,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Privacy {
+    raw_text_included: bool,
+    /// The connection code is a credential for one browser session.
+    secrets_included: bool,
+}
+
 /// `open [options]`; unknown options are reported by [`run`].
 pub(crate) fn recognizes(args: &[OsString]) -> bool {
     args.first().is_some_and(|arg| arg == "open")
@@ -58,10 +99,10 @@ pub(crate) async fn run(installation: &ResolvedInstallation, args: &[OsString]) 
         Err(error) => return report_error(json_requested, &error),
     };
     if options.help {
-        return report_success(&options, &json!({ "usage": USAGE }), USAGE);
+        return report_success(&options, Usage { usage: USAGE }, false, USAGE);
     }
     match open(installation, &options).await {
-        Ok((data, human)) => report_success(&options, &data, &human),
+        Ok((data, human)) => report_success(&options, data, true, &human),
         Err(error) => report_error(options.json, &error),
     }
 }
@@ -69,7 +110,7 @@ pub(crate) async fn run(installation: &ResolvedInstallation, args: &[OsString]) 
 async fn open(
     installation: &ResolvedInstallation,
     options: &Options,
-) -> Result<(Value, String), CliError> {
+) -> Result<(OpenResult, String), CliError> {
     let data_root = super::gateway::resolve_data(options.data.as_deref(), installation)
         .map_err(|error| CliError::failed("butler_data_unavailable", error.message()))?;
     let endpoint = super::gateway::running_app_endpoint(&data_root, installation, STARTUP_PATIENCE)
@@ -83,12 +124,6 @@ async fn open(
         })?;
     let link = request_link(&endpoint, &data_root).await?;
     let opened = !options.no_browser && open_in_browser(&link.url);
-    let data = json!({
-        "url": link.url,
-        "code": link.code,
-        "expiresAt": link.expires_at,
-        "browserOpened": opened,
-    });
     let lead = if opened {
         "Opened Butler in your browser. If it did not open, visit:"
     } else {
@@ -98,6 +133,12 @@ async fn open(
         "{lead}\n  {}\nConnection code (one use, 5 minutes): {}",
         link.url, link.code
     );
+    let data = OpenResult {
+        url: link.url,
+        code: link.code,
+        expires_at: link.expires_at,
+        browser_opened: opened,
+    };
     Ok((data, human))
 }
 
@@ -106,13 +147,17 @@ async fn request_link(
     endpoint: &str,
     data_root: &std::path::Path,
 ) -> Result<ConnectionLink, CliError> {
-    let auth = AppServiceConfiguration::capture(data_root)
-        .gateway_config()
-        .local_auth;
+    let app = AppServiceConfiguration::capture(data_root);
+    let auth = app.gateway_config().local_auth;
     let token = auth.token().ok_or_else(|| {
+        let cause = app
+            .credential_errors()
+            .first()
+            .map(|error| format!(" ({})", error.diagnostic()))
+            .unwrap_or_default();
         CliError::failed(
             "local_auth_unavailable",
-            "The gateway token in this data folder cannot be read.",
+            format!("The gateway token in this data folder cannot be read{cause}."),
         )
     })?;
     let unavailable = |source: reqwest::Error| {
@@ -181,19 +226,25 @@ fn parse(args: &[OsString]) -> Result<Options, CliError> {
     Ok(options)
 }
 
-fn report_success(options: &Options, data: &Value, human: &str) -> ExitCode {
+fn report_success<T: Serialize>(
+    options: &Options,
+    data: T,
+    secrets_included: bool,
+    human: &str,
+) -> ExitCode {
     if options.json {
-        println!(
-            "{}",
-            json!({
-                "ok": true,
-                "command": COMMAND,
-                "data": data,
-                "error": null,
-                "privacy": { "rawTextIncluded": false, "secretsIncluded": true }
-            })
-        );
-    } else if !options.quiet {
+        return print_report(&Report::<T> {
+            ok: true,
+            command: COMMAND,
+            data: Some(data),
+            error: None,
+            privacy: Privacy {
+                raw_text_included: false,
+                secrets_included,
+            },
+        });
+    }
+    if !options.quiet {
         println!("{human}");
     }
     ExitCode::SUCCESS
@@ -201,18 +252,35 @@ fn report_success(options: &Options, data: &Value, human: &str) -> ExitCode {
 
 fn report_error(json_output: bool, error: &CliError) -> ExitCode {
     if json_output {
-        println!(
-            "{}",
-            json!({
-                "ok": false,
-                "command": COMMAND,
-                "data": null,
-                "error": { "code": error.code, "message": error.message },
-                "privacy": { "rawTextIncluded": false, "secretsIncluded": false }
-            })
-        );
+        print_report(&Report::<Usage> {
+            ok: false,
+            command: COMMAND,
+            data: None,
+            error: Some(ReportedError {
+                code: &error.code,
+                message: &error.message,
+            }),
+            privacy: Privacy {
+                raw_text_included: false,
+                secrets_included: false,
+            },
+        });
     } else {
         eprintln!("{}", error.message);
     }
     ExitCode::from(error.exit)
+}
+
+/// Prints the JSON envelope; exit 1 when it cannot be encoded.
+fn print_report<T: Serialize>(report: &Report<'_, T>) -> ExitCode {
+    match serde_json::to_string(report) {
+        Ok(text) => {
+            println!("{text}");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("{COMMAND}: cannot encode the JSON report: {error}");
+            ExitCode::FAILURE
+        }
+    }
 }

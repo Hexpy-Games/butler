@@ -10,7 +10,7 @@
 //! `null`.
 
 use std::collections::HashSet;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 
 use axum::http::{HeaderMap, HeaderValue, Method, header};
 
@@ -184,6 +184,27 @@ fn is_json(headers: &HeaderMap) -> bool {
         .is_some_and(|media| media.trim().eq_ignore_ascii_case("application/json"))
 }
 
+/// Whether the request's Host names a loopback address (`localhost`, a
+/// `.localhost` name or a loopback IP), which browsers treat as potentially
+/// trustworthy: they send it Fetch Metadata even over plain HTTP.
+pub(in crate::gateway::http) fn is_loopback_host(headers: &HeaderMap) -> bool {
+    let Some(authority) = headers
+        .get(header::HOST)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_ascii_lowercase)
+    else {
+        return false;
+    };
+    let name = match authority.rsplit_once(':') {
+        Some((name, _)) if has_port(&authority) => name,
+        _ => authority.as_str(),
+    };
+    let name = name.trim_start_matches('[').trim_end_matches(']');
+    name == "localhost"
+        || name.ends_with(".localhost")
+        || name.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback())
+}
+
 /// Whether an authority ends in `:port` (an IPv6 literal alone does not).
 fn has_port(authority: &str) -> bool {
     authority.rsplit_once(':').is_some_and(|(host, port)| {
@@ -244,6 +265,31 @@ mod tests {
         assert!(policy.check_host(&HeaderMap::new()).is_err());
         let repeated = headers(&[("host", "127.0.0.1:18765"), ("host", "127.0.0.1:18765")]);
         assert!(policy.check_host(&repeated).is_err());
+    }
+
+    /// Security boundary: the Host names browsers send Fetch Metadata to.
+    #[test]
+    fn loopback_hosts_are_the_potentially_trustworthy_names() {
+        let cases = [
+            ("127.0.0.1:18765", true),
+            ("LOCALHOST:18765", true),
+            ("[::1]:18765", true),
+            ("[::1]", true),
+            ("127.8.0.1", true),
+            ("preview.localhost:3000", true),
+            ("localhost.attacker.example:18765", false),
+            ("butler.lan:18765", false),
+            ("192.168.1.10:18765", false),
+            ("[fe80::1]:18765", false),
+        ];
+        for (host, loopback) in cases {
+            assert_eq!(
+                is_loopback_host(&headers(&[("host", host)])),
+                loopback,
+                "Host {host}"
+            );
+        }
+        assert!(!is_loopback_host(&HeaderMap::new()));
     }
 
     /// Security boundary: raw-string Origin allowlist; `null` never passes.

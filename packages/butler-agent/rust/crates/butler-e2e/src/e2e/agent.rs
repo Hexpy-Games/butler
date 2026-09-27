@@ -31,6 +31,12 @@ pub struct Launch {
 /// Where the agent keeps its gateway token when no override names a file.
 pub const DATA_FOLDER_TOKEN_FILE: &str = "app/runtime/auth/local-agent-auth.json";
 
+/// The field of the token file the harness reads.
+#[derive(serde::Deserialize)]
+struct TokenFile {
+    token: String,
+}
+
 impl Launch {
     pub fn new(sandbox: &Sandbox) -> Result<Self, HarnessError> {
         let token = format!("e2e-gateway-{}", uuid::Uuid::new_v4().simple());
@@ -82,8 +88,9 @@ impl Launch {
     /// The token the agent keeps in its data folder, once it exists.
     pub fn data_folder_token(&self) -> Option<String> {
         let bytes = fs::read(self.data.join(DATA_FOLDER_TOKEN_FILE)).ok()?;
-        let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
-        value["token"].as_str().map(str::to_owned)
+        serde_json::from_slice::<TokenFile>(&bytes)
+            .ok()
+            .map(|file| file.token)
     }
 
     /// A command for the agent binary with the scenario's isolated environment.

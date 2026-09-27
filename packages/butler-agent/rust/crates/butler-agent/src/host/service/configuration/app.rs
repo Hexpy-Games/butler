@@ -6,13 +6,14 @@ use std::{
     time::Duration,
 };
 
+use serde::Deserialize;
 use serde_json::Value;
 
 use butler_core::json::number_from_string;
 use butler_core::public_text::trim_js_whitespace;
 use butler_gateway::gateway::{GatewayConfig, LocalAuthConfig};
 
-use super::local_credentials::{CredentialFiles, LocalCredentials};
+use super::local_credentials::{CredentialFiles, LocalCredentialError, LocalCredentials};
 
 const MAX_SIGNED_URL_TTL_SECONDS: u64 = 600;
 
@@ -24,6 +25,19 @@ pub(crate) struct AppServiceConfiguration {
     pub(crate) enabled: bool,
     pub(crate) folder_selection_secret: Option<String>,
     gateway: GatewayConfig,
+    /// Why the token or the folder secret is unavailable; the gateway then
+    /// refuses every client (`local_auth_unconfigured`).
+    credential_errors: Vec<LocalCredentialError>,
+}
+
+/// The typed part of `gateways/app.json` `config`.
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TypedGatewaySettings {
+    /// Extra Host names (`name` or `name:port`) the gateway answers besides
+    /// loopback. A list that is not all strings is ignored as a whole.
+    #[serde(default)]
+    allowed_hosts: Vec<String>,
 }
 
 /// Facts captured by the process that cannot safely change with an App-only
@@ -100,19 +114,31 @@ impl AppServiceConfiguration {
             .unwrap_or_else(|| data_root.join("app-server/butler-client.sqlite"));
         // Local auth is enforced whoever started the agent: the token (and
         // the folder secret) belong to the data folder.
-        let credentials = LocalCredentials::load(data_root, files);
+        let LocalCredentials {
+            token,
+            folder_secret,
+        } = LocalCredentials::load(data_root, files);
+        let mut credential_errors = Vec::new();
+        let token = token.map_err(|error| credential_errors.push(error)).ok();
+        let folder_secret = folder_secret
+            .map_err(|error| credential_errors.push(error))
+            .ok();
         Self {
             host,
             port,
             db_path,
             db_configured,
             enabled,
-            folder_selection_secret: credentials.folder_secret.ok(),
-            gateway: gateway_config(
-                LocalAuthConfig::required(credentials.token.ok()),
-                allowed_hosts(config),
-            ),
+            folder_selection_secret: folder_secret,
+            gateway: gateway_config(LocalAuthConfig::required(token), allowed_hosts(config)),
+            credential_errors,
         }
+    }
+
+    /// Why the data folder's gateway token or folder secret could not be
+    /// read or created (empty when both are available).
+    pub(crate) fn credential_errors(&self) -> &[LocalCredentialError] {
+        &self.credential_errors
     }
 
     pub(crate) fn gateway_config(&self) -> GatewayConfig {
@@ -209,15 +235,16 @@ fn signed_url_ttl() -> Duration {
     Duration::from_secs(seconds)
 }
 
-/// `gateways/app.json` `config.allowedHosts`: extra Host names (`name` or
-/// `name:port`) the gateway answers besides loopback.
+/// `gateways/app.json` `config.allowedHosts`, trimmed, blank names dropped.
 fn allowed_hosts(config: Option<&Value>) -> Vec<String> {
-    config
-        .and_then(|value| value.get("allowedHosts"))
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|value| trimmed_string(Some(value)))
+    let settings = config
+        .and_then(|value| TypedGatewaySettings::deserialize(value).ok())
+        .unwrap_or_default();
+    settings
+        .allowed_hosts
+        .iter()
+        .map(|name| trim_js_whitespace(name))
+        .filter(|name| !name.is_empty())
         .map(str::to_owned)
         .collect()
 }

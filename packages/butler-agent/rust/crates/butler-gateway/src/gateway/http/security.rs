@@ -1,11 +1,13 @@
 //! Request admission for the App gateway, in order: Host check, Origin
 //! allowlist, CORS preflight (before auth), then one credential: the bearer
-//! token, the browser-session cookie from a connection code, or a signed
-//! URL for one message file.
+//! token, the browser-session cookie from a connection code (used only by
+//! the Butler page itself, see [`fetch_metadata`]), or a signed URL for one
+//! message file.
 
 mod browser_session;
 mod connect_page;
 mod cors;
+mod fetch_metadata;
 mod request_policy;
 mod signed_urls;
 
@@ -26,6 +28,7 @@ use crate::gateway::crypto::{constant_time_eq, hmac_sha256, hmac_sha256_base64};
 use crate::gateway::protocol::{APP_PROTOCOL_VERSION, ApiEnvelope};
 use browser_session::BrowserSessions;
 use connect_page::ConnectPage;
+use fetch_metadata::{SessionRefusal, SessionRequest};
 use request_policy::RequestPolicy;
 use signed_urls::ResourceSigner;
 
@@ -93,7 +96,10 @@ pub(super) enum Admission {
 enum Denial {
     Unconfigured,
     Missing,
+    /// A session cookie request without the Butler page's Origin.
     OriginRequired,
+    /// A session cookie request another origin of the site sent.
+    ForeignSite,
 }
 
 impl From<Denial> for HttpError {
@@ -112,7 +118,12 @@ impl From<Denial> for HttpError {
             Denial::OriginRequired => HttpError::public(
                 403,
                 "origin_required",
-                "Browser requests that change state must come from the Butler page.",
+                "Browser requests must come from the Butler page.",
+            ),
+            Denial::ForeignSite => HttpError::public(
+                403,
+                "cross_site_session",
+                "This browser session only answers the Butler page.",
             ),
         }
     }
@@ -168,7 +179,11 @@ impl GatewaySecurity {
         }
         match self.credential(method, uri, headers, origin, now) {
             Ok(access) => Ok(Admission::Granted(access)),
-            Err(Denial::Missing) if *method == Method::GET && static_ui::accepts_html(headers) => {
+            // A navigation without a usable session (none, or one another
+            // local page's link carried) gets the connection-code screen.
+            Err(Denial::Missing | Denial::ForeignSite)
+                if *method == Method::GET && static_ui::accepts_html(headers) =>
+            {
                 Ok(Admission::Respond(ConnectPage::SessionRequired.response()))
             }
             Err(denial) => Err(denial.into()),
@@ -190,29 +205,38 @@ impl GatewaySecurity {
         if auth::bearer_matches(headers, token) {
             return Ok(Access::Bearer);
         }
-        if self
+        let session_refusal = if self
             .sessions
             .as_ref()
             .is_some_and(|sessions| sessions.has_session(headers, now))
         {
-            // Browsers send Origin on every state-changing request; one
-            // without it did not come from the Butler page.
-            let safe = matches!(*method, Method::GET | Method::HEAD);
-            if !safe && origin.allowed().is_none() {
-                return Err(Denial::OriginRequired);
+            let refusal = fetch_metadata::session_use(SessionRequest {
+                method,
+                headers,
+                origin_allowed: origin.allowed().is_some(),
+                loopback_host: request_policy::is_loopback_host(headers),
+            });
+            match refusal {
+                Ok(()) => return Ok(Access::BrowserSession),
+                Err(refusal) => Some(refusal),
             }
-            return Ok(Access::BrowserSession);
-        }
+        } else {
+            None
+        };
+        // A signature is its own credential, whatever cookie comes with it.
         let signed = *method == Method::GET
             && self
                 .signer
                 .as_ref()
                 .is_some_and(|signer| signer.verify(uri.path(), uri.query(), unix_seconds(now)));
         if signed {
-            Ok(Access::SignedResource)
-        } else {
-            Err(Denial::Missing)
+            return Ok(Access::SignedResource);
         }
+        Err(match session_refusal {
+            Some(SessionRefusal::ForeignSite) => Denial::ForeignSite,
+            Some(SessionRefusal::OriginRequired) => Denial::OriginRequired,
+            None => Denial::Missing,
+        })
     }
 
     /// `GET /connect[?code=..]`: the code page, or a session cookie and a

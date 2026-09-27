@@ -55,9 +55,53 @@ pub(crate) enum LocalCredentialError {
     /// The token file could not be encoded.
     #[error("cannot encode the local auth file")]
     Encode(#[source] serde_json::Error),
-    /// The file is still unusable right after it was written.
-    #[error("the credential file {path} is unusable after it was written")]
+    /// The file is missing or holds no usable credential: a read-only load,
+    /// an override file, or a file still unusable after it was written.
+    #[error("the credential file {path} holds no usable credential")]
     Unusable { path: PathBuf },
+}
+
+impl LocalCredentialError {
+    /// A stable code for service diagnostics and CLI errors.
+    pub(crate) fn code(&self) -> &'static str {
+        match self {
+            Self::Directory { .. } => "local_credential_directory_unavailable",
+            Self::Read { .. } => "local_credential_unreadable",
+            Self::Write { .. } => "local_credential_unwritable",
+            Self::Encode(_) => "local_credential_encode_failed",
+            Self::Unusable { .. } => "local_credential_unusable",
+        }
+    }
+
+    /// The file or directory concerned, when there is one.
+    pub(crate) fn path(&self) -> Option<&Path> {
+        match self {
+            Self::Directory { path, .. }
+            | Self::Read { path, .. }
+            | Self::Write { path, .. }
+            | Self::Unusable { path } => Some(path),
+            Self::Encode(_) => None,
+        }
+    }
+
+    /// One log line: code, path and the cause chain (never a credential).
+    pub(crate) fn diagnostic(&self) -> String {
+        use std::error::Error as _;
+        use std::fmt::Write as _;
+        let mut line = format!("code={}", self.code());
+        // Writing to a String cannot fail.
+        if let Some(path) = self.path() {
+            let _ = write!(line, " path={}", path.display());
+        }
+        let mut cause = self.source();
+        let mut separator = " error=";
+        while let Some(error) = cause {
+            let _ = write!(line, "{separator}{error}");
+            separator = ": ";
+            cause = error.source();
+        }
+        line
+    }
 }
 
 /// Whether loading may create the credential files.

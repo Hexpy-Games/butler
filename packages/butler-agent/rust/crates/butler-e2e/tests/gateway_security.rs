@@ -1,7 +1,8 @@
 //! SEC. Local gateway security model (#228): a data-folder token enforced
-//! however the agent started, Host/Origin admission, CORS for the
-//! `app://butler` renderer, signed short-lived URLs for token-less
-//! subresources, and `butler open`'s one-time browser link.
+//! however the agent started (and kept when the App adopts it), Host/Origin
+//! admission, CORS for the `app://butler` renderer, and a fail-closed
+//! gateway that says why its token is unavailable. Browser access (signed
+//! URLs, `butler open`, message files) is in `gateway_browser.rs`.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -9,12 +10,14 @@
     reason = "test assertions"
 )]
 
+use std::fs::File;
 use std::os::unix::fs::PermissionsExt;
-use std::time::Duration;
+use std::process::{Child, Stdio};
+use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::agent::DATA_FOLDER_TOKEN_FILE;
-use butler_e2e::e2e::gateway::Gateway;
+use butler_e2e::e2e::gateway::{Gateway, Reply};
 use butler_e2e::e2e::media;
 use butler_e2e::e2e::scenario::{Scenario, Setup};
 use reqwest::Method;
@@ -32,14 +35,6 @@ fn header<'a>(headers: &'a HeaderMap, name: &str) -> &'a str {
         .get(name)
         .and_then(|value| value.to_str().ok())
         .unwrap_or_default()
-}
-
-/// A client that does not follow redirects, so the cookie hand-off is seen.
-fn browser() -> reqwest::Client {
-    reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .unwrap()
 }
 
 fn file_mode(path: &std::path::Path) -> u32 {
@@ -255,159 +250,131 @@ fn assert_app_cors(response: &reqwest::Response, what: &str) {
     assert!(header(headers, "vary").contains("Origin"), "{what}");
 }
 
-/// SEC-04 — `<img>` and the artifact viewer send no Authorization header:
-/// the plain file URL answers 401, the `signed_url` the gateway returns
-/// serves that one file without a token until it expires, and a signature
-/// opens nothing else.
+/// SEC-06 — the App adopts an agent the CLI started, then the agent it
+/// launches itself: the CLI-started agent created the data folder's token;
+/// the App reads that file (as its `prepareAppLocalAuth` does), connects,
+/// and replaces the process with one started with
+/// `BUTLER_APP_LOCAL_AUTH_FILE` naming the same file. One token and one
+/// state across the launches; `butler open` works under both.
 #[tokio::test]
-async fn sec_04_signed_file_url_works_once_and_expires() -> Result<(), HarnessError> {
+async fn sec_06_app_reconnects_to_a_cli_started_agent() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let s = Setup::new("SEC-04")?
-        .env("BUTLER_APP_SIGNED_URL_TTL_SECONDS", "3")
-        .start()
+    let mut s = Setup::new("SEC-06")?.data_folder_token().start().await?;
+    let token_file = s.sandbox.data.join(DATA_FOLDER_TOKEN_FILE);
+    let written = std::fs::read(&token_file)?;
+    let app_token = s.agent.launch.data_folder_token().unwrap();
+    let app = Gateway::new(s.gw.base.clone(), app_token.clone());
+    let patch = from_app(&app, Method::PATCH, "/settings")
+        .header("content-type", "application/json")
+        .body(json!({"language": "ko"}).to_string())
+        .send()
         .await?;
-    let png = media::digits_png("4821", 12);
-    let upload =
-        s.gw.upload("number.png", "image/png", &png, Some("general"))
-            .await?;
+    assert_eq!(patch.status().as_u16(), 200, "App refused by the CLI agent");
+    let png = media::digits_png("306", 8);
+    let upload = app
+        .upload("number.png", "image/png", &png, Some("general"))
+        .await?;
     assert_eq!(upload.status, 201, "{}", upload.text);
-    let file = &upload.data()["file"];
-    let plain = file["url"].as_str().unwrap();
-    let signed = file["signed_url"]
-        .as_str()
-        .expect("no signed_url")
-        .to_owned();
-    assert!(signed.starts_with(&format!("{plain}?expires=")), "{signed}");
-    assert!(signed.contains("&signature="), "{signed}");
+    let file = upload.data()["file"]["url"].as_str().unwrap().to_owned();
 
-    let tokenless = s.gw.http().get(url(&s.gw, plain)).send().await?;
-    assert_eq!(
-        tokenless.status().as_u16(),
-        401,
-        "plain file URL served without a token"
+    let launch = &mut s.agent.launch;
+    launch.set_env("BUTLER_APP_LOCAL_AUTH_REQUIRED", "1");
+    launch.set_env(
+        "BUTLER_APP_LOCAL_AUTH_FILE",
+        token_file.display().to_string(),
     );
-    let served = s.gw.http().get(url(&s.gw, &signed)).send().await?;
-    assert_eq!(served.status().as_u16(), 200);
-    assert_eq!(header(served.headers(), "content-type"), "image/png");
-    assert_eq!(served.bytes().await?.to_vec(), png);
+    launch.set_env("BUTLER_APP_BUNDLED_SUPERVISOR", "1");
+    s.restart().await?;
+    assert_eq!(std::fs::read(&token_file)?, written, "token file rewritten");
+    assert_app_session(&s, &app, &file, &png).await?;
 
-    let query = signed.split_once('?').unwrap().1;
-    let tampered = format!("{signed}x");
-    for (label, target) in [
-        ("tampered", tampered),
-        ("other route", format!("/settings?{query}")),
-        ("events", format!("/events?{query}")),
-    ] {
-        let reply = s.gw.http().get(url(&s.gw, &target)).send().await?;
-        assert_eq!(reply.status().as_u16(), 401, "{label} accepted");
-    }
-
-    tokio::time::sleep(Duration::from_millis(4_500)).await;
-    let expired = s.gw.http().get(url(&s.gw, &signed)).send().await?;
-    assert_eq!(expired.status().as_u16(), 401, "expired signature accepted");
+    // And back to a CLI start: still the same token.
+    s.agent.launch.use_data_folder_token();
+    s.agent.launch.remove_env("BUTLER_APP_BUNDLED_SUPERVISOR");
+    s.restart().await?;
+    assert_eq!(s.gw.token, app_token, "token changed on the CLI restart");
+    assert_app_session(&s, &app, &file, &png).await?;
     s.finish().await
 }
 
-/// Runs `butler open --no-browser --json` and returns `(url, code)`.
-fn open_link(s: &Scenario) -> Result<(String, String), HarnessError> {
-    let output = s.agent.cli(&["open", "--no-browser", "--json"])?;
-    assert_eq!(output.code, Some(0), "{output:?}");
-    let value = output.json()?;
-    assert_eq!(value["data"]["browserOpened"], false, "{value}");
-    Ok((
-        value["data"]["url"].as_str().unwrap().to_owned(),
-        value["data"]["code"].as_str().unwrap().to_owned(),
-    ))
-}
-
-/// SEC-05 — `butler open`: the one-time link sets an HttpOnly, SameSite=Strict
-/// session cookie and cannot be used twice; a browser without it gets the
-/// connection-code screen (no password dialog); cookie requests that change
-/// state must come from the Butler page.
-#[tokio::test]
-async fn sec_05_one_time_link_sets_a_cookie_and_cannot_be_reused() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let s = Setup::new("SEC-05")?.start().await?;
-    let browser = browser();
-    let page = browser
-        .get(url(&s.gw, "/"))
-        .header("accept", "text/html")
-        .send()
-        .await?;
-    assert_eq!(page.status().as_u16(), 401);
-    assert!(
-        page.headers().get("www-authenticate").is_none(),
-        "password dialog"
-    );
-    assert!(page.text().await?.contains("Connection code"));
-
-    let (link, _) = open_link(&s)?;
-    assert!(
-        link.starts_with(&format!("{}/connect?code=", s.gw.base)),
-        "{link}"
-    );
-    let redeemed = browser.get(&link).send().await?;
-    assert_eq!(redeemed.status().as_u16(), 303);
-    assert_eq!(header(redeemed.headers(), "location"), "/");
-    let set_cookie = header(redeemed.headers(), "set-cookie").to_owned();
-    assert!(
-        set_cookie.contains("HttpOnly") && set_cookie.contains("SameSite=Strict"),
-        "{set_cookie}"
-    );
-    let cookie = set_cookie.split(';').next().unwrap().to_owned();
-    let reused = browser.get(&link).send().await?;
-    assert_eq!(reused.status().as_u16(), 401, "link reused");
-    assert!(reused.headers().get("set-cookie").is_none());
-    assert_cookie_session(&s.gw, &browser, &cookie).await?;
-
-    let (_, code) = open_link(&s)?;
-    let typed = code.to_lowercase().replace('-', " ");
-    let entered = browser
-        .get(url(&s.gw, "/connect"))
-        .query(&[("code", typed)])
-        .send()
-        .await?;
-    assert_eq!(
-        entered.status().as_u16(),
-        303,
-        "typed connection code refused"
-    );
-    s.finish().await
-}
-
-/// SEC-05: the session cookie reads without a token; a state change with it
-/// needs the page's own Origin; it cannot mint further codes.
-async fn assert_cookie_session(
-    gw: &Gateway,
-    browser: &reqwest::Client,
-    cookie: &str,
+/// SEC-06: the App's client works against the running agent with the state
+/// it left, a stale token does not, and `butler open` mints a link.
+async fn assert_app_session(
+    s: &Scenario,
+    app: &Gateway,
+    file: &str,
+    png: &[u8],
 ) -> Result<(), HarnessError> {
-    let settings = browser
-        .get(url(gw, "/settings"))
-        .header("cookie", cookie)
-        .send()
+    assert_eq!(s.gw.token, app.token);
+    assert_eq!(app.settings().await?["language"], "ko");
+    assert_eq!(app.download(file).await?, (200, png.to_vec()));
+    let stale = app
+        .send_with(Method::GET, "/settings", None, Some("e2e-stale-token"), &[])
         .await?;
-    assert_eq!(settings.status().as_u16(), 200);
-    let own_origin = gw.base.as_str();
-    let body = json!({"language": "ko"}).to_string();
-    for (origin, expected) in [(None, 403), (Some(own_origin), 200)] {
-        let mut request = browser
-            .patch(url(gw, "/settings"))
-            .header("cookie", cookie)
-            .header("content-type", "application/json")
-            .body(body.clone());
-        if let Some(origin) = origin {
-            request = request.header("origin", origin);
-        }
-        let status = request.send().await?.status().as_u16();
-        assert_eq!(status, expected, "origin {origin:?}");
-    }
-    let minted = browser
-        .post(url(gw, "/connection-codes"))
-        .header("cookie", cookie)
-        .header("origin", own_origin)
-        .send()
-        .await?;
-    assert_eq!(minted.status().as_u16(), 403, "a session minted a code");
+    assert_eq!(stale.status, 401, "{}", stale.text);
+    let open = s.agent.cli(&["open", "--no-browser", "--json"])?;
+    assert_eq!(open.code, Some(0), "{open:?}");
+    assert_eq!(open.json()?["ok"], true, "{open:?}");
     Ok(())
+}
+
+/// Kills an agent process the test spawned itself, also on a failed assertion.
+struct KillOnDrop(Child);
+
+impl Drop for KillOnDrop {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+/// SEC-08 — a token file the agent cannot read fails closed and says why:
+/// the gateway answers every client 503 `local_auth_unconfigured`, and the
+/// service log names the error code and the file.
+#[tokio::test]
+async fn sec_08_unreadable_token_fails_closed_with_a_diagnostic() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("SEC-08")?.start().await?;
+    s.agent.terminate().await?;
+    let missing = s.sandbox.root.join("missing-gateway-auth.json");
+    let mut launch = s.agent.launch.clone();
+    launch.set_env("BUTLER_APP_LOCAL_AUTH_FILE", missing.display().to_string());
+    let log = launch.logs.join("unreadable-token.log");
+    let output = File::create(&log)?;
+    let child = launch
+        .command()
+        .stdin(Stdio::null())
+        .stdout(output.try_clone()?)
+        .stderr(output)
+        .spawn()?;
+    let mut agent = KillOnDrop(child);
+    let reply = first_reply(&s.gw, &mut agent).await?;
+    assert_eq!(reply.status, 503, "{}", reply.text);
+    assert_eq!(reply.error_code(), Some("local_auth_unconfigured"));
+    let logged = std::fs::read_to_string(&log)?;
+    let diagnostic = format!(
+        "[native-app] local auth unavailable code=local_credential_unreadable path={}",
+        missing.display()
+    );
+    assert!(logged.contains(&diagnostic), "{logged}");
+    drop(agent);
+    s.finish().await
+}
+
+/// The gateway's first answer to `GET /health`, whatever its status.
+async fn first_reply(gw: &Gateway, agent: &mut KillOnDrop) -> Result<Reply, HarnessError> {
+    let deadline = Instant::now() + Duration::from_secs(90);
+    loop {
+        let reply = gw
+            .send_with(Method::GET, "/health", None, Some(&gw.token), &[])
+            .await;
+        if let Ok(reply) = reply {
+            return Ok(reply);
+        }
+        if let Some(status) = agent.0.try_wait()? {
+            panic!("agent exited ({status}) before its gateway answered");
+        }
+        assert!(Instant::now() < deadline, "no gateway answer within 90s");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
 }

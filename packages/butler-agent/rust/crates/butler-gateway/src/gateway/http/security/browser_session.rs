@@ -46,7 +46,9 @@ pub(in crate::gateway::http) struct BrowserSessions {
 }
 
 impl BrowserSessions {
-    /// Cookies are per port: browsers share cookies across ports of a host.
+    /// The cookie name carries the port, so two gateways on one host keep
+    /// their own sessions. Browsers still send it to every port of the host,
+    /// which is why only the Butler page may use it (`fetch_metadata`).
     pub(in crate::gateway::http) fn new(key: SigningKey, port: u16) -> Self {
         Self {
             key,
