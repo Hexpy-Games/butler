@@ -128,20 +128,7 @@ fn insert_initial_turn(
     let budget = limits
         .map(|limits| initial_budget_json(limits, model, turn_id))
         .transpose()?;
-    let has_legacy = column_exists(connection, "btcc_turns", "continuation_snapshot_json")?;
-    let sql = if has_legacy {
-        "INSERT INTO btcc_turns (turn_id, session_id, inbox_id, trigger_key, original_message_id, \
-         original_message, admission_snapshot_ref, model_selection_json, route_state_json, \
-         continuation_budget_json, context_json, progress_destination_json, semantic_state, \
-         active_checkpoint_id, execution_fence, final_disposition, continuation_snapshot_json, revision) \
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,'[]',0)"
-    } else {
-        "INSERT INTO btcc_turns (turn_id, session_id, inbox_id, trigger_key, original_message_id, \
-         original_message, admission_snapshot_ref, model_selection_json, route_state_json, \
-         continuation_budget_json, context_json, progress_destination_json, semantic_state, \
-         active_checkpoint_id, execution_fence, final_disposition, revision) \
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,0)"
-    };
+    let sql = insert_turn_sql(connection)?;
     connection
         .execute(
             sql,
@@ -177,10 +164,42 @@ fn insert_initial_turn(
         )
         .map_err(StorageError::sqlite)?;
     if !stopped {
-        connection.execute("INSERT INTO btcc_checkpoints (checkpoint_id, turn_id, turn_revision, semantic_state, \
-            kind, checkpoint_revision, is_active) VALUES (?1, ?2, 0, 'admitted', 'runtime', 1, 1)",
-            params![checkpoint_id, turn_id]).map_err(StorageError::sqlite)?;
+        activate_admitted_checkpoint(connection, &checkpoint_id, turn_id)?;
     }
+    Ok(())
+}
+
+/// The turn insert, including the legacy continuation column when the
+/// database still has it.
+fn insert_turn_sql(connection: &Connection) -> StorageResult<&'static str> {
+    let has_legacy = column_exists(connection, "btcc_turns", "continuation_snapshot_json")?;
+    Ok(if has_legacy {
+        "INSERT INTO btcc_turns (turn_id, session_id, inbox_id, trigger_key, original_message_id, \
+         original_message, admission_snapshot_ref, model_selection_json, route_state_json, \
+         continuation_budget_json, context_json, progress_destination_json, semantic_state, \
+         active_checkpoint_id, execution_fence, final_disposition, continuation_snapshot_json, revision) \
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,'[]',0)"
+    } else {
+        "INSERT INTO btcc_turns (turn_id, session_id, inbox_id, trigger_key, original_message_id, \
+         original_message, admission_snapshot_ref, model_selection_json, route_state_json, \
+         continuation_budget_json, context_json, progress_destination_json, semantic_state, \
+         active_checkpoint_id, execution_fence, final_disposition, revision) \
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,0)"
+    })
+}
+
+fn activate_admitted_checkpoint(
+    connection: &Connection,
+    checkpoint_id: &str,
+    turn_id: &str,
+) -> StorageResult<()> {
+    connection
+        .execute(
+            "INSERT INTO btcc_checkpoints (checkpoint_id, turn_id, turn_revision, semantic_state, \
+             kind, checkpoint_revision, is_active) VALUES (?1, ?2, 0, 'admitted', 'runtime', 1, 1)",
+            params![checkpoint_id, turn_id],
+        )
+        .map_err(StorageError::sqlite)?;
     Ok(())
 }
 

@@ -149,33 +149,9 @@ fn classify_transcript(
             None,
         );
     }
-    let role = match TranscriptKind::parse(&row.kind) {
-        TranscriptKind::Inbound => Role::User,
-        TranscriptKind::Outbound => Role::Assistant,
-        TranscriptKind::NotSemantic => {
-            return build_decision(
-                Provenance::Discarded,
-                "transcript_kind_not_semantic",
-                None,
-                None,
-            );
-        }
-        TranscriptKind::Turn => {
-            return build_decision(
-                Provenance::Ambiguous,
-                "turn_text_requires_explicit_recovery_policy",
-                None,
-                None,
-            );
-        }
-        TranscriptKind::Other => {
-            return build_decision(
-                Provenance::Ambiguous,
-                "historical_tool_or_unknown_requires_review",
-                None,
-                None,
-            );
-        }
+    let role = match TranscriptKind::parse(&row.kind).role() {
+        Ok(role) => role,
+        Err((provenance, reason)) => return build_decision(provenance, reason, None, None),
     };
     let text = transcript_text(row.payload.as_ref());
     if text.is_empty() {
@@ -192,6 +168,25 @@ fn classify_transcript(
         Some(role),
         Some(text),
     )
+}
+
+impl TranscriptKind {
+    /// The conversation role of a recoverable kind, or why the row is not recovered.
+    fn role(self) -> Result<Role, (Provenance, &'static str)> {
+        match self {
+            Self::Inbound => Ok(Role::User),
+            Self::Outbound => Ok(Role::Assistant),
+            Self::NotSemantic => Err((Provenance::Discarded, "transcript_kind_not_semantic")),
+            Self::Turn => Err((
+                Provenance::Ambiguous,
+                "turn_text_requires_explicit_recovery_policy",
+            )),
+            Self::Other => Err((
+                Provenance::Ambiguous,
+                "historical_tool_or_unknown_requires_review",
+            )),
+        }
+    }
 }
 
 /// The recovery-relevant kinds of historical transcript rows.

@@ -56,17 +56,17 @@ src/host/guided/command/evidence.rs	capability_receipts	85
 src/host/guided/command/output.rs	from_streams	175
 src/host/guided/command/output/assemble.rs	assemble	149
 src/host/guided/factory.rs	<GuidedTurnFactoryAdapter as GuidedTurnFactory>::bind_pre_model	231
-src/host/guided/factory/tests/journaled_factory.rs	factory_reads_physical_file_journals_result_and_continues_provider	399
+src/host/guided/factory/tests/journaled_factory.rs	factory_reads_physical_file_journals_result_and_continues_provider	405
 src/host/guided/file_effects/edit.rs	decode	115
 src/host/guided/file_effects/edit.rs	recover	149
 src/host/guided/file_effects/edit/legacy.rs	recover	90
-src/host/guided/preparation.rs	GuidedPreparation::prepare	134
+src/host/guided/preparation.rs	GuidedPreparation::prepare	130
 src/host/guided/project_tools.rs	GuidedProjectTools::run	126
 src/host/guided/project_tools/evidence.rs	canonical_record	89
 src/host/guided/project_tools/lifecycle.rs	execute	86
 src/host/guided/project_tools/lifecycle/closeout.rs	closeout	97
 src/host/guided/project_tools/options.rs	command	144
-src/host/guided/prompt.rs	<GuidedPrompt as PromptPort>::render	187
+src/host/guided/prompt.rs	<GuidedPrompt as PromptPort>::render	190
 src/host/guided/prompt/documents.rs	read	113
 src/host/guided/prompt/prior_tool/semantic.rs	facts	93
 src/host/guided/prompt/work_context.rs	render	267

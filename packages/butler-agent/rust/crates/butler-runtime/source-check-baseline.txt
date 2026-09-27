@@ -8,9 +8,9 @@ src/capabilities/edit_file/normalize.rs	batch	87
 src/capabilities/edit_file/result.rs	batch_result	112
 src/capabilities/grep_files.rs	execute	111
 src/capabilities/grep_files/args.rs	normalize	94
-src/capabilities/grep_files/response.rs	success	189
-src/capabilities/grep_files/search.rs	execute	124
-src/capabilities/list_files.rs	execute	147
+src/capabilities/grep_files/response.rs	success	192
+src/capabilities/grep_files/search.rs	execute	125
+src/capabilities/list_files.rs	execute	149
 src/capabilities/read_file.rs	execute	255
 src/capabilities/tests/arguments.rs	number_coercion_limits_and_guard_cases_have_explicit_results	81
 src/capabilities/write_file.rs	execute	130
@@ -28,7 +28,7 @@ src/context/image/tests.rs	sanitizes_real_codecs_and_keeps_legacy_source_record_
 src/context/prompt/sections.rs	PromptAssembler::runtime_assembly	149
 src/context/prompt/sections.rs	PromptAssembler::shared_assembly	92
 src/context/prompt/tests.rs	butler_and_steward_assemblies_keep_sections_producer_order_and_fallbacks	95
-src/context/round_projection.rs	TurnContext::project_round	82
+src/context/round_projection.rs	TurnContext::project_round	85
 src/context/round_projection/compaction.rs	CompactionState::compact_under_pressure	112
 src/context/round_projection/serialization.rs	append_message_json	122
 src/context/round_projection/tests.rs	message_writers_keep_the_persisted_digest_field_order_and_omissions	97
@@ -66,7 +66,7 @@ src/web_access/read/lightpanda.rs	run_dump	101
 src/web_access/search.rs	WebSession::web_search	172
 src/web_access/search.rs	execute_planned	98
 tests/context_loopback/failure.rs	summary_failure_drops_turn_owner_without_saving	93
-tests/context_loopback/main.rs	summary_persists_and_reopens_with_physical_request_admission	199
-tests/context_loopback/selection.rs	nochange_compactor_selects_semantic_and_bounded_eviction_skips_steering_recheck	86
-tests/provider_loopback.rs	provider_context_and_replay_share_one_turn_owner	175
+tests/context_loopback/main.rs	summary_persists_and_reopens_with_physical_request_admission	201
+tests/context_loopback/selection.rs	nochange_compactor_selects_semantic_and_bounded_eviction_skips_steering_recheck	85
+tests/provider_loopback.rs	provider_context_and_replay_share_one_turn_owner	182
 tests/registered_write_effect.rs	actual_registered_write_commits_then_effect_reopens_without_second_write	93

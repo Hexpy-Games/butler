@@ -110,12 +110,9 @@ fn pending_record(
         "authority-ref-{}",
         digest.get(..32).unwrap_or(digest.as_str())
     );
-    let reviewed = input.category.as_deref() == Some("reviewed_effect");
-    let category = if reviewed {
-        "reviewed_effect"
-    } else {
-        "command"
-    };
+    let category = Category::of(&input);
+    // Evaluated early for borrowing; its error surfaces in field order below.
+    let executable = category.executable(&input);
     let required = |value: &str, label: &str| identity::required(value, label).map(str::to_owned);
     Ok(AuthorityRecord {
         request_id: request_id.clone(),
@@ -137,29 +134,12 @@ fn pending_record(
         normalized_input_json: identity::canonical(&input.normalized_input, collation)?,
         model_ref: required(&input.model_ref, "model")?,
         reasoning_effort: required(&input.reasoning_effort, "reasoning effort")?,
-        category: category.into(),
+        category: category.as_str().into(),
         reason: input
             .public_action_title
             .filter(|title| !title.is_empty())
-            .unwrap_or_else(|| {
-                if reviewed {
-                    "Apply one reviewed effect"
-                } else {
-                    "Run one reviewed command"
-                }
-                .into()
-            }),
-        executable: if reviewed {
-            identity::slice_utf16(identity::required(&input.capability, "capability")?, 96)
-        } else {
-            first_executable(
-                input
-                    .normalized_input
-                    .get("command")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or(""),
-            )
-        },
+            .unwrap_or_else(|| category.default_reason().into()),
+        executable: executable?,
         command_count: 1,
         decision: "pending".into(),
         allow_scope: "once".into(),
@@ -174,6 +154,53 @@ fn pending_record(
         created_at: now.clone(),
         updated_at: now,
     })
+}
+
+/// What an authority request approves: one reviewed effect or one command.
+#[derive(Clone, Copy)]
+enum Category {
+    ReviewedEffect,
+    Command,
+}
+
+impl Category {
+    fn of(input: &AuthorityAdmissionInput) -> Self {
+        if input.category.as_deref() == Some("reviewed_effect") {
+            Self::ReviewedEffect
+        } else {
+            Self::Command
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::ReviewedEffect => "reviewed_effect",
+            Self::Command => "command",
+        }
+    }
+
+    fn default_reason(self) -> &'static str {
+        match self {
+            Self::ReviewedEffect => "Apply one reviewed effect",
+            Self::Command => "Run one reviewed command",
+        }
+    }
+
+    /// The reviewed capability, or the command's first executable.
+    fn executable(self, input: &AuthorityAdmissionInput) -> AuthorityResult<String> {
+        Ok(match self {
+            Self::ReviewedEffect => {
+                identity::slice_utf16(identity::required(&input.capability, "capability")?, 96)
+            }
+            Self::Command => first_executable(
+                input
+                    .normalized_input
+                    .get("command")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or(""),
+            ),
+        })
+    }
 }
 
 fn terminal(record: &AuthorityRecord) -> bool {
