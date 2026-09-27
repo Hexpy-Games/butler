@@ -50,6 +50,7 @@ enum Mode {
         upstream: String,
         meta: Meta,
         client: reqwest::Client,
+        out_dir: std::path::PathBuf,
     },
 }
 
@@ -88,11 +89,15 @@ impl Provider {
         Self::serve(Mode::Replay(cassette), placeholders, count).await
     }
 
+    /// Record mode; the cassette is written to `out_dir` (default: the
+    /// committed cassette root).
     pub async fn record(
         upstream: String,
         meta: Meta,
         placeholders: Placeholders,
+        out_dir: Option<std::path::PathBuf>,
     ) -> Result<Self, HarnessError> {
+        let out_dir = out_dir.unwrap_or_else(|| cassette::root().join(&meta.scenario));
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(600))
             .build()?;
@@ -101,6 +106,7 @@ impl Provider {
                 upstream,
                 meta,
                 client,
+                out_dir,
             },
             placeholders,
             0,
@@ -147,9 +153,12 @@ impl Provider {
         matches!(self.state.mode, Mode::Record { .. })
     }
 
-    /// Adds a fault. Record mode ignores faults: it captures clean traffic.
+    /// Adds a fault. Record mode keeps only request-targeted argument
+    /// mutations (see [`Fault::on_request`]); other faults need clean traffic.
     pub fn inject(&self, fault: Fault) -> Result<(), HarnessError> {
-        if self.is_recording() {
+        if self.is_recording()
+            && !(fault.request.is_some() && matches!(fault.transform, Transform::MutateToolArgs(_)))
+        {
             return Ok(());
         }
         if let Transform::ErrorFromLibrary(name) = &fault.transform {
@@ -197,6 +206,11 @@ impl Provider {
         lock(&self.state.placeholders).add(name, value);
     }
 
+    /// Unmatched request keys so far (strict replay misses).
+    pub fn misses(&self) -> Vec<String> {
+        lock(&self.state.misses).clone()
+    }
+
     /// Number of provider requests answered so far (harness bookkeeping).
     pub fn served(&self) -> u32 {
         *lock(&self.state.served)
@@ -238,9 +252,9 @@ impl Provider {
             return Ok(());
         }
         self.written = true;
-        if let Mode::Record { meta, .. } = &self.state.mode {
+        if let Mode::Record { meta, out_dir, .. } = &self.state.mode {
             let exchanges = lock(&self.state.recorded).clone();
-            let dir = cassette::root().join(&meta.scenario);
+            let dir = out_dir.clone();
             cassette::write(&dir, meta.clone(), &exchanges)?;
             eprintln!(
                 "RECORDED {} exchange(s) into {}",
@@ -270,6 +284,7 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
         .await
         .unwrap_or_default();
     let json: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    learn_echo_ids(&state, &String::from_utf8_lossy(&bytes));
     let key = matching::key(&path, &json, &lock(&state.placeholders));
     match &state.mode {
         Mode::Replay(cassette) => {
@@ -281,6 +296,19 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
                 .map(|(index, _)| index)
                 .collect();
             let Some(&first) = candidates.first() else {
+                // A declared stall may target a request whose live round was
+                // cut off by a crash during recording: hold it open, answer nothing.
+                if let Some((_, Transform::StallAfter(0))) = take_fault(&state, None, &key) {
+                    return replay(
+                        &state,
+                        &ResponseRecord {
+                            status: 200,
+                            headers: Vec::new(),
+                            chunks: Vec::new(),
+                        },
+                        Some((usize::MAX, Transform::StallAfter(0))),
+                    );
+                }
                 lock(&state.misses).push(serde_json::to_string(&key).unwrap_or_default());
                 return plain(501, "HARNESS_ERROR: no recording matches this request");
             };
@@ -291,8 +319,13 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
                 seen as usize
             };
             let index = candidates[hit.min(candidates.len() - 1)];
-            let fault = take_fault(&state, index);
-            replay(&state, &cassette.exchanges[index].response, fault)
+            let fault = take_fault(&state, Some(index), &key);
+            let reserve = (hit + 1).saturating_sub(candidates.len());
+            let mut response = cassette.exchanges[index].response.clone();
+            if reserve > 0 {
+                remint_ids(&mut response, reserve);
+            }
+            replay(&state, &response, fault)
         }
         Mode::Record {
             upstream, client, ..
@@ -312,20 +345,89 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
     }
 }
 
-fn take_fault(state: &State, index: usize) -> Option<Transform> {
-    let mut faults = lock(&state.faults);
-    let position = faults.iter().position(|fault| {
-        fault.exchange.is_none_or(|target| target == index)
-            && fault.remaining.is_none_or(|remaining| remaining > 0)
-    })?;
-    let fault = &mut faults[position];
-    if let Some(remaining) = fault.remaining.as_mut() {
-        *remaining -= 1;
+/// Takes the first matching fault. Tool-scoped argument mutations
+/// (`ArgsMutation::OnlyTool`) are consumed lazily, only by a response that
+/// actually contains a call of that tool (see [`consume_fault`]).
+/// Product-generated ids the model must echo back verbatim (the Work id in
+/// work tool calls) differ per run. Each distinct id is named `ECHO_<n>` in
+/// order of first appearance in requests: the recorder hides it in replies,
+/// and replay substitutes the current run's id for the same name.
+fn learn_echo_ids(state: &State, request: &str) {
+    static PATTERN: std::sync::OnceLock<Option<regex::Regex>> = std::sync::OnceLock::new();
+    let Some(pattern) = PATTERN
+        .get_or_init(|| regex::Regex::new(r"guided-work-[0-9a-f]{64}").ok())
+        .as_ref()
+    else {
+        return;
+    };
+    let mut placeholders = lock(&state.placeholders);
+    for found in pattern.find_iter(request) {
+        let value = found.as_str();
+        if placeholders.0.iter().any(|(_, known)| known == value) {
+            continue;
+        }
+        let next = placeholders
+            .0
+            .iter()
+            .filter(|(name, _)| name.starts_with("ECHO_"))
+            .count()
+            + 1;
+        placeholders.add(&format!("ECHO_{next}"), value);
     }
-    Some(fault.transform.clone())
 }
 
-fn replay(state: &State, recorded: &ResponseRecord, fault: Option<Transform>) -> Response<Body> {
+fn take_fault(
+    state: &State,
+    index: Option<usize>,
+    key: &cassette::MatchKey,
+) -> Option<(usize, Transform)> {
+    let mut faults = lock(&state.faults);
+    let position = faults.iter().position(|fault| fault.matches(index, key))?;
+    let fault = &mut faults[position];
+    let lazy = matches!(
+        fault.transform,
+        Transform::MutateToolArgs(super::faults::ArgsMutation::OnlyTool { .. })
+    );
+    if !lazy && let Some(remaining) = fault.remaining.as_mut() {
+        *remaining -= 1;
+    }
+    Some((position, fault.transform.clone()))
+}
+
+fn consume_fault(state: &State, position: usize) {
+    if let Some(remaining) = lock(&state.faults)
+        .get_mut(position)
+        .and_then(|fault| fault.remaining.as_mut())
+    {
+        *remaining = remaining.saturating_sub(1);
+    }
+}
+
+/// A recording served again for an identical request (a retry or a resumed
+/// turn) gets fresh provider object ids, as a live provider would issue:
+/// `resp_`/`msg_`/`fc_`/`rs_`/`call_` ids get a `r<n>` suffix.
+fn remint_ids(response: &mut ResponseRecord, generation: usize) {
+    static PATTERN: std::sync::OnceLock<Option<regex::Regex>> = std::sync::OnceLock::new();
+    let Some(pattern) = PATTERN
+        .get_or_init(|| regex::Regex::new(r"\b((?:resp|msg|fc|rs|call)_[A-Za-z0-9]+)").ok())
+        .as_ref()
+    else {
+        return;
+    };
+    for chunk in &mut response.chunks {
+        chunk.text = pattern
+            .replace_all(&chunk.text, format!("${{1}}r{generation}").as_str())
+            .into_owned();
+    }
+}
+
+fn replay(
+    state: &State,
+    recorded: &ResponseRecord,
+    fault: Option<(usize, Transform)>,
+) -> Response<Body> {
+    let position = fault.as_ref().map(|(position, _)| *position);
+    let fault = fault.map(|(_, transform)| transform);
     let placeholders = lock(&state.placeholders).clone();
     let pacing = *lock(&state.pacing);
     let (response, limit, ending) = match fault {
@@ -341,8 +443,14 @@ fn replay(state: &State, recorded: &ResponseRecord, fault: Option<Transform>) ->
         Some(Transform::StallAfter(k)) => (recorded.clone(), k, Ending::Stall),
         Some(Transform::MutateToolArgs(op)) => {
             let mut response = recorded.clone();
+            let mut changed = false;
             for chunk in &mut response.chunks {
-                chunk.text = mutate_chunk(&chunk.text, &op);
+                let mutated = mutate_chunk(&chunk.text, &op);
+                changed |= mutated != chunk.text;
+                chunk.text = mutated;
+            }
+            if changed && let Some(position) = position {
+                consume_fault(state, position);
             }
             (response, usize::MAX, Ending::Clean)
         }
@@ -427,6 +535,10 @@ async fn record(
             request = request.header(name.as_str(), value.as_bytes());
         }
     }
+    let (mut fault_position, mutation) = match take_fault(state, None, &key) {
+        Some((position, Transform::MutateToolArgs(mutation))) => (Some(position), Some(mutation)),
+        _ => (None, None),
+    };
     let upstream_response = match request.body(body).send().await {
         Ok(response) => response,
         Err(error) => return plain(502, &format!("HARNESS_ERROR: upstream failed: {error}")),
@@ -466,16 +578,31 @@ async fn record(
                     .await;
                 break;
             };
-            let _ = sender.send(Ok(bytes.clone())).await;
+            if mutation.is_none() {
+                let _ = sender.send(Ok(bytes.clone())).await;
+            }
             buffer.extend_from_slice(&bytes);
             while let Some(end) = find(&buffer, b"\n\n") {
                 let event: Vec<u8> = buffer.drain(..end + 2).collect();
+                if let Some(mutation) = &mutation {
+                    let original = String::from_utf8_lossy(&event).into_owned();
+                    let text = mutate_chunk(&original, mutation);
+                    if text != original
+                        && let Some(position) = fault_position.take()
+                    {
+                        consume_fault(&state, position);
+                    }
+                    let _ = sender.send(Ok(Bytes::from(text))).await;
+                }
                 let now = Instant::now();
                 events.push((millis(now.duration_since(last)), event));
                 last = now;
             }
         }
         if !buffer.is_empty() {
+            if mutation.is_some() {
+                let _ = sender.send(Ok(Bytes::from(buffer.clone()))).await;
+            }
             events.push((millis(Instant::now().duration_since(last)), buffer));
         }
         let placeholders = lock(&state.placeholders).clone();

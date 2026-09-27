@@ -207,6 +207,13 @@ impl Agent {
         self.spawn().await
     }
 
+    /// Collects an exited process so the agent can be started again.
+    pub fn reap(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            let _ = child.wait();
+        }
+    }
+
     pub fn is_running(&mut self) -> bool {
         self.child
             .as_mut()

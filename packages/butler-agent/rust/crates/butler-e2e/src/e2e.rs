@@ -10,6 +10,7 @@ pub mod fixtures;
 pub mod gateway;
 pub mod live;
 pub mod matching;
+pub mod media;
 pub mod provider;
 pub mod sandbox;
 pub mod sanitize;

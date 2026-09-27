@@ -256,3 +256,53 @@ pub fn expect_status(reply: &Reply, status: u16, what: &str) -> Result<(), Harne
         )))
     }
 }
+
+/// Tool activity rows (`used_tool`) of one turn, from `GET /messages`.
+pub fn tool_rows(messages: &[Value], turn_id: &str) -> Vec<Value> {
+    messages
+        .iter()
+        .filter(|message| message["turn_id"] == turn_id)
+        .flat_map(|message| {
+            message["turn_activity_rows"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+        })
+        .filter(|row| row["tool_call_id"].is_string() && row["safe_tool_name"].is_string())
+        .filter(|row| row["safe_tool_name"] != "model_round")
+        .collect()
+}
+
+impl Gateway {
+    /// Full text of one operation's output (`/turns/{t}/operations/{op}/output`).
+    pub async fn operation_output(
+        &self,
+        turn_id: &str,
+        row: &Value,
+    ) -> Result<String, HarnessError> {
+        let call = row["tool_call_id"].as_str().unwrap_or_default();
+        let result = row["tool_result_id"].as_str().unwrap_or_default();
+        let mut text = String::new();
+        let mut offset = 0u64;
+        for _ in 0..64 {
+            let reply = self
+                .get(&format!(
+                    "/turns/{turn_id}/operations/{call}/output?result_id={result}&offset={offset}"
+                ))
+                .await?;
+            expect_status(&reply, 200, "GET operation output")?;
+            let data = reply.data();
+            let chunk = data["text"]
+                .as_str()
+                .or_else(|| data["output"].as_str())
+                .or_else(|| data["content"].as_str())
+                .map_or_else(|| data.to_string(), str::to_owned);
+            text.push_str(&chunk);
+            match data["next_offset"].as_u64() {
+                Some(next) if next > offset && data["has_more"] != false => offset = next,
+                _ => break,
+            }
+        }
+        Ok(text)
+    }
+}

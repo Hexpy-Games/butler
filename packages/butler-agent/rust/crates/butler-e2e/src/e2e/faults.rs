@@ -22,6 +22,11 @@ pub enum Transform {
 
 #[derive(Clone, Debug)]
 pub enum ArgsMutation {
+    /// Apply `mutation` only to calls of the tool named `tool`.
+    OnlyTool {
+        tool: String,
+        mutation: Box<ArgsMutation>,
+    },
     /// Cut the arguments JSON in half (unparseable).
     Truncate,
     /// Replace every string value in the arguments object by a number.
@@ -38,6 +43,9 @@ pub enum ArgsMutation {
 pub struct Fault {
     /// Recorded exchange index the fault targets (`None`: any match).
     pub exchange: Option<usize>,
+    /// Alternative target: a request whose user request contains `.0` and
+    /// whose tool round has `.1` items. Works in record mode too.
+    pub request: Option<(String, Option<usize>)>,
     /// Number of matching hits still to transform (`None`: every hit).
     pub remaining: Option<u32>,
     pub transform: Transform,
@@ -47,6 +55,7 @@ impl Fault {
     pub fn once(exchange: usize, transform: Transform) -> Self {
         Self {
             exchange: Some(exchange),
+            request: None,
             remaining: Some(1),
             transform,
         }
@@ -55,14 +64,60 @@ impl Fault {
     pub fn times(exchange: usize, times: u32, transform: Transform) -> Self {
         Self {
             exchange: Some(exchange),
+            request: None,
             remaining: Some(times),
             transform,
         }
     }
 
+    /// Targets a request by its user text and tool-round length. In record
+    /// mode only `MutateToolArgs` applies: the live reply is rewritten on its
+    /// way to the product (the cassette keeps the original), so the model's
+    /// real follow-up to the resulting tool error is what gets recorded.
+    pub fn on_request(text: &str, round_len: usize, transform: Transform) -> Self {
+        Self {
+            exchange: None,
+            request: Some((text.to_owned(), Some(round_len))),
+            remaining: Some(1),
+            transform,
+        }
+    }
+
+    /// Every reply to requests whose user request contains `text` (all tool
+    /// rounds), e.g. to rewrite every call of one tool.
+    pub fn every_reply(text: &str, transform: Transform) -> Self {
+        Self {
+            exchange: None,
+            request: Some((text.to_owned(), None)),
+            remaining: None,
+            transform,
+        }
+    }
+
+    /// The first call of one tool in replies to requests whose user request
+    /// contains `text` (use with `ArgsMutation::OnlyTool`).
+    pub fn first_call(text: &str, transform: Transform) -> Self {
+        Self {
+            exchange: None,
+            request: Some((text.to_owned(), None)),
+            remaining: Some(1),
+            transform,
+        }
+    }
+
+    pub fn matches(&self, index: Option<usize>, key: &super::cassette::MatchKey) -> bool {
+        self.remaining.is_none_or(|remaining| remaining > 0)
+            && self.exchange.is_none_or(|target| Some(target) == index)
+            && self.request.as_ref().is_none_or(|(text, round_len)| {
+                key.user_request.contains(text.as_str())
+                    && round_len.is_none_or(|round_len| key.round.len() == round_len)
+            })
+    }
+
     pub fn always(exchange: usize, transform: Transform) -> Self {
         Self {
             exchange: Some(exchange),
+            request: None,
             remaining: None,
             transform,
         }
@@ -92,6 +147,9 @@ pub fn mutate_chunk(text: &str, mutation: &ArgsMutation) -> String {
 }
 
 fn mutate_value(value: &mut Value, mutation: &ArgsMutation) {
+    if let ArgsMutation::OnlyTool { tool, mutation } = mutation {
+        return mutate_tool(value, tool, mutation);
+    }
     match value {
         Value::Object(object) => {
             let is_call = object
@@ -124,6 +182,30 @@ fn mutate_value(value: &mut Value, mutation: &ArgsMutation) {
     }
 }
 
+fn mutate_tool(value: &mut Value, tool: &str, mutation: &ArgsMutation) {
+    match value {
+        Value::Object(object) => {
+            if object.get("name").and_then(Value::as_str) == Some(tool)
+                && object.contains_key("arguments")
+            {
+                let mut item = Value::Object(object.clone());
+                mutate_value(&mut item, mutation);
+                *value = item;
+                return;
+            }
+            for child in object.values_mut() {
+                mutate_tool(child, tool, mutation);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                mutate_tool(item, tool, mutation);
+            }
+        }
+        _ => {}
+    }
+}
+
 fn mutate_arguments(text: &str, mutation: &ArgsMutation) -> String {
     match mutation {
         ArgsMutation::Truncate => {
@@ -148,6 +230,6 @@ fn mutate_arguments(text: &str, mutation: &ArgsMutation) -> String {
             let quoted = Value::String(to.clone()).to_string();
             text.replace(from.as_str(), &quoted[1..quoted.len() - 1])
         }
-        ArgsMutation::UnknownTool => text.to_owned(),
+        ArgsMutation::UnknownTool | ArgsMutation::OnlyTool { .. } => text.to_owned(),
     }
 }

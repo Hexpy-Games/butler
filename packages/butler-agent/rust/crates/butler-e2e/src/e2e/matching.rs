@@ -16,7 +16,13 @@ pub fn key(path: &str, body: &Value, placeholders: &Placeholders) -> MatchKey {
         .or_else(|| body["messages"].as_array())
         .cloned()
         .unwrap_or_default();
-    let last_user = items.iter().rposition(|item| item["role"] == "user");
+    // The user's request is the last user item carrying `User request:`;
+    // later user-role items are product context updates (e.g. "Updated
+    // current Work context"), which embed ids and tool arguments.
+    let last_user = items
+        .iter()
+        .rposition(|item| item["role"] == "user" && text_of(item).contains("User request:"))
+        .or_else(|| items.iter().rposition(|item| item["role"] == "user"));
     let user_request = last_user
         .map(|index| user_request(&text_of(&items[index]), placeholders))
         .unwrap_or_default();
@@ -57,14 +63,12 @@ pub fn user_request(text: &str, placeholders: &Placeholders) -> String {
 }
 
 fn item_kind(item: &Value) -> Option<String> {
-    let kind = item["type"].as_str().map(str::to_owned).or_else(|| {
-        match (item["role"].as_str(), item["tool_calls"].is_array()) {
-            (Some("assistant"), true) => Some("function_call".into()),
-            (Some("assistant"), false) => Some("message".into()),
-            (Some("tool"), _) => Some("function_call_output".into()),
-            (Some(role), _) => Some(role.to_owned()),
-            (None, _) => None,
-        }
-    })?;
+    let kind = match (item["role"].as_str(), item["tool_calls"].is_array()) {
+        (Some("assistant"), true) => "function_call".to_owned(),
+        (Some("assistant"), false) => "message".to_owned(),
+        (Some("tool"), _) => "function_call_output".to_owned(),
+        (Some(role), _) => role.to_owned(),
+        (None, _) => item["type"].as_str()?.to_owned(),
+    };
     (kind != "reasoning").then_some(kind)
 }

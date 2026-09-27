@@ -85,3 +85,28 @@ pub fn stub_codex_auth(codex_home: &Path) -> Result<(), HarnessError> {
     )?;
     Ok(())
 }
+
+/// `F3-legacy`: a synthetic previous-generation data dir (see
+/// `fixtures/F3-legacy`): the legacy App DB built from `app-server.sql`,
+/// an unknown legacy file, onboarding and a model config.
+pub fn legacy(data: &Path, model: &str) -> Result<(), HarnessError> {
+    ready(data, model)?;
+    install_tree("F3-legacy/data", data)?;
+    let sql = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/F3-legacy/app-server.sql"),
+    )?;
+    fs::create_dir_all(data.join("app-server"))?;
+    let connection = rusqlite::Connection::open(data.join("app-server/butler-client.sqlite"))
+        .map_err(|error| super::harness_error(format!("legacy fixture: {error}")))?;
+    connection
+        .execute_batch(&sql)
+        .map_err(|error| super::harness_error(format!("legacy fixture: {error}")))?;
+    Ok(())
+}
+
+/// The legacy fixture's expected-content manifest.
+pub fn legacy_manifest() -> Result<serde_json::Value, HarnessError> {
+    Ok(serde_json::from_slice(&fs::read(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/F3-legacy/manifest.json"),
+    )?)?)
+}
