@@ -8,119 +8,50 @@
 
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::fixtures::legacy_manifest;
-use butler_e2e::e2e::scenario::{Fixture, Scenario, Setup};
-use serde_json::Value;
+use butler_e2e::e2e::scenario::{Scenario, Setup};
 
-/// Rows of the App DB that the migration must keep stable, as text.
-fn db_dump(scenario: &Scenario) -> String {
-    let path = scenario
-        .sandbox
-        .data
-        .join("app-server/butler-client.sqlite");
-    let db =
-        rusqlite::Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .unwrap();
-    let mut out = String::new();
-    let mut schema = db
-        .prepare("SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name")
-        .unwrap();
-    for row in schema
-        .query_map([], |row| {
-            Ok(format!(
-                "{}: {}",
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?
-            ))
-        })
-        .unwrap()
-    {
-        out.push_str(&row.unwrap());
-        out.push('\n');
-    }
-    let mut rows = db
-        .prepare(
-            "SELECT id, chat_id, role, text, created_at, legacy_note FROM messages ORDER BY id",
-        )
-        .unwrap();
-    for row in rows
-        .query_map([], |row| {
-            Ok(format!(
-                "{}|{}|{}|{}|{}|{:?}",
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, String>(4)?,
-                row.get::<_, Option<String>>(5)?
-            ))
-        })
-        .unwrap()
-    {
-        out.push_str(&row.unwrap());
-        out.push('\n');
-    }
-    out
-}
-
-async fn assert_manifest(s: &Scenario, manifest: &Value) -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let chats = s.gw.get("/chats").await?;
-    for chat in manifest["chats"].as_array().unwrap() {
-        let id = chat["id"].as_str().unwrap();
-        assert!(
-            chats.text.contains(&format!("\"id\":\"{id}\"")),
-            "chat {id} missing: {}",
-            chats.text
-        );
-        let messages = s.gw.messages(id).await?;
-        let legacy: Vec<&Value> = messages
-            .iter()
-            .filter(|message| {
-                message["id"]
-                    .as_str()
-                    .is_some_and(|mid| mid.starts_with("legacy-m-"))
-            })
-            .collect();
-        let expected = chat["messages"].as_array().unwrap();
-        assert_eq!(legacy.len(), expected.len(), "{id}: {messages:?}");
-        for (got, want) in legacy.iter().zip(expected) {
-            for key in ["id", "role", "text", "created_at"] {
-                assert_eq!(got[key], want[key], "{id}: {key} of {}", want["id"]);
-            }
-        }
-    }
-    Ok(())
-}
-
-/// MIG-01 — Opening a legacy data dir.
+/// MIG-01 (owner decision: pre-BTCC data folders are not supported) — a data
+/// dir whose App DB predates the BTCC runtime store (no
+/// `agent-runtime/btcc.sqlite`) is refused at start with a message that names
+/// the folder, says it is unsupported and says what to do; the legacy content
+/// stays in place.
 #[tokio::test]
-#[ignore = "product gap: MIG-01-PRE-BTCC — a data dir whose App DB predates the BTCC runtime store (no agent-runtime/btcc.sqlite) is refused at start: `storage_bootstrap_failed: legacy Agent BTCC migration is unsupported`"]
-async fn mig_01_legacy_data_dir_opens_with_all_content() -> Result<(), HarnessError> {
+async fn mig_01_pre_btcc_data_dir_is_refused_with_actionable_message() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let manifest = legacy_manifest()?;
-    let mut s = Setup::new("MIG-01")?
-        .fixture(Fixture::Legacy)
-        .start()
-        .await?;
-    assert_manifest(&s, &manifest).await?;
+    let setup = Setup::new("MIG-01")?;
+    let data = setup.sandbox.data.clone();
+    butler_e2e::e2e::fixtures::legacy(&data, "openai/gpt-6-sol")?;
+    let launch = butler_e2e::e2e::agent::Launch::new(&setup.sandbox)?;
+    let output = launch
+        .command()
+        .stdin(std::process::Stdio::null())
+        .output()?;
+    assert!(!output.status.success(), "pre-BTCC data dir accepted");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("legacy data folder is unsupported"),
+        "refusal does not say the folder is unsupported: {stderr}"
+    );
+    assert!(
+        stderr.contains(&data.display().to_string()),
+        "refusal does not name the folder: {stderr}"
+    );
+    assert!(
+        stderr.contains("BUTLER_DATA") && stderr.contains("Move this folder aside"),
+        "refusal does not say what to do: {stderr}"
+    );
     for file in manifest["preserved_files"].as_array().unwrap() {
         assert!(
-            s.sandbox.data.join(file.as_str().unwrap()).is_file(),
+            data.join(file.as_str().unwrap()).is_file(),
             "legacy file {file} removed"
         );
     }
-    s.agent.terminate().await?;
-    let first = db_dump(&s);
     assert!(
-        first.contains("imported-from-v0"),
-        "unknown legacy column lost:\n{first}"
+        data.join("app-server/butler-client.sqlite").is_file(),
+        "legacy App DB removed"
     );
-    s.gw = s.agent.start_again().await?;
-    assert_manifest(&s, &manifest).await?;
-    s.agent.terminate().await?;
-    assert_eq!(db_dump(&s), first, "second start rewrote migrated data");
-    s.gw = s.agent.start_again().await?;
-    s.finish().await
+    Ok(())
 }
 
 /// MIG-01 (current behavior) — the refused legacy dir is left untouched and
