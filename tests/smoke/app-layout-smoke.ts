@@ -3786,6 +3786,8 @@ try {
     Object.values(pendingLabels).some((label) =>
       turnActivityText.includes(label),
     ) ||
+      // Model-wait rows read the interface "generating" status (7e7bde4f5).
+      turnActivityText.includes(appCopy.interfaceStatus.generating) ||
       turnActivityText.includes("Preparing the work") ||
       turnActivityText.includes("Bash"),
     `turn-activity-during-send failed: ${turnActivityText}`,
