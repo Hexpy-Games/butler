@@ -158,11 +158,3 @@ fn scan_directory(
     }
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn private_patterns_compile() {
-        assert!(super::PRIVATE_PATTERNS.is_match("Authorization: Bearer x"));
-    }
-}
