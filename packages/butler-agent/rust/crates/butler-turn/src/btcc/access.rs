@@ -54,7 +54,8 @@ impl AccessMode {
     /// Whether a turn with this access may run the built-in tool `name`
     /// without asking because the tool performs an exempt action.
     pub fn exempts_tool(&self, name: &str) -> bool {
-        ApprovalExemptAction::of_tool(name).is_some_and(|action| self.allows_without_approval(action))
+        ApprovalExemptAction::of_tool(name)
+            .is_some_and(|action| self.allows_without_approval(action))
     }
 }
 
@@ -84,7 +85,12 @@ mod tests {
         for tool in ToolName::ALL {
             assert!(!AccessMode::ReadOnly.exempts_tool(tool.as_str()), "{tool}");
         }
-        for name in ["call_mcp_tool", "run_command", "write_file", "create_automation"] {
+        for name in [
+            "call_mcp_tool",
+            "run_command",
+            "write_file",
+            "create_automation",
+        ] {
             assert!(!AccessMode::AskFirst.exempts_tool(name), "{name}");
         }
     }

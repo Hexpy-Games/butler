@@ -169,7 +169,7 @@ fn phase_selection_enforces_execution_policy_access_and_required_tools() {
 }
 
 #[test]
-fn image_tool_requires_current_image_admission_and_approval_free_access() {
+fn image_tool_requires_current_full_access_image_admission() {
     let catalog = catalog();
     let catalog = catalog.snapshot();
     for flag in ["on", "off"] {
@@ -213,31 +213,27 @@ fn image_tool_requires_current_image_admission_and_approval_free_access() {
             "analyze_attached_image"
         ));
 
-        // Ask-first analyzes an attached image without asking (#236).
-        for access in ["full_access", "ask_first"] {
-            let mut with_image = phase_turn(access, &image_context());
-            // Host validates the frozen Models admission and supplies this Turn fact.
-            with_image.context["executionPolicy"]["requiredNativeTools"] =
-                json!(["analyze_attached_image"]);
-            let selection = select_phase(GuidedPhaseInput {
-                turn: &with_image,
-                catalog,
-                phase_surface_flag: flag,
-                operation_replay_flag: "off",
-                default_workspace: "/tmp",
-            })
-            .unwrap();
-            assert!(
-                selection
-                    .authorized_names
-                    .contains(&"analyze_attached_image".to_owned()),
-                "{access}"
-            );
-            assert!(
-                has_provider_tool(&selection.provider_tools, "analyze_attached_image"),
-                "{access}"
-            );
-        }
+        let mut with_image = phase_turn("full_access", &image_context());
+        // Host validates the frozen Models admission and supplies this Turn fact.
+        with_image.context["executionPolicy"]["requiredNativeTools"] =
+            json!(["analyze_attached_image"]);
+        let selection = select_phase(GuidedPhaseInput {
+            turn: &with_image,
+            catalog,
+            phase_surface_flag: flag,
+            operation_replay_flag: "off",
+            default_workspace: "/tmp",
+        })
+        .unwrap();
+        assert!(
+            selection
+                .authorized_names
+                .contains(&"analyze_attached_image".to_owned())
+        );
+        assert!(has_provider_tool(
+            &selection.provider_tools,
+            "analyze_attached_image"
+        ));
     }
 
     let mut stale = image_context();
@@ -280,6 +276,32 @@ fn image_tool_requires_current_image_admission_and_approval_free_access() {
         &selection.provider_tools,
         "analyze_attached_image"
     ));
+}
+
+/// Security boundary (#236): ask-first analyzes an admitted attached image
+/// without asking, on both surfaces.
+#[test]
+fn ask_first_admits_the_attached_image_tool() {
+    let catalog = catalog();
+    let catalog = catalog.snapshot();
+    for flag in ["on", "off"] {
+        let mut turn = phase_turn("ask_first", &image_context());
+        turn.context["executionPolicy"]["requiredNativeTools"] = json!(["analyze_attached_image"]);
+        let selection = select_phase(GuidedPhaseInput {
+            turn: &turn,
+            catalog,
+            phase_surface_flag: flag,
+            operation_replay_flag: "off",
+            default_workspace: "/tmp",
+        })
+        .unwrap();
+        let name = "analyze_attached_image".to_owned();
+        assert!(selection.authorized_names.contains(&name), "{flag}");
+        assert!(
+            has_provider_tool(&selection.provider_tools, &name),
+            "{flag}"
+        );
+    }
 }
 
 /// Security boundary (#236): on the production (legacy) surface, ask-first

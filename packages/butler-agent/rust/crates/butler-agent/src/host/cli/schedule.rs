@@ -90,13 +90,16 @@ fn is_command_word(value: &str) -> bool {
 /// One stderr line when the deprecated spelling was used; stdout (and so
 /// `--json` output) is unchanged.
 fn warn_if_deprecated(args: &[OsString]) {
-    if positionals_without_options(args).first().map(String::as_str) == Some(DEPRECATED_COMMAND) {
+    if positionals_without_options(args)
+        .first()
+        .map(String::as_str)
+        == Some(DEPRECATED_COMMAND)
+    {
         eprintln!("butler automation is deprecated; use butler schedule.");
     }
 }
 
 pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> ExitCode {
-    warn_if_deprecated(args);
     let json_requested = args.iter().any(|arg| arg == "--json");
     let options = match parse(args) {
         Ok(options) => options,
@@ -284,6 +287,7 @@ fn is_delete_command(command: &Command) -> bool {
 }
 
 fn parse(args: &[OsString]) -> Result<Options, (&'static str, CliError)> {
+    warn_if_deprecated(args);
     let mut options = Options::default();
     let mut index = 0;
     while index < args.len() {

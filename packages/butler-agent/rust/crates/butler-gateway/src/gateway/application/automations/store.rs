@@ -6,8 +6,8 @@ use super::{
     AutomationRunListView, AutomationSummary, CreateAutomationRequest, UpdateAutomationRequest,
     records,
 };
-use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::settings;
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::{
     AppApplication, AppStorageError, GatewayApplicationError, app_error, events, public,
 };

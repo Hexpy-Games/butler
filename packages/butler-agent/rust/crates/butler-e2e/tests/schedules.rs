@@ -53,7 +53,9 @@ async fn create(
 /// Runs the schedule now and waits until its turn waits for an approval or ends.
 async fn run(s: &Scenario, chat: &str, schedule: &Value) -> Result<(String, Value), HarnessError> {
     let id = schedule["id"].as_str().unwrap();
-    let reply = s.gw.post(&format!("/automations/{id}/run"), json!({})).await?;
+    let reply =
+        s.gw.post(&format!("/automations/{id}/run"), json!({}))
+            .await?;
     assert_eq!(reply.status, 202, "{}", reply.text);
     let turn_id = reply.data()["run"]["turn_id"]
         .as_str()
@@ -113,7 +115,10 @@ async fn sched_01_schedule_runs_with_its_own_access_mode() -> Result<(), Harness
     let (_, turn) = run(&s, &strict, &schedule).await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
     let requests = s.gw.approval_requests(&strict).await?;
-    assert!(requests.is_empty(), "the full-access schedule asked: {requests:?}");
+    assert!(
+        requests.is_empty(),
+        "the full-access schedule asked: {requests:?}"
+    );
     let content = std::fs::read_to_string(s.sandbox.data.join(&written))?;
     assert_eq!(content.trim(), "scheduled");
     let controls = s.gw.get(&format!("/sessions/{strict}/controls")).await?;
@@ -197,7 +202,15 @@ async fn sched_03_cli_is_schedule_with_a_deprecated_alias() -> Result<(), Harnes
         alias.stderr
     );
     let help = s.agent.cli(&["help", "--json"])?;
-    assert!(help.stdout.contains("butler schedule list"), "{}", help.stdout);
-    assert!(!help.stdout.contains("butler automation"), "{}", help.stdout);
+    assert!(
+        help.stdout.contains("butler schedule list"),
+        "{}",
+        help.stdout
+    );
+    assert!(
+        !help.stdout.contains("butler automation"),
+        "{}",
+        help.stdout
+    );
     s.finish().await
 }

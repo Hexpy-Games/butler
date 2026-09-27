@@ -251,7 +251,8 @@ struct ApprovalFreeFacts<'a> {
 fn approval_free_tools(access: &str, facts: ApprovalFreeFacts<'_>) -> Vec<&'static str> {
     let mode = serde_json::from_value::<AccessMode>(Value::String(access.to_owned()))
         .unwrap_or(AccessMode::ReadOnly);
-    let onboarding = mode.allows_without_approval(ApprovalExemptAction::FirstConversationOnboarding)
+    let onboarding = mode
+        .allows_without_approval(ApprovalExemptAction::FirstConversationOnboarding)
         && (facts.selected_memory_write
             || facts.butler_role
                 && !butler_memory::profile::first_chat_onboarding_complete(

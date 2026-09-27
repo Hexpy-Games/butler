@@ -59,9 +59,8 @@ async fn acc_01_onboarding_saves_without_approval_in_ask_first() -> Result<(), H
         .start()
         .await?;
     assert_eq!(s.gw.settings().await?["access_mode"], "ask_first");
-    let accepted = s
-        .gw
-        .say(
+    let accepted =
+        s.gw.say(
             "general",
             &format!(
                 "Hi! My name is {name}, and please call me {name}. Save that, and skip all \
@@ -73,7 +72,10 @@ async fn acc_01_onboarding_saves_without_approval_in_ask_first() -> Result<(), H
     delivered_without_asking(&s, "general", &turn_id).await?;
     let saved = data_file(&s, "personalization/onboarding.json")
         + &data_file(&s, "personalization/profile.json");
-    assert!(saved.contains(&name), "onboarding answer not saved: {saved}");
+    assert!(
+        saved.contains(&name),
+        "onboarding answer not saved: {saved}"
+    );
     s.finish().await
 }
 
@@ -91,9 +93,8 @@ async fn acc_02_memory_save_proceeds_without_approval_in_ask_first() -> Result<(
         .placeholder("NONCE", &code);
     let recall = fixtures::embedding_assets(&setup.sandbox.data)?;
     let s = setup.start().await?;
-    let accepted = s
-        .gw
-        .say(
+    let accepted =
+        s.gw.say(
             "general",
             &format!("Please remember this for later: my locker combination is {code}."),
         )
@@ -116,12 +117,25 @@ async fn acc_02_memory_save_proceeds_without_approval_in_ask_first() -> Result<(
         .to_owned();
     let ingest = s
         .agent
-        .cli(&["cognition", "memory", "ingest", "--session", &hint, "--json"])?
+        .cli(&[
+            "cognition",
+            "memory",
+            "ingest",
+            "--session",
+            &hint,
+            "--json",
+        ])?
         .json()?;
     assert_eq!(ingest["ok"], true, "{ingest}");
     let result = s
         .agent
-        .cli(&["cognition", "memory", "recall", "locker combination", "--json"])?
+        .cli(&[
+            "cognition",
+            "memory",
+            "recall",
+            "locker combination",
+            "--json",
+        ])?
         .json()?;
     assert!(
         result["data"]["results"].to_string().contains(&code),
@@ -195,9 +209,8 @@ async fn acc_04_mcp_tool_asks_in_ask_first() -> Result<(), HarnessError> {
         )
         .await?;
     assert!(added.status < 300, "add server: {}", added.text);
-    let accepted = s
-        .gw
-        .say(
+    let accepted =
+        s.gw.say(
             "general",
             "Call the e2e_echo tool of the MCP server named e2e and tell me the token it returns.",
         )
@@ -214,7 +227,12 @@ async fn acc_04_mcp_tool_asks_in_ask_first() -> Result<(), HarnessError> {
     );
     let mut outputs = String::new();
     for row in tool_rows(&s.gw.messages("general").await?, &turn_id) {
-        outputs.push_str(&s.gw.operation_output(&turn_id, &row).await.unwrap_or_default());
+        outputs.push_str(
+            &s.gw
+                .operation_output(&turn_id, &row)
+                .await
+                .unwrap_or_default(),
+        );
     }
     assert!(
         !outputs.contains(&token),

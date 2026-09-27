@@ -16,7 +16,9 @@ pub(super) fn backfill(connection: &Connection) -> Result<(), AppStorageError> {
         .prepare("SELECT id,target_session_id FROM app_automations WHERE access_mode IS NULL")
         .map_err(AppStorageError::sqlite)?;
     let schedules = statement
-        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
         .map_err(AppStorageError::sqlite)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(AppStorageError::sqlite)?;

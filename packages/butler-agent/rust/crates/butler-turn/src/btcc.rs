@@ -24,6 +24,7 @@ mod work;
 
 use std::sync::Arc;
 
+pub use access::ApprovalExemptAction;
 pub use contracts::{
     AcceptedWorkResult, AcceptedWorkStatus, AccessMode, AdmissionKind, AlreadyDeliveredOutcome,
     ArtifactKind, AttachmentKind, AttachmentRef, ChangedFileLine, ChangedFileSummary,
@@ -32,7 +33,6 @@ pub use contracts::{
     StopRequest, TurnMessage, TurnOutcome, TurnOutcomeKind, TurnRequest, TurnRoute, TurnTrigger,
     WorkStatus,
 };
-pub use access::ApprovalExemptAction;
 pub use error::{BtccCode, BtccError, BtccSource};
 
 pub use turn::{

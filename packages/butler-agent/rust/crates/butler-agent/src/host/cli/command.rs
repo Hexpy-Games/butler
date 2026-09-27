@@ -380,20 +380,13 @@ mod tests {
     fn command_families_claim_their_commands_after_common_options() {
         for (args, expected) in [
             (&["schedule", "list"][..], Command::Schedule),
-            (&["automation", "list"], Command::Schedule),
             (
                 &[
-                    "--data",
-                    "/tmp/d",
-                    "schedule",
-                    "list",
-                    "--status",
-                    "active",
-                    "--json",
+                    "--data", "/tmp/d", "schedule", "list", "--status", "active", "--json",
                 ],
                 Command::Schedule,
             ),
-            (&["schedule", "future-command"], Command::Schedule),
+            (&["automation", "future-command"], Command::Schedule),
             (&["metrics", "tail"], Command::Observability),
             (
                 &["--data", "/tmp/d", "metrics", "tail", "--lines"],
