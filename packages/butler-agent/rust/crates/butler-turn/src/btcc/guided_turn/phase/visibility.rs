@@ -59,14 +59,22 @@ const STEWARD_PARENT: &[&str] = &["delegate_to_steward", "steer_steward", "cance
 const WORKER_DELEGATION: &[&str] = &["delegate_to_worker", "steer_worker", "wait_for_worker"];
 /// The tools a guided turn is authorized to call on the legacy surface, from
 /// its role, access mode, tracking mode and project binding.
+/// What the turn context says about its project.
+#[derive(Clone, Copy)]
+pub(super) struct ProjectSignals {
+    /// The context names a project.
+    pub(super) project_ref: bool,
+    /// The context carries project sources.
+    pub(super) project_sources: bool,
+}
+
 pub(super) fn legacy_authorized<'a>(
     catalog: &'a GuidedCatalogSnapshot,
     policy: &GuidedExecutionPolicy,
-    project_ref: bool,
-    project_sources: bool,
+    signals: ProjectSignals,
 ) -> Vec<&'a GuidedCatalogTool> {
     let scope = AuthorizationScope {
-        has_project: policy.has_project_id() || project_ref,
+        has_project: policy.has_project_id() || signals.project_ref,
         ledger: policy.tracking_mode == "ledger",
         worker: policy.role == "worker",
     };
@@ -111,7 +119,7 @@ pub(super) fn legacy_authorized<'a>(
     if policy.access_mode != AccessMode::ReadOnly && scope.ledger && scope.has_project {
         names.extend(catalog.managed_ledger_effects.iter().cloned());
     }
-    if project_sources {
+    if signals.project_sources {
         names.insert("read_project_source".into());
     } else {
         names.remove("read_project_source");

@@ -53,7 +53,9 @@ fn lcs_decisions(old: &[&str], new: &[&str]) -> Option<DecisionBits> {
             } else {
                 let right = *current.get(new_index + 1)?;
                 // The source chooses deletion when the two scores tie.
-                decisions.set(old_index, new_index, down >= right);
+                if down >= right {
+                    decisions.mark_deletion(old_index, new_index);
+                }
                 down.max(right)
             };
             *current.get_mut(new_index)? = score;
@@ -189,10 +191,7 @@ impl DecisionBits {
         })
     }
 
-    fn set(&mut self, old_index: usize, new_index: usize, delete: bool) {
-        if !delete {
-            return;
-        }
+    fn mark_deletion(&mut self, old_index: usize, new_index: usize) {
         let bit = old_index * self.width + new_index;
         if let Some(byte) = self.bits.get_mut(bit / 8) {
             *byte |= 1 << (bit % 8);

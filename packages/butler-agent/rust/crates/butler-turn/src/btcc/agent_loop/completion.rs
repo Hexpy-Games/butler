@@ -130,7 +130,7 @@ pub(super) async fn finish(
         )
         .await
         .map_err(propagated)?;
-    let route = route(&state.used_tools, closeout.has_final_work);
+    let route = route(&state.used_tools, &closeout);
     let terminal_outcome = (suspension.is_none()
         && closeout.runtime_failure.is_none()
         && closeout.content.trim().is_empty()
@@ -155,8 +155,9 @@ pub(super) async fn finish(
     })
 }
 
-fn route(used_tools: &[String], has_final_work: bool) -> ExecutionRoute {
-    if has_final_work || used_tools.iter().any(|name| durable_work_tool(name)) {
+/// Managed when durable Work is involved, direct without tools, else assisted.
+fn route(used_tools: &[String], closeout: &super::contracts::GuidedCloseout) -> ExecutionRoute {
+    if closeout.has_final_work || used_tools.iter().any(|name| durable_work_tool(name)) {
         ExecutionRoute::Managed
     } else if used_tools.is_empty() {
         ExecutionRoute::Direct

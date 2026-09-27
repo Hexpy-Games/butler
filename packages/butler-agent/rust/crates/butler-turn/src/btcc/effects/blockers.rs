@@ -119,7 +119,12 @@ async fn reconcile_blocker(
             Verdict::Settled(outcome)
         }
     };
-    let observed = match observe_prior(context, &blocker, custom).await {
+    let target = if custom {
+        LegacyTarget::FallBackToCurrent
+    } else {
+        LegacyTarget::Required
+    };
+    let observed = match observe_prior(context, &blocker, target).await {
         Ok(observed) => observed,
         Err(Prior::Unconfirmed(outcome)) => return Ok(unconfirmed(outcome)),
         Err(Prior::Settled(outcome)) => return Ok(Verdict::Settled(outcome)),
@@ -172,10 +177,18 @@ enum Prior {
 
 /// Asks the adapter to reconcile the prior occurrence. A custom adapter
 /// whose legacy target no longer normalizes is asked about the current target.
+/// Whether a legacy target that no longer normalizes may be replaced by the
+/// current target (custom adapters) or settles the effect as uncertain.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LegacyTarget {
+    Required,
+    FallBackToCurrent,
+}
+
 async fn observe_prior(
     context: &execution::Context<'_>,
     blocker: &EffectBlocker,
-    custom: bool,
+    target: LegacyTarget,
 ) -> Result<EffectResult<AdapterOutcome>, Prior> {
     let adapter = &context.input.adapter;
     let prior_input = adapter
@@ -183,7 +196,9 @@ async fn observe_prior(
         .map_err(|error| Prior::Unconfirmed(prior_error(&error)))?;
     let prior_target = match adapter.normalize_target(&blocker.target) {
         Ok(value) => value,
-        Err(error) if !custom => return Err(Prior::Settled(prior_error(&error))),
+        Err(error) if target == LegacyTarget::Required => {
+            return Err(Prior::Settled(prior_error(&error)));
+        }
         Err(_) => context.resolved.normalized_target.clone(),
     };
     Ok(adapter

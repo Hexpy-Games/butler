@@ -390,7 +390,7 @@ impl Supervisor<'_> {
             }
             tokio::select! {
                 chunk = chunks.recv(), if !self.decoders.done => {
-                    self.receive(chunk, completion.is_some());
+                    self.receive(chunk, completion);
                 }
                 () = tokio::time::sleep_until(signals.deadline), if !self.stop.timed_out => {
                     self.stop.timed_out = true;
@@ -429,9 +429,11 @@ impl Supervisor<'_> {
     }
 
     /// Output after the result was settled early is dropped.
-    fn receive(&mut self, chunk: Option<StreamChunk>, completion_open: bool) {
+    fn receive(&mut self, chunk: Option<StreamChunk>, completion: &Completion) {
         match chunk {
-            Some(chunk) if completion_open => self.decoders.decode(&chunk, &mut self.captured),
+            Some(chunk) if completion.is_some() => {
+                self.decoders.decode(&chunk, &mut self.captured);
+            }
             Some(_) => {}
             None => self.decoders.done = true,
         }

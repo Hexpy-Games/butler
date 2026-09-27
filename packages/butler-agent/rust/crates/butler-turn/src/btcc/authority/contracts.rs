@@ -262,12 +262,52 @@ pub struct ConversationPermission {
     pub description: String,
     pub(crate) created_at: String,
 }
+/// The user's answer to an authority request as received (`allow`, `deny`,
+/// `modify`). Any other answer is recorded like a modification without an
+/// alternative, as the source does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AuthorityAction {
+    Allow,
+    Deny,
+    Modify,
+    Unrecognized,
+}
+
+impl AuthorityAction {
+    pub(crate) fn parse(action: &str) -> Self {
+        match action {
+            "allow" => Self::Allow,
+            "deny" => Self::Deny,
+            "modify" => Self::Modify,
+            _ => Self::Unrecognized,
+        }
+    }
+
+    /// The stored request decision.
+    pub(crate) fn decision(self) -> &'static str {
+        match self {
+            Self::Allow => "allowed",
+            Self::Deny => "denied",
+            Self::Modify | Self::Unrecognized => "modified",
+        }
+    }
+
+    /// The input scheduled to continue the source turn.
+    pub(crate) fn schedule_text(self) -> &'static str {
+        match self {
+            Self::Allow => "Continue the approved operation exactly once.",
+            Self::Deny => "The reviewed command was denied.",
+            Self::Modify | Self::Unrecognized => "Continue with the reviewed alternative.",
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct DecisionWrite {
     pub(crate) request_ref: String,
     pub(crate) owner_session_id: String,
     pub(crate) source_session_id: String,
-    pub(crate) action: String,
+    pub(crate) action: AuthorityAction,
     pub(crate) permission: Option<ConversationPermission>,
     pub(crate) alternative_input: Option<String>,
     pub(crate) now: String,

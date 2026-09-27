@@ -11,7 +11,8 @@ use super::catalog::{GuidedCatalogSnapshot, GuidedCatalogTool};
 use super::instructions;
 use super::policy::GuidedExecutionPolicy;
 use super::visibility::{
-    legacy_authorized, legacy_visible, phase_allows, profile_initial, turn_admits_zai_image_tool,
+    ProjectSignals, legacy_authorized, legacy_visible, phase_allows, profile_initial,
+    turn_admits_zai_image_tool,
 };
 
 const REVISION: &str = "butler.btcc-tool-instruction-policy.v2";
@@ -92,7 +93,7 @@ pub fn select_phase(
     let policy = GuidedExecutionPolicy::from_turn(input.turn, input.default_workspace)?;
     let catalog = input.catalog;
     let image_tool_admitted = turn_admits_zai_image_tool(&policy);
-    let mut authorized = base_authorized(input, &policy, image_tool_admitted);
+    let mut authorized = base_authorized(input, &policy);
     let phase = phase(&policy, catalog);
     let replay_mode = if enabled(input.operation_replay_flag) {
         ReplayMode::Available
@@ -125,14 +126,8 @@ pub fn select_phase(
             && (tool.name != ToolName::AnalyzeAttachedImage || image_tool_admitted)
     });
     require_tools(&authorized, &policy, phase)?;
-    let provider_names = provider_candidates(
-        catalog,
-        &authorized,
-        &policy,
-        phase,
-        &required_profiles,
-        image_tool_admitted,
-    );
+    let provider_names =
+        provider_candidates(catalog, &authorized, &policy, phase, &required_profiles);
     let provider: Vec<_> = authorized
         .iter()
         .filter(|tool| {
@@ -175,7 +170,6 @@ pub fn select_phase(
 fn base_authorized<'a>(
     input: GuidedPhaseInput<'a>,
     policy: &GuidedExecutionPolicy,
-    image_tool_admitted: bool,
 ) -> Vec<&'a GuidedCatalogTool> {
     let context = &input.turn.context;
     let project_ref = context
@@ -186,7 +180,12 @@ fn base_authorized<'a>(
         .get("projectSources")
         .and_then(Value::as_array)
         .is_some_and(|value| !value.is_empty());
-    let mut authorized = legacy_authorized(input.catalog, policy, project_ref, project_sources);
+    let signals = ProjectSignals {
+        project_ref,
+        project_sources,
+    };
+    let mut authorized = legacy_authorized(input.catalog, policy, signals);
+    let image_tool_admitted = turn_admits_zai_image_tool(policy);
     authorized.retain(|tool| tool.name != ToolName::AnalyzeAttachedImage || image_tool_admitted);
     // Current source exact-read capability is always available, independently of replay replacement.
     push_missing(&mut authorized, input.catalog, &EXACT_READ_TOOLS);
@@ -344,10 +343,9 @@ fn provider_candidates(
     policy: &GuidedExecutionPolicy,
     phase: GuidedPhase,
     required_profiles: &[String],
-    image_tool_admitted: bool,
 ) -> HashSet<String> {
     let mut names = profile_candidates(catalog, authorized, policy, phase, required_profiles);
-    if image_tool_admitted {
+    if turn_admits_zai_image_tool(policy) {
         names.insert("analyze_attached_image".to_owned());
     }
     for tool in authorized {

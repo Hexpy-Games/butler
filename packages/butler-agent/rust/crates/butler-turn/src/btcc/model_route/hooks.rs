@@ -66,7 +66,7 @@ impl RouteHooks {
         candidate: u32,
         model: &str,
     ) -> Result<AttemptHistory, crate::btcc::agent_loop::ModelRoundError> {
-        let key = self.key(round, candidate, model, false);
+        let key = self.key(round, candidate, model, KeyScope::Route);
         self.retry("attempt_history_read", || {
             self.store.load_model_route_attempt_history(key.clone())
         })
@@ -79,7 +79,7 @@ impl RouteHooks {
         candidate: u32,
         model: &str,
     ) -> Result<Option<Value>, crate::btcc::agent_loop::ModelRoundError> {
-        let key = self.key(round, candidate, model, true);
+        let key = self.key(round, candidate, model, KeyScope::Checkpoint);
         self.retry("response_acceptance_read", || {
             self.store.load_model_round_acceptance(key.clone())
         })
@@ -96,7 +96,7 @@ impl RouteHooks {
     ) -> Result<(), crate::btcc::agent_loop::ModelRoundError> {
         let write = ModelRoundAcceptanceWrite {
             binding: self.binding.clone(),
-            key: self.key(round, candidate, model, true),
+            key: self.key(round, candidate, model, KeyScope::Checkpoint),
             transport_attempt: attempt,
             result,
         };
@@ -106,7 +106,8 @@ impl RouteHooks {
         .await
     }
 
-    fn key(&self, round: &str, candidate: u32, model: &str, checkpoint: bool) -> ModelRoundKey {
+    fn key(&self, round: &str, candidate: u32, model: &str, scope: KeyScope) -> ModelRoundKey {
+        let checkpoint = scope == KeyScope::Checkpoint;
         ModelRoundKey {
             turn_id: self.binding.turn_id.clone(),
             round_id: round.into(),
@@ -139,6 +140,14 @@ impl RouteHooks {
             }
         }
     }
+}
+
+/// Whether a round key is bound to the claim's checkpoint (accepted
+/// responses) or only to the route (attempt history).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum KeyScope {
+    Route,
+    Checkpoint,
 }
 
 fn contention(error: &BtccError) -> bool {

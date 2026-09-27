@@ -431,14 +431,10 @@ fn explain_runtime_failure(turn: &TurnRecord, result: &mut super::contracts::Age
     let Some(failure) = &result.runtime_failure else {
         return;
     };
-    let work_completed = result
-        .accepted_work_result
-        .as_ref()
-        .is_some_and(|value| value.status == crate::btcc::AcceptedWorkStatus::Success);
     result.content = super::failure::runtime_failure_message_for_work(
         &turn.original_message,
         failure,
-        work_completed,
+        result.accepted_work_result.as_ref(),
     );
     result
         .accepted_work_result
