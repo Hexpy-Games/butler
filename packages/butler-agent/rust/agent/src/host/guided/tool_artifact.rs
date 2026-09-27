@@ -9,18 +9,18 @@ use serde_json::Value;
 
 use crate::{
     context::{
-        ArtifactStream, ContextResult, NativeToolOutput, ReadToolEvidenceInput, ReadToolOutputInput,
+        ArtifactStream, ContextResult, ReadToolEvidenceInput, ReadToolOutputInput, ToolOutput,
     },
     json::JsonDocument,
 };
 
 #[derive(Clone)]
-pub(crate) struct NativeToolArtifactReader {
-    output: NativeToolOutput,
+pub(crate) struct ToolArtifactReader {
+    output: ToolOutput,
 }
 
-impl NativeToolArtifactReader {
-    pub(crate) fn new(output: NativeToolOutput) -> Self {
+impl ToolArtifactReader {
+    pub(crate) fn new(output: ToolOutput) -> Self {
         Self { output }
     }
 

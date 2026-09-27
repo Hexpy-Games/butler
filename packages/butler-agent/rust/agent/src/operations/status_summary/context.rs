@@ -6,13 +6,13 @@ use serde_json::{Value, json};
 
 use crate::{
     context,
-    models::{ModelCatalog, ModelConfiguration, NativeStatusModels},
+    models::{ModelCatalog, ModelConfiguration, StatusModels},
 };
 use std::sync::Arc;
 
 use super::stream::{number, visit_jsonl};
 
-pub(super) async fn read_context_monitor(data_root: &Path, models: &NativeStatusModels) -> Value {
+pub(super) async fn read_context_monitor(data_root: &Path, models: &StatusModels) -> Value {
     read_context_for_session(
         data_root,
         "butler/main",
@@ -114,7 +114,7 @@ pub(super) async fn read_context_for_session(
 pub(super) async fn render_context_estimate(
     resources: &Path,
     data_root: &Path,
-    models: &NativeStatusModels,
+    models: &StatusModels,
 ) -> String {
     let system_prompt = rough_tokens_text(&read_joined(&[
         resources.join("prompts/butler.md"),

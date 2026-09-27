@@ -72,26 +72,25 @@ pub(crate) use agent_loop::{
 };
 pub(crate) use authority::contracts::{
     AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityDecisionInput, AuthorityError,
-    AuthorityExecutionInput, AuthorityOutcomeInput, NativePrincipalAuthority,
+    AuthorityExecutionInput, AuthorityOutcomeInput, PrincipalAuthority,
 };
 #[cfg(test)]
 pub(crate) use continuation_budget::TurnContinuationBudgetLimits;
 pub(crate) use continuation_budget::select_turn_continuation_budget;
-pub(crate) use effects::NativeEffectService;
-pub(crate) use effects::accepted_plan_effect_id;
 pub(crate) use effects::contracts::{
     Access as EffectAccess, AdapterOutcome, BlockerRelation, EffectAdapter, EffectAdapterError,
     EffectBlocker, EffectError, EffectFailure, EffectFuture, EffectJournal, EffectOutcome,
     EffectRecord, EffectStatus, ExecuteEffect, PlanBinding, PreparedWrite, RecoveryHint,
     RegisteredEditPort, RegisteredWritePort,
 };
-pub(crate) use effects::effect_input_sha256;
-pub(crate) use effects::reviewed_effect_action_key;
 pub(crate) use effects::workspace_edit::{
     WorkspaceFileEditEffectAdapter, batch_target as workspace_edit_batch_target,
 };
-pub(crate) use effects::workspace_file::WorkspaceFileEffectAdapter;
-pub(crate) use effects::workspace_file::normalized_workspace_effect_path;
+pub(crate) use effects::workspace_file::{
+    WorkspaceFileEffectAdapter, normalized_workspace_effect_path,
+};
+pub(crate) use effects::{EffectService, accepted_plan_effect_id};
+pub(crate) use effects::{effect_input_sha256, reviewed_effect_action_key};
 pub(crate) use execution_controls::{
     ControlResolution, ControlSource, ExecutionControls, ModelFallback, SubsessionResultContext,
     VerifiedExecutionControls,
@@ -129,9 +128,9 @@ pub(crate) use storage::{
 #[cfg(test)]
 pub(crate) use storage::{ContextDocumentInput, TestStorageFixture, test_prepared_turn};
 pub(crate) use subsessions::{
-    InterruptedSubsessionEvent, NativeSubsessionService, StewardDelegationRequest,
-    SubsessionCancelRequest, SubsessionChildQueue, SubsessionDirectionRequest, SubsessionEnqueue,
-    SubsessionResumeRequest, WorkerDelegationRequest, WorkerProfile, WorkerProfileReader,
+    InterruptedSubsessionEvent, StewardDelegationRequest, SubsessionCancelRequest,
+    SubsessionChildQueue, SubsessionDirectionRequest, SubsessionEnqueue, SubsessionResumeRequest,
+    SubsessionService, WorkerDelegationRequest, WorkerProfile, WorkerProfileReader,
 };
 pub(crate) use work::WorkStatus as DurableWorkStatus;
 pub(crate) use work::policy::{

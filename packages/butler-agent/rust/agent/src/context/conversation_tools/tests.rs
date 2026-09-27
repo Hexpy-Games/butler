@@ -3,7 +3,7 @@ use std::{cmp::Ordering, sync::Arc};
 
 use super::{
     super::{ContextBudgetEnvironment, ContextConversation},
-    NativeConversationTools,
+    ConversationTools,
 };
 use crate::{
     configuration::ConfigurationWrites,
@@ -112,7 +112,7 @@ async fn canonical_write_lists_and_reads_legacy_context() {
         catalog,
         ContextBudgetEnvironment::default(),
     ));
-    let tools = NativeConversationTools::new(root.clone(), context, 2);
+    let tools = ConversationTools::new(root.clone(), context, 2);
     let binding = CanonicalMemoryReadBinding {
         runtime_session_id: "runtime-a".into(),
         turn_id: "ct_a".into(),

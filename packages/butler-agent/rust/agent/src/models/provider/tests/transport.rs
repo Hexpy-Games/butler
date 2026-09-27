@@ -62,12 +62,12 @@ fn messages() -> [ModelRoundMessage; 1] {
     }]
 }
 
-pub(super) fn provider(endpoint: Url, model_ref: &str) -> (NativeModelProvider, Arc<Observations>) {
+pub(super) fn provider(endpoint: Url, model_ref: &str) -> (ModelProvider, Arc<Observations>) {
     let (catalog, snapshot) = catalog();
     let metadata = snapshot.find_model_metadata(Some(model_ref)).unwrap();
     let observations = Arc::new(Observations::default());
     (
-        NativeModelProvider::new(
+        ModelProvider::new(
             crate::models::provider_http_client().unwrap(),
             Arc::new(Config {
                 metadata,
@@ -363,7 +363,7 @@ async fn codex_fallback_stream_id_is_reused_and_final_id_samples_separately() {
     let metadata = snapshot
         .find_model_metadata(Some("openai/gpt-5.5"))
         .unwrap();
-    let provider = NativeModelProvider::new(
+    let provider = ModelProvider::new(
         crate::models::provider_http_client().unwrap(),
         Arc::new(Config {
             metadata,

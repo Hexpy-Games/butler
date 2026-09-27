@@ -13,12 +13,12 @@ use crate::{
     operations::CycleMetrics,
 };
 
-use crate::host::memory_jobs::briefing::NativeBriefingGeneration;
+use crate::host::memory_jobs::briefing::BriefingGeneration;
 use crate::host::memory_jobs::profile_consolidation::ProfileConsolidation;
 
-pub(in crate::host) struct NativeCyclePhases {
+pub(in crate::host) struct CyclePhases {
     pub(in crate::host) metrics: Arc<CycleMetrics>,
-    pub(in crate::host) briefing: Arc<NativeBriefingGeneration>,
+    pub(in crate::host) briefing: Arc<BriefingGeneration>,
     pub(in crate::host) profile: Arc<ProfileConsolidation>,
     pub(in crate::host) box_store: Arc<BoxStoreService>,
     pub(in crate::host) legacy_metadata: Arc<LegacyMetadataIntegrityService>,
@@ -27,7 +27,7 @@ pub(in crate::host) struct NativeCyclePhases {
     pub(in crate::host) health: Arc<MemoryHealthService>,
 }
 
-impl PhaseExecutor for NativeCyclePhases {
+impl PhaseExecutor for CyclePhases {
     fn execute<'a>(
         &'a self,
         phase: Phase,

@@ -11,7 +11,7 @@ use crate::{
     profile::{FirstChatOnboardingUpdate, ProfileError, ProfilingMode},
 };
 
-use super::NativeGuidedTools;
+use super::GuidedTools;
 use crate::profile::ProfileCode;
 
 pub(super) fn supports(name: &str) -> bool {
@@ -22,7 +22,7 @@ pub(super) fn supports(name: &str) -> bool {
 }
 
 pub(super) async fn execute(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     call: &ModelRoundToolCall,
 ) -> Result<JsonDocument, ToolExecutionError> {
     let result = match call.name.as_str() {

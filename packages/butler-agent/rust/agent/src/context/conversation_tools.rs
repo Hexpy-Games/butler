@@ -17,7 +17,7 @@ use super::{
 use crate::context::ContextCode;
 use crate::conversation::{CanonicalMemoryReadBinding, conversation_store_path};
 
-pub(crate) struct NativeConversationTools {
+pub(crate) struct ConversationTools {
     path: PathBuf,
     data_root: PathBuf,
     conversation: Arc<ContextConversation>,
@@ -26,7 +26,7 @@ pub(crate) struct NativeConversationTools {
     closing: Mutex<bool>,
 }
 
-impl NativeConversationTools {
+impl ConversationTools {
     pub(crate) fn new(
         data_root: PathBuf,
         conversation: Arc<ContextConversation>,

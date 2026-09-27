@@ -6,12 +6,12 @@ use serde_json::{Map, Value, json};
 use crate::btcc::{BtccError, ModelRoundToolCall, ToolExecutionError};
 use crate::json::JsonDocument;
 
-use super::NativeGuidedTools;
+use super::GuidedTools;
 
 const PAGE_UTF16: usize = 24_000;
 
 pub(super) async fn execute(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     call: &ModelRoundToolCall,
 ) -> Result<JsonDocument, ToolExecutionError> {
     let args = &call.arguments;

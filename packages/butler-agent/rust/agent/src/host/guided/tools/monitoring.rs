@@ -10,7 +10,7 @@ use crate::{
     json::JsonDocument,
 };
 
-use super::NativeGuidedTools;
+use super::GuidedTools;
 
 pub(crate) struct MonitoringReaders {
     data_root: PathBuf,
@@ -105,7 +105,7 @@ pub(super) fn supports(name: &str) -> bool {
 }
 
 pub(super) async fn execute(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     call: &ModelRoundToolCall,
 ) -> Result<JsonDocument, ToolExecutionError> {
     let session = call
@@ -157,7 +157,7 @@ pub(super) async fn execute(
     })
 }
 
-fn list_capabilities(owner: &NativeGuidedTools, call: &ModelRoundToolCall) -> Value {
+fn list_capabilities(owner: &GuidedTools, call: &ModelRoundToolCall) -> Value {
     let raw = call.arguments.get("category");
     let category = raw.and_then(|value| match value {
         Value::String(value) => Some(value.trim().to_ascii_lowercase()),
@@ -191,7 +191,7 @@ fn list_capabilities(owner: &NativeGuidedTools, call: &ModelRoundToolCall) -> Va
                 return None;
             }
             let disabled = owner.web_session.configured_disabled_reason(tool.name);
-            let implemented = NativeGuidedTools::supports(tool.name);
+            let implemented = GuidedTools::supports(tool.name);
             let enabled = implemented && disabled.is_none();
             if !include_disabled && !enabled {
                 return None;

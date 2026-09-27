@@ -9,7 +9,7 @@ mod tests;
 use serde_json::{Map, Value, json};
 
 use super::{
-    NativeIngressError,
+    IngressError,
     bind::{self, Envelope},
 };
 use crate::{
@@ -23,9 +23,9 @@ pub(super) fn actions(
     envelope: &Envelope,
     binding: &StoredSessionBinding,
     outcome: &TurnOutcome,
-) -> Result<Vec<Value>, NativeIngressError> {
+) -> Result<Vec<Value>, IngressError> {
     let target = app_target(binding, envelope).ok_or_else(|| {
-        NativeIngressError::new(
+        IngressError::new(
             "inbound_app_target_missing",
             "App delivery target unavailable",
         )

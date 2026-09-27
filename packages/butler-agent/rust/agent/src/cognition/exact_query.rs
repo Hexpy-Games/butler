@@ -18,14 +18,14 @@ use crate::conversation::{CanonicalMemoryReadBinding, conversation_store_path};
 use super::{CognitionError, CognitionResult};
 use crate::cognition::CognitionCode;
 
-pub(crate) struct NativeExactMemoryQuery {
+pub(crate) struct ExactMemoryQuery {
     path: PathBuf,
     permits: Arc<Semaphore>,
     jobs: TaskTracker,
     closing: Mutex<bool>,
 }
 
-impl NativeExactMemoryQuery {
+impl ExactMemoryQuery {
     pub(crate) fn new(data_root: &Path, read_concurrency: usize) -> Self {
         Self {
             path: conversation_store_path(data_root),

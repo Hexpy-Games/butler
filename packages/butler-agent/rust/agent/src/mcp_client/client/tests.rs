@@ -9,7 +9,7 @@ use std::{
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use super::super::NativeMcpClient;
+use super::super::McpClient;
 
 mod streamable_http;
 
@@ -51,7 +51,7 @@ async fn stdio_client_lists_describes_calls_and_reads_then_reaps_each_child() {
         "args":["--exact", "mcp_client::client::tests::stdio_fixture_child", "--ignored"],
         "env":[{"key":"MCP_FIXTURE_MARKER","source":"literal","value":marker.to_string_lossy()}],
     }));
-    let client = NativeMcpClient::new(
+    let client = McpClient::new(
         scratch.0.clone(),
         HashMap::from([("BUTLER_TEST_PARENT_SECRET".into(), "not-forwarded".into())]),
     );
@@ -113,7 +113,7 @@ async fn stdio_cancellation_reaps_child_after_one_tool_dispatch() {
             {"key":"MCP_FIXTURE_PID","source":"literal","value":pid_marker.to_string_lossy()},
         ],
     }));
-    let client = NativeMcpClient::new(scratch.0.clone(), HashMap::new());
+    let client = McpClient::new(scratch.0.clone(), HashMap::new());
     let signal = CancellationToken::new();
     let call_signal = signal.clone();
     let call = tokio::spawn(async move {

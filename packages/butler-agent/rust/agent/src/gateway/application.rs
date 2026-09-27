@@ -18,7 +18,6 @@ mod message_files;
 mod message_projection;
 mod model_catalog;
 mod monitoring;
-mod native_preparation;
 mod new_chat_briefing;
 mod operation_output;
 mod personalization;
@@ -139,7 +138,7 @@ pub(crate) fn normalize_committed_turn_event(
 }
 
 pub(crate) fn app_session_hint(chat_id: &str) -> String {
-    native_preparation::session_hint(chat_id)
+    crate::gateway::application::snapshot_input::session_hint(chat_id)
 }
 
 pub(crate) struct AppApplication {
@@ -428,5 +427,6 @@ pub(crate) use test_support::{
     seed_test_assistant_attachment, seed_test_authority_queue, seed_test_transcript_messages,
 };
 
+mod snapshot_input;
 #[cfg(test)]
 mod tests;

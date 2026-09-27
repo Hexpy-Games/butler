@@ -11,12 +11,12 @@ use crate::btcc::{
     StorageError,
 };
 
-use super::{NativeProjectLedger, ProjectLedgerReadError, active_reference, work};
+use super::{ProjectLedger, ProjectLedgerReadError, active_reference, work};
 
 const RESULT_SCHEMA: &str = "butler.btcc-project-work-result-reference.v1";
 
 pub(crate) async fn prepare_exact_project_work_result_authority(
-    ledger: &NativeProjectLedger,
+    ledger: &ProjectLedger,
     scope: ResolvedProjectWorkScope,
     work_ids: Vec<String>,
 ) -> Result<Arc<dyn ExactProjectWorkResultAuthority>, StorageError> {

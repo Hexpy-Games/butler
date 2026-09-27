@@ -2,7 +2,7 @@
 
 use serde_json::{Value, json};
 
-use super::{NativeSubsessionService, error};
+use super::{SubsessionService, error};
 use crate::btcc::BtccCode;
 use crate::btcc::{BtccError, StoredSubsessionDelegation, StoredSubsessionDirection};
 use crate::workspace::SessionRole;
@@ -36,7 +36,7 @@ pub(crate) struct SubsessionResumeRequest {
     pub relation_id: String,
 }
 
-impl NativeSubsessionService {
+impl SubsessionService {
     pub(crate) async fn resume(
         &self,
         request: SubsessionResumeRequest,

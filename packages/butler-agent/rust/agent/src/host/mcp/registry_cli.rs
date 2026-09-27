@@ -7,7 +7,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     configuration::ConfigurationWrites,
-    mcp_client::{NativeMcpClient, RegistryPathGuard},
+    mcp_client::{McpClient, RegistryPathGuard},
 };
 
 use super::super::ResolvedInstallation;
@@ -220,7 +220,7 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
 fn registry_client(
     data_root: PathBuf,
     installation: &ResolvedInstallation,
-) -> Result<NativeMcpClient, crate::host::HostError> {
+) -> Result<McpClient, crate::host::HostError> {
     let install_root = installation.root().to_path_buf();
     let guard_installation = installation.clone();
     let guard: Arc<RegistryPathGuard> = Arc::new(move |root, target| {
@@ -289,7 +289,7 @@ fn registry_client(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(_) => return Err("Private environment could not be read.".into()),
     }
-    Ok(NativeMcpClient::with_registry_writer(
+    Ok(McpClient::with_registry_writer(
         data_root,
         environment,
         Arc::new(ConfigurationWrites::new()),

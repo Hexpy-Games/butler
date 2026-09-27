@@ -8,16 +8,16 @@ use tokio::{sync::oneshot, time::MissedTickBehavior};
 
 use super::support::{deliver_parent_results, failure};
 use crate::btcc::BtccError;
-use crate::host::NativeProgressPublisher;
-use crate::host::app::gateway_lifecycle::NativeActiveAppEndpoint;
+use crate::host::ProgressPublisher;
+use crate::host::app::gateway_lifecycle::ActiveAppEndpoint;
 
 const SERVICE_MAINTENANCE_INTERVAL: Duration = Duration::from_millis(500);
 
 pub(super) async fn run_service_maintenance(
-    progress: Arc<NativeProgressPublisher>,
+    progress: Arc<ProgressPublisher>,
     parent_client: reqwest::Client,
     subsessions: crate::btcc::SqliteSubsessionRepository,
-    app_endpoint: NativeActiveAppEndpoint,
+    app_endpoint: ActiveAppEndpoint,
     mut stop: oneshot::Receiver<()>,
 ) -> Result<(), BtccError> {
     let mut interval = tokio::time::interval(SERVICE_MAINTENANCE_INTERVAL);

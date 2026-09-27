@@ -18,7 +18,7 @@ use crate::host::service::instance::{
     instance_is_locked, process_matches, read_record, validate_write_destinations,
 };
 
-use super::{GatewayControlCommand, NativeAppGatewayLifecycle};
+use super::{AppGatewayLifecycle, GatewayControlCommand};
 
 const CONTROL_SCHEMA: &str = "butler.native-app-gateway-control.v1";
 const MAX_FRAME_BYTES: usize = 8 * 1024;
@@ -56,7 +56,7 @@ impl GatewayControlServer {
         data_root: std::path::PathBuf,
         installation: ResolvedInstallation,
         nonce: String,
-        lifecycle: Arc<NativeAppGatewayLifecycle>,
+        lifecycle: Arc<AppGatewayLifecycle>,
         effects: Arc<StorageEffectJournal>,
     ) -> Result<Self, crate::host::HostError> {
         let listener = TcpListener::bind(("127.0.0.1", 0))
@@ -139,7 +139,7 @@ async fn serve_one(
     installation: &ResolvedInstallation,
     nonce: &str,
     token: &str,
-    lifecycle: &NativeAppGatewayLifecycle,
+    lifecycle: &AppGatewayLifecycle,
     effects: &StorageEffectJournal,
 ) -> Result<(), crate::host::HostError> {
     let request = timeout(IO_TIMEOUT, read_frame::<ControlRequest>(stream))

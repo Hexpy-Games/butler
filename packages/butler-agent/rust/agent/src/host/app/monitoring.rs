@@ -16,12 +16,12 @@ use crate::{
     },
 };
 
-pub(crate) struct NativeAppMonitoring {
+pub(crate) struct AppMonitoring {
     data_root: PathBuf,
     session_work: Arc<SessionWorkRepository>,
 }
 
-impl NativeAppMonitoring {
+impl AppMonitoring {
     pub(crate) fn new(data_root: PathBuf, session_work: Arc<SessionWorkRepository>) -> Self {
         Self {
             data_root,
@@ -30,7 +30,7 @@ impl NativeAppMonitoring {
     }
 }
 
-impl AppMonitoringPort for NativeAppMonitoring {
+impl AppMonitoringPort for AppMonitoring {
     fn work_status(&self) -> ApplicationFuture<Vec<AppBoundWorkStatusFact>> {
         let session_work = self.session_work.clone();
         Box::pin(async move { work_status::read(session_work).await })

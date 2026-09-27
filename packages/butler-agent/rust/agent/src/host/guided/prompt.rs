@@ -23,21 +23,21 @@ pub(crate) struct GuidedTextState {
     pub work_scope: crate::btcc::WorkTurnScope,
     pub documents: BtccRepositories,
     pub journal: Arc<ToolJournalRepository>,
-    pub attachment_context: Arc<crate::context::NativeAttachmentContext>,
+    pub attachment_context: Arc<crate::context::AttachmentContext>,
     pub effects: Arc<dyn EffectJournal>,
     pub accepted_plan: Option<ProjectLedgerPlan>,
     pub butler_data: String,
     pub response_language: String,
     pub continuation_budget_enabled: bool,
-    pub work_streams: Arc<crate::host::NativeWorkStreams>,
-    pub subsessions: Arc<crate::btcc::NativeSubsessionService>,
+    pub work_streams: Arc<crate::host::WorkStreams>,
+    pub subsessions: Arc<crate::btcc::SubsessionService>,
 }
 
-pub(crate) struct NativeGuidedPrompt {
+pub(crate) struct GuidedPrompt {
     state: Arc<GuidedTextState>,
 }
 
-impl NativeGuidedPrompt {
+impl GuidedPrompt {
     pub(crate) fn new(state: Arc<GuidedTextState>) -> Self {
         Self { state }
     }
@@ -250,7 +250,7 @@ fn request_bytes(
         })
 }
 
-impl PromptPort for NativeGuidedPrompt {
+impl PromptPort for GuidedPrompt {
     fn render<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,

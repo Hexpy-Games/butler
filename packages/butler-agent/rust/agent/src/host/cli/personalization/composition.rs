@@ -12,8 +12,8 @@ use crate::{
 
 use crate::host::cli::settings as settings_cli;
 use crate::host::{
-    NativeProcessEnvironment, NativeProcessModels, ProfileConversationSources,
-    ResolvedInstallation, SystemIdentity,
+    ProcessEnvironment, ProcessModels, ProfileConversationSources, ResolvedInstallation,
+    SystemIdentity,
 };
 
 pub(super) fn open(
@@ -35,7 +35,7 @@ pub(super) fn open(
         crate::host::HostError::new("native environment is unavailable").with_source(source)
     })?;
     let environment =
-        NativeProcessEnvironment::capture(data_root, &home, &os.release().to_string_lossy());
+        ProcessEnvironment::capture(data_root, &home, &os.release().to_string_lossy());
     let cognition_root = environment.cognition_paths.cognition_root(data_root);
     validate_cognition_paths(data_root, installation, &cognition_root, mutating)?;
     let locale = process_locale();
@@ -43,7 +43,7 @@ pub(super) fn open(
         crate::host::HostError::new("native locale is unavailable").with_source(source)
     })?);
     let writes = Arc::new(ConfigurationWrites::new());
-    let models = NativeProcessModels::new(
+    let models = ProcessModels::new(
         data_root.to_path_buf(),
         environment.model,
         writes.clone(),

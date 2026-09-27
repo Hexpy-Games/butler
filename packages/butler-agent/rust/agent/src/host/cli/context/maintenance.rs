@@ -28,11 +28,8 @@ pub(super) async fn run(
     let models = open_status_models(data_root).await?;
     let budget_owner = Arc::new(context_budget_owner(&models));
     let metrics = Arc::new(MetricFiles::new(data_root.to_path_buf()));
-    let tool_output = crate::host::native_tool_output(
-        data_root.to_path_buf(),
-        budget_owner,
-        Arc::clone(&metrics),
-    );
+    let tool_output =
+        crate::host::open_tool_output(data_root.to_path_buf(), budget_owner, Arc::clone(&metrics));
     let artifacts = async {
         let completion = tool_output
             .submit_prune(PruneToolOutputInput {

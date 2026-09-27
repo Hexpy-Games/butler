@@ -9,11 +9,11 @@ use nix::unistd::Pid;
 use serde_json::Value;
 
 use super::{INSTANCE_PUBLISH_TIMEOUT, POLL_INTERVAL, START_TIMEOUT, active_service};
-use crate::host::NativeServiceConfiguration;
+use crate::host::ServiceConfiguration;
 use crate::host::service::instance::{InstanceRecord, instance_is_locked, read_record};
 
 pub(super) async fn wait_until_ready(
-    config: &NativeServiceConfiguration,
+    config: &ServiceConfiguration,
     mut child: Option<&mut Child>,
     expected_nonce: Option<String>,
 ) -> Result<InstanceRecord, crate::host::HostError> {
@@ -114,7 +114,7 @@ pub(super) async fn wait_until_registered(
 
 async fn app_health_ready(
     client: &reqwest::Client,
-    config: &NativeServiceConfiguration,
+    config: &ServiceConfiguration,
     record: &InstanceRecord,
 ) -> Result<bool, crate::host::HostError> {
     if !record.app_enabled {

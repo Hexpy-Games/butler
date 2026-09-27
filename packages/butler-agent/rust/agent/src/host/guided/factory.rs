@@ -14,59 +14,58 @@ use crate::btcc::{
     EffectJournal, GuidedPolicyDependencies, GuidedTurnFactory, GuidedTurnInputs, GuidedTurnStart,
     ModelRoundPort, PortFuture,
 };
-use crate::capabilities::NativeCapabilities;
+use crate::capabilities::Capabilities;
 use crate::cognition::{
-    CognitionPathEnvironment, CompletionPublisher, NativeExactMemoryQuery, NativeMemoryRecall,
+    CognitionPathEnvironment, CompletionPublisher, ExactMemoryQuery, MemoryRecall,
 };
-use crate::context::{NativeContextPort, NativeConversationSessionReference};
+use crate::context::{ContextPortAdapter, ConversationSessionReference};
 use crate::conversation::CanonicalMemoryReadBinding;
 
 use crate::host::{
-    GuidedTextState, GuidedToolBinding, NativeGuidedActivity, NativeGuidedJournal,
-    NativeGuidedPreparation, NativeGuidedPrompt, NativeGuidedSteering, NativeGuidedTools,
-    NativeGuidedWork, NativeGuidedWorkTools, PreparedNativeGuidedTurn,
-    resolve_guided_response_language,
+    GuidedActivity, GuidedJournal, GuidedPreparation, GuidedPrompt, GuidedSteering,
+    GuidedTextState, GuidedToolBinding, GuidedTools, GuidedWorkAdapter, GuidedWorkTools,
+    PreparedNativeGuidedTurn, resolve_guided_response_language,
 };
 
 /// All fields are process services or immutable host configuration, never Turn state.
-pub(crate) struct NativeGuidedTurnFactory {
-    pub preparation: NativeGuidedPreparation,
+pub(crate) struct GuidedTurnFactoryAdapter {
+    pub preparation: GuidedPreparation,
     pub documents: BtccRepositories,
     pub effects: Arc<dyn EffectJournal>,
-    pub capabilities: Arc<NativeCapabilities>,
-    pub command: Arc<crate::host::guided::command::NativeGuidedCommand>,
-    pub project_tools: Arc<crate::host::guided::project_tools::NativeGuidedProjectTools>,
-    pub tool_artifacts: Arc<crate::host::NativeToolArtifactReader>,
-    pub memory_query: Arc<NativeExactMemoryQuery>,
-    pub memory_recall: Arc<NativeMemoryRecall>,
+    pub capabilities: Arc<Capabilities>,
+    pub command: Arc<crate::host::guided::command::GuidedCommand>,
+    pub project_tools: Arc<crate::host::guided::project_tools::GuidedProjectTools>,
+    pub tool_artifacts: Arc<crate::host::ToolArtifactReader>,
+    pub memory_query: Arc<ExactMemoryQuery>,
+    pub memory_recall: Arc<MemoryRecall>,
     pub memory_paths: CognitionPathEnvironment,
     pub memory_publisher: Arc<CompletionPublisher>,
-    pub conversation_reference: Arc<NativeConversationSessionReference>,
-    pub conversation_tools: Arc<crate::context::NativeConversationTools>,
+    pub conversation_reference: Arc<ConversationSessionReference>,
+    pub conversation_tools: Arc<crate::context::ConversationTools>,
     pub compactions: ContextCompactionRepository,
-    pub attachment_context: Arc<crate::context::NativeAttachmentContext>,
+    pub attachment_context: Arc<crate::context::AttachmentContext>,
     pub verified_image_payload: Arc<dyn crate::btcc::VerifiedImagePayloadPort>,
     pub butler_data: PathBuf,
     pub installation_root: PathBuf,
     pub protected_ledger_roots: Vec<PathBuf>,
-    pub subsessions: Arc<crate::btcc::NativeSubsessionService>,
-    pub work_streams: Arc<crate::host::NativeWorkStreams>,
-    pub automations: Arc<crate::operations::NativeAutomationService>,
-    pub mcp_client: Arc<crate::mcp_client::NativeMcpClient>,
+    pub subsessions: Arc<crate::btcc::SubsessionService>,
+    pub work_streams: Arc<crate::host::WorkStreams>,
+    pub automations: Arc<crate::operations::AutomationService>,
+    pub mcp_client: Arc<crate::mcp_client::McpClient>,
     pub profile: Arc<crate::profile::ProfileService>,
     pub monitoring: Arc<crate::host::MonitoringReaders>,
-    pub session_worktrees: crate::workspace::NativeSessionWorktrees,
+    pub session_worktrees: crate::workspace::SessionWorktrees,
     pub web_access: Arc<crate::web_access::WebAccess>,
-    pub app_endpoint: Arc<crate::host::NativeActiveAppEndpoint>,
+    pub app_endpoint: Arc<crate::host::ActiveAppEndpoint>,
 }
 
-struct NativeBoundTurn<'a> {
+struct BoundTurn<'a> {
     inputs: Option<GuidedTurnInputs>,
     progress: &'a dyn AgentLoopProgress,
     base: &'a dyn ModelRoundPort,
 }
 
-impl BoundGuidedTurn for NativeBoundTurn<'_> {
+impl BoundGuidedTurn for BoundTurn<'_> {
     fn take_inputs(&mut self) -> Result<GuidedTurnInputs, BtccError> {
         self.inputs
             .take()
@@ -80,7 +79,7 @@ impl BoundGuidedTurn for NativeBoundTurn<'_> {
     }
 }
 
-impl GuidedTurnFactory for NativeGuidedTurnFactory {
+impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
     fn bind_pre_model<'a>(
         &'a self,
         start: GuidedTurnStart<'a>,
@@ -110,7 +109,7 @@ impl GuidedTurnFactory for NativeGuidedTurnFactory {
             let surface = surface::available(&mut phase, self.preparation.catalog.snapshot())?;
             let policy = &phase.execution_policy;
             let language = resolve_guided_response_language(start.turn, &self.documents).await;
-            let work = Arc::new(NativeGuidedWork::new(
+            let work = Arc::new(GuidedWorkAdapter::new(
                 self.preparation.work.clone(),
                 work_scope.clone(),
                 policy.tracking_mode.clone(),
@@ -119,7 +118,7 @@ impl GuidedTurnFactory for NativeGuidedTurnFactory {
                 start.turn.original_message.clone(),
             )?);
             let workspace_path = workspace.get().map_err(|e| error(e.code()))?;
-            let activity = Arc::new(NativeGuidedActivity::new(
+            let activity = Arc::new(GuidedActivity::new(
                 start.turn.turn_id.clone(),
                 source_revision.clone(),
                 initial_work
@@ -135,11 +134,11 @@ impl GuidedTurnFactory for NativeGuidedTurnFactory {
             {
                 activity.restore(&saved.activity)?;
             }
-            let tools = Arc::new(NativeGuidedTools::new(
+            let tools = Arc::new(GuidedTools::new(
                 self.capabilities.clone(),
                 self.command.clone(),
                 self.tool_artifacts.clone(),
-                Arc::new(crate::btcc::NativeEffectService::new(
+                Arc::new(crate::btcc::EffectService::new(
                     self.effects.clone(),
                     Arc::new(|| {
                         crate::models::ModelConfigurationClock::now_iso(
@@ -149,7 +148,7 @@ impl GuidedTurnFactory for NativeGuidedTurnFactory {
                 )),
                 self.effects.clone(),
                 self.preparation.authority.clone(),
-                crate::host::NativeGuidedFileEffects::new(
+                crate::host::GuidedFileEffects::new(
                     self.capabilities.clone(),
                     crate::host::RegisteredWriteContext {
                         workspace_reference: Some(workspace.clone()),
@@ -174,7 +173,7 @@ impl GuidedTurnFactory for NativeGuidedTurnFactory {
                 self.conversation_reference.clone(),
                 self.conversation_tools.clone(),
                 self.project_tools.clone(),
-                NativeGuidedWorkTools::new(self.preparation.work.clone(), work_scope.clone()),
+                GuidedWorkTools::new(self.preparation.work.clone(), work_scope.clone()),
                 activity.clone(),
                 self.preparation.journal.clone(),
                 self.preparation.catalog.clone(),
@@ -251,7 +250,7 @@ impl GuidedTurnFactory for NativeGuidedTurnFactory {
                     installation_root: Some(self.installation_root.clone()),
                 },
             )?);
-            let journal = Arc::new(NativeGuidedJournal::new(
+            let journal = Arc::new(GuidedJournal::new(
                 start.turn.turn_id.clone(),
                 self.preparation.journal.clone(),
                 activity.clone(),
@@ -272,18 +271,18 @@ impl GuidedTurnFactory for NativeGuidedTurnFactory {
                 work_streams: self.work_streams.clone(),
                 subsessions: self.subsessions.clone(),
             });
-            let prompt = Arc::new(NativeGuidedPrompt::new(text.clone()));
-            let steering = Arc::new(NativeGuidedSteering::new(
+            let prompt = Arc::new(GuidedPrompt::new(text.clone()));
+            let steering = Arc::new(GuidedSteering::new(
                 text,
                 self.subsessions.clone(),
                 start.turn.session_id.clone(),
                 start.turn.turn_id.clone(),
             ));
-            let context = Arc::new(NativeContextPort::new(
+            let context = Arc::new(ContextPortAdapter::new(
                 steering,
                 Some(self.compactions.clone()),
             ));
-            let authority = Arc::new(authority::NativeBoundAuthority::new(
+            let authority = Arc::new(authority::BoundAuthority::new(
                 start.turn.turn_id.clone(),
                 activity,
             ));
@@ -305,7 +304,7 @@ impl GuidedTurnFactory for NativeGuidedTurnFactory {
                 budget,
                 source_revision,
             };
-            Ok(Box::new(NativeBoundTurn {
+            Ok(Box::new(BoundTurn {
                 inputs: Some(inputs),
                 progress: start.progress,
                 base: start.base,

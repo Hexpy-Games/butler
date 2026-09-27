@@ -13,7 +13,7 @@ use serde_json::Value;
 use std::{path::PathBuf, sync::Arc};
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct NativeAppTurn {
+pub(crate) struct AppTurn {
     pub chat_id: String,
     pub message_id: String,
     pub turn_id: String,
@@ -35,23 +35,20 @@ pub(crate) struct NativeAppTurn {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct NativeEnqueueReceipt {
+pub(crate) struct EnqueueReceipt {
     pub queue_id: String,
 }
 
 pub(crate) trait AppNativeIngress: Send + Sync + 'static {
-    fn enqueue(&self, turn: NativeAppTurn) -> ApplicationFuture<NativeEnqueueReceipt>;
-    fn find(&self, turn: NativeAppTurn) -> ApplicationFuture<Option<NativeEnqueueReceipt>>;
-    fn enqueue_cancel(
-        &self,
-        _cancel: NativeAppCancellation,
-    ) -> ApplicationFuture<NativeEnqueueReceipt> {
+    fn enqueue(&self, turn: AppTurn) -> ApplicationFuture<EnqueueReceipt>;
+    fn find(&self, turn: AppTurn) -> ApplicationFuture<Option<EnqueueReceipt>>;
+    fn enqueue_cancel(&self, _cancel: AppCancellation) -> ApplicationFuture<EnqueueReceipt> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct NativeAppCancellation {
+pub(crate) struct AppCancellation {
     pub chat_id: String,
     pub session_id: String,
     pub turn_id: String,
@@ -227,7 +224,7 @@ pub(crate) struct AppFileDownload {
 
 #[derive(Clone, Debug)]
 pub(crate) struct AppLedgerSourceRequest {
-    pub project: NativeProjectSnapshot,
+    pub project: ProjectSnapshot,
     pub source: ProjectSourceReference,
 }
 
@@ -250,8 +247,8 @@ pub(crate) struct VisualAdmissionRequest {
 }
 pub(crate) struct AppApplicationDependencies {
     pub updates: Arc<crate::operations::AppUpdateService>,
-    pub skills: Arc<crate::skills::NativeSkills>,
-    pub mcp_client: Arc<crate::mcp_client::NativeMcpClient>,
+    pub skills: Arc<crate::skills::Skills>,
+    pub mcp_client: Arc<crate::mcp_client::McpClient>,
     pub native_ingress: Arc<dyn AppNativeIngress>,
     pub native_assets: Arc<dyn AppNativeAssetResolver>,
     pub executor_readiness: Arc<dyn AppExecutorReadiness>,
@@ -372,7 +369,7 @@ pub(crate) struct AppModelFallbackFacts {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct NativeProjectSnapshot {
+pub(crate) struct ProjectSnapshot {
     pub id: String,
     pub workspace_path: String,
     pub ledger_project_id: Option<String>,
@@ -390,7 +387,7 @@ pub(crate) struct ClaimedNativeSnapshot {
     pub app_queue_claim_id: Option<String>,
     pub session_id: String,
     pub session_kind: String,
-    pub project: Option<NativeProjectSnapshot>,
+    pub project: Option<ProjectSnapshot>,
     pub branch_seed: Option<Value>,
     pub project_sources: Value,
     pub content_parts: Option<crate::gateway::MessageContent>,

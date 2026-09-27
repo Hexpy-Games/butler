@@ -14,7 +14,7 @@ use crate::{
 };
 
 use crate::host::installation::realpath_or_nearest;
-use crate::host::{NativeProcessEnvironment, ResolvedInstallation, SystemIdentity};
+use crate::host::{ProcessEnvironment, ResolvedInstallation, SystemIdentity};
 
 pub(crate) async fn run_native_oauth_login(
     installation: ResolvedInstallation,
@@ -49,8 +49,7 @@ async fn run_native_oauth_login_with_data(
 ) -> Result<(), crate::host::HostError> {
     let os = nix::sys::utsname::uname().map_err(crate::host::HostError::from_error)?;
     let mut environment =
-        NativeProcessEnvironment::capture(&data_root, &user_home, &os.release().to_string_lossy())
-            .model;
+        ProcessEnvironment::capture(&data_root, &user_home, &os.release().to_string_lossy()).model;
     let requested_profile = environment
         .butler_codex_auth_profile
         .as_ref()

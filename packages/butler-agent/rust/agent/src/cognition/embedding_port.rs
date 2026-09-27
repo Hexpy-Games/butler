@@ -6,7 +6,7 @@ use std::{future::Future, pin::Pin};
 use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
 
-use super::{CognitionResult, NativeEmbeddingResult, NativeTokenization};
+use super::{CognitionResult, EmbeddingResult, Tokenization};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum EmbeddingMode {
@@ -30,7 +30,7 @@ pub(crate) struct EmbeddingRequest {
 }
 
 pub(crate) type EmbeddingFuture<'a> =
-    Pin<Box<dyn Future<Output = CognitionResult<NativeEmbeddingResult>> + Send + 'a>>;
+    Pin<Box<dyn Future<Output = CognitionResult<EmbeddingResult>> + Send + 'a>>;
 
 pub(crate) trait CognitionEmbeddingPort: Send + Sync {
     fn embed(
@@ -74,8 +74,8 @@ pub(crate) struct WorkerResponse {
 #[serde(tag = "status", content = "result", rename_all = "snake_case")]
 pub(crate) enum WorkerResult {
     Ready,
-    Embedding(Box<NativeEmbeddingResult>),
-    Tokenization(NativeTokenization),
+    Embedding(Box<EmbeddingResult>),
+    Tokenization(Tokenization),
     Closed,
     Error { code: String },
 }

@@ -12,14 +12,14 @@ use crate::{
     profile::ProfileService,
 };
 
-pub(crate) struct NativeAppSettingsMutation {
+pub(crate) struct AppSettingsMutation {
     configuration: Arc<ModelConfiguration>,
     profile: Arc<ProfileService>,
     installation: ResolvedInstallation,
     data_root: PathBuf,
 }
 
-impl NativeAppSettingsMutation {
+impl AppSettingsMutation {
     pub(crate) fn new(
         configuration: Arc<ModelConfiguration>,
         profile: Arc<ProfileService>,
@@ -147,7 +147,7 @@ impl NativeAppSettingsMutation {
     }
 }
 
-impl AppSettingsMutationPort for NativeAppSettingsMutation {
+impl AppSettingsMutationPort for AppSettingsMutation {
     fn apply(&self, patch: Value, projection: Value) -> ApplicationFuture<()> {
         let this = Self {
             configuration: self.configuration.clone(),

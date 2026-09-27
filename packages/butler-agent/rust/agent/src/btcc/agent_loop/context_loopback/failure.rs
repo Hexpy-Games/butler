@@ -2,7 +2,7 @@ use super::*;
 use crate::btcc::ContextProjectionError;
 
 #[tokio::test]
-async fn native_summary_failure_drops_turn_owner_without_saving() {
+async fn summary_failure_drops_turn_owner_without_saving() {
     let fixture = TestStorageFixture::activated();
     let storage = BtccStorage::open(fixture.config("context-native-error"))
         .await
@@ -39,7 +39,7 @@ async fn native_summary_failure_drops_turn_owner_without_saving() {
         model_execution: execution.as_ref(),
         operation_results: None,
     };
-    let context = NativeContextPort::new(
+    let context = ContextPortAdapter::new(
         Arc::new(Steering(progress.clone())),
         Some(ContextCompactionRepository::new(storage.clone())),
     );

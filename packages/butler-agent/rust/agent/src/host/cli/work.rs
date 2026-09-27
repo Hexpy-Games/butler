@@ -14,7 +14,7 @@ use commands::execute;
 use options::{parse, resolve_data_root};
 use output::{render_error, render_success};
 
-pub(crate) use output::NativeWorkCliResult;
+pub(crate) use output::WorkCliResult;
 
 pub(crate) fn recognizes(args: &[OsString]) -> bool {
     options::recognizes(args)
@@ -23,7 +23,7 @@ pub(crate) fn recognizes(args: &[OsString]) -> bool {
 pub(crate) async fn run(
     installation: ResolvedInstallation,
     raw_args: Vec<OsString>,
-) -> NativeWorkCliResult {
+) -> WorkCliResult {
     let json_requested = raw_args.iter().any(|arg| arg == "--json");
     let options = match parse(raw_args) {
         Ok(options) => options,

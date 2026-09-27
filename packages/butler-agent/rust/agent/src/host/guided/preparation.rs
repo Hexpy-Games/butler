@@ -6,29 +6,29 @@ use crate::btcc::{
     AuthorityDecision, BtccError, DurableWorkService, ExactResultReplaySelection,
     GuidedAuthorityDecision, GuidedContinuationBudgetFactory, GuidedPhaseInput,
     GuidedPhaseSelection, GuidedPreparationError, GuidedSourceRevision, GuidedTurnStart,
-    GuidedWork, NativePrincipalAuthority, OperationResultReplayFactory, OperationResultRepository,
-    OperationResultRuntime, OperationResultRuntimeFactory, OperationResultScope, ProjectLedgerPlan,
+    GuidedWork, OperationResultReplayFactory, OperationResultRepository, OperationResultRuntime,
+    OperationResultRuntimeFactory, OperationResultScope, PrincipalAuthority, ProjectLedgerPlan,
     ReplayMode, SemanticTurn, ToolJournalRepository, TurnContinuationBudgetPort, WorkTurnScope,
     guided_authority_loop_decision, load_guided_turn_work, select_phase, work_scope_for_turn,
 };
 use crate::project_ledger::ProjectLedgerReadError;
-use crate::workspace::{NativeSessionWorkspaceRecovery, WorkspaceReference};
+use crate::workspace::{SessionWorkspaceRecovery, WorkspaceReference};
 
-use crate::host::{NativeAcceptedPlanProducer, NativeGuidedCatalog};
+use crate::host::{AcceptedPlanProducer, GuidedCatalog};
 
-pub(crate) struct NativeGuidedPreparation {
-    pub catalog: Arc<NativeGuidedCatalog>,
-    pub workspace: NativeSessionWorkspaceRecovery,
-    pub accepted_plans: NativeAcceptedPlanProducer,
+pub(crate) struct GuidedPreparation {
+    pub catalog: Arc<GuidedCatalog>,
+    pub workspace: SessionWorkspaceRecovery,
+    pub accepted_plans: AcceptedPlanProducer,
     pub work: Arc<DurableWorkService>,
-    pub authority: Arc<NativePrincipalAuthority>,
+    pub authority: Arc<PrincipalAuthority>,
     pub journal: Arc<ToolJournalRepository>,
     pub operation_results: Arc<OperationResultRepository>,
     pub budget: Arc<GuidedContinuationBudgetFactory>,
     pub default_workspace: String,
     pub phase_surface_flag: String,
     pub operation_replay_flag: String,
-    pub subsessions: Arc<crate::btcc::NativeSubsessionService>,
+    pub subsessions: Arc<crate::btcc::SubsessionService>,
 }
 
 /// No transcript cache or second Work read is introduced during preparation.
@@ -45,7 +45,7 @@ pub(crate) struct PreparedNativeGuidedTurn {
     pub source_revision: GuidedSourceRevision,
 }
 
-impl NativeGuidedPreparation {
+impl GuidedPreparation {
     pub(crate) async fn prepare(
         &self,
         start: &GuidedTurnStart<'_>,

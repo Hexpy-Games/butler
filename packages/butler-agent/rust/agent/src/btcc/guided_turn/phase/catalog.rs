@@ -44,7 +44,7 @@ impl GuidedCatalogSnapshot {
         })
     }
 
-    pub(crate) fn native_tools(&self) -> impl Iterator<Item = GuidedCatalogRead<'_>> {
+    pub(crate) fn builtin_tools(&self) -> impl Iterator<Item = GuidedCatalogRead<'_>> {
         self.tools
             .iter()
             .filter(|tool| !tool.durable)
@@ -57,8 +57,8 @@ impl GuidedCatalogSnapshot {
             })
     }
 
-    pub(crate) fn native_tool(&self, name: &str) -> Option<GuidedCatalogRead<'_>> {
-        self.native_tools().find(|tool| tool.name == name)
+    pub(crate) fn builtin_tool(&self, name: &str) -> Option<GuidedCatalogRead<'_>> {
+        self.builtin_tools().find(|tool| tool.name == name)
     }
     pub(crate) fn hidden_native_bridge_tool(
         &self,

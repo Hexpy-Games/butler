@@ -24,7 +24,7 @@ async fn dropped_caller_and_close_keep_actual_pending_write_owned() {
     let fixture = Fixture::new();
     let (entered_tx, entered_rx) = std::sync::mpsc::channel();
     let (release_tx, release_rx) = std::sync::mpsc::channel();
-    let service = NativeToolOutput::new(
+    let service = ToolOutput::new(
         fixture.root.clone(),
         Arc::clone(&fixture.owner),
         Arc::new(BlockingIdentity {
@@ -77,7 +77,7 @@ async fn bounded_queue_drops_waiting_caller_and_close_rejects_pending_submission
     let fixture = Fixture::new();
     let (entered_tx, entered_rx) = std::sync::mpsc::channel();
     let (release_tx, release_rx) = std::sync::mpsc::channel();
-    let service = NativeToolOutput::new(
+    let service = ToolOutput::new(
         fixture.root.clone(),
         Arc::clone(&fixture.owner),
         Arc::new(BlockingIdentity {

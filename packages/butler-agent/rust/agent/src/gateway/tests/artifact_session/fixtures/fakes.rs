@@ -73,8 +73,8 @@ pub(super) fn test_dependencies() -> AppApplicationDependencies {
             )
             .unwrap(),
         ),
-        skills: Arc::new(crate::skills::NativeSkills::new(root.clone(), root)),
-        mcp_client: Arc::new(crate::mcp_client::NativeMcpClient::new(
+        skills: Arc::new(crate::skills::Skills::new(root.clone(), root)),
+        mcp_client: Arc::new(crate::mcp_client::McpClient::new(
             std::env::temp_dir().join(format!("butler-artifact-mcp-{}", uuid::Uuid::new_v4())),
             Default::default(),
         )),
@@ -226,15 +226,15 @@ impl AppIdentityClock for TestClock {
 struct TestNative;
 
 impl AppNativeIngress for TestNative {
-    fn enqueue(&self, _: NativeAppTurn) -> ApplicationFuture<NativeEnqueueReceipt> {
+    fn enqueue(&self, _: AppTurn) -> ApplicationFuture<EnqueueReceipt> {
         Box::pin(async {
-            Ok(NativeEnqueueReceipt {
+            Ok(EnqueueReceipt {
                 queue_id: "test-queue".into(),
             })
         })
     }
 
-    fn find(&self, _: NativeAppTurn) -> ApplicationFuture<Option<NativeEnqueueReceipt>> {
+    fn find(&self, _: AppTurn) -> ApplicationFuture<Option<EnqueueReceipt>> {
         Box::pin(async { Ok(None) })
     }
 }

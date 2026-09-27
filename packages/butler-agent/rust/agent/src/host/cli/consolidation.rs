@@ -5,10 +5,10 @@ use std::{ffi::OsString, path::PathBuf, sync::Arc};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::host::memory_jobs::briefing::NativeBriefingGeneration;
-use crate::host::memory_jobs::consolidation_phase::NativeCyclePhases;
+use crate::host::memory_jobs::briefing::BriefingGeneration;
+use crate::host::memory_jobs::consolidation_phase::CyclePhases;
 use crate::host::memory_jobs::profile_consolidation::ProfileConsolidation;
-use crate::host::{NativeProcessEnvironment, ResolvedInstallation, SystemIdentity};
+use crate::host::{ProcessEnvironment, ResolvedInstallation, SystemIdentity};
 use crate::{
     cognition::{
         BoxStoreService, CognitionPathEnvironment, CycleService, CycleStatus,
@@ -19,7 +19,7 @@ use crate::{
     operations::{CycleMetrics, MetricFiles},
 };
 
-pub(crate) struct NativeConsolidationCliResult {
+pub(crate) struct ConsolidationCliResult {
     pub stdout: String,
     pub stderr: String,
     pub exit_code: u8,
@@ -37,7 +37,7 @@ struct Options {
 pub(crate) async fn run_native_consolidation_cli(
     installation: ResolvedInstallation,
     arguments: Vec<OsString>,
-) -> NativeConsolidationCliResult {
+) -> ConsolidationCliResult {
     let parsed = match parse(&installation, arguments) {
         Ok(parsed) => parsed,
         Err(message) => {
@@ -153,13 +153,10 @@ pub(crate) async fn run_native_consolidation_cli(
             );
         }
     };
-    let environment = NativeProcessEnvironment::capture(
-        &parsed.data,
-        &user_home,
-        &os.release().to_string_lossy(),
-    );
+    let environment =
+        ProcessEnvironment::capture(&parsed.data, &user_home, &os.release().to_string_lossy());
     let cognition_paths = environment.cognition_paths.clone();
-    let briefing = match NativeBriefingGeneration::open(
+    let briefing = match BriefingGeneration::open(
         parsed.data.clone(),
         installation.resources().to_path_buf(),
         environment,
@@ -175,7 +172,7 @@ pub(crate) async fn run_native_consolidation_cli(
             );
         }
     };
-    let phases = Arc::new(NativeCyclePhases {
+    let phases = Arc::new(CyclePhases {
         metrics: metrics.clone(),
         briefing: briefing.clone(),
         profile: Arc::new(ProfileConsolidation {
@@ -376,13 +373,8 @@ fn expand_home(value: &str) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(value))
 }
 
-fn success(
-    options: &Options,
-    command: &str,
-    data: &Value,
-    human: &str,
-) -> NativeConsolidationCliResult {
-    NativeConsolidationCliResult {
+fn success(options: &Options, command: &str, data: &Value, human: &str) -> ConsolidationCliResult {
+    ConsolidationCliResult {
         stdout: if options.json {
             envelope(true, command, data, None)
         } else if options.quiet {
@@ -400,8 +392,8 @@ fn incomplete(
     command: &str,
     data: &Value,
     human: &str,
-) -> NativeConsolidationCliResult {
-    NativeConsolidationCliResult {
+) -> ConsolidationCliResult {
+    ConsolidationCliResult {
         stdout: if options.json {
             envelope(
                 false,
@@ -431,8 +423,8 @@ fn failure(
     code: &str,
     message: &str,
     exit_code: u8,
-) -> NativeConsolidationCliResult {
-    NativeConsolidationCliResult {
+) -> ConsolidationCliResult {
+    ConsolidationCliResult {
         stdout: if json {
             envelope(
                 false,

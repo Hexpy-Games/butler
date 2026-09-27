@@ -12,52 +12,47 @@ use crate::{
     btcc::BtccError,
     gateway::{
         AppApplication, AppApplicationConfig, AppApplicationDependencies, AppIdentityClock,
-        GatewayApplicationError, GatewayServer, NativeAppMessageFiles, NativeInboundQueue,
-        serve_gateway,
+        AppMessageFiles, GatewayApplicationError, GatewayServer, InboundQueue, serve_gateway,
     },
     operations::ServiceReadiness,
 };
 
-use crate::host::app::dashboard::NativeAppDashboardLedger;
-use crate::host::app::dashboard_briefing::NativeAppDashboardBriefing;
-use crate::host::app::plan_decision::NativeAppPlanDecisionLedger;
-use crate::host::app::runtime_ports::NativeAppRuntimeInfo;
-use crate::host::service::configuration::NativeAppServiceConfiguration;
+use crate::host::app::dashboard::AppDashboardLedger;
+use crate::host::app::dashboard_briefing::AppDashboardBriefing;
+use crate::host::app::plan_decision::AppPlanDecisionLedger;
+use crate::host::app::runtime_ports::AppRuntimeInfo;
+use crate::host::service::configuration::AppServiceConfiguration;
 use crate::host::{
-    NativeAgentRuntime, NativeAppAdmission, NativeAppApprovalClaims, NativeAppAssets,
-    NativeAppBranchConversations, NativeAppBranchSummarizer, NativeAppContextRead,
-    NativeAppIngress, NativeAppModelCatalog, NativeAppMonitoring, NativeAppQueueOwnerLiveness,
-    NativeAppReadiness, NativeAppSessionProgress, NativeAppSessionWorkspaces,
-    NativeAppSettingsFacts, NativeAppSettingsMutation, NativeAuthorityHandoff,
-    ResolvedInstallation, SystemIdentity,
+    AgentRuntime, AppAdmission, AppApprovalClaimsAdapter, AppAssets, AppBranchConversations,
+    AppBranchSummarizerAdapter, AppContextRead, AppIngress, AppModelCatalog, AppMonitoring,
+    AppQueueOwnerLivenessAdapter, AppReadiness, AppSessionProgress, AppSessionWorkspaces,
+    AppSettingsFactsAdapter, AppSettingsMutation, AuthorityHandoff, ResolvedInstallation,
+    SystemIdentity,
 };
 
-pub(crate) struct NativeAppServer {
+pub(crate) struct AppServer {
     listener: Option<GatewayServer>,
     /// Bound address, kept after the listener stops.
     address: SocketAddr,
     listener_ready: Arc<AtomicBool>,
     application: Arc<AppApplication>,
-    artifacts: Arc<NativeAppMessageFiles>,
+    artifacts: Arc<AppMessageFiles>,
 }
 
-impl NativeAppServer {
+impl AppServer {
     pub(crate) fn local_addr(&self) -> SocketAddr {
         self.address
     }
 
     pub(crate) async fn open(
-        runtime: &NativeAgentRuntime,
+        runtime: &AgentRuntime,
         data_root: &std::path::Path,
         installation: &ResolvedInstallation,
-        app_config: &NativeAppServiceConfiguration,
-        queue: Arc<NativeInboundQueue>,
+        app_config: &AppServiceConfiguration,
+        queue: Arc<InboundQueue>,
         receipt: Arc<ServiceReadiness>,
     ) -> Result<Self, BtccError> {
-        let artifacts = Arc::new(NativeAppMessageFiles::new(
-            data_root,
-            Arc::new(SystemIdentity),
-        ));
+        let artifacts = Arc::new(AppMessageFiles::new(data_root, Arc::new(SystemIdentity)));
         let result = Self::open_with_artifacts(
             runtime,
             data_root,
@@ -75,18 +70,18 @@ impl NativeAppServer {
     }
 
     async fn open_with_artifacts(
-        runtime: &NativeAgentRuntime,
+        runtime: &AgentRuntime,
         data_root: &std::path::Path,
         installation: &ResolvedInstallation,
-        app_config: &NativeAppServiceConfiguration,
-        queue: Arc<NativeInboundQueue>,
+        app_config: &AppServiceConfiguration,
+        queue: Arc<InboundQueue>,
         receipt: Arc<ServiceReadiness>,
-        artifacts: Arc<NativeAppMessageFiles>,
+        artifacts: Arc<AppMessageFiles>,
     ) -> Result<Self, BtccError> {
         let listener_ready = Arc::new(AtomicBool::new(false));
         let identity_clock: Arc<dyn AppIdentityClock> = Arc::new(SystemIdentity);
         let settings = Arc::new(
-            NativeAppSettingsFacts::open(
+            AppSettingsFactsAdapter::open(
                 runtime.models.configuration.clone(),
                 runtime.profile.clone(),
                 data_root.to_path_buf(),
@@ -96,7 +91,7 @@ impl NativeAppServer {
             .await
             .map_err(app_error)?,
         );
-        let session_workspaces = Arc::new(NativeAppSessionWorkspaces::new(
+        let session_workspaces = Arc::new(AppSessionWorkspaces::new(
             runtime.bindings.clone(),
             runtime.session_worktrees.clone(),
             runtime.workspace_recovery.clone(),
@@ -113,16 +108,16 @@ impl NativeAppServer {
             ),
             skills: runtime.skills.clone(),
             mcp_client: runtime.mcp_client.clone(),
-            native_ingress: Arc::new(NativeAppIngress::new(queue.clone())),
-            native_assets: Arc::new(NativeAppAssets::new(
+            native_ingress: Arc::new(AppIngress::new(queue.clone())),
+            native_assets: Arc::new(AppAssets::new(
                 runtime.conversations.clone(),
                 runtime.image_files.clone(),
                 runtime.models.configuration.clone(),
                 runtime.mcp_client.clone(),
                 data_root,
             )),
-            executor_readiness: Arc::new(NativeAppReadiness::new(receipt, listener_ready.clone())),
-            admission: Arc::new(NativeAppAdmission::new(
+            executor_readiness: Arc::new(AppReadiness::new(receipt, listener_ready.clone())),
+            admission: Arc::new(AppAdmission::new(
                 runtime.project_ledger.clone(),
                 runtime.image_files.clone(),
                 runtime.models.configuration.clone(),
@@ -132,69 +127,69 @@ impl NativeAppServer {
             artifact_materializer: artifacts.clone(),
             message_files: artifacts.clone(),
             settings_facts: settings.clone(),
-            settings_mutations: Arc::new(NativeAppSettingsMutation::new(
+            settings_mutations: Arc::new(AppSettingsMutation::new(
                 runtime.models.configuration.clone(),
                 runtime.profile.clone(),
                 installation.clone(),
                 data_root.to_path_buf(),
             )),
-            runtime_info: Arc::new(NativeAppRuntimeInfo::open(installation)),
-            model_catalog: Arc::new(NativeAppModelCatalog::new(
+            runtime_info: Arc::new(AppRuntimeInfo::open(installation)),
+            model_catalog: Arc::new(AppModelCatalog::new(
                 runtime.models.configuration.clone(),
                 settings,
                 installation.clone(),
                 data_root.to_path_buf(),
             )),
-            personalization: Arc::new(crate::host::NativeAppPersonalization::new(
+            personalization: Arc::new(crate::host::AppPersonalization::new(
                 runtime.profile.clone(),
                 runtime.models.configuration.clone(),
                 installation.clone(),
                 data_root.to_path_buf(),
                 identity_clock.clone(),
             )),
-            monitoring: Arc::new(NativeAppMonitoring::new(
+            monitoring: Arc::new(AppMonitoring::new(
                 data_root.to_path_buf(),
                 runtime.session_work.clone(),
             )),
-            context_read: Arc::new(NativeAppContextRead::new(
+            context_read: Arc::new(AppContextRead::new(
                 data_root.to_path_buf(),
                 runtime.context_budget.clone(),
                 runtime.context_compactions.clone(),
             )),
             identity_clock,
-            approval_claims: Arc::new(NativeAppApprovalClaims::new(runtime.authority.clone())),
-            queue_owner_liveness: Arc::new(NativeAppQueueOwnerLiveness),
-            authority_handoff: Arc::new(NativeAuthorityHandoff::new(
+            approval_claims: Arc::new(AppApprovalClaimsAdapter::new(runtime.authority.clone())),
+            queue_owner_liveness: Arc::new(AppQueueOwnerLivenessAdapter),
+            authority_handoff: Arc::new(AuthorityHandoff::new(
                 runtime.authority.clone(),
                 queue,
                 Arc::new(|| crate::models::ModelConfigurationClock::now_iso(&SystemIdentity)),
             )),
             session_workspaces: session_workspaces.clone(),
             relocation_host: session_workspaces,
-            session_work_progress: Arc::new(NativeAppSessionProgress::new(
+            session_work_progress: Arc::new(AppSessionProgress::new(
                 runtime.session_work.clone(),
                 runtime.project_ledger.clone(),
             )),
-            project_dashboard_ledger: Arc::new(NativeAppDashboardLedger::new(
+            project_dashboard_ledger: Arc::new(AppDashboardLedger::new(
                 runtime.project_ledger.clone(),
             )),
-            project_dashboard_briefing: Arc::new(NativeAppDashboardBriefing::new(
+            project_dashboard_briefing: Arc::new(AppDashboardBriefing::new(
                 &runtime.models,
                 data_root,
             )),
-            plan_decision_ledger: Arc::new(NativeAppPlanDecisionLedger::new(
+            plan_decision_ledger: Arc::new(AppPlanDecisionLedger::new(
                 runtime.project_ledger.clone(),
             )),
             work_streams: runtime.work_streams.clone(),
-            subsessions: Arc::new(crate::host::NativeAppSubsessions::new(
+            subsessions: Arc::new(crate::host::AppSubsessions::new(
                 runtime.subsessions.clone(),
                 runtime.conversations.clone(),
                 runtime.progress.clone(),
             )),
-            branch_conversations: Arc::new(NativeAppBranchConversations::new(
+            branch_conversations: Arc::new(AppBranchConversations::new(
                 runtime.conversations.clone(),
             )),
-            branch_summarizer: Arc::new(NativeAppBranchSummarizer::new(&runtime.models)),
+            branch_summarizer: Arc::new(AppBranchSummarizerAdapter::new(&runtime.models)),
         };
         let application = Arc::new(
             AppApplication::open(
@@ -271,7 +266,7 @@ impl NativeAppServer {
     }
 }
 
-impl Drop for NativeAppServer {
+impl Drop for AppServer {
     fn drop(&mut self) {
         self.listener_ready.store(false, Ordering::Release);
     }

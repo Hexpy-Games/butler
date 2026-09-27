@@ -8,20 +8,20 @@ use crate::btcc::{
     ModelRoundToolCall, PortFuture, SuspensionReason, TextCallDisposition, ToolOutcome, ToolResult,
 };
 
-use crate::host::guided::activity::NativeGuidedActivity;
+use crate::host::guided::activity::GuidedActivity;
 mod closeout;
 
-pub(crate) struct NativeGuidedJournal {
+pub(crate) struct GuidedJournal {
     turn_id: String,
     journal: Arc<ToolJournalRepository>,
-    activity: Arc<NativeGuidedActivity>,
+    activity: Arc<GuidedActivity>,
 }
 
-impl NativeGuidedJournal {
+impl GuidedJournal {
     pub(crate) fn new(
         turn_id: String,
         journal: Arc<ToolJournalRepository>,
-        activity: Arc<NativeGuidedActivity>,
+        activity: Arc<GuidedActivity>,
     ) -> Self {
         Self {
             turn_id,
@@ -42,7 +42,7 @@ impl NativeGuidedJournal {
     }
 }
 
-impl JournalPort for NativeGuidedJournal {
+impl JournalPort for GuidedJournal {
     fn handle_text_tool_calls<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,

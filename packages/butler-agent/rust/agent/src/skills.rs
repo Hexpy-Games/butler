@@ -20,7 +20,7 @@ pub(crate) fn validate(catalog: &[SkillDefinition]) -> Vec<SkillValidationIssue>
 const MAX_BLOCKING_SKILL_JOBS: usize = 2;
 
 #[derive(Clone)]
-pub(crate) struct NativeSkills {
+pub(crate) struct Skills {
     inner: Arc<Inner>,
 }
 
@@ -32,7 +32,7 @@ struct Inner {
     closed: CancellationToken,
 }
 
-impl NativeSkills {
+impl Skills {
     pub(crate) fn new(resource_root: PathBuf, data_root: PathBuf) -> Self {
         Self::with_native_executable(resource_root, data_root, None)
     }

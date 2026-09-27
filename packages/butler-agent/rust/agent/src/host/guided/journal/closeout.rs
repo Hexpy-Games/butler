@@ -26,7 +26,7 @@ pub(super) async fn collect(
         }
         let count = page.len();
         for row in &page {
-            if !crate::host::NativeGuidedTools::supports(&row.tool_name) {
+            if !crate::host::GuidedTools::supports(&row.tool_name) {
                 return Err(BtccError::relayed(
                     "guided_journal_closeout_unbound",
                     "A durable tool result requires its native closeout projection",

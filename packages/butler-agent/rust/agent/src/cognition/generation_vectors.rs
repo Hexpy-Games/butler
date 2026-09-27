@@ -8,7 +8,7 @@ mod representative;
 mod rows;
 mod search;
 
-pub(crate) use adapter::NativeGenerationVectorAdapter;
+pub(crate) use adapter::GenerationVectorAdapter;
 pub(crate) use readiness::invalid_persisted_rebuild_vectors;
 pub(crate) use representative::{PreparedRepresentative, prepare_representatives};
-pub(crate) use rows::{GenerationVectorRow, NativeGenerationVectorStore, persisted_receipt};
+pub(crate) use rows::{GenerationVectorRow, GenerationVectorStore, persisted_receipt};

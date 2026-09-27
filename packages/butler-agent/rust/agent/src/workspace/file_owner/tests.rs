@@ -1,12 +1,12 @@
 use std::sync::{Arc, Barrier};
 
-use super::NativeWorkspaceFiles;
+use super::WorkspaceFiles;
 
 /// An admitted blocking operation stays owned after its caller is dropped,
 /// and close waits for it before rejecting new work.
 #[tokio::test]
 async fn dropped_caller_is_owned_until_operation_completes_and_close_drains() {
-    let files = NativeWorkspaceFiles::new(1);
+    let files = WorkspaceFiles::new(1);
     let entered = Arc::new(Barrier::new(2));
     let release = Arc::new(Barrier::new(2));
     let task = tokio::spawn({

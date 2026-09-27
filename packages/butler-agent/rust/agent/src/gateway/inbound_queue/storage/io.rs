@@ -6,8 +6,8 @@ use std::{
     path::Path,
 };
 
-use super::super::{NativeQueueError, QueueResult, QueuedInboundEvent};
-use crate::gateway::NativeQueueCode;
+use super::super::{InboundQueueError, QueueResult, QueuedInboundEvent};
+use crate::gateway::InboundQueueCode;
 
 pub(super) fn read(path: &Path) -> QueueResult<Option<QueuedInboundEvent>> {
     let bytes = match fs::read(path) {
@@ -26,8 +26,8 @@ pub(super) fn read(path: &Path) -> QueueResult<Option<QueuedInboundEvent>> {
 
 pub(super) fn atomic_write(path: &Path, record: &QueuedInboundEvent) -> QueueResult<()> {
     let parent = path.parent().ok_or_else(|| {
-        NativeQueueError::new(
-            NativeQueueCode::InboundQueuePathInvalid,
+        InboundQueueError::new(
+            InboundQueueCode::InboundQueuePathInvalid,
             "Invalid queue path",
         )
     })?;
@@ -47,8 +47,11 @@ pub(super) fn atomic_write(path: &Path, record: &QueuedInboundEvent) -> QueueRes
         }
         let mut writer = BufWriter::new(file);
         serde_json::to_writer_pretty(&mut writer, record).map_err(|error| {
-            NativeQueueError::new(NativeQueueCode::InboundQueueEncodeFailed, error.to_string())
-                .with_source(error)
+            InboundQueueError::new(
+                InboundQueueCode::InboundQueueEncodeFailed,
+                error.to_string(),
+            )
+            .with_source(error)
         })?;
         writer.write_all(b"\n").map_err(io_error)?;
         writer.flush().map_err(io_error)?;
@@ -94,7 +97,7 @@ pub(super) fn ensure_dir(path: &Path) -> QueueResult<()> {
     }
 }
 
-pub(super) fn io_error(error: std::io::Error) -> NativeQueueError {
-    NativeQueueError::new(NativeQueueCode::InboundQueueIoFailed, error.to_string())
+pub(super) fn io_error(error: std::io::Error) -> InboundQueueError {
+    InboundQueueError::new(InboundQueueCode::InboundQueueIoFailed, error.to_string())
         .with_source(error)
 }

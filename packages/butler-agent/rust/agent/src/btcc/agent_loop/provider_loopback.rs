@@ -19,10 +19,10 @@ use crate::btcc::{
     AgentLoop, ModelRoundError, ModelRouteEventWrite, ModelRouteRetryConfig, ModelRouteWrite,
     PortFuture, TurnModelExecutionFactory, TurnSteeringPort, TurnStore,
 };
-use crate::context::NativeContextPort;
+use crate::context::ContextPortAdapter;
 use crate::locale::LocaleCollation;
 use crate::models::{
-    ModelCatalog, ModelCatalogSnapshot, ModelCatalogSnapshotInput, NativeModelProvider,
+    ModelCatalog, ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelProvider,
     PromptUsageMetricInput, PromptUsageMetricSink, ProviderAuth, ProviderClock,
     ProviderConfigFuture, ProviderConfigRequest, ProviderObservation, ProviderObservationSink,
     ProviderPromptCachePolicy, ProviderRequestConfig, ProviderRequestConfigPort,
@@ -157,7 +157,7 @@ async fn server() -> (Url, tokio::task::JoinHandle<Vec<Value>>) {
 }
 
 #[tokio::test]
-async fn native_provider_context_and_replay_share_one_turn_owner() {
+async fn provider_context_and_replay_share_one_turn_owner() {
     let fixture = TestStorageFixture::activated();
     let storage = BtccStorage::open(fixture.config("native-loopback"))
         .await
@@ -241,7 +241,7 @@ async fn native_provider_context_and_replay_share_one_turn_owner() {
             )
             .unwrap(),
     );
-    let model = Arc::new(NativeModelProvider::new(
+    let model = Arc::new(ModelProvider::new(
         crate::models::provider_http_client().unwrap(),
         Arc::new(Config { snapshot, endpoint }),
         Arc::new(Observations),
@@ -255,7 +255,7 @@ async fn native_provider_context_and_replay_share_one_turn_owner() {
         .lock()
         .unwrap()
         .insert("one".into(), json!({"body":"x".repeat(20_000)}));
-    let context = Arc::new(NativeContextPort::new(
+    let context = Arc::new(ContextPortAdapter::new(
         Arc::new(Steering(policy_fixture.clone())),
         Some(ContextCompactionRepository::new(storage.clone())),
     ));

@@ -16,7 +16,7 @@ use crate::host::service::instance::{
     process_matches, read_record, refuse_live_legacy_process, send_signal,
     validate_write_destinations,
 };
-use crate::host::{NativeServiceConfiguration, ResolvedInstallation};
+use crate::host::{ResolvedInstallation, ServiceConfiguration};
 
 mod readiness;
 mod restart_handoff;
@@ -90,7 +90,7 @@ pub(super) fn summary(action: Action, value: &Value) -> String {
 
 async fn start_service(
     installation: &ResolvedInstallation,
-    config: &NativeServiceConfiguration,
+    config: &ServiceConfiguration,
     dry_run: bool,
 ) -> Result<Value, crate::host::HostError> {
     let data_root = &config.data_root;
@@ -111,7 +111,7 @@ async fn start_service(
 
 async fn start_service_admitted(
     installation: &ResolvedInstallation,
-    config: &NativeServiceConfiguration,
+    config: &ServiceConfiguration,
     admission: AdmissionLock,
 ) -> Result<Value, crate::host::HostError> {
     let data_root = &config.data_root;
@@ -383,10 +383,10 @@ fn resolve_data_root(
 fn service_configuration(
     installation: &ResolvedInstallation,
     data_root: &Path,
-) -> Result<NativeServiceConfiguration, crate::host::HostError> {
+) -> Result<ServiceConfiguration, crate::host::HostError> {
     let home = user_home()?;
     let data = data_root.to_string_lossy();
-    NativeServiceConfiguration::capture(Some(&data), &home, installation).map_err(|error| {
+    ServiceConfiguration::capture(Some(&data), &home, installation).map_err(|error| {
         crate::host::HostError::new(format!("{}: {}", error.code(), error.message()))
             .with_source(error)
     })

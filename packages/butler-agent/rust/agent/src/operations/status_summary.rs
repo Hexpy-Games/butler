@@ -11,7 +11,7 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 
-use crate::models::NativeStatusModels;
+use crate::models::StatusModels;
 use crate::models::{ModelCatalog, ModelConfiguration};
 use std::sync::Arc;
 
@@ -45,7 +45,7 @@ pub(crate) fn read_usage_monitor(
     )
 }
 
-pub(crate) struct NativeMetricsStatus {
+pub(crate) struct MetricsStatus {
     pub(crate) value: Value,
     context_estimate: String,
 }
@@ -62,7 +62,7 @@ pub(crate) fn tail_operational_metric_events(
     tail::tail_events(data_root, since_ts, lines)
 }
 
-impl NativeMetricsStatus {
+impl MetricsStatus {
     pub(crate) fn model_telemetry(&self) -> Value {
         self.value
             .pointer("/usage/model")
@@ -74,9 +74,9 @@ impl NativeMetricsStatus {
 pub(crate) async fn read_metrics_status(
     data_root: &Path,
     since_ts: Option<f64>,
-    models: &NativeStatusModels,
+    models: &StatusModels,
     resources: &Path,
-) -> NativeMetricsStatus {
+) -> MetricsStatus {
     let enabled = operational::metrics_enabled(data_root);
     let operational = operational::read_summary(data_root, since_ts, enabled);
     let first_visible = operational::read_first_visible(data_root, since_ts);
@@ -85,7 +85,7 @@ pub(crate) async fn read_metrics_status(
     let context = context::read_context_monitor(data_root, models).await;
     let context_estimate = context::render_context_estimate(resources, data_root, models).await;
     let health = health::read_health(data_root, &transcript_activity);
-    NativeMetricsStatus {
+    MetricsStatus {
         value: json!({
             "enabled": enabled,
             "operational": operational,
@@ -98,7 +98,7 @@ pub(crate) async fn read_metrics_status(
     }
 }
 
-pub(crate) fn render_metrics_status(status: &NativeMetricsStatus) -> String {
+pub(crate) fn render_metrics_status(status: &MetricsStatus) -> String {
     let value = &status.value;
     let operational = &value["operational"];
     let usage = &value["usage"];
@@ -158,8 +158,8 @@ pub(crate) fn render_metrics_status(status: &NativeMetricsStatus) -> String {
 }
 
 pub(crate) fn render_status_context(
-    metrics: &NativeMetricsStatus,
-    models: &NativeStatusModels,
+    metrics: &MetricsStatus,
+    models: &StatusModels,
     services: &Value,
 ) -> String {
     let telemetry = metrics.model_telemetry();

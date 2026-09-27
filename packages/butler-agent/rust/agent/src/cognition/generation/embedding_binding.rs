@@ -15,7 +15,7 @@ use super::{
 use crate::cognition::CognitionCode;
 use crate::{
     cognition::{
-        CognitionError, CognitionPathEnvironment, embedding::NativeEmbeddingIdentity,
+        CognitionError, CognitionPathEnvironment, embedding::EmbeddingIdentity,
         ensure_data_authority,
     },
     coordination::CognitionWriteLease,
@@ -26,7 +26,7 @@ pub(crate) fn bind_native_embedding_identity(
     environment: &CognitionPathEnvironment,
     target: &MemoryGenerationTarget,
     handle: &MemoryGenerationHandle,
-    observed: &NativeEmbeddingIdentity,
+    observed: &EmbeddingIdentity,
     lease: &CognitionWriteLease,
 ) -> Result<GenerationEmbedding, CognitionError> {
     let lock_path = environment.consolidation_lock(data_root);

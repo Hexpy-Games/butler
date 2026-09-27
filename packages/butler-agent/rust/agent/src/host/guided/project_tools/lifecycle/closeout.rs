@@ -4,14 +4,14 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 
-use crate::project_ledger::{LedgerCommand, NativeProjectLedger, ProjectLedgerReadError};
+use crate::project_ledger::{LedgerCommand, ProjectLedger, ProjectLedgerReadError};
 
 use super::{command, nonempty};
 
 const VIEWS: [&str; 3] = ["dashboard", "handoff", "roadmap"];
 
 pub(crate) async fn closeout(
-    ledger: &NativeProjectLedger,
+    ledger: &ProjectLedger,
     root: &Path,
     mutation: Value,
 ) -> Result<Value, ProjectLedgerReadError> {
@@ -129,7 +129,7 @@ fn error_summary(result: &Value) -> Value {
             })
         })
         .collect();
-    let native_next = if source_next.iter().any(|item| {
+    let recovery_next_steps = if source_next.iter().any(|item| {
         item.as_str()
             .or_else(|| item.get("command").and_then(Value::as_str))
             .is_some_and(|command| {
@@ -157,7 +157,7 @@ fn error_summary(result: &Value) -> Value {
     } else {
         vec![]
     };
-    json!({"code":nullable_text(error.get("code")),"message":nullable_text(error.get("message")),"next":next,"native_next":native_next})
+    json!({"code":nullable_text(error.get("code")),"message":nullable_text(error.get("message")),"next":next,"native_next":recovery_next_steps})
 }
 
 fn apply_closeout(mut mutation: Value, closeout: Value) -> Value {

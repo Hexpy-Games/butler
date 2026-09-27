@@ -14,7 +14,7 @@ use crate::{
     public_text::trim_js_whitespace,
 };
 
-pub(crate) struct NativeAppServiceConfiguration {
+pub(crate) struct AppServiceConfiguration {
     pub(crate) host: String,
     pub(crate) port: u16,
     pub(crate) db_path: PathBuf,
@@ -26,15 +26,15 @@ pub(crate) struct NativeAppServiceConfiguration {
 
 /// Facts captured by the process that cannot safely change with an App-only
 /// listener restart because the App runtime owners are already constructed.
-pub(crate) struct NativeAppCapturedDependencies {
+pub(crate) struct AppCapturedDependencies {
     db_path: PathBuf,
     folder_selection_secret: Option<String>,
     local_auth_required: bool,
     local_auth_token: Option<String>,
 }
 
-impl NativeAppCapturedDependencies {
-    pub(crate) fn capture(configuration: &NativeAppServiceConfiguration) -> Self {
+impl AppCapturedDependencies {
+    pub(crate) fn capture(configuration: &AppServiceConfiguration) -> Self {
         let local_auth = &configuration.gateway.local_auth;
         Self {
             db_path: configuration.db_path.clone(),
@@ -44,7 +44,7 @@ impl NativeAppCapturedDependencies {
         }
     }
 
-    pub(crate) fn matches(&self, configuration: &NativeAppServiceConfiguration) -> bool {
+    pub(crate) fn matches(&self, configuration: &AppServiceConfiguration) -> bool {
         let local_auth = &configuration.gateway.local_auth;
         self.db_path == configuration.db_path
             && self.folder_selection_secret == configuration.folder_selection_secret
@@ -53,7 +53,7 @@ impl NativeAppCapturedDependencies {
     }
 }
 
-impl NativeAppServiceConfiguration {
+impl AppServiceConfiguration {
     pub(crate) fn capture(data_root: &Path) -> Self {
         let settings = fs::read(data_root.join("gateways/app.json"))
             .ok()

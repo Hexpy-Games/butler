@@ -3,7 +3,7 @@ use std::sync::Arc;
 use serde_json::json;
 
 use super::{
-    InterruptedSubsessionEvent, NativeSubsessionService, SubsessionChildQueue, SubsessionEnqueue,
+    InterruptedSubsessionEvent, SubsessionChildQueue, SubsessionEnqueue, SubsessionService,
     WorkerProfile, WorkerProfileReader, child_metadata, child_work_scope,
 };
 use crate::btcc::{
@@ -247,7 +247,7 @@ async fn cancelled_child_abandons_bound_work_and_commits_cancelled_result() {
         })
         .await
         .unwrap();
-    let service = NativeSubsessionService::new(
+    let service = SubsessionService::new(
         repository.clone(),
         bindings.clone(),
         Arc::new(EmptyQueue),

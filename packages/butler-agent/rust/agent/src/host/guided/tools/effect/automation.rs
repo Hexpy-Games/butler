@@ -10,10 +10,10 @@ use crate::{
         PlanBinding,
     },
     json::JsonDocument,
-    operations::NativeAutomationService,
+    operations::AutomationService,
 };
 
-use super::super::NativeGuidedTools;
+use super::super::GuidedTools;
 
 pub(super) fn supports(name: &str) -> bool {
     matches!(
@@ -23,7 +23,7 @@ pub(super) fn supports(name: &str) -> bool {
 }
 
 pub(super) fn prepare(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     call: &crate::btcc::ModelRoundToolCall,
     occurrence: &str,
 ) -> Result<(String, Value, Arc<dyn EffectAdapter>), BtccError> {
@@ -69,7 +69,7 @@ pub(super) fn prepare(
 }
 
 struct AutomationEffect {
-    service: Arc<NativeAutomationService>,
+    service: Arc<AutomationService>,
     session_id: String,
     name: String,
     target: String,

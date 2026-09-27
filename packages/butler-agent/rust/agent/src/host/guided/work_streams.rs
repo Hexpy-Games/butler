@@ -52,11 +52,11 @@ struct State {
     worker: Option<JoinHandle<()>>,
 }
 
-pub(crate) struct NativeWorkStreams {
+pub(crate) struct WorkStreams {
     state: Arc<Mutex<State>>,
 }
 
-impl NativeWorkStreams {
+impl WorkStreams {
     pub(crate) fn open(root: PathBuf) -> Result<Self, BtccError> {
         let (sender, mut receiver) = mpsc::channel(CAPACITY);
         let worker = std::thread::Builder::new()
@@ -207,7 +207,7 @@ impl NativeWorkStreams {
     }
 }
 
-impl AppWorkStreamReader for NativeWorkStreams {
+impl AppWorkStreamReader for WorkStreams {
     fn list_active(&self, query: AppWorkStreamQuery) -> ApplicationFuture<Value> {
         let state = self.state.clone();
         Box::pin(async move {

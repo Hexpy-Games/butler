@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use crate::skills::{NativeSkills, SkillValidationIssue};
+use crate::skills::{SkillValidationIssue, Skills};
 
 use super::{CapabilityError, CapabilityInvocation};
 
@@ -18,7 +18,7 @@ pub(super) fn definition() -> Value {
 }
 
 pub(super) async fn execute(
-    skills: &NativeSkills,
+    skills: &Skills,
     input: CapabilityInvocation<'_>,
 ) -> Result<Value, CapabilityError> {
     let project_id = input

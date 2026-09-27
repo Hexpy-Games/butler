@@ -12,9 +12,9 @@ use crate::{
     },
 };
 
-use super::{NativeModelProvider, ProviderObservation, serialize::Carrier};
+use super::{ModelProvider, ProviderObservation, serialize::Carrier};
 
-impl ProviderPromptPort for NativeModelProvider {
+impl ProviderPromptPort for ModelProvider {
     fn run_prompt<'a>(
         &'a self,
         request: ProviderPromptRequest<'a>,
@@ -25,7 +25,7 @@ impl ProviderPromptPort for NativeModelProvider {
 }
 
 async fn run(
-    provider: &NativeModelProvider,
+    provider: &ModelProvider,
     request: ProviderPromptRequest<'_>,
     lifecycle: ProviderPromptLifecycle<'_>,
 ) -> Result<ProviderPromptResult, ModelRoundError> {
@@ -46,7 +46,7 @@ async fn run(
         })
         .await
         .map_err(ModelRoundError::Provider)?;
-    let (carrier, mode, api) = super::native::carrier(&config);
+    let (carrier, mode, api) = crate::models::provider::client::carrier(&config);
     let serialize::PromptWire {
         body,
         cache_key,
@@ -104,7 +104,7 @@ async fn run(
     if matches!(mode, crate::models::transport::ResponseMode::HostedChatSse) {
         http = http.header("accept", "text/event-stream");
     }
-    let http = super::native::authorize(
+    let http = crate::models::provider::client::authorize(
         http.body(serialized.clone()),
         &config.auth,
         &config.metadata.provider_id,
@@ -144,7 +144,9 @@ async fn run(
     let response = match response {
         Ok(value) => value,
         Err(ModelRoundError::Provider(mut error)) => {
-            error.endpoint = Some(super::native::safe_endpoint(&config.endpoint));
+            error.endpoint = Some(crate::models::provider::client::safe_endpoint(
+                &config.endpoint,
+            ));
             error.model = Some(config.wire_model.clone());
             provider.observations.failure(&error);
             return Err(ModelRoundError::Provider(error));
@@ -194,7 +196,7 @@ struct UsageObservation<'a> {
 }
 
 fn observe_usage(
-    provider: &NativeModelProvider,
+    provider: &ModelProvider,
     request: &ProviderPromptRequest<'_>,
     config: &super::ProviderRequestConfig,
     observation: UsageObservation<'_>,

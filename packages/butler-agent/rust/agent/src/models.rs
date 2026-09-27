@@ -39,7 +39,7 @@ pub(crate) use prompt::{PromptBudgetStateSource, PromptCacheBoundary};
 pub(crate) use visual_admission::ImageAdmissionError;
 
 pub(crate) use provider::{
-    NativeModelProvider, PromptCacheRetention, ProviderAuth, ProviderAuthMode, ProviderClock,
+    ModelProvider, PromptCacheRetention, ProviderAuth, ProviderAuthMode, ProviderClock,
     ProviderConfigFuture, ProviderConfigRequest, ProviderObservation, ProviderObservationSink,
     ProviderPromptCachePolicy, ProviderRequestConfig, ProviderRequestConfigPort,
     ProviderRoundPolicy, ProviderVisualCapabilityFuture, ProviderVisualCapabilityPort,
@@ -71,7 +71,7 @@ pub(crate) use configuration::{
     pkce_challenge,
 };
 #[cfg(unix)]
-pub(crate) use status::{NativeStatusModels, auth_status_with_environment, open_status_models};
+pub(crate) use status::{StatusModels, auth_status_with_environment, open_status_models};
 
 pub(crate) const DEFAULT_MODEL_REF: &str = "openai/gpt-5.5";
 

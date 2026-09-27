@@ -5,25 +5,25 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 
 use crate::{
-    btcc::{AuthorityDecisionInput, AuthorityError, NativePrincipalAuthority},
+    btcc::{AuthorityDecisionInput, AuthorityError, PrincipalAuthority},
     gateway::{
         AppAuthorityDecision, AppAuthorityDecisionInput, AppAuthorityHandoff, AppAuthorityPage,
-        ApplicationFuture, GatewayApplicationError, NativeInboundQueue,
+        ApplicationFuture, GatewayApplicationError, InboundQueue,
     },
     json::JsonDocument,
 };
 
 #[derive(Clone)]
-pub(crate) struct NativeAuthorityHandoff {
-    authority: Arc<NativePrincipalAuthority>,
-    queue: Arc<NativeInboundQueue>,
+pub(crate) struct AuthorityHandoff {
+    authority: Arc<PrincipalAuthority>,
+    queue: Arc<InboundQueue>,
     now_iso: Arc<dyn Fn() -> String + Send + Sync>,
 }
 
-impl NativeAuthorityHandoff {
+impl AuthorityHandoff {
     pub(crate) fn new(
-        authority: Arc<NativePrincipalAuthority>,
-        queue: Arc<NativeInboundQueue>,
+        authority: Arc<PrincipalAuthority>,
+        queue: Arc<InboundQueue>,
         now_iso: Arc<dyn Fn() -> String + Send + Sync>,
     ) -> Self {
         Self {
@@ -96,7 +96,7 @@ impl NativeAuthorityHandoff {
     }
 }
 
-impl AppAuthorityHandoff for NativeAuthorityHandoff {
+impl AppAuthorityHandoff for AuthorityHandoff {
     fn close_self_session(
         &self,
         runtime_session_id: String,

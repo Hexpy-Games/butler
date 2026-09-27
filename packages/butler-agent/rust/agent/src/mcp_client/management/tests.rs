@@ -2,7 +2,7 @@ use std::{collections::HashMap, fs};
 
 use serde_json::{Value, json};
 
-use super::NativeMcpClient;
+use super::McpClient;
 
 struct Scratch(std::path::PathBuf);
 
@@ -23,7 +23,7 @@ impl Drop for Scratch {
 #[tokio::test]
 async fn registry_crud_redacts_literals_and_patch_retains_secret_placeholders() {
     let scratch = Scratch::new();
-    let client = NativeMcpClient::new(scratch.0.clone(), HashMap::new());
+    let client = McpClient::new(scratch.0.clone(), HashMap::new());
     fs::create_dir_all(scratch.0.join("config")).unwrap();
     fs::write(
         scratch.0.join("config/mcp-servers.json"),

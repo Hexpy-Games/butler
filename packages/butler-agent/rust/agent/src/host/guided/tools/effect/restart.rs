@@ -10,13 +10,13 @@ use crate::{
     json::JsonDocument,
 };
 
-use super::NativeGuidedTools;
+use super::GuidedTools;
 
 const CAPABILITY: &str = "request_service_restart";
 const TARGET: &str = "butler-agent-native";
 
 pub(super) fn prepare(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     args: &serde_json::Map<String, Value>,
 ) -> Result<(String, Value, Arc<dyn EffectAdapter>), crate::btcc::BtccError> {
     if owner.binding.app_session_id.is_none() {

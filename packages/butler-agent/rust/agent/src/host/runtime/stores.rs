@@ -52,7 +52,7 @@ impl RuntimeStores {
                 process_started_at_ms: u64::try_from(SystemIdentity.now_epoch_millis().max(0))
                     .unwrap_or_default(),
             },
-            process_liveness: Arc::new(NativeProcessLiveness { host_id }),
+            process_liveness: Arc::new(ProcessLivenessProbe { host_id }),
         })
         .await
         .map_err(|e| error(e.code(), e.message()))?;
@@ -111,11 +111,11 @@ impl RuntimeStores {
     }
 }
 
-struct NativeProcessLiveness {
+struct ProcessLivenessProbe {
     host_id: String,
 }
 
-impl ProcessLiveness for NativeProcessLiveness {
+impl ProcessLiveness for ProcessLivenessProbe {
     fn is_alive(&self, owner: &RuntimeOwnerIdentity) -> bool {
         // A remote or permission-denied process is not proven dead. Reclamation
         // is allowed only after an actual local ESRCH probe.

@@ -16,7 +16,7 @@ use crate::{
     public_text::trim_js_whitespace,
 };
 
-use super::NativeGuidedTools;
+use super::GuidedTools;
 
 const SERVER_ID: &str = "zai-vision";
 const TOOL_NAME: &str = "analyze_image";
@@ -28,7 +28,7 @@ pub(super) fn supports(name: &str) -> bool {
 }
 
 pub(super) async fn execute(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
 ) -> Result<JsonDocument, ToolExecutionError> {

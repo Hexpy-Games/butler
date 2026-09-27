@@ -24,10 +24,10 @@ use crate::btcc::{
 use crate::host::guided::command::CommandScope;
 use crate::json::{JsonDocument, visit_raw_object};
 
-use super::NativeGuidedTools;
+use super::GuidedTools;
 
 pub(super) async fn execute(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
     occurrence: &str,

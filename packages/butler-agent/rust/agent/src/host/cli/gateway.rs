@@ -5,7 +5,7 @@ use std::{ffi::OsString, path::PathBuf, process::ExitCode};
 use serde_json::{Map, Value, json};
 
 use crate::host::ResolvedInstallation;
-use crate::host::service::configuration::NativeAppServiceConfiguration;
+use crate::host::service::configuration::AppServiceConfiguration;
 
 mod arguments;
 mod control;
@@ -96,7 +96,7 @@ async fn execute(
         return logs::read(data_root, installation, options.lines, options.follow);
     }
     let mut settings = settings::Settings::read(data_root, installation)?;
-    let app = NativeAppServiceConfiguration::capture(data_root);
+    let app = AppServiceConfiguration::capture(data_root);
     match action {
         Action::Enable | Action::Disable => {
             settings
@@ -126,7 +126,7 @@ async fn execute(
             settings
                 .patch(data_root, installation, Some(true), patch)
                 .await?;
-            let refreshed = NativeAppServiceConfiguration::capture(data_root);
+            let refreshed = AppServiceConfiguration::capture(data_root);
             status_value(action, &settings, &refreshed, installation, data_root).await
         }
         Action::List | Action::Status | Action::Inspect | Action::Test => {
@@ -226,7 +226,7 @@ async fn execute(
 async fn status_value(
     action: Action,
     settings: &settings::Settings,
-    app: &NativeAppServiceConfiguration,
+    app: &AppServiceConfiguration,
     installation: &ResolvedInstallation,
     data_root: &std::path::Path,
 ) -> Result<Value, crate::host::HostError> {

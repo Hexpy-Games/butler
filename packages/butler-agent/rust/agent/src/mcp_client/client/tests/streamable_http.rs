@@ -7,7 +7,7 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use super::{NativeMcpClient, Scratch};
+use super::{McpClient, Scratch};
 
 #[tokio::test]
 async fn streamable_http_client_posts_initialize_and_call_with_auth_then_closes() {
@@ -78,7 +78,7 @@ async fn streamable_http_client_posts_initialize_and_call_with_auth_then_closes(
         "url":endpoint,
         "headers":[{"key":"x-mcp-fixture-key","source":"literal","value":"fixture-secret"}],
     }));
-    let client = NativeMcpClient::new(scratch.0.clone(), HashMap::new());
+    let client = McpClient::new(scratch.0.clone(), HashMap::new());
     let result = Box::pin(tokio::time::timeout(
         Duration::from_secs(8),
         client.call_tool(

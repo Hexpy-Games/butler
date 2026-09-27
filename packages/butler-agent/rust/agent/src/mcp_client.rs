@@ -15,5 +15,5 @@ pub(crate) use catalog::{
     describe as describe_mcp_tool, parse_id as parse_mcp_catalog_id,
     search as search_mcp_tool_catalog,
 };
-pub(crate) use client::{NativeMcpClient, RegistryPathGuard};
+pub(crate) use client::{McpClient, RegistryPathGuard};
 pub(crate) use registry::McpRegistryError;

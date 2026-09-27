@@ -19,9 +19,9 @@ mod policy_tests;
 fn clock() -> Arc<dyn Fn() -> String + Send + Sync> {
     Arc::new(|| "2026-09-19T00:00:00.000Z".into())
 }
-fn principal(storage: BtccStorage) -> NativePrincipalAuthority {
+fn principal(storage: BtccStorage) -> PrincipalAuthority {
     let sequence = Arc::new(std::sync::atomic::AtomicUsize::new(1));
-    NativePrincipalAuthority::new(
+    PrincipalAuthority::new(
         storage,
         Arc::new(LocaleCollation::new("en-US").unwrap()),
         clock(),

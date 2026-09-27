@@ -173,7 +173,7 @@ async fn actual_native_provider_loopback_reaches_profile_commit() {
     let metadata = snapshot
         .find_model_metadata(Some("openai/gpt-5.5"))
         .unwrap();
-    let provider = Arc::new(NativeModelProvider::new(
+    let provider = Arc::new(ModelProvider::new(
         provider_http_client().unwrap(),
         Arc::new(Config {
             metadata,

@@ -9,22 +9,22 @@ use tokio::signal::unix::{Signal, SignalKind, signal};
 use tokio::{sync::oneshot, task::JoinSet, time::MissedTickBehavior};
 
 use crate::btcc::BtccError;
-use crate::gateway::NativeTranscriptWriter;
+use crate::gateway::TranscriptWriter;
 use crate::models::ModelConfigurationClock;
 use crate::operations::ServiceReadiness;
 
 use crate::host::app::gateway_lifecycle::{
-    GatewayControlServer, NativeActiveAppEndpoint, NativeAppGatewayLifecycle,
+    ActiveAppEndpoint, AppGatewayLifecycle, GatewayControlServer,
 };
 use crate::host::service::foreground_lease::ForegroundLease;
-use crate::host::service::ingress::NativeIngressDispatcher;
-use crate::host::service::restart_handoff::NativeRestartHandoff;
+use crate::host::service::ingress::IngressDispatcher;
+use crate::host::service::restart_handoff::RestartHandoff;
 mod maintenance;
 mod support;
-use crate::host::service::delivery::NativeAppDelivery;
+use crate::host::service::delivery::AppDelivery;
 use crate::host::{
-    NativeAgentRuntime, NativeProcessEnvironment, NativeProgressPublisher, NativeRuntimePaths,
-    NativeServiceConfiguration, ResolvedInstallation, SystemIdentity, require_model_ref,
+    AgentRuntime, ProcessEnvironment, ProgressPublisher, ResolvedInstallation, RuntimePaths,
+    ServiceConfiguration, SystemIdentity, require_model_ref,
 };
 use maintenance::{maintenance_join_result, run_service_maintenance, unexpected_maintenance_exit};
 use support::{close_runtime, failure, io, process_locale};
@@ -102,7 +102,7 @@ async fn run(
         .filter(|home| !home.is_empty())
         .map(PathBuf::from)
         .ok_or_else(|| failure("native_home_unavailable", "User home is unavailable"))?;
-    let config = NativeServiceConfiguration::capture(explicit_data, &user_home, &installation)?;
+    let config = ServiceConfiguration::capture(explicit_data, &user_home, &installation)?;
     let executable = std::env::current_exe().map_err(io)?;
     let mut instance = crate::host::service::instance::InstanceGuard::acquire(
         &config.data_root,
@@ -113,19 +113,19 @@ async fn run(
         failure("native_service_instance_unavailable", message.to_string()).with_source(message)
     })?;
     let os = nix::sys::utsname::uname().map_err(io)?;
-    let environment = NativeProcessEnvironment::capture(
+    let environment = ProcessEnvironment::capture(
         &config.data_root,
         &user_home,
         &os.release().to_string_lossy(),
     );
-    let worker_profiles = Arc::new(crate::host::NativeWorkerProfileReader::new(
+    let worker_profiles = Arc::new(crate::host::AppWorkerProfileReader::new(
         &config.app,
         config.app.gateway_config().local_auth,
     )?);
-    let app_endpoint = Arc::new(NativeActiveAppEndpoint::new());
+    let app_endpoint = Arc::new(ActiveAppEndpoint::new());
     let runtime = Arc::new(
-        NativeAgentRuntime::open(
-            NativeRuntimePaths {
+        AgentRuntime::open(
+            RuntimePaths {
                 data_root: config.data_root.clone(),
                 installation_root: config.installation.root().to_path_buf(),
                 executable_path: config.installation.executable().to_path_buf(),
@@ -141,14 +141,13 @@ async fn run(
         )
         .await?,
     );
-    let writer =
-        match NativeTranscriptWriter::new(config.data_root.clone(), Arc::new(SystemIdentity)) {
-            Ok(writer) => Arc::new(writer),
-            Err(error) => {
-                let _ = close_runtime(runtime).await;
-                return Err(io(error));
-            }
-        };
+    let writer = match TranscriptWriter::new(config.data_root.clone(), Arc::new(SystemIdentity)) {
+        Ok(writer) => Arc::new(writer),
+        Err(error) => {
+            let _ = close_runtime(runtime).await;
+            return Err(io(error));
+        }
+    };
     let result = serve(
         runtime.clone(),
         app_endpoint,
@@ -173,10 +172,10 @@ async fn run(
 }
 
 async fn serve(
-    runtime: Arc<NativeAgentRuntime>,
-    app_endpoint: Arc<NativeActiveAppEndpoint>,
-    config: &NativeServiceConfiguration,
-    writer: Arc<NativeTranscriptWriter>,
+    runtime: Arc<AgentRuntime>,
+    app_endpoint: Arc<ActiveAppEndpoint>,
+    config: &ServiceConfiguration,
+    writer: Arc<TranscriptWriter>,
     instance: &mut crate::host::service::instance::InstanceGuard,
     foreground_lease_override: Option<bool>,
     logs: ServiceLogMode,
@@ -199,12 +198,12 @@ async fn serve(
     }
     config.persist_session_pointer(&binding.session_id)?;
     let model = require_model_ref(&binding)?;
-    let progress = Arc::new(NativeProgressPublisher::new(
+    let progress = Arc::new(ProgressPublisher::new(
         runtime.progress.clone(),
         writer.clone(),
     ));
     let queue = runtime.inbound_queue.clone();
-    let restart_handoff = Arc::new(NativeRestartHandoff::new(
+    let restart_handoff = Arc::new(RestartHandoff::new(
         runtime.restart_tool_journal.clone(),
         runtime.restart_effect_journal.clone(),
         config.installation.clone(),
@@ -214,14 +213,14 @@ async fn serve(
     queue
         .recover_runtime_interruptions()
         .map_err(|e| failure(e.code(), e.message()))?;
-    let dispatcher = NativeIngressDispatcher::new(
+    let dispatcher = IngressDispatcher::new(
         queue.clone(),
         runtime.btcc.clone(),
         runtime.authority.clone(),
         runtime.bindings.clone(),
         config.data_root.clone(),
         config.data_root.clone(),
-        Arc::new(NativeAppDelivery::new(writer)),
+        Arc::new(AppDelivery::new(writer)),
         runtime.subsessions.clone(),
         restart_handoff,
     );
@@ -244,7 +243,7 @@ async fn serve(
         ServiceReadiness::publish(&config.data_root, &SystemIdentity.now_iso(), now_ms)
             .map_err(io)?,
     );
-    let gateway = Arc::new(NativeAppGatewayLifecycle::new(
+    let gateway = Arc::new(AppGatewayLifecycle::new(
         runtime.clone(),
         config,
         queue.clone(),
@@ -360,13 +359,13 @@ async fn serve(
 }
 
 struct PollOwners<'a> {
-    dispatcher: &'a NativeIngressDispatcher,
-    queue: Arc<crate::gateway::NativeInboundQueue>,
-    progress: Arc<NativeProgressPublisher>,
-    config: &'a NativeServiceConfiguration,
+    dispatcher: &'a IngressDispatcher,
+    queue: Arc<crate::gateway::InboundQueue>,
+    progress: Arc<ProgressPublisher>,
+    config: &'a ServiceConfiguration,
     subsessions: &'a crate::btcc::SqliteSubsessionRepository,
     parent_client: &'a reqwest::Client,
-    app_endpoint: &'a NativeActiveAppEndpoint,
+    app_endpoint: &'a ActiveAppEndpoint,
     logs: ServiceLogMode,
 }
 

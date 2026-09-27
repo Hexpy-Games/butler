@@ -1,4 +1,4 @@
-use super::NativeDateParser;
+use super::DateParser;
 
 #[test]
 fn local_times_resolve_through_dst_gaps_and_overlaps_like_javascript() {
@@ -30,7 +30,7 @@ fn local_times_resolve_through_dst_gaps_and_overlaps_like_javascript() {
         ("Asia/Seoul", "1970-01-01", 0),
         ("Pacific/Apia", "2024-02-30 12:00", 1_709_247_600_000),
     ] {
-        let parser = NativeDateParser::new(zone).unwrap();
+        let parser = DateParser::new(zone).unwrap();
         assert_eq!(parser.parse(text), Some(expected), "{zone} {text}");
     }
 }
@@ -38,10 +38,10 @@ fn local_times_resolve_through_dst_gaps_and_overlaps_like_javascript() {
 #[test]
 fn maintenance_uses_process_local_day_and_rejects_unknown_zones() {
     {
-        assert!(NativeDateParser::new("bad-zone").is_err());
+        assert!(DateParser::new("bad-zone").is_err());
     }
     {
-        let zone = NativeDateParser::new("Asia/Seoul").unwrap();
+        let zone = DateParser::new("Asia/Seoul").unwrap();
         let instant = chrono::DateTime::parse_from_rfc3339("2026-09-22T18:30:00Z").unwrap();
         assert_eq!(
             zone.local_day_and_minute(instant.timestamp_millis())

@@ -67,7 +67,7 @@ pub(super) async fn run(
 
     let cancellation = CancellationToken::new();
     let mut warnings = Vec::new();
-    let mut models: Option<crate::host::NativeProcessModels> = None;
+    let mut models: Option<crate::host::ProcessModels> = None;
     let mut model_setup_failure: Option<String> = None;
     let mut embedding = None;
     let mut index: Option<LegacyIndexService> = None;
@@ -232,7 +232,7 @@ async fn bound_project(
 }
 
 async fn configured_summary(
-    models: &mut Option<crate::host::NativeProcessModels>,
+    models: &mut Option<crate::host::ProcessModels>,
     setup_failure: &mut Option<String>,
     data_root: &std::path::Path,
     text: &str,
@@ -292,18 +292,18 @@ async fn configured_summary(
 
 fn process_models(
     data_root: &std::path::Path,
-) -> Result<crate::host::NativeProcessModels, crate::host::HostError> {
+) -> Result<crate::host::ProcessModels, crate::host::HostError> {
     let home = std::env::var_os("HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| data_root.to_owned());
     let os_release = nix::sys::utsname::uname()
         .map(|value| value.release().to_string_lossy().into_owned())
         .unwrap_or_else(|_| "unknown".into());
-    let environment = crate::host::NativeProcessEnvironment::capture(data_root, &home, &os_release);
+    let environment = crate::host::ProcessEnvironment::capture(data_root, &home, &os_release);
     let collation = Arc::new(LocaleCollation::new("en-US").map_err(|source| {
         crate::host::HostError::new("native_locale_unavailable").with_source(source)
     })?);
-    crate::host::NativeProcessModels::new(
+    crate::host::ProcessModels::new(
         data_root.to_owned(),
         environment.model,
         Arc::new(ConfigurationWrites::new()),
@@ -317,7 +317,7 @@ fn ensure_index_owner<'a>(
     data_root: &std::path::Path,
     paths: &CognitionPathEnvironment,
     coordinator: Arc<crate::coordination::CognitionWriteCoordinator>,
-    embedding: &mut Option<Arc<crate::host::NativeEmbeddingOwner>>,
+    embedding: &mut Option<Arc<crate::host::EmbeddingOwner>>,
     index: &'a mut Option<LegacyIndexService>,
 ) -> Result<&'a LegacyIndexService, crate::host::HostError> {
     if index.is_none() {
@@ -325,7 +325,7 @@ fn ensure_index_owner<'a>(
             Some(owner) => owner.clone(),
             None => embedding
                 .insert(Arc::new(
-                    crate::host::NativeEmbeddingOwner::new(data_root.to_owned())
+                    crate::host::EmbeddingOwner::new(data_root.to_owned())
                         .map_err(|error| error.code())?,
                 ))
                 .clone(),

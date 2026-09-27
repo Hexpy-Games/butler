@@ -10,26 +10,26 @@ use serde_json::{Value, json};
 use crate::{
     conversation::AgentConversationStore,
     gateway::{
-        AppNativeAssetResolver, ApplicationFuture, ClaimedNativeSnapshot, GatewayApplicationError,
-        NativeAppImageFiles, ResolvedNativeAssets, resolve_session_references,
+        AppImageFiles, AppNativeAssetResolver, ApplicationFuture, ClaimedNativeSnapshot,
+        GatewayApplicationError, ResolvedNativeAssets, resolve_session_references,
     },
     models::{ModelConfiguration, VisualImageAdmissionResult},
 };
 
-pub(crate) struct NativeAppAssets {
+pub(crate) struct AppAssets {
     conversations: Arc<AgentConversationStore>,
-    images: Arc<NativeAppImageFiles>,
+    images: Arc<AppImageFiles>,
     models: Arc<ModelConfiguration>,
-    mcp: Arc<crate::mcp_client::NativeMcpClient>,
+    mcp: Arc<crate::mcp_client::McpClient>,
     files_root: PathBuf,
 }
 
-impl NativeAppAssets {
+impl AppAssets {
     pub(crate) fn new(
         conversations: Arc<AgentConversationStore>,
-        images: Arc<NativeAppImageFiles>,
+        images: Arc<AppImageFiles>,
         models: Arc<ModelConfiguration>,
-        mcp: Arc<crate::mcp_client::NativeMcpClient>,
+        mcp: Arc<crate::mcp_client::McpClient>,
         data_root: &Path,
     ) -> Self {
         Self {
@@ -42,7 +42,7 @@ impl NativeAppAssets {
     }
 }
 
-impl AppNativeAssetResolver for NativeAppAssets {
+impl AppNativeAssetResolver for AppAssets {
     fn resolve(&self, snapshot: ClaimedNativeSnapshot) -> ApplicationFuture<ResolvedNativeAssets> {
         let conversations = Arc::clone(&self.conversations);
         let images = Arc::clone(&self.images);

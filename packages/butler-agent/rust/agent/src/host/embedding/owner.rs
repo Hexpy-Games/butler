@@ -22,7 +22,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::cognition::{
     CognitionEmbeddingPort, CognitionError, CognitionResult, EmbeddingFuture, EmbeddingMode,
-    EmbeddingRequest, EmbeddingRequestClass, NativeEmbeddingResult, WorkerOperation, WorkerRequest,
+    EmbeddingRequest, EmbeddingRequestClass, EmbeddingResult, WorkerOperation, WorkerRequest,
 };
 
 mod queue;
@@ -37,7 +37,7 @@ use queue::{
     deadline_wait, expired, validate_request,
 };
 
-pub(crate) struct NativeEmbeddingOwner {
+pub(crate) struct EmbeddingOwner {
     inner: Arc<Inner>,
     actor: Mutex<Option<JoinHandle<()>>>,
     completion: watch::Receiver<Option<bool>>,
@@ -58,7 +58,7 @@ struct AdmissionGuard {
     cancellation: CancellationToken,
 }
 
-impl NativeEmbeddingOwner {
+impl EmbeddingOwner {
     pub(crate) fn new(data_root: PathBuf) -> CognitionResult<Self> {
         let executable = std::env::current_exe()
             .map_err(|source| error(CognitionCode::EmbedWorkerUnavailable).with_source(source))?;
@@ -114,7 +114,7 @@ impl NativeEmbeddingOwner {
         &self,
         request: EmbeddingRequest,
         cancellation: CancellationToken,
-    ) -> CognitionResult<NativeEmbeddingResult> {
+    ) -> CognitionResult<EmbeddingResult> {
         validate_request(&request)?;
         // The source socket uses 300 seconds when its caller supplies no
         // deadline; checked projection supplies its own 30-second deadline.
@@ -194,13 +194,13 @@ impl NativeEmbeddingOwner {
     }
 }
 
-impl Drop for NativeEmbeddingOwner {
+impl Drop for EmbeddingOwner {
     fn drop(&mut self) {
         self.inner.close();
     }
 }
 
-impl CognitionEmbeddingPort for NativeEmbeddingOwner {
+impl CognitionEmbeddingPort for EmbeddingOwner {
     fn embed(
         &self,
         request: EmbeddingRequest,
@@ -306,7 +306,7 @@ async fn run_item(
     inner: &Inner,
     child: &mut Option<WorkerChild>,
     item: &Pending,
-) -> CognitionResult<NativeEmbeddingResult> {
+) -> CognitionResult<EmbeddingResult> {
     if item.cancellation.is_cancelled() {
         return Err(error(CognitionCode::EmbedRequestCancelled));
     }

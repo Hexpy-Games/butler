@@ -11,7 +11,7 @@ use crate::cognition::CognitionPathEnvironment;
 use crate::context::{ContextBudgetEnvironment, PromptEnvironment};
 use crate::models::ModelConfigurationEnvironment;
 
-pub(crate) struct NativeProcessEnvironment {
+pub(crate) struct ProcessEnvironment {
     pub model: ModelConfigurationEnvironment,
     pub prompt: PromptEnvironment,
     pub context_budget: ContextBudgetEnvironment,
@@ -21,7 +21,7 @@ pub(crate) struct NativeProcessEnvironment {
     pub model_route_retry_base_ms: f64,
 }
 
-impl NativeProcessEnvironment {
+impl ProcessEnvironment {
     /// Capture once at process composition. Paths and OS release are host facts,
     /// supplied by the caller rather than rediscovered by each domain owner.
     pub(crate) fn capture(_data_root: &Path, user_home: &Path, os_release: &str) -> Self {

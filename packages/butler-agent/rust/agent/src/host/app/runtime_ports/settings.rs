@@ -16,7 +16,7 @@ use crate::{
     profile::ProfileService,
 };
 
-pub(crate) struct NativeAppSettingsFacts {
+pub(crate) struct AppSettingsFactsAdapter {
     configuration: Arc<ModelConfiguration>,
     profile: Arc<ProfileService>,
     data_root: PathBuf,
@@ -25,7 +25,7 @@ pub(crate) struct NativeAppSettingsFacts {
     current: Arc<RwLock<Arc<AppSettingsFacts>>>,
 }
 
-impl NativeAppSettingsFacts {
+impl AppSettingsFactsAdapter {
     pub(crate) async fn open(
         configuration: Arc<ModelConfiguration>,
         profile: Arc<ProfileService>,
@@ -67,7 +67,7 @@ impl NativeAppSettingsFacts {
     }
 }
 
-impl AppSettingsFactsProvider for NativeAppSettingsFacts {
+impl AppSettingsFactsProvider for AppSettingsFactsAdapter {
     fn snapshot(&self) -> Result<Arc<AppSettingsFacts>, GatewayApplicationError> {
         Ok(self.current.read().clone())
     }
@@ -78,7 +78,7 @@ impl AppSettingsFactsProvider for NativeAppSettingsFacts {
     }
 }
 
-impl NativeAppSettingsFacts {
+impl AppSettingsFactsAdapter {
     fn clone_for_refresh(&self) -> Self {
         Self {
             configuration: self.configuration.clone(),

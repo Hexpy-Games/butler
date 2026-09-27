@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 
 use super::*;
 use crate::gateway::application::storage::AppStorageCode;
-use crate::gateway::{MessageContentPart, NativeProjectSnapshot, ProjectSourceReference};
+use crate::gateway::{MessageContentPart, ProjectSnapshot, ProjectSourceReference};
 use crate::json::Utf16Prefix;
 use crate::public_text::{sanitize_public_text, trim_js_whitespace};
 
@@ -148,12 +148,12 @@ impl AppApplication {
     }
 }
 
-fn project_row(db: &Connection, id: &str) -> Result<NativeProjectSnapshot, AppStorageError> {
+fn project_row(db: &Connection, id: &str) -> Result<ProjectSnapshot, AppStorageError> {
     db.query_row(
         "SELECT id,workspace_path,ledger_project_id FROM projects WHERE id=?1",
         [id],
         |row| {
-            Ok(NativeProjectSnapshot {
+            Ok(ProjectSnapshot {
                 id: row.get(0)?,
                 workspace_path: row.get(1)?,
                 ledger_project_id: row.get(2)?,

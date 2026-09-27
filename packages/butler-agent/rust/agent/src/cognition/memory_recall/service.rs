@@ -25,7 +25,7 @@ pub(crate) type DateParsePort = Arc<dyn Fn(&str) -> Option<i64> + Send + Sync>;
 pub(crate) type LocaleComparePort = Arc<dyn Fn(&str, &str) -> Ordering + Send + Sync>;
 pub(crate) type RecallClock = Arc<dyn Fn() -> i64 + Send + Sync>;
 
-pub(crate) struct NativeMemoryRecall {
+pub(crate) struct MemoryRecall {
     data_root: PathBuf,
     environment: CognitionPathEnvironment,
     parse_date: DateParsePort,
@@ -36,11 +36,11 @@ pub(crate) struct NativeMemoryRecall {
     operations: TaskTracker,
     lifecycle: Mutex<bool>,
     cursors: Arc<CursorStore>,
-    vector_port: Option<Arc<dyn super::vector::NativeRecallVectorPort>>,
+    vector_port: Option<Arc<dyn super::vector::RecallVectorPort>>,
     metrics: Option<Arc<dyn super::metrics::RecallMetricSink>>,
 }
 
-impl NativeMemoryRecall {
+impl MemoryRecall {
     pub(crate) async fn recall_tool(
         &self,
         binding: crate::conversation::CanonicalMemoryReadBinding,
@@ -131,7 +131,7 @@ impl NativeMemoryRecall {
 
     pub(crate) fn with_vector_port(
         mut self,
-        port: Arc<dyn super::vector::NativeRecallVectorPort>,
+        port: Arc<dyn super::vector::RecallVectorPort>,
     ) -> Self {
         self.vector_port = Some(port);
         self
@@ -223,7 +223,7 @@ async fn operation(
     admission: Arc<Semaphore>,
     shutdown: CancellationToken,
     cursors: Arc<CursorStore>,
-    vector_port: Option<Arc<dyn super::vector::NativeRecallVectorPort>>,
+    vector_port: Option<Arc<dyn super::vector::RecallVectorPort>>,
     metrics: Option<Arc<dyn super::metrics::RecallMetricSink>>,
 ) -> CognitionResult<RecallResponse> {
     let _permit = tokio::select! {

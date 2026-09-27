@@ -135,7 +135,7 @@ impl AppApplication {
         let receipt = self
             .dependencies
             .native_ingress
-            .enqueue_cancel(NativeAppCancellation {
+            .enqueue_cancel(AppCancellation {
                 session_id: app_session_hint(&chat_id),
                 chat_id,
                 request_id: format!("cancel:{turn_id}"),

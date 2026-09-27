@@ -9,22 +9,22 @@ use std::sync::{
 use crate::btcc::BtccError;
 use crate::configuration::ConfigurationWrites;
 use crate::locale::LocaleCollation;
-use crate::mcp_client::NativeMcpClient;
+use crate::mcp_client::McpClient;
 use crate::models::{
-    ModelCatalog, ModelConfiguration, ModelConfigurationEnvironment, NativeModelProvider,
+    ModelCatalog, ModelConfiguration, ModelConfigurationEnvironment, ModelProvider,
     ProviderObservation, ProviderObservationSink, provider_http_client,
 };
 use crate::operations::PromptUsageMetrics;
 
 use crate::host::SystemIdentity;
 
-pub(crate) struct NativeProcessModels {
+pub(crate) struct ProcessModels {
     pub catalog: Arc<ModelCatalog>,
     pub configuration: Arc<ModelConfiguration>,
-    pub provider: Arc<NativeModelProvider>,
+    pub provider: Arc<ModelProvider>,
 }
 
-impl NativeProcessModels {
+impl ProcessModels {
     pub(crate) fn new(
         data_root: PathBuf,
         environment: ModelConfigurationEnvironment,
@@ -39,16 +39,14 @@ impl NativeProcessModels {
         environment: ModelConfigurationEnvironment,
         writes: Arc<ConfigurationWrites>,
         collation: Arc<LocaleCollation>,
-        mcp_client: Arc<NativeMcpClient>,
+        mcp_client: Arc<McpClient>,
     ) -> Result<Self, BtccError> {
         Self::new_with_visual_capability(
             data_root,
             environment,
             writes,
             collation,
-            Some(Arc::new(crate::host::NativeZaiVisionCapability::new(
-                mcp_client,
-            ))),
+            Some(Arc::new(crate::host::ZaiVisionCapability::new(mcp_client))),
         )
     }
 
@@ -80,7 +78,7 @@ impl NativeProcessModels {
                     .with_source(error)
             })?,
         );
-        let provider = NativeModelProvider::new(
+        let provider = ModelProvider::new(
             client,
             configuration.clone(),
             Arc::new(ProviderCounts::default()),

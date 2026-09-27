@@ -1,6 +1,6 @@
 //! App session binding mutation and runtime policy.
 
-use super::{Envelope, NativeIngressError};
+use super::{Envelope, IngressError};
 use crate::workspace::{
     OwnOptional, SessionBindingStore, SessionLifecycleState, SessionRole, SessionTransportBinding,
     StoredSessionBinding, UpsertSessionBinding,
@@ -21,7 +21,7 @@ pub(super) async fn upsert_app_binding(
     session_id: &str,
     model_ref: &str,
     roots: BindingRoots<'_>,
-) -> Result<StoredSessionBinding, NativeIngressError> {
+) -> Result<StoredSessionBinding, IngressError> {
     let BindingRoots {
         data_root,
         default_workspace,
@@ -124,7 +124,7 @@ pub(super) async fn upsert_app_binding(
     metadata.insert("appSessionKind".into(), session_kind.into());
     metadata.insert("accessMode".into(), access.into());
     let Some(controls) = envelope.execution_controls.as_ref() else {
-        return Err(NativeIngressError::new(
+        return Err(IngressError::new(
             "session_binding_unavailable",
             "Verified execution controls are missing",
         ));
@@ -237,7 +237,7 @@ pub(super) async fn upsert_app_binding(
         })
         .await
         .map_err(|source| {
-            NativeIngressError::new("session_binding_unavailable", "Session binding unavailable")
+            IngressError::new("session_binding_unavailable", "Session binding unavailable")
                 .with_source(source)
         })
 }

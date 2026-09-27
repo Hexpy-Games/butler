@@ -12,8 +12,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::process::{CaptureSink, ProcessFuture, ProcessHost, signal_pid};
 use super::{
-    CommandError, CommandStep, GuidedAccess, GuidedCommandInput, NativeCommands,
-    StructuredCommandInput,
+    CommandError, CommandStep, Commands, GuidedAccess, GuidedCommandInput, StructuredCommandInput,
 };
 
 /// Real processes with the conditions the lifecycle tests depend on made
@@ -159,7 +158,7 @@ impl Drop for Fixture {
 #[tokio::test]
 async fn guided_real_process_spool_offsets_and_close() {
     let fixture = Fixture::new();
-    let owner = NativeCommands::new();
+    let owner = Commands::new();
     let output = owner
         .submit_guided(fixture.guided("printf 'out'; printf 'err' >&2"))
         .unwrap()
@@ -235,7 +234,7 @@ fn bun_incremental_decoder_oracle_matches_chunk_boundaries() {
 #[tokio::test]
 async fn structured_pipeline_and_stderr_are_real_process_results() {
     let fixture = Fixture::new();
-    let owner = NativeCommands::new();
+    let owner = Commands::new();
     let input = fixture.structured(vec![
         CommandStep {
             executable: "/bin/sh".into(),
@@ -257,7 +256,7 @@ async fn structured_pipeline_and_stderr_are_real_process_results() {
 #[tokio::test]
 async fn caller_drop_does_not_cancel_owned_child() {
     let fixture = Fixture::new();
-    let owner = NativeCommands::new();
+    let owner = Commands::new();
     let marker = fixture.0.join("done");
     let command = format!("sleep 0.05; printf x > '{}'", marker.display());
     drop(owner.submit_guided(fixture.guided(&command)).unwrap());
@@ -273,7 +272,7 @@ async fn caller_drop_does_not_cancel_owned_child() {
 #[tokio::test]
 async fn guided_timeout_reaps_owned_child() {
     let fixture = Fixture::new();
-    let owner = NativeCommands::new();
+    let owner = Commands::new();
     let mut input = fixture.guided("sleep 5");
     input.timeout_ms = Some(10.0);
     let output = owner.submit_guided(input).unwrap().await.unwrap().unwrap();
@@ -286,7 +285,7 @@ async fn guided_timeout_reaps_owned_child() {
 #[tokio::test]
 async fn structured_utf8_fragments_and_spawn_failure() {
     let fixture = Fixture::new();
-    let owner = NativeCommands::new();
+    let owner = Commands::new();
     let output = owner
         .submit_structured(fixture.structured(vec![CommandStep {
             executable: "/bin/sh".into(),
@@ -315,7 +314,7 @@ async fn structured_utf8_fragments_and_spawn_failure() {
 #[tokio::test]
 async fn structured_preabort_and_legacy_pipefail() {
     let fixture = Fixture::new();
-    let owner = NativeCommands::new();
+    let owner = Commands::new();
     let preabort = fixture.structured(vec![CommandStep {
         executable: "/bin/sh".into(),
         arguments: vec!["-c".into(), "exit 3".into()],

@@ -26,7 +26,7 @@ use crate::{
     models::ModelConfigurationClock,
 };
 
-use crate::host::cli::consolidation::NativeConsolidationCliResult;
+use crate::host::cli::consolidation::ConsolidationCliResult;
 use crate::host::memory_jobs::maintain::signals;
 use crate::host::{ResolvedInstallation, SystemIdentity};
 
@@ -36,7 +36,7 @@ use options::{Operation, parse};
 pub(crate) async fn run(
     installation: ResolvedInstallation,
     arguments: Vec<OsString>,
-) -> NativeConsolidationCliResult {
+) -> ConsolidationCliResult {
     let requested_json = arguments.iter().any(|arg| arg == "--json");
     let options = match parse(&installation, arguments) {
         Ok(options) => options,
@@ -266,7 +266,7 @@ pub(crate) async fn run(
         },
     };
     match result {
-        Ok(value) => NativeConsolidationCliResult {
+        Ok(value) => ConsolidationCliResult {
             stdout: if options.json {
                 format!(
                     "{}\n",
@@ -333,13 +333,8 @@ async fn classify_before_prepare(
     Ok(())
 }
 
-fn failure(
-    json_mode: bool,
-    code: &str,
-    message: &str,
-    exit_code: u8,
-) -> NativeConsolidationCliResult {
-    NativeConsolidationCliResult {
+fn failure(json_mode: bool, code: &str, message: &str, exit_code: u8) -> ConsolidationCliResult {
+    ConsolidationCliResult {
         stdout: if json_mode {
             format!(
                 "{}\n",

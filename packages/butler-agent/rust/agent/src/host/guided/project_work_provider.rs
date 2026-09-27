@@ -4,24 +4,24 @@ use std::sync::Arc;
 
 use crate::{
     btcc::{BtccError, DurableWorkRepository, PortFuture, ResolvedProjectWorkScope},
-    project_ledger::{NativeProjectLedger, NativeProjectWork, ProjectWorkScopeLookup},
+    project_ledger::{ProjectLedger, ProjectWork, ProjectWorkScopeLookup},
     workspace::StoredSessionBinding,
 };
 
 use crate::host::guided::scope_selected_work::ProjectWorkRepositoryProvider;
 
-pub(in crate::host) struct NativeProjectWorkProvider {
-    ledger: NativeProjectLedger,
-    work: Arc<NativeProjectWork>,
+pub(in crate::host) struct ProjectWorkProvider {
+    ledger: ProjectLedger,
+    work: Arc<ProjectWork>,
 }
 
-impl NativeProjectWorkProvider {
-    pub(in crate::host) fn new(ledger: NativeProjectLedger, work: Arc<NativeProjectWork>) -> Self {
+impl ProjectWorkProvider {
+    pub(in crate::host) fn new(ledger: ProjectLedger, work: Arc<ProjectWork>) -> Self {
         Self { ledger, work }
     }
 }
 
-impl ProjectWorkRepositoryProvider for NativeProjectWorkProvider {
+impl ProjectWorkRepositoryProvider for ProjectWorkProvider {
     fn resolve_scope(
         &self,
         binding: StoredSessionBinding,
@@ -54,18 +54,18 @@ impl ProjectWorkRepositoryProvider for NativeProjectWorkProvider {
 }
 
 /// Prepares one current canonical snapshot for one operation-result read.
-pub(in crate::host) struct NativeProjectResultAuthority {
-    ledger: NativeProjectLedger,
+pub(in crate::host) struct ProjectResultAuthority {
+    ledger: ProjectLedger,
     data_root: std::path::PathBuf,
 }
 
-impl NativeProjectResultAuthority {
-    pub(in crate::host) fn new(ledger: NativeProjectLedger, data_root: std::path::PathBuf) -> Self {
+impl ProjectResultAuthority {
+    pub(in crate::host) fn new(ledger: ProjectLedger, data_root: std::path::PathBuf) -> Self {
         Self { ledger, data_root }
     }
 }
 
-impl crate::btcc::ProjectWorkResultAuthorityFactory for NativeProjectResultAuthority {
+impl crate::btcc::ProjectWorkResultAuthorityFactory for ProjectResultAuthority {
     fn prepare(
         &self,
         location: crate::btcc::ProjectWorkResultAuthorityLocation,

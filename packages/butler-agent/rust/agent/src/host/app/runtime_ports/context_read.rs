@@ -19,13 +19,13 @@ use crate::{
 const MAX_COMPACTION_SUMMARY_CHARS: usize = 32_000;
 use crate::json_lines::visit_json_lines;
 
-pub(crate) struct NativeAppContextRead {
+pub(crate) struct AppContextRead {
     data_root: PathBuf,
     budget: Arc<ContextBudgetOwner>,
     compactions: ContextCompactionRepository,
 }
 
-impl NativeAppContextRead {
+impl AppContextRead {
     pub(crate) fn new(
         data_root: PathBuf,
         budget: Arc<ContextBudgetOwner>,
@@ -39,7 +39,7 @@ impl NativeAppContextRead {
     }
 }
 
-impl AppContextReadPort for NativeAppContextRead {
+impl AppContextReadPort for AppContextRead {
     fn read(&self, query: AppContextReadQuery) -> ApplicationFuture<AppContextReadFacts> {
         let root = self.data_root.clone();
         let budget = self.budget.clone();

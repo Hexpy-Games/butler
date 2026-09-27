@@ -8,10 +8,10 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::host::ResolvedInstallation;
-use crate::skills::{NativeSkills, SkillError, SkillSettingsView, StagedSkillArchive};
+use crate::skills::{SkillError, SkillSettingsView, Skills, StagedSkillArchive};
 use output::{CommandError, failure, render_error, render_success};
 
-pub(crate) use output::NativeSkillCliResult;
+pub(crate) use output::SkillCliResult;
 
 struct Options {
     args: Vec<String>,
@@ -23,7 +23,7 @@ struct Options {
 pub(crate) async fn run_native_skills_cli(
     installation: ResolvedInstallation,
     raw_args: Vec<OsString>,
-) -> NativeSkillCliResult {
+) -> SkillCliResult {
     let options = match parse(raw_args) {
         Ok(value) => value,
         Err(error) => return render_error(false, "butler skills", error),
@@ -33,7 +33,7 @@ pub(crate) async fn run_native_skills_cli(
         Ok(value) => value,
         Err(error) => return render_error(options.json, &command, error),
     };
-    let skills = NativeSkills::new(installation.resources().to_owned(), data_root);
+    let skills = Skills::new(installation.resources().to_owned(), data_root);
     let outcome = execute(&skills, &options).await;
     skills.close().await;
     match outcome {
@@ -43,7 +43,7 @@ pub(crate) async fn run_native_skills_cli(
 }
 
 async fn execute(
-    skills: &NativeSkills,
+    skills: &Skills,
     options: &Options,
 ) -> Result<(&'static str, serde_json::Value, String), CommandError> {
     let subcommand = options.args.get(1).map(String::as_str).unwrap_or("list");
@@ -61,7 +61,7 @@ async fn execute(
 }
 
 async fn list(
-    skills: &NativeSkills,
+    skills: &Skills,
     options: &Options,
 ) -> Result<(&'static str, serde_json::Value, String), CommandError> {
     let view = skills
@@ -78,7 +78,7 @@ async fn list(
 }
 
 async fn inspect(
-    skills: &NativeSkills,
+    skills: &Skills,
     options: &Options,
 ) -> Result<(&'static str, serde_json::Value, String), CommandError> {
     let name = options
@@ -116,7 +116,7 @@ async fn inspect(
 }
 
 async fn import(
-    skills: &NativeSkills,
+    skills: &Skills,
     options: &Options,
 ) -> Result<(&'static str, serde_json::Value, String), CommandError> {
     let path = options
@@ -167,7 +167,7 @@ async fn import(
 }
 
 async fn validate(
-    skills: &NativeSkills,
+    skills: &Skills,
     options: &Options,
 ) -> Result<(&'static str, serde_json::Value, String), CommandError> {
     let result = skills

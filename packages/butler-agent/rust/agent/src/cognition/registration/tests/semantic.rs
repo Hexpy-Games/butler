@@ -1,7 +1,7 @@
 use super::*;
 use serde_json::Value;
 mod lifecycle;
-mod native;
+mod provider;
 mod ranked;
 use crate::{
     cognition::{

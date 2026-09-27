@@ -12,22 +12,22 @@ use crate::{
     },
     project_ledger::{
         DashboardLedgerRecord, DashboardLedgerSnapshot, DashboardLedgerSource,
-        DashboardManagedWorkView, DashboardWorkHistoryEntry, NativeProjectLedger,
-        ProjectLedgerBinding, ProjectLedgerReadError,
+        DashboardManagedWorkView, DashboardWorkHistoryEntry, ProjectLedger, ProjectLedgerBinding,
+        ProjectLedgerReadError,
     },
 };
 
-pub(crate) struct NativeAppDashboardLedger {
-    ledger: NativeProjectLedger,
+pub(crate) struct AppDashboardLedger {
+    ledger: ProjectLedger,
 }
 
-impl NativeAppDashboardLedger {
-    pub(crate) fn new(ledger: NativeProjectLedger) -> Self {
+impl AppDashboardLedger {
+    pub(crate) fn new(ledger: ProjectLedger) -> Self {
         Self { ledger }
     }
 }
 
-impl AppProjectDashboardLedgerPort for NativeAppDashboardLedger {
+impl AppProjectDashboardLedgerPort for AppDashboardLedger {
     fn snapshot(
         &self,
         app_project_id: String,

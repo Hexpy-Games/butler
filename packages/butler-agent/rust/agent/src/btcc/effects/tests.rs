@@ -4,7 +4,7 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
-use super::NativeEffectService;
+use super::EffectService;
 use super::contracts::*;
 use super::{identity, outcomes, recovery};
 use crate::btcc::TurnStore;

@@ -4,14 +4,14 @@ use serde_json::{Value, json};
 
 use super::*;
 use crate::btcc::{GuidedPhaseInput, TurnRecord, select_phase};
-use crate::workspace::{NativeWorkspaceFiles, WorkspaceMutations};
+use crate::workspace::{WorkspaceFiles, WorkspaceMutations};
 
-fn catalog() -> NativeGuidedCatalog {
-    let capabilities = NativeCapabilities::new(
-        Arc::new(NativeWorkspaceFiles::new(1)),
+fn catalog() -> GuidedCatalog {
+    let capabilities = Capabilities::new(
+        Arc::new(WorkspaceFiles::new(1)),
         Arc::new(WorkspaceMutations::new()),
     );
-    NativeGuidedCatalog::load(&capabilities).unwrap()
+    GuidedCatalog::load(&capabilities).unwrap()
 }
 
 /// (admitted access, turn context, phase surface enabled, replay flag,

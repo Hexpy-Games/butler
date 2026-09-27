@@ -166,7 +166,7 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
         }
     }
 
-    let store = operations::NativeAutomationCliStore::new(&data_root);
+    let store = operations::AutomationCliStore::new(&data_root);
     let command_name = command.name();
     let result = match command {
         Command::List => store

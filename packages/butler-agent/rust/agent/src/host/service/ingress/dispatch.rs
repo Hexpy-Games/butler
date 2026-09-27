@@ -9,13 +9,13 @@ use std::{
 use serde_json::json;
 
 use super::{
-    NativeIngressDelivery, NativeIngressPoll, action,
+    IngressDelivery, IngressPoll, action,
     bind::{self, Envelope},
 };
-use crate::host::service::restart_handoff::NativeRestartHandoff;
+use crate::host::service::restart_handoff::RestartHandoff;
 use crate::{
     btcc::{Btcc, StopRequest, TurnOutcomeKind, WorkStatus},
-    gateway::{ClaimedInboundEvent, NativeInboundQueue, QueuedInboundEvent},
+    gateway::{ClaimedInboundEvent, InboundQueue, QueuedInboundEvent},
     workspace::SessionBindingStore,
 };
 
@@ -25,14 +25,14 @@ struct Executed {
 }
 
 pub(super) struct DispatchDependencies {
-    pub queue: Arc<NativeInboundQueue>,
+    pub queue: Arc<InboundQueue>,
     pub btcc: Btcc,
     pub bindings: SessionBindingStore,
     pub data_root: PathBuf,
     pub default_workspace: PathBuf,
-    pub delivery: Arc<dyn NativeIngressDelivery>,
-    pub subsessions: Arc<crate::btcc::NativeSubsessionService>,
-    pub restart_handoff: Arc<NativeRestartHandoff>,
+    pub delivery: Arc<dyn IngressDelivery>,
+    pub subsessions: Arc<crate::btcc::SubsessionService>,
+    pub restart_handoff: Arc<RestartHandoff>,
 }
 
 pub(super) fn session_key(record: &QueuedInboundEvent) -> String {
@@ -94,10 +94,7 @@ pub(super) fn eligible_for_claim(
     batch_sessions.insert(session)
 }
 
-pub(super) async fn one(
-    item: ClaimedInboundEvent,
-    deps: DispatchDependencies,
-) -> NativeIngressPoll {
+pub(super) async fn one(item: ClaimedInboundEvent, deps: DispatchDependencies) -> IngressPoll {
     let DispatchDependencies {
         queue,
         btcc,
@@ -132,13 +129,13 @@ pub(super) async fn one(
                 {
                     eprintln!("[native-restart] handoff code={error}");
                 }
-                NativeIngressPoll {
+                IngressPoll {
                     handled: 1,
                     delivered: executed.delivered,
                     ..Default::default()
                 }
             }
-            _ => NativeIngressPoll {
+            _ => IngressPoll {
                 interrupted: 1,
                 ..Default::default()
             },
@@ -156,7 +153,7 @@ pub(super) async fn one(
                 eprintln!("[native-btcc] interrupted code={}", error.message);
             }
             let _ = queue.park_for_process_replacement(&item, error.code);
-            NativeIngressPoll {
+            IngressPoll {
                 interrupted: 1,
                 ..Default::default()
             }
@@ -170,9 +167,9 @@ async fn execute(
     bindings: &SessionBindingStore,
     data_root: &Path,
     default_workspace: &Path,
-    delivery: &dyn NativeIngressDelivery,
-    subsessions: &crate::btcc::NativeSubsessionService,
-) -> Result<Executed, super::NativeIngressError> {
+    delivery: &dyn IngressDelivery,
+    subsessions: &crate::btcc::SubsessionService,
+) -> Result<Executed, super::IngressError> {
     let envelope = Envelope::from_record(&item.record)?;
     let kind = envelope
         .control
@@ -185,20 +182,20 @@ async fn execute(
                 bind::bind_and_request(&envelope, bindings, data_root, default_workspace).await?;
             let session_id = request.session_id.clone();
             let outcome = btcc.run_turn(request).await.map_err(|error| {
-                super::NativeIngressError::new("inbound_turn_interrupted", error.code())
+                super::IngressError::new("inbound_turn_interrupted", error.code())
             })?;
             let binding = bindings
                 .get_by_session_id(&session_id)
                 .await
                 .map_err(|source| {
-                    super::NativeIngressError::new(
+                    super::IngressError::new(
                         "session_binding_unavailable",
                         "Session binding unavailable",
                     )
                     .with_source(source)
                 })?
                 .ok_or_else(|| {
-                    super::NativeIngressError::new(
+                    super::IngressError::new(
                         "session_binding_missing",
                         "Session binding unavailable",
                     )
@@ -215,7 +212,7 @@ async fn execute(
                 .and_then(serde_json::Value::as_str)
                 != Some(turn_id)
             {
-                return Err(super::NativeIngressError::new(
+                return Err(super::IngressError::new(
                     "inbound_control_invalid",
                     "Cancellation identity mismatch",
                 ));
@@ -226,7 +223,7 @@ async fn execute(
                 })
                 .await
                 .map_err(|error| {
-                    super::NativeIngressError::new("inbound_turn_interrupted", error.code())
+                    super::IngressError::new("inbound_turn_interrupted", error.code())
                 })?;
             (binding, outcome)
         }
@@ -234,12 +231,12 @@ async fn execute(
             let binding = bind::existing_control_binding(&envelope, bindings).await?;
             let request = bind::control_request(&envelope, &binding)?;
             let outcome = btcc.run_turn(request).await.map_err(|error| {
-                super::NativeIngressError::new("inbound_turn_interrupted", error.code())
+                super::IngressError::new("inbound_turn_interrupted", error.code())
             })?;
             (binding, outcome)
         }
         Some(_) => {
-            return Err(super::NativeIngressError::new(
+            return Err(super::IngressError::new(
                 "inbound_control_unsupported",
                 "Unknown inbound control",
             ));
@@ -279,7 +276,7 @@ async fn execute(
             .and_then(serde_json::Value::as_str)
             == Some("final_result");
         if !delivery.deliver(binding.session_id.clone(), action).await? {
-            return Err(super::NativeIngressError::new(
+            return Err(super::IngressError::new(
                 "inbound_delivery_interrupted",
                 "App result delivery unavailable",
             ));
@@ -294,11 +291,11 @@ async fn execute(
 }
 
 async fn complete_subsession_child(
-    subsessions: &crate::btcc::NativeSubsessionService,
+    subsessions: &crate::btcc::SubsessionService,
     session_id: &str,
     turn_id: &str,
     outcome: &crate::btcc::TurnOutcome,
-) -> Result<(), super::NativeIngressError> {
+) -> Result<(), super::IngressError> {
     if matches!(
         outcome.result,
         TurnOutcomeKind::Cancelled { .. } | TurnOutcomeKind::AlreadyCancelled { .. }
@@ -312,7 +309,7 @@ async fn complete_subsession_child(
             )
             .await
             .map_err(|error| {
-                super::NativeIngressError::new("subsession_result_commit_failed", error.code())
+                super::IngressError::new("subsession_result_commit_failed", error.code())
             });
     }
     let (content, work_status) = match &outcome.result {
@@ -325,7 +322,7 @@ async fn complete_subsession_child(
         Some(WorkStatus::Blocked) => "blocked",
         Some(WorkStatus::Abandoned) => "failed",
         _ => {
-            return Err(super::NativeIngressError::new(
+            return Err(super::IngressError::new(
                 "subsession_work_incomplete",
                 "Subsession Work is not terminal",
             ));
@@ -334,9 +331,7 @@ async fn complete_subsession_child(
     subsessions
         .complete_child(session_id, turn_id, status, content.to_owned())
         .await
-        .map_err(|error| {
-            super::NativeIngressError::new("subsession_result_commit_failed", error.code())
-        })
+        .map_err(|error| super::IngressError::new("subsession_result_commit_failed", error.code()))
 }
 
 #[cfg(test)]

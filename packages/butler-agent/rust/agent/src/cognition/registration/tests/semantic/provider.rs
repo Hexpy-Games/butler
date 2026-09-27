@@ -15,7 +15,7 @@ use crate::{btcc::ProviderRequestError, locale::LocaleCollation, models::*};
 mod lifecycle;
 
 struct PanicRecallVectors;
-impl crate::cognition::NativeRecallVectorPort for PanicRecallVectors {
+impl crate::cognition::RecallVectorPort for PanicRecallVectors {
     fn search<'a>(
         &'a self,
         _: &'a crate::cognition::MemoryGenerationHandle,
@@ -204,7 +204,7 @@ async fn actual_native_provider_applies_registered_semantic_window() {
     let metadata = snapshot
         .find_model_metadata(Some("openai/gpt-5.5"))
         .unwrap();
-    let provider = Arc::new(NativeModelProvider::new(
+    let provider = Arc::new(ModelProvider::new(
         provider_http_client().unwrap(),
         Arc::new(Config {
             metadata,
@@ -313,7 +313,7 @@ async fn actual_native_provider_applies_registered_semantic_window() {
 
     let compare = Arc::new(LocaleCollation::new("en-US").unwrap());
     let metrics = Arc::new(RecallMetrics::default());
-    let reader = crate::cognition::NativeMemoryRecall::new(
+    let reader = crate::cognition::MemoryRecall::new(
         fixture.root.clone(),
         CognitionPathEnvironment::default(),
         Arc::new(crate::js_date::parse_iso_millis),
@@ -444,7 +444,7 @@ async fn actual_native_provider_applies_registered_semantic_window() {
     );
     reader.close().await;
     let compare = Arc::new(LocaleCollation::new("en-US").unwrap());
-    let reopened = crate::cognition::NativeMemoryRecall::new(
+    let reopened = crate::cognition::MemoryRecall::new(
         fixture.root.clone(),
         CognitionPathEnvironment::default(),
         Arc::new(crate::js_date::parse_iso_millis),

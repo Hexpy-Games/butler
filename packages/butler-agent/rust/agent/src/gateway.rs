@@ -12,7 +12,6 @@ mod live;
 mod message_files;
 mod message_validation;
 mod mutations;
-mod native_queue;
 mod protocol;
 mod rate_limit;
 mod session_references;
@@ -24,30 +23,31 @@ use std::{future::Future, net::SocketAddr, pin::Pin, sync::Arc};
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
-pub(crate) use application::app_session_hint;
-pub(crate) use application::diagnostics_enabled_readonly;
-pub(crate) use application::normalize_committed_turn_event;
+pub(crate) use crate::gateway::inbound_queue::{
+    ClaimedInboundEvent, InboundQueue, InboundQueueCode, InboundQueueError, QueuedInboundEvent,
+};
 pub(crate) use application::{
     AppAdmissionAuthority, AppApplication, AppApplicationConfig, AppApplicationDependencies,
     AppApprovalClaims, AppArtifactMaterializer, AppAuthorityDecision, AppAuthorityDecisionInput,
     AppAuthorityHandoff, AppAuthorityPage, AppBoundWorkStatusFact, AppBranchCanonicalAnswer,
     AppBranchConversationReader, AppBranchSummarizer, AppBranchSummary, AppBranchSummaryInput,
-    AppChatKind, AppChatSummary, AppContextBudgetFacts, AppContextReadFacts, AppContextReadPort,
-    AppContextReadQuery, AppContextUsage, AppCreateProjectRequest, AppCreateProjectResult,
-    AppCreateSessionInput, AppCreateSessionRequest, AppCreateSessionResult, AppDeveloperLogsQuery,
-    AppExecutorReadiness, AppFileDownload, AppFileUpload, AppFileWrite, AppIdentityClock,
-    AppLedgerSourceRequest, AppMessageFileSnapshot, AppMessageFileStorage, AppModelCatalogCommand,
-    AppModelCatalogPort, AppModelFallbackFacts, AppModelMetadata, AppMonitorPage,
-    AppMonitoringPort, AppNativeAssetResolver, AppNativeIngress, AppPersonalizationCommand,
-    AppPersonalizationEvent, AppPersonalizationPort, AppPersonalizationResult,
-    AppPlanDecisionAction, AppPlanDecisionLedgerError, AppPlanDecisionLedgerFuture,
-    AppPlanDecisionLedgerPort, AppPlanDecisionPlan, AppPlanDecisionRequest, AppPlanDecisionResult,
-    AppPlanDecisionStatus, AppProjectActionResult, AppProjectDashboardActionProgress,
-    AppProjectDashboardBriefingPort, AppProjectDashboardBriefingPrompt,
-    AppProjectDashboardBriefingRequest, AppProjectDashboardCheckpoint,
-    AppProjectDashboardDisposition, AppProjectDashboardLedgerError, AppProjectDashboardLedgerEvent,
-    AppProjectDashboardLedgerFuture, AppProjectDashboardLedgerHistory,
-    AppProjectDashboardLedgerPort, AppProjectDashboardLedgerRecord, AppProjectDashboardManagedPlan,
+    AppCancellation, AppChatKind, AppChatSummary, AppContextBudgetFacts, AppContextReadFacts,
+    AppContextReadPort, AppContextReadQuery, AppContextUsage, AppCreateProjectRequest,
+    AppCreateProjectResult, AppCreateSessionInput, AppCreateSessionRequest, AppCreateSessionResult,
+    AppDeveloperLogsQuery, AppExecutorReadiness, AppFileDownload, AppFileUpload, AppFileWrite,
+    AppIdentityClock, AppLedgerSourceRequest, AppMessageFileSnapshot, AppMessageFileStorage,
+    AppModelCatalogCommand, AppModelCatalogPort, AppModelFallbackFacts, AppModelMetadata,
+    AppMonitorPage, AppMonitoringPort, AppNativeAssetResolver, AppNativeIngress,
+    AppPersonalizationCommand, AppPersonalizationEvent, AppPersonalizationPort,
+    AppPersonalizationResult, AppPlanDecisionAction, AppPlanDecisionLedgerError,
+    AppPlanDecisionLedgerFuture, AppPlanDecisionLedgerPort, AppPlanDecisionPlan,
+    AppPlanDecisionRequest, AppPlanDecisionResult, AppPlanDecisionStatus, AppProjectActionResult,
+    AppProjectDashboardActionProgress, AppProjectDashboardBriefingPort,
+    AppProjectDashboardBriefingPrompt, AppProjectDashboardBriefingRequest,
+    AppProjectDashboardCheckpoint, AppProjectDashboardDisposition, AppProjectDashboardLedgerError,
+    AppProjectDashboardLedgerEvent, AppProjectDashboardLedgerFuture,
+    AppProjectDashboardLedgerHistory, AppProjectDashboardLedgerPort,
+    AppProjectDashboardLedgerRecord, AppProjectDashboardManagedPlan,
     AppProjectDashboardManagedWork, AppProjectDashboardPageQuery, AppProjectDashboardPinRef,
     AppProjectDashboardPreferencesUpdate, AppProjectDashboardRecordsQuery,
     AppProjectDashboardReview, AppProjectDashboardSnapshot, AppProjectDashboardSource,
@@ -63,13 +63,12 @@ pub(crate) use application::{
     AppSessionWorkProgress, AppSessionWorkspaceProvisioner, AppSessionWorkspaceSnapshot,
     AppSettingsFacts, AppSettingsFactsProvider, AppSettingsMutationPort, AppSourceDocument,
     AppSourceSnapshotRequest, AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin,
-    AppStartTopicConversationRequest, AppSubsessionPort, AppUsageMonitorQuery,
+    AppStartTopicConversationRequest, AppSubsessionPort, AppTurn, AppUsageMonitorQuery,
     AppWorkOperationalNoticeFact, AppWorkProgress, AppWorkStatusConversationFact,
     AppWorkStreamQuery, AppWorkStreamReader, AppWorkStreamTurnOutcome, AppWorkerActivityQuery,
     AppWorkspaceMode, ArtifactFileCandidate, ArtifactMaterializationRequest, ClaimedNativeSnapshot,
-    MaterializedResponderFile, NativeAppCancellation, NativeAppTurn, NativeEnqueueReceipt,
-    NativeProjectSnapshot, OperationOutputChunk, OperationOutputView, ResolvedNativeAssets,
-    TranscriptExport, VisualAdmissionRequest,
+    EnqueueReceipt, MaterializedResponderFile, OperationOutputChunk, OperationOutputView,
+    ProjectSnapshot, ResolvedNativeAssets, TranscriptExport, VisualAdmissionRequest,
 };
 pub(crate) use application::{
     AutomationDetailView, AutomationListView, AutomationMutationResult, AutomationRunListView,
@@ -77,14 +76,14 @@ pub(crate) use application::{
 };
 #[cfg(test)]
 pub(crate) use application::{TestProjectDashboardBriefing, TestProjectDashboardLedger};
+pub(crate) use application::{
+    app_session_hint, diagnostics_enabled_readonly, normalize_committed_turn_event,
+};
 pub(crate) use application::{app_work_status, app_worker_activity};
 pub(crate) use application::{read_new_chat_briefing_projects, read_new_chat_briefing_settings};
 pub(crate) use auth::LocalAuthConfig;
-pub(crate) use image_files::NativeAppImageFiles;
-pub(crate) use message_files::NativeAppMessageFiles;
-pub(crate) use native_queue::{
-    ClaimedInboundEvent, NativeInboundQueue, NativeQueueCode, NativeQueueError, QueuedInboundEvent,
-};
+pub(crate) use image_files::AppImageFiles;
+pub(crate) use message_files::AppMessageFiles;
 pub(crate) use protocol::{
     AppEventEnvelope, ArtifactKind, ArtifactOpenAction, ChangedFileDetail, DeliveryState,
     EventReplayView, HealthView, MessageContent, MessageContentPart, MessageFileKind,
@@ -97,7 +96,7 @@ pub(crate) use protocol::{
 mod error;
 pub(crate) use error::GatewayApplicationError;
 pub(crate) use session_references::resolve_session_references;
-pub(crate) use transcript::{NativeTranscriptWriter, TranscriptCode};
+pub(crate) use transcript::{TranscriptCode, TranscriptWriter};
 
 pub(crate) type ApplicationFuture<T> =
     Pin<Box<dyn Future<Output = Result<T, GatewayApplicationError>> + Send + 'static>>;
@@ -482,5 +481,6 @@ pub(crate) async fn serve_gateway(
     })
 }
 
+mod inbound_queue;
 #[cfg(test)]
 mod tests;

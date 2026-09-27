@@ -13,7 +13,7 @@ use crate::btcc::{
     TurnStore, TurnTrigger, WorkTurnScope,
 };
 
-use super::{NativeGuidedWork, decision};
+use super::{GuidedWorkAdapter, decision};
 
 struct Live;
 impl ProcessLiveness for Live {
@@ -153,7 +153,7 @@ async fn real_sqlite_work_final_reconcile_persists_current_open_disposition() {
         .await
         .unwrap();
     assert_eq!(started.status, DurableWorkStatus::Open);
-    let port = NativeGuidedWork::new(
+    let port = GuidedWorkAdapter::new(
         service,
         scope,
         "local".into(),

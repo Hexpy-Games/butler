@@ -1,35 +1,35 @@
 //! Runtime owner shutdown after admission has stopped and Turn futures have drained.
 
 use super::*;
-use crate::skills::NativeSkills;
+use crate::skills::Skills;
 
 pub(super) struct RuntimeOwners {
     pub(super) stores: RuntimeStores,
-    pub(super) project_work: Arc<NativeProjectWork>,
-    pub(super) project_tools: Arc<crate::host::guided::project_tools::NativeGuidedProjectTools>,
-    pub(super) session_worktrees: NativeSessionWorktrees,
-    pub(super) image_files: Arc<crate::gateway::NativeAppImageFiles>,
-    pub(super) attachment_context: Arc<crate::context::NativeAttachmentContext>,
-    pub(super) memory_sync: crate::host::memory_jobs::sync::NativeMemorySync,
+    pub(super) project_work: Arc<ProjectWork>,
+    pub(super) project_tools: Arc<crate::host::guided::project_tools::GuidedProjectTools>,
+    pub(super) session_worktrees: SessionWorktrees,
+    pub(super) image_files: Arc<crate::gateway::AppImageFiles>,
+    pub(super) attachment_context: Arc<crate::context::AttachmentContext>,
+    pub(super) memory_sync: crate::host::memory_jobs::sync::MemorySync,
     #[cfg(unix)]
-    pub(super) embedding: Arc<super::super::NativeEmbeddingOwner>,
+    pub(super) embedding: Arc<super::super::EmbeddingOwner>,
     pub(super) profile: Arc<ProfileService>,
-    pub(super) cognition: Arc<NativeCognitionPromptReader>,
-    pub(super) memory_query: Arc<NativeExactMemoryQuery>,
-    pub(super) memory_recall: Arc<NativeMemoryRecall>,
-    pub(super) conversation_reference: Arc<NativeConversationSessionReference>,
-    pub(super) conversation_tools: Arc<NativeConversationTools>,
-    pub(super) observer: Arc<NativeConversationObserver>,
-    pub(super) plans: NativeAcceptedPlanProducer,
-    pub(super) command: Arc<crate::host::guided::command::NativeGuidedCommand>,
-    pub(super) commands: NativeCommands,
-    pub(super) tool_output: NativeToolOutput,
+    pub(super) cognition: Arc<CognitionPromptReader>,
+    pub(super) memory_query: Arc<ExactMemoryQuery>,
+    pub(super) memory_recall: Arc<MemoryRecall>,
+    pub(super) conversation_reference: Arc<ConversationSessionReference>,
+    pub(super) conversation_tools: Arc<ConversationTools>,
+    pub(super) observer: Arc<ConversationObserver>,
+    pub(super) plans: AcceptedPlanProducer,
+    pub(super) command: Arc<crate::host::guided::command::GuidedCommand>,
+    pub(super) commands: Commands,
+    pub(super) tool_output: ToolOutput,
     pub(super) context_maintenance: Arc<ContextMaintenance>,
-    pub(super) files: NativeWorkspaceFiles,
+    pub(super) files: WorkspaceFiles,
     pub(super) mutations: WorkspaceMutations,
-    pub(super) work_streams: Arc<super::super::NativeWorkStreams>,
-    pub(super) skills: Arc<NativeSkills>,
-    pub(super) automations: Arc<crate::operations::NativeAutomationService>,
+    pub(super) work_streams: Arc<super::super::WorkStreams>,
+    pub(super) skills: Arc<Skills>,
+    pub(super) automations: Arc<crate::operations::AutomationService>,
 }
 
 impl HostDependencies for RuntimeOwners {

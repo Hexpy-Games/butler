@@ -21,8 +21,7 @@ impl AppIdentityClock for Clock {
 #[tokio::test]
 async fn outbound_delivery_and_replay_claim_append_source_transcript_events() {
     let root = std::env::temp_dir().join(format!("butler-transcript-{}", uuid::Uuid::new_v4()));
-    let writer =
-        NativeTranscriptWriter::new(root.clone(), Arc::new(Clock(AtomicU64::new(1)))).unwrap();
+    let writer = TranscriptWriter::new(root.clone(), Arc::new(Clock(AtomicU64::new(1)))).unwrap();
     let session = "butler/app-general".to_owned();
     writer
         .append_lifecycle(

@@ -1,10 +1,9 @@
 //! Reviewed Steward Plan action to durable Worker dispatch.
 
 use super::*;
-use crate::btcc::BtccCode;
-use crate::btcc::BtccError;
+use crate::btcc::{BtccCode, BtccError};
 
-impl NativeSubsessionService {
+impl SubsessionService {
     pub(crate) async fn delegate_worker(
         &self,
         request: WorkerDelegationRequest,

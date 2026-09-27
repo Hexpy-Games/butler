@@ -10,13 +10,13 @@ use crate::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecution
 use crate::capabilities::{BridgeCatalogTool, describe_native, search_native};
 use crate::json::{JsonDocument, visit_raw_array, visit_raw_object};
 
-use super::NativeGuidedTools;
+use super::GuidedTools;
 
 const SCOPED: &str = "tool is outside the current session's scoped progressive surface";
 const RECOVER: &str = "Choose a tool already present in the current native surface, or adjust the structured runtime policy that selects tool profiles.";
 
 pub(super) async fn execute(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
     outer_call_id: &str,
@@ -64,7 +64,7 @@ pub(super) fn effective(call: &ModelRoundToolCall) -> (String, Value, Option<Str
 }
 
 async fn search(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     args: &Map<String, Value>,
     signal: &tokio_util::sync::CancellationToken,
 ) -> Result<JsonDocument, ToolExecutionError> {
@@ -130,7 +130,7 @@ async fn search(
     let catalog = owner.catalog.snapshot();
     let result = search_native(
         catalog
-            .native_tools()
+            .builtin_tools()
             .filter(|tool| {
                 !catalog.hidden_native_bridge_tool(
                     tool.name,
@@ -150,7 +150,7 @@ async fn search(
 }
 
 async fn describe(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     args: &Map<String, Value>,
     signal: &tokio_util::sync::CancellationToken,
 ) -> Result<JsonDocument, ToolExecutionError> {
@@ -201,7 +201,7 @@ async fn describe(
             missing.push(json!({"id":id,"error":"unknown_tool_catalog_id"}));
             continue;
         }
-        if let Some(tool) = catalog.native_tool(name) {
+        if let Some(tool) = catalog.builtin_tool(name) {
             descriptions.push(describe_native(projection(owner, tool)).map_err(|error| {
                 ToolExecutionError::Integrity(BtccError::relayed(
                     "guided_bridge_catalog_json",
@@ -216,7 +216,7 @@ async fn describe(
 }
 
 pub(super) fn remember_described(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     call: &ModelRoundToolCall,
     result: &JsonDocument,
 ) -> Result<(), ToolExecutionError> {
@@ -259,13 +259,13 @@ pub(super) fn remember_described(
 }
 
 fn projection<'a>(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     tool: crate::btcc::GuidedCatalogRead<'a>,
 ) -> BridgeCatalogTool<'a> {
     let configured_disabled = owner.web_session.configured_disabled_reason(tool.name);
     let enabled = configured_disabled.is_none()
         && owner.binding.authorized_names.contains(tool.name)
-        && NativeGuidedTools::supports(tool.name)
+        && GuidedTools::supports(tool.name)
         && !matches!(
             ToolName::parse(tool.name),
             Some(ToolName::ToolSearch | ToolName::ToolDescribe | ToolName::ToolCall)

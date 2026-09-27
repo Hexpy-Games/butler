@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-pub(crate) struct NativeWorkCliResult {
+pub(crate) struct WorkCliResult {
     pub stdout: String,
     pub stderr: String,
     pub exit_code: u8,
@@ -30,7 +30,7 @@ pub(super) fn render_success(
     data: Value,
     human: &str,
     quiet: bool,
-) -> NativeWorkCliResult {
+) -> WorkCliResult {
     let stdout = if json_output {
         envelope(true, command, Some(data), None)
     } else if quiet {
@@ -38,7 +38,7 @@ pub(super) fn render_success(
     } else {
         format!("{}\n", human.trim_end())
     };
-    NativeWorkCliResult {
+    WorkCliResult {
         stdout,
         stderr: String::new(),
         exit_code: 0,
@@ -49,9 +49,9 @@ pub(super) fn render_error(
     json_output: bool,
     command: &str,
     error: &CommandError,
-) -> NativeWorkCliResult {
+) -> WorkCliResult {
     if json_output {
-        NativeWorkCliResult {
+        WorkCliResult {
             stdout: envelope(
                 false,
                 command,
@@ -62,7 +62,7 @@ pub(super) fn render_error(
             exit_code: error.exit_code,
         }
     } else {
-        NativeWorkCliResult {
+        WorkCliResult {
             stdout: String::new(),
             stderr: format!("{}\n", error.message),
             exit_code: error.exit_code,

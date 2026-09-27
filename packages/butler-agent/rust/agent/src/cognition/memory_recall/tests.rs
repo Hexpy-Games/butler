@@ -118,7 +118,7 @@ fn raw_excerpt_and_v2_handles_match_unchanged_bun_source() {
 
 #[tokio::test]
 async fn caller_drop_does_not_abandon_admitted_recall_and_close_drains_it() {
-    let reader = std::sync::Arc::new(super::NativeMemoryRecall::new(
+    let reader = std::sync::Arc::new(super::MemoryRecall::new(
         std::env::temp_dir().join(format!("butler-recall-drain-{}", uuid::Uuid::new_v4())),
         crate::cognition::CognitionPathEnvironment::default(),
         std::sync::Arc::new(crate::js_date::parse_iso_millis),

@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use tokio_util::sync::CancellationToken;
 
-use crate::workspace::{CommandStep, NativeCommands, StructuredCommandInput};
+use crate::workspace::{CommandStep, Commands, StructuredCommandInput};
 
 pub(in crate::host::guided::command) type GitSnapshot = IndexMap<String, String>;
 
@@ -38,7 +38,7 @@ pub(super) fn changed_paths(before: &GitSnapshot, after: &GitSnapshot) -> Vec<St
 }
 
 pub(in crate::host::guided::command) async fn snapshot(
-    commands: &NativeCommands,
+    commands: &Commands,
     workspace: &Path,
     host_environment: Arc<HashMap<String, String>>,
     abort: CancellationToken,

@@ -65,13 +65,13 @@ struct State {
     pending_title: Option<String>,
 }
 
-pub(crate) struct NativeGuidedActivity {
+pub(crate) struct GuidedActivity {
     turn_id: String,
     source_revision: GuidedSourceRevision,
     state: Mutex<State>,
 }
 
-impl NativeGuidedActivity {
+impl GuidedActivity {
     pub(crate) fn new(
         turn_id: String,
         source_revision: GuidedSourceRevision,

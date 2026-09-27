@@ -17,8 +17,8 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
 use super::{
-    NativeCommands, NativeWorkspaceFiles, RebindWorkspaceInput, RebindWorkspaceResult,
-    SessionBindingStore, WorkspaceClock, WorkspaceReference, WorkspaceResult,
+    Commands, RebindWorkspaceInput, RebindWorkspaceResult, SessionBindingStore, WorkspaceClock,
+    WorkspaceFiles, WorkspaceReference, WorkspaceResult,
 };
 use git::GitWorktrees;
 use path::{marker, normalize_ref, public_label, safe_ref};
@@ -77,14 +77,14 @@ fn failure(
 type SessionLock = tokio::sync::Mutex<()>;
 
 #[derive(Clone)]
-pub(crate) struct NativeSessionWorktrees {
+pub(crate) struct SessionWorktrees {
     inner: Arc<Owner>,
 }
 
 struct Owner {
     bindings: SessionBindingStore,
-    commands: NativeCommands,
-    files: NativeWorkspaceFiles,
+    commands: Commands,
+    files: WorkspaceFiles,
     host_environment: Arc<HashMap<String, String>>,
     butler_data: PathBuf,
     clock: Arc<dyn WorkspaceClock>,
@@ -98,11 +98,11 @@ struct State {
     locks: HashMap<String, Weak<SessionLock>>,
 }
 
-impl NativeSessionWorktrees {
+impl SessionWorktrees {
     pub(crate) fn new(
         bindings: SessionBindingStore,
-        commands: NativeCommands,
-        files: NativeWorkspaceFiles,
+        commands: Commands,
+        files: WorkspaceFiles,
         host_environment: Arc<HashMap<String, String>>,
         butler_data: PathBuf,
         clock: Arc<dyn WorkspaceClock>,

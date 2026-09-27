@@ -6,15 +6,15 @@ use crate::btcc::{
 use crate::btcc::{
     ToolJournalFinish, ToolJournalFinishStatus, ToolJournalRecord, ToolJournalStart,
 };
-use crate::host::NativeGuidedWorkTools;
+use crate::host::GuidedWorkTools;
 use crate::json::JsonDocument;
 use crate::tool_protocol::ToolName;
 
-use super::NativeGuidedTools;
+use super::GuidedTools;
 use super::occurrence::{Occurrence, occurrence};
 
 pub(super) async fn execute(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
 ) -> Result<JsonDocument, ToolExecutionError> {
@@ -88,7 +88,7 @@ pub(super) async fn execute(
             "completed" => {
                 let output = record_output(record)?;
                 super::discovery::remember_described(owner, call, &output)?;
-                if NativeGuidedWorkTools::repairs_completed_relation(&call.name)
+                if GuidedWorkTools::repairs_completed_relation(&call.name)
                     && output.field("ok").ok().flatten() == Some("true")
                 {
                     let repaired = super::dispatch::execute_work(owner, call, &call_id).await?;
@@ -104,7 +104,7 @@ pub(super) async fn execute(
             }
             "failed" | "cancelled" => return prior_failure(&call.name, &record.status),
             "started" | "awaiting_authority"
-                if !NativeGuidedTools::supports(&call.name)
+                if !GuidedTools::supports(&call.name)
                     || matches!(
                         ToolName::parse(effective_name.as_str()),
                         Some(
@@ -156,7 +156,7 @@ pub(super) async fn execute(
 }
 
 pub(super) async fn record_unexecuted(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
     result: &ToolResult,
@@ -196,13 +196,13 @@ pub(super) async fn record_unexecuted(
         .map_err(BtccError::from)
 }
 
-fn next_index(owner: &NativeGuidedTools) -> u64 {
+fn next_index(owner: &GuidedTools) -> u64 {
     let mut state = owner.state.lock();
     let current = state.next_call_index;
     state.next_call_index += 1;
     current
 }
-fn remember_provider(owner: &NativeGuidedTools, occurrence: &Occurrence, call_id: &str) {
+fn remember_provider(owner: &GuidedTools, occurrence: &Occurrence, call_id: &str) {
     if let Some(provider) = &occurrence.provider_call_id {
         owner
             .state
@@ -212,7 +212,7 @@ fn remember_provider(owner: &NativeGuidedTools, occurrence: &Occurrence, call_id
     }
 }
 async fn resolve_record(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     occurrence: &Occurrence,
 ) -> Result<Option<ToolJournalRecord>, ToolExecutionError> {
     if let Some(record) = owner
@@ -233,7 +233,7 @@ async fn resolve_record(
     Ok(None)
 }
 async fn start(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     call: &ModelRoundToolCall,
     call_id: &str,
     effective_name: &str,
@@ -252,7 +252,7 @@ async fn start(
         .map_err(|error| ToolExecutionError::Integrity(error.into()))
 }
 async fn finish(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     call_id: &str,
     status: ToolJournalFinishStatus,
     result: Option<&JsonDocument>,

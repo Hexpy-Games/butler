@@ -5,16 +5,12 @@ use std::{path::PathBuf, sync::Arc};
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
 
-use crate::{btcc::BtccError, gateway::NativeInboundQueue, operations::ServiceReadiness};
+use crate::{btcc::BtccError, gateway::InboundQueue, operations::ServiceReadiness};
 
-use super::NativeActiveAppEndpoint;
-use crate::host::service::configuration::{
-    NativeAppCapturedDependencies, NativeAppServiceConfiguration,
-};
+use super::ActiveAppEndpoint;
+use crate::host::service::configuration::{AppCapturedDependencies, AppServiceConfiguration};
 use crate::host::service::instance::mark_gateway_state;
-use crate::host::{
-    NativeAgentRuntime, NativeAppServer, NativeServiceConfiguration, ResolvedInstallation,
-};
+use crate::host::{AgentRuntime, AppServer, ResolvedInstallation, ServiceConfiguration};
 
 #[derive(Clone, Copy, Debug, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -27,31 +23,31 @@ pub(crate) enum GatewayControlCommand {
     RestartHandoffResult,
 }
 
-pub(crate) struct NativeAppGatewayLifecycle {
-    runtime: Arc<NativeAgentRuntime>,
+pub(crate) struct AppGatewayLifecycle {
+    runtime: Arc<AgentRuntime>,
     data_root: PathBuf,
-    queue: Arc<NativeInboundQueue>,
+    queue: Arc<InboundQueue>,
     readiness: Arc<ServiceReadiness>,
-    endpoint: Arc<NativeActiveAppEndpoint>,
+    endpoint: Arc<ActiveAppEndpoint>,
     installation: ResolvedInstallation,
-    captured_dependencies: NativeAppCapturedDependencies,
+    captured_dependencies: AppCapturedDependencies,
     nonce: String,
-    current: Mutex<Option<NativeAppServer>>,
+    current: Mutex<Option<AppServer>>,
 }
 
-impl NativeAppGatewayLifecycle {
+impl AppGatewayLifecycle {
     pub(crate) fn new(
-        runtime: Arc<NativeAgentRuntime>,
-        service: &NativeServiceConfiguration,
-        queue: Arc<NativeInboundQueue>,
+        runtime: Arc<AgentRuntime>,
+        service: &ServiceConfiguration,
+        queue: Arc<InboundQueue>,
         readiness: Arc<ServiceReadiness>,
-        endpoint: Arc<NativeActiveAppEndpoint>,
+        endpoint: Arc<ActiveAppEndpoint>,
         nonce: String,
     ) -> Self {
         Self {
             installation: service.installation.clone(),
             data_root: service.data_root.clone(),
-            captured_dependencies: NativeAppCapturedDependencies::capture(&service.app),
+            captured_dependencies: AppCapturedDependencies::capture(&service.app),
             runtime,
             queue,
             readiness,
@@ -63,7 +59,7 @@ impl NativeAppGatewayLifecycle {
 
     pub(crate) async fn start_initial(
         &self,
-        initial: &NativeAppServiceConfiguration,
+        initial: &AppServiceConfiguration,
     ) -> Result<bool, BtccError> {
         let mut current = self.current.lock().await;
         if !initial.enabled {
@@ -82,7 +78,7 @@ impl NativeAppGatewayLifecycle {
             GatewayControlCommand::Status => self.view(current.as_ref()).await,
             GatewayControlCommand::Test => self.test(current.as_ref()).await,
             GatewayControlCommand::Start => {
-                let desired = NativeAppServiceConfiguration::capture(&self.data_root);
+                let desired = AppServiceConfiguration::capture(&self.data_root);
                 self.require_captured_dependencies_text(&desired)?;
                 if !desired.enabled {
                     let mut view = self.view(current.as_ref()).await?;
@@ -108,7 +104,7 @@ impl NativeAppGatewayLifecycle {
                 Ok(view)
             }
             GatewayControlCommand::Restart => {
-                let desired = NativeAppServiceConfiguration::capture(&self.data_root);
+                let desired = AppServiceConfiguration::capture(&self.data_root);
                 self.require_captured_dependencies_text(&desired)?;
                 if !desired.enabled {
                     let mut view = self.view(current.as_ref()).await?;
@@ -139,13 +135,13 @@ impl NativeAppGatewayLifecycle {
 
     async fn start_locked(
         &self,
-        current: &mut Option<NativeAppServer>,
-        app_config: &NativeAppServiceConfiguration,
+        current: &mut Option<AppServer>,
+        app_config: &AppServiceConfiguration,
     ) -> Result<bool, BtccError> {
         if current.is_some() {
             return Ok(false);
         }
-        let mut server = NativeAppServer::open(
+        let mut server = AppServer::open(
             &self.runtime,
             &self.data_root,
             &self.installation,
@@ -194,7 +190,7 @@ impl NativeAppGatewayLifecycle {
 
     async fn stop_locked(
         &self,
-        current: &mut Option<NativeAppServer>,
+        current: &mut Option<AppServer>,
     ) -> Result<(), crate::host::HostError> {
         if let Some(server) = current.as_mut() {
             server
@@ -204,13 +200,13 @@ impl NativeAppGatewayLifecycle {
             drop(current.take());
         }
         self.endpoint.clear();
-        let config = NativeAppServiceConfiguration::capture(&self.data_root);
+        let config = AppServiceConfiguration::capture(&self.data_root);
         self.persist(false, None, &config)
     }
 
     fn require_captured_dependencies(
         &self,
-        desired: &NativeAppServiceConfiguration,
+        desired: &AppServiceConfiguration,
     ) -> Result<(), BtccError> {
         if self.captured_dependencies.matches(desired) {
             Ok(())
@@ -224,7 +220,7 @@ impl NativeAppGatewayLifecycle {
 
     fn require_captured_dependencies_text(
         &self,
-        desired: &NativeAppServiceConfiguration,
+        desired: &AppServiceConfiguration,
     ) -> Result<(), crate::host::HostError> {
         self.require_captured_dependencies(desired)
             .map_err(error_text)
@@ -235,7 +231,7 @@ impl NativeAppGatewayLifecycle {
         &self,
         active: bool,
         address: Option<String>,
-        config: &NativeAppServiceConfiguration,
+        config: &AppServiceConfiguration,
     ) -> Result<(), crate::host::HostError> {
         mark_gateway_state(
             &self.data_root,
@@ -247,11 +243,8 @@ impl NativeAppGatewayLifecycle {
         )
     }
 
-    async fn view(
-        &self,
-        current: Option<&NativeAppServer>,
-    ) -> Result<Value, crate::host::HostError> {
-        let desired = NativeAppServiceConfiguration::capture(&self.data_root);
+    async fn view(&self, current: Option<&AppServer>) -> Result<Value, crate::host::HostError> {
+        let desired = AppServiceConfiguration::capture(&self.data_root);
         let active = self.endpoint.snapshot();
         let enabled = desired.enabled;
         let running = match (current, active.as_ref()) {
@@ -296,10 +289,7 @@ impl NativeAppGatewayLifecycle {
         }))
     }
 
-    async fn test(
-        &self,
-        current: Option<&NativeAppServer>,
-    ) -> Result<Value, crate::host::HostError> {
+    async fn test(&self, current: Option<&AppServer>) -> Result<Value, crate::host::HostError> {
         let mut view = self.view(current).await?;
         let result = view["enabled"] == true && view["running"] == true;
         view["ok"] = Value::Bool(result);

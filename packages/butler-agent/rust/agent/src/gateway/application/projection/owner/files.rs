@@ -58,7 +58,7 @@ pub(super) async fn resolve_chat_file(
 }
 
 fn transcript_file(chat: &str) -> String {
-    let session = super::super::super::native_preparation::session_hint(chat);
+    let session = crate::gateway::application::snapshot_input::session_hint(chat);
     format!(
         "{}.jsonl",
         session.replace(

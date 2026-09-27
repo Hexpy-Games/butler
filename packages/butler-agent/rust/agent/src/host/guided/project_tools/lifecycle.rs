@@ -6,14 +6,14 @@ use std::path::Path;
 use serde_json::{Map, Value, json};
 
 use super::command;
-use crate::project_ledger::{LedgerCommand, NativeProjectLedger, ProjectLedgerReadError};
+use crate::project_ledger::{LedgerCommand, ProjectLedger, ProjectLedgerReadError};
 
 mod closeout;
 pub(super) use closeout::closeout;
 
 /// Returns `None` for tools with no planned lifecycle transition.
 pub(super) async fn execute(
-    ledger: &NativeProjectLedger,
+    ledger: &ProjectLedger,
     root: &Path,
     name: &str,
     args: &Map<String, Value>,

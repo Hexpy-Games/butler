@@ -8,7 +8,7 @@ use tokio::{
 };
 
 use crate::cognition::{
-    CognitionError, CognitionResult, EmbeddingMode, NativeEmbeddingResult, WorkerOperation,
+    CognitionError, CognitionResult, EmbeddingMode, EmbeddingResult, WorkerOperation,
     WorkerRequest, WorkerResponse, WorkerResult,
 };
 
@@ -76,7 +76,7 @@ pub(super) async fn initialize(process: &mut WorkerChild, id: u64) -> CognitionR
 pub(super) async fn exchange(
     process: &mut WorkerChild,
     item: &Pending,
-) -> CognitionResult<CognitionResult<NativeEmbeddingResult>> {
+) -> CognitionResult<CognitionResult<EmbeddingResult>> {
     let response = round_trip(process, &item.frame, item.id).await?;
     match response.result {
         WorkerResult::Embedding(result) => {
@@ -131,7 +131,7 @@ async fn round_trip(
     Ok(response)
 }
 
-fn validate_result(item: &Pending, result: &NativeEmbeddingResult) -> CognitionResult<()> {
+fn validate_result(item: &Pending, result: &EmbeddingResult) -> CognitionResult<()> {
     let metadata = &result.metadata;
     let expected_pooling = match item.mode {
         EmbeddingMode::CheckedCls => "cls",

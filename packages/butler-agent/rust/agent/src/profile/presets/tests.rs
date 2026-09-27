@@ -26,7 +26,7 @@ fn locale(value: &serde_json::Value) -> PersonaLocale {
 }
 
 #[test]
-fn native_filesystem_presets_match_actual_bun_source() {
+fn filesystem_presets_match_actual_bun_source() {
     let golden: serde_json::Value = serde_json::from_str(include_str!("bun-golden.json")).unwrap();
     let fixture = Fixture::new();
     let templates = fixture.0.join("resources/personas/templates");

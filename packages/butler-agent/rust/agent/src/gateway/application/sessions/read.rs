@@ -264,7 +264,7 @@ fn project(row: SessionRow) -> Result<AppSessionSummary, AppStorageError> {
         title: row.title,
         project_id,
         project,
-        session_hint: super::super::native_preparation::session_hint(&row.id),
+        session_hint: crate::gateway::application::snapshot_input::session_hint(&row.id),
         created_at: row.created_at,
         updated_at: row.updated_at.clone(),
         last_activity_at: row.updated_at,

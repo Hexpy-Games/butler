@@ -11,13 +11,13 @@ use crate::{
     models::ModelConfigurationClock,
 };
 
-use crate::host::cli::consolidation::NativeConsolidationCliResult;
+use crate::host::cli::consolidation::ConsolidationCliResult;
 use crate::host::{ResolvedInstallation, SystemIdentity};
 
 pub(crate) async fn run(
     installation: ResolvedInstallation,
     arguments: Vec<OsString>,
-) -> NativeConsolidationCliResult {
+) -> ConsolidationCliResult {
     let json_mode = arguments.iter().any(|item| item == "--json");
     let data = match parse(&installation, &arguments) {
         Ok(path) => path,
@@ -42,7 +42,7 @@ pub(crate) async fn run(
     )
     .await;
     match result {
-        Ok(handle) => NativeConsolidationCliResult {
+        Ok(handle) => ConsolidationCliResult {
             stdout: if json_mode {
                 format!(
                     "{}\n",
@@ -104,13 +104,8 @@ fn parse(
     installation.validate_data_root(&requested)
 }
 
-fn failure(
-    json_mode: bool,
-    code: &str,
-    message: &str,
-    exit_code: u8,
-) -> NativeConsolidationCliResult {
-    NativeConsolidationCliResult {
+fn failure(json_mode: bool, code: &str, message: &str, exit_code: u8) -> ConsolidationCliResult {
+    ConsolidationCliResult {
         stdout: if json_mode {
             format!(
                 "{}\n",

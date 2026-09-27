@@ -18,17 +18,17 @@ use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
 
 use crate::btcc::{AccessMode, BtccError};
-use crate::context::NativeToolOutput;
+use crate::context::ToolOutput;
 use crate::json::JsonDocument;
 use crate::workspace::{
-    GuidedAccess, GuidedCommandInput, LegacyShell, NativeCommands, StructuredCommandInput,
+    Commands, GuidedAccess, GuidedCommandInput, LegacyShell, StructuredCommandInput,
     WorkspaceReference,
 };
 use jobs::CommandJobs;
 
-pub(crate) struct NativeGuidedCommand {
-    commands: NativeCommands,
-    output: NativeToolOutput,
+pub(crate) struct GuidedCommand {
+    commands: Commands,
+    output: ToolOutput,
     host_environment: Arc<HashMap<String, String>>,
     jobs: CommandJobs,
 }
@@ -49,10 +49,10 @@ pub(crate) struct PreparedCommandEffect {
     pub adapter: Arc<dyn crate::btcc::EffectAdapter>,
 }
 
-impl NativeGuidedCommand {
+impl GuidedCommand {
     pub(crate) fn new(
-        commands: NativeCommands,
-        output: NativeToolOutput,
+        commands: Commands,
+        output: ToolOutput,
         host_environment: Arc<HashMap<String, String>>,
     ) -> Self {
         Self {
@@ -122,7 +122,7 @@ impl NativeGuidedCommand {
             let requested = cwd.clone();
             let resolved_cwd = self
                 .jobs
-                .run(move || NativeCommands::guarded_directory(&guarded_root, requested.as_deref()))
+                .run(move || Commands::guarded_directory(&guarded_root, requested.as_deref()))
                 .await?
                 .map_err(BtccError::from)?;
             let guard_command = command.to_owned();
@@ -176,7 +176,7 @@ impl NativeGuidedCommand {
             let host = Arc::clone(&self.host_environment);
             let environment = self
                 .jobs
-                .run(move || NativeCommands::tool_environment(&host, &data))
+                .run(move || Commands::tool_environment(&host, &data))
                 .await?
                 .map_err(BtccError::from)?;
             let output_abort = scope.abort.clone();

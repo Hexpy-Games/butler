@@ -4,14 +4,14 @@ use serde_json::{Map, Value};
 
 use crate::operations::AutomationCode;
 use crate::{
-    gateway::NativeInboundQueue,
+    gateway::InboundQueue,
     json::JsonDocument,
     operations::{AutomationEnqueue, AutomationError},
 };
 
-pub(crate) struct NativeAutomationQueue(pub(crate) Arc<NativeInboundQueue>);
+pub(crate) struct AutomationQueue(pub(crate) Arc<InboundQueue>);
 
-impl AutomationEnqueue for NativeAutomationQueue {
+impl AutomationEnqueue for AutomationQueue {
     fn enqueue(
         &self,
         envelope: Value,

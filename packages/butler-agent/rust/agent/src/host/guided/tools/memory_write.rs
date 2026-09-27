@@ -13,7 +13,7 @@ use crate::conversation::{
 };
 use crate::json::JsonDocument;
 
-use super::NativeGuidedTools;
+use super::GuidedTools;
 
 pub(super) fn supports(name: &str) -> bool {
     matches!(
@@ -23,7 +23,7 @@ pub(super) fn supports(name: &str) -> bool {
 }
 
 pub(super) fn execute(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
     call_id: &str,
@@ -45,7 +45,7 @@ pub(super) fn execute(
     encoded(&result)
 }
 
-fn ingest(owner: &NativeGuidedTools, args: &Map<String, Value>) -> Value {
+fn ingest(owner: &GuidedTools, args: &Map<String, Value>) -> Value {
     let task_id = args
         .get("task_id")
         .and_then(Value::as_str)
@@ -69,7 +69,7 @@ fn ingest(owner: &NativeGuidedTools, args: &Map<String, Value>) -> Value {
 }
 
 fn update(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     args: &Map<String, Value>,
     call_id: &str,
@@ -130,7 +130,7 @@ fn update(
 }
 
 fn canonical_authored_source(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
 ) -> Result<(Option<String>, Option<String>), &'static str> {
     let runtime_session_id = owner.binding.memory.runtime_session_id.trim();

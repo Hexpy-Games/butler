@@ -3,8 +3,7 @@ use std::sync::Arc;
 use serde_json::json;
 
 use crate::btcc::authority::contracts::{
-    AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityDecisionInput,
-    NativePrincipalAuthority,
+    AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityDecisionInput, PrincipalAuthority,
 };
 use crate::btcc::storage::{
     BtccRepositories, BtccStorage, SessionWorkRepository, ToolJournalRepository, ToolJournalStart,
@@ -20,8 +19,8 @@ use super::*;
 fn clock() -> Arc<dyn Fn() -> String + Send + Sync> {
     Arc::new(|| "2026-09-19T00:00:00.000Z".into())
 }
-fn authority(storage: BtccStorage) -> NativePrincipalAuthority {
-    NativePrincipalAuthority::new(
+fn authority(storage: BtccStorage) -> PrincipalAuthority {
+    PrincipalAuthority::new(
         storage,
         Arc::new(LocaleCollation::new("en-US").unwrap()),
         clock(),

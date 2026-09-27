@@ -4,7 +4,6 @@ mod authority;
 mod cache;
 mod cutover;
 mod initialize;
-mod native_bind;
 mod qualification;
 mod qualification_service;
 mod qualification_witness;
@@ -16,15 +15,16 @@ mod retry_failed;
 mod set_extractor;
 mod types;
 
+pub(crate) use crate::cognition::generation::embedding_binding::bind_native_embedding_identity;
 pub(crate) use authority::assert_mutation_authority;
 pub(crate) use cache::advance as advance_rebuild_cache;
-pub(in crate::cognition) use cache::physical_entries as physical_hot_cache_entries;
-pub(in crate::cognition) use cache::read_hot_cache_health;
+pub(in crate::cognition) use cache::{
+    physical_entries as physical_hot_cache_entries, read_hot_cache_health,
+};
 pub(crate) use cutover::{
     activate as activate_memory_rebuild, rollback as rollback_memory_rebuild,
 };
 pub(crate) use initialize::initialize_empty_memory_generation;
-pub(crate) use native_bind::bind_native_embedding_identity;
 pub(crate) use qualification_service::validate as validate_memory_rebuild;
 pub(crate) use read::{
     active_memory_descriptor_exists, resolve_active_generation, resolve_generation,
@@ -44,5 +44,6 @@ pub(crate) use retry_failed::run as retry_failed_memory_generation;
 pub(crate) use set_extractor::run as set_extractor_memory_generation;
 pub(crate) use types::{GenerationEmbedding, MemoryGenerationHandle, MemoryGenerationTarget};
 
+mod embedding_binding;
 #[cfg(test)]
 mod tests;

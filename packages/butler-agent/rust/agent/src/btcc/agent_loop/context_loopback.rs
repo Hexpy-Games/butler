@@ -19,10 +19,10 @@ use crate::btcc::{
     PortFuture, SteeringObservation, TurnContinuationBudgetLimits, TurnModelExecutionFactory,
     TurnSteeringPort, TurnStore,
 };
-use crate::context::NativeContextPort;
+use crate::context::ContextPortAdapter;
 use crate::locale::LocaleCollation;
 use crate::models::{
-    ModelCatalog, ModelCatalogSnapshot, ModelCatalogSnapshotInput, NativeModelProvider,
+    ModelCatalog, ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelProvider,
     PromptUsageMetricInput, PromptUsageMetricSink, ProviderAuth, ProviderClock,
     ProviderConfigFuture, ProviderConfigRequest, ProviderObservation, ProviderObservationSink,
     ProviderPromptCachePolicy, ProviderRequestConfig, ProviderRequestConfigPort,
@@ -171,7 +171,7 @@ async fn server(
     (endpoint, bodies, task)
 }
 
-fn provider(endpoint: Url) -> Arc<NativeModelProvider> {
+fn provider(endpoint: Url) -> Arc<ModelProvider> {
     let catalog = Arc::new(ModelCatalog::new().unwrap());
     let snapshot = Arc::new(
         catalog
@@ -188,7 +188,7 @@ fn provider(endpoint: Url) -> Arc<NativeModelProvider> {
             )
             .unwrap(),
     );
-    Arc::new(NativeModelProvider::new(
+    Arc::new(ModelProvider::new(
         crate::models::provider_http_client().unwrap(),
         Arc::new(Config { snapshot, endpoint }),
         Arc::new(Observations),
@@ -212,7 +212,7 @@ fn limits() -> TurnContinuationBudgetLimits {
 }
 
 #[tokio::test]
-async fn native_summary_persists_and_reopens_with_physical_request_admission() {
+async fn summary_persists_and_reopens_with_physical_request_admission() {
     let fixture = TestStorageFixture::activated();
     let storage = BtccStorage::open(fixture.config("context-native-first"))
         .await
@@ -260,7 +260,7 @@ async fn native_summary_persists_and_reopens_with_physical_request_admission() {
         model_execution: execution.as_ref(),
         operation_results: None,
     };
-    let context = NativeContextPort::new(
+    let context = ContextPortAdapter::new(
         Arc::new(Steering(progress.clone())),
         Some(ContextCompactionRepository::new(storage.clone())),
     );
@@ -380,7 +380,7 @@ async fn native_summary_persists_and_reopens_with_physical_request_admission() {
     let reopened = BtccStorage::open(fixture.config("context-native-reopen"))
         .await
         .unwrap();
-    let reopened_context = NativeContextPort::new(
+    let reopened_context = ContextPortAdapter::new(
         Arc::new(Steering(progress.clone())),
         Some(ContextCompactionRepository::new(reopened.clone())),
     );

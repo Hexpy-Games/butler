@@ -7,20 +7,20 @@ use crate::{
         AppPlanDecisionLedgerError, AppPlanDecisionLedgerFuture, AppPlanDecisionLedgerPort,
         AppPlanDecisionPlan, AppPlanDecisionStatus,
     },
-    project_ledger::{LedgerCommand, LedgerCommandRequest, NativeProjectLedger, PlanRecordRead},
+    project_ledger::{LedgerCommand, LedgerCommandRequest, PlanRecordRead, ProjectLedger},
 };
 
-pub(crate) struct NativeAppPlanDecisionLedger {
-    ledger: NativeProjectLedger,
+pub(crate) struct AppPlanDecisionLedger {
+    ledger: ProjectLedger,
 }
 
-impl NativeAppPlanDecisionLedger {
-    pub(crate) fn new(ledger: NativeProjectLedger) -> Self {
+impl AppPlanDecisionLedger {
+    pub(crate) fn new(ledger: ProjectLedger) -> Self {
         Self { ledger }
     }
 }
 
-impl AppPlanDecisionLedgerPort for NativeAppPlanDecisionLedger {
+impl AppPlanDecisionLedgerPort for AppPlanDecisionLedger {
     fn read_plan(
         &self,
         app_project_id: String,

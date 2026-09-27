@@ -97,7 +97,7 @@ impl ProviderObservationSink for Observations {
 
 #[test]
 fn custom_local_api_keys_are_sent_as_bearer_authorization() {
-    let request = super::native::authorize(
+    let request = crate::models::provider::client::authorize(
         crate::models::provider_http_client()
             .unwrap()
             .post("http://127.0.0.1/v1/chat/completions"),
@@ -250,7 +250,7 @@ fn request<'a>(
 }
 
 #[tokio::test]
-async fn native_openai_json_uses_one_admitted_body_and_releases_socket() {
+async fn openai_json_uses_one_admitted_body_and_releases_socket() {
     let body = br#"{"id":"resp_1","model":"gpt-5.5","output":[{"type":"message","content":[{"type":"output_text","text":"done"}]}],"usage":{"input_tokens":3,"total_tokens":5}}"#;
     let head = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
@@ -262,7 +262,7 @@ async fn native_openai_json_uses_one_admitted_body_and_releases_socket() {
         .find_model_metadata(Some("openai/gpt-5.5"))
         .unwrap();
     let observations = Arc::new(Observations::default());
-    let provider = NativeModelProvider::new(
+    let provider = ModelProvider::new(
         crate::models::provider_http_client().unwrap(),
         Arc::new(Config {
             metadata,
@@ -308,7 +308,7 @@ async fn native_openai_json_uses_one_admitted_body_and_releases_socket() {
 }
 
 #[tokio::test]
-async fn native_hosted_sse_decodes_split_unicode_and_requires_done() {
+async fn hosted_sse_decodes_split_unicode_and_requires_done() {
     let body = concat!(
         "data: {\"id\":\"chat-1\",\"model\":\"qwen3.7-max\",\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"안\"}}]}\n\n",
         "data: {\"choices\":[{\"delta\":{\"content\":\"녕\"},\"finish_reason\":\"stop\"}]}\r\n\r\n",
@@ -334,7 +334,7 @@ async fn native_hosted_sse_decodes_split_unicode_and_requires_done() {
         .find_model_metadata(Some("qwen/qwen3.7-max"))
         .unwrap();
     let observations = Arc::new(Observations::default());
-    let provider = NativeModelProvider::new(
+    let provider = ModelProvider::new(
         crate::models::provider_http_client().unwrap(),
         Arc::new(Config {
             metadata,
@@ -403,7 +403,7 @@ async fn bounded_body_rejection_precedes_guard_and_socket_dispatch() {
         .find_model_metadata(Some("openai/gpt-5.5"))
         .unwrap();
     let observations = Arc::new(Observations::default());
-    let provider = NativeModelProvider::new(
+    let provider = ModelProvider::new(
         crate::models::provider_http_client().unwrap(),
         Arc::new(Config {
             metadata,

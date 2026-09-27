@@ -19,12 +19,12 @@ enum Command {
     Close,
 }
 
-pub(crate) struct NativeAutomationService {
+pub(crate) struct AutomationService {
     admission: Mutex<Option<mpsc::Sender<Command>>>,
     task: Mutex<Option<JoinHandle<()>>>,
 }
 
-impl NativeAutomationService {
+impl AutomationService {
     pub(crate) fn open(data_root: &Path, dependencies: AutomationDependencies) -> Arc<Self> {
         let (sender, receiver) = mpsc::channel(64);
         let task = tokio::spawn(run(AutomationStore::new(data_root), dependencies, receiver));

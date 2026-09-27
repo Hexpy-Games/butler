@@ -20,7 +20,7 @@ use crate::{
 use crate::host::SystemIdentity;
 use crate::host::service::instance::RestartIdentity;
 
-pub(crate) struct NativeRestartHandoff {
+pub(crate) struct RestartHandoff {
     tools: Arc<ToolJournalRepository>,
     effects: Arc<StorageEffectJournal>,
     installation: ResolvedInstallation,
@@ -147,7 +147,7 @@ impl ProcessLiveness for HandoffProcessLiveness {
     }
 }
 
-impl NativeRestartHandoff {
+impl RestartHandoff {
     pub(crate) fn new(
         tools: Arc<ToolJournalRepository>,
         effects: Arc<StorageEffectJournal>,

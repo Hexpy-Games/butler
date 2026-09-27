@@ -12,9 +12,9 @@ use tokio_util::sync::CancellationToken;
 use crate::workspace::SessionWorkspaceAuthority;
 use crate::workspace::session_recovery::SessionWorkspaceValidation;
 use crate::workspace::{
-    NativeCommands, NativeSessionWorkspaceRecovery, NativeWorkspaceFiles, OwnOptional,
-    SessionBindingStore, SessionBindingStoreConfig, SessionRole, UpsertSessionBinding,
-    WorkspaceClock, WorkspaceResult, WorkspaceStorageProfile,
+    Commands, OwnOptional, SessionBindingStore, SessionBindingStoreConfig, SessionRole,
+    SessionWorkspaceRecovery, UpsertSessionBinding, WorkspaceClock, WorkspaceFiles,
+    WorkspaceResult, WorkspaceStorageProfile,
 };
 
 struct Clock;
@@ -39,8 +39,8 @@ pub(super) struct Fixture {
     anchor: PathBuf,
     target: PathBuf,
     pub(super) store: SessionBindingStore,
-    pub(super) commands: NativeCommands,
-    pub(super) files: NativeWorkspaceFiles,
+    pub(super) commands: Commands,
+    pub(super) files: WorkspaceFiles,
 }
 
 impl Fixture {
@@ -72,8 +72,8 @@ impl Fixture {
             anchor,
             target,
             store,
-            commands: NativeCommands::new(),
-            files: NativeWorkspaceFiles::new(2),
+            commands: Commands::new(),
+            files: WorkspaceFiles::new(2),
         };
         fixture
             .bind(&fixture.target, Some(fixture.marker("feature/linked")))
@@ -147,8 +147,8 @@ impl Fixture {
         ));
     }
 
-    fn recovery(&self, store: SessionBindingStore) -> NativeSessionWorkspaceRecovery {
-        NativeSessionWorkspaceRecovery::new(
+    fn recovery(&self, store: SessionBindingStore) -> SessionWorkspaceRecovery {
+        SessionWorkspaceRecovery::new(
             store,
             self.commands.clone(),
             self.files.clone(),
@@ -203,7 +203,7 @@ async fn actual_binding_git_worktree_reopen_dirty_and_invalid_authority() {
         valid.validation,
         SessionWorkspaceValidation::Valid { dirty: false, .. }
     ));
-    let missing_git = NativeSessionWorkspaceRecovery::new(
+    let missing_git = SessionWorkspaceRecovery::new(
         fixture.store.clone(),
         fixture.commands.clone(),
         fixture.files.clone(),

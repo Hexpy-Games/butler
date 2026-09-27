@@ -23,7 +23,7 @@ mod projection;
 use errors::{invalid_request, model_error, profile_error};
 use projection::{event, resolve_response_language, update_event_payload};
 
-pub(crate) struct NativeAppPersonalization {
+pub(crate) struct AppPersonalization {
     profile: Arc<ProfileService>,
     configuration: Arc<ModelConfiguration>,
     installation: ResolvedInstallation,
@@ -32,7 +32,7 @@ pub(crate) struct NativeAppPersonalization {
     clock: Arc<dyn crate::gateway::AppIdentityClock>,
 }
 
-impl NativeAppPersonalization {
+impl AppPersonalization {
     pub(crate) fn new(
         profile: Arc<ProfileService>,
         configuration: Arc<ModelConfiguration>,
@@ -296,7 +296,7 @@ impl NativeAppPersonalization {
     }
 }
 
-impl AppPersonalizationPort for NativeAppPersonalization {
+impl AppPersonalizationPort for AppPersonalization {
     fn execute(
         &self,
         command: AppPersonalizationCommand,

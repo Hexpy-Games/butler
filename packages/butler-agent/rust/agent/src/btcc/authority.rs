@@ -13,7 +13,7 @@ mod service;
 #[cfg(test)]
 pub(crate) use contracts::{
     AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityDecisionInput,
-    AuthorityExecutionInput, AuthorityOutcomeInput, NativePrincipalAuthority,
+    AuthorityExecutionInput, AuthorityOutcomeInput, PrincipalAuthority,
 };
 
 #[cfg(test)]

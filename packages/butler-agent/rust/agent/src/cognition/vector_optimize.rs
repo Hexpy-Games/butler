@@ -36,14 +36,14 @@ pub(crate) enum VectorOptimizeOutcome {
     },
 }
 
-pub(crate) struct NativeVectorOptimizeService {
+pub(crate) struct VectorOptimizeService {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
     coordinator: Arc<CognitionWriteCoordinator>,
-    store: NativeLanceStore,
+    store: LanceStore,
 }
 
-impl NativeVectorOptimizeService {
+impl VectorOptimizeService {
     pub(crate) fn new(
         data_root: PathBuf,
         paths: CognitionPathEnvironment,
@@ -53,7 +53,7 @@ impl NativeVectorOptimizeService {
             data_root,
             paths,
             coordinator,
-            store: NativeLanceStore::new(),
+            store: LanceStore::new(),
         }
     }
 
@@ -165,11 +165,11 @@ impl NativeVectorOptimizeService {
     }
 }
 
-struct NativeLanceStore {
+struct LanceStore {
     one_at_a_time: Semaphore,
 }
 
-impl NativeLanceStore {
+impl LanceStore {
     fn new() -> Self {
         Self {
             one_at_a_time: Semaphore::new(1),

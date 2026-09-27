@@ -121,7 +121,7 @@ async fn prompt_lifecycle_admission_usage_and_metric_order_match_source() {
     let metadata = snapshot
         .find_model_metadata(Some("openai/gpt-5.5"))
         .unwrap();
-    let provider = NativeModelProvider::new(
+    let provider = ModelProvider::new(
         crate::models::provider_http_client().unwrap(),
         Arc::new(PromptConfig {
             metadata,
@@ -190,7 +190,7 @@ async fn anthropic_prompt_serializes_registered_default_output() {
     let metadata = snapshot
         .find_model_metadata(Some("anthropic/claude-sonnet-5"))
         .unwrap();
-    let provider = NativeModelProvider::new(
+    let provider = ModelProvider::new(
         crate::models::provider_http_client().unwrap(),
         Arc::new(PromptConfig {
             metadata,
@@ -243,7 +243,7 @@ async fn empty_openai_response_records_usage_before_returning_failure() {
     let metadata = snapshot
         .find_model_metadata(Some("openai/gpt-5.5"))
         .unwrap();
-    let provider = NativeModelProvider::new(
+    let provider = ModelProvider::new(
         crate::models::provider_http_client().unwrap(),
         Arc::new(PromptConfig {
             metadata,
@@ -286,7 +286,7 @@ async fn cancellation_after_intent_never_enters_adapter_or_auth() {
     let metadata = snapshot
         .find_model_metadata(Some("openai/gpt-5.5"))
         .unwrap();
-    let provider = NativeModelProvider::new(
+    let provider = ModelProvider::new(
         crate::models::provider_http_client().unwrap(),
         Arc::new(PromptConfig {
             metadata,

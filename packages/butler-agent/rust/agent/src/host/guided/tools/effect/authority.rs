@@ -10,7 +10,7 @@ use crate::btcc::{
 };
 use crate::json::JsonDocument;
 
-use super::{NativeGuidedTools, ToolExecutionError, ordinary, wire_error};
+use super::{GuidedTools, ToolExecutionError, ordinary, wire_error};
 
 pub(super) enum Gate {
     Return(JsonDocument),
@@ -41,7 +41,7 @@ fn public_action_title(call: &ModelRoundToolCall) -> Option<String> {
 }
 
 pub(super) async fn gate(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     call: &ModelRoundToolCall,
     occurrence: &str,
     work: &WorkView,
@@ -166,7 +166,7 @@ pub(super) async fn gate(
 }
 
 pub(super) async fn settle(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     approved: Approved,
     outcome: &EffectOutcome,
 ) -> Result<Option<JsonDocument>, ToolExecutionError> {

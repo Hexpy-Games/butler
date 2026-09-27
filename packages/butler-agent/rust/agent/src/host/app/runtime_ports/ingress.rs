@@ -6,44 +6,44 @@ use serde_json::{Value, json};
 
 use crate::{
     gateway::{
-        AppNativeIngress, ApplicationFuture, GatewayApplicationError, NativeAppCancellation,
-        NativeAppTurn, NativeEnqueueReceipt, NativeInboundQueue,
+        AppCancellation, AppNativeIngress, AppTurn, ApplicationFuture, EnqueueReceipt,
+        GatewayApplicationError, InboundQueue,
     },
     json::JsonDocument,
 };
 
-pub(crate) struct NativeAppIngress {
-    queue: Arc<NativeInboundQueue>,
+pub(crate) struct AppIngress {
+    queue: Arc<InboundQueue>,
 }
 
-impl NativeAppIngress {
-    pub(crate) fn new(queue: Arc<NativeInboundQueue>) -> Self {
+impl AppIngress {
+    pub(crate) fn new(queue: Arc<InboundQueue>) -> Self {
         Self { queue }
     }
 }
 
-impl AppNativeIngress for NativeAppIngress {
-    fn enqueue(&self, turn: NativeAppTurn) -> ApplicationFuture<NativeEnqueueReceipt> {
+impl AppNativeIngress for AppIngress {
+    fn enqueue(&self, turn: AppTurn) -> ApplicationFuture<EnqueueReceipt> {
         let queue = self.queue.clone();
         Box::pin(async move {
             let document = envelope(turn)?;
             let record = queue
                 .enqueue_idempotent(document)
                 .map_err(GatewayApplicationError::internal_from)?;
-            Ok(NativeEnqueueReceipt {
+            Ok(EnqueueReceipt {
                 queue_id: record.queue_id,
             })
         })
     }
 
-    fn find(&self, turn: NativeAppTurn) -> ApplicationFuture<Option<NativeEnqueueReceipt>> {
+    fn find(&self, turn: AppTurn) -> ApplicationFuture<Option<EnqueueReceipt>> {
         let queue = self.queue.clone();
         Box::pin(async move {
             let document = envelope(turn)?;
             queue
                 .find_idempotent(&document)
                 .map(|record| {
-                    record.map(|item| NativeEnqueueReceipt {
+                    record.map(|item| EnqueueReceipt {
                         queue_id: item.queue_id,
                     })
                 })
@@ -51,10 +51,7 @@ impl AppNativeIngress for NativeAppIngress {
         })
     }
 
-    fn enqueue_cancel(
-        &self,
-        cancel: NativeAppCancellation,
-    ) -> ApplicationFuture<NativeEnqueueReceipt> {
+    fn enqueue_cancel(&self, cancel: AppCancellation) -> ApplicationFuture<EnqueueReceipt> {
         let queue = self.queue.clone();
         Box::pin(async move {
             let mut value = json!({
@@ -74,14 +71,14 @@ impl AppNativeIngress for NativeAppIngress {
             let record = queue
                 .enqueue_idempotent(document)
                 .map_err(GatewayApplicationError::internal_from)?;
-            Ok(NativeEnqueueReceipt {
+            Ok(EnqueueReceipt {
                 queue_id: record.queue_id,
             })
         })
     }
 }
 
-fn envelope(turn: NativeAppTurn) -> Result<JsonDocument, GatewayApplicationError> {
+fn envelope(turn: AppTurn) -> Result<JsonDocument, GatewayApplicationError> {
     let canonical_event_id = format!("app:{}", turn.message_id);
     let event_id = if turn.turn_attempt > 1 {
         format!(

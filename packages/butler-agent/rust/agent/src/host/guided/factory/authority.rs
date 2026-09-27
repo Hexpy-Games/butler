@@ -1,20 +1,20 @@
 use std::sync::Arc;
 
 use crate::btcc::{AuthorityPort, BtccError, GuidedInvocation, GuidedPresentation, PortFuture};
-use crate::host::NativeGuidedActivity;
+use crate::host::GuidedActivity;
 
-pub(super) struct NativeBoundAuthority {
+pub(super) struct BoundAuthority {
     turn_id: String,
-    activity: Arc<NativeGuidedActivity>,
+    activity: Arc<GuidedActivity>,
 }
 
-impl NativeBoundAuthority {
-    pub(super) fn new(turn_id: String, activity: Arc<NativeGuidedActivity>) -> Self {
+impl BoundAuthority {
+    pub(super) fn new(turn_id: String, activity: Arc<GuidedActivity>) -> Self {
         Self { turn_id, activity }
     }
 }
 
-impl AuthorityPort for NativeBoundAuthority {
+impl AuthorityPort for BoundAuthority {
     fn presentation<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,

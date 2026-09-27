@@ -4,7 +4,7 @@ use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
-use super::client::{McpClientError, NativeMcpClient};
+use super::client::{McpClient, McpClientError};
 
 const MCP_DISABLED: &str = "MCP tool calls require the MCP tool profile in the current session";
 const MCP_RECOVERY: &str =
@@ -14,7 +14,7 @@ const MCP_SAFETY: &str =
 const MCP_UNAVAILABLE_RECOVERY: &str = "Retry tool_describe later, choose another MCP server/tool, or continue with enabled native tools.";
 
 pub(crate) async fn search(
-    client: &NativeMcpClient,
+    client: &McpClient,
     args: &Map<String, Value>,
     call_available: bool,
     signal: &CancellationToken,
@@ -137,7 +137,7 @@ pub(crate) async fn search(
 }
 
 pub(crate) async fn describe(
-    client: &NativeMcpClient,
+    client: &McpClient,
     id: &str,
     server_id: &str,
     tool_name: &str,

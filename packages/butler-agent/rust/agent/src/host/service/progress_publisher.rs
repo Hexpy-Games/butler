@@ -7,13 +7,13 @@ use serde_json::{Value, json};
 use crate::btcc::{
     BtccError, CommittedProgressEvent, EventVisibility, PeerKind, StorageProgressPublication,
 };
-use crate::gateway::{NativeTranscriptWriter, normalize_committed_turn_event};
+use crate::gateway::{TranscriptWriter, normalize_committed_turn_event};
 
 const PAGE_SIZE: usize = 32;
 
-pub(crate) struct NativeProgressPublisher {
+pub(crate) struct ProgressPublisher {
     repository: StorageProgressPublication,
-    writer: Arc<NativeTranscriptWriter>,
+    writer: Arc<TranscriptWriter>,
 }
 
 pub(crate) struct ProgressPublicationSummary {
@@ -21,10 +21,10 @@ pub(crate) struct ProgressPublicationSummary {
     pub published: usize,
 }
 
-impl NativeProgressPublisher {
+impl ProgressPublisher {
     pub(crate) fn new(
         repository: StorageProgressPublication,
-        writer: Arc<NativeTranscriptWriter>,
+        writer: Arc<TranscriptWriter>,
     ) -> Self {
         Self { repository, writer }
     }

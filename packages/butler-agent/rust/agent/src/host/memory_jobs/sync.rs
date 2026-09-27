@@ -13,29 +13,29 @@ use tokio_util::sync::CancellationToken;
 
 use crate::btcc::BtccError;
 #[cfg(unix)]
-use crate::cognition::NativeGenerationVectorAdapter;
+use crate::cognition::GenerationVectorAdapter;
 #[cfg(not(unix))]
 use crate::cognition::{CandidateSearchInput, CognitionVectorSearch, VectorSearchFuture};
 use crate::cognition::{
-    CognitionError, CognitionPathEnvironment, CognitionRegistrationService, MemorySyncPoll,
-    NativeMemorySyncConsumer, active_memory_descriptor_exists, resolve_active_generation,
+    CognitionError, CognitionPathEnvironment, CognitionRegistrationService, MemorySyncConsumer,
+    MemorySyncPoll, active_memory_descriptor_exists, resolve_active_generation,
 };
 use crate::coordination::CognitionWriteCoordinator;
 #[cfg(unix)]
-use crate::host::NativeEmbeddingOwner;
-use crate::models::{ModelConfigurationClock, NativeModelProvider};
+use crate::host::EmbeddingOwner;
+use crate::models::{ModelConfigurationClock, ModelProvider};
 
 use crate::host::SystemIdentity;
 
-pub(in crate::host) struct NativeMemorySync {
-    consumer: Arc<NativeMemorySyncConsumer>,
+pub(in crate::host) struct MemorySync {
+    consumer: Arc<MemorySyncConsumer>,
     registration: Arc<CognitionRegistrationService>,
     shutdown: CancellationToken,
     task: Mutex<Option<JoinHandle<()>>>,
 }
 
-impl NativeMemorySync {
-    pub(in crate::host) fn consumer(&self) -> Arc<NativeMemorySyncConsumer> {
+impl MemorySync {
+    pub(in crate::host) fn consumer(&self) -> Arc<MemorySyncConsumer> {
         self.consumer.clone()
     }
 
@@ -43,9 +43,9 @@ impl NativeMemorySync {
         data_root: &Path,
         paths: &CognitionPathEnvironment,
         coordinator: Arc<CognitionWriteCoordinator>,
-        provider: Arc<NativeModelProvider>,
-        #[cfg(unix)] embedding: Arc<NativeEmbeddingOwner>,
-        #[cfg(unix)] vector: Arc<NativeGenerationVectorAdapter>,
+        provider: Arc<ModelProvider>,
+        #[cfg(unix)] embedding: Arc<EmbeddingOwner>,
+        #[cfg(unix)] vector: Arc<GenerationVectorAdapter>,
     ) -> Result<Self, BtccError> {
         let clock: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
         if active_memory_descriptor_exists(data_root, paths).map_err(error)? {
@@ -68,7 +68,7 @@ impl NativeMemorySync {
             },
             Arc::new(SystemIdentity),
         ));
-        let consumer = NativeMemorySyncConsumer::new(
+        let consumer = MemorySyncConsumer::new(
             data_root.to_path_buf(),
             paths.clone(),
             registration.clone(),
@@ -110,7 +110,7 @@ impl NativeMemorySync {
 }
 
 async fn poll(
-    consumer: Arc<NativeMemorySyncConsumer>,
+    consumer: Arc<MemorySyncConsumer>,
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
     shutdown: CancellationToken,

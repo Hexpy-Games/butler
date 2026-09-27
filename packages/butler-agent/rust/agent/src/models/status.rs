@@ -19,7 +19,7 @@ use super::{
     provider_http_client,
 };
 
-pub(crate) struct NativeStatusModels {
+pub(crate) struct StatusModels {
     pub(crate) configuration: Arc<ModelConfiguration>,
     pub(crate) catalog: Arc<ModelCatalog>,
     pub(crate) model_ref: String,
@@ -30,7 +30,7 @@ pub(crate) struct NativeStatusModels {
     prompt_cache: Value,
 }
 
-impl NativeStatusModels {
+impl StatusModels {
     pub(crate) fn status_value(&self, telemetry: &Value) -> Value {
         let mut prompt_cache = self.prompt_cache.clone();
         prompt_cache["telemetry"] = telemetry_projection(telemetry);
@@ -141,7 +141,7 @@ pub(crate) enum StatusModelsError {
 
 pub(crate) async fn open_status_models(
     data_root: PathBuf,
-) -> Result<NativeStatusModels, StatusModelsError> {
+) -> Result<StatusModels, StatusModelsError> {
     let environment = status_environment();
     let collation = Arc::new(LocaleCollation::new("en-US").map_err(StatusModelsError::Locale)?);
     let catalog = Arc::new(ModelCatalog::new().map_err(StatusModelsError::Catalog)?);
@@ -174,7 +174,7 @@ pub(crate) async fn open_status_models(
     };
     let auth = auth_status(&data_root);
     let prompt_cache = prompt_cache_policy(configuration.status_prompt_cache_policy());
-    Ok(NativeStatusModels {
+    Ok(StatusModels {
         configuration,
         catalog,
         model_ref: parsed.canonical_ref,

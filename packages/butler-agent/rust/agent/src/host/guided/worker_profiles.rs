@@ -7,17 +7,17 @@ use crate::{
     gateway::LocalAuthConfig,
 };
 
-use crate::host::service::configuration::NativeAppServiceConfiguration;
+use crate::host::service::configuration::AppServiceConfiguration;
 
-pub(crate) struct NativeWorkerProfileReader {
+pub(crate) struct AppWorkerProfileReader {
     url: String,
     auth: LocalAuthConfig,
     client: reqwest::Client,
 }
 
-impl NativeWorkerProfileReader {
+impl AppWorkerProfileReader {
     pub(crate) fn new(
-        config: &NativeAppServiceConfiguration,
+        config: &AppServiceConfiguration,
         auth: LocalAuthConfig,
     ) -> Result<Self, BtccError> {
         if !matches!(config.host.as_str(), "127.0.0.1" | "localhost" | "::1") {
@@ -40,7 +40,7 @@ impl NativeWorkerProfileReader {
     }
 }
 
-impl WorkerProfileReader for NativeWorkerProfileReader {
+impl WorkerProfileReader for AppWorkerProfileReader {
     fn list(&self) -> PortFuture<'_, Vec<WorkerProfile>> {
         Box::pin(async move {
             let profiles = self.fetch().await?;
@@ -65,7 +65,7 @@ impl WorkerProfileReader for NativeWorkerProfileReader {
     }
 }
 
-impl NativeWorkerProfileReader {
+impl AppWorkerProfileReader {
     async fn fetch(&self) -> Result<Vec<Value>, BtccError> {
         let mut request = self.client.get(&self.url);
         if self.auth.required {

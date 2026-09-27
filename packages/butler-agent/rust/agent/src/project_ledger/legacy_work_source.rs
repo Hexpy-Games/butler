@@ -5,7 +5,7 @@ use std::{fs, path::Path};
 use serde_json::{Map, Value, json};
 
 use super::{
-    NativeProjectLedger, ProjectLedgerReadError, active_reference, committed, records, source_head,
+    ProjectLedger, ProjectLedgerReadError, active_reference, committed, records, source_head,
 };
 use crate::{
     btcc::{
@@ -17,7 +17,7 @@ use crate::{
     public_text::trim_js_whitespace,
 };
 
-impl LegacyProjectWorkSource for NativeProjectLedger {
+impl LegacyProjectWorkSource for ProjectLedger {
     fn load_open_work(
         &self,
         project_ref: String,

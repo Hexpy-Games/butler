@@ -16,19 +16,19 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 
-use crate::skills::NativeSkills;
-use crate::workspace::{NativeWorkspaceFiles, WorkspaceMutations, WorkspaceReference};
+use crate::skills::Skills;
+use crate::workspace::{WorkspaceFiles, WorkspaceMutations, WorkspaceReference};
 
 pub(crate) use catalog::{
-    BridgeCatalogTool, CatalogError, NativeToolCatalog, describe_native, search_native,
+    BridgeCatalogTool, CatalogError, ToolCatalog, describe_native, search_native,
     validate_native_arguments,
 };
 
 #[derive(Clone)]
-pub(crate) struct NativeCapabilities {
-    files: Arc<NativeWorkspaceFiles>,
+pub(crate) struct Capabilities {
+    files: Arc<WorkspaceFiles>,
     mutations: Arc<WorkspaceMutations>,
-    skills: Arc<NativeSkills>,
+    skills: Arc<Skills>,
 }
 
 #[derive(Clone, Debug)]
@@ -84,11 +84,11 @@ impl PartialEq for CapabilityError {
 
 impl Eq for CapabilityError {}
 
-impl NativeCapabilities {
+impl Capabilities {
     pub(crate) fn with_skills(
-        files: Arc<NativeWorkspaceFiles>,
+        files: Arc<WorkspaceFiles>,
         mutations: Arc<WorkspaceMutations>,
-        skills: Arc<NativeSkills>,
+        skills: Arc<Skills>,
     ) -> Self {
         Self {
             files,

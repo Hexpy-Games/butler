@@ -10,7 +10,7 @@ async fn post_dispatch_and_post_receipt_faults_settle_same_durable_occurrence() 
         binding: PlanBinding::AcceptedPlan,
     });
     let journal = Arc::new(StorageEffectJournal::new(storage.clone(), clock()));
-    let first = NativeEffectService::with_fault_points(
+    let first = EffectService::with_fault_points(
         journal.clone(),
         clock(),
         Arc::new(FailAt("after_dispatch")),
@@ -24,7 +24,7 @@ async fn post_dispatch_and_post_receipt_faults_settle_same_durable_occurrence() 
             ..
         }
     ));
-    let second = NativeEffectService::with_fault_points(
+    let second = EffectService::with_fault_points(
         journal.clone(),
         clock(),
         Arc::new(FailAt("after_receipt")),
@@ -83,7 +83,7 @@ async fn legacy_blocker_grouping_preserves_first_payload_and_conservative_relati
         binding: PlanBinding::AcceptedPlan,
     });
     let journal = Arc::new(StorageEffectJournal::new(storage.clone(), clock()));
-    let service = NativeEffectService::new(journal.clone(), clock());
+    let service = EffectService::new(journal.clone(), clock());
     assert!(matches!(
         service
             .execute(invocation(work.clone(), adapter, CancellationToken::new()))
@@ -123,7 +123,7 @@ async fn cancellation_before_intent_and_after_claim_preserve_source_dispatch_bou
         binding: PlanBinding::AcceptedPlan,
     });
     let journal = Arc::new(StorageEffectJournal::new(storage.clone(), clock()));
-    let service = NativeEffectService::new(journal.clone(), clock());
+    let service = EffectService::new(journal.clone(), clock());
     let cancelled = CancellationToken::new();
     cancelled.cancel();
     assert!(
@@ -138,7 +138,7 @@ async fn cancellation_before_intent_and_after_claim_preserve_source_dispatch_bou
             .is_empty()
     );
     let marker = CancellationToken::new();
-    let service = NativeEffectService::with_fault_points(
+    let service = EffectService::with_fault_points(
         journal.clone(),
         clock(),
         Arc::new(CancelAtMarker(marker.clone())),
@@ -226,7 +226,7 @@ async fn accepted_work_journal_effect_persists_null_result_and_replays_without_s
         result: crate::json::JsonDocument::from_value(&serde_json::Value::Null).unwrap(),
         binding: PlanBinding::AcceptedPlan,
     });
-    let service = NativeEffectService::new(
+    let service = EffectService::new(
         Arc::new(StorageEffectJournal::new(storage.clone(), clock())),
         clock(),
     );
@@ -253,7 +253,7 @@ async fn accepted_work_journal_effect_persists_null_result_and_replays_without_s
     let reopened = BtccStorage::open(fixture.config("effect-reopen"))
         .await
         .unwrap();
-    let service = NativeEffectService::new(
+    let service = EffectService::new(
         Arc::new(StorageEffectJournal::new(reopened.clone(), clock())),
         clock(),
     );

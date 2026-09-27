@@ -2,7 +2,7 @@
 //! checked separately from BTCC's authority and provider-surface selection.
 
 use crate::btcc::{BtccError, GuidedCatalogSnapshot};
-use crate::capabilities::{CatalogError, NativeCapabilities, NativeToolCatalog};
+use crate::capabilities::{Capabilities, CatalogError, ToolCatalog};
 
 #[derive(Debug)]
 pub(crate) enum GuidedCatalogError {
@@ -21,13 +21,13 @@ impl std::fmt::Display for GuidedCatalogError {
 
 /// The host owns this once and borrows its snapshot during each Turn's policy
 /// selection. No service owner, model response, or Turn is retained here.
-pub(crate) struct NativeGuidedCatalog {
+pub(crate) struct GuidedCatalog {
     snapshot: GuidedCatalogSnapshot,
 }
 
-impl NativeGuidedCatalog {
-    pub(crate) fn load(capabilities: &NativeCapabilities) -> Result<Self, GuidedCatalogError> {
-        let source = NativeToolCatalog::load(capabilities).map_err(GuidedCatalogError::Source)?;
+impl GuidedCatalog {
+    pub(crate) fn load(capabilities: &Capabilities) -> Result<Self, GuidedCatalogError> {
+        let source = ToolCatalog::load(capabilities).map_err(GuidedCatalogError::Source)?;
         let snapshot =
             GuidedCatalogSnapshot::parse(source.source()).map_err(GuidedCatalogError::Policy)?;
         Ok(Self { snapshot })

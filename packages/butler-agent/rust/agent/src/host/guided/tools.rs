@@ -31,11 +31,11 @@ use crate::btcc::{
     AuthorityLoopContinuation, BtccError, GuidedInvocation, ModelRoundMessage, ModelRoundTool,
     ModelRoundToolCall, PortFuture, ToolExecutionError, ToolPort, ToolResult, TurnRecord,
 };
-use crate::capabilities::NativeCapabilities;
-use crate::cognition::{NativeExactMemoryQuery, NativeMemoryRecall};
-use crate::context::NativeConversationSessionReference;
+use crate::capabilities::Capabilities;
+use crate::cognition::{ExactMemoryQuery, MemoryRecall};
+use crate::context::ConversationSessionReference;
 use crate::conversation::CanonicalMemoryReadBinding;
-use crate::host::{NativeGuidedActivity, NativeGuidedWorkTools};
+use crate::host::{GuidedActivity, GuidedWorkTools};
 use crate::workspace::WorkspaceReference;
 use resume::ResumePool;
 use tokio::sync::OnceCell;
@@ -75,36 +75,36 @@ struct State {
     described_ids: HashSet<String>,
 }
 
-pub(crate) struct NativeGuidedTools {
-    capabilities: Arc<NativeCapabilities>,
-    command: Arc<crate::host::guided::command::NativeGuidedCommand>,
-    tool_artifacts: Arc<crate::host::NativeToolArtifactReader>,
-    effects: Arc<crate::btcc::NativeEffectService>,
-    authority: Arc<crate::btcc::NativePrincipalAuthority>,
+pub(crate) struct GuidedTools {
+    capabilities: Arc<Capabilities>,
+    command: Arc<crate::host::guided::command::GuidedCommand>,
+    tool_artifacts: Arc<crate::host::ToolArtifactReader>,
+    effects: Arc<crate::btcc::EffectService>,
+    authority: Arc<crate::btcc::PrincipalAuthority>,
     effect_journal: Arc<dyn crate::btcc::EffectJournal>,
-    file_effects: crate::host::NativeGuidedFileEffects,
-    query: Arc<NativeExactMemoryQuery>,
-    recall: Arc<NativeMemoryRecall>,
+    file_effects: crate::host::GuidedFileEffects,
+    query: Arc<ExactMemoryQuery>,
+    recall: Arc<MemoryRecall>,
     memory_paths: crate::cognition::CognitionPathEnvironment,
     memory_publisher: Arc<crate::cognition::CompletionPublisher>,
-    conversations: Arc<NativeConversationSessionReference>,
-    conversation_tools: Arc<crate::context::NativeConversationTools>,
-    project: Arc<crate::host::guided::project_tools::NativeGuidedProjectTools>,
-    work: NativeGuidedWorkTools,
-    activity: Arc<NativeGuidedActivity>,
+    conversations: Arc<ConversationSessionReference>,
+    conversation_tools: Arc<crate::context::ConversationTools>,
+    project: Arc<crate::host::guided::project_tools::GuidedProjectTools>,
+    work: GuidedWorkTools,
+    activity: Arc<GuidedActivity>,
     journal: Arc<ToolJournalRepository>,
-    catalog: Arc<crate::host::NativeGuidedCatalog>,
-    subsessions: Arc<crate::btcc::NativeSubsessionService>,
-    work_streams: Arc<crate::host::NativeWorkStreams>,
-    automations: Arc<crate::operations::NativeAutomationService>,
-    mcp_client: Arc<crate::mcp_client::NativeMcpClient>,
+    catalog: Arc<crate::host::GuidedCatalog>,
+    subsessions: Arc<crate::btcc::SubsessionService>,
+    work_streams: Arc<crate::host::WorkStreams>,
+    automations: Arc<crate::operations::AutomationService>,
+    mcp_client: Arc<crate::mcp_client::McpClient>,
     verified_image_payload: Arc<dyn crate::btcc::VerifiedImagePayloadPort>,
     profile: Arc<crate::profile::ProfileService>,
     monitoring: Arc<MonitoringReaders>,
-    attachment_context: Arc<crate::context::NativeAttachmentContext>,
-    session_worktrees: crate::workspace::NativeSessionWorktrees,
+    attachment_context: Arc<crate::context::AttachmentContext>,
+    session_worktrees: crate::workspace::SessionWorktrees,
     web_session: crate::web_access::WebSession,
-    app_endpoint: Arc<crate::host::NativeActiveAppEndpoint>,
+    app_endpoint: Arc<crate::host::ActiveAppEndpoint>,
     binding: GuidedToolBinding,
     state: Mutex<State>,
     resume: OnceCell<Mutex<ResumePool>>,
@@ -140,41 +140,41 @@ impl GuidedToolError {
     }
 }
 
-impl NativeGuidedTools {
+impl GuidedTools {
     #[expect(
         clippy::too_many_arguments,
         reason = "composition explicitly requires independently owned tool, authority, and lifecycle collaborators"
     )]
     pub(crate) fn new(
-        capabilities: Arc<NativeCapabilities>,
-        command: Arc<crate::host::guided::command::NativeGuidedCommand>,
-        tool_artifacts: Arc<crate::host::NativeToolArtifactReader>,
-        effects: Arc<crate::btcc::NativeEffectService>,
+        capabilities: Arc<Capabilities>,
+        command: Arc<crate::host::guided::command::GuidedCommand>,
+        tool_artifacts: Arc<crate::host::ToolArtifactReader>,
+        effects: Arc<crate::btcc::EffectService>,
         effect_journal: Arc<dyn crate::btcc::EffectJournal>,
-        authority: Arc<crate::btcc::NativePrincipalAuthority>,
-        file_effects: crate::host::NativeGuidedFileEffects,
-        query: Arc<NativeExactMemoryQuery>,
-        recall: Arc<NativeMemoryRecall>,
+        authority: Arc<crate::btcc::PrincipalAuthority>,
+        file_effects: crate::host::GuidedFileEffects,
+        query: Arc<ExactMemoryQuery>,
+        recall: Arc<MemoryRecall>,
         memory_paths: crate::cognition::CognitionPathEnvironment,
         memory_publisher: Arc<crate::cognition::CompletionPublisher>,
-        conversations: Arc<NativeConversationSessionReference>,
-        conversation_tools: Arc<crate::context::NativeConversationTools>,
-        project: Arc<crate::host::guided::project_tools::NativeGuidedProjectTools>,
-        work: NativeGuidedWorkTools,
-        activity: Arc<NativeGuidedActivity>,
+        conversations: Arc<ConversationSessionReference>,
+        conversation_tools: Arc<crate::context::ConversationTools>,
+        project: Arc<crate::host::guided::project_tools::GuidedProjectTools>,
+        work: GuidedWorkTools,
+        activity: Arc<GuidedActivity>,
         journal: Arc<ToolJournalRepository>,
-        catalog: Arc<crate::host::NativeGuidedCatalog>,
-        subsessions: Arc<crate::btcc::NativeSubsessionService>,
-        work_streams: Arc<crate::host::NativeWorkStreams>,
-        automations: Arc<crate::operations::NativeAutomationService>,
-        mcp_client: Arc<crate::mcp_client::NativeMcpClient>,
+        catalog: Arc<crate::host::GuidedCatalog>,
+        subsessions: Arc<crate::btcc::SubsessionService>,
+        work_streams: Arc<crate::host::WorkStreams>,
+        automations: Arc<crate::operations::AutomationService>,
+        mcp_client: Arc<crate::mcp_client::McpClient>,
         verified_image_payload: Arc<dyn crate::btcc::VerifiedImagePayloadPort>,
         profile: Arc<crate::profile::ProfileService>,
         monitoring: Arc<MonitoringReaders>,
-        attachment_context: Arc<crate::context::NativeAttachmentContext>,
-        session_worktrees: crate::workspace::NativeSessionWorktrees,
+        attachment_context: Arc<crate::context::AttachmentContext>,
+        session_worktrees: crate::workspace::SessionWorktrees,
         web_session: crate::web_access::WebSession,
-        app_endpoint: Arc<crate::host::NativeActiveAppEndpoint>,
+        app_endpoint: Arc<crate::host::ActiveAppEndpoint>,
         restored: Option<&AuthorityLoopContinuation>,
         binding: GuidedToolBinding,
     ) -> Result<Self, BtccError> {
@@ -303,8 +303,8 @@ impl NativeGuidedTools {
                     | ToolName::WebSearch
                     | ToolName::WebRead
             )
-        ) || NativeGuidedWorkTools::is_work_tool(name)
-            || crate::host::guided::project_tools::NativeGuidedProjectTools::supports(name)
+        ) || GuidedWorkTools::is_work_tool(name)
+            || crate::host::guided::project_tools::GuidedProjectTools::supports(name)
     }
 
     async fn resume_pool(&self) -> Result<&Mutex<ResumePool>, BtccError> {
@@ -321,7 +321,7 @@ impl NativeGuidedTools {
     }
 }
 
-impl ToolPort for NativeGuidedTools {
+impl ToolPort for GuidedTools {
     fn surface<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
@@ -392,7 +392,7 @@ impl ToolPort for NativeGuidedTools {
     }
 }
 
-impl NativeGuidedTools {
+impl GuidedTools {
     fn same_turn(&self, invocation: GuidedInvocation<'_>) -> Result<(), BtccError> {
         if invocation.turn.turn_id == self.binding.turn_id {
             Ok(())

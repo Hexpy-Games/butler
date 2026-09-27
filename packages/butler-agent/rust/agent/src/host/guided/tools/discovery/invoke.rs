@@ -1,6 +1,6 @@
 //! One inner native invocation under the outer bridge occurrence.
 
-use super::{NativeGuidedTools, bridge_error, encoded, projection, text};
+use super::{GuidedTools, bridge_error, encoded, projection, text};
 use crate::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 use crate::capabilities::{describe_native, validate_native_arguments};
 use crate::json::JsonDocument;
@@ -8,7 +8,7 @@ use crate::tool_protocol::ToolName;
 use serde_json::{Value, json};
 
 pub(super) async fn run(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
     outer_call_id: &str,
@@ -38,7 +38,7 @@ pub(super) async fn run(
         ));
     };
     let catalog = owner.catalog.snapshot();
-    let Some(tool) = catalog.native_tool(name).filter(|_| {
+    let Some(tool) = catalog.builtin_tool(name).filter(|_| {
         !catalog.hidden_native_bridge_tool(name, owner.binding.enable_project_ledger_effects)
     }) else {
         let mut error = bridge_error(
@@ -158,7 +158,7 @@ pub(super) async fn run(
 }
 
 async fn run_mcp(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
     outer_call_id: &str,

@@ -13,7 +13,7 @@ pub(crate) mod workspace_file;
 pub(crate) use identity::{
     accepted_plan_effect_id, effect_input_sha256, reviewed_effect_action_key,
 };
-pub(crate) use service::NativeEffectService;
+pub(crate) use service::EffectService;
 
 #[cfg(test)]
 mod tests;

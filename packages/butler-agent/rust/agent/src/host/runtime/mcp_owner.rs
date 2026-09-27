@@ -2,14 +2,14 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use crate::{
     configuration::ConfigurationWrites,
-    mcp_client::{NativeMcpClient, RegistryPathGuard},
+    mcp_client::{McpClient, RegistryPathGuard},
 };
 
 pub(super) fn for_runtime(
-    paths: &super::NativeRuntimePaths,
+    paths: &super::RuntimePaths,
     host_environment: &Arc<HashMap<String, String>>,
     registry_writes: Arc<ConfigurationWrites>,
-) -> Arc<NativeMcpClient> {
+) -> Arc<McpClient> {
     new(
         paths.data_root.clone(),
         paths.installation_root.clone(),
@@ -23,7 +23,7 @@ pub(super) fn new(
     installation_root: PathBuf,
     host_environment: &Arc<HashMap<String, String>>,
     registry_writes: Arc<ConfigurationWrites>,
-) -> Arc<NativeMcpClient> {
+) -> Arc<McpClient> {
     let path_guard: Arc<RegistryPathGuard> = Arc::new(move |data_root, target| {
         let data_real =
             super::super::installation::realpath_or_nearest(data_root).map_err(|source| {
@@ -45,7 +45,7 @@ pub(super) fn new(
         }
         Ok(())
     });
-    Arc::new(NativeMcpClient::with_registry_writer(
+    Arc::new(McpClient::with_registry_writer(
         data_root,
         (**host_environment).clone(),
         registry_writes,

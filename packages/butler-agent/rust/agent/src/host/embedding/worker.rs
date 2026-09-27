@@ -6,7 +6,7 @@ use std::{path::PathBuf, time::Duration};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::cognition::{
-    NativeEmbeddingEngine, WorkerOperation, WorkerRequest, WorkerResponse, WorkerResult,
+    EmbeddingEngine, WorkerOperation, WorkerRequest, WorkerResponse, WorkerResult,
 };
 
 mod assets;
@@ -24,7 +24,7 @@ pub(crate) async fn run() -> std::process::ExitCode {
     let Some(data_root) = data_root else {
         return std::process::ExitCode::FAILURE;
     };
-    let mut engine: Option<NativeEmbeddingEngine> = None;
+    let mut engine: Option<EmbeddingEngine> = None;
     let mut stdin = tokio::io::stdin();
     let mut stdout = tokio::io::stdout();
     let mut frame = Vec::with_capacity(8 * 1024);
@@ -83,7 +83,7 @@ pub(crate) async fn run() -> std::process::ExitCode {
 async fn handle(
     request: WorkerRequest,
     data_root: &std::path::Path,
-    engine: &mut Option<NativeEmbeddingEngine>,
+    engine: &mut Option<EmbeddingEngine>,
 ) -> WorkerResponse {
     let id = request.id;
     let result = match request.op {
@@ -132,7 +132,7 @@ async fn handle(
                 if let Err(code) = assets::ensure(data_root).await {
                     return WorkerResponse::error(id, code);
                 }
-                match NativeEmbeddingEngine::load(data_root) {
+                match EmbeddingEngine::load(data_root) {
                     Ok(loaded) => *engine = Some(loaded),
                     Err(error) => {
                         return WorkerResponse::error(id, error.code());

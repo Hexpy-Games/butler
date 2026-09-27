@@ -17,14 +17,14 @@ use tokio_util::task::TaskTracker;
 use super::{AppMessageFileSnapshot, GatewayApplicationError};
 use crate::models::ModelProviderMetadata;
 
-pub(crate) struct NativeAppImageFiles {
+pub(crate) struct AppImageFiles {
     root: PathBuf,
     permits: Arc<Semaphore>,
     jobs: TaskTracker,
     closing: Arc<Mutex<bool>>,
 }
 
-impl NativeAppImageFiles {
+impl AppImageFiles {
     pub(crate) fn new(data_root: &Path) -> Self {
         Self {
             root: data_root.join("app-server/message-files"),

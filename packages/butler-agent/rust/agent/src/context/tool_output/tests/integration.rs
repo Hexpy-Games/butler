@@ -4,12 +4,12 @@ use super::*;
 #[tokio::test]
 async fn real_k2_structured_and_guided_outputs_feed_persisted_context_artifacts() {
     use crate::workspace::{
-        CommandStep, GuidedAccess, GuidedCommandInput, NativeCommands, StructuredCommandInput,
+        CommandStep, Commands, GuidedAccess, GuidedCommandInput, StructuredCommandInput,
     };
     use tokio_util::sync::CancellationToken;
 
     let fixture = Fixture::new();
-    let commands = NativeCommands::new();
+    let commands = Commands::new();
     let structured = commands
         .submit_structured(StructuredCommandInput {
             steps: vec![CommandStep {

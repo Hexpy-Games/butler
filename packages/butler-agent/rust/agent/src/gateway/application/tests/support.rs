@@ -247,23 +247,23 @@ impl AppAdmissionAuthority for Admission {
     }
 }
 
-pub(super) struct Native(pub(super) Mutex<Vec<NativeAppTurn>>);
+pub(super) struct Native(pub(super) Mutex<Vec<AppTurn>>);
 
 impl AppNativeIngress for Native {
-    fn enqueue(&self, turn: NativeAppTurn) -> ApplicationFuture<NativeEnqueueReceipt> {
+    fn enqueue(&self, turn: AppTurn) -> ApplicationFuture<EnqueueReceipt> {
         self.0.lock().unwrap().push(turn);
         Box::pin(async {
-            Ok(NativeEnqueueReceipt {
+            Ok(EnqueueReceipt {
                 queue_id: "app:m1".into(),
             })
         })
     }
-    fn find(&self, _: NativeAppTurn) -> ApplicationFuture<Option<NativeEnqueueReceipt>> {
+    fn find(&self, _: AppTurn) -> ApplicationFuture<Option<EnqueueReceipt>> {
         Box::pin(async { Ok(None) })
     }
-    fn enqueue_cancel(&self, _: NativeAppCancellation) -> ApplicationFuture<NativeEnqueueReceipt> {
+    fn enqueue_cancel(&self, _: AppCancellation) -> ApplicationFuture<EnqueueReceipt> {
         Box::pin(async {
-            Ok(NativeEnqueueReceipt {
+            Ok(EnqueueReceipt {
                 queue_id: "app:cancel-1".into(),
             })
         })
@@ -390,7 +390,7 @@ pub(super) fn dependencies(native: Arc<Native>, clock: u64) -> AppApplicationDep
     AppApplicationDependencies {
         updates: test_updates(),
         skills: test_skills(),
-        mcp_client: Arc::new(crate::mcp_client::NativeMcpClient::new(
+        mcp_client: Arc::new(crate::mcp_client::McpClient::new(
             std::env::temp_dir().join(format!("butler-test-mcp-{}", uuid::Uuid::new_v4())),
             Default::default(),
         )),
@@ -436,9 +436,9 @@ pub(super) fn test_updates() -> Arc<crate::operations::AppUpdateService> {
     )
 }
 
-pub(super) fn test_skills() -> Arc<crate::skills::NativeSkills> {
+pub(super) fn test_skills() -> Arc<crate::skills::Skills> {
     let root = std::env::temp_dir().join(format!("butler-test-skills-{}", uuid::Uuid::new_v4()));
-    Arc::new(crate::skills::NativeSkills::new(root.clone(), root))
+    Arc::new(crate::skills::Skills::new(root.clone(), root))
 }
 
 pub(super) fn command(client: &str, text: &str) -> SendMessageCommand {

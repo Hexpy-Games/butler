@@ -2,7 +2,7 @@ use std::{path::PathBuf, sync::Arc, time::SystemTime};
 
 use serde_json::json;
 
-use super::NativeToolArtifactReader;
+use super::ToolArtifactReader;
 use crate::{
     configuration::ConfigurationWrites,
     context::{
@@ -33,7 +33,7 @@ impl ToolOutputIdentity for Clock {
     }
 }
 
-fn service(root: PathBuf) -> crate::context::NativeToolOutput {
+fn service(root: PathBuf) -> crate::context::ToolOutput {
     let catalog = Arc::new(ModelCatalog::new().unwrap());
     let configuration = Arc::new(
         ModelConfiguration::new(
@@ -52,7 +52,7 @@ fn service(root: PathBuf) -> crate::context::NativeToolOutput {
         catalog,
         ContextBudgetEnvironment::default(),
     ));
-    crate::context::NativeToolOutput::new(
+    crate::context::ToolOutput::new(
         root.clone(),
         budget,
         Arc::new(Clock),
@@ -87,7 +87,7 @@ async fn retained_command_artifact_reads_exact_utf16_ranges() {
         .unwrap()
         .unwrap();
     let path = retained.butler_tool_artifact.unwrap().path;
-    let tools = NativeToolArtifactReader::new(owner.clone());
+    let tools = ToolArtifactReader::new(owner.clone());
     let output = tools
         .read_output(json!({"path":path,"stream":"stdout","offset_chars":2,"max_tokens":50}))
         .await

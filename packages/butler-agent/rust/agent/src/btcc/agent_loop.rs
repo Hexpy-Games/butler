@@ -31,7 +31,7 @@ mod failure_tests;
 #[cfg(test)]
 mod guided_fixture;
 #[cfg(test)]
-mod native_loopback;
+mod provider_loopback;
 #[cfg(test)]
 mod round_contract_tests;
 #[cfg(test)]

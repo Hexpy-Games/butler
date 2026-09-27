@@ -49,7 +49,7 @@ impl ModelConfigurationClock for FixedIdentity {
 
 struct Fixture {
     root: PathBuf,
-    service: NativeToolOutput,
+    service: ToolOutput,
     owner: Arc<ContextBudgetOwner>,
 }
 
@@ -81,7 +81,7 @@ impl Fixture {
             catalog,
             Default::default(),
         ));
-        let service = NativeToolOutput::new(
+        let service = ToolOutput::new(
             root.clone(),
             Arc::clone(&owner),
             Arc::new(FixedIdentity),

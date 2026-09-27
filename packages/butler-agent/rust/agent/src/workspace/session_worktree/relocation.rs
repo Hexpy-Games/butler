@@ -4,7 +4,7 @@ mod cleanup;
 
 use std::path::Path;
 
-use super::{NativeSessionWorktrees, Owner, git::GitWorktrees, path};
+use super::{Owner, SessionWorktrees, git::GitWorktrees, path};
 use crate::workspace::WorkspaceCode;
 use crate::workspace::{WorkspaceError, WorkspaceResult};
 use serde::{Deserialize, Serialize};
@@ -40,7 +40,7 @@ pub(crate) struct RelocationWorkspaceMarker {
     pub bound_at: String,
 }
 
-impl NativeSessionWorktrees {
+impl SessionWorktrees {
     pub(crate) async fn plan_relocation(
         &self,
         input: RelocationWorkspaceInput,

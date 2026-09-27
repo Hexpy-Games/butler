@@ -110,8 +110,8 @@ fn environment_home_is_not_installation_authority() {
             .unwrap();
         runtime.block_on(async {
             let owner = Arc::new(WorkspaceMutations::new());
-            let capabilities = crate::capabilities::NativeCapabilities::new(
-                Arc::new(crate::workspace::NativeWorkspaceFiles::new(1)),
+            let capabilities = crate::capabilities::Capabilities::new(
+                Arc::new(crate::workspace::WorkspaceFiles::new(1)),
                 Arc::clone(&owner),
             );
             let call = json!({"arguments":{"path":"environment.txt","content":"no"}});

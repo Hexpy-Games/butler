@@ -10,7 +10,7 @@ use crate::{
         EmbeddingMode, EmbeddingRequest, EmbeddingRequestClass, MemoryGenerationHandle,
         MemoryGenerationTarget, assert_conversation_source_current, assert_mutation_authority,
         bind_native_embedding_identity, ensure_data_authority,
-        generation_vectors::{GenerationVectorRow, NativeGenerationVectorStore, persisted_receipt},
+        generation_vectors::{GenerationVectorRow, GenerationVectorStore, persisted_receipt},
         graph::{ClaimedVectorUnit, GraphRepository},
         resolve_generation,
         sources::read_typed_record,
@@ -77,8 +77,7 @@ async fn run_claimed(
         .unwrap_or(MemoryGenerationTarget::Active {
             expected_generation: generation.generation_id.clone(),
         });
-    let store =
-        NativeGenerationVectorStore::new(input.data_root.clone(), input.environment.clone());
+    let store = GenerationVectorStore::new(input.data_root.clone(), input.environment.clone());
     if let Some(identity) = generation
         .embedding
         .as_ref()

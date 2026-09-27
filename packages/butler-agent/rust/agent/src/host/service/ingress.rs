@@ -15,17 +15,16 @@ use std::{
 use serde_json::Value;
 use tokio::{sync::Mutex, task::JoinSet};
 
-use crate::host::service::restart_handoff::NativeRestartHandoff;
+use crate::host::service::restart_handoff::RestartHandoff;
 use crate::{
-    btcc::{Btcc, NativePrincipalAuthority},
-    gateway::{NativeInboundQueue, NativeQueueError},
+    btcc::{Btcc, PrincipalAuthority},
+    gateway::{InboundQueue, InboundQueueError},
     workspace::SessionBindingStore,
 };
 
-pub(crate) type DeliveryFuture =
-    Pin<Box<dyn Future<Output = Result<bool, NativeIngressError>> + Send>>;
+pub(crate) type DeliveryFuture = Pin<Box<dyn Future<Output = Result<bool, IngressError>> + Send>>;
 
-pub(crate) trait NativeIngressDelivery: Send + Sync + 'static {
+pub(crate) trait IngressDelivery: Send + Sync + 'static {
     fn deliver(&self, session_id: String, action: Value) -> DeliveryFuture;
 }
 
@@ -33,14 +32,14 @@ pub(crate) trait NativeIngressDelivery: Send + Sync + 'static {
 /// queued event, plus the underlying error.
 #[derive(Clone, Debug, thiserror::Error)]
 #[error("{code}: {message}")]
-pub(crate) struct NativeIngressError {
+pub(crate) struct IngressError {
     pub(crate) code: &'static str,
     pub(crate) message: String,
     #[source]
     source: Option<Arc<dyn std::error::Error + Send + Sync>>,
 }
 
-impl NativeIngressError {
+impl IngressError {
     pub(crate) fn new(code: &'static str, message: impl Into<String>) -> Self {
         Self {
             code,
@@ -60,14 +59,14 @@ impl NativeIngressError {
     }
 }
 
-impl From<NativeQueueError> for NativeIngressError {
-    fn from(error: NativeQueueError) -> Self {
+impl From<InboundQueueError> for IngressError {
+    fn from(error: InboundQueueError) -> Self {
         Self::new(error.code(), error.message()).with_source(error)
     }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub(crate) struct NativeIngressPoll {
+pub(crate) struct IngressPoll {
     pub(crate) claimed: usize,
     pub(crate) handled: usize,
     pub(crate) delivered: usize,
@@ -78,7 +77,7 @@ pub(crate) struct NativeIngressPoll {
 struct DispatchDone {
     session: String,
     queue_id: String,
-    result: NativeIngressPoll,
+    result: IngressPoll,
 }
 
 struct Lifecycle {
@@ -89,34 +88,34 @@ struct Lifecycle {
     tasks: JoinSet<DispatchDone>,
 }
 
-pub(crate) struct NativeIngressDispatcher {
-    queue: Arc<NativeInboundQueue>,
+pub(crate) struct IngressDispatcher {
+    queue: Arc<InboundQueue>,
     btcc: Btcc,
-    authority: Arc<NativePrincipalAuthority>,
+    authority: Arc<PrincipalAuthority>,
     bindings: SessionBindingStore,
     data_root: PathBuf,
     default_workspace: PathBuf,
-    delivery: Arc<dyn NativeIngressDelivery>,
-    subsessions: Arc<crate::btcc::NativeSubsessionService>,
-    restart_handoff: Arc<NativeRestartHandoff>,
+    delivery: Arc<dyn IngressDelivery>,
+    subsessions: Arc<crate::btcc::SubsessionService>,
+    restart_handoff: Arc<RestartHandoff>,
     lifecycle: Mutex<Lifecycle>,
 }
 
-impl NativeIngressDispatcher {
+impl IngressDispatcher {
     #[expect(
         clippy::too_many_arguments,
         reason = "composition names each required queue, execution, authority, routing, delivery, and lifecycle owner"
     )]
     pub(crate) fn new(
-        queue: Arc<NativeInboundQueue>,
+        queue: Arc<InboundQueue>,
         btcc: Btcc,
-        authority: Arc<NativePrincipalAuthority>,
+        authority: Arc<PrincipalAuthority>,
         bindings: SessionBindingStore,
         data_root: PathBuf,
         default_workspace: PathBuf,
-        delivery: Arc<dyn NativeIngressDelivery>,
-        subsessions: Arc<crate::btcc::NativeSubsessionService>,
-        restart_handoff: Arc<NativeRestartHandoff>,
+        delivery: Arc<dyn IngressDelivery>,
+        subsessions: Arc<crate::btcc::SubsessionService>,
+        restart_handoff: Arc<RestartHandoff>,
     ) -> Self {
         Self {
             queue,
@@ -138,15 +137,15 @@ impl NativeIngressDispatcher {
         }
     }
 
-    pub(crate) async fn poll(&self) -> Result<NativeIngressPoll, NativeIngressError> {
+    pub(crate) async fn poll(&self) -> Result<IngressPoll, IngressError> {
         let mut state = self.lifecycle.lock().await;
         if state.closing {
-            return Err(NativeIngressError::new(
+            return Err(IngressError::new(
                 "inbound_dispatcher_closed",
                 "Inbound dispatcher closed",
             ));
         }
-        let mut summary = NativeIngressPoll::default();
+        let mut summary = IngressPoll::default();
         while let Some(done) = state.tasks.try_join_next_with_id() {
             match done {
                 Ok((id, done)) => {
@@ -178,7 +177,7 @@ impl NativeIngressDispatcher {
             .waiting_source_sessions()
             .await
             .map_err(|source| {
-                NativeIngressError::new(
+                IngressError::new(
                     "inbound_authority_state_unavailable",
                     "Waiting session state unavailable",
                 )
@@ -226,7 +225,7 @@ impl NativeIngressDispatcher {
     }
 
     /// Stop admission and retain every task through completion.
-    pub(crate) async fn close(&self) -> Result<(), NativeIngressError> {
+    pub(crate) async fn close(&self) -> Result<(), IngressError> {
         let mut state = self.lifecycle.lock().await;
         state.closing = true;
         while let Some(done) = state.tasks.join_next_with_id().await {

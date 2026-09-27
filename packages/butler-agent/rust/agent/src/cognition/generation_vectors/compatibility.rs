@@ -5,9 +5,7 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 
 use crate::cognition::CognitionCode;
-use crate::cognition::{
-    CognitionError, CognitionResult, GenerationEmbedding, NativeEmbeddingIdentity,
-};
+use crate::cognition::{CognitionError, CognitionResult, EmbeddingIdentity, GenerationEmbedding};
 
 pub(super) fn preflight(embedding: &GenerationEmbedding) -> CognitionResult<()> {
     let GenerationEmbedding::JavaScript(js) = embedding else {
@@ -47,7 +45,7 @@ pub(super) fn preflight(embedding: &GenerationEmbedding) -> CognitionResult<()> 
 
 pub(super) fn query_identity(
     embedding: &GenerationEmbedding,
-    actual: &NativeEmbeddingIdentity,
+    actual: &EmbeddingIdentity,
 ) -> CognitionResult<()> {
     match embedding {
         GenerationEmbedding::Native(expected) => {

@@ -25,7 +25,7 @@ use super::{
 };
 
 /// App SQLite remains with AppApplication; this owner holds only bounded file jobs.
-pub(crate) struct NativeAppMessageFiles {
+pub(crate) struct AppMessageFiles {
     root: PathBuf,
     clock: Arc<dyn AppIdentityClock>,
     permits: Arc<Semaphore>,
@@ -33,7 +33,7 @@ pub(crate) struct NativeAppMessageFiles {
     closing: Arc<Mutex<bool>>,
 }
 
-impl NativeAppMessageFiles {
+impl AppMessageFiles {
     pub(crate) fn new(data_root: &Path, clock: Arc<dyn AppIdentityClock>) -> Self {
         Self {
             root: data_root.join("app-server/message-files"),
@@ -110,7 +110,7 @@ impl NativeAppMessageFiles {
     }
 }
 
-impl AppArtifactMaterializer for NativeAppMessageFiles {
+impl AppArtifactMaterializer for AppMessageFiles {
     fn materialize(
         &self,
         request: ArtifactMaterializationRequest,
@@ -119,7 +119,7 @@ impl AppArtifactMaterializer for NativeAppMessageFiles {
     }
 }
 
-impl AppMessageFileStorage for NativeAppMessageFiles {
+impl AppMessageFileStorage for AppMessageFiles {
     fn write_upload(&self, input: AppFileWrite) -> ApplicationFuture<MaterializedResponderFile> {
         self.run_file_job(move |root, clock| upload::write(root, clock, input))
     }

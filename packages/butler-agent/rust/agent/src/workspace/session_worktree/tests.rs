@@ -9,13 +9,12 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use tokio_util::sync::CancellationToken;
 
 use super::{
-    BindSessionWorktreeInput, BindSessionWorktreeResult, NativeSessionWorktrees,
-    SessionWorktreeAction,
+    BindSessionWorktreeInput, BindSessionWorktreeResult, SessionWorktreeAction, SessionWorktrees,
 };
 use crate::workspace::{
-    NativeCommands, NativeSessionWorkspaceRecovery, NativeWorkspaceFiles, OwnOptional,
-    SessionBindingStore, SessionBindingStoreConfig, SessionRole, UpsertSessionBinding,
-    WorkspaceClock, WorkspaceReference, WorkspaceResult, WorkspaceStorageProfile,
+    Commands, OwnOptional, SessionBindingStore, SessionBindingStoreConfig, SessionRole,
+    SessionWorkspaceRecovery, UpsertSessionBinding, WorkspaceClock, WorkspaceFiles,
+    WorkspaceReference, WorkspaceResult, WorkspaceStorageProfile,
 };
 
 struct Clock;
@@ -93,13 +92,13 @@ async fn create_select_persists_cas_and_reopens_one_real_worktree() {
         })
         .await
         .unwrap();
-    let commands = NativeCommands::new();
-    let files = NativeWorkspaceFiles::new(2);
+    let commands = Commands::new();
+    let files = WorkspaceFiles::new(2);
     let env = Arc::new(HashMap::from([(
         "PATH".into(),
         std::env::var("PATH").unwrap_or_else(|_| "/usr/bin:/bin".into()),
     )]));
-    let binder = NativeSessionWorktrees::new(
+    let binder = SessionWorktrees::new(
         store.clone(),
         commands.clone(),
         files.clone(),
@@ -166,12 +165,8 @@ async fn create_select_persists_cas_and_reopens_one_real_worktree() {
     })
     .await
     .unwrap();
-    let recovery = NativeSessionWorkspaceRecovery::new(
-        reopened_store.clone(),
-        commands.clone(),
-        files.clone(),
-        env,
-    );
+    let recovery =
+        SessionWorkspaceRecovery::new(reopened_store.clone(), commands.clone(), files.clone(), env);
     let reopened = recovery
         .recover("session", None, CancellationToken::new())
         .await

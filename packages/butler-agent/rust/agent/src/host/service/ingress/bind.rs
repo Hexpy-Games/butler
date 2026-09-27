@@ -10,7 +10,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use super::NativeIngressError;
+use super::IngressError;
 use crate::{
     btcc::{
         AttachmentRef, ExecutionControls, Peer, Sender, SessionRole as TurnRole, TurnMessage,
@@ -60,9 +60,9 @@ pub(super) struct Hints {
 }
 
 impl Envelope {
-    pub(super) fn from_record(record: &QueuedInboundEvent) -> Result<Self, NativeIngressError> {
+    pub(super) fn from_record(record: &QueuedInboundEvent) -> Result<Self, IngressError> {
         record.envelope.read().map_err(|source| {
-            NativeIngressError::new(
+            IngressError::new(
                 "inbound_envelope_invalid",
                 "Inbound envelope could not be decoded",
             )
@@ -86,13 +86,13 @@ pub(super) async fn bind_and_request(
     bindings: &SessionBindingStore,
     data_root: &Path,
     default_workspace: &Path,
-) -> Result<TurnRequest, NativeIngressError> {
+) -> Result<TurnRequest, IngressError> {
     if envelope.transport == "automation" {
         let binding = automation_binding(envelope, bindings).await?;
         return automation_request(envelope, &binding);
     }
     if envelope.transport != "app" {
-        return Err(NativeIngressError::new(
+        return Err(IngressError::new(
             "inbound_transport_unsupported",
             "Native ingress transport unavailable",
         ));
@@ -133,7 +133,7 @@ pub(super) async fn bind_and_request(
         .get_by_session_id(session_id)
         .await
         .map_err(|source| {
-            NativeIngressError::new("session_binding_unavailable", "Session binding unavailable")
+            IngressError::new("session_binding_unavailable", "Session binding unavailable")
                 .with_source(source)
         })?;
     let binding = policy::upsert_app_binding(
@@ -226,7 +226,7 @@ pub(super) async fn bind_and_request(
 async fn automation_binding(
     envelope: &Envelope,
     bindings: &SessionBindingStore,
-) -> Result<StoredSessionBinding, NativeIngressError> {
+) -> Result<StoredSessionBinding, IngressError> {
     let session_id = envelope
         .routing_hints
         .as_ref()
@@ -237,11 +237,11 @@ async fn automation_binding(
         .get_by_session_id(session_id)
         .await
         .map_err(|source| {
-            NativeIngressError::new("session_binding_unavailable", "Session binding unavailable")
+            IngressError::new("session_binding_unavailable", "Session binding unavailable")
                 .with_source(source)
         })?
         .ok_or_else(|| {
-            NativeIngressError::new("session_binding_missing", "Session binding unavailable")
+            IngressError::new("session_binding_missing", "Session binding unavailable")
         })?;
     if binding.lifecycle_state == SessionLifecycleState::Active {
         return Ok(binding);
@@ -250,18 +250,16 @@ async fn automation_binding(
         .update_lifecycle_state(session_id, SessionLifecycleState::Active, None)
         .await
         .map_err(|source| {
-            NativeIngressError::new("session_binding_unavailable", "Session binding unavailable")
+            IngressError::new("session_binding_unavailable", "Session binding unavailable")
                 .with_source(source)
         })?
-        .ok_or_else(|| {
-            NativeIngressError::new("session_binding_missing", "Session binding unavailable")
-        })
+        .ok_or_else(|| IngressError::new("session_binding_missing", "Session binding unavailable"))
 }
 
 fn automation_request(
     envelope: &Envelope,
     binding: &StoredSessionBinding,
-) -> Result<TurnRequest, NativeIngressError> {
+) -> Result<TurnRequest, IngressError> {
     let role = match binding.role {
         SessionRole::Butler => TurnRole::Butler,
         SessionRole::Steward => TurnRole::Steward,
@@ -316,7 +314,7 @@ fn automation_request(
 pub(super) async fn existing_control_binding(
     envelope: &Envelope,
     bindings: &SessionBindingStore,
-) -> Result<StoredSessionBinding, NativeIngressError> {
+) -> Result<StoredSessionBinding, IngressError> {
     let session_id = envelope
         .routing_hints
         .as_ref()
@@ -327,11 +325,11 @@ pub(super) async fn existing_control_binding(
         .get_by_session_id(session_id)
         .await
         .map_err(|source| {
-            NativeIngressError::new("session_binding_unavailable", "Session binding unavailable")
+            IngressError::new("session_binding_unavailable", "Session binding unavailable")
                 .with_source(source)
         })?
         .ok_or_else(|| {
-            NativeIngressError::new("session_binding_missing", "Session binding unavailable")
+            IngressError::new("session_binding_missing", "Session binding unavailable")
         })?;
     if matches!(
         binding.lifecycle_state,
@@ -343,18 +341,16 @@ pub(super) async fn existing_control_binding(
         .update_lifecycle_state(session_id, SessionLifecycleState::Active, None)
         .await
         .map_err(|source| {
-            NativeIngressError::new("session_binding_unavailable", "Session binding unavailable")
+            IngressError::new("session_binding_unavailable", "Session binding unavailable")
                 .with_source(source)
         })?
-        .ok_or_else(|| {
-            NativeIngressError::new("session_binding_missing", "Session binding unavailable")
-        })
+        .ok_or_else(|| IngressError::new("session_binding_missing", "Session binding unavailable"))
 }
 
 pub(super) fn control_request(
     envelope: &Envelope,
     binding: &StoredSessionBinding,
-) -> Result<TurnRequest, NativeIngressError> {
+) -> Result<TurnRequest, IngressError> {
     let hints = envelope
         .routing_hints
         .as_ref()
@@ -446,7 +442,7 @@ fn verify_context(
     envelope: &Envelope,
     model_ref: &str,
     turn_id: &str,
-) -> Result<(), NativeIngressError> {
+) -> Result<(), IngressError> {
     if context.get("version").and_then(Value::as_u64) != Some(1)
         || context.pointer("/session/id").and_then(Value::as_str) != Some(envelope.peer.id.as_str())
         || context
@@ -480,6 +476,6 @@ fn verify_context(
     Ok(())
 }
 
-fn invalid(message: &'static str) -> NativeIngressError {
-    NativeIngressError::new("inbound_app_turn_invalid", message)
+fn invalid(message: &'static str) -> IngressError {
+    IngressError::new("inbound_app_turn_invalid", message)
 }

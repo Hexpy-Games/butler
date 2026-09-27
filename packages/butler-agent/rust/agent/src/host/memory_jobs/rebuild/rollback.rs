@@ -7,13 +7,11 @@ use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 use super::build;
-use crate::host::{
-    NativeEmbeddingOwner, NativeProcessEnvironment, NativeProcessModels, SystemIdentity,
-};
+use crate::host::{EmbeddingOwner, ProcessEnvironment, ProcessModels, SystemIdentity};
 use crate::{
     cognition::{
         CognitionError, CognitionPathEnvironment, CognitionRegistrationService, CognitionResult,
-        NativeGenerationVectorAdapter, NativeMemorySyncConsumer, inspect_memory_rebuild,
+        GenerationVectorAdapter, MemorySyncConsumer, inspect_memory_rebuild,
         rollback_memory_rebuild,
     },
     configuration::ConfigurationWrites,
@@ -106,26 +104,26 @@ async fn serving_catchup(
 ) -> CognitionResult<Value> {
     let generation = crate::cognition::resolve_active_generation(data_root, paths)?;
     let os = nix::sys::utsname::uname()
-        .map_err(|source| error(CognitionCode::NativeEnvironmentUnavailable).with_source(source))?;
+        .map_err(|source| error(CognitionCode::EnvironmentUnavailable).with_source(source))?;
     let home = std::env::var_os("HOME")
         .map(std::path::PathBuf::from)
         .unwrap_or_default();
     let environment =
-        NativeProcessEnvironment::capture(data_root, &home, &os.release().to_string_lossy());
+        ProcessEnvironment::capture(data_root, &home, &os.release().to_string_lossy());
     let collation = Arc::new(
         LocaleCollation::new("en-US")
-            .map_err(|source| error(CognitionCode::NativeLocaleUnavailable).with_source(source))?,
+            .map_err(|source| error(CognitionCode::LocaleUnavailable).with_source(source))?,
     );
-    let models = NativeProcessModels::new(
+    let models = ProcessModels::new(
         data_root.to_owned(),
         environment.model,
         Arc::new(ConfigurationWrites::new()),
         collation,
     )
-    .map_err(|error| CognitionError::new(CognitionCode::NativeModelSetupFailed, error.code()))?;
-    let embedding = Arc::new(NativeEmbeddingOwner::new(data_root.to_owned())?);
+    .map_err(|error| CognitionError::new(CognitionCode::ModelSetupFailed, error.code()))?;
+    let embedding = Arc::new(EmbeddingOwner::new(data_root.to_owned())?);
     let clock: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
-    let vectors = Arc::new(NativeGenerationVectorAdapter::new(
+    let vectors = Arc::new(GenerationVectorAdapter::new(
         data_root.to_owned(),
         paths.clone(),
         embedding.clone(),
@@ -138,7 +136,7 @@ async fn serving_catchup(
         vectors,
         Arc::new(SystemIdentity),
     ));
-    let consumer = NativeMemorySyncConsumer::new(
+    let consumer = MemorySyncConsumer::new(
         data_root.to_owned(),
         paths.clone(),
         registration.clone(),

@@ -8,7 +8,7 @@ use std::{
 
 use serde_json::{Map, Value, json};
 
-use super::{AutomationDependencies, AutomationEnqueue, AutomationError, NativeAutomationService};
+use super::{AutomationDependencies, AutomationEnqueue, AutomationError, AutomationService};
 
 #[derive(Default)]
 struct Queue(Mutex<Vec<Value>>, tokio::sync::Notify);
@@ -35,8 +35,7 @@ async fn tool_claim_does_not_enqueue_and_scheduler_restart_does_not_duplicate() 
     let root = std::env::temp_dir().join(format!("native-automation-{}", uuid::Uuid::new_v4()));
     let now = Arc::new(AtomicI64::new(0));
     let queue = Arc::new(Queue::default());
-    let service =
-        NativeAutomationService::open(&root.clone(), dependencies(now.clone(), queue.clone()));
+    let service = AutomationService::open(&root.clone(), dependencies(now.clone(), queue.clone()));
 
     service
         .execute(
@@ -86,7 +85,7 @@ async fn tool_claim_does_not_enqueue_and_scheduler_restart_does_not_duplicate() 
             .is_err()
     );
 
-    let reopened = NativeAutomationService::open(&root.clone(), dependencies(now, queue.clone()));
+    let reopened = AutomationService::open(&root.clone(), dependencies(now, queue.clone()));
     tokio::task::yield_now().await;
     assert_eq!(queue.0.lock().unwrap().len(), 1);
     reopened

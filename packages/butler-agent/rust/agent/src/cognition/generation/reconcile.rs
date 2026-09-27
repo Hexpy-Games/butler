@@ -12,7 +12,7 @@ use crate::{
         CognitionError, CognitionPathEnvironment, CognitionResult, MemoryGenerationTarget,
         assert_mutation_authority, ensure_data_authority,
         generation_vectors::{
-            NativeGenerationVectorStore, PreparedRepresentative, prepare_representatives,
+            GenerationVectorStore, PreparedRepresentative, prepare_representatives,
         },
         graph::GraphRepository,
         resolve_generation,
@@ -137,7 +137,7 @@ pub(in crate::cognition::generation) async fn commit_prepared(
         live.assert_current()?;
         candidate.assert_current(&current).await?;
         if cancellation.is_cancelled() { return Err(error(CognitionCode::MemoryOperationAborted)); }
-        let store = NativeGenerationVectorStore::new(data_root.to_owned(), environment.clone());
+        let store = GenerationVectorStore::new(data_root.to_owned(), environment.clone());
         let mut affected_unit_ids = prepared.iter()
             .flat_map(|item| item.affected_unit_ids.iter().cloned()).collect::<Vec<_>>();
         let rows = prepared.into_iter().map(|item| item.row).collect::<Vec<_>>();

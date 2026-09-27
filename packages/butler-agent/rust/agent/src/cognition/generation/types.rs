@@ -5,7 +5,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::cognition::CognitionCode;
-use crate::cognition::{CognitionError, embedding::NativeEmbeddingIdentity};
+use crate::cognition::{CognitionError, embedding::EmbeddingIdentity};
 
 const NATIVE_EMBEDDING_SCHEMA: &str = "butler.native-embedding-identity.v1";
 const CHECKED_PREPROCESSING: &str = "tokenizer-json-special-tokens-checked-v1";
@@ -41,7 +41,7 @@ pub(crate) struct JavaScriptGenerationEmbedding {
 #[derive(Clone)]
 pub(crate) enum GenerationEmbedding {
     JavaScript(JavaScriptGenerationEmbedding),
-    Native(NativeEmbeddingIdentity),
+    Native(EmbeddingIdentity),
 }
 
 impl GenerationEmbedding {
@@ -52,7 +52,7 @@ impl GenerationEmbedding {
         }
     }
 
-    pub(crate) fn native_identity(&self) -> Option<&NativeEmbeddingIdentity> {
+    pub(crate) fn native_identity(&self) -> Option<&EmbeddingIdentity> {
         match self {
             Self::JavaScript(_) => None,
             Self::Native(value) => Some(value),
@@ -60,8 +60,8 @@ impl GenerationEmbedding {
     }
 }
 
-impl From<NativeEmbeddingIdentity> for GenerationEmbedding {
-    fn from(value: NativeEmbeddingIdentity) -> Self {
+impl From<EmbeddingIdentity> for GenerationEmbedding {
+    fn from(value: EmbeddingIdentity) -> Self {
         Self::Native(value)
     }
 }
@@ -110,7 +110,7 @@ impl<'de> Deserialize<'de> for GenerationEmbedding {
             == Some(NATIVE_EMBEDDING_SCHEMA)
         {
             ensure_exact_native_fields(&value).map_err(D::Error::custom)?;
-            serde_json::from_value::<NativeEmbeddingIdentity>(value)
+            serde_json::from_value::<EmbeddingIdentity>(value)
                 .map(Self::Native)
                 .map_err(D::Error::custom)
         } else {
@@ -174,7 +174,7 @@ pub(super) fn validate_generation_embedding(
 }
 
 pub(super) fn validate_native_embedding_identity(
-    value: &NativeEmbeddingIdentity,
+    value: &EmbeddingIdentity,
 ) -> Result<(), CognitionError> {
     let sha = |text: &str| {
         text.len() == 64
@@ -249,14 +249,14 @@ fn validate_javascript_embedding(
 
 /// Why stored native embedding metadata does not match the native schema.
 #[derive(Debug, thiserror::Error)]
-enum NativeFieldsError {
+enum FieldsError {
     #[error("native embedding metadata must be an object")]
     NotAnObject,
     #[error("native embedding metadata fields do not match the native schema")]
     FieldMismatch,
 }
 
-fn ensure_exact_native_fields(value: &Value) -> Result<(), NativeFieldsError> {
+fn ensure_exact_native_fields(value: &Value) -> Result<(), FieldsError> {
     const FIELDS: [&str; 16] = [
         "schema",
         "model",
@@ -276,10 +276,10 @@ fn ensure_exact_native_fields(value: &Value) -> Result<(), NativeFieldsError> {
         "version",
     ];
     let Some(object) = value.as_object() else {
-        return Err(NativeFieldsError::NotAnObject);
+        return Err(FieldsError::NotAnObject);
     };
     if object.len() != FIELDS.len() || FIELDS.iter().any(|field| !object.contains_key(*field)) {
-        return Err(NativeFieldsError::FieldMismatch);
+        return Err(FieldsError::FieldMismatch);
     }
     Ok(())
 }

@@ -2,19 +2,19 @@
 
 use std::sync::Arc;
 
-use crate::cognition::{CapsulePresence, CognitionError, NativeCognitionPromptReader};
+use crate::cognition::{CapsulePresence, CognitionError, CognitionPromptReader};
 use crate::context::{
     CognitionPromptPort, ContextError, ContextFuture, ProjectCapsuleStatus, PromptProjectionInput,
     ScopedFeedbackProjection,
 };
 use crate::workspace::StoredSessionBinding;
 
-pub(crate) struct NativeCognitionPrompt {
-    reader: Arc<NativeCognitionPromptReader>,
+pub(crate) struct CognitionPrompt {
+    reader: Arc<CognitionPromptReader>,
 }
 
-impl NativeCognitionPrompt {
-    pub(crate) fn new(reader: Arc<NativeCognitionPromptReader>) -> Self {
+impl CognitionPrompt {
+    pub(crate) fn new(reader: Arc<CognitionPromptReader>) -> Self {
         Self { reader }
     }
 }
@@ -23,7 +23,7 @@ fn error(error: CognitionError) -> ContextError {
     ContextError::port(error.code(), error.message().clone(), error)
 }
 
-impl CognitionPromptPort for NativeCognitionPrompt {
+impl CognitionPromptPort for CognitionPrompt {
     fn scoped_feedback<'a>(
         &'a self,
         input: &'a PromptProjectionInput<'a>,

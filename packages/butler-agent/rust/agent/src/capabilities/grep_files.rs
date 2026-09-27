@@ -13,7 +13,7 @@ use regress::{Flags, Regex};
 use serde_json::{Value, json};
 
 use super::{CapabilityError, CapabilityInvocation, arguments, evidence};
-use crate::workspace::{NativeWorkspaceFiles, WorkspaceListInput, WorkspaceListOutcome};
+use crate::workspace::{WorkspaceFiles, WorkspaceListInput, WorkspaceListOutcome};
 
 pub(super) fn definition() -> Value {
     json!({
@@ -46,7 +46,7 @@ fn escape_literal(pattern: &str) -> String {
 }
 
 pub(super) async fn execute(
-    workspace: &NativeWorkspaceFiles,
+    workspace: &WorkspaceFiles,
     input: CapabilityInvocation<'_>,
 ) -> Result<Value, CapabilityError> {
     let started = Instant::now();

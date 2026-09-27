@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::btcc::BtccError;
 use crate::models::ModelConfigurationClock;
 
-use crate::host::{NativeAgentRuntime, SystemIdentity};
+use crate::host::{AgentRuntime, SystemIdentity};
 
 pub(super) async fn deliver_parent_results(
     client: &reqwest::Client,
@@ -73,7 +73,7 @@ pub(super) fn failure(code: impl Into<String>, message: impl Into<String>) -> Bt
     BtccError::relayed(code.into(), message)
 }
 
-pub(super) async fn close_runtime(runtime: Arc<NativeAgentRuntime>) -> Result<(), BtccError> {
+pub(super) async fn close_runtime(runtime: Arc<AgentRuntime>) -> Result<(), BtccError> {
     match Arc::try_unwrap(runtime) {
         Ok(runtime) => runtime.close().await,
         Err(_) => Err(failure(

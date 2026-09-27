@@ -7,14 +7,14 @@ use tokio_util::sync::CancellationToken;
 
 use crate::cognition::{
     ConfiguredPhase, ConfiguredPhaseExecutor, ConfiguredPhaseFuture, GraphConsolidationService,
-    MemoryHealthService, NativeMemorySyncConsumer, NativeVectorOptimizeService,
-    ProjectCapsuleService, VectorOptimizeOutcome,
+    MemoryHealthService, MemorySyncConsumer, ProjectCapsuleService, VectorOptimizeOutcome,
+    VectorOptimizeService,
 };
 
-pub(in crate::host) struct NativeConfiguredPhases {
-    pub consumer: Arc<NativeMemorySyncConsumer>,
+pub(in crate::host) struct ConfiguredPhases {
+    pub consumer: Arc<MemorySyncConsumer>,
     pub consolidate: GraphConsolidationService,
-    pub optimize: NativeVectorOptimizeService,
+    pub optimize: VectorOptimizeService,
     pub capsules: Arc<ProjectCapsuleService>,
     pub health: MemoryHealthService,
     pub generation_id: String,
@@ -22,7 +22,7 @@ pub(in crate::host) struct NativeConfiguredPhases {
     pub project_capsule_refresh_limit: usize,
 }
 
-impl ConfiguredPhaseExecutor for NativeConfiguredPhases {
+impl ConfiguredPhaseExecutor for ConfiguredPhases {
     fn run<'a>(
         &'a self,
         phase: ConfiguredPhase,

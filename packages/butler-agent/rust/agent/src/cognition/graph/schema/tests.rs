@@ -10,7 +10,7 @@ struct Golden {
 }
 
 #[test]
-fn native_schema_matches_actual_bun_ensure_schema_surface_and_is_idempotent() {
+fn schema_matches_actual_bun_ensure_schema_surface_and_is_idempotent() {
     let golden: Golden =
         serde_json::from_str(include_str!("tests/fixtures/bun-ensure-schema.json")).unwrap();
     let mut connection = Connection::open_in_memory().unwrap();

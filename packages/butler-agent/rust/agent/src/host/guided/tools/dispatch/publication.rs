@@ -1,19 +1,17 @@
 use crate::btcc::{GuidedInvocation, ToolExecutionError};
-use crate::host::NativeGuidedWorkTools;
+use crate::host::GuidedWorkTools;
 
-use super::NativeGuidedTools;
+use super::GuidedTools;
 
 /// The stable occurrence is still in scope here; provider IDs are not unique keys.
 pub(in crate::host::guided::tools) async fn publish_work_result(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     name: &str,
     call_id: &str,
     result: &crate::json::JsonDocument,
 ) -> Result<(), ToolExecutionError> {
-    if NativeGuidedWorkTools::is_work_tool(name)
-        && result.field("ok").ok().flatten() == Some("true")
-    {
+    if GuidedWorkTools::is_work_tool(name) && result.field("ok").ok().flatten() == Some("true") {
         let work = owner
             .work
             .accepted_work(name)

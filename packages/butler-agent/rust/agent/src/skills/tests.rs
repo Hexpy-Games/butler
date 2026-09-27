@@ -34,7 +34,7 @@ async fn only_installed_status_receives_a_canonical_shell_quoted_command() {
         "'{}'",
         executable.display().to_string().replace('\'', "'\\''")
     );
-    let owner = NativeSkills::for_installation(resources, data, executable);
+    let owner = Skills::for_installation(resources, data, executable);
     let catalog = owner.runtime_catalog(None).await.unwrap();
     assert_eq!(catalog.len(), 3);
     assert!(
@@ -80,7 +80,7 @@ async fn imports_lists_and_reopens_the_same_user_skill() {
     let root = std::env::temp_dir().join(format!("butler-skills-{}", uuid::Uuid::new_v4()));
     let home = root.join("home");
     let data = root.join("data");
-    let first = NativeSkills::new(home.clone(), data.clone());
+    let first = Skills::new(home.clone(), data.clone());
     let imported = first
         .import(
             archive(&root.join("upload"), "imported/SKILL.md", SKILL),
@@ -98,7 +98,7 @@ async fn imports_lists_and_reopens_the_same_user_skill() {
         ["imported"]
     );
     first.close().await;
-    let reopened = NativeSkills::new(home, data);
+    let reopened = Skills::new(home, data);
     assert_eq!(
         reopened.runtime_catalog(None).await.unwrap()[0].name,
         "imported"
@@ -110,7 +110,7 @@ async fn imports_lists_and_reopens_the_same_user_skill() {
 #[tokio::test]
 async fn rejects_parent_traversal_without_writing_outside_staging() {
     let root = std::env::temp_dir().join(format!("butler-skills-{}", uuid::Uuid::new_v4()));
-    let owner = NativeSkills::new(root.join("home"), root.join("data"));
+    let owner = Skills::new(root.join("home"), root.join("data"));
     let result = owner
         .import(
             archive(&root.join("upload"), "../escape/SKILL.md", SKILL),
@@ -136,7 +136,7 @@ async fn imports_each_colliding_basename_and_keeps_the_later_candidate() {
             ("two/imported/SKILL.md", &second),
         ],
     );
-    let owner = NativeSkills::new(root.join("home"), root.join("data"));
+    let owner = Skills::new(root.join("home"), root.join("data"));
     let imported = owner.import(path, None).await.unwrap();
     assert_eq!(imported.imported.len(), 2);
     let catalog = owner.runtime_catalog(None).await.unwrap();
@@ -160,7 +160,7 @@ async fn cancelled_caller_leaves_admitted_archive_owned_by_blocking_job() {
     let root = std::env::temp_dir().join(format!("butler-upload-{}", uuid::Uuid::new_v4()));
     let staged = archive(&root, "imported/SKILL.md", SKILL);
     let archive_path = staged.path().to_owned();
-    let owner = NativeSkills::new(root.join("home"), root.join("data"));
+    let owner = Skills::new(root.join("home"), root.join("data"));
     let permit = owner.permit().await.unwrap();
     let (started_tx, started_rx) = tokio::sync::oneshot::channel();
     let (release_tx, release_rx) = std::sync::mpsc::channel();
@@ -207,7 +207,7 @@ async fn projects_loaded_names_from_the_matching_final_result_turn() {
         transcript,
     )
     .unwrap();
-    let owner = NativeSkills::new(root.join("home"), root.join("data"));
+    let owner = Skills::new(root.join("home"), root.join("data"));
     let names = owner
         .loaded_names(vec![(
             "butler/app-general".into(),
@@ -236,7 +236,7 @@ async fn falls_back_to_legacy_session_only_when_runtime_has_no_projection() {
         }
     });
     std::fs::write(transcripts.join("legacy.jsonl"), event.to_string()).unwrap();
-    let owner = NativeSkills::new(root.join("home"), root.join("data"));
+    let owner = Skills::new(root.join("home"), root.join("data"));
     let fallback = owner
         .loaded_names(vec![(
             "runtime".into(),

@@ -2,9 +2,9 @@
 
 use crate::gateway::AppQueueOwnerLiveness;
 
-pub(crate) struct NativeAppQueueOwnerLiveness;
+pub(crate) struct AppQueueOwnerLivenessAdapter;
 
-impl AppQueueOwnerLiveness for NativeAppQueueOwnerLiveness {
+impl AppQueueOwnerLiveness for AppQueueOwnerLivenessAdapter {
     fn definitely_dead(&self, owner: &str, current_owner: &str) -> bool {
         let Some((pid, incarnation)) = parse(owner) else {
             return false;

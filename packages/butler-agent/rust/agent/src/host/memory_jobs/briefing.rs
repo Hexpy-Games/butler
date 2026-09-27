@@ -17,45 +17,44 @@ use crate::{
     coordination::CognitionWriteCoordinator,
     gateway::{read_new_chat_briefing_projects, read_new_chat_briefing_settings},
     locale::LocaleCollation,
-    models::{ModelConfiguration, NativeModelProvider, ProviderAuthMethod, ReasoningEffort},
+    models::{ModelConfiguration, ModelProvider, ProviderAuthMethod, ReasoningEffort},
     profile::{PersonaPresets, ProfileService, active_briefing_persona},
-    project_ledger::{NativeProjectLedger, ProjectBriefingTarget},
+    project_ledger::{ProjectBriefingTarget, ProjectLedger},
 };
 
 use crate::cognition::BriefingGenerationCode;
 use crate::host::{
-    NativeDateParser, NativeProcessEnvironment, NativeProcessModels, ProfileConversationSources,
-    SystemIdentity,
+    DateParser, ProcessEnvironment, ProcessModels, ProfileConversationSources, SystemIdentity,
 };
 
-pub(in crate::host) struct NativeBriefingGeneration {
+pub(in crate::host) struct BriefingGeneration {
     generator: BriefingGenerationService,
     profile: Arc<ProfileService>,
-    ledger: NativeProjectLedger,
-    _models: Option<NativeProcessModels>,
+    ledger: ProjectLedger,
+    _models: Option<ProcessModels>,
     owns_profile_and_ledger: bool,
 }
 
-struct NativeBriefingSource {
+struct BriefingSource {
     data_root: PathBuf,
     app_database_path: PathBuf,
     cognition_paths: CognitionPathEnvironment,
     models: Arc<ModelConfiguration>,
     profile: Arc<ProfileService>,
-    ledger: NativeProjectLedger,
-    date_parser: Arc<NativeDateParser>,
+    ledger: ProjectLedger,
+    date_parser: Arc<DateParser>,
 }
 
-impl NativeBriefingGeneration {
+impl BriefingGeneration {
     pub(in crate::host) fn open(
         data_root: PathBuf,
         resource_root: PathBuf,
-        environment: NativeProcessEnvironment,
+        environment: ProcessEnvironment,
     ) -> Result<Self, BtccError> {
-        let date_parser = NativeDateParser::from_process().map_err(setup)?;
+        let date_parser = DateParser::from_process().map_err(setup)?;
         let collation = Arc::new(LocaleCollation::new("en-US").map_err(setup)?);
         let writes = Arc::new(ConfigurationWrites::new());
-        let models = NativeProcessModels::new(
+        let models = ProcessModels::new(
             data_root.clone(),
             environment.model,
             writes.clone(),
@@ -75,11 +74,11 @@ impl NativeBriefingGeneration {
             )),
             models.provider.clone(),
         ));
-        let ledger = NativeProjectLedger::with_collation(&data_root, 2, collation);
+        let ledger = ProjectLedger::with_collation(&data_root, 2, collation);
         let app_database_path =
-            crate::host::service::configuration::NativeAppServiceConfiguration::capture(&data_root)
+            crate::host::service::configuration::AppServiceConfiguration::capture(&data_root)
                 .db_path;
-        let source = Arc::new(NativeBriefingSource {
+        let source = Arc::new(BriefingSource {
             data_root: data_root.clone(),
             app_database_path,
             cognition_paths: environment.cognition_paths.clone(),
@@ -106,17 +105,17 @@ impl NativeBriefingGeneration {
     pub(in crate::host) fn from_runtime(
         data_root: PathBuf,
         coordinator: Arc<CognitionWriteCoordinator>,
-        provider: Arc<NativeModelProvider>,
+        provider: Arc<ModelProvider>,
         configuration: Arc<ModelConfiguration>,
         profile: Arc<ProfileService>,
-        ledger: NativeProjectLedger,
-        date_parser: Arc<NativeDateParser>,
+        ledger: ProjectLedger,
+        date_parser: Arc<DateParser>,
         cognition_paths: CognitionPathEnvironment,
     ) -> Self {
         let app_database_path =
-            crate::host::service::configuration::NativeAppServiceConfiguration::capture(&data_root)
+            crate::host::service::configuration::AppServiceConfiguration::capture(&data_root)
                 .db_path;
-        let source = Arc::new(NativeBriefingSource {
+        let source = Arc::new(BriefingSource {
             data_root: data_root.clone(),
             app_database_path,
             cognition_paths,
@@ -156,7 +155,7 @@ impl NativeBriefingGeneration {
     }
 }
 
-impl BriefingInputSource for NativeBriefingSource {
+impl BriefingInputSource for BriefingSource {
     fn local_minute(&self, epoch_ms: i64) -> Result<u16, BriefingGenerationError> {
         self.date_parser
             .local_day_and_minute(epoch_ms)

@@ -10,12 +10,12 @@ use crate::{
     operations::ServiceReadiness,
 };
 
-pub(crate) struct NativeAppReadiness {
+pub(crate) struct AppReadiness {
     receipt: Arc<ServiceReadiness>,
     listener_ready: Arc<AtomicBool>,
 }
 
-impl NativeAppReadiness {
+impl AppReadiness {
     pub(crate) fn new(receipt: Arc<ServiceReadiness>, listener_ready: Arc<AtomicBool>) -> Self {
         Self {
             receipt,
@@ -24,7 +24,7 @@ impl NativeAppReadiness {
     }
 }
 
-impl AppExecutorReadiness for NativeAppReadiness {
+impl AppExecutorReadiness for AppReadiness {
     fn readiness(&self) -> Result<RuntimeReadinessView, GatewayApplicationError> {
         let published = self
             .receipt

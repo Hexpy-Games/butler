@@ -13,11 +13,9 @@ use super::{
     io::{atomic_write, read},
     record_path,
 };
-use crate::gateway::NativeQueueCode;
-use crate::{
-    gateway::native_queue::{NativeQueueError, QueueResult, QueuedInboundEvent},
-    json::JsonDocument,
-};
+use crate::gateway::InboundQueueCode;
+use crate::gateway::inbound_queue::{InboundQueueError, QueueResult, QueuedInboundEvent};
+use crate::json::JsonDocument;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,12 +32,12 @@ struct RoutingHints {
 
 fn identity(envelope: &JsonDocument) -> QueueResult<EnvelopeIdentity> {
     let id: EnvelopeIdentity = envelope.read().map_err(|error| {
-        NativeQueueError::new(NativeQueueCode::InboundEnvelopeInvalid, error.to_string())
+        InboundQueueError::new(InboundQueueCode::InboundEnvelopeInvalid, error.to_string())
             .with_source(error)
     })?;
     if id.event_id.is_empty() {
-        return Err(NativeQueueError::new(
-            NativeQueueCode::InboundEnvelopeInvalid,
+        return Err(InboundQueueError::new(
+            InboundQueueCode::InboundEnvelopeInvalid,
             "Missing event identity",
         ));
     }
@@ -90,7 +88,7 @@ fn find_queue_id(
     Ok(None)
 }
 
-pub(in crate::gateway::native_queue) fn find_idempotent(
+pub(in crate::gateway::inbound_queue) fn find_idempotent(
     root: &Path,
     envelope: &JsonDocument,
 ) -> QueueResult<Option<QueuedInboundEvent>> {
@@ -113,7 +111,7 @@ pub(in crate::gateway::native_queue) fn find_idempotent(
     Ok(Some(canonical))
 }
 
-pub(in crate::gateway::native_queue) fn enqueue_idempotent(
+pub(in crate::gateway::inbound_queue) fn enqueue_idempotent(
     root: &Path,
     envelope: JsonDocument,
     metadata: Map<String, Value>,
@@ -209,8 +207,11 @@ fn patch_envelope(
         RawValue::from_string(serde_json::to_string(&hints).map_err(encode)?).map_err(encode)?,
     );
     JsonDocument::from_encoded(serde_json::to_string(&outer).map_err(encode)?).map_err(|error| {
-        NativeQueueError::new(NativeQueueCode::InboundQueueEncodeFailed, error.to_string())
-            .with_source(error)
+        InboundQueueError::new(
+            InboundQueueCode::InboundQueueEncodeFailed,
+            error.to_string(),
+        )
+        .with_source(error)
     })
 }
 
@@ -218,7 +219,10 @@ fn raw_string(value: &str) -> QueueResult<Box<RawValue>> {
     RawValue::from_string(serde_json::to_string(value).map_err(encode)?).map_err(encode)
 }
 
-fn encode(error: impl std::error::Error + Send + Sync + 'static) -> NativeQueueError {
-    NativeQueueError::new(NativeQueueCode::InboundQueueEncodeFailed, error.to_string())
-        .with_source(error)
+fn encode(error: impl std::error::Error + Send + Sync + 'static) -> InboundQueueError {
+    InboundQueueError::new(
+        InboundQueueCode::InboundQueueEncodeFailed,
+        error.to_string(),
+    )
+    .with_source(error)
 }

@@ -11,16 +11,16 @@ use std::{future::Future, path::Path, pin::Pin, sync::Arc, time::Duration};
 
 use serde_json::{Map, Value};
 
-pub(crate) use actor::NativeAutomationService;
+pub(crate) use actor::AutomationService;
 pub(crate) use error::{AutomationCode, AutomationError};
 
 /// One-shot DATA store access for the native CLI. It deliberately does not
 /// construct the actor or its scheduler.
-pub(crate) struct NativeAutomationCliStore {
+pub(crate) struct AutomationCliStore {
     store: store::AutomationStore,
 }
 
-impl NativeAutomationCliStore {
+impl AutomationCliStore {
     pub(crate) fn new(data_root: &Path) -> Self {
         Self {
             store: store::AutomationStore::new(data_root),

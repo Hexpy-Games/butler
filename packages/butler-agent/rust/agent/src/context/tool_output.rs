@@ -192,13 +192,13 @@ struct Admission {
 }
 
 #[derive(Clone)]
-pub(crate) struct NativeToolOutput {
+pub(crate) struct ToolOutput {
     admission: Arc<Mutex<Admission>>,
     slots: Arc<Semaphore>,
     drained: Arc<Notify>,
 }
 
-impl NativeToolOutput {
+impl ToolOutput {
     pub(crate) fn new(
         butler_data: PathBuf,
         budget_owner: Arc<ContextBudgetOwner>,

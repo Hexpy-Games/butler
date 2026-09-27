@@ -1,22 +1,20 @@
 use std::{path::PathBuf, sync::Arc};
 
 use crate::btcc::{
-    Btcc, BtccError, BtccHost, ContextCompactionRepository, NativePrincipalAuthority,
+    Btcc, BtccError, BtccHost, ContextCompactionRepository, PrincipalAuthority,
     SessionWorkRepository, StorageProgressPublication,
 };
 use crate::context::ContextBudgetOwner;
 use crate::conversation::AgentConversationStore;
 use crate::host::memory_jobs::context_maintenance::ContextMaintenance;
 use crate::locale::LocaleCollation;
-use crate::project_ledger::NativeProjectLedger;
-use crate::skills::NativeSkills;
-use crate::workspace::{
-    NativeSessionWorkspaceRecovery, NativeSessionWorktrees, SessionBindingStore,
-};
+use crate::project_ledger::ProjectLedger;
+use crate::skills::Skills;
+use crate::workspace::{SessionBindingStore, SessionWorkspaceRecovery, SessionWorktrees};
 
-use super::super::{NativeProcessModels, NativeWorkStreams};
+use super::super::{ProcessModels, WorkStreams};
 
-pub(crate) struct NativeRuntimePaths {
+pub(crate) struct RuntimePaths {
     pub data_root: PathBuf,
     pub installation_root: PathBuf,
     pub executable_path: PathBuf,
@@ -25,34 +23,34 @@ pub(crate) struct NativeRuntimePaths {
 }
 
 /// Ingress holds this owner, admits via BTCC, then awaits close before process exit.
-pub(crate) struct NativeAgentRuntime {
+pub(crate) struct AgentRuntime {
     pub btcc: Btcc,
     pub bindings: SessionBindingStore,
-    pub models: NativeProcessModels,
+    pub models: ProcessModels,
     pub context_budget: Arc<ContextBudgetOwner>,
     pub context_compactions: ContextCompactionRepository,
     pub collation: Arc<LocaleCollation>,
     pub progress: StorageProgressPublication,
     pub conversations: Arc<AgentConversationStore>,
-    pub image_files: Arc<crate::gateway::NativeAppImageFiles>,
-    pub authority: Arc<NativePrincipalAuthority>,
-    pub project_ledger: NativeProjectLedger,
+    pub image_files: Arc<crate::gateway::AppImageFiles>,
+    pub authority: Arc<PrincipalAuthority>,
+    pub project_ledger: ProjectLedger,
     pub session_work: Arc<SessionWorkRepository>,
-    pub session_worktrees: NativeSessionWorktrees,
-    pub workspace_recovery: NativeSessionWorkspaceRecovery,
-    pub inbound_queue: Arc<crate::gateway::NativeInboundQueue>,
+    pub session_worktrees: SessionWorktrees,
+    pub workspace_recovery: SessionWorkspaceRecovery,
+    pub inbound_queue: Arc<crate::gateway::InboundQueue>,
     pub restart_tool_journal: Arc<crate::btcc::ToolJournalRepository>,
     pub restart_effect_journal: Arc<crate::btcc::StorageEffectJournal>,
-    pub subsessions: Arc<crate::btcc::NativeSubsessionService>,
-    pub work_streams: Arc<NativeWorkStreams>,
-    pub skills: Arc<NativeSkills>,
-    pub mcp_client: Arc<crate::mcp_client::NativeMcpClient>,
+    pub subsessions: Arc<crate::btcc::SubsessionService>,
+    pub work_streams: Arc<WorkStreams>,
+    pub skills: Arc<Skills>,
+    pub mcp_client: Arc<crate::mcp_client::McpClient>,
     pub context_maintenance: Arc<ContextMaintenance>,
     pub profile: Arc<crate::profile::ProfileService>,
     pub(super) host: BtccHost,
 }
 
-impl NativeAgentRuntime {
+impl AgentRuntime {
     pub(crate) async fn close(self) -> Result<(), BtccError> {
         self.host.close().await
     }

@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn prompt_clock_formats_local_time_with_zone_names_and_rejects_unknown_zones() {
-    let clock = NativePromptClock::new().unwrap();
+    let clock = SystemPromptClock::new().unwrap();
     for (timezone, expected) in [
         ("UTC", "Monday, September 14, 2026 at 12:00:00 AM UTC"),
         (
@@ -30,7 +30,7 @@ fn prompt_clock_formats_local_time_with_zone_names_and_rejects_unknown_zones() {
 
 #[test]
 fn prompt_clock_native_iso_preserves_range_and_rejects_invalid_timestamp() {
-    let clock = NativePromptClock::new().unwrap();
+    let clock = SystemPromptClock::new().unwrap();
     let epoch = 1_789_344_000_000;
     assert_eq!(
         clock.parse_timestamp("2026-09-14T00:00:00.000Z"),

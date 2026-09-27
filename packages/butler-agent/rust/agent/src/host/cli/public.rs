@@ -48,7 +48,7 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
                     Ok(value) => value,
                     Err(message) => return error(parsed.json, message.message()),
                 };
-            let provenance = match installation.native_payload_provenance() {
+            let provenance = match installation.payload_provenance() {
                 Ok(value) => value,
                 Err(message) => return error(parsed.json, message.message()),
             };

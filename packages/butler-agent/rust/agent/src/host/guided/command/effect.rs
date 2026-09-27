@@ -9,13 +9,13 @@ use crate::btcc::{
     AdapterOutcome, BtccError, EffectAdapter, EffectAdapterError, EffectError, EffectFuture,
     PlanBinding,
 };
-use crate::context::NativeToolOutput;
-use crate::workspace::{GuidedAccess, GuidedCommandInput, NativeCommands};
+use crate::context::ToolOutput;
+use crate::workspace::{Commands, GuidedAccess, GuidedCommandInput};
 
-use super::{CommandScope, NativeGuidedCommand, PreparedCommandEffect, active_root, error, output};
+use super::{CommandScope, GuidedCommand, PreparedCommandEffect, active_root, error, output};
 
 pub(super) async fn prepare(
-    owner: &NativeGuidedCommand,
+    owner: &GuidedCommand,
     args: &Map<String, Value>,
     scope: CommandScope<'_>,
 ) -> Result<PreparedCommandEffect, BtccError> {
@@ -24,7 +24,7 @@ pub(super) async fn prepare(
     let requested = args.get("cwd").and_then(Value::as_str).map(str::to_owned);
     let cwd = owner
         .jobs
-        .run(move || NativeCommands::guarded_directory(&guarded_root, requested.as_deref()))
+        .run(move || Commands::guarded_directory(&guarded_root, requested.as_deref()))
         .await?
         .map_err(BtccError::from)?;
     let root_identity = canonical_root(&workspace);
@@ -68,8 +68,8 @@ pub(super) async fn prepare(
 }
 
 struct CommandEffectAdapter {
-    commands: NativeCommands,
-    output: NativeToolOutput,
+    commands: Commands,
+    output: ToolOutput,
     jobs: super::jobs::CommandJobs,
     host_environment: Arc<HashMap<String, String>>,
     butler_data: PathBuf,

@@ -5,26 +5,23 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 
 use crate::btcc::{EffectFailure, EffectFuture, RegisteredEditPort};
-use crate::capabilities::{CapabilityInvocation, NativeCapabilities};
+use crate::capabilities::{Capabilities, CapabilityInvocation};
 
 use crate::host::RegisteredWriteContext;
 
-pub(crate) struct NativeRegisteredEdit {
-    capabilities: Arc<NativeCapabilities>,
+pub(crate) struct RegisteredEdit {
+    capabilities: Arc<Capabilities>,
     context: RegisteredWriteContext,
 }
-impl NativeRegisteredEdit {
-    pub(crate) fn new(
-        capabilities: Arc<NativeCapabilities>,
-        context: RegisteredWriteContext,
-    ) -> Self {
+impl RegisteredEdit {
+    pub(crate) fn new(capabilities: Arc<Capabilities>, context: RegisteredWriteContext) -> Self {
         Self {
             capabilities,
             context,
         }
     }
 }
-impl RegisteredEditPort for NativeRegisteredEdit {
+impl RegisteredEditPort for RegisteredEdit {
     fn edit(&self, prepared: Value) -> EffectFuture<'_, Value> {
         Box::pin(async move {
             let call = json!({"arguments":prepared});

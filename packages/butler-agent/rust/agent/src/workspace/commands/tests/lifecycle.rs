@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use super::{CommandStep, Fixture, GuidedAccess, NativeCommands, ScriptedProcesses};
+use super::{CommandStep, Commands, Fixture, GuidedAccess, ScriptedProcesses};
 
 #[cfg(unix)]
 #[tokio::test]
@@ -11,7 +11,7 @@ async fn guided_normal_close_kills_owned_background_descendant() {
     use nix::unistd::Pid;
 
     let fixture = Fixture::new();
-    let owner = NativeCommands::new();
+    let owner = Commands::new();
     let pid_path = fixture.0.join("child.pid");
     let command = format!("sleep 10 & echo $! > '{}'; exit 0", pid_path.display());
     let output = owner
@@ -36,7 +36,7 @@ async fn guided_normal_close_kills_owned_background_descendant() {
 #[tokio::test]
 async fn spool_initialization_failure_does_not_start_child() {
     let fixture = Fixture::new();
-    let owner = NativeCommands::new();
+    let owner = Commands::new();
     let spool_parent = fixture.0.join("runtime/btcc");
     std::fs::create_dir_all(&spool_parent).unwrap();
     std::fs::write(spool_parent.join("command-spool"), b"occupied").unwrap();
@@ -57,7 +57,7 @@ async fn spool_initialization_failure_does_not_start_child() {
 #[tokio::test]
 async fn capture_write_failure_terminates_child_and_discards_owned_files() {
     let fixture = Fixture::new();
-    let owner = NativeCommands::with_host(Arc::new(ScriptedProcesses {
+    let owner = Commands::with_host(Arc::new(ScriptedProcesses {
         failing_capture: true,
         ..ScriptedProcesses::default()
     }));
@@ -82,7 +82,7 @@ async fn capture_write_failure_terminates_child_and_discards_owned_files() {
 #[tokio::test]
 async fn structured_timeout_and_close_reap_children() {
     let fixture = Fixture::new();
-    let owner = NativeCommands::new();
+    let owner = Commands::new();
     let mut timed = fixture.structured(vec![CommandStep {
         executable: "/bin/sh".into(),
         arguments: vec![
@@ -105,7 +105,7 @@ async fn structured_timeout_and_close_reap_children() {
 #[tokio::test]
 async fn close_cancels_running_command_and_rejects_admission() {
     let fixture = Fixture::new();
-    let owner = NativeCommands::new();
+    let owner = Commands::new();
     let receiver = owner.submit_guided(fixture.guided("sleep 10")).unwrap();
     tokio::time::timeout(std::time::Duration::from_secs(3), owner.close())
         .await
@@ -126,7 +126,7 @@ async fn close_cancels_running_command_and_rejects_admission() {
 #[tokio::test]
 async fn guided_environment_excludes_non_allowlisted_host_values() {
     let fixture = Fixture::new();
-    let owner = NativeCommands::new();
+    let owner = Commands::new();
     let mut input = fixture.guided("printf %s \"${PRIVATE_TOKEN-unset}\"");
     input
         .host_environment
@@ -141,7 +141,7 @@ async fn guided_environment_excludes_non_allowlisted_host_values() {
 #[tokio::test]
 async fn structured_undefined_environment_entry_removes_inherited_value() {
     let fixture = Fixture::new();
-    let owner = NativeCommands::new();
+    let owner = Commands::new();
     let mut input = fixture.structured(vec![CommandStep {
         executable: "/bin/sh".into(),
         arguments: vec![
@@ -163,7 +163,7 @@ async fn structured_undefined_environment_entry_removes_inherited_value() {
 #[tokio::test]
 async fn guided_read_only_uses_actual_sandbox_boundary() {
     let fixture = Fixture::new();
-    let owner = NativeCommands::new();
+    let owner = Commands::new();
     let target = fixture.0.join("must-not-write");
     let mut input = fixture.guided(&format!("printf x > '{}'", target.display()));
     input.access = GuidedAccess::ReadOnlyObservation;
@@ -177,7 +177,7 @@ async fn guided_read_only_uses_actual_sandbox_boundary() {
 async fn guided_forced_public_settlement_precedes_owned_reap() {
     let fixture = Fixture::new();
     let (host, release) = ScriptedProcesses::reaped_on_release();
-    let owner = NativeCommands::with_host(Arc::new(host));
+    let owner = Commands::with_host(Arc::new(host));
     let mut input = fixture.guided("while :; do sleep 1; done");
     input.timeout_ms = Some(10.0);
     let receiver = owner.submit_guided(input).unwrap();
@@ -193,10 +193,7 @@ async fn guided_forced_public_settlement_precedes_owned_reap() {
 
 /// The public result is already settled; closing the owner must still wait
 /// until the killed child is reaped.
-async fn assert_close_waits_for_reap(
-    owner: &NativeCommands,
-    release: tokio::sync::watch::Sender<bool>,
-) {
+async fn assert_close_waits_for_reap(owner: &Commands, release: tokio::sync::watch::Sender<bool>) {
     let mut closing = tokio::spawn({
         let owner = owner.clone();
         async move { owner.close().await }
@@ -216,7 +213,7 @@ async fn assert_close_waits_for_reap(
 async fn structured_forced_public_settlement_precedes_owned_reap() {
     let fixture = Fixture::new();
     let (host, release) = ScriptedProcesses::reaped_on_release();
-    let owner = NativeCommands::with_host(Arc::new(host));
+    let owner = Commands::with_host(Arc::new(host));
     let mut input = fixture.structured(vec![CommandStep {
         executable: "/bin/sh".into(),
         arguments: vec!["-c".into(), "while :; do sleep 1; done".into()],
@@ -241,7 +238,7 @@ async fn partial_pipeline_spawn_failure_reaps_term_ignoring_descendant() {
 
     let fixture = Fixture::new();
     let gate = Arc::new(tokio::sync::Notify::new());
-    let owner = NativeCommands::with_host(Arc::new(ScriptedProcesses {
+    let owner = Commands::with_host(Arc::new(ScriptedProcesses {
         before_second_spawn: Some(gate.clone()),
         ..ScriptedProcesses::default()
     }));

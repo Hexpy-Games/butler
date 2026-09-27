@@ -8,8 +8,8 @@ use super::path::{canonical_path, linked_directory, occupied};
 use crate::workspace::WorkspaceCode;
 use crate::workspace::session_recovery::path::{WorktreeEntry, parse_worktrees};
 use crate::workspace::{
-    CommandStep, NativeCommands, NativeWorkspaceFiles, StructuredCommandInput,
-    StructuredCommandOutput, WorkspaceError, WorkspaceResult,
+    CommandStep, Commands, StructuredCommandInput, StructuredCommandOutput, WorkspaceError,
+    WorkspaceFiles, WorkspaceResult,
 };
 
 pub(super) type GitOutcome<T> = Result<T, WorkspaceCode>;
@@ -20,15 +20,15 @@ pub(super) struct Validated {
 }
 
 pub(super) struct GitWorktrees<'a> {
-    commands: &'a NativeCommands,
-    files: &'a NativeWorkspaceFiles,
+    commands: &'a Commands,
+    files: &'a WorkspaceFiles,
     host_environment: &'a Arc<HashMap<String, String>>,
 }
 
 impl<'a> GitWorktrees<'a> {
     pub(super) fn new(
-        commands: &'a NativeCommands,
-        files: &'a NativeWorkspaceFiles,
+        commands: &'a Commands,
+        files: &'a WorkspaceFiles,
         host_environment: &'a Arc<HashMap<String, String>>,
     ) -> Self {
         Self {

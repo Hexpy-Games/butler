@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use crate::{
     btcc::{
-        NativeSubsessionService, StorageProgressPublication, SubsessionCancelRequest,
-        SubsessionResumeRequest,
+        StorageProgressPublication, SubsessionCancelRequest, SubsessionResumeRequest,
+        SubsessionService,
     },
     conversation::{
         AgentConversationStore, ConversationMessageWithParts, ConversationPartKind,
@@ -18,15 +18,15 @@ use crate::{
     workspace::SessionRole,
 };
 
-pub(crate) struct NativeAppSubsessions {
-    service: Arc<NativeSubsessionService>,
+pub(crate) struct AppSubsessions {
+    service: Arc<SubsessionService>,
     conversations: Arc<AgentConversationStore>,
     progress: StorageProgressPublication,
 }
 
-impl NativeAppSubsessions {
+impl AppSubsessions {
     pub(crate) fn new(
-        service: Arc<NativeSubsessionService>,
+        service: Arc<SubsessionService>,
         conversations: Arc<AgentConversationStore>,
         progress: StorageProgressPublication,
     ) -> Self {
@@ -38,7 +38,7 @@ impl NativeAppSubsessions {
     }
 }
 
-impl AppSubsessionPort for NativeAppSubsessions {
+impl AppSubsessionPort for AppSubsessions {
     fn projection(
         &self,
         session_id: String,

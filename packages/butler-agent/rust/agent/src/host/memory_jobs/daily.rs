@@ -9,33 +9,32 @@ use crate::{
         BoxStoreService, CognitionPathEnvironment, ConfiguredCycleOptions, ConfiguredCycleResult,
         ConfiguredCycleService, CycleService, CycleStatus, FeedbackBufferService,
         GraphConsolidationService, KnowHowService, LegacyMetadataIntegrityService,
-        MemoryHealthService, NativeMemorySyncConsumer, NativeVectorOptimizeService,
-        ProjectCapsuleService, RunCycle, active_memory_descriptor_exists,
-        resolve_active_generation,
+        MemoryHealthService, MemorySyncConsumer, ProjectCapsuleService, RunCycle,
+        VectorOptimizeService, active_memory_descriptor_exists, resolve_active_generation,
     },
     coordination::CognitionWriteCoordinator,
-    models::{ModelConfiguration, NativeModelProvider},
+    models::{ModelConfiguration, ModelProvider},
     operations::{CycleMetrics, MetricFiles},
     profile::ProfileService,
-    project_ledger::NativeProjectLedger,
+    project_ledger::ProjectLedger,
     workspace::SessionBindingStore,
 };
 
-use crate::host::memory_jobs::briefing::NativeBriefingGeneration;
-use crate::host::memory_jobs::consolidation_phase::NativeCyclePhases;
-use crate::host::memory_jobs::maintain_phase::NativeConfiguredPhases;
+use crate::host::memory_jobs::briefing::BriefingGeneration;
+use crate::host::memory_jobs::consolidation_phase::CyclePhases;
+use crate::host::memory_jobs::maintain_phase::ConfiguredPhases;
 use crate::host::memory_jobs::profile_consolidation::ProfileConsolidation;
-use crate::host::memory_jobs::transcript_sync::NativeLegacySessionSync;
-use crate::host::{NativeDateParser, NativeEmbeddingOwner, SystemIdentity};
+use crate::host::memory_jobs::transcript_sync::LegacySessionSync;
+use crate::host::{DateParser, EmbeddingOwner, SystemIdentity};
 
 pub(in crate::host) struct DailyCognitionJobs {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
     coordinator: Arc<CognitionWriteCoordinator>,
-    consumer: Arc<NativeMemorySyncConsumer>,
+    consumer: Arc<MemorySyncConsumer>,
     capsules: Arc<ProjectCapsuleService>,
     generic: CycleService,
-    legacy: NativeLegacySessionSync,
+    legacy: LegacySessionSync,
 }
 
 pub(in crate::host) struct DailyCognitionOwners {
@@ -43,15 +42,15 @@ pub(in crate::host) struct DailyCognitionOwners {
     pub(in crate::host) paths: CognitionPathEnvironment,
     pub(in crate::host) coordinator: Arc<CognitionWriteCoordinator>,
     pub(in crate::host) metrics: Arc<MetricFiles>,
-    pub(in crate::host) consumer: Arc<NativeMemorySyncConsumer>,
+    pub(in crate::host) consumer: Arc<MemorySyncConsumer>,
     pub(in crate::host) capsules: Arc<ProjectCapsuleService>,
-    pub(in crate::host) provider: Arc<NativeModelProvider>,
+    pub(in crate::host) provider: Arc<ModelProvider>,
     pub(in crate::host) configuration: Arc<ModelConfiguration>,
     pub(in crate::host) profile: Arc<ProfileService>,
-    pub(in crate::host) ledger: NativeProjectLedger,
-    pub(in crate::host) date_parser: Arc<NativeDateParser>,
+    pub(in crate::host) ledger: ProjectLedger,
+    pub(in crate::host) date_parser: Arc<DateParser>,
     pub(in crate::host) bindings: SessionBindingStore,
-    pub(in crate::host) embedding: Arc<NativeEmbeddingOwner>,
+    pub(in crate::host) embedding: Arc<EmbeddingOwner>,
 }
 
 impl DailyCognitionJobs {
@@ -71,7 +70,7 @@ impl DailyCognitionJobs {
             bindings,
             embedding,
         } = owners;
-        let legacy = NativeLegacySessionSync::new(
+        let legacy = LegacySessionSync::new(
             data_root.clone(),
             paths.clone(),
             coordinator.clone(),
@@ -95,7 +94,7 @@ impl DailyCognitionJobs {
             coordinator.clone(),
         ));
         let cycle_metrics = Arc::new(CycleMetrics::new(metrics));
-        let briefing = Arc::new(NativeBriefingGeneration::from_runtime(
+        let briefing = Arc::new(BriefingGeneration::from_runtime(
             data_root.clone(),
             coordinator.clone(),
             provider,
@@ -105,7 +104,7 @@ impl DailyCognitionJobs {
             date_parser,
             paths.clone(),
         ));
-        let phases = Arc::new(NativeCyclePhases {
+        let phases = Arc::new(CyclePhases {
             metrics: cycle_metrics.clone(),
             briefing,
             profile: Arc::new(ProfileConsolidation {
@@ -226,14 +225,14 @@ impl DailyCognitionJobs {
         }
         let generation = resolve_active_generation(&self.data_root, &self.paths)
             .map_err(|error| error.code().to_owned())?;
-        let phases = Arc::new(NativeConfiguredPhases {
+        let phases = Arc::new(ConfiguredPhases {
             consumer: self.consumer.clone(),
             consolidate: GraphConsolidationService::new(
                 self.data_root.clone(),
                 self.paths.clone(),
                 self.coordinator.clone(),
             ),
-            optimize: NativeVectorOptimizeService::new(
+            optimize: VectorOptimizeService::new(
                 self.data_root.clone(),
                 self.paths.clone(),
                 self.coordinator.clone(),

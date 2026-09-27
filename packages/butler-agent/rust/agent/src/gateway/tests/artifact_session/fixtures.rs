@@ -27,9 +27,9 @@ use crate::gateway::{
     AppRuntimeInfoProvider, AppSessionBranchQuery, AppSessionWorkProgress,
     AppSessionWorkspaceProvisioner, AppSessionWorkspaceSnapshot, AppSettingsFacts,
     AppSettingsFactsProvider, AppSettingsMutationPort, AppSourceDocument, AppSourceSnapshotRequest,
-    AppWorkProgress, ArtifactMaterializationRequest, ClaimedNativeSnapshot, GatewayApplication,
-    GatewayApplicationError, GatewayConfig, MaterializedResponderFile, NativeAppTurn,
-    NativeEnqueueReceipt, ResolvedNativeAssets, RuntimeReadinessView, VisualAdmissionRequest,
+    AppTurn, AppWorkProgress, ArtifactMaterializationRequest, ClaimedNativeSnapshot,
+    EnqueueReceipt, GatewayApplication, GatewayApplicationError, GatewayConfig,
+    MaterializedResponderFile, ResolvedNativeAssets, RuntimeReadinessView, VisualAdmissionRequest,
 };
 
 pub(crate) async fn start_real(application: Arc<AppApplication>) -> GatewayServer {

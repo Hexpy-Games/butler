@@ -9,7 +9,7 @@ use super::{
     io::{atomic_write, file_names, read},
     record_path,
 };
-use crate::gateway::native_queue::{ClaimedInboundEvent, QueueResult};
+use crate::gateway::inbound_queue::{ClaimedInboundEvent, QueueResult};
 
 fn now() -> String {
     let now: DateTime<Utc> = SystemTime::now().into();
@@ -22,7 +22,7 @@ fn owns(item: &ClaimedInboundEvent) -> QueueResult<bool> {
         .is_some_and(|lease| lease.claim_id == item.processing.claim_id))
 }
 
-pub(in crate::gateway::native_queue) fn settle(
+pub(in crate::gateway::inbound_queue) fn settle(
     root: &Path,
     item: &ClaimedInboundEvent,
     state: &str,
@@ -70,7 +70,7 @@ pub(in crate::gateway::native_queue) fn settle(
     Ok(true)
 }
 
-pub(in crate::gateway::native_queue) fn park(
+pub(in crate::gateway::inbound_queue) fn park(
     root: &Path,
     item: &ClaimedInboundEvent,
     error: &str,
@@ -104,7 +104,7 @@ pub(in crate::gateway::native_queue) fn park(
     Ok(true)
 }
 
-pub(in crate::gateway::native_queue) fn recover_runtime_interruptions(
+pub(in crate::gateway::inbound_queue) fn recover_runtime_interruptions(
     root: &Path,
 ) -> QueueResult<usize> {
     let mut recovered = 0;

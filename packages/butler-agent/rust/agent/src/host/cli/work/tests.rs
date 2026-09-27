@@ -33,7 +33,7 @@ impl Fixture {
         directory
     }
 
-    async fn run(&self, args: &[&str]) -> NativeWorkCliResult {
+    async fn run(&self, args: &[&str]) -> WorkCliResult {
         let mut raw = vec![OsString::from("work")];
         raw.extend(args.iter().map(OsString::from));
         super::run(self.installation.clone(), raw).await
@@ -46,7 +46,7 @@ impl Drop for Fixture {
     }
 }
 
-fn json_output(result: &NativeWorkCliResult) -> Value {
+fn json_output(result: &WorkCliResult) -> Value {
     serde_json::from_str(&result.stdout).unwrap()
 }
 

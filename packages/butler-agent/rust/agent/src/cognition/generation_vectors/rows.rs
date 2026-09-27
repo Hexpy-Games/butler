@@ -73,12 +73,12 @@ fn digest(value: &serde_json::Value) -> String {
     format!("{:x}", Sha256::digest(value.to_string().as_bytes()))
 }
 
-pub(crate) struct NativeGenerationVectorStore {
+pub(crate) struct GenerationVectorStore {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
 }
 
-impl NativeGenerationVectorStore {
+impl GenerationVectorStore {
     pub(crate) fn new(data_root: PathBuf, paths: CognitionPathEnvironment) -> Self {
         Self { data_root, paths }
     }

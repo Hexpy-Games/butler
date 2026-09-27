@@ -1,6 +1,6 @@
 //! Read-only selection for governance tools; initialization belongs to commands.
 
-use super::{NativeProjectLedger, ProjectLedgerReadError, active_reference};
+use super::{ProjectLedger, ProjectLedgerReadError, active_reference};
 use std::path::PathBuf;
 
 pub(crate) struct ProjectLedgerToolScopeLookup {
@@ -9,7 +9,7 @@ pub(crate) struct ProjectLedgerToolScopeLookup {
     pub explicit_reference: Option<String>,
 }
 
-impl NativeProjectLedger {
+impl ProjectLedger {
     pub(crate) async fn resolve_tool_scope(
         &self,
         input: ProjectLedgerToolScopeLookup,

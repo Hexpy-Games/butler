@@ -30,7 +30,7 @@ async fn admission_persists_claimed_message_turn_and_signed_native_input() {
         AppApplicationDependencies {
             updates: test_updates(),
             skills: test_skills(),
-            mcp_client: Arc::new(crate::mcp_client::NativeMcpClient::new(
+            mcp_client: Arc::new(crate::mcp_client::McpClient::new(
                 path.parent().unwrap().into(),
                 Default::default(),
             )),
@@ -100,7 +100,7 @@ async fn stable_client_replay_rejects_changed_input_without_second_enqueue() {
         AppApplicationDependencies {
             updates: test_updates(),
             skills: test_skills(),
-            mcp_client: Arc::new(crate::mcp_client::NativeMcpClient::new(
+            mcp_client: Arc::new(crate::mcp_client::McpClient::new(
                 path.parent().unwrap().into(),
                 Default::default(),
             )),
@@ -334,14 +334,14 @@ async fn delivered_transcript_final_projects_and_settles_exact_queue_claim() {
     let mut plan_request = command("projection-id", "question");
     plan_request.request.plan_mode = Some(json!(true));
     let accepted = app.send_message(plan_request).await.unwrap();
-    let native_turn = native.0.lock().unwrap()[0].clone();
+    let rebuilt_turn = native.0.lock().unwrap()[0].clone();
     let turn_id = accepted.turn.unwrap().id;
     let outbound = json!({
         "eventId":"outbound-1","sessionId":"butler/app-general","kind":"outbound",
         "timestamp":"2026-09-14T00:00:01.000Z","transport":"app",
         "payload":{"actionId":"action-1","message":{"text":"<butler_final_answer>answer</butler_final_answer>","artifacts":[],
             "plan":{"kind":"plan","id":"plan-1","title":"Ship it","status":"active","body":"Do the work"}},
-            "metadata":{"kind":"final_result","turnId":turn_id,"appQueueClaimId":native_turn.app_queue_claim_id,
+            "metadata":{"kind":"final_result","turnId":turn_id,"appQueueClaimId":rebuilt_turn.app_queue_claim_id,
                 "queueId":"queue-1","dispatchClaimId":"dispatch-1"}}
     });
     let delivery = json!({

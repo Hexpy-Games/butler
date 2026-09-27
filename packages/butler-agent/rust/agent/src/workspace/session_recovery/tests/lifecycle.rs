@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 use super::integration::Fixture;
-use crate::workspace::NativeSessionWorkspaceRecovery;
+use crate::workspace::SessionWorkspaceRecovery;
 
 #[tokio::test]
 async fn admitted_git_child_is_drained_by_same_command_owner() {
@@ -26,7 +26,7 @@ async fn admitted_git_child_is_drained_by_same_command_owner() {
     )
     .unwrap();
     std::fs::set_permissions(&fake_git, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let recovery = NativeSessionWorkspaceRecovery::new(
+    let recovery = SessionWorkspaceRecovery::new(
         fixture.store.clone(),
         fixture.commands.clone(),
         fixture.files.clone(),

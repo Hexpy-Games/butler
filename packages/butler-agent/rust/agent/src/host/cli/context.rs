@@ -276,7 +276,7 @@ fn validate_write_destination(
     Ok(())
 }
 
-async fn open_status_models(data_root: &Path) -> Result<models::NativeStatusModels, CliError> {
+async fn open_status_models(data_root: &Path) -> Result<models::StatusModels, CliError> {
     models::open_status_models(data_root.to_path_buf())
         .await
         .map_err(|source| {
@@ -288,7 +288,7 @@ async fn open_status_models(data_root: &Path) -> Result<models::NativeStatusMode
         })
 }
 
-fn context_budget_owner(models: &models::NativeStatusModels) -> ContextBudgetOwner {
+fn context_budget_owner(models: &models::StatusModels) -> ContextBudgetOwner {
     ContextBudgetOwner::new(
         Arc::clone(&models.configuration),
         Arc::clone(&models.catalog),

@@ -36,11 +36,11 @@ struct State {
     worker: Option<JoinHandle<()>>,
 }
 
-pub(crate) struct NativeConversationObserver {
+pub(crate) struct ConversationObserver {
     state: Mutex<State>,
 }
 
-impl NativeConversationObserver {
+impl ConversationObserver {
     pub(crate) fn new(
         data_root: &Path,
         paths: &CognitionPathEnvironment,
@@ -133,7 +133,7 @@ impl NativeConversationObserver {
     }
 }
 
-impl ConversationAdmissionObserver for NativeConversationObserver {
+impl ConversationAdmissionObserver for ConversationObserver {
     fn admission_metric(&self, metric: AdmissionMetric) -> ConversationObserverFuture<'_> {
         Box::pin(async move { self.submit(|reply| Job::Admission(metric, reply)).await })
     }

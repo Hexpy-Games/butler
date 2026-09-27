@@ -13,29 +13,29 @@ use crate::{
         read_legacy_new_lines,
     },
     coordination::CognitionWriteCoordinator,
-    models::NativeModelProvider,
+    models::ModelProvider,
     workspace::{SessionBindingStore, SessionLifecycleState, SessionRole},
 };
 
 use crate::cognition::CognitionCode;
-use crate::host::NativeEmbeddingOwner;
+use crate::host::EmbeddingOwner;
 
-pub(in crate::host) struct NativeLegacySessionSync {
+pub(in crate::host) struct LegacySessionSync {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
     bindings: SessionBindingStore,
     index: LegacyIndexService,
-    hot: hot::NativeLegacyHot,
+    hot: hot::LegacyHot,
 }
 
-impl NativeLegacySessionSync {
+impl LegacySessionSync {
     pub(in crate::host) fn new(
         data_root: PathBuf,
         paths: CognitionPathEnvironment,
         coordinator: Arc<CognitionWriteCoordinator>,
         bindings: SessionBindingStore,
-        provider: Arc<NativeModelProvider>,
-        embedding: Arc<NativeEmbeddingOwner>,
+        provider: Arc<ModelProvider>,
+        embedding: Arc<EmbeddingOwner>,
     ) -> Self {
         Self {
             index: LegacyIndexService::new(
@@ -44,7 +44,7 @@ impl NativeLegacySessionSync {
                 coordinator.clone(),
                 embedding,
             ),
-            hot: hot::NativeLegacyHot::new(data_root.clone(), paths.clone(), coordinator, provider),
+            hot: hot::LegacyHot::new(data_root.clone(), paths.clone(), coordinator, provider),
             data_root,
             paths,
             bindings,

@@ -46,7 +46,7 @@ pub(crate) use result_authority::prepare_exact_project_work_result_authority;
 pub(crate) use tool_scope::ProjectLedgerToolScopeLookup;
 mod read_error;
 pub(crate) use read_error::ProjectLedgerReadError;
-pub(crate) use work::NativeProjectWork;
+pub(crate) use work::ProjectWork;
 pub(crate) use work_scope::ProjectWorkScopeLookup;
 
 #[derive(Clone, Debug)]
@@ -57,7 +57,7 @@ pub(crate) struct PlanRecordRead {
 }
 
 #[derive(Clone)]
-pub(crate) struct NativeProjectLedger {
+pub(crate) struct ProjectLedger {
     data_root: PathBuf,
     owner: Arc<ReadOwner>,
     collation: Arc<LocaleCollation>,
@@ -86,7 +86,7 @@ impl Drop for ActiveRead {
     }
 }
 
-impl NativeProjectLedger {
+impl ProjectLedger {
     pub(crate) async fn briefing_signals(
         &self,
         targets: Option<Vec<ProjectBriefingTarget>>,

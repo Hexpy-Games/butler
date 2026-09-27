@@ -10,28 +10,24 @@ mod source_gaps;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use super::{CapabilityInvocation, NativeCapabilities};
-use crate::skills::NativeSkills;
-use crate::workspace::{NativeWorkspaceFiles, WorkspaceReference};
+use super::{Capabilities, CapabilityInvocation};
+use crate::skills::Skills;
+use crate::workspace::{WorkspaceFiles, WorkspaceReference};
 
-impl NativeCapabilities {
+impl Capabilities {
     pub(crate) fn new(
-        files: Arc<NativeWorkspaceFiles>,
+        files: Arc<WorkspaceFiles>,
         mutations: Arc<crate::workspace::WorkspaceMutations>,
     ) -> Self {
         let root = std::env::temp_dir().join("butler-native-empty-skills");
-        Self::with_skills(
-            files,
-            mutations,
-            Arc::new(NativeSkills::new(root.clone(), root)),
-        )
+        Self::with_skills(files, mutations, Arc::new(Skills::new(root.clone(), root)))
     }
 }
 
 struct Fixture {
     root: PathBuf,
-    files: Arc<NativeWorkspaceFiles>,
-    capabilities: NativeCapabilities,
+    files: Arc<WorkspaceFiles>,
+    capabilities: Capabilities,
 }
 impl Fixture {
     fn new() -> Self {
@@ -42,8 +38,8 @@ impl Fixture {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
         }
-        let files = Arc::new(NativeWorkspaceFiles::new(2));
-        let capabilities = NativeCapabilities::new(
+        let files = Arc::new(WorkspaceFiles::new(2));
+        let capabilities = Capabilities::new(
             Arc::clone(&files),
             Arc::new(crate::workspace::WorkspaceMutations::new()),
         );

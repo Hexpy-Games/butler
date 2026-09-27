@@ -23,12 +23,12 @@ use compaction::CompactionState;
 use serialization::{MessageProjection, messages_json, request_for_messages, request_json};
 use summary::{SummaryPort, SummaryRequest, SummarySizing};
 
-pub(crate) struct NativeContextPort {
+pub(crate) struct ContextPortAdapter {
     steering: Arc<dyn TurnSteeringPort>,
     compactions: Option<ContextCompactionRepository>,
 }
 
-impl NativeContextPort {
+impl ContextPortAdapter {
     pub(crate) fn new(
         steering: Arc<dyn TurnSteeringPort>,
         compactions: Option<ContextCompactionRepository>,
@@ -40,7 +40,7 @@ impl NativeContextPort {
     }
 }
 
-impl ContextPort for NativeContextPort {
+impl ContextPort for ContextPortAdapter {
     fn steering<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
@@ -60,7 +60,7 @@ impl ContextPort for NativeContextPort {
                 ))),
                 None => None,
             };
-            Ok(Box::new(NativeTurnContext {
+            Ok(Box::new(TurnContext {
                 turn_id: invocation.turn.turn_id.clone(),
                 repository: self.compactions.clone(),
                 state,
@@ -70,14 +70,14 @@ impl ContextPort for NativeContextPort {
     }
 }
 
-struct NativeTurnContext {
+struct TurnContext {
     turn_id: String,
     repository: Option<ContextCompactionRepository>,
     state: Option<Mutex<CompactionState>>,
     budget: Option<Arc<dyn TurnContinuationBudgetPort>>,
 }
 
-impl TurnContextProjection for NativeTurnContext {
+impl TurnContextProjection for TurnContext {
     fn project<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
@@ -93,7 +93,7 @@ impl TurnContextProjection for NativeTurnContext {
     }
 }
 
-impl NativeTurnContext {
+impl TurnContext {
     async fn project_round(
         &self,
         invocation: GuidedInvocation<'_>,

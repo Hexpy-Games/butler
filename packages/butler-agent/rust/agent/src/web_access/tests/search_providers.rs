@@ -222,7 +222,7 @@ async fn auto_uses_data_openai_key_without_process_environment() {
             body,
         }],
     );
-    let models = crate::host::NativeProcessModels::new(
+    let models = crate::host::ProcessModels::new(
         root.clone(),
         crate::models::ModelConfigurationEnvironment::default(),
         Arc::new(crate::configuration::ConfigurationWrites::new()),

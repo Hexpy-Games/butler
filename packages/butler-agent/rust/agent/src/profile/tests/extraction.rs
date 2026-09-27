@@ -9,7 +9,7 @@ use super::*;
 
 mod import;
 mod lifecycle;
-mod native_provider;
+mod provider;
 
 #[tokio::test]
 async fn canonical_discovery_claim_provider_and_commit_share_durable_coverage() {

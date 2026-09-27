@@ -20,8 +20,8 @@ mod update;
 mod web_search_metrics;
 
 pub(crate) use automation::{
-    AutomationCode, AutomationDependencies, AutomationEnqueue, AutomationError,
-    NativeAutomationCliStore, NativeAutomationService,
+    AutomationCliStore, AutomationCode, AutomationDependencies, AutomationEnqueue, AutomationError,
+    AutomationService,
 };
 pub(crate) use conversation_metrics::{AdmissionMeasure, ConversationMetrics};
 pub(crate) use cycle_metrics::CycleMetrics;

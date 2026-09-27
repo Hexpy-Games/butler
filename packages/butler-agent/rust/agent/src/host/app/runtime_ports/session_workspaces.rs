@@ -8,35 +8,35 @@ use std::sync::Arc;
 use serde_json::{Map, Value};
 
 use crate::{
-    btcc::NativeSubsessionService,
+    btcc::SubsessionService,
     conversation::AgentConversationStore,
     gateway::{
         AppSessionWorkspaceProvisioner, AppSessionWorkspaceSnapshot, ApplicationFuture,
         GatewayApplicationError,
     },
     workspace::{
-        BindSessionWorktreeInput, BindSessionWorktreeResult, NativeSessionWorkspaceRecovery,
-        NativeSessionWorktrees, OwnOptional, ProjectWorkspaceInspection, SessionBindingStore,
-        SessionLifecycleState, SessionRole, SessionWorkspaceAuthority, SessionWorkspaceValidation,
-        SessionWorktreeAction, UpsertSessionBinding, WorkspaceReference,
+        BindSessionWorktreeInput, BindSessionWorktreeResult, OwnOptional,
+        ProjectWorkspaceInspection, SessionBindingStore, SessionLifecycleState, SessionRole,
+        SessionWorkspaceAuthority, SessionWorkspaceRecovery, SessionWorkspaceValidation,
+        SessionWorktreeAction, SessionWorktrees, UpsertSessionBinding, WorkspaceReference,
         short_session_worktree_branch,
     },
 };
 
-pub(crate) struct NativeAppSessionWorkspaces {
+pub(crate) struct AppSessionWorkspaces {
     bindings: SessionBindingStore,
-    worktrees: NativeSessionWorktrees,
-    recovery: NativeSessionWorkspaceRecovery,
-    subsessions: Arc<NativeSubsessionService>,
+    worktrees: SessionWorktrees,
+    recovery: SessionWorkspaceRecovery,
+    subsessions: Arc<SubsessionService>,
     conversations: Arc<AgentConversationStore>,
 }
 
-impl NativeAppSessionWorkspaces {
+impl AppSessionWorkspaces {
     pub(crate) fn new(
         bindings: SessionBindingStore,
-        worktrees: NativeSessionWorktrees,
-        recovery: NativeSessionWorkspaceRecovery,
-        subsessions: Arc<NativeSubsessionService>,
+        worktrees: SessionWorktrees,
+        recovery: SessionWorkspaceRecovery,
+        subsessions: Arc<SubsessionService>,
         conversations: Arc<AgentConversationStore>,
     ) -> Self {
         Self {
@@ -49,7 +49,7 @@ impl NativeAppSessionWorkspaces {
     }
 }
 
-impl AppSessionWorkspaceProvisioner for NativeAppSessionWorkspaces {
+impl AppSessionWorkspaceProvisioner for AppSessionWorkspaces {
     fn provision(
         &self,
         snapshot: AppSessionWorkspaceSnapshot,

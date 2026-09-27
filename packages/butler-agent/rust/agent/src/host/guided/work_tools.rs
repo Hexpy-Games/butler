@@ -15,12 +15,12 @@ use crate::btcc::{BtccError, DurableWorkService, WorkTurnScope, WorkView};
 
 use decode::Command;
 
-pub(crate) struct NativeGuidedWorkTools {
+pub(crate) struct GuidedWorkTools {
     service: Arc<DurableWorkService>,
     scope: WorkTurnScope,
 }
 
-impl NativeGuidedWorkTools {
+impl GuidedWorkTools {
     pub(crate) fn new(service: Arc<DurableWorkService>, scope: WorkTurnScope) -> Self {
         Self { service, scope }
     }

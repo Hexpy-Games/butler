@@ -5,7 +5,7 @@ use crate::{btcc::BtccError, json::visit_raw_array};
 use super::{append_field, field};
 
 pub(super) fn supports(name: &str) -> bool {
-    crate::host::NativeGuidedWorkTools::is_work_tool(name)
+    crate::host::GuidedWorkTools::is_work_tool(name)
 }
 
 pub(super) fn project_raw(name: &str, raw: &str) -> Result<String, BtccError> {

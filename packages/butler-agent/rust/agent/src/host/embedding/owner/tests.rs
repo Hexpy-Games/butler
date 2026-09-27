@@ -114,7 +114,7 @@ async fn slow_initialization_outlives_first_deadline_and_keeps_ready_child() {
 
 #[tokio::test]
 async fn concurrent_and_repeated_close_finish_even_when_actor_fails() {
-    let owner = NativeEmbeddingOwner::new(PathBuf::new()).expect("owner without model load");
+    let owner = EmbeddingOwner::new(PathBuf::new()).expect("owner without model load");
     let (first, second) = tokio::time::timeout(Duration::from_secs(2), async {
         tokio::join!(owner.close(), owner.close())
     })
@@ -127,7 +127,7 @@ async fn concurrent_and_repeated_close_finish_even_when_actor_fails() {
         .expect("repeated close completes")
         .expect("repeated close succeeds");
 
-    let failed_owner = NativeEmbeddingOwner::new(PathBuf::new()).expect("owner without model load");
+    let failed_owner = EmbeddingOwner::new(PathBuf::new()).expect("owner without model load");
     failed_owner.actor.lock().as_ref().expect("actor").abort();
     let (first, second) = tokio::time::timeout(Duration::from_secs(2), async {
         tokio::join!(failed_owner.close(), failed_owner.close())

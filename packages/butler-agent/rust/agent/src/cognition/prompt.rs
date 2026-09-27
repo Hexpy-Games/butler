@@ -4,8 +4,7 @@ mod feedback;
 mod memory;
 mod owner;
 
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::cognition::{CognitionPathEnvironment, CognitionResult};
 
@@ -32,13 +31,13 @@ pub(crate) enum CapsulePresence {
     Missing,
 }
 
-pub(crate) struct NativeCognitionPromptReader {
+pub(crate) struct CognitionPromptReader {
     data_root: PathBuf,
     environment: CognitionPathEnvironment,
     owner: PromptReadOwner,
 }
 
-impl NativeCognitionPromptReader {
+impl CognitionPromptReader {
     pub(crate) fn new(
         data_root: PathBuf,
         environment: CognitionPathEnvironment,

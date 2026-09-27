@@ -16,8 +16,9 @@ mod session_worktree;
 mod status;
 
 pub(crate) use commands::{
-    CommandCode, CommandError, CommandStep, GuidedAccess, GuidedCommandInput, GuidedCommandOutput,
-    GuidedSummary, LegacyShell, NativeCommands, StructuredCommandInput, StructuredCommandOutput,
+    CommandCode, CommandError, CommandStep, Commands, GuidedAccess, GuidedCommandInput,
+    GuidedCommandOutput, GuidedSummary, LegacyShell, StructuredCommandInput,
+    StructuredCommandOutput,
 };
 pub(crate) use discovery::{
     WorkspaceListEntry, WorkspaceListInput, WorkspaceListLimits, WorkspaceListOutcome,
@@ -28,26 +29,25 @@ pub(crate) use effect_file::{
     observe_effect_file, read_effect_edit_target,
 };
 pub(crate) use error::{WorkspaceCode, WorkspaceError};
-pub(crate) use file_owner::{FileOwnerError, NativeWorkspaceFiles};
+pub(crate) use file_owner::{FileOwnerError, WorkspaceFiles};
 pub(crate) use files::{ReadFileInput, WorkspaceFileRead, cursor_path, utf8_prefix_end};
 pub(crate) use grep::{GrepCandidate, GrepMatch, GrepRead};
-pub(crate) use mutations::net_changed_file_detail;
-pub(crate) use mutations::prepare_exact_text;
 pub(crate) use mutations::{
     BatchResult, ChangedFile, CommittedFile, EditFailure, EditMutation, EditedFile, ExactEdit,
     MutationCommand, MutationContext, MutationOutcome, MutationOwnerError, WorkspaceMutations,
     WriteMutation,
 };
+pub(crate) use mutations::{net_changed_file_detail, prepare_exact_text};
 pub(crate) use path_guard::safe_workspace_path;
 pub(crate) use reference::WorkspaceReference;
 pub(crate) use session_recovery::{
-    NativeSessionWorkspaceRecovery, ProjectWorkspaceInspection, SessionWorkspaceAuthority,
+    ProjectWorkspaceInspection, SessionWorkspaceAuthority, SessionWorkspaceRecovery,
     SessionWorkspaceValidation,
 };
 pub(crate) use session_worktree::{
-    BindSessionWorktreeInput, BindSessionWorktreeResult, NativeSessionWorktrees,
-    RelocationWorkspaceInput, RelocationWorkspaceMarker, RelocationWorkspacePlan,
-    SessionWorktreeAction, short_session_worktree_branch,
+    BindSessionWorktreeInput, BindSessionWorktreeResult, RelocationWorkspaceInput,
+    RelocationWorkspaceMarker, RelocationWorkspacePlan, SessionWorktreeAction, SessionWorktrees,
+    short_session_worktree_branch,
 };
 pub(crate) use status::{StatusSessionIdentity, read_active_butler_session};
 

@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use super::{NativeProjectLedger, PlanRecordRead, ProjectLedgerReadError};
+use super::{PlanRecordRead, ProjectLedger, ProjectLedgerReadError};
 
 struct Fixture {
     data: PathBuf,
@@ -44,8 +44,8 @@ impl Fixture {
             plan_id: plan_id.into(),
         }
     }
-    fn native(&self) -> NativeProjectLedger {
-        NativeProjectLedger::new(&self.data, 1)
+    fn native(&self) -> ProjectLedger {
+        ProjectLedger::new(&self.data, 1)
     }
 }
 

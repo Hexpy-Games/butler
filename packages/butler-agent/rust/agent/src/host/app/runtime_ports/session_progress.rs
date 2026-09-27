@@ -7,18 +7,18 @@ use crate::{
     gateway::{
         AppSessionWorkProgress, AppWorkProgress, ApplicationFuture, GatewayApplicationError,
     },
-    project_ledger::{NativeProjectLedger, ProjectWorkPlanRead},
+    project_ledger::{ProjectLedger, ProjectWorkPlanRead},
 };
 
-pub(crate) struct NativeAppSessionProgress {
+pub(crate) struct AppSessionProgress {
     session_work: Arc<SessionWorkRepository>,
-    project_ledger: NativeProjectLedger,
+    project_ledger: ProjectLedger,
 }
 
-impl NativeAppSessionProgress {
+impl AppSessionProgress {
     pub(crate) fn new(
         session_work: Arc<SessionWorkRepository>,
-        project_ledger: NativeProjectLedger,
+        project_ledger: ProjectLedger,
     ) -> Self {
         Self {
             session_work,
@@ -27,7 +27,7 @@ impl NativeAppSessionProgress {
     }
 }
 
-impl AppSessionWorkProgress for NativeAppSessionProgress {
+impl AppSessionWorkProgress for AppSessionProgress {
     fn read(&self, runtime_session_id: String) -> ApplicationFuture<Option<AppWorkProgress>> {
         let session_work = self.session_work.clone();
         let project_ledger = self.project_ledger.clone();

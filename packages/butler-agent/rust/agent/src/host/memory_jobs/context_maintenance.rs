@@ -13,10 +13,10 @@ use serde_json::{Value, json};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
-use crate::context::{NativeToolOutput, PruneToolOutputInput};
+use crate::context::{PruneToolOutputInput, ToolOutput};
 use crate::operations::MetricFiles;
 
-use crate::host::NativeDateParser;
+use crate::host::DateParser;
 #[cfg(unix)]
 use crate::host::memory_jobs::daily::DailyCognitionJobs;
 use crate::host::memory_jobs::daily_schedule;
@@ -27,9 +27,9 @@ const DAY_MS: f64 = 24.0 * 60.0 * 60.0 * 1_000.0;
 
 pub(crate) struct ContextMaintenance {
     data_root: PathBuf,
-    tool_output: NativeToolOutput,
+    tool_output: ToolOutput,
     metrics: Arc<MetricFiles>,
-    timezone: Arc<NativeDateParser>,
+    timezone: Arc<DateParser>,
     #[cfg(unix)]
     daily_cognition: Arc<DailyCognitionJobs>,
     cancellation: CancellationToken,
@@ -39,9 +39,9 @@ pub(crate) struct ContextMaintenance {
 impl ContextMaintenance {
     pub(in crate::host) fn new(
         data_root: PathBuf,
-        tool_output: NativeToolOutput,
+        tool_output: ToolOutput,
         metrics: Arc<MetricFiles>,
-        timezone: Arc<NativeDateParser>,
+        timezone: Arc<DateParser>,
         #[cfg(unix)] daily_cognition: Arc<DailyCognitionJobs>,
     ) -> Self {
         Self {
@@ -141,7 +141,7 @@ impl ContextMaintenance {
 
 pub(crate) async fn run_tick(
     data_root: &std::path::Path,
-    tool_output: &NativeToolOutput,
+    tool_output: &ToolOutput,
     metrics: &Arc<MetricFiles>,
     now_ms: i64,
     day: &str,

@@ -5,7 +5,7 @@ use serde_json::{Map, Value, json};
 use super::{base_metadata, peer};
 use crate::btcc::{FinalArtifact, TurnOutcomeKind};
 use crate::gateway::ClaimedInboundEvent;
-use crate::host::service::ingress::NativeIngressError;
+use crate::host::service::ingress::IngressError;
 use crate::host::service::ingress::bind::Envelope;
 use crate::workspace::SessionTransportBinding;
 
@@ -29,7 +29,7 @@ pub(super) struct RichTerminal {
     pub no_visible: bool,
 }
 
-pub(super) fn from_outcome(result: &TurnOutcomeKind) -> Result<Terminal<'_>, NativeIngressError> {
+pub(super) fn from_outcome(result: &TurnOutcomeKind) -> Result<Terminal<'_>, IngressError> {
     let terminal = match result {
         TurnOutcomeKind::Delivered(value) => Terminal {
             text: &value.content,
@@ -89,7 +89,7 @@ pub(super) fn from_outcome(result: &TurnOutcomeKind) -> Result<Terminal<'_>, Nat
         },
         TurnOutcomeKind::AlreadyFinalizing { .. }
         | TurnOutcomeKind::FencedPendingPersistence { .. } => {
-            return Err(NativeIngressError::new(
+            return Err(IngressError::new(
                 "inbound_turn_recoverable",
                 "Turn finalization remains recoverable",
             ));

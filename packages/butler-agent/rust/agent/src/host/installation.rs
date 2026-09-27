@@ -10,7 +10,7 @@ pub(crate) struct ResolvedInstallation {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct NativePayloadProvenance {
+pub(crate) struct PayloadProvenance {
     pub(crate) schema: String,
     pub(crate) agent_version: Option<String>,
     pub(crate) app_version: Option<String>,
@@ -114,9 +114,9 @@ impl ResolvedInstallation {
         string_field(&value, "appVersion")
     }
 
-    pub(crate) fn native_payload_provenance(
+    pub(crate) fn payload_provenance(
         &self,
-    ) -> Result<Option<NativePayloadProvenance>, crate::host::HostError> {
+    ) -> Result<Option<PayloadProvenance>, crate::host::HostError> {
         let manifest_path = self.installation_root.join("native-agent-manifest.json");
         let metadata = match std::fs::symlink_metadata(&manifest_path) {
             Ok(metadata) => metadata,
@@ -183,7 +183,7 @@ impl ResolvedInstallation {
                 return Err("installation_manifest_invalid".into());
             }
         }
-        Ok(Some(NativePayloadProvenance {
+        Ok(Some(PayloadProvenance {
             schema: schema.into(),
             agent_version: version,
             app_version: string_field(&value, "appVersion"),
@@ -198,10 +198,7 @@ impl ResolvedInstallation {
     }
 
     pub(crate) fn agent_version(&self) -> Option<String> {
-        self.native_payload_provenance()
-            .ok()
-            .flatten()?
-            .agent_version
+        self.payload_provenance().ok().flatten()?.agent_version
     }
 
     pub(crate) fn validate_data_root(

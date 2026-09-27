@@ -17,25 +17,23 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     cognition::{CognitionPathEnvironment, ensure_data_authority},
     coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator},
-    models::{
-        NativeModelProvider, ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest,
-    },
+    models::{ModelProvider, ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest},
     public_text::trim_js_whitespace,
 };
 
-pub(super) struct NativeLegacyHot {
+pub(super) struct LegacyHot {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
     coordinator: Arc<CognitionWriteCoordinator>,
-    provider: Arc<NativeModelProvider>,
+    provider: Arc<ModelProvider>,
 }
 
-impl NativeLegacyHot {
+impl LegacyHot {
     pub(super) fn new(
         data_root: PathBuf,
         paths: CognitionPathEnvironment,
         coordinator: Arc<CognitionWriteCoordinator>,
-        provider: Arc<NativeModelProvider>,
+        provider: Arc<ModelProvider>,
     ) -> Self {
         Self {
             data_root,

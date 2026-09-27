@@ -48,7 +48,7 @@ pub(super) fn resources_check(installation: &ResolvedInstallation) -> Check {
 }
 
 pub(super) fn version_check(installation: &ResolvedInstallation) -> Check {
-    let result = installation.native_payload_provenance();
+    let result = installation.payload_provenance();
     let passed = result.as_ref().is_ok_and(|value| {
         value
             .as_ref()

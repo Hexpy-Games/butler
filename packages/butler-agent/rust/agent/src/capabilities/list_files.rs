@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 
 use super::{CapabilityError, CapabilityInvocation, evidence};
 use crate::workspace::{
-    NativeWorkspaceFiles, WorkspaceListInput, WorkspaceListLimits, WorkspaceListOutcome,
+    WorkspaceFiles, WorkspaceListInput, WorkspaceListLimits, WorkspaceListOutcome,
 };
 
 pub(super) fn definition() -> Value {
@@ -33,7 +33,7 @@ pub(super) fn definition() -> Value {
 }
 
 pub(super) async fn execute(
-    workspace: &NativeWorkspaceFiles,
+    workspace: &WorkspaceFiles,
     input: CapabilityInvocation<'_>,
 ) -> Result<Value, CapabilityError> {
     let started = Instant::now();

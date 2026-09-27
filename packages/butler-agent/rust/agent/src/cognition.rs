@@ -52,7 +52,7 @@ pub(crate) use briefing::{
 };
 pub(crate) use briefing::{latest_completed_briefing_run_id, read_new_chat_briefing};
 pub(crate) use completion::{
-    CompletionNotice, CompletionPublisher, MemorySyncPoll, NativeMemorySyncConsumer,
+    CompletionNotice, CompletionPublisher, MemorySyncConsumer, MemorySyncPoll,
     TypedMemorySourceNotice,
 };
 pub(crate) use configured_cycle::{
@@ -65,15 +65,13 @@ pub(crate) use consolidation::{
 pub(crate) use continuity_recovery::{
     ContinuityRecoveryAction, ContinuityRecoveryManifestView, ContinuityRecoveryService,
 };
-pub(crate) use embedding::{
-    NativeEmbeddingEngine, NativeEmbeddingIdentity, NativeEmbeddingResult, NativeTokenization,
-};
+pub(crate) use embedding::{EmbeddingEngine, EmbeddingIdentity, EmbeddingResult, Tokenization};
 pub(crate) use embedding_port::{
     CognitionEmbeddingPort, EmbeddingFuture, EmbeddingMode, EmbeddingRequest,
     EmbeddingRequestClass, WorkerOperation, WorkerRequest, WorkerResponse, WorkerResult,
 };
 pub(crate) use error::{CognitionCode, CognitionError, CognitionResult};
-pub(crate) use exact_query::NativeExactMemoryQuery;
+pub(crate) use exact_query::ExactMemoryQuery;
 pub(crate) use extraction::{CandidateSearchInput, CognitionVectorSearch, VectorSearchFuture};
 pub(crate) use feedback_buffer::{FeedbackBufferService, FeedbackTarget};
 pub(crate) use generation::{
@@ -87,12 +85,10 @@ pub(crate) use generation::{
     resolve_generation, retry_failed_memory_generation, rollback_memory_rebuild,
     set_extractor_memory_generation, validate_memory_rebuild,
 };
-pub(crate) use generation_vectors::NativeGenerationVectorAdapter;
-pub(crate) use graph::GraphProgress;
-pub(crate) use graph::ProjectionModelPolicyInput;
+pub(crate) use generation_vectors::GenerationVectorAdapter;
+pub(crate) use graph::{GraphProgress, ProjectionModelPolicyInput};
 pub(crate) use graph_consolidation::GraphConsolidationService;
-pub(crate) use hot_cache::LegacyIndexService;
-pub(crate) use hot_cache::extract_legacy_import_transcript;
+pub(crate) use hot_cache::{LegacyIndexService, extract_legacy_import_transcript};
 pub(crate) use knowhow_store::{FeedbackResolvePort, KnowHowService};
 pub(crate) use legacy_lance_writer::{LegacyLanceWriter, LegacyVectorRow};
 pub(crate) use legacy_memory_import::{
@@ -110,20 +106,20 @@ pub(crate) use legacy_session_sync::{
 #[cfg(unix)]
 pub(crate) use mcp_graph::read_mcp_legacy_graph;
 pub(crate) use memory_health::{MemoryHealthReport, MemoryHealthService};
-pub(crate) use memory_recall::{NativeMemoryRecall, NativeRecallVectorPort, RecallVectorFuture};
+pub(crate) use memory_recall::{MemoryRecall, RecallVectorFuture, RecallVectorPort};
 pub(crate) use memory_recall::{RecallMetric, RecallMetricSink};
 pub(crate) use migration::CognitionNamespaceMigrationService;
 pub(crate) use mutable_paths::ensure_data_authority;
 pub(crate) use paths::CognitionPathEnvironment;
 pub(crate) use project_capsule::ProjectCapsuleService;
-pub(crate) use prompt::{CapsulePresence, NativeCognitionPromptReader};
+pub(crate) use prompt::{CapsulePresence, CognitionPromptReader};
 pub(crate) use recall::RecallRequest;
 pub(crate) use registration::RegisterTypedSourceInput;
 pub(crate) use registration::{
     CognitionConversationSourceNotice, CognitionRegistrationService, ConsumeTypedLifecycleInput,
     ConversationRegistrationOutcome, RegisterConversationSourceInput,
 };
-pub(crate) use source_reference::{MemorySourceCandidate, NativeMemorySourceReference};
+pub(crate) use source_reference::{MemorySourceCandidate, MemorySourceReference};
 pub(in crate::cognition) use sources::assert_conversation_source_current;
 
 pub(crate) use sources::{
@@ -132,7 +128,7 @@ pub(crate) use sources::{
     hydrate_conversation_source, ingest_task_outcome_memory, prepare_conversation_source,
     read_prior_public_context, update_explicit_memory,
 };
-pub(crate) use vector_optimize::{NativeVectorOptimizeService, VectorOptimizeOutcome};
+pub(crate) use vector_optimize::{VectorOptimizeOutcome, VectorOptimizeService};
 pub(crate) use windows::{
     MEMORY_SOURCE_WINDOW_BYTES, grapheme_byte_boundaries, split_historical_source_spans,
 };

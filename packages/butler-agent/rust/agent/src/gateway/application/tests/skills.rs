@@ -9,8 +9,7 @@ async fn session_view_and_summary_project_loaded_skills_for_the_latest_turn() {
     ));
     std::fs::create_dir_all(root.join("transcripts")).unwrap();
     let mut app_dependencies = dependencies(native, 90);
-    app_dependencies.skills =
-        Arc::new(crate::skills::NativeSkills::new(root.clone(), root.clone()));
+    app_dependencies.skills = Arc::new(crate::skills::Skills::new(root.clone(), root.clone()));
     let app = AppApplication::open(
         AppApplicationConfig {
             database_path: root.join("app.sqlite"),

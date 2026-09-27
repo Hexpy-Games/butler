@@ -17,7 +17,7 @@ use crate::btcc::{
     WorkFinalState, WorkPort, WorkStatus, WorkTurnScope, WorkView,
 };
 
-pub(crate) struct NativeGuidedWork {
+pub(crate) struct GuidedWorkAdapter {
     service: Arc<DurableWorkService>,
     scope: WorkTurnScope,
     tracking_mode: String,
@@ -25,7 +25,7 @@ pub(crate) struct NativeGuidedWork {
     original_request: String,
 }
 
-impl NativeGuidedWork {
+impl GuidedWorkAdapter {
     pub(crate) fn new(
         service: Arc<DurableWorkService>,
         scope: WorkTurnScope,
@@ -129,7 +129,7 @@ impl NativeGuidedWork {
     }
 }
 
-impl WorkPort for NativeGuidedWork {
+impl WorkPort for GuidedWorkAdapter {
     fn after_batch<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,

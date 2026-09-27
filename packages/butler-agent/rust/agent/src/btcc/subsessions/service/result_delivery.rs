@@ -1,10 +1,9 @@
 //! Durable Worker result delivery to the owning Steward queue.
 
 use super::*;
-use crate::btcc::BtccCode;
-use crate::btcc::BtccError;
+use crate::btcc::{BtccCode, BtccError};
 
-impl NativeSubsessionService {
+impl SubsessionService {
     pub(crate) async fn deliver_worker_results(&self) -> Result<(), BtccError> {
         for pending in self
             .repository

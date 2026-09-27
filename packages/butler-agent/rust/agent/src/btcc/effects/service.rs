@@ -3,12 +3,12 @@ use std::sync::Arc;
 use super::contracts::*;
 use super::{blockers, execution, identity, outcomes};
 
-pub(crate) struct NativeEffectService {
+pub(crate) struct EffectService {
     journal: Arc<dyn EffectJournal>,
     clock: Arc<dyn Fn() -> String + Send + Sync>,
     fault: Arc<dyn EffectFaultHook>,
 }
-impl NativeEffectService {
+impl EffectService {
     pub(crate) fn new(
         journal: Arc<dyn EffectJournal>,
         clock: Arc<dyn Fn() -> String + Send + Sync>,

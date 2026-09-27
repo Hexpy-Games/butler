@@ -309,7 +309,7 @@ pub(crate) trait AuthorityRepository {
 }
 
 #[derive(Clone)]
-pub(crate) struct NativePrincipalAuthority {
+pub(crate) struct PrincipalAuthority {
     pub(super) storage: BtccStorage,
     pub(super) collation: Arc<LocaleCollation>,
     pub(super) clock: Arc<dyn Fn() -> String + Send + Sync>,

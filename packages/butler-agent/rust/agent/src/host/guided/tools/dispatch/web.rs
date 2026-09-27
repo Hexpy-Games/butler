@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use super::NativeGuidedTools;
+use super::GuidedTools;
 use crate::btcc::{GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 use crate::json::JsonDocument;
 use crate::tool_protocol::ToolName;
@@ -13,7 +13,7 @@ pub(super) fn supports(name: &str) -> bool {
 }
 
 pub(super) async fn execute(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
 ) -> Result<JsonDocument, ToolExecutionError> {

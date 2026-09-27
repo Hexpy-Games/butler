@@ -13,12 +13,12 @@ use crate::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecution
 use crate::capabilities::CapabilityInvocation;
 use crate::json::JsonDocument;
 
-use super::NativeGuidedTools;
-use crate::host::NativeGuidedWorkTools;
+use super::GuidedTools;
+use crate::host::GuidedWorkTools;
 pub(super) use work::execute_work;
 
 pub(super) async fn execute(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
     call_id: &str,
@@ -321,7 +321,7 @@ pub(super) async fn execute(
             .map_err(ToolExecutionError::Integrity)?;
         return encoded(&json!({"ok":true,"status":if waiting{"waiting"}else{"no_active_worker"}}));
     }
-    if NativeGuidedWorkTools::is_work_tool(&call.name) {
+    if GuidedWorkTools::is_work_tool(&call.name) {
         return encoded(&execute_work(owner, call, call_id).await?);
     }
     if matches!(
@@ -366,7 +366,7 @@ pub(super) async fn execute(
     {
         return super::effect::execute(owner, invocation, call, call_id).await;
     }
-    if crate::host::guided::project_tools::NativeGuidedProjectTools::supports(&call.name) {
+    if crate::host::guided::project_tools::GuidedProjectTools::supports(&call.name) {
         let workspace = owner
             .binding
             .workspace_reference

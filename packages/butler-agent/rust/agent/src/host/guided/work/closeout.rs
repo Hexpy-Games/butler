@@ -5,10 +5,10 @@ use crate::btcc::{
     DurableWorkStatus, RuntimeOwnedOpenGeneration, WorkView, disposition_material_fingerprint,
 };
 
-use super::NativeGuidedWork;
+use super::GuidedWorkAdapter;
 
 pub(super) async fn settle_open(
-    adapter: &NativeGuidedWork,
+    adapter: &GuidedWorkAdapter,
     bound: &WorkView,
     candidate: &str,
 ) -> Result<String, BtccError> {
@@ -84,7 +84,7 @@ pub(super) fn publication_failure(error: &BtccError) -> bool {
         || error.code() == "project_ledger_effect_uncertain"
 }
 
-pub(super) fn notice(adapter: &NativeGuidedWork, candidate: &str) -> String {
+pub(super) fn notice(adapter: &GuidedWorkAdapter, candidate: &str) -> String {
     let notice = copy(adapter).notice;
     let content = crate::public_text::trim_js_whitespace(candidate);
     if content.starts_with(&format!("{notice}\n\n")) {
@@ -99,7 +99,7 @@ struct Copy {
     next_condition: &'static str,
     notice: &'static str,
 }
-fn copy(adapter: &NativeGuidedWork) -> Copy {
+fn copy(adapter: &GuidedWorkAdapter) -> Copy {
     let lower = adapter.response_language.to_lowercase();
     let korean = adapter.response_language.chars().any(hangul)
         || adapter.original_request.chars().any(hangul)

@@ -5,7 +5,7 @@ use serde_json::json;
 use super::{clock, input, principal, scope};
 use crate::btcc::authority::{
     AuthorityAdmissionResult, AuthorityDecisionInput, AuthorityExecutionInput,
-    AuthorityOutcomeInput, NativePrincipalAuthority,
+    AuthorityOutcomeInput, PrincipalAuthority,
 };
 use crate::btcc::storage::{
     BtccRepositories, BtccStorage, SessionWorkRepository, StorageError, ToolJournalRepository,
@@ -19,7 +19,7 @@ use crate::btcc::{SuspensionReason, TurnStore, TurnTransition};
 struct Ready {
     _fixture: crate::btcc::storage::tests::Fixture,
     storage: BtccStorage,
-    authority: NativePrincipalAuthority,
+    authority: PrincipalAuthority,
     request_ref: String,
     work_id: String,
     plan_id: String,

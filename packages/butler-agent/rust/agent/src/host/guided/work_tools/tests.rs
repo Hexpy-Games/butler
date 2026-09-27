@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 
-use super::NativeGuidedWorkTools;
+use super::GuidedWorkTools;
 use crate::btcc::{
     BtccRepositories, BtccStorage, DurableWorkService, ReviewVerdict, SessionWorkRepository,
     TestStorageFixture, TurnStore, WorkTurnScope, test_prepared_turn,
@@ -21,7 +21,7 @@ async fn model_work_calls_create_reviewed_plan_in_canonical_store() {
     let service = Arc::new(DurableWorkService::new(Arc::new(
         SessionWorkRepository::new(storage.clone(), Arc::new(|| "now".into())),
     )));
-    let owner = NativeGuidedWorkTools::new(
+    let owner = GuidedWorkTools::new(
         service.clone(),
         WorkTurnScope {
             turn_id: turn.turn_id.clone(),

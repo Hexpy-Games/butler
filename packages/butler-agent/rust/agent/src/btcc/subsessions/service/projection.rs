@@ -2,11 +2,11 @@
 
 use serde_json::{Value, json};
 
-use super::NativeSubsessionService;
+use super::SubsessionService;
 use crate::btcc::BtccCode;
 use crate::btcc::{BtccError, StoredSubsessionDelegation};
 
-impl NativeSubsessionService {
+impl SubsessionService {
     pub(crate) async fn worker_prompt_lines(
         &self,
         parent_session_id: String,

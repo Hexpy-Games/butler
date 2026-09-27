@@ -25,7 +25,7 @@ pub(super) async fn run(
     );
     let cancellation = CancellationToken::new();
     let signal_task = signals(cancellation.clone()).map_err(|message| {
-        CognitionError::new(CognitionCode::NativeSignalUnavailable, message.to_string())
+        CognitionError::new(CognitionCode::SignalUnavailable, message.to_string())
             .with_source(message)
     })?;
     let result = retry_failed_memory_generation(

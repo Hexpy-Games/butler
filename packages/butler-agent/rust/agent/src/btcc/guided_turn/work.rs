@@ -1,5 +1,5 @@
 use crate::btcc::authority::contracts::{
-    AuthorityError, AuthorityExecutionInput, NativePrincipalAuthority,
+    AuthorityError, AuthorityExecutionInput, PrincipalAuthority,
 };
 use crate::btcc::work::{DurableWorkService, WorkContext, WorkTurnScope};
 use crate::btcc::{BtccError, TurnRecord};
@@ -87,7 +87,7 @@ async fn load_initial_guided_work(
 
 pub(crate) async fn load_guided_turn_work(
     service: &DurableWorkService,
-    authority: Option<&NativePrincipalAuthority>,
+    authority: Option<&PrincipalAuthority>,
     turn: &TurnRecord,
     tracking_mode: &str,
     workspace_path: &str,

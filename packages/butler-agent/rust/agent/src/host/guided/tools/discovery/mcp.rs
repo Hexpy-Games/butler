@@ -4,10 +4,10 @@ use tokio_util::sync::CancellationToken;
 use crate::btcc::{BtccError, ToolExecutionError};
 use crate::json::JsonDocument;
 
-use super::{NativeGuidedTools, bridge_error, encoded};
+use super::{GuidedTools, bridge_error, encoded};
 
 pub(super) async fn search(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     args: &Map<String, Value>,
     category: Option<&str>,
     signal: &CancellationToken,
@@ -44,7 +44,7 @@ pub(super) async fn search(
 }
 
 pub(super) async fn describe(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     id: &str,
     signal: &CancellationToken,
 ) -> Result<Option<Value>, ToolExecutionError> {

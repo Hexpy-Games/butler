@@ -8,18 +8,18 @@ use crate::btcc::{GuidedInvocation, PortFuture, SteeringObservation, TurnSteerin
 
 use crate::host::guided::prompt::{GuidedTextState, work_context};
 
-pub(crate) struct NativeGuidedSteering {
+pub(crate) struct GuidedSteering {
     state: Arc<GuidedTextState>,
     last_rendered: Mutex<Option<String>>,
-    subsessions: Arc<crate::btcc::NativeSubsessionService>,
+    subsessions: Arc<crate::btcc::SubsessionService>,
     child_session_id: String,
     child_turn_id: String,
 }
 
-impl NativeGuidedSteering {
+impl GuidedSteering {
     pub(crate) fn new(
         state: Arc<GuidedTextState>,
-        subsessions: Arc<crate::btcc::NativeSubsessionService>,
+        subsessions: Arc<crate::btcc::SubsessionService>,
         child_session_id: String,
         child_turn_id: String,
     ) -> Self {
@@ -34,7 +34,7 @@ impl NativeGuidedSteering {
     }
 }
 
-impl TurnSteeringPort for NativeGuidedSteering {
+impl TurnSteeringPort for GuidedSteering {
     fn observe<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,

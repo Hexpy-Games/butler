@@ -10,7 +10,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     public_text::trim_js_whitespace,
-    workspace::{CommandStep, NativeCommands, StructuredCommandInput},
+    workspace::{CommandStep, Commands, StructuredCommandInput},
 };
 
 const INSTALL_URL: &str = "https://git-scm.com/downloads";
@@ -19,7 +19,7 @@ pub(super) async fn normalize(
     name: &str,
     args: &Map<String, Value>,
     workspace: Option<&Path>,
-    commands: &NativeCommands,
+    commands: &Commands,
     host_environment: &HashMap<String, String>,
     cancel: CancellationToken,
 ) -> Result<Map<String, Value>, Value> {
@@ -71,7 +71,7 @@ struct Evidence {
 }
 
 async fn collect_evidence(
-    commands: &NativeCommands,
+    commands: &Commands,
     environment: &HashMap<String, String>,
     workspace: &Path,
     cancel: CancellationToken,
@@ -135,7 +135,7 @@ async fn collect_evidence(
 }
 
 async fn git_text(
-    commands: &NativeCommands,
+    commands: &Commands,
     environment: &HashMap<String, String>,
     cwd: &Path,
     args: &[&str],

@@ -3,22 +3,22 @@
 use serde_json::Value;
 
 use crate::btcc::{ModelRoundToolCall, ToolExecutionError};
-use crate::host::NativeGuidedWorkTools;
-use crate::host::guided::tools::NativeGuidedTools;
+use crate::host::GuidedWorkTools;
+use crate::host::guided::tools::GuidedTools;
 
 pub(in crate::host::guided::tools) async fn execute_work(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Result<Value, ToolExecutionError> {
-    let prior = if NativeGuidedWorkTools::repairs_completed_relation(&call.name) {
+    let prior = if GuidedWorkTools::repairs_completed_relation(&call.name) {
         owner
             .journal
             .completed_call_identities(owner.binding.turn_id.clone())
             .await
             .map_err(|error| ToolExecutionError::Integrity(error.into()))?
             .into_iter()
-            .filter(|(_, name)| !NativeGuidedWorkTools::is_work_tool(name))
+            .filter(|(_, name)| !GuidedWorkTools::is_work_tool(name))
             .map(|(id, _)| id)
             .collect::<Vec<_>>()
     } else {

@@ -38,7 +38,7 @@ pub(crate) struct MemoryCatchupOutcome {
 
 type Clock = Arc<dyn Fn() -> String + Send + Sync>;
 
-pub(crate) struct NativeMemorySyncConsumer {
+pub(crate) struct MemorySyncConsumer {
     data_root: PathBuf,
     environment: CognitionPathEnvironment,
     registration: Arc<CognitionRegistrationService>,
@@ -53,7 +53,7 @@ pub(crate) struct NativeMemorySyncConsumer {
     catchup_at: Arc<Mutex<Option<Instant>>>,
 }
 
-impl NativeMemorySyncConsumer {
+impl MemorySyncConsumer {
     pub(crate) fn new(
         data_root: PathBuf,
         environment: CognitionPathEnvironment,

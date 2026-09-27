@@ -15,7 +15,7 @@ use crate::cognition::{
 };
 use crate::conversation::{ConversationSourceReader, conversation_store_path};
 
-pub(crate) struct NativeMemorySourceReference {
+pub(crate) struct MemorySourceReference {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
 }
@@ -40,7 +40,7 @@ pub(crate) struct ResolvedMemorySource {
     pub basis: String,
 }
 
-impl NativeMemorySourceReference {
+impl MemorySourceReference {
     pub(crate) fn new(data_root: PathBuf, paths: CognitionPathEnvironment) -> Self {
         Self { data_root, paths }
     }

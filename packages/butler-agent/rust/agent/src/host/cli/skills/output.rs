@@ -2,7 +2,7 @@ use serde_json::json;
 
 use super::Options;
 
-pub(crate) struct NativeSkillCliResult {
+pub(crate) struct SkillCliResult {
     pub stdout: String,
     pub stderr: String,
     pub exit_code: u8,
@@ -33,7 +33,7 @@ pub(super) fn render_success(
     command: &str,
     data: serde_json::Value,
     human: &str,
-) -> NativeSkillCliResult {
+) -> SkillCliResult {
     let stdout = if options.json {
         envelope(true, command, Some(data), None)
     } else if options.quiet {
@@ -41,7 +41,7 @@ pub(super) fn render_success(
     } else {
         format!("{}\n", human.trim_end())
     };
-    NativeSkillCliResult {
+    SkillCliResult {
         stdout,
         stderr: String::new(),
         exit_code: 0,
@@ -52,9 +52,9 @@ pub(super) fn render_error(
     json_output: bool,
     command: &str,
     error: CommandError,
-) -> NativeSkillCliResult {
+) -> SkillCliResult {
     if json_output {
-        NativeSkillCliResult {
+        SkillCliResult {
             stdout: envelope(
                 false,
                 command,
@@ -65,7 +65,7 @@ pub(super) fn render_error(
             exit_code: error.exit_code,
         }
     } else {
-        NativeSkillCliResult {
+        SkillCliResult {
             stdout: String::new(),
             stderr: format!("{}\n", error.message),
             exit_code: error.exit_code,

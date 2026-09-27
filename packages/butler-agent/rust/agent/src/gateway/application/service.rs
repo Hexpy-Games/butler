@@ -24,7 +24,7 @@ impl AppApplication {
         &self,
         claim: &QueueClaim,
         turn_id: &str,
-        receipt: &NativeEnqueueReceipt,
+        receipt: &EnqueueReceipt,
     ) -> Result<(), GatewayApplicationError> {
         let chat = claim.chat_id.clone();
         let turn = turn_id.to_owned();

@@ -7,12 +7,12 @@ use crate::{
     profile::ProfileService,
 };
 
-use super::super::{MonitoringReaders, NativeProcessModels};
+use super::super::{MonitoringReaders, ProcessModels};
 
 pub(super) fn open(
     data_root: &Path,
     paths: &CognitionPathEnvironment,
-    models: &NativeProcessModels,
+    models: &ProcessModels,
     coordinator: Arc<CognitionWriteCoordinator>,
     profile: Arc<ProfileService>,
     metrics: Arc<MetricFiles>,

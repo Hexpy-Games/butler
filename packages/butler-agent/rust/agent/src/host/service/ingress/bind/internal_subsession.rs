@@ -8,7 +8,7 @@ pub(super) async fn bind(
     context: &Value,
     session_id: &str,
     turn_id: &str,
-) -> Result<TurnRequest, NativeIngressError> {
+) -> Result<TurnRequest, IngressError> {
     let object = context
         .as_object()
         .ok_or_else(|| invalid("Invalid native subsession context"))?;
@@ -26,7 +26,7 @@ pub(super) async fn bind(
         .get_by_session_id(session_id)
         .await
         .map_err(|source| {
-            NativeIngressError::new("session_binding_unavailable", "Session binding unavailable")
+            IngressError::new("session_binding_unavailable", "Session binding unavailable")
                 .with_source(source)
         })?
         .ok_or_else(|| invalid("Missing native subsession binding"))?;

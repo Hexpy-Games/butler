@@ -9,10 +9,10 @@ use crate::btcc::{
 };
 use crate::tool_protocol::ToolName;
 
-use super::NativeGuidedTools;
+use super::GuidedTools;
 
 pub(super) fn result_message(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     turn: &TurnRecord,
     result: &ToolResult,
     references: &OperationResultMessageReferences,
@@ -20,7 +20,7 @@ pub(super) fn result_message(
     if turn.turn_id != owner.binding.turn_id {
         return Err(error("guided_tool_turn_mismatch"));
     }
-    if !NativeGuidedTools::supports(&result.name) {
+    if !GuidedTools::supports(&result.name) {
         return Err(error("guided_tool_provider_projection_unavailable"));
     }
     let mut content = String::from("{\"ok\":");
@@ -112,7 +112,7 @@ pub(super) fn result_message(
             match result.name.as_str() {
                 "read_operation_results" => "exact_result_view",
                 "query_memory" | "recall_memory" => "memory_recall_context",
-                name if !result.ok && crate::host::NativeGuidedWorkTools::is_work_tool(name) => {
+                name if !result.ok && crate::host::GuidedWorkTools::is_work_tool(name) => {
                     "work_recovery_receipt"
                 }
                 _ => "latest_tool_result_delivery",

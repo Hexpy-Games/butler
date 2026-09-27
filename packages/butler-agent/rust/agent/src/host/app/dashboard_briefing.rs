@@ -10,24 +10,21 @@ use crate::{
         GatewayApplicationError,
     },
     models::{
-        ModelCatalog, ModelConfiguration, NativeModelProvider, PromptUsageAttribution,
+        ModelCatalog, ModelConfiguration, ModelProvider, PromptUsageAttribution,
         ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest, ReasoningEffort,
         TokenEstimateInput,
     },
 };
 
-pub(crate) struct NativeAppDashboardBriefing {
+pub(crate) struct AppDashboardBriefing {
     catalog: Arc<ModelCatalog>,
     configuration: Arc<ModelConfiguration>,
-    provider: Arc<NativeModelProvider>,
+    provider: Arc<ModelProvider>,
     data_root: String,
 }
 
-impl NativeAppDashboardBriefing {
-    pub(crate) fn new(
-        models: &crate::host::NativeProcessModels,
-        data_root: &std::path::Path,
-    ) -> Self {
+impl AppDashboardBriefing {
+    pub(crate) fn new(models: &crate::host::ProcessModels, data_root: &std::path::Path) -> Self {
         Self {
             catalog: models.catalog.clone(),
             configuration: models.configuration.clone(),
@@ -37,7 +34,7 @@ impl NativeAppDashboardBriefing {
     }
 }
 
-impl AppProjectDashboardBriefingPort for NativeAppDashboardBriefing {
+impl AppProjectDashboardBriefingPort for AppDashboardBriefing {
     fn estimate_tokens(&self, model_ref: String, text: String) -> ApplicationFuture<f64> {
         let catalog = self.catalog.clone();
         let configuration = self.configuration.clone();

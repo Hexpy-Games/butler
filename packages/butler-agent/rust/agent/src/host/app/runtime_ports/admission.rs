@@ -4,29 +4,29 @@ use std::sync::Arc;
 
 use crate::{
     gateway::{
-        AppAdmissionAuthority, AppLedgerSourceRequest, AppSourceDocument, AppSourceSnapshotRequest,
-        ApplicationFuture, GatewayApplicationError, MaterializedResponderFile, NativeAppImageFiles,
-        NativeAppMessageFiles, VisualAdmissionRequest,
+        AppAdmissionAuthority, AppImageFiles, AppLedgerSourceRequest, AppMessageFiles,
+        AppSourceDocument, AppSourceSnapshotRequest, ApplicationFuture, GatewayApplicationError,
+        MaterializedResponderFile, VisualAdmissionRequest,
     },
     models::ModelConfiguration,
-    project_ledger::{NativeProjectLedger, ProjectLedgerBinding, ProjectLedgerReadError},
+    project_ledger::{ProjectLedger, ProjectLedgerBinding, ProjectLedgerReadError},
 };
 
-pub(crate) struct NativeAppAdmission {
-    ledger: NativeProjectLedger,
-    images: Arc<NativeAppImageFiles>,
+pub(crate) struct AppAdmission {
+    ledger: ProjectLedger,
+    images: Arc<AppImageFiles>,
     models: Arc<ModelConfiguration>,
-    mcp: Arc<crate::mcp_client::NativeMcpClient>,
-    artifacts: Arc<NativeAppMessageFiles>,
+    mcp: Arc<crate::mcp_client::McpClient>,
+    artifacts: Arc<AppMessageFiles>,
 }
 
-impl NativeAppAdmission {
+impl AppAdmission {
     pub(crate) fn new(
-        ledger: NativeProjectLedger,
-        images: Arc<NativeAppImageFiles>,
+        ledger: ProjectLedger,
+        images: Arc<AppImageFiles>,
         models: Arc<ModelConfiguration>,
-        mcp: Arc<crate::mcp_client::NativeMcpClient>,
-        artifacts: Arc<NativeAppMessageFiles>,
+        mcp: Arc<crate::mcp_client::McpClient>,
+        artifacts: Arc<AppMessageFiles>,
     ) -> Self {
         Self {
             ledger,
@@ -38,7 +38,7 @@ impl NativeAppAdmission {
     }
 }
 
-impl AppAdmissionAuthority for NativeAppAdmission {
+impl AppAdmissionAuthority for AppAdmission {
     fn read_ledger_source(
         &self,
         request: AppLedgerSourceRequest,

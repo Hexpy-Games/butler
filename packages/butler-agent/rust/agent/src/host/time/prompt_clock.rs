@@ -8,12 +8,12 @@ use crate::context::ContextCode;
 use crate::host::time::timezone_data::TimeZoneData;
 use timezone_names::TimeZoneNames;
 
-pub(crate) struct NativePromptClock {
+pub(crate) struct SystemPromptClock {
     names: TimeZoneNames,
     transitions: TimeZoneData,
 }
 
-impl NativePromptClock {
+impl SystemPromptClock {
     pub(crate) fn new() -> ContextResult<Self> {
         Ok(Self {
             names: TimeZoneNames::new()?,
@@ -93,7 +93,7 @@ impl NativePromptClock {
     }
 }
 
-impl PromptClock for NativePromptClock {
+impl PromptClock for SystemPromptClock {
     fn now_epoch_millis(&self) -> i64 {
         crate::models::ModelConfigurationClock::now_epoch_millis(&crate::host::SystemIdentity)
     }

@@ -5,10 +5,10 @@ use std::{fs, time::Duration};
 async fn accepted_app_turn_wakes_the_dispatcher_after_queue_admission() {
     let root = std::env::temp_dir().join(format!("butler-app-ingress-{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&root).unwrap();
-    let queue = Arc::new(NativeInboundQueue::new(&root.clone()));
-    let ingress = NativeAppIngress::new(queue.clone());
+    let queue = Arc::new(InboundQueue::new(&root.clone()));
+    let ingress = AppIngress::new(queue.clone());
     let receipt = ingress
-        .enqueue(NativeAppTurn {
+        .enqueue(AppTurn {
             chat_id: "chat".into(),
             message_id: "message".into(),
             turn_id: "turn".into(),
@@ -40,7 +40,7 @@ async fn accepted_app_turn_wakes_the_dispatcher_after_queue_admission() {
 
 #[test]
 fn retry_occurrence_keeps_the_original_btcc_event_identity() {
-    let turn = NativeAppTurn {
+    let turn = AppTurn {
         chat_id: "chat".into(),
         message_id: "message".into(),
         turn_id: "turn".into(),
@@ -61,7 +61,7 @@ fn retry_occurrence_keeps_the_original_btcc_event_identity() {
         raw_source: "app".into(),
     };
     let first: Value = envelope(turn.clone()).unwrap().read().unwrap();
-    let retry: Value = envelope(NativeAppTurn {
+    let retry: Value = envelope(AppTurn {
         turn_attempt: 2,
         ..turn.clone()
     })
@@ -76,7 +76,7 @@ fn retry_occurrence_keeps_the_original_btcc_event_identity() {
         first["routingHints"]["turnId"]
     );
     assert_eq!(retry["routingHints"]["turnAttempt"], 2);
-    let colliding_first: Value = envelope(NativeAppTurn {
+    let colliding_first: Value = envelope(AppTurn {
         message_id: "message:attempt:2".into(),
         turn_attempt: 1,
         ..turn

@@ -18,11 +18,11 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 use crate::btcc::BtccError;
 use crate::project_ledger::{
-    LedgerCommand, LedgerCommandRequest, NativeProjectLedger, ProjectLedgerReadError,
+    LedgerCommand, LedgerCommandRequest, ProjectLedger, ProjectLedgerReadError,
     ProjectLedgerToolScopeLookup,
 };
 use crate::public_text::trim_js_whitespace;
-use crate::workspace::NativeCommands;
+use crate::workspace::Commands;
 
 pub(crate) struct ProjectToolScope {
     pub project_id: Option<String>,
@@ -30,9 +30,9 @@ pub(crate) struct ProjectToolScope {
     pub installation_root: Option<PathBuf>,
 }
 
-pub(crate) struct NativeGuidedProjectTools {
-    ledger: NativeProjectLedger,
-    commands: NativeCommands,
+pub(crate) struct GuidedProjectTools {
+    ledger: ProjectLedger,
+    commands: Commands,
     environment: Arc<HashMap<String, String>>,
     work_records: crate::work_records::WorkRecordReader,
     collation: Arc<crate::locale::LocaleCollation>,
@@ -41,14 +41,14 @@ pub(crate) struct NativeGuidedProjectTools {
     permits: Arc<Semaphore>,
 }
 
-impl NativeGuidedProjectTools {
-    pub(in crate::host) fn ledger(&self) -> NativeProjectLedger {
+impl GuidedProjectTools {
+    pub(in crate::host) fn ledger(&self) -> ProjectLedger {
         self.ledger.clone()
     }
 
     pub(crate) fn new(
-        ledger: NativeProjectLedger,
-        commands: NativeCommands,
+        ledger: ProjectLedger,
+        commands: Commands,
         environment: Arc<HashMap<String, String>>,
         work_records: crate::work_records::WorkRecordReader,
         collation: Arc<crate::locale::LocaleCollation>,
@@ -285,7 +285,7 @@ fn error(code: &'static str) -> BtccError {
 
 /// Bound each former CLI response before presentation and mutation closeout.
 pub(in crate::host) async fn command(
-    ledger: &NativeProjectLedger,
+    ledger: &ProjectLedger,
     root: &Path,
     command: LedgerCommand,
     options: Value,
@@ -312,7 +312,7 @@ pub(in crate::host) async fn command(
 }
 
 async fn plan_body(
-    ledger: &NativeProjectLedger,
+    ledger: &ProjectLedger,
     root: &Path,
     args: &Map<String, Value>,
     mut result: Value,

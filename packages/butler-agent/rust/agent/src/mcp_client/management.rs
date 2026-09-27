@@ -6,14 +6,14 @@ use serde_json::{Value, json};
 
 use super::registry::McpRegistryError;
 use super::{
-    NativeMcpClient,
+    McpClient,
     registry::{
         McpServerConfig, normalize_server_config, normalize_server_id, now_iso,
         read_registry_value, redact_server, registry_path, server_to_value,
     },
 };
 
-impl NativeMcpClient {
+impl McpClient {
     pub(crate) fn list_servers(&self) -> Result<Value, McpRegistryError> {
         let registry = read_registry_value(&self.data_root)?;
         let servers = normalized_servers(&registry)?;

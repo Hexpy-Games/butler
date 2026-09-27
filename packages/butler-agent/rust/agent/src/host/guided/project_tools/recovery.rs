@@ -15,7 +15,7 @@ pub(super) fn attach(name: &str, args: &Map<String, Value>, mut result: Value) -
     let Some(error) = output.get("error").and_then(Value::as_object) else {
         return result;
     };
-    let hints = native_next(error, name, args);
+    let hints = recovery_next_steps(error, name, args);
     let code = error
         .get("code")
         .and_then(Value::as_str)
@@ -40,7 +40,11 @@ pub(super) fn attach(name: &str, args: &Map<String, Value>, mut result: Value) -
     result
 }
 
-fn native_next(error: &Map<String, Value>, name: &str, args: &Map<String, Value>) -> Vec<Value> {
+fn recovery_next_steps(
+    error: &Map<String, Value>,
+    name: &str,
+    args: &Map<String, Value>,
+) -> Vec<Value> {
     let code = error
         .get("code")
         .and_then(Value::as_str)

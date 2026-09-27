@@ -5,27 +5,27 @@ use std::sync::Arc;
 use crate::btcc::BtccError;
 use crate::configuration::ConfigurationWrites;
 use crate::locale::LocaleCollation;
-use crate::mcp_client::NativeMcpClient;
+use crate::mcp_client::McpClient;
 use crate::models::ModelConfigurationEnvironment;
 use crate::operations::WebSearchMetrics;
 use crate::web_access::WebAccess;
 
-use super::super::NativeProcessModels;
-use super::NativeRuntimePaths;
+use super::super::ProcessModels;
+use super::RuntimePaths;
 
 pub(super) struct ProcessWebServices {
-    pub models: NativeProcessModels,
+    pub models: ProcessModels,
     pub web_access: Arc<WebAccess>,
 }
 
 pub(super) fn open(
-    paths: &NativeRuntimePaths,
+    paths: &RuntimePaths,
     model_environment: ModelConfigurationEnvironment,
     writes: &Arc<ConfigurationWrites>,
     collation: &Arc<LocaleCollation>,
-    mcp_client: Arc<NativeMcpClient>,
+    mcp_client: Arc<McpClient>,
 ) -> Result<ProcessWebServices, BtccError> {
-    let models = NativeProcessModels::new_with_mcp(
+    let models = ProcessModels::new_with_mcp(
         paths.data_root.clone(),
         model_environment,
         writes.clone(),

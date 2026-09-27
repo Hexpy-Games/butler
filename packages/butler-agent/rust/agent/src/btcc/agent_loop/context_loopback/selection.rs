@@ -51,7 +51,7 @@ async fn nochange_compactor_selects_semantic_and_bounded_eviction_skips_steering
     };
     let semantic = [ModelRoundMessage::user("semantic".into(), None)];
     let transport = [ModelRoundMessage::user("transport".into(), None)];
-    let compacting = NativeContextPort::new(
+    let compacting = ContextPortAdapter::new(
         Arc::new(Steering(ports.clone())),
         Some(ContextCompactionRepository::new(storage.clone())),
     );
@@ -79,7 +79,7 @@ async fn nochange_compactor_selects_semantic_and_bounded_eviction_skips_steering
     assert!(!projection.requires_rebase);
     drop(owner);
 
-    let bounded = NativeContextPort::new(Arc::new(Steering(ports.clone())), None);
+    let bounded = ContextPortAdapter::new(Arc::new(Steering(ports.clone())), None);
     let owner = bounded.begin_turn(invocation, None).await.unwrap();
     let transport = [
         ModelRoundMessage::user("request".into(), None),

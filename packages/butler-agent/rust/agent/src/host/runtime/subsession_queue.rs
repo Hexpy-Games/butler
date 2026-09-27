@@ -6,13 +6,13 @@ use serde_json::{Value, json};
 
 use crate::{
     btcc::{BtccError, InterruptedSubsessionEvent, SubsessionChildQueue, SubsessionEnqueue},
-    gateway::NativeInboundQueue,
+    gateway::InboundQueue,
     json::JsonDocument,
 };
 
-pub(crate) struct NativeSubsessionQueue(pub(crate) Arc<NativeInboundQueue>);
+pub(crate) struct SubsessionQueue(pub(crate) Arc<InboundQueue>);
 
-impl SubsessionChildQueue for NativeSubsessionQueue {
+impl SubsessionChildQueue for SubsessionQueue {
     fn enqueue(&self, input: SubsessionEnqueue) -> Result<(), BtccError> {
         let document = JsonDocument::from_value(&input.envelope)
             .map_err(|source| invalid().with_source(source))?;
@@ -111,7 +111,7 @@ fn invalid() -> BtccError {
     )
 }
 
-fn queue_error(error: crate::gateway::NativeQueueError) -> BtccError {
+fn queue_error(error: crate::gateway::InboundQueueError) -> BtccError {
     BtccError::relay(error.code(), error.message(), error)
 }
 
@@ -121,15 +121,15 @@ mod tests {
 
     use serde_json::{Map, Value, json};
 
-    use super::{NativeSubsessionQueue, SubsessionChildQueue, SubsessionEnqueue};
-    use crate::{gateway::NativeInboundQueue, json::JsonDocument};
+    use super::{SubsessionChildQueue, SubsessionEnqueue, SubsessionQueue};
+    use crate::{gateway::InboundQueue, json::JsonDocument};
 
     #[test]
     fn child_cancel_outbox_preserves_parent_turn_provenance_outside_envelope() {
         let root =
             std::env::temp_dir().join(format!("butler-subsession-outbox-{}", uuid::Uuid::new_v4()));
-        let queue = Arc::new(NativeInboundQueue::new(&root.clone()));
-        let adapter = NativeSubsessionQueue(queue.clone());
+        let queue = Arc::new(InboundQueue::new(&root.clone()));
+        let adapter = SubsessionQueue(queue.clone());
         let envelope = json!({
             "eventId":"subsession-cancel:request-1",
             "control":{"kind":"cancel_turn","requestId":"request-1"}
@@ -147,7 +147,7 @@ mod tests {
             .unwrap();
 
         let lookup = JsonDocument::from_value(&envelope).unwrap();
-        let stored = NativeInboundQueue::new(&root.clone())
+        let stored = InboundQueue::new(&root.clone())
             .find_idempotent(&lookup)
             .unwrap()
             .unwrap();

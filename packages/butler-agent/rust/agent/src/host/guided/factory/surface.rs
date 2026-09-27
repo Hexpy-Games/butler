@@ -51,7 +51,7 @@ pub(super) fn available(
     phase: &mut GuidedPhaseSelection,
     catalog: &GuidedCatalogSnapshot,
 ) -> Result<Vec<ModelRoundTool>, BtccError> {
-    let implemented = crate::host::NativeGuidedTools::supports;
+    let implemented = crate::host::GuidedTools::supports;
     if phase
         .execution_policy
         .required_tools

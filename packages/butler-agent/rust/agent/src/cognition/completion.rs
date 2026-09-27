@@ -5,7 +5,7 @@ mod observation;
 mod queue;
 mod typed_notice;
 
-pub(crate) use consumer::{MemorySyncPoll, NativeMemorySyncConsumer};
+pub(crate) use consumer::{MemorySyncConsumer, MemorySyncPoll};
 pub(crate) use typed_notice::TypedMemorySourceNotice;
 
 use std::path::{Path, PathBuf};

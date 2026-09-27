@@ -3,7 +3,7 @@ use std::{collections::HashSet, fs};
 use serde_json::json;
 
 use super::eligible_for_claim;
-use crate::{gateway::NativeInboundQueue, json::JsonDocument};
+use crate::{gateway::InboundQueue, json::JsonDocument};
 
 #[test]
 fn waiting_source_session_admits_control_then_released_ordinary_event() {
@@ -11,7 +11,7 @@ fn waiting_source_session_admits_control_then_released_ordinary_event() {
         "butler-native-ingress-waiting-{}",
         uuid::Uuid::new_v4()
     ));
-    let queue = NativeInboundQueue::new(&root.clone());
+    let queue = InboundQueue::new(&root.clone());
     let ordinary = queue
         .enqueue_idempotent(JsonDocument::from_value(&event("ordinary-1", None)).unwrap())
         .unwrap();

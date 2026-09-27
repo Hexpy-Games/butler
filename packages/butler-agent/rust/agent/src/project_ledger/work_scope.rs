@@ -3,7 +3,7 @@
 use crate::btcc::ResolvedProjectWorkScope;
 
 use super::publication::ProjectWorkPublicationError;
-use super::{NativeProjectLedger, ProjectLedgerReadError, active_reference};
+use super::{ProjectLedger, ProjectLedgerReadError, active_reference};
 
 pub(crate) struct ProjectWorkScopeLookup {
     pub app_project_id: String,
@@ -11,7 +11,7 @@ pub(crate) struct ProjectWorkScopeLookup {
     pub ledger_project_id: Option<String>,
 }
 
-impl NativeProjectLedger {
+impl ProjectLedger {
     pub(crate) async fn resolve_work_scope(
         &self,
         input: ProjectWorkScopeLookup,

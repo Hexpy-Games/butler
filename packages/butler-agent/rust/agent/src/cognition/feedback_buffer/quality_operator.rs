@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 
 use crate::cognition::{
     CognitionError, CognitionResult, CompletionPublisher, MemorySourceCandidate,
-    NativeMemorySourceReference, mutable_paths,
+    MemorySourceReference, mutable_paths,
 };
 
 use super::{FeedbackBufferService, operator::read_entries};
@@ -95,7 +95,7 @@ fn record_exclusion(input: ExclusionOperation<'_>) -> CognitionResult<Value> {
     let active_descriptor_path = memory_root.join("active-generation.json");
     let quality_guard = [memory_root.as_path(), active_descriptor_path.as_path()];
     mutable_paths::ensure_data_authority(data_root, &quality_guard)?;
-    let resolved = NativeMemorySourceReference::new(data_root.to_owned(), paths.clone()).resolve(
+    let resolved = MemorySourceReference::new(data_root.to_owned(), paths.clone()).resolve(
         source_ref,
         |candidate: &MemorySourceCandidate| {
             candidate.source_kind == "task_report"

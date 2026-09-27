@@ -4,8 +4,8 @@ use std::error::Error;
 use std::sync::Arc;
 
 wire_codes! {
-    /// Wire codes of NativeQueue failures.
-    pub(crate) enum NativeQueueCode {
+    /// Wire codes of inbound queue failures.
+    pub(crate) enum InboundQueueCode {
         InboundEnvelopeInvalid = "inbound_envelope_invalid",
         InboundQueueEncodeFailed = "inbound_queue_encode_failed",
         InboundQueueIoFailed = "inbound_queue_io_failed",
@@ -15,34 +15,34 @@ wire_codes! {
 }
 
 /// A shareable underlying error (errors are cloned to every waiter).
-pub(crate) type NativeQueueSource = Arc<dyn Error + Send + Sync>;
+pub(crate) type QueueSource = Arc<dyn Error + Send + Sync>;
 
 /// Failures of the durable inbound message queue.
 ///
 /// `code()` is the persisted wire code, `message()` the user-facing text and
 /// `Display` renders `code: message`.
 #[derive(Clone, Debug, thiserror::Error)]
-pub(crate) enum NativeQueueError {
+pub(crate) enum InboundQueueError {
     /// A queue check failed: invalid or conflicting record, missing claim,
     /// closed lane. Nothing lower-level failed.
     #[error("{code}: {message}")]
     Detected {
-        code: NativeQueueCode,
+        code: InboundQueueCode,
         message: String,
     },
     /// A filesystem, JSON or task operation failed; `code` names what the queue
     /// was doing and `source` is the cause.
     #[error("{code}: {message}")]
     Failed {
-        code: NativeQueueCode,
+        code: InboundQueueCode,
         message: String,
         #[source]
-        source: NativeQueueSource,
+        source: QueueSource,
     },
 }
 
-impl NativeQueueError {
-    pub(crate) fn new(code: NativeQueueCode, message: impl Into<String>) -> Self {
+impl InboundQueueError {
+    pub(crate) fn new(code: InboundQueueCode, message: impl Into<String>) -> Self {
         Self::Detected {
             code,
             message: message.into(),
@@ -79,11 +79,11 @@ impl NativeQueueError {
 
 #[cfg(test)]
 mod tests {
-    use super::NativeQueueCode;
+    use super::InboundQueueCode;
 
     #[test]
     fn wire_codes_are_stable() {
-        let codes: Vec<&str> = NativeQueueCode::ALL
+        let codes: Vec<&str> = InboundQueueCode::ALL
             .iter()
             .map(|code| code.as_str())
             .collect();

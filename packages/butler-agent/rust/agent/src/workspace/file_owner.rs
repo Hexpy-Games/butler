@@ -13,7 +13,7 @@ use super::path_guard::{GuardInput, GuardResult, resolve_workspace_path_guard};
 mod tests;
 
 #[derive(Clone)]
-pub(crate) struct NativeWorkspaceFiles {
+pub(crate) struct WorkspaceFiles {
     inner: Arc<FileOwner>,
 }
 struct FileOwner {
@@ -55,7 +55,7 @@ impl FileOwnerError {
     }
 }
 
-impl NativeWorkspaceFiles {
+impl WorkspaceFiles {
     pub(crate) fn new(max_blocking_reads: usize) -> Self {
         Self {
             inner: Arc::new(FileOwner {

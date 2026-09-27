@@ -8,7 +8,7 @@ use std::{env, ffi::OsString, path::PathBuf, process::ExitCode, sync::Arc};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::host::{NativeProcessEnvironment, NativeProcessModels, ResolvedInstallation};
+use crate::host::{ProcessEnvironment, ProcessModels, ResolvedInstallation};
 
 #[derive(Default, Debug)]
 struct Options {
@@ -177,7 +177,7 @@ async fn run_search_test(
         Ok(value) => value.release().to_string_lossy().into_owned(),
         Err(_) => "unknown".into(),
     };
-    let environment = NativeProcessEnvironment::capture(&data_root, &home, &os_release);
+    let environment = ProcessEnvironment::capture(&data_root, &home, &os_release);
     let collation = match crate::locale::LocaleCollation::new("en-US") {
         Ok(value) => Arc::new(value),
         Err(_) => {
@@ -190,7 +190,7 @@ async fn run_search_test(
             );
         }
     };
-    let Ok(models) = NativeProcessModels::new(
+    let Ok(models) = ProcessModels::new(
         data_root.clone(),
         environment.model,
         Arc::new(crate::configuration::ConfigurationWrites::new()),

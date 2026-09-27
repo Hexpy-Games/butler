@@ -6,7 +6,7 @@ mod storage;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use error::{NativeQueueCode, NativeQueueError};
+pub(crate) use error::{InboundQueueCode, InboundQueueError};
 pub(crate) use record::{ClaimedInboundEvent, QueuedInboundEvent};
 
 use parking_lot::Mutex;
@@ -22,16 +22,16 @@ use tokio::sync::Notify;
 use crate::json::JsonDocument;
 
 #[derive(Clone, Debug)]
-pub(crate) struct NativeInboundQueue {
+pub(crate) struct InboundQueue {
     root: PathBuf,
     owner_id: String,
     lane: Arc<Mutex<()>>,
     enqueue_wake: Arc<Notify>,
 }
 
-pub(crate) type QueueResult<T> = Result<T, NativeQueueError>;
+pub(crate) type QueueResult<T> = Result<T, InboundQueueError>;
 
-impl NativeInboundQueue {
+impl InboundQueue {
     pub(crate) fn new(butler_data: &Path) -> Self {
         Self {
             root: butler_data.join("runtime/inbound-events"),

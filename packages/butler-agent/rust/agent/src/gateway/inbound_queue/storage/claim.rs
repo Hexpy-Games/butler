@@ -13,18 +13,17 @@ use super::{
     io::{atomic_write, ensure_dir, file_names, read},
     record_path,
 };
-use crate::gateway::NativeQueueCode;
-use crate::gateway::native_queue::{
-    ClaimedInboundEvent, NativeQueueError, QueueResult, record::ProcessingLease,
-};
+use crate::gateway::InboundQueueCode;
+use crate::gateway::inbound_queue::record::ProcessingLease;
+use crate::gateway::inbound_queue::{ClaimedInboundEvent, InboundQueueError, QueueResult};
 
 const LEASE: Duration = Duration::from_secs(16 * 60);
 
-pub(in crate::gateway::native_queue) fn claim(
+pub(in crate::gateway::inbound_queue) fn claim(
     root: &Path,
     owner: &str,
     limit: usize,
-    mut eligible: impl FnMut(&crate::gateway::native_queue::QueuedInboundEvent) -> bool,
+    mut eligible: impl FnMut(&crate::gateway::inbound_queue::QueuedInboundEvent) -> bool,
 ) -> QueueResult<Vec<ClaimedInboundEvent>> {
     if limit == 0 {
         return Ok(Vec::new());
@@ -51,8 +50,8 @@ pub(in crate::gateway::native_queue) fn claim(
         let expires: DateTime<Utc> = now
             .checked_add(LEASE)
             .ok_or_else(|| {
-                NativeQueueError::new(
-                    NativeQueueCode::InboundQueueTimeInvalid,
+                InboundQueueError::new(
+                    InboundQueueCode::InboundQueueTimeInvalid,
                     "Invalid queue lease",
                 )
             })?
@@ -75,7 +74,7 @@ pub(in crate::gateway::native_queue) fn claim(
     Ok(result)
 }
 
-fn available(record: &crate::gateway::native_queue::QueuedInboundEvent) -> bool {
+fn available(record: &crate::gateway::inbound_queue::QueuedInboundEvent) -> bool {
     if record
         .metadata
         .get("resumeAfterProcessId")
@@ -102,7 +101,7 @@ fn chrono_now_millis() -> i64 {
     now.timestamp_millis()
 }
 
-pub(in crate::gateway::native_queue) fn recover_stale(
+pub(in crate::gateway::inbound_queue) fn recover_stale(
     root: &Path,
     owner: &str,
     active: &HashSet<String>,
@@ -161,8 +160,8 @@ pub(in crate::gateway::native_queue) fn recover_stale(
             record.metadata.insert(
                 "previousProcessing".into(),
                 serde_json::to_value(previous).map_err(|error| {
-                    NativeQueueError::new(
-                        NativeQueueCode::InboundQueueEncodeFailed,
+                    InboundQueueError::new(
+                        InboundQueueCode::InboundQueueEncodeFailed,
                         error.to_string(),
                     )
                     .with_source(error)

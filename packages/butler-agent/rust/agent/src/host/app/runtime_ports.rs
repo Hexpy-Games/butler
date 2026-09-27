@@ -18,36 +18,36 @@ mod topic_branch;
 use std::sync::Arc;
 
 use crate::{
-    btcc::NativePrincipalAuthority,
+    btcc::PrincipalAuthority,
     gateway::{AppApprovalClaims, ApplicationFuture, GatewayApplicationError},
 };
 
-pub(crate) use admission::NativeAppAdmission;
-pub(crate) use assets::NativeAppAssets;
-pub(crate) use context_read::NativeAppContextRead;
-pub(crate) use ingress::NativeAppIngress;
-pub(crate) use liveness::NativeAppQueueOwnerLiveness;
-pub(crate) use model_catalog::NativeAppModelCatalog;
-pub(crate) use personalization::NativeAppPersonalization;
-pub(crate) use readiness::NativeAppReadiness;
-pub(crate) use runtime_info::NativeAppRuntimeInfo;
-pub(crate) use session_progress::NativeAppSessionProgress;
-pub(crate) use session_workspaces::NativeAppSessionWorkspaces;
-pub(crate) use settings::NativeAppSettingsFacts;
-pub(crate) use settings_mutation::NativeAppSettingsMutation;
-pub(crate) use topic_branch::{NativeAppBranchConversations, NativeAppBranchSummarizer};
+pub(crate) use admission::AppAdmission;
+pub(crate) use assets::AppAssets;
+pub(crate) use context_read::AppContextRead;
+pub(crate) use ingress::AppIngress;
+pub(crate) use liveness::AppQueueOwnerLivenessAdapter;
+pub(crate) use model_catalog::AppModelCatalog;
+pub(crate) use personalization::AppPersonalization;
+pub(crate) use readiness::AppReadiness;
+pub(crate) use runtime_info::AppRuntimeInfo;
+pub(crate) use session_progress::AppSessionProgress;
+pub(crate) use session_workspaces::AppSessionWorkspaces;
+pub(crate) use settings::AppSettingsFactsAdapter;
+pub(crate) use settings_mutation::AppSettingsMutation;
+pub(crate) use topic_branch::{AppBranchConversations, AppBranchSummarizerAdapter};
 
-pub(crate) struct NativeAppApprovalClaims {
-    authority: Arc<NativePrincipalAuthority>,
+pub(crate) struct AppApprovalClaimsAdapter {
+    authority: Arc<PrincipalAuthority>,
 }
 
-impl NativeAppApprovalClaims {
-    pub(crate) fn new(authority: Arc<NativePrincipalAuthority>) -> Self {
+impl AppApprovalClaimsAdapter {
+    pub(crate) fn new(authority: Arc<PrincipalAuthority>) -> Self {
         Self { authority }
     }
 }
 
-impl AppApprovalClaims for NativeAppApprovalClaims {
+impl AppApprovalClaims for AppApprovalClaimsAdapter {
     fn retains_claim(&self, turn_id: String) -> ApplicationFuture<bool> {
         let authority = self.authority.clone();
         Box::pin(async move {

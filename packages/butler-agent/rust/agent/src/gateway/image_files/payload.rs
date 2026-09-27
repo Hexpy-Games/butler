@@ -2,14 +2,14 @@
 
 use serde_json::Value;
 
-use super::{GatewayApplicationError, NativeAppImageFiles, files};
+use super::{AppImageFiles, GatewayApplicationError, files};
 use crate::public_text::trim_js_whitespace;
 use crate::{
     btcc::{BtccError, PortFuture, VerifiedImagePayloadPort},
     context::VisualAttachmentManifest,
 };
 
-impl VerifiedImagePayloadPort for NativeAppImageFiles {
+impl VerifiedImagePayloadPort for AppImageFiles {
     fn read<'a>(&'a self, reference: &'a Value) -> PortFuture<'a, Vec<u8>> {
         Box::pin(async move {
             let manifest: VisualAttachmentManifest = serde_json::from_value(reference.clone())

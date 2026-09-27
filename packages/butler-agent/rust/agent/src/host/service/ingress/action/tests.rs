@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use super::*;
 use crate::{
     btcc::{AlreadyDeliveredOutcome, ArtifactKind, DeliveredOutcome, FinalArtifact, TurnOutcome},
-    gateway::NativeInboundQueue,
+    gateway::InboundQueue,
     json::JsonDocument,
     workspace::{SessionLifecycleState, SessionRole},
 };
@@ -13,7 +13,7 @@ use crate::{
 #[test]
 fn app_final_projects_bounded_rich_result_then_source_ordered_cancellation() {
     let root = std::env::temp_dir().join(format!("butler-ingress-rich-{}", uuid::Uuid::new_v4()));
-    let queue = NativeInboundQueue::new(&root.clone());
+    let queue = InboundQueue::new(&root.clone());
     let binding = binding();
     let (item, envelope) = claimed(&queue, "normal", None);
     let artifact = FinalArtifact {
@@ -135,7 +135,7 @@ fn app_final_projects_bounded_rich_result_then_source_ordered_cancellation() {
 }
 
 fn claimed(
-    queue: &NativeInboundQueue,
+    queue: &InboundQueue,
     event: &str,
     control: Option<Value>,
 ) -> (ClaimedInboundEvent, Envelope) {

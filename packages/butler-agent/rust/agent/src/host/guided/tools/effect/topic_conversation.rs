@@ -9,7 +9,7 @@ use crate::{
     btcc::{
         AdapterOutcome, EffectAdapter, EffectAdapterError, EffectFailure, EffectFuture, PlanBinding,
     },
-    host::{NativeActiveAppEndpoint, NativeGuidedTools},
+    host::{ActiveAppEndpoint, GuidedTools},
     json::JsonDocument,
 };
 
@@ -21,7 +21,7 @@ pub(super) fn supports(name: &str) -> bool {
 }
 
 pub(super) fn prepare(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     call: &crate::btcc::ModelRoundToolCall,
     _occurrence: &str,
 ) -> Result<(String, Value, Arc<dyn EffectAdapter>), crate::btcc::BtccError> {
@@ -47,7 +47,7 @@ pub(super) fn prepare(
 
 struct TopicConversationEffect {
     client: reqwest::Client,
-    endpoint: Arc<NativeActiveAppEndpoint>,
+    endpoint: Arc<ActiveAppEndpoint>,
     current_session_id: Option<String>,
     target: String,
 }
@@ -304,7 +304,7 @@ mod tests {
     fn topic_branch_accepted_plan_uses_source_target() {
         let effect = TopicConversationEffect {
             client: reqwest::Client::new(),
-            endpoint: Arc::new(NativeActiveAppEndpoint::new()),
+            endpoint: Arc::new(ActiveAppEndpoint::new()),
             current_session_id: Some("app-session".into()),
             target: SOURCE_TARGET.into(),
         };

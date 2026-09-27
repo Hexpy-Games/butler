@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::NativeCapabilities;
+use super::Capabilities;
 
 mod bridge;
 mod validation;
@@ -32,12 +32,12 @@ pub(crate) enum CatalogError {
 /// Validated static source bytes have no mutable registry or per-Turn state.
 /// Only the Host translates these bytes into the BTCC-owned policy snapshot.
 #[derive(Clone, Copy)]
-pub(crate) struct NativeToolCatalog {
+pub(crate) struct ToolCatalog {
     source: &'static str,
 }
 
-impl NativeToolCatalog {
-    pub(crate) fn load(capabilities: &NativeCapabilities) -> Result<Self, CatalogError> {
+impl ToolCatalog {
+    pub(crate) fn load(capabilities: &Capabilities) -> Result<Self, CatalogError> {
         Self::validate(SOURCE, capabilities)
     }
 
@@ -45,10 +45,7 @@ impl NativeToolCatalog {
         self.source
     }
 
-    fn validate(
-        source: &'static str,
-        capabilities: &NativeCapabilities,
-    ) -> Result<Self, CatalogError> {
+    fn validate(source: &'static str, capabilities: &Capabilities) -> Result<Self, CatalogError> {
         // Raw definitions are startup-only validation data. Drop their parsed
         // tree before Host builds its single guided snapshot; do not cache both.
         #[derive(Deserialize)]

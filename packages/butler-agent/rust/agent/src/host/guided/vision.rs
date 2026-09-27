@@ -1,6 +1,6 @@
 use crate::{
     gateway::GatewayApplicationError,
-    mcp_client::NativeMcpClient,
+    mcp_client::McpClient,
     models::{
         ModelConfiguration, ModelProviderMetadata, ProviderVisualCapabilityFuture,
         ProviderVisualCapabilityPort,
@@ -9,17 +9,17 @@ use crate::{
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
-pub(crate) struct NativeZaiVisionCapability {
-    mcp: Arc<NativeMcpClient>,
+pub(crate) struct ZaiVisionCapability {
+    mcp: Arc<McpClient>,
 }
 
-impl NativeZaiVisionCapability {
-    pub(crate) fn new(mcp: Arc<NativeMcpClient>) -> Self {
+impl ZaiVisionCapability {
+    pub(crate) fn new(mcp: Arc<McpClient>) -> Self {
         Self { mcp }
     }
 }
 
-impl ProviderVisualCapabilityPort for NativeZaiVisionCapability {
+impl ProviderVisualCapabilityPort for ZaiVisionCapability {
     fn zai_vision_tool_capability_digest<'a>(
         &'a self,
         metadata: &'a ModelProviderMetadata,
@@ -43,7 +43,7 @@ impl ProviderVisualCapabilityPort for NativeZaiVisionCapability {
 /// model credential resolution is performed here.
 pub(crate) async fn catalog_for_visual_admission(
     models: &ModelConfiguration,
-    mcp: &NativeMcpClient,
+    mcp: &McpClient,
     model_ref: &str,
 ) -> Result<Vec<ModelProviderMetadata>, GatewayApplicationError> {
     let read = models

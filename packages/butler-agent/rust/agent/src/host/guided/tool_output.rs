@@ -2,12 +2,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use crate::context::{ContextBudgetOwner, NativeToolOutput, ToolOutputIdentity};
+use crate::context::{ContextBudgetOwner, ToolOutput, ToolOutputIdentity};
 use crate::operations::MetricFiles;
 
-pub(crate) struct NativeToolOutputIdentity;
+pub(crate) struct SystemToolOutputIdentity;
 
-impl ToolOutputIdentity for NativeToolOutputIdentity {
+impl ToolOutputIdentity for SystemToolOutputIdentity {
     fn now(&self) -> SystemTime {
         SystemTime::now()
     }
@@ -16,15 +16,15 @@ impl ToolOutputIdentity for NativeToolOutputIdentity {
     }
 }
 
-pub(crate) fn native_tool_output(
+pub(crate) fn open_tool_output(
     butler_data: PathBuf,
     budget_owner: Arc<ContextBudgetOwner>,
     metric_files: Arc<MetricFiles>,
-) -> NativeToolOutput {
-    NativeToolOutput::new(
+) -> ToolOutput {
+    ToolOutput::new(
         butler_data,
         budget_owner,
-        Arc::new(NativeToolOutputIdentity),
+        Arc::new(SystemToolOutputIdentity),
         metric_files,
     )
 }

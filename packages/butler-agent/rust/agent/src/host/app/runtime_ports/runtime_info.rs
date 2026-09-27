@@ -1,10 +1,10 @@
 use crate::gateway::{AppRuntimeInfoProvider, GatewayApplicationError};
 
-pub(crate) struct NativeAppRuntimeInfo {
+pub(crate) struct AppRuntimeInfo {
     app_version: Option<String>,
 }
 
-impl NativeAppRuntimeInfo {
+impl AppRuntimeInfo {
     pub(crate) fn open(installation: &crate::host::installation::ResolvedInstallation) -> Self {
         Self {
             app_version: installation.app_version(),
@@ -12,7 +12,7 @@ impl NativeAppRuntimeInfo {
     }
 }
 
-impl AppRuntimeInfoProvider for NativeAppRuntimeInfo {
+impl AppRuntimeInfoProvider for AppRuntimeInfo {
     fn app_version(&self) -> Result<String, GatewayApplicationError> {
         self.app_version
             .clone()

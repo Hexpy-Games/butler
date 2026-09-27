@@ -12,18 +12,18 @@ use crate::btcc::{
 };
 use crate::json::JsonDocument;
 use crate::workspace::{
-    BindSessionWorktreeInput, BindSessionWorktreeResult, NativeSessionWorktrees,
-    SessionWorktreeAction, WorkspaceReference,
+    BindSessionWorktreeInput, BindSessionWorktreeResult, SessionWorktreeAction, SessionWorktrees,
+    WorkspaceReference,
 };
 
-use super::super::NativeGuidedTools;
+use super::super::GuidedTools;
 
 pub(super) fn supports(name: &str) -> bool {
     name == ToolName::BindSessionGitWorktree
 }
 
 pub(super) fn prepare(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     args: &Map<String, Value>,
 ) -> Result<(String, Value, Arc<dyn EffectAdapter>), BtccError> {
     let input = normalize(&Value::Object(args.clone())).map_err(crate::btcc::BtccError::from)?;
@@ -56,7 +56,7 @@ pub(super) fn prepare(
 }
 
 struct SessionWorktreeEffect {
-    worktrees: NativeSessionWorktrees,
+    worktrees: SessionWorktrees,
     session_id: String,
     reference: WorkspaceReference,
     target: String,

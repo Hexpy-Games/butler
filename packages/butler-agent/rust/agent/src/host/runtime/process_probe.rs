@@ -74,7 +74,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn native_probe_uses_current_pid_and_preserves_uncertainty() {
+    fn probe_uses_current_pid_and_preserves_uncertainty() {
         let host = SystemIdentity;
         assert_eq!(host.process_id(), std::process::id());
         assert_eq!(

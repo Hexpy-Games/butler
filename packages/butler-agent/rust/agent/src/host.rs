@@ -7,47 +7,41 @@ mod error;
 mod installation;
 #[cfg(unix)]
 mod mcp;
-pub(crate) use crate::host::guided::tool_artifact::NativeToolArtifactReader;
-pub(crate) use crate::host::memory_jobs::source::NativeMemorySourceReader;
+pub(crate) use crate::host::guided::tool_artifact::ToolArtifactReader;
+pub(crate) use crate::host::memory_jobs::source::MemorySourceReader;
 mod runtime;
 
 #[cfg(unix)]
-pub(crate) use crate::host::app::monitoring::NativeAppMonitoring;
+pub(crate) use crate::host::app::monitoring::AppMonitoring;
 #[cfg(unix)]
 pub(crate) use crate::host::app::runtime_ports::{
-    NativeAppAdmission, NativeAppApprovalClaims, NativeAppAssets, NativeAppBranchConversations,
-    NativeAppBranchSummarizer, NativeAppContextRead, NativeAppIngress, NativeAppModelCatalog,
-    NativeAppPersonalization, NativeAppQueueOwnerLiveness, NativeAppReadiness,
-    NativeAppSessionProgress, NativeAppSessionWorkspaces, NativeAppSettingsFacts,
-    NativeAppSettingsMutation,
+    AppAdmission, AppApprovalClaimsAdapter, AppAssets, AppBranchConversations,
+    AppBranchSummarizerAdapter, AppContextRead, AppIngress, AppModelCatalog, AppPersonalization,
+    AppQueueOwnerLivenessAdapter, AppReadiness, AppSessionProgress, AppSessionWorkspaces,
+    AppSettingsFactsAdapter, AppSettingsMutation,
 };
 #[cfg(unix)]
-pub(crate) use crate::host::app::server::NativeAppServer;
-pub(crate) use crate::host::app::subsessions::NativeAppSubsessions;
-pub(crate) use crate::host::guided::activity::NativeGuidedActivity;
-pub(crate) use crate::host::guided::authority_handoff::NativeAuthorityHandoff;
-pub(crate) use crate::host::guided::catalog::NativeGuidedCatalog;
-pub(crate) use crate::host::guided::cognition_prompt::NativeCognitionPrompt;
-pub(crate) use crate::host::guided::factory::NativeGuidedTurnFactory;
-pub(crate) use crate::host::guided::file_effects::NativeGuidedFileEffects;
-pub(crate) use crate::host::guided::journal::NativeGuidedJournal;
-pub(crate) use crate::host::guided::preparation::{
-    NativeGuidedPreparation, PreparedNativeGuidedTurn,
-};
+pub(crate) use crate::host::app::server::AppServer;
+pub(crate) use crate::host::app::subsessions::AppSubsessions;
+pub(crate) use crate::host::guided::activity::GuidedActivity;
+pub(crate) use crate::host::guided::authority_handoff::AuthorityHandoff;
+pub(crate) use crate::host::guided::catalog::GuidedCatalog;
+pub(crate) use crate::host::guided::cognition_prompt::CognitionPrompt;
+pub(crate) use crate::host::guided::factory::GuidedTurnFactoryAdapter;
+pub(crate) use crate::host::guided::file_effects::GuidedFileEffects;
+pub(crate) use crate::host::guided::journal::GuidedJournal;
+pub(crate) use crate::host::guided::preparation::{GuidedPreparation, PreparedNativeGuidedTurn};
 pub(crate) use crate::host::guided::prompt::{
-    GuidedTextState, NativeGuidedPrompt, resolve_guided_response_language,
+    GuidedPrompt, GuidedTextState, resolve_guided_response_language,
 };
-pub(crate) use crate::host::guided::registered_edit::NativeRegisteredEdit;
-pub(crate) use crate::host::guided::registered_write::{
-    NativeRegisteredWrite, RegisteredWriteContext,
-};
-pub(crate) use crate::host::guided::steering::NativeGuidedSteering;
-pub(crate) use crate::host::guided::tools::GuidedToolBinding;
+pub(crate) use crate::host::guided::registered_edit::RegisteredEdit;
+pub(crate) use crate::host::guided::registered_write::{RegisteredWrite, RegisteredWriteContext};
+pub(crate) use crate::host::guided::steering::GuidedSteering;
 use crate::host::guided::tools::MonitoringReaders;
-pub(crate) use crate::host::guided::tools::NativeGuidedTools;
-pub(crate) use crate::host::guided::work::NativeGuidedWork;
-pub(crate) use crate::host::guided::work_tools::NativeGuidedWorkTools;
-pub(crate) use crate::host::service::conversation_observer::NativeConversationObserver;
+pub(crate) use crate::host::guided::tools::{GuidedToolBinding, GuidedTools};
+pub(crate) use crate::host::guided::work::GuidedWorkAdapter;
+pub(crate) use crate::host::guided::work_tools::GuidedWorkTools;
+pub(crate) use crate::host::service::conversation_observer::ConversationObserver;
 mod app;
 mod automation;
 pub(crate) mod cli;
@@ -56,36 +50,32 @@ mod guided;
 mod memory_jobs;
 mod service;
 mod time;
-pub(crate) use crate::host::automation::queue::NativeAutomationQueue;
+pub(crate) use crate::host::automation::queue::AutomationQueue;
 pub(crate) use crate::host::automation::runtime::open_automation_service;
-pub(crate) use crate::host::time::date_parser::NativeDateParser;
+pub(crate) use crate::host::time::date_parser::DateParser;
 
 #[cfg(unix)]
-pub(crate) use crate::host::app::gateway_lifecycle::NativeActiveAppEndpoint;
+pub(crate) use crate::host::app::gateway_lifecycle::ActiveAppEndpoint;
 #[cfg(unix)]
-pub(crate) use crate::host::embedding::owner::NativeEmbeddingOwner;
-pub(crate) use crate::host::guided::tool_output::native_tool_output;
+pub(crate) use crate::host::embedding::owner::EmbeddingOwner;
+pub(crate) use crate::host::guided::tool_output::open_tool_output;
 
-pub(crate) use crate::host::guided::active_plan::NativeAcceptedPlanProducer;
-pub(crate) use crate::host::guided::vision::{
-    NativeZaiVisionCapability, catalog_for_visual_admission,
-};
-pub(crate) use crate::host::guided::work_streams::NativeWorkStreams;
+pub(crate) use crate::host::guided::active_plan::AcceptedPlanProducer;
+pub(crate) use crate::host::guided::vision::{ZaiVisionCapability, catalog_for_visual_admission};
+pub(crate) use crate::host::guided::work_streams::WorkStreams;
 #[cfg(unix)]
-pub(crate) use crate::host::guided::worker_profiles::NativeWorkerProfileReader;
+pub(crate) use crate::host::guided::worker_profiles::AppWorkerProfileReader;
 pub(crate) use crate::host::memory_jobs::profile_sources::ProfileConversationSources;
-pub(crate) use crate::host::runtime::environment::NativeProcessEnvironment;
-pub(crate) use crate::host::runtime::models::NativeProcessModels;
+pub(crate) use crate::host::runtime::environment::ProcessEnvironment;
+pub(crate) use crate::host::runtime::models::ProcessModels;
 pub(crate) use crate::host::runtime::storage_bootstrap::prepare_btcc_storage;
-pub(crate) use crate::host::service::configuration::{
-    NativeServiceConfiguration, require_model_ref,
-};
-pub(crate) use crate::host::service::progress_publisher::NativeProgressPublisher;
-pub(crate) use crate::host::time::prompt_clock::NativePromptClock;
+pub(crate) use crate::host::service::configuration::{ServiceConfiguration, require_model_ref};
+pub(crate) use crate::host::service::progress_publisher::ProgressPublisher;
+pub(crate) use crate::host::time::prompt_clock::SystemPromptClock;
 #[cfg(unix)]
 pub(crate) use error::HostError;
 pub(crate) use installation::ResolvedInstallation;
-pub(crate) use runtime::{NativeAgentRuntime, NativeRuntimePaths};
+pub(crate) use runtime::{AgentRuntime, RuntimePaths};
 
 use std::time::{Duration, SystemTime};
 

@@ -5,7 +5,7 @@ use std::{path::PathBuf, sync::Arc};
 use serde_json::{Value, json};
 
 use crate::btcc::{EffectFailure, EffectFuture, PreparedWrite, RegisteredWritePort};
-use crate::capabilities::{CapabilityInvocation, NativeCapabilities};
+use crate::capabilities::{Capabilities, CapabilityInvocation};
 use crate::workspace::WorkspaceReference;
 
 #[derive(Clone)]
@@ -19,15 +19,12 @@ pub(crate) struct RegisteredWriteContext {
     pub installation_root: Option<PathBuf>,
 }
 
-pub(crate) struct NativeRegisteredWrite {
-    capabilities: Arc<NativeCapabilities>,
+pub(crate) struct RegisteredWrite {
+    capabilities: Arc<Capabilities>,
     context: RegisteredWriteContext,
 }
-impl NativeRegisteredWrite {
-    pub(crate) fn new(
-        capabilities: Arc<NativeCapabilities>,
-        context: RegisteredWriteContext,
-    ) -> Self {
+impl RegisteredWrite {
+    pub(crate) fn new(capabilities: Arc<Capabilities>, context: RegisteredWriteContext) -> Self {
         Self {
             capabilities,
             context,
@@ -35,7 +32,7 @@ impl NativeRegisteredWrite {
     }
 }
 
-impl RegisteredWritePort for NativeRegisteredWrite {
+impl RegisteredWritePort for RegisteredWrite {
     fn write(&self, prepared: PreparedWrite) -> EffectFuture<'_, Value> {
         Box::pin(async move {
             let mut arguments = json!({

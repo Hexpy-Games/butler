@@ -7,10 +7,10 @@ use std::sync::Arc;
 use serde_json::Value;
 
 use crate::btcc::{BtccError, EffectAdapter, EffectJournal, WorkView, WorkspaceFileEffectAdapter};
-use crate::capabilities::NativeCapabilities;
+use crate::capabilities::Capabilities;
 use crate::workspace::EffectFileScope;
 
-use crate::host::{NativeRegisteredEdit, NativeRegisteredWrite, RegisteredWriteContext};
+use crate::host::{RegisteredEdit, RegisteredWrite, RegisteredWriteContext};
 
 pub(crate) struct PreparedGuidedFileEffect {
     pub target: String,
@@ -18,25 +18,22 @@ pub(crate) struct PreparedGuidedFileEffect {
     pub adapter: Arc<dyn EffectAdapter>,
 }
 
-pub(crate) struct NativeGuidedFileEffects {
+pub(crate) struct GuidedFileEffects {
     scope: EffectFileScope,
-    registered_write: Arc<NativeRegisteredWrite>,
-    registered_edit: Arc<NativeRegisteredEdit>,
+    registered_write: Arc<RegisteredWrite>,
+    registered_edit: Arc<RegisteredEdit>,
 }
 
-impl NativeGuidedFileEffects {
+impl GuidedFileEffects {
     pub(crate) fn new(
-        capabilities: Arc<NativeCapabilities>,
+        capabilities: Arc<Capabilities>,
         context: RegisteredWriteContext,
         scope: EffectFileScope,
     ) -> Self {
         Self {
             scope,
-            registered_edit: Arc::new(NativeRegisteredEdit::new(
-                capabilities.clone(),
-                context.clone(),
-            )),
-            registered_write: Arc::new(NativeRegisteredWrite::new(capabilities, context)),
+            registered_edit: Arc::new(RegisteredEdit::new(capabilities.clone(), context.clone())),
+            registered_write: Arc::new(RegisteredWrite::new(capabilities, context)),
         }
     }
 

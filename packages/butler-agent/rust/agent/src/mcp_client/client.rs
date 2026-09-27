@@ -10,7 +10,7 @@ use super::{
     transport::{project_resources, project_templates, project_tools, with_probe_error},
 };
 #[derive(Clone)]
-pub(crate) struct NativeMcpClient {
+pub(crate) struct McpClient {
     pub(super) data_root: PathBuf,
     pub(super) environment: Arc<HashMap<String, String>>,
     pub(super) configuration_writes: Arc<crate::configuration::ConfigurationWrites>,
@@ -57,7 +57,7 @@ impl McpClientError {
     }
 }
 
-impl NativeMcpClient {
+impl McpClient {
     /// Test-only owner for isolated fixtures; production must supply a write path guard.
     #[cfg(test)]
     pub(crate) fn new(data_root: PathBuf, environment: HashMap<String, String>) -> Self {

@@ -3,25 +3,25 @@
 
 use std::path::PathBuf;
 
-use crate::cognition::{CognitionPathEnvironment, NativeMemorySourceReference};
+use crate::cognition::{CognitionPathEnvironment, MemorySourceReference};
 use crate::context::{
     ContextError, ContextResult, MemorySourceCandidate, MemorySourceReferencePort,
     ResolvedMemorySource,
 };
 
-pub(crate) struct NativeMemorySourceReader {
-    source: NativeMemorySourceReference,
+pub(crate) struct MemorySourceReader {
+    source: MemorySourceReference,
 }
 
-impl NativeMemorySourceReader {
+impl MemorySourceReader {
     pub(crate) fn new(root: PathBuf, environment: CognitionPathEnvironment) -> Self {
         Self {
-            source: NativeMemorySourceReference::new(root, environment),
+            source: MemorySourceReference::new(root, environment),
         }
     }
 }
 
-impl MemorySourceReferencePort for NativeMemorySourceReader {
+impl MemorySourceReferencePort for MemorySourceReader {
     fn resolve(
         &self,
         handle: &str,

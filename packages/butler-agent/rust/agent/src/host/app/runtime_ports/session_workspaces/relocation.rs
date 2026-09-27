@@ -4,9 +4,9 @@ use std::collections::HashSet;
 
 use serde_json::{Map, Value};
 
-use super::NativeAppSessionWorkspaces;
+use super::AppSessionWorkspaces;
 use crate::{
-    btcc::NativeSubsessionService,
+    btcc::SubsessionService,
     gateway::{
         AppRelocationBinding, AppRelocationBindingResult, AppRelocationBindingSeed,
         AppRelocationBindingUpdate, AppRelocationCanonicalUpdate, AppRelocationHost,
@@ -21,7 +21,7 @@ use crate::{
     },
 };
 
-impl AppRelocationHost for NativeAppSessionWorkspaces {
+impl AppRelocationHost for AppSessionWorkspaces {
     fn inspect(&self, runtime_session_id: String) -> ApplicationFuture<AppRelocationSnapshot> {
         let bindings = self.bindings.clone();
         let subsessions = self.subsessions.clone();
@@ -196,7 +196,7 @@ impl AppRelocationHost for NativeAppSessionWorkspaces {
 }
 
 async fn has_open_child(
-    subsessions: &NativeSubsessionService,
+    subsessions: &SubsessionService,
     root: String,
 ) -> Result<bool, GatewayApplicationError> {
     let repository = subsessions.repository();

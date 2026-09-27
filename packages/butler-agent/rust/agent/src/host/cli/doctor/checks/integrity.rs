@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 use super::{Check, ResolvedInstallation};
 
 pub(crate) fn digest_check(installation: &ResolvedInstallation) -> Check {
-    let result = installation.native_payload_provenance();
+    let result = installation.payload_provenance();
     let (status, summary, evidence) = match result {
         Err(_) => (
             "fail",

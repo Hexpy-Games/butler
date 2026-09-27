@@ -48,7 +48,7 @@ pub(crate) async fn search_generation_vectors(
     }
     let mut result = RecallVectorMatches::default();
     let Some(embedding) = generation.embedding.as_ref() else {
-        return Err(error(CognitionCode::NativeVectorUnavailable));
+        return Err(error(CognitionCode::VectorUnavailable));
     };
     let root = generation.root.join("butler.lance");
     ensure_data_authority(
@@ -57,10 +57,10 @@ pub(crate) async fn search_generation_vectors(
     )?;
     let connection = crate::cognition::lance_store::connect(&root)
         .await
-        .map_err(|source| error(CognitionCode::NativeVectorUnavailable).with_source(source))?;
+        .map_err(|source| error(CognitionCode::VectorUnavailable).with_source(source))?;
     let table = crate::cognition::lance_store::open(&connection, "butler_memory")
         .await
-        .map_err(|source| error(CognitionCode::NativeVectorUnavailable).with_source(source))?;
+        .map_err(|source| error(CognitionCode::VectorUnavailable).with_source(source))?;
     let legacy = !has_source_kind(&table).await?;
     let columns = selected_columns(legacy);
     for kind in ["node", "episode"] {
@@ -74,33 +74,27 @@ pub(crate) async fn search_generation_vectors(
         let mut best = HashMap::<String, RecallVectorMatch>::new();
         for vector in vectors {
             if vector.len() != dimension(embedding) || vector.iter().any(|v| !v.is_finite()) {
-                return Err(error(CognitionCode::NativeVectorInvalidQuery));
+                return Err(error(CognitionCode::VectorInvalidQuery));
             }
             let Some(predicate) = predicate(generation, request, kind, legacy) else {
                 continue;
             };
             let batches = table
                 .vector_search(vector.as_slice())
-                .map_err(|source| {
-                    error(CognitionCode::NativeVectorUnavailable).with_source(source)
-                })?
+                .map_err(|source| error(CognitionCode::VectorUnavailable).with_source(source))?
                 .only_if(predicate)
                 .select(Select::columns(&columns))
                 .limit(LIMIT)
                 .execute()
                 .await
-                .map_err(|source| {
-                    error(CognitionCode::NativeVectorUnavailable).with_source(source)
-                })?
+                .map_err(|source| error(CognitionCode::VectorUnavailable).with_source(source))?
                 .try_collect::<Vec<_>>()
                 .await
-                .map_err(|source| {
-                    error(CognitionCode::NativeVectorUnavailable).with_source(source)
-                })?;
+                .map_err(|source| error(CognitionCode::VectorUnavailable).with_source(source))?;
             let mut count = 0;
             for batch in batches {
                 let distance_column = batch.schema().index_of("_distance").map_err(|source| {
-                    error(CognitionCode::NativeVectorUnavailable).with_source(source)
+                    error(CognitionCode::VectorUnavailable).with_source(source)
                 })?;
                 for row in 0..batch.num_rows() {
                     count += 1;
@@ -174,10 +168,10 @@ pub(crate) async fn search_vector_candidates(
     vector: &[f32],
 ) -> CognitionResult<Vec<VectorHit>> {
     let Some(embedding) = generation.embedding.as_ref() else {
-        return Err(error(CognitionCode::NativeVectorUnavailable));
+        return Err(error(CognitionCode::VectorUnavailable));
     };
     if vector.len() != dimension(embedding) {
-        return Err(error(CognitionCode::NativeVectorInvalidQuery));
+        return Err(error(CognitionCode::VectorInvalidQuery));
     }
     let root = generation.root.join("butler.lance");
     ensure_data_authority(
@@ -186,10 +180,10 @@ pub(crate) async fn search_vector_candidates(
     )?;
     let connection = crate::cognition::lance_store::connect(&root)
         .await
-        .map_err(|source| error(CognitionCode::NativeVectorUnavailable).with_source(source))?;
+        .map_err(|source| error(CognitionCode::VectorUnavailable).with_source(source))?;
     let table = crate::cognition::lance_store::open(&connection, "butler_memory")
         .await
-        .map_err(|source| error(CognitionCode::NativeVectorUnavailable).with_source(source))?;
+        .map_err(|source| error(CognitionCode::VectorUnavailable).with_source(source))?;
     let legacy = !has_source_kind(&table).await?;
     let columns = selected_columns(legacy);
     let mut clauses = vec![
@@ -205,23 +199,23 @@ pub(crate) async fn search_vector_candidates(
     }
     let batches = table
         .vector_search(vector)
-        .map_err(|source| error(CognitionCode::NativeVectorUnavailable).with_source(source))?
+        .map_err(|source| error(CognitionCode::VectorUnavailable).with_source(source))?
         .only_if(clauses.join(" AND "))
         .select(Select::columns(&columns))
         .limit(50)
         .execute()
         .await
-        .map_err(|source| error(CognitionCode::NativeVectorUnavailable).with_source(source))?
+        .map_err(|source| error(CognitionCode::VectorUnavailable).with_source(source))?
         .try_collect::<Vec<_>>()
         .await
-        .map_err(|source| error(CognitionCode::NativeVectorUnavailable).with_source(source))?;
+        .map_err(|source| error(CognitionCode::VectorUnavailable).with_source(source))?;
     let graph = GraphRepository::open(&generation.graph_path)?;
     let mut hits = Vec::new();
     for batch in batches {
         let column = batch
             .schema()
             .index_of("_distance")
-            .map_err(|source| error(CognitionCode::NativeVectorUnavailable).with_source(source))?;
+            .map_err(|source| error(CognitionCode::VectorUnavailable).with_source(source))?;
         for row in 0..batch.num_rows() {
             let hit = RecallVectorMatch {
                 vector_key: text(&batch, 0, row)?,
@@ -262,7 +256,7 @@ async fn has_source_kind(table: &Table) -> CognitionResult<bool> {
     let schema = table
         .schema()
         .await
-        .map_err(|source| error(CognitionCode::NativeVectorUnavailable).with_source(source))?;
+        .map_err(|source| error(CognitionCode::VectorUnavailable).with_source(source))?;
     Ok(schema
         .fields()
         .iter()
@@ -364,5 +358,5 @@ fn distance(batch: &arrow_array::RecordBatch, column: usize, row: usize) -> Cogn
     if let Some(values) = data.as_any().downcast_ref::<Float64Array>() {
         return Ok(values.value(row));
     }
-    Err(error(CognitionCode::NativeVectorUnavailable))
+    Err(error(CognitionCode::VectorUnavailable))
 }

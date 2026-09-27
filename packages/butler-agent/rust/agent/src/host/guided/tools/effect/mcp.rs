@@ -11,14 +11,14 @@ use crate::{
     json::JsonDocument,
 };
 
-use super::super::NativeGuidedTools;
+use super::super::GuidedTools;
 
 pub(super) fn supports(name: &str) -> bool {
     name == ToolName::CallMcpTool
 }
 
 pub(super) fn prepare(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     args: &Map<String, Value>,
 ) -> Result<(String, Value, Arc<dyn EffectAdapter>), crate::btcc::BtccError> {
     let server_id = required_text(args, "server_id")?;
@@ -48,7 +48,7 @@ pub(super) fn prepare(
 }
 
 struct McpToolEffect {
-    client: Arc<crate::mcp_client::NativeMcpClient>,
+    client: Arc<crate::mcp_client::McpClient>,
     server_id: String,
     tool_name: String,
     target: String,

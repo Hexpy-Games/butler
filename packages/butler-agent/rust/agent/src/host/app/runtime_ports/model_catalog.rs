@@ -14,19 +14,19 @@ use crate::models::{
     ProviderAuthMethod, ProviderCredentialMutation,
 };
 
-use super::NativeAppSettingsFacts;
+use super::AppSettingsFactsAdapter;
 
-pub(crate) struct NativeAppModelCatalog {
+pub(crate) struct AppModelCatalog {
     configuration: Arc<ModelConfiguration>,
-    settings: Arc<NativeAppSettingsFacts>,
+    settings: Arc<AppSettingsFactsAdapter>,
     installation: ResolvedInstallation,
     data_root: PathBuf,
 }
 
-impl NativeAppModelCatalog {
+impl AppModelCatalog {
     pub(crate) fn new(
         configuration: Arc<ModelConfiguration>,
-        settings: Arc<NativeAppSettingsFacts>,
+        settings: Arc<AppSettingsFactsAdapter>,
         installation: ResolvedInstallation,
         data_root: PathBuf,
     ) -> Self {
@@ -222,7 +222,7 @@ impl NativeAppModelCatalog {
     }
 }
 
-impl AppModelCatalogPort for NativeAppModelCatalog {
+impl AppModelCatalogPort for AppModelCatalog {
     fn execute(
         &self,
         command: AppModelCatalogCommand,
@@ -233,7 +233,7 @@ impl AppModelCatalogPort for NativeAppModelCatalog {
     }
 }
 
-impl NativeAppModelCatalog {
+impl AppModelCatalog {
     fn clone_for_future(&self) -> Self {
         Self {
             configuration: self.configuration.clone(),

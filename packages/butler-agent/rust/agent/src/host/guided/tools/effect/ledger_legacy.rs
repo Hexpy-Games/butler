@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use serde_json::{Map, Value};
 
 use crate::btcc::{BlockerRelation, EffectBlocker, EffectFailure, effect_input_sha256};
-use crate::project_ledger::{NativeProjectLedger, ProjectLedgerRecordUpdate};
+use crate::project_ledger::{ProjectLedger, ProjectLedgerRecordUpdate};
 use crate::public_text::trim_js_whitespace;
 
 pub(super) fn updates(
@@ -26,7 +26,7 @@ pub(super) fn updates(
 }
 
 pub(super) async fn classify(
-    ledger: &NativeProjectLedger,
+    ledger: &ProjectLedger,
     root: PathBuf,
     capability: &str,
     blocker: &EffectBlocker,

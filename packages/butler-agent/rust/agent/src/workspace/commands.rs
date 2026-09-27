@@ -98,7 +98,7 @@ pub(crate) struct StructuredCommandOutput {
 }
 
 #[derive(Clone)]
-pub(crate) struct NativeCommands {
+pub(crate) struct Commands {
     inner: Arc<Owner>,
 }
 
@@ -126,7 +126,7 @@ impl Drop for Active {
     }
 }
 
-impl NativeCommands {
+impl Commands {
     pub(crate) fn guarded_directory(
         root: &std::path::Path,
         cwd: Option<&str>,

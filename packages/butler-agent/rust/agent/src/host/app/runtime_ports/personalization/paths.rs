@@ -4,9 +4,9 @@ use serde_json::Value;
 
 use crate::gateway::GatewayApplicationError;
 
-use super::{NativeAppPersonalization, errors::unsafe_personalization_path};
+use super::{AppPersonalization, errors::unsafe_personalization_path};
 
-impl NativeAppPersonalization {
+impl AppPersonalization {
     pub(super) fn validate_read_destinations(&self) -> Result<(), GatewayApplicationError> {
         self.validate_paths(&[
             "butler.config.json",

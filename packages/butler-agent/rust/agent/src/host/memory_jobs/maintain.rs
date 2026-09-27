@@ -9,9 +9,9 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     cognition::{
         CognitionPathEnvironment, CognitionRegistrationService, ConfiguredCycleOptions,
-        ConfiguredCycleResult, ConfiguredCycleService, GraphConsolidationService,
-        LegacyIndexService, MemoryHealthReport, MemoryHealthService, NativeGenerationVectorAdapter,
-        NativeMemorySyncConsumer, NativeVectorOptimizeService, ProjectCapsuleService,
+        ConfiguredCycleResult, ConfiguredCycleService, GenerationVectorAdapter,
+        GraphConsolidationService, LegacyIndexService, MemoryHealthReport, MemoryHealthService,
+        MemorySyncConsumer, ProjectCapsuleService, VectorOptimizeService,
         active_memory_descriptor_exists, resolve_active_generation,
     },
     configuration::ConfigurationWrites,
@@ -20,11 +20,10 @@ use crate::{
     models::ModelConfigurationClock,
 };
 
-use crate::host::cli::consolidation::NativeConsolidationCliResult;
-use crate::host::memory_jobs::maintain_phase::NativeConfiguredPhases;
+use crate::host::cli::consolidation::ConsolidationCliResult;
+use crate::host::memory_jobs::maintain_phase::ConfiguredPhases;
 use crate::host::{
-    NativeEmbeddingOwner, NativeProcessEnvironment, NativeProcessModels, ResolvedInstallation,
-    SystemIdentity,
+    EmbeddingOwner, ProcessEnvironment, ProcessModels, ResolvedInstallation, SystemIdentity,
 };
 
 struct Options {
@@ -38,7 +37,7 @@ struct Options {
 pub(crate) async fn run(
     installation: ResolvedInstallation,
     arguments: Vec<OsString>,
-) -> NativeConsolidationCliResult {
+) -> ConsolidationCliResult {
     let requested_json = arguments.iter().any(|argument| argument == "--json");
     let options = match parse(&installation, arguments) {
         Ok(value) => value,
@@ -69,7 +68,7 @@ pub(crate) async fn run(
             );
         }
     };
-    let embedding = match NativeEmbeddingOwner::new(options.data.clone()) {
+    let embedding = match EmbeddingOwner::new(options.data.clone()) {
         Ok(value) => Arc::new(value),
         Err(error) => {
             signal_task.abort();
@@ -150,7 +149,7 @@ pub(crate) async fn run(
             outcome.failed_phases.join(",")
         )
     };
-    NativeConsolidationCliResult {
+    ConsolidationCliResult {
         stdout: if options.json {
             format!(
                 "{}\n",
@@ -174,32 +173,32 @@ async fn run_active(
     paths: &CognitionPathEnvironment,
     config: &ConfiguredCycleOptions,
     coordinator: Arc<CognitionWriteCoordinator>,
-    embedding: Arc<NativeEmbeddingOwner>,
+    embedding: Arc<EmbeddingOwner>,
     cancellation: &CancellationToken,
 ) -> crate::cognition::CognitionResult<crate::cognition::ConfiguredCycleResult> {
     let generation = resolve_active_generation(&options.data, paths)?;
     let os = nix::sys::utsname::uname()
-        .map_err(|source| error(CognitionCode::NativeEnvironmentUnavailable).with_source(source))?;
+        .map_err(|source| error(CognitionCode::EnvironmentUnavailable).with_source(source))?;
     let home = std::env::var_os("HOME")
         .map(PathBuf::from)
         .unwrap_or_default();
     let environment =
-        NativeProcessEnvironment::capture(&options.data, &home, &os.release().to_string_lossy());
+        ProcessEnvironment::capture(&options.data, &home, &os.release().to_string_lossy());
     let collation = Arc::new(
         LocaleCollation::new("en-US")
-            .map_err(|source| error(CognitionCode::NativeLocaleUnavailable).with_source(source))?,
+            .map_err(|source| error(CognitionCode::LocaleUnavailable).with_source(source))?,
     );
-    let models = NativeProcessModels::new(
+    let models = ProcessModels::new(
         options.data.clone(),
         environment.model,
         Arc::new(ConfigurationWrites::new()),
         collation,
     )
     .map_err(|error| {
-        crate::cognition::CognitionError::new(CognitionCode::NativeModelSetupFailed, error.code())
+        crate::cognition::CognitionError::new(CognitionCode::ModelSetupFailed, error.code())
     })?;
     let clock: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
-    let vectors = Arc::new(NativeGenerationVectorAdapter::new(
+    let vectors = Arc::new(GenerationVectorAdapter::new(
         options.data.clone(),
         paths.clone(),
         embedding.clone(),
@@ -213,7 +212,7 @@ async fn run_active(
         Arc::new(SystemIdentity),
     ));
     let consumer = Arc::new(
-        NativeMemorySyncConsumer::new(
+        MemorySyncConsumer::new(
             options.data.clone(),
             paths.clone(),
             registration.clone(),
@@ -227,14 +226,14 @@ async fn run_active(
         paths.clone(),
         coordinator.clone(),
     ));
-    let phases = Arc::new(NativeConfiguredPhases {
+    let phases = Arc::new(ConfiguredPhases {
         consumer: consumer.clone(),
         consolidate: GraphConsolidationService::new(
             options.data.clone(),
             paths.clone(),
             coordinator.clone(),
         ),
-        optimize: NativeVectorOptimizeService::new(
+        optimize: VectorOptimizeService::new(
             options.data.clone(),
             paths.clone(),
             coordinator.clone(),
@@ -342,8 +341,8 @@ fn expand_home(value: &str) -> PathBuf {
 fn error(code: CognitionCode) -> crate::cognition::CognitionError {
     crate::cognition::CognitionError::new(code, code.as_str())
 }
-fn fail(json_mode: bool, code: &str, message: &str, exit_code: u8) -> NativeConsolidationCliResult {
-    NativeConsolidationCliResult {
+fn fail(json_mode: bool, code: &str, message: &str, exit_code: u8) -> ConsolidationCliResult {
+    ConsolidationCliResult {
         stdout: if json_mode {
             format!(
                 "{}\n",

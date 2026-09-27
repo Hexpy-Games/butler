@@ -10,17 +10,17 @@ use crate::workspace::{
     UpsertSessionBinding,
 };
 
-use super::{NativeServiceBootstrap, NativeServiceConfiguration};
+use super::{ServiceBootstrap, ServiceConfiguration};
 
 const DEFAULT_BUTLER_SESSION_ID: &str = "butler/main";
 
-impl NativeServiceConfiguration {
+impl ServiceConfiguration {
     /// Called after the process store is open and before the first inbound Turn.
     pub(crate) async fn bootstrap_butler_session(
         &self,
         store: &SessionBindingStore,
         collation: &LocaleCollation,
-    ) -> Result<NativeServiceBootstrap, BtccError> {
+    ) -> Result<ServiceBootstrap, BtccError> {
         let session_id = self.resolve_butler_session(store, collation).await?;
         let existing = store
             .get_by_session_id(&session_id)
@@ -39,7 +39,7 @@ impl NativeServiceConfiguration {
         };
         // The caller appends source's new-registration session_status event,
         // then calls persist_session_pointer before admitting any Turn.
-        Ok(NativeServiceBootstrap {
+        Ok(ServiceBootstrap {
             binding,
             newly_registered,
         })

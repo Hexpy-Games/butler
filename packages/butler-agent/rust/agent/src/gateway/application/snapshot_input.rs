@@ -14,7 +14,7 @@ impl AppApplication {
     pub(super) async fn prepare_claimed_native(
         &self,
         claim: &QueueClaim,
-    ) -> Result<NativeAppTurn, GatewayApplicationError> {
+    ) -> Result<AppTurn, GatewayApplicationError> {
         let queued_id = claim.queued_message_id.clone();
         let claim_id = claim.claim_id.clone();
         let snapshot = self
@@ -82,7 +82,7 @@ impl AppApplication {
             .native_assets
             .resolve(snapshot.clone())
             .await?;
-        Ok(native_turn(snapshot, assets))
+        Ok(rebuilt_turn(snapshot, assets))
     }
 }
 
@@ -124,7 +124,7 @@ fn claimed_snapshot(
                     execution_controls: parse_value(&controls_json, 6)?,
                     app_queue_claim_id: Some(claim_id.to_owned()),
                     session_kind: row.get(10)?,
-                    project: project_id.map(|id| NativeProjectSnapshot {
+                    project: project_id.map(|id| ProjectSnapshot {
                         id,
                         workspace_path: workspace_path.unwrap_or_default(),
                         ledger_project_id,
@@ -207,7 +207,7 @@ fn claimed_snapshot(
     Ok(snapshot)
 }
 
-fn native_turn(snapshot: ClaimedNativeSnapshot, assets: ResolvedNativeAssets) -> NativeAppTurn {
+fn rebuilt_turn(snapshot: ClaimedNativeSnapshot, assets: ResolvedNativeAssets) -> AppTurn {
     let mut context = Map::new();
     context.insert("version".into(), Value::from(1));
     if let Some(seed) = snapshot.branch_seed.clone() {
@@ -249,7 +249,7 @@ fn native_turn(snapshot: ClaimedNativeSnapshot, assets: ResolvedNativeAssets) ->
     if let Some(value) = snapshot.plan_id.as_ref() {
         context.insert("planId".into(), value.clone().into());
     }
-    NativeAppTurn {
+    AppTurn {
         chat_id: snapshot.chat_id,
         message_id: snapshot.message_id,
         turn_id: snapshot.turn_id,

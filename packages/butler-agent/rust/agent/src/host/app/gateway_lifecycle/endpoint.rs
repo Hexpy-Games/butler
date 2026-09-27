@@ -4,15 +4,15 @@ use parking_lot::RwLock;
 use std::{net::SocketAddr, path::PathBuf};
 
 use crate::gateway::LocalAuthConfig;
-use crate::host::service::configuration::NativeAppServiceConfiguration;
+use crate::host::service::configuration::AppServiceConfiguration;
 
 #[derive(Clone, Default)]
-pub(crate) struct NativeActiveAppEndpoint {
-    current: std::sync::Arc<RwLock<Option<NativeActiveAppEndpointSnapshot>>>,
+pub(crate) struct ActiveAppEndpoint {
+    current: std::sync::Arc<RwLock<Option<ActiveAppEndpointSnapshot>>>,
 }
 
 #[derive(Clone)]
-pub(crate) struct NativeActiveAppEndpointSnapshot {
+pub(crate) struct ActiveAppEndpointSnapshot {
     pub(crate) base_url: String,
     pub(crate) local_auth: LocalAuthConfig,
     pub(crate) configured_host: String,
@@ -20,21 +20,17 @@ pub(crate) struct NativeActiveAppEndpointSnapshot {
     pub(crate) database_path: PathBuf,
 }
 
-impl NativeActiveAppEndpoint {
+impl ActiveAppEndpoint {
     pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    pub(crate) fn snapshot(&self) -> Option<NativeActiveAppEndpointSnapshot> {
+    pub(crate) fn snapshot(&self) -> Option<ActiveAppEndpointSnapshot> {
         self.current.read().clone()
     }
 
-    pub(crate) fn publish(
-        &self,
-        address: SocketAddr,
-        configuration: &NativeAppServiceConfiguration,
-    ) {
-        let snapshot = NativeActiveAppEndpointSnapshot {
+    pub(crate) fn publish(&self, address: SocketAddr, configuration: &AppServiceConfiguration) {
+        let snapshot = ActiveAppEndpointSnapshot {
             base_url: format!("http://{address}"),
             local_auth: configuration.gateway_config().local_auth,
             configured_host: configuration.host.clone(),

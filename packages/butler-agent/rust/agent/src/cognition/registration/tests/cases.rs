@@ -37,9 +37,9 @@ async fn internal_control_without_graph_projection_completes_idempotently() {
 #[tokio::test]
 async fn registered_memory_source_reads_original_scalar_after_reopen() {
     use crate::cognition::CognitionPathEnvironment;
-    use crate::context::NativeConversationSessionReference;
+    use crate::context::ConversationSessionReference;
     use crate::conversation::CanonicalMemoryReadBinding;
-    use crate::host::NativeMemorySourceReader;
+    use crate::host::MemorySourceReader;
     use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 
     let fixture = Fixture::new("source-reference");
@@ -66,7 +66,7 @@ async fn registered_memory_source_reads_original_scalar_after_reopen() {
         URL_SAFE_NO_PAD.encode(GENERATION),
         URL_SAFE_NO_PAD.encode(source_id)
     );
-    let memory = Arc::new(NativeMemorySourceReader::new(
+    let memory = Arc::new(MemorySourceReader::new(
         fixture.root.clone(),
         CognitionPathEnvironment::default(),
     ));
@@ -76,14 +76,14 @@ async fn registered_memory_source_reads_original_scalar_after_reopen() {
         project_id: Some("project".into()),
     };
     let args = json!({"source_ref":handle,"scope":"current_project","max_chars":4000});
-    let reader = NativeConversationSessionReference::new(&fixture.root.clone(), 2, memory.clone());
+    let reader = ConversationSessionReference::new(&fixture.root.clone(), 2, memory.clone());
     let first = reader.read(binding.clone(), args.clone()).await.unwrap();
     assert_eq!(first["ok"], true, "{first}");
     assert_eq!(first["text"], "Straße remembers 🙂");
     assert_eq!(first["source_kind"], "conversation");
     reader.close().await.unwrap();
 
-    let reopened = NativeConversationSessionReference::new(&fixture.root.clone(), 1, memory);
+    let reopened = ConversationSessionReference::new(&fixture.root.clone(), 1, memory);
     let again = reopened.read(binding, args).await.unwrap();
     assert_eq!(again["text"], first["text"]);
     reopened.close().await.unwrap();

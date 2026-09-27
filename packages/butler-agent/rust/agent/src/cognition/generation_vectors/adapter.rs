@@ -7,7 +7,7 @@ use unicode_normalization::UnicodeNormalization;
 use crate::cognition::{
     CandidateSearchInput, CognitionEmbeddingPort, CognitionError, CognitionPathEnvironment,
     CognitionResult, CognitionVectorSearch, EmbeddingMode, EmbeddingRequest, EmbeddingRequestClass,
-    MemoryGenerationHandle, NativeRecallVectorPort, RecallVectorFuture, VectorSearchFuture,
+    MemoryGenerationHandle, RecallVectorFuture, RecallVectorPort, VectorSearchFuture,
     generation::resolve_projection_generation,
     recall::{RecallRequest, RecallVectorMatches},
 };
@@ -18,13 +18,13 @@ use super::{
     search::{search_generation_vectors, search_vector_candidates},
 };
 
-pub(crate) struct NativeGenerationVectorAdapter {
+pub(crate) struct GenerationVectorAdapter {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
     embedding: Arc<dyn CognitionEmbeddingPort>,
 }
 
-impl NativeGenerationVectorAdapter {
+impl GenerationVectorAdapter {
     pub(crate) fn new(
         data_root: PathBuf,
         paths: CognitionPathEnvironment,
@@ -46,7 +46,7 @@ impl NativeGenerationVectorAdapter {
         let expected = generation
             .embedding
             .as_ref()
-            .ok_or_else(|| error(CognitionCode::NativeVectorUnavailable))?;
+            .ok_or_else(|| error(CognitionCode::VectorUnavailable))?;
         compatibility::preflight(expected)?;
         let source = if request.vector_queries.is_empty() {
             vec![request.cue.clone()]
@@ -101,7 +101,7 @@ impl NativeGenerationVectorAdapter {
     }
 }
 
-impl NativeRecallVectorPort for NativeGenerationVectorAdapter {
+impl RecallVectorPort for GenerationVectorAdapter {
     fn search<'a>(
         &'a self,
         generation: &'a MemoryGenerationHandle,
@@ -112,7 +112,7 @@ impl NativeRecallVectorPort for NativeGenerationVectorAdapter {
     }
 }
 
-impl CognitionVectorSearch for NativeGenerationVectorAdapter {
+impl CognitionVectorSearch for GenerationVectorAdapter {
     fn search<'a>(&'a self, input: CandidateSearchInput<'a>) -> VectorSearchFuture<'a> {
         Box::pin(async move {
             let generation =
@@ -125,7 +125,7 @@ impl CognitionVectorSearch for NativeGenerationVectorAdapter {
             let expected = generation
                 .embedding
                 .as_ref()
-                .ok_or_else(|| error(CognitionCode::NativeVectorUnavailable))?;
+                .ok_or_else(|| error(CognitionCode::VectorUnavailable))?;
             compatibility::preflight(expected)?;
             let response = self
                 .embedding

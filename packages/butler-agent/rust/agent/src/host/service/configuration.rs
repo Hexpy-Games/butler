@@ -12,16 +12,16 @@ use crate::host::installation::ResolvedInstallation;
 use crate::models::{DEFAULT_MODEL_REF, parse_model_ref};
 use crate::workspace::StoredSessionBinding;
 
-pub(crate) use app::{NativeAppCapturedDependencies, NativeAppServiceConfiguration};
+pub(crate) use app::{AppCapturedDependencies, AppServiceConfiguration};
 
-pub(crate) struct NativeServiceBootstrap {
+pub(crate) struct ServiceBootstrap {
     pub(crate) binding: StoredSessionBinding,
     /// Only a new registration emits source's session_status event.
     pub(crate) newly_registered: bool,
 }
 
-pub(crate) struct NativeServiceConfiguration {
-    pub(crate) app: NativeAppServiceConfiguration,
+pub(crate) struct ServiceConfiguration {
+    pub(crate) app: AppServiceConfiguration,
     pub(crate) installation: ResolvedInstallation,
     pub(crate) data_root: PathBuf,
     pub(crate) provider_id: String,
@@ -30,7 +30,7 @@ pub(crate) struct NativeServiceConfiguration {
     projects: Vec<(String, String)>,
 }
 
-impl NativeServiceConfiguration {
+impl ServiceConfiguration {
     pub(crate) fn capture(
         explicit_data: Option<&str>,
         user_home: &Path,
@@ -88,7 +88,7 @@ impl NativeServiceConfiguration {
                 ))
             })
             .collect();
-        let app = NativeAppServiceConfiguration::capture(&data_root);
+        let app = AppServiceConfiguration::capture(&data_root);
         Ok(Self {
             app,
             installation: installation.clone(),

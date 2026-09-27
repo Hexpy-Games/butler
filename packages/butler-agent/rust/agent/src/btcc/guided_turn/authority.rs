@@ -1,5 +1,5 @@
 use crate::btcc::TurnRecord;
-use crate::btcc::authority::contracts::{AuthorityExecutionInput, NativePrincipalAuthority};
+use crate::btcc::authority::contracts::{AuthorityExecutionInput, PrincipalAuthority};
 
 use super::work::GuidedPreparationError;
 
@@ -11,7 +11,7 @@ pub(crate) enum GuidedAuthorityDecision {
 }
 
 pub(crate) async fn guided_authority_loop_decision(
-    authority: Option<&NativePrincipalAuthority>,
+    authority: Option<&PrincipalAuthority>,
     turn: &TurnRecord,
     owner_session_id: &str,
 ) -> Result<Option<GuidedAuthorityDecision>, GuidedPreparationError> {

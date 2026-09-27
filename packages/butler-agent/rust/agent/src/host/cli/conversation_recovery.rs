@@ -3,7 +3,7 @@
 use std::{ffi::OsString, path::PathBuf, process::ExitCode, sync::Arc};
 
 use crate::host::cli::settings as settings_cli;
-use crate::host::{NativeDateParser, ResolvedInstallation, SystemIdentity};
+use crate::host::{DateParser, ResolvedInstallation, SystemIdentity};
 use crate::{
     conversation::{
         AgentConversationStore, ConversationSourceReader, ConversationStoreConfig,
@@ -108,8 +108,7 @@ async fn execute(
     options: Options,
 ) -> Result<String, crate::host::HostError> {
     let data = settings_cli::resolve_data_root_override(options.data, &installation)?;
-    let date_parser =
-        NativeDateParser::from_process().map_err(crate::host::HostError::from_error)?;
+    let date_parser = DateParser::from_process().map_err(crate::host::HostError::from_error)?;
     let parse_timestamp = |value: &str| date_parser.parse(value);
     if options.write {
         settings_cli::validate_data_mutation_paths(

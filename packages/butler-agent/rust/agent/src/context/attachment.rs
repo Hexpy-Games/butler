@@ -17,14 +17,14 @@ use crate::public_text::trim_js_whitespace;
 use super::{ContextError, ContextResult};
 use crate::context::ContextCode;
 
-pub(crate) struct NativeAttachmentContext {
+pub(crate) struct AttachmentContext {
     butler_data: PathBuf,
     permits: Arc<Semaphore>,
     jobs: TaskTracker,
     closing: Mutex<bool>,
 }
 
-impl NativeAttachmentContext {
+impl AttachmentContext {
     pub(crate) fn new(butler_data: PathBuf) -> Self {
         Self {
             butler_data,

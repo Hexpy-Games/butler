@@ -6,14 +6,13 @@ use super::contracts::{
     AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityDecisionInput,
     AuthorityDecisionResult, AuthorityError, AuthorityExecutionInput,
     AuthorityOperationalCloseResult, AuthorityOutcomeInput, AuthorityRepository, AuthorityResult,
-    AuthorityResumeSource, AuthorityStoredExecution, ConversationPermission,
-    NativePrincipalAuthority,
+    AuthorityResumeSource, AuthorityStoredExecution, ConversationPermission, PrincipalAuthority,
 };
 use super::{admission, decision, execution, identity, projection};
 use crate::btcc::storage::{BtccStorage, SqliteAuthorityRepository};
 use crate::locale::LocaleCollation;
 
-impl NativePrincipalAuthority {
+impl PrincipalAuthority {
     pub(crate) async fn retains_approval_claim(&self, turn_id: String) -> AuthorityResult<bool> {
         self.in_lane(move |repo| repo.retains_approval_claim(&turn_id))
             .await

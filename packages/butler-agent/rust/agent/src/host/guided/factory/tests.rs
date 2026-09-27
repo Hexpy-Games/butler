@@ -1,5 +1,6 @@
 //! One physical provider -> native file -> durable journal -> provider Turn.
 
+mod journaled_factory;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -19,18 +20,18 @@ use crate::btcc::{
     StorageEffectJournal, TestStorageFixture, ToolJournalRepository, TurnModelExecutionFactory,
     TurnStore, test_prepared_turn,
 };
-use crate::host::{NativeAcceptedPlanProducer, NativeGuidedCatalog, SystemIdentity};
+use crate::host::{AcceptedPlanProducer, GuidedCatalog, SystemIdentity};
 use crate::locale::LocaleCollation;
 use crate::models::{
-    ModelCatalog, ModelCatalogSnapshot, ModelCatalogSnapshotInput, NativeModelProvider,
+    ModelCatalog, ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelProvider,
     PromptUsageMetricInput, PromptUsageMetricSink, ProviderAuth, ProviderClock,
     ProviderConfigFuture, ProviderConfigRequest, ProviderObservation, ProviderObservationSink,
     ProviderPromptCachePolicy, ProviderRequestConfig, ProviderRequestConfigPort,
     ProviderRoundPolicy,
 };
 use crate::workspace::{
-    NativeCommands, NativeSessionWorkspaceRecovery, NativeWorkspaceFiles, SessionBindingStore,
-    SessionBindingStoreConfig, WorkspaceMutations, WorkspaceStorageProfile,
+    Commands, SessionBindingStore, SessionBindingStoreConfig, SessionWorkspaceRecovery,
+    WorkspaceFiles, WorkspaceMutations, WorkspaceStorageProfile,
 };
 
 struct EmptyProfiles;
@@ -205,5 +206,3 @@ impl Drop for Scratch {
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
-
-mod native_factory;

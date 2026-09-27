@@ -53,7 +53,7 @@ impl EmbeddingFailure {
 }
 
 #[derive(Clone, Deserialize, Serialize)]
-pub(crate) struct NativeEmbeddingIdentity {
+pub(crate) struct EmbeddingIdentity {
     pub(crate) schema: String,
     pub(crate) model: String,
     pub(crate) runtime: String,
@@ -73,32 +73,32 @@ pub(crate) struct NativeEmbeddingIdentity {
 }
 
 #[derive(Deserialize, Serialize)]
-pub(crate) struct NativeEmbeddingResult {
+pub(crate) struct EmbeddingResult {
     pub(crate) embeddings: Vec<Vec<f32>>,
     pub(crate) token_counts: Vec<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) embedded_texts: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) omitted_count: Option<usize>,
-    pub(crate) metadata: NativeEmbeddingIdentity,
+    pub(crate) metadata: EmbeddingIdentity,
 }
 
 #[derive(Deserialize, Serialize)]
-pub(crate) struct NativeTokenization {
+pub(crate) struct Tokenization {
     pub(crate) token_ids: Vec<Vec<u32>>,
     pub(crate) token_counts: Vec<usize>,
     pub(crate) max_tokens: usize,
 }
 
-pub(crate) struct NativeEmbeddingEngine {
+pub(crate) struct EmbeddingEngine {
     strict_tokenizer: Tokenizer,
     session: Session,
     max_tokens: usize,
-    checked_identity: NativeEmbeddingIdentity,
-    unchecked_identity: NativeEmbeddingIdentity,
+    checked_identity: EmbeddingIdentity,
+    unchecked_identity: EmbeddingIdentity,
 }
 
-impl NativeEmbeddingEngine {
+impl EmbeddingEngine {
     pub(crate) fn load(data_root: &Path) -> Result<Self, EmbeddingFailure> {
         let root = data_root.join("cache/models/Xenova/bge-m3");
         let tokenizer_file = root.join("tokenizer.json");
@@ -166,7 +166,7 @@ impl NativeEmbeddingEngine {
             return Err(EmbeddingFailure::new("embed_model_input_unsupported"));
         }
         let runtime_build_info_sha256 = hash_bytes(ort::info().as_bytes());
-        let mut checked_identity = NativeEmbeddingIdentity {
+        let mut checked_identity = EmbeddingIdentity {
             schema: "butler.native-embedding-identity.v1".to_owned(),
             model: MODEL_ID.to_owned(),
             runtime: "onnxruntime-cpu-static".to_owned(),
@@ -207,10 +207,7 @@ impl NativeEmbeddingEngine {
         })
     }
 
-    pub(crate) fn tokenize(
-        &self,
-        texts: &[String],
-    ) -> Result<NativeTokenization, EmbeddingFailure> {
+    pub(crate) fn tokenize(&self, texts: &[String]) -> Result<Tokenization, EmbeddingFailure> {
         let mut token_ids = Vec::with_capacity(texts.len());
         let mut token_counts = Vec::with_capacity(texts.len());
         for text in texts {
@@ -218,7 +215,7 @@ impl NativeEmbeddingEngine {
             token_counts.push(encoded.len());
             token_ids.push(encoded.get_ids().to_vec());
         }
-        Ok(NativeTokenization {
+        Ok(Tokenization {
             token_ids,
             token_counts,
             max_tokens: self.max_tokens,
@@ -231,7 +228,7 @@ impl NativeEmbeddingEngine {
         checked: bool,
         resplit: bool,
         max_embeddings: Option<usize>,
-    ) -> Result<NativeEmbeddingResult, EmbeddingFailure> {
+    ) -> Result<EmbeddingResult, EmbeddingFailure> {
         if texts.is_empty()
             || texts.len() > MAX_EMBEDDINGS
             || (checked && texts.iter().any(String::is_empty))
@@ -268,7 +265,7 @@ impl NativeEmbeddingEngine {
             token_counts.push(encoded.len());
             embeddings.push(self.infer(&encoded, checked)?);
         }
-        Ok(NativeEmbeddingResult {
+        Ok(EmbeddingResult {
             embeddings,
             token_counts,
             embedded_texts: (checked && resplit).then_some(embedded_texts),

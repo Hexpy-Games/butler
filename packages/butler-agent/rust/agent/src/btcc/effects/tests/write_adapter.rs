@@ -1,8 +1,8 @@
 use super::*;
 use crate::btcc::effects::workspace_file::WorkspaceFileEffectAdapter;
-use crate::capabilities::NativeCapabilities;
-use crate::host::{NativeRegisteredWrite, RegisteredWriteContext};
-use crate::workspace::{EffectFileScope, NativeWorkspaceFiles, WorkspaceMutations};
+use crate::capabilities::Capabilities;
+use crate::host::{RegisteredWrite, RegisteredWriteContext};
+use crate::workspace::{EffectFileScope, WorkspaceFiles, WorkspaceMutations};
 
 struct WorkspaceRoot(std::path::PathBuf);
 impl Drop for WorkspaceRoot {
@@ -28,9 +28,9 @@ async fn actual_registered_write_commits_then_effect_reopens_without_second_writ
         std::env::temp_dir().join(format!("butler-b2c2-registered-{}", uuid::Uuid::new_v4())),
     );
     std::fs::create_dir(&root.0).unwrap();
-    let files = Arc::new(NativeWorkspaceFiles::new(1));
+    let files = Arc::new(WorkspaceFiles::new(1));
     let mutations = Arc::new(WorkspaceMutations::new());
-    let capabilities = Arc::new(NativeCapabilities::new(
+    let capabilities = Arc::new(Capabilities::new(
         Arc::clone(&files),
         Arc::clone(&mutations),
     ));
@@ -40,7 +40,7 @@ async fn actual_registered_write_commits_then_effect_reopens_without_second_writ
         protected_roots: vec![],
         installation_root: None,
     };
-    let registered = Arc::new(NativeRegisteredWrite::new(
+    let registered = Arc::new(RegisteredWrite::new(
         capabilities,
         RegisteredWriteContext {
             workspace_reference: None,
@@ -64,7 +64,7 @@ async fn actual_registered_write_commits_then_effect_reopens_without_second_writ
         adapter: Arc::clone(&adapter),
     };
     let journal = Arc::new(StorageEffectJournal::new(storage.clone(), clock()));
-    let first = NativeEffectService::new(journal, clock())
+    let first = EffectService::new(journal, clock())
         .execute(input())
         .await
         .unwrap();
@@ -89,7 +89,7 @@ async fn actual_registered_write_commits_then_effect_reopens_without_second_writ
     let reopened = BtccStorage::open(fixture.config("effect-registered-reopen"))
         .await
         .unwrap();
-    let replay = NativeEffectService::new(
+    let replay = EffectService::new(
         Arc::new(StorageEffectJournal::new(reopened.clone(), clock())),
         clock(),
     )

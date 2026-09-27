@@ -2,36 +2,32 @@ use std::sync::Arc;
 
 use crate::{
     btcc::BtccError,
-    capabilities::NativeCapabilities,
-    skills::NativeSkills,
-    workspace::{NativeWorkspaceFiles, WorkspaceMutations},
+    capabilities::Capabilities,
+    skills::Skills,
+    workspace::{WorkspaceFiles, WorkspaceMutations},
 };
 
-use super::{NativeGuidedCatalog, NativeRuntimePaths};
+use super::{GuidedCatalog, RuntimePaths};
 
-type SkillsOwner = (
-    Arc<NativeSkills>,
-    Arc<NativeCapabilities>,
-    Arc<NativeGuidedCatalog>,
-);
+type SkillsOwner = (Arc<Skills>, Arc<Capabilities>, Arc<GuidedCatalog>);
 
 pub(super) fn open(
-    paths: &NativeRuntimePaths,
-    files: &NativeWorkspaceFiles,
+    paths: &RuntimePaths,
+    files: &WorkspaceFiles,
     mutations: &WorkspaceMutations,
 ) -> Result<SkillsOwner, BtccError> {
-    let skills = Arc::new(NativeSkills::for_installation(
+    let skills = Arc::new(Skills::for_installation(
         paths.resource_root.clone(),
         paths.data_root.clone(),
         paths.executable_path.clone(),
     ));
-    let capabilities = Arc::new(NativeCapabilities::with_skills(
+    let capabilities = Arc::new(Capabilities::with_skills(
         Arc::new(files.clone()),
         Arc::new(mutations.clone()),
         skills.clone(),
     ));
     let catalog = Arc::new(
-        NativeGuidedCatalog::load(&capabilities)
+        GuidedCatalog::load(&capabilities)
             .map_err(|e| BtccError::relayed("guided_catalog_unavailable", e.to_string()))?,
     );
     Ok((skills, capabilities, catalog))

@@ -9,7 +9,7 @@ use serde_json::json;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    cognition::{CognitionPathEnvironment, NativeCognitionPromptReader},
+    cognition::{CognitionPathEnvironment, CognitionPromptReader},
     coordination::{
         CognitionCoordinationHost, CognitionProcessStatus, CognitionWriteAcquire,
         CognitionWriteCoordinator, CoordinationResult,
@@ -115,8 +115,7 @@ async fn registered_refresh_writes_prompt_capsule_and_releases_project_lock() {
     assert!(capsule.contains("# Project Memory: alpha"));
     assert!(capsule.contains("/workspace/alpha"));
     assert!(capsule.contains("task:task-001"));
-    let prompt =
-        NativeCognitionPromptReader::new(root.clone(), CognitionPathEnvironment::default(), 1);
+    let prompt = CognitionPromptReader::new(root.clone(), CognitionPathEnvironment::default(), 1);
     assert_eq!(
         prompt.project_capsule(Some("alpha".into())).await.unwrap(),
         Some(capsule.trim().to_owned())

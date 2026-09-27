@@ -9,7 +9,7 @@ use std::{
 use serde_json::{Map, Value, json};
 
 use crate::host::ResolvedInstallation;
-use crate::host::service::configuration::NativeAppServiceConfiguration;
+use crate::host::service::configuration::AppServiceConfiguration;
 
 pub(super) struct Settings {
     value: Value,
@@ -82,7 +82,7 @@ impl Settings {
 
 pub(super) fn local_view(
     settings: &Settings,
-    app: &NativeAppServiceConfiguration,
+    app: &AppServiceConfiguration,
     running: bool,
     restart_required: bool,
 ) -> Value {

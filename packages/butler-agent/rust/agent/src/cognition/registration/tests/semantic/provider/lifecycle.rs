@@ -11,7 +11,7 @@ use std::{
 
 use tokio::sync::oneshot;
 
-use crate::cognition::{CognitionPathEnvironment, NativeMemoryRecall, RecallRequest};
+use crate::cognition::{CognitionPathEnvironment, MemoryRecall, RecallRequest};
 
 pub(super) async fn prove(data_root: PathBuf, request: RecallRequest) {
     let gate = Arc::new((Mutex::new(false), Condvar::new()));
@@ -36,7 +36,7 @@ pub(super) async fn prove(data_root: PathBuf, request: RecallRequest) {
             crate::js_date::parse_iso_millis("2026-09-19T00:00:00.000Z").unwrap()
         })
     };
-    let reader = Arc::new(NativeMemoryRecall::new(
+    let reader = Arc::new(MemoryRecall::new(
         data_root,
         CognitionPathEnvironment::default(),
         Arc::new(crate::js_date::parse_iso_millis),

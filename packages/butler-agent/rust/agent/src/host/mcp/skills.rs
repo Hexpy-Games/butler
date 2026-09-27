@@ -3,10 +3,10 @@
 use std::path::Path;
 
 use super::super::ResolvedInstallation;
-use crate::skills::NativeSkills;
+use crate::skills::Skills;
 
 pub(super) async fn list_text(installation: &ResolvedInstallation, data_root: &Path) -> String {
-    let skills = NativeSkills::new(
+    let skills = Skills::new(
         installation.resources().to_path_buf(),
         data_root.to_path_buf(),
     );

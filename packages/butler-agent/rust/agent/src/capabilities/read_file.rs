@@ -8,12 +8,12 @@ use std::time::Instant;
 use serde_json::{Value, json};
 
 use super::{CapabilityError, CapabilityInvocation, cursor, evidence, failure};
-use crate::workspace::{NativeWorkspaceFiles, ReadFileInput, WorkspaceFileRead, utf8_prefix_end};
+use crate::workspace::{ReadFileInput, WorkspaceFileRead, WorkspaceFiles, utf8_prefix_end};
 
 const DEFAULT_TOTAL_BYTES: usize = 1_048_576;
 
 pub(super) async fn execute(
-    workspace: &NativeWorkspaceFiles,
+    workspace: &WorkspaceFiles,
     input: CapabilityInvocation<'_>,
 ) -> Result<Value, CapabilityError> {
     let started = Instant::now();

@@ -9,19 +9,15 @@ use super::artifacts::{self, Snapshot};
 use super::jobs::CommandJobs;
 use super::{registered_artifacts, structured_stdout};
 use crate::btcc::BtccError;
-use crate::context::{
-    BudgetToolOutputInput, NativeToolOutput, OutputModeInput, ShellCommandResult,
-};
+use crate::context::{BudgetToolOutputInput, OutputModeInput, ShellCommandResult, ToolOutput};
 use crate::json::JsonDocument;
-use crate::workspace::{
-    GuidedCommandOutput, GuidedSummary, NativeCommands, StructuredCommandOutput,
-};
+use crate::workspace::{Commands, GuidedCommandOutput, GuidedSummary, StructuredCommandOutput};
 use tokio_util::sync::CancellationToken;
 
 mod assemble;
 
 pub(super) struct OutputResources<'a> {
-    pub output: &'a NativeToolOutput,
+    pub output: &'a ToolOutput,
     pub jobs: &'a CommandJobs,
 }
 
@@ -34,7 +30,7 @@ pub(super) struct OutputOrigin<'a> {
 
 pub(super) struct RegisteredContext<'a> {
     pub before_git: Option<registered_artifacts::GitSnapshot>,
-    pub commands: &'a NativeCommands,
+    pub commands: &'a Commands,
     pub host_environment: Arc<HashMap<String, String>>,
     pub abort: CancellationToken,
 }

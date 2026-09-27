@@ -15,7 +15,7 @@ use super::contracts::{
 use super::result;
 use super::serialize::{self, Carrier};
 
-pub(crate) struct NativeModelProvider {
+pub(crate) struct ModelProvider {
     pub(super) client: Client,
     pub(super) config: Arc<dyn ProviderRequestConfigPort>,
     pub(super) observations: Arc<dyn ProviderObservationSink>,
@@ -25,7 +25,7 @@ pub(crate) struct NativeModelProvider {
     visual_capability: Option<Arc<dyn ProviderVisualCapabilityPort>>,
 }
 
-impl NativeModelProvider {
+impl ModelProvider {
     pub(crate) fn new(
         client: Client,
         config: Arc<dyn ProviderRequestConfigPort>,
@@ -262,7 +262,7 @@ pub(super) fn safe_endpoint(endpoint: &url::Url) -> String {
     endpoint.to_string()
 }
 
-impl ModelRoundPort for NativeModelProvider {
+impl ModelRoundPort for ModelProvider {
     fn context_sizing<'a>(
         &'a self,
         request: crate::btcc::ContextSizingRequest<'a>,

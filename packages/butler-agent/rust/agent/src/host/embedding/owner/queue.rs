@@ -9,7 +9,7 @@ use tokio::{sync::oneshot, time::Instant};
 use tokio_util::sync::CancellationToken;
 
 use crate::cognition::{
-    CognitionResult, EmbeddingMode, EmbeddingRequest, EmbeddingRequestClass, NativeEmbeddingResult,
+    CognitionResult, EmbeddingMode, EmbeddingRequest, EmbeddingRequestClass, EmbeddingResult,
 };
 
 use super::error;
@@ -43,7 +43,7 @@ pub(super) struct Pending {
     pub(super) max_embeddings: Option<usize>,
     pub(super) cancellation: CancellationToken,
     pub(super) deadline: Option<Instant>,
-    pub(super) response: oneshot::Sender<CognitionResult<NativeEmbeddingResult>>,
+    pub(super) response: oneshot::Sender<CognitionResult<EmbeddingResult>>,
 }
 
 impl QueueState {

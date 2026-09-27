@@ -11,7 +11,7 @@ pub(in crate::gateway::application) async fn sync_chat_once(
     context: &ProjectionContext,
     chat_id: &str,
 ) -> Result<bool, GatewayApplicationError> {
-    let session_id = super::super::native_preparation::session_hint(chat_id);
+    let session_id = crate::gateway::application::snapshot_input::session_hint(chat_id);
     let file_name = format!(
         "{}.jsonl",
         session_id.replace(

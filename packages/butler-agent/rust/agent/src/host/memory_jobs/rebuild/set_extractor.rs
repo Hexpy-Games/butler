@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 use super::{SystemIdentity, signals};
-use crate::host::{NativeProcessEnvironment, NativeProcessModels};
+use crate::host::{ProcessEnvironment, ProcessModels};
 use crate::{
     cognition::{
         CognitionError, CognitionPathEnvironment, ProjectionModelPolicyInput,
@@ -29,28 +29,27 @@ pub(super) async fn run(
         return Err(error(CognitionCode::MemoryRebuildInvalidModelPolicy));
     }
     let os = nix::sys::utsname::uname()
-        .map_err(|source| error(CognitionCode::NativeEnvironmentUnavailable).with_source(source))?;
+        .map_err(|source| error(CognitionCode::EnvironmentUnavailable).with_source(source))?;
     let home = std::env::var_os("HOME")
         .map(std::path::PathBuf::from)
         .unwrap_or_default();
-    let environment =
-        NativeProcessEnvironment::capture(data, &home, &os.release().to_string_lossy());
+    let environment = ProcessEnvironment::capture(data, &home, &os.release().to_string_lossy());
     let collation = Arc::new(
         LocaleCollation::new("en-US")
-            .map_err(|source| error(CognitionCode::NativeLocaleUnavailable).with_source(source))?,
+            .map_err(|source| error(CognitionCode::LocaleUnavailable).with_source(source))?,
     );
-    let models = NativeProcessModels::new(
+    let models = ProcessModels::new(
         data.to_owned(),
         environment.model,
         Arc::new(ConfigurationWrites::new()),
         collation,
     )
-    .map_err(|source| error(CognitionCode::NativeModelSetupFailed).with_source(source))?;
+    .map_err(|source| error(CognitionCode::ModelSetupFailed).with_source(source))?;
     let current = models
         .configuration
         .read()
         .await
-        .map_err(|source| error(CognitionCode::NativeModelSetupFailed).with_source(source))?;
+        .map_err(|source| error(CognitionCode::ModelSetupFailed).with_source(source))?;
     for (model, effort) in [
         (&policy.primary_model, &policy.primary_effort),
         (&policy.fallback_model, &policy.fallback_effort),
@@ -71,7 +70,7 @@ pub(super) async fn run(
     );
     let cancellation = CancellationToken::new();
     let signal_task = signals(cancellation.clone()).map_err(|message| {
-        CognitionError::new(CognitionCode::NativeSignalUnavailable, message.to_string())
+        CognitionError::new(CognitionCode::SignalUnavailable, message.to_string())
             .with_source(message)
     })?;
     let result = set_extractor_memory_generation(

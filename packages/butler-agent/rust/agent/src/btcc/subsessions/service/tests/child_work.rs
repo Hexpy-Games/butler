@@ -171,7 +171,7 @@ async fn child_creation_binds_work(
         scopes: Mutex::new(Vec::new()),
     });
     let work = Arc::new(DurableWorkService::new(work_repository.clone()));
-    let service = NativeSubsessionService::new(
+    let service = SubsessionService::new(
         repository.clone(),
         bindings.clone(),
         Arc::new(EmptyQueue),

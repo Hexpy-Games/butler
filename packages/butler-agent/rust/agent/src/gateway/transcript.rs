@@ -28,12 +28,12 @@ struct State {
     worker: Option<JoinHandle<()>>,
 }
 
-pub(crate) struct NativeTranscriptWriter {
+pub(crate) struct TranscriptWriter {
     clock: Arc<dyn AppIdentityClock>,
     state: Mutex<State>,
 }
 
-impl NativeTranscriptWriter {
+impl TranscriptWriter {
     pub(crate) fn new(
         data_root: PathBuf,
         clock: Arc<dyn AppIdentityClock>,

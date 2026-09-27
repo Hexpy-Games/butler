@@ -17,5 +17,5 @@ mod validate;
 mod vector;
 
 pub(crate) use metrics::{RecallMetric, RecallMetricSink};
-pub(crate) use service::NativeMemoryRecall;
-pub(crate) use vector::{NativeRecallVectorPort, RecallVectorFuture};
+pub(crate) use service::MemoryRecall;
+pub(crate) use vector::{RecallVectorFuture, RecallVectorPort};

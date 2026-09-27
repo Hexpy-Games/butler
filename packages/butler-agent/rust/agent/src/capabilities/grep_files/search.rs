@@ -5,8 +5,7 @@ use std::time::Instant;
 use regress::Regex;
 
 use crate::workspace::{
-    GrepCandidate, GrepMatch, GrepRead, NativeWorkspaceFiles, WorkspaceListEntry,
-    WorkspaceListResult,
+    GrepCandidate, GrepMatch, GrepRead, WorkspaceFiles, WorkspaceListEntry, WorkspaceListResult,
 };
 
 pub(super) struct CandidateResult {
@@ -97,7 +96,7 @@ pub(super) fn fit(mut item: GrepMatch, available: usize) -> (GrepMatch, usize, b
 }
 
 pub(super) async fn execute(
-    owner: &NativeWorkspaceFiles,
+    owner: &WorkspaceFiles,
     root: PathBuf,
     listed: &WorkspaceListResult,
     matcher: Arc<Regex>,

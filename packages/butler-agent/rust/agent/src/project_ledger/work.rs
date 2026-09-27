@@ -30,18 +30,18 @@ use crate::btcc::{
     WorkView,
 };
 
-use super::NativeProjectLedger;
+use super::ProjectLedger;
 
 fn invalid(code: &'static str) -> BtccError {
     BtccError::relayed(code, code)
 }
 
-pub(crate) struct NativeProjectWork {
+pub(crate) struct ProjectWork {
     shared: Arc<Shared>,
 }
 
 struct Shared {
-    ledger: NativeProjectLedger,
+    ledger: ProjectLedger,
     projection: Arc<dyn ProjectWorkRuntimeProjection>,
     results: Arc<dyn ProjectWorkResultRuntime>,
     legacy: Arc<dyn ProjectWorkLegacyRuntime>,
@@ -62,9 +62,9 @@ struct MutationState {
     tasks: TaskTracker,
 }
 
-impl NativeProjectWork {
+impl ProjectWork {
     pub(crate) fn new(
-        ledger: NativeProjectLedger,
+        ledger: ProjectLedger,
         projection: Arc<dyn ProjectWorkRuntimeProjection>,
         results: Arc<dyn ProjectWorkResultRuntime>,
         legacy: Arc<dyn ProjectWorkLegacyRuntime>,

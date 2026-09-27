@@ -6,11 +6,11 @@ use crate::context::ContextCode;
 use crate::context::{ContextError, ContextResult};
 use crate::host::time::timezone_data::TimeZoneData;
 
-pub(crate) struct NativeDateParser {
+pub(crate) struct DateParser {
     zone: tz::TimeZone,
 }
 
-impl NativeDateParser {
+impl DateParser {
     /// Capture the process timezone once. An explicit TZ uses the same compiled
     /// zone rules as named-zone callers; otherwise use the OS localtime file.
     pub(crate) fn from_process() -> ContextResult<Self> {

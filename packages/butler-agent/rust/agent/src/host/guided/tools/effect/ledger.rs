@@ -12,16 +12,16 @@ use crate::btcc::{
 };
 use crate::json::JsonDocument;
 use crate::project_ledger::{
-    LedgerEffectReconciliation, LedgerEffectRequest, NativeProjectLedger,
-    ProjectLedgerRecordUpdate, ProjectLedgerToolScopeLookup,
+    LedgerEffectReconciliation, LedgerEffectRequest, ProjectLedger, ProjectLedgerRecordUpdate,
+    ProjectLedgerToolScopeLookup,
 };
 use crate::workspace::WorkspaceReference;
 
-use super::super::NativeGuidedTools;
+use super::super::GuidedTools;
 use super::{ledger_input, ledger_legacy};
 
 pub(super) async fn prepare(
-    owner: &NativeGuidedTools,
+    owner: &GuidedTools,
     name: &str,
     args: &serde_json::Map<String, Value>,
 ) -> Result<(String, Value, std::sync::Arc<dyn EffectAdapter>), crate::btcc::BtccError> {
@@ -89,7 +89,7 @@ pub(super) struct LedgerEffectAdapter {
     pub root: PathBuf,
     pub workspace: PathBuf,
     pub workspace_reference: Option<WorkspaceReference>,
-    pub ledger: NativeProjectLedger,
+    pub ledger: ProjectLedger,
 }
 
 impl LedgerEffectAdapter {

@@ -3,14 +3,14 @@ use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
 use super::{
-    client::{McpClientError, NativeMcpClient, failure},
+    client::{McpClient, McpClientError, failure},
     registry::server_capability_projection,
 };
 
 const SERVER_ID: &str = "zai-vision";
 const TOOL_NAME: &str = "analyze_image";
 
-impl NativeMcpClient {
+impl McpClient {
     /// Probes the current enabled Z.AI Vision server and hashes the same
     /// route/server/schema facts frozen by the source image admission.
     pub(crate) async fn zai_vision_tool_capability_digest(

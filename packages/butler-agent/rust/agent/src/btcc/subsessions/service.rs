@@ -92,7 +92,7 @@ pub(crate) struct WorkerDelegationRequest {
 }
 
 #[derive(Clone)]
-pub(crate) struct NativeSubsessionService {
+pub(crate) struct SubsessionService {
     repository: SqliteSubsessionRepository,
     bindings: SessionBindingStore,
     queue: Arc<dyn SubsessionChildQueue>,
@@ -101,7 +101,7 @@ pub(crate) struct NativeSubsessionService {
     now: Arc<dyn Fn() -> String + Send + Sync>,
 }
 
-impl NativeSubsessionService {
+impl SubsessionService {
     pub(crate) fn new(
         repository: SqliteSubsessionRepository,
         bindings: SessionBindingStore,

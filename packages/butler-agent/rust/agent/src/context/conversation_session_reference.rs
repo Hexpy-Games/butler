@@ -23,7 +23,7 @@ use crate::conversation::{
 use super::{ContextError, ContextResult, MemorySourceReferencePort, ResolvedMemorySource};
 use crate::context::ContextCode;
 
-pub(crate) struct NativeConversationSessionReference {
+pub(crate) struct ConversationSessionReference {
     path: PathBuf,
     memory_sources: Arc<dyn MemorySourceReferencePort>,
     permits: Arc<Semaphore>,
@@ -31,7 +31,7 @@ pub(crate) struct NativeConversationSessionReference {
     closing: Mutex<bool>,
 }
 
-impl NativeConversationSessionReference {
+impl ConversationSessionReference {
     pub(crate) fn new(
         data_root: &Path,
         read_concurrency: usize,

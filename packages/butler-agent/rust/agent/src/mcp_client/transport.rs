@@ -13,7 +13,7 @@ use tokio_util::sync::CancellationToken;
 use url::Url;
 
 use super::{
-    client::{McpClientError, NativeMcpClient},
+    client::{McpClient, McpClientError},
     registry::{McpServerConfig, McpTransportKind, ResolvedServerSecrets},
     session::{Operation, run_session, run_session_with_child},
     sse_transport::{LegacySseTransport, headers as sse_headers, streamable_headers},
@@ -22,7 +22,7 @@ use super::{
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 const MIN_TIMEOUT: Duration = Duration::from_secs(1);
 
-impl NativeMcpClient {
+impl McpClient {
     pub(super) async fn with_server(
         &self,
         server: &McpServerConfig,

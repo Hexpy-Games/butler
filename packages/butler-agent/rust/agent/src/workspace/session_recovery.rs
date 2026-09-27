@@ -11,14 +11,11 @@ use std::sync::Arc;
 
 use tokio_util::sync::CancellationToken;
 
-use super::{
-    NativeCommands, NativeWorkspaceFiles, SessionBindingStore, WorkspaceReference, WorkspaceResult,
-};
+use super::{Commands, SessionBindingStore, WorkspaceFiles, WorkspaceReference, WorkspaceResult};
 pub(crate) use authority::SessionWorkspaceAuthority;
 use authority::resolve_authority;
 pub(crate) use git::ProjectWorkspaceInspection;
-use git::inspect_project_workspace;
-use git::validate_linked_worktree;
+use git::{inspect_project_workspace, validate_linked_worktree};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum SessionWorkspaceValidation {
@@ -33,18 +30,18 @@ pub(crate) struct RecoveredSessionWorkspaceReference {
 }
 
 #[derive(Clone)]
-pub(crate) struct NativeSessionWorkspaceRecovery {
+pub(crate) struct SessionWorkspaceRecovery {
     bindings: SessionBindingStore,
-    commands: NativeCommands,
-    files: NativeWorkspaceFiles,
+    commands: Commands,
+    files: WorkspaceFiles,
     host_environment: Arc<HashMap<String, String>>,
 }
 
-impl NativeSessionWorkspaceRecovery {
+impl SessionWorkspaceRecovery {
     pub(crate) fn new(
         bindings: SessionBindingStore,
-        commands: NativeCommands,
-        files: NativeWorkspaceFiles,
+        commands: Commands,
+        files: WorkspaceFiles,
         host_environment: Arc<HashMap<String, String>>,
     ) -> Self {
         Self {

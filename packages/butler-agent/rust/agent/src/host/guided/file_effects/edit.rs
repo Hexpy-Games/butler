@@ -13,7 +13,7 @@ use crate::btcc::{
 };
 use crate::workspace::{prepare_exact_text, read_effect_edit_target};
 
-use super::{NativeGuidedFileEffects, PreparedGuidedFileEffect};
+use super::{GuidedFileEffects, PreparedGuidedFileEffect};
 
 mod legacy;
 
@@ -73,7 +73,7 @@ fn sha(text: &str) -> String {
 }
 
 pub(super) async fn prepare(
-    owner: &NativeGuidedFileEffects,
+    owner: &GuidedFileEffects,
     args: &Value,
     work: &WorkView,
     occurrence: &str,
@@ -150,7 +150,7 @@ pub(super) async fn prepare(
     })
 }
 
-fn decode(args: &Value, owner: &NativeGuidedFileEffects) -> Result<(Vec<Edit>, bool), BtccError> {
+fn decode(args: &Value, owner: &GuidedFileEffects) -> Result<(Vec<Edit>, bool), BtccError> {
     let record = args.as_object().ok_or_else(|| {
         rejected(
             "edit_file_invalid_input",

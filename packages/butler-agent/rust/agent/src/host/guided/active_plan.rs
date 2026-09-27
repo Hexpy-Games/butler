@@ -4,20 +4,20 @@
 use std::path::Path;
 
 use crate::btcc::{ProjectLedgerPlan, ProjectLedgerPlanInput, accepted_project_plan};
-use crate::project_ledger::{NativeProjectLedger, PlanRecordRead, ProjectLedgerReadError};
+use crate::project_ledger::{PlanRecordRead, ProjectLedger, ProjectLedgerReadError};
 
 #[derive(Clone)]
-pub(crate) struct NativeAcceptedPlanProducer {
-    ledger: NativeProjectLedger,
+pub(crate) struct AcceptedPlanProducer {
+    ledger: ProjectLedger,
 }
 
-impl NativeAcceptedPlanProducer {
+impl AcceptedPlanProducer {
     #[cfg(test)]
     pub(crate) fn new(butler_data: &Path, max_blocking_reads: usize) -> Self {
-        Self::from_ledger(NativeProjectLedger::new(butler_data, max_blocking_reads))
+        Self::from_ledger(ProjectLedger::new(butler_data, max_blocking_reads))
     }
 
-    pub(crate) fn from_ledger(ledger: NativeProjectLedger) -> Self {
+    pub(crate) fn from_ledger(ledger: ProjectLedger) -> Self {
         Self { ledger }
     }
 
@@ -86,7 +86,7 @@ mod tests {
         ] {
             fs::write(root.join(path), source[key].as_str().unwrap()).unwrap();
         }
-        let producer = NativeAcceptedPlanProducer::new(&data, 1);
+        let producer = AcceptedPlanProducer::new(&data, 1);
         let read = |id: &str| {
             producer.read_accepted(
                 workspace.to_string_lossy().into_owned(),

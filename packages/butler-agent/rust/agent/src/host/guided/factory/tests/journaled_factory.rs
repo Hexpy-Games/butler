@@ -1,7 +1,7 @@
 use super::*;
 
 #[tokio::test]
-async fn native_factory_reads_physical_file_journals_result_and_continues_provider() {
+async fn factory_reads_physical_file_journals_result_and_continues_provider() {
     let fixture = TestStorageFixture::activated();
     let storage = BtccStorage::open(fixture.config("native-factory-read"))
         .await
@@ -60,12 +60,12 @@ async fn native_factory_reads_physical_file_journals_result_and_continues_provid
         .unwrap();
     let turn = documents.find_turn(&turn.turn_id).await.unwrap().unwrap();
 
-    let files = NativeWorkspaceFiles::new(2);
-    let capabilities = Arc::new(NativeCapabilities::new(
+    let files = WorkspaceFiles::new(2);
+    let capabilities = Arc::new(Capabilities::new(
         Arc::new(files.clone()),
         Arc::new(WorkspaceMutations::new()),
     ));
-    let catalog = Arc::new(NativeGuidedCatalog::load(&capabilities).unwrap());
+    let catalog = Arc::new(GuidedCatalog::load(&capabilities).unwrap());
     let bindings = SessionBindingStore::open(SessionBindingStoreConfig {
         path: scratch.0.join("sessions.sqlite"),
         storage_profile: WorkspaceStorageProfile::Durable,
@@ -73,7 +73,7 @@ async fn native_factory_reads_physical_file_journals_result_and_continues_provid
     })
     .await
     .unwrap();
-    let commands = NativeCommands::new();
+    let commands = Commands::new();
     let work = Arc::new(DurableWorkService::new(Arc::new(
         SessionWorkRepository::new(storage.clone(), Arc::new(|| "now".into())),
     )));
@@ -81,27 +81,27 @@ async fn native_factory_reads_physical_file_journals_result_and_continues_provid
         storage.clone(),
         Arc::new(|| "now".into()),
     ));
-    let subsessions = Arc::new(crate::btcc::NativeSubsessionService::new(
+    let subsessions = Arc::new(crate::btcc::SubsessionService::new(
         crate::btcc::SqliteSubsessionRepository::new(storage.clone()),
         bindings.clone(),
-        Arc::new(crate::host::runtime::NativeSubsessionQueue(Arc::new(
-            crate::gateway::NativeInboundQueue::new(&scratch.0.clone()),
+        Arc::new(crate::host::runtime::SubsessionQueue(Arc::new(
+            crate::gateway::InboundQueue::new(&scratch.0.clone()),
         ))),
         Arc::new(EmptyProfiles),
         work.clone(),
         Arc::new(|| "now".into()),
     ));
-    let preparation = NativeGuidedPreparation {
+    let preparation = GuidedPreparation {
         catalog,
-        workspace: NativeSessionWorkspaceRecovery::new(
+        workspace: SessionWorkspaceRecovery::new(
             bindings.clone(),
             commands.clone(),
             files.clone(),
             Arc::new(HashMap::new()),
         ),
-        accepted_plans: NativeAcceptedPlanProducer::new(&scratch.0, 1),
+        accepted_plans: AcceptedPlanProducer::new(&scratch.0, 1),
         work,
-        authority: Arc::new(crate::btcc::NativePrincipalAuthority::new(
+        authority: Arc::new(crate::btcc::PrincipalAuthority::new(
             storage.clone(),
             Arc::new(LocaleCollation::new("en-US").unwrap()),
             Arc::new(|| "now".into()),
@@ -118,7 +118,7 @@ async fn native_factory_reads_physical_file_journals_result_and_continues_provid
         operation_replay_flag: "disabled".into(),
         subsessions: subsessions.clone(),
     };
-    let output_models = crate::host::NativeProcessModels::new(
+    let output_models = crate::host::ProcessModels::new(
         scratch.0.clone(),
         Default::default(),
         Arc::new(crate::configuration::ConfigurationWrites::new()),
@@ -139,7 +139,7 @@ async fn native_factory_reads_physical_file_journals_result_and_continues_provid
         )),
         output_models.provider.clone(),
     ));
-    let tool_output = crate::host::native_tool_output(
+    let tool_output = crate::host::open_tool_output(
         scratch.0.clone(),
         Arc::new(crate::context::ContextBudgetOwner::new(
             output_models.configuration.clone(),
@@ -157,7 +157,7 @@ async fn native_factory_reads_physical_file_journals_result_and_continues_provid
     )
     .await
     .unwrap();
-    let conversation_tools = Arc::new(crate::context::NativeConversationTools::new(
+    let conversation_tools = Arc::new(crate::context::ConversationTools::new(
         scratch.0.clone(),
         Arc::new(crate::context::ContextConversation::new(
             conversation_store.clone(),
@@ -167,33 +167,31 @@ async fn native_factory_reads_physical_file_journals_result_and_continues_provid
         )),
         1,
     ));
-    let command = Arc::new(crate::host::guided::command::NativeGuidedCommand::new(
+    let command = Arc::new(crate::host::guided::command::GuidedCommand::new(
         commands.clone(),
         tool_output.clone(),
         Arc::new(HashMap::new()),
     ));
-    let project_tools = Arc::new(
-        crate::host::guided::project_tools::NativeGuidedProjectTools::new(
-            crate::project_ledger::NativeProjectLedger::new(&scratch.0, 1),
-            commands.clone(),
-            Arc::new(HashMap::new()),
-            crate::work_records::WorkRecordReader::new(&scratch.0),
-            Arc::new(LocaleCollation::new("en-US").unwrap()),
-        ),
-    );
-    let work_streams = Arc::new(crate::host::NativeWorkStreams::open(scratch.0.clone()).unwrap());
-    let automations = crate::operations::NativeAutomationService::open(
+    let project_tools = Arc::new(crate::host::guided::project_tools::GuidedProjectTools::new(
+        crate::project_ledger::ProjectLedger::new(&scratch.0, 1),
+        commands.clone(),
+        Arc::new(HashMap::new()),
+        crate::work_records::WorkRecordReader::new(&scratch.0),
+        Arc::new(LocaleCollation::new("en-US").unwrap()),
+    ));
+    let work_streams = Arc::new(crate::host::WorkStreams::open(scratch.0.clone()).unwrap());
+    let automations = crate::operations::AutomationService::open(
         &scratch.0.clone(),
         crate::operations::AutomationDependencies {
             parse_date: Arc::new(crate::js_date::parse_iso_millis),
             now_millis: Arc::new(|| 0),
-            enqueue: Arc::new(crate::host::NativeAutomationQueue(Arc::new(
-                crate::gateway::NativeInboundQueue::new(&scratch.0.clone()),
+            enqueue: Arc::new(crate::host::AutomationQueue(Arc::new(
+                crate::gateway::InboundQueue::new(&scratch.0.clone()),
             ))),
             scheduler_interval: std::time::Duration::from_secs(60),
         },
     );
-    let factory = NativeGuidedTurnFactory {
+    let factory = GuidedTurnFactoryAdapter {
         preparation,
         documents: documents.clone(),
         effects: Arc::new(StorageEffectJournal::new(
@@ -203,23 +201,21 @@ async fn native_factory_reads_physical_file_journals_result_and_continues_provid
         capabilities,
         command: command.clone(),
         project_tools: project_tools.clone(),
-        tool_artifacts: Arc::new(crate::host::NativeToolArtifactReader::new(
-            tool_output.clone(),
-        )),
+        tool_artifacts: Arc::new(crate::host::ToolArtifactReader::new(tool_output.clone())),
         conversation_tools: conversation_tools.clone(),
-        memory_query: Arc::new(crate::cognition::NativeExactMemoryQuery::new(
+        memory_query: Arc::new(crate::cognition::ExactMemoryQuery::new(
             &scratch.0.clone(),
             1,
         )),
-        conversation_reference: Arc::new(crate::context::NativeConversationSessionReference::new(
+        conversation_reference: Arc::new(crate::context::ConversationSessionReference::new(
             &scratch.0.clone(),
             1,
-            Arc::new(crate::host::NativeMemorySourceReader::new(
+            Arc::new(crate::host::MemorySourceReader::new(
                 scratch.0.clone(),
                 Default::default(),
             )),
         )),
-        memory_recall: Arc::new(crate::cognition::NativeMemoryRecall::new(
+        memory_recall: Arc::new(crate::cognition::MemoryRecall::new(
             scratch.0.clone(),
             Default::default(),
             Arc::new(crate::js_date::parse_iso_millis),
@@ -234,19 +230,15 @@ async fn native_factory_reads_physical_file_journals_result_and_continues_provid
             Arc::new(|| "now".into()),
         )),
         compactions: ContextCompactionRepository::new(storage.clone()),
-        attachment_context: Arc::new(crate::context::NativeAttachmentContext::new(
-            scratch.0.clone(),
-        )),
-        verified_image_payload: Arc::new(crate::gateway::NativeAppImageFiles::new(
-            &scratch.0.clone(),
-        )),
+        attachment_context: Arc::new(crate::context::AttachmentContext::new(scratch.0.clone())),
+        verified_image_payload: Arc::new(crate::gateway::AppImageFiles::new(&scratch.0.clone())),
         butler_data: scratch.0.clone(),
         installation_root: scratch.0.clone(),
         protected_ledger_roots: vec![],
         subsessions,
         work_streams: work_streams.clone(),
         automations: automations.clone(),
-        mcp_client: Arc::new(crate::mcp_client::NativeMcpClient::new(
+        mcp_client: Arc::new(crate::mcp_client::McpClient::new(
             scratch.0.clone(),
             HashMap::new(),
         )),
@@ -268,7 +260,7 @@ async fn native_factory_reads_physical_file_journals_result_and_continues_provid
                 crate::operations::MetricFiles::new(scratch.0.clone()),
             ))),
         )),
-        session_worktrees: crate::workspace::NativeSessionWorktrees::new(
+        session_worktrees: crate::workspace::SessionWorktrees::new(
             bindings.clone(),
             commands.clone(),
             files.clone(),
@@ -280,7 +272,7 @@ async fn native_factory_reads_physical_file_journals_result_and_continues_provid
             scratch.0.clone(),
             &web_endpoint,
         )),
-        app_endpoint: Arc::new(crate::host::NativeActiveAppEndpoint::new()),
+        app_endpoint: Arc::new(crate::host::ActiveAppEndpoint::new()),
     };
     let (endpoint, served) = loopback(&web_page_url).await;
     let model_catalog = Arc::new(ModelCatalog::new().unwrap());
@@ -299,7 +291,7 @@ async fn native_factory_reads_physical_file_journals_result_and_continues_provid
             )
             .unwrap(),
     );
-    let model = Arc::new(NativeModelProvider::new(
+    let model = Arc::new(ModelProvider::new(
         crate::models::provider_http_client().unwrap(),
         Arc::new(Config { snapshot, endpoint }),
         Arc::new(Observations),

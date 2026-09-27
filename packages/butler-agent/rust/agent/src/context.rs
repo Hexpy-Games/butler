@@ -21,15 +21,15 @@ mod tool_artifact_slice;
 mod tool_output;
 
 pub(crate) use crate::conversation::text_for_message;
-pub(crate) use attachment::NativeAttachmentContext;
+pub(crate) use attachment::AttachmentContext;
 pub(crate) use budget::*;
 pub(crate) use compaction::{
     CompactionMetricEvent, ContextCompactionMetricSink, compact_transcript,
     compaction_snapshot_path,
 };
 pub(crate) use conversation::*;
-pub(crate) use conversation_session_reference::NativeConversationSessionReference;
-pub(crate) use conversation_tools::NativeConversationTools;
+pub(crate) use conversation_session_reference::ConversationSessionReference;
+pub(crate) use conversation_tools::ConversationTools;
 pub(crate) use error::{ContextCode, ContextError};
 pub(crate) use image::{
     ImageCapabilityEvidence, ImageCarrierTuple, ImageSanitizerInput, ImageSanitizerLimits,
@@ -43,7 +43,7 @@ pub(crate) use memory_source::{
 pub(crate) use pdf::{PdfTextError, extract_pdf_text, pdf_sidecar_text};
 pub(crate) use prompt::*;
 pub(crate) use recent::{RecentConversationInput, include_recent_context};
-pub(crate) use round_projection::NativeContextPort;
+pub(crate) use round_projection::ContextPortAdapter;
 #[cfg(unix)]
 pub(crate) use status::evaluate_status_budget;
 pub(crate) use status_conversation::{
@@ -55,9 +55,9 @@ pub(crate) use status_transcript_activity::{
 };
 pub(crate) use tool_artifact_slice::{ExactText, ToolArtifactTextSlice};
 pub(crate) use tool_output::{
-    ArtifactStream, BudgetToolOutputInput, BudgetedToolOutput, NativeToolOutput, OutputModeInput,
+    ArtifactStream, BudgetToolOutputInput, BudgetedToolOutput, OutputModeInput,
     PruneMetricObserver, PruneToolOutputInput, PruneToolOutputResult, ReadToolEvidenceInput,
-    ReadToolOutputInput, ShellCommandResult, ToolOutputIdentity,
+    ReadToolOutputInput, ShellCommandResult, ToolOutput, ToolOutputIdentity,
 };
 
 pub(crate) type ContextResult<T> = Result<T, ContextError>;

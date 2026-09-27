@@ -8,8 +8,8 @@ use super::SessionWorkspaceValidation;
 use super::path::{canonical_path, listed_worktree_matches, precheck_linked_worktree};
 use crate::workspace::WorkspaceCode;
 use crate::workspace::{
-    CommandStep, NativeCommands, NativeWorkspaceFiles, StructuredCommandInput,
-    StructuredCommandOutput, WorkspaceError, WorkspaceResult,
+    CommandStep, Commands, StructuredCommandInput, StructuredCommandOutput, WorkspaceError,
+    WorkspaceFiles, WorkspaceResult,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -20,8 +20,8 @@ pub(crate) enum ProjectWorkspaceInspection {
 }
 
 pub(super) async fn inspect_project_workspace(
-    commands: &NativeCommands,
-    files: &NativeWorkspaceFiles,
+    commands: &Commands,
+    files: &WorkspaceFiles,
     host_environment: &Arc<HashMap<String, String>>,
     workspace_path: &str,
     abort: CancellationToken,
@@ -114,8 +114,8 @@ pub(super) async fn inspect_project_workspace(
 }
 
 pub(super) async fn validate_linked_worktree(
-    commands: &NativeCommands,
-    files: &NativeWorkspaceFiles,
+    commands: &Commands,
+    files: &WorkspaceFiles,
     host_environment: &Arc<HashMap<String, String>>,
     anchor: &str,
     target: &str,
@@ -249,7 +249,7 @@ fn command_failure_code(
 }
 
 async fn git(
-    commands: &NativeCommands,
+    commands: &Commands,
     host_environment: &Arc<HashMap<String, String>>,
     cwd: &str,
     args: &[&str],
