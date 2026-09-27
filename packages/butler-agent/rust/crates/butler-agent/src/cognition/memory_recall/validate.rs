@@ -1,7 +1,7 @@
 //! Source-order validation and canonical timestamp normalization.
 
 use crate::cognition::CognitionCode;
-use crate::public_text::fixed_regex;
+use butler_core::public_text::fixed_regex;
 use std::sync::OnceLock;
 
 use regex::Regex;
@@ -10,7 +10,7 @@ use crate::cognition::{
     CognitionError, CognitionResult,
     recall::{RecallProjectFilter, RecallRequest, RecallScope},
 };
-use crate::segmentation::grapheme_segments;
+use butler_core::segmentation::grapheme_segments;
 
 pub(super) fn normalize(
     mut input: RecallRequest,
@@ -23,11 +23,11 @@ pub(super) fn normalize(
         &input.runtime.native_operation_id,
     ]
     .iter()
-    .any(|value| crate::public_text::trim_js_whitespace(value).is_empty())
+    .any(|value| butler_core::public_text::trim_js_whitespace(value).is_empty())
     {
         return Err(failure(CognitionCode::InvalidRuntimeBinding));
     }
-    if crate::public_text::trim_js_whitespace(&input.cue).is_empty()
+    if butler_core::public_text::trim_js_whitespace(&input.cue).is_empty()
         || grapheme_segments(&input.cue).count() > 2048
     {
         return Err(failure(CognitionCode::InvalidArguments));
@@ -90,7 +90,7 @@ fn timestamp(text: &str, parse_date: &impl Fn(&str) -> Option<i64>) -> Cognition
         return Err(failure(CognitionCode::InvalidArguments));
     }
     let millis = parse_date(text).ok_or_else(|| failure(CognitionCode::InvalidArguments))?;
-    crate::js_date::format_iso_millis(millis)
+    butler_core::js_date::format_iso_millis(millis)
         .ok_or_else(|| failure(CognitionCode::InvalidArguments))
 }
 

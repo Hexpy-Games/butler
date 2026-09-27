@@ -15,7 +15,7 @@ const SESSION_COLUMNS: &str = "session_id, role, lifecycle_state, project_id, ap
 
 fn normalize_thread_id(value: Option<&str>) -> String {
     value
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
         .unwrap_or_default()
         .into()
@@ -45,7 +45,7 @@ fn dedupe_transport_bindings(
 }
 
 fn encode_metadata(metadata: &Map<String, Value>) -> WorkspaceResult<String> {
-    crate::json::stringify(&Value::Object(metadata.clone())).map_err(WorkspaceError::json)
+    butler_core::json::stringify(&Value::Object(metadata.clone())).map_err(WorkspaceError::json)
 }
 
 fn parse_metadata(raw: Option<&String>) -> Option<Map<String, Value>> {

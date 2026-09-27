@@ -191,7 +191,7 @@ fn recovered_source_hash(
         encoded.push('[');
         encoded.push_str(&serde_json::to_string(&part.id).map_err(json_error)?);
         encoded.push(',');
-        crate::json::append_json(&part.content_json, &mut encoded).map_err(json_error)?;
+        butler_core::json::append_json(&part.content_json, &mut encoded).map_err(json_error)?;
         encoded.push(']');
     }
     encoded.push(']');

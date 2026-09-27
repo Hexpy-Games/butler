@@ -3,7 +3,7 @@ use serde_json::Value;
 
 use super::super::{admission, identity, permission};
 use super::AuthorityAdmissionInput;
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]

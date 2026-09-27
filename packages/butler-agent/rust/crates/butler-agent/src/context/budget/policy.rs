@@ -15,8 +15,8 @@ fn positive_integer(value: Option<&Value>) -> Option<f64> {
             .filter(|v| v.is_finite())
             .map(f64::trunc)
             .filter(|v| *v > 0.0),
-        Value::String(value) if !crate::public_text::trim_js_whitespace(value).is_empty() => {
-            Some(crate::json::number_from_string(value))
+        Value::String(value) if !butler_core::public_text::trim_js_whitespace(value).is_empty() => {
+            Some(butler_core::json::number_from_string(value))
                 .filter(|v| v.is_finite())
                 .map(f64::trunc)
                 .filter(|v| *v > 0.0)
@@ -27,7 +27,7 @@ fn positive_integer(value: Option<&Value>) -> Option<f64> {
 
 fn canonical_model_ref(value: Option<&str>) -> String {
     let raw = value
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|v| !v.is_empty())
         .unwrap_or("openai/gpt-5.5-codex");
     parse_model_ref(raw).canonical_ref

@@ -15,7 +15,7 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 pub(crate) use contracts::{LedgerEffectError, LedgerEffectReconciliation, LedgerEffectRequest};
 use evidence::{Applied, Reconciled};

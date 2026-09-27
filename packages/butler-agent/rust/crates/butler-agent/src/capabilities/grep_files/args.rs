@@ -49,18 +49,18 @@ fn integer(value: Option<&Value>, fallback: usize, min: usize, max: usize) -> us
     let Some(value) = value else {
         return fallback.clamp(min, max);
     };
-    let Ok(number) = crate::json::coerce_number(value) else {
+    let Ok(number) = butler_core::json::coerce_number(value) else {
         return fallback;
     };
     if number.is_finite() {
-        crate::json::saturating_usize(number.floor().max(min as f64).min(max as f64))
+        butler_core::json::saturating_usize(number.floor().max(min as f64).min(max as f64))
     } else {
         fallback
     }
 }
 
 pub(super) fn normalize(args: &Map<String, Value>) -> Result<Options, Value> {
-    let pattern = crate::public_text::trim_js_whitespace(&js_string(
+    let pattern = butler_core::public_text::trim_js_whitespace(&js_string(
         args.get("pattern").unwrap_or(&Value::Null),
     ))
     .to_owned();
@@ -77,7 +77,7 @@ pub(super) fn normalize(args: &Map<String, Value>) -> Result<Options, Value> {
         let mode = args
             .get("mode")
             .and_then(Value::as_str)
-            .map(|text| crate::public_text::trim_js_whitespace(text).to_ascii_lowercase())
+            .map(|text| butler_core::public_text::trim_js_whitespace(text).to_ascii_lowercase())
             .unwrap_or_default();
         if has_mode && mode != "literal" && mode != "regex" {
             return Err(failure(

@@ -5,7 +5,7 @@
 //! host-local conversion injected. Neither rewrites persisted input.
 
 mod parse;
-pub(crate) use parse::parse_date_millis;
+pub use parse::parse_date_millis;
 
 use chrono::{DateTime, Timelike};
 
@@ -13,7 +13,7 @@ const MILLIS_PER_DAY: i64 = 86_400_000;
 const TIME_CLIP: i64 = 8_640_000_000_000_000;
 
 /// `Date.prototype.toISOString` for a system time (millisecond precision).
-pub(crate) fn iso_from_system_time(time: std::time::SystemTime) -> String {
+pub fn iso_from_system_time(time: std::time::SystemTime) -> String {
     let millis = match time.duration_since(std::time::UNIX_EPOCH) {
         Ok(after) => i64::try_from(after.as_millis()).unwrap_or(i64::MAX),
         Err(before) => {
@@ -25,7 +25,7 @@ pub(crate) fn iso_from_system_time(time: std::time::SystemTime) -> String {
     format_iso_millis(millis.clamp(-TIME_CLIP, TIME_CLIP)).unwrap_or_default()
 }
 
-pub(crate) fn format_iso_millis(value: i64) -> Option<String> {
+pub fn format_iso_millis(value: i64) -> Option<String> {
     if !(-TIME_CLIP..=TIME_CLIP).contains(&value) {
         return None;
     }
@@ -48,7 +48,7 @@ pub(crate) fn format_iso_millis(value: i64) -> Option<String> {
 
 /// ISO projection of a JavaScript Date value represented by epoch milliseconds.
 /// Nonfinite/out-of-range values represent Invalid Date, without inventing a date.
-pub(crate) fn format_date_value(value: f64) -> Option<String> {
+pub fn format_date_value(value: f64) -> Option<String> {
     if !value.is_finite() || value.abs() > TIME_CLIP as f64 {
         return None;
     }
@@ -60,7 +60,7 @@ pub(crate) fn format_date_value(value: f64) -> Option<String> {
     format_iso_millis(millis)
 }
 
-pub(crate) fn parse_iso_millis(value: &str) -> Option<i64> {
+pub fn parse_iso_millis(value: &str) -> Option<i64> {
     if let Some(parsed) = parse_canonical(value) {
         return Some(parsed);
     }
@@ -140,7 +140,7 @@ fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
     era * 146_097 + year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year - 719_468
 }
 
-pub(crate) fn civil_from_days(days: i64) -> (i64, i64, i64) {
+pub fn civil_from_days(days: i64) -> (i64, i64, i64) {
     let shifted = days + 719_468;
     let era = shifted.div_euclid(146_097);
     let day_of_era = shifted - era * 146_097;

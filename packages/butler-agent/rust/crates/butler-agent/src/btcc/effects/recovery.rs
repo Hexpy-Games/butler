@@ -83,7 +83,7 @@ fn sha(value: Option<&Value>, index: usize, field: &str) -> EffectResult<String>
 fn normalize_path(value: &str) -> Option<String> {
     if value.is_empty()
         || value.encode_utf16().count() > 512
-        || crate::public_text::trim_js_whitespace(value) != value
+        || butler_core::public_text::trim_js_whitespace(value) != value
         || value.contains('\0')
         || value.starts_with('/')
         || value.starts_with('\\')

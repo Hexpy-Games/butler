@@ -319,7 +319,7 @@ impl BriefingGenerationService {
 }
 
 fn metrics(input: &BriefingMetrics) -> Map<String, Value> {
-    crate::json::json_object!({
+    butler_core::json::json_object!({
         "outcome":input.outcome, "skip_reason":input.reason, "generated_count":input.generated,
         "failed_count":input.failed, "skipped_project_count":input.skipped,
         "general_artifact_path":input.general, "project_artifact_paths":input.projects,

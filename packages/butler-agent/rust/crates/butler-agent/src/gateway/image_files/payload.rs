@@ -3,11 +3,11 @@
 use serde_json::Value;
 
 use super::{AppImageFiles, GatewayApplicationError, files};
-use crate::public_text::trim_js_whitespace;
 use crate::{
     btcc::{BtccError, PortFuture, VerifiedImagePayloadPort},
     context::VisualAttachmentManifest,
 };
+use butler_core::public_text::trim_js_whitespace;
 
 impl VerifiedImagePayloadPort for AppImageFiles {
     fn read<'a>(&'a self, reference: &'a Value) -> PortFuture<'a, Vec<u8>> {

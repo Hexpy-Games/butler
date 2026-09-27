@@ -274,7 +274,7 @@ fn rebuilt_turn(snapshot: ClaimedNativeSnapshot, assets: ResolvedNativeAssets) -
 pub(super) fn session_hint(chat_id: &str) -> String {
     let mut normalized = String::new();
     let mut separator = false;
-    for ch in crate::public_text::trim_js_whitespace(chat_id)
+    for ch in butler_core::public_text::trim_js_whitespace(chat_id)
         .to_lowercase()
         .chars()
     {

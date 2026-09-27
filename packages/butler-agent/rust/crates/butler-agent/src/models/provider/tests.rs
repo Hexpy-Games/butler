@@ -21,10 +21,10 @@ use crate::btcc::{
     ModelRoundError, ModelRoundMessage, ModelRoundPort, ModelRoundRequest, ModelRoundRole,
     ProviderBodyAdmissionPort, ReasoningEffort,
 };
-use crate::locale::LocaleCollation;
 use crate::models::{
     ModelCatalog, ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelProviderMetadata,
 };
+use butler_core::locale::LocaleCollation;
 
 struct Config {
     metadata: ModelProviderMetadata,

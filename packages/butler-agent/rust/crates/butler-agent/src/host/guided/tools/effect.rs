@@ -13,7 +13,7 @@ pub(super) fn is_managed_project_ledger_effect(name: &str) -> bool {
     ledger_input::managed(name)
 }
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use serde_json::{Value, json};
 
 use crate::btcc::{
@@ -21,7 +21,8 @@ use crate::btcc::{
     ModelRoundToolCall, ToolExecutionError,
 };
 use crate::host::guided::command::CommandScope;
-use crate::json::{JsonDocument, visit_raw_object};
+use butler_core::json::JsonDocument;
+use butler_core::json::visit_raw_object;
 
 use super::GuidedTools;
 
@@ -212,7 +213,7 @@ fn receipt_result(
     result: &JsonDocument,
     receipt: &Value,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    let receipt = crate::json::stringify(receipt).map_err(wire_error)?;
+    let receipt = butler_core::json::stringify(receipt).map_err(wire_error)?;
     let raw = result.as_str().trim_start();
     let encoded = if raw.starts_with('{') {
         let mut encoded = String::with_capacity(raw.len() + receipt.len() + 32);
@@ -248,7 +249,7 @@ fn receipt_result(
     JsonDocument::from_encoded(encoded).map_err(wire_error)
 }
 
-fn wire_error(error: crate::json::JsonError) -> ToolExecutionError {
+fn wire_error(error: butler_core::json::JsonError) -> ToolExecutionError {
     ToolExecutionError::Integrity(
         BtccError::relayed("guided_tool_result_json", error.to_string()).with_source(error),
     )

@@ -79,7 +79,7 @@ pub(crate) use runtime::{AgentRuntime, RuntimePaths};
 
 use std::time::{Duration, SystemTime};
 
-use crate::js_date as date;
+use butler_core::js_date as date;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 

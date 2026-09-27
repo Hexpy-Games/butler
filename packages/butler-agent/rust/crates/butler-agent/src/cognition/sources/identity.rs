@@ -7,7 +7,7 @@ use crate::cognition::CognitionCode;
 pub(in crate::cognition) fn projection_hash(
     values: Vec<Value>,
 ) -> Result<String, CognitionSourceError> {
-    let json = crate::json::stringify(&Value::Array(values)).map_err(|error| {
+    let json = butler_core::json::stringify(&Value::Array(values)).map_err(|error| {
         crate::cognition::CognitionError::new(
             CognitionCode::CognitionSourceJsonError,
             error.to_string(),
@@ -28,7 +28,7 @@ pub(super) fn recovered_parts_hash(
         json.push('[');
         json.push_str(&serde_json::to_string(&part.id).map_err(json_error)?);
         json.push(',');
-        json.push_str(&crate::json::stringify(&part.content_json).map_err(json_error)?);
+        json.push_str(&butler_core::json::stringify(&part.content_json).map_err(json_error)?);
         json.push(']');
     }
     json.push(']');

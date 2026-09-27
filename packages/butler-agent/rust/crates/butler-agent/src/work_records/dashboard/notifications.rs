@@ -4,7 +4,8 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 
-use crate::{locale::LocaleCollation, work_records::WorkRecordReadError};
+use crate::work_records::WorkRecordReadError;
+use butler_core::locale::LocaleCollation;
 
 pub(super) fn pending(
     root: &Path,

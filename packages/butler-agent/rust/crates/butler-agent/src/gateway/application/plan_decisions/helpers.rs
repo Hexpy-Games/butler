@@ -1,11 +1,10 @@
 use rusqlite::{Connection, OptionalExtension};
 
 use super::contracts::{AppPlanDecisionLedgerError, AppPlanDecisionPlan};
+use crate::gateway::application::AppStorageError;
+use crate::gateway::application::read_model;
 use crate::gateway::application::storage::AppStorageCode;
-use crate::{
-    gateway::application::{AppStorageError, read_model},
-    public_text::trim_js_whitespace,
-};
+use butler_core::public_text::trim_js_whitespace;
 
 pub(super) struct DecisionProject {
     pub app_project_id: String,

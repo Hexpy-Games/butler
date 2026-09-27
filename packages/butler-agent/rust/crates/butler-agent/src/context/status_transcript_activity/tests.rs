@@ -41,7 +41,7 @@ fn missing_index_falls_back_to_transcript_activity_without_writes() {
         "{\"kind\":\"tool_call\",\"timestamp\":\"2026-09-22T12:00:05Z\",\"payload\":{\"name\":\"ignored_tail\"}}"
     );
     fs::write(&transcript, contents).unwrap();
-    let now_ms = crate::js_date::parse_iso_millis("2026-09-22T12:00:05Z").unwrap();
+    let now_ms = butler_core::js_date::parse_iso_millis("2026-09-22T12:00:05Z").unwrap();
 
     let activity = read_status_transcript_activity_at(&fixture.0, now_ms).unwrap();
 
@@ -78,7 +78,7 @@ fn latest_delivery_without_error_does_not_reuse_an_older_error() {
         "payload": { "ok": false }
     }));
 
-    activity.prune(crate::js_date::parse_iso_millis("2026-09-22T12:00:05Z").unwrap());
+    activity.prune(butler_core::js_date::parse_iso_millis("2026-09-22T12:00:05Z").unwrap());
 
     assert_eq!(activity.summary.last_delivery_error, None);
 }
@@ -86,7 +86,7 @@ fn latest_delivery_without_error_does_not_reuse_an_older_error() {
 #[test]
 fn missing_transcripts_return_a_truthful_empty_fallback() {
     let fixture = Fixture::new();
-    let now_ms = crate::js_date::parse_iso_millis("2026-09-22T12:00:05Z").unwrap();
+    let now_ms = butler_core::js_date::parse_iso_millis("2026-09-22T12:00:05Z").unwrap();
 
     let activity = read_status_transcript_activity_at(&fixture.0, now_ms).unwrap();
 

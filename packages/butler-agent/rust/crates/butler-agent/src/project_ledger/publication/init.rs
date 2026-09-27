@@ -42,7 +42,7 @@ pub(super) fn ensure(
     scope: &ResolvedProjectWorkScope,
     display_name: &str,
 ) -> Result<(), ProjectWorkPublicationError> {
-    let display_name = crate::public_text::trim_js_whitespace(display_name);
+    let display_name = butler_core::public_text::trim_js_whitespace(display_name);
     if display_name.is_empty() {
         return Err(ProjectWorkPublicationError::adapter(
             "project_ledger_init_name_required",
@@ -90,7 +90,7 @@ pub(super) fn ensure(
             "projectId":scope.ledger_project_id,
             "source":"project-ledger",
         });
-        let mut line = crate::json::stringify(&event)
+        let mut line = butler_core::json::stringify(&event)
             .map_err(|source| io().with_source(source))?
             .into_bytes();
         line.push(b'\n');

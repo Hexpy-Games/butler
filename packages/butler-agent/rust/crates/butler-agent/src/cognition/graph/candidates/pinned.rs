@@ -48,10 +48,11 @@ pub(in crate::cognition::graph) fn load(
             if !append(&mut context, id, &mut visiting, &mut group, true)? {
                 continue;
             }
-            let bytes = crate::json::serde_serialized_bytes(&CandidateSlices(&result, &group))
-                .map_err(|source| {
-                    error(CognitionCode::MemoryExtractInvalidJson).with_source(source)
-                })?;
+            let bytes =
+                butler_core::json::serde_serialized_bytes(&CandidateSlices(&result, &group))
+                    .map_err(|source| {
+                        error(CognitionCode::MemoryExtractInvalidJson).with_source(source)
+                    })?;
             if bytes > candidate_bytes {
                 continue;
             }

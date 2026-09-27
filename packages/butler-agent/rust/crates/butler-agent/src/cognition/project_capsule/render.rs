@@ -24,7 +24,7 @@ pub(super) fn render(
     let registry = snapshot.registry.as_ref();
     let promotions = collect_promotions(snapshot);
     counts.promoted = promotions.values().map(Vec::len).sum();
-    let now = crate::js_date::format_iso_millis(now_epoch_ms)
+    let now = butler_core::js_date::format_iso_millis(now_epoch_ms)
         .unwrap_or_else(|| "1970-01-01T00:00:00.000Z".to_owned());
     let aliases = registry
         .and_then(|value| value.get("aliases"))

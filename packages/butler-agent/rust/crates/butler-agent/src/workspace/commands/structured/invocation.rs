@@ -9,7 +9,7 @@ pub(super) fn invocation_steps(
     let Some(legacy) = &input.legacy else {
         return Ok(input.steps.clone());
     };
-    let command = crate::public_text::trim_js_whitespace(&legacy.command);
+    let command = butler_core::public_text::trim_js_whitespace(&legacy.command);
     if command.is_empty() {
         return Err(CommandError::new(
             CommandCode::LegacyCommandEmpty,

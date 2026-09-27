@@ -1,6 +1,6 @@
 //! Bounded-page reads and source-compatible public conversation enrichment.
 
-use crate::public_text::fixed_regex;
+use butler_core::public_text::fixed_regex;
 use std::{cmp::Reverse, collections::HashSet, sync::LazyLock};
 
 use regex::Regex;
@@ -173,7 +173,7 @@ fn safe_conversation_label(value: &str, internal_refs: &[String], fallback: &str
     text = LONG_HEX
         .replace_all(&text, "internal reference")
         .into_owned();
-    let safe = crate::public_text::sanitize_public_text(text.trim(), fallback);
+    let safe = butler_core::public_text::sanitize_public_text(text.trim(), fallback);
     let mut units = safe.encode_utf16();
     let preview = units.by_ref().take(180).collect::<Vec<_>>();
     if units.next().is_some() {

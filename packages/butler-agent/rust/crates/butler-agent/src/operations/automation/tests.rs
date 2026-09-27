@@ -23,7 +23,7 @@ impl AutomationEnqueue for Queue {
 
 fn dependencies(now: Arc<AtomicI64>, queue: Arc<Queue>) -> AutomationDependencies {
     AutomationDependencies {
-        parse_date: Arc::new(crate::js_date::parse_iso_millis),
+        parse_date: Arc::new(butler_core::js_date::parse_iso_millis),
         now_millis: Arc::new(move || now.load(Ordering::SeqCst)),
         enqueue: queue,
         scheduler_interval: Duration::from_secs(60),
@@ -140,7 +140,7 @@ fn concurrent_run_and_delete_preserve_any_successful_run_count() {
                 })),
                 "session-1",
                 0,
-                &crate::js_date::parse_iso_millis,
+                &butler_core::js_date::parse_iso_millis,
             )
             .unwrap();
 
@@ -149,7 +149,7 @@ fn concurrent_run_and_delete_preserve_any_successful_run_count() {
         let run_barrier = barrier.clone();
         let run = thread::spawn(move || {
             run_barrier.wait();
-            run_store.run_now("race", 1_000, &crate::js_date::parse_iso_millis)
+            run_store.run_now("race", 1_000, &butler_core::js_date::parse_iso_millis)
         });
         let delete_store = super::store::AutomationStore::new(&root.clone());
         let delete_barrier = barrier.clone();

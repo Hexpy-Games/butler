@@ -77,7 +77,7 @@ pub(super) fn identity_from_value(
 
 pub(super) fn request_digest(
     value: &Value,
-    collation: &crate::locale::LocaleCollation,
+    collation: &butler_core::locale::LocaleCollation,
 ) -> Result<String, crate::btcc::BtccError> {
     let body = super::super::work_json::canonical(value, collation)
         .map_err(super::snapshot::read_error)?;
@@ -250,7 +250,7 @@ pub(super) fn revisions(manifest: &Value) -> Value {
 pub(super) fn work_update(
     manifest: &Value,
     create: bool,
-    collation: &crate::locale::LocaleCollation,
+    collation: &butler_core::locale::LocaleCollation,
 ) -> Result<ProjectLedgerRecordUpdate, crate::btcc::BtccError> {
     let work_id = text(manifest, "workId")?;
     let status = text(manifest, "status")?;

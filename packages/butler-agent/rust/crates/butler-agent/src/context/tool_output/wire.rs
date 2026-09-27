@@ -44,9 +44,10 @@ impl BudgetedToolOutput {
             output.push_str(",\"path\":");
             append_path(&mut output, &artifact.path)?;
             output.push_str(",\"raw_tokens\":");
-            output.push_str(&crate::json::saturating_u64(artifact.raw_tokens).to_string());
+            output.push_str(&butler_core::json::saturating_u64(artifact.raw_tokens).to_string());
             output.push_str(",\"compact_tokens\":");
-            output.push_str(&crate::json::saturating_u64(artifact.compact_tokens).to_string());
+            output
+                .push_str(&butler_core::json::saturating_u64(artifact.compact_tokens).to_string());
             output.push_str(",\"created_at\":");
             append_string(&mut output, &artifact.created_at)?;
             if let Some(command) = &artifact.command {
@@ -122,7 +123,7 @@ pub(super) fn append_slice(
     output.push_str(",\"total_lines\":");
     output.push_str(&slice.total_lines.to_string());
     output.push_str(",\"estimated_tokens\":");
-    output.push_str(&crate::json::saturating_u64(slice.estimated_tokens).to_string());
+    output.push_str(&butler_core::json::saturating_u64(slice.estimated_tokens).to_string());
     output.push_str(",\"truncated_by_lines\":");
     output.push_str(if slice.truncated_by_lines {
         "true"
@@ -182,10 +183,12 @@ pub(super) fn append_optional_number(output: &mut String, value: Option<f64>) ->
                 ContextError::new(ContextCode::ToolOutputJsonError, "Invalid number")
             })?;
             output.push_str(
-                &crate::json::stringify(&serde_json::Value::Number(number)).map_err(|error| {
-                    ContextError::new(ContextCode::ToolOutputJsonError, error.to_string())
-                        .with_source(error)
-                })?,
+                &butler_core::json::stringify(&serde_json::Value::Number(number)).map_err(
+                    |error| {
+                        ContextError::new(ContextCode::ToolOutputJsonError, error.to_string())
+                            .with_source(error)
+                    },
+                )?,
             );
         }
         _ => output.push_str("null"),
@@ -217,7 +220,7 @@ pub(super) fn append_path(output: &mut String, path: &std::path::Path) -> Contex
 }
 
 pub(super) fn append_string(output: &mut String, value: &str) -> ContextResult<()> {
-    crate::json::write_string(value, output).map_err(|error| {
+    butler_core::json::write_string(value, output).map_err(|error| {
         ContextError::new(ContextCode::ToolOutputJsonError, error.to_string()).with_source(error)
     })
 }

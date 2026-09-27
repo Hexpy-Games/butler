@@ -324,7 +324,7 @@ fn recovery_revision(generation_id: &str, now: &str) -> CognitionResult<String> 
 }
 
 fn stringify(value: &Value) -> CognitionResult<String> {
-    crate::json::stringify(value)
+    butler_core::json::stringify(value)
         .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))
 }
 

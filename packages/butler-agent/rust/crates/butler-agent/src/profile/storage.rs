@@ -237,7 +237,7 @@ pub(super) fn write_projection(
         "INSERT INTO runtime_projection(id,version,mode,payload_json,updated_at)
          VALUES('active',?1,?2,?3,?4) ON CONFLICT(id) DO UPDATE SET
          version=excluded.version,mode=excluded.mode,payload_json=excluded.payload_json,updated_at=excluded.updated_at",
-        params![crate::json::saturating_i64(value.version), value.mode, serde_json::to_string(value).map_err(json_error)?, value.updated_at],
+        params![butler_core::json::saturating_i64(value.version), value.mode, serde_json::to_string(value).map_err(json_error)?, value.updated_at],
     ).map_err(db_error)?;
     Ok(())
 }

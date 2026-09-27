@@ -1,11 +1,11 @@
 //! Source attachment name, MIME, and kind rules.
 
-use crate::public_text::fixed_regex;
+use butler_core::public_text::fixed_regex;
 use std::sync::LazyLock;
 
 use regex::Regex;
 
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 static UNSAFE: LazyLock<Regex> = LazyLock::new(|| fixed_regex(r"[^\p{L}\p{N}_ .@()+\-\[\]]+"));
 static TEXT_SUFFIX: LazyLock<Regex> = LazyLock::new(|| {

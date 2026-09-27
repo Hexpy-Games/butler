@@ -51,7 +51,7 @@ impl GuardResult {
                 .ok()?
                 .to_string_lossy()
                 .into_owned(),
-            None => crate::public_text::trim_js_whitespace(&self.requested).to_owned(),
+            None => butler_core::public_text::trim_js_whitespace(&self.requested).to_owned(),
         };
         if candidate.is_empty()
             || candidate == "."
@@ -262,7 +262,7 @@ pub(crate) fn resolve_workspace_mutation_guard(
 }
 
 pub(crate) fn safe_workspace_path(path: &str) -> Option<&str> {
-    let trimmed = crate::public_text::trim_js_whitespace(path);
+    let trimmed = butler_core::public_text::trim_js_whitespace(path);
     if trimmed.is_empty()
         || trimmed.starts_with(['/', '\\', '~'])
         || has_parent_segment(trimmed)
@@ -317,7 +317,7 @@ pub(super) fn protected_path(root: &Path, target: &Path, extra: &[PathBuf]) -> b
     let target = realpath_or_nearest(target);
     let mut roots = vec![root.join(".project-ledger")];
     if let Ok(data) = std::env::var("BUTLER_DATA")
-        && !crate::public_text::trim_js_whitespace(&data).is_empty()
+        && !butler_core::public_text::trim_js_whitespace(&data).is_empty()
     {
         roots.push(PathBuf::from(data).join("project-ledger/projects"));
     }

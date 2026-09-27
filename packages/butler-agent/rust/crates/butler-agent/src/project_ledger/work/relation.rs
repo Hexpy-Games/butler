@@ -233,7 +233,7 @@ impl ProjectWorkRepository {
             .projection
             .operation_recorded_at(identity)
             .await?;
-        if value.is_empty() || crate::js_date::parse_iso_millis(&value).is_none() {
+        if value.is_empty() || butler_core::js_date::parse_iso_millis(&value).is_none() {
             return Err(invalid("project_work_operation_time_invalid"));
         }
         Ok(value)
@@ -391,7 +391,7 @@ fn source_version(
         Ok(serde_json::json!({"path": path, "raw": committed::read_selected(&scope.ledger_root, path)?}))
     }).collect::<Result<Vec<_>, ProjectLedgerReadError>>()?;
     let source = serde_json::json!([all_paths, records]);
-    let bytes = crate::json::stringify(&source).map_err(|source| {
+    let bytes = butler_core::json::stringify(&source).map_err(|source| {
         ProjectLedgerReadError::record_show("project_work_managed_record_invalid")
             .with_source(source)
     })?;

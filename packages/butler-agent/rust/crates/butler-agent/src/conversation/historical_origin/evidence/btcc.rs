@@ -9,7 +9,8 @@ use super::{
     ConversationCode, ConversationOriginEvidence, ConversationResult, HistoricalOriginCandidate,
     SourceEvidence, evidence_error, evidence_unavailable, sha256,
 };
-use crate::json::{CanonicalKeyOrder, canonical_json};
+use butler_core::json::CanonicalKeyOrder;
+use butler_core::json::canonical_json;
 
 fn open(data_root: &Path) -> rusqlite::Result<Option<Connection>> {
     let path = data_root.join("agent-runtime/btcc.sqlite");

@@ -189,7 +189,7 @@ pub(super) fn append_controls_event(
     now: &str,
 ) -> Result<(), AppStorageError> {
     let mut controls_value = controls_json(controls);
-    let mut payload = std::mem::take(crate::json::object_mut(&mut controls_value));
+    let mut payload = std::mem::take(butler_core::json::object_mut(&mut controls_value));
     payload.insert("session_id".into(), chat_id.into());
     payload.insert("revision".into(), revision.into());
     payload.insert(

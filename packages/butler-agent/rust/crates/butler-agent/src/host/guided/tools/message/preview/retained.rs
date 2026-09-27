@@ -1,10 +1,12 @@
 //! Source selectors for registered command, grep, and conversation results.
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use std::collections::HashSet;
 
 use crate::btcc::BtccError;
-use crate::json::{raw_string_units, visit_raw_array, visit_raw_object};
+use butler_core::json::raw_string_units;
+use butler_core::json::visit_raw_array;
+use butler_core::json::visit_raw_object;
 
 use super::{append_field, failure, field};
 
@@ -23,11 +25,12 @@ pub(super) fn project(name: &str, raw: &str) -> Result<String, BtccError> {
     if let Some(raw_name) = field(raw, "tool_name")? {
         result.push_str(raw_name);
     } else {
-        crate::json::write_string(name, &mut result)
+        butler_core::json::write_string(name, &mut result)
             .map_err(|source| failure().with_source(source))?;
     }
     visit_raw_object(raw, |key, value| {
-        let decoded = serde_json::from_str::<String>(key).map_err(crate::json::JsonError::from)?;
+        let decoded =
+            serde_json::from_str::<String>(key).map_err(butler_core::json::JsonError::from)?;
         if !excluded.contains(&decoded.as_str()) && decoded != "tool_name" {
             result.push(',');
             result.push_str(key);
@@ -45,7 +48,7 @@ pub(super) fn project(name: &str, raw: &str) -> Result<String, BtccError> {
             visit_raw_array(matches, |item| {
                 count += 1;
                 if let Some(path) = field(item, "path")
-                    .map_err(crate::json::JsonError::callback)?
+                    .map_err(butler_core::json::JsonError::callback)?
                     .filter(|raw| raw.trim_start().starts_with('"'))
                 {
                     let units = raw_string_units(path).collect::<Vec<_>>();

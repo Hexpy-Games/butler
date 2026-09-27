@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use serde_json::Map;
 
-use crate::locale::LocaleCollation;
 use crate::models::{DEFAULT_MODEL_REF, ModelCatalogError};
+use butler_core::locale::LocaleCollation;
 
 use super::{
     ModelCatalogSnapshotInput, ModelCatalogView, ModelProviderMetadata, ParsedModelRef,
@@ -11,7 +11,7 @@ use super::{
 };
 
 pub(crate) fn parse_model_ref(input: &str) -> ParsedModelRef {
-    let trimmed = crate::public_text::trim_js_whitespace(input);
+    let trimmed = butler_core::public_text::trim_js_whitespace(input);
     let namespaced = trimmed.split_once('/').filter(|(provider, model)| {
         !provider.is_empty()
             && !provider.chars().any(js_whitespace)
@@ -109,7 +109,7 @@ pub(super) fn resolve_model_metadata(
     models: &[ModelProviderMetadata],
 ) -> ModelProviderMetadata {
     let requested = model_ref
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
         .unwrap_or(DEFAULT_MODEL_REF);
     let parsed = parse_model_ref(requested);
@@ -279,7 +279,7 @@ pub(crate) fn model_provider_family_id(model: &ModelProviderMetadata) -> &str {
     model
         .provider_family_id
         .as_deref()
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
         .unwrap_or(&model.provider_id)
 }

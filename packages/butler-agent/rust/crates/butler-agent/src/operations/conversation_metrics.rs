@@ -34,7 +34,7 @@ impl ConversationMetrics {
                 "orphan_tool_result_rejected": input.reason == "orphan_tool_result_rejected",
             },
         });
-        let dimensions = crate::json::object_mut(&mut event["dimensions"]);
+        let dimensions = butler_core::json::object_mut(&mut event["dimensions"]);
         for (key, value) in [
             ("event_kind", input.event_kind),
             ("session_role", input.session_role),
@@ -111,7 +111,7 @@ fn now_millis() -> u128 {
 }
 
 fn safe_dimension(value: &str) -> Option<String> {
-    let trimmed = crate::public_text::trim_js_whitespace(value);
+    let trimmed = butler_core::public_text::trim_js_whitespace(value);
     let scheme = trimmed.find("://").is_some_and(|at| {
         at > 0
             && trimmed[..at]
@@ -125,7 +125,7 @@ fn safe_dimension(value: &str) -> Option<String> {
     if trimmed.encode_utf16().count() <= 160 {
         return Some(trimmed.into());
     }
-    let mut text = crate::json::Utf16Slice::new(trimmed, 0, 160)
+    let mut text = butler_core::json::Utf16Slice::new(trimmed, 0, 160)
         .utf8_lossy()
         .into_owned();
     text.push('…');

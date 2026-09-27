@@ -10,7 +10,7 @@ mod snapshot;
 use std::path::Path;
 
 use super::ProjectLedgerReadError;
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 pub(crate) use ledger_history::DashboardLedgerHistory;
 pub(super) use managed::{decode_child_body, decode_manifest_body};

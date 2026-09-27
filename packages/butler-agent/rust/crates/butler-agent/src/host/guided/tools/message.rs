@@ -7,7 +7,7 @@ use crate::btcc::{
     BtccError, ModelRoundMessage, ModelRoundRole, OperationResultMessageReferences, ToolResult,
     TurnRecord,
 };
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 
 use super::GuidedTools;
 
@@ -61,7 +61,7 @@ pub(super) fn result_message(
                         error("guided_tool_provider_serialization_failed").with_source(source)
                     })? {
                         content.push(',');
-                        crate::json::write_string(key, &mut content).map_err(|source| {
+                        butler_core::json::write_string(key, &mut content).map_err(|source| {
                             error("guided_tool_provider_serialization_failed").with_source(source)
                         })?;
                         content.push(':');
@@ -71,7 +71,7 @@ pub(super) fn result_message(
                 content.push('}');
             } else {
                 content.push_str("{\"tool_name\":");
-                crate::json::write_string(&result.name, &mut content).map_err(|source| {
+                butler_core::json::write_string(&result.name, &mut content).map_err(|source| {
                     error("guided_tool_provider_serialization_failed").with_source(source)
                 })?;
                 if encoded.len() > 2 {
@@ -82,7 +82,7 @@ pub(super) fn result_message(
             }
         } else if encoded.starts_with('"') {
             content.push_str("{\"tool_name\":");
-            crate::json::write_string(&result.name, &mut content).map_err(|source| {
+            butler_core::json::write_string(&result.name, &mut content).map_err(|source| {
                 error("guided_tool_provider_serialization_failed").with_source(source)
             })?;
             content.push_str(",\"text\":");
@@ -90,7 +90,7 @@ pub(super) fn result_message(
             content.push('}');
         } else {
             content.push_str("{\"tool_name\":");
-            crate::json::write_string(&result.name, &mut content).map_err(|source| {
+            butler_core::json::write_string(&result.name, &mut content).map_err(|source| {
                 error("guided_tool_provider_serialization_failed").with_source(source)
             })?;
             content.push_str(",\"value\":");
@@ -130,6 +130,6 @@ fn error(code: &'static str) -> BtccError {
 }
 
 fn append_value(output: &mut String, value: &serde_json::Value) -> Result<(), BtccError> {
-    crate::json::append_json(value, output)
+    butler_core::json::append_json(value, output)
         .map_err(|source| error("guided_tool_provider_serialization_failed").with_source(source))
 }

@@ -28,7 +28,7 @@ impl WebSession {
         let query = args
             .get("query")
             .and_then(Value::as_str)
-            .map(crate::public_text::trim_js_whitespace)
+            .map(butler_core::public_text::trim_js_whitespace)
             .unwrap_or_default();
         if query.encode_utf16().count() < 2 {
             return Err(WebAccessError::new(
@@ -319,7 +319,7 @@ fn interleave_results(outputs: &[SearchOutput], limit: usize) -> Vec<SearchResul
 
 fn bounded_error(value: &str, max: usize) -> String {
     let compact = value.split_whitespace().collect::<Vec<_>>().join(" ");
-    crate::json::Utf16Slice::new(&compact, 0, max)
+    butler_core::json::Utf16Slice::new(&compact, 0, max)
         .utf8_lossy()
         .into_owned()
 }
@@ -330,7 +330,7 @@ fn string_array(value: Option<&Value>) -> Vec<String> {
         .into_iter()
         .flatten()
         .filter_map(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
         .collect()
@@ -340,5 +340,7 @@ fn optional_number(value: Option<&Value>, min: usize, max: usize) -> Option<usiz
     value
         .and_then(Value::as_f64)
         .filter(|number| number.is_finite())
-        .map(|number| crate::json::saturating_usize(number.trunc().clamp(min as f64, max as f64)))
+        .map(|number| {
+            butler_core::json::saturating_usize(number.trunc().clamp(min as f64, max as f64))
+        })
 }

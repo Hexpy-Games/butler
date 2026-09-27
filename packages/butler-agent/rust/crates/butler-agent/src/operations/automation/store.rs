@@ -276,7 +276,7 @@ fn schedule(
                 .ok_or_else(|| {
                     invalid("create_automation interval schedule requires interval_minutes")
                 })?;
-            let interval_minutes = crate::json::saturating_i64(number.trunc());
+            let interval_minutes = butler_core::json::saturating_i64(number.trunc());
             if !number.is_finite() || interval_minutes < 1 {
                 return Err(invalid("automation interval_minutes must be at least 1"));
             }
@@ -285,7 +285,7 @@ fn schedule(
                 .filter(|v| !v.is_empty())
                 .map(|value| {
                     parse(value)
-                        .and_then(crate::js_date::format_iso_millis)
+                        .and_then(butler_core::js_date::format_iso_millis)
                         .ok_or_else(|| invalid("automation start_at must be a valid ISO date"))
                 })
                 .transpose()?;

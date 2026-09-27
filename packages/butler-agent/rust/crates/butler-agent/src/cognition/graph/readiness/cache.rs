@@ -153,8 +153,8 @@ fn entry_current(
     }
     if let Some(until) = entry["valid_until"].as_str()
         && let (Some(expiry), Some(now)) = (
-            crate::js_date::parse_date_millis(until, &|value| Some(value)),
-            crate::js_date::parse_date_millis(as_of, &|value| Some(value)),
+            butler_core::js_date::parse_date_millis(until, &|value| Some(value)),
+            butler_core::js_date::parse_date_millis(as_of, &|value| Some(value)),
         )
         && expiry <= now
     {

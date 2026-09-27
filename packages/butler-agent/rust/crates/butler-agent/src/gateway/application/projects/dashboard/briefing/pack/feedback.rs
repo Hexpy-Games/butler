@@ -5,11 +5,10 @@ use sha2::{Digest, Sha256};
 
 use super::super::super::super::AppStorageError;
 use super::types::{Fact, Followup, FollowupReference};
-use crate::{
-    context::prefix_utf16,
-    gateway::{MessageContent, MessageContentPart},
-    public_text::sanitize_public_text,
-};
+use crate::context::prefix_utf16;
+use crate::gateway::MessageContent;
+use crate::gateway::MessageContentPart;
+use butler_core::public_text::sanitize_public_text;
 
 pub(super) fn add_followups(fact: &mut Fact, followups: Vec<Followup>) {
     if followups.is_empty() {

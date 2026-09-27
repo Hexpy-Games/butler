@@ -111,7 +111,7 @@ fn safe_attempt_count(value: Option<&Value>) -> CognitionResult<i64> {
     {
         return Err(error(CognitionCode::MemoryInputRepairInvalidRequest));
     }
-    Ok(crate::json::saturating_i64(number))
+    Ok(butler_core::json::saturating_i64(number))
 }
 
 fn valid_sha(value: &str) -> bool {

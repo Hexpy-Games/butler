@@ -129,7 +129,7 @@ fn event(value: &Value, inode: u64, offset: usize) -> Option<DashboardLedgerEven
     };
     let record_id = value.get("id")?.as_str()?.to_owned();
     let at = value.get("ts")?.as_str()?.to_owned();
-    crate::js_date::parse_iso_millis(&at)?;
+    butler_core::js_date::parse_iso_millis(&at)?;
     Some(DashboardLedgerEvent {
         id: format!("{inode}:{offset}"),
         record_id,

@@ -1,4 +1,4 @@
-use crate::public_text::fixed_regex;
+use butler_core::public_text::fixed_regex;
 use serde_json::{Map, Value};
 use std::sync::LazyLock;
 
@@ -257,7 +257,7 @@ fn js_boundary(value: &str, offset: usize) -> bool {
         != value[offset..].chars().next().is_some_and(word)
 }
 fn safe_optional(value: Option<&Value>) -> Option<String> {
-    let text = crate::public_text::trim_js_whitespace(value?.as_str()?);
+    let text = butler_core::public_text::trim_js_whitespace(value?.as_str()?);
     if text.is_empty() {
         None
     } else {
@@ -267,7 +267,7 @@ fn safe_optional(value: Option<&Value>) -> Option<String> {
 }
 fn safe_public(value: &str, fallback: &str) -> String {
     let stripped = strip_think(value);
-    let value = crate::public_text::sanitize_public_text(&stripped, fallback);
+    let value = butler_core::public_text::sanitize_public_text(&stripped, fallback);
     if value.is_empty() || PRIVATE_SENTINEL.is_match(&value) {
         fallback.into()
     } else {
@@ -304,7 +304,7 @@ fn utf16_prefix(value: &str, max: usize) -> String {
 fn text(value: Option<&Value>) -> Option<String> {
     value?
         .as_str()
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|v| !v.is_empty())
         .map(str::to_owned)
 }
@@ -327,7 +327,7 @@ mod tests {
             }
         });
         let safe = safe_tool_content(payload.as_object(), "tool_call.finalized");
-        let encoded = crate::json::stringify(&Value::Object(safe)).unwrap();
+        let encoded = butler_core::json::stringify(&Value::Object(safe)).unwrap();
         assert!(!encoded.contains("secret"));
         assert!(!encoded.contains("private"));
         assert!(encoded.contains("tokenized"));

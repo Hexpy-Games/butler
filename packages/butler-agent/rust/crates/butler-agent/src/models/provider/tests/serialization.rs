@@ -60,7 +60,7 @@ fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
         prompt_reasoning_effort: None,
     };
     let body = serialize::body(&request, &config, serialize::Carrier::Responses).unwrap();
-    let encoded = crate::json::stringify(&body).unwrap();
+    let encoded = butler_core::json::stringify(&body).unwrap();
     assert_eq!(
         encoded,
         r#"{"model":"gpt-5.5","tool_choice":"auto","reasoning":{"effort":"medium"},"instructions":"PREFIX dynamic","max_output_tokens":64,"store":true,"input":"hello"}"#

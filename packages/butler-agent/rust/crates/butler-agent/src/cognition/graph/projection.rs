@@ -285,7 +285,7 @@ fn parse_optional(value: Option<&str>) -> CognitionResult<Option<Value>> {
     value.map(parse).transpose()
 }
 fn stringify(value: &Value) -> CognitionResult<String> {
-    crate::json::stringify(value).map_err(json_error)
+    butler_core::json::stringify(value).map_err(json_error)
 }
 fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
     CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string()).with_source(error)

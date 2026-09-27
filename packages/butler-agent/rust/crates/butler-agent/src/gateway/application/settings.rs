@@ -19,7 +19,7 @@ mod worker_profiles;
 use super::{AppSettingsFacts, EventSubscribers, events, storage::AppStorageError};
 use crate::btcc::{ControlResolution, ControlSource};
 use crate::gateway::MessageSendRequest;
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 use controls::{
     Controls, append_controls_event, controls_json, global_settings, has_message_override,
     inherited_controls, merge_message_controls,

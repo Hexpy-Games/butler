@@ -231,7 +231,7 @@ fn publication_id(id: &str, attempt: &Attempt) -> Result<String, LedgerEffectErr
 }
 
 fn json_hash(value: &serde_json::Value) -> Result<String, LedgerEffectError> {
-    let encoded = crate::json::stringify(value).map_err(LedgerEffectError::uncertain)?;
+    let encoded = butler_core::json::stringify(value).map_err(LedgerEffectError::uncertain)?;
     Ok(digest::sha(encoded.as_bytes()))
 }
 

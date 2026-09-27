@@ -7,9 +7,9 @@ use super::commit;
 use super::contracts::LedgerEffectError;
 use super::head::{self, LedgerHead};
 use super::occurrence::{Attempt, Occurrence};
-use crate::locale::LocaleCollation;
 use crate::project_ledger::publication::occurrence as shared;
 use crate::project_ledger::publication::transaction::claim;
+use butler_core::locale::LocaleCollation;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

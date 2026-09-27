@@ -2,11 +2,12 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::btcc::ModelRoundToolCall;
-use crate::json::{CanonicalKeyOrder, canonical_json};
-use crate::public_text::trim_js_whitespace;
+use butler_core::json::CanonicalKeyOrder;
+use butler_core::json::canonical_json;
+use butler_core::public_text::trim_js_whitespace;
 
 use super::GuidedToolError;
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 
 pub(super) struct Occurrence {
     pub call_id: String,
@@ -50,7 +51,7 @@ pub(super) fn occurrence(
         normalized.remove("summary");
     }
     let arguments = if catalog_id.is_some() {
-        crate::json::stringify_sorted(&Value::Object(normalized), &|a, b| {
+        butler_core::json::stringify_sorted(&Value::Object(normalized), &|a, b| {
             a.encode_utf16().cmp(b.encode_utf16())
         })
     } else {

@@ -189,7 +189,7 @@ fn append_idempotent(
 }
 
 fn json_string(value: &str) -> CognitionResult<String> {
-    crate::json::stringify(&Value::String(value.to_owned())).map_err(|error| {
+    butler_core::json::stringify(&Value::String(value.to_owned())).map_err(|error| {
         CognitionError::new(CognitionCode::MemoryQueueInvalidJson, error.to_string())
             .with_source(error)
     })

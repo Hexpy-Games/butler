@@ -63,7 +63,7 @@ pub(super) async fn inspect_project_workspace(
     .await?;
     if probe.error.is_none()
         && (probe.exit_code != Some(0)
-            || crate::public_text::trim_js_whitespace(&probe.stdout) != "true")
+            || butler_core::public_text::trim_js_whitespace(&probe.stdout) != "true")
     {
         return Ok(ProjectWorkspaceInspection::Folder);
     }
@@ -98,7 +98,7 @@ pub(super) async fn inspect_project_workspace(
             code: "git_workspace_unavailable",
         });
     }
-    let branch = crate::public_text::trim_js_whitespace(&branch.stdout);
+    let branch = butler_core::public_text::trim_js_whitespace(&branch.stdout);
     let branch: String = branch
         .chars()
         .filter(|character| {
@@ -183,7 +183,7 @@ pub(super) async fn validate_linked_worktree(
         )
         .await?;
         command_failure(&symbolic, WorkspaceCode::SessionWorkspaceUnavailable).or_else(|| {
-            (crate::public_text::trim_js_whitespace(&symbolic.stdout) != branch)
+            (butler_core::public_text::trim_js_whitespace(&symbolic.stdout) != branch)
                 .then(|| invalid("session_workspace_unavailable"))
         })
     };

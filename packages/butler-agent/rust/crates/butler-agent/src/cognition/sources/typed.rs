@@ -150,7 +150,7 @@ pub(in crate::cognition) fn hydrate_typed_source(
         if !value.is_finite() || value < 0.0 || value.fract() != 0.0 || value > usize::MAX as f64 {
             return Err(changed());
         }
-        Ok(crate::json::saturating_usize(value))
+        Ok(butler_core::json::saturating_usize(value))
     };
     let start = offset(row.byte_start)?;
     let end = offset(row.byte_end)?;
@@ -237,7 +237,7 @@ fn task_operation_id(
         report.review_hash,
         report.source_revision,
     ]);
-    let encoded = crate::json::stringify(&value).map_err(unavailable)?;
+    let encoded = butler_core::json::stringify(&value).map_err(unavailable)?;
     Ok(format!("{:x}", Sha256::digest(encoded.as_bytes())))
 }
 

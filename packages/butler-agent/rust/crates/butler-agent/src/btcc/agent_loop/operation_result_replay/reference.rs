@@ -76,7 +76,7 @@ pub(super) fn reference(
 }
 
 fn bounded_identifier(value: &str, code: BtccCode) -> Result<String, BtccError> {
-    let trimmed = crate::public_text::trim_js_whitespace(value);
+    let trimmed = butler_core::public_text::trim_js_whitespace(value);
     if trimmed.is_empty() || trimmed.len() > 256 {
         Err(error(code))
     } else {
@@ -86,7 +86,7 @@ fn bounded_identifier(value: &str, code: BtccCode) -> Result<String, BtccError> 
 
 fn bounded_error_code(value: Option<&str>) -> Option<String> {
     let value = value?;
-    let trimmed = crate::public_text::trim_js_whitespace(value);
+    let trimmed = butler_core::public_text::trim_js_whitespace(value);
     let normalized: String = trimmed
         .chars()
         .map(|value| {

@@ -44,7 +44,7 @@ pub(in crate::gateway::application::projects::dashboard::briefing) fn resolve_la
 }
 
 fn normalize_language(value: Option<&str>) -> Option<String> {
-    let value = crate::public_text::trim_js_whitespace(value?).to_lowercase();
+    let value = butler_core::public_text::trim_js_whitespace(value?).to_lowercase();
     if value.is_empty() {
         None
     } else if value == "ko"
@@ -67,7 +67,7 @@ fn persona_language(value: &str) -> Option<&str> {
     let remainder = &value[start..];
     let start = remainder
         .char_indices()
-        .find(|(_, character)| !crate::public_text::is_js_whitespace(*character))
+        .find(|(_, character)| !butler_core::public_text::is_js_whitespace(*character))
         .map_or(remainder.len(), |(index, _)| index);
     Some(remainder[start..].split('\n').next().unwrap_or(""))
 }

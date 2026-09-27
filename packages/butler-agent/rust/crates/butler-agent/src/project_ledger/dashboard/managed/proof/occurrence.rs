@@ -1,14 +1,14 @@
 use std::fs;
 use std::path::Path;
 
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use super::super::{invalid, required_string};
-use crate::json;
 use crate::project_ledger::ProjectLedgerReadError;
 use crate::project_ledger::dashboard::{DashboardLedgerRecord, ProjectLedgerBinding, exact};
+use butler_core::json;
 
 pub(super) fn validate(
     root: &Path,

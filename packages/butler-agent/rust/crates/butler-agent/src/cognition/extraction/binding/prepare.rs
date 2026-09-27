@@ -114,7 +114,7 @@ pub(in crate::cognition) async fn prepare(
         let mut evidence = Vec::new();
         for id in &target.evidence {
             let passage = passages
-                .get(crate::json::saturating_usize(*id))
+                .get(butler_core::json::saturating_usize(*id))
                 .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?;
             let reference = format!("{}u{id}", target.local_ref);
             current_refs.insert(reference.clone());
@@ -182,7 +182,7 @@ pub(in crate::cognition) async fn prepare(
             .map(|v| v["ref"].clone())
             .collect::<Vec<_>>();
         let entry = json!({"target":target.local_ref,"meaning":target.meaning,"evidence":current,"candidates":wire_candidates});
-        if crate::json::stringify(&json!({"targets":[entry.clone()],"evidence":evidence}))
+        if butler_core::json::stringify(&json!({"targets":[entry.clone()],"evidence":evidence}))
             .map_err(json_error)?
             .len()
             > 3072
@@ -192,7 +192,10 @@ pub(in crate::cognition) async fn prepare(
         let mut proposed = batch.prompt.clone();
         append_to_prompt(&mut proposed, entry.clone(), evidence.clone());
         if batch.targets.len() == 4
-            || crate::json::stringify(&proposed).map_err(json_error)?.len() > 3072
+            || butler_core::json::stringify(&proposed)
+                .map_err(json_error)?
+                .len()
+                > 3072
         {
             batches.push(batch);
             batch = BindingBatch {

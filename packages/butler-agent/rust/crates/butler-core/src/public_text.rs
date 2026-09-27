@@ -12,11 +12,11 @@ use base64::engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig};
 use serde_json::Value;
 
 use patterns::Patterns;
-pub(crate) use source_regex::{fixed_regex, fixed_regex_ci};
+pub use source_regex::{fixed_regex, fixed_regex_ci};
 
 static PATTERNS: LazyLock<Patterns> = LazyLock::new(Patterns::new);
 
-pub(crate) fn sanitize_public_text(value: &str, fallback: &str) -> String {
+pub fn sanitize_public_text(value: &str, fallback: &str) -> String {
     let stripped: Cow<'_, str> = if value.chars().any(is_control) {
         Cow::Owned(
             value
@@ -37,7 +37,7 @@ pub(crate) fn sanitize_public_text(value: &str, fallback: &str) -> String {
     }
 }
 
-pub(crate) fn sanitize_public_value(value: &Value, fallback: &str) -> String {
+pub fn sanitize_public_value(value: &Value, fallback: &str) -> String {
     match value {
         Value::String(text) => sanitize_public_text(text, fallback),
         Value::Bool(value) => sanitize_public_text(if *value { "true" } else { "false" }, fallback),
@@ -51,15 +51,15 @@ pub(crate) fn sanitize_public_value(value: &Value, fallback: &str) -> String {
     }
 }
 
-pub(crate) fn trim_js_whitespace(value: &str) -> &str {
+pub fn trim_js_whitespace(value: &str) -> &str {
     value.trim_matches(is_js_whitespace)
 }
 
-pub(crate) fn trim_js_whitespace_start(value: &str) -> &str {
+pub fn trim_js_whitespace_start(value: &str) -> &str {
     value.trim_start_matches(is_js_whitespace)
 }
 
-pub(crate) fn trim_js_whitespace_end(value: &str) -> &str {
+pub fn trim_js_whitespace_end(value: &str) -> &str {
     value.trim_end_matches(is_js_whitespace)
 }
 
@@ -119,7 +119,7 @@ fn is_control(character: char) -> bool {
     character < '\u{20}' || character == '\u{7f}'
 }
 
-pub(crate) fn is_js_whitespace(character: char) -> bool {
+pub fn is_js_whitespace(character: char) -> bool {
     matches!(character, '\u{9}'..='\u{d}' | '\u{20}' | '\u{a0}' | '\u{1680}' |
         '\u{2000}'..='\u{200a}' | '\u{2028}' | '\u{2029}' | '\u{202f}' |
         '\u{205f}' | '\u{3000}' | '\u{feff}')

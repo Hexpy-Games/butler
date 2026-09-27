@@ -44,11 +44,11 @@ pub(super) fn read(
         ReadAvailability::Strict,
     )?
     .unwrap_or_default();
-    if crate::public_text::trim_js_whitespace(&public_report).is_empty() {
+    if butler_core::public_text::trim_js_whitespace(&public_report).is_empty() {
         return Ok(None);
     }
     let request = read::text(&directory.join("request.md"), ReadAvailability::BestEffort)?
-        .map(|value| crate::public_text::trim_js_whitespace(&value).to_owned())
+        .map(|value| butler_core::public_text::trim_js_whitespace(&value).to_owned())
         .filter(|value| !value.is_empty());
     let origin = read::json(&directory.join("origin.json"), ReadAvailability::BestEffort)?
         .filter(valid_origin);

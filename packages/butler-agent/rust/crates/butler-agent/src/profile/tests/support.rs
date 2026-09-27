@@ -5,12 +5,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use super::super::*;
-use crate::configuration::ConfigurationWrites;
 use crate::coordination::{
     CognitionCoordinationHost, CognitionProcessStatus, CognitionWriteCoordinator,
     CoordinationResult,
 };
 use crate::models::ProviderPromptPort;
+use butler_core::configuration::ConfigurationWrites;
 
 pub(super) struct Root(pub(super) PathBuf);
 impl Root {
@@ -126,8 +126,12 @@ impl CanonicalProfileSourceReader for Reader {
                     .as_ref()
                     .is_none_or(|since| message.created_at >= *since)
             })
-            .skip(crate::json::saturating_usize(scan.offset.max(0.0).floor()))
-            .take(crate::json::saturating_usize(scan.limit.max(0.0).floor()))
+            .skip(butler_core::json::saturating_usize(
+                scan.offset.max(0.0).floor(),
+            ))
+            .take(butler_core::json::saturating_usize(
+                scan.limit.max(0.0).floor(),
+            ))
             .collect())
     }
     fn read_message(&mut self, id: &str) -> ProfileResult<Option<CanonicalProfileMessage>> {

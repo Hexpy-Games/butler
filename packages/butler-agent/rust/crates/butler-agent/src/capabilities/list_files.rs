@@ -76,7 +76,7 @@ pub(super) async fn execute(
     let cursor_input = args.get("cursor").filter(|value| {
         !value
             .as_str()
-            .is_some_and(|text| crate::public_text::trim_js_whitespace(text).is_empty())
+            .is_some_and(|text| butler_core::public_text::trim_js_whitespace(text).is_empty())
     });
     let position = cursor_input.and_then(cursor::decode);
     if cursor_input.is_some() && position.as_ref().is_none_or(|cursor| cursor.query != query) {
@@ -184,7 +184,7 @@ pub(super) fn normalize_root(value: Option<&Value>) -> String {
     let Some(text) = value.and_then(Value::as_str) else {
         return ".".into();
     };
-    let text = crate::public_text::trim_js_whitespace(text);
+    let text = butler_core::public_text::trim_js_whitespace(text);
     if text.is_empty() {
         return ".".into();
     }
@@ -239,7 +239,7 @@ fn normalize_globs(value: Option<&Value>, name: &str) -> Result<Vec<String>, (St
         .iter()
         .filter_map(Value::as_str)
         .map(|text| {
-            let text = crate::public_text::trim_js_whitespace(text).replace('\\', "/");
+            let text = butler_core::public_text::trim_js_whitespace(text).replace('\\', "/");
             text.strip_prefix("./").unwrap_or(&text).to_owned()
         })
         .filter(|text| !text.is_empty())
@@ -258,10 +258,10 @@ pub(super) fn integer(
     let Some(value) = value else {
         return Ok(fallback);
     };
-    let number = crate::json::coerce_number(value)
+    let number = butler_core::json::coerce_number(value)
         .map_err(|source| CapabilityError::caused("invalid_number_conversion", source))?;
     Ok(if number.is_finite() {
-        crate::json::saturating_usize(number.floor().max(min as f64).min(max as f64))
+        butler_core::json::saturating_usize(number.floor().max(min as f64).min(max as f64))
     } else {
         fallback
     })

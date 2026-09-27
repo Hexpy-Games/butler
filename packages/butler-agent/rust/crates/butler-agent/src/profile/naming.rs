@@ -76,7 +76,7 @@ pub(super) fn render(profile: &PersonalizationProfile) -> Option<String> {
 
 pub(super) fn bounded(value: &str, limit: usize) -> String {
     let normalized = value.replace("\r\n", "\n");
-    let normalized = crate::public_text::trim_js_whitespace(&normalized);
+    let normalized = butler_core::public_text::trim_js_whitespace(&normalized);
     if normalized.encode_utf16().count() <= limit {
         return normalized.to_owned();
     }
@@ -99,7 +99,7 @@ pub(super) fn collapse_js_whitespace(value: &str) -> String {
     let mut output = String::with_capacity(value.len());
     let mut pending_space = false;
     for character in value.chars() {
-        if crate::public_text::is_js_whitespace(character) {
+        if butler_core::public_text::is_js_whitespace(character) {
             pending_space = !output.is_empty();
         } else {
             if pending_space {

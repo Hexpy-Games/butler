@@ -45,7 +45,7 @@ impl ModelConfiguration {
         target: McpModelTarget,
         requested: &str,
     ) -> Result<(), ModelCatalogError> {
-        let trimmed = crate::public_text::trim_js_whitespace(requested);
+        let trimmed = butler_core::public_text::trim_js_whitespace(requested);
         if !valid_model(trimmed) {
             let label = match target {
                 McpModelTarget::Worker => "worker",
@@ -61,7 +61,10 @@ impl ModelConfiguration {
         let path = self.data_root.join("butler.config.json");
         let mut config = super::read_object_sync(&path);
         let canonical = parse_model_ref(trimmed).canonical_ref;
-        let system = crate::json::object_field_mut(crate::json::object_mut(&mut config), "system");
+        let system = butler_core::json::object_field_mut(
+            butler_core::json::object_mut(&mut config),
+            "system",
+        );
         let field = match target {
             McpModelTarget::Worker => "workerModel",
             McpModelTarget::Butler => "butlerModel",

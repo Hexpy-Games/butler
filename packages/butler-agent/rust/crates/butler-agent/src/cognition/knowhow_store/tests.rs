@@ -39,7 +39,7 @@ impl CognitionCoordinationHost for TestHost {
     }
 
     fn now_epoch_millis(&self) -> i64 {
-        crate::js_date::parse_iso_millis(NOW).expect("valid test timestamp")
+        butler_core::js_date::parse_iso_millis(NOW).expect("valid test timestamp")
     }
 
     fn now_iso(&self) -> String {

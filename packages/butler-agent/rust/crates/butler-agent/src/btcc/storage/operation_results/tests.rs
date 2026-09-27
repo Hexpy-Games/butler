@@ -1,4 +1,4 @@
-use crate::json::JsonDocument;
+use butler_core::json::JsonDocument;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 

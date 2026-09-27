@@ -244,8 +244,8 @@ impl AppApplication {
             "max_output_tokens":budget.max_output_tokens,
             "available_working_context_tokens":available,"used_working_context_tokens":used_working,
             "usable_user_message_tokens":available,
-            "auto_compact_at_tokens":crate::json::saturating_u64((available as f64 * WORKING_CONTEXT_AUTO_COMPACT_RATIO).floor()),
-            "hard_pressure_at_tokens":crate::json::saturating_u64((available as f64 * WORKING_CONTEXT_HARD_PRESSURE_RATIO).floor()),
+            "auto_compact_at_tokens":butler_core::json::saturating_u64((available as f64 * WORKING_CONTEXT_AUTO_COMPACT_RATIO).floor()),
+            "hard_pressure_at_tokens":butler_core::json::saturating_u64((available as f64 * WORKING_CONTEXT_HARD_PRESSURE_RATIO).floor()),
             "ratio":if budget.context_window_tokens == 0 {0.0} else {used as f64 / budget.context_window_tokens as f64},
             "status":if working_ratio >= WORKING_CONTEXT_AUTO_COMPACT_RATIO {"high"} else if working_ratio >= 0.7 {"medium"} else {"low"},
             "categories":categories,"updated_at":self.dependencies.identity_clock.now_iso(),
@@ -267,7 +267,7 @@ fn bounded_tokens(text: &str) -> u64 {
 fn configured_text(path: &std::path::Path) -> bool {
     std::fs::read_to_string(path)
         .ok()
-        .is_some_and(|value| !crate::public_text::trim_js_whitespace(&value).is_empty())
+        .is_some_and(|value| !butler_core::public_text::trim_js_whitespace(&value).is_empty())
 }
 
 fn bounded_recent(messages: &[crate::gateway::MessageRecord]) -> String {

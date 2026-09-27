@@ -129,7 +129,7 @@ fn validate_provider_stream(
         payload
             .get(key)
             .and_then(Value::as_str)
-            .map(|value| crate::public_text::sanitize_public_text(value, ""))
+            .map(|value| butler_core::public_text::sanitize_public_text(value, ""))
             .is_some_and(|value| !value.is_empty())
     };
     let integer = |key: &str| payload.get(key).and_then(Value::as_u64).is_some();
@@ -197,12 +197,12 @@ fn sanitize_value(value: &Value, key: &str, preserve_numbers: bool) -> Value {
             .unwrap_or(Value::Null);
     }
     match value {
-        Value::String(text) => {
-            Value::String(crate::public_text::sanitize_public_text(text, &fallback))
-        }
-        Value::Number(_) | Value::Bool(_) => {
-            Value::String(crate::public_text::sanitize_public_value(value, &fallback))
-        }
+        Value::String(text) => Value::String(butler_core::public_text::sanitize_public_text(
+            text, &fallback,
+        )),
+        Value::Number(_) | Value::Bool(_) => Value::String(
+            butler_core::public_text::sanitize_public_value(value, &fallback),
+        ),
         Value::Array(values) => Value::Array(
             values
                 .iter()
@@ -235,7 +235,7 @@ fn non_negative_integer(value: Option<&Value>) -> Option<u64> {
         _ => None,
     }
     .filter(|value| value.is_finite() && *value >= 0.0)
-    .map(|value| crate::json::saturating_u64(value.round()))
+    .map(|value| butler_core::json::saturating_u64(value.round()))
 }
 
 fn decision_key(key: &str) -> bool {

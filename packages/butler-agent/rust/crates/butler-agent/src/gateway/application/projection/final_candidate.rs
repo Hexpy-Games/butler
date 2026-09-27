@@ -9,7 +9,7 @@ use super::{TranscriptEvent, staging};
 use crate::gateway::application::{
     ArtifactFileCandidate, ArtifactMaterializationRequest, storage::AppStorageError,
 };
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 pub(super) struct FinalCandidate {
     pub action_id: String,

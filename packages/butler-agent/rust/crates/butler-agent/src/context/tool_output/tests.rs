@@ -3,10 +3,10 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use crate::locale::LocaleCollation;
 use crate::models::{
     ModelCatalog, ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
 };
+use butler_core::locale::LocaleCollation;
 
 struct FixedIdentity;
 struct TestPruneMetrics(PathBuf);
@@ -72,7 +72,7 @@ impl Fixture {
                 Arc::clone(&catalog),
                 locale,
                 crate::models::provider_http_client().unwrap(),
-                Arc::new(crate::configuration::ConfigurationWrites::new()),
+                Arc::new(butler_core::configuration::ConfigurationWrites::new()),
             )
             .unwrap(),
         );

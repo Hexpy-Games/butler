@@ -7,8 +7,8 @@ use crate::btcc::{
     BtccError, ProgressDestination, SessionRole as BtccRole, TurnRecord, TurnRequest, TurnTrigger,
 };
 use crate::conversation::{ConversationEnvelope, DurableSessionBinding};
-use crate::json::stringify;
 use crate::workspace::{SessionLifecycleState, SessionRole as WorkspaceRole, StoredSessionBinding};
+use butler_core::json::stringify;
 
 pub(super) fn assert_replay_identity(
     turn: &TurnRecord,

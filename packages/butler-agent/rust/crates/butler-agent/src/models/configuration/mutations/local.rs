@@ -22,7 +22,7 @@ impl ModelConfiguration {
         )?;
         let now = self.clock.now_iso();
         let (_, api_base_url) = super::super::discovery::normalize_server(&input.server_url)?;
-        let model_id = crate::public_text::trim_js_whitespace(&input.model_id);
+        let model_id = butler_core::public_text::trim_js_whitespace(&input.model_id);
         let previous = current
             .iter()
             .find(|model| model.model_id == model_id && model.api_base_url == api_base_url);
@@ -168,7 +168,7 @@ fn normalize_local_input(
     previous: Option<&LocalModelConfig>,
     now: &str,
 ) -> Result<LocalModelConfig, ModelCatalogError> {
-    let model_id = crate::public_text::trim_js_whitespace(&input.model_id);
+    let model_id = butler_core::public_text::trim_js_whitespace(&input.model_id);
     let raw = json!({
         "model_id":input.model_id,
         "model_ref":previous.filter(|model| model.model_id == model_id).map(|model| &model.model_ref),
@@ -187,7 +187,7 @@ fn normalize_local_input(
 }
 
 fn find_local<'a>(models: &'a [LocalModelConfig], lookup: &str) -> Option<&'a LocalModelConfig> {
-    let lookup = crate::public_text::trim_js_whitespace(lookup);
+    let lookup = butler_core::public_text::trim_js_whitespace(lookup);
     if let Some(exact) = models.iter().find(|model| model.model_ref == lookup) {
         return Some(exact);
     }
@@ -207,7 +207,7 @@ fn local_secret(api_key: Option<&str>) -> Result<Option<String>, ModelCatalogErr
     {
         return Err(super::error("Local model API key is invalid."));
     }
-    let secret = crate::public_text::trim_js_whitespace(api_key);
+    let secret = butler_core::public_text::trim_js_whitespace(api_key);
     Ok((!secret.is_empty()).then(|| secret.to_owned()))
 }
 
@@ -231,7 +231,7 @@ fn credentials_for_models(
 }
 
 fn safe_local_id(value: &str) -> String {
-    let value = crate::public_text::trim_js_whitespace(value)
+    let value = butler_core::public_text::trim_js_whitespace(value)
         .strip_prefix("local/")
         .unwrap_or(value);
     let mut output = String::new();

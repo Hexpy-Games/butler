@@ -14,7 +14,7 @@ use crate::conversation::{
     DurableSessionBinding, ReadMessagesInput, classify_conversation_origin,
 };
 use crate::host::SystemIdentity;
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 #[derive(Default)]
 struct Observer {

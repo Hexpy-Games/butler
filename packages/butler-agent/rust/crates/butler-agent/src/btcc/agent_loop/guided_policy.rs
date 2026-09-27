@@ -1,7 +1,7 @@
 use std::pin::Pin;
 
 use crate::btcc::{PortFuture, TurnRecord};
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 
 use super::continuation::GuidedPresentation;
 use super::contracts::{
@@ -112,7 +112,11 @@ impl GuidedPolicyPort for GuidedPolicy {
         call: &'a ModelRoundToolCall,
         contract_version: Option<u8>,
     ) -> Pin<
-        Box<dyn Future<Output = Result<crate::json::JsonDocument, ToolExecutionError>> + Send + 'a>,
+        Box<
+            dyn Future<Output = Result<butler_core::json::JsonDocument, ToolExecutionError>>
+                + Send
+                + 'a,
+        >,
     > {
         if matches!(
             ToolName::parse(call.name.as_str()),
@@ -132,7 +136,7 @@ impl GuidedPolicyPort for GuidedPolicy {
                 }
                 .map_err(ToolExecutionError::Integrity)
                 .and_then(|value| {
-                    crate::json::JsonDocument::from_value(&value).map_err(|error| {
+                    butler_core::json::JsonDocument::from_value(&value).map_err(|error| {
                         ToolExecutionError::Integrity(crate::btcc::BtccError::detected(
                             BtccCode::GuidedToolResultJson,
                             error.to_string(),

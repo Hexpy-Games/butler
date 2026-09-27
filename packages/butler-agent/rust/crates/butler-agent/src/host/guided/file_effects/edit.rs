@@ -1,4 +1,4 @@
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -222,7 +222,7 @@ fn decode(args: &Value, owner: &GuidedFileEffects) -> Result<(Vec<Edit>, bool), 
         })?;
         let hint = match row.get("start_line") {
             None => None,
-            Some(value) => Some(crate::json::saturating_usize(
+            Some(value) => Some(butler_core::json::saturating_usize(
                 value
                     .as_f64()
                     .filter(|number| {

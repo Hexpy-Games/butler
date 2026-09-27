@@ -1,13 +1,13 @@
 use super::grapheme_segments;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct GraphemeByteSpan {
-    pub(crate) start: usize,
-    pub(crate) end: usize,
-    pub(crate) oversized: bool,
+pub struct GraphemeByteSpan {
+    pub start: usize,
+    pub end: usize,
+    pub oversized: bool,
 }
 
-pub(crate) fn split_grapheme_utf8_spans(text: &str, max_bytes: f64) -> Vec<GraphemeByteSpan> {
+pub fn split_grapheme_utf8_spans(text: &str, max_bytes: f64) -> Vec<GraphemeByteSpan> {
     let mut spans = Vec::new();
     let mut start = 0;
     let mut prior = 0;

@@ -138,7 +138,7 @@ impl ModelConfiguration {
         let mut config = read_object_sync(&root.join("butler.config.json"));
         let now = self.clock.now_iso();
         let mut current = normalized_registered(&config, self, &now);
-        let lookup = crate::public_text::trim_js_whitespace(lookup);
+        let lookup = butler_core::public_text::trim_js_whitespace(lookup);
         let previous = current
             .iter()
             .find(|value| value.model_ref == lookup || value.model_id == lookup)
@@ -190,7 +190,8 @@ impl ModelConfiguration {
             "label":input.credential_label.as_deref().and_then(clean).unwrap_or(&input.provider_id),
             "secret":secret, "created_at":self.clock.now_iso(), "updated_at":self.clock.now_iso()
         }));
-        crate::json::object_mut(&mut file).insert("credentials".into(), Value::Array(records));
+        butler_core::json::object_mut(&mut file)
+            .insert("credentials".into(), Value::Array(records));
         write_json(&path, &file)?;
         Ok(id)
     }
@@ -212,8 +213,8 @@ fn normalized_registered(
 }
 
 fn set_models_array(config: &mut Value, key: &str, value: Value) {
-    let root = crate::json::object_mut(config);
-    crate::json::object_field_mut(root, "models").insert(key.into(), value);
+    let root = butler_core::json::object_mut(config);
+    butler_core::json::object_field_mut(root, "models").insert(key.into(), value);
 }
 
 pub(super) fn write_json(path: &Path, value: &Value) -> Result<(), ModelCatalogError> {
@@ -232,7 +233,7 @@ pub(super) fn write_json(path: &Path, value: &Value) -> Result<(), ModelCatalogE
 }
 
 fn clean(value: &str) -> Option<&str> {
-    let value = crate::public_text::trim_js_whitespace(value);
+    let value = butler_core::public_text::trim_js_whitespace(value);
     (!value.is_empty()).then_some(value)
 }
 fn error(message: &'static str) -> ModelCatalogError {

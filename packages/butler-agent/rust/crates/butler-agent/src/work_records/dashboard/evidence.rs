@@ -1,6 +1,6 @@
 //! Dashboard-consumed worker completion safety from durable task evidence.
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use parking_lot::Mutex;
 use std::{
     collections::HashMap,
@@ -13,9 +13,9 @@ use std::{
 use regex::Regex;
 use serde_json::Value;
 
-use crate::public_text::fixed_regex;
+use butler_core::public_text::fixed_regex;
 
-use crate::public_text::trim_js_whitespace as trim;
+use butler_core::public_text::trim_js_whitespace as trim;
 
 #[expect(
     clippy::struct_excessive_bools,

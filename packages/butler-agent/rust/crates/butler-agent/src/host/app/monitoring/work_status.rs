@@ -1,6 +1,6 @@
 //! Actual BTCC Work facts for the source work-status projection.
 
-use crate::public_text::fixed_regex;
+use butler_core::public_text::fixed_regex;
 use std::sync::{Arc, LazyLock};
 
 use regex::Regex;
@@ -90,7 +90,7 @@ fn safe_work_text(value: &str, fallback: &str, ids: [&str; 3]) -> String {
     text = PATHS.replace_all(&text, "local path").into_owned();
     text = SECRETS.replace_all(&text, "[redacted]").into_owned();
     text = BEARER.replace_all(&text, "Bearer [redacted]").into_owned();
-    let safe = crate::public_text::sanitize_public_text(&text, fallback);
+    let safe = butler_core::public_text::sanitize_public_text(&text, fallback);
     let compact = safe.split_whitespace().collect::<Vec<_>>().join(" ");
     let mut chars = compact.chars();
     let value = chars.by_ref().take(180).collect::<String>();

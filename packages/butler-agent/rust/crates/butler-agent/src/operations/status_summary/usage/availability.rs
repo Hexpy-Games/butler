@@ -1,6 +1,6 @@
 //! Read-only web-search and transcript availability projections.
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use std::{
     collections::BTreeMap,
     fs::File,
@@ -123,7 +123,7 @@ fn read_session_tools(data_root: &Path, session_id: &str, since_ts: Option<f64>)
                 event
                     .get("timestamp")
                     .and_then(Value::as_str)
-                    .and_then(crate::js_date::parse_iso_millis)
+                    .and_then(butler_core::js_date::parse_iso_millis)
                     .is_some_and(|ts| ts as f64 >= since)
             });
             if in_window {

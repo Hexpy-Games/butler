@@ -33,7 +33,7 @@ pub(super) fn initial(
     compare_locale: &impl Fn(&str, &str) -> Ordering,
 ) -> CognitionResult<RecallResponse> {
     let (canonical, graph) = open_sources(generation)?;
-    let now_iso = crate::js_date::format_iso_millis(now_millis())
+    let now_iso = butler_core::js_date::format_iso_millis(now_millis())
         .ok_or_else(|| CognitionError::new(CognitionCode::InvalidArguments, "invalid_arguments"));
     let result = now_iso.and_then(|now_iso| {
         let graph_started = Instant::now();
@@ -154,7 +154,7 @@ pub(super) fn continue_page(
     compare_locale: &impl Fn(&str, &str) -> Ordering,
 ) -> CognitionResult<RecallResponse> {
     let (canonical, graph) = open_sources(generation)?;
-    let now_iso = crate::js_date::format_iso_millis(now_millis())
+    let now_iso = butler_core::js_date::format_iso_millis(now_millis())
         .ok_or_else(|| CognitionError::new(CognitionCode::InvalidArguments, "invalid_arguments"));
     let result = now_iso.and_then(|now_iso| {
         continuation::run(

@@ -128,7 +128,7 @@ fn safe_queue_id(value: &Value) -> Option<String> {
 }
 
 fn safe_token(value: &Value) -> Option<String> {
-    let text = crate::public_text::trim_js_whitespace(value.as_str()?);
+    let text = butler_core::public_text::trim_js_whitespace(value.as_str()?);
     if text.is_empty()
         || !text
             .chars()
@@ -158,7 +158,7 @@ mod tests {
             session_id: "butler/app-general".into(),
             kind: "outbound".into(),
             timestamp: "2026-09-14T00:00:00.000Z".into(),
-            payload: crate::json::json_object!({"metadata":metadata}),
+            payload: butler_core::json::json_object!({"metadata":metadata}),
             transport: Some("app".into()),
             metadata: None,
         }

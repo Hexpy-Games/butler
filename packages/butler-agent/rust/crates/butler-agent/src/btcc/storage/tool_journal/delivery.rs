@@ -146,7 +146,7 @@ fn has_in_flight(db: &Connection, turn: &str) -> StorageResult<bool> {
 }
 
 fn validate_id(value: &str, code: StorageCode) -> StorageResult<()> {
-    if crate::public_text::trim_js_whitespace(value).is_empty() || value.len() > 256 {
+    if butler_core::public_text::trim_js_whitespace(value).is_empty() || value.len() > 256 {
         fail(code)
     } else {
         Ok(())

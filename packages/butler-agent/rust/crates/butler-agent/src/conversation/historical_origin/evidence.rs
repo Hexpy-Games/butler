@@ -166,6 +166,6 @@ fn js_to_string(value: &serde_json::Value) -> String {
             .collect::<Vec<_>>()
             .join(","),
         serde_json::Value::Object(_) => "[object Object]".into(),
-        _ => crate::json::stringify(value).unwrap_or_default(),
+        _ => butler_core::json::stringify(value).unwrap_or_default(),
     }
 }

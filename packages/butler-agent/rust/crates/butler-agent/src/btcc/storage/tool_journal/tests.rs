@@ -1,4 +1,4 @@
-use crate::json::JsonDocument;
+use butler_core::json::JsonDocument;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde_json::{Value, json};
@@ -36,8 +36,8 @@ fn assert_golden(value: &impl serde::Serialize, expected: &Value) {
     let actual = serde_json::to_value(value).unwrap();
     // JS JSON numbers are f64, including rowid, but stringify emits integer form.
     assert_eq!(
-        crate::json::stringify(&actual).unwrap(),
-        crate::json::stringify(expected).unwrap()
+        butler_core::json::stringify(&actual).unwrap(),
+        butler_core::json::stringify(expected).unwrap()
     );
 }
 

@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
 
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 use contracts::{CliFailure, CommandContext};
 pub(crate) use contracts::{LedgerCommand, LedgerCommandRequest};
@@ -67,7 +67,7 @@ pub(in crate::project_ledger) fn execute_sync(
                 label,
                 Ok(json!({
                     "initialized":false,
-                    "kind":option_string(&request.options,"kind").map(crate::public_text::trim_js_whitespace).filter(|value|!value.is_empty()),
+                    "kind":option_string(&request.options,"kind").map(butler_core::public_text::trim_js_whitespace).filter(|value|!value.is_empty()),
                     "results":[],
                 })),
             ),

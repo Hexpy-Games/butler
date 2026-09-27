@@ -137,7 +137,7 @@ async fn load(
         .await
         .map_err(GatewayApplicationError::internal_from)?;
     let private_environment =
-        crate::configuration::read_private_environment(&data_root.join(".env"))
+        butler_core::configuration::read_private_environment(&data_root.join(".env"))
             .map_err(GatewayApplicationError::internal_from)?;
     let web_search = read.config.get("webSearch").unwrap_or(&Value::Null);
     let planning = web_search.get("planning").unwrap_or(&Value::Null);
@@ -237,7 +237,7 @@ fn web_search_credentials(
 fn nonempty(value: &Value) -> Option<&str> {
     value
         .as_str()
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
 }
 
@@ -250,7 +250,7 @@ fn model(source: &ModelProviderMetadata) -> AppModelMetadata {
         context_window_tokens: source
             .context_window_tokens
             .filter(|value| value.is_finite() && *value > 0.0)
-            .map(|value| crate::json::saturating_u64(value.trunc())),
+            .map(|value| butler_core::json::saturating_u64(value.trunc())),
         aliases: source.aliases.clone().unwrap_or_default().into(),
         runtime_supported: source.runtime_supported,
         registered: source.registered == Some(true),

@@ -27,7 +27,7 @@ impl Settings {
         if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
             return Err("gateway_settings_path_ambiguous".into());
         }
-        let value = crate::configuration::read_json_object(&path)
+        let value = butler_core::configuration::read_json_object(&path)
             .map_err(|message| format!("gateway_settings_read_failed: {message}"))?;
         Ok(Self { value })
     }
@@ -49,7 +49,7 @@ impl Settings {
         enabled: Option<bool>,
         config_patch: Map<String, Value>,
     ) -> Result<(), crate::host::HostError> {
-        let writes = crate::configuration::ConfigurationWrites::new();
+        let writes = butler_core::configuration::ConfigurationWrites::new();
         let _permit = writes.acquire().await;
         let current = Self::read(data_root, installation)?;
         let existing_config = current.value["config"]
@@ -157,7 +157,7 @@ fn write_settings(
     if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
         return Err("gateway_settings_path_ambiguous".into());
     }
-    crate::configuration::write_json_atomic(&path, value).map_err(|source| {
+    butler_core::configuration::write_json_atomic(&path, value).map_err(|source| {
         crate::host::HostError::new("gateway_settings_unavailable").with_source(source)
     })
 }

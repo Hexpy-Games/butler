@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
 use crate::btcc::storage::{
@@ -124,18 +124,19 @@ impl OperationResultReplayRuntime {
             return Ok(replacement_bytes < original_bytes);
         }
         let replacement_bytes =
-            crate::json::string_bytes(&replacement.content).map_err(|error| {
+            butler_core::json::string_bytes(&replacement.content).map_err(|error| {
                 OperationResultError::Contract(BtccError::detected(
                     BtccCode::OperationResultSerializationFailed,
                     error.to_string(),
                 ))
             })?;
-        let original_bytes = crate::json::string_bytes(&original.content).map_err(|error| {
-            OperationResultError::Contract(BtccError::detected(
-                BtccCode::OperationResultSerializationFailed,
-                error.to_string(),
-            ))
-        })?;
+        let original_bytes =
+            butler_core::json::string_bytes(&original.content).map_err(|error| {
+                OperationResultError::Contract(BtccError::detected(
+                    BtccCode::OperationResultSerializationFailed,
+                    error.to_string(),
+                ))
+            })?;
         Ok(replacement_bytes < original_bytes)
     }
 
@@ -341,20 +342,20 @@ impl OperationResultRuntime for OperationResultReplayRuntime {
             let cursor = args
                 .get("cursor")
                 .filter(|value| !value.is_null())
-                .map(crate::json::coerce_number)
+                .map(butler_core::json::coerce_number)
                 .transpose()
                 .map_err(numeric_argument_error)?
                 .unwrap_or(0.0);
             let through = args
                 .get("through")
                 .filter(|value| !value.is_null())
-                .map(crate::json::coerce_number)
+                .map(butler_core::json::coerce_number)
                 .transpose()
                 .map_err(numeric_argument_error)?;
             let limit = args
                 .get("limit")
                 .filter(|value| !value.is_null())
-                .map(crate::json::coerce_number)
+                .map(butler_core::json::coerce_number)
                 .transpose()
                 .map_err(numeric_argument_error)?
                 .unwrap_or(5.0)
@@ -488,7 +489,7 @@ fn contract(code: BtccCode) -> BtccError {
     BtccError::detected(code, code.as_str())
 }
 
-fn numeric_argument_error(error: crate::json::JsonError) -> BtccError {
+fn numeric_argument_error(error: butler_core::json::JsonError) -> BtccError {
     BtccError::detected(
         BtccCode::OperationResultArgumentCoercionFailed,
         error.to_string(),

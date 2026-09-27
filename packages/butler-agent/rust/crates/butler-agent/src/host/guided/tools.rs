@@ -16,7 +16,7 @@ mod project_source;
 mod resume;
 pub(in crate::host) use message::structured_raw as structured_tool_preview;
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
@@ -360,7 +360,11 @@ impl ToolPort for GuidedTools {
         call: &'a ModelRoundToolCall,
         _: Option<u8>,
     ) -> Pin<
-        Box<dyn Future<Output = Result<crate::json::JsonDocument, ToolExecutionError>> + Send + 'a>,
+        Box<
+            dyn Future<Output = Result<butler_core::json::JsonDocument, ToolExecutionError>>
+                + Send
+                + 'a,
+        >,
     > {
         Box::pin(async move { Box::pin(execute::execute(self, invocation, call)).await })
     }

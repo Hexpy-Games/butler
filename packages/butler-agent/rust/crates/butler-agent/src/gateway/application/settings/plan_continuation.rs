@@ -10,7 +10,7 @@ use crate::gateway::{
     MessageSendRequest,
     application::{AppSettingsFacts, events::EventSubscribers, storage::AppStorageError},
 };
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 pub(in crate::gateway::application) struct PlanContinuation {
     pub(in crate::gateway::application) queued_id: String,
@@ -197,7 +197,7 @@ fn stable_client_message_id(value: &str) -> String {
 }
 
 fn encoded(value: &Value) -> Result<String, AppStorageError> {
-    crate::json::stringify(value).map_err(|error| {
+    butler_core::json::stringify(value).map_err(|error| {
         AppStorageError::new(AppStorageCode::SettingsJsonFailed, error.to_string())
             .with_source(error)
     })

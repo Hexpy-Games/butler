@@ -3,7 +3,7 @@ use serde_json::Value;
 
 use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::storage::AppStorageError;
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 pub(super) fn revision(db: &Connection, key: &str) -> Result<u64, AppStorageError> {
     Ok(read_json(db, key)?
@@ -13,7 +13,7 @@ pub(super) fn revision(db: &Connection, key: &str) -> Result<u64, AppStorageErro
                 && number >= 0.0
                 && number.fract() == 0.0
                 && number <= 9_007_199_254_740_991.0)
-                .then_some(crate::json::saturating_u64(number))
+                .then_some(butler_core::json::saturating_u64(number))
         })
         .unwrap_or(0))
 }

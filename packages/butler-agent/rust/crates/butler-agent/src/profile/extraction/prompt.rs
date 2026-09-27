@@ -2,7 +2,7 @@ use serde_json::Value;
 
 use super::super::contracts::ProfilingMode;
 use super::types::{CorrectionTargets, MAX_OBSERVATIONS, PROMPT_BYTES, SourceWindow};
-use crate::segmentation::split_grapheme_utf8_spans;
+use butler_core::segmentation::split_grapheme_utf8_spans;
 
 pub(super) struct PreparedBatch {
     pub windows: Vec<SourceWindow>,

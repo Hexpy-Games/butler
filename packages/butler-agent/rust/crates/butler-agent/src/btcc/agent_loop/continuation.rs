@@ -113,7 +113,7 @@ pub(crate) struct GuidedActivityBinding {
     pub deferred_until_accepted: bool,
 }
 
-pub(super) fn pending_authority(value: Option<&crate::json::JsonDocument>) -> Option<String> {
+pub(super) fn pending_authority(value: Option<&butler_core::json::JsonDocument>) -> Option<String> {
     let value = value?;
     (value.field("authority_pending").ok().flatten()? == "true")
         .then(|| value.field("request_ref").ok().flatten())?

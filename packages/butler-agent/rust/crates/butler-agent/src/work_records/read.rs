@@ -22,7 +22,7 @@ pub(crate) enum WorkRecordReadError {
     Json(#[from] serde_json::Error),
     /// Re-encoding a record for its revision hash failed.
     #[error("memory_source_unavailable")]
-    Encode(#[from] crate::json::JsonError),
+    Encode(#[from] butler_core::json::JsonError),
     /// A record is structurally invalid: a required field is missing or has
     /// the wrong type, or the records root has no parent.
     #[error("memory_source_unavailable")]
@@ -109,7 +109,7 @@ pub(super) fn snapshot(
     Ok(Some(Snapshot {
         plan,
         review,
-        status: crate::public_text::trim_js_whitespace(&status).into(),
+        status: butler_core::public_text::trim_js_whitespace(&status).into(),
         latest_attempt,
     }))
 }

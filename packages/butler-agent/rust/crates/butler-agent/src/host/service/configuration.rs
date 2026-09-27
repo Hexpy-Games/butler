@@ -46,7 +46,8 @@ impl ServiceConfiguration {
             })?;
         let config = read_butler_config(&data_root);
         let configured = source_model(&config).unwrap_or("");
-        let provider_model = if crate::public_text::trim_js_whitespace(configured).is_empty() {
+        let provider_model = if butler_core::public_text::trim_js_whitespace(configured).is_empty()
+        {
             DEFAULT_MODEL_REF
         } else {
             configured
@@ -117,7 +118,7 @@ impl ServiceConfiguration {
 /// model restored from an existing session rather than the current config.
 pub(crate) fn require_model_ref(binding: &StoredSessionBinding) -> Result<&str, BtccError> {
     let value = binding.model_ref.as_str();
-    if crate::public_text::trim_js_whitespace(value).is_empty() {
+    if butler_core::public_text::trim_js_whitespace(value).is_empty() {
         return Err(BtccError::relayed(
             "butler_model_binding_missing",
             "Stored Butler session has no model binding",

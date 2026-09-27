@@ -13,7 +13,7 @@ use super::{
 pub(crate) struct McpClient {
     pub(super) data_root: PathBuf,
     pub(super) environment: Arc<HashMap<String, String>>,
-    pub(super) configuration_writes: Arc<crate::configuration::ConfigurationWrites>,
+    pub(super) configuration_writes: Arc<butler_core::configuration::ConfigurationWrites>,
     pub(super) registry_path_guard: Arc<RegistryPathGuard>,
 }
 
@@ -64,7 +64,7 @@ impl McpClient {
         Self {
             data_root,
             environment: Arc::new(environment),
-            configuration_writes: Arc::new(crate::configuration::ConfigurationWrites::new()),
+            configuration_writes: Arc::new(butler_core::configuration::ConfigurationWrites::new()),
             registry_path_guard: Arc::new(|_, _| Ok(())),
         }
     }
@@ -72,7 +72,7 @@ impl McpClient {
     pub(crate) fn with_registry_writer(
         data_root: PathBuf,
         environment: HashMap<String, String>,
-        configuration_writes: Arc<crate::configuration::ConfigurationWrites>,
+        configuration_writes: Arc<butler_core::configuration::ConfigurationWrites>,
         registry_path_guard: Arc<RegistryPathGuard>,
     ) -> Self {
         Self {

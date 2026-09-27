@@ -353,7 +353,7 @@ fn normalized(row: &Map<String, Value>, key: &str) -> String {
     normalized_value(text(row, key))
 }
 fn normalized_value(value: Option<&str>) -> String {
-    crate::public_text::trim_js_whitespace(value.unwrap_or("")).to_lowercase()
+    butler_core::public_text::trim_js_whitespace(value.unwrap_or("")).to_lowercase()
 }
 fn kind(row: &Map<String, Value>) -> &str {
     text(row, "kind").unwrap_or("")

@@ -49,7 +49,7 @@ fn normalize_entry(value: &Value, scope: &EffectFileScope) -> EffectResult<Value
         .and_then(Value::as_str)
         .ok_or_else(|| invalid("edit_file requires path"))?;
     let path = crate::btcc::effects::workspace_file::normalized_workspace_effect_path(scope, path)?;
-    let line = crate::json::saturating_u64(
+    let line = butler_core::json::saturating_u64(
         object
             .get("start_line")
             .and_then(Value::as_f64)
@@ -124,7 +124,7 @@ pub(super) fn target_for(input: &Value) -> EffectResult<String> {
 pub(super) fn batch_target(paths: &[String]) -> EffectResult<String> {
     let body = json!({"version":1,"paths":paths});
     let encoded =
-        crate::json::stringify_sorted(&body, &|a, b| a.encode_utf16().cmp(b.encode_utf16()))
+        butler_core::json::stringify_sorted(&body, &|a, b| a.encode_utf16().cmp(b.encode_utf16()))
             .map_err(|error| invalid(error.to_string()).with_source(error))?;
     Ok(format!(
         "workspace:batch:{}",

@@ -23,7 +23,7 @@ use std::sync::Arc;
 use tokio::sync::{Notify, Semaphore};
 
 use crate::btcc::{ProjectWorkOperationIdentity, ResolvedProjectWorkScope};
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 tokio::task_local! {
     static IN_PUBLICATION: ();

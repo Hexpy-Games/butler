@@ -133,7 +133,7 @@ pub(super) fn closeout_page(
             ));
         }
         let document = |raw| {
-            crate::json::JsonDocument::from_encoded(raw).map_err(|error| {
+            butler_core::json::JsonDocument::from_encoded(raw).map_err(|error| {
                 StorageError::new(StorageCode::ToolJournalJsonInvalid, error.to_string())
                     .with_source(error)
             })
@@ -231,7 +231,7 @@ fn hydrate(row: StoredRecord) -> StorageResult<ToolJournalRecord> {
     let result = row
         .result_json
         .map(|value| {
-            crate::json::JsonDocument::from_encoded(value).map_err(|failure| {
+            butler_core::json::JsonDocument::from_encoded(value).map_err(|failure| {
                 error(StorageCode::ToolJournalJsonInvalid, failure.to_string()).with_source(failure)
             })
         })

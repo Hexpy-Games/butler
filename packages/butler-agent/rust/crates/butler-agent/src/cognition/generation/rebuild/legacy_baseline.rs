@@ -78,10 +78,10 @@ pub(super) async fn ensure(
             let root = generations.join(&id);
             ensure_data_authority(data_root, &[&root])?;
             durable::create_dir(&root)?;
-            let legacy_hash = crate::json::stringify(&json!(["legacy-baseline", id, first.hash]))
-                .map_err(|source| {
-                error(CognitionCode::MemoryInventoryIncomplete).with_source(source)
-            })?;
+            let legacy_hash =
+                butler_core::json::stringify(&json!(["legacy-baseline", id, first.hash])).map_err(
+                    |source| error(CognitionCode::MemoryInventoryIncomplete).with_source(source),
+                )?;
             durable::write_json(
                 &root.join("manifest.json"),
                 &json!({

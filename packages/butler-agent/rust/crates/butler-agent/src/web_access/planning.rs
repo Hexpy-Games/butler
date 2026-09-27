@@ -162,7 +162,8 @@ fn bounded_original_request(value: &str) -> Option<String> {
     if utf16_len(&compact) <= 3_000 {
         return Some(compact);
     }
-    let head = crate::json::saturating_usize(((3_000 - utf16_len(MARKER)) as f64 * 0.7).floor());
+    let head =
+        butler_core::json::saturating_usize(((3_000 - utf16_len(MARKER)) as f64 * 0.7).floor());
     let tail = 3_000 - utf16_len(MARKER) - head;
     Some(format!(
         "{}{}{}",
@@ -200,7 +201,7 @@ fn utf16_len(value: &str) -> usize {
 }
 
 fn utf16_slice(value: &str, start: usize, end: usize) -> String {
-    crate::json::Utf16Slice::new(value, start, end)
+    butler_core::json::Utf16Slice::new(value, start, end)
         .utf8_lossy()
         .into_owned()
 }

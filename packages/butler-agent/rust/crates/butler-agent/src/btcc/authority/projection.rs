@@ -11,7 +11,7 @@ const EFFECT_DENIAL: &str = "Reviewed operation denied. No change was applied.";
 
 pub(super) fn admission(
     record: &AuthorityRecord,
-    collation: &crate::locale::LocaleCollation,
+    collation: &butler_core::locale::LocaleCollation,
 ) -> AuthorityResult<AuthorityAdmissionResult> {
     match record.decision.as_str() {
         "allowed" => Ok(AuthorityAdmissionResult::Allowed {
@@ -41,7 +41,7 @@ pub(super) fn admission(
 }
 pub(super) fn request(
     record: &AuthorityRecord,
-    collation: &crate::locale::LocaleCollation,
+    collation: &butler_core::locale::LocaleCollation,
 ) -> AuthorityResult<Value> {
     let scope = permission::for_record(record, collation)?;
     let mut output = json!({

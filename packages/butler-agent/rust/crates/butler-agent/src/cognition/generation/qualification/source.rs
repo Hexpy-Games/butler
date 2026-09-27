@@ -41,9 +41,10 @@ pub(super) fn memory_inventory_hash(inventory: &Value) -> CognitionResult<String
             .unwrap_or(fallback);
         normalized.insert(field.to_owned(), value);
     }
-    let serialized = crate::json::stringify(&Value::Object(normalized)).map_err(|source| {
-        invalid(CognitionCode::MemoryAcceptanceEvidenceInvalid).with_source(source)
-    })?;
+    let serialized =
+        butler_core::json::stringify(&Value::Object(normalized)).map_err(|source| {
+            invalid(CognitionCode::MemoryAcceptanceEvidenceInvalid).with_source(source)
+        })?;
     Ok(sha256(serialized.as_bytes()))
 }
 
@@ -386,5 +387,5 @@ pub(super) fn valid_timestamp(value: &str) -> bool {
 }
 
 pub(super) fn timestamp_millis(value: &str) -> Option<i64> {
-    crate::js_date::parse_date_millis(value, &|local| Some(local))
+    butler_core::js_date::parse_date_millis(value, &|local| Some(local))
 }

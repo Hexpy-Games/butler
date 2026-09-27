@@ -48,7 +48,7 @@ pub(super) fn line(
     // Only this small metadata event is materialized; prompts, attachments and
     // callbacks never enter the encoder or survive the append operation.
     let value = serde_json::to_value(event).map_err(encode_failure)?;
-    crate::json::stringify(&value).map_err(encode_failure)
+    butler_core::json::stringify(&value).map_err(encode_failure)
 }
 
 #[derive(Serialize)]

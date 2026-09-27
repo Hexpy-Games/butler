@@ -8,11 +8,11 @@ use std::{
 use rusqlite::{Connection, OpenFlags};
 use serde_json::{Value, json};
 
-use crate::{
-    cognition::{CognitionPathEnvironment, CognitionResult},
-    coordination::{CognitionWriteCoordinator, ConsolidationLockState},
-    js_date,
-};
+use crate::cognition::CognitionPathEnvironment;
+use crate::cognition::CognitionResult;
+use crate::coordination::CognitionWriteCoordinator;
+use crate::coordination::ConsolidationLockState;
+use butler_core::js_date;
 
 use super::{MaintenanceStatus, MemoryHealthReport, error, maintenance};
 use crate::cognition::CognitionCode;
@@ -110,7 +110,7 @@ pub(super) fn read(
         diagnostics.push("graph memory has no indexed associations yet".into());
     }
     if ingestion_lag_ms.is_some_and(|lag| lag > 60 * 60 * 1_000) {
-        let minutes = crate::json::saturating_i64(
+        let minutes = butler_core::json::saturating_i64(
             (ingestion_lag_ms.unwrap_or_default() as f64 / 60_000.0).round(),
         );
         diagnostics.push(format!("memory ingestion lag is {minutes} minute(s)"));
@@ -373,7 +373,7 @@ fn read_registered_projects(path: &Path) -> Vec<String> {
     values
         .into_iter()
         .filter_map(|project| project.get("name").and_then(Value::as_str))
-        .filter(|name| !crate::public_text::trim_js_whitespace(name).is_empty())
+        .filter(|name| !butler_core::public_text::trim_js_whitespace(name).is_empty())
         .map(str::to_owned)
         .collect()
 }

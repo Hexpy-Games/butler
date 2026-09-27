@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 use serde_json::{Map, Value, json};
 
 use super::{AppSettingsFacts, model, validation};
-use crate::{gateway::GatewayApplicationError, public_text::trim_js_whitespace};
+use crate::gateway::GatewayApplicationError;
+use butler_core::public_text::trim_js_whitespace;
 
 mod patch;
 

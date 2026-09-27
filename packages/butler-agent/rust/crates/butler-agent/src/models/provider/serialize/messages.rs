@@ -64,7 +64,7 @@ pub(super) fn local_chat_messages(request: &ModelRoundRequest<'_>) -> Vec<Value>
             [
                 request
                     .instructions
-                    .map(crate::public_text::trim_js_whitespace)
+                    .map(butler_core::public_text::trim_js_whitespace)
                     .filter(|value| !value.is_empty()),
                 Some("When a request depends on current, external, public, or user-environment state, choose and call the appropriate tool from the provided tool catalog before answering. Do not ask the user to name the tool."),
                 Some("When a tool is needed, use only the structured tool-call channel provided by the API (`message.tool_calls`) or an explicit backend-native `<|tool_call>...<tool_call|>` marker. Do not write pseudo tool calls, raw function-call syntax, Markdown code, JSON tool calls, or process notes as a substitute for a tool call. If you cannot call a tool, answer directly and say what cannot be verified."),
@@ -85,7 +85,7 @@ fn chat_messages_with_instructions(
 ) -> Vec<Value> {
     let mut output = Vec::new();
     if let Some(value) = instructions
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
     {
         output.push(serde_json::json!({"role":"system","content":value}));

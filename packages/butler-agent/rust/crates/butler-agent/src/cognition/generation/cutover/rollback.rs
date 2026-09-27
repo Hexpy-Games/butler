@@ -273,9 +273,9 @@ async fn resume_for_build(
             return Err(error(CognitionCode::MemoryOperationAborted));
         }
         let current = descriptor::capture_active_descriptor(data_root, environment)?;
-        let current_json = crate::json::stringify(&current.raw)
+        let current_json = butler_core::json::stringify(&current.raw)
             .map_err(|source| error(CognitionCode::MemoryGenerationChanged).with_source(source))?;
-        let expected_json = crate::json::stringify(expected_descriptor)
+        let expected_json = butler_core::json::stringify(expected_descriptor)
             .map_err(|source| error(CognitionCode::MemoryGenerationChanged).with_source(source))?;
         if current_json != expected_json
             || current.fields.previous_generation_id.as_deref() != Some(generation_id)

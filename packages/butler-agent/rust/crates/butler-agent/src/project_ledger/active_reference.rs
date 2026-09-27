@@ -78,7 +78,7 @@ pub(super) fn resolve_reference(
         .into_iter()
         .flatten()
         .filter_map(|value| {
-            let id = crate::public_text::trim_js_whitespace(&value);
+            let id = butler_core::public_text::trim_js_whitespace(&value);
             (safe_id(id) && seen.insert(id.to_owned())).then(|| id.to_owned())
         })
         .map(|id| projects_root.join(id))
@@ -126,7 +126,7 @@ fn json_string(path: &Path, key: &str) -> Option<String> {
     let text = String::from_utf8_lossy(&raw);
     let json: Value = serde_json::from_str(&text).ok()?;
     let value = json.get(key)?.as_str()?;
-    let value = crate::public_text::trim_js_whitespace(value);
+    let value = butler_core::public_text::trim_js_whitespace(value);
     (!value.is_empty()).then(|| value.to_owned())
 }
 

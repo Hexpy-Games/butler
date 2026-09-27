@@ -281,7 +281,7 @@ fn chunk_evidence(markdown: &str, title: Option<&str>, url: &str) -> Vec<Evidenc
     let mut chunks = Vec::new();
     let mut offset = 0;
     while offset < text.encode_utf16().count() {
-        let candidate = crate::json::Utf16Slice::new(text, offset, CHUNK_SIZE)
+        let candidate = butler_core::json::Utf16Slice::new(text, offset, CHUNK_SIZE)
             .utf8_lossy()
             .into_owned();
         let candidate_units = candidate.encode_utf16().count();
@@ -295,7 +295,7 @@ fn chunk_evidence(markdown: &str, title: Option<&str>, url: &str) -> Vec<Evidenc
                 end = offset + before;
             }
         }
-        let slice = crate::json::Utf16Slice::new(text, offset, end.saturating_sub(offset))
+        let slice = butler_core::json::Utf16Slice::new(text, offset, end.saturating_sub(offset))
             .utf8_lossy()
             .into_owned();
         let chunk_text = slice.trim().to_owned();
@@ -320,7 +320,7 @@ fn chunk_evidence(markdown: &str, title: Option<&str>, url: &str) -> Vec<Evidenc
 }
 
 fn utf16_prefix(value: &str, max: usize) -> String {
-    crate::json::Utf16Slice::new(value, 0, max)
+    butler_core::json::Utf16Slice::new(value, 0, max)
         .utf8_lossy()
         .into_owned()
 }

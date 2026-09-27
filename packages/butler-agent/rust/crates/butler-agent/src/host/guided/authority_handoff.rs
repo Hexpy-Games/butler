@@ -4,14 +4,17 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 
-use crate::{
-    btcc::{AuthorityDecisionInput, AuthorityError, PrincipalAuthority},
-    gateway::{
-        AppAuthorityDecision, AppAuthorityDecisionInput, AppAuthorityHandoff, AppAuthorityPage,
-        ApplicationFuture, GatewayApplicationError, InboundQueue,
-    },
-    json::JsonDocument,
-};
+use crate::btcc::AuthorityDecisionInput;
+use crate::btcc::AuthorityError;
+use crate::btcc::PrincipalAuthority;
+use crate::gateway::AppAuthorityDecision;
+use crate::gateway::AppAuthorityDecisionInput;
+use crate::gateway::AppAuthorityHandoff;
+use crate::gateway::AppAuthorityPage;
+use crate::gateway::ApplicationFuture;
+use crate::gateway::GatewayApplicationError;
+use crate::gateway::InboundQueue;
+use butler_core::json::JsonDocument;
 
 #[derive(Clone)]
 pub(crate) struct AuthorityHandoff {

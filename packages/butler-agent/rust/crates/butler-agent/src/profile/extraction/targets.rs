@@ -76,7 +76,7 @@ pub(super) fn revision(entry: &storage::StoredEntry) -> String {
 pub(super) fn normalized_conditions(mut values: Vec<String>) -> Vec<String> {
     values = values
         .into_iter()
-        .map(|value| crate::public_text::trim_js_whitespace(&value).to_owned())
+        .map(|value| butler_core::public_text::trim_js_whitespace(&value).to_owned())
         .filter(|value| !value.is_empty())
         .collect();
     values.sort_by(|left, right| left.encode_utf16().cmp(right.encode_utf16()));

@@ -23,7 +23,7 @@ fn v2_recomputes_support_in_qualifier_order_and_rejects_legacy_schema() {
         )
         .expect("create v2 fixture");
 
-    let now = crate::js_date::parse_date_millis("2026-09-23T00:00:00.000Z", &Some)
+    let now = butler_core::js_date::parse_date_millis("2026-09-23T00:00:00.000Z", &Some)
         .expect("test timestamp");
     let metrics = run(&mut connection, now, 1.0).expect("consolidate v2 edge");
     assert_eq!(metrics.candidates_considered, 1);

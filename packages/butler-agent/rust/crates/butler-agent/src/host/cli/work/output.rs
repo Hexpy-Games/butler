@@ -73,7 +73,7 @@ pub(super) fn render_error(
 fn envelope(ok: bool, command: &str, data: Option<Value>, error: Option<&Value>) -> String {
     format!(
         "{}\n",
-        crate::json::pretty(&json!({
+        butler_core::json::pretty(&json!({
             "ok": ok,
             "command": command,
             "data": data.unwrap_or(Value::Null),

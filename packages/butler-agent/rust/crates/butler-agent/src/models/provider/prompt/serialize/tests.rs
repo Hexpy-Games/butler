@@ -5,13 +5,15 @@ use tokio_util::sync::CancellationToken;
 use url::Url;
 
 use super::*;
-use crate::{
-    locale::LocaleCollation,
-    models::{
-        ModelCatalog, ModelCatalogSnapshotInput, PromptCacheBoundary, PromptJsonSchema,
-        PromptUsageAttribution, ProviderAuth, ProviderPromptCachePolicy, ProviderRoundPolicy,
-    },
-};
+use crate::models::ModelCatalog;
+use crate::models::ModelCatalogSnapshotInput;
+use crate::models::PromptCacheBoundary;
+use crate::models::PromptJsonSchema;
+use crate::models::PromptUsageAttribution;
+use crate::models::ProviderAuth;
+use crate::models::ProviderPromptCachePolicy;
+use crate::models::ProviderRoundPolicy;
+use butler_core::locale::LocaleCollation;
 
 fn config(model_ref: &str) -> ProviderRequestConfig {
     let catalog = ModelCatalog::new().unwrap();
@@ -85,7 +87,7 @@ fn wire(
     config: &ProviderRequestConfig,
     carrier: Carrier,
 ) -> String {
-    crate::json::stringify(&body(request, config, carrier).unwrap().body).unwrap()
+    butler_core::json::stringify(&body(request, config, carrier).unwrap().body).unwrap()
 }
 
 #[test]
@@ -174,7 +176,7 @@ fn hosted_prompt_wire_bodies_follow_each_carrier_contract() {
         config.prompt_cache.retention = Some(PromptCacheRetention::Hours24);
         let wire = body(&request, &config, Carrier::Responses).unwrap();
         assert_eq!(
-            crate::json::stringify(&wire.body).unwrap(),
+            butler_core::json::stringify(&wire.body).unwrap(),
             r#"{"max_output_tokens":321,"model":"gpt-5.5","store":true,"prompt_cache_key":"fixture:scope","prompt_cache_retention":"24h","instructions":"System","reasoning":{"effort":"high"},"input":"StableDynamic"}"#
         );
         assert_eq!(wire.cache_retention, Some(PromptCacheRetention::Hours24));

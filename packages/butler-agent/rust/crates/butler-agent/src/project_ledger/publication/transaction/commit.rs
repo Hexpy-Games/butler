@@ -17,7 +17,7 @@ pub(super) fn prepare(
     attempt: &Attempt,
     paths: &Paths,
     updates: &[ProjectLedgerRecordUpdate],
-    collation: &crate::locale::LocaleCollation,
+    collation: &butler_core::locale::LocaleCollation,
 ) -> Result<Journal, ProjectWorkPublicationError> {
     let root = &scope.ledger_root;
     let mut journal = Journal {

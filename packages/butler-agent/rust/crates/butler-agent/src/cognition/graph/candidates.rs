@@ -88,8 +88,9 @@ pub(super) fn load(
             if !append(&mut context, &id, &mut visiting, &mut group, false)? {
                 continue;
             }
-            let next_bytes = crate::json::serde_serialized_bytes(&CandidateSlices(&result, &group))
-                .map_err(json_error)?;
+            let next_bytes =
+                butler_core::json::serde_serialized_bytes(&CandidateSlices(&result, &group))
+                    .map_err(json_error)?;
             if next_bytes > 8_192 {
                 continue;
             }

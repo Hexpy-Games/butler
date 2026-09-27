@@ -109,7 +109,7 @@ fn message(
     let Some(text) = input
         .text
         .as_deref()
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|v| !v.is_empty())
     else {
         return deny(input, "audit_event", "message_text_missing");
@@ -138,7 +138,7 @@ fn tool(
         .as_ref()
         .and_then(|v| v.get("toolCallId"))
         .and_then(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|v| !v.is_empty());
     let Some(call) = call else {
         return deny(

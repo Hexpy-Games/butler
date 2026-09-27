@@ -70,7 +70,7 @@ fn hosted_responses(
     body.insert("model".into(), config.wire_model.clone().into());
     if let Some(instructions) = request
         .instructions
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
     {
         body.insert("instructions".into(), instructions.into());
@@ -126,8 +126,7 @@ fn responses(
         if !codex && !explicit {
             Value::String(prompt.into())
         } else {
-            let mut stable =
-                crate::json::json_object!({"type":"input_text","text":boundary.stable_prefix});
+            let mut stable = butler_core::json::json_object!({"type":"input_text","text":boundary.stable_prefix});
             if explicit {
                 stable.insert("prompt_cache_breakpoint".into(), json!({"mode":"explicit"}));
             }
@@ -188,7 +187,7 @@ fn responses(
         body.insert("model".into(), model.into());
         let instructions = request
             .instructions
-            .map(crate::public_text::trim_js_whitespace)
+            .map(butler_core::public_text::trim_js_whitespace)
             .filter(|value| !value.is_empty())
             .unwrap_or("You are Butler, a helpful personal AI assistant.");
         body.insert("instructions".into(), instructions.into());

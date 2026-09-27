@@ -121,15 +121,17 @@ pub(crate) fn project_work_status(facts: Vec<AppBoundWorkStatusFact>) -> Value {
                 .count();
             let total_actions = fact.action_progress.len();
             let safe_title =
-                crate::public_text::sanitize_public_text(&fact.safe_title, "Butler work");
+                butler_core::public_text::sanitize_public_text(&fact.safe_title, "Butler work");
             let summary = fact
                 .operational_notice
                 .as_ref()
                 .filter(|notice| matches!(notice.status.as_str(), "recovering" | "interrupted"))
                 .map(|notice| notice.summary.as_str())
                 .unwrap_or(&fact.summary);
-            let safe_summary =
-                crate::public_text::sanitize_public_text(summary, "Work status is available.");
+            let safe_summary = butler_core::public_text::sanitize_public_text(
+                summary,
+                "Work status is available.",
+            );
             let stage = fact.stage.filter(|stage| {
                 matches!(
                     stage.as_str(),
@@ -349,7 +351,7 @@ fn append_relation_workers(
             "worker_label": label,
             "worker_display_name": label,
             "worker_ordinal_label": ordinal_label,
-            "objective": crate::public_text::sanitize_public_text(title, "Native child Work"),
+            "objective": butler_core::public_text::sanitize_public_text(title, "Native child Work"),
             "phase": phase,
             "status_line": worker_status_line(status),
             "session_id": session.id,

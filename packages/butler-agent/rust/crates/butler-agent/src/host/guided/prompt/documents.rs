@@ -1,4 +1,4 @@
-use crate::public_text::fixed_regex;
+use butler_core::public_text::fixed_regex;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
@@ -47,9 +47,9 @@ async fn group(
                 Err(_) => continue,
             },
         };
-        let prefix = crate::json::Utf16Prefix::new(content.as_ref(), remaining);
+        let prefix = butler_core::json::Utf16Prefix::new(content.as_ref(), remaining);
         let value = prefix.utf8_for_hash();
-        if !crate::public_text::trim_js_whitespace(&value).is_empty() {
+        if !butler_core::public_text::trim_js_whitespace(&value).is_empty() {
             contents.push(value.into_owned());
         }
         remaining = remaining.saturating_sub(prefix.len_utf16());
@@ -60,12 +60,12 @@ async fn group(
 fn language(candidate: &str) -> Option<String> {
     static RESPONSE_LANGUAGE: LazyLock<Regex> =
         LazyLock::new(|| fixed_regex(r"(?imu)^Assistant Response Language:\s*(.+)$"));
-    let prefix = crate::json::Utf16Prefix::new(candidate, 12_000);
+    let prefix = butler_core::json::Utf16Prefix::new(candidate, 12_000);
     let text = prefix.utf8_for_hash();
     let language = RESPONSE_LANGUAGE.captures(&text)?.get(1)?;
-    let language = crate::public_text::trim_js_whitespace(language.as_str());
+    let language = butler_core::public_text::trim_js_whitespace(language.as_str());
     (!language.is_empty()).then(|| {
-        crate::json::Utf16Prefix::new(language, 80)
+        butler_core::json::Utf16Prefix::new(language, 80)
             .utf8_for_hash()
             .into_owned()
     })
@@ -172,7 +172,7 @@ pub(super) async fn read(
         .filter(|document| document.source_id == "eol");
     let eol_content = eol
         .next()
-        .map(|document| crate::public_text::trim_js_whitespace(&document.content).to_owned());
+        .map(|document| butler_core::public_text::trim_js_whitespace(&document.content).to_owned());
     if eol.next().is_some() || eol_content.as_deref().is_none_or(str::is_empty) {
         return Err(BtccError::relayed(
             "guided_eol_instruction_document_invalid",
@@ -207,7 +207,7 @@ pub(super) async fn read(
         bounded
             .iter()
             .filter(|document| accepted.contains(document.source_id.as_str()))
-            .map(|document| crate::public_text::trim_js_whitespace(&document.content))
+            .map(|document| butler_core::public_text::trim_js_whitespace(&document.content))
             .filter(|value| !value.is_empty())
             .collect::<Vec<_>>()
             .join("\n\n")

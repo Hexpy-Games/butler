@@ -1,5 +1,5 @@
 use crate::cognition::CognitionCode;
-use crate::public_text::fixed_regex;
+use butler_core::public_text::fixed_regex;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fs,
@@ -37,7 +37,7 @@ pub(super) fn plan(
     project_id: &str,
     workspace: &Path,
 ) -> CognitionResult<ContinuityRecoveryManifest> {
-    let project_id = crate::public_text::trim_js_whitespace(project_id);
+    let project_id = butler_core::public_text::trim_js_whitespace(project_id);
     if project_id.is_empty() {
         return Err(error(CognitionCode::ContinuityRecoveryProjectRequired));
     }
@@ -292,7 +292,7 @@ fn compact(value: &str, max: usize) -> String {
     let mut normalized = String::new();
     let mut pending_space = false;
     for character in value.chars() {
-        if crate::public_text::is_js_whitespace(character) {
+        if butler_core::public_text::is_js_whitespace(character) {
             pending_space = !normalized.is_empty();
         } else {
             if pending_space {

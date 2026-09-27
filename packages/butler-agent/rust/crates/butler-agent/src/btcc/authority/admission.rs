@@ -9,7 +9,7 @@ const ALLOW_TEXT: &str = "Continue the approved operation exactly once.";
 pub(super) fn admit(
     repository: &mut dyn AuthorityRepository,
     input: AuthorityAdmissionInput,
-    collation: &crate::locale::LocaleCollation,
+    collation: &butler_core::locale::LocaleCollation,
     clock: &dyn Fn() -> String,
     uuid: &dyn Fn() -> String,
 ) -> AuthorityResult<AuthorityAdmissionResult> {
@@ -155,7 +155,7 @@ pub(super) fn first_executable(command: &str) -> String {
         return "command".into();
     }
     let executable = candidate.rsplit(['/', '\\']).next().unwrap_or("");
-    let executable = crate::public_text::trim_js_whitespace(executable);
+    let executable = butler_core::public_text::trim_js_whitespace(executable);
     if executable.is_empty() {
         "command".into()
     } else {
@@ -168,7 +168,7 @@ fn shell_words(command: &str) -> Option<Vec<String>> {
     let mut quote: Option<char> = None;
     let mut escaped = false;
     let mut started = false;
-    for character in crate::public_text::trim_js_whitespace(command).chars() {
+    for character in butler_core::public_text::trim_js_whitespace(command).chars() {
         if escaped {
             word.push(character);
             escaped = false;
@@ -194,7 +194,7 @@ fn shell_words(command: &str) -> Option<Vec<String>> {
             started = true;
             continue;
         }
-        if crate::public_text::is_js_whitespace(character) {
+        if butler_core::public_text::is_js_whitespace(character) {
             if started {
                 words.push(std::mem::take(&mut word));
                 started = false;

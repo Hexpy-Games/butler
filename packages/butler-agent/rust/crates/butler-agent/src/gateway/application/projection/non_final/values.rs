@@ -1,6 +1,6 @@
 //! Transport value normalization shared by non-final projections.
 
-use crate::public_text::fixed_regex;
+use butler_core::public_text::fixed_regex;
 use regex::Regex;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Map, Value};
@@ -20,7 +20,7 @@ pub(super) fn object(value: Option<&Value>) -> &Map<String, Value> {
 }
 pub(super) fn text(v: Option<&Value>) -> Option<String> {
     v.and_then(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|s| !s.is_empty())
         .map(str::to_owned)
 }

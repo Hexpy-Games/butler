@@ -8,9 +8,9 @@ use super::head;
 use super::occurrence::{Attempt, Occurrence};
 use super::scope::LedgerScope;
 use super::targets;
-use crate::locale::LocaleCollation;
 use crate::project_ledger::publication::ProjectLedgerRecordUpdate;
 use crate::project_ledger::publication::transaction::claim;
+use butler_core::locale::LocaleCollation;
 
 pub(super) fn apply(
     data_root: &Path,

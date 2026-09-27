@@ -3,14 +3,13 @@ use std::{fs, path::PathBuf, sync::Arc};
 use serde_json::{Value, json};
 
 use super::*;
-use crate::{
-    btcc::ModelRoundError,
-    locale::LocaleCollation,
-    models::{
-        ModelCatalog, ProviderAuth, ProviderAuthMode, ProviderConfigRequest,
-        ProviderRequestConfigPort,
-    },
-};
+use crate::btcc::ModelRoundError;
+use crate::models::ModelCatalog;
+use crate::models::ProviderAuth;
+use crate::models::ProviderAuthMode;
+use crate::models::ProviderConfigRequest;
+use crate::models::ProviderRequestConfigPort;
+use butler_core::locale::LocaleCollation;
 
 mod local;
 
@@ -48,7 +47,7 @@ impl Fixture {
             Arc::new(ModelCatalog::new().unwrap()),
             Arc::new(LocaleCollation::new("en-US").unwrap()),
             crate::models::provider_http_client().unwrap(),
-            Arc::new(crate::configuration::ConfigurationWrites::new()),
+            Arc::new(butler_core::configuration::ConfigurationWrites::new()),
         )
         .unwrap()
     }

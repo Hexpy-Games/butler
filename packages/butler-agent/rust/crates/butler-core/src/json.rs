@@ -6,25 +6,27 @@ use std::borrow::Cow;
 use unicode_normalization::UnicodeNormalization;
 
 mod utf16_prefix;
-pub(crate) use utf16_prefix::Utf16Prefix;
+pub use utf16_prefix::Utf16Prefix;
 mod utf16_slice;
-pub(crate) use utf16_slice::Utf16Slice;
+pub use utf16_slice::Utf16Slice;
 mod document;
-pub(crate) use document::JsonDocument;
-pub(crate) use document::{
+pub use document::JsonDocument;
+pub use document::{
     bound_raw_string, raw_string_contains_any, raw_string_units, visit_raw_array, visit_raw_object,
 };
 mod number;
-pub(crate) use number::{coerce_number, number_from_string};
+pub use number::{coerce_number, number_from_string};
 mod saturating;
-pub(crate) use saturating::{
+pub use saturating::{
     saturating_i32, saturating_i64, saturating_u16, saturating_u32, saturating_u64,
     saturating_usize,
 };
 
 /// Builds a JSON object literal as a `serde_json::Map`, so callers can insert
 /// or remove keys without unwrapping `Value::as_object_mut`.
-macro_rules! json_object {
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __json_object {
     ({ $($body:tt)* }) => {
         match ::serde_json::json!({ $($body)* }) {
             ::serde_json::Value::Object(map) => map,
@@ -33,16 +35,16 @@ macro_rules! json_object {
         }
     };
 }
-pub(crate) use json_object;
+pub use crate::__json_object as json_object;
 
 /// Pretty-prints a JSON value. Writing a `Value` to memory cannot fail; the
 /// compact form is the fallback regardless.
-pub(crate) fn pretty(value: &Value) -> String {
+pub fn pretty(value: &Value) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
 }
 
 /// `value` as a mutable object; any other value is first replaced by `{}`.
-pub(crate) fn object_mut(value: &mut Value) -> &mut serde_json::Map<String, Value> {
+pub fn object_mut(value: &mut Value) -> &mut serde_json::Map<String, Value> {
     match value {
         Value::Object(map) => map,
         other => {
@@ -53,7 +55,7 @@ pub(crate) fn object_mut(value: &mut Value) -> &mut serde_json::Map<String, Valu
 }
 
 /// `parent[key]` as a mutable object; a missing or non-object value becomes `{}`.
-pub(crate) fn object_field_mut<'a>(
+pub fn object_field_mut<'a>(
     parent: &'a mut serde_json::Map<String, Value>,
     key: &str,
 ) -> &'a mut serde_json::Map<String, Value> {
@@ -66,7 +68,7 @@ pub(crate) fn object_field_mut<'a>(
 
 /// Failures of the crate's JSON encoders.
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum JsonError {
+pub enum JsonError {
     /// A number has no JSON representation (NaN or an infinity).
     #[error("invalid JSON number")]
     InvalidNumber,
@@ -86,18 +88,18 @@ pub(crate) enum JsonError {
 
 impl JsonError {
     /// Wraps a visitor callback's own error.
-    pub(crate) fn callback(error: impl std::error::Error + Send + Sync + 'static) -> Self {
+    pub fn callback(error: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::Callback(Box::new(error))
     }
 }
 
 #[derive(Clone, Copy)]
-pub(crate) enum CanonicalKeyOrder {
+pub enum CanonicalKeyOrder {
     Utf16Lexical,
     JsPropertyEnumeration,
 }
 
-pub(crate) fn canonical_json(value: &Value, order: CanonicalKeyOrder) -> Result<String, JsonError> {
+pub fn canonical_json(value: &Value, order: CanonicalKeyOrder) -> Result<String, JsonError> {
     encode(
         value,
         match order {
@@ -108,14 +110,14 @@ pub(crate) fn canonical_json(value: &Value, order: CanonicalKeyOrder) -> Result<
     )
 }
 
-pub(crate) fn stringify(value: &Value) -> Result<String, JsonError> {
+pub fn stringify(value: &Value) -> Result<String, JsonError> {
     encode(value, JsonOrder::Insertion, None)
 }
 
 /// Sort object keys stably, then apply ECMAScript property enumeration.
 /// Strings and keys retain their original Unicode representation. The caller
 /// owns comparison policy; this codec never creates or retains a collator.
-pub(crate) fn stringify_sorted(
+pub fn stringify_sorted(
     value: &Value,
     compare: &dyn Fn(&str, &str) -> std::cmp::Ordering,
 ) -> Result<String, JsonError> {
@@ -124,7 +126,7 @@ pub(crate) fn stringify_sorted(
 
 /// Serialize transformed string values without cloning the containing DOM.
 /// Keys retain ECMAScript enumeration order and are never transformed.
-pub(crate) fn stringify_with_string_projection(
+pub fn stringify_with_string_projection(
     value: &Value,
     mut project: impl FnMut(&str) -> Option<String>,
 ) -> Result<String, JsonError> {
@@ -139,13 +141,13 @@ pub(crate) fn stringify_with_string_projection(
     Ok(output)
 }
 
-pub(crate) fn stringify_without(value: &Value, field: &str) -> Result<String, JsonError> {
+pub fn stringify_without(value: &Value, field: &str) -> Result<String, JsonError> {
     encode(value, JsonOrder::Insertion, Some(field))
 }
 
 /// Append borrowed JSON without allocating an intermediate encoded string.
 /// As with the other writers, callers discard the output if encoding fails.
-pub(crate) fn append_json(value: &Value, output: &mut String) -> Result<(), JsonError> {
+pub fn append_json(value: &Value, output: &mut String) -> Result<(), JsonError> {
     write_value(value, output, JsonOrder::Insertion, None, &mut None)
 }
 
@@ -239,13 +241,13 @@ fn write_value(
     Ok(())
 }
 
-pub(crate) fn write_string(value: &str, output: &mut String) -> Result<(), JsonError> {
+pub fn write_string(value: &str, output: &mut String) -> Result<(), JsonError> {
     serde_json::to_writer(Utf8Output(output), value).map_err(JsonError::from)
 }
 
 /// Measure the same escaped UTF-8 string bytes without retaining encoded output.
 /// The counting sink uses the writer's serializer, including both quote bytes.
-pub(crate) fn string_bytes(value: &str) -> Result<usize, JsonError> {
+pub fn string_bytes(value: &str) -> Result<usize, JsonError> {
     serde_serialized_bytes(value)
 }
 
@@ -253,9 +255,7 @@ pub(crate) fn string_bytes(value: &str) -> Result<usize, JsonError> {
 /// This is not the ECMAScript codec: in particular, serde number formatting can
 /// differ from JSON.stringify. Callers needing JS byte limits must establish
 /// encoding equivalence for their DTO (for example, a string/null-only DTO).
-pub(crate) fn serde_serialized_bytes<T: serde::Serialize + ?Sized>(
-    value: &T,
-) -> Result<usize, JsonError> {
+pub fn serde_serialized_bytes<T: serde::Serialize + ?Sized>(value: &T) -> Result<usize, JsonError> {
     let mut output = ByteCount(0);
     serde_json::to_writer(&mut output, value).map_err(JsonError::from)?;
     Ok(output.0)

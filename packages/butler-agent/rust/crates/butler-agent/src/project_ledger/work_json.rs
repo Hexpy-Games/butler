@@ -4,7 +4,8 @@ use serde_json::{Map, Value};
 use unicode_normalization::UnicodeNormalization;
 
 use super::ProjectLedgerReadError;
-use crate::{json, locale::LocaleCollation};
+use butler_core::json;
+use butler_core::locale::LocaleCollation;
 
 pub(super) fn canonical(
     value: &Value,

@@ -1,6 +1,6 @@
-use crate::tool_protocol::ToolName;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
 use crate::workspace::cursor_path;
@@ -57,7 +57,7 @@ pub(super) fn decode(value: &Value) -> Option<GrepCursor> {
             if !number.is_finite() || number < 1.0 || number.fract() != 0.0 {
                 return None;
             }
-            crate::json::saturating_usize(number)
+            butler_core::json::saturating_usize(number)
         })),
     }?;
     let window_start = optional_path("window_start_path")?;

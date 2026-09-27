@@ -166,7 +166,7 @@ fn current_date(timezone: &str) -> String {
         .map(tz::LocalTimeType::ut_offset)
         .unwrap_or(0);
     let wall_ms = epoch_ms.saturating_add(i64::from(offset).saturating_mul(1_000));
-    let (year, month, day) = crate::js_date::civil_from_days(wall_ms.div_euclid(86_400_000));
+    let (year, month, day) = butler_core::js_date::civil_from_days(wall_ms.div_euclid(86_400_000));
     format!("{year:04}-{month:02}-{day:02}")
 }
 

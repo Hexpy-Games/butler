@@ -1,6 +1,6 @@
 //! One-shot post-delivery service restart handoff over the existing effect journal.
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -123,7 +123,7 @@ pub(crate) async fn record_helper_terminal(
     })?;
     let journal = StorageEffectJournal::new(
         storage.clone(),
-        Arc::new(|| crate::js_date::iso_from_system_time(SystemTime::now())),
+        Arc::new(|| butler_core::js_date::iso_from_system_time(SystemTime::now())),
     );
     let result = journal
         .finish_restart_handoff(intent_id.to_owned(), state)

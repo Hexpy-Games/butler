@@ -265,7 +265,7 @@ pub(super) async fn run_model_round(
 fn model_round_output_bytes(result: &ModelRoundResult) -> Result<u64, AttemptError> {
     let assistant = result.assistant_message.as_ref();
     let mut encoded = String::from("{\"role\":\"assistant\",\"content\":");
-    crate::json::write_string(
+    butler_core::json::write_string(
         assistant
             .map(|message| message.content.as_ref())
             .or(result.text.as_deref())
@@ -280,7 +280,7 @@ fn model_round_output_bytes(result: &ModelRoundResult) -> Result<u64, AttemptErr
             .unwrap_or(&result.tool_calls),
     )
     .map_err(output_serialization_error)?;
-    crate::json::append_json(&calls, &mut encoded).map_err(output_serialization_error)?;
+    butler_core::json::append_json(&calls, &mut encoded).map_err(output_serialization_error)?;
     encoded.push('}');
     let bytes = encoded.len();
     u64::try_from(bytes).map_err(|source| {

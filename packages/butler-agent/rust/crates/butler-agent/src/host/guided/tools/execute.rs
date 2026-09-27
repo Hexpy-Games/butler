@@ -7,8 +7,8 @@ use crate::btcc::{
     ToolJournalFinish, ToolJournalFinishStatus, ToolJournalRecord, ToolJournalStart,
 };
 use crate::host::GuidedWorkTools;
-use crate::json::JsonDocument;
-use crate::tool_protocol::ToolName;
+use butler_core::json::JsonDocument;
+use butler_core::tool_protocol::ToolName;
 
 use super::GuidedTools;
 use super::occurrence::{Occurrence, occurrence};

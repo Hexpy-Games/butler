@@ -10,8 +10,8 @@ use crate::cognition::{CognitionError, CognitionResult, RecallRequest};
 use crate::conversation::{
     CanonicalMemoryReadBinding, PublicMemoryScope, PublicMemorySnapshot, conversation_store_path,
 };
-use crate::public_text::trim_js_whitespace;
-use crate::segmentation::grapheme_segments;
+use butler_core::public_text::trim_js_whitespace;
+use butler_core::segmentation::grapheme_segments;
 
 use crate::cognition::recall::{RecallRuntime, RecallScope};
 
@@ -57,7 +57,7 @@ pub(super) fn prepare(
     crate::cognition::resolve_active_generation(data_root, environment)?;
     let limit = match args.get("limit") {
         None => 6,
-        Some(value) => crate::json::saturating_usize(
+        Some(value) => butler_core::json::saturating_usize(
             value
                 .as_f64()
                 .filter(|v| v.fract() == 0.0 && (1.0..=20.0).contains(v))

@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 use regex::{RegexSet, RegexSetBuilder};
 use serde_json::{Value, json};
 
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 use super::{CliFailure, CommandContext, display_path, index, io_failure, option_string};
 

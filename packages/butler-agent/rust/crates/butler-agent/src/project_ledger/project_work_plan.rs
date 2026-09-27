@@ -5,7 +5,7 @@ use std::path::Path;
 use serde_json::Value;
 
 use super::{ProjectLedgerReadError, committed, dashboard, records};
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 #[derive(Clone, Debug)]
 pub(crate) struct ProjectWorkPlanRead {
@@ -118,7 +118,7 @@ pub(super) fn read(
 }
 
 fn safe_id(id: &str) -> Result<(), ProjectLedgerReadError> {
-    if crate::public_text::trim_js_whitespace(id).is_empty()
+    if butler_core::public_text::trim_js_whitespace(id).is_empty()
         || id.encode_utf16().count() > 4096
         || matches!(id, "." | "..")
         || id.contains(['/', '\\'])

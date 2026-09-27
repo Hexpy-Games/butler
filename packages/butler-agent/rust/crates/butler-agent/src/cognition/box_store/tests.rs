@@ -31,7 +31,7 @@ impl CognitionCoordinationHost for TestHost {
         uuid::Uuid::new_v4().to_string()
     }
     fn now_epoch_millis(&self) -> i64 {
-        crate::js_date::parse_iso_millis(NOW).unwrap()
+        butler_core::js_date::parse_iso_millis(NOW).unwrap()
     }
     fn now_iso(&self) -> String {
         NOW.into()
@@ -199,7 +199,7 @@ async fn retention_preserves_unknown_data_and_skips_external_or_unexpired_items(
     write_manifest(&root, "box_pinned", &pinned);
 
     let report = service(&root)
-        .retention(crate::js_date::parse_iso_millis(NOW).unwrap())
+        .retention(butler_core::js_date::parse_iso_millis(NOW).unwrap())
         .await
         .unwrap();
     assert_eq!(report.expired_candidate_count, 2);
@@ -243,7 +243,7 @@ async fn retention_prevalidates_every_path_before_deleting_any_file_in_an_item()
     );
 
     let error = service(&root)
-        .retention(crate::js_date::parse_iso_millis(NOW).unwrap())
+        .retention(butler_core::js_date::parse_iso_millis(NOW).unwrap())
         .await
         .unwrap_err();
     assert_eq!(error.code(), "memory_box_retention_path_unsafe");

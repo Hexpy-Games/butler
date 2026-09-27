@@ -8,7 +8,7 @@ use std::{
 
 use crate::cognition::{CognitionSourceRow, hydrate_conversation_source};
 use crate::conversation::ConversationMessageWithParts;
-use crate::segmentation::grapheme_segments;
+use butler_core::segmentation::grapheme_segments;
 
 use super::super::typed::{TypedMemoryRecord, read_typed_record};
 use super::{RecallSourceHydration, RecallSourceResolution, ResolvedRecallSource, current};
@@ -187,8 +187,8 @@ fn span(row: &CognitionSourceRow, len: usize) -> Option<(usize, usize)> {
         return None;
     }
     Some((
-        crate::json::saturating_usize(row.byte_start),
-        crate::json::saturating_usize(row.byte_end),
+        butler_core::json::saturating_usize(row.byte_start),
+        butler_core::json::saturating_usize(row.byte_end),
     ))
 }
 fn truncate(text: &str, max: usize) -> String {

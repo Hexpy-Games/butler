@@ -71,7 +71,7 @@ pub(super) fn normalize(
     let mut refs = IndexMap::new();
     let mut selected = IndexMap::<String, &ExtractCandidate>::new();
     for node in &output.nodes {
-        if crate::segmentation::grapheme_segments(&node.label).count() > 256 {
+        if butler_core::segmentation::grapheme_segments(&node.label).count() > 256 {
             return Err(invalid_output());
         }
         validate_resolution(
@@ -93,7 +93,7 @@ pub(super) fn normalize(
         );
     }
     for claim in &output.claims {
-        if crate::segmentation::grapheme_segments(&claim.statement).count() > 1024 {
+        if butler_core::segmentation::grapheme_segments(&claim.statement).count() > 1024 {
             return Err(invalid_output());
         }
         validate_resolution(
@@ -130,7 +130,7 @@ pub(super) fn normalize(
             return Err(invalid_output());
         }
         for alias in &node.aliases {
-            if crate::segmentation::grapheme_segments(&alias.text).count() > 256 {
+            if butler_core::segmentation::grapheme_segments(&alias.text).count() > 256 {
                 return Err(invalid_output());
             }
             validate_quotes(input, &alias.evidence, true)?;
@@ -155,7 +155,7 @@ pub(super) fn normalize(
         if claim
             .condition
             .as_ref()
-            .is_some_and(|value| crate::segmentation::grapheme_segments(value).count() > 1024)
+            .is_some_and(|value| butler_core::segmentation::grapheme_segments(value).count() > 1024)
         {
             return Err(invalid_output());
         }
@@ -201,7 +201,7 @@ pub(super) fn normalize(
         validate_quotes(input, &correction.evidence, true)?;
     }
     if let Some(summary) = &output.summary {
-        if crate::segmentation::grapheme_segments(&summary.text).count() > 480 {
+        if butler_core::segmentation::grapheme_segments(&summary.text).count() > 480 {
             return Err(invalid_output());
         }
         validate_quotes(input, &summary.evidence, true)?;
@@ -311,7 +311,7 @@ fn validate_quotes(
             .get(quote.unit_ref.as_str())
             .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidQuote))?;
         if quote.quote.is_empty()
-            || crate::segmentation::grapheme_segments(&quote.quote).count() > 480
+            || butler_core::segmentation::grapheme_segments(&quote.quote).count() > 480
         {
             return Err(error(CognitionCode::MemoryExtractInvalidQuote));
         }
@@ -330,9 +330,9 @@ fn validate_quotes(
             && let Some(span) = &context.source_span
             && current.contains(span.source_ref.as_str())
             && start
-                < crate::json::saturating_usize(span.prefix_bytes)
-                    + crate::json::saturating_usize(span.focus_end - span.focus_start)
-            && end > crate::json::saturating_usize(span.prefix_bytes)
+                < butler_core::json::saturating_usize(span.prefix_bytes)
+                    + butler_core::json::saturating_usize(span.focus_end - span.focus_start)
+            && end > butler_core::json::saturating_usize(span.prefix_bytes)
         {
             has_current = true;
         }

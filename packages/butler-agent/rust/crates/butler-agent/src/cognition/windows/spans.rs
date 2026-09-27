@@ -1,4 +1,4 @@
-use crate::segmentation::grapheme_segments;
+use butler_core::segmentation::grapheme_segments;
 
 use super::ByteSpan;
 

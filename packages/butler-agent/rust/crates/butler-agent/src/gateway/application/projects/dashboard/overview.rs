@@ -7,7 +7,7 @@ use super::contracts::{AppProjectDashboardLedgerRecord, AppProjectDashboardWork,
 use super::project::{pins, project_summary, read_project};
 use super::session_links::ProjectSessionLinks;
 use crate::gateway::AppSessionSummary;
-use crate::public_text::sanitize_public_text;
+use butler_core::public_text::sanitize_public_text;
 
 pub(super) async fn get(
     application: &AppApplication,

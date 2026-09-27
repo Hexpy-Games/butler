@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::btcc::BtccSource;
 use crate::btcc::storage::BtccStorage;
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 /// Failures of authority requests (permission, schedule and modify decisions).
 ///

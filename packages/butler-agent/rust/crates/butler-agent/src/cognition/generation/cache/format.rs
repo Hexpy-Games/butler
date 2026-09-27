@@ -1,14 +1,15 @@
 //! Pure formatting and compaction for structured generation hot-cache entries.
 
 use crate::cognition::{CognitionCode, CognitionError};
-use crate::public_text::fixed_regex;
+use butler_core::public_text::fixed_regex;
 use std::{collections::HashSet, sync::OnceLock};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use crate::public_text::{trim_js_whitespace, trim_js_whitespace_end};
+use butler_core::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace_end;
 
 const DEFAULT_MAX_BYTES: usize = 20 * 1024;
 const MAX_ENTRY_BODY_UTF16: usize = 8_000;

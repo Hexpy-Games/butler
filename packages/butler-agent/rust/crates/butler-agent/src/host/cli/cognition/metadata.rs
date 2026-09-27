@@ -64,7 +64,7 @@ pub(super) async fn run(
                 &report.integrity.missing_feedback_refs,
             );
             let mut data = data;
-            let fields = crate::json::object_mut(&mut data);
+            let fields = butler_core::json::object_mut(&mut data);
             fields.insert("repaired_box_refs".into(), json!(report.repaired_box_refs));
             fields.insert(
                 "repaired_feedback_refs".into(),

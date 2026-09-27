@@ -33,9 +33,9 @@ pub(super) async fn set_enabled(
             );
         }
     };
-    let writes = crate::configuration::ConfigurationWrites::new();
+    let writes = butler_core::configuration::ConfigurationWrites::new();
     let _guard = writes.acquire().await;
-    let mut config = match crate::configuration::read_json_object(&path) {
+    let mut config = match butler_core::configuration::read_json_object(&path) {
         Ok(config) => config,
         Err(error) => {
             return report_error(
@@ -51,7 +51,7 @@ pub(super) async fn set_enabled(
         config["metrics"] = json!({});
     }
     config["metrics"]["enabled"] = Value::Bool(enabled);
-    if let Err(error) = crate::configuration::write_json_atomic(&path, &config) {
+    if let Err(error) = butler_core::configuration::write_json_atomic(&path, &config) {
         return report_error(
             command.name(),
             options.json,
@@ -130,8 +130,8 @@ fn render_event(event: &Value) -> String {
 }
 
 fn format_iso_timestamp(timestamp_ms: f64) -> String {
-    let seconds = crate::json::saturating_i64((timestamp_ms / 1_000.0).floor());
-    let nanos = crate::json::saturating_u32(
+    let seconds = butler_core::json::saturating_i64((timestamp_ms / 1_000.0).floor());
+    let nanos = butler_core::json::saturating_u32(
         (timestamp_ms - seconds as f64 * 1_000.0).max(0.0) * 1_000_000.0,
     );
     chrono::DateTime::from_timestamp(seconds, nanos)

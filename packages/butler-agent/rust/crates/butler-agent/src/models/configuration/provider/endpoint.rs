@@ -104,7 +104,7 @@ pub(super) fn resolve(
 }
 
 fn trim_slashes(value: &str) -> String {
-    crate::public_text::trim_js_whitespace(value)
+    butler_core::public_text::trim_js_whitespace(value)
         .trim_end_matches('/')
         .to_owned()
 }

@@ -256,7 +256,11 @@ impl GuidedPolicyPort for Fixture {
         call: &'a ModelRoundToolCall,
         _: Option<u8>,
     ) -> Pin<
-        Box<dyn Future<Output = Result<crate::json::JsonDocument, ToolExecutionError>> + Send + 'a>,
+        Box<
+            dyn Future<Output = Result<butler_core::json::JsonDocument, ToolExecutionError>>
+                + Send
+                + 'a,
+        >,
     > {
         Box::pin(async move {
             if invocation.cancellation.is_cancelled() {
@@ -266,7 +270,7 @@ impl GuidedPolicyPort for Fixture {
                 )));
             }
             self.note(format!("execute:{}", call.name));
-            crate::json::JsonDocument::from_value(
+            butler_core::json::JsonDocument::from_value(
                 &self
                     .tool_outputs
                     .lock()

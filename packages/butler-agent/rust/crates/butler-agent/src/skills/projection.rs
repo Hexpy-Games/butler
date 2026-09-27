@@ -1,4 +1,4 @@
-use crate::public_text::fixed_regex;
+use butler_core::public_text::fixed_regex;
 use std::{
     collections::HashSet,
     fs::File,
@@ -10,8 +10,8 @@ use std::{
 use regex::Regex;
 use serde_json::Value;
 
-use crate::json_lines::MAX_JSON_LINE_BYTES;
-use crate::public_text::trim_js_whitespace;
+use butler_core::json_lines::MAX_JSON_LINE_BYTES;
+use butler_core::public_text::trim_js_whitespace;
 
 const MAX_SKILL_NAMES: usize = 48;
 

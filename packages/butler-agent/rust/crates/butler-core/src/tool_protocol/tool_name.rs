@@ -8,7 +8,7 @@ macro_rules! tool_names {
     ($($variant:ident = $wire:literal,)+) => {
         /// A built-in tool, by its wire name.
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-        pub(crate) enum ToolName {
+        pub enum ToolName {
             $(
                 #[doc = concat!("`", $wire, "`")]
                 $variant,
@@ -17,18 +17,17 @@ macro_rules! tool_names {
 
         impl ToolName {
             /// Every built-in tool, in wire-name order.
-            #[cfg(test)]
-            pub(crate) const ALL: &'static [Self] = &[$(Self::$variant,)+];
+            pub const ALL: &'static [Self] = &[$(Self::$variant,)+];
 
             /// The wire name.
-            pub(crate) const fn as_str(self) -> &'static str {
+            pub const fn as_str(self) -> &'static str {
                 match self {
                     $(Self::$variant => $wire,)+
                 }
             }
 
             /// The built-in tool with this wire name, if any.
-            pub(crate) fn parse(name: &str) -> Option<Self> {
+            pub fn parse(name: &str) -> Option<Self> {
                 match name {
                     $($wire => Some(Self::$variant),)+
                     _ => None,
@@ -166,45 +165,6 @@ mod tests {
         for tool in ToolName::ALL {
             assert_eq!(ToolName::parse(tool.as_str()), Some(*tool));
             assert!(seen.insert(tool.as_str()), "duplicate {tool}");
-        }
-    }
-
-    #[test]
-    fn every_catalog_tool_is_named() {
-        let catalog: serde_json::Value =
-            serde_json::from_str(include_str!("../capabilities/catalog/catalog.json")).unwrap();
-        fn names(value: &serde_json::Value, out: &mut Vec<String>) {
-            match value {
-                serde_json::Value::Object(map) => {
-                    for (key, child) in map {
-                        if key == "name"
-                            && let Some(name) = child.as_str()
-                            && name
-                                .bytes()
-                                .all(|byte| byte.is_ascii_lowercase() || byte == b'_')
-                        {
-                            out.push(name.to_owned());
-                        }
-                        names(child, out);
-                    }
-                }
-                serde_json::Value::Array(items) => items.iter().for_each(|item| names(item, out)),
-                _ => {}
-            }
-        }
-        let mut found = Vec::new();
-        names(&catalog, &mut found);
-        for name in &found {
-            assert!(
-                ToolName::parse(name).is_some(),
-                "catalog tool {name} has no ToolName"
-            );
-        }
-        for tool in ToolName::ALL {
-            assert!(
-                found.iter().any(|name| name == tool.as_str()),
-                "{tool} is not in the catalog"
-            );
         }
     }
 }

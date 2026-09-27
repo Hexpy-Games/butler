@@ -9,7 +9,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 use super::{ModelCatalogError, tokenizer::TokenizerOwner};
 

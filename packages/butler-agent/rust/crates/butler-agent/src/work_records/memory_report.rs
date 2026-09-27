@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use super::read::{self, ReadAvailability, WorkRecordReadError};
-use crate::public_text::trim_js_whitespace as trim;
+use butler_core::public_text::trim_js_whitespace as trim;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub(crate) struct PlannedTaskMemoryReport {
@@ -80,7 +80,7 @@ pub(super) fn read(
     let latest = current
         .latest_attempt
         .as_deref()
-        .map(crate::json::number_from_string)
+        .map(butler_core::json::number_from_string)
         .unwrap_or(f64::NAN);
     if !latest.is_finite() || latest.fract() != 0.0 || Some(latest) != attempt {
         return Ok(None);
@@ -152,7 +152,7 @@ pub(super) fn read(
         binding["report_hash"],
         binding["disposition"]
     ]);
-    let revision = crate::json::stringify(&revision)?;
+    let revision = butler_core::json::stringify(&revision)?;
     if binding.get("source_revision").and_then(Value::as_str) != Some(hash(&revision).as_str()) {
         return Ok(None);
     }
@@ -234,6 +234,6 @@ fn js_string(value: &Value) -> String {
             })
             .collect::<Vec<_>>()
             .join(","),
-        value => crate::json::stringify(value).unwrap_or_default(),
+        value => butler_core::json::stringify(value).unwrap_or_default(),
     }
 }

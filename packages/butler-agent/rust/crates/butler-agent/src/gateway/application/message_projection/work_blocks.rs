@@ -101,7 +101,7 @@ pub(super) fn project(rows: &[Value]) -> Vec<Value> {
         .into_iter()
         .filter_map(|mut block| {
             let label = string(&block.value, "label")?;
-            if crate::public_text::trim_js_whitespace(label).is_empty() {
+            if butler_core::public_text::trim_js_whitespace(label).is_empty() {
                 return None;
             }
             block.value.insert("rows".into(), Value::Array(block.rows));

@@ -40,7 +40,7 @@ impl Fixture {
             Arc::new(ModelCatalog::new().unwrap()),
             Arc::new(LocaleCollation::new("en-US").unwrap()),
             crate::models::provider_http_client().unwrap(),
-            Arc::new(crate::configuration::ConfigurationWrites::new()),
+            Arc::new(butler_core::configuration::ConfigurationWrites::new()),
         )
         .unwrap()
     }

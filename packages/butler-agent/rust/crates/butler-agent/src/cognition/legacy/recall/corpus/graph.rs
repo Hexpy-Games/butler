@@ -167,7 +167,7 @@ fn compact(value: &str, limit: usize) -> String {
     let mut normalized = String::with_capacity(value.len());
     let mut pending_space = false;
     for character in value.chars() {
-        if crate::public_text::is_js_whitespace(character) {
+        if butler_core::public_text::is_js_whitespace(character) {
             pending_space = !normalized.is_empty();
         } else {
             if pending_space {
@@ -177,7 +177,7 @@ fn compact(value: &str, limit: usize) -> String {
             pending_space = false;
         }
     }
-    let normalized = crate::public_text::trim_js_whitespace(&normalized);
+    let normalized = butler_core::public_text::trim_js_whitespace(&normalized);
     if normalized.encode_utf16().count() > limit {
         format!("{}...", slice_utf16(normalized, limit))
     } else {

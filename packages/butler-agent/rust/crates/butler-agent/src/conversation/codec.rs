@@ -7,7 +7,7 @@ use super::{ConversationError, ConversationIdentityClock, ConversationResult};
 use crate::conversation::ConversationCode;
 
 pub(super) fn stringify(value: &Value) -> ConversationResult<String> {
-    crate::json::stringify(value).map_err(ConversationError::json)
+    butler_core::json::stringify(value).map_err(ConversationError::json)
 }
 
 pub(super) fn parse(value: &str) -> ConversationResult<Value> {
@@ -18,7 +18,7 @@ pub(super) fn normalize_limit(value: Option<f64>, fallback: u64, max: u64) -> u6
     let Some(value) = value.filter(|value| value.is_finite()) else {
         return fallback;
     };
-    crate::json::saturating_u64(value.floor().clamp(1.0, max as f64))
+    butler_core::json::saturating_u64(value.floor().clamp(1.0, max as f64))
 }
 
 pub(super) fn next_seq(

@@ -1,4 +1,4 @@
-use crate::public_text::fixed_regex;
+use butler_core::public_text::fixed_regex;
 use std::collections::HashSet;
 
 use serde_json::Value;
@@ -33,7 +33,7 @@ pub(in crate::cognition) fn compact_hot_cache(body: &str) -> CompactedCache {
         cursor = block.1;
     }
     legacy.push_str(&body[cursor..]);
-    let legacy = crate::public_text::trim_js_whitespace(&legacy).to_owned();
+    let legacy = butler_core::public_text::trim_js_whitespace(&legacy).to_owned();
     let mut audit = Vec::new();
     if !legacy.is_empty() {
         audit.push(legacy.clone());
@@ -55,9 +55,9 @@ pub(in crate::cognition) fn compact_hot_cache(body: &str) -> CompactedCache {
             }
             Some(_) => {}
             None => {
-                audit.push(crate::public_text::trim_js_whitespace_end(&block.raw).to_owned());
+                audit.push(butler_core::public_text::trim_js_whitespace_end(&block.raw).to_owned());
                 legacy_blocks
-                    .push(crate::public_text::trim_js_whitespace_end(&block.raw).to_owned());
+                    .push(butler_core::public_text::trim_js_whitespace_end(&block.raw).to_owned());
             }
         }
     }

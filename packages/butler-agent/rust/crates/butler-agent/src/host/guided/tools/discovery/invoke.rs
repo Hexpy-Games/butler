@@ -3,8 +3,8 @@
 use super::{GuidedTools, bridge_error, encoded, projection, text};
 use crate::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 use crate::capabilities::{describe_native, validate_native_arguments};
-use crate::json::JsonDocument;
-use crate::tool_protocol::ToolName;
+use butler_core::json::JsonDocument;
+use butler_core::tool_protocol::ToolName;
 use serde_json::{Value, json};
 
 pub(super) async fn run(
@@ -105,12 +105,13 @@ pub(super) async fn run(
         error["error"]["path"] = Value::String(path);
         return encoded(&error);
     }
-    let raw_arguments = crate::json::stringify(&Value::Object(args.clone())).map_err(|error| {
-        ToolExecutionError::Integrity(BtccError::relayed(
-            "guided_bridge_arguments_json",
-            error.to_string(),
-        ))
-    })?;
+    let raw_arguments =
+        butler_core::json::stringify(&Value::Object(args.clone())).map_err(|error| {
+            ToolExecutionError::Integrity(BtccError::relayed(
+                "guided_bridge_arguments_json",
+                error.to_string(),
+            ))
+        })?;
     let inner = ModelRoundToolCall {
         id: call.id.clone(),
         name: name.into(),
@@ -238,8 +239,8 @@ async fn run_mcp(
             error.to_string(),
         ))
     })?;
-    let raw_arguments =
-        crate::json::stringify(&Value::Object(inner_arguments.clone())).map_err(|error| {
+    let raw_arguments = butler_core::json::stringify(&Value::Object(inner_arguments.clone()))
+        .map_err(|error| {
             ToolExecutionError::Integrity(BtccError::relayed(
                 "guided_bridge_arguments_json",
                 error.to_string(),
@@ -290,7 +291,7 @@ fn attach_bridge_invocation(
         body.push(',');
     }
     body.push_str("\"bridge_invocation\":");
-    crate::json::append_json(meta, &mut body).map_err(|error| {
+    butler_core::json::append_json(meta, &mut body).map_err(|error| {
         ToolExecutionError::Integrity(BtccError::relayed(
             "guided_bridge_result_json",
             error.to_string(),

@@ -7,11 +7,11 @@ use super::{
     SessionQueueView, admission, admission_identity, app_error, events, queue, queue_view, service,
     settings,
 };
+use crate::gateway::MessageSendRequest;
+use crate::gateway::SessionControlState;
+use crate::gateway::VisualAdmissionRequest;
 use crate::gateway::application::storage::AppStorageCode;
-use crate::{
-    gateway::{MessageSendRequest, SessionControlState, VisualAdmissionRequest},
-    public_text::trim_js_whitespace,
-};
+use butler_core::public_text::trim_js_whitespace;
 pub(in crate::gateway::application) use owner::SessionQueueMutationOwner;
 use support::{
     apply_plan_binding, attachment_ids, attachment_values, authority_immutable,

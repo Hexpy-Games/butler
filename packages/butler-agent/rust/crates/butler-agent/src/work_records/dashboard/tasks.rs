@@ -4,14 +4,11 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 
-use crate::{
-    locale::LocaleCollation,
-    public_text::trim_js_whitespace as trim,
-    work_records::{
-        WorkRecordReadError,
-        read::{self, ReadAvailability},
-    },
-};
+use crate::work_records::WorkRecordReadError;
+use crate::work_records::read;
+use crate::work_records::read::ReadAvailability;
+use butler_core::locale::LocaleCollation;
+use butler_core::public_text::trim_js_whitespace as trim;
 
 use super::evidence;
 

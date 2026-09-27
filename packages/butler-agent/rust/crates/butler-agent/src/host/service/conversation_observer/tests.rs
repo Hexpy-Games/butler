@@ -8,7 +8,7 @@ use crate::conversation::{
     ConversationEnvelope, ConversationOriginEvidence, ConversationOriginFacts,
     ConversationStoreConfig, DurableSessionBinding, classify_conversation_origin,
 };
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 #[tokio::test]
 async fn canonical_completion_publishes_one_observation_and_one_queue_job_then_drains() {

@@ -8,8 +8,9 @@ use sha2::{Digest, Sha256};
 use super::*;
 use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::{MessageContentPart, ProjectSnapshot, ProjectSourceReference};
-use crate::json::Utf16Prefix;
-use crate::public_text::{sanitize_public_text, trim_js_whitespace};
+use butler_core::json::Utf16Prefix;
+use butler_core::public_text::sanitize_public_text;
+use butler_core::public_text::trim_js_whitespace;
 
 const MAX_SOURCE_BYTES: usize = 10 * 1024 * 1024;
 

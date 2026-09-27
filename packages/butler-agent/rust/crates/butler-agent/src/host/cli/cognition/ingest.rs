@@ -3,18 +3,21 @@ use std::{path::PathBuf, sync::Arc, time::Duration};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    cognition::{
-        CognitionPathEnvironment, LegacyIndexService, LegacyMemoryImportPlan,
-        LegacyMemoryImportService, ensure_data_authority, extract_legacy_import_transcript,
-    },
-    configuration::ConfigurationWrites,
-    locale::LocaleCollation,
-    models::{ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest},
-    workspace::{
-        SessionBindingStore, SessionBindingStoreConfig, WorkspaceStorageProfile, session_store_path,
-    },
-};
+use crate::cognition::CognitionPathEnvironment;
+use crate::cognition::LegacyIndexService;
+use crate::cognition::LegacyMemoryImportPlan;
+use crate::cognition::LegacyMemoryImportService;
+use crate::cognition::ensure_data_authority;
+use crate::cognition::extract_legacy_import_transcript;
+use crate::models::ProviderPromptLifecycle;
+use crate::models::ProviderPromptPort;
+use crate::models::ProviderPromptRequest;
+use crate::workspace::SessionBindingStore;
+use crate::workspace::SessionBindingStoreConfig;
+use crate::workspace::WorkspaceStorageProfile;
+use crate::workspace::session_store_path;
+use butler_core::configuration::ConfigurationWrites;
+use butler_core::locale::LocaleCollation;
 
 use super::CliError;
 
@@ -250,7 +253,7 @@ async fn configured_summary(
             .unwrap_or_else(|| "native_model_setup_failed".into())
             .into());
     };
-    let text = crate::public_text::trim_js_whitespace(text);
+    let text = butler_core::public_text::trim_js_whitespace(text);
     if text.is_empty() {
         return Err("hot_cache_entry_empty".into());
     }

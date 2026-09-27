@@ -126,19 +126,19 @@ fn probe_matches(
             == base
                 .image_endpoint_profile_id
                 .as_deref()
-                .map(crate::public_text::trim_js_whitespace)
+                .map(butler_core::public_text::trim_js_whitespace)
                 .filter(|value| !value.is_empty())
         && Some(probe.capability_revision.as_str())
             == base
                 .image_capability_revision
                 .as_deref()
-                .map(crate::public_text::trim_js_whitespace)
+                .map(butler_core::public_text::trim_js_whitespace)
                 .filter(|value| !value.is_empty())
         && Some(probe.capability_digest.as_str())
             == base
                 .image_capability_digest
                 .as_deref()
-                .map(crate::public_text::trim_js_whitespace)
+                .map(butler_core::public_text::trim_js_whitespace)
                 .filter(|value| !value.is_empty())
 }
 
@@ -162,7 +162,7 @@ pub(crate) fn normalize_registered_hosted_model(
         .filter(|value| !value.is_null())
         .or_else(|| input.get("model_ref").filter(|value| !value.is_null()));
     let requested = js_string(raw_requested)?;
-    let requested = crate::public_text::trim_js_whitespace(&requested);
+    let requested = butler_core::public_text::trim_js_whitespace(&requested);
     let requested = if requested.contains('/') {
         requested.to_owned()
     } else {
@@ -203,7 +203,7 @@ pub(crate) fn normalize_registered_hosted_model(
 }
 
 pub(crate) fn normalize_hosted_api_base_url(value: Option<&Value>) -> Option<String> {
-    let text = crate::public_text::trim_js_whitespace(value.and_then(Value::as_str)?);
+    let text = butler_core::public_text::trim_js_whitespace(value.and_then(Value::as_str)?);
     if text.is_empty() {
         return None;
     }
@@ -235,7 +235,7 @@ pub(in crate::models) fn hosted_provider(value: &str) -> Option<String> {
 fn text(value: Option<&Value>) -> Option<String> {
     value
         .and_then(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|v| !v.is_empty())
         .map(str::to_owned)
 }
@@ -244,7 +244,9 @@ fn js_string(value: Option<&Value>) -> Option<String> {
         None | Some(Value::Null) => Some(String::new()),
         Some(Value::String(value)) => Some(value.clone()),
         Some(Value::Bool(value)) => Some(value.to_string()),
-        Some(Value::Number(value)) => crate::json::stringify(&Value::Number(value.clone())).ok(),
+        Some(Value::Number(value)) => {
+            butler_core::json::stringify(&Value::Number(value.clone())).ok()
+        }
         Some(Value::Object(_)) => Some("[object Object]".into()),
         Some(Value::Array(values)) => values
             .iter()

@@ -3,7 +3,7 @@ use serde::Deserialize;
 use serde_json::{Map, Value};
 
 use crate::btcc::BtccError;
-use crate::json::JsonDocument;
+use butler_core::json::JsonDocument;
 
 use super::contracts::{ModelRoundTool, ModelRoundToolCall, ToolError, ToolResult};
 use super::guided_ports::GuidedInvocation;

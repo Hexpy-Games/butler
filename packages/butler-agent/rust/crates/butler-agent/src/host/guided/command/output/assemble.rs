@@ -6,8 +6,8 @@ use super::super::artifacts::Artifact;
 use super::super::{evidence, structured_stdout, validation};
 use crate::btcc::BtccError;
 use crate::context::BudgetedToolOutput;
-use crate::json::JsonDocument;
 use crate::workspace::GuidedSummary;
+use butler_core::json::JsonDocument;
 
 #[derive(Clone, Copy)]
 pub(super) struct Assembly<'a> {
@@ -175,7 +175,7 @@ pub(super) fn assemble(input: Assembly<'_>) -> Result<JsonDocument, BtccError> {
 
 fn append_raw(out: &mut String, key: &str, value: &str) -> Result<(), BtccError> {
     out.push(',');
-    crate::json::write_string(key, out)
+    butler_core::json::write_string(key, out)
         .map_err(|source| error("command_result_encoding_failed").with_source(source))?;
     out.push(':');
     out.push_str(value);
@@ -184,15 +184,15 @@ fn append_raw(out: &mut String, key: &str, value: &str) -> Result<(), BtccError>
 
 fn append_field_string(out: &mut String, key: &str, value: &str) -> Result<(), BtccError> {
     out.push(',');
-    crate::json::write_string(key, out)
+    butler_core::json::write_string(key, out)
         .map_err(|source| error("command_result_encoding_failed").with_source(source))?;
     out.push(':');
-    crate::json::write_string(value, out)
+    butler_core::json::write_string(value, out)
         .map_err(|source| error("command_result_encoding_failed").with_source(source))
 }
 
 fn append_value(out: &mut String, key: &str, value: &Value) -> Result<(), BtccError> {
-    let encoded = crate::json::stringify(value)
+    let encoded = butler_core::json::stringify(value)
         .map_err(|source| error("command_result_encoding_failed").with_source(source))?;
     append_raw(out, key, &encoded)
 }

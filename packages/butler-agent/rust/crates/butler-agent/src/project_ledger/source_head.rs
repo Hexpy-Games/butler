@@ -9,7 +9,8 @@ use sha2::{Digest, Sha256};
 use unicode_normalization::UnicodeNormalization;
 
 use super::{ProjectLedgerReadError, committed, records};
-use crate::{json as js, locale::LocaleCollation};
+use butler_core::json as js;
+use butler_core::locale::LocaleCollation;
 
 pub(super) struct SourceHead {
     pub project_root: PathBuf,

@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 
 use crate::context::{ContextError, ContextResult};
 use crate::conversation::*;
-use crate::json::stringify;
+use butler_core::json::stringify;
 
 use super::parts::to_context_message;
 use super::types::*;
@@ -92,7 +92,7 @@ pub(crate) fn compile_prompt_material_context_plan(
     for turn in &rendered_turns {
         body.extend(render_turn(turn)?);
     }
-    body.retain(|line| !crate::public_text::trim_js_whitespace(line).is_empty());
+    body.retain(|line| !butler_core::public_text::trim_js_whitespace(line).is_empty());
     let rendered = if body.is_empty() {
         String::new()
     } else {
@@ -224,7 +224,7 @@ fn render_turn_fields(
     lines.extend(
         messages
             .iter()
-            .filter(|v| !crate::public_text::trim_js_whitespace(&v.text).is_empty())
+            .filter(|v| !butler_core::public_text::trim_js_whitespace(&v.text).is_empty())
             .map(|v| format!("{}: {}", v.speaker, v.text)),
     );
     Ok(lines)
@@ -344,7 +344,7 @@ fn render_summary(value: &ConversationSummaryAtom) -> String {
         value.summary_id,
         number_display(value.covers_from_seq),
         number_display(value.covers_to_seq),
-        crate::public_text::trim_js_whitespace(&value.text)
+        butler_core::public_text::trim_js_whitespace(&value.text)
     )
 }
 
@@ -368,7 +368,7 @@ fn json_error(e: impl std::error::Error + Send + Sync + 'static) -> ContextError
 fn number_display(v: f64) -> String {
     serde_json::Number::from_f64(v)
         .map(Value::Number)
-        .and_then(|value| crate::json::stringify(&value).ok())
+        .and_then(|value| butler_core::json::stringify(&value).ok())
         .unwrap_or_else(|| v.to_string())
 }
 fn js_number(v: f64) -> ContextResult<String> {

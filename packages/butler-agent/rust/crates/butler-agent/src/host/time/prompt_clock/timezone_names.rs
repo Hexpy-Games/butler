@@ -94,6 +94,6 @@ impl TimeZoneNames {
 
 fn timestamp(value: &str) -> ContextResult<i64> {
     let iso = format!("{}:00.000Z", value.replace(' ', "T"));
-    crate::js_date::parse_iso_millis(&iso)
+    butler_core::js_date::parse_iso_millis(&iso)
         .ok_or_else(|| failure("Invalid embedded metazone timestamp"))
 }

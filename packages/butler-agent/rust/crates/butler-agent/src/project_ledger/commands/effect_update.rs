@@ -5,10 +5,10 @@ use std::path::Path;
 use serde_json::{Map, Value};
 
 use super::{LedgerCommand, execute_candidate, show};
-use crate::locale::LocaleCollation;
 use crate::project_ledger::publication::{
     ProjectLedgerRecordKind, ProjectLedgerRecordOperation, ProjectLedgerRecordUpdate,
 };
+use butler_core::locale::LocaleCollation;
 
 pub(in crate::project_ledger) fn apply(
     root: &Path,

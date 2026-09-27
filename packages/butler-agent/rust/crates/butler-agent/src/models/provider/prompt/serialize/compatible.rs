@@ -23,7 +23,7 @@ pub(super) fn anthropic(
     );
     if let Some(instructions) = request
         .instructions
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
     {
         body.insert("system".into(), instructions.into());
@@ -72,7 +72,7 @@ pub(super) fn gemini(
     let mut body = Map::new();
     if let Some(instructions) = request
         .instructions
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
     {
         body.insert(
@@ -116,15 +116,15 @@ pub(super) fn chat(
     if matches!(provider, "zai" | "zai-api")
         && let Some(schema) = &request.response_format
     {
-        let schema_json =
-            crate::json::stringify(&Value::Object(schema.schema.clone())).map_err(|error| {
+        let schema_json = butler_core::json::stringify(&Value::Object(schema.schema.clone()))
+            .map_err(|error| {
                 super::invocation("prompt_schema_serialization_failed", error.to_string())
             })?;
         instructions = Some(format!(
             "{}\n\nReturn exactly one JSON object matching the following JSON Schema. Do not wrap it in Markdown or add explanatory text.\n{schema_json}",
             request
                 .instructions
-                .map(crate::public_text::trim_js_whitespace)
+                .map(butler_core::public_text::trim_js_whitespace)
                 .unwrap_or_default()
         ));
         response_format = Some(json!({"type":"json_object"}));
@@ -132,7 +132,7 @@ pub(super) fn chat(
     let mut messages = Vec::new();
     if let Some(instructions) = instructions
         .as_deref()
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
     {
         messages.push(json!({"role":"system","content":instructions}));

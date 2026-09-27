@@ -121,7 +121,7 @@ fn applied(
         }
         result
     };
-    crate::json::JsonDocument::from_value(&result)
+    butler_core::json::JsonDocument::from_value(&result)
         .map(AdapterOutcome::Applied)
         .map_err(|failure| {
             crate::btcc::effects::contracts::EffectFailure::adapter(failure.to_string())

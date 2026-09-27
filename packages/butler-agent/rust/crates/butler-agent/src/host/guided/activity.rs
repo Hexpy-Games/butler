@@ -4,7 +4,7 @@ mod content;
 mod publication;
 mod snapshot;
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use indexmap::IndexMap;
 use parking_lot::Mutex;
 use serde_json::{Map, Value};

@@ -99,7 +99,7 @@ fn integer(
                 && *value <= MAX_SAFE_INTEGER
                 && value.fract() == 0.0
         })
-        .map(crate::json::saturating_u64)
+        .map(butler_core::json::saturating_u64)
         .ok_or_else(invalid)
 }
 

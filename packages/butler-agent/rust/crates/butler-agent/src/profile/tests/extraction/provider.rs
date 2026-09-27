@@ -11,8 +11,8 @@ use url::Url;
 use super::super::support::{Root, service_with_parts};
 use super::super::*;
 use crate::btcc::ModelRoundError;
-use crate::locale::LocaleCollation;
 use crate::models::*;
+use butler_core::locale::LocaleCollation;
 
 struct Config {
     metadata: ModelProviderMetadata,

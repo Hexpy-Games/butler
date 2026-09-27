@@ -131,7 +131,7 @@ fn parse_date(value: &str) -> Option<i64> {
 }
 
 fn date_string(days: i64) -> String {
-    let (year, month, day) = crate::js_date::civil_from_days(days);
+    let (year, month, day) = butler_core::js_date::civil_from_days(days);
     format!("{year:04}-{month:02}-{day:02}")
 }
 

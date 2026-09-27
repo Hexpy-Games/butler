@@ -21,7 +21,7 @@ pub(super) fn pin_binding_candidates(
     nonce: &str,
     input: &crate::cognition::extraction::ExtractInput,
 ) -> CognitionResult<()> {
-    let json = crate::json::stringify(&serde_json::to_value(input).map_err(json_error)?)
+    let json = butler_core::json::stringify(&serde_json::to_value(input).map_err(json_error)?)
         .map_err(json_error)?;
     let sha = crate::cognition::sources::projection_hash_for_graph(vec![
         Value::String("extract-input".into()),
@@ -125,7 +125,7 @@ pub(super) fn save_plan(
 }
 
 fn stringify(value: &Value) -> CognitionResult<String> {
-    crate::json::stringify(value).map_err(json_error)
+    butler_core::json::stringify(value).map_err(json_error)
 }
 fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
     CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string()).with_source(error)

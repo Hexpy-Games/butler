@@ -103,7 +103,7 @@ fn boolean_like(value: Option<&Value>) -> bool {
 fn token(value: Option<&Value>) -> Option<String> {
     let text = value
         .and_then(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)?;
+        .map(butler_core::public_text::trim_js_whitespace)?;
     if text.is_empty()
         || !text
             .chars()

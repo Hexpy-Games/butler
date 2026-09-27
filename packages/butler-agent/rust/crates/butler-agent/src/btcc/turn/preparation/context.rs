@@ -8,9 +8,9 @@ use crate::btcc::identity::digest;
 use crate::btcc::storage::{BtccRepositories, ContextDocumentInput};
 use crate::btcc::subsessions::SubsessionMetadata;
 use crate::btcc::{AccessMode, BtccError, TurnRequest, VerifiedExecutionControls};
-use crate::json::stringify;
-use crate::public_text::trim_js_whitespace;
 use crate::workspace::{SessionRole, StoredSessionBinding};
+use butler_core::json::stringify;
+use butler_core::public_text::trim_js_whitespace;
 
 pub(super) async fn snapshot(
     repositories: &BtccRepositories,

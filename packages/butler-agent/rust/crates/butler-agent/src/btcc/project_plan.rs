@@ -22,10 +22,10 @@ pub(crate) fn accepted_project_plan(
     input: &ProjectLedgerPlanInput,
     expected_id: &str,
 ) -> Option<ProjectLedgerPlan> {
-    let id = crate::public_text::trim_js_whitespace(&input.id);
-    let title = crate::public_text::trim_js_whitespace(&input.title);
-    let body = crate::public_text::trim_js_whitespace(input.body.as_deref()?);
-    let status = crate::public_text::trim_js_whitespace(&input.status);
+    let id = butler_core::public_text::trim_js_whitespace(&input.id);
+    let title = butler_core::public_text::trim_js_whitespace(&input.title);
+    let body = butler_core::public_text::trim_js_whitespace(input.body.as_deref()?);
+    let status = butler_core::public_text::trim_js_whitespace(&input.status);
     if id != expected_id || title.is_empty() || body.is_empty() {
         return None;
     }
@@ -41,7 +41,7 @@ pub(crate) fn accepted_project_plan(
         path: input
             .path
             .as_deref()
-            .map(crate::public_text::trim_js_whitespace)
+            .map(butler_core::public_text::trim_js_whitespace)
             .filter(|path| !path.is_empty())
             .map(str::to_owned),
     })

@@ -225,7 +225,7 @@ fn parse_content(value: &Value) -> Result<MessageContent, HttpError> {
         return Err(invalid_request("Queued message content is invalid."));
     }
     let mut normalized = value.clone();
-    crate::json::object_mut(&mut normalized).insert("version".to_owned(), Value::from(1));
+    butler_core::json::object_mut(&mut normalized).insert("version".to_owned(), Value::from(1));
     serde_json::from_value(normalized)
         .map_err(|_| invalid_request("Queued message content is invalid."))
 }

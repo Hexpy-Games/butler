@@ -2,10 +2,9 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 
-use crate::{
-    locale::LocaleCollation,
-    work_records::{WorkRecordReadError, WorkRecordReader},
-};
+use crate::work_records::WorkRecordReadError;
+use crate::work_records::WorkRecordReader;
+use butler_core::locale::LocaleCollation;
 
 use super::{options::Options, output};
 

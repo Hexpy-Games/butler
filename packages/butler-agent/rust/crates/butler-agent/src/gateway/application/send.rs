@@ -352,7 +352,7 @@ impl AppApplication {
             reply: None,
             replies: Vec::new(),
             turn: turns.turns.into_iter().find(|item| item.id == turn_id),
-            next_cursor: crate::json::saturating_u64(messages.next_cursor),
+            next_cursor: butler_core::json::saturating_u64(messages.next_cursor),
         })
     }
 }

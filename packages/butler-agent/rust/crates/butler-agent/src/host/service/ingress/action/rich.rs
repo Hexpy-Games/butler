@@ -69,7 +69,7 @@ pub(super) fn plan(source: Option<&Value>) -> Option<Value> {
         projected.insert(key.into(), text(input.get(key)?.as_str()?)?.into());
     }
     let body = input.get("body")?.as_str()?;
-    if crate::public_text::trim_js_whitespace(body).is_empty() {
+    if butler_core::public_text::trim_js_whitespace(body).is_empty() {
         return None;
     }
     projected.insert("body".into(), body.into());
@@ -80,6 +80,6 @@ pub(super) fn plan(source: Option<&Value>) -> Option<Value> {
 }
 
 pub(super) fn text(value: &str) -> Option<String> {
-    let trimmed = crate::public_text::trim_js_whitespace(value);
+    let trimmed = butler_core::public_text::trim_js_whitespace(value);
     (!trimmed.is_empty()).then(|| trimmed.to_owned())
 }

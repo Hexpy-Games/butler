@@ -6,7 +6,7 @@ use crate::conversation::{
     ConversationMessageWithParts, ConversationOriginKind, ConversationRole, ConversationStatus,
     scalar_for_part,
 };
-use crate::segmentation::grapheme_segments;
+use butler_core::segmentation::grapheme_segments;
 
 use super::types::{CognitionSourceError, CognitionSourceRow, HydratedConversationSource};
 use crate::cognition::CognitionCode;
@@ -66,7 +66,7 @@ fn truncate_graphemes(value: &str, limit: f64) -> Cow<'_, str> {
         value.len()
     } else {
         grapheme_segments(value)
-            .nth(crate::json::saturating_usize(count))
+            .nth(butler_core::json::saturating_usize(count))
             .map_or(value.len(), |segment| segment.start)
     };
     if end == value.len() {
@@ -82,7 +82,7 @@ fn js_buffer_index(value: f64, length: usize) -> usize {
     } else if !value.is_finite() || value >= length as f64 {
         length
     } else {
-        crate::json::saturating_usize(value.trunc())
+        butler_core::json::saturating_usize(value.trunc())
     }
 }
 

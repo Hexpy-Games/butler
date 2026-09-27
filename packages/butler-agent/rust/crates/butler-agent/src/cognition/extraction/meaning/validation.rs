@@ -28,7 +28,7 @@ pub(super) fn validate(value: Value, passages: &[Passage]) -> CognitionResult<Me
     for (index, entity) in entities.iter().enumerate() {
         let object = object(entity, &["name", "evidence"])?;
         let name = string(object.get("name"))?;
-        let size = crate::segmentation::grapheme_segments(name).count();
+        let size = butler_core::segmentation::grapheme_segments(name).count();
         if size > 256 {
             return Err(CognitionError::new(
                 CognitionCode::MemoryExtractInvalidOutput,

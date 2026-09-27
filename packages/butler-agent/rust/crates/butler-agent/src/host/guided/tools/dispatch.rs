@@ -4,14 +4,14 @@ mod mcp;
 mod publication;
 mod web;
 mod work;
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 pub(super) use publication::publish_work_result;
 
 use serde_json::{Value, json};
 
 use crate::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 use crate::capabilities::CapabilityInvocation;
-use crate::json::JsonDocument;
+use butler_core::json::JsonDocument;
 
 use super::GuidedTools;
 use crate::host::GuidedWorkTools;
@@ -58,7 +58,7 @@ pub(super) async fn execute(
             .arguments
             .get("request")
             .and_then(Value::as_str)
-            .map(crate::public_text::trim_js_whitespace)
+            .map(butler_core::public_text::trim_js_whitespace)
             .filter(|value| !value.is_empty())
             .ok_or_else(|| {
                 ToolExecutionError::Integrity(BtccError::relayed(
@@ -141,7 +141,7 @@ pub(super) async fn execute(
             call.arguments
                 .get(key)
                 .and_then(Value::as_str)
-                .map(crate::public_text::trim_js_whitespace)
+                .map(butler_core::public_text::trim_js_whitespace)
                 .filter(|v| !v.is_empty())
                 .map(str::to_owned)
                 .ok_or_else(|| {

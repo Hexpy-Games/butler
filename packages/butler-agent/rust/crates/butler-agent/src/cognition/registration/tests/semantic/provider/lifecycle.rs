@@ -33,13 +33,13 @@ pub(super) async fn prove(data_root: PathBuf, request: RecallRequest) {
                     released = signal.wait(released).unwrap();
                 }
             }
-            crate::js_date::parse_iso_millis("2026-09-19T00:00:00.000Z").unwrap()
+            butler_core::js_date::parse_iso_millis("2026-09-19T00:00:00.000Z").unwrap()
         })
     };
     let reader = Arc::new(MemoryRecall::new(
         data_root,
         CognitionPathEnvironment::default(),
-        Arc::new(crate::js_date::parse_iso_millis),
+        Arc::new(butler_core::js_date::parse_iso_millis),
         Arc::new(|left: &str, right: &str| left.cmp(right)),
         clock,
         1,

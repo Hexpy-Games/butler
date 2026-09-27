@@ -16,7 +16,7 @@ const ERRORS: &[&str] = &[
 ];
 
 pub(super) fn parse(value: &str) -> Option<Value> {
-    if crate::public_text::trim_js_whitespace(value).is_empty() {
+    if butler_core::public_text::trim_js_whitespace(value).is_empty() {
         return None;
     }
     let parsed: Value = serde_json::from_str(value).ok()?;

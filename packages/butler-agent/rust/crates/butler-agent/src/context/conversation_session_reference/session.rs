@@ -1,11 +1,11 @@
 use serde_json::{Value, json};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{
-    context::{apply_char_budget, to_context_message, to_context_summary},
-    conversation::PublicMemorySnapshot,
-    json,
-};
+use crate::context::apply_char_budget;
+use crate::context::to_context_message;
+use crate::context::to_context_summary;
+use crate::conversation::PublicMemorySnapshot;
+use butler_core::json;
 
 use super::{
     ContextError, ContextResult,

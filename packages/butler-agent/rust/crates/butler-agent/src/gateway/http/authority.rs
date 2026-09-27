@@ -24,7 +24,7 @@ pub(super) async fn route(
     let path = uri.path();
     let session_id = query(uri)
         .get("session_id")
-        .map(|value| crate::public_text::trim_js_whitespace(value))
+        .map(|value| butler_core::public_text::trim_js_whitespace(value))
         .filter(|value| !value.is_empty())
         .unwrap_or("general")
         .to_owned();
@@ -96,7 +96,7 @@ pub(super) async fn route(
 
 async fn allow_scope(request: Request<Body>) -> Result<String, HttpError> {
     let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
-    if crate::public_text::trim_js_whitespace(&String::from_utf8_lossy(&bytes)).is_empty() {
+    if butler_core::public_text::trim_js_whitespace(&String::from_utf8_lossy(&bytes)).is_empty() {
         return Ok("once".into());
     }
     let value: Value = serde_json::from_slice(&bytes).map_err(|_| scope_error())?;
@@ -120,7 +120,7 @@ async fn modify_input(request: Request<Body>) -> Result<String, HttpError> {
         .or_else(|| value.get("instruction"));
     alternative
         .and_then(Value::as_str)
-        .filter(|value| !crate::public_text::trim_js_whitespace(value).is_empty())
+        .filter(|value| !butler_core::public_text::trim_js_whitespace(value).is_empty())
         .map(str::to_owned)
         .ok_or_else(modify_error)
 }

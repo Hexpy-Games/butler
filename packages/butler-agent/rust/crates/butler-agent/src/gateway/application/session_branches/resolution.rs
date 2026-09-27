@@ -266,7 +266,7 @@ impl AppApplication {
             () = server_shutdown.cancelled() => { cancellation.cancel(); return Err(cancelled()); }
             () = owner_shutdown.cancelled() => { cancellation.cancel(); return Err(cancelled()); }
         };
-        let summary_text = crate::public_text::trim_js_whitespace(&result.text).to_owned();
+        let summary_text = butler_core::public_text::trim_js_whitespace(&result.text).to_owned();
         if summary_text.is_empty() {
             return Err(public(
                 502,

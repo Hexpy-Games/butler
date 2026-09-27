@@ -16,7 +16,7 @@ use crate::conversation::{
 };
 
 fn parse_timestamp(value: &str) -> Option<i64> {
-    crate::js_date::parse_date_millis(value, &Some)
+    butler_core::js_date::parse_date_millis(value, &Some)
 }
 
 fn transcript(event_id: &str, session_id: &str, text: &str) -> HistoricalTranscriptRow {

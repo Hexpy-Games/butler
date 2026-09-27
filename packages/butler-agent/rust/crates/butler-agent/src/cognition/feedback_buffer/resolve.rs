@@ -99,7 +99,7 @@ fn rewrite_resolved(path: &Path, id: &str, now_ms: i64) -> CognitionResult<()> {
         let mut output = options.open(&temporary).map_err(|source| {
             error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
         })?;
-        let fallback_iso = crate::js_date::format_iso_millis(now_ms)
+        let fallback_iso = butler_core::js_date::format_iso_millis(now_ms)
             .unwrap_or_else(|| "1970-01-01T00:00:00.000Z".into());
         let mut record = Vec::new();
         let mut started = false;
@@ -151,7 +151,7 @@ fn write_record(
     found: &mut bool,
 ) -> CognitionResult<()> {
     let block = String::from_utf8_lossy(raw);
-    if crate::public_text::trim_js_whitespace(&block).is_empty() {
+    if butler_core::public_text::trim_js_whitespace(&block).is_empty() {
         return Ok(());
     }
     let mut entry = parse_entry(&block, now_iso);
@@ -199,7 +199,7 @@ pub(super) fn format_entry(entry: &FeedbackEntry) -> String {
             .map(|(key, value)| format!("- {key}: {value}")),
     );
     lines.push(String::new());
-    lines.push(crate::public_text::trim_js_whitespace(&entry.text).to_owned());
+    lines.push(butler_core::public_text::trim_js_whitespace(&entry.text).to_owned());
     lines.push(String::new());
     format!("{}\n", lines.join("\n"))
 }

@@ -23,7 +23,7 @@ pub(super) fn read_text_if_exists(path: &Path) -> ContextResult<Option<String>> 
         .with_source(error)
     })?;
     let text = String::from_utf8_lossy(&bytes);
-    let text = crate::public_text::trim_js_whitespace(&text);
+    let text = butler_core::public_text::trim_js_whitespace(&text);
     Ok((!text.is_empty()).then(|| text.to_owned()))
 }
 
@@ -77,7 +77,7 @@ pub(super) fn bounded_persona(value: &str) -> String {
     }
     format!(
         "{}\n...",
-        crate::public_text::trim_js_whitespace_end(prefix_utf16(value, 3_000))
+        butler_core::public_text::trim_js_whitespace_end(prefix_utf16(value, 3_000))
     )
 }
 
@@ -92,7 +92,7 @@ pub(super) fn safe_config_string(value: &str) -> String {
     let mut normalized = String::with_capacity(value.len());
     let mut whitespace = false;
     for character in value.chars() {
-        if crate::public_text::is_js_whitespace(character) {
+        if butler_core::public_text::is_js_whitespace(character) {
             whitespace = true;
         } else {
             if whitespace && !normalized.is_empty() {
@@ -102,7 +102,11 @@ pub(super) fn safe_config_string(value: &str) -> String {
             normalized.push(character);
         }
     }
-    prefix_utf16(crate::public_text::trim_js_whitespace(&normalized), 180).to_owned()
+    prefix_utf16(
+        butler_core::public_text::trim_js_whitespace(&normalized),
+        180,
+    )
+    .to_owned()
 }
 
 pub(super) fn resolve_language(
@@ -125,7 +129,7 @@ pub(super) fn resolve_language(
 }
 
 fn normalize_language(value: Option<&str>) -> Option<&'static str> {
-    let normalized = crate::public_text::trim_js_whitespace(value?).to_lowercase();
+    let normalized = butler_core::public_text::trim_js_whitespace(value?).to_lowercase();
     if normalized.is_empty() {
         return None;
     }
@@ -151,7 +155,7 @@ fn persona_language(value: &str) -> Option<&str> {
     let remainder = &value[start..];
     let start = remainder
         .char_indices()
-        .find(|(_, value)| !crate::public_text::is_js_whitespace(*value))
+        .find(|(_, value)| !butler_core::public_text::is_js_whitespace(*value))
         .map_or(remainder.len(), |(index, _)| index);
     Some(remainder[start..].split('\n').next().unwrap_or(""))
 }

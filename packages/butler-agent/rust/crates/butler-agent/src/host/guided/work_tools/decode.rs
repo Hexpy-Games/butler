@@ -130,7 +130,7 @@ pub(super) fn command(
 }
 
 fn trim(value: &str) -> &str {
-    crate::public_text::trim_js_whitespace(value)
+    butler_core::public_text::trim_js_whitespace(value)
 }
 fn required(value: Option<&Value>, field: &str) -> Result<String, WorkArgumentError> {
     value

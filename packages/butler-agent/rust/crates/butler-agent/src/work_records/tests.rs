@@ -38,7 +38,7 @@ fn original_writer_and_reader_goldens_preserve_hashes_review_gates_and_read_erro
             } else {
                 let actual = serde_json::to_value(actual.unwrap()).unwrap();
                 let actual: Value =
-                    serde_json::from_str(&crate::json::stringify(&actual).unwrap()).unwrap();
+                    serde_json::from_str(&butler_core::json::stringify(&actual).unwrap()).unwrap();
                 assert_eq!(actual, case[key]["value"], "{} {key}", case["name"]);
             }
         }

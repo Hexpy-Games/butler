@@ -109,7 +109,7 @@ fn node_vector_second_filter_requires_complete_current_unit_and_scoped_source() 
             episodes: vec![],
             diagnostics: vec![],
         },
-        &|text| crate::js_date::parse_iso_millis(text).map_or(f64::NAN, |value| value as f64),
+        &|text| butler_core::js_date::parse_iso_millis(text).map_or(f64::NAN, |value| value as f64),
     )
     .unwrap();
     assert!(!selected.partial);
@@ -132,7 +132,7 @@ fn node_vector_second_filter_requires_complete_current_unit_and_scoped_source() 
             episodes: vec![],
             diagnostics: vec![],
         },
-        &|text| crate::js_date::parse_iso_millis(text).map_or(f64::NAN, |value| value as f64),
+        &|text| butler_core::js_date::parse_iso_millis(text).map_or(f64::NAN, |value| value as f64),
     )
     .unwrap();
     assert!(stale.nodes.is_empty());
@@ -151,7 +151,7 @@ fn node_vector_second_filter_requires_complete_current_unit_and_scoped_source() 
             episodes: vec![],
             diagnostics: vec![],
         },
-        &|text| crate::js_date::parse_iso_millis(text).map_or(f64::NAN, |value| value as f64),
+        &|text| butler_core::js_date::parse_iso_millis(text).map_or(f64::NAN, |value| value as f64),
     )
     .unwrap();
     assert!(excluded.nodes.is_empty());
@@ -168,7 +168,7 @@ fn node_vector_second_filter_requires_complete_current_unit_and_scoped_source() 
             episodes: vec![],
             diagnostics: vec![],
         },
-        &|text| crate::js_date::parse_iso_millis(text).map_or(f64::NAN, |value| value as f64),
+        &|text| butler_core::js_date::parse_iso_millis(text).map_or(f64::NAN, |value| value as f64),
     )
     .unwrap();
     assert!(rejected.nodes.is_empty());
@@ -206,8 +206,9 @@ fn episode_vector_receipt_and_finite_distance_are_required() {
         ],
     )
     .unwrap();
-    let parse =
-        |text: &str| crate::js_date::parse_iso_millis(text).map_or(f64::NAN, |value| value as f64);
+    let parse = |text: &str| {
+        butler_core::js_date::parse_iso_millis(text).map_or(f64::NAN, |value| value as f64)
+    };
     let selected = current(
         &db,
         &input(),

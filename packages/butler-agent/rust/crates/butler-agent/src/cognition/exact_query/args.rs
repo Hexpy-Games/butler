@@ -79,7 +79,7 @@ pub(super) fn parse(
                 .as_f64()
                 .filter(|n| n.is_finite() && n.fract() == 0.0 && (1.0..=50.0).contains(n))
                 .ok_or(CognitionCode::InvalidLimit)?;
-            crate::json::saturating_usize(n)
+            butler_core::json::saturating_usize(n)
         }
     };
     let project_id = project_id.map(str::trim).filter(|value| !value.is_empty());
@@ -258,8 +258,9 @@ fn timestamp(value: &str) -> Result<(i64, String), CognitionCode> {
     if !prefix || !zone {
         return Err(CognitionCode::InvalidTime);
     }
-    let millis =
-        crate::js_date::parse_date_millis(value, &|_| None).ok_or(CognitionCode::InvalidTime)?;
-    let formatted = crate::js_date::format_iso_millis(millis).ok_or(CognitionCode::InvalidTime)?;
+    let millis = butler_core::js_date::parse_date_millis(value, &|_| None)
+        .ok_or(CognitionCode::InvalidTime)?;
+    let formatted =
+        butler_core::js_date::format_iso_millis(millis).ok_or(CognitionCode::InvalidTime)?;
     Ok((millis, formatted))
 }

@@ -21,7 +21,6 @@ use crate::btcc::{
     TurnStore, test_prepared_turn,
 };
 use crate::host::{AcceptedPlanProducer, GuidedCatalog, SystemIdentity};
-use crate::locale::LocaleCollation;
 use crate::models::{
     ModelCatalog, ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelProvider,
     PromptUsageMetricInput, PromptUsageMetricSink, ProviderAuth, ProviderClock,
@@ -33,6 +32,7 @@ use crate::workspace::{
     Commands, SessionBindingStore, SessionBindingStoreConfig, SessionWorkspaceRecovery,
     WorkspaceFiles, WorkspaceMutations, WorkspaceStorageProfile,
 };
+use butler_core::locale::LocaleCollation;
 
 struct EmptyProfiles;
 impl crate::btcc::WorkerProfileReader for EmptyProfiles {

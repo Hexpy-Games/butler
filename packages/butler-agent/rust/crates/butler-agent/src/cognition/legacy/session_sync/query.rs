@@ -180,8 +180,8 @@ fn project_line(line: &str, transcript_file: &str) -> Option<IndexMessage> {
     }
 
     let text = event_text(payload)?;
-    let timestamp_ms = crate::js_date::parse_iso_millis(timestamp)?;
-    let created_at = crate::js_date::format_iso_millis(timestamp_ms)?;
+    let timestamp_ms = butler_core::js_date::parse_iso_millis(timestamp)?;
+    let created_at = butler_core::js_date::format_iso_millis(timestamp_ms)?;
     let internal = session_id.starts_with("steward/")
         || nullish(payload.get("route").and_then(|route| route.get("role")))
             .or_else(|| nullish(payload.get("role")))
@@ -199,7 +199,7 @@ fn project_line(line: &str, transcript_file: &str) -> Option<IndexMessage> {
             .and_then(Value::as_object)
             .and_then(|message| message.get("timestamp"))
             .and_then(Value::as_str)
-            .and_then(crate::js_date::parse_iso_millis)
+            .and_then(butler_core::js_date::parse_iso_millis)
             .is_some_and(|millis| millis <= 0);
 
     Some(IndexMessage {
@@ -260,7 +260,7 @@ fn current_iso_timestamp() -> CognitionResult<String> {
         .map_err(|source| unavailable().with_source(source))?
         .as_millis();
     let millis = i64::try_from(millis).map_err(|source| unavailable().with_source(source))?;
-    crate::js_date::format_iso_millis(millis).ok_or_else(unavailable)
+    butler_core::js_date::format_iso_millis(millis).ok_or_else(unavailable)
 }
 
 fn db_error(_: rusqlite::Error) -> CognitionError {

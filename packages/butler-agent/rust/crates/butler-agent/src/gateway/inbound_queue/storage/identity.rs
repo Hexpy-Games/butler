@@ -15,7 +15,7 @@ use super::{
 };
 use crate::gateway::InboundQueueCode;
 use crate::gateway::inbound_queue::{InboundQueueError, QueueResult, QueuedInboundEvent};
-use crate::json::JsonDocument;
+use butler_core::json::JsonDocument;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]

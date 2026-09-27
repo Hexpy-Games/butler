@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 

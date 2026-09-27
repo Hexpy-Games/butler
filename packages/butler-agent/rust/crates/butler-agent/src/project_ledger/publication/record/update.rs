@@ -145,7 +145,7 @@ pub(super) fn apply(
         match value {
             Value::String(text) => {
                 raw.push_str(
-                    &crate::json::stringify(&Value::String(text))
+                    &butler_core::json::stringify(&Value::String(text))
                         .map_err(|source| invalid().with_source(source))?,
                 );
             }
@@ -170,7 +170,7 @@ fn put_text(map: &mut Map<String, Value>, key: &str, value: Option<&str>) {
 
 fn required(value: Option<&str>) -> Result<&str, ProjectWorkPublicationError> {
     value
-        .filter(|value| !crate::public_text::trim_js_whitespace(value).is_empty())
+        .filter(|value| !butler_core::public_text::trim_js_whitespace(value).is_empty())
         .ok_or_else(invalid)
 }
 

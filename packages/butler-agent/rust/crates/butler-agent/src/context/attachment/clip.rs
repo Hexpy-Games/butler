@@ -3,7 +3,9 @@
 use std::collections::VecDeque;
 use std::io::{Read, Result as IoResult};
 
-use crate::public_text::{is_js_whitespace, trim_js_whitespace_end, trim_js_whitespace_start};
+use butler_core::public_text::is_js_whitespace;
+use butler_core::public_text::trim_js_whitespace_end;
+use butler_core::public_text::trim_js_whitespace_start;
 
 const MARKER: &str = "\n[...attachment content trimmed...]\n";
 
@@ -126,7 +128,7 @@ impl TextCollector {
             return Some(String::from_utf16_lossy(&self.complete.first));
         }
         let remaining = max_chars.saturating_sub(MARKER.encode_utf16().count());
-        let head_chars = crate::json::saturating_usize(((remaining as f64) * 0.65).floor());
+        let head_chars = butler_core::json::saturating_usize(((remaining as f64) * 0.65).floor());
         let tail_chars = remaining.saturating_sub(head_chars);
         let head = String::from_utf16_lossy(&self.complete.first[..head_chars]);
         let tail = String::from_utf16_lossy(

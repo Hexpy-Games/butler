@@ -245,7 +245,7 @@ fn commit_relocation(
         &tx,
         "session.updated",
         None,
-        crate::json::json_object!({"session":session,"context_revision":operation_id}),
+        butler_core::json::json_object!({"session":session,"context_revision":operation_id}),
         &clock.now_iso(),
     )
     .map_err(app_error)?;
@@ -254,7 +254,7 @@ fn commit_relocation(
         &tx,
         "space.changed",
         None,
-        crate::json::json_object!({"revision":final_view.revision}),
+        butler_core::json::json_object!({"revision":final_view.revision}),
         &clock.now_iso(),
     )
     .map_err(app_error)?;

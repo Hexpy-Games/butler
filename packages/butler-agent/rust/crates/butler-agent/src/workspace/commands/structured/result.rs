@@ -17,7 +17,7 @@ pub(super) fn pipeline_exit(statuses: &[Option<std::process::ExitStatus>]) -> Op
 
 pub(super) fn bounded_timeout(value: Option<f64>) -> Duration {
     let value = value.filter(|value| value.is_finite()).unwrap_or(30_000.0);
-    Duration::from_millis(crate::json::saturating_u64(
+    Duration::from_millis(butler_core::json::saturating_u64(
         value.trunc().clamp(1.0, 3_600_000.0),
     ))
 }

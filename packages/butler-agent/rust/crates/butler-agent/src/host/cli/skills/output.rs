@@ -81,7 +81,7 @@ fn envelope(
 ) -> String {
     format!(
         "{}\n",
-        crate::json::pretty(&json!({
+        butler_core::json::pretty(&json!({
             "ok": ok,
             "command": command,
             "data": data.unwrap_or(serde_json::Value::Null),

@@ -35,7 +35,7 @@ pub(super) struct Span {
 
 fn historical_quote(candidate: &ExtractCandidate) -> Option<(QuoteRef, String)> {
     for unit in &candidate.evidence {
-        for sentence in crate::segmentation::sentence_segments(&unit.text) {
+        for sentence in butler_core::segmentation::sentence_segments(&unit.text) {
             if std::iter::once(&candidate.label)
                 .chain(candidate.aliases.iter())
                 .any(|alias| !alias.is_empty() && sentence.text.contains(alias))
@@ -104,7 +104,7 @@ pub(super) fn repair_schema(batch: &BindingBatch) -> Map<String, Value> {
     } else {
         json!({"anyOf":[null_decision,selected_decision]})
     };
-    crate::json::json_object!({"type":"object","additionalProperties":false,"required":["decisions"],"properties":{"decisions":{"type":"array","maxItems":4,"items":item}}})
+    butler_core::json::json_object!({"type":"object","additionalProperties":false,"required":["decisions"],"properties":{"decisions":{"type":"array","maxItems":4,"items":item}}})
 }
 fn error(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, code.as_str())

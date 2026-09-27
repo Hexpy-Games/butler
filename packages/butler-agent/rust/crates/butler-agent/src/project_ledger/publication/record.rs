@@ -73,7 +73,7 @@ pub(super) fn resolve_scope(
 pub(super) fn capture(
     scope: &ResolvedProjectWorkScope,
     updates: &[ProjectLedgerRecordUpdate],
-    collation: &crate::locale::LocaleCollation,
+    collation: &butler_core::locale::LocaleCollation,
 ) -> Result<(ProjectWorkHead, Vec<ProjectWorkTarget>), ProjectWorkPublicationError> {
     let mut addressed = Vec::with_capacity(updates.len() * 2);
     for update in updates {
@@ -212,7 +212,7 @@ pub(super) fn materialize(
 }
 
 pub(super) fn safe_id(id: &str) -> Result<&str, ProjectWorkPublicationError> {
-    if crate::public_text::trim_js_whitespace(id).is_empty()
+    if butler_core::public_text::trim_js_whitespace(id).is_empty()
         || matches!(id, "." | "..")
         || id.contains(['/', '\\'])
     {

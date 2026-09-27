@@ -216,7 +216,7 @@ fn safe_id(value: &str) -> String {
 }
 
 fn utf16_slice(value: &str, limit: usize) -> String {
-    crate::json::Utf16Slice::new(value, 0, limit)
+    butler_core::json::Utf16Slice::new(value, 0, limit)
         .utf8_lossy()
         .into_owned()
 }

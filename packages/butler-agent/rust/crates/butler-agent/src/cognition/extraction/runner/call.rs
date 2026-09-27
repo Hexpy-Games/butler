@@ -86,14 +86,14 @@ where
         } else {
             json!({"input": prompt_value, "correction": {"error": rejection, "instruction": correction}})
         };
-        let prompt = crate::json::stringify(&prompt_value).map_err(json_error)?;
+        let prompt = butler_core::json::stringify(&prompt_value).map_err(json_error)?;
         let schema = if repair > 0 {
             repair_schema.unwrap_or(schema)
         } else {
             schema
         };
-        let wire = json!({"profile":format!("memory-{stage}.v4"),"input_json_sha256":sha(&prompt),"input_json_utf8_bytes":prompt.len(),"instructions_sha256":sha(instructions),"output_schema_sha256":sha(&crate::json::stringify(&Value::Object(schema.clone())).map_err(json_error)?)});
-        let request_hash = sha(&crate::json::stringify(&json!([
+        let wire = json!({"profile":format!("memory-{stage}.v4"),"input_json_sha256":sha(&prompt),"input_json_utf8_bytes":prompt.len(),"instructions_sha256":sha(instructions),"output_schema_sha256":sha(&butler_core::json::stringify(&Value::Object(schema.clone())).map_err(json_error)?)});
+        let request_hash = sha(&butler_core::json::stringify(&json!([
             input.revision,
             model,
             effort,

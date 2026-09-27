@@ -30,7 +30,7 @@ pub(crate) async fn search(
         .and_then(Value::as_f64)
         .filter(|value| value.is_finite())
         .map_or(20, |value| {
-            crate::json::saturating_usize(value.floor()).clamp(1, 50)
+            butler_core::json::saturating_usize(value.floor()).clamp(1, 50)
         });
     let disabled_reason = (!call_available).then_some(MCP_DISABLED);
     let recovery_hint = disabled_reason.map(|_| MCP_RECOVERY);
@@ -299,8 +299,8 @@ fn hex(value: u8) -> Option<u8> {
     }
 }
 
-fn schema_digest(schema: &Value) -> Result<String, crate::json::JsonError> {
-    let body = crate::json::stringify_sorted(schema, &|left, right| utf16_cmp(left, right))?;
+fn schema_digest(schema: &Value) -> Result<String, butler_core::json::JsonError> {
+    let body = butler_core::json::stringify_sorted(schema, &|left, right| utf16_cmp(left, right))?;
     Ok(format!("sha256:{:x}", Sha256::digest(body.as_bytes())))
 }
 

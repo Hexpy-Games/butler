@@ -20,7 +20,7 @@ pub(super) fn exact_read_arguments(
     let result_ref = value
         .get("result_ref")
         .and_then(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .unwrap_or_default();
     if result_ref.is_empty() || utf16_len(result_ref) > 256 {
         return Err(error(BtccCode::OperationResultReferenceInvalid));
@@ -28,7 +28,7 @@ pub(super) fn exact_read_arguments(
     let sha256 = value
         .get("sha256")
         .and_then(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .unwrap_or_default();
     if sha256.len() != 64
         || !sha256
@@ -44,7 +44,7 @@ pub(super) fn exact_read_arguments(
     let work_id = match value.get("work_id") {
         None | Some(Value::Null) => None,
         Some(Value::String(original)) => {
-            let trimmed = crate::public_text::trim_js_whitespace(original);
+            let trimmed = butler_core::public_text::trim_js_whitespace(original);
             if trimmed.is_empty() || utf16_len(original) > 256 {
                 return Err(error(BtccCode::OperationResultWorkIdInvalid));
             }
@@ -79,7 +79,7 @@ pub(super) fn safe_integer(value: Option<&Value>, code: BtccCode) -> Result<usiz
     let number = value
         .ok_or_else(|| error(code))
         .and_then(|value| number(value, code))?;
-    usize::try_from(crate::json::saturating_u64(number))
+    usize::try_from(butler_core::json::saturating_u64(number))
         .map_err(|source| error(code).with_source(source))
 }
 

@@ -4,11 +4,11 @@ use std::fs;
 use serde_json::{Map, Value};
 
 use crate::btcc::BtccError;
-use crate::locale::LocaleCollation;
 use crate::workspace::{
     OwnOptional, SessionBindingStore, SessionLifecycleState, SessionRole, StoredSessionBinding,
     UpsertSessionBinding,
 };
+use butler_core::locale::LocaleCollation;
 
 use super::{ServiceBootstrap, ServiceConfiguration};
 
@@ -121,7 +121,7 @@ impl ServiceConfiguration {
             .model_ref
             .split('/')
             .next()
-            .map(crate::public_text::trim_js_whitespace)
+            .map(butler_core::public_text::trim_js_whitespace)
             .filter(|value| !value.is_empty())
             .unwrap_or(&self.provider_id)
             .to_owned();
@@ -158,7 +158,7 @@ impl ServiceConfiguration {
     fn read_session_pointer(&self) -> Option<String> {
         let bytes = fs::read(self.pointer_path()).ok()?;
         let text = String::from_utf8_lossy(&bytes);
-        let trimmed = crate::public_text::trim_js_whitespace(&text);
+        let trimmed = butler_core::public_text::trim_js_whitespace(&text);
         (!trimmed.is_empty()).then(|| trimmed.to_owned())
     }
 

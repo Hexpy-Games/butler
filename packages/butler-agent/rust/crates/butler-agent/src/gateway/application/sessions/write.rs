@@ -3,7 +3,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::{AppStorageError, contracts::*, read};
 use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::{AppIdentityClock, EventSubscribers, events};
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 pub(super) fn identity(input: &AppCreateSessionInput, clock: &dyn AppIdentityClock) -> String {
     match input
@@ -112,7 +112,7 @@ pub(super) fn append_created_unpublished(
     clock: &dyn AppIdentityClock,
 ) -> Result<crate::gateway::AppEventEnvelope, AppStorageError> {
     let summary = read::session(db, id)?;
-    let payload = crate::json::json_object!({"session":summary});
+    let payload = butler_core::json::json_object!({"session":summary});
     events::append_unpublished(db, "session.created", None, payload, &clock.now_iso())
 }
 
@@ -122,7 +122,7 @@ fn append_created(
     summary: &AppSessionSummary,
     now: &str,
 ) -> Result<(), AppStorageError> {
-    let payload = crate::json::json_object!({"session":summary});
+    let payload = butler_core::json::json_object!({"session":summary});
     events::append(db, subscribers, "session.created", None, payload, now)?;
     Ok(())
 }

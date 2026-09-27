@@ -21,7 +21,7 @@ pub(crate) async fn canonical_conversation_session_id(
     runtime_session_id: &str,
     gateway: Option<&str>,
 ) -> ContextResult<String> {
-    let runtime = crate::public_text::trim_js_whitespace(runtime_session_id);
+    let runtime = butler_core::public_text::trim_js_whitespace(runtime_session_id);
     if runtime.is_empty() {
         return Ok(conversation_session_id_for_durable_session("butler/main"));
     }
@@ -34,7 +34,7 @@ pub(crate) async fn canonical_conversation_session_id(
         return Ok(runtime.to_owned());
     }
     if let Some(gateway) = gateway
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|v| !v.is_empty())
         && let Some(bound) = store
             .get_session_by_gateway_binding(gateway, runtime)
@@ -63,7 +63,7 @@ pub(crate) async fn read_conversation_context(
     let query = input
         .query
         .as_deref()
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .unwrap_or("")
         .to_owned();
     let canonical =
@@ -116,7 +116,7 @@ pub(crate) async fn read_conversation_context(
     let requested_anchor = input
         .anchor_message_id
         .as_deref()
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|v| !v.is_empty())
         .map(str::to_owned);
     Ok(ConversationContextResult {
@@ -142,7 +142,7 @@ async fn resolve_anchor(
     if let Some(id) = input
         .anchor_message_id
         .as_deref()
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|v| !v.is_empty())
     {
         let message = store.read_message_by_id(id).await.map_err(store_error)?;
@@ -156,7 +156,7 @@ async fn resolve_anchor(
     if let Some(id) = input
         .anchor_event_id
         .as_deref()
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|v| !v.is_empty())
     {
         return store
@@ -205,14 +205,14 @@ async fn select_messages(
                         index,
                         all.len(),
                         direction,
-                        crate::json::saturating_usize(limit),
+                        butler_core::json::saturating_usize(limit),
                     ) {
                         selected.insert(all[selected_index].0.clone(), ());
-                        if selected.len() >= crate::json::saturating_usize(limit) {
+                        if selected.len() >= butler_core::json::saturating_usize(limit) {
                             break;
                         }
                     }
-                    if selected.len() >= crate::json::saturating_usize(limit) {
+                    if selected.len() >= butler_core::json::saturating_usize(limit) {
                         break;
                     }
                 }
@@ -250,16 +250,16 @@ fn normalize(value: &str) -> String {
 }
 fn query_terms(query: &str) -> Vec<String> {
     let normalized = normalize(query);
-    let normalized = crate::public_text::trim_js_whitespace(&normalized).to_owned();
+    let normalized = butler_core::public_text::trim_js_whitespace(&normalized).to_owned();
     if normalized.is_empty() {
         return vec![];
     }
     let mut values = IndexMap::new();
     values.insert(normalized.clone(), ());
     for value in normalized.split(|c: char| {
-        crate::public_text::is_js_whitespace(c) || ",./!?()[]{}'\"`~:;|<>".contains(c)
+        butler_core::public_text::is_js_whitespace(c) || ",./!?()[]{}'\"`~:;|<>".contains(c)
     }) {
-        let value = crate::public_text::trim_js_whitespace(value);
+        let value = butler_core::public_text::trim_js_whitespace(value);
         if value.encode_utf16().count() >= 2 {
             values.insert(value.into(), ());
         }
@@ -298,7 +298,7 @@ pub(in crate::context) fn apply_char_budget(
     messages: Vec<ConversationContextMessage>,
     max_chars: f64,
 ) -> (Vec<ConversationContextMessage>, bool) {
-    let max = crate::json::saturating_usize(max_chars.max(0.0));
+    let max = butler_core::json::saturating_usize(max_chars.max(0.0));
     let mut selected = Vec::new();
     let mut used = 0;
     for mut message in messages {
@@ -311,7 +311,7 @@ pub(in crate::context) fn apply_char_budget(
         }
         if cost > max {
             let units = max.saturating_sub(32);
-            message.text = crate::public_text::trim_js_whitespace_end(
+            message.text = butler_core::public_text::trim_js_whitespace_end(
                 crate::context::prefix_utf16(&message.text, units),
             )
             .to_owned()
@@ -339,7 +339,7 @@ fn direction_name(value: ConversationContextDirection) -> &'static str {
 }
 fn trim_option(value: Option<String>) -> Option<String> {
     value
-        .map(|v| crate::public_text::trim_js_whitespace(&v).to_owned())
+        .map(|v| butler_core::public_text::trim_js_whitespace(&v).to_owned())
         .filter(|v| !v.is_empty())
 }
 fn store_error(error: impl std::error::Error + Send + Sync + 'static) -> ContextError {

@@ -1,6 +1,6 @@
 //! Source task/work completion planning and durable Ledger closeout.
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use std::path::Path;
 
 use serde_json::{Map, Value, json};
@@ -215,13 +215,13 @@ fn error_code(result: &Value) -> &str {
 fn text(value: Option<&Value>) -> &str {
     value
         .and_then(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .unwrap_or("")
 }
 fn nonempty(value: Option<&Value>) -> Option<&str> {
     value
         .and_then(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
 }
 fn final_summary(kind: &str, id: &str, args: &Map<String, Value>) -> String {

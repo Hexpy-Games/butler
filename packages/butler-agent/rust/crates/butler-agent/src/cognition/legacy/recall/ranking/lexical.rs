@@ -1,4 +1,4 @@
-use crate::public_text::fixed_regex;
+use butler_core::public_text::fixed_regex;
 use std::{
     collections::{HashMap, HashSet},
     sync::LazyLock,

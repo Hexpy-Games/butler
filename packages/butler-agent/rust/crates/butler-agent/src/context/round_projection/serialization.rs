@@ -271,7 +271,7 @@ pub(super) fn projection_digest_json(
             output.push(',');
         }
         if let Some(item_id) = item_id {
-            crate::json::write_string(item_id, &mut output).map_err(json_error)?;
+            butler_core::json::write_string(item_id, &mut output).map_err(json_error)?;
         } else {
             output.push_str("null");
         }
@@ -285,7 +285,7 @@ pub(super) fn digest(value: &str) -> String {
 }
 
 pub(super) fn stringify(value: &Value) -> Result<String, BtccError> {
-    crate::json::stringify(value).map_err(|error| {
+    butler_core::json::stringify(value).map_err(|error| {
         BtccError::relayed("context_serialization_failed", error.to_string()).with_source(error)
     })
 }
@@ -336,9 +336,9 @@ fn string_field(
     value: &str,
 ) -> Result<(), BtccError> {
     separator(output, has_field);
-    crate::json::write_string(name, output).map_err(json_error)?;
+    butler_core::json::write_string(name, output).map_err(json_error)?;
     output.push(':');
-    crate::json::write_string(value, output).map_err(json_error)
+    butler_core::json::write_string(value, output).map_err(json_error)
 }
 
 fn value_field(
@@ -348,7 +348,7 @@ fn value_field(
     value: &Value,
 ) -> Result<(), BtccError> {
     separator(output, has_field);
-    crate::json::write_string(name, output).map_err(json_error)?;
+    butler_core::json::write_string(name, output).map_err(json_error)?;
     output.push(':');
     append_value(value, output)
 }
@@ -360,7 +360,7 @@ fn map_field(
     value: &Map<String, Value>,
 ) -> Result<(), BtccError> {
     separator(output, has_field);
-    crate::json::write_string(name, output).map_err(json_error)?;
+    butler_core::json::write_string(name, output).map_err(json_error)?;
     output.push_str(":{");
     let mut entries = value.iter().collect::<Vec<_>>();
     entries.sort_by(
@@ -375,7 +375,7 @@ fn map_field(
         if index > 0 {
             output.push(',');
         }
-        crate::json::write_string(key, output).map_err(json_error)?;
+        butler_core::json::write_string(key, output).map_err(json_error)?;
         output.push(':');
         append_value(value, output)?;
     }
@@ -394,7 +394,7 @@ fn small_field<T: Serialize + ?Sized>(
 }
 
 fn append_value(value: &Value, output: &mut String) -> Result<(), BtccError> {
-    crate::json::append_json(value, output).map_err(json_error)
+    butler_core::json::append_json(value, output).map_err(json_error)
 }
 
 fn separator(output: &mut String, has_field: &mut bool) {
@@ -409,7 +409,7 @@ fn array_index(key: &str) -> Option<u32> {
     (value < u32::MAX && value.to_string() == key).then_some(value)
 }
 
-fn json_error(error: crate::json::JsonError) -> BtccError {
+fn json_error(error: butler_core::json::JsonError) -> BtccError {
     BtccError::relayed("context_serialization_failed", error.to_string()).with_source(error)
 }
 

@@ -52,11 +52,12 @@ async fn run(
         cache_key,
         cache_retention,
     } = serialize::body(&request, &config, carrier)?;
-    let serialized =
-        crate::json::stringify(&body).map_err(|error| ModelRoundError::InvocationFailure {
+    let serialized = butler_core::json::stringify(&body).map_err(|error| {
+        ModelRoundError::InvocationFailure {
             code: Some("prompt_serialization_failed".into()),
             message: error.to_string(),
-        })?;
+        }
+    })?;
     let serialized = Bytes::from(serialized);
     let physical = crate::models::request_admission::PreparedRequestAdmission::new(
         &crate::models::request_admission::PrepareAdmissionInput {

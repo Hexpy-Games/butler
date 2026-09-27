@@ -115,7 +115,7 @@ impl SubsessionService {
         &self,
         request: SubsessionDirectionRequest,
     ) -> Result<Value, BtccError> {
-        let instruction = crate::public_text::trim_js_whitespace(&request.instruction);
+        let instruction = butler_core::public_text::trim_js_whitespace(&request.instruction);
         if instruction.is_empty() {
             return Err(error(BtccCode::StewardDirectionInstructionRequired));
         }

@@ -35,8 +35,8 @@ use super::{
     normalize_hosted_api_base_url, normalize_local_model_config, normalize_registered_hosted_model,
     registered_hosted_model_metadata,
 };
-use crate::configuration::ConfigurationWrites;
-use crate::locale::LocaleCollation;
+use butler_core::configuration::ConfigurationWrites;
+use butler_core::locale::LocaleCollation;
 
 use credentials::CredentialRecord;
 use environment::merge_private_auth_environment;

@@ -1,10 +1,10 @@
 //! Borrowed native catalog projection for one progressive discovery call.
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use crate::json;
+use butler_core::json;
 
 #[derive(Clone, Copy)]
 pub(crate) struct BridgeCatalogTool<'a> {
@@ -61,7 +61,7 @@ pub(crate) fn search_native<'a>(
         .and_then(Value::as_f64)
         .filter(|number| number.is_finite())
         .map_or(20, |number| {
-            crate::json::saturating_usize(number.floor()).clamp(1, 50)
+            butler_core::json::saturating_usize(number.floor()).clamp(1, 50)
         });
     let mut ranked = Vec::new();
     for tool in tools {

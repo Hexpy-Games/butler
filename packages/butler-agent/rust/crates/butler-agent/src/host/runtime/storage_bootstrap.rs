@@ -43,7 +43,7 @@ pub(crate) fn prepare_fresh_btcc_storage(
     }
     let path = butler_data.join("agent-runtime/btcc.sqlite");
     let fence = format!("native-service-pre-readiness:{}", std::process::id());
-    let completed_at = crate::js_date::iso_from_system_time(SystemTime::now());
+    let completed_at = butler_core::js_date::iso_from_system_time(SystemTime::now());
     let manifest_id = bootstrap_fresh_storage(&path, &fence, runtime_version, &completed_at)
         .map_err(FreshStorageError::Storage)?;
     Ok(FreshStorageBootstrap { path, manifest_id })

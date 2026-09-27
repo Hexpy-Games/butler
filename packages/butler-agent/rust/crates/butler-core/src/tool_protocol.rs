@@ -3,7 +3,7 @@
 mod tool_name;
 
 use std::borrow::Cow;
-pub(crate) use tool_name::ToolName;
+pub use tool_name::ToolName;
 
 use serde_json::{Map, Value};
 
@@ -21,7 +21,7 @@ pub(crate) struct ParsedToolCatalogId<'a> {
     pub name: Cow<'a, str>,
 }
 
-pub(crate) struct NormalizedGuidedToolCall<'a> {
+pub struct NormalizedGuidedToolCall<'a> {
     pub name: Cow<'a, str>,
 }
 
@@ -49,7 +49,7 @@ pub(crate) fn parse_tool_catalog_id(id: &str) -> Option<ParsedToolCatalogId<'_>>
     })
 }
 
-pub(crate) fn normalize_guided_tool_call<'a>(
+pub fn normalize_guided_tool_call<'a>(
     tool_name: &'a str,
     args: &'a Map<String, Value>,
 ) -> NormalizedGuidedToolCall<'a> {

@@ -40,7 +40,7 @@ impl SystemPromptClock {
         let local = value + i64::from(offset) * 1000;
         let days = local.div_euclid(86_400_000);
         let seconds = local.rem_euclid(86_400_000) / 1000;
-        let (year, month, day) = crate::js_date::civil_from_days(days);
+        let (year, month, day) = butler_core::js_date::civil_from_days(days);
         let hour = seconds / 3600;
         let minute = seconds / 60 % 60;
         let second = seconds % 60;
@@ -99,11 +99,12 @@ impl PromptClock for SystemPromptClock {
     }
 
     fn parse_timestamp(&self, value: &str) -> Option<i64> {
-        crate::js_date::parse_iso_millis(value)
+        butler_core::js_date::parse_iso_millis(value)
     }
 
     fn iso_from_epoch_millis(&self, value: i64) -> ContextResult<String> {
-        crate::js_date::format_iso_millis(value).ok_or_else(|| failure("Date is outside TimeClip"))
+        butler_core::js_date::format_iso_millis(value)
+            .ok_or_else(|| failure("Date is outside TimeClip"))
     }
 
     fn format_local_time(&self, value: i64, timezone: &str) -> ContextResult<String> {

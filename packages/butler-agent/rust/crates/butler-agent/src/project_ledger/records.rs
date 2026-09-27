@@ -20,7 +20,7 @@ pub(super) fn show_plan(
     root: &Path,
     original_id: &str,
 ) -> Result<PlanRecordShow, ProjectLedgerReadError> {
-    let lookup = crate::public_text::trim_js_whitespace(original_id);
+    let lookup = butler_core::public_text::trim_js_whitespace(original_id);
     if lookup.is_empty() {
         return Err(ProjectLedgerReadError::record_show("invalid_input"));
     }
@@ -62,7 +62,7 @@ pub(super) fn show_plan(
         let id = data
             .get("id")
             .and_then(Value::as_str)
-            .map(crate::public_text::trim_js_whitespace)
+            .map(butler_core::public_text::trim_js_whitespace)
             .filter(|id| !id.is_empty())
             .unwrap_or(&filename_id);
         let title = data
@@ -146,7 +146,7 @@ pub(super) fn frontmatter(raw: &str) -> Option<Value> {
     let header = raw.strip_prefix("---\n")?;
     let end = header.find("\n---")?;
     let mut data = Map::new();
-    for line in crate::public_text::trim_js_whitespace(&header[..end]).split('\n') {
+    for line in butler_core::public_text::trim_js_whitespace(&header[..end]).split('\n') {
         let Some((key, value)) = line.split_once(':') else {
             continue;
         };
@@ -163,7 +163,7 @@ pub(super) fn frontmatter(raw: &str) -> Option<Value> {
 }
 
 fn scalar(value: &str) -> Value {
-    let raw = crate::public_text::trim_js_whitespace(value);
+    let raw = butler_core::public_text::trim_js_whitespace(value);
     if raw.starts_with('"') && raw.ends_with('"') {
         return serde_json::from_str(raw)
             .unwrap_or_else(|_| Value::String(raw[1..raw.len().saturating_sub(1)].to_owned()));
@@ -179,7 +179,7 @@ fn scalar(value: &str) -> Value {
                     && trimmed.len() > 1
                     && trimmed[1..].bytes().all(|byte| byte.is_ascii_digit()))) =>
         {
-            let number = crate::json::number_from_string(trimmed);
+            let number = butler_core::json::number_from_string(trimmed);
             serde_json::Number::from_f64(number)
                 .map(Value::Number)
                 .unwrap_or(Value::Null)
@@ -209,7 +209,7 @@ fn js_string(value: &Value) -> Result<String, ProjectLedgerReadError> {
     Ok(match value {
         Value::Null => "null".to_owned(),
         Value::Bool(value) => value.to_string(),
-        Value::Number(_) => crate::json::stringify(value).map_err(|source| {
+        Value::Number(_) => butler_core::json::stringify(value).map_err(|source| {
             ProjectLedgerReadError::record_show("invalid_record_value").with_source(source)
         })?,
         Value::String(value) => value.clone(),

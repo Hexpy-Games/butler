@@ -162,25 +162,26 @@ impl WebAccess {
     }
 
     pub(super) fn config(&self) -> Result<Value, WebAccessError> {
-        crate::configuration::read_json_object(&self.inner.data_root.join("butler.config.json"))
-            .map_err(|source| {
-                WebAccessError::new(
-                    WebAccessCode::WebAccessConfigurationInvalid,
-                    "Butler web configuration could not be read.",
-                )
-                .with_source(source)
-            })
+        butler_core::configuration::read_json_object(
+            &self.inner.data_root.join("butler.config.json"),
+        )
+        .map_err(|source| {
+            WebAccessError::new(
+                WebAccessCode::WebAccessConfigurationInvalid,
+                "Butler web configuration could not be read.",
+            )
+            .with_source(source)
+        })
     }
 
     pub(super) fn private_environment(&self) -> Result<HashMap<String, String>, WebAccessError> {
-        crate::configuration::read_private_environment(&self.inner.data_root.join(".env")).map_err(
-            |_| {
+        butler_core::configuration::read_private_environment(&self.inner.data_root.join(".env"))
+            .map_err(|_| {
                 WebAccessError::new(
                     WebAccessCode::WebAccessConfigurationInvalid,
                     "Private web settings could not be read.",
                 )
-            },
-        )
+            })
     }
 
     pub(super) fn environment_value(&self, name: &str) -> Result<Option<String>, WebAccessError> {

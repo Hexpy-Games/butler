@@ -49,7 +49,7 @@ impl ProjectCapsuleService {
         &self,
         project_id: &str,
     ) -> CognitionResult<ProjectCapsuleInspectReport> {
-        let project_id = crate::public_text::trim_js_whitespace(project_id).to_owned();
+        let project_id = butler_core::public_text::trim_js_whitespace(project_id).to_owned();
         if project_id.is_empty() {
             return Err(error(CognitionCode::ProjectCapsuleProjectIdRequired));
         }
@@ -70,7 +70,7 @@ impl ProjectCapsuleService {
         deadline_at_epoch_ms: i64,
     ) -> CognitionResult<PathBuf> {
         check_active(cancellation, deadline_at_epoch_ms)?;
-        let project_id = crate::public_text::trim_js_whitespace(project_id).to_owned();
+        let project_id = butler_core::public_text::trim_js_whitespace(project_id).to_owned();
         if project_id.is_empty() {
             return Err(error(CognitionCode::ProjectCapsuleProjectIdRequired));
         }

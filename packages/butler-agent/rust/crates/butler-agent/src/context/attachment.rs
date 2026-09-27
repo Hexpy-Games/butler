@@ -12,7 +12,7 @@ use tokio::sync::{Semaphore, oneshot};
 use tokio_util::task::TaskTracker;
 
 use crate::btcc::{AttachmentKind, AttachmentRef};
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 use super::{ContextError, ContextResult};
 use crate::context::ContextCode;

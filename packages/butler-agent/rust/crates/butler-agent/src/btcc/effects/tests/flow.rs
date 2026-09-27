@@ -6,7 +6,7 @@ async fn post_dispatch_and_post_receipt_faults_settle_same_durable_occurrence() 
     let calls = Arc::new(AtomicUsize::new(0));
     let adapter: Arc<dyn EffectAdapter> = Arc::new(FixtureAdapter {
         calls: Arc::clone(&calls),
-        result: crate::json::JsonDocument::from_value(&json!({"done":true})).unwrap(),
+        result: butler_core::json::JsonDocument::from_value(&json!({"done":true})).unwrap(),
         binding: PlanBinding::AcceptedPlan,
     });
     let journal = Arc::new(StorageEffectJournal::new(storage.clone(), clock()));
@@ -79,7 +79,7 @@ async fn legacy_blocker_grouping_preserves_first_payload_and_conservative_relati
     let calls = Arc::new(AtomicUsize::new(0));
     let adapter: Arc<dyn EffectAdapter> = Arc::new(FixtureAdapter {
         calls: Arc::clone(&calls),
-        result: crate::json::JsonDocument::from_value(&json!({"done":true})).unwrap(),
+        result: butler_core::json::JsonDocument::from_value(&json!({"done":true})).unwrap(),
         binding: PlanBinding::AcceptedPlan,
     });
     let journal = Arc::new(StorageEffectJournal::new(storage.clone(), clock()));
@@ -119,7 +119,7 @@ async fn cancellation_before_intent_and_after_claim_preserve_source_dispatch_bou
     let calls = Arc::new(AtomicUsize::new(0));
     let adapter: Arc<dyn EffectAdapter> = Arc::new(FixtureAdapter {
         calls: Arc::clone(&calls),
-        result: crate::json::JsonDocument::from_value(&json!({"ok":true})).unwrap(),
+        result: butler_core::json::JsonDocument::from_value(&json!({"ok":true})).unwrap(),
         binding: PlanBinding::AcceptedPlan,
     });
     let journal = Arc::new(StorageEffectJournal::new(storage.clone(), clock()));
@@ -223,7 +223,7 @@ async fn accepted_work_journal_effect_persists_null_result_and_replays_without_s
     let calls = Arc::new(AtomicUsize::new(0));
     let adapter: Arc<dyn EffectAdapter> = Arc::new(FixtureAdapter {
         calls: Arc::clone(&calls),
-        result: crate::json::JsonDocument::from_value(&serde_json::Value::Null).unwrap(),
+        result: butler_core::json::JsonDocument::from_value(&serde_json::Value::Null).unwrap(),
         binding: PlanBinding::AcceptedPlan,
     });
     let service = EffectService::new(

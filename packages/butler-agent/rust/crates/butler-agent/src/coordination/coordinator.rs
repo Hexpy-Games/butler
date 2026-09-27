@@ -195,7 +195,7 @@ impl CoordinatorInner {
             let purpose = request
                 .purpose
                 .as_deref()
-                .map(crate::public_text::trim_js_whitespace)
+                .map(butler_core::public_text::trim_js_whitespace)
                 .filter(|value| !value.is_empty())
                 .unwrap_or("projection")
                 .to_owned();

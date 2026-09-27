@@ -5,7 +5,7 @@ use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
 use crate::btcc::{AttachmentKind, AttachmentRef};
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 use super::clip;
 

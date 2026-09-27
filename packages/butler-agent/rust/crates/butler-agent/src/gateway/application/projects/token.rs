@@ -52,7 +52,7 @@ pub(super) fn selected_path(
     let path = value
         .get("path")
         .and_then(Value::as_str)
-        .filter(|value| !crate::public_text::trim_js_whitespace(value).is_empty())
+        .filter(|value| !butler_core::public_text::trim_js_whitespace(value).is_empty())
         .ok_or_else(invalid)?;
     Ok(path.to_owned())
 }

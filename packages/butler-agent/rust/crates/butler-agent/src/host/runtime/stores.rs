@@ -11,10 +11,10 @@ use crate::conversation::{
     AgentConversationStore, ConversationStoreConfig, conversation_store_path,
 };
 use crate::coordination::{CognitionCoordinationHost, CognitionProcessStatus};
-use crate::locale::LocaleCollation;
 use crate::workspace::{
     SessionBindingStore, SessionBindingStoreConfig, WorkspaceStorageProfile, session_store_path,
 };
+use butler_core::locale::LocaleCollation;
 
 use crate::host::{SystemIdentity, prepare_btcc_storage};
 

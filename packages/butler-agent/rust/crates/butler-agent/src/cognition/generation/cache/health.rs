@@ -60,7 +60,7 @@ pub(in crate::cognition) fn read(
             entry
                 .get("valid_until")
                 .and_then(Value::as_str)
-                .and_then(crate::js_date::parse_iso_millis)
+                .and_then(butler_core::js_date::parse_iso_millis)
                 .is_some_and(|at| at <= now)
         })
         .count();
@@ -72,7 +72,7 @@ pub(in crate::cognition) fn read(
                 && entry
                     .get("valid_until")
                     .and_then(Value::as_str)
-                    .and_then(crate::js_date::parse_iso_millis)
+                    .and_then(butler_core::js_date::parse_iso_millis)
                     .is_none_or(|at| at > now)
         })
         .count();

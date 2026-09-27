@@ -59,7 +59,10 @@ pub(super) fn finish(
     input: ToolJournalFinish,
     clock: &dyn Fn() -> String,
 ) -> StorageResult<()> {
-    let result_json = input.result.as_ref().map(crate::json::JsonDocument::as_str);
+    let result_json = input
+        .result
+        .as_ref()
+        .map(butler_core::json::JsonDocument::as_str);
     let result_sha256 = result_json.map(digest);
     let changed_files_json = input
         .changed_files

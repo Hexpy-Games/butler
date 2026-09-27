@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 
 use serde_json::{Value, json};
 
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 use super::{CliFailure, CommandContext, index, option_string, record};
 
@@ -48,7 +48,7 @@ pub(super) fn query(
     let rows = select(&index, kind, options, collation)?;
     let status = option_string(options, "status").filter(|value| !value.is_empty());
     let needle = option_string(options, "query")
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .unwrap_or("")
         .to_lowercase();
     let rows = rows
@@ -61,7 +61,7 @@ pub(super) fn query(
         })
         .filter(|record| {
             needle.is_empty()
-                || crate::json::stringify(record)
+                || butler_core::json::stringify(record)
                     .is_ok_and(|text| text.to_lowercase().contains(&needle))
         })
         .cloned()
@@ -69,7 +69,7 @@ pub(super) fn query(
     let Some(raw_limit) = options.get("limit") else {
         return Ok(json!({"kind":kind,"results":filtered}));
     };
-    let limit = crate::json::saturating_usize(
+    let limit = butler_core::json::saturating_usize(
         match raw_limit {
             Value::String(raw) => raw.parse::<f64>().ok(),
             Value::Number(number) => number.as_f64(),
@@ -220,7 +220,7 @@ pub(super) fn select(
         }
         _ => {
             let status = option_string(options, "status")
-                .map(crate::public_text::trim_js_whitespace)
+                .map(butler_core::public_text::trim_js_whitespace)
                 .filter(|value| !value.is_empty());
             rows.retain(|record| {
                 (kind == "all" || text(record, "kind") == kind)

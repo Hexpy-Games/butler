@@ -30,7 +30,7 @@ impl ArtifactCollector {
             if !raw.starts_with('[') {
                 continue;
             }
-            crate::json::visit_raw_array(raw, |candidate| {
+            butler_core::json::visit_raw_array(raw, |candidate| {
                 if self.items.len() == 12 {
                     return Ok(());
                 }
@@ -62,7 +62,7 @@ fn final_artifact(value: &Value) -> Option<FinalArtifact> {
     let size_bytes = size_value
         .and_then(Value::as_f64)
         .filter(|number| number.is_finite() && *number > 0.0)
-        .map(|number| crate::json::saturating_u64(number.trunc()));
+        .map(|number| butler_core::json::saturating_u64(number.trunc()));
     if size_bytes.is_some_and(|size| size > 10 * 1024 * 1024) {
         return None;
     }
@@ -84,18 +84,18 @@ fn final_artifact(value: &Value) -> Option<FinalArtifact> {
         .or_else(|| item.get("createdAt"))
         .and_then(safe_text);
     let mut identity = String::from("{\"safePathLabel\":");
-    crate::json::write_string(&path, &mut identity).ok()?;
+    butler_core::json::write_string(&path, &mut identity).ok()?;
     identity.push_str(",\"kind\":");
-    crate::json::write_string(kind_name, &mut identity).ok()?;
+    butler_core::json::write_string(kind_name, &mut identity).ok()?;
     identity.push_str(",\"mimeType\":");
-    crate::json::write_string(&mime, &mut identity).ok()?;
+    butler_core::json::write_string(&mime, &mut identity).ok()?;
     if let Some(size) = size_bytes {
         identity.push_str(",\"sizeBytes\":");
         identity.push_str(&size.to_string());
     }
     if let Some(created) = &created {
         identity.push_str(",\"createdAt\":");
-        crate::json::write_string(created, &mut identity).ok()?;
+        butler_core::json::write_string(created, &mut identity).ok()?;
     }
     identity.push('}');
     Some(FinalArtifact {
@@ -115,7 +115,7 @@ fn safe_text(value: &Value) -> Option<String> {
         return None;
     }
     Some(
-        crate::json::Utf16Slice::new(value, 0, 240)
+        butler_core::json::Utf16Slice::new(value, 0, 240)
             .utf8_lossy()
             .into_owned(),
     )

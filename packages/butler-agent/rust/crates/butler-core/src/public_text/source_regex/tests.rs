@@ -70,11 +70,20 @@ fn leading_literal(text: &str) -> Option<String> {
 
 #[test]
 fn every_fixed_pattern_compiles() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    // Every crate of the workspace, with paths relative to its `src`.
+    let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
     let mut files = Vec::new();
-    rust_files(&root, &mut files);
+    for entry in fs::read_dir(&crates).unwrap() {
+        let root = entry.unwrap().path().join("src");
+        if !root.is_dir() {
+            continue;
+        }
+        let mut crate_files = Vec::new();
+        rust_files(&root, &mut crate_files);
+        files.extend(crate_files.into_iter().map(|file| (root.clone(), file)));
+    }
     let mut compiled = 0;
-    for file in files {
+    for (root, file) in files {
         let relative = file
             .strip_prefix(&root)
             .unwrap()

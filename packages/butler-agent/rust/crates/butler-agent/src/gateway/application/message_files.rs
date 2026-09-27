@@ -6,11 +6,10 @@ use super::{
     AppApplication, AppFileDownload, AppFileUpload, AppMessageFileSnapshot, AppStorageError,
     GatewayApplicationError, app_error, public, read_model,
 };
+use crate::gateway::AppFileWrite;
+use crate::gateway::MessageFileRef;
 use crate::gateway::application::storage::AppStorageCode;
-use crate::{
-    gateway::{AppFileWrite, MessageFileRef},
-    public_text::trim_js_whitespace,
-};
+use butler_core::public_text::trim_js_whitespace;
 
 impl AppApplication {
     pub(super) async fn upload_message_file(

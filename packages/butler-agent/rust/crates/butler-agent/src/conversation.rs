@@ -63,9 +63,9 @@ pub(crate) trait ConversationLocaleCollation: Send + Sync {
     fn compare(&self, left: &str, right: &str) -> Ordering;
 }
 
-impl ConversationLocaleCollation for crate::locale::LocaleCollation {
+impl ConversationLocaleCollation for butler_core::locale::LocaleCollation {
     fn compare(&self, left: &str, right: &str) -> Ordering {
-        crate::locale::LocaleCollation::compare(self, left, right)
+        butler_core::locale::LocaleCollation::compare(self, left, right)
     }
 }
 

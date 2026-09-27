@@ -123,7 +123,7 @@ impl<'a> GitWorktrees<'a> {
         {
             return Ok(Err(WorkspaceCode::GitNotInstalled));
         }
-        let top = crate::public_text::trim_js_whitespace(&result.stdout);
+        let top = butler_core::public_text::trim_js_whitespace(&result.stdout);
         if result.exit_code != Some(0) || top.is_empty() {
             return Ok(Err(WorkspaceCode::GitRepositoryRequired));
         }
@@ -267,7 +267,7 @@ impl<'a> GitWorktrees<'a> {
         if let Some(code) = command_failure(&symbolic, WorkspaceCode::PartialCreation) {
             return Ok(Err(code));
         }
-        if crate::public_text::trim_js_whitespace(&symbolic.stdout) != branch {
+        if butler_core::public_text::trim_js_whitespace(&symbolic.stdout) != branch {
             return Ok(Err(WorkspaceCode::PartialCreation));
         }
         let dirty = match self.dirty(target, abort).await? {

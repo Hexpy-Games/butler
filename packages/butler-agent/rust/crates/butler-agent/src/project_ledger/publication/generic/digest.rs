@@ -2,14 +2,14 @@ use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
 use super::contracts::LedgerEffectError;
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 pub(super) fn request(
     updates: &Value,
     collation: &LocaleCollation,
 ) -> Result<String, LedgerEffectError> {
     let sorted = sort(updates, collation);
-    let encoded = crate::json::stringify(&sorted).map_err(LedgerEffectError::uncertain)?;
+    let encoded = butler_core::json::stringify(&sorted).map_err(LedgerEffectError::uncertain)?;
     Ok(sha(encoded.as_bytes()))
 }
 

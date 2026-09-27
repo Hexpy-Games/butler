@@ -15,7 +15,7 @@ pub(crate) struct BoxRetentionReport {
 }
 
 pub(super) fn prune_expired(root: &Path, now_epoch_ms: i64) -> CognitionResult<BoxRetentionReport> {
-    let now_iso = crate::js_date::format_iso_millis(now_epoch_ms)
+    let now_iso = butler_core::js_date::format_iso_millis(now_epoch_ms)
         .ok_or_else(|| error(CognitionCode::MemoryBoxRetentionClockInvalid))?;
     let mut report = BoxRetentionReport::default();
     visit_manifests(root, |item_dir, manifest_path, value| {
@@ -99,7 +99,7 @@ fn is_expired_candidate(value: &Value, now_epoch_ms: i64) -> CognitionResult<boo
         return Ok(false);
     };
     let expires = js_string(expires);
-    Ok(crate::js_date::parse_date_millis(&expires, &Some)
+    Ok(butler_core::js_date::parse_date_millis(&expires, &Some)
         .is_some_and(|expires| expires <= now_epoch_ms))
 }
 

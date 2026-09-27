@@ -1,13 +1,13 @@
 use unicode_segmentation::UnicodeSegmentation;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct TextSegment<'a> {
-    pub(crate) text: &'a str,
-    pub(crate) start: usize,
-    pub(crate) end: usize,
+pub struct TextSegment<'a> {
+    pub text: &'a str,
+    pub start: usize,
+    pub end: usize,
 }
 
-pub(crate) fn grapheme_segments(text: &str) -> impl DoubleEndedIterator<Item = TextSegment<'_>> {
+pub fn grapheme_segments(text: &str) -> impl DoubleEndedIterator<Item = TextSegment<'_>> {
     text.grapheme_indices(true)
         .map(|(start, text)| TextSegment {
             text,
@@ -16,7 +16,7 @@ pub(crate) fn grapheme_segments(text: &str) -> impl DoubleEndedIterator<Item = T
         })
 }
 
-pub(crate) fn sentence_segments(text: &str) -> impl Iterator<Item = TextSegment<'_>> {
+pub fn sentence_segments(text: &str) -> impl Iterator<Item = TextSegment<'_>> {
     text.split_sentence_bound_indices()
         .map(|(start, text)| TextSegment {
             text,

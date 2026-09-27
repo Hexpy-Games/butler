@@ -3,7 +3,7 @@
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 
 use crate::cognition::lexical;
-use crate::segmentation::grapheme_segments;
+use butler_core::segmentation::grapheme_segments;
 
 pub(super) fn handle(generation: &str, source_id: &str) -> String {
     format!(
@@ -42,7 +42,7 @@ pub(super) fn raw_excerpt(text: &str, phrases: &[String], limit: usize) -> Strin
     }
     let mut keys = phrases
         .iter()
-        .map(|phrase| lexical::case_fold(crate::public_text::trim_js_whitespace(phrase)))
+        .map(|phrase| lexical::case_fold(butler_core::public_text::trim_js_whitespace(phrase)))
         .chain(source_query_terms(phrases))
         .filter(|key| !key.is_empty())
         .collect::<Vec<_>>();
@@ -72,7 +72,7 @@ fn source_query_terms(phrases: &[String]) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     let mut terms = Vec::new();
     for phrase in phrases {
-        let folded = lexical::case_fold(crate::public_text::trim_js_whitespace(phrase));
+        let folded = lexical::case_fold(butler_core::public_text::trim_js_whitespace(phrase));
         let grams = lexical::folded_grams(&folded);
         let candidates = if grams.is_empty() {
             vec![folded]
@@ -80,7 +80,7 @@ fn source_query_terms(phrases: &[String]) -> Vec<String> {
             grams
         };
         for candidate in candidates {
-            if !crate::public_text::trim_js_whitespace(&candidate).is_empty()
+            if !butler_core::public_text::trim_js_whitespace(&candidate).is_empty()
                 && seen.insert(candidate.clone())
             {
                 terms.push(candidate);

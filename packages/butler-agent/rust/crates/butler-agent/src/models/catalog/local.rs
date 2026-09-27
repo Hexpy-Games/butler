@@ -51,7 +51,7 @@ pub(crate) struct LocalModelConfig {
 
 pub(crate) fn normalize_local_model_config(value: &Value, now: &str) -> Option<LocalModelConfig> {
     let input = value.as_object()?;
-    let model_id = crate::public_text::trim_js_whitespace(input.get("model_id")?.as_str()?);
+    let model_id = butler_core::public_text::trim_js_whitespace(input.get("model_id")?.as_str()?);
     if model_id.is_empty() {
         return None;
     }
@@ -61,14 +61,14 @@ pub(crate) fn normalize_local_model_config(value: &Value, now: &str) -> Option<L
     let api_base_url = input
         .get("api_base_url")
         .and_then(Value::as_str)
-        .filter(|value| !crate::public_text::trim_js_whitespace(value).is_empty())
+        .filter(|value| !butler_core::public_text::trim_js_whitespace(value).is_empty())
         .and_then(normalize_local_server_url)
         .map(|(_, api_base_url)| api_base_url)
         .unwrap_or(api_base_url);
     let display_name = input
         .get("display_name")
         .and_then(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
         .unwrap_or_else(|| display_name_for_id(model_id));
@@ -106,7 +106,7 @@ pub(crate) fn normalize_local_model_config(value: &Value, now: &str) -> Option<L
         source_url: input
             .get("source_url")
             .and_then(Value::as_str)
-            .map(crate::public_text::trim_js_whitespace)
+            .map(butler_core::public_text::trim_js_whitespace)
             .filter(|v| !v.is_empty())
             .unwrap_or(LOCAL_SOURCE)
             .into(),
@@ -240,7 +240,7 @@ fn positive_integer(value: &Value) -> Option<f64> {
     (value.is_finite() && value.trunc() > 0.0).then_some(value.trunc())
 }
 fn safe_local_model_id(value: &str) -> String {
-    let value = crate::public_text::trim_js_whitespace(value);
+    let value = butler_core::public_text::trim_js_whitespace(value);
     let trimmed = value.strip_prefix("local/").unwrap_or(value);
     let filtered = trimmed
         .chars()
@@ -284,7 +284,7 @@ fn display_name_for_id(id: &str) -> String {
         })
         .unwrap_or(id);
     let result = base.replace(['-', '_'], " ");
-    let result = crate::public_text::trim_js_whitespace(&result);
+    let result = butler_core::public_text::trim_js_whitespace(&result);
     if result.is_empty() {
         id.into()
     } else {
@@ -293,7 +293,7 @@ fn display_name_for_id(id: &str) -> String {
 }
 
 fn normalize_local_server_url(value: &str) -> Option<(String, String)> {
-    let text = crate::public_text::trim_js_whitespace(value);
+    let text = butler_core::public_text::trim_js_whitespace(value);
     if text.is_empty() {
         return None;
     }

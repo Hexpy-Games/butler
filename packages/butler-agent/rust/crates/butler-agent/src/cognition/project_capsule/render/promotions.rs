@@ -1,4 +1,4 @@
-use crate::public_text::fixed_regex_ci;
+use butler_core::public_text::fixed_regex_ci;
 use std::{collections::HashMap, sync::OnceLock};
 
 use regex::Regex;
@@ -105,7 +105,7 @@ pub(super) fn collect_promotions(
 }
 
 fn push_source(sources: &mut Vec<(String, String)>, text: &str, provenance: String) {
-    if !crate::public_text::trim_js_whitespace(text).is_empty() {
+    if !butler_core::public_text::trim_js_whitespace(text).is_empty() {
         sources.push((text.to_owned(), provenance));
     }
 }
@@ -158,9 +158,10 @@ fn split_sentences(line: &str) -> Vec<String> {
         let (position, character) = chars[index];
         let previous_is_punctuation =
             index > 0 && matches!(chars[index - 1].1, '.' | '!' | '?' | '。');
-        if previous_is_punctuation && crate::public_text::is_js_whitespace(character) {
+        if previous_is_punctuation && butler_core::public_text::is_js_whitespace(character) {
             parts.push(line[start..position].to_owned());
-            while index < chars.len() && crate::public_text::is_js_whitespace(chars[index].1) {
+            while index < chars.len() && butler_core::public_text::is_js_whitespace(chars[index].1)
+            {
                 index += 1;
             }
             start = chars.get(index).map_or(line.len(), |(next, _)| *next);
@@ -173,7 +174,7 @@ fn split_sentences(line: &str) -> Vec<String> {
 }
 
 fn strip_markdown_prefix(value: &str) -> String {
-    let mut text = crate::public_text::trim_js_whitespace(value);
+    let mut text = butler_core::public_text::trim_js_whitespace(value);
     if let Some(first) = text.chars().next()
         && matches!(first, '-' | '*')
     {
@@ -181,9 +182,9 @@ fn strip_markdown_prefix(value: &str) -> String {
         if rest
             .chars()
             .next()
-            .is_some_and(crate::public_text::is_js_whitespace)
+            .is_some_and(butler_core::public_text::is_js_whitespace)
         {
-            text = rest.trim_start_matches(crate::public_text::is_js_whitespace);
+            text = rest.trim_start_matches(butler_core::public_text::is_js_whitespace);
         }
     }
     if text.starts_with('#') {
@@ -192,15 +193,15 @@ fn strip_markdown_prefix(value: &str) -> String {
             .take_while(|character| *character == '#')
             .count();
         let rest = &text[hashes..];
-        text = rest.trim_start_matches(crate::public_text::is_js_whitespace);
+        text = rest.trim_start_matches(butler_core::public_text::is_js_whitespace);
     }
-    crate::public_text::trim_js_whitespace(text).to_owned()
+    butler_core::public_text::trim_js_whitespace(text).to_owned()
 }
 
 fn strip_provenance(value: &str) -> String {
     static TRAILER: OnceLock<Regex> = OnceLock::new();
     let regex = TRAILER.get_or_init(|| fixed_regex_ci(r"\s*\((?:provenance|source):[^)]*\)\s*$"));
-    crate::public_text::trim_js_whitespace(&regex.replace(value, "")).to_owned()
+    butler_core::public_text::trim_js_whitespace(&regex.replace(value, "")).to_owned()
 }
 
 fn category_for(statement: &str) -> Option<PromotionCategory> {
@@ -245,7 +246,7 @@ fn normalized_statement(statement: &str) -> String {
 
 pub(super) fn compact(value: &str, limit: usize) -> String {
     let normalized = value
-        .split(crate::public_text::is_js_whitespace)
+        .split(butler_core::public_text::is_js_whitespace)
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join(" ");

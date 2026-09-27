@@ -18,7 +18,7 @@ pub(in crate::host) struct ProfileConsolidation {
 impl ProfileConsolidation {
     pub(in crate::host) fn feedback_triage(&self) -> Result<Map<String, Value>, PhaseError> {
         let counts = self.feedback.counts(now_ms()).map_err(feedback_error)?;
-        Ok(crate::json::json_object!({"active_feedback_count":counts.active_count}))
+        Ok(butler_core::json::json_object!({"active_feedback_count":counts.active_count}))
     }
 
     pub(in crate::host) async fn consolidate(
@@ -35,7 +35,7 @@ impl ProfileConsolidation {
             .await
             .map_err(profile_error)?;
         if consent.mode == ProfilingMode::Off {
-            return Ok(crate::json::json_object!({
+            return Ok(butler_core::json::json_object!({
                 "profiling_enabled":false,
                 "profile_feedback_count":feedback_count,
                 "captured_candidate_count":0,
@@ -69,8 +69,8 @@ impl ProfileConsolidation {
             )
             .with_source(source)
         })?;
-        let mut metrics = std::mem::take(crate::json::object_mut(&mut consolidated));
-        let more = crate::json::json_object!({
+        let mut metrics = std::mem::take(butler_core::json::object_mut(&mut consolidated));
+        let more = butler_core::json::json_object!({
             "profile_feedback_count":feedback_count,
             "transcript_since":Value::Null,
             "semantic_scanned_session_count":capture.semantic_scanned_session_count,

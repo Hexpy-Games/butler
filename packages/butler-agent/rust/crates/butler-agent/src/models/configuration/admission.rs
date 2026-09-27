@@ -58,7 +58,7 @@ pub(super) fn retry_attempts(value: Option<&str>) -> f64 {
     let Some(value) = value else {
         return 3.0;
     };
-    let value = crate::public_text::trim_js_whitespace(value);
+    let value = butler_core::public_text::trim_js_whitespace(value);
     let number = if value.is_empty() {
         0.0
     } else if value.starts_with("0x") || value.starts_with("0X") {

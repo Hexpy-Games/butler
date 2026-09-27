@@ -2,12 +2,11 @@ use std::sync::Arc;
 
 use serde_json::{Map, Value};
 
+use crate::gateway::InboundQueue;
 use crate::operations::AutomationCode;
-use crate::{
-    gateway::InboundQueue,
-    json::JsonDocument,
-    operations::{AutomationEnqueue, AutomationError},
-};
+use crate::operations::AutomationEnqueue;
+use crate::operations::AutomationError;
+use butler_core::json::JsonDocument;
 
 pub(crate) struct AutomationQueue(pub(crate) Arc<InboundQueue>);
 

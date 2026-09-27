@@ -29,7 +29,7 @@ impl ProviderRequestConfigPort for ModelConfiguration {
     fn effective_prompt_model(&self, requested: Option<&str>) -> Result<String, ModelRoundError> {
         let config = super::read_object_sync(&self.data_root.join("butler.config.json"));
         let model = requested
-            .map(crate::public_text::trim_js_whitespace)
+            .map(butler_core::public_text::trim_js_whitespace)
             .filter(|value| !value.is_empty())
             .map(str::to_owned)
             .or_else(|| super::configured_default(&config).map(str::to_owned))
@@ -89,7 +89,7 @@ impl ModelConfiguration {
             )
         })?;
         let configured_openai_request =
-            crate::public_text::trim_js_whitespace(request.model_ref).is_empty();
+            butler_core::public_text::trim_js_whitespace(request.model_ref).is_empty();
         let requested = effective_model(request.model_ref, &read, &self.environment);
         let requested_model = parse_model_ref(&requested);
         let requested = if (configured_openai_request && requested == dynamic::AUTO_CODEX_LATEST)
@@ -194,7 +194,7 @@ impl ModelConfiguration {
 
     fn selected_root(&self, butler_data: Option<&str>) -> PathBuf {
         butler_data
-            .map(crate::public_text::trim_js_whitespace)
+            .map(butler_core::public_text::trim_js_whitespace)
             .filter(|value| !value.is_empty())
             .map(PathBuf::from)
             .unwrap_or_else(|| self.data_root.clone())
@@ -248,7 +248,8 @@ impl ModelConfiguration {
             ));
         }
         let private_environment =
-            crate::configuration::read_private_environment(&root.join(".env")).unwrap_or_default();
+            butler_core::configuration::read_private_environment(&root.join(".env"))
+                .unwrap_or_default();
         let mut environment = self.environment.clone();
         super::merge_private_auth_environment(&mut environment, &private_environment);
         let owner = AuthOwner {
@@ -332,7 +333,7 @@ fn effective_model(
     read: &ModelConfigurationRead,
     environment: &crate::models::ModelConfigurationEnvironment,
 ) -> String {
-    let requested = crate::public_text::trim_js_whitespace(requested);
+    let requested = butler_core::public_text::trim_js_whitespace(requested);
     if requested.is_empty() {
         dynamic::configured_model(environment, &read.config)
     } else {

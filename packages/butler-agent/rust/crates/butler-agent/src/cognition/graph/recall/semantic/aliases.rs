@@ -33,7 +33,7 @@ pub(super) fn select(
     );
     let mut statement = db.prepare(&sql).map_err(db_error)?;
     for original in std::iter::once(&input.cue).chain(input.seed_phrases.iter()) {
-        let phrase = crate::public_text::trim_js_whitespace(original);
+        let phrase = butler_core::public_text::trim_js_whitespace(original);
         let nfc = phrase.nfc().collect::<String>();
         if phrase.is_empty() || !seen.insert(nfc.clone()) {
             continue;

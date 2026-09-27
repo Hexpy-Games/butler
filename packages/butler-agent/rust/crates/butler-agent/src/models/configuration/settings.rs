@@ -9,10 +9,10 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use serde_json::Value;
 
 use super::ModelConfiguration;
-use crate::{
-    configuration,
-    models::{ParsedModelRef, ParsedModelRefSource, parse_model_ref},
-};
+use crate::models::ParsedModelRef;
+use crate::models::ParsedModelRefSource;
+use crate::models::parse_model_ref;
+use butler_core::configuration;
 
 /// Failures of user-settings, default-model, private-environment and
 /// auth-profile writes. `Display` is the user-facing message.
@@ -81,8 +81,8 @@ impl ModelConfiguration {
         let root = root.unwrap_or(&self.data_root);
         let path = root.join("butler.config.json");
         let mut config = configuration::read_json_object(&path)?;
-        let object = crate::json::object_mut(&mut config);
-        let user = crate::json::object_field_mut(object, "user");
+        let object = butler_core::json::object_mut(&mut config);
+        let user = butler_core::json::object_field_mut(object, "user");
         for (key, value) in patch {
             user.insert(key.clone(), value.clone());
         }
@@ -106,8 +106,8 @@ impl ModelConfiguration {
         let _write = self.configuration_writes.acquire().await;
         let path = root.join("butler.config.json");
         let mut config = configuration::read_json_object(&path)?;
-        let object = crate::json::object_mut(&mut config);
-        let web_search = crate::json::object_field_mut(object, "webSearch");
+        let object = butler_core::json::object_mut(&mut config);
+        let web_search = butler_core::json::object_field_mut(object, "webSearch");
         if let Some(value) = patch.get("provider") {
             web_search.insert("provider".into(), value.clone());
         }
@@ -115,7 +115,7 @@ impl ModelConfiguration {
             web_search.insert("readerBackend".into(), value.clone());
         }
         if let Some(planning_patch) = patch.get("planning").and_then(Value::as_object) {
-            let planning = crate::json::object_field_mut(web_search, "planning");
+            let planning = butler_core::json::object_field_mut(web_search, "planning");
             for (key, value) in planning_patch {
                 planning.insert(key.clone(), value.clone());
             }
@@ -168,8 +168,8 @@ impl ModelConfiguration {
             .pointer("/system/defaultModel")
             .cloned()
             .unwrap_or(Value::Null);
-        let root = crate::json::object_mut(&mut config);
-        let system = crate::json::object_field_mut(root, "system");
+        let root = butler_core::json::object_mut(&mut config);
+        let system = butler_core::json::object_field_mut(root, "system");
         system.insert(
             "defaultModel".into(),
             Value::String(model.canonical_ref.clone()),

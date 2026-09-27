@@ -4,7 +4,7 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use serde_json::{Value, json};
 
 use super::{ConversationOriginEvidence, HistoricalOriginCandidate, SourceEvidence, sha256};
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 pub(super) fn read(data_root: &Path, row: &HistoricalOriginCandidate) -> SourceEvidence {
     let path = data_root.join("app-server/butler-client.sqlite");
@@ -86,7 +86,7 @@ fn read_existing(path: &Path, candidate: &HistoricalOriginCandidate) -> Option<S
         "conversation_session_id":session,"conversation_turn_id":turn,
         "conversation_message_id":message,"app_turn_id":app_turn,
         "execution_controls_json":controls_json});
-    let json = crate::json::stringify(&value).ok()?;
+    let json = butler_core::json::stringify(&value).ok()?;
     Some(SourceEvidence {
         available: true,
         matched,

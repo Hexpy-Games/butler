@@ -11,10 +11,7 @@ use token::{Kind, Scanner, Token};
 
 /// `local_to_utc` receives wall-clock components encoded as epoch milliseconds.
 /// The host owns the process timezone and DST ambiguity/nonexistence policy.
-pub(crate) fn parse_date_millis(
-    value: &str,
-    local_to_utc: &dyn Fn(i64) -> Option<i64>,
-) -> Option<i64> {
+pub fn parse_date_millis(value: &str, local_to_utc: &dyn Fn(i64) -> Option<i64>) -> Option<i64> {
     let mut scanner = Scanner::new(value);
     let (mut day, mut time, mut zone) = (Day::default(), Time::default(), Zone::default());
     let mut token = iso::parse(&mut scanner, &mut day, &mut time, &mut zone)?;

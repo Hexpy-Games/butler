@@ -28,11 +28,11 @@ pub(super) fn decode(
         (text, calls, text_tool_call_names) = local::decode(&response, request);
     }
     let identity = reported
-        .filter(|value| !crate::public_text::trim_js_whitespace(value).is_empty())
+        .filter(|value| !butler_core::public_text::trim_js_whitespace(value).is_empty())
         .map(|reported_model| ProviderIdentity {
             provider: provider.into(),
             configured_model: configured_model.into(),
-            reported_model: crate::public_text::trim_js_whitespace(&reported_model).into(),
+            reported_model: butler_core::public_text::trim_js_whitespace(&reported_model).into(),
         });
     let assistant_message = Some(ModelRoundMessage {
         role: ModelRoundRole::Assistant,
@@ -144,7 +144,7 @@ fn responses(value: &Value, model: &str, provider: &str, round: u32) -> Fields {
     let text = value
         .get("output_text")
         .and_then(Value::as_str)
-        .filter(|value| !crate::public_text::trim_js_whitespace(value).is_empty())
+        .filter(|value| !butler_core::public_text::trim_js_whitespace(value).is_empty())
         .map(str::to_owned)
         .unwrap_or_else(|| {
             output
@@ -317,7 +317,7 @@ type Fields = (
     reason = "map_err/iterator adapter taking owned values"
 )]
 pub(super) fn nonempty(value: String) -> Option<String> {
-    let value = crate::public_text::trim_js_whitespace(&value);
+    let value = butler_core::public_text::trim_js_whitespace(&value);
     if value.is_empty() {
         return None;
     }
@@ -327,7 +327,7 @@ pub(super) fn nonempty(value: String) -> Option<String> {
     if let Some(start) = lower.rfind(open) {
         let body = &value[start + open.len()..];
         let end = body.to_ascii_lowercase().find(close).unwrap_or(body.len());
-        let selected = crate::public_text::trim_js_whitespace(&body[..end]);
+        let selected = butler_core::public_text::trim_js_whitespace(&body[..end]);
         if !selected.is_empty() {
             return Some(selected.to_owned());
         }
@@ -386,7 +386,7 @@ fn call(
     let raw = arguments
         .and_then(Value::as_str)
         .map(str::to_owned)
-        .or_else(|| arguments.and_then(|value| crate::json::stringify(value).ok()))
+        .or_else(|| arguments.and_then(|value| butler_core::json::stringify(value).ok()))
         .unwrap_or_else(|| "{}".into());
     let parsed = serde_json::from_str::<Value>(&raw)
         .ok()

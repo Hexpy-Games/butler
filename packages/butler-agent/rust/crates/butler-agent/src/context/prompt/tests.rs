@@ -12,11 +12,11 @@ use crate::btcc::{
 };
 use crate::context::{ContextBudgetEnvironment, ContextConversation, ContextError};
 use crate::conversation::*;
-use crate::locale::LocaleCollation;
 use crate::models::{
     ModelCatalog, ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
 };
 use crate::workspace::{SessionLifecycleState, SessionRole as WorkspaceRole, StoredSessionBinding};
+use butler_core::locale::LocaleCollation;
 
 mod integration;
 mod support;
@@ -278,7 +278,7 @@ pub(super) async fn fixture(
             catalog.clone(),
             Arc::new(LocaleCollation::new("en-US").unwrap()),
             crate::models::provider_http_client().unwrap(),
-            Arc::new(crate::configuration::ConfigurationWrites::new()),
+            Arc::new(butler_core::configuration::ConfigurationWrites::new()),
         )
         .unwrap(),
     );

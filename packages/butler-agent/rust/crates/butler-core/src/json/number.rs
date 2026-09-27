@@ -4,7 +4,7 @@
 use super::JsonError;
 use serde_json::Value;
 
-pub(crate) fn coerce_number(value: &Value) -> Result<f64, JsonError> {
+pub fn coerce_number(value: &Value) -> Result<f64, JsonError> {
     validate_primitive_conversion(value)?;
     Ok(match value {
         Value::Null => 0.0,
@@ -59,7 +59,7 @@ fn array_number(mut values: &[Value]) -> f64 {
     }
 }
 
-pub(crate) fn number_from_string(value: &str) -> f64 {
+pub fn number_from_string(value: &str) -> f64 {
     let value = crate::public_text::trim_js_whitespace(value);
     match value {
         "" => return 0.0,

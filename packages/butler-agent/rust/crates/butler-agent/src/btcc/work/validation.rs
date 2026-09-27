@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::btcc::BtccCode;
 use crate::btcc::BtccError;
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 use super::contracts::{
     ActionProgress, ActionStatus, CheckpointInput, ClaimCloseoutCorrectionInput, ContinueWorkInput,

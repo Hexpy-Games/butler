@@ -9,7 +9,7 @@ use serde_json::value::RawValue;
 
 use crate::json::JsonError;
 
-pub(crate) fn visit_raw_object<'a>(
+pub fn visit_raw_object<'a>(
     encoded: &'a str,
     field: impl FnMut(&'a str, &'a str) -> Result<(), JsonError>,
 ) -> Result<(), JsonError> {
@@ -34,7 +34,7 @@ pub(crate) fn visit_raw_object<'a>(
         .map_err(JsonError::from)
 }
 
-pub(crate) fn visit_raw_array<'a>(
+pub fn visit_raw_array<'a>(
     encoded: &'a str,
     item: impl FnMut(&'a str) -> Result<(), JsonError>,
 ) -> Result<(), JsonError> {
@@ -63,7 +63,7 @@ const LINE_MARKER: &str = "\n[remaining lines omitted]";
 const CONTENT_MARKER: &str = "\n[content omitted; continue from the provided cursor or artifact]\n";
 
 /// Source middle-elision over decoded UTF-16 units without a full string copy.
-pub(crate) fn bound_raw_string(raw: &str, max_chars: usize) -> Result<String, JsonError> {
+pub fn bound_raw_string(raw: &str, max_chars: usize) -> Result<String, JsonError> {
     let mut head = Vec::with_capacity(max_chars);
     let mut tail = VecDeque::with_capacity(max_chars);
     let mut total = 0usize;
@@ -111,7 +111,7 @@ pub(crate) fn bound_raw_string(raw: &str, max_chars: usize) -> Result<String, Js
     Ok(output)
 }
 
-pub(crate) fn raw_string_contains_any(raw: &str, markers: &[&str]) -> bool {
+pub fn raw_string_contains_any(raw: &str, markers: &[&str]) -> bool {
     let patterns = markers
         .iter()
         .map(|marker| marker.encode_utf16().collect::<Vec<_>>())
@@ -143,7 +143,7 @@ pub(crate) fn raw_string_contains_any(raw: &str, markers: &[&str]) -> bool {
 
 /// Iterate a validated JSON string literal without allocating a scalar string.
 /// Callers pass a string field borrowed from a validated `JsonDocument`.
-pub(crate) fn raw_string_units(raw: &str) -> impl Iterator<Item = u16> + '_ {
+pub fn raw_string_units(raw: &str) -> impl Iterator<Item = u16> + '_ {
     RawUnits::new(raw)
 }
 

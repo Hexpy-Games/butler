@@ -69,16 +69,18 @@ impl McpClient {
             "server": server_capability_projection(&server),
             "tool": {"name": TOOL_NAME, "input_schema": schema},
         });
-        let canonical =
-            crate::json::canonical_json(&descriptor, crate::json::CanonicalKeyOrder::Utf16Lexical)
-                .map_err(|source| {
-                    failure(
-                        "mcp_catalog_unavailable",
-                        "MCP tool capability could not be prepared.",
-                        false,
-                    )
-                    .with_source(source)
-                })?;
+        let canonical = butler_core::json::canonical_json(
+            &descriptor,
+            butler_core::json::CanonicalKeyOrder::Utf16Lexical,
+        )
+        .map_err(|source| {
+            failure(
+                "mcp_catalog_unavailable",
+                "MCP tool capability could not be prepared.",
+                false,
+            )
+            .with_source(source)
+        })?;
         Ok(format!("{:x}", Sha256::digest(canonical.as_bytes())))
     }
 }

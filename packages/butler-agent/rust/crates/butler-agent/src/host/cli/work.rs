@@ -9,7 +9,7 @@ mod tests;
 use std::ffi::OsString;
 
 use crate::host::ResolvedInstallation;
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 use commands::execute;
 use options::{parse, resolve_data_root};
 use output::{render_error, render_success};

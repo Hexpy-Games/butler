@@ -10,8 +10,8 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 
-use crate::locale::LocaleCollation;
 use crate::project_ledger::committed;
+use butler_core::locale::LocaleCollation;
 
 use super::{CliFailure, CommandContext, display_path, io_failure, now_iso};
 
@@ -173,7 +173,7 @@ fn write_unlocked(root: &Path) -> Result<Value, CliFailure> {
         "issues":index.get("issues").and_then(Value::as_array).map(Vec::len),
         "source":"project-ledger",
     });
-    let mut event = crate::json::stringify(&event)
+    let mut event = butler_core::json::stringify(&event)
         .map_err(|source| io_failure().with_source(source))?
         .into_bytes();
     event.push(b'\n');

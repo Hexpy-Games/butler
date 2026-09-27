@@ -228,7 +228,7 @@ async fn canonical_writer_turn_prepares_ordered_windows_hydration_and_prior_cont
     assert_eq!(context.len(), 1);
     assert_eq!(context[0].text, "prior one   prior two");
     assert!(
-        crate::json::stringify(&serde_json::to_value(&context).unwrap())
+        butler_core::json::stringify(&serde_json::to_value(&context).unwrap())
             .unwrap()
             .contains("\"ref\":\"conversation-message:cm_prior\"")
     );

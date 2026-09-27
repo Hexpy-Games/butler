@@ -1,6 +1,6 @@
 //! One admitted, durable authority occurrence gates persistent Effects.
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use serde_json::{Value, json};
 
 use crate::btcc::{
@@ -8,7 +8,7 @@ use crate::btcc::{
     AuthorityOutcomeInput, EffectAdapter, EffectOutcome, ModelRoundToolCall, WorkView,
     effect_input_sha256, reviewed_effect_action_key,
 };
-use crate::json::JsonDocument;
+use butler_core::json::JsonDocument;
 
 use super::{GuidedTools, ToolExecutionError, ordinary, wire_error};
 
@@ -31,12 +31,12 @@ fn public_action_title(call: &ModelRoundToolCall) -> Option<String> {
         return None;
     }
     let raw = call.arguments.get("summary")?.as_str()?;
-    let raw = crate::public_text::trim_js_whitespace(raw);
+    let raw = butler_core::public_text::trim_js_whitespace(raw);
     if raw.is_empty() || raw.contains(['\n', '\r']) || raw.chars().count() > 32 {
         return None;
     }
-    let title = crate::public_text::sanitize_public_text(raw, "");
-    let title = crate::public_text::trim_js_whitespace(&title);
+    let title = butler_core::public_text::sanitize_public_text(raw, "");
+    let title = butler_core::public_text::trim_js_whitespace(&title);
     (!title.is_empty() && title.chars().count() <= 32).then(|| title.to_owned())
 }
 

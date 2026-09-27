@@ -51,7 +51,7 @@ pub(super) async fn collect(
     })
 }
 
-fn invalid(error: crate::json::JsonError) -> BtccError {
+fn invalid(error: butler_core::json::JsonError) -> BtccError {
     BtccError::relayed("guided_journal_result_invalid", error.to_string()).with_source(error)
 }
 
@@ -77,7 +77,7 @@ fn safe_path(value: &str, artifact: bool) -> Option<String> {
     Some(if artifact {
         normalized
     } else {
-        crate::json::Utf16Slice::new(&normalized, 0, 1024)
+        butler_core::json::Utf16Slice::new(&normalized, 0, 1024)
             .utf8_lossy()
             .into_owned()
     })

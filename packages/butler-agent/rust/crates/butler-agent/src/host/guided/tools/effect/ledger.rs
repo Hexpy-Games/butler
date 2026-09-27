@@ -1,7 +1,7 @@
 //! Reviewed Project Ledger record effects over the existing durable EffectService.
 
 pub(super) mod legacy;
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
@@ -11,12 +11,12 @@ use crate::btcc::{
     AdapterOutcome, BlockerRelation, EffectAdapter, EffectAdapterError, EffectBlocker,
     EffectFailure, EffectFuture, PlanBinding, ResolvedProjectWorkScope,
 };
-use crate::json::JsonDocument;
 use crate::project_ledger::{
     LedgerEffectReconciliation, LedgerEffectRequest, ProjectLedger, ProjectLedgerRecordUpdate,
     ProjectLedgerToolScopeLookup,
 };
 use crate::workspace::WorkspaceReference;
+use butler_core::json::JsonDocument;
 
 use super::super::GuidedTools;
 use super::ledger_input;
@@ -186,7 +186,7 @@ impl EffectAdapter for LedgerEffectAdapter {
         PlanBinding::AcceptedPlan
     }
     fn normalize_target(&self, target: &str) -> Result<String, EffectFailure> {
-        let normalized = crate::public_text::trim_js_whitespace(target);
+        let normalized = butler_core::public_text::trim_js_whitespace(target);
         if !valid_target(normalized) || normalized != self.target {
             return Err(EffectFailure::policy(
                 "project_ledger_effect_target_invalid",

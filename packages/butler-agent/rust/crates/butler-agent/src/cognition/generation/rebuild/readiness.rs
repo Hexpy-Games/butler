@@ -427,7 +427,7 @@ fn verified_live_inventory(
 }
 
 fn hash(value: &Value) -> CognitionResult<String> {
-    let serialized = crate::json::stringify(value)
+    let serialized = butler_core::json::stringify(value)
         .map_err(|source| error(CognitionCode::MemoryReadinessUnavailable).with_source(source))?;
     Ok(format!("{:x}", Sha256::digest(serialized.as_bytes())))
 }

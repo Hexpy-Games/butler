@@ -20,7 +20,7 @@ pub(super) fn array(value: Option<&Value>) -> &[Value] {
 pub(super) fn text(value: Option<&Value>) -> Option<&str> {
     value
         .and_then(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
 }
 

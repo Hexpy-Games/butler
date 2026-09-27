@@ -7,10 +7,10 @@ use crate::btcc::{
 use crate::context::ContextBudgetOwner;
 use crate::conversation::AgentConversationStore;
 use crate::host::memory_jobs::context_maintenance::ContextMaintenance;
-use crate::locale::LocaleCollation;
 use crate::project_ledger::ProjectLedger;
 use crate::skills::Skills;
 use crate::workspace::{SessionBindingStore, SessionWorkspaceRecovery, SessionWorktrees};
+use butler_core::locale::LocaleCollation;
 
 use super::super::{ProcessModels, WorkStreams};
 

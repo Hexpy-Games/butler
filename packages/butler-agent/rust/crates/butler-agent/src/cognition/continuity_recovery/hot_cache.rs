@@ -238,7 +238,7 @@ fn append_semantic_entry(
     let block = format!(
         "{marker}\n## [{created_at}] {project_id} | {session_id}\n- source_id: {source_id}\n- scope: project\n- project_id: {project_id}\n\n{body}\n<!-- butler-semantic:{source_id}:end -->"
     );
-    let trimmed = crate::public_text::trim_js_whitespace_end(current);
+    let trimmed = butler_core::public_text::trim_js_whitespace_end(current);
     let appended = if trimmed.is_empty() {
         format!("{block}\n")
     } else {
@@ -396,8 +396,8 @@ fn preserve_audit(path: &Path, body: &str) -> CognitionResult<()> {
     }
     let next = format!(
         "{}{}{}",
-        crate::public_text::trim_js_whitespace_end(&current),
-        if crate::public_text::trim_js_whitespace(&current).is_empty() {
+        butler_core::public_text::trim_js_whitespace_end(&current),
+        if butler_core::public_text::trim_js_whitespace(&current).is_empty() {
             ""
         } else {
             "\n\n"

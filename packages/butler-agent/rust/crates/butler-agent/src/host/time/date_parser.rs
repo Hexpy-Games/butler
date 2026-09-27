@@ -70,7 +70,7 @@ impl DateParser {
     }
 
     pub(crate) fn parse(&self, text: &str) -> Option<i64> {
-        crate::js_date::parse_date_millis(text, &|wall| self.local_to_utc(wall))
+        butler_core::js_date::parse_date_millis(text, &|wall| self.local_to_utc(wall))
     }
 
     pub(crate) fn local_day_and_minute(&self, epoch_ms: i64) -> ContextResult<(String, u16)> {
@@ -84,14 +84,14 @@ impl DateParser {
             })?
             .ut_offset();
         let wall = epoch_ms + i64::from(offset) * 1_000;
-        let (year, month, day) = crate::js_date::civil_from_days(wall.div_euclid(86_400_000));
+        let (year, month, day) = butler_core::js_date::civil_from_days(wall.div_euclid(86_400_000));
         // A day has 1440 minutes, so this always fits.
         let minute = u16::try_from(wall.rem_euclid(86_400_000) / 60_000).unwrap_or_default();
         Ok((format!("{year:04}-{month:02}-{day:02}"), minute))
     }
 
     fn local_to_utc(&self, wall: i64) -> Option<i64> {
-        let (year, month, day) = crate::js_date::civil_from_days(wall.div_euclid(86_400_000));
+        let (year, month, day) = butler_core::js_date::civil_from_days(wall.div_euclid(86_400_000));
         let seconds = wall.rem_euclid(86_400_000) / 1000;
         // find_n records candidates in UTC order. Only the earliest is needed:
         // ICU uses the former offset for both a fold and a skipped wall time.

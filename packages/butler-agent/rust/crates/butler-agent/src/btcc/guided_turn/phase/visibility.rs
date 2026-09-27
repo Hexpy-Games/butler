@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::btcc::AccessMode;
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 
 use super::catalog::{GuidedCatalogSnapshot, GuidedCatalogTool};
 use super::policy::GuidedExecutionPolicy;
@@ -79,7 +79,7 @@ pub(super) fn legacy_authorized<'a>(
         policy
             .required_profiles
             .iter()
-            .map(|name| crate::public_text::trim_js_whitespace(name))
+            .map(|name| butler_core::public_text::trim_js_whitespace(name))
             .filter(|name| catalog.profiles.contains_key(*name))
             .map(str::to_owned),
     );

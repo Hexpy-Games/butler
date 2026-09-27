@@ -143,7 +143,7 @@ pub(super) fn execute(
         &tx,
         "space.changed",
         None,
-        crate::json::json_object!({"revision":after.revision}),
+        butler_core::json::json_object!({"revision":after.revision}),
         &clock.now_iso(),
     )
     .map_err(app_error)?;

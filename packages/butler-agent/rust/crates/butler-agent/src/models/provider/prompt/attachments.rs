@@ -41,7 +41,7 @@ pub(super) fn prompt(request: &ProviderPromptRequest<'_>) -> Result<String, Mode
             attachment
                 .mime_type
                 .as_deref()
-                .map(crate::public_text::trim_js_whitespace)
+                .map(butler_core::public_text::trim_js_whitespace)
                 .filter(|value| !value.is_empty())
                 .unwrap_or("application/octet-stream"),
         );
@@ -101,7 +101,7 @@ fn content(attachment: &AttachmentRef, root: &Path, max_units: usize) -> Option<
     }
     let bytes = std::fs::read(path).ok()?;
     let decoded = String::from_utf8_lossy(&bytes).replace('\0', "");
-    if crate::public_text::trim_js_whitespace(&decoded).is_empty() {
+    if butler_core::public_text::trim_js_whitespace(&decoded).is_empty() {
         None
     } else {
         Some(trim_text(&decoded, max_units))
@@ -118,13 +118,13 @@ fn path(attachment: &AttachmentRef, root: &Path) -> Option<PathBuf> {
 
 fn trim_text(text: &str, max_units: usize) -> String {
     let normalized = text.replace("\r\n", "\n");
-    let normalized = crate::public_text::trim_js_whitespace(&normalized);
+    let normalized = butler_core::public_text::trim_js_whitespace(&normalized);
     if normalized.encode_utf16().count() <= max_units {
         return normalized.into();
     }
     let marker = "\n[...attachment content trimmed...]\n";
     let marker_units = marker.encode_utf16().count();
-    let head_units = crate::json::saturating_usize(
+    let head_units = butler_core::json::saturating_usize(
         ((max_units.saturating_sub(marker_units)) as f64 * 0.65).floor(),
     );
     let tail_units = max_units.saturating_sub(marker_units + head_units);
@@ -132,9 +132,9 @@ fn trim_text(text: &str, max_units: usize) -> String {
     let tail = utf16_suffix(normalized, tail_units);
     format!(
         "{}\n{}\n{}",
-        crate::public_text::trim_js_whitespace_end(head),
-        crate::public_text::trim_js_whitespace(marker),
-        crate::public_text::trim_js_whitespace_start(tail)
+        butler_core::public_text::trim_js_whitespace_end(head),
+        butler_core::public_text::trim_js_whitespace(marker),
+        butler_core::public_text::trim_js_whitespace_start(tail)
     )
 }
 
@@ -258,7 +258,7 @@ fn name(attachment: &AttachmentRef, index: usize) -> String {
     attachment
         .file_name
         .as_deref()
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
         .unwrap_or_else(|| format!("attachment-{}", index + 1))

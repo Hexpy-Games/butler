@@ -59,14 +59,14 @@ pub(super) async fn settle_open(
     let persisted = match persisted {
         Ok(value) => value,
         Err(error) if publication_failure(&error) => {
-            return Ok(crate::public_text::trim_js_whitespace(candidate).into());
+            return Ok(butler_core::public_text::trim_js_whitespace(candidate).into());
         }
         Err(error) => return Err(error),
     };
     if persisted.status == DurableWorkStatus::Completed
         && super::decision::fresh(Some(&persisted), &adapter.scope.turn_id)?
     {
-        return Ok(crate::public_text::trim_js_whitespace(candidate).into());
+        return Ok(butler_core::public_text::trim_js_whitespace(candidate).into());
     }
     if persisted.status != DurableWorkStatus::Open
         || !super::decision::fresh(Some(&persisted), &adapter.scope.turn_id)?
@@ -86,7 +86,7 @@ pub(super) fn publication_failure(error: &BtccError) -> bool {
 
 pub(super) fn notice(adapter: &GuidedWorkAdapter, candidate: &str) -> String {
     let notice = copy(adapter).notice;
-    let content = crate::public_text::trim_js_whitespace(candidate);
+    let content = butler_core::public_text::trim_js_whitespace(candidate);
     if content.starts_with(&format!("{notice}\n\n")) {
         content.into()
     } else {

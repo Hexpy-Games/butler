@@ -3,7 +3,9 @@
 use indexmap::IndexSet;
 use serde_json::value::RawValue;
 
-use crate::json::{raw_string_units, visit_raw_array, visit_raw_object};
+use butler_core::json::raw_string_units;
+use butler_core::json::visit_raw_array;
+use butler_core::json::visit_raw_object;
 
 const PATH_KEYS: &[&str] = &[
     "artifact_file",
@@ -45,7 +47,7 @@ fn string(raw: &str) -> Option<String> {
 
 fn trim_string(raw: &str) -> Option<String> {
     let value = string(raw)?;
-    let trimmed = crate::public_text::trim_js_whitespace(&value);
+    let trimmed = butler_core::public_text::trim_js_whitespace(&value);
     (!trimmed.is_empty()).then(|| trimmed.to_owned())
 }
 
@@ -220,7 +222,7 @@ fn collect_paths(raw: &str, out: &mut IndexSet<String>) {
 pub(super) fn inspect(stdout: &str) -> Metadata {
     let mut paths = IndexSet::new();
     let mut validations = Vec::new();
-    let trimmed = crate::public_text::trim_js_whitespace(stdout);
+    let trimmed = butler_core::public_text::trim_js_whitespace(stdout);
     if trimmed.is_empty() {
         return Metadata {
             paths: Vec::new(),
@@ -235,7 +237,7 @@ pub(super) fn inspect(stdout: &str) -> Metadata {
     };
     inspect_one(trimmed);
     for line in trimmed.split('\n') {
-        let candidate = crate::public_text::trim_js_whitespace(line.trim_end_matches('\r'));
+        let candidate = butler_core::public_text::trim_js_whitespace(line.trim_end_matches('\r'));
         if candidate.is_empty()
             || candidate == trimmed
             || !(candidate.starts_with('{') || candidate.starts_with('['))
@@ -265,7 +267,7 @@ pub(super) fn append_declared_validation(
     else {
         return;
     };
-    let suite = crate::public_text::trim_js_whitespace(suite);
+    let suite = butler_core::public_text::trim_js_whitespace(suite);
     if suite.is_empty()
         || metadata
             .validations

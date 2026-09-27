@@ -257,7 +257,7 @@ fn integer(value: &Value, positive: bool) -> Option<i64> {
                 && *value <= MAX_SAFE_INTEGER
                 && value.fract() == 0.0
         })
-        .and_then(|value| i64::try_from(crate::json::saturating_u64(value)).ok())
+        .and_then(|value| i64::try_from(butler_core::json::saturating_u64(value)).ok())
 }
 
 pub(super) fn sha256(bytes: &[u8]) -> String {

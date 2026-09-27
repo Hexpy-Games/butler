@@ -28,7 +28,7 @@ fn error(error: &std::io::Error) -> CognitionError {
 fn parse(block: &str) -> Entry {
     let mut lines = block.lines();
     let heading = lines.next().unwrap_or_default();
-    let mut heading = crate::public_text::trim_js_whitespace(heading).split_whitespace();
+    let mut heading = butler_core::public_text::trim_js_whitespace(heading).split_whitespace();
     let id = heading
         .next()
         .filter(|value| value.starts_with("fb_"))
@@ -61,11 +61,11 @@ fn parse(block: &str) -> Entry {
         if !in_body && let Some((key, value)) = field {
             fields.insert(
                 key.to_owned(),
-                crate::public_text::trim_js_whitespace_start(value).to_owned(),
+                butler_core::public_text::trim_js_whitespace_start(value).to_owned(),
             );
             continue;
         }
-        if !crate::public_text::trim_js_whitespace(line).is_empty() || in_body {
+        if !butler_core::public_text::trim_js_whitespace(line).is_empty() || in_body {
             in_body = true;
             body.push(line);
         }
@@ -94,7 +94,7 @@ fn parse(block: &str) -> Entry {
             .get("expires_at")
             .filter(|value| !value.is_empty() && *value != "null")
             .cloned(),
-        text: crate::public_text::trim_js_whitespace(&body.join("\n")).to_owned(),
+        text: butler_core::public_text::trim_js_whitespace(&body.join("\n")).to_owned(),
     }
 }
 
@@ -108,8 +108,8 @@ fn rank(priority: &str) -> u8 {
 }
 
 fn compact(text: &str) -> String {
-    crate::json::Utf16Prefix::new(text, usize::MAX)
-        .collapse_whitespace(crate::public_text::is_js_whitespace)
+    butler_core::json::Utf16Prefix::new(text, usize::MAX)
+        .collapse_whitespace(butler_core::public_text::is_js_whitespace)
         .prefix(500)
         .utf8_for_hash()
         .into_owned()
@@ -120,7 +120,7 @@ fn visible(entry: &Entry, session: &str, project: Option<&str>, now: i64) -> boo
         return false;
     }
     if entry.expires_at.as_deref().is_some_and(|expires| {
-        crate::js_date::parse_date_millis(expires, &Some).is_some_and(|expiry| expiry <= now)
+        butler_core::js_date::parse_date_millis(expires, &Some).is_some_and(|expiry| expiry <= now)
     }) {
         return false;
     }
@@ -156,7 +156,7 @@ pub(super) fn read(
     let mut entries = source
         .split("\n## ")
         .map(|block| block.strip_prefix("## ").unwrap_or(block))
-        .filter(|block| !crate::public_text::trim_js_whitespace(block).is_empty())
+        .filter(|block| !butler_core::public_text::trim_js_whitespace(block).is_empty())
         .map(parse)
         .filter(|entry| visible(entry, session, project, now))
         .collect::<Vec<_>>();

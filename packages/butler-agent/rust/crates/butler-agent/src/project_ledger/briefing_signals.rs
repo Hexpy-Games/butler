@@ -10,7 +10,7 @@ use std::{
 use serde_json::Value;
 
 use super::{ProjectLedgerReadError, active_reference};
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 #[derive(Clone, Debug)]
 pub(crate) struct ProjectBriefingTarget {
@@ -260,7 +260,7 @@ fn work_titles(project_root: &Path) -> Result<(Vec<String>, Vec<String>), Projec
         };
         let frontmatter = text.split("\n---\n").next().unwrap_or("");
         let title = frontmatter_field(frontmatter, "title")
-            .map(|value| crate::public_text::sanitize_public_text(&value, ""))
+            .map(|value| butler_core::public_text::sanitize_public_text(&value, ""))
             .unwrap_or_default();
         let status = frontmatter_field(frontmatter, "status").unwrap_or_default();
         if title.is_empty()

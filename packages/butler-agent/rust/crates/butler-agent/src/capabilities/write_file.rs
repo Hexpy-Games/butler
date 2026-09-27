@@ -24,7 +24,7 @@ pub(super) async fn execute(
     let requested = args
         .get("path")
         .and_then(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .unwrap_or("")
         .to_owned();
     let content = args.get("content").and_then(Value::as_str);

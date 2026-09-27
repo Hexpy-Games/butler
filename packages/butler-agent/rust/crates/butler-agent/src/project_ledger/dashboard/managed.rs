@@ -8,7 +8,7 @@ mod validate;
 
 use std::path::Path;
 
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 use serde_json::Value;
 
 use super::{
@@ -357,7 +357,7 @@ pub(super) fn required_string<'a>(
         .get(key)
         .and_then(Value::as_str)
         .filter(|text| {
-            !crate::public_text::trim_js_whitespace(text).is_empty()
+            !butler_core::public_text::trim_js_whitespace(text).is_empty()
                 && text.encode_utf16().count() <= 4096
         })
         .ok_or_else(invalid)

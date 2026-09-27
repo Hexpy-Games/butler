@@ -33,7 +33,7 @@ pub(super) fn strict(
         if raw_refs.iter().any(|value| {
             value
                 .as_str()
-                .map(crate::public_text::trim_js_whitespace)
+                .map(butler_core::public_text::trim_js_whitespace)
                 .is_none_or(|value| !allowed.contains(value))
         }) {
             return Err(validation(
@@ -61,7 +61,7 @@ pub(super) fn strict(
         if raw_corrections.iter().any(|value| {
             value
                 .as_str()
-                .map(crate::public_text::trim_js_whitespace)
+                .map(butler_core::public_text::trim_js_whitespace)
                 .is_none_or(str::is_empty)
         }) {
             return Err(validation(
@@ -72,7 +72,7 @@ pub(super) fn strict(
             raw_corrections
                 .iter()
                 .filter_map(Value::as_str)
-                .map(|value| crate::public_text::trim_js_whitespace(value).to_owned())
+                .map(|value| butler_core::public_text::trim_js_whitespace(value).to_owned())
                 .collect(),
             usize::MAX,
         );
@@ -95,7 +95,7 @@ pub(super) fn strict(
             resolved.push(Value::String(target.stable_id.clone()));
         }
         resolved.truncate(6);
-        crate::json::object_mut(&mut candidate.payload)
+        butler_core::json::object_mut(&mut candidate.payload)
             .insert("contradiction_refs".into(), Value::Array(resolved));
         output.push(candidate);
     }
@@ -145,7 +145,7 @@ fn normalize(
             .into_iter()
             .flatten()
             .filter_map(Value::as_str)
-            .map(crate::public_text::trim_js_whitespace)
+            .map(butler_core::public_text::trim_js_whitespace)
             .filter(|value| allowed.contains(*value))
             .map(str::to_owned)
             .collect(),
@@ -266,7 +266,7 @@ fn forgiving_object(raw: &str) -> Map<String, Value> {
 }
 
 fn fences(raw: &str) -> &str {
-    let mut text = crate::public_text::trim_js_whitespace(raw);
+    let mut text = butler_core::public_text::trim_js_whitespace(raw);
     if text
         .get(..7)
         .is_some_and(|prefix| prefix.eq_ignore_ascii_case("```json"))
@@ -275,9 +275,9 @@ fn fences(raw: &str) -> &str {
     } else if text.starts_with("```") {
         text = &text[3..];
     }
-    text = crate::public_text::trim_js_whitespace(text);
+    text = butler_core::public_text::trim_js_whitespace(text);
     if let Some(value) = text.strip_suffix("```") {
-        text = crate::public_text::trim_js_whitespace(value);
+        text = butler_core::public_text::trim_js_whitespace(value);
     }
     text
 }
@@ -355,7 +355,7 @@ fn valid(object: &Map<String, Value>, key: &str, allowed: &[&str]) -> Value {
 fn normalized_conditions(mut value: Vec<String>) -> Vec<String> {
     value = value
         .into_iter()
-        .map(|value| crate::public_text::trim_js_whitespace(&value).to_owned())
+        .map(|value| butler_core::public_text::trim_js_whitespace(&value).to_owned())
         .filter(|value| !value.is_empty())
         .collect();
     value.sort_by(|a, b| a.encode_utf16().cmp(b.encode_utf16()));

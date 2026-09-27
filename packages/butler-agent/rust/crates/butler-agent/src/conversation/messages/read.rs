@@ -20,7 +20,7 @@ impl AgentConversationStore {
         source_ref: &str,
     ) -> ConversationResult<Option<ConversationMessageWithParts>> {
         let session_id = session_id.to_owned();
-        let source_ref = crate::public_text::trim_js_whitespace(source_ref).to_owned();
+        let source_ref = butler_core::public_text::trim_js_whitespace(source_ref).to_owned();
         if source_ref.is_empty() {
             return Ok(None);
         }
@@ -172,7 +172,7 @@ pub(in crate::conversation) fn projection(
 ) -> ConversationResult<Vec<ConversationMessageWithParts>> {
     let after = after_seq
         .filter(|value| value.is_finite())
-        .map(|value| crate::json::saturating_u64(value.floor().max(0.0)))
+        .map(|value| butler_core::json::saturating_u64(value.floor().max(0.0)))
         .unwrap_or(0);
     let limit = normalize_limit(limit, 500, 1000);
     query_messages(
@@ -251,13 +251,13 @@ pub(in crate::conversation) fn cognition(
     let offset = input
         .offset
         .filter(|v| v.is_finite())
-        .map(|v| crate::json::saturating_u64(v.floor().max(0.0)))
+        .map(|v| butler_core::json::saturating_u64(v.floor().max(0.0)))
         .unwrap_or(0);
     let mut clauses = vec!["visibility='model'".to_owned()];
     let mut values = Vec::new();
     if let Some(session) = input
         .session_id
-        .map(|v| crate::public_text::trim_js_whitespace(&v).to_owned())
+        .map(|v| butler_core::public_text::trim_js_whitespace(&v).to_owned())
         .filter(|v| !v.is_empty())
     {
         values.push(rusqlite::types::Value::Text(session));
@@ -280,7 +280,7 @@ pub(in crate::conversation) fn cognition(
     }
     if let Some(since) = input
         .since
-        .map(|v| crate::public_text::trim_js_whitespace(&v).to_owned())
+        .map(|v| butler_core::public_text::trim_js_whitespace(&v).to_owned())
         .filter(|v| !v.is_empty())
     {
         values.push(rusqlite::types::Value::Text(since));

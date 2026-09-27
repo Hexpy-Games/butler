@@ -10,10 +10,10 @@ use sha2::{Digest, Sha256};
 use unicode_normalization::UnicodeNormalization;
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{
-    conversation::{CanonicalMemoryReadBinding, PublicMemorySnapshot, decode_message_scalars},
-    json,
-};
+use crate::conversation::CanonicalMemoryReadBinding;
+use crate::conversation::PublicMemorySnapshot;
+use crate::conversation::decode_message_scalars;
+use butler_core::json;
 
 use super::{
     CognitionError, CognitionResult,

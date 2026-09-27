@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 use crate::gateway::GatewayApplicationError;
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 use super::storage::AppStorage;
 use super::{AppApplication, AppChatKind, AppStorageError, app_error};

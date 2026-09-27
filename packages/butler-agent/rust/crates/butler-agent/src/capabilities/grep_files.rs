@@ -87,7 +87,7 @@ pub(super) async fn execute(
     let cursor_input = args.get("cursor").filter(|value| {
         !value
             .as_str()
-            .is_some_and(|text| crate::public_text::trim_js_whitespace(text).is_empty())
+            .is_some_and(|text| butler_core::public_text::trim_js_whitespace(text).is_empty())
     });
     let position = cursor_input.and_then(cursor::decode);
     if cursor_input.is_some() && position.as_ref().is_none_or(|cursor| cursor.query != query) {

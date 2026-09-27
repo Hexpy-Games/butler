@@ -1,4 +1,4 @@
-use crate::public_text::fixed_regex;
+use butler_core::public_text::fixed_regex;
 use std::path::{Component, Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -7,7 +7,7 @@ use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use unicode_normalization::UnicodeNormalization;
 
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 pub(super) struct BindingMarker {
     pub repository_anchor_path: String,

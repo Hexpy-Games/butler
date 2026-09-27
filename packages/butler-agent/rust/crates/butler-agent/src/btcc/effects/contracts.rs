@@ -6,7 +6,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::btcc::BtccSource;
 use crate::btcc::work::WorkView;
-use crate::json::JsonDocument;
+use butler_core::json::JsonDocument;
 
 pub(crate) type EffectResult<T> = Result<T, EffectFailure>;
 pub(crate) type EffectFuture<'a, T> = Pin<Box<dyn Future<Output = EffectResult<T>> + Send + 'a>>;

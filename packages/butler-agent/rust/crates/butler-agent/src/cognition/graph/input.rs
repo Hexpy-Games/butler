@@ -204,7 +204,7 @@ fn enforce_budget(input: &mut ExtractInput) -> CognitionResult<()> {
 }
 fn json_bytes<T: serde::Serialize>(value: &T) -> CognitionResult<usize> {
     Ok(
-        crate::json::stringify(&serde_json::to_value(value).map_err(json_error)?)
+        butler_core::json::stringify(&serde_json::to_value(value).map_err(json_error)?)
             .map_err(json_error)?
             .len(),
     )

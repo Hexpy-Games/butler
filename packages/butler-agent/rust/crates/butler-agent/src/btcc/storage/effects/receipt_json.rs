@@ -6,11 +6,11 @@ fn field(output: &mut String, name: &str, value: &str, first: bool) -> EffectRes
     if !first {
         output.push(',');
     }
-    crate::json::write_string(name, output).map_err(error)?;
+    butler_core::json::write_string(name, output).map_err(error)?;
     output.push(':');
-    crate::json::write_string(value, output).map_err(error)
+    butler_core::json::write_string(value, output).map_err(error)
 }
-fn error(error: crate::json::JsonError) -> EffectFailure {
+fn error(error: butler_core::json::JsonError) -> EffectFailure {
     EffectFailure::policy("effect_journal_json", error.to_string()).with_source(error)
 }
 
@@ -39,10 +39,10 @@ pub(super) fn encode(receipt: &EffectReceipt) -> EffectResult<String> {
     output.push_str(",\"result\":");
     output.push_str(receipt.result.as_str());
     output.push_str(",\"appliedAt\":");
-    crate::json::write_string(&receipt.applied_at, &mut output).map_err(error)?;
+    butler_core::json::write_string(&receipt.applied_at, &mut output).map_err(error)?;
     if let Some(attempt) = &receipt.dispatch_attempt {
         output.push_str(",\"dispatchAttempt\":");
-        crate::json::append_json(attempt, &mut output).map_err(error)?;
+        butler_core::json::append_json(attempt, &mut output).map_err(error)?;
     }
     output.push('}');
     Ok(output)

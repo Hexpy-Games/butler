@@ -166,7 +166,7 @@ pub(crate) fn read_legacy_new_lines(
         }
         bytes += read;
         let text = String::from_utf8_lossy(&line);
-        if !crate::public_text::trim_js_whitespace(&text).is_empty() {
+        if !butler_core::public_text::trim_js_whitespace(&text).is_empty() {
             if count >= prior.map_or(0, |value| value.last_line) {
                 lines.push(text.trim_end_matches(['\r', '\n']).to_owned());
             }

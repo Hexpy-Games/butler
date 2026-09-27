@@ -38,7 +38,7 @@ fn active_targets_in_file(path: &Path, now_epoch_ms: i64) -> CognitionResult<Vec
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(_) => return Err(error(CognitionCode::MemoryFeedbackBufferReadFailed)),
     };
-    let fallback_iso = crate::js_date::format_iso_millis(now_epoch_ms)
+    let fallback_iso = butler_core::js_date::format_iso_millis(now_epoch_ms)
         .unwrap_or_else(|| "1970-01-01T00:00:00.000Z".into());
     let mut reader = BufReader::new(file);
     let mut record = Vec::new();
@@ -70,7 +70,7 @@ fn push_active_target(
     targets: &mut Vec<FeedbackTarget>,
 ) {
     let block = String::from_utf8_lossy(record);
-    if crate::public_text::trim_js_whitespace(&block).is_empty() {
+    if butler_core::public_text::trim_js_whitespace(&block).is_empty() {
         return;
     }
     let entry = parse_entry(&block, fallback_iso);

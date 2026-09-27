@@ -201,7 +201,7 @@ fn binding_current(
     Ok(hydrated
         .text
         .as_bytes()
-        .get(crate::json::saturating_usize(start)..crate::json::saturating_usize(end))
+        .get(butler_core::json::saturating_usize(start)..butler_core::json::saturating_usize(end))
         .and_then(|bytes| std::str::from_utf8(bytes).ok())
         == Some(quote))
 }

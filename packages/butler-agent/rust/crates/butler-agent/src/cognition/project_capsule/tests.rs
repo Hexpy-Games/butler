@@ -46,7 +46,7 @@ impl CognitionCoordinationHost for TestHost {
         .unwrap_or(i64::MAX)
     }
     fn now_iso(&self) -> String {
-        crate::js_date::format_iso_millis(self.now_epoch_millis()).unwrap()
+        butler_core::js_date::format_iso_millis(self.now_epoch_millis()).unwrap()
     }
 }
 

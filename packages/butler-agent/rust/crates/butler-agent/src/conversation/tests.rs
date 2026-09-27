@@ -237,7 +237,7 @@ fn source_hash_matches_real_typescript_fixture_and_origin_json_uses_ref() {
         sha256: None,
     };
     assert_eq!(
-        crate::json::stringify(&serde_json::to_value([evidence]).unwrap()).unwrap(),
+        butler_core::json::stringify(&serde_json::to_value([evidence]).unwrap()).unwrap(),
         // Stored rows (Bun and native) are `kind, ref, sha256`; classification
         // compares this text byte-for-byte against the persisted column.
         "[{\"kind\":\"authorized_wake\",\"ref\":\"wake:1\",\"sha256\":null}]"

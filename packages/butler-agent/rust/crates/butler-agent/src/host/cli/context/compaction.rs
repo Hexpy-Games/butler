@@ -4,15 +4,14 @@ use std::{path::Path, sync::Arc};
 
 use serde_json::{Value, json};
 
-use crate::{
-    context::{compact_transcript, compaction_snapshot_path},
-    conversation::{
-        AgentConversationStore, ConversationStoreConfig,
-        conversation_session_id_for_durable_session, conversation_store_path,
-    },
-    locale::LocaleCollation,
-    operations::MetricFiles,
-};
+use crate::context::compact_transcript;
+use crate::context::compaction_snapshot_path;
+use crate::conversation::AgentConversationStore;
+use crate::conversation::ConversationStoreConfig;
+use crate::conversation::conversation_session_id_for_durable_session;
+use crate::conversation::conversation_store_path;
+use crate::operations::MetricFiles;
+use butler_core::locale::LocaleCollation;
 
 use super::{
     CliError, ResolvedInstallation, context_budget_owner, open_status_models, unavailable,
@@ -96,7 +95,7 @@ fn validate_compaction_destinations(
     validate_write_destination(installation, &conversation_store, true)?;
     validate_write_destination(installation, &metric_file, true)?;
 
-    let trimmed_session_id = crate::public_text::trim_js_whitespace(session_id);
+    let trimmed_session_id = butler_core::public_text::trim_js_whitespace(session_id);
     let hash_source = if trimmed_session_id.is_empty() {
         "butler/main"
     } else {

@@ -10,8 +10,8 @@ use super::jobs::CommandJobs;
 use super::{registered_artifacts, structured_stdout};
 use crate::btcc::BtccError;
 use crate::context::{BudgetToolOutputInput, OutputModeInput, ShellCommandResult, ToolOutput};
-use crate::json::JsonDocument;
 use crate::workspace::{Commands, GuidedCommandOutput, GuidedSummary, StructuredCommandOutput};
+use butler_core::json::JsonDocument;
 use tokio_util::sync::CancellationToken;
 
 mod assemble;

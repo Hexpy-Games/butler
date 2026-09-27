@@ -10,7 +10,7 @@ use super::{
     OVERSIZED_GRAPHEME, VectorRegistrationStage, db_error, digest, json_array, json_error,
     stringify,
 };
-use crate::segmentation::grapheme_segments;
+use butler_core::segmentation::grapheme_segments;
 
 use nodes::{job_chunk, node_rows};
 

@@ -86,7 +86,7 @@ impl Serialize for GenerationEmbedding {
                         && number <= 9_007_199_254_740_991.0
                     {
                         wire[field] = Value::Number(serde_json::Number::from(
-                            crate::json::saturating_u64(number),
+                            butler_core::json::saturating_u64(number),
                         ));
                     }
                 }

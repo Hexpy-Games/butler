@@ -7,7 +7,7 @@ use super::super::super::super::storage::AppStorageError;
 use super::calendar::{self, Calendar};
 use super::view::{self, add, set_source};
 use crate::gateway::application::storage::AppStorageCode;
-use crate::public_text::sanitize_public_text;
+use butler_core::public_text::sanitize_public_text;
 
 const MAX_ROWS: usize = 20_000;
 

@@ -242,7 +242,7 @@ pub(super) fn refresh_semantic_state(
     let state = if complete == total {
         serde_json::json!({"state":"complete","completed_units":complete,"total_units":total})
     } else if complete > 0 || failed > 0 || warnings > 0 {
-        let mut value = crate::json::json_object!({"state":"partial","completed_units":complete,"total_units":total,"pending_units":pending,"failed_units":failed});
+        let mut value = butler_core::json::json_object!({"state":"partial","completed_units":complete,"total_units":total,"pending_units":pending,"failed_units":failed});
         if warnings > 0 {
             value.insert("warning_units".into(), warnings.into());
         }

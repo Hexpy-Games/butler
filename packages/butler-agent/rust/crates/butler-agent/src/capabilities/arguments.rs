@@ -40,12 +40,12 @@ pub(super) fn root(
             .map_err(|error| CapabilityError::caused(error.code(), error));
     }
     if let Some(path) = input.workspace_path
-        && !crate::public_text::trim_js_whitespace(&path.to_string_lossy()).is_empty()
+        && !butler_core::public_text::trim_js_whitespace(&path.to_string_lossy()).is_empty()
     {
         return Ok(path.to_path_buf());
     }
     if let Some(path) = args.get("workspace_root").and_then(Value::as_str)
-        && !crate::public_text::trim_js_whitespace(path).is_empty()
+        && !butler_core::public_text::trim_js_whitespace(path).is_empty()
     {
         return Ok(PathBuf::from(path));
     }
@@ -72,7 +72,7 @@ pub(super) fn scope(path: &str, scopes: Option<&[String]>) -> bool {
     let Some(scopes) = scopes else {
         return true;
     };
-    let target = crate::public_text::trim_js_whitespace(path).replace('\\', "/");
+    let target = butler_core::public_text::trim_js_whitespace(path).replace('\\', "/");
     let target = target.strip_prefix("./").unwrap_or(&target);
     if target.is_empty()
         || Path::new(target).is_absolute()
@@ -81,7 +81,7 @@ pub(super) fn scope(path: &str, scopes: Option<&[String]>) -> bool {
         return false;
     }
     scopes.iter().any(|scope| {
-        let raw = crate::public_text::trim_js_whitespace(scope);
+        let raw = butler_core::public_text::trim_js_whitespace(scope);
         if raw == "." || raw == "./" {
             return true;
         }
@@ -114,7 +114,7 @@ pub(super) fn start_line(value: Option<&Value>) -> Result<Option<usize>, ()> {
     {
         return Err(());
     }
-    Ok(Some(crate::json::saturating_usize(number)))
+    Ok(Some(butler_core::json::saturating_usize(number)))
 }
 
 fn js_number(value: &Value) -> f64 {
@@ -142,7 +142,7 @@ fn js_number(value: &Value) -> f64 {
 }
 
 fn parse_number(value: &str) -> f64 {
-    let value = crate::public_text::trim_js_whitespace(value);
+    let value = butler_core::public_text::trim_js_whitespace(value);
     if value.is_empty() {
         return 0.0;
     }

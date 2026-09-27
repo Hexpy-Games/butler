@@ -5,7 +5,7 @@ use super::super::contracts::{
     ProjectLedgerRecordKind, ProjectLedgerRecordOperation, ProjectLedgerRecordUpdate,
     ProjectWorkPublicationError,
 };
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 pub(super) fn updates(
     updates: &[ProjectLedgerRecordUpdate],

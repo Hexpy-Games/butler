@@ -44,7 +44,7 @@ pub(super) fn recall_from_corpus(
     corpus: &LegacyRecallCorpus,
     now: f64,
 ) -> LegacyRecallResponse {
-    let cue = crate::public_text::trim_js_whitespace(&request.cue).to_owned();
+    let cue = butler_core::public_text::trim_js_whitespace(&request.cue).to_owned();
     let seeds = extract_recall_seeds(&cue);
     let limit = normalized_limit(request.limit);
     let activation = activate_graph(corpus, &seeds);
@@ -191,7 +191,7 @@ fn normalized_limit(limit: Option<f64>) -> usize {
     if value.is_nan() {
         0
     } else {
-        crate::json::saturating_usize(value.clamp(1.0, 10.0))
+        butler_core::json::saturating_usize(value.clamp(1.0, 10.0))
     }
 }
 

@@ -105,7 +105,7 @@ pub(super) fn failure(error: &str, message: &str, hint: &str) -> Value {
 }
 
 fn failure_object(error: &str, message: &str, hint: &str) -> Map<String, Value> {
-    crate::json::json_object!({"ok":false,"error":error,"message":message,"recovery_hint":hint,
+    butler_core::json::json_object!({"ok":false,"error":error,"message":message,"recovery_hint":hint,
         "evidence_capability_receipts":mutation_evidence::failure("edit_file",error,&[],&[],&[],&[])})
 }
 

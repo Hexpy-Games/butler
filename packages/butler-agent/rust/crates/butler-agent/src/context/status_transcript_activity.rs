@@ -175,7 +175,7 @@ impl ActivityAccumulator {
         let timestamp = event
             .get("timestamp")
             .and_then(Value::as_str)
-            .and_then(crate::js_date::parse_iso_millis);
+            .and_then(butler_core::js_date::parse_iso_millis);
         let Some(timestamp_ms) = timestamp else {
             self.delivery_unknown_count = self.delivery_unknown_count.saturating_add(1);
             if error.is_some() {

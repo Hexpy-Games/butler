@@ -15,7 +15,7 @@ impl DurableWorkService {
         object.remove("expectedMaterialFingerprint");
         let request_sha256 = fingerprint("record_work_disposition", &identity)?;
         let command = DispositionCommand {
-            normalized_summary: crate::public_text::trim_js_whitespace(&input.summary).into(),
+            normalized_summary: butler_core::public_text::trim_js_whitespace(&input.summary).into(),
             action_updates: input.action_updates.clone().unwrap_or_default(),
             remaining_actions: input.remaining_actions.clone().unwrap_or_default(),
             evidence_refs: input.evidence_refs.clone().unwrap_or_default(),

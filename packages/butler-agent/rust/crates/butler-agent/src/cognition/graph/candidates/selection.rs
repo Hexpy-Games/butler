@@ -60,7 +60,7 @@ fn alias(
     as_of: &str,
     cue: &str,
 ) -> CognitionResult<Vec<RankedCandidate>> {
-    let phrase = crate::public_text::trim_js_whitespace(cue);
+    let phrase = butler_core::public_text::trim_js_whitespace(cue);
     if phrase.is_empty() {
         return Ok(Vec::new());
     }

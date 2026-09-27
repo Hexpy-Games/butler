@@ -1,6 +1,6 @@
 use std::{fs, path::PathBuf};
 
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 use super::{ProjectBriefingTarget, read};
 

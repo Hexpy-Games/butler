@@ -77,16 +77,16 @@ pub(super) fn attach(
             let focus_end = at + passage.text.len();
             let boundaries = grapheme_byte_boundaries(scalar);
             let first = boundaries
-                .binary_search(&(crate::json::saturating_usize(row.byte_start) + focus_start))
+                .binary_search(&(butler_core::json::saturating_usize(row.byte_start) + focus_start))
                 .map_err(|_| changed())?;
             let last = boundaries
-                .binary_search(&(crate::json::saturating_usize(row.byte_start) + focus_end))
+                .binary_search(&(butler_core::json::saturating_usize(row.byte_start) + focus_end))
                 .map_err(|_| changed())?;
             let allowance = width.min(480usize.saturating_sub(last - first) / 2);
             let start = boundaries[first.saturating_sub(allowance)];
             let end = boundaries[(last + allowance).min(boundaries.len() - 1)];
-            if start == crate::json::saturating_usize(row.byte_start) + focus_start
-                && end == crate::json::saturating_usize(row.byte_start) + focus_end
+            if start == butler_core::json::saturating_usize(row.byte_start) + focus_start
+                && end == butler_core::json::saturating_usize(row.byte_start) + focus_end
             {
                 continue;
             }
@@ -96,8 +96,8 @@ pub(super) fn attach(
                 byte_end: end as f64,
                 focus_start: focus_start as f64,
                 focus_end: focus_end as f64,
-                prefix_bytes: (crate::json::saturating_usize(row.byte_start) + focus_start - start)
-                    as f64,
+                prefix_bytes: (butler_core::json::saturating_usize(row.byte_start) + focus_start
+                    - start) as f64,
             };
             let hash = crate::cognition::sources::projection_hash_for_graph(vec![
                 json!(source_ref),

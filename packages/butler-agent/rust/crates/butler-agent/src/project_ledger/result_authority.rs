@@ -34,7 +34,7 @@ pub(crate) async fn prepare_exact_project_work_result_authority(
                 ));
             }
             active_reference::canonical_containment(&projects_root, &scope.ledger_root)?;
-            if crate::public_text::trim_js_whitespace(&work_id).is_empty()
+            if butler_core::public_text::trim_js_whitespace(&work_id).is_empty()
                 || work_id.encode_utf16().count() > 4096
                 || matches!(work_id.as_str(), "." | "..")
                 || work_id.contains(['/', '\\'])

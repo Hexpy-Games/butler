@@ -3,7 +3,8 @@ use std::{fs, path::PathBuf};
 use serde_json::{Map, Value, json};
 
 use super::{TempImageFile, admitted_image, frozen_carrier_valid, project_result, required_text};
-use crate::{context::ImageCarrierTuple, public_text::trim_js_whitespace};
+use crate::context::ImageCarrierTuple;
+use butler_core::public_text::trim_js_whitespace;
 
 struct Scratch(PathBuf);
 

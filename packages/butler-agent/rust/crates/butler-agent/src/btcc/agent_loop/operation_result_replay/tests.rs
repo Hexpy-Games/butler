@@ -1,4 +1,4 @@
-use crate::json::JsonDocument;
+use butler_core::json::JsonDocument;
 use serde_json::json;
 use std::{future::Future, pin::Pin, sync::Arc};
 

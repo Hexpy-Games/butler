@@ -170,7 +170,7 @@ fn append_message(messages: &mut Vec<Message>, role: Role, text: &str, timestamp
         role,
         text,
         timestamp: timestamp.to_owned(),
-        timestamp_ms: crate::js_date::parse_iso_millis(timestamp),
+        timestamp_ms: butler_core::js_date::parse_iso_millis(timestamp),
     });
 }
 

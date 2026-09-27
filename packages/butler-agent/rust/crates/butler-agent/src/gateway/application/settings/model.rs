@@ -1,10 +1,10 @@
 use super::Controls;
 use crate::gateway::application::storage::AppStorageCode;
-use crate::public_text::trim_js_whitespace;
 use crate::{
     btcc::{ModelFallback, ReasoningEffort},
     gateway::application::{AppModelMetadata, AppSettingsFacts, storage::AppStorageError},
 };
+use butler_core::public_text::trim_js_whitespace;
 
 pub(super) fn normalize(mut input: Controls, models: &[AppModelMetadata]) -> Controls {
     let metadata = resolve_runtime(&input.model, models).or_else(|| models.first());

@@ -122,7 +122,7 @@ pub(super) fn record_failure_best_effort(
         return;
     }
     let record = FailureRecord {
-        ts: crate::js_date::format_iso_millis(super::now_epoch_ms())
+        ts: butler_core::js_date::format_iso_millis(super::now_epoch_ms())
             .unwrap_or_else(|| "1970-01-01T00:00:00.000Z".to_owned()),
         project_id,
         phase,
@@ -204,7 +204,7 @@ fn write_capsule(path: &Path, body: &str) -> std::io::Result<()> {
 fn create_lock_file(path: &Path, recovered: bool) -> std::io::Result<File> {
     let record = LockRecord {
         pid: std::process::id(),
-        created_at: crate::js_date::format_iso_millis(super::now_epoch_ms())
+        created_at: butler_core::js_date::format_iso_millis(super::now_epoch_ms())
             .unwrap_or_else(|| "1970-01-01T00:00:00.000Z".to_owned()),
         recovered_stale_lock: recovered.then_some(true),
     };
@@ -305,7 +305,7 @@ fn set_private_mode(_options: &mut OpenOptions) {}
 
 fn compact(message: &str, limit: usize) -> String {
     let normalized = message
-        .split(crate::public_text::is_js_whitespace)
+        .split(butler_core::public_text::is_js_whitespace)
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join(" ");

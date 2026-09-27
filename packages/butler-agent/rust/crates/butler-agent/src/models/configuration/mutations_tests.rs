@@ -3,10 +3,10 @@ use std::{fs, path::PathBuf, sync::Arc};
 use serde_json::Value;
 
 use super::*;
-use crate::{
-    locale::LocaleCollation,
-    models::{LocalModelSource, ModelCatalog, ProviderAuthMethod},
-};
+use crate::models::LocalModelSource;
+use crate::models::ModelCatalog;
+use crate::models::ProviderAuthMethod;
+use butler_core::locale::LocaleCollation;
 
 struct Clock;
 impl ModelConfigurationClock for Clock {
@@ -30,11 +30,13 @@ impl Fixture {
         Self(root)
     }
     fn owner(&self) -> ModelConfiguration {
-        self.owner_with(Arc::new(crate::configuration::ConfigurationWrites::new()))
+        self.owner_with(Arc::new(
+            butler_core::configuration::ConfigurationWrites::new(),
+        ))
     }
     fn owner_with(
         &self,
-        writes: Arc<crate::configuration::ConfigurationWrites>,
+        writes: Arc<butler_core::configuration::ConfigurationWrites>,
     ) -> ModelConfiguration {
         ModelConfiguration::new(
             self.0.clone(),
@@ -57,7 +59,7 @@ impl Fixture {
 #[tokio::test]
 async fn concurrent_distinct_registrations_share_the_full_file_write_sequence() {
     let fixture = Fixture::new();
-    let writes = Arc::new(crate::configuration::ConfigurationWrites::new());
+    let writes = Arc::new(butler_core::configuration::ConfigurationWrites::new());
     let first_owner = fixture.owner_with(Arc::clone(&writes));
     let second_owner = fixture.owner_with(writes);
     let first = LocalModelMutation {

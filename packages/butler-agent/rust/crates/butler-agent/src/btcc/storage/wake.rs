@@ -5,7 +5,7 @@ use rusqlite::params;
 
 use super::{BtccRepositories, StorageError};
 use crate::btcc::PortFuture;
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 #[derive(Clone, Debug)]
 pub(crate) struct WakeAuthorization {

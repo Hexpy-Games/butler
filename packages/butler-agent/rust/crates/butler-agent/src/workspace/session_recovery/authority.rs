@@ -1,7 +1,7 @@
 use serde_json::Value;
 
-use crate::public_text::trim_js_whitespace;
 use crate::workspace::StoredSessionBinding;
+use butler_core::public_text::trim_js_whitespace;
 
 const MARKER_SCHEMA: &str = "butler.session-workspace-binding.v1";
 

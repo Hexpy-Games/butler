@@ -358,7 +358,8 @@ fn increment_graph_revision(tx: &Connection) -> CognitionResult<()> {
     Ok(())
 }
 fn stringify<T: serde::Serialize>(value: &T) -> CognitionResult<String> {
-    crate::json::stringify(&serde_json::to_value(value).map_err(json_error)?).map_err(json_error)
+    butler_core::json::stringify(&serde_json::to_value(value).map_err(json_error)?)
+        .map_err(json_error)
 }
 fn error(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, code.as_str())

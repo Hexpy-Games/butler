@@ -1,10 +1,10 @@
 //! Source guided-project-ledger-effect-input: one reviewed record update.
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value};
 
 use crate::btcc::BtccError;
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 pub(super) fn managed(name: &str) -> bool {
     matches!(

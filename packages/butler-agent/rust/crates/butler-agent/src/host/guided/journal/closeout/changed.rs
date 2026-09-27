@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use serde_json::{Value, json};
 
 use crate::btcc::{BtccError, ToolJournalCloseoutRow};
@@ -58,7 +58,7 @@ impl ChangedCollector {
             if let Some(raw) = row.arguments.field("edits").map_err(invalid)?
                 && raw.starts_with('[')
             {
-                return crate::json::visit_raw_array(raw, |edit| {
+                return butler_core::json::visit_raw_array(raw, |edit| {
                     if let Ok(value) = serde_json::from_str::<Value>(edit)
                         && let Some(path) = value.get("path").and_then(Value::as_str)
                     {
@@ -79,7 +79,7 @@ impl ChangedCollector {
     }
 
     fn add_array(&mut self, raw: &str) -> Result<(), BtccError> {
-        crate::json::visit_raw_array(raw, |candidate| {
+        butler_core::json::visit_raw_array(raw, |candidate| {
             if let Ok(value) = serde_json::from_str::<Value>(candidate) {
                 self.append(safe_detail(&value));
             }
@@ -186,7 +186,7 @@ fn safe_detail(value: &Value) -> Option<Detail> {
                             && *number >= 1.0
                             && *number <= 9_007_199_254_740_991.0
                     })
-                    .map(|number| Some(crate::json::saturating_u64(number))),
+                    .map(|number| Some(butler_core::json::saturating_u64(number))),
             }
         };
         let (Some(old), Some(new)) = (number("old_line"), number("new_line")) else {

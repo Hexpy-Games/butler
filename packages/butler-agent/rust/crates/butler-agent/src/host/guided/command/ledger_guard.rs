@@ -3,7 +3,7 @@
 
 mod trust;
 
-use crate::public_text::fixed_regex;
+use butler_core::public_text::fixed_regex;
 use std::path::{Component, Path, PathBuf};
 use std::sync::LazyLock;
 

@@ -12,7 +12,7 @@ use super::super::contracts::{
 use super::super::session_links::ProjectSessionLinks;
 use super::calendar::Calendar;
 use super::view::{add, day_index, set_source};
-use crate::public_text::sanitize_public_text;
+use butler_core::public_text::sanitize_public_text;
 
 pub(super) fn populate(
     view: &mut Value,

@@ -34,7 +34,7 @@ pub(super) fn contextual_recall_evidence(
     ]
     .into_iter()
     .filter(|value| {
-        value.is_some_and(|text| !crate::public_text::trim_js_whitespace(text).is_empty())
+        value.is_some_and(|text| !butler_core::public_text::trim_js_whitespace(text).is_empty())
     })
     .map(Option::unwrap)
     .chain(context.recent_artifacts.iter().map(String::as_str))

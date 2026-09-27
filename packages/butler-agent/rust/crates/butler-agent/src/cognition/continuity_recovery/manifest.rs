@@ -114,7 +114,7 @@ pub(super) fn approve(
             .collect::<Vec<_>>(),
         Some(ids) => ids
             .into_iter()
-            .map(|id| crate::public_text::trim_js_whitespace(&id).to_owned())
+            .map(|id| butler_core::public_text::trim_js_whitespace(&id).to_owned())
             .filter(|id| !id.is_empty())
             .collect::<std::collections::HashSet<_>>()
             .into_iter()

@@ -101,7 +101,7 @@ fn page(payload: &str, output: &str, data: &str, offset: u64) -> Result<String, 
             if projected.len() > 1 {
                 projected.push(',');
             }
-            crate::json::write_string(key, &mut projected)
+            butler_core::json::write_string(key, &mut projected)
                 .map_err(|source| failure().with_source(source))?;
             projected.push(':');
             projected.push_str(raw);
@@ -111,7 +111,7 @@ fn page(payload: &str, output: &str, data: &str, offset: u64) -> Result<String, 
         projected.push(',');
     }
     projected.push_str("\"data\":");
-    crate::json::write_string(data, &mut projected)
+    butler_core::json::write_string(data, &mut projected)
         .map_err(|source| failure().with_source(source))?;
     if let Some(raw) = field(output, "offset")? {
         append_field(&mut projected, "offset", raw)?;

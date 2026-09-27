@@ -4,7 +4,7 @@ use serde_json::Value;
 
 use super::super::contracts::AppProjectDashboardBriefingPrompt;
 use super::pack::Pack;
-use crate::public_text::sanitize_public_text;
+use butler_core::public_text::sanitize_public_text;
 
 pub(super) const INSTRUCTIONS: &str = "Return only JSON: {introduction,position:{title,body,sourceIds:[]},suggestions:[{candidateId,title,reason,sourceIds:[]}]}. No other fields.\n\
 Write a readable project signpost, not an audit report. Introduction: describe the project's purpose, at most 180 characters; no progress, dates or statistics. Ground it in the supplied facts.\n\
@@ -38,7 +38,7 @@ pub(super) fn validate(raw: &str, pack: &Pack) -> Result<Value, ()> {
         return Err(());
     }
     let value: Value =
-        serde_json::from_str(crate::public_text::trim_js_whitespace(raw)).map_err(|_| ())?;
+        serde_json::from_str(butler_core::public_text::trim_js_whitespace(raw)).map_err(|_| ())?;
     if !has_exact_keys(&value, &["introduction", "position", "suggestions"])
         || !valid_text(&value["introduction"], 180)
         || !has_exact_keys(&value["position"], &["title", "body", "sourceIds"])
@@ -90,7 +90,7 @@ fn valid_text(value: &Value, max_units: usize) -> bool {
     let Some(text) = value.as_str() else {
         return false;
     };
-    let trimmed = crate::public_text::trim_js_whitespace(text);
+    let trimmed = butler_core::public_text::trim_js_whitespace(text);
     !trimmed.is_empty()
         && text.encode_utf16().count() <= max_units
         && sanitize_public_text(text, "") == trimmed

@@ -23,7 +23,7 @@ fn optional_text(path: &Path) -> CognitionResult<Option<String>> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(failure(&error)),
     };
-    let text = crate::public_text::trim_js_whitespace(&text);
+    let text = butler_core::public_text::trim_js_whitespace(&text);
     Ok((!text.is_empty()).then(|| text.to_owned()))
 }
 
@@ -35,7 +35,7 @@ pub(super) fn continuity(memory_root: &Path, session: &str) -> CognitionResult<O
 }
 
 pub(super) fn capsule_path(memory_root: &Path, project: Option<&str>) -> Option<PathBuf> {
-    let project = crate::public_text::trim_js_whitespace(project?);
+    let project = butler_core::public_text::trim_js_whitespace(project?);
     if project.is_empty() {
         return None;
     }
@@ -68,7 +68,7 @@ pub(super) fn project(
         })
         .collect::<Vec<_>>()
         .join("\n");
-    let filtered = crate::public_text::trim_js_whitespace(&filtered);
+    let filtered = butler_core::public_text::trim_js_whitespace(&filtered);
     Ok((!filtered.is_empty()).then(|| filtered.to_owned()))
 }
 
@@ -147,7 +147,7 @@ fn project_entries(
     let Some(before_revision) = graph.hot_cache_graph_revision()? else {
         return Ok(None);
     };
-    let project = project.map(crate::public_text::trim_js_whitespace);
+    let project = project.map(butler_core::public_text::trim_js_whitespace);
     let now = chrono::Utc::now().to_rfc3339();
     let selected = entries
         .iter()

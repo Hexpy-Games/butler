@@ -23,7 +23,7 @@ pub(super) fn canonical_json(value: &Value) -> StorageResult<String> {
 
 /// ECMAScript JSON.stringify object enumeration over an insertion-preserving Value.
 pub(super) fn stringify(value: &Value) -> StorageResult<String> {
-    crate::json::stringify(value).map_err(|error| {
+    butler_core::json::stringify(value).map_err(|error| {
         StorageError::new(StorageCode::JsonStringify, error.to_string()).with_source(error)
     })
 }

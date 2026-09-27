@@ -5,11 +5,11 @@ use super::contracts::{
     ConversationPermission,
 };
 use super::identity::{canonical, digest};
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 
 pub(super) fn for_admission(
     input: &AuthorityAdmissionInput,
-    collation: &crate::locale::LocaleCollation,
+    collation: &butler_core::locale::LocaleCollation,
 ) -> AuthorityResult<ConversationPermission> {
     permission(PermissionFacts {
         owner: &input.owner_session_id,
@@ -24,7 +24,7 @@ pub(super) fn for_admission(
 }
 pub(super) fn for_record(
     record: &AuthorityRecord,
-    collation: &crate::locale::LocaleCollation,
+    collation: &butler_core::locale::LocaleCollation,
 ) -> AuthorityResult<ConversationPermission> {
     let input: Value = serde_json::from_str(&record.normalized_input_json).map_err(|source| {
         AuthorityError::policy("authority_request_corrupt").with_source(source)
@@ -58,7 +58,7 @@ struct PermissionFacts<'a> {
     input: &'a Value,
     title: Option<&'a str>,
     executable: Option<&'a str>,
-    collation: &'a crate::locale::LocaleCollation,
+    collation: &'a butler_core::locale::LocaleCollation,
 }
 
 fn permission(facts: PermissionFacts<'_>) -> AuthorityResult<ConversationPermission> {

@@ -447,7 +447,7 @@ fn failure(
 fn envelope(ok: bool, command: &str, data: &Value, error: Option<&Value>) -> String {
     format!(
         "{}\n",
-        crate::json::pretty(&json!({"ok":ok,"command":command,"data":data,
+        butler_core::json::pretty(&json!({"ok":ok,"command":command,"data":data,
         "error":error,"privacy":{"rawTextIncluded":false,"secretsIncluded":false}}))
     )
 }

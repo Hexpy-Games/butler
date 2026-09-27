@@ -51,10 +51,10 @@ pub(super) async fn operation(
     call_id: &str,
     tool_name: &str,
     status: Status,
-    output: Option<&crate::json::JsonDocument>,
+    output: Option<&butler_core::json::JsonDocument>,
 ) {
     let mut event = RuntimeTurnEventInput::new(status.event_kind());
-    let mut payload = crate::json::json_object!({
+    let mut payload = butler_core::json::json_object!({
         "safeLabel": tool_name,
         "toolName": tool_name,
         "toolCallId": call_id,
@@ -63,7 +63,7 @@ pub(super) async fn operation(
         "semanticBlockId": format!("tool-{call_id}"),
         "operationStatus": status.as_str(),
     });
-    let encoded = output.map(crate::json::JsonDocument::as_str);
+    let encoded = output.map(butler_core::json::JsonDocument::as_str);
     let result_ref = encoded.map(|body| {
         let sha256 = super::super::identity::digest(body);
         let id = super::super::identity::digest(&format!("btcc-guided-tool-result.v1\0{sha256}"));

@@ -3,7 +3,9 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use serde_json::Value;
 
 use crate::btcc::{BtccError, ToolJournalSignature};
-use crate::json::{CanonicalKeyOrder, canonical_json, visit_raw_object};
+use butler_core::json::CanonicalKeyOrder;
+use butler_core::json::canonical_json;
+use butler_core::json::visit_raw_object;
 
 #[derive(Default)]
 pub(super) struct ResumePool {

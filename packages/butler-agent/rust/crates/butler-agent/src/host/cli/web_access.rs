@@ -178,7 +178,7 @@ async fn run_search_test(
         Err(_) => "unknown".into(),
     };
     let environment = ProcessEnvironment::capture(&data_root, &home, &os_release);
-    let collation = match crate::locale::LocaleCollation::new("en-US") {
+    let collation = match butler_core::locale::LocaleCollation::new("en-US") {
         Ok(value) => Arc::new(value),
         Err(_) => {
             return report_error(
@@ -193,7 +193,7 @@ async fn run_search_test(
     let Ok(models) = ProcessModels::new(
         data_root.clone(),
         environment.model,
-        Arc::new(crate::configuration::ConfigurationWrites::new()),
+        Arc::new(butler_core::configuration::ConfigurationWrites::new()),
         collation,
     ) else {
         return report_error(

@@ -12,7 +12,8 @@ use super::helpers::{
     DecisionProject, decision_gate, decision_project, map_decision_project_error, map_read_error,
     normalized_plan,
 };
-use crate::{gateway::application::storage::AppStorageError, public_text::trim_js_whitespace};
+use crate::gateway::application::storage::AppStorageError;
+use butler_core::public_text::trim_js_whitespace;
 
 impl AppApplication {
     pub(in crate::gateway::application) async fn decide_session_plan_owned(

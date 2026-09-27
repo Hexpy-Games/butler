@@ -12,7 +12,7 @@ macro_rules! saturating {
             clippy::cast_sign_loss,
             reason = "float-to-int `as` saturates and truncates by definition; that is the intent"
         )]
-        pub(crate) fn $name(value: f64) -> $target {
+        pub fn $name(value: f64) -> $target {
             value as $target
         }
     )*};
@@ -30,7 +30,7 @@ saturating! {
     clippy::cast_possible_truncation,
     reason = "float-to-int `as` saturates and truncates by definition; that is the intent"
 )]
-pub(crate) fn saturating_i64(value: f64) -> i64 {
+pub fn saturating_i64(value: f64) -> i64 {
     value as i64
 }
 
@@ -38,7 +38,7 @@ pub(crate) fn saturating_i64(value: f64) -> i64 {
     clippy::cast_possible_truncation,
     reason = "float-to-int `as` saturates and truncates by definition; that is the intent"
 )]
-pub(crate) fn saturating_i32(value: f64) -> i32 {
+pub fn saturating_i32(value: f64) -> i32 {
     value as i32
 }
 

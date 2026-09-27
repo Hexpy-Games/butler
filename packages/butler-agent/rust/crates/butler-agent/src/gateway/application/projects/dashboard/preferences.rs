@@ -128,7 +128,7 @@ pub(super) async fn update(
             let row = super::super::rows::any_by_id(&tx, &project_key)?
                 .ok_or_else(|| AppStorageError::new(AppStorageCode::ProjectNotFound, "Project not found."))?;
             let project = super::super::rows::summary(row, None);
-            let payload = crate::json::json_object!({"project":project});
+            let payload = butler_core::json::json_object!({"project":project});
             let event = events::append_unpublished(
                 &tx,
                 "project.updated",

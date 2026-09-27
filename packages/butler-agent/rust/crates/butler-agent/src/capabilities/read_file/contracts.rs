@@ -38,7 +38,7 @@ pub(super) fn normalize_request(value: &Value) -> Result<Option<Request>, Capabi
     let Some(path) = object
         .get("path")
         .and_then(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
     else {
         return Ok(None);
     };
@@ -79,12 +79,12 @@ pub(super) fn integer(
     let Some(value) = value else {
         return Ok(fallback);
     };
-    let number = crate::json::coerce_number(value)
+    let number = butler_core::json::coerce_number(value)
         .map_err(|source| CapabilityError::caused("invalid_number_conversion", source))?;
     if !number.is_finite() {
         return Ok(fallback);
     }
-    Ok(crate::json::saturating_usize(
+    Ok(butler_core::json::saturating_usize(
         number.floor().max(min as f64).min(max as f64),
     ))
 }

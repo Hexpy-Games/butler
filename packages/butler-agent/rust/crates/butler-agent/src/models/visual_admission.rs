@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::visual_manifest::VisualAttachmentManifest;
 use crate::models::{HostedApiShape, ModelProviderMetadata};
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]

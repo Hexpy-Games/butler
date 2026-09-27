@@ -63,7 +63,7 @@ pub(super) fn stage_value(value: &Value) -> Result<(), ProjectLedgerReadError> {
 pub(super) fn strings(value: &Value) -> Result<(), ProjectLedgerReadError> {
     for item in array(Some(value))? {
         if item.as_str().is_none_or(|text| {
-            crate::public_text::trim_js_whitespace(text).is_empty()
+            butler_core::public_text::trim_js_whitespace(text).is_empty()
                 || text.encode_utf16().count() > 4096
         }) {
             return Err(invalid());

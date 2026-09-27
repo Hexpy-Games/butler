@@ -73,7 +73,7 @@ fn decode_jwt_payload(token: &str) -> Option<Map<String, Value>> {
 }
 
 fn trimmed(value: &str) -> Option<&str> {
-    let value = crate::public_text::trim_js_whitespace(value);
+    let value = butler_core::public_text::trim_js_whitespace(value);
     (!value.is_empty()).then_some(value)
 }
 

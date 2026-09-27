@@ -72,7 +72,7 @@ impl FeedbackEntry {
     fn is_active_at(&self, now_epoch_ms: i64) -> bool {
         self.status == FeedbackStatus::Active
             && self.expires_at.as_deref().is_none_or(|value| {
-                crate::js_date::parse_date_millis(value, &Some)
+                butler_core::js_date::parse_date_millis(value, &Some)
                     .is_none_or(|expires| expires > now_epoch_ms)
             })
     }
@@ -143,8 +143,8 @@ fn matching_ids_in_file(path: &Path, ids: &HashSet<String>) -> CognitionResult<H
     while let Some(line) = read_line(&mut reader)? {
         if let Some(heading) = line.bytes.strip_prefix(b"## ") {
             let heading = String::from_utf8_lossy(heading);
-            if let Some(id) = crate::public_text::trim_js_whitespace(&heading)
-                .split(crate::public_text::is_js_whitespace)
+            if let Some(id) = butler_core::public_text::trim_js_whitespace(&heading)
+                .split(butler_core::public_text::is_js_whitespace)
                 .find(|value| !value.is_empty())
                 && id.starts_with("fb_")
                 && ids.contains(id)
@@ -168,7 +168,7 @@ fn count_feedback_file(path: &Path, now_epoch_ms: i64) -> CognitionResult<Feedba
         Err(_) => return Err(error(CognitionCode::MemoryFeedbackBufferReadFailed)),
     };
 
-    let fallback_iso = crate::js_date::format_iso_millis(now_epoch_ms)
+    let fallback_iso = butler_core::js_date::format_iso_millis(now_epoch_ms)
         .unwrap_or_else(|| "1970-01-01T00:00:00.000Z".into());
     let mut reader = BufReader::new(file);
     let mut record = Vec::new();
@@ -244,7 +244,7 @@ fn append_line(record: &mut Vec<u8>, bytes: &[u8], terminated: bool) {
 
 fn add_record(raw: &[u8], fallback_iso: &str, now_epoch_ms: i64, counts: &mut FeedbackCounts) {
     let block = String::from_utf8_lossy(raw);
-    if crate::public_text::trim_js_whitespace(&block).is_empty() {
+    if butler_core::public_text::trim_js_whitespace(&block).is_empty() {
         return;
     }
     let entry = parse_entry(&block, fallback_iso);
@@ -263,8 +263,8 @@ fn add_record(raw: &[u8], fallback_iso: &str, now_epoch_ms: i64, counts: &mut Fe
 fn parse_entry(block: &str, fallback_iso: &str) -> FeedbackEntry {
     let mut lines = block.split('\n');
     let heading = lines.next().unwrap_or_default();
-    let mut heading = crate::public_text::trim_js_whitespace(heading)
-        .split(crate::public_text::is_js_whitespace)
+    let mut heading = butler_core::public_text::trim_js_whitespace(heading)
+        .split(butler_core::public_text::is_js_whitespace)
         .filter(|value| !value.is_empty());
     let raw_id = heading.next().unwrap_or_default();
     let feedback_id = if raw_id.starts_with("fb_") {
@@ -297,11 +297,11 @@ fn parse_entry(block: &str, fallback_iso: &str) -> FeedbackEntry {
         if !in_body && let Some((key, value)) = field {
             fields.insert(
                 key.to_owned(),
-                crate::public_text::trim_js_whitespace_start(value).to_owned(),
+                butler_core::public_text::trim_js_whitespace_start(value).to_owned(),
             );
             continue;
         }
-        if !crate::public_text::trim_js_whitespace(line).is_empty() || in_body {
+        if !butler_core::public_text::trim_js_whitespace(line).is_empty() || in_body {
             in_body = true;
             body.push(line);
         }
@@ -354,7 +354,7 @@ fn parse_entry(block: &str, fallback_iso: &str) -> FeedbackEntry {
         supersedes: parse_list(fields.get("supersedes").map(String::as_str)),
         conflicts_with: parse_list(fields.get("conflicts_with").map(String::as_str)),
         privacy_class,
-        text: crate::public_text::trim_js_whitespace(&body.join("\n")).to_owned(),
+        text: butler_core::public_text::trim_js_whitespace(&body.join("\n")).to_owned(),
         extra_fields: fields,
     }
 }
@@ -370,7 +370,7 @@ fn parse_list(value: Option<&str>) -> Vec<String> {
     }
     value
         .split(',')
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
         .collect()

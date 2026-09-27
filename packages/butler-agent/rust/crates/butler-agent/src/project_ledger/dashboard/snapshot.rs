@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 

@@ -29,7 +29,7 @@ pub(super) fn publish(
     let project = input
         .project_id
         .as_deref()
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty());
     let generation = input.outcome_generation.floor().max(1.0);
     let generation_json: Value = if generation.is_finite() {
@@ -43,7 +43,7 @@ pub(super) fn publish(
     } else {
         Value::Null
     };
-    let mut value = crate::json::json_object!({
+    let mut value = butler_core::json::json_object!({
         "schema_version": "butler.conversation-completion-observation.v1",
         "job_id": job_id,
         "scope": if project.is_some() { "project" } else { "global" },
@@ -87,7 +87,7 @@ pub(super) fn publish(
 }
 
 fn required(value: &str) -> CognitionResult<&str> {
-    let trimmed = crate::public_text::trim_js_whitespace(value);
+    let trimmed = butler_core::public_text::trim_js_whitespace(value);
     if trimmed.is_empty() {
         Err(error(CognitionCode::CompletionObservationIdentityMissing))
     } else {

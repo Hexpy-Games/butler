@@ -4,10 +4,10 @@ use bytes::Bytes;
 use serde_json::{Value, json};
 
 use super::*;
-use crate::{
-    locale::LocaleCollation,
-    models::{ModelCatalogSnapshotInput, ProviderConfigFuture, ProviderConfigRequest},
-};
+use crate::models::ModelCatalogSnapshotInput;
+use crate::models::ProviderConfigFuture;
+use crate::models::ProviderConfigRequest;
+use butler_core::locale::LocaleCollation;
 
 struct SnapshotPort(Arc<ModelCatalogSnapshot>);
 
@@ -53,7 +53,7 @@ fn prepare<'a>(
     body: &'a Value,
     output: f64,
 ) -> PreparedRequestAdmission<'a> {
-    let serialized = Bytes::from(crate::json::stringify(body).unwrap());
+    let serialized = Bytes::from(butler_core::json::stringify(body).unwrap());
     PreparedRequestAdmission::new(&PrepareAdmissionInput {
         catalog,
         config,

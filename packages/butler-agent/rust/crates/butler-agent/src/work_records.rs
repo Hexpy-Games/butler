@@ -14,7 +14,7 @@ pub(crate) use read::{ReadAvailability, WorkRecordReadError};
 
 use std::path::{Path, PathBuf};
 
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 use serde_json::Value;
 
 #[derive(Clone)]

@@ -8,11 +8,10 @@ use std::{
 
 use serde_json::Value;
 
-use crate::{
-    gateway::{GatewayConfig, LocalAuthConfig},
-    json::number_from_string,
-    public_text::trim_js_whitespace,
-};
+use crate::gateway::GatewayConfig;
+use crate::gateway::LocalAuthConfig;
+use butler_core::json::number_from_string;
+use butler_core::public_text::trim_js_whitespace;
 
 pub(crate) struct AppServiceConfiguration {
     pub(crate) host: String,
@@ -100,7 +99,7 @@ impl AppServiceConfiguration {
             local_auth: local_auth(),
             dev_cors_origin: env::var("BUTLER_APP_DEV_ORIGIN").ok(),
             message_rate_limit_max: if max.is_finite() && max > 0.0 {
-                crate::json::saturating_u64(max.ceil())
+                butler_core::json::saturating_u64(max.ceil())
             } else {
                 60
             },
@@ -159,7 +158,7 @@ fn number_value(value: Option<&Value>) -> Option<f64> {
 fn normalize_port(value: Option<f64>) -> u16 {
     match value {
         Some(value) if value.is_finite() && (1.0..=65_535.0).contains(&value) => {
-            crate::json::saturating_u16(value)
+            butler_core::json::saturating_u16(value)
         }
         _ => 18_765,
     }

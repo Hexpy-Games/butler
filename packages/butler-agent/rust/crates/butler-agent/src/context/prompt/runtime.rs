@@ -86,7 +86,7 @@ pub(super) fn current_input(request: &TurnRequest) -> ContextSection {
         "Current User Input",
         format!(
             "Message Text: {}",
-            crate::public_text::trim_js_whitespace(&request.message.content)
+            butler_core::public_text::trim_js_whitespace(&request.message.content)
         ),
         "current_input",
         "optional_hot_cache",
@@ -109,13 +109,13 @@ pub(super) fn current_attachments(
             let name = attachment
                 .file_name
                 .as_deref()
-                .map(crate::public_text::trim_js_whitespace)
+                .map(butler_core::public_text::trim_js_whitespace)
                 .filter(|value| !value.is_empty())
                 .map_or_else(|| format!("attachment-{}", index + 1), str::to_owned);
             let mime = attachment
                 .mime_type
                 .as_deref()
-                .map(crate::public_text::trim_js_whitespace)
+                .map(butler_core::public_text::trim_js_whitespace)
                 .filter(|value| !value.is_empty())
                 .unwrap_or("application/octet-stream");
             let size = attachment
@@ -260,6 +260,6 @@ fn attachment_kind(kind: &AttachmentKind) -> &'static str {
 fn number(value: f64) -> String {
     serde_json::Number::from_f64(value)
         .map(Value::Number)
-        .and_then(|value| crate::json::stringify(&value).ok())
+        .and_then(|value| butler_core::json::stringify(&value).ok())
         .unwrap_or_else(|| value.to_string())
 }

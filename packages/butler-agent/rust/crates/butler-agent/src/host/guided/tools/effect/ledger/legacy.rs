@@ -1,13 +1,13 @@
 //! Historical Project Ledger effect input, kept separate from current tool input.
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use std::path::PathBuf;
 
 use serde_json::{Map, Value};
 
 use crate::btcc::{BlockerRelation, EffectBlocker, EffectFailure, effect_input_sha256};
 use crate::project_ledger::{ProjectLedger, ProjectLedgerRecordUpdate};
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 pub(in crate::host::guided::tools::effect) fn updates(
     input: &Value,

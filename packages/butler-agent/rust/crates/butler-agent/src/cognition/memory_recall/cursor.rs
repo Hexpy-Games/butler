@@ -149,7 +149,7 @@ fn decode(cursor: &str) -> CognitionResult<WireCursor> {
     Ok(WireCursor {
         schema: schema.into(),
         key: key.into(),
-        offset: crate::json::saturating_u64(offset),
+        offset: butler_core::json::saturating_u64(offset),
     })
 }
 

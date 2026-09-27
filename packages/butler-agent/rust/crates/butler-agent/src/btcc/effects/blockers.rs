@@ -46,7 +46,7 @@ pub(super) async fn reconcile(
     }
     let mut not_applied = Vec::new();
     let mut must_dispatch = false;
-    let mut adopted_result: Option<crate::json::JsonDocument> = None;
+    let mut adopted_result: Option<butler_core::json::JsonDocument> = None;
     for Classified {
         blocker,
         relation,

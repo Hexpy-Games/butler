@@ -5,7 +5,7 @@ async fn journal_cas_failed_uncertain_and_recovery_backfill_use_real_lane() {
     let (_fixture, storage, work) = ready("effect-cas-recovery").await;
     let adapter: Arc<dyn EffectAdapter> = Arc::new(FixtureAdapter {
         calls: Arc::new(AtomicUsize::new(0)),
-        result: crate::json::JsonDocument::from_value(&json!({"ok":true})).unwrap(),
+        result: butler_core::json::JsonDocument::from_value(&json!({"ok":true})).unwrap(),
         binding: PlanBinding::AcceptedPlan,
     });
     let journal = StorageEffectJournal::new(storage.clone(), clock());
@@ -119,7 +119,7 @@ async fn actual_bun_journal_result_and_receipt_bytes_match() {
         .record_applied(
             identity.effect_id.clone(),
             claimed.journal_revision,
-            crate::json::JsonDocument::from_value(&source["result"]).unwrap(),
+            butler_core::json::JsonDocument::from_value(&source["result"]).unwrap(),
             receipt,
         )
         .await

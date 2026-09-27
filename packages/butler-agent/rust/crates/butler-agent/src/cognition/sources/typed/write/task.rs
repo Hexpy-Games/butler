@@ -78,7 +78,7 @@ pub(crate) fn ingest_task_outcome_memory(
     // The source writer applies filter(Boolean) to the section entries.
     lines.retain(|line| !line.is_empty());
     let body = lines.join("\n");
-    let body = format!("{}\n", crate::public_text::trim_js_whitespace(&body));
+    let body = format!("{}\n", butler_core::public_text::trim_js_whitespace(&body));
     std::fs::create_dir_all(&task_memory_root).map_err(io_error)?;
     write_atomic(&memory_path, body.as_bytes())?;
 
@@ -127,7 +127,7 @@ fn slug(value: &str) -> String {
         }
     }
     let normalized = normalized.trim_matches('-');
-    let prefix = crate::json::Utf16Slice::new(normalized, 0, 80).utf8_lossy();
+    let prefix = butler_core::json::Utf16Slice::new(normalized, 0, 80).utf8_lossy();
     if prefix.is_empty() {
         "memory".into()
     } else {

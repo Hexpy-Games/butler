@@ -150,7 +150,7 @@ pub(super) fn apply(
     scope: &ResolvedProjectWorkScope,
     occurrence: &Occurrence,
     updates: Option<&[ProjectLedgerRecordUpdate]>,
-    collation: &crate::locale::LocaleCollation,
+    collation: &butler_core::locale::LocaleCollation,
 ) -> Result<Vec<ProjectWorkTarget>, ProjectWorkPublicationError> {
     let attempt = latest(occurrence)?;
     let paths = paths(data_root, attempt);

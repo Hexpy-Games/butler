@@ -251,7 +251,7 @@ impl EffectJournal for StorageEffectJournal {
         &self,
         effect_id: String,
         revision: i64,
-        result: crate::json::JsonDocument,
+        result: butler_core::json::JsonDocument,
         receipt: EffectReceipt,
     ) -> EffectFuture<'_, Option<EffectRecord>> {
         let storage = self.storage.clone();

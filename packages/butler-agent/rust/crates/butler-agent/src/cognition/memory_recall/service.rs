@@ -63,7 +63,7 @@ impl MemoryRecall {
         };
         let root = self.data_root.clone();
         let environment = self.environment.clone();
-        let now = crate::js_date::format_iso_millis((self.clock)()).ok_or_else(|| {
+        let now = butler_core::js_date::format_iso_millis((self.clock)()).ok_or_else(|| {
             CognitionError::new(CognitionCode::InvalidClock, "Invalid recall clock")
         })?;
         let prepared = tokio::task::spawn_blocking(move || {

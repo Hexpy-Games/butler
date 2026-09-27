@@ -56,7 +56,7 @@ pub(super) fn read(
         let oldest = db.query_row("SELECT MIN(created_at) FROM (SELECT j.created_at FROM memory_projection_windows w JOIN memory_projection_jobs j ON j.job_id=w.job_id JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision WHERE w.state IN ('pending','planned','running','failed') UNION ALL SELECT j.created_at FROM memory_vector_units u JOIN memory_projection_jobs j ON j.job_id=u.job_id JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision WHERE u.state IN ('pending','running','failed') UNION ALL SELECT j.created_at FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision WHERE COALESCE(json_extract(j.hot_cache_state,'$.state'),'pending') NOT IN ('complete','not_configured'))",[],|row|row.get::<_,Option<String>>(0))?;
         let old_age = oldest
             .as_deref()
-            .and_then(crate::js_date::parse_iso_millis)
+            .and_then(butler_core::js_date::parse_iso_millis)
             .map(|at| now.saturating_sub(at).max(0));
         let failures = count(
             &db,
@@ -182,7 +182,7 @@ fn inventory(
         Some(&reader),
         &request,
         chrono::Utc::now().timestamp_millis().saturating_add(1_000),
-        &|text| crate::js_date::parse_iso_millis(text).map_or(f64::NAN, |ms| ms as f64),
+        &|text| butler_core::js_date::parse_iso_millis(text).map_or(f64::NAN, |ms| ms as f64),
         &|left, right| left.cmp(right),
         || chrono::Utc::now().timestamp_millis(),
     );

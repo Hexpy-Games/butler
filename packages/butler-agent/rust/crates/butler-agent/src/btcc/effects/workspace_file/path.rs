@@ -8,7 +8,7 @@ fn invalid(message: impl Into<String>) -> EffectFailure {
     EffectFailure::policy("effect_request_invalid", message)
 }
 fn required(value: &str, field: &str) -> EffectResult<String> {
-    let trimmed = crate::public_text::trim_js_whitespace(value);
+    let trimmed = butler_core::public_text::trim_js_whitespace(value);
     if trimmed.is_empty() {
         Err(invalid(format!(
             "write_file effect {field} must be a non-empty string"

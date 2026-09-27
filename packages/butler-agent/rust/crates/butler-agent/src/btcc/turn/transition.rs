@@ -12,7 +12,7 @@ pub(super) fn guided_final(
     let content = if result.terminal_outcome == Some(super::contracts::TerminalOutcome::NoVisible) {
         String::new()
     } else {
-        let trimmed = crate::public_text::trim_js_whitespace(&result.content);
+        let trimmed = butler_core::public_text::trim_js_whitespace(&result.content);
         if trimmed.is_empty() {
             runtime_failure_message(
                 &turn.original_message,

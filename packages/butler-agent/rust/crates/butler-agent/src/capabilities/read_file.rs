@@ -60,14 +60,16 @@ pub(super) async fn execute(
     } else {
         input
             .workspace_path
-            .filter(|p| !crate::public_text::trim_js_whitespace(&p.to_string_lossy()).is_empty())
+            .filter(|p| {
+                !butler_core::public_text::trim_js_whitespace(&p.to_string_lossy()).is_empty()
+            })
             .map(ToOwned::to_owned)
     };
     let supplied_root_raw = args
         .get("workspace_root")
         .and_then(Value::as_str)
-        .filter(|s| !crate::public_text::trim_js_whitespace(s).is_empty());
-    let supplied_root = supplied_root_raw.map(crate::public_text::trim_js_whitespace);
+        .filter(|s| !butler_core::public_text::trim_js_whitespace(s).is_empty());
+    let supplied_root = supplied_root_raw.map(butler_core::public_text::trim_js_whitespace);
     let root = bound_root
         .clone()
         .or_else(|| supplied_root_raw.map(PathBuf::from))
@@ -77,7 +79,7 @@ pub(super) async fn execute(
         .map_err(|source| CapabilityError::caused("cursor_query_json_failed", source))?;
     let cursor_input = args.get("cursor").filter(|v| {
         v.as_str()
-            .is_none_or(|s| !crate::public_text::trim_js_whitespace(s).is_empty())
+            .is_none_or(|s| !butler_core::public_text::trim_js_whitespace(s).is_empty())
     });
     let cursor = cursor_input.and_then(cursor::decode);
     if cursor_input.is_some() && cursor.as_ref().is_none_or(|value| value.query != query) {

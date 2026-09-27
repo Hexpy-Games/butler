@@ -7,11 +7,11 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use super::{ContextError, ContextResult};
 use crate::context::ContextCode;
-use crate::{
-    conversation::{CanonicalMemoryReadBinding, PublicMemorySnapshot, decode_message_scalars},
-    json,
-};
+use crate::conversation::CanonicalMemoryReadBinding;
+use crate::conversation::PublicMemorySnapshot;
+use crate::conversation::decode_message_scalars;
 use args::{ListCursor, encode_cursor};
+use butler_core::json;
 
 pub(super) fn run(
     path: &Path,

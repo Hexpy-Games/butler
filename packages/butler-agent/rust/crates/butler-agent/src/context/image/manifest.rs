@@ -4,7 +4,7 @@ use sha2::{Digest, Sha256};
 use super::contracts::{ImageSanitizerInput, ImageSourceRecord, VisualAttachmentManifest};
 use crate::context::ContextCode;
 use crate::context::{ContextError, ContextResult};
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 pub(super) const SANITIZER_REVISION: &str = "visual-derivative-rust-v1";
 

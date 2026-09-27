@@ -19,7 +19,7 @@ pub(super) fn configured_model(
     if let Some(model) = environment
         .openai_model
         .as_deref()
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
     {
         return model.to_owned();
@@ -27,7 +27,7 @@ pub(super) fn configured_model(
     if let Some(model) = config
         .pointer("/system/openaiModel")
         .and_then(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
     {
         return model.to_owned();
@@ -38,7 +38,7 @@ pub(super) fn configured_model(
         .or_else(|| config.pointer("/system/defaultModel"));
     if let Some(model) = legacy
         .and_then(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
     {
         let parsed = parse_model_ref(model);
@@ -94,7 +94,7 @@ pub(super) async fn resolve(
         .environment
         .openai_base_url
         .as_deref()
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
         .unwrap_or("https://api.openai.com/v1")
         .trim_end_matches('/');

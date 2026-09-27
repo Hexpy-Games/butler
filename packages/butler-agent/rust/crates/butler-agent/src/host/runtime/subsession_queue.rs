@@ -4,11 +4,12 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 
-use crate::{
-    btcc::{BtccError, InterruptedSubsessionEvent, SubsessionChildQueue, SubsessionEnqueue},
-    gateway::InboundQueue,
-    json::JsonDocument,
-};
+use crate::btcc::BtccError;
+use crate::btcc::InterruptedSubsessionEvent;
+use crate::btcc::SubsessionChildQueue;
+use crate::btcc::SubsessionEnqueue;
+use crate::gateway::InboundQueue;
+use butler_core::json::JsonDocument;
 
 pub(crate) struct SubsessionQueue(pub(crate) Arc<InboundQueue>);
 
@@ -122,7 +123,8 @@ mod tests {
     use serde_json::{Map, Value, json};
 
     use super::{SubsessionChildQueue, SubsessionEnqueue, SubsessionQueue};
-    use crate::{gateway::InboundQueue, json::JsonDocument};
+    use crate::gateway::InboundQueue;
+    use butler_core::json::JsonDocument;
 
     #[test]
     fn child_cancel_outbox_preserves_parent_turn_provenance_outside_envelope() {

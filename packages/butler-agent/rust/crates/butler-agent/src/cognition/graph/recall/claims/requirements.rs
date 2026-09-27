@@ -12,7 +12,7 @@ use crate::cognition::CognitionCode;
 #[derive(Deserialize)]
 struct RequirementValue {
     action: String,
-    condition: crate::json::JsonDocument,
+    condition: butler_core::json::JsonDocument,
 }
 
 pub(super) fn requirements(

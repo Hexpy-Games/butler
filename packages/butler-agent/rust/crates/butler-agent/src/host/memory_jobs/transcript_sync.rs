@@ -174,7 +174,9 @@ impl LegacySessionSync {
                     if cancellation.is_cancelled() {
                         return Err("memory_write_aborted".into());
                     }
-                    if crate::public_text::trim_js_whitespace(&chunk.conversation_text).is_empty() {
+                    if butler_core::public_text::trim_js_whitespace(&chunk.conversation_text)
+                        .is_empty()
+                    {
                         continue;
                     }
                     match self

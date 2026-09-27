@@ -104,7 +104,7 @@ pub(super) async fn discover(
             .and_then(Value::as_str)
             .or_else(|| object.get("model").and_then(Value::as_str))
             .unwrap_or("");
-        if crate::public_text::trim_js_whitespace(raw_id).is_empty() {
+        if butler_core::public_text::trim_js_whitespace(raw_id).is_empty() {
             continue;
         }
         let props = if platform == LocalModelPlatform::LlamaCpp {
@@ -119,7 +119,7 @@ pub(super) async fn discover(
         } else {
             None
         };
-        let model_id = crate::public_text::trim_js_whitespace(raw_id);
+        let model_id = butler_core::public_text::trim_js_whitespace(raw_id);
         let context = props
             .as_ref()
             .and_then(context_from_props)
@@ -172,7 +172,7 @@ async fn fetch_object(client: &reqwest::Client, url: &str, api_key: Option<&str>
 }
 
 pub(super) fn normalize_server(value: &str) -> Result<(String, String), ModelCatalogError> {
-    let value = crate::public_text::trim_js_whitespace(value);
+    let value = butler_core::public_text::trim_js_whitespace(value);
     if value.is_empty() {
         return Err(error("Local model server URL is required."));
     }
@@ -249,7 +249,7 @@ fn context_from_args(value: Option<&Value>) -> Option<f64> {
             .then(|| {
                 pair[1]
                     .as_str()
-                    .map(crate::json::number_from_string)
+                    .map(butler_core::json::number_from_string)
                     .filter(|value| value.is_finite() && *value > 0.0)
                     .map(f64::trunc)
             })
@@ -265,7 +265,7 @@ fn positive_number(value: f64) -> Option<f64> {
 }
 
 fn safe_model_id(value: &str) -> String {
-    let value = crate::public_text::trim_js_whitespace(value)
+    let value = butler_core::public_text::trim_js_whitespace(value)
         .strip_prefix("local/")
         .unwrap_or(value);
     let mut output = String::new();
@@ -308,7 +308,7 @@ fn display_name(id: &str) -> String {
             separator = false;
         }
     }
-    let value = crate::public_text::trim_js_whitespace(&replaced);
+    let value = butler_core::public_text::trim_js_whitespace(&replaced);
     if value.is_empty() {
         id.into()
     } else {

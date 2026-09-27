@@ -3,7 +3,8 @@
 use serde_json::Value;
 
 use crate::btcc::BtccError;
-use crate::json::{raw_string_units, visit_raw_object};
+use butler_core::json::raw_string_units;
+use butler_core::json::visit_raw_object;
 
 use super::super::{failure, field};
 
@@ -98,12 +99,13 @@ fn clipped_slice(raw: &str, text: &str, limit: usize) -> Result<String, BtccErro
         Some(value) => {
             let parsed: Value =
                 serde_json::from_str(value).map_err(|source| failure().with_source(source))?;
-            crate::json::coerce_number(&parsed).map_err(|source| failure().with_source(source))?
+            butler_core::json::coerce_number(&parsed)
+                .map_err(|source| failure().with_source(source))?
         }
     };
     let next = start + visible.len() as f64;
     let next = if let Some(number) = serde_json::Number::from_f64(next) {
-        crate::json::stringify(&Value::Number(number))
+        butler_core::json::stringify(&Value::Number(number))
             .map_err(|source| failure().with_source(source))?
     } else {
         "null".into()
@@ -129,7 +131,8 @@ fn replace(raw: &str, fields: &[(&str, String)]) -> Result<String, BtccError> {
     let mut output = String::from("{");
     let mut seen = vec![false; fields.len()];
     visit_raw_object(raw, |key, value| {
-        let decoded: String = serde_json::from_str(key).map_err(crate::json::JsonError::from)?;
+        let decoded: String =
+            serde_json::from_str(key).map_err(butler_core::json::JsonError::from)?;
         if output.len() > 1 {
             output.push(',');
         }
@@ -153,7 +156,7 @@ fn replace(raw: &str, fields: &[(&str, String)]) -> Result<String, BtccError> {
             if output.len() > 1 {
                 output.push(',');
             }
-            crate::json::write_string(key, &mut output)
+            butler_core::json::write_string(key, &mut output)
                 .map_err(|source| failure().with_source(source))?;
             output.push(':');
             output.push_str(value);

@@ -147,9 +147,9 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
                     if error.code != "provider_network_error"
                         && let Some(receipt) = receipt
                     {
-                        error.request_generation = Some(crate::json::saturating_u64(receipt.plan.generation));
-                        error.measured_input_tokens = Some(crate::json::saturating_u64(receipt.plan.compiled_input_tokens));
-                        error.registered_input_capacity = Some(crate::json::saturating_u64(receipt.plan.input_capacity_tokens));
+                        error.request_generation = Some(butler_core::json::saturating_u64(receipt.plan.generation));
+                        error.measured_input_tokens = Some(butler_core::json::saturating_u64(receipt.plan.compiled_input_tokens));
+                        error.registered_input_capacity = Some(butler_core::json::saturating_u64(receipt.plan.input_capacity_tokens));
                         error.request_hash = Some(receipt.request_hash);
                     }
                     TransportError::Provider(error)
@@ -166,7 +166,7 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
                                 () = cancellation.cancelled() => {
                                     return Err(TransportError::Provider(Box::new(diagnostics::cancelled(provider, api))));
                                 }
-                                () = tokio::time::sleep(std::time::Duration::from_millis(crate::json::saturating_u64(delay.trunc()))) => {}
+                                () = tokio::time::sleep(std::time::Duration::from_millis(butler_core::json::saturating_u64(delay.trunc()))) => {}
                             }
                         }
                     }

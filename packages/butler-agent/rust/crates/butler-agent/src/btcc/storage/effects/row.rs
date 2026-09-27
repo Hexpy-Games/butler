@@ -66,9 +66,9 @@ fn raw(row: &Row<'_>) -> rusqlite::Result<Raw> {
     })
 }
 fn hydrate(raw: Raw) -> EffectResult<EffectRecord> {
-    let result: Option<crate::json::JsonDocument> = raw
+    let result: Option<butler_core::json::JsonDocument> = raw
         .result_json
-        .map(|text| crate::json::JsonDocument::from_encoded(text).map_err(json))
+        .map(|text| butler_core::json::JsonDocument::from_encoded(text).map_err(json))
         .transpose()?;
     let mut receipt: Option<EffectReceipt> = raw
         .receipt_json
@@ -142,7 +142,7 @@ pub(super) fn list_for_work(
     work_id: &str,
     limit: Option<f64>,
 ) -> EffectResult<Vec<EffectRecord>> {
-    let limit = crate::json::saturating_i64(limit.unwrap_or(12.0).trunc().clamp(1.0, 50.0));
+    let limit = butler_core::json::saturating_i64(limit.unwrap_or(12.0).trunc().clamp(1.0, 50.0));
     let mut statement = db
         .prepare(&format!(
             "{SELECT} WHERE e.work_id=?1 \

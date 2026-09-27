@@ -83,13 +83,13 @@ fn write(path: &Path, mut metadata: Map<String, Value>, body: &str) -> Result<()
         match value {
             Value::Bool(value) => output.push_str(if value { "true" } else { "false" }),
             Value::Number(value) => output.push_str(
-                &crate::json::stringify(&Value::Number(value))
+                &butler_core::json::stringify(&Value::Number(value))
                     .map_err(|source| super::super::io_failure().with_source(source))?,
             ),
             other => {
                 let text = js_string(&other)?;
                 output.push_str(
-                    &crate::json::stringify(&Value::String(text))
+                    &butler_core::json::stringify(&Value::String(text))
                         .map_err(|source| super::super::io_failure().with_source(source))?,
                 );
             }
@@ -118,7 +118,7 @@ pub(super) fn append_event(root: &Path, event: &Value) -> Result<(), CliFailure>
             .cloned()
             .ok_or_else(super::super::io_failure)?,
     );
-    let line = crate::json::stringify(&Value::Object(record))
+    let line = butler_core::json::stringify(&Value::Object(record))
         .map_err(|source| super::super::io_failure().with_source(source))?;
     let mut file = OpenOptions::new()
         .append(true)
@@ -142,7 +142,7 @@ fn js_string(value: &Value) -> Result<String, CliFailure> {
         Value::String(value) => Ok(value.clone()),
         Value::Null => Ok("null".into()),
         Value::Bool(value) => Ok(value.to_string()),
-        Value::Number(_) => crate::json::stringify(value)
+        Value::Number(_) => butler_core::json::stringify(value)
             .map_err(|source| super::super::io_failure().with_source(source)),
         Value::Array(values) => {
             let mut output = String::new();

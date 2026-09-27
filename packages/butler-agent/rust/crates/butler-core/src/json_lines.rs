@@ -4,14 +4,14 @@ use std::{fs::File, io::BufRead, io::BufReader, path::Path};
 
 use serde_json::Value;
 
-pub(crate) const MAX_JSON_LINE_BYTES: usize = 1024 * 1024;
+pub const MAX_JSON_LINE_BYTES: usize = 1024 * 1024;
 
 #[derive(Default)]
-pub(crate) struct JsonLineVisit {
+pub struct JsonLineVisit {
     pub(crate) oversize_lines: u64,
 }
 
-pub(crate) fn visit_json_lines(path: &Path, mut visit: impl FnMut(&Value)) -> JsonLineVisit {
+pub fn visit_json_lines(path: &Path, mut visit: impl FnMut(&Value)) -> JsonLineVisit {
     let Ok(file) = File::open(path) else {
         return JsonLineVisit::default();
     };

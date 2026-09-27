@@ -227,7 +227,7 @@ fn read_by_source_ref(
     session_id: &str,
     source_ref: &str,
 ) -> ConversationResult<Option<ConversationMessageWithParts>> {
-    let source_ref = crate::public_text::trim_js_whitespace(source_ref);
+    let source_ref = butler_core::public_text::trim_js_whitespace(source_ref);
     if source_ref.is_empty() {
         return Ok(None);
     }
@@ -249,7 +249,7 @@ fn read_by_source_ref_any_session(
     connection: &Connection,
     source_ref: &str,
 ) -> ConversationResult<Option<ConversationMessageWithParts>> {
-    let source_ref = crate::public_text::trim_js_whitespace(source_ref);
+    let source_ref = butler_core::public_text::trim_js_whitespace(source_ref);
     if source_ref.is_empty() {
         return Ok(None);
     }

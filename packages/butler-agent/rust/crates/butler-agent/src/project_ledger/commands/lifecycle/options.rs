@@ -4,7 +4,7 @@ use super::super::contracts::CliFailure;
 
 pub(super) fn required(options: &Value, key: &str) -> Result<String, CliFailure> {
     let value = options.get(key).and_then(Value::as_str).unwrap_or_default();
-    let value = crate::public_text::trim_js_whitespace(value);
+    let value = butler_core::public_text::trim_js_whitespace(value);
     if value.is_empty() {
         return Err(CliFailure::new(
             "invalid_arguments",
@@ -16,7 +16,7 @@ pub(super) fn required(options: &Value, key: &str) -> Result<String, CliFailure>
 
 pub(super) fn optional<'a>(options: &'a Value, key: &str) -> Option<&'a str> {
     options.get(key).and_then(Value::as_str).and_then(|value| {
-        let value = crate::public_text::trim_js_whitespace(value);
+        let value = butler_core::public_text::trim_js_whitespace(value);
         (!value.is_empty()).then_some(value)
     })
 }
@@ -31,7 +31,7 @@ pub(super) fn body(options: &Value) -> Result<Option<String>, CliFailure> {
         ));
     }
     if let Some(body) = literal {
-        if crate::public_text::trim_js_whitespace(body).is_empty() {
+        if butler_core::public_text::trim_js_whitespace(body).is_empty() {
             return Err(CliFailure::new("invalid_input", "--body input is empty"));
         }
         return Ok(Some(body.to_owned()));
@@ -48,7 +48,7 @@ pub(super) fn body(options: &Value) -> Result<Option<String>, CliFailure> {
 }
 
 pub(super) fn safe_id(id: &str) -> Result<&str, CliFailure> {
-    let value = crate::public_text::trim_js_whitespace(id);
+    let value = butler_core::public_text::trim_js_whitespace(id);
     if value.is_empty()
         || matches!(value, "." | "..")
         || value.contains('/')
@@ -98,7 +98,7 @@ pub(super) fn updates(options: &Value, fields: &[&str]) -> Result<Map<String, Va
     }
     for field in ["priority", "revision", "supersedesRevision"] {
         if let Some(value) = options.get(field) {
-            let number = crate::json::coerce_number(value).map_err(|source| {
+            let number = butler_core::json::coerce_number(value).map_err(|source| {
                 CliFailure::new("invalid_arguments", format!("--{field} must be a number"))
                     .with_source(source)
             })?;
@@ -110,7 +110,7 @@ pub(super) fn updates(options: &Value, fields: &[&str]) -> Result<Map<String, Va
             }
             let json_number =
                 if number.fract() == 0.0 && number >= i64::MIN as f64 && number < i64::MAX as f64 {
-                    Number::from(crate::json::saturating_i64(number))
+                    Number::from(butler_core::json::saturating_i64(number))
                 } else {
                     Number::from_f64(number).ok_or_else(|| {
                         CliFailure::new("invalid_arguments", format!("--{field} must be a number"))

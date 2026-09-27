@@ -2,7 +2,8 @@ use std::{collections::HashSet, fs, path::PathBuf};
 
 use serde::Serialize;
 
-use crate::public_text::{trim_js_whitespace, trim_js_whitespace_start};
+use butler_core::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace_start;
 
 const PRESET_ORDER: [&str; 9] = [
     "butler",

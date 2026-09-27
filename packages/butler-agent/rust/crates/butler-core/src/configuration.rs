@@ -18,7 +18,7 @@ use tokio::sync::{Mutex, MutexGuard, OwnedMutexGuard};
 
 /// Failures reading or writing the shared user configuration files.
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum ConfigError {
+pub enum ConfigError {
     /// The private environment file exists but could not be read.
     #[error("Private environment file could not be read.")]
     EnvironmentUnreadable(#[source] std::io::Error),
@@ -42,15 +42,13 @@ pub(crate) enum ConfigError {
     WriteFailed(#[source] std::io::Error),
 }
 
-pub(crate) struct ConfigurationWrites {
+pub struct ConfigurationWrites {
     gate: Arc<Mutex<()>>,
 }
 
 /// Read the private DATA-scoped environment file without mutating the process.
 /// A nonempty process variable remains authoritative at the composition edge.
-pub(crate) fn read_private_environment(
-    path: &Path,
-) -> Result<HashMap<String, String>, ConfigError> {
+pub fn read_private_environment(path: &Path) -> Result<HashMap<String, String>, ConfigError> {
     let text = match fs::read_to_string(path) {
         Ok(text) => text,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(HashMap::new()),
@@ -81,8 +79,14 @@ pub(crate) fn read_private_environment(
     Ok(values)
 }
 
+impl Default for ConfigurationWrites {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConfigurationWrites {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             gate: Arc::new(Mutex::new(())),
         }
@@ -90,20 +94,20 @@ impl ConfigurationWrites {
 
     /// Acquire before a source-synchronous read/modify/write sequence. Drop
     /// before provider/network work; cancellation releases the borrowed guard.
-    pub(crate) async fn acquire(&self) -> MutexGuard<'_, ()> {
+    pub async fn acquire(&self) -> MutexGuard<'_, ()> {
         self.gate.lock().await
     }
 
     /// A tracked blocking operation moves this permit into its closure so a
     /// dropped caller cannot unlock while the actual file mutation continues.
-    pub(crate) async fn acquire_owned(&self) -> OwnedMutexGuard<()> {
+    pub async fn acquire_owned(&self) -> OwnedMutexGuard<()> {
         Arc::clone(&self.gate).lock_owned().await
     }
 }
 
 /// Read the shared user configuration without initializing its parent DATA directory.
 /// Missing files have the same empty-object default as the operator CLI.
-pub(crate) fn read_json_object(path: &Path) -> Result<serde_json::Value, ConfigError> {
+pub fn read_json_object(path: &Path) -> Result<serde_json::Value, ConfigError> {
     let bytes = match fs::read(path) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -119,7 +123,7 @@ pub(crate) fn read_json_object(path: &Path) -> Result<serde_json::Value, ConfigE
 }
 
 /// Atomically replace a user-owned JSON file with a private temporary file.
-pub(crate) fn write_json_atomic(path: &Path, value: &serde_json::Value) -> Result<(), ConfigError> {
+pub fn write_json_atomic(path: &Path, value: &serde_json::Value) -> Result<(), ConfigError> {
     let parent = path.parent().ok_or(ConfigError::InvalidPath)?;
     create_private_directories(parent)?;
     let temporary = parent.join(format!(".butler-config-{}.tmp", uuid::Uuid::new_v4()));

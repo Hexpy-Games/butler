@@ -218,7 +218,7 @@ pub(super) fn read_entries(path: &Path) -> CognitionResult<Vec<FeedbackEntry>> {
 
 fn push_entry(record: &[u8], fallback_iso: &str, entries: &mut Vec<FeedbackEntry>) {
     let block = String::from_utf8_lossy(record);
-    if crate::public_text::trim_js_whitespace(&block).is_empty() {
+    if butler_core::public_text::trim_js_whitespace(&block).is_empty() {
         return;
     }
     entries.push(parse_entry(&block, fallback_iso));

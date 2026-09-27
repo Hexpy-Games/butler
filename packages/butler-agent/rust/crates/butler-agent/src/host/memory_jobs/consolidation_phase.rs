@@ -36,7 +36,7 @@ impl PhaseExecutor for CyclePhases {
     ) -> Pin<Box<dyn Future<Output = Result<Map<String, Value>, PhaseError>> + Send + 'a>> {
         Box::pin(async move {
             match phase {
-                Phase::Preflight => Ok(crate::json::json_object!({ "ok": true })),
+                Phase::Preflight => Ok(butler_core::json::json_object!({ "ok": true })),
                 Phase::FeedbackTriage => self.profile.feedback_triage(),
                 Phase::ProfileConsolidation => self.profile.consolidate(run_id, cancellation).await,
                 Phase::BoxIndex => self
@@ -44,7 +44,7 @@ impl PhaseExecutor for CyclePhases {
                     .rebuild_index()
                     .await
                     .map(|report| {
-                        crate::json::json_object!({
+                        butler_core::json::json_object!({
                             "indexed_count": report.indexed_count,
                             "skipped_count": report.skipped_count,
                         })
@@ -55,7 +55,7 @@ impl PhaseExecutor for CyclePhases {
                     .check()
                     .await
                     .map(|report| {
-                        crate::json::json_object!({
+                        butler_core::json::json_object!({
                             "chunk_count": report.chunk_count,
                             "missing_box_refs_count": report.missing_box_refs_count,
                             "missing_feedback_refs_count": report.missing_feedback_refs_count,
@@ -67,7 +67,7 @@ impl PhaseExecutor for CyclePhases {
                     .aggregate_and_rebuild()
                     .await
                     .map(|report| {
-                        crate::json::json_object!({
+                        butler_core::json::json_object!({
                             "source_quality_summary_count": report.source_quality_summary_count,
                             "knowhow_indexed_count": report.knowhow_indexed_count,
                         })
@@ -86,7 +86,7 @@ impl PhaseExecutor for CyclePhases {
                         .revise(&feedback, self.feedback.as_ref())
                         .await
                         .map(|report| {
-                            crate::json::json_object!({
+                            butler_core::json::json_object!({
                                 "revised_knowhow_count": report.revised_knowhow_count,
                                 "demoted_knowhow_count": report.demoted_knowhow_count,
                                 "applied_feedback_count": report.applied_feedback_count,
@@ -104,7 +104,7 @@ impl PhaseExecutor for CyclePhases {
                             report.metric_status,
                             &report.metric_dimensions,
                         );
-                        crate::json::json_object!({
+                        butler_core::json::json_object!({
                             "memory_chunks_count": report.memory_chunks_count,
                             "vector_rows_count": report.vector_rows_count,
                             "maintenance_status": report.maintenance_status.as_str(),
@@ -125,7 +125,7 @@ impl PhaseExecutor for CyclePhases {
                         "ok",
                         &json!({ "raw_text_included": false }),
                     );
-                    Ok(crate::json::json_object!({ "raw_text_included": false }))
+                    Ok(butler_core::json::json_object!({ "raw_text_included": false }))
                 }
                 Phase::BoxRetention => self
                     .box_store
@@ -135,7 +135,7 @@ impl PhaseExecutor for CyclePhases {
                     )
                     .await
                     .map(|report| {
-                        crate::json::json_object!({
+                        butler_core::json::json_object!({
                             "expired_candidate_count": report.expired_candidate_count,
                             "pruned_box_owned_count": report.pruned_box_owned_count,
                         })

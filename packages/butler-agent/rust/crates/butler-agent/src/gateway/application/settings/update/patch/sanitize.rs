@@ -1,7 +1,7 @@
 use serde_json::{Map, Value, json};
 
 use super::super::super::{AppSettingsFacts, validation};
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 pub(super) fn sanitize(input: &Value, facts: &AppSettingsFacts) -> Value {
     let Some(input) = input.as_object() else {
@@ -56,7 +56,7 @@ pub(super) fn sanitize(input: &Value, facts: &AppSettingsFacts) -> Value {
     {
         output.insert(
             "context_window_tokens".into(),
-            json!(crate::json::saturating_u64(value.trunc())),
+            json!(butler_core::json::saturating_u64(value.trunc())),
         );
     }
     for key in ["worker_profiles", "desktop_notifications", "web_search"] {
@@ -117,7 +117,7 @@ pub(super) fn sanitize(input: &Value, facts: &AppSettingsFacts) -> Value {
     {
         output.insert(
             "max_simultaneous_workers".into(),
-            json!(crate::json::saturating_u64(value)),
+            json!(butler_core::json::saturating_u64(value)),
         );
     }
     if input

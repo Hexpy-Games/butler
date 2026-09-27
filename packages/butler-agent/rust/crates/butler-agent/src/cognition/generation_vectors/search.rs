@@ -277,7 +277,9 @@ fn index(modern: usize, legacy: bool) -> usize {
 fn dimension(embedding: &GenerationEmbedding) -> usize {
     match embedding {
         GenerationEmbedding::Native(value) => value.dimension,
-        GenerationEmbedding::JavaScript(value) => crate::json::saturating_usize(value.dimension),
+        GenerationEmbedding::JavaScript(value) => {
+            butler_core::json::saturating_usize(value.dimension)
+        }
     }
 }
 

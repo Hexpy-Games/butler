@@ -4,10 +4,10 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use super::{ManagedPlanView, invalid, required_string};
-use crate::locale::LocaleCollation;
 use crate::project_ledger::ProjectLedgerReadError;
 use crate::project_ledger::dashboard::{DashboardLedgerRecord, ProjectLedgerBinding, exact};
 use crate::project_ledger::work_json::canonical;
+use butler_core::locale::LocaleCollation;
 
 pub(super) fn parse_canonical(
     body: &str,
@@ -209,7 +209,7 @@ pub(super) fn strings(value: &Value) -> Result<Vec<String>, ProjectLedgerReadErr
         .map(|item| {
             item.as_str()
                 .filter(|value| {
-                    !crate::public_text::trim_js_whitespace(value).is_empty()
+                    !butler_core::public_text::trim_js_whitespace(value).is_empty()
                         && value.encode_utf16().count() <= 4096
                 })
                 .map(str::to_owned)

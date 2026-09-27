@@ -20,7 +20,7 @@ use tokio_util::sync::CancellationToken;
 
 struct FixtureAdapter {
     calls: Arc<AtomicUsize>,
-    result: crate::json::JsonDocument,
+    result: butler_core::json::JsonDocument,
     binding: PlanBinding,
 }
 impl EffectAdapter for FixtureAdapter {

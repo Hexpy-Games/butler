@@ -2,16 +2,17 @@
 
 use std::{ffi::OsString, path::PathBuf, process::ExitCode, sync::Arc};
 
+use crate::conversation::AgentConversationStore;
+use crate::conversation::ConversationSourceReader;
+use crate::conversation::ConversationStoreConfig;
+use crate::conversation::HistoricalRecoveryInput;
+use crate::conversation::conversation_store_path;
+use crate::conversation::plan_historical_recovery;
+use crate::conversation::read_historical_app_rows;
+use crate::conversation::read_historical_transcript_rows;
 use crate::host::cli::settings as settings_cli;
 use crate::host::{DateParser, ResolvedInstallation, SystemIdentity};
-use crate::{
-    conversation::{
-        AgentConversationStore, ConversationSourceReader, ConversationStoreConfig,
-        HistoricalRecoveryInput, conversation_store_path, plan_historical_recovery,
-        read_historical_app_rows, read_historical_transcript_rows,
-    },
-    locale::LocaleCollation,
-};
+use butler_core::locale::LocaleCollation;
 
 const USAGE: &str = "Usage: butler conversation historical-recovery [--data PATH] [--transcript-file PATH] [--app-db PATH] [--write]\nDefault mode is dry-run. Reports counts, ids, reasons, and canonical mappings without raw conversation text.";
 

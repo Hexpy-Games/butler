@@ -66,7 +66,7 @@ pub(super) async fn read(
 }
 
 fn write_string(value: &str, output: &mut String) -> Result<(), BtccError> {
-    crate::json::write_string(value, output)
+    butler_core::json::write_string(value, output)
         .map_err(|source| error("phase_scoped_memory_document_invalid").with_source(source))
 }
 

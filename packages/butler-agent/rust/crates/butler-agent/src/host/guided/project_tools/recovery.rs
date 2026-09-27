@@ -1,9 +1,9 @@
 //! Executable native next steps for source Project Ledger CLI errors.
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 pub(super) fn attach(name: &str, args: &Map<String, Value>, mut result: Value) -> Value {
     let Some(output) = result.as_object_mut() else {

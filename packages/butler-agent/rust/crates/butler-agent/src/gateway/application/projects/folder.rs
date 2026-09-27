@@ -6,7 +6,8 @@ use std::{
 };
 
 use super::error;
-use crate::{gateway::GatewayApplicationError, public_text::trim_js_whitespace};
+use crate::gateway::GatewayApplicationError;
+use butler_core::public_text::trim_js_whitespace;
 
 const MAX_ATTEMPTS: usize = 10_000;
 

@@ -3,12 +3,14 @@
 mod invoke;
 mod mcp;
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
 use crate::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 use crate::capabilities::{BridgeCatalogTool, describe_native, search_native};
-use crate::json::{JsonDocument, visit_raw_array, visit_raw_object};
+use butler_core::json::JsonDocument;
+use butler_core::json::visit_raw_array;
+use butler_core::json::visit_raw_object;
 
 use super::GuidedTools;
 
@@ -240,7 +242,7 @@ pub(super) fn remember_described(
         visit_raw_object(description, |key, value| {
             if key == "\"id\"" {
                 let id: String =
-                    serde_json::from_str(value).map_err(crate::json::JsonError::from)?;
+                    serde_json::from_str(value).map_err(butler_core::json::JsonError::from)?;
                 if !id.is_empty() {
                     ids.push(id);
                 }

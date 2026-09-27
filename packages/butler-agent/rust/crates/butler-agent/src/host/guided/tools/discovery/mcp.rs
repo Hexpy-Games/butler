@@ -2,7 +2,7 @@ use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
 use crate::btcc::{BtccError, ToolExecutionError};
-use crate::json::JsonDocument;
+use butler_core::json::JsonDocument;
 
 use super::{GuidedTools, bridge_error, encoded};
 

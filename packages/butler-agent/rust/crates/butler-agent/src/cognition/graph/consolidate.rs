@@ -6,10 +6,9 @@ use std::collections::HashMap;
 use rusqlite::{Connection, Transaction};
 use serde_json::{Map, Number, Value};
 
-use crate::{
-    cognition::{CognitionError, CognitionResult},
-    js_date,
-};
+use crate::cognition::CognitionError;
+use crate::cognition::CognitionResult;
+use butler_core::js_date;
 
 #[cfg(test)]
 mod tests;
@@ -148,7 +147,7 @@ fn json_number(value: f64) -> Value {
         && value >= i64::MIN as f64
         && value < i64::MAX as f64
     {
-        Value::from(crate::json::saturating_i64(value))
+        Value::from(butler_core::json::saturating_i64(value))
     } else {
         Number::from_f64(value)
             .map(Value::Number)

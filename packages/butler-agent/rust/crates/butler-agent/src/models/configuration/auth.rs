@@ -393,7 +393,7 @@ fn required<'a>(value: Option<&'a String>, code: &'static str) -> Result<&'a str
 }
 fn trimmed(value: Option<&str>) -> Option<&str> {
     value
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
 }
 fn error(code: &'static str, message: &'static str) -> AuthError {

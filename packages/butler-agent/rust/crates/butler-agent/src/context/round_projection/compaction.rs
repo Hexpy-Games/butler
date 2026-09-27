@@ -130,7 +130,7 @@ impl CompactionState {
                 "current_context_exceeds_model_capacity",
             )));
         }
-        let summary_budget = crate::json::saturating_usize(
+        let summary_budget = butler_core::json::saturating_usize(
             (max_bytes * SUMMARY_RATIO)
                 .min((max_bytes - required_bytes) / 2.0)
                 .floor()
@@ -231,7 +231,7 @@ async fn summarize_history(
     current: &mut String,
 ) -> Result<(), ContextProjectionError> {
     let sizing = producer.sizing().map_err(ContextProjectionError::Model)?;
-    let chunk_budget = crate::json::saturating_usize(
+    let chunk_budget = butler_core::json::saturating_usize(
         max_bytes
             .min(sizing.as_ref().map_or(max_bytes, |sizing| sizing.max_bytes))
             .mul_add(0.5, 0.0)
@@ -414,7 +414,7 @@ fn view<'a>(
 }
 
 fn trim_summary(value: &str) -> Result<String, BtccError> {
-    let trimmed = crate::public_text::trim_js_whitespace(value);
+    let trimmed = butler_core::public_text::trim_js_whitespace(value);
     if trimmed.is_empty() {
         Err(error("context_summary_empty_response"))
     } else {
@@ -423,7 +423,7 @@ fn trim_summary(value: &str) -> Result<String, BtccError> {
 }
 
 fn json_string_bytes(value: &str) -> Result<usize, BtccError> {
-    crate::json::string_bytes(value).map_err(|error| {
+    butler_core::json::string_bytes(value).map_err(|error| {
         BtccError::relayed("context_serialization_failed", error.to_string()).with_source(error)
     })
 }

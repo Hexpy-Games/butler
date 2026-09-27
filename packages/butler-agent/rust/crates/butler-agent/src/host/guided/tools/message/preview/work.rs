@@ -1,6 +1,7 @@
 //! Source Work receipt: public control facts only, copied from raw fields.
 
-use crate::{btcc::BtccError, json::visit_raw_array};
+use crate::btcc::BtccError;
+use butler_core::json::visit_raw_array;
 
 use super::{append_field, field};
 
@@ -10,7 +11,7 @@ pub(super) fn supports(name: &str) -> bool {
 
 pub(super) fn project_raw(name: &str, raw: &str) -> Result<String, BtccError> {
     let mut preview = String::from("{\"tool_name\":");
-    crate::json::write_string(name, &mut preview).map_err(|source| {
+    butler_core::json::write_string(name, &mut preview).map_err(|source| {
         BtccError::relayed(
             "guided_tool_provider_serialization_failed",
             "Provider result JSON unavailable",
@@ -52,7 +53,7 @@ pub(super) fn project_raw(name: &str, raw: &str) -> Result<String, BtccError> {
                 if public.len() > 1 {
                     public.push(',');
                 }
-                crate::json::write_string(key, &mut public).map_err(|source| {
+                butler_core::json::write_string(key, &mut public).map_err(|source| {
                     BtccError::relayed(
                         "guided_tool_provider_serialization_failed",
                         "Provider result JSON unavailable",
@@ -73,12 +74,12 @@ pub(super) fn project_raw(name: &str, raw: &str) -> Result<String, BtccError> {
                 let mut selected = String::from("{");
                 for key in ["action_key", "status"] {
                     if let Some(value) =
-                        field(action, key).map_err(crate::json::JsonError::callback)?
+                        field(action, key).map_err(butler_core::json::JsonError::callback)?
                     {
                         if selected.len() > 1 {
                             selected.push(',');
                         }
-                        crate::json::write_string(key, &mut selected)?;
+                        butler_core::json::write_string(key, &mut selected)?;
                         selected.push(':');
                         selected.push_str(value);
                     }

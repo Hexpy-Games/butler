@@ -20,7 +20,6 @@ use crate::btcc::{
     TurnSteeringPort, TurnStore,
 };
 use crate::context::ContextPortAdapter;
-use crate::locale::LocaleCollation;
 use crate::models::{
     ModelCatalog, ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelProvider,
     PromptUsageMetricInput, PromptUsageMetricSink, ProviderAuth, ProviderClock,
@@ -28,6 +27,7 @@ use crate::models::{
     ProviderPromptCachePolicy, ProviderRequestConfig, ProviderRequestConfigPort,
     ProviderRoundPolicy,
 };
+use butler_core::locale::LocaleCollation;
 
 use super::guided_ports::GuidedInvocation;
 use super::test_support::Fixture;

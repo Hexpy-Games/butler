@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use serde_json::{Value, json};
 
 use crate::btcc::{AccessMode, TurnRecord};
@@ -96,7 +96,7 @@ pub(crate) fn select_phase(
         });
     }
     for profile in &policy.required_profiles {
-        let name = crate::public_text::trim_js_whitespace(profile);
+        let name = butler_core::public_text::trim_js_whitespace(profile);
         if !name.is_empty() && !catalog.profiles.contains_key(name) {
             return Err(GuidedPreparationError::Policy(format!(
                 "unknown required tool profile: {name}"
@@ -361,7 +361,7 @@ fn phase(policy: &GuidedExecutionPolicy, catalog: &GuidedCatalogSnapshot) -> &'s
 }
 fn enabled(flag: &str) -> bool {
     matches!(
-        crate::public_text::trim_js_whitespace(flag)
+        butler_core::public_text::trim_js_whitespace(flag)
             .to_lowercase()
             .as_str(),
         "1" | "true" | "on" | "yes"

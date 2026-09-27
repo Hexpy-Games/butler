@@ -168,7 +168,7 @@ fn session_page(
         .and_then(|value| value.parse::<f64>().ok())
         .filter(|value| value.is_finite() && *value >= 0.0)
         .map_or(200, |value| {
-            crate::json::saturating_usize(value.floor()).clamp(1, 200)
+            butler_core::json::saturating_usize(value.floor()).clamp(1, 200)
         });
     Ok(AppSessionViewPage {
         after_cursor: before.is_none().then_some(after).flatten(),

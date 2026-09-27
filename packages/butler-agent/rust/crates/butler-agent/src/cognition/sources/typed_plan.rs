@@ -51,7 +51,7 @@ pub(in crate::cognition) fn prepare(record: &TypedMemoryRecord) -> CognitionResu
 
     let mut spans = Vec::new();
     for span in split_historical_source_spans(&record.text, MEMORY_SOURCE_WINDOW_BYTES) {
-        if span.end - span.start > crate::json::saturating_usize(MEMORY_SOURCE_WINDOW_BYTES) {
+        if span.end - span.start > butler_core::json::saturating_usize(MEMORY_SOURCE_WINDOW_BYTES) {
             return Err(CognitionError::new(
                 CognitionCode::MemorySourceUnavailable,
                 "A grapheme exceeds the memory source window limit",

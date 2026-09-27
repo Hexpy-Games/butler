@@ -54,7 +54,7 @@ pub(super) fn actions(
     let artifacts = rich::artifacts(terminal.artifacts);
     let changed_files = rich::changed_files(terminal.changed_files);
     let plan = rich::plan(terminal.plan);
-    let no_visible = crate::public_text::trim_js_whitespace(terminal.text).is_empty()
+    let no_visible = butler_core::public_text::trim_js_whitespace(terminal.text).is_empty()
         && artifacts.is_empty()
         && changed_files.is_empty()
         && plan.is_none();

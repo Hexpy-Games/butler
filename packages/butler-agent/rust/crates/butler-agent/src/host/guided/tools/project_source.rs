@@ -4,7 +4,7 @@ use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde_json::{Map, Value, json};
 
 use crate::btcc::{BtccError, ModelRoundToolCall, ToolExecutionError};
-use crate::json::JsonDocument;
+use butler_core::json::JsonDocument;
 
 use super::GuidedTools;
 

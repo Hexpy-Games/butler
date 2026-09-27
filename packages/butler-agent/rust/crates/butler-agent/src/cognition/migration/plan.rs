@@ -383,6 +383,6 @@ fn now_millis() -> i64 {
 }
 
 fn iso(value: i64) -> String {
-    crate::js_date::format_iso_millis(value)
+    butler_core::js_date::format_iso_millis(value)
         .unwrap_or_else(|| "1970-01-01T00:00:00.000Z".to_owned())
 }

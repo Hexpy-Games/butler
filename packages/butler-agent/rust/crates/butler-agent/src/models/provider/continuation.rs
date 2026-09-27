@@ -68,7 +68,7 @@ fn sent(previous: &Value, field: &str) -> Result<i64, crate::btcc::ModelRoundErr
         .pointer(&format!("/sent/{field}"))
         .and_then(Value::as_f64)
         .filter(|value| value.fract() == 0.0 && value.abs() <= 9_007_199_254_740_991.0)
-        .map(crate::json::saturating_i64)
+        .map(butler_core::json::saturating_i64)
         .ok_or_else(|| invalid("openai_sent_continuation_missing"))
 }
 

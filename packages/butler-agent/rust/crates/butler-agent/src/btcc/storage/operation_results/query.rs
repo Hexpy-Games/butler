@@ -96,7 +96,7 @@ LIMIT ?11"
         .map_err(StorageError::sqlite)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(StorageError::sqlite)?;
-    let limit = crate::json::saturating_usize(input.limit.max(0.0));
+    let limit = butler_core::json::saturating_usize(input.limit.max(0.0));
     let has_more = entries.len() > limit;
     entries.truncate(limit);
     let next_cursor = has_more
@@ -195,7 +195,8 @@ pub(super) fn managed_fields(
     canonical_head_sha256: Option<&str>,
 ) -> bool {
     scope_kind == "project"
-        && ledger_project_id.is_some_and(|v| !crate::public_text::trim_js_whitespace(v).is_empty())
+        && ledger_project_id
+            .is_some_and(|v| !butler_core::public_text::trim_js_whitespace(v).is_empty())
         && canonical_head_sha256.is_some_and(|v| {
             v.len() == 64
                 && v.bytes()

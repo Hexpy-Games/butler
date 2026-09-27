@@ -353,7 +353,7 @@ pub(crate) fn inspect(
 }
 
 fn snapshot_id(generation_id: &str, inventory_hash: &str) -> CognitionResult<String> {
-    let bytes = crate::json::stringify(&json!([
+    let bytes = butler_core::json::stringify(&json!([
         "canonical-snapshot-v1",
         generation_id,
         inventory_hash

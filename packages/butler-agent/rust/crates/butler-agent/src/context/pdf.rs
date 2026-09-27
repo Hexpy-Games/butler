@@ -2,7 +2,7 @@
 
 use lopdf::{Document, decode_text_string};
 
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 const SCANNED_MESSAGE: &str = "PDF text is unavailable. This may be a scanned document; OCR and page images have not been read.";
 const EXTRACTION_MESSAGE: &str = "[PDF text could not be extracted. The file may be encrypted or damaged; its contents have not been read.]";

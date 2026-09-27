@@ -2,9 +2,9 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-use crate::locale::LocaleCollation;
 use crate::project_ledger::commands;
 use crate::project_ledger::publication::ProjectLedgerRecordUpdate;
+use butler_core::locale::LocaleCollation;
 
 use super::contracts::LedgerEffectError;
 
@@ -81,8 +81,8 @@ fn validate_events(path: &Path) -> Result<(), LedgerEffectError> {
 
 fn validate_line(line: &[u8]) -> Result<(), LedgerEffectError> {
     let text = String::from_utf8_lossy(line);
-    if !crate::public_text::trim_js_whitespace(&text).is_empty() {
-        crate::json::JsonDocument::from_encoded(text.into_owned())
+    if !butler_core::public_text::trim_js_whitespace(&text).is_empty() {
+        butler_core::json::JsonDocument::from_encoded(text.into_owned())
             .map_err(LedgerEffectError::uncertain)?;
     }
     Ok(())

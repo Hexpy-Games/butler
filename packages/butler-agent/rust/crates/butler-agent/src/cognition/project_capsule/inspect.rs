@@ -66,7 +66,7 @@ pub(super) fn read(
         .map_err(|source| inspect_error().with_source(source))?;
     let body = if exists {
         fs::read_to_string(&path)
-            .map(|text| crate::public_text::trim_js_whitespace(&text).to_owned())
+            .map(|text| butler_core::public_text::trim_js_whitespace(&text).to_owned())
             .unwrap_or_default()
     } else {
         String::new()
@@ -83,7 +83,7 @@ pub(super) fn read(
                     .modified()
                     .ok()
                     .and_then(epoch_millis)
-                    .and_then(crate::js_date::format_iso_millis);
+                    .and_then(butler_core::js_date::format_iso_millis);
                 if updated_at.is_none() {
                     diagnostics.push("project capsule stat failed".to_owned());
                 }
@@ -110,8 +110,8 @@ pub(super) fn read(
             let rest = line.strip_prefix("##")?;
             rest.chars()
                 .next()
-                .is_some_and(crate::public_text::is_js_whitespace)
-                .then(|| crate::public_text::trim_js_whitespace(rest).to_owned())
+                .is_some_and(butler_core::public_text::is_js_whitespace)
+                .then(|| butler_core::public_text::trim_js_whitespace(rest).to_owned())
         })
         .collect();
 

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use super::*;
 use crate::btcc::TurnStore;
 use crate::btcc::storage::{BtccRepositories, StorageError, tests::Fixture};
-use crate::json::JsonDocument;
+use butler_core::json::JsonDocument;
 
 #[tokio::test]
 async fn source_exact_output_is_stored_hashed_replayed_and_reopened_without_scalar_dom() {

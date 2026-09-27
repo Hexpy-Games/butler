@@ -2,7 +2,8 @@ use std::{fs, path::Path};
 
 use tokio_util::sync::CancellationToken;
 
-use crate::{cognition::CognitionResult, public_text::trim_js_whitespace};
+use crate::cognition::CognitionResult;
+use butler_core::public_text::trim_js_whitespace;
 
 use super::super::{check_active, error, types::TaskSummary};
 use super::read_text;

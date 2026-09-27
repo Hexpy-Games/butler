@@ -22,7 +22,7 @@ pub(super) fn single(args: &Map<String, Value>) -> Result<ExactEdit, Value> {
     let path = args
         .get("path")
         .and_then(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|path| !path.is_empty())
         .ok_or_else(|| {
             super::invalid(
@@ -110,7 +110,7 @@ pub(super) fn batch(value: &Value) -> Result<Vec<ExactEdit>, Value> {
         let path = item
             .get("path")
             .and_then(Value::as_str)
-            .map(crate::public_text::trim_js_whitespace)
+            .map(butler_core::public_text::trim_js_whitespace)
             .filter(|path| !path.is_empty())
             .ok_or_else(|| {
                 super::invalid(

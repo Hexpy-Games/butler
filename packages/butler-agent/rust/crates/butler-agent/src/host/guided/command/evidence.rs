@@ -147,7 +147,7 @@ fn base(
         "references":[],"limitations":[],"created_at":now()})
 }
 fn safe(path: &str) -> bool {
-    let path = crate::public_text::trim_js_whitespace(path);
+    let path = butler_core::public_text::trim_js_whitespace(path);
     !path.is_empty()
         && !path.starts_with('/')
         && !path.starts_with('~')

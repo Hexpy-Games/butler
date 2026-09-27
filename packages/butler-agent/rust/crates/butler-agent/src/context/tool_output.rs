@@ -21,7 +21,7 @@ use super::{
     ToolArtifactTextSlice,
 };
 use crate::context::ContextCode;
-use crate::json::JsonDocument;
+use butler_core::json::JsonDocument;
 
 pub(crate) trait ToolOutputIdentity: Send + Sync {
     fn now(&self) -> SystemTime;

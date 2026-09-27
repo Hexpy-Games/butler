@@ -24,7 +24,7 @@ struct Output<'a, T: Serialize + ?Sized> {
 }
 
 pub(super) fn bytes<T: Serialize + ?Sized>(response: &T) -> CognitionResult<usize> {
-    crate::json::serde_serialized_bytes(&Envelope {
+    butler_core::json::serde_serialized_bytes(&Envelope {
         ok: true,
         output: Output { ok: true, response },
     })
@@ -61,7 +61,7 @@ pub(super) fn minimum(
     }
     if minimum.requirements.is_empty() {
         for item in &mut minimum.evidence {
-            item.excerpt = crate::segmentation::grapheme_segments(&item.excerpt)
+            item.excerpt = butler_core::segmentation::grapheme_segments(&item.excerpt)
                 .take(120)
                 .map(|segment| segment.text)
                 .collect();
@@ -73,7 +73,7 @@ pub(super) fn minimum(
 fn requirement_key(
     requirements: &[RecallRequirement],
     compare_locale: &impl Fn(&str, &str) -> Ordering,
-) -> Vec<(String, String, crate::json::JsonDocument, String)> {
+) -> Vec<(String, String, butler_core::json::JsonDocument, String)> {
     let mut values = requirements
         .iter()
         .map(|item| {

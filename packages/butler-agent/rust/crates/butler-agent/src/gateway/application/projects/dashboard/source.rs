@@ -11,8 +11,8 @@ use super::contracts::{
 use super::cursor::{self, RevisionOffsetCursor};
 use super::project::{DashboardProject, read_project};
 use crate::gateway::application::storage::AppStorageCode;
-use crate::json::Utf16Slice;
-use crate::public_text::sanitize_public_text;
+use butler_core::json::Utf16Slice;
+use butler_core::public_text::sanitize_public_text;
 
 const SOURCE_PAGE_UNITS: usize = 24_000;
 

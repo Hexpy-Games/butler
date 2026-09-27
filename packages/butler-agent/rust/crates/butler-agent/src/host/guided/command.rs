@@ -19,11 +19,11 @@ use tokio_util::sync::CancellationToken;
 
 use crate::btcc::{AccessMode, BtccError};
 use crate::context::ToolOutput;
-use crate::json::JsonDocument;
 use crate::workspace::{
     Commands, GuidedAccess, GuidedCommandInput, LegacyShell, StructuredCommandInput,
     WorkspaceReference,
 };
+use butler_core::json::JsonDocument;
 use jobs::CommandJobs;
 
 pub(crate) struct GuidedCommand {
@@ -102,12 +102,12 @@ impl GuidedCommand {
             .and_then(Value::as_str)
             .ok_or_else(|| error("command_invalid"))?;
         if raw_command.is_empty()
-            || (registered && crate::public_text::trim_js_whitespace(raw_command).is_empty())
+            || (registered && butler_core::public_text::trim_js_whitespace(raw_command).is_empty())
         {
             return Err(error("command_invalid"));
         }
         let command = if registered {
-            crate::public_text::trim_js_whitespace(raw_command)
+            butler_core::public_text::trim_js_whitespace(raw_command)
         } else {
             raw_command
         };

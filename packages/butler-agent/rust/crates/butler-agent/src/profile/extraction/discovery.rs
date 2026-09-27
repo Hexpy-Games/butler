@@ -11,14 +11,14 @@ use super::super::contracts::{
 };
 use super::super::storage;
 use super::types::{EXTRACTOR_VERSION, MAX_SCAN_MESSAGES, SourceRead, SourceWindow};
-use crate::segmentation::split_grapheme_utf8_spans;
+use butler_core::segmentation::split_grapheme_utf8_spans;
 
 pub(super) fn read(
     root: &Path,
     factory: &dyn CanonicalProfileSourceFactory,
     options: &ProfileTranscriptCaptureOptions,
 ) -> ProfileResult<SourceRead> {
-    let limit = crate::json::saturating_usize(
+    let limit = butler_core::json::saturating_usize(
         options
             .max_user_messages
             .filter(|value| value.is_finite())

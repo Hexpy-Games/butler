@@ -2,7 +2,7 @@ use crate::conversation::{
     ConversationOriginKind, ConversationPartKind, ConversationRole, ConversationSourceReader,
     ConversationStatus,
 };
-use crate::segmentation::grapheme_segments;
+use butler_core::segmentation::grapheme_segments;
 
 use super::types::{CognitionSourceError, CognitionSourceRow, PriorPublicContext};
 use crate::cognition::CognitionCode;
@@ -116,7 +116,7 @@ fn conversation_text(message: &crate::conversation::ConversationMessageWithParts
         }
         output.push_str(text);
     }
-    crate::public_text::trim_js_whitespace(&output).to_owned()
+    butler_core::public_text::trim_js_whitespace(&output).to_owned()
 }
 
 fn utf16_cmp(left: &str, right: &str) -> std::cmp::Ordering {

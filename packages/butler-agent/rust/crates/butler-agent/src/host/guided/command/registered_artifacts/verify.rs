@@ -58,7 +58,7 @@ fn lexical(path: &Path) -> PathBuf {
 }
 
 fn candidates(source: &str, cwd: &Path, data: &Path) -> Vec<PathBuf> {
-    let source = crate::public_text::trim_js_whitespace(source);
+    let source = butler_core::public_text::trim_js_whitespace(source);
     if source.is_empty() {
         return Vec::new();
     }

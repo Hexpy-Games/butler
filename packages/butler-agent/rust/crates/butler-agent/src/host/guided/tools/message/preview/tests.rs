@@ -77,7 +77,7 @@ fn structured_previews_drop_private_fields_and_bound_artifact_pages() {
             "stderr": {"text": "", "start_char": 0}
         }
     });
-    let page = crate::json::stringify(&page).unwrap();
+    let page = butler_core::json::stringify(&page).unwrap();
     assert_eq!(
         artifact::fit(&page, 300).unwrap(),
         r#"{"ok":true,"output":{"tool_name":"read_tool_output_artifact","stdout":{"text":"A😀\nBA😀\nBA","start_char":5,"total_chars":100,"next_offset_chars":16,"returned_lines":3,"truncated_by_tokens":true},"stderr":{"text":"","start_char":0}},"model_preview":{"truncated":true,"completeness":"partial"}}"#,
@@ -96,7 +96,7 @@ fn large_memory_result_is_truncated_to_a_bounded_provider_preview() {
         output: Some(JsonDocument::from_value(&output).unwrap()),
     };
     let mut original = String::from("{\"ok\":true,\"output\":{\"tool_name\":\"query_memory\",");
-    let encoded = crate::json::stringify(&output).unwrap();
+    let encoded = butler_core::json::stringify(&output).unwrap();
     original.push_str(&encoded[1..encoded.len() - 1]);
     original.push_str("}}");
     let content = fit(

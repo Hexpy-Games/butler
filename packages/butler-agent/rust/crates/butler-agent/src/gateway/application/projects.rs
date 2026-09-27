@@ -91,7 +91,7 @@ pub(super) fn initial_root(db: &Connection, fallback: &Path) -> Result<PathBuf, 
         .as_deref()
         .and_then(|value| serde_json::from_str::<Value>(value).ok())
         .and_then(|value| value.as_str().map(str::to_owned))
-        .filter(|value| !crate::public_text::trim_js_whitespace(value).is_empty());
+        .filter(|value| !butler_core::public_text::trim_js_whitespace(value).is_empty());
     let path = stored
         .map(PathBuf::from)
         .unwrap_or_else(|| fallback.to_path_buf());
@@ -149,7 +149,9 @@ impl AppApplication {
                 AppProjectSource::ExistingFolder => {
                     let token = token
                         .as_deref()
-                        .filter(|value| !crate::public_text::trim_js_whitespace(value).is_empty())
+                        .filter(|value| {
+                            !butler_core::public_text::trim_js_whitespace(value).is_empty()
+                        })
                         .ok_or_else(|| {
                             error(
                                 400,

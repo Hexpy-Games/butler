@@ -344,7 +344,7 @@ fn unique(values: Vec<String>) -> Vec<String> {
     values
         .into_iter()
         .filter(|value| {
-            let value = crate::public_text::trim_js_whitespace(value);
+            let value = butler_core::public_text::trim_js_whitespace(value);
             !value.is_empty() && seen.insert(value.to_owned())
         })
         .collect()

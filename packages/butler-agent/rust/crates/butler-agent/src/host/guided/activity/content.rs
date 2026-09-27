@@ -1,10 +1,11 @@
 //! Source English activity copy and public argument projection.
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use serde_json::{Value, json};
 
 use crate::btcc::{ModelRoundToolCall, WorkStage, WorkView};
-use crate::public_text::{sanitize_public_text, sanitize_public_value};
+use butler_core::public_text::sanitize_public_text;
+use butler_core::public_text::sanitize_public_value;
 
 pub(super) struct Content {
     pub title: String,

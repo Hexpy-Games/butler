@@ -8,16 +8,16 @@ pub(super) fn digest(value: &str) -> String {
 }
 pub(super) fn canonical(
     value: &Value,
-    collation: &crate::locale::LocaleCollation,
+    collation: &butler_core::locale::LocaleCollation,
 ) -> AuthorityResult<String> {
-    crate::json::stringify_sorted(value, &|a, b| collation.compare(a, b)).map_err(|error| {
+    butler_core::json::stringify_sorted(value, &|a, b| collation.compare(a, b)).map_err(|error| {
         AuthorityError::policy(format!("authority_json: {error}")).with_source(error)
     })
 }
 pub(super) fn identity(
     input: &AuthorityAdmissionInput,
     generation: i64,
-    collation: &crate::locale::LocaleCollation,
+    collation: &butler_core::locale::LocaleCollation,
 ) -> AuthorityResult<String> {
     let mut object = Map::new();
     object.insert("version".into(), json!(1));
@@ -68,7 +68,7 @@ pub(super) fn client_message_id(request_id: &str) -> String {
     )
 }
 pub(super) fn required<'a>(value: &'a str, label: &str) -> AuthorityResult<&'a str> {
-    if crate::public_text::trim_js_whitespace(value).is_empty() {
+    if butler_core::public_text::trim_js_whitespace(value).is_empty() {
         Err(AuthorityError::policy(format!(
             "authority_{}_missing",
             label.replace(' ', "_")

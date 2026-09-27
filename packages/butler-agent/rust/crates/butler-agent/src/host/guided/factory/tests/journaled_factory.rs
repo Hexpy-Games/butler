@@ -121,7 +121,7 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
     let output_models = crate::host::ProcessModels::new(
         scratch.0.clone(),
         Default::default(),
-        Arc::new(crate::configuration::ConfigurationWrites::new()),
+        Arc::new(butler_core::configuration::ConfigurationWrites::new()),
         Arc::new(LocaleCollation::new("en-US").unwrap()),
     )
     .unwrap();
@@ -129,7 +129,7 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
         scratch.0.clone(),
         scratch.0.join("cognition"),
         Arc::new(crate::profile::PersonaPresets::new(scratch.0.clone())),
-        Arc::new(crate::configuration::ConfigurationWrites::new()),
+        Arc::new(butler_core::configuration::ConfigurationWrites::new()),
         Arc::new(
             crate::coordination::CognitionWriteCoordinator::new(Arc::new(SystemIdentity)).unwrap(),
         ),
@@ -183,7 +183,7 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
     let automations = crate::operations::AutomationService::open(
         &scratch.0.clone(),
         crate::operations::AutomationDependencies {
-            parse_date: Arc::new(crate::js_date::parse_iso_millis),
+            parse_date: Arc::new(butler_core::js_date::parse_iso_millis),
             now_millis: Arc::new(|| 0),
             enqueue: Arc::new(crate::host::AutomationQueue(Arc::new(
                 crate::gateway::InboundQueue::new(&scratch.0.clone()),
@@ -218,7 +218,7 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
         memory_recall: Arc::new(crate::cognition::MemoryRecall::new(
             scratch.0.clone(),
             Default::default(),
-            Arc::new(crate::js_date::parse_iso_millis),
+            Arc::new(butler_core::js_date::parse_iso_millis),
             Arc::new(std::cmp::Ord::cmp),
             Arc::new(|| 0),
             1,

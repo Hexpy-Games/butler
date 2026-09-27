@@ -1,17 +1,18 @@
 //! Public artifact identity and delivered page facts, without full result DOMs.
 
 mod page;
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 pub(super) use page::fit;
 
 use crate::btcc::BtccError;
-use crate::json::Utf16Prefix;
+use butler_core::json::Utf16Prefix;
 
 use super::{append_field, failure, field};
 
 pub(super) fn project(name: &str, raw: &str) -> Result<String, BtccError> {
     let mut output = String::from("{\"tool_name\":");
-    crate::json::write_string(name, &mut output).map_err(|source| failure().with_source(source))?;
+    butler_core::json::write_string(name, &mut output)
+        .map_err(|source| failure().with_source(source))?;
     selected(
         &mut output,
         "ok",
@@ -120,7 +121,7 @@ fn text(raw: &str, max: Option<usize>) -> Result<Option<String>, BtccError> {
     }
     let decoded: String =
         serde_json::from_str(raw).map_err(|source| failure().with_source(source))?;
-    let trimmed = crate::public_text::trim_js_whitespace(&decoded);
+    let trimmed = butler_core::public_text::trim_js_whitespace(&decoded);
     if trimmed.is_empty() {
         return Ok(None);
     }
@@ -137,7 +138,7 @@ fn text(raw: &str, max: Option<usize>) -> Result<Option<String>, BtccError> {
         encoded
     } else {
         let mut encoded = String::new();
-        crate::json::write_string(trimmed, &mut encoded)
+        butler_core::json::write_string(trimmed, &mut encoded)
             .map_err(|source| failure().with_source(source))?;
         encoded
     };
@@ -149,7 +150,8 @@ fn selected(output: &mut String, key: &str, raw: Option<&str>) -> Result<(), Btc
         if output.len() > 1 {
             output.push(',');
         }
-        crate::json::write_string(key, output).map_err(|source| failure().with_source(source))?;
+        butler_core::json::write_string(key, output)
+            .map_err(|source| failure().with_source(source))?;
         output.push(':');
         output.push_str(raw);
     }

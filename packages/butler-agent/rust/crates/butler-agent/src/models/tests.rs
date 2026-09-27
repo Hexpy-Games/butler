@@ -1,7 +1,7 @@
 use serde_json::{Value, json};
 
 use super::*;
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 fn input(registered_models: Vec<ModelProviderMetadata>) -> ModelCatalogSnapshotInput {
     ModelCatalogSnapshotInput {

@@ -196,7 +196,11 @@ pub(crate) trait GuidedPolicyPort: Send + Sync {
         call: &'a ModelRoundToolCall,
         contract_version: Option<u8>,
     ) -> Pin<
-        Box<dyn Future<Output = Result<crate::json::JsonDocument, ToolExecutionError>> + Send + 'a>,
+        Box<
+            dyn Future<Output = Result<butler_core::json::JsonDocument, ToolExecutionError>>
+                + Send
+                + 'a,
+        >,
     >;
 
     fn record_unexecuted<'a>(

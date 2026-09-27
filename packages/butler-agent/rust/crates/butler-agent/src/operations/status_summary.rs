@@ -209,8 +209,9 @@ fn format_number(value: f64) -> String {
 }
 
 fn format_iso_utc(timestamp_ms: f64) -> String {
-    let seconds = crate::json::saturating_i64((timestamp_ms / 1_000.0).floor());
-    let millis = crate::json::saturating_u32((timestamp_ms - seconds as f64 * 1_000.0).round());
+    let seconds = butler_core::json::saturating_i64((timestamp_ms / 1_000.0).floor());
+    let millis =
+        butler_core::json::saturating_u32((timestamp_ms - seconds as f64 * 1_000.0).round());
     let timestamp = chrono::DateTime::from_timestamp(seconds, millis * 1_000_000);
     timestamp
         .map(|time| time.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))

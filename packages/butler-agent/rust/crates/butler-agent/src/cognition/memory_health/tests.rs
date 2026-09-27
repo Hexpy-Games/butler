@@ -41,7 +41,7 @@ impl CognitionCoordinationHost for TestHost {
     }
 
     fn now_iso(&self) -> String {
-        crate::js_date::format_iso_millis(epoch_now()).expect("test timestamp")
+        butler_core::js_date::format_iso_millis(epoch_now()).expect("test timestamp")
     }
 }
 
@@ -91,7 +91,7 @@ async fn vector_snapshot_and_maintenance_status_drive_source_diagnostics() {
 
     let failed_summary = json!({
         "phase": "summary",
-        "ts": crate::js_date::format_iso_millis(now).expect("timestamp"),
+        "ts": butler_core::js_date::format_iso_millis(now).expect("timestamp"),
         "status": "error",
         "metrics": {"failed_phases": ["box_index", "source_quality"]}
     });
@@ -128,14 +128,14 @@ async fn vector_snapshot_and_maintenance_status_drive_source_diagnostics() {
         memory.join("db/vector-stats.json"),
         serde_json::to_vec(&json!({
             "row_count": 7,
-            "updated_at": crate::js_date::format_iso_millis(now + 1_000).expect("timestamp")
+            "updated_at": butler_core::js_date::format_iso_millis(now + 1_000).expect("timestamp")
         }))
         .expect("serialize vector stats"),
     )
     .expect("write vector stats");
     let repaired_summary = json!({
         "phase": "summary",
-        "ts": crate::js_date::format_iso_millis(now + 1_000).expect("timestamp"),
+        "ts": butler_core::js_date::format_iso_millis(now + 1_000).expect("timestamp"),
         "status": "ok",
         "metrics": {"failed_phases": []}
     });
@@ -189,7 +189,7 @@ async fn active_generation_serving_health_reads_populated_graph_without_writing(
     .unwrap();
     let graph_path = generation_root.join("graph.sqlite");
     let now = epoch_now();
-    let at = crate::js_date::format_iso_millis(now - 5_000).unwrap();
+    let at = butler_core::js_date::format_iso_millis(now - 5_000).unwrap();
     drop(Connection::open(&graph_path).unwrap());
     let mut graph = crate::cognition::graph::GraphRepository::open(&graph_path).unwrap();
     graph.ensure_schema(&at).unwrap();

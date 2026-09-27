@@ -5,10 +5,9 @@ use std::{
 
 use serde_json::{Value, json};
 
-use crate::{
-    cognition::{CognitionResult, FeedbackTarget},
-    js_date,
-};
+use crate::cognition::CognitionResult;
+use crate::cognition::FeedbackTarget;
+use butler_core::js_date;
 
 use super::{entries::EntryPath, error};
 use crate::cognition::CognitionCode;

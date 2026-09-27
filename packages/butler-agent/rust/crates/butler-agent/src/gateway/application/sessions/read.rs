@@ -3,7 +3,7 @@ use serde_json::Value;
 
 use super::{AppStorageError, contracts::*, json_error};
 use crate::gateway::application::storage::AppStorageCode;
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 pub(super) struct WorkspaceProject {
     pub id: String,
@@ -243,7 +243,7 @@ fn project(row: SessionRow) -> Result<AppSessionSummary, AppStorageError> {
             if text.encode_utf16().count() > 96 {
                 format!(
                     "{}...",
-                    crate::json::Utf16Slice::new(text, 0, 93).utf8_lossy()
+                    butler_core::json::Utf16Slice::new(text, 0, 93).utf8_lossy()
                 )
             } else {
                 text.to_owned()

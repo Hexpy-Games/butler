@@ -40,7 +40,7 @@ pub(super) fn disposition(
         .optional().map_err(db_error)?.ok_or_else(changed)?;
     let evidence = json!({"disposition":kind,"warnings":[{"code":kind}],
         "context_recovery":if revised.is_some(){"scheduled"}else{"exhausted_or_unavailable"}});
-    let evidence_json = crate::json::stringify(&evidence).map_err(json_error)?;
+    let evidence_json = butler_core::json::stringify(&evidence).map_err(json_error)?;
     tx.execute("INSERT INTO memory_projection_attempts \
         (attempt_ref,window_ref,job_id,attempt_count,state,error_code,input_sha256,provider_evidence_json,recorded_at,attempt_kind,provider_invoked,outcome_known,invocation_ref,recovery_revision) \
         VALUES(?1,?2,?3,?4,'warning',NULL,?5,?6,?7,'validation',?8,1,?9,?10)",
@@ -61,8 +61,9 @@ pub(super) fn disposition(
         {
             return Err(changed());
         }
-        let next_json = crate::json::stringify(&serde_json::to_value(next).map_err(json_error)?)
-            .map_err(json_error)?;
+        let next_json =
+            butler_core::json::stringify(&serde_json::to_value(next).map_err(json_error)?)
+                .map_err(json_error)?;
         let next_sha = crate::cognition::sources::projection_hash_for_graph(vec![
             Value::String("extract-input".into()),
             Value::String(next_json.clone()),
@@ -77,7 +78,7 @@ pub(super) fn disposition(
             "previous_input_json":row.3,"previous_input_sha256":row.1,"next_input_json":next_json,"next_input_sha256":next_sha});
         tx.execute("INSERT INTO memory_projection_attempts(attempt_ref,window_ref,job_id,attempt_count,state,error_code,input_sha256,recorded_at,attempt_kind,provider_invoked,outcome_known,recovery_revision,recovery_request_json) \
             VALUES(?1,?2,?3,?4,'recovery_requested','memory_extract_needs_context',?5,?6,'recovery',0,1,?7,?8)",
-            params![recovery,window,job,row.0,row.1,now,recovery,crate::json::stringify(&request).map_err(json_error)?]).map_err(db_error)?;
+            params![recovery,window,job,row.0,row.1,now,recovery,butler_core::json::stringify(&request).map_err(json_error)?]).map_err(db_error)?;
         tx.execute("UPDATE memory_projection_windows SET input_json=?1,input_sha256=?2,input_migration_note='adjacent_source_context', \
             recovery_revision=?3,recovery_base_attempt_count=attempt_count,state='pending',error_code=NULL,next_attempt_at=?4 WHERE window_ref=?5",
             params![next_json,next_sha,recovery,now,window]).map_err(db_error)?;

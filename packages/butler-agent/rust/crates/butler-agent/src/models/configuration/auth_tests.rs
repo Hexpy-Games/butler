@@ -5,10 +5,9 @@ use serde_json::{Value, json};
 use tokio::{io::AsyncReadExt, io::AsyncWriteExt, net::TcpListener};
 
 use super::*;
-use crate::{
-    locale::LocaleCollation,
-    models::{ModelCatalog, ProviderAuth},
-};
+use crate::models::ModelCatalog;
+use crate::models::ProviderAuth;
+use butler_core::locale::LocaleCollation;
 
 struct Clock;
 impl ModelConfigurationClock for Clock {
@@ -45,7 +44,7 @@ impl Fixture {
             Arc::new(ModelCatalog::new().unwrap()),
             Arc::new(LocaleCollation::new("en-US").unwrap()),
             crate::models::provider_http_client().unwrap(),
-            Arc::new(crate::configuration::ConfigurationWrites::new()),
+            Arc::new(butler_core::configuration::ConfigurationWrites::new()),
         )
         .unwrap()
     }
@@ -208,7 +207,7 @@ async fn relative_profile_override_is_shared_by_oauth_write_and_model_auth_reade
         Arc::new(ModelCatalog::new().unwrap()),
         Arc::new(LocaleCollation::new("en-US").unwrap()),
         crate::models::provider_http_client().unwrap(),
-        Arc::new(crate::configuration::ConfigurationWrites::new()),
+        Arc::new(butler_core::configuration::ConfigurationWrites::new()),
     )
     .unwrap();
     let profile = owner
@@ -242,7 +241,7 @@ async fn codex_auth_requires_home_fact_but_explicit_missing_file_is_optional() {
         Arc::new(ModelCatalog::new().unwrap()),
         Arc::new(LocaleCollation::new("en-US").unwrap()),
         crate::models::provider_http_client().unwrap(),
-        Arc::new(crate::configuration::ConfigurationWrites::new()),
+        Arc::new(butler_core::configuration::ConfigurationWrites::new()),
     )
     .unwrap();
     let error = owner.auth_owner().resolve_codex().await.err().unwrap();

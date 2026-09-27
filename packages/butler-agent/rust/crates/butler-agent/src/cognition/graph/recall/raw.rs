@@ -40,7 +40,7 @@ pub(super) fn select(
     for phrase in
         std::iter::once(input.cue.as_str()).chain(input.seed_phrases.iter().map(String::as_str))
     {
-        let folded = lexical::case_fold(crate::public_text::trim_js_whitespace(phrase));
+        let folded = lexical::case_fold(butler_core::public_text::trim_js_whitespace(phrase));
         let grams = lexical::folded_grams(&folded);
         let terms = if grams.is_empty() {
             vec![folded]
@@ -48,7 +48,7 @@ pub(super) fn select(
             grams
         };
         for term in terms {
-            if !crate::public_text::trim_js_whitespace(&term).is_empty()
+            if !butler_core::public_text::trim_js_whitespace(&term).is_empty()
                 && seen.insert(term.clone())
             {
                 all_terms.push(term);
@@ -111,7 +111,7 @@ pub(super) fn select(
         .collect::<Vec<_>>();
     let query_weight = weights.iter().map(|item| item.weight).sum::<f64>();
     let encoded_weights = serde_json::to_string(&weights).map_err(json_error)?;
-    let cue = crate::public_text::trim_js_whitespace(&input.cue).to_owned();
+    let cue = butler_core::public_text::trim_js_whitespace(&input.cue).to_owned();
     let candidate_sql = format!(
         r"
         WITH query AS (

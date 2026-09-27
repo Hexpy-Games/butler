@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use serde_json::Value;
 
 use super::{WebAccessError, WebSession};

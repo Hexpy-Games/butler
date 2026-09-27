@@ -80,7 +80,7 @@ pub(super) fn string_array(value: Option<&Value>) -> Vec<String> {
         .into_iter()
         .flatten()
         .filter_map(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|text| !text.is_empty())
         .map(str::to_owned)
         .collect()

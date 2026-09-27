@@ -150,7 +150,7 @@ impl LiveState {
             protocol_version: APP_PROTOCOL_VERSION.to_owned(),
             id: high_water,
             event_type: "stream.reconcile_required".to_owned(),
-            created_at: crate::js_date::iso_from_system_time(std::time::SystemTime::now()),
+            created_at: butler_core::js_date::iso_from_system_time(std::time::SystemTime::now()),
             payload: serde_json::Map::from_iter([
                 ("after_cursor".to_owned(), self.cursor.into()),
                 ("high_water_cursor".to_owned(), high_water.into()),
@@ -167,7 +167,7 @@ impl LiveState {
                 protocol_version: APP_PROTOCOL_VERSION.to_owned(),
                 id: high_water,
                 event_type: "stream.reconcile_required".to_owned(),
-                created_at: crate::js_date::iso_from_system_time(std::time::SystemTime::now()),
+                created_at: butler_core::js_date::iso_from_system_time(std::time::SystemTime::now()),
                 payload: serde_json::Map::from_iter([
                     ("after_cursor".to_owned(), self.cursor.into()),
                     ("high_water_cursor".to_owned(), high_water.into()),

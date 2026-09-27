@@ -330,7 +330,7 @@ where
         }
     }
     let tail = &buffer[start..];
-    if !crate::public_text::trim_js_whitespace(&String::from_utf8_lossy(tail)).is_empty() {
+    if !butler_core::public_text::trim_js_whitespace(&String::from_utf8_lossy(tail)).is_empty() {
         check_limit(tail, limit, provider, api)?;
         let frame = String::from_utf8_lossy(tail);
         if let Some(data) = data(&frame)
@@ -376,7 +376,7 @@ fn data(frame: &str) -> Option<String> {
         .filter_map(|line| line.strip_prefix("data:").map(str::trim_start))
         .collect::<Vec<_>>()
         .join("\n");
-    let data = crate::public_text::trim_js_whitespace(&data);
+    let data = butler_core::public_text::trim_js_whitespace(&data);
     (!data.is_empty()).then(|| data.to_owned())
 }
 

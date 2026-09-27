@@ -14,7 +14,7 @@ use super::contracts::{
 use super::cursor::{self, RevisionOffsetCursor};
 use super::project::{pins, read_project};
 use super::session_links::ProjectSessionLinks;
-use crate::public_text::sanitize_public_text;
+use butler_core::public_text::sanitize_public_text;
 
 pub(super) async fn get(
     application: &AppApplication,

@@ -42,7 +42,7 @@ fn valid_with_markers(units: &[u16], next_marker: &mut u32, forbidden: &[u16]) -
 
 fn safe_scope(units: &[u16], fallback: &str, next_marker: &mut u32, forbidden: &[u16]) -> SafeText {
     let represented = valid_with_markers(units, next_marker, forbidden);
-    let sanitized = crate::public_text::sanitize_public_text(&represented.valid, fallback);
+    let sanitized = butler_core::public_text::sanitize_public_text(&represented.valid, fallback);
     let bounded: Vec<u16> = sanitized.encode_utf16().take(180).collect();
     let mut result = valid_with_markers(&bounded, next_marker, forbidden);
     // Markers from input that survive sanitization retain their source unit.
@@ -85,7 +85,7 @@ fn validation_receipt(value: &Validation) -> Result<String, BtccError> {
         scope["failure_summary"] = json!(failure.valid);
     }
     let limitations = failure.as_ref().map_or_else(Vec::new, |value| {
-        vec![crate::public_text::sanitize_public_text(
+        vec![butler_core::public_text::sanitize_public_text(
             &value.valid,
             "Evidence limitation was recorded.",
         )]
@@ -102,7 +102,7 @@ fn validation_receipt(value: &Validation) -> Result<String, BtccError> {
         "created_at":DateTime::<Utc>::from(std::time::SystemTime::now()).to_rfc3339_opts(SecondsFormat::Millis,true),
     });
     let mut encoded =
-        crate::json::stringify(&receipt).map_err(|source| error().with_source(source))?;
+        butler_core::json::stringify(&receipt).map_err(|source| error().with_source(source))?;
     for text in std::iter::once(&suite).chain(failure.as_ref()) {
         for (marker, unit) in &text.escaped_units {
             encoded = encoded.replace(*marker, &format!("\\u{unit:04x}"));
@@ -126,7 +126,7 @@ pub(super) fn capability_receipts(
             encoded.push(',');
         }
         encoded.push_str(
-            &crate::json::stringify(receipt).map_err(|source| error().with_source(source))?,
+            &butler_core::json::stringify(receipt).map_err(|source| error().with_source(source))?,
         );
     }
     for validation in validations {
@@ -136,7 +136,7 @@ pub(super) fn capability_receipts(
     for receipt in ordinary.iter().skip(1) {
         encoded.push(',');
         encoded.push_str(
-            &crate::json::stringify(receipt).map_err(|source| error().with_source(source))?,
+            &butler_core::json::stringify(receipt).map_err(|source| error().with_source(source))?,
         );
     }
     encoded.push(']');

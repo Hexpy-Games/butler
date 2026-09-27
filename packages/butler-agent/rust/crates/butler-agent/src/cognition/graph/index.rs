@@ -57,7 +57,7 @@ pub(super) fn index_source(
         .prepare("INSERT INTO memory_source_terms(term,source_key) VALUES(?1,?2)")
         .map_err(db_error)?;
     for term in lexical::terms(&folded) {
-        if !crate::public_text::trim_js_whitespace(&term).is_empty() {
+        if !butler_core::public_text::trim_js_whitespace(&term).is_empty() {
             insert
                 .execute(params![term, source_key])
                 .map_err(db_error)?;

@@ -1,7 +1,8 @@
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use crate::{conversation::PublicMemoryScope, json};
+use crate::conversation::PublicMemoryScope;
+use butler_core::json;
 
 use super::{ContextError, ContextResult};
 use crate::context::ContextCode;
@@ -118,7 +119,7 @@ pub(super) fn integer(
                 "Integer is outside source range",
             )
         })?;
-    Ok(crate::json::saturating_usize(number))
+    Ok(butler_core::json::saturating_usize(number))
 }
 
 pub(super) fn failure(code: &str, diagnostics: &[&str]) -> Value {

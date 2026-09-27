@@ -192,7 +192,7 @@ pub(super) async fn record_uncertain(
 pub(super) async fn record_applied(
     context: &Context<'_>,
     current: &EffectRecord,
-    result: crate::json::JsonDocument,
+    result: butler_core::json::JsonDocument,
 ) -> EffectResult<EffectOutcome> {
     let identity = &context.resolved.identity;
     let receipt = EffectReceipt {

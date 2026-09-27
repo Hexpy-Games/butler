@@ -181,7 +181,7 @@ impl ConversationAdmissionTurn {
             .filter(|v| !v.is_empty())
             .collect::<Vec<_>>()
             .join(" ");
-        let content = crate::public_text::trim_js_whitespace(&content).to_owned();
+        let content = butler_core::public_text::trim_js_whitespace(&content).to_owned();
         let content_parts = message
             .parts
             .iter()

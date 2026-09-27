@@ -8,7 +8,7 @@ mod decision;
 #[cfg(test)]
 mod tests;
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use std::sync::Arc;
 
 use crate::btcc::{

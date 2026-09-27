@@ -12,11 +12,10 @@ use super::{
     admission_identity::{input_digest, stringify},
     storage::AppStorageError,
 };
+use crate::gateway::MessageContentPart;
+use crate::gateway::MessageSendRequest;
 use crate::gateway::application::storage::AppStorageCode;
-use crate::{
-    gateway::{MessageContentPart, MessageSendRequest},
-    public_text::trim_js_whitespace,
-};
+use butler_core::public_text::trim_js_whitespace;
 
 pub(super) struct Inspected {
     pub chat: AppChatSnapshot,

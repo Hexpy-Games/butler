@@ -3,7 +3,7 @@ use serde_json::Value;
 use crate::btcc::{
     AgentLoopError, AgentLoopResult, ExecutionRoute, SuspensionReason, TerminalOutcome,
 };
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 
 use super::contracts::{AgentLoopEvent, BatchDisposition, CloseoutInput, ToolOutcome, ToolResult};
 use super::driver::Invocation;

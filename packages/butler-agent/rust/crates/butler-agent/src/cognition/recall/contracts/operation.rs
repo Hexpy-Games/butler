@@ -178,7 +178,7 @@ pub(crate) struct RecallEvidence {
 pub(crate) struct RecallRequirement {
     pub node_ref: String,
     pub action: String,
-    pub condition: crate::json::JsonDocument,
+    pub condition: butler_core::json::JsonDocument,
     pub basis: String,
     pub source_refs: Vec<String>,
 }

@@ -32,7 +32,7 @@ pub(crate) fn accepted_plan_effect_id(
     capability: &str,
     occurrence_id: &str,
 ) -> EffectResult<String> {
-    let occurrence = crate::public_text::trim_js_whitespace(occurrence_id);
+    let occurrence = butler_core::public_text::trim_js_whitespace(occurrence_id);
     required(occurrence, "runtime occurrence")?;
     let slot = json!({"version":1,"workId":work_id,"planRevisionId":plan_revision_id,
         "actionKey":"accepted-plan","capability":capability,
@@ -45,7 +45,7 @@ pub(crate) fn effect_input_sha256(value: &Value) -> EffectResult<String> {
 }
 
 pub(super) fn stable(value: &Value) -> EffectResult<String> {
-    crate::json::stringify_sorted(value, &|left, right| {
+    butler_core::json::stringify_sorted(value, &|left, right| {
         left.encode_utf16().cmp(right.encode_utf16())
     })
     .map_err(|error| {
@@ -54,7 +54,7 @@ pub(super) fn stable(value: &Value) -> EffectResult<String> {
 }
 
 fn required(value: &str, label: &str) -> EffectResult<()> {
-    if crate::public_text::trim_js_whitespace(value).is_empty() {
+    if butler_core::public_text::trim_js_whitespace(value).is_empty() {
         Err(EffectFailure::policy(
             "effect_request_invalid",
             format!("Effect {label} must not be empty"),
@@ -153,7 +153,7 @@ pub(super) fn resolve(input: &ExecuteEffect) -> EffectResult<Resolved> {
     let occurrence = if binding == PlanBinding::AcceptedPlan {
         let value = input.occurrence_id.as_deref().unwrap_or("");
         required(value, "runtime effect occurrence")?;
-        Some(crate::public_text::trim_js_whitespace(value))
+        Some(butler_core::public_text::trim_js_whitespace(value))
     } else {
         None
     };
@@ -186,11 +186,11 @@ pub(super) fn build_identity(parts: IdentityParts<'_>) -> EffectResult<EffectIde
     let occurrence_sha256 = if parts.binding == PlanBinding::AcceptedPlan {
         let value = parts.occurrence.unwrap_or("");
         required(value, "runtime effect occurrence")?;
-        Some(digest(crate::public_text::trim_js_whitespace(value)))
+        Some(digest(butler_core::public_text::trim_js_whitespace(value)))
     } else {
         None
     };
-    let base = crate::json::json_object!({"version":1,"workId":parts.work_id,"planRevisionId":parts.plan_revision_id,
+    let base = butler_core::json::json_object!({"version":1,"workId":parts.work_id,"planRevisionId":parts.plan_revision_id,
         "actionKey":parts.action_key,"capability":parts.capability,"targetSha256":target_sha256,
         "inputSha256":input_sha256});
     let mut identity_body = base.clone();

@@ -97,12 +97,12 @@ pub(super) fn set_path(config: &mut Value, dotted_path: &str, value: Value) {
             current.insert(part.to_owned(), value);
             return;
         }
-        current = crate::json::object_field_mut(current, part);
+        current = butler_core::json::object_field_mut(current, part);
     }
 }
 
 pub(super) fn parse_value(raw: &str) -> Value {
-    let trimmed = crate::public_text::trim_js_whitespace(raw);
+    let trimmed = butler_core::public_text::trim_js_whitespace(raw);
     match trimmed {
         "true" => return Value::Bool(true),
         "false" => return Value::Bool(false),

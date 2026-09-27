@@ -284,7 +284,7 @@ fn now_iso() -> String {
             .min(i64::MAX as u128),
     )
     .unwrap_or(i64::MAX);
-    crate::js_date::format_iso_millis(millis)
+    butler_core::js_date::format_iso_millis(millis)
         .unwrap_or_else(|| "1970-01-01T00:00:00.000Z".to_owned())
 }
 

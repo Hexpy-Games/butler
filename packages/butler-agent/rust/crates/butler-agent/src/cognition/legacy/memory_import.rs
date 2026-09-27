@@ -57,7 +57,7 @@ impl LegacyMemoryImportService {
         let content = String::from_utf8_lossy(&raw);
         let lines = content
             .split('\n')
-            .filter(|line| !crate::public_text::trim_js_whitespace(line).is_empty())
+            .filter(|line| !butler_core::public_text::trim_js_whitespace(line).is_empty())
             .map(str::to_owned)
             .collect::<Vec<_>>();
         let source_session_id = transcript_session_id(&lines);
@@ -108,7 +108,7 @@ impl LegacyMemoryImportService {
     ) -> CognitionResult<()> {
         if plan.format == "butler-transcript"
             && let Some(project_id) = project_id
-            && !crate::public_text::trim_js_whitespace(project_id).is_empty()
+            && !butler_core::public_text::trim_js_whitespace(project_id).is_empty()
         {
             plan.project = project_id.to_owned();
             return Ok(());
@@ -127,7 +127,7 @@ impl LegacyMemoryImportService {
         };
         Ok(content
             .lines()
-            .any(|line| crate::public_text::trim_js_whitespace(line) == session_id))
+            .any(|line| butler_core::public_text::trim_js_whitespace(line) == session_id))
     }
 
     pub(crate) fn prepare_apply(&self) -> CognitionResult<()> {
@@ -219,7 +219,7 @@ fn resolve_import_project(data_root: &std::path::Path, path_hint: &str) -> Cogni
 }
 
 fn resolve_project_key(data_root: &std::path::Path, raw: &str) -> CognitionResult<Option<String>> {
-    let raw = crate::public_text::trim_js_whitespace(raw);
+    let raw = butler_core::public_text::trim_js_whitespace(raw);
     if raw.is_empty() {
         return Ok(None);
     }

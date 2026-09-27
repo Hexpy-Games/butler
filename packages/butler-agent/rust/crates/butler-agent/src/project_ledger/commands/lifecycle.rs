@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 
 use super::contracts::{CliFailure, LedgerCommand, LedgerCommandRequest};
 use super::{envelope, refresh_index_after_mutation};
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 pub(super) fn execute(
     project_root: &Path,

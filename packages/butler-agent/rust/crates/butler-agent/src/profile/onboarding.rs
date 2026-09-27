@@ -82,7 +82,7 @@ pub(super) fn apply_update_fields(
     state
         .skipped_fields
         .extend(input.skipped_fields.iter().filter_map(|value| {
-            let value = crate::public_text::trim_js_whitespace(value);
+            let value = butler_core::public_text::trim_js_whitespace(value);
             (!value.is_empty()).then(|| value.to_owned())
         }));
     state
@@ -104,7 +104,7 @@ pub(super) fn resolve_persona_selection(
             .filter(|value| !value.is_empty())
             .map(|_| "custom".into());
     };
-    let selection = crate::public_text::trim_js_whitespace(selection);
+    let selection = butler_core::public_text::trim_js_whitespace(selection);
     if selection.is_empty() {
         return None;
     }
@@ -280,7 +280,7 @@ fn string_array(value: Option<&Value>) -> Vec<String> {
         .into_iter()
         .flatten()
         .filter_map(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|v| !v.is_empty())
         .take(12)
         .map(str::to_owned)
@@ -295,7 +295,7 @@ fn custom(value: &str) -> bool {
 fn persona_id(value: &str) -> Option<&str> {
     let marker = "persona_preset:";
     let start = value.find(marker)? + marker.len();
-    let value = crate::public_text::trim_js_whitespace(&value[start..]);
+    let value = butler_core::public_text::trim_js_whitespace(&value[start..]);
     let value = value.strip_prefix('`').unwrap_or(value);
     let end = value
         .find(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '`')))
@@ -306,11 +306,11 @@ fn persona_id(value: &str) -> Option<&str> {
         .filter(|value| !value.is_empty())
 }
 fn normalize_selection(value: &str) -> String {
-    let value = crate::public_text::trim_js_whitespace(value);
+    let value = butler_core::public_text::trim_js_whitespace(value);
     let value = value
         .strip_prefix('-')
         .or_else(|| value.strip_prefix('*'))
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .unwrap_or(value);
     let value = value.replace(['`', '"', '“', '”'], "");
     super::naming::collapse_js_whitespace(&value).to_lowercase()
@@ -322,7 +322,7 @@ fn locale_str(value: PersonaLocale) -> &'static str {
     }
 }
 fn object<'a>(root: &'a mut Value, key: &str) -> &'a mut Map<String, Value> {
-    crate::json::object_field_mut(crate::json::object_mut(root), key)
+    butler_core::json::object_field_mut(butler_core::json::object_mut(root), key)
 }
 fn error() -> ProfileError {
     ProfileError::new(

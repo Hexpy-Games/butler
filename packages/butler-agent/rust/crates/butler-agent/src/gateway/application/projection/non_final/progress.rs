@@ -220,7 +220,7 @@ fn non_negative_integer(value: Option<&Value>) -> Option<u64> {
         _ => None,
     }
     .filter(|number| number.is_finite() && *number >= 0.0)
-    .map(|number| crate::json::saturating_u64(number.round()))
+    .map(|number| butler_core::json::saturating_u64(number.round()))
 }
 
 pub(super) struct ProgressAppend<'a> {

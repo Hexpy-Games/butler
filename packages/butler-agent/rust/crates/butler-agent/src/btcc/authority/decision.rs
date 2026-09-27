@@ -7,12 +7,12 @@ use super::{permission, projection};
 pub(super) fn decide(
     repository: &mut dyn AuthorityRepository,
     input: &AuthorityDecisionInput,
-    collation: &crate::locale::LocaleCollation,
+    collation: &butler_core::locale::LocaleCollation,
     clock: &dyn Fn() -> String,
 ) -> AuthorityResult<AuthorityDecisionResult> {
     let alternative = if input.action == "modify" {
         let value = input.alternative_input.as_deref().unwrap_or("");
-        if crate::public_text::trim_js_whitespace(value).is_empty() {
+        if butler_core::public_text::trim_js_whitespace(value).is_empty() {
             return Err(AuthorityError::policy("authority_modify_input_missing"));
         }
         if value.len() > 16 * 1024 {

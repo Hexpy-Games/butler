@@ -6,7 +6,7 @@ mod lifecycle;
 mod options;
 mod recovery;
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -21,8 +21,8 @@ use crate::project_ledger::{
     LedgerCommand, LedgerCommandRequest, ProjectLedger, ProjectLedgerReadError,
     ProjectLedgerToolScopeLookup,
 };
-use crate::public_text::trim_js_whitespace;
 use crate::workspace::Commands;
+use butler_core::public_text::trim_js_whitespace;
 
 pub(crate) struct ProjectToolScope {
     pub project_id: Option<String>,
@@ -35,7 +35,7 @@ pub(crate) struct GuidedProjectTools {
     commands: Commands,
     environment: Arc<HashMap<String, String>>,
     work_records: crate::work_records::WorkRecordReader,
-    collation: Arc<crate::locale::LocaleCollation>,
+    collation: Arc<butler_core::locale::LocaleCollation>,
     tasks: TaskTracker,
     admission: Mutex<bool>,
     permits: Arc<Semaphore>,
@@ -51,7 +51,7 @@ impl GuidedProjectTools {
         commands: Commands,
         environment: Arc<HashMap<String, String>>,
         work_records: crate::work_records::WorkRecordReader,
-        collation: Arc<crate::locale::LocaleCollation>,
+        collation: Arc<butler_core::locale::LocaleCollation>,
     ) -> Self {
         Self {
             ledger,
@@ -298,7 +298,7 @@ pub(in crate::host) async fn command(
         })
         .await?;
     const MAX_CLI_OUTPUT_BYTES: usize = 1_048_576;
-    match crate::json::stringify(&result) {
+    match butler_core::json::stringify(&result) {
         Ok(output) if output.len() <= MAX_CLI_OUTPUT_BYTES => Ok(result),
         Ok(_) => Ok(
             json!({"ok":false,"error":{"code":"project_ledger_output_limit",

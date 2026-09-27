@@ -4,10 +4,11 @@ use std::borrow::Cow;
 
 use serde_json::Value;
 
-use crate::{
-    btcc::BtccError,
-    json::{bound_raw_string, raw_string_contains_any, visit_raw_array, visit_raw_object},
-};
+use crate::btcc::BtccError;
+use butler_core::json::bound_raw_string;
+use butler_core::json::raw_string_contains_any;
+use butler_core::json::visit_raw_array;
+use butler_core::json::visit_raw_object;
 
 const CONTROL_FACTS: &[&str] = &[
     "status",
@@ -279,7 +280,7 @@ impl<'a> Node<'a> {
             let mut fields = Vec::new();
             visit_raw_object(raw, |key, value| {
                 if let Some(node) = Self::bounded(value, chars, items, depth + 1)
-                    .map_err(crate::json::JsonError::callback)?
+                    .map_err(butler_core::json::JsonError::callback)?
                 {
                     fields.push((Key::source(key), node));
                 }
@@ -293,7 +294,7 @@ impl<'a> Node<'a> {
             visit_raw_array(raw, |value| {
                 if values.len() < items
                     && let Some(node) = Self::bounded(value, chars, items, depth + 1)
-                        .map_err(crate::json::JsonError::callback)?
+                        .map_err(butler_core::json::JsonError::callback)?
                 {
                     values.push(node);
                 }
@@ -419,9 +420,9 @@ fn primitive_raw(raw: &str) -> bool {
     !raw.starts_with('{') && !raw.starts_with('[')
 }
 fn encode_value(value: &Value) -> Result<String, BtccError> {
-    crate::json::stringify(value).map_err(json_error)
+    butler_core::json::stringify(value).map_err(json_error)
 }
-fn json_error(error: crate::json::JsonError) -> BtccError {
+fn json_error(error: butler_core::json::JsonError) -> BtccError {
     BtccError::relayed(
         "guided_tool_provider_serialization_failed",
         error.to_string(),

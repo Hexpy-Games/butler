@@ -9,7 +9,7 @@ use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::{
     AppIdentityClock, EventSubscribers, events, storage::AppStorageError,
 };
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 pub(super) struct ProjectRow {
     id: String,
@@ -211,7 +211,7 @@ pub(super) fn append_created_unpublished(
     clock: &dyn AppIdentityClock,
     project: &AppProjectSummary,
 ) -> Result<crate::gateway::AppEventEnvelope, AppStorageError> {
-    let payload = crate::json::json_object!({"project":project});
+    let payload = butler_core::json::json_object!({"project":project});
     events::append_unpublished(db, "project.created", None, payload, &clock.now_iso())
 }
 
@@ -221,7 +221,7 @@ fn append_created(
     clock: &dyn AppIdentityClock,
     project: &AppProjectSummary,
 ) -> Result<(), AppStorageError> {
-    let payload = crate::json::json_object!({"project":project});
+    let payload = butler_core::json::json_object!({"project":project});
     events::append(
         db,
         subscribers,

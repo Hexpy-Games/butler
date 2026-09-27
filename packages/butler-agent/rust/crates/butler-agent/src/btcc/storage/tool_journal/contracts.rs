@@ -1,7 +1,7 @@
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::json::JsonDocument;
+use butler_core::json::JsonDocument;
 
 #[derive(Clone)]
 pub(crate) struct ToolJournalStart {

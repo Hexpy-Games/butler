@@ -45,7 +45,7 @@ impl CognitionPathEnvironment {
 
 fn trimmed(value: Option<&String>) -> Option<&str> {
     value
-        .map(|value| crate::public_text::trim_js_whitespace(value))
+        .map(|value| butler_core::public_text::trim_js_whitespace(value))
         .filter(|value| !value.is_empty())
 }
 

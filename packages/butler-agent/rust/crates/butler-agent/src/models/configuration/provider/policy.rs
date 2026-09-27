@@ -17,7 +17,7 @@ pub(super) fn idle(value: Option<&str>) -> Duration {
 }
 pub(super) fn retry_base(value: Option<&str>) -> f64 {
     value
-        .map(crate::json::number_from_string)
+        .map(butler_core::json::number_from_string)
         .filter(|value| value.is_finite())
         .map(|value| value.max(0.0))
         .unwrap_or(DEFAULT_RETRY_BASE_MS)
@@ -25,7 +25,7 @@ pub(super) fn retry_base(value: Option<&str>) -> f64 {
 pub(super) fn sanitize_cache_segment(value: &str) -> String {
     let mut output = String::new();
     let mut dash = false;
-    for character in crate::public_text::trim_js_whitespace(value).chars() {
+    for character in butler_core::public_text::trim_js_whitespace(value).chars() {
         if character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | ':' | '-') {
             output.push(character);
             dash = false;
@@ -55,7 +55,7 @@ pub(super) fn cache_prefix(data: &std::path::Path) -> String {
 
 fn positive_integer_ms(value: Option<&str>, fallback: f64) -> f64 {
     value
-        .map(crate::json::number_from_string)
+        .map(butler_core::json::number_from_string)
         .filter(|value| value.fract() == 0.0 && *value > 0.0)
         .unwrap_or(fallback)
 }

@@ -317,7 +317,7 @@ pub(super) fn bounded_text(value: &str, max_chars: usize) -> (String, bool) {
     if value.encode_utf16().count() <= max_chars {
         return (value.to_owned(), false);
     }
-    let clipped = crate::json::Utf16Slice::new(value, 0, max_chars.saturating_sub(16))
+    let clipped = butler_core::json::Utf16Slice::new(value, 0, max_chars.saturating_sub(16))
         .utf8_lossy()
         .into_owned();
     (format!("{}\n...[truncated]", clipped.trim_end()), true)

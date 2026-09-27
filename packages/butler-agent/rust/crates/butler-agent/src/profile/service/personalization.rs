@@ -1,11 +1,10 @@
 use std::{fs, path::Path};
 
 use super::ProfileService;
+use crate::profile::PersonaLocale;
+use crate::profile::PersonaPreset;
 use crate::profile::ProfileCode;
-use crate::{
-    profile::{PersonaLocale, PersonaPreset},
-    public_text::trim_js_whitespace,
-};
+use butler_core::public_text::trim_js_whitespace;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct PersonalizationDocuments {

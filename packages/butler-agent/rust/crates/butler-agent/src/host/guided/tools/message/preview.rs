@@ -8,9 +8,9 @@ mod work;
 
 use crate::btcc::{BtccError, OperationResultMessageReferences, ToolResult};
 #[cfg(test)]
-use crate::json::JsonDocument;
-use crate::json::visit_raw_object;
-use crate::tool_protocol::ToolName;
+use butler_core::json::JsonDocument;
+use butler_core::json::visit_raw_object;
+use butler_core::tool_protocol::ToolName;
 
 const MAX_BYTES: usize = 50 * 1024;
 
@@ -80,7 +80,7 @@ pub(super) fn fit(
     {
         projected.push_str(",\"error\":");
         projected.push_str(
-            &crate::json::stringify(
+            &butler_core::json::stringify(
                 &serde_json::to_value(error).map_err(|source| failure().with_source(source))?,
             )
             .map_err(|source| failure().with_source(source))?,
@@ -105,7 +105,7 @@ pub(super) fn fit(
         let payload = payload(result)?;
         projected.push_str(",\"model_preview\":");
         projected.push_str(
-            &crate::json::stringify(&bound::metadata(payload.len(), exact_read))
+            &butler_core::json::stringify(&bound::metadata(payload.len(), exact_read))
                 .map_err(|source| failure().with_source(source))?,
         );
     }
@@ -143,7 +143,8 @@ fn keys(name: &str) -> &'static [&'static str] {
 
 fn generic_output(name: &str, candidate: &str) -> Result<String, BtccError> {
     let mut output = String::from("{\"tool_name\":");
-    crate::json::write_string(name, &mut output).map_err(|source| failure().with_source(source))?;
+    butler_core::json::write_string(name, &mut output)
+        .map_err(|source| failure().with_source(source))?;
     let candidate = candidate.trim();
     if candidate.starts_with('{') {
         if !candidate[1..candidate.len() - 1].trim().is_empty() {
@@ -170,7 +171,7 @@ fn payload(result: &ToolResult) -> Result<String, BtccError> {
     {
         body.push_str(",\"error\":");
         body.push_str(
-            &crate::json::stringify(
+            &butler_core::json::stringify(
                 &serde_json::to_value(error).map_err(|source| failure().with_source(source))?,
             )
             .map_err(|source| failure().with_source(source))?,
@@ -230,7 +231,8 @@ pub(super) fn field<'a>(raw: &'a str, name: &str) -> Result<Option<&'a str>, Btc
 
 pub(super) fn append_field(output: &mut String, name: &str, raw: &str) -> Result<(), BtccError> {
     output.push(',');
-    crate::json::write_string(name, output).map_err(|source| failure().with_source(source))?;
+    butler_core::json::write_string(name, output)
+        .map_err(|source| failure().with_source(source))?;
     output.push(':');
     output.push_str(raw);
     Ok(())

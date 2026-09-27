@@ -11,8 +11,8 @@ use crate::conversation::{
     AgentConversationStore, ConversationMessageWithParts, ConversationPartKind,
     ConversationReadOrder, ConversationRole, ReadCognitionMessagesInput,
 };
-use crate::json::Utf16Prefix;
-use crate::public_text::trim_js_whitespace;
+use butler_core::json::Utf16Prefix;
+use butler_core::public_text::trim_js_whitespace;
 
 pub(crate) async fn resolve_session_references(
     content: Option<&MessageContent>,

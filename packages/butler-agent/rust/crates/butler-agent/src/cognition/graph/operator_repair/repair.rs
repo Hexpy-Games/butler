@@ -394,6 +394,6 @@ fn parse_input_value(serialized: &str) -> CognitionResult<Value> {
 }
 
 fn stringify(value: &Value) -> CognitionResult<String> {
-    crate::json::stringify(value)
+    butler_core::json::stringify(value)
         .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))
 }

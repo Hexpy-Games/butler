@@ -9,10 +9,9 @@ use super::{
     ReadToolOutputInput, reader, wire,
 };
 use crate::context::ContextCode;
-use crate::{
-    context::tool_artifact_slice::{SliceInput, slice_tool_artifact_text},
-    json::JsonDocument,
-};
+use crate::context::tool_artifact_slice::SliceInput;
+use crate::context::tool_artifact_slice::slice_tool_artifact_text;
+use butler_core::json::JsonDocument;
 
 const SCHEMA: &str = "butler.raw-tool-artifact.v1";
 
@@ -59,9 +58,10 @@ pub(super) fn read(
         .offset_chars
         .filter(|value| value.is_finite())
         .map(nonnegative_trunc);
-    let limit_lines =
-        crate::json::saturating_usize(input.limit_lines.unwrap_or(80.0).trunc().clamp(1.0, 500.0));
-    let max_tokens = crate::json::saturating_usize(
+    let limit_lines = butler_core::json::saturating_usize(
+        input.limit_lines.unwrap_or(80.0).trunc().clamp(1.0, 500.0),
+    );
+    let max_tokens = butler_core::json::saturating_usize(
         input
             .max_tokens
             .unwrap_or(1_200.0)
@@ -131,5 +131,5 @@ fn failure(error: &str) -> ContextResult<JsonDocument> {
     })
 }
 fn nonnegative_trunc(value: f64) -> usize {
-    crate::json::saturating_usize(value.trunc().max(0.0))
+    butler_core::json::saturating_usize(value.trunc().max(0.0))
 }

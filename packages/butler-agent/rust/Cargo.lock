@@ -697,6 +697,7 @@ dependencies = [
  "arrow-schema",
  "axum",
  "base64 0.22.1",
+ "butler-core",
  "butler-test-support",
  "bytes",
  "chrono",
@@ -742,6 +743,26 @@ dependencies = [
  "uuid",
  "webp",
  "zip",
+]
+
+[[package]]
+name = "butler-core"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "butler-test-support",
+ "chrono",
+ "icu_collator",
+ "icu_locid",
+ "regex",
+ "ryu-js",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "unicode-normalization",
+ "unicode-segmentation",
+ "uuid",
 ]
 
 [[package]]

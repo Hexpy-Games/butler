@@ -54,7 +54,7 @@ impl<'a> PreparedRequestAdmission<'a> {
             .body
             .get("tools")
             .filter(|value| !value.is_null())
-            .map(crate::json::stringify)
+            .map(butler_core::json::stringify)
             .transpose()
             .map_err(serialization_failure)?
             .map_or(2, |value| value.len());
@@ -144,7 +144,7 @@ impl<'a> PreparedRequestAdmission<'a> {
             let body: serde_json::Value =
                 serde_json::from_slice(&self.serialized).map_err(serialization_failure)?;
             projected = Some(
-                crate::json::stringify_with_string_projection(&body, |text| {
+                butler_core::json::stringify_with_string_projection(&body, |text| {
                     image_data_url(text).then(|| {
                         image_count += 1;
                         format!("[image input bytes={}]", text.len())

@@ -19,7 +19,7 @@ use serde_json::Value;
 
 use super::super::super::app_error;
 use super::super::{AppApplication, GatewayApplicationError};
-use crate::public_text::sanitize_public_text;
+use butler_core::public_text::sanitize_public_text;
 
 pub(super) const INPUT_TOKENS: u64 = 8_000;
 pub(super) const OUTPUT_TOKENS: u64 = 1_200;

@@ -26,7 +26,7 @@ pub(super) use generic::{apply as apply_record_effect, reconcile as reconcile_re
 pub(super) async fn publish<F, Fut>(
     data_root: std::path::PathBuf,
     fs_permits: Arc<Semaphore>,
-    collation: Arc<crate::locale::LocaleCollation>,
+    collation: Arc<butler_core::locale::LocaleCollation>,
     scope: ResolvedProjectWorkScope,
     identity: ProjectWorkOperationIdentity,
     prepare_updates: F,

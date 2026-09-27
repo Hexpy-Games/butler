@@ -194,7 +194,7 @@ fn integer_byte_offset(value: f64) -> CognitionResult<i64> {
     if !value.is_finite() || value < 0.0 || value.fract() != 0.0 || value > i64::MAX as f64 {
         Err(source_changed())
     } else {
-        Ok(crate::json::saturating_i64(value))
+        Ok(butler_core::json::saturating_i64(value))
     }
 }
 
@@ -213,7 +213,7 @@ fn json_string(value: Option<&str>) -> CognitionResult<String> {
 }
 
 fn stringify(value: &Value) -> CognitionResult<String> {
-    crate::json::stringify(value).map_err(|error| {
+    butler_core::json::stringify(value).map_err(|error| {
         CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string())
             .with_source(error)
     })

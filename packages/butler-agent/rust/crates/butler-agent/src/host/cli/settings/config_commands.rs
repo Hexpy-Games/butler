@@ -10,7 +10,7 @@ use serde_json::json;
 use super::{
     CliError, Command, Options, config, path::safe_data_file, report_error, report_success,
 };
-use crate::configuration;
+use butler_core::configuration;
 
 fn config_path(data_root: &Path) -> std::path::PathBuf {
     data_root.join("butler.config.json")

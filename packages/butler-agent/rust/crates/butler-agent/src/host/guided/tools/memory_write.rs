@@ -1,6 +1,6 @@
 //! Public memory-write adapters using the current Turn's canonical provenance.
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
 use crate::btcc::{AccessMode, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
@@ -11,7 +11,7 @@ use crate::cognition::{
 use crate::conversation::{
     CanonicalMemoryReadBinding, PublicMemorySnapshot, conversation_store_path,
 };
-use crate::json::JsonDocument;
+use butler_core::json::JsonDocument;
 
 use super::GuidedTools;
 
@@ -49,7 +49,7 @@ fn ingest(owner: &GuidedTools, args: &Map<String, Value>) -> Value {
     let task_id = args
         .get("task_id")
         .and_then(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty());
     let Some(task_id) = task_id else {
         return failure(
@@ -93,7 +93,7 @@ fn update(
             "update_explicit_memory requires text",
         );
     };
-    if crate::public_text::trim_js_whitespace(text).is_empty() {
+    if butler_core::public_text::trim_js_whitespace(text).is_empty() {
         return failure(
             "update_explicit_memory_requires_text",
             "update_explicit_memory requires text",
@@ -102,7 +102,7 @@ fn update(
     let source = args
         .get("source")
         .and_then(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty());
     if source.is_none() {
         return failure(

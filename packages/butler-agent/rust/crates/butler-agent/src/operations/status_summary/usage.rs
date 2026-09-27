@@ -144,7 +144,7 @@ pub(super) fn read_usage(
         0.0
     };
     let mut model_value = model.value();
-    let fields = crate::json::object_mut(&mut model_value);
+    let fields = butler_core::json::object_mut(&mut model_value);
     fields.insert("cacheHitRatio".into(), json!(prompt_hit_ratio));
     fields.insert("byScope".into(), map_numbers(by_scope));
     fields.insert("byScopeUsage".into(), map_tokens(by_scope_usage));
@@ -287,7 +287,7 @@ fn provider_id(model: &str) -> String {
 fn provider_summary(values: BTreeMap<String, Tokens>) -> Value {
     let mut providers = values.into_iter().map(|(provider, tokens)| {
         let mut value = tokens.value();
-        let bucket = crate::json::object_mut(&mut value);
+        let bucket = butler_core::json::object_mut(&mut value);
         bucket.insert("providerId".into(), json!(provider));
         bucket.insert("source".into(), json!("local_telemetry"));
         bucket.insert("remaining".into(), json!({

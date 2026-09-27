@@ -55,7 +55,7 @@ pub(crate) fn update_explicit_memory(
     publisher: &CompletionPublisher,
     input: &ExplicitMemoryUpdateInput,
 ) -> CognitionResult<ExplicitMemoryUpdateResult> {
-    if crate::public_text::trim_js_whitespace(&input.text).is_empty() {
+    if butler_core::public_text::trim_js_whitespace(&input.text).is_empty() {
         return Err(error(CognitionCode::ExplicitMemoryTextRequired));
     }
     let memory_root = environment.memory_root(data_root);
@@ -63,14 +63,14 @@ pub(crate) fn update_explicit_memory(
     let operation_id = input
         .operation_id
         .as_deref()
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let record_id = input
         .record_id
         .as_deref()
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
         .unwrap_or_else(|| sha256(format!("explicit-rule:{operation_id}").as_bytes()));
@@ -195,20 +195,20 @@ fn explicit_rule_revision(
         session_id,
         message_id,
     ]);
-    let encoded = crate::json::stringify(&value).map_err(json_error)?;
+    let encoded = butler_core::json::stringify(&value).map_err(json_error)?;
     Ok(sha256(encoded.as_bytes()))
 }
 
 fn compact(value: &str, limit: usize) -> String {
-    let collapsed = crate::json::Utf16Prefix::new(value, usize::MAX)
-        .collapse_whitespace(crate::public_text::is_js_whitespace);
+    let collapsed = butler_core::json::Utf16Prefix::new(value, usize::MAX)
+        .collapse_whitespace(butler_core::public_text::is_js_whitespace);
     if collapsed.len_utf16() <= limit {
         return collapsed.utf8_for_hash().into_owned();
     }
     let text = collapsed.utf8_for_hash();
     format!(
         "{}...",
-        crate::json::Utf16Slice::new(&text, 0, limit).utf8_lossy()
+        butler_core::json::Utf16Slice::new(&text, 0, limit).utf8_lossy()
     )
 }
 

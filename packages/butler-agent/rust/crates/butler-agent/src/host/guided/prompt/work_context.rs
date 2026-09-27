@@ -10,8 +10,8 @@ fn word<T: serde::Serialize>(value: &T) -> String {
 }
 
 fn line(value: &str, limit: Option<usize>) -> String {
-    let collapsed = crate::json::Utf16Prefix::new(value, usize::MAX)
-        .collapse_whitespace(crate::public_text::is_js_whitespace);
+    let collapsed = butler_core::json::Utf16Prefix::new(value, usize::MAX)
+        .collapse_whitespace(butler_core::public_text::is_js_whitespace);
     collapsed
         .prefix(limit.unwrap_or(usize::MAX))
         .utf8_for_hash()

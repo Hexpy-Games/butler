@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 
 use super::{AppIdentityClock, GatewayApplicationError, MessageContent, PreparedAppAdmission};
 use crate::gateway::MessageSendRequest;
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 pub(super) fn stable_client_id(
     value: Option<&Value>,

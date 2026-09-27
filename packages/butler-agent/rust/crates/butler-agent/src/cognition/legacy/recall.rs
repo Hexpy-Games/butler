@@ -14,7 +14,7 @@ use std::{
 use crate::cognition::{
     CognitionCode, CognitionError, CognitionPathEnvironment, CognitionResult, ensure_data_authority,
 };
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 pub(crate) fn recall_legacy(
     data_root: &Path,

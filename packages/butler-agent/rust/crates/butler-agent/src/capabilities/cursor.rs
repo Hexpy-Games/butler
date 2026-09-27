@@ -1,6 +1,6 @@
-use crate::tool_protocol::ToolName;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
@@ -14,10 +14,10 @@ pub(super) struct ReadCursor {
     pub file_sha256: String,
 }
 
-pub(super) fn query_hash(value: &Value) -> Result<String, crate::json::JsonError> {
+pub(super) fn query_hash(value: &Value) -> Result<String, butler_core::json::JsonError> {
     let sorted = sort_keys(value);
     let mut encoded = String::new();
-    crate::json::append_json(&sorted, &mut encoded)?;
+    butler_core::json::append_json(&sorted, &mut encoded)?;
     Ok(format!("{:x}", Sha256::digest(encoded.as_bytes())))
 }
 fn sort_keys(value: &Value) -> Value {
@@ -127,5 +127,5 @@ pub(super) fn decode_buffer_base64url(raw: &str) -> Vec<u8> {
 fn nonnegative_integer(value: &Value) -> Option<usize> {
     let number = value.as_f64()?;
     (number.is_finite() && number >= 0.0 && number.fract() == 0.0)
-        .then_some(crate::json::saturating_usize(number))
+        .then_some(butler_core::json::saturating_usize(number))
 }

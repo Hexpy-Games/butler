@@ -209,7 +209,7 @@ pub(super) async fn test_search(
 }
 
 fn utf16_prefix(value: &str, max: usize) -> String {
-    crate::json::Utf16Slice::new(value, 0, max)
+    butler_core::json::Utf16Slice::new(value, 0, max)
         .utf8_lossy()
         .into_owned()
 }

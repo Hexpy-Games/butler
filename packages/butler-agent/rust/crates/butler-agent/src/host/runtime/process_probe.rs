@@ -43,7 +43,7 @@ impl CognitionCoordinationHost for SystemIdentity {
     }
 
     fn now_iso(&self) -> String {
-        crate::js_date::iso_from_system_time(std::time::SystemTime::now())
+        butler_core::js_date::iso_from_system_time(std::time::SystemTime::now())
     }
 }
 
@@ -66,7 +66,10 @@ pub(in crate::host) fn profile_process_status(pid: f64) -> CognitionProcessStatu
     {
         return CognitionProcessStatus::Uncertain;
     }
-    probe_result(kill(Pid::from_raw(crate::json::saturating_i32(pid)), None))
+    probe_result(kill(
+        Pid::from_raw(butler_core::json::saturating_i32(pid)),
+        None,
+    ))
 }
 
 #[cfg(test)]

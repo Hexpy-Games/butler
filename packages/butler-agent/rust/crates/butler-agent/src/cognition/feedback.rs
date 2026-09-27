@@ -149,7 +149,7 @@ fn read_owners(path: &Path) -> CognitionResult<HashMap<String, FeedbackOwner>> {
                 body.push(line);
             }
         }
-        let text = crate::public_text::trim_js_whitespace(&body.join("\n")).to_owned();
+        let text = butler_core::public_text::trim_js_whitespace(&body.join("\n")).to_owned();
         let owner = FeedbackOwnerRevision {
             feedback_id,
             created_at: fields.get("created_at").copied().unwrap_or(""),

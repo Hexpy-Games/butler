@@ -97,7 +97,7 @@ pub(super) fn admit(
     scope: &ResolvedProjectWorkScope,
     identity: &ProjectWorkOperationIdentity,
     updates: &[super::contracts::ProjectLedgerRecordUpdate],
-    collation: &crate::locale::LocaleCollation,
+    collation: &butler_core::locale::LocaleCollation,
 ) -> Result<Occurrence, ProjectWorkPublicationError> {
     let (base, targets) = record::capture(scope, updates, collation)?;
     let occurrence_id = occurrence_id(scope, identity)?;
@@ -128,7 +128,7 @@ pub(super) fn append(
     identity: &ProjectWorkOperationIdentity,
     previous: &Occurrence,
     updates: &[super::contracts::ProjectLedgerRecordUpdate],
-    collation: &crate::locale::LocaleCollation,
+    collation: &butler_core::locale::LocaleCollation,
 ) -> Result<Occurrence, ProjectWorkPublicationError> {
     let (base, targets) = record::capture(scope, updates, collation)?;
     let new_attempt = attempt(
@@ -275,7 +275,8 @@ fn operation_kind(kind: ProjectWorkOperationKind) -> &'static str {
 }
 
 fn digest(value: &serde_json::Value) -> Result<String, ProjectWorkPublicationError> {
-    let encoded = crate::json::stringify(value).map_err(|source| invalid().with_source(source))?;
+    let encoded =
+        butler_core::json::stringify(value).map_err(|source| invalid().with_source(source))?;
     Ok(format!("{:x}", Sha256::digest(encoded.as_bytes())))
 }
 

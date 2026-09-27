@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use crate::{conversation::PublicMemoryScope, json};
+use crate::conversation::PublicMemoryScope;
+use butler_core::json;
 
 #[derive(Clone)]
 pub(super) struct ListArgs {
@@ -179,7 +180,7 @@ fn integer(
     if number.fract() != 0.0 || !number.is_finite() || number < min as f64 || number > max as f64 {
         return Err(ContextCode::InvalidInteger);
     }
-    Ok(crate::json::saturating_usize(number))
+    Ok(butler_core::json::saturating_usize(number))
 }
 fn strings(value: Option<&Value>, max: usize) -> Result<Vec<String>, ContextCode> {
     let Some(value) = value else {
@@ -212,7 +213,7 @@ fn iso(text: &str) -> Result<String, ContextCode> {
         return Err(ContextCode::InvalidTime);
     }
     let millis =
-        crate::js_date::parse_date_millis(text, &|_| None).ok_or(ContextCode::InvalidTime)?;
+        butler_core::js_date::parse_date_millis(text, &|_| None).ok_or(ContextCode::InvalidTime)?;
     DateTime::<Utc>::from_timestamp_millis(millis)
         .map(|date| date.to_rfc3339_opts(SecondsFormat::Millis, true))
         .ok_or(ContextCode::InvalidTime)

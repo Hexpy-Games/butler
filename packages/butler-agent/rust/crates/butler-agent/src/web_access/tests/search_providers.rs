@@ -225,8 +225,8 @@ async fn auto_uses_data_openai_key_without_process_environment() {
     let models = crate::host::ProcessModels::new(
         root.clone(),
         crate::models::ModelConfigurationEnvironment::default(),
-        Arc::new(crate::configuration::ConfigurationWrites::new()),
-        Arc::new(crate::locale::LocaleCollation::new("en-US").unwrap()),
+        Arc::new(butler_core::configuration::ConfigurationWrites::new()),
+        Arc::new(butler_core::locale::LocaleCollation::new("en-US").unwrap()),
     )
     .unwrap();
     let access = WebAccess::new(

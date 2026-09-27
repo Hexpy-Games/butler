@@ -5,7 +5,7 @@ mod relations;
 use std::collections::HashSet;
 use std::path::Path;
 
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 use serde_json::Value;
 
 use super::{ManagedPlanView, child, invalid, required_string};

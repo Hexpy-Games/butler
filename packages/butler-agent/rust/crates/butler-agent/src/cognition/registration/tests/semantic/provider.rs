@@ -10,7 +10,9 @@ use tokio::{
 };
 use url::Url;
 
-use crate::{btcc::ProviderRequestError, locale::LocaleCollation, models::*};
+use crate::btcc::ProviderRequestError;
+use crate::models::*;
+use butler_core::locale::LocaleCollation;
 
 mod lifecycle;
 
@@ -316,9 +318,9 @@ async fn actual_native_provider_applies_registered_semantic_window() {
     let reader = crate::cognition::MemoryRecall::new(
         fixture.root.clone(),
         CognitionPathEnvironment::default(),
-        Arc::new(crate::js_date::parse_iso_millis),
+        Arc::new(butler_core::js_date::parse_iso_millis),
         Arc::new(move |left, right| compare.compare(left, right)),
-        Arc::new(|| crate::js_date::parse_iso_millis("2026-09-19T00:00:00.000Z").unwrap()),
+        Arc::new(|| butler_core::js_date::parse_iso_millis("2026-09-19T00:00:00.000Z").unwrap()),
         2,
     )
     .with_vector_port(Arc::new(PanicRecallVectors))
@@ -447,9 +449,9 @@ async fn actual_native_provider_applies_registered_semantic_window() {
     let reopened = crate::cognition::MemoryRecall::new(
         fixture.root.clone(),
         CognitionPathEnvironment::default(),
-        Arc::new(crate::js_date::parse_iso_millis),
+        Arc::new(butler_core::js_date::parse_iso_millis),
         Arc::new(move |left, right| compare.compare(left, right)),
-        Arc::new(|| crate::js_date::parse_iso_millis("2026-09-19T00:00:00.000Z").unwrap()),
+        Arc::new(|| butler_core::js_date::parse_iso_millis("2026-09-19T00:00:00.000Z").unwrap()),
         2,
     );
     paged.cursor = None;

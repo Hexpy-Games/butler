@@ -80,7 +80,7 @@ fn mutate(
     change: impl FnOnce(&mut Map<String, Value>),
 ) -> ProfileResult<()> {
     let mut config = read_config(data_root);
-    let root = crate::json::object_mut(&mut config);
+    let root = butler_core::json::object_mut(&mut config);
     let personalization = object(root, "personalization");
     let profile = object(personalization, "profiling");
     change(profile);
@@ -95,10 +95,10 @@ fn read_config(data_root: &Path) -> Value {
         .unwrap_or_else(|| Value::Object(Map::new()))
 }
 fn object<'a>(map: &'a mut Map<String, Value>, key: &str) -> &'a mut Map<String, Value> {
-    crate::json::object_field_mut(map, key)
+    butler_core::json::object_field_mut(map, key)
 }
 fn normalize_model(value: &str) -> Option<String> {
-    let value = crate::public_text::trim_js_whitespace(value);
+    let value = butler_core::public_text::trim_js_whitespace(value);
     if value.is_empty() || matches!(value, "default" | "butler") {
         return Some(DEFAULT_SETTING.into());
     }

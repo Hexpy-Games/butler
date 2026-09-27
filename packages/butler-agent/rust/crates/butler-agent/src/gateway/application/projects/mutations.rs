@@ -6,7 +6,7 @@ use super::{AppApplication, AppProjectSummary, rows};
 use crate::gateway::GatewayApplicationError;
 use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::{app_error, events, storage::AppStorageError};
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -271,7 +271,7 @@ fn append_project_event(
         db,
         event_type,
         None,
-        crate::json::json_object!({"project":project}),
+        butler_core::json::json_object!({"project":project}),
         &clock.now_iso(),
     )
 }

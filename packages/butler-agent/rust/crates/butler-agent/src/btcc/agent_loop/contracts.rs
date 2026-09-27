@@ -296,7 +296,7 @@ pub(crate) struct ToolResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<ToolError>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub output: Option<crate::json::JsonDocument>,
+    pub output: Option<butler_core::json::JsonDocument>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

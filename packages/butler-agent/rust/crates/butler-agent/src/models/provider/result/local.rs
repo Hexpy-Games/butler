@@ -1,4 +1,4 @@
-use crate::public_text::fixed_regex;
+use butler_core::public_text::fixed_regex;
 use std::{collections::HashSet, sync::LazyLock};
 
 use regex::Regex;
@@ -14,7 +14,7 @@ pub(super) fn decode(
         .pointer("/choices/0/message")
         .unwrap_or(&Value::Null);
     let raw = assistant_raw_text(message);
-    let raw = crate::public_text::trim_js_whitespace(&raw);
+    let raw = butler_core::public_text::trim_js_whitespace(&raw);
     let allowed = request
         .tools
         .iter()
@@ -63,7 +63,7 @@ fn text_calls(text: &str, allowed: &HashSet<&str>) -> Vec<ModelRoundToolCall> {
 }
 
 fn parse_body(body: &str, allowed: &HashSet<&str>, index: usize) -> Option<ModelRoundToolCall> {
-    let body = crate::public_text::trim_js_whitespace(body);
+    let body = butler_core::public_text::trim_js_whitespace(body);
     if body.is_empty() || body.len() > 20_000 {
         return None;
     }
@@ -78,7 +78,7 @@ fn parse_body(body: &str, allowed: &HashSet<&str>, index: usize) -> Option<Model
             return None;
         }
         let remainder = captures.get(2).map_or("", |value| value.as_str());
-        let arguments = if crate::public_text::trim_js_whitespace(remainder).is_empty() {
+        let arguments = if butler_core::public_text::trim_js_whitespace(remainder).is_empty() {
             Map::new()
         } else {
             object_in(remainder)?
@@ -111,7 +111,7 @@ fn parse_body(body: &str, allowed: &HashSet<&str>, index: usize) -> Option<Model
             .unwrap_or_else(|| Value::Object(Map::new()));
         (name, arguments.as_object().cloned().unwrap_or_default())
     };
-    let raw = crate::json::stringify(&Value::Object(arguments.clone())).ok()?;
+    let raw = butler_core::json::stringify(&Value::Object(arguments.clone())).ok()?;
     Some(ModelRoundToolCall {
         id: format!("local_text_call_{index}"),
         name,
@@ -128,7 +128,7 @@ fn object_in(value: &str) -> Option<Map<String, Value>> {
 }
 
 fn jsonish(value: &str) -> Option<Map<String, Value>> {
-    let value = crate::public_text::trim_js_whitespace(value);
+    let value = butler_core::public_text::trim_js_whitespace(value);
     if value.is_empty() || value.len() > 8_000 || !value.starts_with('{') || !value.ends_with('}') {
         return None;
     }
@@ -148,13 +148,13 @@ fn jsonish(value: &str) -> Option<Map<String, Value>> {
 }
 
 fn normalize(value: &str, allowed: &HashSet<&str>) -> Option<String> {
-    let value = crate::public_text::trim_js_whitespace(value);
+    let value = butler_core::public_text::trim_js_whitespace(value);
     if value.is_empty() {
         return None;
     }
     let final_segment = value
         .split(':')
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
         .next_back()
         .unwrap_or(value);
@@ -281,7 +281,7 @@ fn sanitize(raw: &str) -> String {
     while output.contains("\n\n\n") {
         output = output.replace("\n\n\n", "\n\n");
     }
-    crate::public_text::trim_js_whitespace(&output).to_owned()
+    butler_core::public_text::trim_js_whitespace(&output).to_owned()
 }
 
 fn mask_fences(text: &str) -> String {

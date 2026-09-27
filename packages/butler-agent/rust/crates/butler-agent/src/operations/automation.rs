@@ -51,7 +51,7 @@ impl AutomationCliStore {
     pub(crate) fn run_now(&self, id: &str, now_ms: i64) -> Result<Value, AutomationError> {
         let run = self
             .store
-            .run_now(id, now_ms, &crate::js_date::parse_iso_millis)?;
+            .run_now(id, now_ms, &butler_core::js_date::parse_iso_millis)?;
         Ok(serde_json::json!({
             "automation": run.automation,
             "envelope": {

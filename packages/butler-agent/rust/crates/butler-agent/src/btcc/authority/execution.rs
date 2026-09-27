@@ -36,7 +36,7 @@ pub(super) fn execution(
         && record
             .private_alternative_input
             .as_deref()
-            .is_none_or(|value| crate::public_text::trim_js_whitespace(value).is_empty())
+            .is_none_or(|value| butler_core::public_text::trim_js_whitespace(value).is_empty())
     {
         return Err(AuthorityError::policy("authority_request_corrupt"));
     }
@@ -76,7 +76,7 @@ pub(super) fn execution(
 pub(super) fn record_outcome(
     repository: &mut dyn AuthorityRepository,
     input: AuthorityOutcomeInput,
-    collation: &crate::locale::LocaleCollation,
+    collation: &butler_core::locale::LocaleCollation,
     clock: &dyn Fn() -> String,
 ) -> AuthorityResult<()> {
     let record = repository

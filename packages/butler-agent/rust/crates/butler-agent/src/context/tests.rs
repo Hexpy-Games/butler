@@ -8,10 +8,10 @@ use serde_json::{Map, json};
 use super::*;
 use crate::btcc::ContextAssembly;
 use crate::conversation::*;
-use crate::locale::LocaleCollation;
 use crate::models::{
     ModelCatalog, ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
 };
+use butler_core::locale::LocaleCollation;
 
 struct Clock(AtomicU64);
 impl Clock {
@@ -318,7 +318,7 @@ async fn real_store_read_compile_and_recent_use_one_bounded_owner() {
             catalog.clone(),
             locale,
             crate::models::provider_http_client().unwrap(),
-            Arc::new(crate::configuration::ConfigurationWrites::new()),
+            Arc::new(butler_core::configuration::ConfigurationWrites::new()),
         )
         .unwrap(),
     );
@@ -406,7 +406,7 @@ async fn budget_precedence_numeric_strings_metadata_and_thresholds_match_source(
             catalog.clone(),
             locale,
             crate::models::provider_http_client().unwrap(),
-            Arc::new(crate::configuration::ConfigurationWrites::new()),
+            Arc::new(butler_core::configuration::ConfigurationWrites::new()),
         )
         .unwrap(),
     );

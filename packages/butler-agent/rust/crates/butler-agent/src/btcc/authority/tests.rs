@@ -11,7 +11,7 @@ use crate::btcc::work::{
     DurableWorkService, ExecutionMode, PlanAction, ReplacePlanInput, StartWorkInput, WorkTurnScope,
 };
 use crate::btcc::{SuspensionReason, TurnStore, TurnTransition};
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 mod bun_oracle;
 mod policy_tests;

@@ -60,7 +60,7 @@ pub(crate) use catalog::{
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 use catalog::StaticCatalog;
 use tokenizer::TokenizerOwner;
 
@@ -149,7 +149,7 @@ pub(crate) enum ModelCatalogError {
     Catalog(#[from] serde_json::Error),
     /// Canonical JSON encoding of the catalog failed.
     #[error(transparent)]
-    CatalogJson(#[from] crate::json::JsonError),
+    CatalogJson(#[from] butler_core::json::JsonError),
     /// The tokenizer could not be initialized.
     #[error("{0}")]
     Tokenizer(Arc<dyn std::error::Error + Send + Sync>),

@@ -20,7 +20,7 @@ pub(super) fn summarize(output: &mut ExtractOutput) {
             .map(String::as_str)
             .collect::<Vec<_>>()
             .join("\n");
-        if crate::segmentation::grapheme_segments(&candidate).count() > 480 {
+        if butler_core::segmentation::grapheme_segments(&candidate).count() > 480 {
             continue;
         }
         let mut next = evidence.clone();

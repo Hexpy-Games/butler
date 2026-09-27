@@ -264,7 +264,7 @@ fn normalize(value: &Value) -> Result<Value, crate::host::HostError> {
         source
             .get(key)
             .and_then(Value::as_str)
-            .filter(|value| !crate::public_text::trim_js_whitespace(value).is_empty())
+            .filter(|value| !butler_core::public_text::trim_js_whitespace(value).is_empty())
             .ok_or_else(|| format!("run_command {key} must be a non-empty string"))
             .map_err(crate::host::HostError::from)
     };
@@ -276,7 +276,7 @@ fn normalize(value: &Value) -> Result<Value, crate::host::HostError> {
         let raw = value
             .as_str()
             .ok_or("run_command validation_suite must be a string")?;
-        let trimmed = crate::public_text::trim_js_whitespace(raw);
+        let trimmed = butler_core::public_text::trim_js_whitespace(raw);
         if !trimmed.is_empty() {
             result.insert("validation_suite".into(), Value::String(trimmed.into()));
         }
@@ -298,7 +298,7 @@ fn normalize(value: &Value) -> Result<Value, crate::host::HostError> {
         for path in paths {
             let raw = path
                 .as_str()
-                .filter(|path| !crate::public_text::trim_js_whitespace(path).is_empty())
+                .filter(|path| !butler_core::public_text::trim_js_whitespace(path).is_empty())
                 .ok_or("run_command output path must be a non-empty string")?;
             normalized.push(Value::String(raw.into()));
         }

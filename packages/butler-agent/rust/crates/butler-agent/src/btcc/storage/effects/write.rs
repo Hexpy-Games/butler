@@ -10,7 +10,7 @@ fn sql(error: rusqlite::Error) -> EffectFailure {
     EffectFailure::storage("sqlite_error", error.to_string()).with_source(error)
 }
 fn json(value: &Value) -> EffectResult<String> {
-    crate::json::stringify(value).map_err(|error| {
+    butler_core::json::stringify(value).map_err(|error| {
         EffectFailure::policy("effect_journal_json", error.to_string()).with_source(error)
     })
 }
@@ -167,7 +167,7 @@ pub(super) fn record_applied(
     db: &Connection,
     effect_id: &str,
     revision: i64,
-    result: &crate::json::JsonDocument,
+    result: &butler_core::json::JsonDocument,
     receipt: &EffectReceipt,
 ) -> EffectResult<Option<EffectRecord>> {
     let Some(current) = row::find(db, effect_id)? else {

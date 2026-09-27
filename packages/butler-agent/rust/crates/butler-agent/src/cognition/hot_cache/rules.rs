@@ -1,5 +1,6 @@
 use crate::cognition::CognitionResult;
-use crate::public_text::{fixed_regex, fixed_regex_ci};
+use butler_core::public_text::fixed_regex;
+use butler_core::public_text::fixed_regex_ci;
 use std::{collections::HashSet, fs, path::Path, sync::OnceLock};
 
 use regex::Regex;
@@ -71,7 +72,7 @@ pub(super) fn extract(
 
     if has_decision(text) {
         let summary = prefix_utf16(text, 80).replace('\n', " ");
-        let summary = crate::public_text::trim_js_whitespace(&summary).to_owned();
+        let summary = butler_core::public_text::trim_js_whitespace(&summary).to_owned();
         add_entity(&mut result, &mut seen, "decision", &summary, project);
         if let Some(project) = project {
             result.edges.push(ExtractedEdge {
@@ -89,7 +90,7 @@ pub(super) fn extract(
             let Some(captured) = captures.get(1) else {
                 continue;
             };
-            let name = crate::public_text::trim_js_whitespace(captured.as_str());
+            let name = butler_core::public_text::trim_js_whitespace(captured.as_str());
             let length = name.encode_utf16().count();
             if (2..=40).contains(&length) {
                 add_entity(&mut result, &mut seen, "concept", name, project);
@@ -138,7 +139,7 @@ pub(super) fn extract(
 
 pub(super) fn mention_snippet(text: &str) -> String {
     let prefix = prefix_utf16(text, 200).replace('\n', " ");
-    crate::public_text::trim_js_whitespace(&prefix).to_owned()
+    butler_core::public_text::trim_js_whitespace(&prefix).to_owned()
 }
 
 fn known_projects(data_root: &Path) -> CognitionResult<Vec<String>> {

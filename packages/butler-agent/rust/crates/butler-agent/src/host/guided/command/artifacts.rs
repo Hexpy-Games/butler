@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use unicode_normalization::UnicodeNormalization;
 use uuid::Uuid;
 
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 const MAX_FILES: usize = 20_000;
 const MAX_DEPTH: usize = 8;
@@ -67,7 +67,7 @@ pub(super) fn publish(
             paths
                 .iter()
                 .filter_map(Value::as_str)
-                .filter(|path| !crate::public_text::trim_js_whitespace(path).is_empty())
+                .filter(|path| !butler_core::public_text::trim_js_whitespace(path).is_empty())
                 .count()
         })
         .unwrap_or(0);
@@ -133,7 +133,7 @@ fn declared(
         .into_iter()
         .flatten()
         .filter_map(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|path| !path.is_empty())
         .take(24)
     {
@@ -294,7 +294,7 @@ fn safe_name(source: &str) -> String {
             }
         })
         .collect();
-    let clean = crate::public_text::trim_js_whitespace(&clean);
+    let clean = butler_core::public_text::trim_js_whitespace(&clean);
     let clean = if clean.is_empty() || clean == "." || clean == ".." {
         "attachment"
     } else {

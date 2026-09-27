@@ -2,7 +2,7 @@ use super::*;
 use crate::models::TokenEstimateInput;
 
 pub(crate) fn token_budget_to_chars(tokens: f64) -> usize {
-    crate::json::saturating_usize(tokens.trunc().max(0.0) * 4.0)
+    butler_core::json::saturating_usize(tokens.trunc().max(0.0) * 4.0)
 }
 
 pub(crate) fn trim_text_to_token_budget(
@@ -12,7 +12,7 @@ pub(crate) fn trim_text_to_token_budget(
     from_start: bool,
     marker: Option<&str>,
 ) -> ContextResult<String> {
-    let trimmed = crate::public_text::trim_js_whitespace(text);
+    let trimmed = butler_core::public_text::trim_js_whitespace(text);
     if trimmed.is_empty() {
         return Ok(String::new());
     }
@@ -30,9 +30,9 @@ pub(crate) fn trim_text_to_token_budget(
         return Ok(marker.to_owned());
     }
     let slice = if from_start {
-        crate::public_text::trim_js_whitespace_end(prefix_utf16(trimmed, max_units))
+        butler_core::public_text::trim_js_whitespace_end(prefix_utf16(trimmed, max_units))
     } else {
-        crate::public_text::trim_js_whitespace_start(suffix_utf16(trimmed, max_units))
+        butler_core::public_text::trim_js_whitespace_start(suffix_utf16(trimmed, max_units))
     };
     Ok(if from_start {
         format!("{slice}\n{marker}")

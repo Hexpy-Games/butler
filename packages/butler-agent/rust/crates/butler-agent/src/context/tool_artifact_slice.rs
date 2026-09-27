@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 use std::fmt::Write;
 
-use crate::json::Utf16Slice;
+use butler_core::json::Utf16Slice;
 
 use super::{ContextResult, OwnedDefaultTokenEstimator};
 use crate::context::ContextCode;
@@ -28,7 +28,7 @@ impl ExactText {
 
     pub(crate) fn append_json_literal(&self, output: &mut String) -> ContextResult<()> {
         match self {
-            Self::Plain(text) => crate::json::write_string(text, output).map_err(|error| {
+            Self::Plain(text) => butler_core::json::write_string(text, output).map_err(|error| {
                 super::ContextError::new(ContextCode::ToolOutputJsonError, error.to_string())
                     .with_source(error)
             }),

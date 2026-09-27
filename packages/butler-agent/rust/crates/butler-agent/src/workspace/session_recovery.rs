@@ -75,7 +75,7 @@ impl SessionWorkspaceRecovery {
             SessionWorkspaceAuthority::Project { workspace_path } => {
                 if let Some(path) = workspace_path
                     .as_deref()
-                    .filter(|path| !crate::public_text::trim_js_whitespace(path).is_empty())
+                    .filter(|path| !butler_core::public_text::trim_js_whitespace(path).is_empty())
                 {
                     SessionWorkspaceValidation::Valid {
                         path: path.to_owned(),

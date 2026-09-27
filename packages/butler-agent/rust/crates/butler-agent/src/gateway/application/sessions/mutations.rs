@@ -5,7 +5,7 @@ use super::read;
 use crate::gateway::GatewayApplicationError;
 use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::{AppApplication, app_error, events, storage::AppStorageError};
-use crate::public_text::trim_js_whitespace;
+use butler_core::public_text::trim_js_whitespace;
 
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -206,7 +206,7 @@ fn mutate_session(
         &tx,
         "session.updated",
         None,
-        crate::json::json_object!({"session":session}),
+        butler_core::json::json_object!({"session":session}),
         &clock.now_iso(),
     )?;
     tx.commit().map_err(AppStorageError::sqlite)?;
@@ -234,7 +234,7 @@ fn delete_permanently(
         &tx,
         "session.permanently_deleted",
         None,
-        crate::json::json_object!({"session":session}),
+        butler_core::json::json_object!({"session":session}),
         &clock.now_iso(),
     )?;
     tx.commit().map_err(AppStorageError::sqlite)?;

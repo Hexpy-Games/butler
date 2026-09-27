@@ -4,10 +4,10 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{
-    conversation::{ConversationOriginKind, PublicMemorySnapshot, decode_message_scalars},
-    json,
-};
+use crate::conversation::ConversationOriginKind;
+use crate::conversation::PublicMemorySnapshot;
+use crate::conversation::decode_message_scalars;
+use butler_core::json;
 
 use super::{
     ContextError, ContextResult, ResolvedMemorySource,

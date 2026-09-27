@@ -94,7 +94,7 @@ impl ProcessEnvironment {
         let retry = model
             .provider_retry_base_delay_ms
             .as_deref()
-            .map(crate::json::number_from_string)
+            .map(butler_core::json::number_from_string)
             .unwrap_or(f64::NAN);
         Self {
             model,
@@ -132,7 +132,7 @@ fn optional(name: &str) -> Option<String> {
 
 fn trimmed(name: &str) -> Option<String> {
     optional(name)
-        .map(|value| crate::public_text::trim_js_whitespace(&value).to_owned())
+        .map(|value| butler_core::public_text::trim_js_whitespace(&value).to_owned())
         .filter(|value| !value.is_empty())
 }
 

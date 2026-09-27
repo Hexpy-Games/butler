@@ -7,7 +7,7 @@ use crate::btcc::{
     BtccRepositories, BtccStorage, TestStorageFixture, ToolJournalFinish, ToolJournalFinishStatus,
     ToolJournalRepository, ToolJournalStart, TurnStore, test_prepared_turn,
 };
-use crate::json::JsonDocument;
+use butler_core::json::JsonDocument;
 
 #[tokio::test]
 async fn completed_command_artifact_projects_from_reopened_real_journal() {

@@ -220,7 +220,7 @@ impl RoutedRound<'_> {
                 value.reasoning_effort = Some(candidate.reasoning_effort.clone());
                 value
             });
-            let mut route_context = crate::json::json_object!({"schemaVersion":"butler.model-route-request.v1","routeDigest":route.route_digest,"cursor":route.active_cursor,"modelRef":candidate.model_ref});
+            let mut route_context = butler_core::json::json_object!({"schemaVersion":"butler.model-route-request.v1","routeDigest":route.route_digest,"cursor":route.active_cursor,"modelRef":candidate.model_ref});
             if let Some(digest) = request.tool_surface_digest {
                 route_context.insert("toolSurfaceDigest".into(), Value::String(digest.into()));
             }

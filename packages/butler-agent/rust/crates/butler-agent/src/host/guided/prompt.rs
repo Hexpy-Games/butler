@@ -63,7 +63,7 @@ fn js_truthy(value: &Value) -> bool {
 }
 
 fn json(value: &Value) -> Result<String, BtccError> {
-    crate::json::stringify(value).map_err(|error| {
+    butler_core::json::stringify(value).map_err(|error| {
         BtccError::relayed("guided_prompt_json_invalid", error.to_string()).with_source(error)
     })
 }
@@ -125,20 +125,20 @@ fn source_prompt(
     entries.push(format!("User request:\n{}", turn.original_message));
     entries.push(scope);
     if let Some(work) = work_context::render(state.work.context.as_ref()) {
-        let summary = crate::public_text::trim_js_whitespace(&work);
+        let summary = butler_core::public_text::trim_js_whitespace(&work);
         if !summary.is_empty() {
             entries.push(format!(
                 "## Current Work\n\n{}",
-                crate::json::Utf16Prefix::new(summary, 8_000).utf8_for_hash()
+                butler_core::json::Utf16Prefix::new(summary, 8_000).utf8_for_hash()
             ));
         }
     }
     if !work_stream.is_empty() {
         entries.push(work_stream.to_owned());
     }
-    let effect_summary = crate::public_text::trim_js_whitespace(effects);
+    let effect_summary = butler_core::public_text::trim_js_whitespace(effects);
     if !effect_summary.is_empty() {
-        entries.push(format!("## Persistent effect facts for current Work\n\nApplied receipts are completed facts. Uncertain effects must be reconciled before another attempt.\n\n{}", crate::json::Utf16Prefix::new(effect_summary, 6_000).utf8_for_hash()));
+        entries.push(format!("## Persistent effect facts for current Work\n\nApplied receipts are completed facts. Uncertain effects must be reconciled before another attempt.\n\n{}", butler_core::json::Utf16Prefix::new(effect_summary, 6_000).utf8_for_hash()));
     }
     if let Some(plan) = &state.accepted_plan {
         entries.push(render_accepted_project_plan(plan));
@@ -157,20 +157,20 @@ fn source_prompt(
 
 fn source_instructions(stable: &str, documents: &documents::DocumentProjection) -> String {
     let mut instructions = stable.to_owned();
-    let governing = crate::public_text::trim_js_whitespace(&documents.governing);
+    let governing = butler_core::public_text::trim_js_whitespace(&documents.governing);
     if !governing.is_empty() {
         instructions.push_str(&format!("\n{governing}"));
     }
-    let persona = crate::public_text::trim_js_whitespace(&documents.persona);
+    let persona = butler_core::public_text::trim_js_whitespace(&documents.persona);
     if !persona.is_empty() {
         instructions.push_str("\nApply the following current Butler persona and user personalization to every user-facing message in this Turn, including progress, review, failure, and final reporting. Preserve it across every tool round. These instructions are provider-neutral and must not be weakened by report formatting.\n");
         instructions.push_str(persona);
     }
-    let language = crate::public_text::trim_js_whitespace(&documents.response_language);
+    let language = butler_core::public_text::trim_js_whitespace(&documents.response_language);
     if !language.is_empty() {
         instructions.push_str(&format!("\nUse {language} for every user-facing message by default. Follow the user's explicit request to answer or translate into another language instead. Interface language controls app labels only and must not change the answer language."));
     }
-    let eol = crate::public_text::trim_js_whitespace(&documents.eol);
+    let eol = butler_core::public_text::trim_js_whitespace(&documents.eol);
     if !eol.is_empty() {
         instructions.push_str(&format!("\n{eol}"));
     }
@@ -215,7 +215,7 @@ fn memory_bytes(documents: &documents::DocumentProjection) -> usize {
     } else {
         2 + documents.context.len()
     };
-    let persona = crate::public_text::trim_js_whitespace(&documents.persona);
+    let persona = butler_core::public_text::trim_js_whitespace(&documents.persona);
     let persona = if persona.is_empty() {
         0
     } else {

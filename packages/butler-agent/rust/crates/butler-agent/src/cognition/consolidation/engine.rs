@@ -237,7 +237,7 @@ impl CycleService {
                     phases.push(PhaseResult {
                         phase,
                         status: PhaseResultStatus::Error,
-                        metrics: crate::json::json_object!({"lock_held": true}),
+                        metrics: butler_core::json::json_object!({"lock_held": true}),
                         error: Some("consolidation lock is held".into()),
                     });
                     return result::build_result(
@@ -345,7 +345,7 @@ impl CycleService {
 
 fn rate_phase(phase: Phase, status: PhaseResultStatus, budget: &RateBudget) -> PhaseResult {
     let mut result = PhaseResult::new(phase, status);
-    result.metrics = crate::json::json_object!({
+    result.metrics = butler_core::json::json_object!({
         "remaining_ratio":budget.remaining_ratio,"reset_at":budget.reset_at,
     });
     result

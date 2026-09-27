@@ -302,9 +302,9 @@ fn validate_manifest_pair(
 }
 
 fn same_json_stringification(left: &Value, right: &Value) -> CognitionResult<bool> {
-    let left = crate::json::stringify(left)
+    let left = butler_core::json::stringify(left)
         .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
-    let right = crate::json::stringify(right)
+    let right = butler_core::json::stringify(right)
         .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
     Ok(left == right)
 }

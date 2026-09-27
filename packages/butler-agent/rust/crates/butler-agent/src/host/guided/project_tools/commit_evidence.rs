@@ -1,17 +1,17 @@
 //! Source Git commit evidence normalization using the existing tracked command owner.
 
-use crate::tool_protocol::ToolName;
 use crate::workspace::CommandError;
+use butler_core::tool_protocol::ToolName;
 use std::{collections::HashMap, path::Path};
 
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    public_text::trim_js_whitespace,
-    workspace::{CommandStep, Commands, StructuredCommandInput},
-};
+use crate::workspace::CommandStep;
+use crate::workspace::Commands;
+use crate::workspace::StructuredCommandInput;
+use butler_core::public_text::trim_js_whitespace;
 
 const INSTALL_URL: &str = "https://git-scm.com/downloads";
 

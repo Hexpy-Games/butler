@@ -12,19 +12,22 @@ use std::{ffi::OsString, sync::Arc};
 use serde_json::json;
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    cognition::{
-        CognitionError, CognitionPathEnvironment, activate_memory_rebuild, ensure_data_authority,
-        inspect_memory_rebuild, prepare_memory_rebuild, validate_memory_rebuild,
-    },
-    conversation::{
-        AgentConversationStore, ConversationStoreConfig, classify_historical_origins,
-        conversation_store_path,
-    },
-    coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator},
-    locale::LocaleCollation,
-    models::ModelConfigurationClock,
-};
+use crate::cognition::CognitionError;
+use crate::cognition::CognitionPathEnvironment;
+use crate::cognition::activate_memory_rebuild;
+use crate::cognition::ensure_data_authority;
+use crate::cognition::inspect_memory_rebuild;
+use crate::cognition::prepare_memory_rebuild;
+use crate::cognition::validate_memory_rebuild;
+use crate::conversation::AgentConversationStore;
+use crate::conversation::ConversationStoreConfig;
+use crate::conversation::classify_historical_origins;
+use crate::conversation::conversation_store_path;
+use crate::coordination::CognitionWaitClass;
+use crate::coordination::CognitionWriteAcquire;
+use crate::coordination::CognitionWriteCoordinator;
+use crate::models::ModelConfigurationClock;
+use butler_core::locale::LocaleCollation;
 
 use crate::host::cli::consolidation::ConsolidationCliResult;
 use crate::host::memory_jobs::maintain::signals;

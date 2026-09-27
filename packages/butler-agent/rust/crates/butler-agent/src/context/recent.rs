@@ -79,5 +79,5 @@ fn strip_heading(value: &str) -> String {
     let value = value
         .strip_prefix("## Recent Conversation")
         .unwrap_or(value);
-    crate::public_text::trim_js_whitespace(value).to_owned()
+    butler_core::public_text::trim_js_whitespace(value).to_owned()
 }

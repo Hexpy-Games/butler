@@ -10,9 +10,9 @@ use tokio_util::sync::CancellationToken;
 use super::super::contracts::*;
 use super::super::{candidates, extractor_config, storage};
 use super::{Dependencies, parser, prompt, runtime};
-use crate::json::Utf16Prefix;
 use crate::models::{ProviderPromptLifecycle, ProviderPromptRequest};
 use crate::profile::ProfileCode;
+use butler_core::json::Utf16Prefix;
 
 pub(super) async fn run(
     dependencies: Dependencies,
@@ -53,13 +53,13 @@ pub(super) async fn run(
     let model = options
         .model
         .as_deref()
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
         .map(|value| crate::models::parse_model_ref(value).canonical_ref)
         .unwrap_or_else(|| model_config.effective_model.clone());
     model_config.effective_model = model.clone();
     let imported_at = match options.now_epoch_millis {
-        Some(value) => crate::js_date::format_date_value(value).ok_or_else(|| {
+        Some(value) => butler_core::js_date::format_date_value(value).ok_or_else(|| {
             ProfileError::new(
                 ProfileCode::ProfileDataInvalid,
                 "Profile import time is invalid.",
@@ -171,12 +171,12 @@ async fn stable_count(dependencies: &Dependencies) -> ProfileResult<usize> {
 
 fn normalize_text(value: &str) -> Utf16Prefix<'static> {
     let normalized = value.replace("\r\n", "\n");
-    let trimmed = crate::public_text::trim_js_whitespace(&normalized).to_owned();
+    let trimmed = butler_core::public_text::trim_js_whitespace(&normalized).to_owned();
     Utf16Prefix::new(trimmed, 60_000)
 }
 fn normalize_source(value: Option<&str>) -> String {
     let value = value
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .unwrap_or("")
         .to_lowercase();
     let mut output = String::new();
@@ -215,7 +215,7 @@ fn import_prompt(
     now: &str,
 ) -> ProfileResult<String> {
     let literal = text
-        .collapse_whitespace(crate::public_text::is_js_whitespace)
+        .collapse_whitespace(butler_core::public_text::is_js_whitespace)
         .prefix(18_000)
         .json_literal()
         .map_err(|source| {

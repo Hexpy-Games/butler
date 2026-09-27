@@ -293,7 +293,7 @@ fn write_registry(
     guard(data_root, data_root).map_err(McpRegistryError::PathRejected)?;
     guard(data_root, parent).map_err(McpRegistryError::PathRejected)?;
     guard(data_root, &target).map_err(McpRegistryError::PathRejected)?;
-    Ok(crate::configuration::write_json_atomic(
+    Ok(butler_core::configuration::write_json_atomic(
         &target, &canonical,
     )?)
 }

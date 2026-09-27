@@ -31,7 +31,7 @@ impl CognitionCoordinationHost for TestHost {
         uuid::Uuid::new_v4().to_string()
     }
     fn now_epoch_millis(&self) -> i64 {
-        crate::js_date::parse_iso_millis(NOW).unwrap()
+        butler_core::js_date::parse_iso_millis(NOW).unwrap()
     }
     fn now_iso(&self) -> String {
         NOW.into()
@@ -134,7 +134,7 @@ fn counts_apply_source_defaults_expiry_and_active_profile_filter() {
         coordinator,
     );
     let counts = service
-        .counts(crate::js_date::parse_iso_millis(NOW).unwrap())
+        .counts(butler_core::js_date::parse_iso_millis(NOW).unwrap())
         .unwrap();
     let malformed = parse_entry(
         "malformed unrecognized-status\n- priority: urgent\n- privacy_class: internal\n\nDefaulted record.",
@@ -191,7 +191,7 @@ async fn applied_resolution_preserves_other_feedback_and_extra_fields() {
     assert!(contents.contains("Keep active."));
     assert_eq!(
         service
-            .counts(crate::js_date::parse_iso_millis(NOW).unwrap())
+            .counts(butler_core::js_date::parse_iso_millis(NOW).unwrap())
             .unwrap()
             .status_active_count,
         1

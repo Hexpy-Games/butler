@@ -11,7 +11,7 @@ use crate::cognition::{
     generation::resolve_projection_generation,
     recall::{RecallRequest, RecallVectorMatches},
 };
-use crate::segmentation::grapheme_segments;
+use butler_core::segmentation::grapheme_segments;
 
 use super::{
     compatibility,

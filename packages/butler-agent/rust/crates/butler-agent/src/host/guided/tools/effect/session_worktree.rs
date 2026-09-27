@@ -1,6 +1,6 @@
 //! Reviewed session worktree effect over the existing session-owned Git owner.
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use std::sync::Arc;
 
 use serde_json::{Map, Value, json};
@@ -10,11 +10,11 @@ use crate::btcc::{
     AdapterOutcome, BtccError, EffectAdapter, EffectAdapterError, EffectFailure, EffectFuture,
     PlanBinding,
 };
-use crate::json::JsonDocument;
 use crate::workspace::{
     BindSessionWorktreeInput, BindSessionWorktreeResult, SessionWorktreeAction, SessionWorktrees,
     WorkspaceReference,
 };
+use butler_core::json::JsonDocument;
 
 use super::super::GuidedTools;
 
@@ -196,7 +196,7 @@ fn normalize(input: &Value) -> Result<Value, EffectFailure> {
     let branch = args
         .get("branch")
         .and_then(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| policy("invalid_branch"))?;
     let start_point = args
@@ -204,7 +204,7 @@ fn normalize(input: &Value) -> Result<Value, EffectFailure> {
         .map(|value| {
             value
                 .as_str()
-                .map(crate::public_text::trim_js_whitespace)
+                .map(butler_core::public_text::trim_js_whitespace)
                 .ok_or_else(|| policy("invalid_start_point"))
         })
         .transpose()?;

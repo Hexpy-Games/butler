@@ -9,7 +9,7 @@ use crate::conversation::{
     ConversationStoreConfig, MessagePartInput,
 };
 use crate::host::SystemIdentity;
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 struct Directory(PathBuf);
 impl Drop for Directory {

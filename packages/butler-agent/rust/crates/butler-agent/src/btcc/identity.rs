@@ -24,20 +24,23 @@ pub(super) fn json_value<T: serde::Serialize + ?Sized>(value: &T) -> Result<Valu
 }
 
 pub(super) fn stable_json(value: &Value) -> Result<String, BtccError> {
-    crate::json::canonical_json(value, crate::json::CanonicalKeyOrder::Utf16Lexical)
+    butler_core::json::canonical_json(value, butler_core::json::CanonicalKeyOrder::Utf16Lexical)
         .map_err(identity_error)
 }
 
 pub(super) fn sqlite_stable_json(value: &Value) -> Result<String, BtccError> {
-    crate::json::canonical_json(value, crate::json::CanonicalKeyOrder::JsPropertyEnumeration)
-        .map_err(identity_error)
+    butler_core::json::canonical_json(
+        value,
+        butler_core::json::CanonicalKeyOrder::JsPropertyEnumeration,
+    )
+    .map_err(identity_error)
 }
 
 pub(super) fn json_stringify_without(value: &Value, field: &str) -> Result<String, BtccError> {
-    crate::json::stringify_without(value, field).map_err(identity_error)
+    butler_core::json::stringify_without(value, field).map_err(identity_error)
 }
 
-fn identity_error(error: crate::json::JsonError) -> BtccError {
+fn identity_error(error: butler_core::json::JsonError) -> BtccError {
     BtccError::detected(BtccCode::CanonicalJson, error.to_string()).with_source(error)
 }
 

@@ -118,7 +118,7 @@ fn scan(
                 || super::truthy(&envelope["appTurnContext"]["authorityRequestRef"])
                 || super::truthy(&envelope["routingHints"]["authorityRequestRef"])
                 || controls_internal;
-            let json = crate::json::stringify(envelope).map_err(evidence_unavailable)?;
+            let json = butler_core::json::stringify(envelope).map_err(evidence_unavailable)?;
             page_matches.insert(
                 event_id.to_owned(),
                 Match {
@@ -182,7 +182,7 @@ pub(super) fn controls_valid(value: &Value) -> ConversationResult<bool> {
         .as_object_mut()
         .ok_or_else(|| evidence_error(ConversationCode::MemoryOriginEvidenceUnavailable))?
         .shift_remove("integrity_hash");
-    let json = crate::json::stringify(&unsigned).map_err(evidence_unavailable)?;
+    let json = butler_core::json::stringify(&unsigned).map_err(evidence_unavailable)?;
     if sha256(json) != hash {
         return Err(evidence_error(
             ConversationCode::MemoryOriginEvidenceUnavailable,
@@ -194,7 +194,7 @@ pub(super) fn controls_valid(value: &Value) -> ConversationResult<bool> {
 fn nonempty(value: &Value) -> bool {
     value
         .as_str()
-        .is_some_and(|text| !crate::public_text::trim_js_whitespace(text).is_empty())
+        .is_some_and(|text| !butler_core::public_text::trim_js_whitespace(text).is_empty())
 }
 fn model_ref(value: &Value) -> bool {
     nonempty(value) && value.as_str().is_some_and(|text| text.contains('/'))

@@ -13,7 +13,7 @@ use regex::{Regex, RegexBuilder};
     clippy::expect_used,
     reason = "source-fixed pattern; every call site is compiled by tests::every_fixed_pattern_compiles"
 )]
-pub(crate) fn fixed_regex(pattern: &str) -> Regex {
+pub fn fixed_regex(pattern: &str) -> Regex {
     Regex::new(pattern).expect("source-fixed regex pattern compiles")
 }
 
@@ -22,7 +22,7 @@ pub(crate) fn fixed_regex(pattern: &str) -> Regex {
     clippy::expect_used,
     reason = "source-fixed pattern; every call site is compiled by tests::every_fixed_pattern_compiles"
 )]
-pub(crate) fn fixed_regex_ci(pattern: &str) -> Regex {
+pub fn fixed_regex_ci(pattern: &str) -> Regex {
     RegexBuilder::new(pattern)
         .case_insensitive(true)
         .build()

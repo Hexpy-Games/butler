@@ -48,7 +48,7 @@ impl WorkspaceReference {
     }
 
     pub(crate) fn set(&self, path: &str) -> Result<(), WorkspaceReferenceError> {
-        let trimmed = crate::public_text::trim_js_whitespace(path);
+        let trimmed = butler_core::public_text::trim_js_whitespace(path);
         if trimmed.is_empty() {
             return Err(WorkspaceReferenceError::PathRequired);
         }

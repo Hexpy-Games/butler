@@ -8,7 +8,8 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 
-use crate::{locale::LocaleCollation, work_records::WorkRecordReadError};
+use crate::work_records::WorkRecordReadError;
+use butler_core::locale::LocaleCollation;
 
 pub(super) fn project(
     tasks_root: &Path,
@@ -18,7 +19,7 @@ pub(super) fn project(
 ) -> Result<Value, WorkRecordReadError> {
     let limit = match limit {
         Some(value) if value.is_nan() => 0,
-        Some(value) => crate::json::saturating_usize(value.trunc().clamp(1.0, 25.0)),
+        Some(value) => butler_core::json::saturating_usize(value.trunc().clamp(1.0, 25.0)),
         None => 10,
     };
     let tasks = tasks::summaries(tasks_root, collation)?;

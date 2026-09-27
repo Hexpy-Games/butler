@@ -353,20 +353,22 @@ fn integer_value(value: Option<&Value>) -> Option<u64> {
         _ => None,
     }
     .filter(|value| value.is_finite() && *value >= 0.0)
-    .map(|value| crate::json::saturating_u64(value.floor()))
+    .map(|value| butler_core::json::saturating_u64(value.floor()))
 }
 fn optional(value: Option<&Value>) -> Option<String> {
     let value = value?;
     let value = match value {
-        Value::String(value) => crate::public_text::sanitize_public_text(value, ""),
-        Value::Number(_) | Value::Bool(_) => crate::public_text::sanitize_public_value(value, ""),
+        Value::String(value) => butler_core::public_text::sanitize_public_text(value, ""),
+        Value::Number(_) | Value::Bool(_) => {
+            butler_core::public_text::sanitize_public_value(value, "")
+        }
         _ => return None,
     };
     (!value.is_empty()).then_some(value)
 }
 fn safe(value: Option<&Value>, fallback: &str) -> String {
     value
-        .map(|value| crate::public_text::sanitize_public_value(value, fallback))
+        .map(|value| butler_core::public_text::sanitize_public_value(value, fallback))
         .unwrap_or_else(|| fallback.into())
 }
 fn public_source(value: Option<&str>) -> bool {

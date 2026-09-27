@@ -3,9 +3,9 @@ use std::collections::HashSet;
 use serde_json::{Map, Value, json};
 
 use super::model;
-use crate::{
-    btcc::ReasoningEffort, gateway::application::AppSettingsFacts, public_text::trim_js_whitespace,
-};
+use crate::btcc::ReasoningEffort;
+use crate::gateway::application::AppSettingsFacts;
+use butler_core::public_text::trim_js_whitespace;
 
 const DEFAULT_ID: &str = "default";
 const MAX_PROFILES: usize = 12;
@@ -39,7 +39,7 @@ pub(super) fn canonicalize(
         .get("max_simultaneous_workers")
         .and_then(serde_json::Value::as_f64)
         .filter(|value| value.fract() == 0.0 && (1.0..=10.0).contains(value))
-        .map(crate::json::saturating_u64)
+        .map(butler_core::json::saturating_u64)
         .unwrap_or(DEFAULT_MAX_WORKERS);
     let profiles_value = Value::Array(profiles);
     let changed = has_legacy

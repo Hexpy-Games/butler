@@ -6,21 +6,30 @@ use chrono::{DateTime, Utc};
 use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    btcc::BtccError,
-    cognition::{
-        BriefingGenerationError, BriefingGenerationService, BriefingInputFuture,
-        BriefingInputSnapshot, BriefingInputSource, BriefingPersona, BriefingProjectSignal,
-        BriefingSettings, CognitionPathEnvironment,
-    },
-    configuration::ConfigurationWrites,
-    coordination::CognitionWriteCoordinator,
-    gateway::{read_new_chat_briefing_projects, read_new_chat_briefing_settings},
-    locale::LocaleCollation,
-    models::{ModelConfiguration, ModelProvider, ProviderAuthMethod, ReasoningEffort},
-    profile::{PersonaPresets, ProfileService, active_briefing_persona},
-    project_ledger::{ProjectBriefingTarget, ProjectLedger},
-};
+use crate::btcc::BtccError;
+use crate::cognition::BriefingGenerationError;
+use crate::cognition::BriefingGenerationService;
+use crate::cognition::BriefingInputFuture;
+use crate::cognition::BriefingInputSnapshot;
+use crate::cognition::BriefingInputSource;
+use crate::cognition::BriefingPersona;
+use crate::cognition::BriefingProjectSignal;
+use crate::cognition::BriefingSettings;
+use crate::cognition::CognitionPathEnvironment;
+use crate::coordination::CognitionWriteCoordinator;
+use crate::gateway::read_new_chat_briefing_projects;
+use crate::gateway::read_new_chat_briefing_settings;
+use crate::models::ModelConfiguration;
+use crate::models::ModelProvider;
+use crate::models::ProviderAuthMethod;
+use crate::models::ReasoningEffort;
+use crate::profile::PersonaPresets;
+use crate::profile::ProfileService;
+use crate::profile::active_briefing_persona;
+use crate::project_ledger::ProjectBriefingTarget;
+use crate::project_ledger::ProjectLedger;
+use butler_core::configuration::ConfigurationWrites;
+use butler_core::locale::LocaleCollation;
 
 use crate::cognition::BriefingGenerationCode;
 use crate::host::{

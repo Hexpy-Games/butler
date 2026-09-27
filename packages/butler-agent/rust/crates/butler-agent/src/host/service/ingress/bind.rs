@@ -76,7 +76,7 @@ pub(super) fn routed_turn_id(envelope: &Envelope) -> &str {
         .routing_hints
         .as_ref()
         .and_then(|hints| hints.turn_id.as_deref())
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
         .unwrap_or(&envelope.event_id)
 }

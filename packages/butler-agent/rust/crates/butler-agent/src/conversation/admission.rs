@@ -299,7 +299,7 @@ fn collect_evidence(value: &Value, refs: &mut IndexSet<String>) {
                 if let Some(value) = object
                     .get(key)
                     .and_then(Value::as_str)
-                    .map(crate::public_text::trim_js_whitespace)
+                    .map(butler_core::public_text::trim_js_whitespace)
                     .filter(|v| !v.is_empty())
                 {
                     refs.insert(value.into());
@@ -312,7 +312,7 @@ fn collect_evidence(value: &Value, refs: &mut IndexSet<String>) {
 }
 fn stringify_optional(value: Option<&Value>) -> ConversationResult<String> {
     match value {
-        Some(value) => crate::json::stringify(value).map_err(ConversationError::json),
+        Some(value) => butler_core::json::stringify(value).map_err(ConversationError::json),
         None => Ok("null".into()),
     }
 }

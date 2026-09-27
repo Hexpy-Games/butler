@@ -68,7 +68,8 @@ pub(in crate::models::provider) fn identity(
             .get("modelRef")
             .and_then(Value::as_str)
             .is_some_and(|value| {
-                !crate::public_text::trim_js_whitespace(value).is_empty() && value.len() <= 200
+                !butler_core::public_text::trim_js_whitespace(value).is_empty()
+                    && value.len() <= 200
             })
         || route
             .get("toolSurfaceDigest")
@@ -121,9 +122,9 @@ pub(in crate::models::provider) fn identity(
             break;
         }
     }
-    let encoded = crate::json::stringify(&Value::Object(prefix_body))
+    let encoded = butler_core::json::stringify(&Value::Object(prefix_body))
         .map_err(|_| invariant("stable_provider_prefix_serializer_order_invalid"))?;
-    let quoted = crate::json::stringify(&Value::String(prefix.into()))
+    let quoted = butler_core::json::stringify(&Value::String(prefix.into()))
         .map_err(|_| invariant("stable_provider_prefix_serializer_order_invalid"))?;
     let suffix = format!("{quoted}}}");
     if !encoded.ends_with(&suffix) {
@@ -139,7 +140,7 @@ pub(in crate::models::provider) fn identity(
         .get("tools")
         .cloned()
         .unwrap_or_else(|| Value::Array(Vec::new()));
-    let capability = crate::json::stringify(&tools)
+    let capability = butler_core::json::stringify(&tools)
         .map_err(|_| invariant("stable_provider_prefix_serializer_order_invalid"))?;
     let (provider_id, auth_mode, serializer) = match config.auth.mode() {
         ProviderAuthMode::ApiKey => ("openai", "api_key", "butler.openai-responses-final-json.v1"),
@@ -196,8 +197,8 @@ pub(in crate::models::provider) fn identity(
     );
     let identity = Value::Object(identity);
     if let Some(previous) = previous {
-        let old = crate::json::stringify(previous).ok();
-        let current = crate::json::stringify(&identity).ok();
+        let old = butler_core::json::stringify(previous).ok();
+        let current = butler_core::json::stringify(&identity).ok();
         if old != current {
             return Err(invariant("stable_provider_prefix_route_identity_mismatch"));
         }

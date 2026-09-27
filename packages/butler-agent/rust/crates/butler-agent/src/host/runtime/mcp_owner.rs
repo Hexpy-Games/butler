@@ -1,9 +1,8 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-use crate::{
-    configuration::ConfigurationWrites,
-    mcp_client::{McpClient, RegistryPathGuard},
-};
+use crate::mcp_client::McpClient;
+use crate::mcp_client::RegistryPathGuard;
+use butler_core::configuration::ConfigurationWrites;
 
 pub(super) fn for_runtime(
     paths: &super::RuntimePaths,

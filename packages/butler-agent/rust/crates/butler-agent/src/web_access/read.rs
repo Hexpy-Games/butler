@@ -51,7 +51,7 @@ fn cli_projection(page: &PageRead) -> Value {
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ");
-    let preview = crate::json::Utf16Slice::new(&compact, 0, 500)
+    let preview = butler_core::json::Utf16Slice::new(&compact, 0, 500)
         .utf8_lossy()
         .into_owned();
     json!({
@@ -96,7 +96,7 @@ impl WebSession {
         let requested_url = args
             .get("url")
             .and_then(Value::as_str)
-            .map(crate::public_text::trim_js_whitespace)
+            .map(butler_core::public_text::trim_js_whitespace)
             .unwrap_or_default();
         let parsed = Url::parse(requested_url).map_err(|source| {
             WebAccessError::new(
@@ -302,7 +302,9 @@ fn bounded_number(value: Option<&Value>, min: usize, max: usize, fallback: usize
     value
         .and_then(Value::as_f64)
         .filter(|value| value.is_finite())
-        .map(|value| crate::json::saturating_usize(value.trunc().clamp(min as f64, max as f64)))
+        .map(|value| {
+            butler_core::json::saturating_usize(value.trunc().clamp(min as f64, max as f64))
+        })
         .unwrap_or(fallback)
 }
 
@@ -311,7 +313,7 @@ fn bounded_text(value: &str, max: usize) -> (String, bool) {
     if units <= max {
         return (value.to_owned(), false);
     }
-    let text = crate::json::Utf16Slice::new(value, 0, max.saturating_sub(16))
+    let text = butler_core::json::Utf16Slice::new(value, 0, max.saturating_sub(16))
         .utf8_lossy()
         .into_owned();
     (format!("{}\n...[truncated]", text.trim_end()), true)

@@ -14,12 +14,16 @@ use chrono::{DateTime, Local, Utc};
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    cognition::{CognitionPathEnvironment, ensure_data_authority},
-    coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator},
-    models::{ModelProvider, ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest},
-    public_text::trim_js_whitespace,
-};
+use crate::cognition::CognitionPathEnvironment;
+use crate::cognition::ensure_data_authority;
+use crate::coordination::CognitionWaitClass;
+use crate::coordination::CognitionWriteAcquire;
+use crate::coordination::CognitionWriteCoordinator;
+use crate::models::ModelProvider;
+use crate::models::ProviderPromptLifecycle;
+use crate::models::ProviderPromptPort;
+use crate::models::ProviderPromptRequest;
+use butler_core::public_text::trim_js_whitespace;
 
 pub(super) struct LegacyHot {
     data_root: PathBuf,
@@ -326,7 +330,7 @@ fn try_create_lock(path: &Path) -> std::io::Result<()> {
 fn contains_secret(value: &str) -> bool {
     // Only the last alternative is case-insensitive.
     static SECRET: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
-        crate::public_text::fixed_regex(
+        butler_core::public_text::fixed_regex(
             r"-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:sk|ghp|github_pat)_[A-Za-z0-9_-]{16,}\b|\bAKIA[0-9A-Z]{16}\b|(?i:\b(?:password|passwd|token|api[_ -]?key)\s*[:=]\s*[^\s]{8,})",
         )
     });

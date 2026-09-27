@@ -11,7 +11,7 @@ use super::contracts::{
 use super::cursor::{self, ArtifactCursor};
 use super::project::read_project;
 use crate::gateway::{AppFileUpload, MessageFileRef};
-use crate::public_text::sanitize_public_text;
+use butler_core::public_text::sanitize_public_text;
 
 pub(super) async fn get(
     application: &AppApplication,

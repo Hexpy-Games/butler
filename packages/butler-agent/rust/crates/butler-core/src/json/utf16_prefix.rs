@@ -5,13 +5,13 @@ use std::borrow::Cow;
 
 use super::JsonError;
 
-pub(crate) struct Utf16Prefix<'a> {
+pub struct Utf16Prefix<'a> {
     text: Cow<'a, str>,
     trailing_high: Option<u16>,
 }
 
 impl<'a> Utf16Prefix<'a> {
-    pub(crate) fn new(text: impl Into<Cow<'a, str>>, max_units: usize) -> Self {
+    pub fn new(text: impl Into<Cow<'a, str>>, max_units: usize) -> Self {
         Self {
             text: text.into(),
             trailing_high: None,
@@ -19,15 +19,16 @@ impl<'a> Utf16Prefix<'a> {
         .prefix(max_units)
     }
 
-    pub(crate) fn len_utf16(&self) -> usize {
+    pub fn len_utf16(&self) -> usize {
         self.text.encode_utf16().count() + usize::from(self.trailing_high.is_some())
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.text.is_empty() && self.trailing_high.is_none()
     }
 
-    pub(crate) fn prefix(mut self, max_units: usize) -> Self {
+    #[must_use]
+    pub fn prefix(mut self, max_units: usize) -> Self {
         let mut units = 0;
         for (index, character) in self.text.char_indices() {
             if units + character.len_utf16() > max_units {
@@ -52,7 +53,7 @@ impl<'a> Utf16Prefix<'a> {
 
     /// Equivalent to replace(/\s+/gu, " ").trim(), using the caller's exact
     /// ECMAScript whitespace predicate. A final surrogate is non-whitespace.
-    pub(crate) fn collapse_whitespace(
+    pub fn collapse_whitespace(
         &self,
         mut is_whitespace: impl FnMut(char) -> bool,
     ) -> Utf16Prefix<'static> {
@@ -79,7 +80,7 @@ impl<'a> Utf16Prefix<'a> {
     }
 
     /// Node's UTF-8 hash input replaces an unpaired surrogate with U+FFFD.
-    pub(crate) fn utf8_for_hash(&self) -> Cow<'_, str> {
+    pub fn utf8_for_hash(&self) -> Cow<'_, str> {
         if self.trailing_high.is_some() {
             let mut text = self.text.to_string();
             text.push('\u{fffd}');
@@ -90,7 +91,7 @@ impl<'a> Utf16Prefix<'a> {
     }
 
     /// JSON.stringify preserves an unpaired surrogate as a Unicode escape.
-    pub(crate) fn json_literal(&self) -> Result<String, JsonError> {
+    pub fn json_literal(&self) -> Result<String, JsonError> {
         let mut output = String::new();
         super::write_string(&self.text, &mut output)?;
         if let Some(high) = self.trailing_high {

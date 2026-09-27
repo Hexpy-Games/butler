@@ -2,7 +2,7 @@
 
 use serde_json::{Map, Value};
 
-use crate::json::stringify;
+use butler_core::json::stringify;
 
 use super::{ConversationMessageWithParts, ConversationPart, ConversationPartKind};
 
@@ -21,7 +21,7 @@ pub(crate) fn text_for_message(
                 )
         })
         .filter_map(text_for_part)
-        .map(|text| crate::public_text::trim_js_whitespace(&text).to_owned())
+        .map(|text| butler_core::public_text::trim_js_whitespace(&text).to_owned())
         .filter(|text| !text.is_empty())
         .collect::<Vec<_>>()
         .join(" ")
@@ -116,7 +116,9 @@ fn valid_message_part(value: &Value) -> bool {
             object
                 .get("sessionId")
                 .and_then(Value::as_str)
-                .is_some_and(|value| !crate::public_text::trim_js_whitespace(value).is_empty())
+                .is_some_and(|value| {
+                    !butler_core::public_text::trim_js_whitespace(value).is_empty()
+                })
                 && object.get("titleSnapshot").is_some_and(Value::is_string)
         }
         Some("project_source_ref") => valid_project_ref(object),
@@ -129,7 +131,7 @@ fn valid_project_ref(object: &Map<String, Value>) -> bool {
     let source = object.get("source").and_then(Value::as_object);
     let topic_valid = object.get("topic").is_none_or(|value| {
         value.as_str().is_some_and(|topic| {
-            !crate::public_text::trim_js_whitespace(topic).is_empty()
+            !butler_core::public_text::trim_js_whitespace(topic).is_empty()
                 && topic.encode_utf16().count() <= 80
         })
     });
@@ -160,7 +162,7 @@ fn object_string(object: Option<&Map<String, Value>>, key: &str) -> Option<Strin
     object?
         .get(key)?
         .as_str()
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
 }

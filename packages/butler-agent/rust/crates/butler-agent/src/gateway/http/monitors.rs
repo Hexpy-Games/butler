@@ -227,13 +227,13 @@ fn usage_query(parameters: &std::collections::HashMap<String, String>) -> AppUsa
 fn positive_integer(value: Option<&String>) -> Option<usize> {
     number(value)
         .filter(|value| *value >= 1.0)
-        .map(|value| crate::json::saturating_usize(value.floor().min(usize::MAX as f64)))
+        .map(|value| butler_core::json::saturating_usize(value.floor().min(usize::MAX as f64)))
 }
 
 fn nonnegative_integer(value: Option<&String>) -> Option<usize> {
     number(value)
         .filter(|value| *value >= 0.0)
-        .map(|value| crate::json::saturating_usize(value.floor().min(usize::MAX as f64)))
+        .map(|value| butler_core::json::saturating_usize(value.floor().min(usize::MAX as f64)))
 }
 
 fn number(value: Option<&String>) -> Option<f64> {
@@ -252,7 +252,9 @@ fn page_limit(
 ) -> Option<usize> {
     number(value)
         .map(|value| {
-            crate::json::saturating_usize(value.floor().max(minimum as f64).min(maximum as f64))
+            butler_core::json::saturating_usize(
+                value.floor().max(minimum as f64).min(maximum as f64),
+            )
         })
         .or(Some(fallback))
 }

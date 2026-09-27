@@ -110,7 +110,7 @@ fn responses(
         }
     } else if let Some(value) = request
         .instructions
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
     {
         body.insert("instructions".into(), value.into());
@@ -168,7 +168,7 @@ fn responses(
         );
         if request
             .instructions
-            .is_none_or(|value| crate::public_text::trim_js_whitespace(value).is_empty())
+            .is_none_or(|value| butler_core::public_text::trim_js_whitespace(value).is_empty())
         {
             body.insert(
                 "instructions".into(),
@@ -276,7 +276,7 @@ fn cache_scope(value: Option<&str>) -> String {
     let mut output = String::new();
     let mut dash = false;
     for character in
-        crate::public_text::trim_js_whitespace(value.unwrap_or("btcc-agent-loop")).chars()
+        butler_core::public_text::trim_js_whitespace(value.unwrap_or("btcc-agent-loop")).chars()
     {
         if character.is_ascii_alphanumeric() || "._:-".contains(character) {
             output.push(character);
@@ -298,7 +298,7 @@ fn anthropic(
     body.insert("model".into(), model.into());
     if let Some(value) = request
         .instructions
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
     {
         body.insert("system".into(), value.into());
@@ -333,7 +333,7 @@ fn gemini(request: &ModelRoundRequest<'_>) -> Value {
     let mut body = Map::new();
     if let Some(value) = request
         .instructions
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
     {
         body.insert(

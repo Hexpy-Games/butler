@@ -83,7 +83,7 @@ pub(crate) enum McpRegistryError {
     WriteTask(#[source] tokio::task::JoinError),
     /// Reading or writing the registry file failed.
     #[error(transparent)]
-    Config(#[from] crate::configuration::ConfigError),
+    Config(#[from] butler_core::configuration::ConfigError),
 }
 
 pub(super) fn read_registry(data_root: &Path) -> Result<Vec<McpServerConfig>, McpRegistryError> {
@@ -100,9 +100,9 @@ pub(super) fn read_registry(data_root: &Path) -> Result<Vec<McpServerConfig>, Mc
 }
 
 pub(super) fn read_registry_value(data_root: &Path) -> Result<Value, McpRegistryError> {
-    Ok(crate::configuration::read_json_object(&registry_path(
-        data_root,
-    ))?)
+    Ok(butler_core::configuration::read_json_object(
+        &registry_path(data_root),
+    )?)
 }
 
 pub(super) fn registry_path(data_root: &Path) -> std::path::PathBuf {

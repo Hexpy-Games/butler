@@ -88,7 +88,7 @@ impl ModelProvider {
         let (mut body, continuation) =
             serialize::body_with_continuation(&request, &config, carrier)?;
         super::visual::apply(&mut body, &request, carrier).await?;
-        let serialized = crate::json::stringify(&body).map_err(|error| {
+        let serialized = butler_core::json::stringify(&body).map_err(|error| {
             ModelRoundError::Provider(Box::new(diagnostics::network(
                 &config.metadata.provider_id,
                 api,
@@ -279,7 +279,7 @@ impl ModelRoundPort for ModelProvider {
             .or(metadata.max_output_tokens)
             .unwrap_or(0.0);
         let fixed_value = serde_json::json!({"instructions":request.instructions,"tools":request.tools,"tool_choice":"auto","model":request.model});
-        let fixed_json = crate::json::stringify(&fixed_value).map_err(|error| {
+        let fixed_json = butler_core::json::stringify(&fixed_value).map_err(|error| {
             ModelRoundError::Integrity(crate::btcc::BtccError::relayed(
                 "context_serialization_failed",
                 error.to_string(),
@@ -328,7 +328,7 @@ impl ModelRoundPort for ModelProvider {
                         .with_source(source)
                     })?
                 };
-                let bytes = crate::json::stringify(&value).map_err(|source| {
+                let bytes = butler_core::json::stringify(&value).map_err(|source| {
                     crate::btcc::BtccError::relayed(
                         "context_serialization_failed",
                         "Context serialization failed.",
@@ -359,7 +359,7 @@ impl ModelRoundPort for ModelProvider {
         let input =
             serde_json::json!([{"role":"user","content":[{"type":"input_text","text":prompt}]}]);
         let value = serde_json::json!({"instructions":instructions,"input":input});
-        crate::json::stringify(&value)
+        butler_core::json::stringify(&value)
             .map(|value| Some(value.len()))
             .map_err(|error| {
                 ModelRoundError::Provider(Box::new(diagnostics::network(
@@ -375,7 +375,7 @@ impl ModelRoundPort for ModelProvider {
         messages: &[crate::btcc::ModelRoundMessage],
         _butler_data: Option<&str>,
     ) -> Result<Option<usize>, ModelRoundError> {
-        crate::json::stringify(&serde_json::Value::Array(serialize::bounded_items(
+        butler_core::json::stringify(&serde_json::Value::Array(serialize::bounded_items(
             messages,
         )))
         .map(|value| Some(value.len()))

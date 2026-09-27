@@ -4,13 +4,14 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 
-use crate::{
-    gateway::{
-        AppCancellation, AppNativeIngress, AppTurn, ApplicationFuture, EnqueueReceipt,
-        GatewayApplicationError, InboundQueue,
-    },
-    json::JsonDocument,
-};
+use crate::gateway::AppCancellation;
+use crate::gateway::AppNativeIngress;
+use crate::gateway::AppTurn;
+use crate::gateway::ApplicationFuture;
+use crate::gateway::EnqueueReceipt;
+use crate::gateway::GatewayApplicationError;
+use crate::gateway::InboundQueue;
+use butler_core::json::JsonDocument;
 
 pub(crate) struct AppIngress {
     queue: Arc<InboundQueue>,

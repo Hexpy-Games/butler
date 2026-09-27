@@ -98,7 +98,7 @@ pub(super) fn upsert(
 ) -> Result<CredentialView, crate::models::ModelCatalogError> {
     let provider_id = hosted_provider(provider_id)
         .ok_or_else(|| crate::models::ModelCatalogError::rejected("Unsupported provider."))?;
-    let secret = crate::public_text::trim_js_whitespace(secret);
+    let secret = butler_core::public_text::trim_js_whitespace(secret);
     if secret.is_empty() {
         return Err(crate::models::ModelCatalogError::rejected(
             "Provider API key is required.",
@@ -107,7 +107,7 @@ pub(super) fn upsert(
     let file = super::read_object_sync(path);
     let mut records = read(&file, catalog, clock);
     let existing_index = credential_id
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|id| !id.is_empty())
         .and_then(|id| records.iter().position(|record| record.id == id));
     let previous = existing_index.map(|index| &records[index]);

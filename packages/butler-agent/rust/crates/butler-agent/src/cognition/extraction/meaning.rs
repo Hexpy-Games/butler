@@ -35,9 +35,9 @@ pub(in crate::cognition) fn source_passages(input: &ExtractInput) -> CognitionRe
     let mut passages = Vec::new();
     for unit in &input.source_units {
         let mut covered = 0usize;
-        for sentence in crate::segmentation::sentence_segments(&unit.text) {
+        for sentence in butler_core::segmentation::sentence_segments(&unit.text) {
             let clusters =
-                crate::segmentation::grapheme_segments(sentence.text).collect::<Vec<_>>();
+                butler_core::segmentation::grapheme_segments(sentence.text).collect::<Vec<_>>();
             for group in clusters.chunks(256) {
                 let start = sentence.start + group.first().map_or(0, |x| x.start);
                 let end = sentence.start + group.last().map_or(0, |x| x.end);
@@ -51,7 +51,7 @@ pub(in crate::cognition) fn source_passages(input: &ExtractInput) -> CognitionRe
                         .then_some((entry, span))
                 });
                 let (quote, before, after) = if let Some((context, span)) = context {
-                    let prefix = crate::json::saturating_usize(span.prefix_bytes);
+                    let prefix = butler_core::json::saturating_usize(span.prefix_bytes);
                     let focus_end = prefix + text.len();
                     (
                         QuoteRef {
@@ -119,7 +119,11 @@ pub(in crate::cognition) fn meaning_prompt(
             })
             .collect(),
     );
-    if crate::json::stringify(&parts).map_err(json_error)?.len() > 4096 {
+    if butler_core::json::stringify(&parts)
+        .map_err(json_error)?
+        .len()
+        > 4096
+    {
         return Err(error(CognitionCode::MemoryExtractSourceWindowExceedsBudget));
     }
     let mut context = Vec::new();
@@ -136,7 +140,7 @@ pub(in crate::cognition) fn meaning_prompt(
             .chain([item.clone()])
             .collect::<Vec<_>>();
         let candidate = json!({"parts":parts,"context":candidate_context});
-        if crate::json::stringify(&candidate)
+        if butler_core::json::stringify(&candidate)
             .map_err(json_error)?
             .len()
             <= 4096
@@ -184,7 +188,7 @@ pub(in crate::cognition) fn meaning_to_output(
             .iter()
             .map(|x| {
                 passages
-                    .get(crate::json::saturating_usize(
+                    .get(butler_core::json::saturating_usize(
                         x.as_f64().unwrap_or(f64::NAN),
                     ))
                     .map(|p| p.quote.clone())
@@ -208,7 +212,7 @@ pub(in crate::cognition) fn meaning_to_output(
                     .iter()
                     .map(|x| {
                         passages
-                            .get(crate::json::saturating_usize(*x))
+                            .get(butler_core::json::saturating_usize(*x))
                             .map(|passage| passage.quote.clone())
                             .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidEvidence))
                     })
@@ -231,7 +235,7 @@ pub(in crate::cognition) fn meaning_to_output(
             .get("subject")
             .or_else(|| o.get("from"))
             .and_then(Value::as_f64)
-            .map(|x| format!("n{}", crate::json::saturating_usize(x)));
+            .map(|x| format!("n{}", butler_core::json::saturating_usize(x)));
         let relation = matches!(kind, "relation" | "not_relation");
         let statement = o
             .get("text")
@@ -258,7 +262,7 @@ pub(in crate::cognition) fn meaning_to_output(
             object_ref: if relation {
                 o.get("to")
                     .and_then(Value::as_f64)
-                    .map(|x| format!("n{}", crate::json::saturating_usize(x)))
+                    .map(|x| format!("n{}", butler_core::json::saturating_usize(x)))
             } else {
                 None
             },
@@ -300,7 +304,7 @@ pub(in crate::cognition) fn meaning_to_output(
                 to_ref: o
                     .get("to")
                     .and_then(Value::as_f64)
-                    .map(|x| format!("n{}", crate::json::saturating_usize(x)))
+                    .map(|x| format!("n{}", butler_core::json::saturating_usize(x)))
                     .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?,
                 relation: o
                     .get("predicate")

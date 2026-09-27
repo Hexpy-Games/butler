@@ -6,7 +6,7 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 use super::{
     CliFailure, CommandContext, display_path, index, io_failure, now_iso, option_string,
@@ -64,7 +64,7 @@ fn render_unlocked(
             "schema":"project-ledger.event.v1","ts":now_iso()?,
             "type":"view_rendered","view":view,"path":display,"source":"project-ledger",
         });
-        let mut line = crate::json::stringify(&event)
+        let mut line = butler_core::json::stringify(&event)
             .map_err(|source| io_failure().with_source(source))?
             .into_bytes();
         line.push(b'\n');

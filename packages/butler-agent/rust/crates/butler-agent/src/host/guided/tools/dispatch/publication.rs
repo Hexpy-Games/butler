@@ -9,7 +9,7 @@ pub(in crate::host::guided::tools) async fn publish_work_result(
     invocation: GuidedInvocation<'_>,
     name: &str,
     call_id: &str,
-    result: &crate::json::JsonDocument,
+    result: &butler_core::json::JsonDocument,
 ) -> Result<(), ToolExecutionError> {
     if GuidedWorkTools::is_work_tool(name) && result.field("ok").ok().flatten() == Some("true") {
         let work = owner

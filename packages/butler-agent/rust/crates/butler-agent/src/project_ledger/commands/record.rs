@@ -60,7 +60,7 @@ pub(super) fn from_raw(
     let id = data
         .get("id")
         .and_then(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
         .unwrap_or(&filename_id);
     let title = data
@@ -182,9 +182,8 @@ fn js_string(value: &Value) -> Result<String, CliFailure> {
     Ok(match value {
         Value::Null => "null".into(),
         Value::Bool(value) => value.to_string(),
-        Value::Number(_) => {
-            crate::json::stringify(value).map_err(|source| io_failure().with_source(source))?
-        }
+        Value::Number(_) => butler_core::json::stringify(value)
+            .map_err(|source| io_failure().with_source(source))?,
         Value::String(value) => value.clone(),
         Value::Array(values) => values
             .iter()

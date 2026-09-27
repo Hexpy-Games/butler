@@ -19,7 +19,7 @@ use std::{
 use serde_json::{Map, Value};
 use tokio::sync::Notify;
 
-use crate::json::JsonDocument;
+use butler_core::json::JsonDocument;
 
 #[derive(Clone, Debug)]
 pub(crate) struct InboundQueue {

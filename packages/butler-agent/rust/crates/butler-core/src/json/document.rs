@@ -10,17 +10,17 @@ use super::JsonError;
 
 mod field;
 mod traverse;
-pub(crate) use traverse::{
+pub use traverse::{
     bound_raw_string, raw_string_contains_any, raw_string_units, visit_raw_array, visit_raw_object,
 };
 
 #[derive(Clone, Debug)]
-pub(crate) struct JsonDocument(Arc<Box<RawValue>>);
+pub struct JsonDocument(Arc<Box<RawValue>>);
 
 impl JsonDocument {
     /// Validate and take already encoded bytes. This checks JSON syntax only;
     /// the producer still owns ECMAScript formatting and hash verification.
-    pub(crate) fn from_encoded(encoded: String) -> Result<Self, JsonError> {
+    pub fn from_encoded(encoded: String) -> Result<Self, JsonError> {
         RawValue::from_string(encoded)
             .map(|value| Self(Arc::new(value)))
             .map_err(JsonError::from)
@@ -28,23 +28,23 @@ impl JsonDocument {
 
     /// Encode using the existing JS number/property ordering, not serde's DOM
     /// formatter. Callers may release their original DOM after this succeeds.
-    pub(crate) fn from_value(value: &Value) -> Result<Self, JsonError> {
+    pub fn from_value(value: &Value) -> Result<Self, JsonError> {
         Self::from_encoded(super::stringify(value)?)
     }
 
-    pub(crate) fn as_str(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         self.0.get()
     }
 
     /// Borrow an encoded top-level object field; absent and non-object inputs
     /// return None. Present JSON null remains Some("null").
-    pub(crate) fn field(&self, name: &str) -> Result<Option<&str>, JsonError> {
+    pub fn field(&self, name: &str) -> Result<Option<&str>, JsonError> {
         field::field(self.as_str(), name)
     }
 
     /// Parse only the typed view needed by this consumer. Unknown payload
     /// fields can be skipped without retaining a second parsed result body.
-    pub(crate) fn read<'a, T: Deserialize<'a>>(&'a self) -> Result<T, JsonError> {
+    pub fn read<'a, T: Deserialize<'a>>(&'a self) -> Result<T, JsonError> {
         serde_json::from_str(self.as_str()).map_err(JsonError::from)
     }
 }

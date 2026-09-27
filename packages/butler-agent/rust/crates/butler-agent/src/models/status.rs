@@ -11,7 +11,8 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use serde_json::{Value, json};
 
 use crate::btcc::ModelRoundError;
-use crate::{configuration::ConfigurationWrites, locale::LocaleCollation};
+use butler_core::configuration::ConfigurationWrites;
+use butler_core::locale::LocaleCollation;
 
 use super::{
     ModelCatalog, ModelCatalogError, ModelConfiguration, ModelConfigurationEnvironment,
@@ -123,7 +124,7 @@ impl StatusModels {
 pub(crate) enum StatusModelsError {
     /// The collation locale could not be built.
     #[error("model_status_unavailable: {0}")]
-    Locale(#[source] crate::locale::LocaleError),
+    Locale(#[source] butler_core::locale::LocaleError),
     /// The catalog or model configuration could not be opened.
     #[error("model_status_unavailable: {0}")]
     Catalog(#[source] ModelCatalogError),

@@ -250,7 +250,7 @@ fn percentile95(values: &[f64]) -> f64 {
     }
     let mut sorted = values.to_vec();
     sorted.sort_by(f64::total_cmp);
-    let index = crate::json::saturating_usize((sorted.len() as f64 * 0.95).ceil()) - 1;
+    let index = butler_core::json::saturating_usize((sorted.len() as f64 * 0.95).ceil()) - 1;
     sorted[index]
 }
 

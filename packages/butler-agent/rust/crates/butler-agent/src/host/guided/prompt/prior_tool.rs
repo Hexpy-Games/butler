@@ -3,11 +3,11 @@
 mod semantic;
 mod value;
 
-use crate::tool_protocol::ToolName;
+use butler_core::tool_protocol::ToolName;
 use sha2::{Digest, Sha256};
 
 use crate::btcc::{BtccError, ToolJournalRecord};
-use crate::json::visit_raw_object;
+use butler_core::json::visit_raw_object;
 
 const MAX_RECORD_BYTES: usize = 6_000;
 const MAX_TOTAL_BYTES: usize = 20_000;
@@ -119,7 +119,7 @@ fn encode_record(
 fn omit_preview_controls(raw: &str) -> Result<String, BtccError> {
     let mut output = String::from("{");
     visit_raw_object(raw, |key, value| {
-        let name: String = serde_json::from_str(key).map_err(crate::json::JsonError::from)?;
+        let name: String = serde_json::from_str(key).map_err(butler_core::json::JsonError::from)?;
         if !matches!(
             name.as_str(),
             "tool_name"
@@ -148,13 +148,13 @@ pub(super) fn digest(text: &str) -> String {
 }
 
 pub(super) fn encode(value: &serde_json::Value) -> Result<String, BtccError> {
-    crate::json::stringify(value).map_err(json_error)
+    butler_core::json::stringify(value).map_err(json_error)
 }
 
 pub(super) fn write_string(text: &str, output: &mut String) -> Result<(), BtccError> {
-    crate::json::write_string(text, output).map_err(json_error)
+    butler_core::json::write_string(text, output).map_err(json_error)
 }
 
-pub(super) fn json_error(error: crate::json::JsonError) -> BtccError {
+pub(super) fn json_error(error: butler_core::json::JsonError) -> BtccError {
     BtccError::relayed("guided_prompt_json_invalid", error.to_string()).with_source(error)
 }

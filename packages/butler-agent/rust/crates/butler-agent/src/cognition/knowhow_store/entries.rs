@@ -205,7 +205,7 @@ pub(super) fn validate(entry: &Value) -> Vec<&'static str> {
     if entry
         .get("name")
         .and_then(Value::as_str)
-        .is_none_or(|name| crate::public_text::trim_js_whitespace(name).is_empty())
+        .is_none_or(|name| butler_core::public_text::trim_js_whitespace(name).is_empty())
     {
         issues.push("name");
     }

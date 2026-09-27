@@ -16,7 +16,7 @@ impl LocalAuthConfig {
         Self {
             required: true,
             token: token.and_then(|value| {
-                let token = crate::public_text::trim_js_whitespace(&value);
+                let token = butler_core::public_text::trim_js_whitespace(&value);
                 (!token.is_empty()).then(|| Arc::from(token))
             }),
         }

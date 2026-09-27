@@ -206,7 +206,7 @@ fn has_code_commit_evidence(value: Option<&Value>) -> bool {
     let Some(text) = value.and_then(Value::as_str) else {
         return false;
     };
-    if crate::public_text::trim_js_whitespace(text).is_empty() {
+    if butler_core::public_text::trim_js_whitespace(text).is_empty() {
         return false;
     }
     let Ok(Value::Array(commits)) = serde_json::from_str::<Value>(text) else {
@@ -217,7 +217,9 @@ fn has_code_commit_evidence(value: Option<&Value>) -> bool {
             commit
                 .get(*key)
                 .and_then(Value::as_str)
-                .is_some_and(|value| !crate::public_text::trim_js_whitespace(value).is_empty())
+                .is_some_and(|value| {
+                    !butler_core::public_text::trim_js_whitespace(value).is_empty()
+                })
         })
     })
 }

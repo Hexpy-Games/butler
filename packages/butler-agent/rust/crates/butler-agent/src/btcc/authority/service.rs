@@ -10,7 +10,7 @@ use super::contracts::{
 };
 use super::{admission, decision, execution, identity, projection};
 use crate::btcc::storage::{BtccStorage, SqliteAuthorityRepository};
-use crate::locale::LocaleCollation;
+use butler_core::locale::LocaleCollation;
 
 impl PrincipalAuthority {
     pub(crate) async fn retains_approval_claim(&self, turn_id: String) -> AuthorityResult<bool> {

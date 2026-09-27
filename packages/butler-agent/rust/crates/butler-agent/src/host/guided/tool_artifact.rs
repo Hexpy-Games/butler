@@ -7,12 +7,12 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
-use crate::{
-    context::{
-        ArtifactStream, ContextResult, ReadToolEvidenceInput, ReadToolOutputInput, ToolOutput,
-    },
-    json::JsonDocument,
-};
+use crate::context::ArtifactStream;
+use crate::context::ContextResult;
+use crate::context::ReadToolEvidenceInput;
+use crate::context::ReadToolOutputInput;
+use crate::context::ToolOutput;
+use butler_core::json::JsonDocument;
 
 #[derive(Clone)]
 pub(crate) struct ToolArtifactReader {
@@ -65,7 +65,7 @@ impl ToolArtifactReader {
 fn string(args: &Value, key: &str) -> Option<String> {
     args.get(key)
         .and_then(Value::as_str)
-        .map(crate::public_text::trim_js_whitespace)
+        .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
 }

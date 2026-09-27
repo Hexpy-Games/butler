@@ -14,7 +14,7 @@ pub(super) fn event(
     model: &str,
     failure: Option<(&str, FailureDisposition)>,
 ) -> Value {
-    let mut object = crate::json::json_object!(
+    let mut object = butler_core::json::json_object!(
         {"type":kind,"roundId":round,"candidateIndex":candidate,"modelRef":model}
     );
     if let Some(attempt) = attempt {
@@ -132,14 +132,14 @@ pub(super) fn rebase_continuation<'a>(
             "invalid accepted context projection identity",
         )));
     }
-    let current_json = crate::json::stringify(current).map_err(|error| {
+    let current_json = butler_core::json::stringify(current).map_err(|error| {
         ModelRoundError::Integrity(BtccError::detected(
             BtccCode::PhaseContinuityProjectionRebaseIdentityInvalid,
             error.to_string(),
         ))
     })?;
     let accepted_json =
-        crate::json::stringify(accepted.unwrap_or(&Value::Null)).map_err(|error| {
+        butler_core::json::stringify(accepted.unwrap_or(&Value::Null)).map_err(|error| {
             ModelRoundError::Integrity(BtccError::detected(
                 BtccCode::PhaseContinuityProjectionRebaseIdentityInvalid,
                 error.to_string(),

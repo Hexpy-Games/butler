@@ -1,5 +1,5 @@
 use super::*;
-use crate::segmentation::split_grapheme_utf8_spans;
+use butler_core::segmentation::split_grapheme_utf8_spans;
 
 #[test]
 fn historical_windows_split_on_grapheme_boundaries_in_source_order() {

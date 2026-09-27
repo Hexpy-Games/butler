@@ -26,7 +26,7 @@ pub(crate) fn latest_work_anchor_indices(messages: &[ModelRoundMessage]) -> BTre
                 })
                 .unwrap_or_default();
             let normalized =
-                crate::tool_protocol::normalize_guided_tool_call(&call.name, &arguments);
+                butler_core::tool_protocol::normalize_guided_tool_call(&call.name, &arguments);
             calls.insert(call.id.as_str(), normalized.name.into_owned());
         }
     }
