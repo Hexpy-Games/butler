@@ -10,7 +10,7 @@ use std::{
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::cognition::ensure_data_authority;
+use butler_memory::cognition::ensure_data_authority;
 
 const DUE_MINUTE: u16 = 4 * 60;
 

@@ -9,7 +9,7 @@ use crate::gateway::AppSettingsMutationPort;
 use crate::gateway::ApplicationFuture;
 use crate::gateway::GatewayApplicationError;
 use crate::host::ResolvedInstallation;
-use crate::profile::ProfileService;
+use butler_memory::profile::ProfileService;
 use butler_models::models::ModelConfiguration;
 
 pub(crate) struct AppSettingsMutation {

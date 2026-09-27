@@ -9,9 +9,10 @@ mod tests;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::cognition::{
-    CognitionPathEnvironment, CompletionPublisher, ExactMemoryQuery, MemoryRecall,
-};
+use butler_memory::cognition::CognitionPathEnvironment;
+use butler_memory::cognition::CompletionPublisher;
+use butler_memory::cognition::ExactMemoryQuery;
+use butler_memory::cognition::MemoryRecall;
 use butler_runtime::capabilities::Capabilities;
 use butler_runtime::context::ContextPortAdapter;
 use butler_runtime::context::ConversationSessionReference;
@@ -60,7 +61,7 @@ pub(crate) struct GuidedTurnFactoryAdapter {
     pub work_streams: Arc<crate::host::WorkStreams>,
     pub automations: Arc<butler_runtime::operations::AutomationService>,
     pub mcp_client: Arc<butler_models::mcp_client::McpClient>,
-    pub profile: Arc<crate::profile::ProfileService>,
+    pub profile: Arc<butler_memory::profile::ProfileService>,
     pub monitoring: Arc<crate::host::MonitoringReaders>,
     pub session_worktrees: butler_turn::workspace::SessionWorktrees,
     pub web_access: Arc<butler_runtime::web_access::WebAccess>,

@@ -11,12 +11,12 @@ use crate::gateway::AppPersonalizationResult;
 use crate::gateway::ApplicationFuture;
 use crate::gateway::GatewayApplicationError;
 use crate::host::ResolvedInstallation;
-use crate::profile::ClearProfilingResult;
-use crate::profile::PersonalizationProfileUpdate;
-use crate::profile::ProfileService;
-use crate::profile::ProfileThirdPartyImportOptions;
-use crate::profile::ProfilingMode;
-use crate::profile::third_party_migration_prompt;
+use butler_memory::profile::ClearProfilingResult;
+use butler_memory::profile::PersonalizationProfileUpdate;
+use butler_memory::profile::ProfileService;
+use butler_memory::profile::ProfileThirdPartyImportOptions;
+use butler_memory::profile::ProfilingMode;
+use butler_memory::profile::third_party_migration_prompt;
 use butler_models::models::ModelConfiguration;
 
 mod errors;

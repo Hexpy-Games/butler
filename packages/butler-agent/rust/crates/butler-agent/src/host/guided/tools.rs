@@ -26,8 +26,9 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use crate::cognition::{ExactMemoryQuery, MemoryRecall};
 use crate::host::{GuidedActivity, GuidedWorkTools};
+use butler_memory::cognition::ExactMemoryQuery;
+use butler_memory::cognition::MemoryRecall;
 use butler_runtime::capabilities::Capabilities;
 use butler_runtime::context::ConversationSessionReference;
 use butler_turn::btcc::AuthorityLoopContinuation;
@@ -92,8 +93,8 @@ pub(crate) struct GuidedTools {
     file_effects: crate::host::GuidedFileEffects,
     query: Arc<ExactMemoryQuery>,
     recall: Arc<MemoryRecall>,
-    memory_paths: crate::cognition::CognitionPathEnvironment,
-    memory_publisher: Arc<crate::cognition::CompletionPublisher>,
+    memory_paths: butler_memory::cognition::CognitionPathEnvironment,
+    memory_publisher: Arc<butler_memory::cognition::CompletionPublisher>,
     conversations: Arc<ConversationSessionReference>,
     conversation_tools: Arc<butler_runtime::context::ConversationTools>,
     project: Arc<crate::host::guided::project_tools::GuidedProjectTools>,
@@ -106,7 +107,7 @@ pub(crate) struct GuidedTools {
     automations: Arc<butler_runtime::operations::AutomationService>,
     mcp_client: Arc<butler_models::mcp_client::McpClient>,
     verified_image_payload: Arc<dyn butler_turn::btcc::VerifiedImagePayloadPort>,
-    profile: Arc<crate::profile::ProfileService>,
+    profile: Arc<butler_memory::profile::ProfileService>,
     monitoring: Arc<MonitoringReaders>,
     attachment_context: Arc<butler_runtime::context::AttachmentContext>,
     session_worktrees: butler_turn::workspace::SessionWorktrees,
@@ -162,8 +163,8 @@ impl GuidedTools {
         file_effects: crate::host::GuidedFileEffects,
         query: Arc<ExactMemoryQuery>,
         recall: Arc<MemoryRecall>,
-        memory_paths: crate::cognition::CognitionPathEnvironment,
-        memory_publisher: Arc<crate::cognition::CompletionPublisher>,
+        memory_paths: butler_memory::cognition::CognitionPathEnvironment,
+        memory_publisher: Arc<butler_memory::cognition::CompletionPublisher>,
         conversations: Arc<ConversationSessionReference>,
         conversation_tools: Arc<butler_runtime::context::ConversationTools>,
         project: Arc<crate::host::guided::project_tools::GuidedProjectTools>,
@@ -176,7 +177,7 @@ impl GuidedTools {
         automations: Arc<butler_runtime::operations::AutomationService>,
         mcp_client: Arc<butler_models::mcp_client::McpClient>,
         verified_image_payload: Arc<dyn butler_turn::btcc::VerifiedImagePayloadPort>,
-        profile: Arc<crate::profile::ProfileService>,
+        profile: Arc<butler_memory::profile::ProfileService>,
         monitoring: Arc<MonitoringReaders>,
         attachment_context: Arc<butler_runtime::context::AttachmentContext>,
         session_worktrees: butler_turn::workspace::SessionWorktrees,

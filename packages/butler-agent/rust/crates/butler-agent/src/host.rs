@@ -7,8 +7,8 @@ mod error;
 mod installation;
 #[cfg(unix)]
 mod mcp;
-pub(crate) use crate::cognition::MemorySourceReader;
 pub(crate) use crate::host::guided::tool_artifact::ToolArtifactReader;
+pub(crate) use butler_memory::cognition::MemorySourceReader;
 mod runtime;
 
 #[cfg(unix)]
@@ -100,7 +100,7 @@ impl butler_models::models::ProviderClock for SystemIdentity {
 }
 
 #[cfg(unix)]
-impl crate::profile::ProfileHostFacts for SystemIdentity {
+impl butler_memory::profile::ProfileHostFacts for SystemIdentity {
     fn process_id(&self) -> u32 {
         std::process::id()
     }
@@ -113,7 +113,7 @@ impl crate::profile::ProfileHostFacts for SystemIdentity {
     fn now_iso(&self) -> String {
         date::iso_from_system_time(SystemTime::now())
     }
-    fn process_status(&self, pid: f64) -> crate::coordination::CognitionProcessStatus {
+    fn process_status(&self, pid: f64) -> butler_memory::coordination::CognitionProcessStatus {
         crate::host::runtime::process_probe::profile_process_status(pid)
     }
 }

@@ -699,6 +699,7 @@ dependencies = [
  "base64 0.22.1",
  "butler-core",
  "butler-ledger",
+ "butler-memory",
  "butler-models",
  "butler-runtime",
  "butler-test-support",
@@ -791,6 +792,41 @@ dependencies = [
  "tokio",
  "tokio-util",
  "unicode-normalization",
+ "uuid",
+]
+
+[[package]]
+name = "butler-memory"
+version = "0.0.0"
+dependencies = [
+ "arrow-array",
+ "arrow-schema",
+ "base64 0.22.1",
+ "butler-core",
+ "butler-models",
+ "butler-runtime",
+ "butler-test-support",
+ "butler-turn",
+ "chrono",
+ "futures-util",
+ "indexmap 2.14.2",
+ "lance",
+ "lancedb",
+ "nix",
+ "ort",
+ "parking_lot",
+ "regex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror",
+ "tokenizers",
+ "tokio",
+ "tokio-util",
+ "unicode-normalization",
+ "unicode-segmentation",
+ "url",
  "uuid",
 ]
 

@@ -14,12 +14,12 @@ use chrono::{DateTime, Local, Utc};
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
-use crate::cognition::CognitionPathEnvironment;
-use crate::cognition::ensure_data_authority;
-use crate::coordination::CognitionWaitClass;
-use crate::coordination::CognitionWriteAcquire;
-use crate::coordination::CognitionWriteCoordinator;
 use butler_core::public_text::trim_js_whitespace;
+use butler_memory::cognition::CognitionPathEnvironment;
+use butler_memory::cognition::ensure_data_authority;
+use butler_memory::coordination::CognitionWaitClass;
+use butler_memory::coordination::CognitionWriteAcquire;
+use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_models::models::ModelProvider;
 use butler_models::models::ProviderPromptLifecycle;
 use butler_models::models::ProviderPromptPort;
@@ -55,7 +55,7 @@ impl LegacyHot {
         topic: Option<&str>,
         cancellation: &CancellationToken,
     ) -> Result<String, crate::host::HostError> {
-        let text = crate::cognition::legacy_hot_prefix(conversation);
+        let text = butler_memory::cognition::legacy_hot_prefix(conversation);
         let text = trim_js_whitespace(&text);
         if text.is_empty() {
             return Ok(String::new());

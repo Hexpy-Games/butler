@@ -5,9 +5,10 @@ use nix::errno::Errno;
 use nix::sys::signal::kill;
 use nix::unistd::{Pid, gethostname};
 
-use crate::coordination::{
-    CognitionCoordinationHost, CognitionProcessStatus, CoordinationError, CoordinationResult,
-};
+use butler_memory::coordination::CognitionCoordinationHost;
+use butler_memory::coordination::CognitionProcessStatus;
+use butler_memory::coordination::CoordinationError;
+use butler_memory::coordination::CoordinationResult;
 
 use crate::host::SystemIdentity;
 

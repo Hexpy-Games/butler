@@ -3,11 +3,11 @@
 use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
-use crate::cognition::{
-    ExplicitMemoryUpdateInput, TaskMemoryIngestionResult, ingest_task_outcome_memory,
-    update_explicit_memory,
-};
 use butler_core::json::JsonDocument;
+use butler_memory::cognition::ExplicitMemoryUpdateInput;
+use butler_memory::cognition::TaskMemoryIngestionResult;
+use butler_memory::cognition::ingest_task_outcome_memory;
+use butler_memory::cognition::update_explicit_memory;
 use butler_turn::btcc::AccessMode;
 use butler_turn::btcc::GuidedInvocation;
 use butler_turn::btcc::ModelRoundToolCall;
@@ -191,7 +191,7 @@ fn task_result(result: TaskMemoryIngestionResult) -> Value {
     })
 }
 
-fn explicit_result(result: &crate::cognition::ExplicitMemoryUpdateResult) -> Value {
+fn explicit_result(result: &butler_memory::cognition::ExplicitMemoryUpdateResult) -> Value {
     json!({
         "ok":true,
         "record_id":result.record_id,
@@ -229,7 +229,7 @@ mod tests {
     #[test]
     fn memory_write_results_never_expose_private_paths_or_internal_job_ids() {
         {
-            let result = crate::cognition::ExplicitMemoryUpdateResult {
+            let result = butler_memory::cognition::ExplicitMemoryUpdateResult {
                 path: "/private/data/rules/rule.md".into(),
                 record_id: "record".into(),
                 revision: "revision".into(),

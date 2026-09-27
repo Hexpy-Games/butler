@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::env;
 use std::path::{Path, PathBuf};
 
-use crate::cognition::CognitionPathEnvironment;
+use butler_memory::cognition::CognitionPathEnvironment;
 use butler_models::models::ModelConfigurationEnvironment;
 use butler_runtime::context::ContextBudgetEnvironment;
 use butler_runtime::context::PromptEnvironment;

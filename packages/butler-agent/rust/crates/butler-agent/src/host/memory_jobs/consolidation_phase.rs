@@ -5,15 +5,14 @@ use std::{future::Future, pin::Pin, sync::Arc};
 use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::cognition::BoxStoreService;
-use crate::cognition::CycleEventSink;
-use crate::cognition::FeedbackBufferService;
-use crate::cognition::KnowHowService;
-use crate::cognition::LegacyMetadataIntegrityService;
-use crate::cognition::MemoryHealthService;
-use crate::cognition::Phase;
-use crate::cognition::PhaseError;
-use crate::cognition::PhaseExecutor;
+use butler_memory::cognition::BoxStoreService;
+use butler_memory::cognition::FeedbackBufferService;
+use butler_memory::cognition::KnowHowService;
+use butler_memory::cognition::LegacyMetadataIntegrityService;
+use butler_memory::cognition::MemoryHealthService;
+use butler_memory::cognition::Phase;
+use butler_memory::cognition::PhaseError;
+use butler_memory::cognition::PhaseExecutor;
 use butler_runtime::operations::CycleMetrics;
 
 use crate::host::memory_jobs::briefing::BriefingGeneration;
@@ -149,12 +148,6 @@ impl PhaseExecutor for CyclePhases {
     }
 }
 
-fn cognition_phase_error(error: crate::cognition::CognitionError) -> PhaseError {
+fn cognition_phase_error(error: butler_memory::cognition::CognitionError) -> PhaseError {
     PhaseError::new(error.code(), error.code()).with_source(error)
-}
-
-impl CycleEventSink for CycleMetrics {
-    fn record(&self, name: &str, status: &str, dimensions: Value) {
-        Self::record(self, name, status, &dimensions);
-    }
 }

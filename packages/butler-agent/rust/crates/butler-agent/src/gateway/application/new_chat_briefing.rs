@@ -5,7 +5,8 @@ use serde_json::{Value, json};
 
 use super::AppApplication;
 use crate::gateway::GatewayApplicationError;
-use crate::{cognition, profile};
+use butler_memory::cognition;
+use butler_memory::profile;
 
 impl AppApplication {
     #[expect(

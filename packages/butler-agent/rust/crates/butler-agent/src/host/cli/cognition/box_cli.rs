@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use crate::cognition::BoxStoreService;
+use butler_memory::cognition::BoxStoreService;
 
 use super::CliError;
 
@@ -166,6 +166,6 @@ fn not_found(id: &str) -> CliError {
     CliError::failed("not_found", format!("Box item not found: {id}"))
 }
 
-fn service_error(error: &crate::cognition::CognitionError) -> CliError {
+fn service_error(error: &butler_memory::cognition::CognitionError) -> CliError {
     CliError::failed(error.code(), error.message())
 }

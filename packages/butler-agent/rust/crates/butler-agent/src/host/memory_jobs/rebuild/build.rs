@@ -1,33 +1,33 @@
 //! Bounded snapshot-backed rebuild work without activation.
 
-use crate::cognition::CognitionCode;
+use butler_memory::cognition::CognitionCode;
 use std::{collections::HashSet, path::Path, sync::Arc};
 
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::cognition::CognitionError;
-use crate::cognition::CognitionPathEnvironment;
-use crate::cognition::CognitionRegistrationService;
-use crate::cognition::CognitionResult;
-use crate::cognition::GenerationVectorAdapter;
-use crate::cognition::MemoryGenerationTarget;
-use crate::cognition::MemorySyncConsumer;
-use crate::cognition::MemorySyncPoll;
-use crate::cognition::RegisterTypedSourceInput;
-use crate::cognition::advance_rebuild_cache;
-use crate::cognition::assert_rebuild_sources_registered;
-use crate::cognition::inspect_memory_rebuild;
-use crate::cognition::read_build_inventory;
-use crate::cognition::rebuild_typed_cursor;
-use crate::cognition::reconcile_rebuild_vector_representatives;
-use crate::cognition::record_rebuild_readiness;
-use crate::cognition::refresh_memory_rebuild_snapshot;
-use crate::cognition::resolve_generation;
-use crate::coordination::CognitionWriteCoordinator;
 use crate::host::{EmbeddingOwner, ProcessEnvironment, ProcessModels, SystemIdentity};
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
+use butler_memory::cognition::CognitionError;
+use butler_memory::cognition::CognitionPathEnvironment;
+use butler_memory::cognition::CognitionRegistrationService;
+use butler_memory::cognition::CognitionResult;
+use butler_memory::cognition::GenerationVectorAdapter;
+use butler_memory::cognition::MemoryGenerationTarget;
+use butler_memory::cognition::MemorySyncConsumer;
+use butler_memory::cognition::MemorySyncPoll;
+use butler_memory::cognition::RegisterTypedSourceInput;
+use butler_memory::cognition::advance_rebuild_cache;
+use butler_memory::cognition::assert_rebuild_sources_registered;
+use butler_memory::cognition::inspect_memory_rebuild;
+use butler_memory::cognition::read_build_inventory;
+use butler_memory::cognition::rebuild_typed_cursor;
+use butler_memory::cognition::reconcile_rebuild_vector_representatives;
+use butler_memory::cognition::record_rebuild_readiness;
+use butler_memory::cognition::refresh_memory_rebuild_snapshot;
+use butler_memory::cognition::resolve_generation;
+use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_models::models::ModelConfigurationClock;
 
 const MAX_CATCHUP_QUANTA: usize = 4096;
@@ -131,9 +131,9 @@ struct RebuildWork<'a> {
     coordinator: Arc<CognitionWriteCoordinator>,
     data_root: &'a Path,
     paths: &'a CognitionPathEnvironment,
-    handle: &'a crate::cognition::MemoryGenerationHandle,
+    handle: &'a butler_memory::cognition::MemoryGenerationHandle,
     target: MemoryGenerationTarget,
-    inventory: crate::cognition::BuildInventory,
+    inventory: butler_memory::cognition::BuildInventory,
     cancellation: &'a CancellationToken,
 }
 

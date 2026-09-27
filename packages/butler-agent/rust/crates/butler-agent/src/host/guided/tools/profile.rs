@@ -5,16 +5,16 @@
 use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
-use crate::profile::FirstChatOnboardingUpdate;
-use crate::profile::ProfileError;
-use crate::profile::ProfilingMode;
 use butler_core::json::JsonDocument;
+use butler_memory::profile::FirstChatOnboardingUpdate;
+use butler_memory::profile::ProfileError;
+use butler_memory::profile::ProfilingMode;
 use butler_turn::btcc::AccessMode;
 use butler_turn::btcc::ModelRoundToolCall;
 use butler_turn::btcc::ToolExecutionError;
 
 use super::GuidedTools;
-use crate::profile::ProfileCode;
+use butler_memory::profile::ProfileCode;
 
 pub(super) fn supports(name: &str) -> bool {
     matches!(

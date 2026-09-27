@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use serde_json::json;
 
-use crate::cognition::{RecallMetric, RecallMetricSink};
+use butler_memory::cognition::RecallMetric;
+use butler_memory::cognition::RecallMetricSink;
 
 use butler_runtime::operations::MetricFiles;
 use butler_runtime::operations::metrics_enabled;

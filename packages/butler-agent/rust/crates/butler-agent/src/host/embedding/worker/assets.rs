@@ -11,7 +11,7 @@ use futures_util::StreamExt;
 use reqwest::{Client, StatusCode, header};
 use sha2::{Digest, Sha256};
 
-use crate::cognition::ensure_data_authority;
+use butler_memory::cognition::ensure_data_authority;
 
 const REVISION: &str = "4de13258303883538bd53b696b452bf8099f0858";
 const MODEL_ROOT: &str = "cache/models/Xenova/bge-m3";

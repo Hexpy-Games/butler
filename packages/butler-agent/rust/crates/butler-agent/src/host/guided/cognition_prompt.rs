@@ -2,7 +2,9 @@
 
 use std::sync::Arc;
 
-use crate::cognition::{CapsulePresence, CognitionError, CognitionPromptReader};
+use butler_memory::cognition::CapsulePresence;
+use butler_memory::cognition::CognitionError;
+use butler_memory::cognition::CognitionPromptReader;
 use butler_runtime::context::CognitionPromptPort;
 use butler_runtime::context::ContextError;
 use butler_runtime::context::ContextFuture;

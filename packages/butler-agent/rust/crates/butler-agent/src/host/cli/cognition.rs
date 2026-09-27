@@ -5,15 +5,15 @@ use std::{ffi::OsString, path::PathBuf, process::ExitCode, sync::Arc};
 
 use serde_json::{Value, json};
 
-use crate::cognition::BoxStoreService;
-use crate::cognition::CognitionPathEnvironment;
-use crate::cognition::CompletionPublisher;
-use crate::cognition::KnowHowService;
-use crate::cognition::MemoryHealthService;
-use crate::cognition::ProjectCapsuleService;
-use crate::coordination::CognitionWriteCoordinator;
 use crate::host::cli::settings as settings_cli;
 use crate::host::{ResolvedInstallation, SystemIdentity};
+use butler_memory::cognition::BoxStoreService;
+use butler_memory::cognition::CognitionPathEnvironment;
+use butler_memory::cognition::CompletionPublisher;
+use butler_memory::cognition::KnowHowService;
+use butler_memory::cognition::MemoryHealthService;
+use butler_memory::cognition::ProjectCapsuleService;
+use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_runtime::operations::CycleMetrics;
 use butler_runtime::operations::MetricFiles;
 

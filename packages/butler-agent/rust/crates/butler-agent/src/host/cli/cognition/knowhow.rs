@@ -2,7 +2,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value, json};
 
-use crate::cognition::{CognitionPathEnvironment, FeedbackBufferService, KnowHowService};
+use butler_memory::cognition::CognitionPathEnvironment;
+use butler_memory::cognition::FeedbackBufferService;
+use butler_memory::cognition::KnowHowService;
 
 use super::CliError;
 
@@ -16,7 +18,7 @@ pub(super) async fn run(
     service: KnowHowService,
     data_root: std::path::PathBuf,
     paths: CognitionPathEnvironment,
-    coordinator: std::sync::Arc<crate::coordination::CognitionWriteCoordinator>,
+    coordinator: std::sync::Arc<butler_memory::coordination::CognitionWriteCoordinator>,
     args: &[String],
     yes: bool,
     non_interactive: bool,
@@ -221,6 +223,6 @@ fn now_millis() -> i64 {
     .unwrap_or(i64::MAX)
 }
 
-fn service_error(error: &crate::cognition::CognitionError) -> CliError {
+fn service_error(error: &butler_memory::cognition::CognitionError) -> CliError {
     CliError::failed(error.code(), error.message())
 }

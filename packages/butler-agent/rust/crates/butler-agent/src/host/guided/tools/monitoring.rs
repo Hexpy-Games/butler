@@ -16,8 +16,8 @@ pub(crate) struct MonitoringReaders {
     data_root: PathBuf,
     configuration: Arc<butler_models::models::ModelConfiguration>,
     catalog: Arc<butler_models::models::ModelCatalog>,
-    memory_health: Arc<crate::cognition::MemoryHealthService>,
-    profile: Arc<crate::profile::ProfileService>,
+    memory_health: Arc<butler_memory::cognition::MemoryHealthService>,
+    profile: Arc<butler_memory::profile::ProfileService>,
     metrics: Arc<butler_runtime::operations::CycleMetrics>,
 }
 
@@ -26,8 +26,8 @@ impl MonitoringReaders {
         data_root: PathBuf,
         configuration: Arc<butler_models::models::ModelConfiguration>,
         catalog: Arc<butler_models::models::ModelCatalog>,
-        memory_health: Arc<crate::cognition::MemoryHealthService>,
-        profile: Arc<crate::profile::ProfileService>,
+        memory_health: Arc<butler_memory::cognition::MemoryHealthService>,
+        profile: Arc<butler_memory::profile::ProfileService>,
         metrics: Arc<butler_runtime::operations::CycleMetrics>,
     ) -> Self {
         Self {

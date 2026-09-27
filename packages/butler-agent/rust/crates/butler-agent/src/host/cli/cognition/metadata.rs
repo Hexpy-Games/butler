@@ -2,13 +2,11 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 
-use crate::{
-    cognition::{
-        BoxStoreService, CognitionPathEnvironment, FeedbackBufferService,
-        LegacyMetadataIntegrityService,
-    },
-    coordination::CognitionWriteCoordinator,
-};
+use butler_memory::cognition::BoxStoreService;
+use butler_memory::cognition::CognitionPathEnvironment;
+use butler_memory::cognition::FeedbackBufferService;
+use butler_memory::cognition::LegacyMetadataIntegrityService;
+use butler_memory::coordination::CognitionWriteCoordinator;
 
 use super::CliError;
 
@@ -101,8 +99,8 @@ pub(super) async fn run(
 
 fn integrity_data(
     chunk_count: usize,
-    missing_box_refs: &[crate::cognition::MissingBoxRef],
-    missing_feedback_refs: &[crate::cognition::MissingFeedbackRef],
+    missing_box_refs: &[butler_memory::cognition::MissingBoxRef],
+    missing_feedback_refs: &[butler_memory::cognition::MissingFeedbackRef],
 ) -> Value {
     let checked_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     json!({

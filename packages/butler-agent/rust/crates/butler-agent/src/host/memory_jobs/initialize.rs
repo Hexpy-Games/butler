@@ -4,10 +4,10 @@ use std::{ffi::OsString, path::PathBuf, sync::Arc};
 
 use serde_json::json;
 
-use crate::cognition::CognitionPathEnvironment;
-use crate::cognition::initialize_empty_memory_generation;
-use crate::coordination::CognitionWriteCoordinator;
 use butler_core::locale::LocaleCollation;
+use butler_memory::cognition::CognitionPathEnvironment;
+use butler_memory::cognition::initialize_empty_memory_generation;
+use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_models::models::ModelConfigurationClock;
 
 use crate::host::cli::consolidation::ConsolidationCliResult;

@@ -2,11 +2,11 @@
 
 use std::{env, path::Path, path::PathBuf, sync::Arc};
 
-use crate::coordination::CognitionWriteCoordinator;
-use crate::profile::PersonaPresets;
-use crate::profile::ProfileService;
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
+use butler_memory::coordination::CognitionWriteCoordinator;
+use butler_memory::profile::PersonaPresets;
+use butler_memory::profile::ProfileService;
 use butler_turn::conversation::conversation_store_path;
 
 use crate::host::cli::settings as settings_cli;

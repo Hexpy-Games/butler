@@ -7,13 +7,12 @@ use std::{
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use serde_json::Value;
 
-use crate::{
-    cognition::{
-        CognitionPathEnvironment, ContinuityRecoveryAction, ContinuityRecoveryManifestView,
-        ContinuityRecoveryService, ensure_data_authority,
-    },
-    coordination::CognitionWriteCoordinator,
-};
+use butler_memory::cognition::CognitionPathEnvironment;
+use butler_memory::cognition::ContinuityRecoveryAction;
+use butler_memory::cognition::ContinuityRecoveryManifestView;
+use butler_memory::cognition::ContinuityRecoveryService;
+use butler_memory::cognition::ensure_data_authority;
+use butler_memory::coordination::CognitionWriteCoordinator;
 
 use super::CliError;
 
@@ -314,6 +313,6 @@ fn require_yes(yes: bool, non_interactive: bool, command: &str) -> Result<(), Cl
     }
 }
 
-fn service_error(error: &crate::cognition::CognitionError) -> CliError {
+fn service_error(error: &butler_memory::cognition::CognitionError) -> CliError {
     CliError::failed(error.code(), error.message())
 }

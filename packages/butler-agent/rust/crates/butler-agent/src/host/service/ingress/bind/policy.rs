@@ -158,7 +158,7 @@ pub(super) async fn upsert_app_binding(
     });
     if access == "full_access" {
         let onboarding_active = butler_role
-            && !crate::profile::first_chat_onboarding_complete(
+            && !butler_memory::profile::first_chat_onboarding_complete(
                 data_root,
                 &butler_models::models::ModelConfigurationClock::now_iso(
                     &crate::host::SystemIdentity,

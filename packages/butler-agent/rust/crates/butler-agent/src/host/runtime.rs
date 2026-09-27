@@ -20,25 +20,27 @@ use super::{
     EmbeddingOwner, GuidedCatalog, GuidedPreparation, GuidedTurnFactoryAdapter,
     ProfileConversationSources, ResolvedInstallation, SystemIdentity, SystemPromptClock,
 };
-#[cfg(unix)]
-use crate::cognition::GenerationVectorAdapter;
-use crate::cognition::{
-    CognitionPromptReader, CompletionPublisher, ExactMemoryQuery, MemoryRecall,
-    ProjectCapsuleService,
-};
-use crate::coordination::CognitionWriteCoordinator;
 use crate::host::memory_jobs::context_maintenance::ContextMaintenance;
 #[cfg(unix)]
 use crate::host::memory_jobs::daily::{DailyCognitionJobs, DailyCognitionOwners};
 use crate::host::memory_jobs::recall_metrics::RecallMetrics;
 use crate::host::runtime::environment::ProcessEnvironment;
 use crate::host::runtime::stores::RuntimeStores;
-use crate::profile::{PersonaPresets, ProfileService};
 use boundary::{setup, validate_data_installation_boundary};
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
 use butler_ledger::project_ledger::ProjectLedger;
 use butler_ledger::project_ledger::ProjectWork;
+use butler_memory::cognition::CognitionPromptReader;
+use butler_memory::cognition::CompletionPublisher;
+use butler_memory::cognition::ExactMemoryQuery;
+#[cfg(unix)]
+use butler_memory::cognition::GenerationVectorAdapter;
+use butler_memory::cognition::MemoryRecall;
+use butler_memory::cognition::ProjectCapsuleService;
+use butler_memory::coordination::CognitionWriteCoordinator;
+use butler_memory::profile::PersonaPresets;
+use butler_memory::profile::ProfileService;
 use butler_models::models::ModelConfigurationClock;
 use butler_runtime::context::ContextBudgetOwner;
 use butler_runtime::context::ContextConversation;
@@ -198,7 +200,7 @@ impl AgentRuntime {
             project_ledger.clone(),
             commands.clone(),
             host_environment.clone(),
-            crate::work_records::WorkRecordReader::new(&paths.data_root),
+            butler_memory::work_records::WorkRecordReader::new(&paths.data_root),
             collation.clone(),
         ));
         let context_budget = Arc::new(ContextBudgetOwner::new(

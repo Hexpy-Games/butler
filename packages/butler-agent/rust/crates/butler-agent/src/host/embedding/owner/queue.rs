@@ -8,12 +8,14 @@ use std::{
 use tokio::{sync::oneshot, time::Instant};
 use tokio_util::sync::CancellationToken;
 
-use crate::cognition::{
-    CognitionResult, EmbeddingMode, EmbeddingRequest, EmbeddingRequestClass, EmbeddingResult,
-};
+use butler_memory::cognition::CognitionResult;
+use butler_memory::cognition::EmbeddingMode;
+use butler_memory::cognition::EmbeddingRequest;
+use butler_memory::cognition::EmbeddingRequestClass;
+use butler_memory::cognition::EmbeddingResult;
 
 use super::error;
-use crate::cognition::CognitionCode;
+use butler_memory::cognition::CognitionCode;
 
 pub(super) const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub(super) const MAX_QUEUE_REQUESTS: usize = 64;

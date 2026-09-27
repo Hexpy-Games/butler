@@ -3,7 +3,7 @@
 use std::{ffi::OsString, path::PathBuf};
 
 use super::ResolvedInstallation;
-use crate::cognition::ProjectionModelPolicyInput;
+use butler_memory::cognition::ProjectionModelPolicyInput;
 
 pub(super) enum Operation {
     Prepare,

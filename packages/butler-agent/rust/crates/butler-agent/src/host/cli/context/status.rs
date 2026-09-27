@@ -4,7 +4,7 @@ use std::{fs, path::Path};
 
 use serde_json::{Value, json};
 
-use crate::cognition::CognitionPathEnvironment;
+use butler_memory::cognition::CognitionPathEnvironment;
 use butler_runtime::context::ContextBudgetOverrides;
 use butler_runtime::context::ContextThresholdState;
 use butler_runtime::context::StatusFact;

@@ -5,9 +5,11 @@ use std::{path::PathBuf, time::Duration};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::cognition::{
-    EmbeddingEngine, WorkerOperation, WorkerRequest, WorkerResponse, WorkerResult,
-};
+use butler_memory::cognition::EmbeddingEngine;
+use butler_memory::cognition::WorkerOperation;
+use butler_memory::cognition::WorkerRequest;
+use butler_memory::cognition::WorkerResponse;
+use butler_memory::cognition::WorkerResult;
 
 mod assets;
 

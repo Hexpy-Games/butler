@@ -7,13 +7,17 @@ use tokio::{
     process::{Child, ChildStdin, ChildStdout, Command},
 };
 
-use crate::cognition::{
-    CognitionError, CognitionResult, EmbeddingMode, EmbeddingResult, WorkerOperation,
-    WorkerRequest, WorkerResponse, WorkerResult,
-};
+use butler_memory::cognition::CognitionError;
+use butler_memory::cognition::CognitionResult;
+use butler_memory::cognition::EmbeddingMode;
+use butler_memory::cognition::EmbeddingResult;
+use butler_memory::cognition::WorkerOperation;
+use butler_memory::cognition::WorkerRequest;
+use butler_memory::cognition::WorkerResponse;
+use butler_memory::cognition::WorkerResult;
 
 use super::{error, queue::Pending};
-use crate::cognition::CognitionCode;
+use butler_memory::cognition::CognitionCode;
 
 const MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 

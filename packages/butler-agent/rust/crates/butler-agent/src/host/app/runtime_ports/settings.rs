@@ -11,7 +11,7 @@ use crate::gateway::AppModelMetadata;
 use crate::gateway::AppSettingsFacts;
 use crate::gateway::AppSettingsFactsProvider;
 use crate::gateway::GatewayApplicationError;
-use crate::profile::ProfileService;
+use butler_memory::profile::ProfileService;
 use butler_models::models::ModelConfiguration;
 use butler_models::models::ModelProviderMetadata;
 use butler_models::models::ReasoningEffort as ModelReasoningEffort;

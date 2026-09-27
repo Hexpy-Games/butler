@@ -3,14 +3,14 @@ use std::{path::PathBuf, sync::Arc, time::Duration};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::cognition::CognitionPathEnvironment;
-use crate::cognition::LegacyIndexService;
-use crate::cognition::LegacyMemoryImportPlan;
-use crate::cognition::LegacyMemoryImportService;
-use crate::cognition::ensure_data_authority;
-use crate::cognition::extract_legacy_import_transcript;
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
+use butler_memory::cognition::CognitionPathEnvironment;
+use butler_memory::cognition::LegacyIndexService;
+use butler_memory::cognition::LegacyMemoryImportPlan;
+use butler_memory::cognition::LegacyMemoryImportService;
+use butler_memory::cognition::ensure_data_authority;
+use butler_memory::cognition::extract_legacy_import_transcript;
 use butler_models::models::ProviderPromptLifecycle;
 use butler_models::models::ProviderPromptPort;
 use butler_models::models::ProviderPromptRequest;
@@ -26,7 +26,7 @@ pub(super) async fn run(
     paths: CognitionPathEnvironment,
     session_id: &str,
     dry_run: bool,
-    coordinator: Arc<crate::coordination::CognitionWriteCoordinator>,
+    coordinator: Arc<butler_memory::coordination::CognitionWriteCoordinator>,
 ) -> Result<(Value, String), CliError> {
     let importer = LegacyMemoryImportService::new(data_root.clone(), paths.clone());
     let mut plan = importer
@@ -138,10 +138,9 @@ pub(super) async fn run(
             &mut index,
         ) {
             Ok(service) => {
-                let vector_session = crate::cognition::normalize_session_id_for_storage(&format!(
-                    "hot_{}",
-                    chunk.chunk_id
-                ));
+                let vector_session = butler_memory::cognition::normalize_session_id_for_storage(
+                    &format!("hot_{}", chunk.chunk_id),
+                );
                 if let Err(error) = service
                     .index_hot_entry(
                         &index_text,
@@ -319,7 +318,7 @@ fn process_models(
 fn ensure_index_owner<'a>(
     data_root: &std::path::Path,
     paths: &CognitionPathEnvironment,
-    coordinator: Arc<crate::coordination::CognitionWriteCoordinator>,
+    coordinator: Arc<butler_memory::coordination::CognitionWriteCoordinator>,
     embedding: &mut Option<Arc<crate::host::EmbeddingOwner>>,
     index: &'a mut Option<LegacyIndexService>,
 ) -> Result<&'a LegacyIndexService, crate::host::HostError> {
@@ -349,7 +348,7 @@ fn ensure_index_owner<'a>(
 fn record_raw_graph(
     data_root: &std::path::Path,
     paths: &CognitionPathEnvironment,
-    chunk: &crate::cognition::LegacyMemoryImportChunk,
+    chunk: &butler_memory::cognition::LegacyMemoryImportChunk,
     plan: &LegacyMemoryImportPlan,
     graph_count: &mut usize,
     warnings: &mut Vec<Value>,

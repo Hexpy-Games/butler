@@ -1,25 +1,25 @@
 //! One command-owned serving catchup after a bootstrap rollback.
 
-use crate::cognition::CognitionCode;
-use crate::cognition::CutoverStamp;
+use butler_memory::cognition::CognitionCode;
+use butler_memory::cognition::CutoverStamp;
 use std::{path::Path, sync::Arc};
 
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 use super::build;
-use crate::cognition::CognitionError;
-use crate::cognition::CognitionPathEnvironment;
-use crate::cognition::CognitionRegistrationService;
-use crate::cognition::CognitionResult;
-use crate::cognition::GenerationVectorAdapter;
-use crate::cognition::MemorySyncConsumer;
-use crate::cognition::inspect_memory_rebuild;
-use crate::cognition::rollback_memory_rebuild;
-use crate::coordination::CognitionWriteCoordinator;
 use crate::host::{EmbeddingOwner, ProcessEnvironment, ProcessModels, SystemIdentity};
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
+use butler_memory::cognition::CognitionError;
+use butler_memory::cognition::CognitionPathEnvironment;
+use butler_memory::cognition::CognitionRegistrationService;
+use butler_memory::cognition::CognitionResult;
+use butler_memory::cognition::GenerationVectorAdapter;
+use butler_memory::cognition::MemorySyncConsumer;
+use butler_memory::cognition::inspect_memory_rebuild;
+use butler_memory::cognition::rollback_memory_rebuild;
+use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_models::models::ModelConfigurationClock;
 
 pub(super) async fn run(
@@ -110,7 +110,7 @@ async fn serving_catchup(
     coordinator: Arc<CognitionWriteCoordinator>,
     cancellation: &CancellationToken,
 ) -> CognitionResult<Value> {
-    let generation = crate::cognition::resolve_active_generation(data_root, paths)?;
+    let generation = butler_memory::cognition::resolve_active_generation(data_root, paths)?;
     let os = nix::sys::utsname::uname()
         .map_err(|source| error(CognitionCode::EnvironmentUnavailable).with_source(source))?;
     let home = std::env::var_os("HOME")

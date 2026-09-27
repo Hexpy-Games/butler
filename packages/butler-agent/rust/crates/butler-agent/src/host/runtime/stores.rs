@@ -3,8 +3,9 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::coordination::{CognitionCoordinationHost, CognitionProcessStatus};
 use butler_core::locale::LocaleCollation;
+use butler_memory::coordination::CognitionCoordinationHost;
+use butler_memory::coordination::CognitionProcessStatus;
 use butler_turn::btcc::BtccError;
 use butler_turn::btcc::BtccStorage;
 use butler_turn::btcc::BtccStorageConfig;

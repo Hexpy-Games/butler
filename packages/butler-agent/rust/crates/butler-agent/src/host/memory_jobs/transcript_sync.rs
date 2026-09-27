@@ -5,25 +5,25 @@ mod hot;
 use std::{future::Future, path::PathBuf, sync::Arc, time::Duration};
 use tokio_util::sync::CancellationToken;
 
-use crate::cognition::CognitionError;
-use crate::cognition::CognitionPathEnvironment;
-use crate::cognition::CognitionResult;
-use crate::cognition::LegacyIndexService;
-use crate::cognition::LegacySessionOffsets;
-use crate::cognition::append_legacy_session_diagnostic;
-use crate::cognition::ensure_data_authority;
-use crate::cognition::index_legacy_transcript_query;
-use crate::cognition::normalize_session_id_for_storage;
-use crate::cognition::prepare_legacy_transcript;
-use crate::cognition::read_legacy_new_lines;
-use crate::coordination::CognitionWriteCoordinator;
+use butler_memory::cognition::CognitionError;
+use butler_memory::cognition::CognitionPathEnvironment;
+use butler_memory::cognition::CognitionResult;
+use butler_memory::cognition::LegacyIndexService;
+use butler_memory::cognition::LegacySessionOffsets;
+use butler_memory::cognition::append_legacy_session_diagnostic;
+use butler_memory::cognition::ensure_data_authority;
+use butler_memory::cognition::index_legacy_transcript_query;
+use butler_memory::cognition::normalize_session_id_for_storage;
+use butler_memory::cognition::prepare_legacy_transcript;
+use butler_memory::cognition::read_legacy_new_lines;
+use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_models::models::ModelProvider;
 use butler_turn::workspace::SessionBindingStore;
 use butler_turn::workspace::SessionLifecycleState;
 use butler_turn::workspace::SessionRole;
 
-use crate::cognition::CognitionCode;
 use crate::host::EmbeddingOwner;
+use butler_memory::cognition::CognitionCode;
 
 pub(in crate::host) struct LegacySessionSync {
     data_root: PathBuf,
@@ -78,7 +78,7 @@ impl LegacySessionSync {
             let memory = memory_root.clone();
             move || {
                 std::fs::create_dir_all(memory.join("db")).map_err(|source| {
-                    crate::cognition::CognitionError::new(
+                    butler_memory::cognition::CognitionError::new(
                         CognitionCode::LegacySessionOffsetWriteFailed,
                         "legacy_session_offset_write_failed",
                     )

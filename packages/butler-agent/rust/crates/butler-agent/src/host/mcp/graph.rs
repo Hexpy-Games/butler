@@ -1,6 +1,6 @@
 //! MCP formatting for the legacy graph's read-only Cognition facade.
 
-use crate::cognition;
+use butler_memory::cognition;
 
 pub(super) fn query(
     data_root: &std::path::Path,

@@ -5,10 +5,11 @@ use std::sync::Arc;
 use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    cognition::{FeedbackBufferService, PhaseError},
-    profile::{ProfileModelTranscriptCaptureOptions, ProfileService, ProfilingMode},
-};
+use butler_memory::cognition::FeedbackBufferService;
+use butler_memory::cognition::PhaseError;
+use butler_memory::profile::ProfileModelTranscriptCaptureOptions;
+use butler_memory::profile::ProfileService;
+use butler_memory::profile::ProfilingMode;
 
 pub(in crate::host) struct ProfileConsolidation {
     pub(in crate::host) profile: Arc<ProfileService>,
@@ -111,10 +112,10 @@ fn now_ms() -> i64 {
     chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now()).timestamp_millis()
 }
 
-fn profile_error(error: crate::profile::ProfileError) -> PhaseError {
+fn profile_error(error: butler_memory::profile::ProfileError) -> PhaseError {
     PhaseError::new(error.code(), error.code()).with_source(error)
 }
 
-fn feedback_error(error: crate::cognition::CognitionError) -> PhaseError {
+fn feedback_error(error: butler_memory::cognition::CognitionError) -> PhaseError {
     PhaseError::new(error.code(), error.code()).with_source(error)
 }

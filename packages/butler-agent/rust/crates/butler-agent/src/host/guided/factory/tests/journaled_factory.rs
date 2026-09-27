@@ -125,13 +125,16 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
         Arc::new(LocaleCollation::new("en-US").unwrap()),
     )
     .unwrap();
-    let profile = Arc::new(crate::profile::ProfileService::new(
+    let profile = Arc::new(butler_memory::profile::ProfileService::new(
         scratch.0.clone(),
         scratch.0.join("cognition"),
-        Arc::new(crate::profile::PersonaPresets::new(scratch.0.clone())),
+        Arc::new(butler_memory::profile::PersonaPresets::new(
+            scratch.0.clone(),
+        )),
         Arc::new(butler_core::configuration::ConfigurationWrites::new()),
         Arc::new(
-            crate::coordination::CognitionWriteCoordinator::new(Arc::new(SystemIdentity)).unwrap(),
+            butler_memory::coordination::CognitionWriteCoordinator::new(Arc::new(SystemIdentity))
+                .unwrap(),
         ),
         Arc::new(SystemIdentity),
         Arc::new(crate::host::ProfileConversationSources::new(
@@ -178,7 +181,7 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
         butler_ledger::project_ledger::ProjectLedger::new(&scratch.0, 1),
         commands.clone(),
         Arc::new(HashMap::new()),
-        crate::work_records::WorkRecordReader::new(&scratch.0),
+        butler_memory::work_records::WorkRecordReader::new(&scratch.0),
         Arc::new(LocaleCollation::new("en-US").unwrap()),
     ));
     let work_streams = Arc::new(crate::host::WorkStreams::open(scratch.0.clone()).unwrap());
@@ -205,7 +208,7 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
         project_tools: project_tools.clone(),
         tool_artifacts: Arc::new(crate::host::ToolArtifactReader::new(tool_output.clone())),
         conversation_tools: conversation_tools.clone(),
-        memory_query: Arc::new(crate::cognition::ExactMemoryQuery::new(
+        memory_query: Arc::new(butler_memory::cognition::ExactMemoryQuery::new(
             &scratch.0.clone(),
             1,
         )),
@@ -219,7 +222,7 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
                 )),
             ),
         ),
-        memory_recall: Arc::new(crate::cognition::MemoryRecall::new(
+        memory_recall: Arc::new(butler_memory::cognition::MemoryRecall::new(
             scratch.0.clone(),
             Default::default(),
             Arc::new(butler_core::js_date::parse_iso_millis),
@@ -228,7 +231,7 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
             1,
         )),
         memory_paths: Default::default(),
-        memory_publisher: Arc::new(crate::cognition::CompletionPublisher::new(
+        memory_publisher: Arc::new(butler_memory::cognition::CompletionPublisher::new(
             &scratch.0.clone(),
             &Default::default(),
             Arc::new(|| "now".into()),
@@ -253,12 +256,14 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
             scratch.0.clone(),
             output_models.configuration.clone(),
             output_models.catalog.clone(),
-            Arc::new(crate::cognition::MemoryHealthService::new(
+            Arc::new(butler_memory::cognition::MemoryHealthService::new(
                 scratch.0.clone(),
                 Default::default(),
                 Arc::new(
-                    crate::coordination::CognitionWriteCoordinator::new(Arc::new(SystemIdentity))
-                        .unwrap(),
+                    butler_memory::coordination::CognitionWriteCoordinator::new(Arc::new(
+                        SystemIdentity,
+                    ))
+                    .unwrap(),
                 ),
             )),
             profile,

@@ -6,35 +6,35 @@ use chrono::{DateTime, Utc};
 use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
 
-use crate::cognition::BriefingGenerationError;
-use crate::cognition::BriefingGenerationService;
-use crate::cognition::BriefingInputFuture;
-use crate::cognition::BriefingInputSnapshot;
-use crate::cognition::BriefingInputSource;
-use crate::cognition::BriefingPersona;
-use crate::cognition::BriefingProjectSignal;
-use crate::cognition::BriefingSettings;
-use crate::cognition::CognitionPathEnvironment;
-use crate::coordination::CognitionWriteCoordinator;
 use crate::gateway::read_new_chat_briefing_projects;
 use crate::gateway::read_new_chat_briefing_settings;
-use crate::profile::PersonaPresets;
-use crate::profile::ProfileService;
-use crate::profile::active_briefing_persona;
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
 use butler_ledger::project_ledger::ProjectBriefingTarget;
 use butler_ledger::project_ledger::ProjectLedger;
+use butler_memory::cognition::BriefingGenerationError;
+use butler_memory::cognition::BriefingGenerationService;
+use butler_memory::cognition::BriefingInputFuture;
+use butler_memory::cognition::BriefingInputSnapshot;
+use butler_memory::cognition::BriefingInputSource;
+use butler_memory::cognition::BriefingPersona;
+use butler_memory::cognition::BriefingProjectSignal;
+use butler_memory::cognition::BriefingSettings;
+use butler_memory::cognition::CognitionPathEnvironment;
+use butler_memory::coordination::CognitionWriteCoordinator;
+use butler_memory::profile::PersonaPresets;
+use butler_memory::profile::ProfileService;
+use butler_memory::profile::active_briefing_persona;
 use butler_models::models::ModelConfiguration;
 use butler_models::models::ModelProvider;
 use butler_models::models::ProviderAuthMethod;
 use butler_models::models::ReasoningEffort;
 use butler_turn::btcc::BtccError;
 
-use crate::cognition::BriefingGenerationCode;
 use crate::host::{
     DateParser, ProcessEnvironment, ProcessModels, ProfileConversationSources, SystemIdentity,
 };
+use butler_memory::cognition::BriefingGenerationCode;
 
 pub(in crate::host) struct BriefingGeneration {
     generator: BriefingGenerationService,

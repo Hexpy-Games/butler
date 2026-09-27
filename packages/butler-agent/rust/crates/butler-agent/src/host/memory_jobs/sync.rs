@@ -12,16 +12,23 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 #[cfg(unix)]
-use crate::cognition::GenerationVectorAdapter;
-#[cfg(not(unix))]
-use crate::cognition::{CandidateSearchInput, CognitionVectorSearch, VectorSearchFuture};
-use crate::cognition::{
-    CognitionError, CognitionPathEnvironment, CognitionRegistrationService, MemorySyncConsumer,
-    MemorySyncPoll, active_memory_descriptor_exists, resolve_active_generation,
-};
-use crate::coordination::CognitionWriteCoordinator;
-#[cfg(unix)]
 use crate::host::EmbeddingOwner;
+#[cfg(not(unix))]
+use butler_memory::cognition::CandidateSearchInput;
+use butler_memory::cognition::CognitionError;
+use butler_memory::cognition::CognitionPathEnvironment;
+use butler_memory::cognition::CognitionRegistrationService;
+#[cfg(not(unix))]
+use butler_memory::cognition::CognitionVectorSearch;
+#[cfg(unix)]
+use butler_memory::cognition::GenerationVectorAdapter;
+use butler_memory::cognition::MemorySyncConsumer;
+use butler_memory::cognition::MemorySyncPoll;
+#[cfg(not(unix))]
+use butler_memory::cognition::VectorSearchFuture;
+use butler_memory::cognition::active_memory_descriptor_exists;
+use butler_memory::cognition::resolve_active_generation;
+use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_models::models::ModelConfigurationClock;
 use butler_models::models::ModelProvider;
 use butler_turn::btcc::BtccError;

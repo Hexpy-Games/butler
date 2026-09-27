@@ -1,29 +1,29 @@
 //! Existing operator memory-maintain CLI over the configured Cognition cycle.
 
-use crate::cognition::CognitionCode;
+use butler_memory::cognition::CognitionCode;
 use std::{ffi::OsString, path::PathBuf, sync::Arc};
 
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::cognition::CognitionPathEnvironment;
-use crate::cognition::CognitionRegistrationService;
-use crate::cognition::ConfiguredCycleOptions;
-use crate::cognition::ConfiguredCycleResult;
-use crate::cognition::ConfiguredCycleService;
-use crate::cognition::GenerationVectorAdapter;
-use crate::cognition::GraphConsolidationService;
-use crate::cognition::LegacyIndexService;
-use crate::cognition::MemoryHealthReport;
-use crate::cognition::MemoryHealthService;
-use crate::cognition::MemorySyncConsumer;
-use crate::cognition::ProjectCapsuleService;
-use crate::cognition::VectorOptimizeService;
-use crate::cognition::active_memory_descriptor_exists;
-use crate::cognition::resolve_active_generation;
-use crate::coordination::CognitionWriteCoordinator;
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
+use butler_memory::cognition::CognitionPathEnvironment;
+use butler_memory::cognition::CognitionRegistrationService;
+use butler_memory::cognition::ConfiguredCycleOptions;
+use butler_memory::cognition::ConfiguredCycleResult;
+use butler_memory::cognition::ConfiguredCycleService;
+use butler_memory::cognition::GenerationVectorAdapter;
+use butler_memory::cognition::GraphConsolidationService;
+use butler_memory::cognition::LegacyIndexService;
+use butler_memory::cognition::MemoryHealthReport;
+use butler_memory::cognition::MemoryHealthService;
+use butler_memory::cognition::MemorySyncConsumer;
+use butler_memory::cognition::ProjectCapsuleService;
+use butler_memory::cognition::VectorOptimizeService;
+use butler_memory::cognition::active_memory_descriptor_exists;
+use butler_memory::cognition::resolve_active_generation;
+use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_models::models::ModelConfigurationClock;
 
 use crate::host::cli::consolidation::ConsolidationCliResult;
@@ -181,7 +181,7 @@ async fn run_active(
     coordinator: Arc<CognitionWriteCoordinator>,
     embedding: Arc<EmbeddingOwner>,
     cancellation: &CancellationToken,
-) -> crate::cognition::CognitionResult<crate::cognition::ConfiguredCycleResult> {
+) -> butler_memory::cognition::CognitionResult<butler_memory::cognition::ConfiguredCycleResult> {
     let generation = resolve_active_generation(&options.data, paths)?;
     let os = nix::sys::utsname::uname()
         .map_err(|source| error(CognitionCode::EnvironmentUnavailable).with_source(source))?;
@@ -201,7 +201,7 @@ async fn run_active(
         collation,
     )
     .map_err(|error| {
-        crate::cognition::CognitionError::new(CognitionCode::ModelSetupFailed, error.code())
+        butler_memory::cognition::CognitionError::new(CognitionCode::ModelSetupFailed, error.code())
     })?;
     let clock: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
     let vectors = Arc::new(GenerationVectorAdapter::new(
@@ -344,8 +344,8 @@ fn expand_home(value: &str) -> PathBuf {
         PathBuf::from(value)
     }
 }
-fn error(code: CognitionCode) -> crate::cognition::CognitionError {
-    crate::cognition::CognitionError::new(code, code.as_str())
+fn error(code: CognitionCode) -> butler_memory::cognition::CognitionError {
+    butler_memory::cognition::CognitionError::new(code, code.as_str())
 }
 fn fail(json_mode: bool, code: &str, message: &str, exit_code: u8) -> ConsolidationCliResult {
     ConsolidationCliResult {

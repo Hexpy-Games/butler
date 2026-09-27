@@ -2,9 +2,9 @@ use std::{cmp::Ordering, sync::Arc};
 
 use serde_json::json;
 
-use crate::cognition::CognitionPathEnvironment;
-use crate::cognition::ExactMemoryQuery;
 use crate::host::MemorySourceReader;
+use butler_memory::cognition::CognitionPathEnvironment;
+use butler_memory::cognition::ExactMemoryQuery;
 use butler_turn::conversation::AgentConversationStore;
 use butler_turn::conversation::AppendMessageInput;
 use butler_turn::conversation::BeginTurnInput;

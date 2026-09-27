@@ -1,7 +1,7 @@
 //! Host-owned, bounded client for the private same-executable embedding worker.
 //! One in-process queue serializes one child and one inference at a time.
 
-use crate::cognition::CognitionCode;
+use butler_memory::cognition::CognitionCode;
 use parking_lot::Mutex;
 use std::{
     panic::AssertUnwindSafe,
@@ -20,10 +20,16 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::cognition::{
-    CognitionEmbeddingPort, CognitionError, CognitionResult, EmbeddingFuture, EmbeddingMode,
-    EmbeddingRequest, EmbeddingRequestClass, EmbeddingResult, WorkerOperation, WorkerRequest,
-};
+use butler_memory::cognition::CognitionEmbeddingPort;
+use butler_memory::cognition::CognitionError;
+use butler_memory::cognition::CognitionResult;
+use butler_memory::cognition::EmbeddingFuture;
+use butler_memory::cognition::EmbeddingMode;
+use butler_memory::cognition::EmbeddingRequest;
+use butler_memory::cognition::EmbeddingRequestClass;
+use butler_memory::cognition::EmbeddingResult;
+use butler_memory::cognition::WorkerOperation;
+use butler_memory::cognition::WorkerRequest;
 
 mod queue;
 #[cfg(test)]

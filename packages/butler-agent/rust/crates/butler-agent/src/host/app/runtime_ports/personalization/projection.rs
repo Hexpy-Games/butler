@@ -1,8 +1,8 @@
 use serde_json::{Map, Value, json};
 
 use crate::gateway::AppPersonalizationEvent;
-use crate::profile::ClearProfilingResult;
 use butler_core::public_text::trim_js_whitespace;
+use butler_memory::profile::ClearProfilingResult;
 
 pub(super) fn event(event_type: &str, payload: &Value) -> AppPersonalizationEvent {
     AppPersonalizationEvent {

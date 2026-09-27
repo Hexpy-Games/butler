@@ -35,7 +35,7 @@ pub(crate) struct GuidedProjectTools {
     ledger: ProjectLedger,
     commands: Commands,
     environment: Arc<HashMap<String, String>>,
-    work_records: crate::work_records::WorkRecordReader,
+    work_records: butler_memory::work_records::WorkRecordReader,
     collation: Arc<butler_core::locale::LocaleCollation>,
     tasks: TaskTracker,
     admission: Mutex<bool>,
@@ -51,7 +51,7 @@ impl GuidedProjectTools {
         ledger: ProjectLedger,
         commands: Commands,
         environment: Arc<HashMap<String, String>>,
-        work_records: crate::work_records::WorkRecordReader,
+        work_records: butler_memory::work_records::WorkRecordReader,
         collation: Arc<butler_core::locale::LocaleCollation>,
     ) -> Self {
         Self {

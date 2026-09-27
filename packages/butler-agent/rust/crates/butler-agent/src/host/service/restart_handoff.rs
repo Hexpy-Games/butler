@@ -7,8 +7,8 @@ use std::{
     time::SystemTime,
 };
 
-use crate::coordination::CognitionCoordinationHost;
 use crate::host::ResolvedInstallation;
+use butler_memory::coordination::CognitionCoordinationHost;
 use butler_turn::btcc::BtccStorage;
 use butler_turn::btcc::BtccStorageConfig;
 use butler_turn::btcc::ProcessLiveness;
@@ -145,7 +145,7 @@ impl ProcessLiveness for HandoffProcessLiveness {
     fn is_alive(&self, owner: &RuntimeOwnerIdentity) -> bool {
         owner.host_id != self.host_id
             || SystemIdentity.process_status(u64::from(owner.process_id))
-                != crate::coordination::CognitionProcessStatus::DefinitelyDead
+                != butler_memory::coordination::CognitionProcessStatus::DefinitelyDead
     }
 }
 
