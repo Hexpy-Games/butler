@@ -174,9 +174,7 @@ impl AppApplication {
 
         if inserted {
             let visual = self
-                .dependencies
-                .admission
-                .admit_visual(VisualAdmissionRequest {
+                .admit_visual_localized(VisualAdmissionRequest {
                     model_ref: controls.model.clone(),
                     files: inspected.files,
                 })
@@ -337,9 +335,7 @@ impl AppApplication {
             request.plan_id.as_deref(),
         )?;
         let visual = self
-            .dependencies
-            .admission
-            .admit_visual(VisualAdmissionRequest {
+            .admit_visual_localized(VisualAdmissionRequest {
                 model_ref: resolved.resolution.model.clone(),
                 files: inspected.files,
             })

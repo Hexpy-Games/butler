@@ -1945,7 +1945,8 @@ try {
   assert(
     accessButtonState.svgCount === 1 &&
       accessButtonState.label.includes(appCopy.permissions.askFirst) &&
-      accessButtonState.color.includes("0, 122, 255"),
+      // Ask first reads in the accent text color (--accent-text, blue-07 light), AA on the composer.
+      accessButtonState.color.includes("0, 102, 217"),
     `permission button should update icon and ask-first color: ${JSON.stringify(accessButtonState)}`,
   );
   const accessButtonGeometry = await page

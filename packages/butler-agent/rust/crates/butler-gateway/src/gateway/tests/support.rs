@@ -340,6 +340,7 @@ impl GatewayApplication for TestApplication {
             Ok(SessionQueueView {
                 session_id,
                 queued_messages: Vec::new(),
+                paused: false,
             })
         })
     }

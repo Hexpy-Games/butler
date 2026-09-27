@@ -38,6 +38,8 @@ pub struct GuidedTurnInputs {
     pub operation_results: Option<Arc<dyn OperationResultRuntime>>,
     pub budget: Option<Arc<dyn TurnContinuationBudgetPort>>,
     pub source_revision: GuidedSourceRevision,
+    /// Relays the provider's text deltas to progress while the loop runs.
+    pub stream_relay: Option<super::stream_relay::StreamRelay>,
 }
 
 /// A guided turn bound for execution.

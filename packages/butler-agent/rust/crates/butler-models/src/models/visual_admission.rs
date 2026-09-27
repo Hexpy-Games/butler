@@ -75,6 +75,12 @@ impl ImageAdmissionError {
 }
 type ImageAdmissionResult<T> = Result<T, ImageAdmissionError>;
 
+/// Butler internal default cap on one inline image payload, applied to every
+/// model in addition to its catalog `image_max_inline_bytes` (itself labeled
+/// `butler_internal_default` in `image_limit_sources` where the provider
+/// documents no byte limit).
+const INTERNAL_DEFAULT_MAX_INLINE_IMAGE_BYTES: usize = 10 * 1024 * 1024;
+
 fn error(code: &'static str, detail: &'static str) -> ImageAdmissionError {
     ImageAdmissionError::new(code, detail)
 }
@@ -366,7 +372,7 @@ pub fn admit_visual_image_request(
             return Err(error("image_model_unsupported", "mime_not_admitted"));
         }
         if (manifest.derivative_size_bytes as f64) > capability.max_inline_image_bytes
-            || manifest.derivative_size_bytes > 10 * 1024 * 1024
+            || manifest.derivative_size_bytes > INTERNAL_DEFAULT_MAX_INLINE_IMAGE_BYTES
             || f64::from(manifest.width) > capability.max_width
             || f64::from(manifest.height) > capability.max_height
             || (manifest.pixel_count as f64) > capability.max_pixels

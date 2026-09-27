@@ -31,3 +31,23 @@ fn public_projection_redacts_secrets_and_replaces_private_text_with_fallback() {
     assert_eq!(sanitize_public_value(&json!(true), ""), "true");
     assert_eq!(sanitize_public_value(&json!(12), "Working"), "12");
 }
+
+#[test]
+fn public_delta_keeps_whitespace_and_still_redacts() {
+    // (delta, projected): fragments concatenate, so whitespace is kept exactly;
+    // other control characters go and secrets are still redacted.
+    for (value, expected) in [
+        (" two", " two"),
+        ("one ", "one "),
+        ("\n\n", "\n\n"),
+        ("- a\n- b\n", "- a\n- b\n"),
+        ("\tcode", "\tcode"),
+        ("line\r\nnext", "line\nnext"),
+        ("bell\u{7}", "bell"),
+        (" token=abc", " [redacted]"),
+        ("auth: bearer abc ", "[redacted] "),
+        ("", ""),
+    ] {
+        assert_eq!(sanitize_public_delta(value), expected, "{value:?}");
+    }
+}

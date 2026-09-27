@@ -160,6 +160,7 @@ async fn run_iteration(
     if reply.calls.is_empty() {
         return settle_answer(input, state, prepared, reply.text, iteration).await;
     }
+    discard_round_text(prepared);
     run_tool_batch(
         input,
         state,
@@ -221,6 +222,14 @@ async fn obtain_reply(
     })
 }
 
+/// Tells the stream relay that the latest round's streamed text is not the
+/// answer, so a stopped turn does not keep it as its partial answer.
+fn discard_round_text(prepared: &PreparedPolicy) {
+    if let Some(observer) = prepared.ports.stream_observer.as_deref() {
+        observer.round_text_discarded();
+    }
+}
+
 /// Tool calls written as text are a contract failure; the journal records
 /// them and decides the error. A text-only assistant message is dropped first.
 async fn reject_text_tool_calls(
@@ -265,9 +274,11 @@ async fn settle_answer(
     iteration: u32,
 ) -> Result<Step, AgentLoopError> {
     if let Some(synthesized) = synthesize_answer(input, state, prepared, &text).await? {
+        discard_round_text(prepared);
         text = synthesized;
     }
     if text.is_empty() && !state.empty_recovery_used {
+        discard_round_text(prepared);
         state.empty_recovery_used = true;
         state.messages.push(ModelRoundMessage::user(
             "Your previous response was empty. Continue and provide the required result.".into(),
@@ -287,6 +298,7 @@ async fn settle_answer(
                     BtccCode::BtccAgentLoopFinalCandidateObservationMissing,
                 )));
             }
+            discard_round_text(prepared);
             state.phase = super::contracts::LoopPhase::Working;
             state
                 .messages

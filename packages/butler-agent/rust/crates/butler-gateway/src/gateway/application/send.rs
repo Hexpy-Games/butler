@@ -186,9 +186,7 @@ impl AppApplication {
         };
         if inserted {
             let visual = self
-                .dependencies
-                .admission
-                .admit_visual(VisualAdmissionRequest {
+                .admit_visual_localized(VisualAdmissionRequest {
                     model_ref: prepared.controls.model.clone(),
                     files: inspected.files,
                 })
@@ -235,14 +233,16 @@ impl AppApplication {
                     claim_owner: owner,
                     lease_expires_at: lease,
                 },
+                queue::ClaimOrder::Fifo,
                 &now,
                 &subscribers,
             )
         }).await.map_err(app_error)?;
         let Some(claim) = claim else {
-            if let Some(dispatcher) = &self.queue_dispatcher {
-                dispatcher.wake_chat(chat_id.to_owned()).await?;
-            }
+            // Every handle (request handles too) can wake the dispatcher, so a
+            // message queued behind others is dispatched in order even when no
+            // turn is running to wake it.
+            self.queue_wake.chat(chat_id.to_owned()).await?;
             return self.queued_result(chat_id, client_id).await;
         };
         self.start_turn(claim, prepared).await

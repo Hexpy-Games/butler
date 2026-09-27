@@ -63,9 +63,19 @@ pub(super) fn list(
         .into_iter()
         .map(|row| queue_record(connection, row))
         .collect::<Result<Vec<_>, _>>()?;
+    let paused = connection
+        .query_row(
+            "SELECT 1 FROM session_queue_pauses WHERE chat_id=?1",
+            [chat_id],
+            |_| Ok(()),
+        )
+        .optional()
+        .map_err(AppStorageError::sqlite)?
+        .is_some();
     Ok(SessionQueueView {
         session_id: chat_id.to_owned(),
         queued_messages,
+        paused,
     })
 }
 

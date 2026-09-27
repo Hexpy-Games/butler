@@ -130,6 +130,15 @@ async fn fallback_cursor_is_execution_local_and_persists_across_rounds() {
     );
     assert_eq!(&*second_base.models.lock().unwrap(), &["openai/a"]);
     assert_eq!(second.active_model_ref(), "openai/a");
+    // Only the fallback persists a route (the advanced cursor); later events
+    // must not write the admitted route (cursor 0) back.
+    let events = store.events.lock().unwrap();
+    let routes = store.routes.lock().unwrap();
+    for (event, route) in events.iter().zip(routes.iter()) {
+        let expected =
+            (event.kind == crate::btcc::ModelRouteEventKind::FallbackSelected).then_some(1);
+        assert_eq!(*route, expected, "{:?}", event.kind);
+    }
 }
 
 #[tokio::test]

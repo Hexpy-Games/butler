@@ -85,6 +85,24 @@ impl InboundQueue {
         storage::settle(&self.root, item, "processed", None, metadata)
     }
 
+    /// Settles a claimed record as failed with `error`; it is not retried.
+    pub fn fail(
+        &self,
+        item: &ClaimedInboundEvent,
+        error: &str,
+        metadata: Value,
+    ) -> QueueResult<bool> {
+        let _guard = self.lane.lock();
+        storage::settle(&self.root, item, "failed", Some(error), metadata)
+    }
+
+    /// Returns a claimed record to pending, metadata kept, for another attempt
+    /// after a backoff (1 s, doubling per deferral, at most 60 s).
+    pub fn defer(&self, item: &ClaimedInboundEvent, error: &str) -> QueueResult<bool> {
+        let _guard = self.lane.lock();
+        storage::defer(&self.root, item, error)
+    }
+
     pub fn park_for_process_replacement(
         &self,
         item: &ClaimedInboundEvent,

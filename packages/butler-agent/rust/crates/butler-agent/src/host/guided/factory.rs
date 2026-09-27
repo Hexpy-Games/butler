@@ -230,13 +230,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                         }),
                     },
                     project_id: policy.project_id.clone(),
-                    project_sources: start
-                        .turn
-                        .context
-                        .get("projectSources")
-                        .and_then(serde_json::Value::as_array)
-                        .cloned()
-                        .unwrap_or_default(),
+                    project_sources: project_sources(&start.turn.context),
                     visible_names: surface.iter().map(|t| t.name.clone()).collect(),
                     authorized_names: phase.authorized_names.iter().cloned().collect(),
                     required_names: policy.required_tools.iter().cloned().collect(),
@@ -286,6 +280,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 start.turn.turn_id.clone(),
                 activity,
             ));
+            let stream_relay = butler_turn::btcc::StreamRelay::new();
             let inputs = GuidedTurnInputs {
                 semantic,
                 dependencies: GuidedPolicyDependencies {
@@ -296,13 +291,14 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                     journal,
                     work,
                     verified_image_payload: Some(self.verified_image_payload.clone()),
-                    stream_observer: None,
+                    stream_observer: Some(stream_relay.observer()),
                     identity_observer: None,
                 },
                 authority_decision,
                 operation_results,
                 budget,
                 source_revision,
+                stream_relay: Some(stream_relay),
             };
             Ok(Box::new(BoundTurn {
                 inputs: Some(inputs),
@@ -311,6 +307,15 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
             }) as Box<dyn BoundGuidedTurn + 'a>)
         })
     }
+}
+
+/// The App's project source references of the turn (`projectSources`).
+fn project_sources(context: &serde_json::Value) -> Vec<serde_json::Value> {
+    context
+        .get("projectSources")
+        .and_then(serde_json::Value::as_array)
+        .cloned()
+        .unwrap_or_default()
 }
 
 fn error(code: &str) -> BtccError {
