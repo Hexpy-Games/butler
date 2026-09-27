@@ -74,14 +74,7 @@ pub(in crate::btcc::storage::work) fn record(
         &work.id,
     )?;
     let now = clock();
-    let disposition_id = insert_disposition(
-        db,
-        &work.id,
-        command,
-        &normalized,
-        &snapshot,
-        &now,
-    )?;
+    let disposition_id = insert_disposition(db, &work.id, command, &normalized, &snapshot, &now)?;
     if let Some(plan) = &current.current_plan {
         let next = normalized
             .remaining

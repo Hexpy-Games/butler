@@ -26,6 +26,8 @@ pub struct HistoricalOriginReport {
     pub(crate) pending: usize,
 }
 
+/// Classifies the origin of every unclassified historical user and assistant
+/// message from durable evidence, page by page within one minute.
 pub async fn classify_historical_origins(
     data_root: PathBuf,
     store: &AgentConversationStore,
@@ -40,6 +42,12 @@ pub async fn classify_historical_origins(
     .await
     .map_err(|source| unavailable().with_source(source))??;
     let mut report = HistoricalOriginReport::default();
+    let scan = Scan {
+        data_root: &data_root,
+        store,
+        cancellation,
+        started,
+    };
     for role in [ConversationRole::User, ConversationRole::Assistant] {
         let mut after = None;
         loop {
@@ -51,77 +59,124 @@ pub async fn classify_historical_origins(
                 break;
             }
             after = rows.last().map(|row| row.message_id.clone());
-            let user_rows = if role == ConversationRole::User {
-                rows.iter()
-                    .filter(|row| row.role == ConversationRole::User)
-                    .cloned()
-                    .collect::<Vec<_>>()
-            } else {
-                Vec::new()
-            };
-            let facts = if user_rows.is_empty() {
-                Vec::new()
-            } else {
-                let root = data_root.clone();
-                let page_cancellation = cancellation.clone();
-                tokio::task::spawn_blocking(move || {
-                    evidence::read_page(&root, &user_rows, started, &page_cancellation)
-                })
-                .await
-                .map_err(|source| unavailable().with_source(source))??
-            };
-            let mut user = 0;
-            for row in rows.iter().filter(|row| row.role == role) {
-                check(cancellation, started)?;
-                if role == ConversationRole::User {
-                    // read_page returns one fact set per user row, in order.
-                    let Some(facts) = facts.get(user) else {
-                        return Err(unavailable());
-                    };
-                    user += 1;
-                    if let Some(outbox) = facts
-                        .outbox
-                        .clone()
-                        .filter(|_| row.origin_kind != ConversationOriginKind::InternalControl)
-                    {
-                        let decision = classify_conversation_origin(
-                            store.collation().as_ref(),
-                            ConversationOriginFacts {
-                                reference: row.source_ref.clone(),
-                                public_ingress: false,
-                                internal_control: true,
-                                evidence_available: true,
-                                evidence: vec![outbox],
-                            },
-                        );
-                        record(store, row, decision, true, &mut report).await?;
-                        continue;
-                    }
-                    if row.origin_version.is_some() {
-                        report.unchanged += 1;
-                        continue;
-                    }
-                    let decision = classify_conversation_origin(
-                        store.collation().as_ref(),
-                        ConversationOriginFacts {
-                            reference: row.source_ref.clone(),
-                            public_ingress: facts.public_ingress,
-                            internal_control: facts.internal_control,
-                            evidence_available: facts.available,
-                            evidence: facts.evidence.clone(),
-                        },
-                    );
-                    record(store, row, decision, false, &mut report).await?;
-                } else {
-                    classify_assistant(store, row, &mut report).await?;
-                }
-            }
+            scan.classify_page(&rows, role, &mut report).await?;
             if rows.len() < 100 {
                 break;
             }
         }
     }
     Ok(report)
+}
+
+/// One classification pass over the conversation store.
+struct Scan<'a> {
+    data_root: &'a PathBuf,
+    store: &'a AgentConversationStore,
+    cancellation: &'a CancellationToken,
+    started: Instant,
+}
+
+impl Scan<'_> {
+    /// Classifies the page's messages of `role`; user messages are matched
+    /// against the page's source evidence, read once per page.
+    async fn classify_page(
+        &self,
+        rows: &[HistoricalOriginCandidate],
+        role: ConversationRole,
+        report: &mut HistoricalOriginReport,
+    ) -> ConversationResult<()> {
+        let facts = match role {
+            ConversationRole::User => self.user_facts(rows).await?,
+            _ => Vec::new(),
+        };
+        let mut user_facts = facts.iter();
+        for row in rows.iter().filter(|row| row.role == role) {
+            check(self.cancellation, self.started)?;
+            if role != ConversationRole::User {
+                classify_assistant(self.store, row, report).await?;
+                continue;
+            }
+            // read_page returns one fact set per user row, in order.
+            let Some(facts) = user_facts.next() else {
+                return Err(unavailable());
+            };
+            classify_user(self.store, row, facts, report).await?;
+        }
+        Ok(())
+    }
+
+    async fn user_facts(
+        &self,
+        rows: &[HistoricalOriginCandidate],
+    ) -> ConversationResult<Vec<evidence::UserEvidence>> {
+        let user_rows = rows
+            .iter()
+            .filter(|row| row.role == ConversationRole::User)
+            .cloned()
+            .collect::<Vec<_>>();
+        if user_rows.is_empty() {
+            return Ok(Vec::new());
+        }
+        let root = self.data_root.clone();
+        let page_cancellation = self.cancellation.clone();
+        let started = self.started;
+        tokio::task::spawn_blocking(move || {
+            evidence::read_page(&root, &user_rows, started, &page_cancellation)
+        })
+        .await
+        .map_err(|source| unavailable().with_source(source))?
+    }
+}
+
+/// A user message delivered through the subsession outbox is internal
+/// control (correcting an earlier classification); otherwise an unclassified
+/// one is classified from its source evidence.
+async fn classify_user(
+    store: &AgentConversationStore,
+    row: &HistoricalOriginCandidate,
+    facts: &evidence::UserEvidence,
+    report: &mut HistoricalOriginReport,
+) -> ConversationResult<()> {
+    if let Some(outbox) = facts
+        .outbox
+        .clone()
+        .filter(|_| row.origin_kind != ConversationOriginKind::InternalControl)
+    {
+        let decision = classify_conversation_origin(
+            store.collation().as_ref(),
+            ConversationOriginFacts {
+                reference: row.source_ref.clone(),
+                public_ingress: false,
+                internal_control: true,
+                evidence_available: true,
+                evidence: vec![outbox],
+            },
+        );
+        return record(store, row, decision, Correction::InternalOrigin, report).await;
+    }
+    if row.origin_version.is_some() {
+        report.unchanged += 1;
+        return Ok(());
+    }
+    let decision = classify_conversation_origin(
+        store.collation().as_ref(),
+        ConversationOriginFacts {
+            reference: row.source_ref.clone(),
+            public_ingress: facts.public_ingress,
+            internal_control: facts.internal_control,
+            evidence_available: facts.available,
+            evidence: facts.evidence.clone(),
+        },
+    );
+    record(store, row, decision, Correction::None, report).await
+}
+
+/// Whether a classification may replace an existing one.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Correction {
+    None,
+    /// Correct an earlier classification to internal control.
+    InternalOrigin,
 }
 
 async fn classify_assistant(
@@ -191,14 +246,19 @@ async fn classify_assistant(
         decision.kind = ConversationOriginKind::AssistantPublic;
         decision.reason = "verified_public_outcome".into();
     }
-    record(store, row, decision, correct_internal, report).await
+    let correction = if correct_internal {
+        Correction::InternalOrigin
+    } else {
+        Correction::None
+    };
+    record(store, row, decision, correction, report).await
 }
 
 async fn record(
     store: &AgentConversationStore,
     row: &HistoricalOriginCandidate,
     decision: ConversationOriginDecision,
-    correct_internal: bool,
+    correction: Correction,
     report: &mut HistoricalOriginReport,
 ) -> ConversationResult<()> {
     if !decision.complete {
@@ -209,7 +269,7 @@ async fn record(
         .record_origin_classification(RecordOriginClassificationInput {
             candidate: row.clone(),
             decision,
-            correct_internal_origin: correct_internal,
+            correct_internal_origin: correction == Correction::InternalOrigin,
         })
         .await?
     {

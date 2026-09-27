@@ -50,7 +50,10 @@ enum Slot {
     /// An existing request or a standing permission already answers it.
     Settled(AuthorityAdmissionResult),
     /// No request holds this identity and generation yet.
-    Free { identity_sha: String, generation: i64 },
+    Free {
+        identity_sha: String,
+        generation: i64,
+    },
 }
 
 /// Walks generations past terminal requests to the first free slot.
