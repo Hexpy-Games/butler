@@ -67,23 +67,13 @@ impl RoutedRound<'_> {
         self.clear_recovery(&mut cursor.recovery, cursor.attempt, route.retry_ceiling)
             .await;
         let result = attach_surface(result, request.tool_surface_digest)?;
-        let value = serde_json::to_value(&result).map_err(|source| {
-            failure::durability(
-                "response_acceptance_write",
-                &BtccError::detected(
-                    BtccCode::ModelResponseInvalid,
-                    "cannot encode accepted response",
-                )
-                .with_source(source),
-            )
-        })?;
         self.hooks
             .accept(
                 &cursor.round_id,
                 route.active_cursor,
                 cursor.attempt,
                 &candidate.model_ref,
-                value,
+                result.clone(),
             )
             .await?;
         *self.view.accepted.lock() = Some(identity(request, &candidate.model_ref, &result));

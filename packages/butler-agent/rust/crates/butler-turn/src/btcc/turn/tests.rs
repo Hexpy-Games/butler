@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use serde_json::{Value, json};
+use serde_json::json;
 use tokio::sync::Semaphore;
 
 use super::test_support::{agent_result, apply_final, record, request};
@@ -188,7 +188,10 @@ impl TurnStore for Harness {
     ) -> PortFuture<'_, crate::btcc::AttemptHistory> {
         Box::pin(async { Ok(crate::btcc::AttemptHistory::default()) })
     }
-    fn load_model_round_acceptance(&self, _: ModelRoundKey) -> PortFuture<'_, Option<Value>> {
+    fn load_model_round_acceptance(
+        &self,
+        _: ModelRoundKey,
+    ) -> PortFuture<'_, Option<crate::btcc::ModelRoundResult>> {
         Box::pin(async { Ok(None) })
     }
     fn record_model_round_acceptance(&self, _: ModelRoundAcceptanceWrite) -> PortFuture<'_, ()> {

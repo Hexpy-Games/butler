@@ -3,9 +3,9 @@ use serde_json::Value;
 
 use crate::btcc::{
     AcceptedWorkResult, AdmittedModelSelection, AlreadyDeliveredOutcome, AuthorityLoopContinuation,
-    ChangedFileSummary, ExecutionOutcome, FinalArtifact, ModelIdentity, ProgressDestination,
-    RouteState, RuntimeFailure, TurnContinuationBudgetEvent, TurnContinuationBudgetState,
-    TurnRequest, WorkStatus,
+    ChangedFileSummary, ExecutionOutcome, FinalArtifact, ModelIdentity, ModelRoundResult,
+    ProgressDestination, RouteState, RuntimeFailure, TurnContinuationBudgetEvent,
+    TurnContinuationBudgetState, TurnRequest, WorkStatus,
 };
 
 /// The durable lifecycle state of a turn.
@@ -331,7 +331,7 @@ pub struct ModelRoundAcceptanceWrite {
     pub binding: ModelRouteWrite,
     pub key: ModelRoundKey,
     pub transport_attempt: u32,
-    pub result: Value,
+    pub result: Box<ModelRoundResult>,
 }
 
 /// Applies a continuation-budget event under the turn claim.

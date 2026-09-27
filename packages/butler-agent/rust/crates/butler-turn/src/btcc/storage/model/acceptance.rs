@@ -11,7 +11,7 @@ use crate::btcc::turn::{ModelRoundAcceptanceWrite, ModelRoundKey};
 pub(in crate::btcc::storage) fn load_acceptance(
     connection: &Connection,
     key: &ModelRoundKey,
-) -> StorageResult<Option<Value>> {
+) -> StorageResult<Option<crate::btcc::ModelRoundResult>> {
     let (checkpoint_id, checkpoint_revision) = checkpoint(key)?;
     assert_checkpoint(connection, &key.turn_id, checkpoint_id, checkpoint_revision)?;
     let row = connection
@@ -48,7 +48,13 @@ pub(in crate::btcc::storage) fn load_acceptance(
                     normalize_provider_identity(&json(&raw, StorageCode::ProviderIdentityJson)?)?,
                 );
         }
-        Ok(value)
+        serde_json::from_value(value).map_err(|source| {
+            error(
+                StorageCode::ModelResponseInvalid,
+                "invalid accepted response",
+            )
+            .with_source(source)
+        })
     })
     .transpose()
 }
@@ -81,12 +87,16 @@ pub(in crate::btcc::storage) fn record_acceptance(
         ));
     }
     assert_checkpoint(&tx, &write.key.turn_id, checkpoint_id, checkpoint_revision)?;
-    let normalized = normalize(&write.result)?;
-    let provider = write
-        .result
-        .get("providerIdentity")
-        .map(stringify)
-        .transpose()?;
+    // The accepted response is normalized for persistence as JSON.
+    let result = serde_json::to_value(&write.result).map_err(|source| {
+        error(
+            StorageCode::ModelResponseInvalid,
+            "cannot encode accepted response",
+        )
+        .with_source(source)
+    })?;
+    let normalized = normalize(&result)?;
+    let provider = result.get("providerIdentity").map(stringify).transpose()?;
     let acceptance_id = format!(
         "{}:{}:{}:{}:{}",
         write.key.turn_id,

@@ -1,7 +1,6 @@
 use std::future::Future;
 
-use serde_json::Value;
-
+use crate::btcc::agent_loop::ModelRoundResult;
 use crate::btcc::{
     AttemptHistory, BtccError, ModelRoundAcceptanceWrite, ModelRoundKey, ModelRouteEvent,
     ModelRouteEventWrite, ModelRouteWrite, RouteEventStatus, RouteState, StateExecutionClaim,
@@ -78,7 +77,7 @@ impl RouteHooks {
         round: &str,
         candidate: u32,
         model: &str,
-    ) -> Result<Option<Value>, crate::btcc::agent_loop::ModelRoundError> {
+    ) -> Result<Option<ModelRoundResult>, crate::btcc::agent_loop::ModelRoundError> {
         let key = self.key(round, candidate, model, KeyScope::Checkpoint);
         self.retry("response_acceptance_read", || {
             self.store.load_model_round_acceptance(key.clone())
@@ -92,13 +91,13 @@ impl RouteHooks {
         candidate: u32,
         attempt: u32,
         model: &str,
-        result: Value,
+        result: ModelRoundResult,
     ) -> Result<(), crate::btcc::agent_loop::ModelRoundError> {
         let write = ModelRoundAcceptanceWrite {
             binding: self.binding.clone(),
             key: self.key(round, candidate, model, KeyScope::Checkpoint),
             transport_attempt: attempt,
-            result,
+            result: Box::new(result),
         };
         self.retry("response_acceptance_write", || {
             self.store.record_model_round_acceptance(write.clone())

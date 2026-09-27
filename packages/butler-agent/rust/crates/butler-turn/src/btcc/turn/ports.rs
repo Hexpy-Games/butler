@@ -1,7 +1,6 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
 use super::contracts::{
@@ -70,7 +69,10 @@ pub trait TurnStore: Send + Sync {
         key: ModelRoundKey,
     ) -> PortFuture<'_, AttemptHistory>;
     /// The durably accepted response of a round candidate (serialized `ModelRoundResult`).
-    fn load_model_round_acceptance(&self, key: ModelRoundKey) -> PortFuture<'_, Option<Value>>;
+    fn load_model_round_acceptance(
+        &self,
+        key: ModelRoundKey,
+    ) -> PortFuture<'_, Option<crate::btcc::ModelRoundResult>>;
     /// Durably accepts a round's response.
     fn record_model_round_acceptance(&self, write: ModelRoundAcceptanceWrite)
     -> PortFuture<'_, ()>;

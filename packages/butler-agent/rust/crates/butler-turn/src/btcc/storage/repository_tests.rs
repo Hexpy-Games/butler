@@ -205,17 +205,17 @@ async fn model_journal_abandons_restarted_attempt_and_budget_terminal_commits() 
     assert_eq!(history.abandoned, [1]);
     repositories.record_model_round_acceptance(crate::btcc::ModelRoundAcceptanceWrite {
         binding: binding.clone(), key: key.clone(), transport_attempt: 2,
-        result: json!({"toolCalls":[],"assistantMessage":{"role":"assistant","content":"ok",
+        result: serde_json::from_value(json!({"toolCalls":[],"assistantMessage":{"role":"assistant","content":"ok",
             "providerData":{"private":"drop"}},"continuation":{"provider":"openai",
             "responseId":"response-1","deliveredThroughOrdinal":0},
-            "providerIdentity":{"provider":"openai","configuredModel":"gpt","reportedModel":"gpt"}}),
+            "providerIdentity":{"provider":"openai","configuredModel":"gpt","reportedModel":"gpt"}})).unwrap(),
     }).await.expect("accept model round");
     let accepted = repositories
         .load_model_round_acceptance(key.clone())
         .await
         .expect("load acceptance")
         .expect("accepted round");
-    assert!(accepted["assistantMessage"].get("providerData").is_none());
+    assert!(accepted.assistant_message.unwrap().provider_data.is_none());
     let mut stale = key;
     stale.checkpoint_revision = Some(99);
     assert_eq!(

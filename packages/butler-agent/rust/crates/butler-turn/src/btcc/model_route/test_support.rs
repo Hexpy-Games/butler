@@ -77,12 +77,16 @@ impl TurnStore for Store {
                 .unwrap_or_default())
         })
     }
-    fn load_model_round_acceptance(&self, _: ModelRoundKey) -> PortFuture<'_, Option<Value>> {
+    fn load_model_round_acceptance(
+        &self,
+        _: ModelRoundKey,
+    ) -> PortFuture<'_, Option<crate::btcc::ModelRoundResult>> {
         Box::pin(async move {
             if let Some(error) = self.fail_read.lock().unwrap().take() {
                 return Err(error);
             }
-            Ok(self.accepted.lock().unwrap().pop_front().unwrap_or(None))
+            let accepted = self.accepted.lock().unwrap().pop_front().unwrap_or(None);
+            Ok(accepted.map(|value| serde_json::from_value(value).expect("fixture acceptance")))
         })
     }
     fn record_model_round_acceptance(
@@ -90,7 +94,10 @@ impl TurnStore for Store {
         write: ModelRoundAcceptanceWrite,
     ) -> PortFuture<'_, ()> {
         Box::pin(async move {
-            self.acceptances.lock().unwrap().push(write.result);
+            self.acceptances
+                .lock()
+                .unwrap()
+                .push(serde_json::to_value(&write.result).unwrap());
             Ok(())
         })
     }

@@ -6,7 +6,6 @@ use crate::btcc::turn::{
     StorageReadiness, TransitionCommitError, TurnRecord, TurnStore, TurnTransition,
 };
 use crate::btcc::{BtccError, ProgressDestination};
-use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
 use super::operation_input::{CanonicalDelivery, TurnVersion};
@@ -141,7 +140,10 @@ impl TurnStore for BtccRepositories {
                 .map_err(BtccError::from)
         })
     }
-    fn load_model_round_acceptance(&self, key: ModelRoundKey) -> PortFuture<'_, Option<Value>> {
+    fn load_model_round_acceptance(
+        &self,
+        key: ModelRoundKey,
+    ) -> PortFuture<'_, Option<crate::btcc::ModelRoundResult>> {
         let storage = self.storage.clone();
         Box::pin(async move {
             storage
