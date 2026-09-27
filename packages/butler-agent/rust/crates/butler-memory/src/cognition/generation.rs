@@ -48,7 +48,7 @@ pub use rebuild::{
 pub use rebuild::{compute_rebuild_readiness, record_rebuild_readiness};
 pub use reconcile::run as reconcile_rebuild_vector_representatives;
 pub use repair_inputs::{CandidateInputRepairRequest, run as repair_memory_candidate_inputs};
-pub use retry_failed::run as retry_failed_memory_generation;
+pub use retry_failed::{RetriedGeneration, run as retry_failed_memory_generation};
 pub use set_extractor::run as set_extractor_memory_generation;
 pub use types::{GenerationEmbedding, MemoryGenerationHandle, MemoryGenerationTarget};
 

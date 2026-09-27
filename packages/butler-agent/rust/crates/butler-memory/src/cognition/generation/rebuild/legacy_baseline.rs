@@ -23,7 +23,7 @@ pub(super) async fn ensure(
     }
     let first = inventory::read(data_root, canonical, now, cancellation)?;
     let lease = crate::cognition::generation::stage::acquire_abortable(
-        &coordinator,
+        coordinator,
         lock,
         "cutover",
         cancellation,

@@ -1,16 +1,21 @@
 //! Transactional repair of candidate inputs from pinned source evidence.
+//!
+//! Each requested window's pinned extract input keeps every field but
+//! `candidates`, which is reloaded from the current graph. A preview only
+//! reports the repaired digest; an apply records a recovery attempt with the
+//! prior input and swaps the window's input.
 
 use std::{collections::HashSet, path::Path};
 
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
-use serde::Serialize;
-use serde_json::{Value, json};
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 
 use super::{
     error,
     request::{CandidateInputRepairExpected, CandidateInputRepairRequest},
 };
-use crate::cognition::extraction::ExtractInput;
+use crate::cognition::extraction::{ExtractCandidate, ExtractInput};
 use crate::cognition::{CognitionCode, CognitionResult};
 use butler_turn::conversation::ConversationSourceReader;
 
@@ -18,10 +23,131 @@ const INPUT_REPAIR_RECEIPT_SCHEMA: &str = "butler.memory-candidate-input-repair-
 const EXTRACT_INPUT_SCHEMA: &str = "butler.memory-extract-input.v2";
 const MAX_EXTRACT_INPUT_BYTES: usize = 24 * 1024;
 
+/// Whether a candidate-input repair only reports or also writes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RepairMode {
+    /// Report the repaired digests without writing.
+    Preview,
+    /// Record receipts and replace the window inputs.
+    Apply,
+}
+
+/// Result of a candidate-input repair.
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
-pub(in crate::cognition) struct CandidateInputRepairResult {
-    pub(in crate::cognition) repaired: usize,
-    pub(in crate::cognition) receipts: Vec<Value>,
+pub struct CandidateInputRepairResult {
+    /// Windows whose input was replaced.
+    pub repaired: usize,
+    /// One receipt per requested window.
+    pub receipts: Vec<RepairReceipt>,
+}
+
+/// What happened to one requested window.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct RepairReceipt {
+    window_ref: String,
+    state: RepairState,
+    #[serde(flatten)]
+    detail: RepairDetail,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum RepairState {
+    Preview,
+    Unchanged,
+    Repaired,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(untagged)]
+enum RepairDetail {
+    Preview {
+        prior_input_sha256: String,
+        repaired_input_sha256: String,
+        repaired_candidates: Vec<ExtractCandidate>,
+    },
+    Unchanged {
+        input_sha256: String,
+    },
+    Repaired {
+        input_sha256: String,
+        receipt_ref: String,
+    },
+}
+
+/// The recovery receipt archived with each applied repair.
+#[derive(Serialize, Deserialize)]
+struct InputRepairReceipt {
+    schema: String,
+    prior_input_json: String,
+    prior_input_sha256: String,
+    repaired_input_sha256: String,
+    candidate_source_sha256: String,
+    repaired_at: String,
+}
+
+/// Passthrough: a stored extract input kept verbatim so a repair changes only
+/// its `candidates` and every other byte of the hashed input survives.
+#[derive(Clone)]
+struct StoredInput(Map<String, Value>);
+
+impl StoredInput {
+    fn parse(serialized: &str) -> CognitionResult<Self> {
+        serde_json::from_str(serialized)
+            .map(Self)
+            .map_err(|source| precondition_changed().with_source(source))
+    }
+
+    fn typed(&self) -> CognitionResult<ExtractInput> {
+        serde_json::from_value(Value::Object(self.0.clone()))
+            .map_err(|source| precondition_changed().with_source(source))
+    }
+
+    fn field(&self, name: &str) -> CognitionResult<&Value> {
+        self.0.get(name).ok_or_else(precondition_changed)
+    }
+
+    /// The `ref` of every candidate, each required and non-empty.
+    fn candidate_refs(&self) -> CognitionResult<Vec<String>> {
+        #[derive(Deserialize)]
+        struct CandidateRef {
+            #[serde(rename = "ref")]
+            ref_id: String,
+        }
+        let candidates: Vec<CandidateRef> = Vec::deserialize(self.field("candidates")?)
+            .map_err(|source| precondition_changed().with_source(source))?;
+        candidates
+            .into_iter()
+            .map(|candidate| {
+                Some(candidate.ref_id)
+                    .filter(|value| !value.is_empty())
+                    .ok_or_else(precondition_changed)
+            })
+            .collect()
+    }
+
+    fn with_candidates(&self, candidates: Value) -> Self {
+        let mut repaired = self.0.clone();
+        repaired.insert("candidates".into(), candidates);
+        Self(repaired)
+    }
+
+    fn stringify(&self) -> CognitionResult<String> {
+        stringify(&Value::Object(self.0.clone()))
+    }
+}
+
+/// A requested window after its pinned input and candidates were reloaded.
+struct RefreshedWindow<'a> {
+    expected: &'a CandidateInputRepairExpected,
+    row: RepairWindowRow,
+    prior_input_json: String,
+    prior_sha: String,
+    pinned: StoredInput,
+    refreshed: Vec<ExtractCandidate>,
+    refreshed_value: Value,
+    serialized: String,
+    digest: String,
 }
 
 #[derive(Debug)]
@@ -40,128 +166,186 @@ struct RepairWindowRow {
     recovery_revision: Option<String>,
 }
 
+/// The inputs every window repair shares.
+pub(super) struct RepairScope<'a> {
+    pub(super) current_generation: &'a str,
+    pub(super) canonical: &'a ConversationSourceReader,
+    pub(super) source_root: &'a Path,
+    pub(super) mode: RepairMode,
+    pub(super) now: &'a str,
+}
+
 pub(super) fn repair_candidate_inputs(
     connection: &mut Connection,
-    current_generation: &str,
-    canonical: &ConversationSourceReader,
-    source_root: &Path,
+    scope: &RepairScope<'_>,
     request: &CandidateInputRepairRequest,
-    dry_run: bool,
-    now: &str,
 ) -> CognitionResult<CandidateInputRepairResult> {
     let tx = connection.transaction().map_err(super::super::db_error)?;
     let mut result = CandidateInputRepairResult::default();
     for expected in &request.windows {
-        let row = read_repair_window(&tx, expected, current_generation)?
-            .ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))?;
-        validate_repair_window(&tx, expected, &row, dry_run)?;
-
-        // validate_repair_window admitted only rows with a prior input and digest.
-        let (Some(prior_input_json), Some(prior_sha)) =
-            (row.input_json.as_deref(), row.input_sha256.as_deref())
-        else {
-            return Err(error(CognitionCode::MemoryInputRepairPreconditionChanged));
+        let window = refresh_window(&tx, scope, expected)?;
+        let receipt = match scope.mode {
+            RepairMode::Preview => window.preview(),
+            RepairMode::Apply => window.apply(&tx, scope.now)?,
         };
-        let pinned_value = parse_input_value(prior_input_json)?;
-        let pinned: ExtractInput =
-            serde_json::from_value(pinned_value.clone()).map_err(|source| {
-                error(CognitionCode::MemoryInputRepairPreconditionChanged).with_source(source)
-            })?;
-        if pinned.schema != EXTRACT_INPUT_SCHEMA
-            || pinned.window_ref != expected.window_ref
-            || pinned.episode_ref != row.episode_id
-            || pinned.revision != row.revision
-        {
-            return Err(error(CognitionCode::MemoryInputRepairPreconditionChanged));
+        if receipt.state == RepairState::Repaired {
+            result.repaired += 1;
         }
-        super::super::candidates::assert_pinned_source_current(
-            &tx,
-            canonical,
-            source_root,
-            &pinned,
-            now,
+        result.receipts.push(receipt);
+    }
+    tx.commit().map_err(super::super::db_error)?;
+    Ok(result)
+}
+
+/// Validates the window against the request, then reloads its candidates
+/// from the current graph within the pinned input's byte budget.
+fn refresh_window<'a>(
+    tx: &Transaction<'_>,
+    scope: &RepairScope<'_>,
+    expected: &'a CandidateInputRepairExpected,
+) -> CognitionResult<RefreshedWindow<'a>> {
+    let row = read_repair_window(tx, expected, scope.current_generation)?
+        .ok_or_else(precondition_changed)?;
+    validate_repair_window(tx, expected, &row, scope.mode)?;
+    // validate_repair_window admitted only rows with a prior input and digest.
+    let (Some(prior_input_json), Some(prior_sha)) =
+        (row.input_json.clone(), row.input_sha256.clone())
+    else {
+        return Err(precondition_changed());
+    };
+    let pinned = StoredInput::parse(&prior_input_json)?;
+    let typed = pinned.typed()?;
+    if typed.schema != EXTRACT_INPUT_SCHEMA
+        || typed.window_ref != expected.window_ref
+        || typed.episode_ref != row.episode_id
+        || typed.revision != row.revision
+    {
+        return Err(precondition_changed());
+    }
+    super::super::candidates::assert_pinned_source_current(
+        tx,
+        scope.canonical,
+        scope.source_root,
+        &typed,
+        scope.now,
+    )?;
+    let candidate_ids = load_candidate_source(tx, expected, &row, &pinned)?.candidate_refs()?;
+    let refreshed = super::super::candidates::load_pinned(
+        tx,
+        scope.canonical,
+        scope.source_root,
+        &typed,
+        &candidate_ids,
+        remaining_candidate_bytes(&pinned)?,
+    )?;
+    let refreshed_value = serde_json::to_value(&refreshed)
+        .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))?;
+    let serialized = pinned
+        .with_candidates(refreshed_value.clone())
+        .stringify()?;
+    if serialized.len() > MAX_EXTRACT_INPUT_BYTES {
+        return Err(error(CognitionCode::MemoryExtractInputExceedsBudget));
+    }
+    let refreshed_refs = refreshed
+        .iter()
+        .map(|candidate| candidate.ref_id.as_str())
+        .collect::<HashSet<_>>();
+    if candidate_ids
+        .iter()
+        .any(|reference| !refreshed_refs.contains(reference.as_str()))
+    {
+        return Err(error(CognitionCode::MemoryInputRepairCandidatesIncomplete));
+    }
+    Ok(RefreshedWindow {
+        digest: extract_input_sha256(&serialized)?,
+        expected,
+        row,
+        prior_input_json,
+        prior_sha,
+        pinned,
+        refreshed,
+        refreshed_value,
+        serialized,
+    })
+}
+
+impl RefreshedWindow<'_> {
+    fn preview(self) -> RepairReceipt {
+        RepairReceipt {
+            window_ref: self.expected.window_ref.clone(),
+            state: RepairState::Preview,
+            detail: RepairDetail::Preview {
+                prior_input_sha256: self.prior_sha,
+                repaired_input_sha256: self.digest,
+                repaired_candidates: self.refreshed,
+            },
+        }
+    }
+
+    /// Records the recovery receipt and swaps the window input, unless the
+    /// reloaded candidates are identical to the pinned ones.
+    fn apply(self, tx: &Transaction<'_>, now: &str) -> CognitionResult<RepairReceipt> {
+        let window_ref = self.expected.window_ref.clone();
+        if stringify(self.pinned.field("candidates")?)? == stringify(&self.refreshed_value)? {
+            return Ok(RepairReceipt {
+                window_ref,
+                state: RepairState::Unchanged,
+                detail: RepairDetail::Unchanged {
+                    input_sha256: self.prior_sha,
+                },
+            });
+        }
+        let receipt_ref = repair_receipt_ref(&window_ref, &self.prior_sha, &self.digest)?;
+        self.record_attempt(tx, &receipt_ref, now)?;
+        let changed = tx
+            .execute(
+                "UPDATE memory_projection_windows SET input_json=?1,input_sha256=?2 \
+                 WHERE window_ref=?3 AND input_sha256=?4 AND attempt_count=?5 \
+                   AND state='pending' AND owner_nonce IS NULL AND owner_pid IS NULL",
+                params![
+                    self.serialized,
+                    self.digest,
+                    window_ref,
+                    self.prior_sha,
+                    self.row.attempt_count,
+                ],
+            )
+            .map_err(super::super::db_error)?;
+        if changed != 1 {
+            return Err(precondition_changed());
+        }
+        Ok(RepairReceipt {
+            window_ref,
+            state: RepairState::Repaired,
+            detail: RepairDetail::Repaired {
+                input_sha256: self.digest,
+                receipt_ref,
+            },
+        })
+    }
+
+    fn record_attempt(
+        &self,
+        tx: &Transaction<'_>,
+        receipt_ref: &str,
+        now: &str,
+    ) -> CognitionResult<()> {
+        let receipt = InputRepairReceipt {
+            schema: INPUT_REPAIR_RECEIPT_SCHEMA.into(),
+            prior_input_json: self.prior_input_json.clone(),
+            prior_input_sha256: self.prior_sha.clone(),
+            repaired_input_sha256: self.digest.clone(),
+            candidate_source_sha256: self
+                .expected
+                .candidate_source_sha256
+                .clone()
+                .unwrap_or_else(|| self.prior_sha.clone()),
+            repaired_at: now.to_owned(),
+        };
+        let receipt = stringify(
+            &serde_json::to_value(&receipt)
+                .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))?,
         )?;
-
-        let candidate_source = load_candidate_source(&tx, expected, &row, &pinned_value)?;
-        let candidate_ids = candidate_source
-            .get("candidates")
-            .and_then(Value::as_array)
-            .ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))?
-            .iter()
-            .map(|candidate| {
-                candidate
-                    .get("ref")
-                    .and_then(Value::as_str)
-                    .filter(|value| !value.is_empty())
-                    .map(str::to_owned)
-                    .ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))
-            })
-            .collect::<CognitionResult<Vec<_>>>()?;
-
-        let candidate_budget = remaining_candidate_bytes(&pinned_value)?;
-        let refreshed = super::super::candidates::load_pinned(
-            &tx,
-            canonical,
-            source_root,
-            &pinned,
-            &candidate_ids,
-            candidate_budget,
-        )?;
-        let refreshed_value = serde_json::to_value(&refreshed)
-            .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))?;
-        let mut repaired = pinned_value.clone();
-        repaired
-            .as_object_mut()
-            .ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))?
-            .insert("candidates".into(), refreshed_value.clone());
-        let serialized = stringify(&repaired)?;
-        if serialized.len() > MAX_EXTRACT_INPUT_BYTES {
-            return Err(error(CognitionCode::MemoryExtractInputExceedsBudget));
-        }
-
-        let refreshed_refs = refreshed
-            .iter()
-            .map(|candidate| candidate.ref_id.as_str())
-            .collect::<HashSet<_>>();
-        if candidate_ids
-            .iter()
-            .any(|reference| !refreshed_refs.contains(reference.as_str()))
-        {
-            return Err(error(CognitionCode::MemoryInputRepairCandidatesIncomplete));
-        }
-
-        let digest = extract_input_sha256(&serialized)?;
-        if dry_run {
-            result.receipts.push(json!({
-                "window_ref": expected.window_ref,
-                "state": "preview",
-                "prior_input_sha256": prior_sha,
-                "repaired_input_sha256": digest,
-                "repaired_candidates": refreshed_value,
-            }));
-            continue;
-        }
-        let pinned_candidates = pinned_value
-            .get("candidates")
-            .ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))?;
-        if stringify(pinned_candidates)? == stringify(&refreshed_value)? {
-            result.receipts.push(json!({
-                "window_ref": expected.window_ref,
-                "state": "unchanged",
-                "input_sha256": prior_sha,
-            }));
-            continue;
-        }
-
-        let receipt_ref = repair_receipt_ref(&expected.window_ref, prior_sha, &digest)?;
-        let receipt = stringify(&json!({
-            "schema": INPUT_REPAIR_RECEIPT_SCHEMA,
-            "prior_input_json": prior_input_json,
-            "prior_input_sha256": prior_sha,
-            "repaired_input_sha256": digest,
-            "candidate_source_sha256": expected.candidate_source_sha256.as_deref().unwrap_or(prior_sha),
-            "repaired_at": now,
-        }))?;
         tx.execute(
             "INSERT INTO memory_projection_attempts \
              (attempt_ref,window_ref,job_id,attempt_count,state,error_code,input_sha256,recorded_at, \
@@ -169,44 +353,19 @@ pub(super) fn repair_candidate_inputs(
              VALUES(?1,?2,?3,?4,?5,NULL,?6,?7,'recovery',0,1,?8,?9)",
             params![
                 receipt_ref,
-                expected.window_ref,
-                row.job_id,
-                row.attempt_count,
+                self.expected.window_ref,
+                self.row.job_id,
+                self.row.attempt_count,
                 format!("input_repaired:{receipt_ref}"),
-                prior_sha,
+                self.prior_sha,
                 now,
-                row.recovery_revision,
+                self.row.recovery_revision,
                 receipt,
             ],
         )
         .map_err(super::super::db_error)?;
-        let changed = tx
-            .execute(
-                "UPDATE memory_projection_windows SET input_json=?1,input_sha256=?2 \
-                 WHERE window_ref=?3 AND input_sha256=?4 AND attempt_count=?5 \
-                   AND state='pending' AND owner_nonce IS NULL AND owner_pid IS NULL",
-                params![
-                    serialized,
-                    digest,
-                    expected.window_ref,
-                    prior_sha,
-                    row.attempt_count,
-                ],
-            )
-            .map_err(super::super::db_error)?;
-        if changed != 1 {
-            return Err(error(CognitionCode::MemoryInputRepairPreconditionChanged));
-        }
-        result.repaired += 1;
-        result.receipts.push(json!({
-            "window_ref": expected.window_ref,
-            "state": "repaired",
-            "input_sha256": digest,
-            "receipt_ref": receipt_ref,
-        }));
+        Ok(())
     }
-    tx.commit().map_err(super::super::db_error)?;
-    Ok(result)
 }
 
 fn read_repair_window(
@@ -242,52 +401,55 @@ fn read_repair_window(
     .map_err(super::super::db_error)
 }
 
+/// A preview may read a completed window; an apply needs a pending window
+/// with no output and no invocation whose outcome is unknown.
 fn validate_repair_window(
     tx: &Transaction<'_>,
     expected: &CandidateInputRepairExpected,
     row: &RepairWindowRow,
-    dry_run: bool,
+    mode: RepairMode,
 ) -> CognitionResult<()> {
-    let state_allowed = row.state == "pending" || (dry_run && row.state == "complete");
-    let prior_input = row
-        .input_json
-        .as_deref()
-        .ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))?;
+    let apply = mode == RepairMode::Apply;
+    let state_allowed = row.state == "pending" || (!apply && row.state == "complete");
+    let prior_input = row.input_json.as_deref().ok_or_else(precondition_changed)?;
     if !state_allowed
         || row.owner_nonce.is_some()
         || row.owner_pid.is_some()
-        || (!dry_run && (row.output_json.is_some() || row.normalized_plan_json.is_some()))
+        || (apply && (row.output_json.is_some() || row.normalized_plan_json.is_some()))
         || row.input_sha256.as_deref() != Some(expected.expected_input_sha256.as_str())
         || row.attempt_count != expected.expected_attempt_count
         || extract_input_sha256(prior_input)? != expected.expected_input_sha256
     {
-        return Err(error(CognitionCode::MemoryInputRepairPreconditionChanged));
+        return Err(precondition_changed());
     }
-    if !dry_run {
-        let unknown: bool = tx
-            .query_row(
-                "SELECT EXISTS(SELECT 1 FROM memory_projection_attempts a \
-                 WHERE a.window_ref=?1 AND a.provider_invoked=1 AND a.outcome_known=0 \
-                   AND NOT EXISTS(SELECT 1 FROM memory_projection_attempts settled \
-                     WHERE settled.window_ref=a.window_ref \
-                       AND settled.invocation_ref=a.invocation_ref AND settled.outcome_known=1))",
-                [&expected.window_ref],
-                |row| row.get(0),
-            )
-            .map_err(super::super::db_error)?;
-        if unknown {
-            return Err(error(CognitionCode::MemoryInputRepairPreconditionChanged));
-        }
+    if apply && has_unknown_outcome(tx, &expected.window_ref)? {
+        return Err(precondition_changed());
     }
     Ok(())
 }
 
+fn has_unknown_outcome(tx: &Transaction<'_>, window_ref: &str) -> CognitionResult<bool> {
+    tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM memory_projection_attempts a \
+         WHERE a.window_ref=?1 AND a.provider_invoked=1 AND a.outcome_known=0 \
+           AND NOT EXISTS(SELECT 1 FROM memory_projection_attempts settled \
+             WHERE settled.window_ref=a.window_ref \
+               AND settled.invocation_ref=a.invocation_ref AND settled.outcome_known=1))",
+        [window_ref],
+        |row| row.get(0),
+    )
+    .map_err(super::super::db_error)
+}
+
+/// The input whose candidate refs are reloaded: the pinned input, or the
+/// archived prior input named by `candidate_source_sha256`, which must agree
+/// with the pinned input on everything but its candidates.
 fn load_candidate_source(
     tx: &Transaction<'_>,
     expected: &CandidateInputRepairExpected,
     row: &RepairWindowRow,
-    pinned: &Value,
-) -> CognitionResult<Value> {
+    pinned: &StoredInput,
+) -> CognitionResult<StoredInput> {
     let Some(candidate_sha) = expected
         .candidate_source_sha256
         .as_deref()
@@ -310,25 +472,14 @@ fn load_candidate_source(
         )
         .optional()
         .map_err(super::super::db_error)?;
-    let archived =
-        archived.ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))?;
-    let receipt: Value = serde_json::from_str(&archived).map_err(|source| {
-        error(CognitionCode::MemoryInputRepairPreconditionChanged).with_source(source)
-    })?;
-    let prior_json = receipt
-        .get("prior_input_json")
-        .and_then(Value::as_str)
-        .ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))?;
-    let prior_sha = receipt
-        .get("prior_input_sha256")
-        .and_then(Value::as_str)
-        .ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))?;
-    if prior_sha != candidate_sha || extract_input_sha256(prior_json)? != candidate_sha {
-        return Err(error(CognitionCode::MemoryInputRepairPreconditionChanged));
+    let receipt: ArchivedPrior = serde_json::from_str(&archived.ok_or_else(precondition_changed)?)
+        .map_err(|source| precondition_changed().with_source(source))?;
+    if receipt.prior_input_sha256 != candidate_sha
+        || extract_input_sha256(&receipt.prior_input_json)? != candidate_sha
+    {
+        return Err(precondition_changed());
     }
-    let candidate_source: Value = serde_json::from_str(prior_json).map_err(|source| {
-        error(CognitionCode::MemoryInputRepairPreconditionChanged).with_source(source)
-    })?;
+    let candidate_source = StoredInput::parse(&receipt.prior_input_json)?;
     for field in [
         "schema",
         "episode_ref",
@@ -338,26 +489,25 @@ fn load_candidate_source(
         "source_units",
         "context_units",
     ] {
-        let prior = candidate_source
-            .get(field)
-            .ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))?;
-        let current = pinned
-            .get(field)
-            .ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))?;
-        if stringify(prior)? != stringify(current)? {
-            return Err(error(CognitionCode::MemoryInputRepairPreconditionChanged));
+        if stringify(candidate_source.field(field)?)? != stringify(pinned.field(field)?)? {
+            return Err(precondition_changed());
         }
     }
     Ok(candidate_source)
 }
 
-fn remaining_candidate_bytes(pinned: &Value) -> CognitionResult<usize> {
-    let mut empty_candidate_input = pinned.clone();
-    empty_candidate_input
-        .as_object_mut()
-        .ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))?
-        .insert("candidates".into(), Value::Array(Vec::new()));
-    let base = stringify(&empty_candidate_input)?.len();
+/// The fields of an archived receipt a candidate source needs.
+#[derive(Deserialize)]
+struct ArchivedPrior {
+    prior_input_json: String,
+    prior_input_sha256: String,
+}
+
+fn remaining_candidate_bytes(pinned: &StoredInput) -> CognitionResult<usize> {
+    let base = pinned
+        .with_candidates(Value::Array(Vec::new()))
+        .stringify()?
+        .len();
     MAX_EXTRACT_INPUT_BYTES
         .checked_sub(base)
         .and_then(|remaining| remaining.checked_add(2))
@@ -385,13 +535,11 @@ fn repair_receipt_ref(
     ])
 }
 
-fn parse_input_value(serialized: &str) -> CognitionResult<Value> {
-    serde_json::from_str(serialized).map_err(|source| {
-        error(CognitionCode::MemoryInputRepairPreconditionChanged).with_source(source)
-    })
-}
-
 fn stringify(value: &Value) -> CognitionResult<String> {
     butler_core::json::stringify(value)
         .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))
+}
+
+fn precondition_changed() -> crate::cognition::CognitionError {
+    error(CognitionCode::MemoryInputRepairPreconditionChanged)
 }

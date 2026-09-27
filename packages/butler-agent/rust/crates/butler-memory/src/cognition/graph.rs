@@ -45,7 +45,10 @@ pub(in crate::cognition) use internal_supersession::InternalSupersessionInput;
 pub use jobs::GraphProgress;
 pub(in crate::cognition) use jobs::{CatchupCursors, PendingSemanticJob};
 pub(in crate::cognition) use operator_repair::CandidateInputRepairRequest;
-pub use operator_repair::ProjectionModelPolicyInput;
+pub use operator_repair::{
+    CandidateInputRepairResult, ProjectionModelPolicy, ProjectionModelPolicyInput,
+    ProjectionModelSlot, RepairMode, RepairReceipt,
+};
 pub(in crate::cognition) use plan::NormalizedPlan;
 pub(in crate::cognition) use projection::{
     ClaimProjectionWindowInput, ClaimedProjectionWindow, PreviousWindowState,
@@ -55,7 +58,8 @@ pub(in crate::cognition) use recall::{
     RecallEpisodeRow, RecallMention, RelationshipState, TemporalSelection,
 };
 pub(super) use registration::{GraphRegistration, RegistrationInput};
-pub(in crate::cognition) use retry_failed::{RetryFailedCounts, VectorRepairRequest};
+pub use retry_failed::RetryFailedCounts;
+pub(in crate::cognition) use retry_failed::VectorRepairRequest;
 pub(in crate::cognition) use stages::ExtractionStageResult;
 pub(super) use typed_registration::TypedRegistrationInput;
 pub(in crate::cognition) use vector_quantum::ClaimedVectorUnit;

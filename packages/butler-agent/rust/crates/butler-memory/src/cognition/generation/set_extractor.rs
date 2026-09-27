@@ -3,7 +3,6 @@
 use crate::cognition::CognitionCode;
 use std::{path::Path, sync::Arc};
 
-use serde_json::{Value, to_value};
 use tokio_util::sync::CancellationToken;
 
 use super::read;
@@ -11,7 +10,7 @@ use crate::{
     cognition::{
         CognitionError, CognitionPathEnvironment, CognitionResult, assert_mutation_authority,
         ensure_data_authority,
-        graph::{GraphRepository, ProjectionModelPolicyInput},
+        graph::{GraphRepository, ProjectionModelPolicy, ProjectionModelPolicyInput},
         resolve_generation,
     },
     coordination::CognitionWriteCoordinator,
@@ -25,7 +24,7 @@ pub async fn run(
     policy: &ProjectionModelPolicyInput,
     now: &str,
     cancellation: &CancellationToken,
-) -> CognitionResult<Value> {
+) -> CognitionResult<ProjectionModelPolicy> {
     read::safe_generation_id(generation_id)?;
     let memory_root = environment.memory_root(data_root);
     let descriptor = read::read_descriptor(&memory_root)?;
@@ -81,8 +80,7 @@ pub async fn run(
             graph.ensure_schema(now)?;
             let configured = graph.configure_projection_model_policy(policy, now)?;
             graph.close()?;
-            to_value(configured)
-                .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))
+            Ok(configured)
         },
     )
     .await

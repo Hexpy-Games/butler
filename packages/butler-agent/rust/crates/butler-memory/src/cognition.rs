@@ -92,7 +92,7 @@ pub use generation::{
     CanonicalSnapshot, CutoverStamp, EmbeddingSlot, GenerationEmbedding, GenerationFormat,
     GenerationManifest, GenerationReadiness, GenerationState, InitializationOrigin,
     MemoryGenerationHandle, MemoryGenerationTarget, ProjectionMode, RebuildInspection,
-    RollbackOutcome, RollbackStep, SemanticCounts, StageCounts, VectorCounts,
+    RetriedGeneration, RollbackOutcome, RollbackStep, SemanticCounts, StageCounts, VectorCounts,
     activate_memory_rebuild, active_memory_descriptor_exists, advance_rebuild_cache,
     assert_mutation_authority, assert_rebuild_sources_registered, bind_native_embedding_identity,
     compute_rebuild_readiness, initialize_empty_memory_generation, inspect_memory_rebuild,
@@ -103,7 +103,10 @@ pub use generation::{
     set_extractor_memory_generation, validate_memory_rebuild,
 };
 pub use generation_vectors::GenerationVectorAdapter;
-pub use graph::{GraphProgress, ProjectionModelPolicyInput};
+pub use graph::{
+    CandidateInputRepairResult, GraphProgress, ProjectionModelPolicy, ProjectionModelPolicyInput,
+    ProjectionModelSlot, RepairMode, RepairReceipt, RetryFailedCounts,
+};
 pub use graph_consolidation::GraphConsolidationService;
 pub use hot_cache::{LegacyIndexService, extract_legacy_import_transcript};
 pub use knowhow_store::{FeedbackResolvePort, KnowHowService};

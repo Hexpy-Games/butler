@@ -4,18 +4,22 @@ use crate::cognition::CognitionCode;
 use std::collections::HashSet;
 
 use rusqlite::{Connection, OptionalExtension, params};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use super::db_error;
 use crate::cognition::{CognitionError, CognitionResult, generation_vectors::GenerationVectorRow};
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(in crate::cognition) struct RetryFailedCounts {
-    pub(in crate::cognition) semantic_windows: usize,
-    pub(in crate::cognition) vector_units: usize,
-    pub(in crate::cognition) cache_jobs: usize,
+/// Failed work items reset for retry.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct RetryFailedCounts {
+    /// Semantic projection windows.
+    pub semantic_windows: usize,
+    /// Vector units.
+    pub vector_units: usize,
+    /// Hot-cache jobs.
+    pub cache_jobs: usize,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -33,8 +37,8 @@ pub(in crate::cognition) struct VectorRepairUnitRequest {
 }
 
 impl VectorRepairRequest {
-    pub(in crate::cognition) fn parse(value: Value) -> CognitionResult<Self> {
-        let request: Self = serde_json::from_value(value).map_err(|source| {
+    pub(in crate::cognition) fn parse(bytes: &[u8]) -> CognitionResult<Self> {
+        let request: Self = serde_json::from_slice(bytes).map_err(|source| {
             error(CognitionCode::MemoryVectorRepairInvalidRequest).with_source(source)
         })?;
         if request.generation_id.is_empty()
