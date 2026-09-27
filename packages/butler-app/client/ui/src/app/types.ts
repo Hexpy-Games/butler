@@ -1336,6 +1336,8 @@ export interface NewChatBriefingSuggestion {
   title: string;
   description: string;
   text: string;
+  /** A template the user finishes: it fills the composer instead of sending. */
+  template?: boolean;
 }
 
 export interface NewChatBriefingView {

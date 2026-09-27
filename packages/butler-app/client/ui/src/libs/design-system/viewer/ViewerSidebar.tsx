@@ -3,11 +3,13 @@ import { CollapsibleNavGroup } from "../blocks/CollapsibleNavGroup";
 import { EmptyLine } from "../blocks/EmptyLine";
 import { NavRow } from "../blocks/NavRow";
 import { NavSection } from "../blocks/NavSection";
+import { SidebarShell } from "../blocks/SidebarShell";
 import {
   Blocks, BookOpenText, Folder, FolderOpen, ImageIcon, LayoutDashboard, MagicWand, Palette, Sparkles,
 } from "../components/Icons";
 import { Input } from "../components/Input";
 import { Stack } from "../components/Stack";
+import { ADAPTIVE_MEDIA, useMediaMatch } from "../responsive";
 import { Typo } from "../components/Typo";
 import type { ShowcaseEntry } from "../showcase/collectShowcaseEntries";
 import { chapterPage, FOUNDATION_CHAPTERS } from "./foundations/chapters";
@@ -30,7 +32,7 @@ function PageRow({ id, label, page, icon, onOpen }: {
 }) {
   return (
     <div data-ds-nav-item={id}>
-      <NavRow density="compact" icon={icon} label={label} active={page === id} onClick={() => onOpen(id)} />
+      <NavRow icon={icon} label={label} active={page === id} onClick={() => onOpen(id)} />
     </div>
   );
 }
@@ -71,22 +73,34 @@ function SearchResults({ entries, page, onOpen }: Omit<ViewerSidebarProps, "quer
 export function ViewerSidebar({ entries, page, query, onQueryChange, onOpen }: ViewerSidebarProps) {
   const results = filterEntries(entries, query);
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Escape") onQueryChange("");
+    // A filled filter clears first; an empty one lets Escape close the drawer.
+    if (event.key === "Escape" && query) {
+      event.preventDefault();
+      onQueryChange("");
+    }
     if (event.key === "Enter" && results[0]) onOpen(results[0].id);
   };
   const row = (id: string, label: string, icon?: ReactNode) => <PageRow icon={icon} id={id} key={id} label={label} page={page} onOpen={onOpen} />;
 
+  // Touch rows on phones and coarse pointers; the desktop viewer keeps compact rows.
+  const touch = useMediaMatch(`${ADAPTIVE_MEDIA.compact}, ${ADAPTIVE_MEDIA.coarse}`);
+
   return (
-    <Stack gap="lg">
-      <div className={styles.brand}>
-        <span className={styles.brandMark} aria-hidden="true"><Blocks size="md" /></span>
-        <Stack gap="none">
+    <SidebarShell
+      ariaLabel="Design system"
+      density={touch ? "touch" : "compact"}
+      titlebar={(
+        <div className={styles.brand}>
+          <span className={styles.brandMark} aria-hidden="true"><Blocks size="md" /></span>
           <Typo.AppTitle>Butler DS</Typo.AppTitle>
-          <Typo.Caption tone="secondary">Design system · DS Viewer</Typo.Caption>
-        </Stack>
-      </div>
-      <Input aria-label="Filter components and blocks" id={VIEWER_SEARCH_ID} placeholder="Filter (press /)" type="search"
-        value={query} onChange={(event) => onQueryChange(event.target.value)} onKeyDown={handleKeyDown} />
+        </div>
+      )}
+      header={(
+        <Input aria-label="Filter components and blocks" id={VIEWER_SEARCH_ID} placeholder={touch ? "Filter" : "Filter (press /)"} type="search"
+          value={query} onChange={(event) => onQueryChange(event.target.value)} onKeyDown={handleKeyDown} />
+      )}
+    >
+      <Stack gap="lg">
       {query.trim() ? (
         <Stack gap="lg" data-ds-search-results={results.length}>
           <SearchResults entries={results} page={page} onOpen={onOpen} />
@@ -119,6 +133,7 @@ export function ViewerSidebar({ entries, page, query, onQueryChange, onOpen }: V
           </NavSection>
         </>
       )}
-    </Stack>
+      </Stack>
+    </SidebarShell>
   );
 }

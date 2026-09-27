@@ -14,7 +14,7 @@
 use std::fs;
 use std::time::Duration;
 
-use butler_e2e::e2e::config::{Credential, LiveProvider};
+use butler_e2e::e2e::config::{Credential, LiveProvider, ModelChoice};
 use butler_e2e::e2e::gateway::{tool_rows, turn_state};
 use butler_e2e::e2e::scenario::{Scenario, Setup, accepted_turn_id};
 use butler_e2e::e2e::{HarnessError, cassette, live, media, nonce};
@@ -22,11 +22,18 @@ use serde_json::{Value, json};
 
 const IGNORE: &str = "";
 
+/// LIVE-09's canonical exchange: `(cassette, user request)`.
+const CANONICAL: (&str, &str) = ("MEM-03", "Reply with exactly: memory check");
+
 async fn start(id: &str) -> Result<Option<(Scenario, LiveProvider)>, HarnessError> {
     let Some(provider) = live::gate(id)? else {
         return Ok(None);
     };
-    let s = Setup::new(id)?.live(provider.clone()).start().await?;
+    let setup = Setup::new(id)?.live(provider.clone());
+    // Memory recall (LIVE-05) needs the local embedding model; installed
+    // when available so the product does not download it.
+    butler_e2e::e2e::fixtures::embedding_assets(&setup.sandbox.data)?;
+    let s = setup.start().await?;
     Ok(Some((s, provider)))
 }
 
@@ -335,7 +342,14 @@ async fn live_09_cassette_drift() -> Result<(), HarnessError> {
     let Some(provider) = live::gate("LIVE-09")? else {
         return Ok(());
     };
-    let committed = cassette::Cassette::load("TURN-01")?;
+    // The canonical exchange: a plain answer recorded with the owner's live
+    // model (gpt-6-luna@max) inside MEM-03. Real calls never use gpt-6-sol.
+    let committed = cassette::Cassette::load(CANONICAL.0)?;
+    let index = committed
+        .exchanges
+        .iter()
+        .position(|exchange| exchange.request.key.user_request == CANONICAL.1)
+        .ok_or_else(|| butler_e2e::e2e::harness_error("canonical drift exchange missing"))?;
     if committed.meta.provider != provider.provider {
         live::report(
             "LIVE-09",
@@ -350,12 +364,18 @@ async fn live_09_cassette_drift() -> Result<(), HarnessError> {
         "butler-e2e-drift-{}",
         uuid::Uuid::new_v4().simple()
     ));
+    // Same model and effort as the committed recording: a reasoning effort
+    // adds reasoning items to the stream, which is not provider drift.
     let s = Setup::new("LIVE-09")?
-        .cassette("TURN-01")
+        .cassette(CANONICAL.0)
+        .model(ModelChoice {
+            model: committed.meta.model.clone(),
+            effort: committed.meta.effort.clone(),
+        })
         .record_into(temp.clone())
         .start()
         .await?;
-    live_turn(&s, "general", "Write the numbers from one to twelve as English words, separated by single spaces, and nothing else.").await?;
+    live_turn(&s, "general", CANONICAL.1).await?;
     s.finish().await?;
     let fresh = cassette::load_from(&temp, "LIVE-09")?;
     let _ = fs::remove_dir_all(&temp);
@@ -369,7 +389,7 @@ async fn live_09_cassette_drift() -> Result<(), HarnessError> {
         }
         out
     };
-    let old = normalize(&committed.meta.fingerprint[0]);
+    let old = normalize(&committed.meta.fingerprint[index]);
     let new = normalize(&fresh.meta.fingerprint[0]);
     assert_eq!(
         new, old,
@@ -393,19 +413,32 @@ async fn live_10_subscription_token_refresh() -> Result<(), HarnessError> {
         );
         return Ok(());
     };
-    // The profile is the owner's test-only login; only `expiresAt` is touched.
+    // The profile is the owner's test-only login; only `expiresAt` is touched
+    // (moved into the past; the product reads 0 as "no expiry"), and it is
+    // put back if the product did not refresh the token.
     let mut profile: Value = serde_json::from_slice(&fs::read(&path)?)?;
-    let before = profile["expiresAt"].as_f64().unwrap_or(0.0);
-    profile["expiresAt"] = json!(0);
+    let original = profile["expiresAt"].clone();
+    let before = original.as_f64().unwrap_or(0.0);
+    profile["expiresAt"] = json!(1);
     fs::write(&path, serde_json::to_vec_pretty(&profile)?)?;
-    let s = Setup::new("LIVE-10")?.live(provider).start().await?;
-    let (_, turn) = live_turn(&s, "general", "Reply with exactly: refreshed").await?;
+    let outcome = async {
+        let s = Setup::new("LIVE-10")?.live(provider).start().await?;
+        let (_, turn) = live_turn(&s, "general", "Reply with exactly: refreshed").await?;
+        s.finish().await?;
+        Ok::<Value, HarnessError>(turn)
+    }
+    .await;
+    let mut after: Value = serde_json::from_slice(&fs::read(&path)?)?;
+    let refreshed = after["expiresAt"].as_f64().unwrap_or(0.0);
+    if refreshed <= 1.0 {
+        after["expiresAt"] = original;
+        fs::write(&path, serde_json::to_vec_pretty(&after)?)?;
+    }
+    let turn = outcome?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
-    let after: Value = serde_json::from_slice(&fs::read(&path)?)?;
     assert!(
-        after["expiresAt"].as_f64().unwrap_or(0.0) > before.max(1.0),
+        refreshed > before.max(1.0),
         "expiresAt did not move forward"
     );
-    s.finish().await?;
     done("LIVE-10")
 }

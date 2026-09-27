@@ -140,6 +140,7 @@ async fn rec_02_crash_interrupted_turn_is_failed_not_resumed() -> Result<(), Har
     butler_e2e::gate!();
     let mut s = Setup::new("REC-02-OWNER")?
         .cassette("REC-02")
+        .replay_only()
         .start()
         .await?;
     let exchange = s.provider()?.exchange_for("one to twelve", 0)?;

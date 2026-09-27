@@ -102,6 +102,13 @@ test("reduced motion commits the track immediately without travel", async () => 
   expect(animations).toHaveLength(0);
 });
 
+test("reduced motion fades the drawers in place: no slide, no push", () => {
+  const reduced = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
+  expect(reduced).toMatch(/\.root\[data-panel-layout="drawer"\] \.sidebar,\s*\.root\[data-panel-layout="drawer"\] \.inspector\s*\{[^}]*opacity:\s*0;[^}]*transform:\s*none;/u);
+  expect(reduced).toMatch(/\.sidebar\[data-open="true"\],\s*\.root\[data-panel-layout="drawer"\] \.inspector\[data-open="true"\]\s*\{[^}]*opacity:\s*1;/u);
+  expect(reduced).toMatch(/\.root\[data-panel-layout="drawer"\]\[data-left-open="true"\] \.workspace\s*\{\s*transform:\s*none;/u);
+});
+
 test("the grid never interpolates a sidebar track switch; the sidebar moves by transform", () => {
   expect(css).toMatch(/\.root\[data-track-switching="true"\]\s*\{\s*transition:\s*none;/u);
   expect(css).toMatch(/\.sidebar\[data-open="false"\]\s*\{[^}]*transform:\s*translateX\(-100%\)/u);

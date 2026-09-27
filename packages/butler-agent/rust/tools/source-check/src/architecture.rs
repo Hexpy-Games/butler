@@ -1,13 +1,14 @@
 //! Production source boundaries between the domains of every workspace crate;
 //! compiler checks still own complete name resolution.
 
-mod modules;
 mod policy;
 mod references;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+use crate::modules;
 
 type Edges = BTreeMap<String, BTreeSet<String>>;
 

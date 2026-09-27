@@ -1,5 +1,6 @@
 mod architecture;
 mod function_length;
+mod modules;
 
 use std::env;
 use std::ffi::OsStr;

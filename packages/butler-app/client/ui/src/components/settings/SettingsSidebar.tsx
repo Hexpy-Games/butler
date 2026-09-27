@@ -1,8 +1,8 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import {
-  ArrowLeft, Input, NavRow, ScrollArea, SettingsNav, Stack, Typo,
+  ArrowLeft, Input, NavRow, ScrollArea, Separator, SettingsNav, Stack, Typo,
 } from "@/butler-ds";
 import type { SettingsSectionId } from "@/app/types.ts";
 import { filterSettingsSectionGroups } from "./settingsSections";
@@ -101,18 +101,21 @@ export function SettingsSidebar({
         dataTestClass="settings-navigation-scroll"
       >
         <Stack gap="lg">
-          {filteredGroups.map((group) => (
-            <SettingsNav
-              key={group.id}
-              title={group.label}
-              items={group.sections.map((item) => ({
-                id: item.id,
-                label: item.label,
-                icon: item.icon,
-                active: activeSection === item.id,
-                onSelect: () => onSectionChange(item.id),
-              }))}
-            />
+          {filteredGroups.map((group, index) => (
+            <Fragment key={group.id}>
+              {/* A hairline sets the Advanced group apart from everyday settings. */}
+              {group.id === "advanced" && index > 0 && <Separator space="none" tone="muted" />}
+              <SettingsNav
+                title={group.label}
+                items={group.sections.map((item) => ({
+                  id: item.id,
+                  label: item.label,
+                  icon: item.icon,
+                  active: activeSection === item.id,
+                  onSelect: () => onSectionChange(item.id),
+                }))}
+              />
+            </Fragment>
           ))}
         </Stack>
       </ScrollArea>
