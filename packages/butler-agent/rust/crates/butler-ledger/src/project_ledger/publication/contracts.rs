@@ -148,30 +148,44 @@ impl ProjectLedgerRecordUpdate {
     }
 }
 
+/// A record a publication touches, with its state before publishing.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
 pub struct ProjectWorkTarget {
+    /// The record id.
     pub id: String,
+    /// The record kind.
     pub kind: ProjectLedgerRecordKind,
+    /// The record path inside the Ledger project.
     pub path: String,
+    /// The parent record id.
     pub parent_id: Option<String>,
+    /// Whether the record existed before.
     pub state: ProjectWorkTargetState,
+    /// The digest of the record before publishing, when it existed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_record_sha256: Option<String>,
 }
 
+/// Whether a publication target existed before publishing.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ProjectWorkTargetState {
+    /// The record did not exist.
     Absent,
+    /// The record existed.
     Present,
 }
 
+/// What a Project Work publication did.
 #[derive(Clone, Debug)]
 pub struct ProjectWorkPublicationOutcome {
+    /// An earlier attempt of the same operation was replayed.
     pub replayed: bool,
+    /// The operation had nothing to publish.
     pub skipped: bool,
+    /// The records the publication wrote.
     pub targets: Vec<ProjectWorkTarget>,
 }
 
@@ -192,7 +206,9 @@ pub enum ProjectWorkPublicationError {
     /// which check failed and `source` is the decode error when there was one.
     #[error("{code}")]
     Adapter {
+        /// The failed check.
         code: &'static str,
+        /// The decode error, when there was one.
         #[source]
         source: Option<std::sync::Arc<dyn std::error::Error + Send + Sync>>,
     },
@@ -205,13 +221,16 @@ pub enum ProjectWorkPublicationError {
     /// The publication state could not be verified.
     #[error("project_work_publication_uncertain")]
     Uncertain {
+        /// The failed read, write or decode, when there was one.
         #[source]
         source: Option<std::sync::Arc<dyn std::error::Error + Send + Sync>>,
     },
     /// A ledger file operation failed; `code` names the step.
     #[error("{code}")]
     Io {
+        /// The failed step.
         code: &'static str,
+        /// The I/O error, when there was one.
         #[source]
         source: Option<std::sync::Arc<dyn std::error::Error + Send + Sync>>,
     },
@@ -221,6 +240,7 @@ pub enum ProjectWorkPublicationError {
 }
 
 impl ProjectWorkPublicationError {
+    /// The wire code.
     pub fn code(&self) -> &str {
         match self {
             Self::Adapter { code, .. } | Self::Io { code, .. } | Self::Owner(code) => code,

@@ -9,35 +9,45 @@ pub enum ProjectLedgerReadError {
     /// The project or work item could not be resolved.
     #[error("{code}")]
     Resolution {
+        /// The wire code.
         code: &'static str,
+        /// The underlying failure, when there was one.
         #[source]
         source: Option<Arc<dyn std::error::Error + Send + Sync>>,
     },
     /// A ledger record could not be read or is malformed.
     #[error("{code}")]
     RecordShow {
+        /// The wire code.
         code: &'static str,
+        /// The underlying failure, when there was one.
         #[source]
         source: Option<Arc<dyn std::error::Error + Send + Sync>>,
     },
     /// The read owner is closed or its task failed.
     #[error("{code}")]
     Owner {
+        /// The wire code.
         code: &'static str,
+        /// The underlying failure, when there was one.
         #[source]
         source: Option<Arc<dyn std::error::Error + Send + Sync>>,
     },
     /// A dashboard projection failed internally.
     #[error("{code}")]
     DashboardInternal {
+        /// The wire code.
         code: &'static str,
+        /// The underlying failure, when there was one.
         #[source]
         source: Option<Arc<dyn std::error::Error + Send + Sync>>,
     },
     /// Dashboard inputs are unavailable.
     #[error("{code}")]
     DashboardUnavailable {
+        /// The wire code.
         code: &'static str,
+        /// The underlying failure, when there was one.
         #[source]
         source: Option<Arc<dyn std::error::Error + Send + Sync>>,
     },
@@ -47,6 +57,7 @@ pub enum ProjectLedgerReadError {
 }
 
 impl ProjectLedgerReadError {
+    /// A resolution failure with this code.
     pub fn resolution(code: &'static str) -> Self {
         Self::Resolution { code, source: None }
     }

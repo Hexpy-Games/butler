@@ -9,17 +9,25 @@ use serde_json::Value;
 use super::{ProjectLedgerReadError, committed, dashboard, records};
 use butler_core::locale::LocaleCollation;
 
+/// A request for one managed Work's plan facts.
 #[derive(Clone, Debug)]
 pub struct ProjectWorkPlanRead {
+    /// The App project id.
     pub app_project_id: String,
+    /// The Ledger project id.
     pub ledger_project_id: String,
+    /// The Work id.
     pub work_id: String,
 }
 
+/// What session progress needs to know about a Work's current plan.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProjectWorkPlanFacts {
+    /// The latest plan review accepted this plan.
     pub approved: bool,
+    /// Every action key of the plan.
     pub action_keys: Vec<String>,
+    /// Action keys that are done or skipped.
     pub completed_action_keys: Vec<String>,
 }
 

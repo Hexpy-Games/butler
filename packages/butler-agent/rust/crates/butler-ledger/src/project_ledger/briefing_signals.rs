@@ -12,23 +12,37 @@ use serde_json::Value;
 use super::{ProjectLedgerReadError, active_reference};
 use butler_core::locale::LocaleCollation;
 
+/// An App project to summarize for a New Chat Briefing.
 #[derive(Clone, Debug)]
 pub struct ProjectBriefingTarget {
+    /// The App project id.
     pub id: String,
+    /// The name shown for the project.
     pub display_name: String,
+    /// The Ledger project that records its work.
     pub ledger_project_id: String,
+    /// Titles of the project's recent sessions, newest first.
     pub recent_session_titles: Vec<String>,
 }
 
+/// Bounded, non-private facts about one project for a New Chat Briefing.
 #[derive(Clone, Debug)]
 pub struct ProjectBriefingSignal {
+    /// The App project id (or Ledger id when no targets were given).
     pub id: String,
+    /// The name shown for the project.
     pub display_name: String,
+    /// The consolidated project summary, when one exists.
     pub summary: Option<String>,
+    /// Distinct recent session titles.
     pub recent_session_titles: Vec<String>,
+    /// The most frequent recent ledger events, as `type:kind:status xN`.
     pub ledger_event_summary: Vec<String>,
+    /// Titles of Work still open.
     pub open_work_titles: Vec<String>,
+    /// Titles of completed Work.
     pub completed_work_titles: Vec<String>,
+    /// Topics the briefing must not mention.
     pub excluded_topics: Vec<String>,
 }
 

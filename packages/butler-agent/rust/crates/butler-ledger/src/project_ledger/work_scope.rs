@@ -5,13 +5,18 @@ use butler_turn::btcc::ResolvedProjectWorkScope;
 use super::publication::ProjectWorkPublicationError;
 use super::{ProjectLedger, ProjectLedgerReadError, active_reference};
 
+/// What identifies the Ledger a session's Work belongs to.
 pub struct ProjectWorkScopeLookup {
+    /// The App project id.
     pub app_project_id: String,
+    /// The workspace the session runs in.
     pub workspace_path: String,
+    /// The Ledger id the session is bound to, when it is.
     pub ledger_project_id: Option<String>,
 }
 
 impl ProjectLedger {
+    /// The session's Ledger scope, initializing the Ledger on first use.
     pub async fn resolve_work_scope(
         &self,
         input: ProjectWorkScopeLookup,

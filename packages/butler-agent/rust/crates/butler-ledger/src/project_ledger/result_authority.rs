@@ -15,6 +15,8 @@ use super::{ProjectLedger, ProjectLedgerReadError, active_reference, work};
 
 const RESULT_SCHEMA: &str = "butler.btcc-project-work-result-reference.v1";
 
+/// The exact result authority of one managed Work, read from its committed
+/// result references.
 pub async fn prepare_exact_project_work_result_authority(
     ledger: &ProjectLedger,
     scope: ResolvedProjectWorkScope,

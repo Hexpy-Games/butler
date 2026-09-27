@@ -19,9 +19,12 @@ pub struct DashboardLedgerEvent {
     pub at: String,
 }
 
+/// The Ledger's record events at one revision of `ledger.jsonl`.
 #[derive(Clone, Debug)]
 pub struct DashboardLedgerHistory {
+    /// The log file's identity, size and times, or `absent`.
     pub revision: String,
+    /// Record events, newest first.
     pub events: Vec<DashboardLedgerEvent>,
 }
 

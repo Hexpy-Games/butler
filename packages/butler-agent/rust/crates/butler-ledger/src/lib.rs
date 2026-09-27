@@ -17,10 +17,11 @@
     all(feature = "test-support", not(test)),
     allow(dead_code, unused_imports)
 )]
-
-// Every slice/array/Value access is checked, every fallible signature can
-// fail, and blocks nest at most four deep (clippy.toml sets the threshold).
+// Every public item is documented, every slice/array/Value access is
+// checked, every fallible signature can fail, and blocks nest at most four
+// deep (the crate's clippy.toml sets the threshold).
 #![deny(
+    missing_docs,
     clippy::indexing_slicing,
     clippy::unnecessary_wraps,
     clippy::excessive_nesting
