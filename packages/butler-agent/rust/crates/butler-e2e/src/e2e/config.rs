@@ -91,7 +91,10 @@ pub struct LiveProvider {
 }
 
 pub const DEFAULT_LIVE_MODEL: &str = "openai/gpt-6-luna@max";
-pub const DEFAULT_LIVE_MATRIX: &str = "openai/gpt-6-sol@low,openai/gpt-6-luna@max";
+/// Owner decision: automated real calls use gpt-6-luna only (never
+/// gpt-6-sol or -astra), so the LIVE-07 matrix defaults to it alone; set
+/// `BUTLER_E2E_MODEL_MATRIX` to check more entries.
+pub const DEFAULT_LIVE_MATRIX: &str = "openai/gpt-6-luna@max";
 
 impl LiveProvider {
     pub fn from_env() -> Self {
@@ -101,8 +104,8 @@ impl LiveProvider {
             .and_then(|value| ModelChoice::parse(&value))
             .or_else(|| ModelChoice::parse(DEFAULT_LIVE_MODEL))
             .unwrap_or(ModelChoice {
-                model: "openai/gpt-6-sol".into(),
-                effort: Some("low".into()),
+                model: "openai/gpt-6-luna".into(),
+                effort: Some("max".into()),
             });
         let matrix = nonempty("BUTLER_E2E_MODEL_MATRIX")
             .unwrap_or_else(|| DEFAULT_LIVE_MATRIX.into())
