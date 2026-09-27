@@ -43,6 +43,10 @@ pub use turn::{
     TurnFacadeDependencies, TurnRecord, TurnSemanticState, TurnStore, WakeIdentity,
 };
 pub use turn::{
+    AdmittedRoute, CommandMessage, CommandModelSelection, CommandTrigger, ResumeCommand,
+    RouteCandidate, RouteIdentity, RouteState, RunCommand, TurnCommand, WakeCommand,
+};
+pub use turn::{
     AttemptFailure, AttemptHistory, CanonicalMessageStore, DeliveryStatus, FailureDisposition,
     FailureRecord, FinalPayload, ModelRouteEvent, ModelRouteEventKind, PreparedTurn,
     ProgressEventRepository, ProgressWrite, RouteEventStatus, StopPersistenceOutcome,
@@ -71,6 +75,9 @@ pub use agent_loop::{
     ToolOutcome, ToolPort, ToolResult, ToolSurface, TurnContextProjection, TurnSteeringPort,
     UsageAttribution, VerifiedImagePayloadPort, WorkFinalState, WorkPort,
     latest_work_anchor_indices,
+};
+pub use agent_loop::{
+    AdmittedModelSelection, ButlerContext, EmptyResponsePolicy, ExecutionPolicy, TrackingMode,
 };
 pub use authority::contracts::{
     AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityDecisionInput, AuthorityError,

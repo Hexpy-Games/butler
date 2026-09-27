@@ -1,3 +1,4 @@
+mod command;
 mod contracts;
 mod conversation;
 mod failure;
@@ -23,6 +24,10 @@ pub use preparation::{
     AdmissionModelMetadata, ContextAssembly, ContextSection, DefaultTurnPreparation,
 };
 
+pub use command::{
+    AdmittedRoute, CommandMessage, CommandModelSelection, CommandTrigger, ResumeCommand,
+    RouteCandidate, RouteIdentity, RouteState, RunCommand, TurnCommand, WakeCommand,
+};
 pub use contracts::{
     AgentLoopResult, AttemptFailure, AttemptHistory, ContentRef, ContinuationBudgetTransition,
     DeliveryOutbox, DeliveryStatus, ExecutionRoute, FailureDisposition, FailureRecord,

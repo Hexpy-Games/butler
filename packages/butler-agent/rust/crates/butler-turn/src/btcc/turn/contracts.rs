@@ -22,7 +22,7 @@ pub enum TurnSemanticState {
 pub struct PreparedTurn {
     pub preparation_id: String,
     pub request: TurnRequest,
-    pub command: Value,
+    pub command: crate::btcc::TurnCommand,
     pub admission_input_hash: String,
     pub is_fresh: bool,
 }

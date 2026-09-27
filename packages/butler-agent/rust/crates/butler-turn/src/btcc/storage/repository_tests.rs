@@ -54,7 +54,9 @@ async fn repository_admission_replay_claim_and_pre_admission_stop_are_durable() 
     assert_eq!(replayed.turn_id, turn.turn_id);
 
     let mut conflict = ordinary.clone();
-    conflict.command["message"]["content"] = json!("different");
+    conflict
+        .command
+        .edit_json(|command| command["message"]["content"] = json!("different"));
     let error = repositories
         .load_or_admit(&conflict)
         .await
@@ -64,13 +66,17 @@ async fn repository_admission_replay_claim_and_pre_admission_stop_are_durable() 
     // JSON.stringify(undefined) differs from JSON.stringify(null) in the
     // legacy replay authority. An absent field must not become explicit null.
     let mut null_content = prepared("turn-null", "trigger-null", "hash-null");
-    null_content.command["context"]["messageContent"] = json!(null);
+    null_content
+        .command
+        .edit_json(|command| command["context"]["messageContent"] = json!(null));
     repositories.load_or_admit(&null_content).await.unwrap();
     let mut absent_content = null_content.clone();
-    absent_content.command["context"]
-        .as_object_mut()
-        .unwrap()
-        .shift_remove("messageContent");
+    absent_content.command.edit_json(|command| {
+        command["context"]
+            .as_object_mut()
+            .unwrap()
+            .shift_remove("messageContent");
+    });
     assert_eq!(
         repositories
             .load_or_admit(&absent_content)
@@ -88,13 +94,21 @@ async fn repository_admission_replay_claim_and_pre_admission_stop_are_durable() 
         authorization_ref: "authority-ref".into(),
         result_scope_ref: Some("result-scope".into()),
     };
-    wake.command = json!({
-        "kind":"wake","turnId":"turn-wake","sessionId":"session-1",
-        "triggerKey":"trigger-wake","trigger":{"triggerId":"wake-id",
-        "sourceTurnId":"source-turn","authorizationRef":"authority-ref",
-        "resultScopeRef":"result-scope","content":"worker complete"},
-        "modelSelection":{"provider":"openai","model":"gpt","reasoningEffort":"medium",
-        "contextWindowTokens":100},"context":{"messageContent":"worker complete"}
+    wake.command = crate::btcc::TurnCommand::Wake(crate::btcc::WakeCommand {
+        turn_id: "turn-wake".into(),
+        recovery_attempt: None,
+        session_id: "session-1".into(),
+        trigger_key: "trigger-wake".into(),
+        trigger: crate::btcc::CommandTrigger {
+            trigger_id: "wake-id".into(),
+            source_turn_id: "source-turn".into(),
+            authorization_ref: "authority-ref".into(),
+            result_scope_ref: Some("result-scope".into()),
+            content: "worker complete".into(),
+        },
+        model_selection: crate::btcc::CommandModelSelection::fixture(),
+        progress_destination: None,
+        context: json!({"messageContent":"worker complete"}),
     });
     let (woken, fresh) = repositories.load_or_admit(&wake).await.expect("admit wake");
     assert!(fresh);
@@ -461,10 +475,16 @@ pub(super) fn prepared(turn_id: &str, trigger_key: &str, hash: &str) -> Prepared
         app_queue_claim_id: None,
         preparation_cancellation: Default::default(),
     };
-    let command = json!({"kind":"run","turnId":turn_id,"sessionId":"session-1","triggerKey":trigger_key,
-        "message":{"messageId":format!("message-{turn_id}"),"content":"hello"},
-        "modelSelection":{"provider":"openai","model":"gpt","reasoningEffort":"medium","contextWindowTokens":100},
-        "context":{"messageContent":"hello"}});
+    let command = crate::btcc::TurnCommand::fixture_run(
+        turn_id,
+        "session-1",
+        trigger_key,
+        crate::btcc::CommandMessage {
+            message_id: format!("message-{turn_id}"),
+            content: "hello".into(),
+        },
+        json!({"messageContent":"hello"}),
+    );
     PreparedTurn {
         preparation_id: format!("preparation-{turn_id}"),
         request,

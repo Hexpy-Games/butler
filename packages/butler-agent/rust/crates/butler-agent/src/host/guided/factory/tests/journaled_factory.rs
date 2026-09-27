@@ -27,7 +27,7 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
     std::fs::write(workspace.join("proof.txt"), "native-file-proof\n").unwrap();
     let mut prepared = test_prepared_turn();
     prepared.request.route.workspace_path = workspace.to_string_lossy().into_owned();
-    prepared.command["context"] = json!({
+    let context = json!({
         "messageContent":"Read proof.txt and answer with its content.",
         "userRef":"user", "profileRefs":[profile_ref],
         "executionPolicy":{"role":"butler","accessMode":"read_only",
@@ -35,9 +35,12 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
             "requiredNativeTools":["read_file","web_search","web_read"],
             "workspacePath":workspace.to_string_lossy()}
     });
-    prepared.command["modelSelection"] = json!({"provider":"openai","model":"gpt-5.5",
-        "reasoningEffort":"medium","controls":{"accessMode":"read_only"},
-        "controlsHash":"smoke"});
+    prepared.command.edit_json(|command| {
+        command["context"] = context;
+        command["modelSelection"] = json!({"provider":"openai","model":"gpt-5.5",
+            "reasoningEffort":"medium","controls":{"accessMode":"read_only"},
+            "controlsHash":"smoke"});
+    });
     let (turn, _) = documents.load_or_admit(&prepared).await.unwrap();
     let claim = documents.acquire_state_claim(&turn).await.unwrap();
     documents

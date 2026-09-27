@@ -3,27 +3,25 @@ mod construct;
 mod inbound;
 mod types;
 
-use serde_json::Value;
-
 use super::common::{error, stringify};
 use super::hydration;
 use super::{BtccStorage, StorageResult};
 use crate::btcc::continuation_budget::TurnContinuationBudgetLimits;
 use crate::btcc::turn::TurnRecord;
 
-use crate::btcc::StorageCode;
+use crate::btcc::{StorageCode, TurnCommand};
 use claim::acquire_claim;
 use construct::construct_turn;
 use inbound::record_inbound;
-use types::{kind, object, optional_text_object, text, text_object};
+use types::{Fresh, Source, text};
 
 pub(super) async fn load_or_admit(
     storage: &BtccStorage,
-    command: Value,
+    command: TurnCommand,
     admission_input_hash: String,
     continuation_limits: Option<TurnContinuationBudgetLimits>,
 ) -> StorageResult<(TurnRecord, bool)> {
-    let turn_id = text(&command, "turnId")?.to_owned();
+    let turn_id = text(command.turn_id(), "turnId")?.to_owned();
     if let Some(existing) = storage
         .execute({
             let turn_id = turn_id.clone();
@@ -31,12 +29,12 @@ pub(super) async fn load_or_admit(
         })
         .await?
     {
-        if kind(&command)? != "resume" {
-            assert_replay_identity(&existing, &command)?;
+        if let Some(fresh) = Fresh::of(&command) {
+            assert_replay_identity(&existing, &fresh)?;
         }
         return Ok((existing, false));
     }
-    if kind(&command)? == "resume" {
+    if matches!(command, TurnCommand::Resume(_)) {
         return Err(error(
             StorageCode::TurnNotAdmitted,
             format!("BTCC Turn is not admitted: {turn_id}"),
@@ -82,45 +80,33 @@ pub(super) async fn load_or_admit(
     Ok((turn, true))
 }
 
-fn assert_replay_identity(turn: &TurnRecord, command: &Value) -> StorageResult<()> {
-    let command_kind = kind(command)?;
-    let source = match command_kind {
-        "run" => object(command, "message")?,
-        "wake" => object(command, "trigger")?,
-        _ => {
-            return Err(error(
-                StorageCode::InvalidTurnCommand,
-                "BTCC replay command is invalid",
-            ));
-        }
-    };
-    let message_id = if command_kind == "run" {
-        "messageId"
-    } else {
-        "triggerId"
-    };
+fn assert_replay_identity(turn: &TurnRecord, command: &Fresh<'_>) -> StorageResult<()> {
     let admitted_content = turn.context.get("messageContent");
-    let replay_context = object(command, "context")?.get("messageContent");
-    let basic_match = turn.session_id == text(command, "sessionId")?
-        && turn.trigger_key == text(command, "triggerKey")?
-        && turn.original_message_id == text_object(source, message_id)?
-        && turn.original_message == text_object(source, "content")?
+    let replay_context = command
+        .context
+        .as_object()
+        .ok_or_else(|| error(StorageCode::InvalidTurnCommand, "missing object: context"))?
+        .get("messageContent");
+    let basic_match = turn.session_id == text(command.session_id, "sessionId")?
+        && turn.trigger_key == text(command.trigger_key, "triggerKey")?
+        && turn.original_message_id == command.message_id()?
+        && turn.original_message == command.content()?
         && admitted_content.map(stringify).transpose()?
             == replay_context.map(stringify).transpose()?;
-    let wake_match = if command_kind == "run" {
-        turn.wake_identity.is_none()
-    } else {
-        let trigger_id = text_object(source, "triggerId")?;
-        let source_turn_id = text_object(source, "sourceTurnId")?;
-        let authorization_ref = text_object(source, "authorizationRef")?;
-        let result_scope_ref = optional_text_object(source, "resultScopeRef")?;
-        let wake = turn.wake_identity.as_ref();
-        wake.is_some_and(|wake| {
-            wake.trigger_id == trigger_id
-                && wake.source_turn_id == source_turn_id
-                && wake.authorization_ref == authorization_ref
-                && wake.result_scope_ref.as_deref() == result_scope_ref
-        })
+    let wake_match = match command.source {
+        Source::Message(_) => turn.wake_identity.is_none(),
+        Source::Trigger(trigger) => {
+            let trigger_id = text(&trigger.trigger_id, "triggerId")?;
+            let source_turn_id = text(&trigger.source_turn_id, "sourceTurnId")?;
+            let authorization_ref = text(&trigger.authorization_ref, "authorizationRef")?;
+            let result_scope_ref = trigger.result_scope_ref.as_deref();
+            turn.wake_identity.as_ref().is_some_and(|wake| {
+                wake.trigger_id == trigger_id
+                    && wake.source_turn_id == source_turn_id
+                    && wake.authorization_ref == authorization_ref
+                    && wake.result_scope_ref.as_deref() == result_scope_ref
+            })
+        }
     };
     if basic_match && wake_match {
         Ok(())

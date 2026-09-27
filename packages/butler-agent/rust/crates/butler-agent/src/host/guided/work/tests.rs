@@ -123,10 +123,16 @@ async fn real_sqlite_work_final_reconcile_persists_current_open_disposition() {
         .load_or_admit(&PreparedTurn {
             preparation_id: "preparation".into(),
             request,
-            command: json!({"kind":"run","turnId":"turn","sessionId":"session",
-            "triggerKey":"event","message":{"messageId":"message","content":"finish work"},
-            "modelSelection":{"provider":"openai","model":"gpt"},
-            "context":{"messageContent":"finish work"}}),
+            command: butler_turn::btcc::TurnCommand::fixture_run(
+                "turn",
+                "session",
+                "event",
+                butler_turn::btcc::CommandMessage {
+                    message_id: "message".into(),
+                    content: "finish work".into(),
+                },
+                json!({"messageContent":"finish work"}),
+            ),
             admission_input_hash: "hash".into(),
             is_fresh: true,
         })
