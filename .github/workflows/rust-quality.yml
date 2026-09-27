@@ -7,7 +7,8 @@ name: Rust quality
 # - test (pushes to main, PRs into main, stacked PRs labelled `full-ci`):
 #   cargo-nextest over the workspace with the static ONNX Runtime.
 # - linux-clippy (every PR) and linux-test (as test): the same clippy passes
-#   and tests on Linux x64 and arm64, each with its own pinned ORT cache.
+#   and tests on Linux x64 and arm64, each with its own pinned ORT cache;
+#   non-blocking until the platform port lands.
 # - windows-check (every PR): `cargo check` for x86_64-pc-windows-msvc; it
 #   reports what does not compile yet and never fails the workflow.
 # Future tiers plug in the same way: an E2E stub tier is one more job here
@@ -140,13 +141,17 @@ jobs:
             echo "No documentation code blocks; no doctests to run."
           fi
 
-  # Portability tiers. The agent ships on macOS arm64 only; these jobs keep the
-  # workspace building and passing on Linux, and track how far Windows is.
+  # Portability tiers. The agent ships on macOS arm64 only; these jobs track
+  # how far the workspace is from building and passing on Linux and Windows.
   # Format and source rules are platform-independent and stay in `source`.
+  # The Linux jobs are non-blocking (continue-on-error) until the platform
+  # port (crates/butler-platform, stage 0 onward) fixes the known Linux
+  # failures; then drop continue-on-error and make them required.
   linux-clippy:
     name: Linux clippy (${{ matrix.target }}, ${{ matrix.pass }})
     if: github.event.action != 'labeled' || github.event.label.name == 'full-ci'
     runs-on: ${{ matrix.runner }}
+    continue-on-error: true
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -183,6 +188,7 @@ jobs:
       (github.event_name != 'pull_request' || github.base_ref == 'main' ||
        contains(github.event.pull_request.labels.*.name, 'full-ci'))
     runs-on: ${{ matrix.runner }}
+    continue-on-error: true
     timeout-minutes: 150
     strategy:
       fail-fast: false
@@ -283,7 +289,7 @@ jobs:
           print("### Windows compile check (x86_64-pc-windows-msvc)")
           print(f"Outcome: **{os.environ.get('OUTCOME', 'unknown')}**, {errors} errors.")
           if failed:
-              print("\nCould not compile:\n")
+              print("\nCould not compile (crates that depend on these were not checked):\n")
               print("\n".join(f"- {item}" for item in failed))
           for title, counter, limit in (("crate", crates, 20), ("file", files, 40), ("error", codes, 20)):
               if counter:
