@@ -2,21 +2,21 @@
 
 mod completion;
 mod continuation;
-mod contracts;
+pub(crate) mod contracts;
 mod driver;
 mod guided_policy;
-mod guided_ports;
+pub(crate) mod guided_ports;
 mod guided_types;
 mod model_round;
-mod operation_result_replay;
+pub(crate) mod operation_result_replay;
 mod ports;
 mod progress;
 mod state;
 mod tool_batch;
 mod turn_binding;
 
-#[cfg(test)]
-mod fixture_binding;
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) mod fixture_binding;
 
 use crate::btcc::BtccCode;
 pub(crate) use contracts::SemanticTurn;
@@ -25,21 +25,17 @@ pub(crate) use turn_binding::{
 };
 
 #[cfg(test)]
-mod context_loopback;
-#[cfg(test)]
 mod failure_tests;
 #[cfg(test)]
 mod guided_fixture;
 #[cfg(test)]
-mod provider_loopback;
-#[cfg(test)]
 mod round_contract_tests;
-#[cfg(test)]
-mod test_data;
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) mod test_data;
 #[cfg(test)]
 mod test_execution;
-#[cfg(test)]
-mod test_support;
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) mod test_support;
 #[cfg(test)]
 mod tests;
 

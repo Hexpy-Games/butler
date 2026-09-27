@@ -13,7 +13,7 @@ use crate::conversation::{
     ConversationOriginEvidence, ConversationOriginFacts, ConversationStoreConfig,
     DurableSessionBinding, ReadMessagesInput, classify_conversation_origin,
 };
-use crate::host::SystemIdentity;
+use crate::test_clock::SystemClock;
 use butler_core::locale::LocaleCollation;
 
 #[derive(Default)]
@@ -46,7 +46,7 @@ impl Fixture {
         ));
         let store = AgentConversationStore::open(ConversationStoreConfig {
             path: root.join("conversation.sqlite"),
-            identity_clock: Arc::new(SystemIdentity),
+            identity_clock: Arc::new(SystemClock),
             collation: Arc::new(LocaleCollation::new("en-US").unwrap()),
         })
         .await

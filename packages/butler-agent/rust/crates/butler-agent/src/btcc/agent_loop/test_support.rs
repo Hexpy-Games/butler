@@ -1,3 +1,9 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "test fixtures abort the test that uses them on setup failure"
+)]
 use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use std::pin::Pin;
@@ -19,7 +25,7 @@ use super::operation_result_replay::{OperationResultMessageReferences, Operation
 use super::ports::*;
 use super::test_data::tool;
 
-pub(super) struct Fixture {
+pub(crate) struct Fixture {
     pub model_results: Mutex<VecDeque<Result<ModelRoundResult, ModelRoundError>>>,
     pub tool_outputs: Mutex<HashMap<String, Value>>,
     pub events: Mutex<Vec<String>>,
@@ -42,7 +48,7 @@ pub(super) struct Fixture {
 }
 
 impl Fixture {
-    pub(super) fn new(results: impl IntoIterator<Item = ModelRoundResult>) -> Arc<Self> {
+    pub(crate) fn new(results: impl IntoIterator<Item = ModelRoundResult>) -> Arc<Self> {
         Arc::new(Self {
             model_results: Mutex::new(results.into_iter().map(Ok).collect()),
             tool_outputs: Mutex::new(HashMap::new()),
@@ -66,7 +72,7 @@ impl Fixture {
         })
     }
 
-    pub(super) fn agent(self: &Arc<Self>) -> FixtureAgentLoop {
+    pub(crate) fn agent(self: &Arc<Self>) -> FixtureAgentLoop {
         FixtureAgentLoop {
             model: self.clone(),
             execution_factory: self.clone(),
@@ -81,7 +87,7 @@ impl Fixture {
         }
     }
 
-    pub(super) fn guided_agent(
+    pub(crate) fn guided_agent(
         self: &Arc<Self>,
         authority_decision: Option<AuthorityDecision>,
     ) -> FixtureAgentLoop {
@@ -110,7 +116,7 @@ impl Fixture {
         )
     }
 
-    pub(super) fn note(&self, value: impl Into<String>) {
+    pub(crate) fn note(&self, value: impl Into<String>) {
         self.events.lock().unwrap().push(value.into());
     }
 }

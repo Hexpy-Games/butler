@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 
 use super::*;
 use crate::btcc::TurnStore;
-use crate::btcc::storage::{BtccRepositories, StorageError, tests::Fixture};
+use crate::btcc::storage::{BtccRepositories, StorageError, testing::Fixture};
 
 fn start(call: &str) -> ToolJournalStart {
     ToolJournalStart {
@@ -49,7 +49,7 @@ async fn canonical_turn_journal_matches_bun_identity_delivery_and_reopen() {
         .unwrap();
     let repositories = BtccRepositories::new(storage.clone(), None);
     repositories
-        .load_or_admit(&crate::btcc::storage::transition_tests::prepared())
+        .load_or_admit(&crate::btcc::storage::testing::prepared())
         .await
         .unwrap();
     let clock_calls = Arc::new(AtomicUsize::new(0));

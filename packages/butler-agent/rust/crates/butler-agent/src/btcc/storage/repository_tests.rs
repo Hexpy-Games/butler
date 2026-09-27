@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use super::repository::BtccRepositories;
-use super::tests::Fixture;
+use super::testing::Fixture;
 use super::*;
 use crate::btcc::continuation_budget::TurnContinuationBudgetLimits;
 use crate::btcc::{

@@ -1,14 +1,10 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension};
 
+use super::testing::Fixture;
 use super::*;
-
-const MANIFEST: &str = "test-btcc-manifest";
-static FIXTURE_SEQUENCE: AtomicUsize = AtomicUsize::new(0);
 
 #[tokio::test]
 async fn opens_full_schema_preserves_deployed_columns_and_closes_owner() {
@@ -398,81 +394,4 @@ fn pragma_i64(connection: &Connection, name: &str) -> StorageResult<i64> {
     connection
         .query_row(&format!("PRAGMA {name}"), [], |row| row.get(0))
         .map_err(StorageError::sqlite)
-}
-
-pub(crate) struct Fixture {
-    pub(super) path: PathBuf,
-}
-
-impl Fixture {
-    fn empty() -> Self {
-        let sequence = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
-        let local_sequence = FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-        let directory = std::env::temp_dir().join(format!(
-            "butler-btcc-storage-{}-{sequence}-{local_sequence}",
-            std::process::id()
-        ));
-        std::fs::create_dir_all(&directory).expect("fixture directory");
-        Self {
-            path: directory.join("agent-btcc.sqlite"),
-        }
-    }
-
-    pub(crate) fn activated() -> Self {
-        let fixture = Self::empty();
-        let connection = Connection::open(&fixture.path).expect("fixture connection");
-        connection
-            .execute_batch(
-                "CREATE TABLE agent_storage_migration_receipt (singleton INTEGER PRIMARY KEY, \
-                 manifest_id TEXT NOT NULL, receipt_json TEXT NOT NULL); \
-                 CREATE TABLE agent_storage_activation_marker (singleton INTEGER PRIMARY KEY, \
-                 manifest_id TEXT NOT NULL, marker_json TEXT NOT NULL);",
-            )
-            .expect("activation schema");
-        connection
-            .execute(
-                "INSERT INTO agent_storage_migration_receipt VALUES (1, ?1, ?2)",
-                params![MANIFEST, format!(
-                    "{{\"schema\":\"butler.agent-btcc-storage-migration.v1\",\"manifestId\":\"{MANIFEST}\"}}"
-                )],
-            )
-            .expect("receipt");
-        connection
-            .execute(
-                "INSERT INTO agent_storage_activation_marker VALUES (1, ?1, ?2)",
-                params![MANIFEST, format!(
-                    "{{\"schema\":\"butler.agent-btcc-storage-activation.v1\",\"manifestId\":\"{MANIFEST}\",\"storageContract\":\"split-v1\",\"firstActivatedAt\":\"now\",\"activatedAt\":\"now\"}}"
-                )],
-            )
-            .expect("activation");
-        fixture
-    }
-
-    pub(crate) fn config(&self, owner_id: &str) -> BtccStorageConfig {
-        BtccStorageConfig {
-            path: self.path.clone(),
-            profile: StorageProfile::Durable,
-            activation: StorageActivation {
-                manifest_id: MANIFEST.to_owned(),
-            },
-            runtime_owner: RuntimeOwnerIdentity {
-                owner_id: owner_id.to_owned(),
-                host_id: "test-host".to_owned(),
-                process_id: std::process::id(),
-                process_started_at_ms: 1,
-            },
-            process_liveness: Arc::new(ConservativeProcessLiveness),
-        }
-    }
-}
-
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        if let Some(directory) = self.path.parent() {
-            let _ignored_cleanup = std::fs::remove_dir_all(directory);
-        }
-    }
 }

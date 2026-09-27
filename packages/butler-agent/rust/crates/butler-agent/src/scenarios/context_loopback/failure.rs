@@ -8,10 +8,10 @@ async fn summary_failure_drops_turn_owner_without_saving() {
         .await
         .unwrap();
     let repositories = Arc::new(BtccRepositories::new(storage.clone(), None));
-    let mut turn = super::super::test_data::turn(None, "safe_fallback");
+    let mut turn = crate::btcc::agent_loop::test_data::turn(None, "safe_fallback");
     turn.model_selection = json!({"provider":"openai","model":"gpt-5.5",
         "reasoningEffort":"medium","controls":{},"controlsHash":"hash"});
-    let claim = super::super::test_data::claim();
+    let claim = crate::btcc::agent_loop::test_data::claim();
     let (endpoint, bodies, serving) = server(true).await;
     let model = provider(endpoint);
     let progress = Fixture::new([]);

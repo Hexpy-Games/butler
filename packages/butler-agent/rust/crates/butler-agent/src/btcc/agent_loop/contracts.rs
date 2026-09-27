@@ -177,7 +177,7 @@ pub(crate) struct ModelRoundMessage {
 }
 
 impl ModelRoundMessage {
-    pub(super) fn user(content: String, segment: Option<String>) -> Self {
+    pub(crate) fn user(content: String, segment: Option<String>) -> Self {
         Self {
             role: ModelRoundRole::User,
             content: content.into(),

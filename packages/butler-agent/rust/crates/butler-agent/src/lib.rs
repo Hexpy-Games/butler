@@ -17,6 +17,10 @@ mod project_ledger;
 mod skills;
 
 mod host;
+#[cfg(test)]
+mod scenarios;
+#[cfg(test)]
+mod test_clock;
 mod web_access;
 mod work_records;
 mod workspace;

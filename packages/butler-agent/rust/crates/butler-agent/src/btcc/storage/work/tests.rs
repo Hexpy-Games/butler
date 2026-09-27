@@ -27,16 +27,16 @@ fn clock() -> Arc<dyn Fn() -> String + Send + Sync> {
 pub(super) async fn opened(
     name: &str,
 ) -> (
-    super::super::tests::Fixture,
+    super::super::testing::Fixture,
     BtccStorage,
     DurableWorkService,
     ToolJournalRepository,
 ) {
-    let fixture = super::super::tests::Fixture::activated();
+    let fixture = super::super::testing::Fixture::activated();
     let storage = BtccStorage::open(fixture.config(name)).await.unwrap();
     let turns = BtccRepositories::new(storage.clone(), None);
     let (turn, fresh) = turns
-        .load_or_admit(&super::super::transition_tests::prepared())
+        .load_or_admit(&super::super::testing::prepared())
         .await
         .unwrap();
     assert!(fresh);

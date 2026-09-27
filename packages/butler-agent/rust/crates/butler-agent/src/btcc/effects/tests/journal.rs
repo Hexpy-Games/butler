@@ -100,7 +100,7 @@ async fn actual_bun_journal_result_and_receipt_bytes_match() {
     let source = &fixture["stored"];
     let identity: EffectIdentity = serde_json::from_value(source["identity"].clone()).unwrap();
     let receipt: EffectReceipt = serde_json::from_value(source["receipt"].clone()).unwrap();
-    let fixture = crate::btcc::storage::tests::Fixture::activated();
+    let fixture = crate::btcc::storage::testing::Fixture::activated();
     let storage = BtccStorage::open(fixture.config("effect-bun-journal"))
         .await
         .unwrap();

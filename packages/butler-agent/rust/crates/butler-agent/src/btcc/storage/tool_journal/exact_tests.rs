@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use super::*;
 use crate::btcc::TurnStore;
-use crate::btcc::storage::{BtccRepositories, StorageError, tests::Fixture};
+use crate::btcc::storage::{BtccRepositories, StorageError, testing::Fixture};
 use butler_core::json::JsonDocument;
 
 #[tokio::test]
@@ -15,7 +15,7 @@ async fn source_exact_output_is_stored_hashed_replayed_and_reopened_without_scal
         .unwrap();
     let repositories = BtccRepositories::new(storage.clone(), None);
     repositories
-        .load_or_admit(&crate::btcc::storage::transition_tests::prepared())
+        .load_or_admit(&crate::btcc::storage::testing::prepared())
         .await
         .unwrap();
     let journal = ToolJournalRepository::new(storage.clone(), Arc::new(|| "now".into()));

@@ -214,7 +214,7 @@ async fn cancelled_child_abandons_bound_work_and_commits_cancelled_result() {
     let bindings = SessionBindingStore::open(SessionBindingStoreConfig {
         path: test_root.join("sessions.sqlite"),
         storage_profile: WorkspaceStorageProfile::Durable,
-        clock: Arc::new(crate::host::SystemIdentity),
+        clock: Arc::new(crate::test_clock::SystemClock),
     })
     .await
     .unwrap();

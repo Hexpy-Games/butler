@@ -1,5 +1,11 @@
 //! Agent loop assembled from explicit test collaborators instead of the
 //! native guided-turn factory; it drives the same policy and driver.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "test fixtures abort the test that uses them on setup failure"
+)]
 
 use super::ports::GuidedPolicyPort;
 use super::*;

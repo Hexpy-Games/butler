@@ -77,7 +77,7 @@ async fn fresh_turn_binds_and_continues_only_current_session_head() {
         })
         .await
         .unwrap();
-    let mut next = super::super::transition_tests::prepared();
+    let mut next = super::super::testing::prepared();
     next.preparation_id = "preparation-2".into();
     next.admission_input_hash = "hash-2".into();
     next.request.turn_id = "turn-2".into();

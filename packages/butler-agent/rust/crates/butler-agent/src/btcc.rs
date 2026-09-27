@@ -3,20 +3,20 @@
 //! Gateway and host composition may run or stop a Turn. Durable state, model
 //! execution, delivery, and supervision remain private children of this module.
 
-mod agent_loop;
+pub(crate) mod agent_loop;
 mod authority;
 mod continuation_budget;
 mod contracts;
-mod effects;
+pub(crate) mod effects;
 mod error;
 mod execution_controls;
 mod guided_budget;
 mod guided_turn;
 mod identity;
-mod model_route;
+pub(crate) mod model_route;
 mod progress;
 mod project_plan;
-mod storage;
+pub(crate) mod storage;
 mod subsessions;
 mod turn;
 mod work;

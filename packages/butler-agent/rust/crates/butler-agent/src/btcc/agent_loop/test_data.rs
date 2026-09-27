@@ -1,3 +1,9 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "test fixtures abort the test that uses them on setup failure"
+)]
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
@@ -7,7 +13,7 @@ use crate::btcc::{AgentLoopProgress, PortFuture, RuntimeTurnEventInput};
 use super::contracts::{AcceptedCheckpoint, ModelRoundResult, ModelRoundTool, ModelRoundToolCall};
 use super::fixture_binding::FixtureAgentLoop;
 
-pub(super) fn result(text: &str, calls: Vec<ModelRoundToolCall>, round: u32) -> ModelRoundResult {
+pub(crate) fn result(text: &str, calls: Vec<ModelRoundToolCall>, round: u32) -> ModelRoundResult {
     ModelRoundResult {
         text: Some(text.into()),
         tool_calls: calls,
@@ -26,7 +32,7 @@ pub(super) fn result(text: &str, calls: Vec<ModelRoundToolCall>, round: u32) -> 
     }
 }
 
-pub(super) fn call(id: &str, name: &str) -> ModelRoundToolCall {
+pub(crate) fn call(id: &str, name: &str) -> ModelRoundToolCall {
     ModelRoundToolCall {
         id: id.into(),
         name: name.into(),
@@ -36,7 +42,7 @@ pub(super) fn call(id: &str, name: &str) -> ModelRoundToolCall {
     }
 }
 
-pub(super) fn tool(name: &str, concurrent: bool) -> ModelRoundTool {
+pub(crate) fn tool(name: &str, concurrent: bool) -> ModelRoundTool {
     ModelRoundTool {
         name: name.into(),
         description: name.into(),
@@ -46,7 +52,7 @@ pub(super) fn tool(name: &str, concurrent: bool) -> ModelRoundTool {
     }
 }
 
-pub(super) fn turn(authority: Option<Value>, empty: &str) -> TurnRecord {
+pub(crate) fn turn(authority: Option<Value>, empty: &str) -> TurnRecord {
     TurnRecord {
         turn_id: "turn-1".into(),
         session_id: "session-1".into(),
@@ -74,7 +80,7 @@ pub(super) fn turn(authority: Option<Value>, empty: &str) -> TurnRecord {
     }
 }
 
-pub(super) fn claim() -> StateExecutionClaim {
+pub(crate) fn claim() -> StateExecutionClaim {
     StateExecutionClaim {
         claim_id: "claim".into(),
         turn_id: "turn-1".into(),
@@ -86,7 +92,7 @@ pub(super) fn claim() -> StateExecutionClaim {
     }
 }
 
-pub(super) async fn run(
+pub(crate) async fn run(
     agent: &FixtureAgentLoop,
     turn: &TurnRecord,
 ) -> Result<crate::btcc::AgentLoopResult, crate::btcc::AgentLoopError> {
@@ -102,7 +108,7 @@ pub(super) async fn run(
         .await
 }
 
-pub(super) struct TestProgress;
+pub(crate) struct TestProgress;
 
 impl AgentLoopProgress for TestProgress {
     fn emit(&self, _: RuntimeTurnEventInput) -> PortFuture<'_, ()> {

@@ -1,5 +1,5 @@
 use super::*;
-use crate::btcc::storage::{BtccStorage, tests::Fixture};
+use crate::btcc::storage::{BtccStorage, testing::Fixture};
 
 #[tokio::test]
 async fn records_load_descending_replace_and_reopen() {

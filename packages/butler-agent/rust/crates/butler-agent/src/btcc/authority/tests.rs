@@ -63,13 +63,13 @@ fn input(work: &str, plan: &str) -> AuthorityAdmissionInput {
 
 #[tokio::test]
 async fn real_turn_work_journal_authority_resume_outcome_and_reopen() {
-    let fixture = crate::btcc::storage::tests::Fixture::activated();
+    let fixture = crate::btcc::storage::testing::Fixture::activated();
     let storage = BtccStorage::open(fixture.config("authority-real"))
         .await
         .unwrap();
     let turns = BtccRepositories::new(storage.clone(), None);
     let (turn, fresh) = turns
-        .load_or_admit(&crate::btcc::storage::transition_tests::prepared())
+        .load_or_admit(&crate::btcc::storage::testing::prepared())
         .await
         .unwrap();
     assert!(fresh);

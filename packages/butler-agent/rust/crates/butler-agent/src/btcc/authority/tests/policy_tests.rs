@@ -17,7 +17,7 @@ use crate::btcc::work::{
 use crate::btcc::{SuspensionReason, TurnStore, TurnTransition};
 
 struct Ready {
-    _fixture: crate::btcc::storage::tests::Fixture,
+    _fixture: crate::btcc::storage::testing::Fixture,
     storage: BtccStorage,
     authority: PrincipalAuthority,
     request_ref: String,
@@ -25,11 +25,11 @@ struct Ready {
     plan_id: String,
 }
 async fn ready(name: &str) -> Ready {
-    let fixture = crate::btcc::storage::tests::Fixture::activated();
+    let fixture = crate::btcc::storage::testing::Fixture::activated();
     let storage = BtccStorage::open(fixture.config(name)).await.unwrap();
     let turns = BtccRepositories::new(storage.clone(), None);
     let (turn, _) = turns
-        .load_or_admit(&crate::btcc::storage::transition_tests::prepared())
+        .load_or_admit(&crate::btcc::storage::testing::prepared())
         .await
         .unwrap();
     let claim = turns.acquire_state_claim(&turn).await.unwrap();

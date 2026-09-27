@@ -33,8 +33,8 @@ async fn nochange_compactor_selects_semantic_and_bounded_eviction_skips_steering
     let storage = BtccStorage::open(fixture.config("context-selection"))
         .await
         .unwrap();
-    let turn = super::super::test_data::turn(None, "safe_fallback");
-    let claim = super::super::test_data::claim();
+    let turn = crate::btcc::agent_loop::test_data::turn(None, "safe_fallback");
+    let claim = crate::btcc::agent_loop::test_data::claim();
     let ports = Fixture::new([]);
     let execution = DirectExecution {
         model: ports.as_ref(),

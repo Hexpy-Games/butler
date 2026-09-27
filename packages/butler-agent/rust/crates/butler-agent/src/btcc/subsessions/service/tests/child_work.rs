@@ -110,7 +110,7 @@ async fn child_creation_binds_work(
     let bindings = SessionBindingStore::open(SessionBindingStoreConfig {
         path: test_root.join("sessions.sqlite"),
         storage_profile: WorkspaceStorageProfile::Durable,
-        clock: Arc::new(crate::host::SystemIdentity),
+        clock: Arc::new(crate::test_clock::SystemClock),
     })
     .await
     .unwrap();

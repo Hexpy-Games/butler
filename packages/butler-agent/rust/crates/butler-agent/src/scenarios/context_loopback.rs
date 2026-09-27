@@ -29,8 +29,8 @@ use crate::models::{
 };
 use butler_core::locale::LocaleCollation;
 
-use super::guided_ports::GuidedInvocation;
-use super::test_support::Fixture;
+use crate::btcc::agent_loop::guided_ports::GuidedInvocation;
+use crate::btcc::agent_loop::test_support::Fixture;
 
 struct Config {
     snapshot: Arc<ModelCatalogSnapshot>,

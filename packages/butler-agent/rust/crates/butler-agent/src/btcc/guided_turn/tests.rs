@@ -37,13 +37,13 @@ fn scope() -> WorkTurnScope {
 
 #[tokio::test]
 async fn real_work_and_authority_resume_prepare_against_one_reopened_storage_owner() {
-    let fixture = crate::btcc::storage::tests::Fixture::activated();
+    let fixture = crate::btcc::storage::testing::Fixture::activated();
     let storage = BtccStorage::open(fixture.config("guided-prepare"))
         .await
         .unwrap();
     let turns = BtccRepositories::new(storage.clone(), None);
     let (turn, fresh) = turns
-        .load_or_admit(&crate::btcc::storage::transition_tests::prepared())
+        .load_or_admit(&crate::btcc::storage::testing::prepared())
         .await
         .unwrap();
     assert!(fresh);

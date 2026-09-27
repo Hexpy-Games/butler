@@ -67,3 +67,7 @@ tokio = { workspace = true, features = ["test-util"] }
 
 [lints]
 workspace = true
+
+[features]
+# Exposes test fixtures to scenario tests in dependent crates.
+test-support = []

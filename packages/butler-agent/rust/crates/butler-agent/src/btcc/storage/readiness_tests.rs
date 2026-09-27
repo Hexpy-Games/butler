@@ -4,7 +4,7 @@ use rusqlite::Connection;
 use tokio_util::sync::CancellationToken;
 
 use super::repository::BtccRepositories;
-use super::tests::Fixture;
+use super::testing::Fixture;
 use super::*;
 use crate::btcc::StorageReadiness;
 

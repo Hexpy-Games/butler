@@ -1,5 +1,5 @@
 use super::*;
-use crate::btcc::storage::{BtccStorage, tests::Fixture};
+use crate::btcc::storage::{BtccStorage, testing::Fixture};
 
 fn input() -> ContextDocumentInput {
     ContextDocumentInput {

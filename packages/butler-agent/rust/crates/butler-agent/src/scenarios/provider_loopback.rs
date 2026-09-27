@@ -29,13 +29,15 @@ use crate::models::{
 };
 use butler_core::locale::LocaleCollation;
 
-use super::contracts::SteeringObservation;
-use super::fixture_binding::FixtureAgentLoop;
-use super::guided_ports::{ContextPort, GuidedInvocation, GuidedPolicyDependencies};
-use super::operation_result_replay::{
-    ExactResultReplaySelection, OperationResultReplayFactory, ReplayMode,
-};
-use super::test_support::Fixture;
+use crate::btcc::agent_loop::contracts::SteeringObservation;
+use crate::btcc::agent_loop::fixture_binding::FixtureAgentLoop;
+use crate::btcc::agent_loop::guided_ports::ContextPort;
+use crate::btcc::agent_loop::guided_ports::GuidedInvocation;
+use crate::btcc::agent_loop::guided_ports::GuidedPolicyDependencies;
+use crate::btcc::agent_loop::operation_result_replay::ExactResultReplaySelection;
+use crate::btcc::agent_loop::operation_result_replay::OperationResultReplayFactory;
+use crate::btcc::agent_loop::operation_result_replay::ReplayMode;
+use crate::btcc::agent_loop::test_support::Fixture;
 
 struct Config {
     snapshot: Arc<ModelCatalogSnapshot>,
@@ -196,7 +198,7 @@ async fn provider_context_and_replay_share_one_turn_owner() {
         "provider":"openai", "model":"gpt-5.5", "reasoningEffort":"medium",
         "controls":{}, "controlsHash":"hash"
     });
-    admitted.context = super::test_data::turn(None, "safe_fallback").context;
+    admitted.context = crate::btcc::agent_loop::test_data::turn(None, "safe_fallback").context;
     let journal = Arc::new(ToolJournalRepository::new(
         storage.clone(),
         Arc::new(|| "now".into()),

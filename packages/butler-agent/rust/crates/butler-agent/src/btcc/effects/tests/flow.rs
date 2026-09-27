@@ -157,13 +157,13 @@ async fn cancellation_before_intent_and_after_claim_preserve_source_dispatch_bou
 
 #[tokio::test]
 async fn accepted_work_journal_effect_persists_null_result_and_replays_without_second_dispatch() {
-    let fixture = crate::btcc::storage::tests::Fixture::activated();
+    let fixture = crate::btcc::storage::testing::Fixture::activated();
     let storage = BtccStorage::open(fixture.config("effect-real-work"))
         .await
         .unwrap();
     let turns = BtccRepositories::new(storage.clone(), None);
     turns
-        .load_or_admit(&crate::btcc::storage::transition_tests::prepared())
+        .load_or_admit(&crate::btcc::storage::testing::prepared())
         .await
         .unwrap();
     let work = DurableWorkService::new(Arc::new(SessionWorkRepository::new(

@@ -7,7 +7,7 @@ use crate::btcc::StorageCode;
 use crate::btcc::TurnStore;
 use crate::btcc::storage::{
     BtccRepositories, StorageError, ToolJournalFinish, ToolJournalFinishStatus,
-    ToolJournalRepository, ToolJournalStart, tests::Fixture,
+    ToolJournalRepository, ToolJournalStart, testing::Fixture,
 };
 
 fn digest(value: &str) -> String {
@@ -63,7 +63,7 @@ async fn repository() -> (OperationResultRepository, BtccStorage, Fixture) {
         .unwrap();
     let repositories = BtccRepositories::new(storage.clone(), None);
     repositories
-        .load_or_admit(&crate::btcc::storage::transition_tests::prepared())
+        .load_or_admit(&crate::btcc::storage::testing::prepared())
         .await
         .unwrap();
     let journal = ToolJournalRepository::new(storage.clone(), Arc::new(|| "now".into()));

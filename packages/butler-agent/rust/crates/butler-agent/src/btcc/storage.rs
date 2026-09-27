@@ -474,11 +474,11 @@ mod progress_tests;
 mod readiness_tests;
 #[cfg(test)]
 mod repository_tests;
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) mod testing;
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) use testing::{Fixture as TestStorageFixture, prepared as test_prepared_turn};
 #[cfg(test)]
-pub(crate) mod tests;
+mod tests;
 #[cfg(test)]
-pub(crate) use tests::Fixture as TestStorageFixture;
-#[cfg(test)]
-pub(crate) mod transition_tests;
-#[cfg(test)]
-pub(crate) use transition_tests::prepared as test_prepared_turn;
+mod transition_tests;

@@ -1,7 +1,7 @@
 //! Durable reviewed effects over accepted session Work.
 
 mod blockers;
-pub(in crate::btcc) mod contracts;
+pub(crate) mod contracts;
 mod execution;
 mod identity;
 mod outcomes;
@@ -15,5 +15,7 @@ pub(crate) use identity::{
 };
 pub(crate) use service::EffectService;
 
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) mod testing;
 #[cfg(test)]
 mod tests;

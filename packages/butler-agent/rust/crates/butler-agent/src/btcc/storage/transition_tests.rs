@@ -1,12 +1,9 @@
 use serde_json::json;
 
 use super::repository::BtccRepositories;
-use super::tests::Fixture;
+use super::testing::{Fixture, prepared};
 use super::*;
-use crate::btcc::{
-    Peer, PeerKind, PreparedTurn, Sender, SessionRole, SuspensionReason, TurnMessage, TurnRequest,
-    TurnRoute, TurnStore, TurnTransition, TurnTrigger,
-};
+use crate::btcc::{SuspensionReason, TurnStore, TurnTransition};
 
 #[tokio::test]
 async fn authority_suspension_rolls_back_then_resumes_from_decision() {
@@ -122,55 +119,4 @@ async fn authority_suspension_rolls_back_then_resumes_from_decision() {
     );
     assert!(resumed.checkpoint.is_some());
     repositories.close().await.expect("close repository");
-}
-
-pub(crate) fn prepared() -> PreparedTurn {
-    let request = TurnRequest {
-        turn_id: "turn".into(),
-        recovery_attempt: None,
-        session_id: "session".into(),
-        event_id: "event".into(),
-        transport: "app".into(),
-        account_id: "account".into(),
-        peer: Peer {
-            kind: PeerKind::Dm,
-            id: "peer".into(),
-            parent_id: None,
-        },
-        sender: Sender {
-            id: "user".into(),
-            display_name: None,
-        },
-        message: TurnMessage {
-            id: "message".into(),
-            content: "hello".into(),
-            timestamp: "now".into(),
-            attachments: vec![],
-            image_admission: None,
-        },
-        trigger: TurnTrigger::UserMessage,
-        route: TurnRoute {
-            role: SessionRole::Butler,
-            workspace_path: "/tmp".into(),
-            project_id: None,
-            reason: None,
-        },
-        progress_destination: None,
-        execution_controls: None,
-        empty_response_policy: None,
-        app_turn_context: None,
-        authority_request_ref: None,
-        authority_client_message_id: None,
-        app_queue_claim_id: None,
-        preparation_cancellation: Default::default(),
-    };
-    PreparedTurn {
-        preparation_id: "preparation".into(),
-        request,
-        command: json!({"kind":"run","turnId":"turn","sessionId":"session","triggerKey":"event",
-            "message":{"messageId":"message","content":"hello"},"modelSelection":{"provider":"openai","model":"gpt"},
-            "context":{"messageContent":"hello"}}),
-        admission_input_hash: "hash".into(),
-        is_fresh: true,
-    }
 }
