@@ -34,7 +34,14 @@ export function ComposerEditorPlugin() {
       });
       editor.focus();
     }
-    useComposerStore.setState({ insertSessionReference: insert });
+    function appendText(text: string) {
+      editor.update(() => {
+        $getRoot().selectEnd().insertText(text);
+        $addUpdateTag(HISTORY_PUSH_TAG);
+      });
+      editor.focus();
+    }
+    useComposerStore.setState({ insertSessionReference: insert, appendDraftText: appendText });
     const cleanups = [
       editor.registerUpdateListener(({ editorState, dirtyElements, dirtyLeaves }) => {
         editorState.read(() => {
@@ -63,6 +70,7 @@ export function ComposerEditorPlugin() {
     return () => {
       cleanups.forEach(cleanup => cleanup());
       if (useComposerStore.getState().insertSessionReference === insert) useComposerStore.setState({ insertSessionReference: null });
+      if (useComposerStore.getState().appendDraftText === appendText) useComposerStore.setState({ appendDraftText: null });
     };
   }, [editor]);
   return null;
