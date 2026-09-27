@@ -1,0 +1,12 @@
+memory_write_busy
+personalization_write_failed
+profile_closed
+profile_commit_interrupted
+profile_data_invalid
+profile_extractor_invalid
+profile_model_failed
+profile_operation_failed
+profile_result_invalid
+profile_store_unavailable
+profile_write_failed
+unknown_tool

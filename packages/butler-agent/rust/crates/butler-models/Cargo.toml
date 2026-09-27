@@ -1,0 +1,43 @@
+[package]
+name = "butler-models"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+butler-core = { path = "../butler-core" }
+butler-turn = { path = "../butler-turn" }
+base64.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+regex.workspace = true
+reqwest.workspace = true
+futures-util.workspace = true
+http.workspace = true
+webp.workspace = true
+parking_lot.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+ryu-js.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+thiserror.workspace = true
+tiktoken-rs.workspace = true
+url.workspace = true
+rmcp.workspace = true
+
+[features]
+# Exposes test fixtures to tests in dependent crates.
+test-support = []
+
+[dev-dependencies]
+butler-turn = { path = "../butler-turn", features = ["test-support"] }
+butler-test-support = { path = "../butler-test-support" }
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true
