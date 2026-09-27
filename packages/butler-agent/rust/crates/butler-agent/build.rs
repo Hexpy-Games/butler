@@ -29,13 +29,13 @@ fn main() {
         "src",
         "build.rs",
         "Cargo.toml",
-        "../Cargo.toml",
-        "../Cargo.lock",
-        "../rust-toolchain.toml",
-        "../scripts",
-        "../../resources",
-        "../../../butler-app/client/electron",
-        "../../../butler-app/scripts/release",
+        "../../Cargo.toml",
+        "../../Cargo.lock",
+        "../../rust-toolchain.toml",
+        "../../scripts",
+        "../../../resources",
+        "../../../../butler-app/client/electron",
+        "../../../../butler-app/scripts/release",
     ] {
         println!("cargo:rerun-if-changed={path}");
     }

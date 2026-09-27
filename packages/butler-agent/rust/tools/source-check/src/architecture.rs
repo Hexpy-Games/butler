@@ -10,7 +10,7 @@ use std::path::Path;
 type Edges = BTreeMap<String, BTreeSet<String>>;
 
 pub(super) fn check(root: &Path) -> Result<bool, String> {
-    let entry = root.join("agent/src/lib.rs");
+    let entry = root.join("crates/butler-agent/src/lib.rs");
     if !entry.is_file() {
         return Ok(false);
     }
