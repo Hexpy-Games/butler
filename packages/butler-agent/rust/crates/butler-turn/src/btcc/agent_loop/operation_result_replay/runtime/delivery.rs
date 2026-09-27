@@ -149,6 +149,7 @@ pub(super) fn numeric_argument_error(error: butler_core::json::JsonError) -> Btc
 /// A numeric tool argument; absent and `null` read as none.
 // Passthrough: tool arguments/results/schemas, shaped by each tool.
 pub(super) fn optional_number(
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     args: &serde_json::Map<String, serde_json::Value>,
     key: &str,
 ) -> Result<Option<f64>, BtccError> {
