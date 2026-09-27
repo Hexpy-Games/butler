@@ -187,9 +187,9 @@ pub(super) fn reviews(
                     && subject == "result" =>
                 {
                     checkpoints
-                    .iter()
-                    .rev()
-                    .find(|item| item.checkpoint.created_at <= at)
+                        .iter()
+                        .rev()
+                        .find(|item| item.checkpoint.created_at <= at)
                         .map(|item| item.checkpoint.action_progress.clone())
                 }
                 None => None,

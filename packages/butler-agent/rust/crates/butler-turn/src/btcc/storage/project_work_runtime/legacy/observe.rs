@@ -131,13 +131,22 @@ fn record_import(
         ).map_err(StorageError::sqlite)?;
         return Ok(());
     }
-    let changed = db.execute(
-        "UPDATE btcc_guided_work_legacy_imports SET source_revision=?1,imported_at=?2 \
+    let changed = db
+        .execute(
+            "UPDATE btcc_guided_work_legacy_imports SET source_revision=?1,imported_at=?2 \
          WHERE import_id=?3 AND legacy_program_id=?4 AND session_id=?5 AND scope_kind='project' \
          AND scope_ref=?6 AND source_authority='project_ledger' AND work_id=?7",
-        params![input.snapshot.source_sha256, now, id, input.snapshot.source_program_id,
-            input.scope.session_id, input.resolved_scope.app_project_id, work_id],
-    ).map_err(StorageError::sqlite)?;
+            params![
+                input.snapshot.source_sha256,
+                now,
+                id,
+                input.snapshot.source_program_id,
+                input.scope.session_id,
+                input.resolved_scope.app_project_id,
+                work_id
+            ],
+        )
+        .map_err(StorageError::sqlite)?;
     if changed != 1 {
         return Err(invalid(StorageCode::ProjectWorkLegacyIdentityConflict));
     }

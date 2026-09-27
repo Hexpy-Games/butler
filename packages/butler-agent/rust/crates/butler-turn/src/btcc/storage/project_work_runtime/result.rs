@@ -178,9 +178,17 @@ fn write_observed_work(
              ON CONFLICT(binding_revision_id) DO UPDATE SET turn_id=excluded.turn_id, \
              session_id=excluded.session_id,work_id=excluded.work_id,revision=excluded.revision, \
              is_current=excluded.is_current,bound_at=excluded.bound_at",
-            params![binding.binding_revision_id, binding.turn_id, work.session_id, work.work_id,
-                binding.revision, i64::from(binding.is_current), binding.bound_at],
-        ).map_err(StorageError::sqlite)?;
+            params![
+                binding.binding_revision_id,
+                binding.turn_id,
+                work.session_id,
+                work.work_id,
+                binding.revision,
+                i64::from(binding.is_current),
+                binding.bound_at
+            ],
+        )
+        .map_err(StorageError::sqlite)?;
     }
     for (index, reference) in work.result_refs.iter().enumerate() {
         repair_result(
