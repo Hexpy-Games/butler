@@ -1,4 +1,4 @@
-# Functions over 80 lines, ratcheted by tools/source-check.
+# Production functions over 80 lines, ratcheted by tools/source-check.
 # Split a function and regenerate: cargo run -p butler-source-check -- --bless .
 # Entries may only shrink or disappear; new entries need review.
 src/gateway/application.rs	AppApplication::open	99
@@ -8,7 +8,6 @@ src/gateway/application/message_projection/work_blocks.rs	project	101
 src/gateway/application/monitoring/conversation.rs	AppApplication::work_status_conversation_owned	117
 src/gateway/application/new_chat_briefing.rs	AppApplication::new_chat_briefing_view	85
 src/gateway/application/operation_output/chunk.rs	verify_rows	115
-src/gateway/application/operation_output/tests.rs	reads_only_scoped_complete_output_in_utf8_safe_pages	87
 src/gateway/application/plan_decisions/workflow.rs	AppApplication::decide_session_plan_owned	150
 src/gateway/application/progress_view.rs	read	106
 src/gateway/application/project_sources.rs	AppApplication::resolve_project_sources	132
@@ -46,7 +45,6 @@ src/gateway/application/session_relocation.rs	AppApplication::perform_relocation
 src/gateway/application/session_relocation/records.rs	reserve	83
 src/gateway/application/session_views.rs	AppApplication::session_summary_owned	96
 src/gateway/application/session_views.rs	AppApplication::session_view_owned	132
-src/gateway/application/sessions/tests.rs	local_and_project_session_rows_follow_app_source	118
 src/gateway/application/settings/update/patch/project.rs	project	223
 src/gateway/application/settings/update/patch/sanitize.rs	sanitize	223
 src/gateway/application/settings/view.rs	read	269
@@ -55,13 +53,6 @@ src/gateway/application/snapshot_input.rs	claimed_snapshot	120
 src/gateway/application/space/commands.rs	execute	125
 src/gateway/application/space/owner.rs	commit_relocation	102
 src/gateway/application/storage/schema/project_ledger_bindings.rs	initialize	109
-src/gateway/application/tests.rs	delivered_transcript_final_projects_and_settles_exact_queue_claim	137
-src/gateway/application/tests.rs	message_and_turn_cursors_preserve_distinct_public_rules	111
-src/gateway/application/tests/projection_tests.rs	delivered_progress_is_receipted_and_returned_by_message_get	95
-src/gateway/application/tests/projection_tests.rs	recovered_delivered_final_requires_unchanged_original_claim	117
-src/gateway/application/tests/projection_tests.rs	retention_owner_snapshots_terminal_progress_and_joins_on_close	86
-src/gateway/application/tests/retry.rs	retry_reuses_the_same_turn_attempt_controls_and_user_message	121
-src/gateway/application/tests/session_views.rs	session_view_projects_progress_for_active_and_terminal_latest_turn	137
 src/gateway/http.rs	route	191
 src/gateway/http/automations.rs	route	101
 src/gateway/http/dashboard.rs	route	244

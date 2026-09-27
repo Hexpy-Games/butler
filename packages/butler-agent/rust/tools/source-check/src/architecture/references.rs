@@ -4,7 +4,7 @@ use proc_macro2::{TokenStream, TokenTree};
 use syn::visit::{self, Visit};
 use syn::{Item, UseTree};
 
-use super::modules::{Module, item_attributes, test_only};
+use crate::modules::{Module, item_attributes, test_only};
 
 pub(super) struct References<'a> {
     module: &'a Module,
