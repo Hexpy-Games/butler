@@ -84,7 +84,7 @@
 }
 
 .guideNumber {
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: var(--typo-caption-size);
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-body);
