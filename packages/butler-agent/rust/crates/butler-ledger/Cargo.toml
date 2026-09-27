@@ -33,6 +33,8 @@ test-support = []
 
 [dev-dependencies]
 butler-test-support = { path = "../butler-test-support" }
+# The wire-format scenarios drive Project Work through the real BTCC runtime.
+butler-turn = { path = "../butler-turn", features = ["test-support"] }
 tokio = { workspace = true, features = ["test-util"] }
 
 [lints]

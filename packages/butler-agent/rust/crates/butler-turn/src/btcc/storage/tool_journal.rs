@@ -19,16 +19,19 @@ pub use contracts::{
     ToolJournalSignature, ToolJournalStart,
 };
 
+/// The guided tool-call journal.
 pub struct ToolJournalRepository {
     storage: BtccStorage,
     clock: Arc<dyn Fn() -> String + Send + Sync>,
 }
 
 impl ToolJournalRepository {
+    /// A journal over the store and clock.
     pub fn new(storage: BtccStorage, clock: Arc<dyn Fn() -> String + Send + Sync>) -> Self {
         Self { storage, clock }
     }
 
+    /// Journals a started call.
     pub async fn start(&self, input: ToolJournalStart) -> StorageResult<()> {
         let clock = self.clock.clone();
         self.storage
@@ -36,6 +39,7 @@ impl ToolJournalRepository {
             .await
     }
 
+    /// Journals a call's result.
     pub async fn finish(&self, input: ToolJournalFinish) -> StorageResult<()> {
         let clock = self.clock.clone();
         self.storage
@@ -43,6 +47,7 @@ impl ToolJournalRepository {
             .await
     }
 
+    /// A turn's journaled call.
     pub async fn find_for_turn(
         &self,
         turn_id: String,
@@ -53,6 +58,7 @@ impl ToolJournalRepository {
             .await
     }
 
+    /// The turn's restart requests.
     pub async fn restart_requests(&self, turn_id: String) -> StorageResult<Vec<ToolJournalRecord>> {
         self.storage
             .execute(move |db| read::restart_requests(db, &turn_id))
@@ -70,6 +76,7 @@ impl ToolJournalRepository {
             .await
     }
 
+    /// A page of the turn's calls for closeout.
     pub async fn closeout_page(
         &self,
         turn_id: String,
@@ -81,6 +88,7 @@ impl ToolJournalRepository {
             .await
     }
 
+    /// Signatures of the turn's calls, for resume.
     pub async fn list_signatures(
         &self,
         turn_id: String,

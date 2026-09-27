@@ -11,14 +11,18 @@ use super::super::contracts::{
 };
 use super::record_path;
 use crate::project_ledger::records;
+use crate::project_ledger::status::{Lifecycle, Status};
 
+/// Creates or updates one record file in the publication candidate: the
+/// update's fields are merged over the existing frontmatter (or a new one),
+/// Work status moves are checked, and the file is rewritten.
 pub(super) fn apply(
     candidate: &Path,
     relative: &str,
     update: &ProjectLedgerRecordUpdate,
 ) -> Result<(), ProjectWorkPublicationError> {
     let path = record_path(candidate, relative)?;
-    let kind = update.kind.as_ref().ok_or_else(invalid)?;
+    let kind = update.kind.ok_or_else(invalid)?;
     let create = matches!(update.operation, Some(ProjectLedgerRecordOperation::Create));
     let existing = match fs::read_to_string(&path) {
         Ok(raw) => Some(raw),
@@ -32,98 +36,24 @@ pub(super) fn apply(
             "record_not_found"
         }));
     }
-    let mut metadata = if let Some(raw) = existing.as_deref() {
-        records::frontmatter(raw)
+    let mut metadata = match existing.as_deref() {
+        Some(raw) => records::frontmatter(raw)
             .and_then(|value| value.as_object().cloned())
-            .ok_or_else(invalid)?
-    } else {
-        let mut map = Map::new();
-        map.insert(
-            "schema".into(),
-            Value::String(format!("project-ledger.{}.v1", kind.as_str())),
-        );
-        map.insert("kind".into(), Value::String(kind.as_str().into()));
-        map.insert("id".into(), Value::String(update.id.clone()));
-        map.insert(
-            "title".into(),
-            Value::String(required(update.title.as_deref())?.into()),
-        );
-        map.insert(
-            "status".into(),
-            Value::String(create_status(kind, update.status.as_deref())?.into()),
-        );
-        let now = now_iso()?;
-        map.insert("createdAt".into(), Value::String(now.clone()));
-        map.insert("updatedAt".into(), Value::String(now));
-        map
+            .ok_or_else(invalid)?,
+        None => new_metadata(kind, update)?,
     };
     if metadata.get("id").and_then(Value::as_str) != Some(&update.id)
         || metadata.get("kind").and_then(Value::as_str) != Some(kind.as_str())
     {
         return Err(invalid());
     }
-    if kind == &ProjectLedgerRecordKind::Work {
-        let target = update
-            .status
-            .as_deref()
-            .unwrap_or_else(|| metadata.get("status").and_then(Value::as_str).unwrap_or(""));
-        if !matches!(
-            target,
-            "proposed"
-                | "scoped"
-                | "specified"
-                | "in_progress"
-                | "review"
-                | "done"
-                | "blocked"
-                | "cancelled"
-        ) {
-            return Err(invalid());
-        }
+    if kind == ProjectLedgerRecordKind::Work {
+        let (current, target) = work_statuses(&metadata, update)?;
         if existing.is_some() {
-            let from = metadata.get("status").and_then(Value::as_str).unwrap_or("");
-            work_transition(from, target)?;
+            check_work_move(current, target)?;
         }
     }
-    put_text(&mut metadata, "title", update.title.as_deref());
-    put_text(&mut metadata, "status", update.status.as_deref());
-    put_text(&mut metadata, "spec", update.spec.as_deref());
-    put_text(&mut metadata, "parentId", update.parent_id.as_deref());
-    put_text(&mut metadata, "acceptance", update.acceptance.as_deref());
-    put_text(&mut metadata, "validation", update.validation.as_deref());
-    put_text(&mut metadata, "review", update.review.as_deref());
-    put_text(&mut metadata, "report", update.report.as_deref());
-    put_text(
-        &mut metadata,
-        "implementation",
-        update.implementation.as_deref(),
-    );
-    put_text(&mut metadata, "mitigation", update.mitigation.as_deref());
-    put_text(&mut metadata, "reason", update.reason.as_deref());
-    put_text(&mut metadata, "codeCommits", update.code_commits.as_deref());
-    put_text(
-        &mut metadata,
-        "ledgerCommits",
-        update.ledger_commits.as_deref(),
-    );
-    if let Some(value) = update.priority {
-        metadata.insert(
-            "priority".into(),
-            serde_json::to_value(value).map_err(|source| invalid().with_source(source))?,
-        );
-    }
-    if update.requires_commit_evidence == Some(true) {
-        metadata.insert("requiresCommitEvidence".into(), Value::Bool(true));
-    }
-    if update.spec_exemption == Some(true)
-        && metadata
-            .get("spec")
-            .and_then(Value::as_str)
-            .is_none_or(str::is_empty)
-    {
-        metadata.insert("specExemption".into(), Value::Bool(true));
-    }
-    metadata.insert("updatedAt".into(), Value::String(now_iso()?));
+    merge(&mut metadata, update)?;
     let body = update.body.as_deref().or_else(|| {
         existing
             .as_deref()
@@ -134,7 +64,106 @@ pub(super) fn apply(
         "# {}\n\nManaged by Project Ledger.",
         update.title.as_deref().unwrap_or(&update.id)
     );
-    let body = body.unwrap_or(&fallback);
+    let raw = render(metadata, body.unwrap_or(&fallback))?;
+    fs::create_dir_all(path.parent().ok_or_else(invalid)?)
+        .map_err(|source| io().with_source(source))?;
+    fs::write(path, raw).map_err(|source| io().with_source(source))
+}
+
+/// The frontmatter of a record being created.
+fn new_metadata(
+    kind: ProjectLedgerRecordKind,
+    update: &ProjectLedgerRecordUpdate,
+) -> Result<Map<String, Value>, ProjectWorkPublicationError> {
+    let mut map = Map::new();
+    map.insert(
+        "schema".into(),
+        Value::String(format!("project-ledger.{}.v1", kind.as_str())),
+    );
+    map.insert("kind".into(), Value::String(kind.as_str().into()));
+    map.insert("id".into(), Value::String(update.id.clone()));
+    map.insert(
+        "title".into(),
+        Value::String(required(update.title.as_deref())?.into()),
+    );
+    map.insert(
+        "status".into(),
+        Value::String(create_status(kind, update.status.as_deref())?.into()),
+    );
+    let now = now_iso()?;
+    map.insert("createdAt".into(), Value::String(now.clone()));
+    map.insert("updatedAt".into(), Value::String(now));
+    Ok(map)
+}
+
+/// A Work's current status text and its target, which must be a Work status.
+fn work_statuses<'a>(
+    metadata: &'a Map<String, Value>,
+    update: &ProjectLedgerRecordUpdate,
+) -> Result<(&'a str, Status), ProjectWorkPublicationError> {
+    let current = metadata.get("status").and_then(Value::as_str).unwrap_or("");
+    let target = update.status.as_deref().unwrap_or(current);
+    let target = Lifecycle::Work.status(target).ok_or_else(invalid)?;
+    Ok((current, target))
+}
+
+/// An existing Work may stay where it is or move as publication allows.
+fn check_work_move(current: &str, target: Status) -> Result<(), ProjectWorkPublicationError> {
+    if current == target.as_str()
+        || Lifecycle::Work
+            .status(current)
+            .is_some_and(|current| current.publishes_to(target))
+    {
+        return Ok(());
+    }
+    Err(ProjectWorkPublicationError::adapter("invalid_transition"))
+}
+
+/// Copies every field the update sets over the frontmatter.
+fn merge(
+    metadata: &mut Map<String, Value>,
+    update: &ProjectLedgerRecordUpdate,
+) -> Result<(), ProjectWorkPublicationError> {
+    for (key, value) in [
+        ("title", &update.title),
+        ("status", &update.status),
+        ("spec", &update.sections.spec),
+        ("parentId", &update.parent_id),
+        ("acceptance", &update.sections.acceptance),
+        ("validation", &update.sections.validation),
+        ("review", &update.sections.review),
+        ("report", &update.sections.report),
+        ("implementation", &update.sections.implementation),
+        ("mitigation", &update.sections.mitigation),
+        ("reason", &update.sections.reason),
+        ("codeCommits", &update.evidence.code_commits),
+        ("ledgerCommits", &update.evidence.ledger_commits),
+    ] {
+        put_text(metadata, key, value.as_deref());
+    }
+    if let Some(value) = update.priority {
+        metadata.insert(
+            "priority".into(),
+            serde_json::to_value(value).map_err(|source| invalid().with_source(source))?,
+        );
+    }
+    if update.evidence.requires_commit_evidence == Some(true) {
+        metadata.insert("requiresCommitEvidence".into(), Value::Bool(true));
+    }
+    if update.evidence.spec_exemption == Some(true)
+        && metadata
+            .get("spec")
+            .and_then(Value::as_str)
+            .is_none_or(str::is_empty)
+    {
+        metadata.insert("specExemption".into(), Value::Bool(true));
+    }
+    metadata.insert("updatedAt".into(), Value::String(now_iso()?));
+    Ok(())
+}
+
+/// The record file: non-empty frontmatter scalars, then the body.
+fn render(metadata: Map<String, Value>, body: &str) -> Result<String, ProjectWorkPublicationError> {
     let mut raw = String::from("---\n");
     for (key, value) in metadata {
         if value.is_null() || value.as_str() == Some("") {
@@ -157,9 +186,7 @@ pub(super) fn apply(
     }
     raw.push_str("---\n\n");
     raw.push_str(body);
-    fs::create_dir_all(path.parent().ok_or_else(invalid)?)
-        .map_err(|source| io().with_source(source))?;
-    fs::write(path, raw).map_err(|source| io().with_source(source))
+    Ok(raw)
 }
 
 fn put_text(map: &mut Map<String, Value>, key: &str, value: Option<&str>) {
@@ -174,36 +201,16 @@ fn required(value: Option<&str>) -> Result<&str, ProjectWorkPublicationError> {
         .ok_or_else(invalid)
 }
 
-fn create_status<'a>(
-    kind: &ProjectLedgerRecordKind,
-    status: Option<&'a str>,
-) -> Result<&'a str, ProjectWorkPublicationError> {
+fn create_status(
+    kind: ProjectLedgerRecordKind,
+    status: Option<&str>,
+) -> Result<&str, ProjectWorkPublicationError> {
     match kind {
         ProjectLedgerRecordKind::Work => status.ok_or_else(invalid),
         ProjectLedgerRecordKind::Plan | ProjectLedgerRecordKind::Reference => {
             Ok(status.unwrap_or("active"))
         }
         _ => Err(invalid()),
-    }
-}
-
-fn work_transition(from: &str, to: &str) -> Result<(), ProjectWorkPublicationError> {
-    if from == to {
-        return Ok(());
-    }
-    let reachable = match from {
-        "proposed" => !matches!(to, "proposed"),
-        "scoped" => !matches!(to, "proposed" | "scoped"),
-        "specified" => !matches!(to, "proposed" | "scoped" | "specified"),
-        "in_progress" => matches!(to, "review" | "done" | "blocked" | "cancelled"),
-        "review" => matches!(to, "done" | "in_progress" | "blocked" | "cancelled"),
-        "blocked" => matches!(to, "in_progress" | "review" | "done" | "cancelled"),
-        _ => false,
-    };
-    if reachable {
-        Ok(())
-    } else {
-        Err(ProjectWorkPublicationError::adapter("invalid_transition"))
     }
 }
 

@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup as renderRaw } from "react-dom/server";
+import { SettingsFieldScopeProvider } from "@/butler-ds";
+
+/** Settings fields render inside a section scope (SettingsField throws outside one). */
+const renderToStaticMarkup = (node: React.ReactNode) =>
+  renderRaw(<SettingsFieldScopeProvider>{node}</SettingsFieldScopeProvider>);
 import { getAppCopy } from "@/app/copy.ts";
 import { SettingsDetailHeader } from "./SettingsDetailHeader";
 import { SettingsInput } from "./SettingsInput";

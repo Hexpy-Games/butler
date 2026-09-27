@@ -11,6 +11,7 @@ use butler_turn::btcc::ResolvedProjectWorkScope;
 
 use super::contracts::ProjectWorkPublicationError;
 use super::record;
+use crate::project_ledger::events::{self, Event};
 
 const LAYOUT_DIRS: &[&str] = &[
     "initiatives",
@@ -83,14 +84,11 @@ pub(super) fn ensure(
         if !ledger.exists() {
             fs::write(&ledger, b"").map_err(|source| io().with_source(source))?;
         }
-        let event = serde_json::json!({
-            "schema":"project-ledger.event.v1",
-            "ts":now_iso()?,
-            "type":"project_initialized",
-            "projectId":scope.ledger_project_id,
-            "source":"project-ledger",
-        });
-        let mut line = butler_core::json::stringify(&event)
+        let event = Event::ProjectInitialized {
+            r#type: "project_initialized",
+            project_id: &scope.ledger_project_id,
+        };
+        let mut line = events::line(&now_iso()?, event)
             .map_err(|source| io().with_source(source))?
             .into_bytes();
         line.push(b'\n');

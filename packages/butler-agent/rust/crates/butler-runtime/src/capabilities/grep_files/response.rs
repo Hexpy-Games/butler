@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+use butler_turn::workspace::ListStop;
 use serde_json::{Value, json};
 
 use butler_turn::workspace::{WorkspaceListRejection, WorkspaceListResult};
@@ -99,10 +100,13 @@ pub(super) fn success(
             "max_bytes_per_file"
         })
     } else {
-        listed.stopped_by
+        listed.stopped_by.map(ListStop::as_str)
     };
     let supports_cursor = !searched.elapsed_budget_reached
-        && matches!(listed.stopped_by, None | Some("max_results" | "max_files"));
+        && matches!(
+            listed.stopped_by,
+            None | Some(ListStop::MaxResults | ListStop::MaxFiles)
+        );
     let last_match = searched.matches.last();
     let after = cursor.and_then(|cursor| cursor.marker.as_deref().zip(cursor.line));
     let scan_path = listed
@@ -212,7 +216,7 @@ pub(super) fn success(
             "Some candidates exceeded max_bytes_per_file; read relevant unsearched_files with read_file using line ranges."
         });
     } else if listed.stopped_by.is_some() && !supports_cursor {
-        result["recovery_hint"] = json!(if listed.stopped_by == Some("io_error") {
+        result["recovery_hint"] = json!(if listed.stopped_by == Some(ListStop::IoError) {
             "Search hit a workspace I/O error; retry grep_files with a narrower admitted root or glob."
         } else {
             "Search stopped before a safe file boundary; narrow the root/globs and retry without cursor."

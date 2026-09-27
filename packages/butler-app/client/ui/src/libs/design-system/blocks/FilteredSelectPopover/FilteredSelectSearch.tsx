@@ -1,6 +1,7 @@
 import { Input } from "../../components/Input";
 import { X } from "../../components/Icons";
 import styles from "./FilteredSelectPopover.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface FilteredSelectSearchProps {
   label: string;
@@ -22,7 +23,7 @@ export function FilteredSelectSearch({
       <span className={styles.srOnly}>{label}</span>
       <span className={styles.searchControl}>
         <Input
-          className={styles.searchInput}
+          className={dsClass(styles.searchInput)}
           value={value}
           placeholder={placeholder}
           data-test-class="filtered-select-search"
@@ -36,7 +37,7 @@ export function FilteredSelectSearch({
             data-test-class="filtered-select-clear"
             onClick={() => onChange("")}
           >
-            <X size={13} />
+            <X size="sm" />
           </button>
         ) : null}
       </span>

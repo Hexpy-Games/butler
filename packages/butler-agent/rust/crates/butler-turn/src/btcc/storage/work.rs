@@ -34,12 +34,14 @@ pub(in crate::btcc::storage) use read::view as hydrate_work_view;
 pub use scope_selection::PersistedWorkTurnScope;
 pub(in crate::btcc::storage) use tool_result::CONTROL_TOOLS as WORK_CONTROL_TOOLS;
 
+/// The SQLite store of durable Work.
 pub struct SessionWorkRepository {
     storage: BtccStorage,
     clock: Arc<dyn Fn() -> String + Send + Sync>,
 }
 
 impl SessionWorkRepository {
+    /// A repository over the store and clock.
     pub fn new(storage: BtccStorage, clock: Arc<dyn Fn() -> String + Send + Sync>) -> Self {
         Self { storage, clock }
     }

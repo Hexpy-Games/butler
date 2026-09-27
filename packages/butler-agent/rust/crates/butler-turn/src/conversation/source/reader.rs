@@ -32,11 +32,13 @@ const REQUIRED_TABLES: [&str; 8] = [
     "conversation_schema_migrations",
 ];
 
+/// A read-only connection to the conversation store for source readers.
 pub struct ConversationSourceReader {
     pub(super) connection: Option<Connection>,
 }
 
 impl ConversationSourceReader {
+    /// The number of messages with source-bearing parts.
     pub fn count_source_bearing_messages(&self) -> ConversationResult<u64> {
         self.connection()?
             .query_row(
@@ -48,6 +50,7 @@ impl ConversationSourceReader {
             )
             .map_err(ConversationError::sqlite)
     }
+    /// Opens the store read-only.
     pub fn open(path: &Path) -> ConversationResult<Self> {
         let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
             .map_err(source_open_error)?;
@@ -66,6 +69,7 @@ impl ConversationSourceReader {
         })
     }
 
+    /// A message by id.
     pub fn read_message(
         &self,
         id: &str,
@@ -88,6 +92,7 @@ impl ConversationSourceReader {
         read_by_source_ref_any_session(self.connection()?, source_ref)
     }
 
+    /// Ids of a session's recent public messages.
     pub fn read_recent_public_message_ids(
         &self,
         session_id: &str,
@@ -104,6 +109,7 @@ impl ConversationSourceReader {
             .map_err(ConversationError::sqlite)
     }
 
+    /// A page of turn outcomes for recall.
     pub fn read_recall_outcome_page(
         &self,
         after_id: Option<&str>,
@@ -112,6 +118,7 @@ impl ConversationSourceReader {
         recall_pages::outcomes(self.connection()?, after_id, limit)
     }
 
+    /// A page of recovered source messages.
     pub fn read_recovered_source_page(
         &self,
         after_id: Option<&str>,
@@ -120,10 +127,12 @@ impl ConversationSourceReader {
         recall_pages::recovered(self.connection()?, after_id, limit)
     }
 
+    /// A turn by id.
     pub fn read_turn(&self, id: &str) -> ConversationResult<Option<ConversationTurn>> {
         get_turn(self.connection()?, id)
     }
 
+    /// A session by id.
     pub fn read_session(&self, id: &str) -> ConversationResult<Option<ConversationSession>> {
         self.connection()?
             .query_row(
@@ -135,6 +144,7 @@ impl ConversationSourceReader {
             .map_err(ConversationError::sqlite)
     }
 
+    /// A session's message and summary statistics.
     pub fn read_status_context_stats(
         &self,
         session_id: &str,
@@ -147,6 +157,7 @@ impl ConversationSourceReader {
         )
     }
 
+    /// A turn's outcome capsule.
     pub fn read_turn_outcome(
         &self,
         turn_id: &str,
@@ -154,6 +165,7 @@ impl ConversationSourceReader {
         read_outcome(self.connection()?, turn_id)
     }
 
+    /// A session's projected messages (up to 500).
     pub fn read_projection_messages(
         &self,
         session_id: &str,
@@ -161,6 +173,7 @@ impl ConversationSourceReader {
         projection(self.connection()?, session_id, None, Some(500.0))
     }
 
+    /// Messages for memory cognition.
     pub fn read_cognition_messages(
         &self,
         input: &ReadCognitionMessagesInput,
@@ -168,6 +181,7 @@ impl ConversationSourceReader {
         cognition(self.connection()?, input.clone())
     }
 
+    /// Closes the connection.
     pub fn close(mut self) -> ConversationResult<()> {
         let Some(connection) = self.connection.take() else {
             return Ok(());

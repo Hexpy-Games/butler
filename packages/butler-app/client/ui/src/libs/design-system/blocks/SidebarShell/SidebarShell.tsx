@@ -1,9 +1,20 @@
-import { useLayoutEffect, useRef, type ReactNode } from "react";
+import type { DsPrivateStyleProps } from "../../lib/dsProps";
+import { useLayoutEffect, useRef, type ReactNode, type Ref } from "react";
 import { cn } from "../../lib/utils";
+import { useComposedRefs } from "../../lib/composeRefs";
+import { useScrollEdges } from "../../lib/useScrollEdges";
 import styles from "./SidebarShell.module.css";
 import { useStickyClipping } from "./hooks/useStickyClipping";
 
-export interface SidebarShellProps {
+export type SidebarDensity = "compact" | "comfortable" | "touch";
+
+export interface SidebarShellProps extends DsPrivateStyleProps {
+  /**
+   * Row height, inline padding, icon size, gaps and action targets of every
+   * NavRow inside (tokens in tokens.css). Comfortable becomes touch on phones
+   * and coarse pointers.
+   */
+  density?: SidebarDensity;
   titlebar?: ReactNode;
   header?: ReactNode;
   scrollHeader?: ReactNode;
@@ -12,8 +23,8 @@ export interface SidebarShellProps {
   footer?: ReactNode;
   collapsed?: boolean;
   ariaLabel?: string;
-  className?: string;
   scrollFade?: boolean;
+  scrollRef?: Ref<HTMLDivElement>;
 }
 
 export function SidebarShell({
@@ -27,8 +38,12 @@ export function SidebarShell({
   ariaLabel,
   className,
   scrollFade = true,
+  scrollRef,
+  density = "comfortable",
 }: SidebarShellProps) {
   const contentRef = useRef<HTMLDivElement>(null);
+  const edgesRef = useScrollEdges("y", scrollFade);
+  const composedScrollRef = useComposedRefs(scrollRef, edgesRef);
   const stickyRef = useRef<HTMLDivElement>(null);
   useStickyClipping(contentRef, Boolean(stickyHeader));
   useLayoutEffect(() => {
@@ -49,6 +64,7 @@ export function SidebarShell({
     <aside
       className={cn(styles.shell, className)}
       data-collapsed={collapsed ? "true" : undefined}
+      data-sidebar-density={density}
       data-has-titlebar={Boolean(titlebar) || undefined}
       data-test-class="app-sidebar"
       aria-label={ariaLabel}
@@ -67,7 +83,8 @@ export function SidebarShell({
           data-test-class="sidebar-scroll-frame"
         >
           <div
-            className={cn(styles.scroll, !scrollFade && styles.unmasked)}
+            ref={composedScrollRef}
+            className={styles.scroll}
             data-test-class="sidebar-scroll"
           >
             <div
@@ -75,13 +92,18 @@ export function SidebarShell({
               className={styles.scrollContent}
               data-sticky-header={stickyHeader ? "true" : undefined}
             >
-              {scrollHeader}
+              {scrollHeader ? (
+                <div className={styles.scrollHeader} data-slot="sidebar-scroll-header">
+                  {scrollHeader}
+                </div>
+              ) : null}
               {stickyHeader ? (
                 <div
                   ref={stickyRef}
                   className={styles.stickyHeader}
                   data-test-class="sidebar-sticky-header"
                 >
+                  <div className={styles.stickyCover} aria-hidden="true" />
                   {stickyHeader}
                 </div>
               ) : null}
@@ -103,6 +125,12 @@ export function SidebarTrafficSpace() {
   return <div className={styles.trafficSpace} aria-hidden="true" />;
 }
 
-export function SidebarNav({ children }: { children: ReactNode }) {
-  return <nav className={styles.nav}>{children}</nav>;
+/** A list of sidebar rows; rows are spaced by the density's --sidebar-row-spacing. */
+export function SidebarNav({ children, ariaLabel }: { children: ReactNode; ariaLabel?: string }) {
+  return <nav className={styles.nav} aria-label={ariaLabel}>{children}</nav>;
+}
+
+/** The product title row: titlebar height in the titlebar, action height in the header. */
+export function SidebarBrand({ children }: { children: ReactNode }) {
+  return <div className={styles.brand} data-slot="sidebar-brand">{children}</div>;
 }

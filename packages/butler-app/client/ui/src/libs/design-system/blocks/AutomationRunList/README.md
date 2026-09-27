@@ -22,7 +22,7 @@ Automation containers.
 Format run state and time before passing items.
 
 ## Wrong use cases
-Do not use it for scheduled automation definitions. Use `AutomationRow`.
+Do not use it for scheduled automation definitions. Use `ListRow`.
 
 ## Tags
 automation, runs, history, activity

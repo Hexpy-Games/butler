@@ -5,6 +5,7 @@ use crate::conversation::types::*;
 use crate::conversation::{AgentConversationStore, ConversationError, ConversationResult};
 
 impl AgentConversationStore {
+    /// A message by id.
     pub async fn read_message_by_id(
         &self,
         id: &str,
@@ -14,6 +15,7 @@ impl AgentConversationStore {
             .await
     }
 
+    /// A session's message by its source reference.
     pub async fn read_message_by_source_ref(
         &self,
         session_id: &str,
@@ -34,6 +36,7 @@ impl AgentConversationStore {
         .await
     }
 
+    /// A session's latest messages.
     pub async fn read_messages(
         &self,
         input: ReadMessagesInput,
@@ -85,6 +88,7 @@ impl AgentConversationStore {
         .await
     }
 
+    /// Messages for memory cognition.
     pub async fn read_cognition_messages(
         &self,
         input: ReadCognitionMessagesInput,
@@ -93,6 +97,7 @@ impl AgentConversationStore {
             .await
     }
 
+    /// A page of a session's projected messages between sequence bounds.
     pub async fn read_projection_message_page(
         &self,
         session_id: &str,
@@ -139,6 +144,7 @@ impl AgentConversationStore {
         .await
     }
 
+    /// Messages around an anchor.
     pub async fn read_messages_around(
         &self,
         input: ReadAroundInput,
@@ -147,6 +153,7 @@ impl AgentConversationStore {
             .await
     }
 
+    /// The source hash of the given messages.
     pub async fn conversation_messages_source_hash(
         &self,
         ids: Vec<String>,

@@ -24,11 +24,12 @@ pub use preparation::{
 };
 
 pub use contracts::{
-    AgentLoopResult, ContentRef, ContinuationBudgetTransition, DeliveryOutbox, DeliveryStatus,
-    ExecutionRoute, FinalDisposition, FinalPayload, ModelRoundAcceptanceWrite, ModelRoundKey,
-    ModelRouteEventWrite, ModelRouteWrite, PreparedTurn, ProgressEvent, ProgressWrite,
-    StateExecutionClaim, StopPersistenceOutcome, SuspensionReason, TerminalOutcome, TurnCheckpoint,
-    TurnRecord, TurnSemanticState, TurnTransition, WakeIdentity,
+    AgentLoopResult, AttemptFailure, AttemptHistory, ContentRef, ContinuationBudgetTransition,
+    DeliveryOutbox, DeliveryStatus, ExecutionRoute, FailureDisposition, FailureRecord,
+    FinalDisposition, FinalPayload, ModelRoundAcceptanceWrite, ModelRoundKey, ModelRouteEvent,
+    ModelRouteEventKind, ModelRouteEventWrite, ModelRouteWrite, PreparedTurn, ProgressEvent,
+    ProgressWrite, RouteEventStatus, StateExecutionClaim, StopPersistenceOutcome, SuspensionReason,
+    TerminalOutcome, TurnCheckpoint, TurnRecord, TurnSemanticState, TurnTransition, WakeIdentity,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use ports::NoopTurnDeveloperLogCapturePort;
@@ -47,6 +48,7 @@ pub(crate) use host::Coordinator;
 use runtime::TurnRuntime;
 use supervisor::TurnExecutionSupervisor;
 
+/// What the turn runtime is assembled from.
 pub struct TurnFacadeDependencies {
     pub preparation: Arc<dyn TurnPreparation>,
     pub store: Arc<dyn TurnStore>,

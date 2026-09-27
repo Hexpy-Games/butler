@@ -28,12 +28,14 @@ pub struct HistoricalAppProjectionRow {
     pub(crate) conversation_message_id: Option<String>,
 }
 
+/// Historical transcript and App rows to recover (or only plan with `dry_run`).
 pub struct HistoricalRecoveryInput {
     pub transcript_rows: Vec<HistoricalTranscriptRow>,
     pub app_rows: Vec<HistoricalAppProjectionRow>,
     pub dry_run: bool,
 }
 
+/// Reads the historical JSONL transcript; a missing file has no rows.
 pub fn read_historical_transcript_rows(
     path: &Path,
 ) -> ConversationResult<Vec<HistoricalTranscriptRow>> {
@@ -79,6 +81,7 @@ pub fn read_historical_transcript_rows(
         .collect())
 }
 
+/// Reads the historical App message projection; a missing store has no rows.
 pub fn read_historical_app_rows(
     path: &Path,
 ) -> ConversationResult<Vec<HistoricalAppProjectionRow>> {

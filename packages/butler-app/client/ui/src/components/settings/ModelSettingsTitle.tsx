@@ -3,11 +3,11 @@ import {
   ArrowLeft,
   Breadcrumb,
   BreadcrumbItem,
-  BreadcrumbLink,
+  BreadcrumbButton,
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-  Button,
+  IconButton,
   Stack,
 } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
@@ -43,35 +43,21 @@ export function ModelSettingsTitle({
       gap="sm"
       aria-hidden={hidden}
       data-test-class="settings-model-route-nav"
-      style={{ visibility: hidden ? "hidden" : "visible" }}
+      invisible={hidden}
     >
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        onClick={onBack}
-        aria-label={copy.back}
-      >
-        <ArrowLeft size={15} />
-      </Button>
-      <Breadcrumb>
+      <IconButton label={copy.back} onClick={onBack}>
+        <ArrowLeft size="md" />
+      </IconButton>
+      <Breadcrumb label={appCopy.common.breadcrumb}>
         <BreadcrumbList>
           <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <button type="button" onClick={onRoot}>
-                {copy.sections.models}
-              </button>
-            </BreadcrumbLink>
+            <BreadcrumbButton onClick={onRoot}>{copy.sections.models}</BreadcrumbButton>
           </BreadcrumbItem>
           {modelRoute.page === "add" || modelRoute.page === "edit" ? (
             <>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
-                <BreadcrumbLink asChild>
-                  <button type="button" onClick={onManagement}>
-                    {copy.modelManagement.title}
-                  </button>
-                </BreadcrumbLink>
+                <BreadcrumbButton onClick={onManagement}>{copy.modelManagement.title}</BreadcrumbButton>
               </BreadcrumbItem>
             </>
           ) : null}

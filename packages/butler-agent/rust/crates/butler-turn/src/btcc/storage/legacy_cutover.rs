@@ -189,7 +189,8 @@ fn push_diagnostic(
 ) {
     let mut value = json!({"turnId": turn_id, "code": code, "detail": detail});
     if let Some(state) = state {
-        value["semanticState"] = Value::String(state.to_owned());
+        butler_core::json::object_mut(&mut value)
+            .insert("semanticState".into(), Value::String(state.to_owned()));
     }
     map.entry(turn_id.to_owned()).or_default().push(value);
 }
@@ -211,17 +212,29 @@ fn record_quarantines(
     Ok(())
 }
 
+/// The turn state a legacy turn is cut over to.
+struct CutoverTarget {
+    revision: i64,
+    fence: i64,
+    checkpoint_id: String,
+}
+
+/// Cuts a legacy turn over to delivery of the limitation message, keeping
+/// its pending safety blockers and recording digested evidence of the source.
 fn convert(db: &Connection, turn: &LegacyTurn, at: &str) -> StorageResult<()> {
-    let revision = turn.revision + 1;
-    let fence = turn.fence + 1;
-    let checkpoint_id = digest(&format!(
-        "btcc-r3-legacy-cutover-checkpoint.v2\0{}\0{revision}",
-        turn.turn_id
-    ));
+    let target = CutoverTarget {
+        revision: turn.revision + 1,
+        fence: turn.fence + 1,
+        checkpoint_id: digest(&format!(
+            "btcc-r3-legacy-cutover-checkpoint.v2\0{}\0{}",
+            turn.turn_id,
+            turn.revision + 1
+        )),
+    };
     let content = limitation_message(&turn.original_message);
     let delivery = new_delivery(
         &turn.turn_id,
-        revision,
+        target.revision,
         &content,
         "btcc-canonical-delivery.v1",
     )?;
@@ -234,6 +247,54 @@ fn convert(db: &Connection, turn: &LegacyTurn, at: &str) -> StorageResult<()> {
         &pending,
         at,
     )?;
+    let evidence_json = stable_json(&cutover_evidence(db, turn, &target, &pending, at)?)?;
+    insert_delivery(db, &turn.turn_id, target.revision, &delivery, "pending")?;
+    let changed = db.execute(
+        "UPDATE btcc_turns SET semantic_state = 'delivery_committed', active_checkpoint_id = ?1, \
+         route = 'assisted', final_payload_json = ?2, delivery_outbox_id = ?3, \
+         canonical_assistant_message_id = NULL, revision = ?4, execution_fence = ?5, \
+         final_disposition = 'completed' WHERE turn_id = ?6 AND semantic_state = ?7 \
+         AND revision = ?8 AND execution_fence = ?9 AND active_checkpoint_id IS ?10",
+        params![target.checkpoint_id, delivery.payload_json, delivery.outbox_id, target.revision,
+            target.fence, turn.turn_id, turn.state, turn.revision, turn.fence, turn.checkpoint_id],
+    ).map_err(StorageError::sqlite)?;
+    if changed != 1 {
+        return Err(StorageError::new(
+            StorageCode::LegacyTurnCutoverCasConflict,
+            turn.turn_id.clone(),
+        ));
+    }
+    close_legacy_runtime(db, &turn.turn_id, at)?;
+    db.execute(
+        "INSERT INTO btcc_checkpoints (checkpoint_id, turn_id, turn_revision, \
+        semantic_state, kind, checkpoint_revision, active_claim_id, is_active) \
+        VALUES (?1, ?2, ?3, 'delivery_committed', 'runtime', 0, NULL, 1)",
+        params![target.checkpoint_id, turn.turn_id, target.revision],
+    )
+    .map_err(StorageError::sqlite)?;
+    let cutover_id = digest(&format!(
+        "btcc-r3-legacy-turn-cutover.v2\0{}\0{}",
+        turn.turn_id, turn.revision
+    ));
+    db.execute("INSERT INTO btcc_r3_legacy_turn_cutovers (cutover_id, turn_id, \
+        source_semantic_state, source_turn_revision, source_execution_fence, source_active_checkpoint_id, \
+        admitted_checkpoint_id, admitted_turn_revision, admitted_execution_fence, evidence_json, \
+        evidence_sha256, cutover_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        params![cutover_id, turn.turn_id, turn.state, turn.revision, turn.fence, turn.checkpoint_id,
+            target.checkpoint_id, target.revision, target.fence, evidence_json, digest(&evidence_json), at])
+        .map_err(StorageError::sqlite)?;
+    Ok(())
+}
+
+/// The persisted cutover evidence: the source turn's state and runtime
+/// facts, the target state and the preserved safety blockers.
+fn cutover_evidence(
+    db: &Connection,
+    turn: &LegacyTurn,
+    target: &CutoverTarget,
+    pending: &[blockers::Blocker],
+    at: &str,
+) -> StorageResult<Value> {
     let active_checkpoint_revision = turn
         .checkpoint_id
         .as_deref()
@@ -248,7 +309,7 @@ fn convert(db: &Connection, turn: &LegacyTurn, at: &str) -> StorageResult<()> {
         .transpose()
         .map_err(StorageError::sqlite)?
         .flatten();
-    let evidence = json!({
+    Ok(json!({
         "schema": "btcc.r3.legacy-turn-cutover.v2", "turnId": turn.turn_id,
         "source": {"semanticState": turn.state, "turnRevision": turn.revision,
             "executionFence": turn.fence, "activeCheckpointId": turn.checkpoint_id,
@@ -265,106 +326,35 @@ fn convert(db: &Connection, turn: &LegacyTurn, at: &str) -> StorageResult<()> {
                 &turn.turn_id, "status IN ('interrupted', 'ready')")?,
             "openContentionIds": active_ids(db, "btcc_ledger_contentions", "contention_id",
                 &turn.turn_id, "status != 'closed'")?},
-        "target": {"semanticState": "delivery_committed", "turnRevision": revision,
-            "executionFence": fence, "checkpointId": checkpoint_id,
+        "target": {"semanticState": "delivery_committed", "turnRevision": target.revision,
+            "executionFence": target.fence, "checkpointId": target.checkpoint_id,
             "checkpointRevision": 0, "checkpointKind": "runtime"},
         "safetyBlockers": pending.iter().map(|item| item.public.clone()).collect::<Vec<_>>(),
         "cutoverAt": at,
-    });
-    let evidence_json = stable_json(&evidence)?;
-    insert_delivery(db, &turn.turn_id, revision, &delivery, "pending")?;
-    let changed = db.execute(
-        "UPDATE btcc_turns SET semantic_state = 'delivery_committed', active_checkpoint_id = ?1, \
-         route = 'assisted', final_payload_json = ?2, delivery_outbox_id = ?3, \
-         canonical_assistant_message_id = NULL, revision = ?4, execution_fence = ?5, \
-         final_disposition = 'completed' WHERE turn_id = ?6 AND semantic_state = ?7 \
-         AND revision = ?8 AND execution_fence = ?9 AND active_checkpoint_id IS ?10",
-        params![checkpoint_id, delivery.payload_json, delivery.outbox_id, revision, fence,
-            turn.turn_id, turn.state, turn.revision, turn.fence, turn.checkpoint_id],
-    ).map_err(StorageError::sqlite)?;
-    if changed != 1 {
-        return Err(StorageError::new(
-            StorageCode::LegacyTurnCutoverCasConflict,
-            turn.turn_id.clone(),
-        ));
-    }
-    close_legacy_runtime(db, &turn.turn_id, at)?;
-    db.execute(
-        "INSERT INTO btcc_checkpoints (checkpoint_id, turn_id, turn_revision, \
-        semantic_state, kind, checkpoint_revision, active_claim_id, is_active) \
-        VALUES (?1, ?2, ?3, 'delivery_committed', 'runtime', 0, NULL, 1)",
-        params![checkpoint_id, turn.turn_id, revision],
-    )
-    .map_err(StorageError::sqlite)?;
-    let cutover_id = digest(&format!(
-        "btcc-r3-legacy-turn-cutover.v2\0{}\0{}",
-        turn.turn_id, turn.revision
-    ));
-    db.execute("INSERT INTO btcc_r3_legacy_turn_cutovers (cutover_id, turn_id, \
-        source_semantic_state, source_turn_revision, source_execution_fence, source_active_checkpoint_id, \
-        admitted_checkpoint_id, admitted_turn_revision, admitted_execution_fence, evidence_json, \
-        evidence_sha256, cutover_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
-        params![cutover_id, turn.turn_id, turn.state, turn.revision, turn.fence, turn.checkpoint_id,
-            checkpoint_id, revision, fence, evidence_json, digest(&evidence_json), at])
-        .map_err(StorageError::sqlite)?;
-    Ok(())
+    }))
 }
 
+/// Settles a quarantined legacy turn: an already delivered one is marked
+/// delivered, otherwise it commits delivery of its outbox or the limitation
+/// message.
 fn settle_quarantined(db: &Connection, turn: &LegacyTurn) -> StorageResult<()> {
     let revision = turn.revision + 1;
     let fence = turn.fence + 1;
     let existing = load_outbox(db, &turn.turn_id)?;
     let canonical = existing_canonical(db, turn, existing.as_ref())?;
-    let delivery = if let Some(existing) = existing.as_ref() {
-        Delivery::from_existing(existing, &turn.turn_id)?
-    } else if let Some(message_id) = canonical.as_deref() {
-        let content = db
-            .query_row(
-                "SELECT content FROM btcc_messages WHERE message_id = ?1",
-                [message_id],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
-            .map_err(StorageError::sqlite)?
-            .unwrap_or_else(|| limitation_message(&turn.original_message));
-        new_delivery(
-            &turn.turn_id,
-            revision,
-            &content,
-            "btcc-r3-quarantine-delivery.v1",
-        )?
-        .with_message(message_id)
-    } else {
-        new_delivery(
-            &turn.turn_id,
-            revision,
-            &limitation_message(&turn.original_message),
-            "btcc-r3-quarantine-delivery.v1",
-        )?
-    };
+    let delivery = quarantine_delivery(db, turn, existing.as_ref(), canonical.as_deref())?;
     let delivered = canonical.is_some();
-    if existing.is_none() {
-        insert_delivery(
-            db,
-            &turn.turn_id,
-            revision,
-            &delivery,
-            if delivered { "observed" } else { "pending" },
-        )?;
-    } else if delivered
-        || !matches!(
-            existing.as_ref().map(|row| row.status.as_str()),
-            Some("pending" | "inserted")
-        )
-    {
-        db.execute(
-            "UPDATE btcc_delivery_outbox SET status = ?1 WHERE outbox_id = ?2",
-            params![
-                if delivered { "observed" } else { "pending" },
-                delivery.outbox_id
-            ],
-        )
-        .map_err(StorageError::sqlite)?;
+    let status = if delivered { "observed" } else { "pending" };
+    match existing.as_ref() {
+        None => insert_delivery(db, &turn.turn_id, revision, &delivery, status)?,
+        Some(row) if delivered || !matches!(row.status.as_str(), "pending" | "inserted") => {
+            db.execute(
+                "UPDATE btcc_delivery_outbox SET status = ?1 WHERE outbox_id = ?2",
+                params![status, delivery.outbox_id],
+            )
+            .map_err(StorageError::sqlite)?;
+        }
+        Some(_) => {}
     }
     if let Some(canonical) = canonical.as_deref() {
         db.execute(
@@ -406,4 +396,42 @@ fn settle_quarantined(db: &Connection, turn: &LegacyTurn) -> StorageResult<()> {
         .map_err(StorageError::sqlite)?;
     }
     Ok(())
+}
+
+/// The quarantined turn's delivery: its existing outbox, the canonical
+/// message already delivered, or the limitation message.
+fn quarantine_delivery(
+    db: &Connection,
+    turn: &LegacyTurn,
+    existing: Option<&ExistingOutbox>,
+    canonical: Option<&str>,
+) -> StorageResult<Delivery> {
+    let revision = turn.revision + 1;
+    if let Some(existing) = existing {
+        return Delivery::from_existing(existing, &turn.turn_id);
+    }
+    let Some(message_id) = canonical else {
+        return new_delivery(
+            &turn.turn_id,
+            revision,
+            &limitation_message(&turn.original_message),
+            "btcc-r3-quarantine-delivery.v1",
+        );
+    };
+    let content = db
+        .query_row(
+            "SELECT content FROM btcc_messages WHERE message_id = ?1",
+            [message_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(StorageError::sqlite)?
+        .unwrap_or_else(|| limitation_message(&turn.original_message));
+    Ok(new_delivery(
+        &turn.turn_id,
+        revision,
+        &content,
+        "btcc-r3-quarantine-delivery.v1",
+    )?
+    .with_message(message_id))
 }

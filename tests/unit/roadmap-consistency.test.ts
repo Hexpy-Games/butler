@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { readRepoOrLedgerFile } from "../support/project-ledger-root.ts";
+import { readRepoOrLedgerFile, ledgerTest } from "../support/project-ledger-root.ts";
 
-test("feature roadmap status matches completed implementation slices", () => {
+ledgerTest("feature roadmap status matches completed implementation slices", () => {
   const roadmap = readRepoOrLedgerFile("project-ledger/projects/butler/roadmaps/roadmap-todo.md");
   const featurePlan = readRepoOrLedgerFile("project-ledger/projects/butler/plans/plan-feature-roadmap.md");
   const projectMemoryPlan = readRepoOrLedgerFile(

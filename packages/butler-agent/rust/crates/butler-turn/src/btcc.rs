@@ -43,8 +43,10 @@ pub use turn::{
     TurnFacadeDependencies, TurnRecord, TurnSemanticState, TurnStore, WakeIdentity,
 };
 pub use turn::{
-    CanonicalMessageStore, DeliveryStatus, FinalPayload, PreparedTurn, ProgressEventRepository,
-    ProgressWrite, StopPersistenceOutcome, StorageReadiness, TransitionCommitError, TurnTransition,
+    AttemptFailure, AttemptHistory, CanonicalMessageStore, DeliveryStatus, FailureDisposition,
+    FailureRecord, FinalPayload, ModelRouteEvent, ModelRouteEventKind, PreparedTurn,
+    ProgressEventRepository, ProgressWrite, RouteEventStatus, StopPersistenceOutcome,
+    StorageReadiness, TransitionCommitError, TurnTransition,
 };
 
 #[cfg(any(test, feature = "test-support"))]
@@ -56,16 +58,17 @@ pub use agent_loop::{
     BoundGuidedTurn, BoundedContinuationEnvelope, BoundedEnvelopeV1, CandidateDisposition,
     ContextMessages, ContextPort, ContextProjection, ContextProjectionError,
     ContextProjectionInput, ContextProjectionRebaseIdentity, ContextProjectionRebaseV1,
-    ExactResultReplaySelection, GuidedActivityBinding, GuidedActivitySnapshot, GuidedInvocation,
-    GuidedPolicyDependencies, GuidedPresentation, GuidedTurnFactory, GuidedTurnInputs,
-    GuidedTurnStart, JournalCloseout, JournalPort, ModelRoundError, ModelRoundMessage,
-    ModelRoundObserver, ModelRoundPort, ModelRoundRequest, ModelRoundResult, ModelRoundRole,
-    ModelRoundTool, ModelRoundToolCall, OperationResultMessageReferences,
-    OperationResultReplayFactory, OperationResultRuntime, OperationResultRuntimeFactory,
-    OperationResultScope, PendingTool, ProductionAgentLoop, PromptPort, ProviderBodyAdmissionPort,
-    ProviderIdentity, ProviderStreamObserver, RenderedGuidedPrompt, ReplayMode, RollingContextV1,
-    SemanticTurn, SteeringObservation, TextCallDisposition, ToolCallOrigin, ToolChoice,
-    ToolExecutionError, ToolOutcome, ToolPort, ToolResult, TurnContextProjection, TurnSteeringPort,
+    ContextRebase, ExactResultReplaySelection, FinalSynthesis, GuidedActivityBinding,
+    GuidedActivitySnapshot, GuidedInvocation, GuidedPolicyDependencies, GuidedPresentation,
+    GuidedTurnFactory, GuidedTurnInputs, GuidedTurnStart, JournalCloseout, JournalPort, LoopPhase,
+    ModelRoundError, ModelRoundMessage, ModelRoundObserver, ModelRoundPort, ModelRoundRequest,
+    ModelRoundResult, ModelRoundRole, ModelRoundTool, ModelRoundToolCall,
+    OperationResultMessageReferences, OperationResultReplayFactory, OperationResultRuntime,
+    OperationResultRuntimeFactory, OperationResultScope, PendingTool, ProductionAgentLoop,
+    PromptImages, PromptPort, ProviderBodyAdmissionPort, ProviderIdentity, ProviderStreamObserver,
+    RenderedGuidedPrompt, ReplayMode, RollingContextV1, RoundRequestOptions, SemanticTurn,
+    SteeringObservation, TextCallDisposition, ToolCallOrigin, ToolChoice, ToolExecutionError,
+    ToolOutcome, ToolPort, ToolResult, ToolSurface, TurnContextProjection, TurnSteeringPort,
     UsageAttribution, VerifiedImagePayloadPort, WorkFinalState, WorkPort,
     latest_work_anchor_indices,
 };
@@ -92,9 +95,9 @@ pub use execution_controls::{
 };
 pub use guided_budget::{GuidedContinuationBudgetFactory, TurnContinuationBudgetPort};
 pub use guided_turn::{
-    GuidedAuthorityDecision, GuidedCatalogRead, GuidedCatalogSnapshot, GuidedPhaseInput,
-    GuidedPhaseSelection, GuidedPreparationError, GuidedWork, guided_authority_loop_decision,
-    load_guided_turn_work, select_phase, work_scope_for_turn,
+    GuidedAuthorityDecision, GuidedCatalogRead, GuidedCatalogSnapshot, GuidedPhase,
+    GuidedPhaseInput, GuidedPhaseSelection, GuidedPreparationError, GuidedWork, SurfaceMode,
+    guided_authority_loop_decision, load_guided_turn_work, select_phase, work_scope_for_turn,
 };
 pub use model_route::{
     ContextSizing, ContextSizingRequest, GuidedSourceRevision, ModelRequestAdmissionCode,
@@ -152,10 +155,12 @@ pub use work::{
     ReplacePlanCommand, ResolvedProjectWorkScope, ReviewCommand, StartWorkCommand,
 };
 
+/// The SHA-256 hex digest used for BTCC identities.
 pub fn digest_identity(value: &str) -> String {
     identity::digest(value)
 }
 
+/// The material snapshot of a project Work (what a disposition is decided on).
 pub fn build_project_work_material_snapshot(
     work: &WorkView,
     fingerprint: String,
@@ -166,37 +171,44 @@ pub fn build_project_work_material_snapshot(
         .map_err(BtccError::from)
 }
 
+/// Runs and stops turns through the turn coordinator.
 #[derive(Clone)]
 pub struct Btcc {
     inner: Arc<turn::Coordinator>,
 }
 
 impl Btcc {
+    /// Runs a turn to delivery, suspension or cancellation; concurrent requests for the same turn share one run.
     pub async fn run_turn(&self, request: TurnRequest) -> Result<TurnOutcome, BtccError> {
         self.inner.run_turn(request).await
     }
 
+    /// Stops a turn and reports how it ended.
     pub async fn stop_turn(&self, request: StopRequest) -> Result<TurnOutcome, BtccError> {
         self.inner.stop_turn(&request.turn_id).await
     }
 }
 
+/// The shutdown handle of the turn coordinator.
 #[derive(Clone)]
 pub struct BtccHost {
     inner: Arc<turn::Coordinator>,
 }
 
 impl BtccHost {
+    /// Refuses new turns, waits for active ones and closes the dependencies.
     pub async fn close(&self) -> Result<(), BtccError> {
         self.inner.close_host().await
     }
 }
 
+/// The turn runtime and its host handle.
 pub struct BtccAssembly {
     pub btcc: Btcc,
     pub host: BtccHost,
 }
 
+/// Assembles the turn runtime from its dependencies.
 pub fn assemble(dependencies: &TurnFacadeDependencies) -> BtccAssembly {
     let inner = turn::assemble(dependencies);
     BtccAssembly {

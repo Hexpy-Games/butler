@@ -10,12 +10,13 @@ use crate::btcc::{
 
 use super::continuation::GuidedPresentation;
 use super::contracts::{
-    BatchDisposition, CandidateDisposition, ContextProjectionInput, ModelRoundMessage,
+    BatchDisposition, CandidateDisposition, ContextProjectionInput, LoopPhase, ModelRoundMessage,
     ModelRoundTool, ModelRoundToolCall, SteeringObservation, TextCallDisposition, ToolOutcome,
-    ToolResult,
+    ToolResult, ToolSurface,
 };
 use super::ports::{ContextProjectionFuture, ToolExecutionError};
 
+/// What every guided port call borrows from the running turn.
 #[derive(Clone, Copy)]
 pub struct GuidedInvocation<'a> {
     pub turn: &'a TurnRecord,
@@ -45,6 +46,7 @@ impl<'a, 'input: 'a> From<&'a super::driver::Invocation<'input>> for GuidedInvoc
     }
 }
 
+/// The ports a guided policy is composed of.
 pub struct GuidedPolicyDependencies {
     pub prompt: Arc<dyn PromptPort>,
     pub authority: Arc<dyn AuthorityPort>,
@@ -57,28 +59,37 @@ pub struct GuidedPolicyDependencies {
     pub identity_observer: Option<Arc<dyn super::ports::ProviderIdentityObserver>>,
 }
 
+/// Renders the guided prompt of a turn.
 pub trait PromptPort: Send + Sync {
+    /// Renders the prompt, instructions, tools and request options.
     fn render<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
     ) -> PortFuture<'a, RenderedGuidedPrompt>;
 }
 
-pub use super::guided_types::RenderedGuidedPrompt;
+pub use super::guided_types::{
+    FinalSynthesis, PromptImages, RenderedGuidedPrompt, RoundRequestOptions,
+};
 
+/// Authority presentation of a guided turn.
 pub trait AuthorityPort: Send + Sync {
+    /// The activity presentation to persist when the turn suspends for authority.
     fn presentation<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
     ) -> PortFuture<'a, Option<GuidedPresentation>>;
 }
 
+/// Steering and context projection of a guided turn.
 pub trait ContextPort: Send + Sync {
+    /// User messages that arrived since the last round.
     fn steering<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
     ) -> PortFuture<'a, Vec<SteeringObservation>>;
 
+    /// Starts the turn's context projection under its continuation budget.
     fn begin_turn<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
@@ -86,14 +97,18 @@ pub trait ContextPort: Send + Sync {
     ) -> PortFuture<'a, Box<dyn TurnContextProjection + 'a>>;
 }
 
+/// Observes user messages that arrive while a turn runs.
 pub trait TurnSteeringPort: Send + Sync {
+    /// New steering messages since the last observation.
     fn observe<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
     ) -> PortFuture<'a, Vec<SteeringObservation>>;
 }
 
+/// Projects each round's messages within the turn's context budget.
 pub trait TurnContextProjection: Send + Sync {
+    /// The projection of one round.
     fn project<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
@@ -101,14 +116,17 @@ pub trait TurnContextProjection: Send + Sync {
     ) -> ContextProjectionFuture<'a>;
 }
 
+/// Resolves and executes the tools of a guided turn.
 pub trait ToolPort: Send + Sync {
+    /// The tools offered for the next round; the final-report phase offers none.
     fn surface<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
         fallback: &'a [ModelRoundTool],
-        final_report: bool,
-    ) -> PortFuture<'a, (Vec<ModelRoundTool>, Option<String>)>;
+        phase: LoopPhase,
+    ) -> PortFuture<'a, ToolSurface>;
 
+    /// Executes a tool call and returns its encoded output.
     fn execute<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
@@ -122,6 +140,7 @@ pub trait ToolPort: Send + Sync {
         >,
     >;
 
+    /// Journals a call the user's authority decision kept from running.
     fn record_unexecuted<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
@@ -129,8 +148,10 @@ pub trait ToolPort: Send + Sync {
         result: &'a ToolResult,
     ) -> PortFuture<'a, ()>;
 
+    /// The journal call id of a provider tool call, if journaled.
     fn operation_result_call_id(&self, provider_call_id: &str) -> Option<String>;
 
+    /// The transcript message of a tool result.
     fn result_message<'a>(
         &'a self,
         turn: &'a TurnRecord,
@@ -139,7 +160,9 @@ pub trait ToolPort: Send + Sync {
     ) -> PortFuture<'a, ModelRoundMessage>;
 }
 
+/// The guided turn journal: text tool calls, synthesis, candidates and closeout.
 pub trait JournalPort: Send + Sync {
+    /// Journals tool calls the model wrote as text and decides the error.
     fn handle_text_tool_calls<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
@@ -149,6 +172,7 @@ pub trait JournalPort: Send + Sync {
         iteration: u32,
     ) -> PortFuture<'a, TextCallDisposition>;
 
+    /// A final answer synthesized from the transcript.
     fn synthesize_final<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
@@ -156,12 +180,14 @@ pub trait JournalPort: Send + Sync {
         iteration: u32,
     ) -> PortFuture<'a, String>;
 
+    /// Whether the journal accepts the model's text as the final answer after tool use.
     fn accept_tool_candidate<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
         text: &'a str,
     ) -> PortFuture<'a, bool>;
 
+    /// Journals the assistant text that precedes a tool batch.
     fn assistant_before_tools<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
@@ -170,6 +196,7 @@ pub trait JournalPort: Send + Sync {
         iteration: u32,
     ) -> PortFuture<'a, ()>;
 
+    /// Whether a tool result suspends the turn.
     fn outcome<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
@@ -177,16 +204,20 @@ pub trait JournalPort: Send + Sync {
         result: &'a ToolResult,
     ) -> PortFuture<'a, Option<ToolOutcome>>;
 
+    /// The artifacts, changes and plan the turn produced.
     fn closeout<'a>(&'a self, invocation: GuidedInvocation<'a>) -> PortFuture<'a, JournalCloseout>;
 }
 
+/// What the journal contributes to the final payload.
 pub struct JournalCloseout {
     pub artifacts: Vec<FinalArtifact>,
     pub changed_files: Vec<Value>,
     pub plan: Option<Value>,
 }
 
+/// Durable Work of a guided turn.
 pub trait WorkPort: Send + Sync {
+    /// What the loop does after a tool batch, from the Work's state.
     fn after_batch<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
@@ -195,6 +226,7 @@ pub trait WorkPort: Send + Sync {
         iteration: u32,
     ) -> PortFuture<'a, BatchDisposition>;
 
+    /// Reviews a final-answer candidate against the Work.
     fn review_candidate<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
@@ -202,22 +234,26 @@ pub trait WorkPort: Send + Sync {
         iteration: u32,
     ) -> PortFuture<'a, CandidateDisposition>;
 
+    /// The final content reconciled with the Work's final state.
     fn reconcile<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
         content: &'a str,
     ) -> PortFuture<'a, String>;
 
+    /// The Work status the turn ends with.
     fn final_state<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
     ) -> PortFuture<'a, WorkFinalState>;
+    /// The accepted Work result, if the Work was accepted.
     fn accepted_result<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
     ) -> PortFuture<'a, Option<AcceptedWorkResult>>;
 }
 
+/// The Work state a turn ends with.
 pub struct WorkFinalState {
     pub status: Option<WorkStatus>,
     pub has_work: bool,

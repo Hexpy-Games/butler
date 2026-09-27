@@ -10,6 +10,9 @@ import { useMessageList } from "./hooks/useMessageList";
 import { useMessageVirtualizer } from "./hooks/useMessageVirtualizer";
 import { useConversationAutoScroll } from "./hooks/useConversationAutoScroll";
 import { ConversationScroll, MessageListSurface } from "@/butler-ds";
+import { useEnteringMessageIds } from "./hooks/useEnteringMessageIds";
+import { QueuedMessageItem } from "./QueuedMessageItem";
+import { useQueuedConversation } from "./hooks/useQueuedConversation";
 
 interface MessageListProps {
   messages: MessageRecord[];
@@ -44,10 +47,8 @@ function MessageListComponent({
     visibleMessages,
     progressRows,
     turnState,
-    turnStartedAt,
-    turnId,
-    showTurnActivity,
-    itemCount,
+    turnStartedAt, turnId,
+    showTurnActivity, itemCount: messageItemCount,
     copiedMessageId,
     copyAssistantMessage,
     copyContextMenuText,
@@ -55,6 +56,9 @@ function MessageListComponent({
     anchoredStewardProgress,
   } = useMessageList(messages, summary, turnProgress, isSending);
 
+  const enteringIds = useEnteringMessageIds(visibleMessages, activeChatId);
+  const queue = useQueuedConversation(visibleMessages, activeChatId);
+  const itemCount = messageItemCount + queue.items.length;
   const { rowVirtualizer, topOffset, virtualListHeight, latestMessageVersion } =
     useMessageVirtualizer({
       visibleMessages,
@@ -63,6 +67,7 @@ function MessageListComponent({
       bottomReserve,
       scrollRef: parentRef,
       headerHeight,
+      queuedKeys: queue.keys,
     });
 
   const scrollState = useConversationAutoScroll({
@@ -93,10 +98,10 @@ function MessageListComponent({
         <MessageListSurface height={virtualListHeight}>
           {summary?.branch_seed && <div ref={seedRef}><SessionBranchSeed /></div>}
           {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-            if (
-              showTurnActivity &&
-              virtualRow.index === visibleMessages.length
-            ) {
+            const queued = queue.items[virtualRow.index - messageItemCount];
+            if (queued) return <QueuedMessageItem key={`queued-${queued.key}`} item={queued} queue={queue}
+              virtualRow={virtualRow} topOffset={topOffset} rowVirtualizer={rowVirtualizer} />;
+            if (showTurnActivity && virtualRow.index === visibleMessages.length) {
               return (
                 <TurnActivityMessage
                   key="active-turn-activity"
@@ -121,6 +126,7 @@ function MessageListComponent({
                 virtualRow={virtualRow}
                 topOffset={topOffset}
                 copied={copiedMessageId === message.id}
+                entering={enteringIds.has(message.id) && (queue.wasQueued(message.id) ? "delivered" : true)}
                 footerMeta={assistantFooterMetaById.get(message.id) ?? null}
                 onCopyAssistantMessage={copyAssistantMessage}
                 onCopyContextMenuText={copyContextMenuText}

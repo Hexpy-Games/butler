@@ -1,6 +1,6 @@
 /// <reference types="bun" />
 
-import { expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
@@ -20,6 +20,12 @@ import { ComposerNotices } from "./ComposerNotices";
 import { StewardComposerCapsules } from "./StewardComposerCapsules";
 import { useComposerStore } from "./composerStore";
 import { anchoredStewardProgressByMessageId } from "./stewardParentProgressProjection";
+import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
+
+// These expectations are the default (English) copy; pin the locale instead of inheriting it.
+const previousLocale = getAppLocale();
+beforeAll(() => setAppCopyLanguage("en-US"));
+afterAll(() => setAppCopyLanguage(previousLocale));
 
 test("each active Steward has an ordered DS capsule with factual Plan progress", () => {
   const activeHtml = renderToStaticMarkup(
@@ -38,7 +44,7 @@ test("each active Steward has an ordered DS capsule with factual Plan progress",
   expect(activeHtml).toContain("Review the activity surface");
   expect(activeHtml).toContain("Validating the activity surface");
   expect(activeHtml).toContain(">2/3<");
-  expect(activeHtml).not.toContain("작업 중 · 2/3");
+  expect(activeHtml).not.toContain("Working · 2/3");
   expect(activeHtml.indexOf('data-slot="button-icon"')).toBeLessThan(
     activeHtml.indexOf('data-test-class="steward-capsule-task"'),
   );
@@ -236,7 +242,7 @@ test("generic model waiting does not replace the latest substantive Steward acti
   const html = renderToStaticMarkup(<ComposerNotices summary={summary} />);
 
   expect(html).toContain("프로젝트 기록 확인");
-  expect(html).not.toContain("응답 생성 중");
+  expect(html).not.toContain("Generating response");
 });
 
 test("model-authored lifecycle narration does not replace factual Steward activity", () => {
@@ -294,8 +300,9 @@ test("Steward result synthesis capsule reports preparation and offers no Stop", 
       synthesis={summary.latest_turn_subsession_result}
     />,
   );
+  // The capsule renders the localized synthesis copy for the result title.
   expect(capsuleHtml).toContain(
-    "Review the activity surface 작업에 대한 보고 준비 중",
+    "Preparing report for Review the activity surface",
   );
   expect(capsuleHtml).toContain('data-alignment="center"');
   expect(capsuleHtml).toContain("<canvas");
@@ -374,18 +381,18 @@ test("active Steward progress is nested in its exact parent assistant row", () =
   expect(html).toContain("steward-message-content");
   expect(html).toContain("Review the activity surface");
   expect(html).toContain('title="Review the activity surface"');
-  expect(html).toContain("작업 중 · 2/3");
+  expect(html).toContain("Working · 2/3");
   expect(html.indexOf("최신 응답에는 캔버스 마크")).toBeLessThan(
     html.indexOf("steward-parent-progress"),
   );
   expect(html).not.toContain("assistant-terminal-status-row");
-  expect(html).not.toContain("답변 완료");
-  expect(html).toContain('aria-label="진행 상세 보기"');
-  expect(html).not.toContain(">진행 상세 보기<");
+  expect(html).not.toContain("Response completed");
+  expect(html).toContain('aria-label="View progress details"');
+  expect(html).not.toContain(">View progress details<");
   expect(html).toContain("steward-tool-summary");
   expect(html).not.toContain("turn-work-tool-group");
   expect(html).not.toContain("aria-expanded");
-  expect(html).toContain("2 검색");
+  expect(html).toContain("2 Search");
   expect(html).not.toContain("실행 계획 수립");
   expect(html).not.toContain("turn-work-tool-row");
 });
@@ -434,10 +441,10 @@ test("terminal Steward activity stays attached to the factual parent message", (
   );
   expect(html).toContain("steward-parent-progress-card");
   expect(html).toContain("Review the activity surface");
-  expect(html).toContain("완료됨");
+  expect(html).toContain("Completed");
   expect(html).not.toContain('data-test-class="message-artifact-list"');
   expect(html).not.toContain("research/qwen3.8-27b-awq-turboquant-vllm.md");
-  expect(html).not.toContain("답변 완료");
+  expect(html).not.toContain("Response completed");
 });
 
 test("recoverable Steward card shows replay without appearing active", () => {

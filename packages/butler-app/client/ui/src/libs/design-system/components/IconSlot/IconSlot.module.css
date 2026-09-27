@@ -1,0 +1,43 @@
+.slot {
+  --icon-slot-size: var(--icon-size-md);
+
+  display: inline-grid;
+  width: var(--icon-slot-size);
+  height: var(--icon-slot-size);
+  flex: none;
+  place-items: center;
+  color: inherit;
+}
+
+.slot[data-size="sidebar"] {
+  --icon-slot-size: var(--sidebar-icon-size, var(--icon-size-md));
+}
+
+.slot[data-size="xs"] {
+  --icon-slot-size: var(--icon-size-xs);
+}
+
+.slot[data-size="sm"] {
+  --icon-slot-size: var(--icon-size-sm);
+}
+
+.slot[data-size="lg"] {
+  --icon-slot-size: var(--icon-size-lg);
+}
+
+.slot[data-min-height="line"] {
+  height: auto;
+  min-height: 1lh;
+}
+
+.slot[data-passive="true"] {
+  pointer-events: none;
+}
+
+.slot[data-tone="secondary"] {
+  color: var(--text-secondary);
+}
+
+.slot[data-tone="tertiary"] {
+  color: var(--text-tertiary);
+}

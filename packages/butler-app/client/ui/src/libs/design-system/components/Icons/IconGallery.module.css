@@ -1,0 +1,59 @@
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.toolbar > input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.hint {
+  color: var(--text-tertiary);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: var(--space-sm);
+}
+
+.tile {
+  display: grid;
+  min-width: 0;
+  justify-items: center;
+  align-content: center;
+  gap: var(--space-sm);
+  min-height: 84px;
+  padding: var(--space-md) var(--space-sm);
+  border: var(--border-hairline) solid var(--line);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--motion-ease-standard);
+}
+
+.tile:hover {
+  background: var(--selection);
+}
+
+.tile:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.tile[data-copied="true"] {
+  border-color: var(--accent);
+}
+
+.name {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--font-size-1);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

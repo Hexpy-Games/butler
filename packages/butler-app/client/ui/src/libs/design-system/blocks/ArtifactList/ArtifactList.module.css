@@ -37,7 +37,7 @@
   position: relative;
   z-index: 1;
   outline: none;
-  box-shadow: inset 0 0 0 2px var(--color-focus-ring);
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
 }
 
 .icon {

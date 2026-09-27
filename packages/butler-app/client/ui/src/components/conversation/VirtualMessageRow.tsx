@@ -22,6 +22,7 @@ interface VirtualMessageRowProps {
   topOffset: number;
   rowVirtualizer: Virtualizer<HTMLDivElement, Element>;
   onCopyContextMenuText: (message: MessageRecord) => void;
+  entering?: boolean | "delivered";
   children: ReactNode;
 }
 
@@ -31,6 +32,7 @@ export function VirtualMessageRow({
   topOffset,
   rowVirtualizer,
   onCopyContextMenuText,
+  entering = false,
   children,
 }: VirtualMessageRowProps) {
   useAppLocale();
@@ -44,6 +46,7 @@ export function VirtualMessageRow({
           tone={messageTone(message)}
           footer={message.role === "user" ? <UserMessageFooter message={message} /> : undefined}
           compactionEvent={isCompactionEvent}
+          entering={entering}
           avatar={
             <MessageAvatar
               role={message.role}
@@ -53,14 +56,14 @@ export function VirtualMessageRow({
           dataTestClass={messageTestClassName(message, isCompactionEvent)}
           index={virtualRow.index}
           rowRef={rowVirtualizer.measureElement}
-          style={{ transform: `translateY(${virtualRow.start + topOffset}px)` }}
+          offsetY={virtualRow.start + topOffset}
         >
           {children}
         </MessageRow>
       </ContextMenuTrigger>
       <ContextMenuContent>
         <ContextMenuItem onSelect={() => onCopyContextMenuText({ ...message, text: visibleSystemMessageText(message) })}>
-          <Copy size={14} />
+          <Copy size="sm" />
           <span>{appCopy.common.copy}</span>
         </ContextMenuItem>
       </ContextMenuContent>

@@ -7,6 +7,11 @@
 //! tool protocol and [`tool_protocol::ToolName`], and the `wire_codes!` macro
 //! every domain uses to declare its closed set of wire error codes.
 
+// Production code reads slices, strings and JSON with checked accessors.
+#![deny(clippy::indexing_slicing)]
+// Every public item says what it is for.
+#![deny(missing_docs)]
+
 /// Declares a domain's closed set of wire error codes.
 ///
 /// Each variant maps one-to-one to the snake_case string that is persisted in

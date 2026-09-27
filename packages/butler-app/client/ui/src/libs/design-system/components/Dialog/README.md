@@ -19,7 +19,7 @@ Import from the public design-system alias:
 import { Dialog } from "@/butler-ds";
 ```
 
-Prefer token-backed spacing and responsive composition. Validate the fixture in the design-system workbench before using it in a domain flow.
+Prefer token-backed spacing and responsive composition. Check its showcase and usage guidance in the DS Viewer before using it in a domain flow.
 
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
@@ -29,6 +29,10 @@ Product engineers, design-system maintainers, and coding agents can use it when 
   alerts and command dialogs. Popovers retain their separate surface contract.
 - Placement belongs to DialogContent: centered in the viewport at every width,
   with safe-area bounds. Do not add mobile sheet offsets or per-dialog transforms.
+- Size with props, never styles: `size` (`sm` default 380px, `md`, `lg`, `xl`
+  880px, `full`; `--dialog-width-*`), `layout="scroll-body"` (header, one
+  `ScrollArea fill` body, `DialogFooter`; the dialog does not scroll) and
+  `maxHeight="3/5"`. `DialogTitle visuallyHidden` replaces an `sr-only` class.
 - Use ScrollArea for independently scrolling bodies. Do not mask the entire
   modal surface, which would also fade its border, header and shadow.
 - Compose it with other `@/butler-ds` components before adding bespoke CSS.

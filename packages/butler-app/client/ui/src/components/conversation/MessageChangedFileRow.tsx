@@ -14,12 +14,12 @@ function MessageChangedFileRowComponent({ file }: { file: ChangedFileDetail }) {
     : appCopy.conversation.fileChanges.noLineDetails;
 
   if (!hasLines) {
-    return <ListRow icon={<FileText size={20} />} meta={meta} title={file.path} />;
+    return <ListRow icon={<FileText size="lg" />} meta={meta} title={file.path} />;
   }
   return (
     <DisclosureRow
       controlsId={detailsId}
-      icon={<FileText size={20} />}
+      icon={<FileText size="lg" />}
       meta={meta}
       open={expanded}
       surface="plain"

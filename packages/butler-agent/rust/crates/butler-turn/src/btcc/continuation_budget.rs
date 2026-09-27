@@ -120,41 +120,27 @@ fn admit_request(
     model_facing_bytes: u64,
     now: u64,
 ) -> Result<TurnContinuationBudgetState, TurnContinuationBudgetError> {
-    if let Some(index) = state
+    let admitted = state
         .admitted_requests
         .iter()
-        .position(|item| item.round_id == round_id)
-    {
-        if state.admitted_requests[index].request_digest != request_digest {
-            return exhaust(
-                state,
-                TurnContinuationBudgetTerminalReason::AdmissionChanged,
-                now,
-            );
-        }
-        let observed = integer(model_facing_bytes).map_err(TurnContinuationBudgetError::Invalid)?;
-        if observed <= state.admitted_requests[index].model_facing_bytes {
-            return Ok(state);
-        }
-        if observed > state.limits.max_model_facing_bytes {
-            return exhaust(
-                state,
-                TurnContinuationBudgetTerminalReason::ModelFacingBytes,
-                now,
-            );
-        }
-        let increment = observed - state.admitted_requests[index].model_facing_bytes;
-        state.consumed_model_facing_bytes = safe_add(state.consumed_model_facing_bytes, increment);
-        if state.consumed_model_facing_bytes > state.limits.max_cumulative_model_facing_bytes {
-            return exhaust(
-                state,
-                TurnContinuationBudgetTerminalReason::MaxCumulativeModelFacingBytes,
-                now,
-            );
-        }
-        state.admitted_requests[index].model_facing_bytes = observed;
-        state.last_progress_at_ms = now;
-        return Ok(state);
+        .find(|item| item.round_id == round_id)
+        .map(|item| {
+            (
+                item.request_digest == request_digest,
+                item.model_facing_bytes,
+            )
+        });
+    if let Some((same_request, admitted_bytes)) = admitted {
+        return readmit(
+            state,
+            &round_id,
+            Readmission {
+                same_request,
+                admitted_bytes,
+                model_facing_bytes,
+            },
+            now,
+        );
     }
     if model_facing_bytes > state.limits.max_model_facing_bytes {
         return exhaust(
@@ -183,6 +169,63 @@ fn admit_request(
     state.last_progress_at_ms = now;
     Ok(state)
 }
+/// A round that was already admitted, asking again.
+#[derive(Clone, Copy)]
+struct Readmission {
+    same_request: bool,
+    admitted_bytes: u64,
+    model_facing_bytes: u64,
+}
+
+fn readmit(
+    mut state: TurnContinuationBudgetState,
+    round_id: &str,
+    readmission: Readmission,
+    now: u64,
+) -> Result<TurnContinuationBudgetState, TurnContinuationBudgetError> {
+    let Readmission {
+        same_request,
+        admitted_bytes,
+        model_facing_bytes,
+    } = readmission;
+    if !same_request {
+        return exhaust(
+            state,
+            TurnContinuationBudgetTerminalReason::AdmissionChanged,
+            now,
+        );
+    }
+    let observed = integer(model_facing_bytes).map_err(TurnContinuationBudgetError::Invalid)?;
+    if observed <= admitted_bytes {
+        return Ok(state);
+    }
+    if observed > state.limits.max_model_facing_bytes {
+        return exhaust(
+            state,
+            TurnContinuationBudgetTerminalReason::ModelFacingBytes,
+            now,
+        );
+    }
+    let increment = observed - admitted_bytes;
+    state.consumed_model_facing_bytes = safe_add(state.consumed_model_facing_bytes, increment);
+    if state.consumed_model_facing_bytes > state.limits.max_cumulative_model_facing_bytes {
+        return exhaust(
+            state,
+            TurnContinuationBudgetTerminalReason::MaxCumulativeModelFacingBytes,
+            now,
+        );
+    }
+    if let Some(item) = state
+        .admitted_requests
+        .iter_mut()
+        .find(|item| item.round_id == round_id)
+    {
+        item.model_facing_bytes = observed;
+    }
+    state.last_progress_at_ms = now;
+    Ok(state)
+}
+
 fn exhaust(
     mut state: TurnContinuationBudgetState,
     reason: TurnContinuationBudgetTerminalReason,

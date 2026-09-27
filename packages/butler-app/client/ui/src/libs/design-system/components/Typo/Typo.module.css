@@ -138,3 +138,137 @@
   word-break: keep-all;
   overflow-wrap: break-word;
 }
+
+.text {
+  margin: 0;
+}
+
+/* .typo is shared by every variant and scopes the text props. They never change the type scale; without a tone the element
+   keeps inheriting color from its container. */
+.typo[data-tone="primary"] {
+  color: var(--color-text-primary);
+}
+
+.typo[data-tone="secondary"] {
+  color: var(--color-text-secondary);
+}
+
+.typo[data-tone="tertiary"] {
+  color: var(--color-text-tertiary);
+}
+
+.typo[data-tone="disabled"] {
+  color: var(--color-text-disabled);
+}
+
+.typo[data-tone="danger"] {
+  color: var(--color-danger-text);
+}
+
+.typo[data-tone="success"] {
+  color: var(--color-success-text);
+}
+
+.typo[data-tone="warning"] {
+  color: var(--color-warning-text);
+}
+
+.typo[data-tone="inherit"] {
+  color: inherit;
+}
+
+.typo[data-weight="regular"] {
+  font-weight: var(--font-weight-regular);
+}
+
+.typo[data-weight="medium"] {
+  font-weight: var(--font-weight-medium);
+}
+
+.typo[data-weight="semibold"] {
+  font-weight: var(--font-weight-semibold);
+}
+
+.typo[data-align="start"] {
+  text-align: start;
+}
+
+.typo[data-align="center"] {
+  text-align: center;
+}
+
+.typo[data-align="end"] {
+  text-align: end;
+}
+
+.typo[data-wrap="normal"] {
+  white-space: normal;
+}
+
+.typo[data-wrap="nowrap"] {
+  white-space: nowrap;
+}
+
+.typo[data-wrap="pre"] {
+  min-width: 0;
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The first line centers on a control row (text beside an IconButton). */
+.typo[data-align-with="control"] {
+  padding-block: max(0px, calc((var(--control-height-md) - 1lh) / 2));
+}
+
+@media (width <= 640px), (pointer: coarse) {
+  .typo[data-align-with="control"] {
+    padding-block: max(0px, calc((var(--control-hit-target) - 1lh) / 2));
+  }
+}
+
+/* Korean keep-all comes from the locale base styles; long tokens still wrap. */
+.typo[data-wrap="anywhere"] {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.typo[data-truncate="true"] {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.typo[data-line-clamp] {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+}
+
+.typo[data-line-clamp="2"] {
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.typo[data-line-clamp="3"] {
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.typo[data-line-clamp="4"] {
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+}
+
+.typo[data-line-clamp="5"] {
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
+}
+
+.typo[data-numeric="tabular"] {
+  font-variant-numeric: tabular-nums;
+}

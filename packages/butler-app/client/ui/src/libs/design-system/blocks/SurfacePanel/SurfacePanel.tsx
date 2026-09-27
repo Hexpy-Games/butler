@@ -1,14 +1,13 @@
+import type { DsPrivateStyleProps, DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import styles from "./SurfacePanel.module.css";
 
-export interface SurfacePanelProps extends HTMLAttributes<HTMLDivElement> {
+export interface SurfacePanelProps extends DsPrivateStyleProps, DsBaseProps<HTMLAttributes<HTMLDivElement>> {
   /** Panel content */
   children: ReactNode;
-  /** Elevation level */
-  elevation?: "none" | "low" | "medium" | "high";
-  /** Additional CSS class */
-  className?: string;
+  /** Elevation level; `subtle` is a flat, translucent raised surface (documents inside a message). */
+  elevation?: "none" | "subtle" | "low" | "medium" | "high";
 }
 
 export function SurfacePanel({

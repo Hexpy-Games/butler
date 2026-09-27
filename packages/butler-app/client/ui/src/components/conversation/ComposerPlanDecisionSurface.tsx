@@ -1,16 +1,15 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
-import { Button, ButtonContainer, ListChecks } from "@/butler-ds";
+import { Button, ButtonContainer, ComposerDecisionPanel, ListChecks } from "@/butler-ds";
 import type { ComposerPlanDecision } from "./useComposerPlanDecision";
-import { ComposerDecisionSurface } from "./ComposerDecisionSurface";
 
 export function ComposerPlanDecisionSurface({ decision }: { decision: ComposerPlanDecision }) {
   useAppLocale();
-  return <ComposerDecisionSurface
-    icon={<ListChecks aria-hidden="true" size={18} />}
+  return <ComposerDecisionPanel
+    icon={<ListChecks aria-hidden="true" size="lg" />}
     title={decision.planTitle}
     onOpen={decision.onOpenPlan}
-    testClass="composer-plan-decision"
+    data-test-class="composer-plan-decision"
     actions={<ButtonContainer size="sm" justify="end">
       <Button disabled={decision.pending} onClick={decision.onOpenInstruction} size="sm" type="button" variant="outline">
         {appCopy.composer.planInstruction}

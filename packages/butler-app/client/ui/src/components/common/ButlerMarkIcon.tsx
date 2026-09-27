@@ -1,7 +1,7 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useId, type CSSProperties, type SVGProps } from "react";
-import { type ButlerMarkTheme, type ButlerMarkThemeColors, inkForButlerMarkTheme } from "./butlerMarkTheme.ts";
+import { type ButlerMarkTheme, type ButlerMarkThemeColors, inkForButlerMarkTheme } from "@/butler-ds";
 
 interface ButlerMarkIconProps extends Omit<SVGProps<SVGSVGElement>, "color"> {
   style?: CSSProperties;

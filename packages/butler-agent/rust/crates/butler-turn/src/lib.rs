@@ -7,6 +7,8 @@
 //! access. Everything outside a turn (providers, context assembly, memory, the
 //! gateway) plugs in through the ports these modules declare.
 
+// Production code reads slices, strings and JSON with checked accessors.
+#![deny(clippy::indexing_slicing)]
 // Fixtures are compiled for tests and, through the `test-support` feature,
 // for dependent crates' tests; like tests they may abort on setup failure.
 // Libraries are also linted as non-test builds without features.

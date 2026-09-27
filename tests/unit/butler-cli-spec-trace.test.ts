@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readRepoOrLedgerFile, repoOrLedgerExists } from "../support/project-ledger-root.ts";
+import { readRepoOrLedgerFile, repoOrLedgerExists, ledgerTest } from "../support/project-ledger-root.ts";
 
 const childSpecs = [
   "project-ledger/projects/butler/specs/cli/core-commands.md",
@@ -95,7 +95,7 @@ const expectedCommands = [
   "butler automation resume <id>",
 ];
 
-test("Butler CLI parent spec links command-level child specs", () => {
+ledgerTest("Butler CLI parent spec links command-level child specs", () => {
   const parent = readRepoOrLedgerFile("project-ledger/projects/butler/specs/butler-cli.md");
 
   expect(parent).toContain("No command may be implemented");
@@ -108,7 +108,7 @@ test("Butler CLI parent spec links command-level child specs", () => {
   }
 });
 
-test("every Butler CLI command has a command-level sub-spec", () => {
+ledgerTest("every Butler CLI command has a command-level sub-spec", () => {
   const childSpecText = childSpecs.map(readRepoOrLedgerFile).join("\n");
 
   for (const command of expectedCommands) {
@@ -116,7 +116,7 @@ test("every Butler CLI command has a command-level sub-spec", () => {
   }
 });
 
-test("command-level specs include necessity privacy and tests", () => {
+ledgerTest("command-level specs include necessity privacy and tests", () => {
   for (const childSpec of childSpecs) {
     const text = readRepoOrLedgerFile(childSpec);
     expect(text).toContain("Parent spec: `docs/specs/butler-cli.md`");
@@ -126,7 +126,7 @@ test("command-level specs include necessity privacy and tests", () => {
   }
 });
 
-test("active CLI specs remain subordinate to adaptive BTCC lifecycle contracts", () => {
+ledgerTest("active CLI specs remain subordinate to adaptive BTCC lifecycle contracts", () => {
   const parent = readRepoOrLedgerFile("project-ledger/projects/butler/specs/butler-cli.md");
   expect(parent).toContain("Status: Active under the adaptive BTCC contracts.");
 

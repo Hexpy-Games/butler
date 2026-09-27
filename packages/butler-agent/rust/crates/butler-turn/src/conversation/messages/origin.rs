@@ -93,6 +93,9 @@ impl AgentConversationStore {
         .await
     }
 
+    /// Records a message's origin classification when the message still is
+    /// the classified candidate; an existing classification only changes
+    /// through an allowed internal correction.
     pub(crate) async fn record_origin_classification(
         &self,
         input: RecordOriginClassificationInput,
@@ -102,51 +105,9 @@ impl AgentConversationStore {
             let tx = connection
                 .transaction()
                 .map_err(ConversationError::sqlite)?;
-            let Some(message) = read_message(&tx, &input.candidate.message_id)? else {
+            let Some((message, current)) = current_candidate(&tx, &input.candidate.message_id)?
+            else {
                 return Ok(RecordOriginClassificationResult::SourceChanged);
-            };
-            if !matches!(
-                message.message.role,
-                ConversationRole::User | ConversationRole::Assistant
-            ) {
-                return Ok(RecordOriginClassificationResult::SourceChanged);
-            }
-            let turn = read_turn_identity(
-                &tx,
-                message.message.turn_id.as_deref(),
-                &message.message.session_id,
-            )?;
-            if message.message.turn_id.is_some() && turn.is_none() {
-                return Ok(RecordOriginClassificationResult::SourceChanged);
-            }
-            let outcome = read_outcome_identity(&tx, turn.as_ref().map(|value| value.0.as_str()))?;
-            let binding = read_external_binding(
-                &tx,
-                &message.message.session_id,
-                message.message.source_gateway.as_deref().unwrap_or(""),
-            )?;
-            let current = HistoricalOriginCandidate {
-                message_id: message.message.id.clone(),
-                session_id: message.message.session_id.clone(),
-                turn_id: turn.as_ref().map(|value| value.0.clone()),
-                request_id: turn.as_ref().and_then(|value| value.1.clone()),
-                source_gateway: message.message.source_gateway.clone(),
-                external_session_id: binding,
-                source_ref: message.message.source_ref.clone(),
-                provenance: message.message.provenance,
-                role: message.message.role,
-                origin_kind: message.message.origin_kind,
-                origin_ref: message.message.origin_ref.clone(),
-                origin_reason: message.message.origin_reason.clone(),
-                origin_version: message.message.origin_version.clone(),
-                origin_evidence_json: message.message.origin_evidence_json.clone(),
-                source_hash: source_hash(std::slice::from_ref(&message))?,
-                outcome_id: outcome.as_ref().map(|value| value.0.clone()),
-                outcome_generation: outcome.as_ref().map(|value| value.1),
-                outcome_request_message_id: outcome.as_ref().and_then(|value| value.2.clone()),
-                outcome_public_assistant_message_id: outcome
-                    .as_ref()
-                    .and_then(|value| value.3.clone()),
             };
             if current != input.candidate {
                 return Ok(RecordOriginClassificationResult::SourceChanged);
@@ -190,6 +151,59 @@ impl AgentConversationStore {
         })
         .await
     }
+}
+
+/// The message and its current origin candidate; `None` when it is gone,
+/// not a user/assistant message, or its turn is gone.
+fn current_candidate(
+    tx: &rusqlite::Connection,
+    message_id: &str,
+) -> ConversationResult<Option<(ConversationMessageWithParts, HistoricalOriginCandidate)>> {
+    let Some(message) = read_message(tx, message_id)? else {
+        return Ok(None);
+    };
+    if !matches!(
+        message.message.role,
+        ConversationRole::User | ConversationRole::Assistant
+    ) {
+        return Ok(None);
+    }
+    let turn = read_turn_identity(
+        tx,
+        message.message.turn_id.as_deref(),
+        &message.message.session_id,
+    )?;
+    if message.message.turn_id.is_some() && turn.is_none() {
+        return Ok(None);
+    }
+    let outcome = read_outcome_identity(tx, turn.as_ref().map(|value| value.0.as_str()))?;
+    let binding = read_external_binding(
+        tx,
+        &message.message.session_id,
+        message.message.source_gateway.as_deref().unwrap_or(""),
+    )?;
+    let candidate = HistoricalOriginCandidate {
+        message_id: message.message.id.clone(),
+        session_id: message.message.session_id.clone(),
+        turn_id: turn.as_ref().map(|value| value.0.clone()),
+        request_id: turn.as_ref().and_then(|value| value.1.clone()),
+        source_gateway: message.message.source_gateway.clone(),
+        external_session_id: binding,
+        source_ref: message.message.source_ref.clone(),
+        provenance: message.message.provenance,
+        role: message.message.role,
+        origin_kind: message.message.origin_kind,
+        origin_ref: message.message.origin_ref.clone(),
+        origin_reason: message.message.origin_reason.clone(),
+        origin_version: message.message.origin_version.clone(),
+        origin_evidence_json: message.message.origin_evidence_json.clone(),
+        source_hash: source_hash(std::slice::from_ref(&message))?,
+        outcome_id: outcome.as_ref().map(|value| value.0.clone()),
+        outcome_generation: outcome.as_ref().map(|value| value.1),
+        outcome_request_message_id: outcome.as_ref().and_then(|value| value.2.clone()),
+        outcome_public_assistant_message_id: outcome.as_ref().and_then(|value| value.3.clone()),
+    };
+    Ok(Some((message, candidate)))
 }
 
 fn candidate_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CandidateRow> {

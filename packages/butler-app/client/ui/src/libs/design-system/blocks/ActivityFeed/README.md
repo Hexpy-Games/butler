@@ -22,7 +22,7 @@ Domain containers that already own activity data.
 Keep time formatting and event labels outside the block.
 
 ## Wrong use cases
-Do not use it for navigation. Use `NavRow` or `SessionRow`.
+Do not use it for navigation. Use `NavRow`.
 
 ## Tags
 activity, feed, status, inspector

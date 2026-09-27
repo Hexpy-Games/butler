@@ -1,5 +1,6 @@
 //! Accepted top-level Project Ledger Plan projection for Guided Turns.
 
+/// An accepted Project Ledger plan a turn is bound to.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProjectLedgerPlan {
     pub id: String,
@@ -9,6 +10,7 @@ pub struct ProjectLedgerPlan {
     pub path: Option<String>,
 }
 
+/// A Project Ledger plan record as read from the ledger.
 #[derive(Clone, Debug)]
 pub struct ProjectLedgerPlanInput {
     pub id: String,
@@ -18,6 +20,7 @@ pub struct ProjectLedgerPlanInput {
     pub path: Option<String>,
 }
 
+/// The plan when it is the expected, active, non-empty plan.
 pub fn accepted_project_plan(
     input: &ProjectLedgerPlanInput,
     expected_id: &str,
@@ -47,6 +50,7 @@ pub fn accepted_project_plan(
     })
 }
 
+/// The plan as prompt text.
 pub fn render_accepted_project_plan(plan: &ProjectLedgerPlan) -> String {
     format!(
         "Accepted Project Ledger Plan:\n- id: {}\n- title: {}\n- status: active\n\n{}",

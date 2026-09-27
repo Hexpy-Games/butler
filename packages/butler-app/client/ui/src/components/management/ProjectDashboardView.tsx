@@ -25,7 +25,6 @@ import { ProjectDescription } from "./ProjectDescription.tsx";
 import { ProjectHistoryPanel } from "./ProjectHistoryPanel.tsx";
 import { ProjectResultsPanel } from "./ProjectResultsPanel.tsx";
 import { ProjectBriefingPanel } from "./ProjectBriefingPanel.tsx";
-import styles from "./ProjectDashboardView.module.css";
 import { useProjectArtifactAttachment } from "@/hooks/useProjectArtifactAttachment.ts";
 import { useProjectDashboardScroll } from "@/hooks/useProjectDashboardScroll.ts";
 
@@ -80,7 +79,7 @@ export function ProjectDashboardView({
             message={status === "loading" ? copy.dashboardLoading : status === "missing" ? copy.projectMissingHelp : copy.dashboardRetry}
             action={status === "loading" ? undefined : (
               <Button variant="outline" onClick={status === "missing" ? openNewChat : retry}>
-                {status === "missing" ? copy.newChat : copy.retry}
+                {status === "missing" ? appCopy.space.newChat : copy.retry}
               </Button>
             )} />
         </div>
@@ -92,7 +91,7 @@ export function ProjectDashboardView({
     <ManagementPage dataTestClass="project-dashboard-view" scrollRef={scrollRef}
       footerPlacement="overlay" footerReserve={composerHeight}
       footer={project && <ProjectDashboardComposer key={project.id} projectId={project.id} onReserveChange={setComposerHeight} />}>
-      <Stack as="main" gap="xl" className={styles.frame}>
+      <Stack as="main" gap="xl">
         {refreshFailed && <Notice tone="error" title={appCopy.feedback.dashboardFailed} message={appCopy.feedback.dashboardRetry}
           action={<Button variant="outline" onClick={retry}>{appCopy.feedback.retry}</Button>} />}
         <ProjectDashboardHeader
@@ -103,15 +102,15 @@ export function ProjectDashboardView({
         />
         {project && <ProjectDescription key={project.id} projectId={project.id} description={dashboard?.description ?? null}
           revision={dashboard?.preferences?.revision ?? 0} onUpdated={retry} />}
-        <Tabs value={tab} onValueChange={setTab} className={styles.tabs}>
-          <TabsList>
-            <TabsTrigger className={styles.tab} value="overview"><LayoutDashboard />{appCopy.projectSignpost.overview}</TabsTrigger>
-            <TabsTrigger className={styles.tab} value="work"><ListChecks />{appCopy.projectSignpost.work}</TabsTrigger>
-            <TabsTrigger className={styles.tab} value="materials"><Folder />{appCopy.projectSignpost.materials}</TabsTrigger>
-            <TabsTrigger className={styles.tab} value="history"><History />{appCopy.projectSignpost.history}</TabsTrigger>
-            <TabsTrigger className={styles.tab} value="statistics"><Activity />{appCopy.projectSignpost.statistics}</TabsTrigger>
+        <Tabs value={tab} onValueChange={setTab} gap="2xl">
+          <TabsList variant="line">
+            <TabsTrigger value="overview"><LayoutDashboard />{appCopy.projectSignpost.overview}</TabsTrigger>
+            <TabsTrigger value="work"><ListChecks />{appCopy.projectSignpost.work}</TabsTrigger>
+            <TabsTrigger value="materials"><Folder />{appCopy.projectSignpost.materials}</TabsTrigger>
+            <TabsTrigger value="history"><History />{appCopy.projectSignpost.history}</TabsTrigger>
+            <TabsTrigger value="statistics"><Activity />{appCopy.projectSignpost.statistics}</TabsTrigger>
           </TabsList>
-          <TabsContent value="overview"><Stack gap="xl" className={styles.overview}>
+          <TabsContent value="overview"><Stack gap="2xl">
             {project && <ProjectBriefingPanel key={project.id} projectId={project.id} briefing={dashboard?.briefing}
               onSelect={selectDocument} onUpdated={retry} />}
             <ProjectOverviewPanel overview={dashboard?.overview} projectId={project?.id} onSelect={selectDocument} onShowAll={() => setTab("work")}

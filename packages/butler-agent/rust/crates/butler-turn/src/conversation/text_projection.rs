@@ -6,6 +6,7 @@ use butler_core::json::stringify;
 
 use super::{ConversationMessageWithParts, ConversationPart, ConversationPartKind};
 
+/// A message's text, optionally with its tool parts.
 pub fn text_for_message(message: &ConversationMessageWithParts, include_tools: bool) -> String {
     message
         .parts
@@ -24,6 +25,7 @@ pub fn text_for_message(message: &ConversationMessageWithParts, include_tools: b
         .join(" ")
 }
 
+/// A part's text, if it has any.
 pub fn text_for_part(part: &ConversationPart) -> Option<String> {
     let object = part.content_json.as_object();
     match part.kind {

@@ -17,11 +17,23 @@ Pass query state, change handler, and result children.
 `CommandPalettePanel` also accepts a `feedback` slot for caller-owned loading,
 empty or failed-search feedback; results and retry behavior remain domain-owned.
 
+## Opening and motion
+Keep `CommandPalettePanel` mounted and toggle `open` so it can animate out.
+It opens with `DialogContent motion="palette"`: the panel scales 0.98 -> 1
+(`--motion-scale-palette`) and fades with the backdrop over
+`--motion-palette` (140ms); it leaves on `--motion-exit-fast`. Reduced
+motion fades only. Bind Cmd+K with the DS `useHotkey("mod+k", toggle)`,
+which ignores IME composition (Korean input) and key repeat.
+
 ## Who can use this component
 Command palette containers.
 
 ## Best practice
-Keep keyboard navigation and command execution in the caller.
+`CommandPalettePanel` renders results as a `listbox` of `option` rows and owns
+the active row: it starts at the first result, ArrowDown/ArrowUp move it, Enter
+runs the active item, and the input exposes `aria-activedescendant`. Command
+execution stays in the caller. Callers may pass `<mark>` inside item titles to
+highlight query matches; the panel styles marks through tokens.
 
 ## Wrong use cases
 Do not use it for form search fields without command results. Use `Input`.

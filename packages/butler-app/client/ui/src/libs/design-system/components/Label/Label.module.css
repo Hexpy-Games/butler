@@ -1,7 +1,3 @@
-.fixture {
-  min-width: 0;
-}
-
 .label {
   display: inline-flex;
   min-height: 18px;

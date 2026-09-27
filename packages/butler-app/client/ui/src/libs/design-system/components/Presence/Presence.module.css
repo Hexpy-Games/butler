@@ -1,0 +1,29 @@
+.presence[data-state="open"] {
+  animation: presence-enter var(--motion-base) var(--motion-ease-decelerate);
+}
+
+.presence[data-state="closed"] {
+  animation: presence-exit var(--motion-exit-base) var(--motion-ease-accelerate)
+    forwards;
+}
+
+.fade {
+  --presence-travel: 0px;
+}
+
+.rise {
+  --presence-travel: var(--motion-distance-sm);
+}
+
+@keyframes presence-enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--presence-travel));
+  }
+}
+
+@keyframes presence-exit {
+  to {
+    opacity: 0;
+  }
+}

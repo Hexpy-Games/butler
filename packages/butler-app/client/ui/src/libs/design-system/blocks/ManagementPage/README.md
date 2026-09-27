@@ -47,3 +47,6 @@ Do not use it for modal dialogs, inspector panels, or card interiors. Use
 ## Tags
 
 management, page, layout, workspace, automation
+
+## Page width
+ManagementPage renders its content inside `PageContainer`; pass `width` (`narrow`, `default`, `full`) instead of adding max-width or container CSS in product code. Grid responsive columns inside the page query that container.

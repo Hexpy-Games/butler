@@ -45,7 +45,7 @@ export function LocalModelInfoSection({
   const copy = appCopy.settings.localModels;
 
   return (
-    <SettingsSection title={copy.modelInfoTitle}>
+    <SettingsSection id="local-model-info" kind="form" title={copy.modelInfoTitle}>
       <Stack gap="md">
         {status ? <Typo.Caption role="status">{status}</Typo.Caption> : null}
         {hasUnsavedChanges ? (
@@ -67,7 +67,7 @@ export function LocalModelInfoSection({
           setManualContext={setManualContext}
         />
         <Button type="button" disabled={!canRegister} onClick={onRegister}>
-          <Save size={15} />{" "}
+          <Save size="md" />{" "}
           {registering
             ? copy.saving
             : isEditing

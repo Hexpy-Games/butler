@@ -129,6 +129,8 @@ impl TurnRuntime {
         }
     }
 
+    /// Runs the agent loop for an admitted turn and commits its outcome:
+    /// a suspension, or the final payload (retrying through store contention).
     async fn run_agent(
         &self,
         turn: TurnRecord,
@@ -155,69 +157,19 @@ impl TurnRuntime {
         let mut result = match agent_result {
             Ok(result) => result,
             Err(AgentLoopError::Propagate(error)) => return Err(error),
-            Err(AgentLoopError::Runtime(failure)) => super::contracts::AgentLoopResult {
-                route: super::contracts::ExecutionRoute::Assisted,
-                content: runtime_failure_message(&turn.original_message, &failure),
-                terminal_outcome: None,
-                suspension: None,
-                authority_continuation: None,
-                work_status: None,
-                accepted_work_result: Some(crate::btcc::AcceptedWorkResult {
-                    status: crate::btcc::AcceptedWorkStatus::Failed,
-                }),
-                runtime_failure: Some(failure),
-                artifacts: Vec::new(),
-                changed_files: Vec::new(),
-                plan: None,
-                model_identity: None,
-            },
+            Err(AgentLoopError::Runtime(failure)) => runtime_failure_result(&turn, failure),
         };
         permit.assert_active()?;
-        if let Some(failure) = &result.runtime_failure {
-            let work_completed = result
-                .accepted_work_result
-                .as_ref()
-                .is_some_and(|value| value.status == crate::btcc::AcceptedWorkStatus::Success);
-            result.content = super::failure::runtime_failure_message_for_work(
-                &turn.original_message,
-                failure,
-                work_completed,
-            );
-            result
-                .accepted_work_result
-                .get_or_insert(crate::btcc::AcceptedWorkResult {
-                    status: crate::btcc::AcceptedWorkStatus::Failed,
-                });
-        }
-        let transition = if let Some(reason) = result.suspension {
-            TurnTransition::Suspend {
+        explain_runtime_failure(&turn, &mut result);
+        let transition = match result.suspension {
+            Some(reason) => TurnTransition::Suspend {
                 reason,
                 authority_continuation: result.authority_continuation,
-            }
-        } else {
-            guided_final(&turn, result)?
+            },
+            None => guided_final(&turn, result)?,
         };
-        if matches!(transition, TurnTransition::Suspend { .. }) {
-            self.store
-                .commit_transition(&turn, &claim, &transition)
-                .await
-                .map_err(commit_error)?;
-        } else {
-            loop {
-                match self
-                    .store
-                    .commit_transition(&turn, &claim, &transition)
-                    .await
-                {
-                    Ok(()) => break,
-                    Err(TransitionCommitError::Contention) => {
-                        self.readiness.wait(permit.cancellation()).await?;
-                        permit.assert_active()?;
-                    }
-                    Err(TransitionCommitError::Failure(error)) => return Err(error),
-                }
-            }
-        }
+        self.commit_agent_transition(&turn, &claim, &transition, &permit)
+            .await?;
         let committed = self.store.activate_successor(&turn.turn_id).await?;
         if let TurnTransition::Suspend { reason, .. } = transition {
             if committed.suspension != Some(reason) {
@@ -231,6 +183,34 @@ impl TurnRuntime {
         self.publish_state(conversation, &committed, destination)
             .await;
         Ok(committed)
+    }
+
+    /// Commits the agent's transition. A suspension commits once; a final
+    /// payload waits out store contention while the turn stays active.
+    async fn commit_agent_transition(
+        &self,
+        turn: &TurnRecord,
+        claim: &crate::btcc::StateExecutionClaim,
+        transition: &TurnTransition,
+        permit: &super::supervisor::ExecutionPermit,
+    ) -> Result<(), BtccError> {
+        if matches!(transition, TurnTransition::Suspend { .. }) {
+            return self
+                .store
+                .commit_transition(turn, claim, transition)
+                .await
+                .map_err(commit_error);
+        }
+        loop {
+            match self.store.commit_transition(turn, claim, transition).await {
+                Ok(()) => return Ok(()),
+                Err(TransitionCommitError::Contention) => {
+                    self.readiness.wait(permit.cancellation()).await?;
+                    permit.assert_active()?;
+                }
+                Err(TransitionCommitError::Failure(error)) => return Err(error),
+            }
+        }
     }
 
     async fn deliver(
@@ -420,4 +400,45 @@ fn commit_error(error: TransitionCommitError) -> BtccError {
         }
         TransitionCommitError::Failure(error) => error,
     }
+}
+
+/// The assisted answer recorded when the agent loop failed operationally.
+fn runtime_failure_result(
+    turn: &TurnRecord,
+    failure: crate::btcc::RuntimeFailure,
+) -> super::contracts::AgentLoopResult {
+    super::contracts::AgentLoopResult {
+        route: super::contracts::ExecutionRoute::Assisted,
+        content: runtime_failure_message(&turn.original_message, &failure),
+        terminal_outcome: None,
+        suspension: None,
+        authority_continuation: None,
+        work_status: None,
+        accepted_work_result: Some(crate::btcc::AcceptedWorkResult {
+            status: crate::btcc::AcceptedWorkStatus::Failed,
+        }),
+        runtime_failure: Some(failure),
+        artifacts: Vec::new(),
+        changed_files: Vec::new(),
+        plan: None,
+        model_identity: None,
+    }
+}
+
+/// A result with a runtime failure answers with the failure message (noting
+/// completed Work) and is at least a failed Work result.
+fn explain_runtime_failure(turn: &TurnRecord, result: &mut super::contracts::AgentLoopResult) {
+    let Some(failure) = &result.runtime_failure else {
+        return;
+    };
+    result.content = super::failure::runtime_failure_message_for_work(
+        &turn.original_message,
+        failure,
+        result.accepted_work_result.as_ref(),
+    );
+    result
+        .accepted_work_result
+        .get_or_insert(crate::btcc::AcceptedWorkResult {
+            status: crate::btcc::AcceptedWorkStatus::Failed,
+        });
 }

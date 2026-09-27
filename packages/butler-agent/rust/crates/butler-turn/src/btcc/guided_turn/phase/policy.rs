@@ -17,17 +17,20 @@ pub struct GuidedExecutionPolicy {
 }
 
 impl GuidedExecutionPolicy {
+    /// Reads the turn's execution policy, or the butler default when the
+    /// context carries none, never widening the access mode the model
+    /// selection admitted.
     pub(crate) fn from_turn(
         turn: &TurnRecord,
         default_workspace: &str,
     ) -> Result<Self, GuidedPreparationError> {
-        let admitted = turn
-            .model_selection
-            .get("controls")
-            .and_then(|value| value.get("accessMode"))
-            .and_then(Value::as_str)
-            .unwrap_or("read_only");
-        let admitted = access(admitted);
+        let admitted = access(
+            turn.model_selection
+                .get("controls")
+                .and_then(|value| value.get("accessMode"))
+                .and_then(Value::as_str)
+                .unwrap_or("read_only"),
+        );
         let context = turn
             .context
             .as_object()
@@ -40,39 +43,7 @@ impl GuidedExecutionPolicy {
             .get("executionPolicy")
             .filter(|value| !value.is_null())
             .cloned()
-            .unwrap_or_else(|| {
-                let workspace = context
-                    .get("baselineObservationScopeRefs")
-                    .and_then(Value::as_array)
-                    .and_then(|values| {
-                        values
-                            .iter()
-                            .filter_map(Value::as_str)
-                            .find_map(|value| value.strip_prefix("workspace:"))
-                    })
-                    .unwrap_or(default_workspace);
-                let mut result = Map::new();
-                result.insert("role".into(), Value::String("butler".into()));
-                result.insert("accessMode".into(), Value::String(admitted.as_str().into()));
-                result.insert(
-                    "trackingMode".into(),
-                    Value::String(
-                        if project_ref.is_some() {
-                            "ledger"
-                        } else {
-                            "local"
-                        }
-                        .into(),
-                    ),
-                );
-                result.insert("requiredNativeToolProfiles".into(), Value::Array(vec![]));
-                result.insert("requiredNativeTools".into(), Value::Array(vec![]));
-                result.insert("workspacePath".into(), Value::String(workspace.into()));
-                if let Some(project) = project_ref {
-                    result.insert("projectId".into(), Value::String(project.into()));
-                }
-                Value::Object(result)
-            });
+            .unwrap_or_else(|| default_policy(context, &admitted, project_ref, default_workspace));
         let policy = raw
             .as_object_mut()
             .ok_or(GuidedPreparationError::Contract("invalid_execution_policy"))?;
@@ -108,6 +79,42 @@ impl GuidedExecutionPolicy {
                 .cloned(),
         })
     }
+}
+
+/// The butler policy of a turn without one: ledger tracking with a project,
+/// local tracking otherwise, in the baseline workspace scope.
+fn default_policy(
+    context: &Map<String, Value>,
+    admitted: &AccessMode,
+    project_ref: Option<&str>,
+    default_workspace: &str,
+) -> Value {
+    let workspace = context
+        .get("baselineObservationScopeRefs")
+        .and_then(Value::as_array)
+        .and_then(|values| {
+            values
+                .iter()
+                .filter_map(Value::as_str)
+                .find_map(|value| value.strip_prefix("workspace:"))
+        })
+        .unwrap_or(default_workspace);
+    let mut result = Map::new();
+    result.insert("role".into(), Value::String("butler".into()));
+    result.insert("accessMode".into(), Value::String(admitted.as_str().into()));
+    let tracking = if project_ref.is_some() {
+        "ledger"
+    } else {
+        "local"
+    };
+    result.insert("trackingMode".into(), Value::String(tracking.into()));
+    result.insert("requiredNativeToolProfiles".into(), Value::Array(vec![]));
+    result.insert("requiredNativeTools".into(), Value::Array(vec![]));
+    result.insert("workspacePath".into(), Value::String(workspace.into()));
+    if let Some(project) = project_ref {
+        result.insert("projectId".into(), Value::String(project.into()));
+    }
+    Value::Object(result)
 }
 
 impl GuidedExecutionPolicy {

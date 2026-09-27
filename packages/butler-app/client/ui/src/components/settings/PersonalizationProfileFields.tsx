@@ -1,4 +1,4 @@
-import { Field, FieldLabel, Input } from "@/butler-ds";
+import { Input, SettingsField } from "@/butler-ds";
 import type { ProfileFieldKey } from "./PersonalizationSettingsOptions";
 import type { PersonalizationDraft } from "./settingsTypes";
 
@@ -24,11 +24,13 @@ export function PersonalizationProfileFields({
   return (
     <>
       {fields.map((field) => (
-        <Field key={field.key} data-test-class="settings-field">
-          <FieldLabel htmlFor={`personalization-profile-${field.key}`}>
-            {field.label}
-          </FieldLabel>
-          <Input
+        <SettingsField
+          key={field.key}
+          id={`personalization-profile-${field.key}`}
+          settingId={field.key.replace(/_/gu, "-")}
+          data-test-class="settings-field"
+          label={field.label}
+          control={<Input
             id={`personalization-profile-${field.key}`}
             value={profileDraft[field.key]}
             onChange={(event) =>
@@ -42,8 +44,8 @@ export function PersonalizationProfileFields({
             }
             placeholder={field.placeholder}
             disabled={saving || !personalizationLoaded}
-          />
-        </Field>
+          />}
+        />
       ))}
     </>
   );

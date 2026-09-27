@@ -2,10 +2,13 @@
 
 use std::path::Path;
 
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use super::{markdown, options, state};
 use crate::project_ledger::commands::contracts::CliFailure;
+use crate::project_ledger::events::Event;
+use crate::project_ledger::publication::ProjectLedgerRecordKind;
+use crate::project_ledger::status::Lifecycle;
 
 const ALL_METADATA: &[&str] = &[
     "title",
@@ -27,38 +30,18 @@ const ALL_METADATA: &[&str] = &[
     "supersedesSpecId",
 ];
 
-#[expect(
-    clippy::match_same_arms,
-    reason = "explicit arms document the known values beside the default"
-)]
+/// Creates an initiative, decision, risk, spec, report, plan, handoff,
+/// reference or roadmap record.
 pub(super) fn create_top_level(root: &Path, args: &Value) -> Result<Value, CliFailure> {
     let kind = options::required(args, "kind")?;
-    let directory = match kind.as_str() {
-        "initiative" => "initiatives",
-        "decision" => "decisions",
-        "risk" => "risks",
-        "spec" => "specs",
-        "report" => "reports",
-        "plan" => "plans",
-        "handoff" => "handoffs",
-        "reference" => "references",
-        "roadmap" => "roadmaps",
-        _ => {
-            return Err(CliFailure::new(
-                "invalid_input",
-                format!("Unsupported record kind: {kind}"),
-            ));
-        }
-    };
+    let (record_kind, directory) = ProjectLedgerRecordKind::parse(&kind)
+        .and_then(|parsed| Some((parsed, parsed.top_level_directory()?)))
+        .ok_or_else(|| {
+            CliFailure::new("invalid_input", format!("Unsupported record kind: {kind}"))
+        })?;
     let id = options::required(args, "id")?;
     let title = options::required(args, "title")?;
-    let status = options::optional(args, "status").unwrap_or(match kind.as_str() {
-        "decision" => "accepted",
-        "risk" => "open",
-        "report" => "done",
-        "plan" => "active",
-        _ => "active",
-    });
+    let status = options::optional(args, "status").unwrap_or(record_kind.initial_status());
     let timestamp = super::super::now_iso()?;
     let mut metadata = base(&kind, &id, &title, status, &timestamp);
     metadata.extend(options::updates(args, ALL_METADATA)?);
@@ -78,7 +61,7 @@ pub(super) fn create_top_level(root: &Path, args: &Value) -> Result<Value, CliFa
 pub(super) fn create_work(root: &Path, args: &Value) -> Result<Value, CliFailure> {
     let status = options::optional(args, "status").unwrap_or("proposed");
     let optional_id = options::optional(args, "id");
-    state::valid_creation("work", status, optional_id, None)?;
+    state::valid_creation(Lifecycle::Work, status, optional_id, None)?;
     let id = options::required(args, "id")?;
     let title = options::required(args, "title")?;
     let created = super::super::now_iso()?;
@@ -110,7 +93,7 @@ pub(super) fn create_task(root: &Path, args: &Value) -> Result<Value, CliFailure
     super::super::show::resolve_record(root, &work_id, Some("work"))?;
     let status = options::optional(args, "status").unwrap_or("todo");
     let optional_id = options::optional(args, "id");
-    state::valid_creation("task", status, optional_id, Some(&work_id))?;
+    state::valid_creation(Lifecycle::Task, status, optional_id, Some(&work_id))?;
     let id = options::required(args, "id")?;
     let title = options::required(args, "title")?;
     let created = super::super::now_iso()?;
@@ -163,20 +146,23 @@ pub(super) fn update_generic(root: &Path, args: &Value) -> Result<Value, CliFail
         ));
     }
     if let Some(status) = updates.get("status").and_then(Value::as_str)
-        && matches!(kind, "work" | "task" | "attempt")
+        && let Some(lifecycle) = Lifecycle::parse(kind)
     {
-        state::transition(kind, &current.record, status, &id)?;
-        if kind == "work" && status == "done" {
+        state::transition(lifecycle, &current.record, status, &id)?;
+        if lifecycle == Lifecycle::Work && status == "done" {
             state::work_completion_gate(&current.record, &updates)?;
         }
     }
     markdown::update(&current.path, &updates, body.as_deref())?;
-    let event = json!({
-        "type":format!("{kind}_updated"),"id":id,"kind":kind,
-        "path":current.record.get("path").cloned().unwrap_or(Value::Null),
-        "source":"project-ledger"
-    });
-    markdown::append_event(root, &event)?;
+    markdown::append_event(
+        root,
+        Event::Updated {
+            r#type: &format!("{kind}_updated"),
+            id: &id,
+            kind,
+            path: current.record.get("path").unwrap_or(&Value::Null),
+        },
+    )?;
     let record = super::read_back(root, &current.path)?;
     Ok(super::super::refresh_index_after_mutation(root, record))
 }
@@ -205,12 +191,16 @@ fn create_record(
     let status = metadata.get("status").cloned().unwrap_or(Value::Null);
     markdown::create(path, metadata, body.as_deref())?;
     let record = super::read_back(root, path)?;
-    let event = json!({
-        "type":event_type,"id":id,"kind":kind,"status":status,
-        "path":record.get("path").cloned().unwrap_or(Value::Null),
-        "source":"project-ledger"
-    });
-    markdown::append_event(root, &event)?;
+    markdown::append_event(
+        root,
+        Event::Created {
+            r#type: event_type,
+            id,
+            kind,
+            status: &status,
+            path: record.get("path").unwrap_or(&Value::Null),
+        },
+    )?;
     Ok(super::super::refresh_index_after_mutation(root, record))
 }
 

@@ -22,7 +22,7 @@ Conversation containers and reusable activity blocks.
 Keep Butler-specific animated marks in the product layer and pass them as children.
 
 ## Wrong use cases
-Do not use it for project or document thumbnails. Use `ResourceTile`.
+Do not use it for project or document thumbnails. Use `DocumentTile`.
 
 ## Tags
 avatar, message, conversation, role

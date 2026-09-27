@@ -5,30 +5,48 @@ use std::path::Path;
 use std::time::UNIX_EPOCH;
 
 use chrono::{DateTime, SecondsFormat, Utc};
+use serde::Serialize;
 use serde_json::{Value, json};
 
 use super::{CliFailure, display_path, io_failure};
 use crate::project_ledger::records;
-
-const NULL_FIELDS: &[(&str, &str)] = &[
-    ("parentId", "parentId"),
-    ("spec", "spec"),
-    ("acceptance", "acceptance"),
-    ("codeCommits", "codeCommits"),
-    ("ledgerCommits", "ledgerCommits"),
-    ("report", "report"),
-    ("review", "review"),
-    ("validation", "validation"),
-    ("implementation", "implementation"),
-    ("mitigation", "mitigation"),
-    ("reason", "reason"),
-];
 
 pub(super) struct ProjectedRecord {
     pub value: Value,
     pub source_mtime_ms: f64,
 }
 
+/// One source record as the compact index lists it. Field order is the
+/// index's JSON order; optional text fields are `null` when absent.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct IndexRecord<'a> {
+    id: &'a str,
+    kind: &'a str,
+    title: String,
+    status: String,
+    priority: Value,
+    parent_id: Option<&'a str>,
+    spec: Option<&'a str>,
+    spec_exemption: bool,
+    acceptance: Option<&'a str>,
+    acceptance_exemption: bool,
+    requires_commit_evidence: bool,
+    code_commits: Option<&'a str>,
+    ledger_commits: Option<&'a str>,
+    report: Option<&'a str>,
+    review: Option<&'a str>,
+    validation: Option<&'a str>,
+    implementation: Option<&'a str>,
+    mitigation: Option<&'a str>,
+    reason: Option<&'a str>,
+    updated_at: String,
+    path: String,
+    source_mtime_ms: f64,
+}
+
+/// The index projection of one `.md` or `.json` record file, or `None` for
+/// other files and records whose data is `null`/`false`.
 pub(super) fn from_raw(
     root: &Path,
     relative: &Path,
@@ -38,8 +56,8 @@ pub(super) fn from_raw(
     if !matches!(extension, Some("md" | "json")) || relative.ends_with("ledger.jsonl") {
         return Ok(None);
     }
-    let path = root.join(relative);
-    let metadata = fs::metadata(&path).map_err(|source| io_failure().with_source(source))?;
+    let metadata =
+        fs::metadata(root.join(relative)).map_err(|source| io_failure().with_source(source))?;
     let data = if extension == Some("json") {
         serde_json::from_str::<Value>(raw).map_err(|source| {
             CliFailure::new("invalid_json", "Invalid Project Ledger record JSON")
@@ -51,11 +69,6 @@ pub(super) fn from_raw(
     if data.is_null() || data == Value::Bool(false) {
         return Ok(None);
     }
-    let kind = data
-        .get("kind")
-        .and_then(Value::as_str)
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| infer_kind(relative));
     let filename_id = relative.file_stem().unwrap_or_default().to_string_lossy();
     let id = data
         .get("id")
@@ -63,70 +76,70 @@ pub(super) fn from_raw(
         .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
         .unwrap_or(&filename_id);
-    let title = data
-        .get("title")
-        .filter(|value| !value.is_null())
-        .or_else(|| data.get("name").filter(|value| !value.is_null()))
-        .map(js_string)
-        .transpose()?
-        .unwrap_or_else(|| id.to_owned());
-    let status = data
-        .get("status")
-        .filter(|value| !value.is_null())
-        .map(js_string)
-        .transpose()?
-        .unwrap_or_else(|| "unknown".into());
     let modified = metadata
         .modified()
         .map_err(|source| io_failure().with_source(source))?;
-    let elapsed = modified
+    let source_mtime_ms = modified
         .duration_since(UNIX_EPOCH)
-        .map_err(|source| io_failure().with_source(source))?;
+        .map_err(|source| io_failure().with_source(source))?
+        .as_secs_f64()
+        * 1000.0;
     let modified_at = DateTime::<Utc>::from(modified).to_rfc3339_opts(SecondsFormat::Millis, true);
-    let updated_at = data
-        .get("updatedAt")
-        .filter(|value| !value.is_null())
-        .map(js_string)
-        .transpose()?
-        .unwrap_or(modified_at);
-    let priority = data
-        .get("priority")
-        .filter(|value| value.is_number())
-        .cloned()
-        .unwrap_or_else(|| json!(100));
-    let mut value = json!({
-        "id":id,
-        "kind":kind,
-        "title":title,
-        "status":status,
-        "priority":priority,
-        "parentId":null,
-        "spec":null,
-        "specExemption":truthy(data.get("specExemption")),
-        "acceptance":null,
-        "acceptanceExemption":truthy(data.get("acceptanceExemption")),
-        "requiresCommitEvidence":truthy(data.get("requiresCommitEvidence")),
-        "codeCommits":null,
-        "ledgerCommits":null,
-        "report":null,
-        "review":null,
-        "validation":null,
-        "implementation":null,
-        "mitigation":null,
-        "reason":null,
-        "updatedAt":updated_at,
-        "path":display_path(root, relative),
-        "sourceMtimeMs":elapsed.as_secs_f64()*1000.0,
-    });
-    for &(source, output) in NULL_FIELDS {
-        if let Some(text) = data.get(source).and_then(Value::as_str) {
-            value[output] = Value::String(text.to_owned());
-        }
-    }
+    let record = project(&data, relative, id, modified_at, source_mtime_ms, root)?;
+    let value = serde_json::to_value(record).map_err(|source| io_failure().with_source(source))?;
     Ok(Some(ProjectedRecord {
         value,
-        source_mtime_ms: elapsed.as_secs_f64() * 1000.0,
+        source_mtime_ms,
     }))
+}
+
+/// The record's index fields; text a Bun reader would coerce is coerced the
+/// same way.
+fn project<'a>(
+    data: &'a Value,
+    relative: &Path,
+    id: &'a str,
+    modified_at: String,
+    source_mtime_ms: f64,
+    root: &Path,
+) -> Result<IndexRecord<'a>, CliFailure> {
+    let present = |key: &str| data.get(key).filter(|value| !value.is_null());
+    let coerced = |key: &str| present(key).map(js_string).transpose();
+    let text = |key: &str| data.get(key).and_then(Value::as_str);
+    let title = match coerced("title")? {
+        Some(title) => Some(title),
+        None => coerced("name")?,
+    };
+    Ok(IndexRecord {
+        id,
+        kind: text("kind")
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| infer_kind(relative)),
+        title: title.unwrap_or_else(|| id.to_owned()),
+        status: coerced("status")?.unwrap_or_else(|| "unknown".into()),
+        priority: data
+            .get("priority")
+            .filter(|value| value.is_number())
+            .cloned()
+            .unwrap_or_else(|| json!(100)),
+        parent_id: text("parentId"),
+        spec: text("spec"),
+        spec_exemption: truthy(data.get("specExemption")),
+        acceptance: text("acceptance"),
+        acceptance_exemption: truthy(data.get("acceptanceExemption")),
+        requires_commit_evidence: truthy(data.get("requiresCommitEvidence")),
+        code_commits: text("codeCommits"),
+        ledger_commits: text("ledgerCommits"),
+        report: text("report"),
+        review: text("review"),
+        validation: text("validation"),
+        implementation: text("implementation"),
+        mitigation: text("mitigation"),
+        reason: text("reason"),
+        updated_at: coerced("updatedAt")?.unwrap_or(modified_at),
+        path: display_path(root, relative),
+        source_mtime_ms,
+    })
 }
 
 pub(super) fn reference(record: &Value, reason: Option<&str>) -> Value {
@@ -138,7 +151,11 @@ pub(super) fn reference(record: &Value, reason: Option<&str>) -> Value {
         "path":record.get("path"),
     });
     if let Some(reason) = reason {
-        result["reason"] = Value::String(reason.into());
+        crate::project_ledger::work_json::set_field(
+            &mut result,
+            "reason",
+            Value::String(reason.into()),
+        );
     }
     result
 }

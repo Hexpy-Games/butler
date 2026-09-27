@@ -19,6 +19,7 @@ import {
   clampToTitlebarSafeTop,
 } from "../../lib/floatingConstraints";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
+import { usePresence } from "../../components/Presence";
 import styles from "./tooltip.module.css";
 
 const TOOLTIP_DELAY_MS = 650;
@@ -156,23 +157,35 @@ export function Tooltip({ children, label }: TooltipProps) {
     };
   }, [suppressWindowFocusTooltip]);
 
+  // Keep the last label and position so the tooltip can fade out after hide.
+  const visible = Boolean(open && label && position);
+  const lastShownRef = useRef<{ label: string; position: TooltipPosition } | null>(null);
+  if (visible && label && position) lastShownRef.current = { label, position };
+  const presence = usePresence(visible);
+  const shown = lastShownRef.current;
+  const setTooltipNode = useCallback((node: HTMLSpanElement | null) => {
+    tooltipRef.current = node;
+    presence.ref(node);
+  }, [presence.ref]);
+
   const tooltip =
-    open && label && position
+    presence.mounted && shown
       ? createPortal(
           <span
             className={`${tintedGlassSurfaceClassName} ${styles.tooltip}`}
             data-slot="tooltip-content"
             data-glass="popover"
             data-radius="control"
+            data-state={presence.state}
             id={tooltipId}
-            ref={tooltipRef}
+            ref={setTooltipNode}
             role="tooltip"
             style={{
-              left: position.left,
-              top: position.top,
+              left: shown.position.left,
+              top: shown.position.top,
             }}
           >
-            {label}
+            {shown.label}
           </span>,
           document.body,
         )

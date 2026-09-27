@@ -7,6 +7,7 @@ use crate::btcc::BtccCode;
 use crate::btcc::{BtccError, StoredSubsessionDelegation, StoredSubsessionDirection};
 use crate::workspace::SessionRole;
 
+/// A parent's new direction for one of its subsessions.
 #[derive(Clone, Debug)]
 pub struct SubsessionDirectionRequest {
     pub parent_session_id: String,
@@ -20,6 +21,7 @@ pub struct SubsessionDirectionRequest {
     pub access_mode: String,
 }
 
+/// A parent's request to cancel one of its subsessions.
 #[derive(Clone, Debug)]
 pub struct SubsessionCancelRequest {
     pub parent_session_id: String,
@@ -30,6 +32,7 @@ pub struct SubsessionCancelRequest {
     pub child_role: SessionRole,
 }
 
+/// A parent's request to resume a subsession.
 #[derive(Clone, Debug)]
 pub struct SubsessionResumeRequest {
     pub parent_session_id: String,
@@ -37,6 +40,7 @@ pub struct SubsessionResumeRequest {
 }
 
 impl SubsessionService {
+    /// Resumes a subsession.
     pub async fn resume(&self, request: SubsessionResumeRequest) -> Result<Value, BtccError> {
         let relation = self
             .repository
@@ -108,6 +112,7 @@ impl SubsessionService {
         )
     }
 
+    /// Sends new direction to a subsession.
     pub async fn steer(&self, request: SubsessionDirectionRequest) -> Result<Value, BtccError> {
         let instruction = butler_core::public_text::trim_js_whitespace(&request.instruction);
         if instruction.is_empty() {
@@ -130,14 +135,14 @@ impl SubsessionService {
             return Err(error(BtccCode::StewardFollowupAuthorityMismatch));
         }
         let relation = self
-            .select_relation(
-                &request.parent_session_id,
-                request.relation_id.as_deref(),
-                request.work_id.as_deref(),
-                request.safe_title.as_deref(),
-                &request.child_role,
-                true,
-            )
+            .select_relation(RelationQuery {
+                parent: &request.parent_session_id,
+                relation_id: request.relation_id.as_deref(),
+                work_id: request.work_id.as_deref(),
+                title: request.safe_title.as_deref(),
+                role: &request.child_role,
+                purpose: RelationPurpose::Direct,
+            })
             .await?;
         let identity = json!({"relation_id":relation.relation_id,"source_message_id":request.source_message_id,"instruction":instruction});
         let instruction_id = format!(
@@ -172,16 +177,17 @@ impl SubsessionService {
         )
     }
 
+    /// Cancels an unfinished subsession.
     pub async fn cancel(&self, request: SubsessionCancelRequest) -> Result<Value, BtccError> {
         let relation = self
-            .select_relation(
-                &request.parent_session_id,
-                request.relation_id.as_deref(),
-                None,
-                request.safe_title.as_deref(),
-                &request.child_role,
-                false,
-            )
+            .select_relation(RelationQuery {
+                parent: &request.parent_session_id,
+                relation_id: request.relation_id.as_deref(),
+                work_id: None,
+                title: request.safe_title.as_deref(),
+                role: &request.child_role,
+                purpose: RelationPurpose::Cancel,
+            })
             .await?;
         if self
             .repository
@@ -228,6 +234,7 @@ impl SubsessionService {
         )
     }
 
+    /// Takes the next unconsumed direction for a child turn.
     pub async fn consume_direction(
         &self,
         child_session_id: &str,
@@ -311,52 +318,80 @@ impl SubsessionService {
         })
     }
 
+    /// The single active relation the query addresses. Direction may follow
+    /// up on a finished relation whose root Work is still open; cancellation
+    /// only addresses unfinished ones.
     async fn select_relation(
         &self,
-        parent: &str,
-        relation_id: Option<&str>,
-        work_id: Option<&str>,
-        title: Option<&str>,
-        role: &SessionRole,
-        allow_followup: bool,
+        query: RelationQuery<'_>,
     ) -> Result<StoredSubsessionDelegation, BtccError> {
-        let mut candidates = if allow_followup {
-            if let Some(work) = work_id {
-                self.repository
-                    .open_relation_by_work(work.into())
-                    .await
-                    .map_err(BtccError::from)?
-                    .into_iter()
-                    .collect()
-            } else {
-                self.repository
-                    .relations_for_parent(parent.into())
-                    .await
-                    .map_err(BtccError::from)?
+        let candidates = self.candidate_relations(&query).await?;
+        let owned = self.owned_relations(&query, candidates).await?;
+        let mut eligible = Vec::new();
+        for candidate in owned {
+            if self.relation_is_eligible(&query, &candidate).await? {
+                eligible.push(candidate);
             }
-        } else {
-            self.repository
-                .relations_for_parent(parent.into())
+        }
+        let mut eligible = eligible.into_iter();
+        match (eligible.next(), eligible.next()) {
+            (None, _) => Err(error(BtccCode::ActiveStewardRelationNotFound)),
+            (Some(relation), None) => Ok(relation),
+            (Some(_), Some(_)) => Err(error(BtccCode::ActiveStewardRelationAmbiguous)),
+        }
+    }
+
+    /// Relations of the addressed role matching the id and title filters: by
+    /// open Work when directing with a Work id, else the parent's relations.
+    async fn candidate_relations(
+        &self,
+        query: &RelationQuery<'_>,
+    ) -> Result<Vec<StoredSubsessionDelegation>, BtccError> {
+        let mut candidates = match (query.purpose, query.work_id) {
+            (RelationPurpose::Direct, Some(work)) => self
+                .repository
+                .open_relation_by_work(work.into())
                 .await
                 .map_err(BtccError::from)?
+                .into_iter()
+                .collect(),
+            _ => self
+                .repository
+                .relations_for_parent(query.parent.into())
+                .await
+                .map_err(BtccError::from)?,
+        };
+        let role = if *query.role == SessionRole::Worker {
+            "worker"
+        } else {
+            "steward"
         };
         candidates.retain(|candidate| {
-            relation_id.is_none_or(|id| candidate.relation_id == id)
-                && title.is_none_or(|value| candidate.safe_title == value)
-                && candidate.packet.get("child_role").and_then(Value::as_str)
-                    == Some(if *role == SessionRole::Worker {
-                        "worker"
-                    } else {
-                        "steward"
-                    })
+            query
+                .relation_id
+                .is_none_or(|id| candidate.relation_id == id)
+                && query
+                    .title
+                    .is_none_or(|value| candidate.safe_title == value)
+                && candidate.packet.get("child_role").and_then(Value::as_str) == Some(role)
         });
+        Ok(candidates)
+    }
+
+    /// Keeps the relations the parent may address: its own children, or with
+    /// a Work id, children bound to the same ledger and app project.
+    async fn owned_relations(
+        &self,
+        query: &RelationQuery<'_>,
+        candidates: Vec<StoredSubsessionDelegation>,
+    ) -> Result<Vec<StoredSubsessionDelegation>, BtccError> {
         let source = self
             .bindings
-            .get_by_session_id(parent)
+            .get_by_session_id(query.parent)
             .await
             .map_err(BtccError::from)?
             .ok_or_else(|| error(BtccCode::StewardFollowupAuthorityMismatch))?;
-        let expected_parent = if *role == SessionRole::Worker {
+        let expected_parent = if *query.role == SessionRole::Worker {
             SessionRole::Steward
         } else {
             SessionRole::Butler
@@ -364,6 +399,10 @@ impl SubsessionService {
         if source.role != expected_parent {
             return Err(error(BtccCode::StewardFollowupAuthorityMismatch));
         }
+        let source_project = source
+            .app_project_id
+            .as_ref()
+            .or(source.project_id.as_ref());
         let mut owned = Vec::new();
         for candidate in candidates {
             let child = self
@@ -372,51 +411,65 @@ impl SubsessionService {
                 .await
                 .map_err(BtccError::from)?
                 .ok_or_else(|| error(BtccCode::StewardFollowupAuthorityMismatch))?;
-            let same_parent = candidate.parent_session_id == parent;
-            let same_project = work_id.is_some()
+            let same_parent = candidate.parent_session_id == query.parent;
+            let same_project = query.work_id.is_some()
                 && source.ledger_project_id.is_some()
                 && source.ledger_project_id == child.ledger_project_id
-                && source
-                    .app_project_id
-                    .as_ref()
-                    .or(source.project_id.as_ref())
-                    .is_some()
-                && source
-                    .app_project_id
-                    .as_ref()
-                    .or(source.project_id.as_ref())
-                    == child.app_project_id.as_ref().or(child.project_id.as_ref());
+                && source_project.is_some()
+                && source_project == child.app_project_id.as_ref().or(child.project_id.as_ref());
             if same_parent || same_project {
                 owned.push(candidate);
             }
         }
-        candidates = owned;
-        let mut eligible = Vec::new();
-        for candidate in candidates {
-            let terminal = self
-                .repository
-                .result_for_relation(candidate.relation_id.clone())
-                .await
-                .map_err(BtccError::from)?
-                .is_some();
-            if !terminal
-                || (allow_followup
-                    && (work_id.is_some() || relation_id.is_some())
-                    && self
-                        .repository
-                        .open_relation_by_work(candidate.root_work_id.clone())
-                        .await
-                        .map_err(BtccError::from)?
-                        .is_some())
-            {
-                eligible.push(candidate);
-            }
-        }
-        candidates = eligible;
-        match candidates.len() {
-            0 => Err(error(BtccCode::ActiveStewardRelationNotFound)),
-            1 => Ok(candidates.remove(0)),
-            _ => Err(error(BtccCode::ActiveStewardRelationAmbiguous)),
-        }
+        Ok(owned)
     }
+
+    /// An unfinished relation is eligible; a finished one only for a
+    /// follow-up direction addressed by Work or relation id whose root Work
+    /// is still open.
+    async fn relation_is_eligible(
+        &self,
+        query: &RelationQuery<'_>,
+        candidate: &StoredSubsessionDelegation,
+    ) -> Result<bool, BtccError> {
+        let terminal = self
+            .repository
+            .result_for_relation(candidate.relation_id.clone())
+            .await
+            .map_err(BtccError::from)?
+            .is_some();
+        if !terminal {
+            return Ok(true);
+        }
+        if query.purpose != RelationPurpose::Direct
+            || (query.work_id.is_none() && query.relation_id.is_none())
+        {
+            return Ok(false);
+        }
+        Ok(self
+            .repository
+            .open_relation_by_work(candidate.root_work_id.clone())
+            .await
+            .map_err(BtccError::from)?
+            .is_some())
+    }
+}
+
+/// Why a parent addresses one of its subsession relations.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RelationPurpose {
+    /// Send new direction; may follow up on a finished relation.
+    Direct,
+    /// Cancel an unfinished relation.
+    Cancel,
+}
+
+/// Which relation a direction or cancellation addresses.
+struct RelationQuery<'a> {
+    parent: &'a str,
+    relation_id: Option<&'a str>,
+    work_id: Option<&'a str>,
+    title: Option<&'a str>,
+    role: &'a SessionRole,
+    purpose: RelationPurpose,
 }

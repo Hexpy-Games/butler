@@ -1,4 +1,6 @@
-import type { HTMLAttributes, ReactNode } from "react";
+import type { DsBaseProps } from "../../lib/dsProps";
+import type { HTMLAttributes, ReactNode, Ref } from "react";
+import { layoutItemAttributes, splitLayoutItemProps, type LayoutItemProps } from "../Layout/itemProps";
 import styles from "./Typo.module.css";
 
 type TypoElement =
@@ -12,12 +14,49 @@ type TypoElement =
   | "p"
   | "span"
   | "label"
-  | "code";
+  | "code"
+  | "pre"
+  | "time";
 
-export interface TypoProps extends HTMLAttributes<HTMLElement> {
+export type TypoTone =
+  | "primary"
+  | "secondary"
+  | "tertiary"
+  | "disabled"
+  | "danger"
+  | "success"
+  | "warning"
+  | "inherit";
+export type TypoWeight = "regular" | "medium" | "semibold";
+export type TypoAlign = "start" | "center" | "end";
+/** `5`: message-length blocks (a sent or queued user message) before "Show more". */
+export type TypoLineClamp = 2 | 3 | 4 | 5;
+/** `pre`: keep line breaks and spaces, wrap long lines anywhere (logs, raw payloads). */
+export type TypoWrap = "normal" | "nowrap" | "anywhere" | "pre";
+export type TypoNumeric = "tabular";
+
+/** Text props shared by every Typo variant. None of them change the type scale. */
+export interface TypoTextProps {
+  /** Semantic text color. Omit to inherit the container color. */
+  tone?: TypoTone;
+  weight?: TypoWeight;
+  align?: TypoAlign;
+  /** One line with an ellipsis; the element becomes a block with `min-width: 0`. */
+  truncate?: boolean;
+  lineClamp?: TypoLineClamp;
+  wrap?: TypoWrap;
+  numeric?: TypoNumeric;
+  /** `control`: pad the first line so it centers on a control row (text beside an IconButton). */
+  alignWith?: "control";
+}
+
+export interface TypoProps extends TypoTextProps, Omit<LayoutItemProps, "span">, DsBaseProps<HTMLAttributes<HTMLElement>> {
   children: ReactNode;
   as?: TypoElement;
   htmlFor?: string;
+  dateTime?: string;
+  /** DOM ref, e.g. to measure a clamped block before offering "Show more". */
+  ref?: Ref<HTMLElement>;
 }
 
 function classNames(...values: Array<string | undefined>): string {
@@ -25,14 +64,39 @@ function classNames(...values: Array<string | undefined>): string {
 }
 
 function createTypo(defaultAs: TypoElement, variantClassName: string) {
-  return function TypoVariant({
-    as: Component = defaultAs,
-    className,
-    children,
-    ...props
-  }: TypoProps) {
+  return function TypoVariant(allProps: TypoProps) {
+    const [item, {
+      as: Component = defaultAs,
+      className,
+      children,
+      tone,
+      weight,
+      align,
+      truncate,
+      lineClamp,
+      wrap,
+      numeric,
+      alignWith,
+      ref,
+      ...props
+    }] = splitLayoutItemProps(allProps);
+    const { className: itemClassName, ...itemAttributes } = layoutItemAttributes(item);
     return (
-      <Component className={classNames(variantClassName, className)} {...props}>
+      <Component
+        className={classNames(styles.typo, variantClassName, itemClassName, className)}
+        data-tone={tone}
+        data-weight={weight}
+        data-align={align}
+        data-truncate={truncate ? "true" : undefined}
+        data-line-clamp={lineClamp}
+        data-wrap={wrap}
+        data-numeric={numeric}
+        data-align-with={alignWith}
+        {...itemAttributes}
+        {...props}
+        // One ref type for every element the variant can render as.
+        ref={ref as Ref<HTMLElement & HTMLLabelElement & HTMLTimeElement & HTMLPreElement & HTMLHeadingElement & HTMLParagraphElement & HTMLDivElement & HTMLSpanElement>}
+      >
         {children}
       </Component>
     );
@@ -49,6 +113,8 @@ export const Body = createTypo("p", styles.body);
 export const Caption = createTypo("span", styles.caption);
 export const Label = createTypo("label", styles.label);
 export const Code = createTypo("code", styles.code);
+/** Inherits the container's font size, weight and line-height; applies text props only. */
+export const Text = createTypo("span", styles.text);
 
 export const AppTitle = createTypo("span", styles["app-title"]);
 export const PanelTitle = createTypo("span", styles["panel-title"]);
@@ -71,6 +137,7 @@ export const Typo = {
   Caption,
   Label,
   Code,
+  Text,
   AppTitle,
   PanelTitle,
   DashboardTitle,

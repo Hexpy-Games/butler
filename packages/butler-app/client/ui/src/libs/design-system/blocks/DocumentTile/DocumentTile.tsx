@@ -2,8 +2,12 @@ import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { Button } from "../../components/Button";
 import { ButtonContainer } from "../../components/ButtonContainer";
 import { Card } from "../../components/Card";
-import { ResourceSummary } from "../ResourceSummary";
+import { Inline } from "../../components/Inline";
+import { Stack } from "../../components/Stack";
+import { Tag } from "../../components/Tag";
+import { Typo } from "../../components/Typo";
 import styles from "./DocumentTile.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface DocumentTileAction {
   id: string;
@@ -37,7 +41,7 @@ export function DocumentTile({
   badge,
   icon,
   actions = [],
-  actionLabel = "Open",
+  actionLabel,
   actionHref,
   actionTarget,
   ariaLabel,
@@ -53,39 +57,32 @@ export function DocumentTile({
     event.preventDefault();
     onOpen();
   };
+  const secondLine = [description, meta].filter(Boolean).join(" · ");
   const content = (
-    <div className={styles.contentWrap}>
-      {icon || badge ? (
-        <span className={styles.marker}>
-          {icon ? (
-            <span
-              className={styles.icon}
-              data-slot="document-tile-icon"
-              aria-hidden="true"
-            >
-              {icon}
-            </span>
-          ) : null}
-          {badge ? (
-            <span className={styles.badge} data-slot="document-tile-badge">
-              {badge}
-            </span>
-          ) : null}
+    <div className={styles.body}>
+      {icon ? (
+        <span className={styles.icon} data-slot="document-tile-icon" aria-hidden="true">
+          {icon}
         </span>
       ) : null}
-      <ResourceSummary
-        className={styles.content}
-        title={title}
-        description={description}
-        meta={meta}
-      />
+      <Stack gap="xs" className={dsClass(styles.copy)}>
+        <Typo.Body weight="medium" lineClamp={2} wrap="anywhere" title={title}>
+          {title}
+        </Typo.Body>
+        {badge || secondLine ? (
+          <Inline gap="xs" wrap={false} className={dsClass(styles.meta)}>
+            {badge ? <Tag data-test-class="document-tile-badge">{badge}</Tag> : null}
+            {secondLine ? <Typo.Caption tone="secondary" truncate>{secondLine}</Typo.Caption> : null}
+          </Inline>
+        ) : null}
+      </Stack>
     </div>
   );
 
   return (
     <Card
       aria-label={isTileClickable ? (ariaLabel ?? actionLabel) : undefined}
-      className={styles.tile}
+      className={dsClass(styles.tile)}
       data-slot="document-tile"
       interactive={isTileClickable}
       role={isTileClickable ? "button" : undefined}
@@ -95,7 +92,7 @@ export function DocumentTile({
     >
       {content}
       {hasActions ? (
-        <ButtonContainer className={styles.actions} size="xs">
+        <ButtonContainer className={dsClass(styles.actions)} size="xs">
           {actions.map((action) => (
             <DocumentTileActionButton action={action} key={action.id} />
           ))}

@@ -1,3 +1,4 @@
+import { useScrollEdges } from "../../lib/useScrollEdges";
 import styles from "./ChangedLineDiff.module.css";
 
 export interface ChangedLineDiffLine {
@@ -16,8 +17,9 @@ export function ChangedLineDiff({
   id: string;
   lines: readonly ChangedLineDiffLine[];
 }) {
+  const diffFadeRef = useScrollEdges("x");
   return (
-    <div aria-label={ariaLabel} className={styles.diff} id={id} role="region">
+    <div ref={diffFadeRef} aria-label={ariaLabel} className={styles.diff} id={id} role="region">
       <div className={styles.lines}>
         {lines.map((line, index) => (
           <div

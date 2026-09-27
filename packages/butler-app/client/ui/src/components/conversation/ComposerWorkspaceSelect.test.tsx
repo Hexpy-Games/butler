@@ -6,13 +6,14 @@ import { ComposerWorkspaceSelect } from "./ComposerWorkspaceSelect.tsx";
 import { useComposerStore } from "./composerStore.ts";
 import { projectDraftId } from "@/app/utils.ts";
 
-test("both new conversation surfaces reuse glass capsules, default to local, and lock during send", async () => {
+test("both new conversation surfaces use the composer control style, default to local, and lock during send", async () => {
   const dom = new JSDOM('<div id="root"></div>');
-  const globals = ["window", "document", "navigator", "HTMLElement", "IS_REACT_ACT_ENVIRONMENT"] as const;
+  const globals = ["window", "document", "navigator", "HTMLElement", "DocumentFragment", "IS_REACT_ACT_ENVIRONMENT"] as const;
   const previous = globals.map((key) => Object.getOwnPropertyDescriptor(globalThis, key));
   const state = useComposerStore.getState();
   Object.assign(globalThis, { window: dom.window, document: dom.window.document,
-    navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, IS_REACT_ACT_ENVIRONMENT: true });
+    navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement,
+    DocumentFragment: dom.window.DocumentFragment, IS_REACT_ACT_ENVIRONMENT: true });
   const container = dom.window.document.querySelector("#root")!;
   const root = createRoot(container);
   try {
@@ -24,7 +25,9 @@ test("both new conversation surfaces reuse glass capsules, default to local, and
       });
       const trigger = container.querySelector<HTMLButtonElement>('[role="combobox"]')!;
       expect(trigger.textContent).toBe("Local");
-      expect(trigger.dataset.surface).toBe("glass-pill");
+      // Same control style as the access-mode control beside it, not a glass pill.
+      expect(trigger.dataset.surface).toBeUndefined();
+      expect(trigger.querySelector('[data-test-class="composer-control-content"]')).not.toBeNull();
       expect(trigger.querySelector("svg")).not.toBeNull();
       await act(async () => { useComposerStore.getState().setWorkspaceMode("worktree"); });
       expect(useComposerStore.getState().workspaceMode).toBe("worktree");

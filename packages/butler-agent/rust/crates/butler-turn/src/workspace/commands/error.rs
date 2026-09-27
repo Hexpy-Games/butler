@@ -92,6 +92,7 @@ impl CommandError {
         }
     }
 
+    /// The wire code (a cwd rejection reports its reason).
     pub fn code(&self) -> &'static str {
         match self {
             Self::Io { .. } => CommandCode::CommandIoFailed.as_str(),

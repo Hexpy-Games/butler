@@ -1,0 +1,27 @@
+.content {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.title,
+.detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title {
+  max-width: var(--status-capsule-title-max);
+  flex: 1 1 auto;
+}
+
+.detail {
+  max-width: var(--status-capsule-detail-max);
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+}

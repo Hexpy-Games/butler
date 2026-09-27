@@ -176,11 +176,17 @@ impl TurnStore for Harness {
             Ok(StopPersistenceOutcome::Cancelled)
         })
     }
-    fn record_model_route_event(&self, _: ModelRouteEventWrite) -> PortFuture<'_, Option<Value>> {
-        Box::pin(async { Ok(None) })
+    fn record_model_route_event(
+        &self,
+        _: ModelRouteEventWrite,
+    ) -> PortFuture<'_, crate::btcc::RouteEventStatus> {
+        Box::pin(async { Ok(crate::btcc::RouteEventStatus::Recorded) })
     }
-    fn load_model_route_attempt_history(&self, _: ModelRoundKey) -> PortFuture<'_, Value> {
-        Box::pin(async { Ok(json!({})) })
+    fn load_model_route_attempt_history(
+        &self,
+        _: ModelRoundKey,
+    ) -> PortFuture<'_, crate::btcc::AttemptHistory> {
+        Box::pin(async { Ok(crate::btcc::AttemptHistory::default()) })
     }
     fn load_model_round_acceptance(&self, _: ModelRoundKey) -> PortFuture<'_, Option<Value>> {
         Box::pin(async { Ok(None) })

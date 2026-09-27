@@ -1,3 +1,4 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type React from "react";
 import type { ReactNode } from "react";
 import { useMemo } from "react";
@@ -8,11 +9,12 @@ import { cn } from "../../lib/utils";
 import { Label } from "./label";
 import { Separator } from "./separator";
 import styles from "../../components/Field/Field.module.css";
+import { dsClass } from "../../lib/internal";
 
 function FieldSet({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<"fieldset">) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"fieldset">>) {
   return (
     <fieldset
       data-slot="field-set"
@@ -25,7 +27,7 @@ function FieldLegend({
   className,
   variant = "legend",
   ...props
-}: React.ComponentPropsWithoutRef<"legend"> & {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"legend">> & {
   variant?: "legend" | "label";
 }) {
   return (
@@ -40,7 +42,7 @@ function FieldLegend({
 function FieldGroup({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<"div">) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"div">>) {
   return (
     <div
       data-slot="field-group"
@@ -66,7 +68,7 @@ function Field({
   className,
   orientation = "vertical",
   ...props
-}: React.ComponentPropsWithoutRef<"div"> &
+}: DsBaseProps<React.ComponentPropsWithoutRef<"div">> &
   VariantProps<typeof fieldVariants>) {
   return (
     <div
@@ -81,7 +83,7 @@ function Field({
 function FieldContent({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<"div">) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"div">>) {
   return (
     <div
       data-slot="field-content"
@@ -93,11 +95,11 @@ function FieldContent({
 function FieldLabel({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<typeof Label>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof Label>>) {
   return (
     <Label
       data-slot="field-label"
-      className={cn(styles.label, className)}
+      className={dsClass(styles.label, className)}
       {...props} />
   );
 }
@@ -105,7 +107,7 @@ function FieldLabel({
 function FieldTitle({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<"div">) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"div">>) {
   return (
     <div
       data-slot="field-label"
@@ -117,7 +119,7 @@ function FieldTitle({
 function FieldDescription({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<"p">) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"p">>) {
   return (
     <p
       data-slot="field-description"
@@ -130,14 +132,14 @@ function FieldSeparator({
   children,
   className,
   ...props
-}: React.ComponentPropsWithoutRef<"div">) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"div">>) {
   return (
     <div
       data-slot="field-separator"
       data-content={!!children}
       className={cn(styles.separator, className)}
       {...props}>
-      <Separator className="absolute inset-0 top-1/2" />
+      <Separator className={dsClass(styles.separatorLine)} />
       {children && (
         <span
           className={styles.separatorContent}
@@ -154,7 +156,7 @@ function FieldError({
   children,
   errors,
   ...props
-}: React.ComponentPropsWithoutRef<"div"> & {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"div">> & {
   errors?: Array<{ message?: ReactNode }>;
 }) {
   const content = useMemo(() => {
@@ -175,7 +177,7 @@ function FieldError({
     }
 
     return (
-      <ul className="ml-4 flex list-disc flex-col gap-1">
+      <ul className={styles.errorList}>
         {uniqueErrors.map((error, index) =>
           error?.message && <li key={index}>{error.message}</li>)}
       </ul>

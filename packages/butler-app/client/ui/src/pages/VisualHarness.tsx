@@ -33,7 +33,7 @@ import {
   HARNESS_SS03_SUMMARY,
   HARNESS_SUMMARY,
 } from "@/app/fixtures.ts";
-import { appThemeClasses, isDraftChatId, projectDraftId } from "@/app/utils.ts";
+import { appShellTheme, isDraftChatId, projectDraftId } from "@/app/utils.ts";
 import type { WorkerProfile } from "@/app/types.ts";
 import { useButlerStore } from "@/app/store.ts";
 import {
@@ -205,7 +205,7 @@ export function VisualHarness() {
   return (
     <AdaptiveShell
       ref={shellRef}
-      className={`mac-window visual-harness ${appThemeClasses(harnessSettings, systemPrefersDark)}`}
+      theme={appShellTheme(harnessSettings, systemPrefersDark)}
       chromeEnvironment={chromeEnvironment()}
       data-test-class="mac-window visual-harness"
       leftOpen={leftOpen}
@@ -213,7 +213,7 @@ export function VisualHarness() {
       resizing={Boolean(resizingPanel)}
       rightOpen={effectiveRightOpen}
       settingsActive={isSettingsView}
-      style={panelStyle}
+      UNSAFE_style={panelStyle}
       transparentWorkspace={newChatActive}
     >
       {!isSettingsView && (
@@ -234,7 +234,6 @@ export function VisualHarness() {
       ) : (
         <>
           <AdaptiveShellSidebar
-            className="sidebar-slot"
             data-test-class="sidebar-slot"
             id="butler-left-sidebar"
             open={leftOpen}
@@ -242,7 +241,6 @@ export function VisualHarness() {
             <Sidebar />
           </AdaptiveShellSidebar>
           <AdaptiveShellWorkspace
-            className="workspace"
             data-test-class="workspace"
           >
             <Titlebar />
@@ -283,7 +281,6 @@ export function VisualHarness() {
       )}
       {!isSettingsView && rightAvailable && (
         <AdaptiveShellInspector
-          className="right-panel-slot"
           data-test-class="right-panel-slot"
           open={effectiveRightOpen}
         >

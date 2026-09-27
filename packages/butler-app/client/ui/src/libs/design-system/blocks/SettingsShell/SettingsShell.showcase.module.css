@@ -1,0 +1,7 @@
+/* DS Viewer frame: a bounded window height for the shell. */
+.showcaseFrame {
+  --adaptive-viewport-block-size: 520px;
+
+  height: 520px;
+  overflow: hidden;
+}

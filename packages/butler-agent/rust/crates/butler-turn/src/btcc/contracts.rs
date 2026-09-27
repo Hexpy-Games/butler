@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
+/// How much reasoning the model is asked to spend.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReasoningEffort {
@@ -16,6 +17,7 @@ pub enum ReasoningEffort {
     Max,
 }
 
+/// What a turn may do to the workspace: anything, ask first, or read only.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AccessMode {
@@ -24,6 +26,7 @@ pub enum AccessMode {
     ReadOnly,
 }
 
+/// The conversation a message came from on its transport.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Peer {
@@ -33,6 +36,7 @@ pub struct Peer {
     pub parent_id: Option<String>,
 }
 
+/// The kind of transport conversation.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PeerKind {
@@ -42,6 +46,7 @@ pub enum PeerKind {
     Channel,
 }
 
+/// Who sent an inbound message.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Sender {
@@ -50,6 +55,7 @@ pub struct Sender {
     pub display_name: Option<String>,
 }
 
+/// An attachment of an inbound message.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AttachmentRef {
@@ -69,6 +75,7 @@ pub struct AttachmentRef {
     pub visual_manifest: Option<Value>,
 }
 
+/// The media kind of an attachment.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AttachmentKind {
@@ -92,6 +99,7 @@ impl AttachmentKind {
     }
 }
 
+/// The inbound message that starts a turn.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TurnMessage {
@@ -104,6 +112,7 @@ pub struct TurnMessage {
     pub image_admission: Option<Value>,
 }
 
+/// What started a turn: a user message or an authorized wake of an earlier turn.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum TurnTrigger {
@@ -120,6 +129,7 @@ pub enum TurnTrigger {
     },
 }
 
+/// The role a session plays: the user's butler, a delegated steward or a worker.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionRole {
@@ -128,6 +138,7 @@ pub enum SessionRole {
     Worker,
 }
 
+/// Where a turn runs: its role, workspace and project.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TurnRoute {
@@ -139,6 +150,7 @@ pub struct TurnRoute {
     pub reason: Option<String>,
 }
 
+/// Where a turn's progress is published.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProgressDestination {
@@ -150,6 +162,7 @@ pub struct ProgressDestination {
     pub app_queue_claim_id: Option<String>,
 }
 
+/// A request to run (or replay) one turn.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TurnRequest {
@@ -183,12 +196,14 @@ pub struct TurnRequest {
     pub preparation_cancellation: CancellationToken,
 }
 
+/// A request to stop a turn.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StopRequest {
     pub turn_id: String,
 }
 
+/// Whether the turn was newly admitted or replayed its stored admission.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AdmissionKind {
@@ -196,6 +211,7 @@ pub enum AdmissionKind {
     Replay,
 }
 
+/// An operational failure a turn answers with instead of an answer.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(thiserror::Error)]
@@ -205,6 +221,7 @@ pub struct RuntimeFailure {
     pub retryable: bool,
 }
 
+/// A file a turn produced for the user.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FinalArtifact {
@@ -220,6 +237,7 @@ pub struct FinalArtifact {
     pub created_at: Option<String>,
 }
 
+/// The kind of produced artifact.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ArtifactKind {
@@ -234,6 +252,7 @@ pub enum ArtifactKind {
     Unknown,
 }
 
+/// The lifecycle state of durable Work.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkStatus {
@@ -243,6 +262,7 @@ pub enum WorkStatus {
     Abandoned,
 }
 
+/// How the Work a turn accepted ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AcceptedWorkStatus {
@@ -251,17 +271,20 @@ pub enum AcceptedWorkStatus {
     Failed,
 }
 
+/// The accepted Work outcome delivered with a final answer.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AcceptedWorkResult {
     pub status: AcceptedWorkStatus,
 }
 
+/// Why a delivered turn is still executing elsewhere.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionOutcome {
     WaitingForWorker,
 }
 
+/// The model a turn asked for, the one that answered, and what the provider reported.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelIdentity {
@@ -271,6 +294,7 @@ pub struct ModelIdentity {
     pub(crate) provider_reported_model_ref: Option<String>,
 }
 
+/// A turn delivered now.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeliveredOutcome {
@@ -295,6 +319,7 @@ pub struct DeliveredOutcome {
     pub model_identity: Option<ModelIdentity>,
 }
 
+/// A turn that had already been delivered.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AlreadyDeliveredOutcome {
@@ -321,6 +346,7 @@ pub struct AlreadyDeliveredOutcome {
     rename_all = "snake_case",
     rename_all_fields = "camelCase"
 )]
+/// How a turn request ended.
 pub enum TurnOutcomeKind {
     Delivered(Box<DeliveredOutcome>),
     AlreadyDelivered(Box<AlreadyDeliveredOutcome>),
@@ -331,6 +357,7 @@ pub enum TurnOutcomeKind {
     Suspended { turn_id: String, reason: String },
 }
 
+/// The result of a turn request with how it was admitted.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TurnOutcome {

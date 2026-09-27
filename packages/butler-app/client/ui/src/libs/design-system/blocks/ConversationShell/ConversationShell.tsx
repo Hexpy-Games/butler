@@ -1,8 +1,11 @@
 import type { CSSProperties, ReactNode, Ref } from "react";
 import { cn } from "../../lib/utils";
+import { useComposedRefs } from "../../lib/composeRefs";
+import { useScrollEdges } from "../../lib/useScrollEdges";
 import { ChevronDownIcon } from "../../components/Icons";
 import { PillButton } from "../../components/PillButton";
 import styles from "./ConversationShell.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface ConversationShellProps {
   children: ReactNode;
@@ -55,16 +58,17 @@ export function ConversationScroll({
   virtualized?: boolean;
   scrollRef?: Ref<HTMLDivElement>;
 }) {
+  const edgesRef = useScrollEdges("y", masked);
+  const ref = useComposedRefs(scrollRef, edgesRef);
   return (
     <div
       className={cn(
         styles.scroll,
-        !masked && styles.unmaskedScroll,
         !scrollable && styles.lockedScroll,
         virtualized && styles.virtualScroll,
       )}
       data-test-class={`conversation-scroll${virtualized ? " message-virtual-scroll" : ""}`}
-      ref={scrollRef}
+      ref={ref}
     >
       {children}
     </div>
@@ -106,11 +110,11 @@ export function ConversationScrollToBottomButton({
   return (
     <PillButton
       aria-label={ariaLabel}
-      className={styles.scrollToBottomButton}
+      className={dsClass(styles.scrollToBottomButton)}
       surface="glass"
       data-test-class="scroll-to-bottom-button"
       data-unread-messages={hasUnreadMessages ? "true" : "false"}
-      icon={<ChevronDownIcon size={16} />}
+      icon={<ChevronDownIcon size="md" />}
       onClick={onScrollToBottom}
     >
       {children}

@@ -35,7 +35,7 @@ export function CurrentTurnStatus({
     "operational_recovery" ? publicActivity : undefined;
   const waitingForApproval = state === "waiting_for_form";
   const fullLabel = waitingForApproval ? appCopy.interfaceStatus.approvalWaiting : operationLabel ?? (providerRecovery ? interfaceProgressLabel(providerRecovery) : undefined) ??
-    (modelRoundWait ? interfaceProgressLabel(modelRoundWait) : undefined) ?? (publicActivity ? interfaceProgressLabel(publicActivity) : undefined) ??
+    (modelRoundWait ? appCopy.interfaceStatus.generating : undefined) ?? (publicActivity ? interfaceProgressLabel(publicActivity) : undefined) ??
     phaseLabel ??
     appCopy.interfaceStatus.generating;
   return (

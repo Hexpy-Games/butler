@@ -1,0 +1,34 @@
+import type { ShowcaseGuidance } from "../../showcase";
+import { Spinner } from "../../components/Spinner";
+import { Stack } from "../../components/Stack";
+import { ProgressMeter } from "./ProgressMeter";
+
+// #region recipe: Labelled budget bar
+function ContextBudget() {
+  return (
+    <Stack gap="sm">
+      <ProgressMeter label="Context" meta="62%" value={62} />
+      <ProgressMeter bare ariaLabel="Changes reviewed" value={80} tone="success" />
+    </Stack>
+  );
+}
+// #endregion
+
+export const guidance: ShowcaseGuidance = {
+  purpose: "A determinate progress bar (0–100) with a label row, tones and a bare track variant.",
+  whenToUse: ["Show a known fraction: budget used, steps done"],
+  whenNotToUse: [
+    { when: "Unknown duration", use: "Spinner" },
+    { when: "Context usage in the composer toolbar", use: "ContextDonutButton" },
+  ],
+  recipes: [{ name: "Labelled budget bar", description: "label and meta above the track; bare needs ariaLabel.", render: () => <ContextBudget /> }],
+  doDont: [
+    {
+      do: { caption: "A known fraction shows as a bar with a number.", render: () => <ContextBudget /> },
+      dont: { caption: "A spinner for work whose progress is known.", render: () => <Spinner size={16} label="Loading" /> },
+    },
+  ],
+  content: ["Meta shows the number (62%, 3/5)."],
+  accessibility: ["role=progressbar with aria-valuenow; tone never replaces the number."],
+  tokens: ["--accent", "--color-success", "--selection", "--motion-deliberate"],
+};

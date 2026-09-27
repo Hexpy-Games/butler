@@ -1,10 +1,10 @@
 .root {
   --prompt-content-width: var(--conversation-content-width, min(760px, 86%));
   --prompt-title-icon-size: var(--new-chat-title-icon-size, 54px);
-  --prompt-title-icon-gap: var(--new-chat-title-icon-gap, 0px);
+  --prompt-title-icon-gap: var(--new-chat-title-icon-gap, var(--space-md));
   --prompt-edge-gutter: var(
     --new-chat-title-edge-gutter,
-    var(--prompt-title-icon-size)
+    calc(var(--prompt-title-icon-size) + var(--prompt-title-icon-gap))
   );
   --prompt-content-inset: max(
     var(--prompt-edge-gutter),
@@ -184,10 +184,10 @@
   cursor: pointer;
   font: inherit;
   transition:
-    background 160ms ease,
-    border-color 160ms ease,
-    color 160ms ease,
-    transform 160ms ease;
+    background var(--motion-base) var(--motion-ease-standard),
+    border-color var(--motion-base) var(--motion-ease-standard),
+    color var(--motion-base) var(--motion-ease-standard),
+    transform var(--motion-base) var(--motion-ease-standard);
 }
 
 .paletteOption:hover,
@@ -223,7 +223,7 @@
   font-size: var(--font-size-2);
   font-weight: var(--typo-label-weight);
   letter-spacing: 0;
-  line-height: var(--line-height-label);
+  line-height: var(--typo-label-line-height);
   white-space: nowrap;
 }
 
@@ -277,12 +277,13 @@
   min-height: 260px;
   scroll-snap-align: start;
   transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease,
-    transform 160ms ease;
+    border-color var(--motion-base) var(--motion-ease-standard),
+    box-shadow var(--motion-base) var(--motion-ease-standard),
+    transform var(--motion-base) var(--motion-ease-standard);
 }
 
-.itemFrame:hover:not([data-disabled="true"]) {
+.itemFrame:hover:not([data-disabled="true"]),
+.itemFrame:has(.item:focus-visible) {
   --tinted-glass-bg: color-mix(in srgb, var(--surface-raised) 68%, transparent);
   --tinted-glass-border: color-mix(
     in srgb,
@@ -291,6 +292,10 @@
   );
 
   transform: translateY(-2px);
+}
+
+.itemFrame:has(.item:active) {
+  transform: none;
 }
 
 .item {
@@ -416,7 +421,8 @@
     transform: none;
   }
 
-  .itemFrame:hover:not([data-disabled="true"]) {
+  .itemFrame:hover:not([data-disabled="true"]),
+  .itemFrame:has(.item:focus-visible) {
     transform: none;
   }
 }

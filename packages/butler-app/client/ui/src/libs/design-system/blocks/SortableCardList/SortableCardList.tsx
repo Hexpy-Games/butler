@@ -1,3 +1,4 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import {
   closestCenter,
   DndContext,
@@ -22,11 +23,12 @@ import { EmptyLine } from "../EmptyLine";
 import { cn } from "../../lib/utils";
 import { SortableCardItem, type SortableCardItemData } from "./SortableCardItem";
 import styles from "./SortableCardList.module.css";
+import { dsClass } from "../../lib/internal";
 
 export type SortableCardListItem = SortableCardItemData;
 
 export interface SortableCardListProps<TItem extends SortableCardListItem = SortableCardListItem>
-  extends Omit<HTMLAttributes<HTMLElement>, "title"> {
+  extends Omit<DsBaseProps<HTMLAttributes<HTMLElement>>, "title"> {
   title?: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
@@ -104,10 +106,10 @@ export function SortableCardList<TItem extends SortableCardListItem>({
   return (
     <section className={cn(styles.list, className)} {...props}>
       {(title || description || actions) && (
-        <Stack align="row" cross="start" justify="between" gap="md" className={styles.header}>
-          <Stack gap="xs" className={styles.heading}>
+        <Stack align="row" cross="start" justify="between" gap="md" className={dsClass(styles.header)}>
+          <Stack gap="xs" className={dsClass(styles.heading)}>
             {title && <Typo.Body>{title}</Typo.Body>}
-            {description && <Typo.Caption className={styles.headerDescription}>{description}</Typo.Caption>}
+            {description && <Typo.Caption className={dsClass(styles.headerDescription)}>{description}</Typo.Caption>}
           </Stack>
           {actions}
         </Stack>

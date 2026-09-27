@@ -7,6 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::{Map, Value};
 
 use super::super::contracts::CliFailure;
+use crate::project_ledger::events::{self, Event};
 
 pub(super) fn create(
     path: &Path,
@@ -105,20 +106,9 @@ fn write(path: &Path, mut metadata: Map<String, Value>, body: &str) -> Result<()
     fs::write(path, output).map_err(|source| super::super::io_failure().with_source(source))
 }
 
-pub(super) fn append_event(root: &Path, event: &Value) -> Result<(), CliFailure> {
-    let mut record = Map::new();
-    record.insert(
-        "schema".into(),
-        Value::String("project-ledger.event.v1".into()),
-    );
-    record.insert("ts".into(), Value::String(super::super::now_iso()?));
-    record.extend(
-        event
-            .as_object()
-            .cloned()
-            .ok_or_else(super::super::io_failure)?,
-    );
-    let line = butler_core::json::stringify(&Value::Object(record))
+/// Appends `event` to `ledger.jsonl`, creating the log when it is missing.
+pub(super) fn append_event(root: &Path, event: Event<'_>) -> Result<(), CliFailure> {
+    let line = events::line(&super::super::now_iso()?, event)
         .map_err(|source| super::super::io_failure().with_source(source))?;
     let mut file = OpenOptions::new()
         .append(true)

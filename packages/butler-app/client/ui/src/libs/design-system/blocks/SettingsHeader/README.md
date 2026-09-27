@@ -13,7 +13,9 @@ Use it inside settings views and configuration panels.
 It standardizes title, description, and action placement.
 
 ## How to use this component
-Pass title, optional description, and optional action.
+Pass title, optional description, and optional action. The title renders as
+the page `h2` in `Typo.H2` (24px), the top of the settings type hierarchy, so
+it always outranks `FormSection` titles (`Typo.H4`) and field labels.
 
 ## Who can use this component
 Settings containers and related blocks.

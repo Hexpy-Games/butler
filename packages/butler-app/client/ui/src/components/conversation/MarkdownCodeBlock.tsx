@@ -1,24 +1,42 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { Children, isValidElement, type ReactNode } from "react";
-import { MessageFooter } from "@/butler-ds";
+import { MarkdownCodeFrame, MessageFooter } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { CopyTextButton } from "./CopyTextButton";
-import styles from "./MarkdownCodeBlock.module.css";
+import { useSyntaxHighlight } from "./useSyntaxHighlight";
+
+type CodeChildProps = { children?: ReactNode; className?: string };
 
 export function MarkdownCodeBlock({ children }: { children?: ReactNode }) {
   useAppLocale();
-  const code = Children.toArray(children).map((child) => {
-    if (isValidElement<{ children?: ReactNode }>(child)) {
+  const codeChildren = Children.toArray(children);
+  const code = codeChildren.map((child) => {
+    if (isValidElement<CodeChildProps>(child)) {
       return typeof child.props.children === "string" ? child.props.children : "";
     }
     return typeof child === "string" ? child : "";
   }).join("");
+  const language = codeChildren
+    .map((child) =>
+      isValidElement<CodeChildProps>(child)
+        ? /(?:^|\s)language-([\w+#.-]+)/u.exec(child.props.className ?? "")?.[1]
+        : undefined)
+    .find(Boolean);
+  const highlighted = useSyntaxHighlight(code, language);
+  const codeElement = codeChildren.find((child) => isValidElement<CodeChildProps>(child));
+  const body = highlighted && isValidElement<CodeChildProps>(codeElement)
+    ? <code className={codeElement.props.className}>{highlighted}</code>
+    : children;
   return (
-    <div className={styles.block}>
-      <MessageFooter dataTestClass="code-block-actions">
-        <CopyTextButton text={code} label={appCopy.conversation.messageActions.copyCode} />
-      </MessageFooter>
-      <pre>{children}</pre>
-    </div>
+    <MarkdownCodeFrame
+      language={language}
+      actions={(
+        <MessageFooter dataTestClass="code-block-copy">
+          <CopyTextButton text={code} label={appCopy.conversation.messageActions.copyCode} />
+        </MessageFooter>
+      )}
+    >
+      {body}
+    </MarkdownCodeFrame>
   );
 }

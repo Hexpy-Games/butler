@@ -3,9 +3,10 @@ import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import { runtimeModels } from "@/app/utils.ts";
-import { Stack } from "@/butler-ds";
-import { SettingsSection } from "./SettingsFormComponents";
-import { ButlerModelSettings } from "./ButlerModelSettings";
+import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
+import { ButlerModelFields } from "./ButlerModelFields";
+import { FallbackConsolidationFields } from "./FallbackConsolidationFields";
+import { PermissionsFields } from "./PermissionsFields";
 import { ModelAddEditPage } from "./ModelAddEditPage";
 import { ModelManagementPage } from "./ModelManagementPage";
 import { WorkerProfileControls } from "./WorkerProfileControls";
@@ -61,31 +62,49 @@ export function ModelsSettings() {
     }
   }
 
+  const sections = settingsCopy.pageSections;
   return (
-    <>
-      <ButlerModelSettings />
-
-      <SettingsSection title={settingsCopy.panels.workerProfiles}>
-        <Stack gap="md">
+    <SettingsPage>
+      <SettingsSection id="butler-model" kind="form" title={sections.butlerModel}>
+        <ButlerModelFields />
+      </SettingsSection>
+      <SettingsSection
+        id="fallback-consolidation"
+        kind="form"
+        title={sections.fallbackConsolidation}
+        description={settingsCopy.pageSectionDescriptions.fallbackConsolidation}
+      >
+        <FallbackConsolidationFields />
+      </SettingsSection>
+      <SettingsSection id="permissions" kind="form" title={sections.permissions}>
+        <PermissionsFields />
+      </SettingsSection>
+      <SettingsSection
+        id="worker-profiles"
+        kind="list"
+        title={sections.workerProfiles}
+        description={workerProfiles.length < WORKER_PROFILES_LIMIT
+          ? undefined
+          : settingsCopy.workerProfilesPanel.addLimitReached}
+        actions={
           <WorkerProfileControls
             canAdd={workerProfiles.length < WORKER_PROFILES_LIMIT}
             maxSimultaneousWorkers={draft.max_simultaneous_workers}
             onAdd={() => addProfile()}
-            onMaxChange={(value) =>
-              update({ max_simultaneous_workers: value }, setSettings)
-            }
+            onMaxChange={(value) => update({ max_simultaneous_workers: value }, setSettings)}
           />
-          {workerProfiles.map((profile, index) => (
-            <WorkerProfileEditor
-              key={profile.id}
-              profile={profile}
-              models={models}
-              onUpdate={(partial) => updateProfile(index, partial)}
-              onDelete={() => deleteProfile(profile.id)}
-            />
-          ))}
-        </Stack>
+        }
+      >
+        {workerProfiles.map((profile, index) => (
+          <WorkerProfileEditor
+            key={profile.id}
+            profile={profile}
+            models={models}
+            onUpdate={(partial) => updateProfile(index, partial)}
+            onDelete={() => deleteProfile(profile.id)}
+          />
+        ))}
       </SettingsSection>
-    </>
+    </SettingsPage>
   );
 }

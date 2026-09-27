@@ -5,6 +5,7 @@ use butler_core::tool_protocol::ToolName;
 
 use super::catalog::{GuidedCatalogSnapshot, GuidedCatalogTool};
 use super::policy::GuidedExecutionPolicy;
+use super::selection::GuidedPhase;
 
 const DISCOVERY: &[&str] = &[
     "tool_search",
@@ -56,20 +57,111 @@ const NON_FULL: &[&str] = &[
 ];
 const STEWARD_PARENT: &[&str] = &["delegate_to_steward", "steer_steward", "cancel_steward"];
 const WORKER_DELEGATION: &[&str] = &["delegate_to_worker", "steer_worker", "wait_for_worker"];
+/// The tools a guided turn is authorized to call on the legacy surface, from
+/// its role, access mode, tracking mode and project binding.
+/// What the turn context says about its project.
+#[derive(Clone, Copy)]
+pub(super) struct ProjectSignals {
+    /// The context names a project.
+    pub(super) project_ref: bool,
+    /// The context carries project sources.
+    pub(super) project_sources: bool,
+}
+
 pub(super) fn legacy_authorized<'a>(
     catalog: &'a GuidedCatalogSnapshot,
     policy: &GuidedExecutionPolicy,
-    project_ref: bool,
-    project_sources: bool,
+    signals: ProjectSignals,
 ) -> Vec<&'a GuidedCatalogTool> {
-    let has_project = policy.has_project_id() || project_ref;
-    let ledger = policy.tracking_mode == "ledger";
-    let mut profiles = if policy.role == "worker" {
+    let scope = AuthorizationScope {
+        has_project: policy.has_project_id() || signals.project_ref,
+        ledger: policy.tracking_mode == "ledger",
+        worker: policy.role == "worker",
+    };
+    let mut names = if scope.worker {
+        catalog.worker_default.clone()
+    } else {
+        catalog.profile_names(&authorized_profiles(catalog, policy, scope))
+    };
+    if !scope.worker && scope.has_project && policy.access_mode == AccessMode::FullAccess {
+        names.insert("bind_session_git_worktree".into());
+    }
+    for name in &policy.required_tools {
+        let trimmed = name.trim();
+        if catalog.tool(trimmed).is_some()
+            && !(scope.worker && catalog.worker_forbidden.contains(trimmed))
+        {
+            names.insert(trimmed.into());
+        }
+    }
+    if !scope.ledger || policy.access_mode == AccessMode::ReadOnly {
+        names.retain(|name| !catalog.project_mutations.contains(name));
+    }
+    if !scope.ledger {
+        names.retain(|name| !catalog.project_inspection.contains(name));
+    }
+    names.extend(DISCOVERY.iter().map(|name| (*name).to_owned()));
+    apply_access_mode(&mut names, catalog, policy, scope);
+    apply_role(&mut names, policy);
+    names.retain(|name| {
+        !catalog.project_mutations.contains(name)
+            && (!catalog.work_tracking.contains(name)
+                || matches!(
+                    ToolName::parse(name.as_str()),
+                    Some(
+                        ToolName::UpdateTodoList
+                            | ToolName::ListTodoList
+                            | ToolName::ListWorkStreams
+                            | ToolName::UpdateWorkStreamState
+                    )
+                ))
+    });
+    if policy.access_mode != AccessMode::ReadOnly && scope.ledger && scope.has_project {
+        names.extend(catalog.managed_ledger_effects.iter().cloned());
+    }
+    if signals.project_sources {
+        names.insert("read_project_source".into());
+    } else {
+        names.remove("read_project_source");
+    }
+    let tracked = policy.tracking_mode != "none";
+    if tracked {
+        names.extend(
+            catalog
+                .tools
+                .iter()
+                .filter(|tool| tool.durable)
+                .map(|tool| tool.name.clone()),
+        );
+    }
+    catalog
+        .tools
+        .iter()
+        .filter(|tool| names.contains(&tool.name) && (!tool.durable || tracked))
+        .collect()
+}
+
+/// The facts of a policy that shape legacy authorization.
+#[derive(Clone, Copy)]
+struct AuthorizationScope {
+    has_project: bool,
+    /// Work is tracked in the project ledger.
+    ledger: bool,
+    worker: bool,
+}
+
+/// The catalog profiles a non-worker turn draws its tools from.
+fn authorized_profiles(
+    catalog: &GuidedCatalogSnapshot,
+    policy: &GuidedExecutionPolicy,
+    scope: AuthorizationScope,
+) -> Vec<String> {
+    let mut profiles = if scope.worker {
         Vec::new()
     } else {
         vec!["startup".to_owned()]
     };
-    if policy.role != "worker" && ledger && has_project {
+    if !scope.worker && scope.ledger && scope.has_project {
         profiles.push("project".into());
         if policy.access_mode != AccessMode::ReadOnly {
             profiles.push("project-lifecycle".into());
@@ -90,38 +182,26 @@ pub(super) fn legacy_authorized<'a>(
     if policy.access_mode == AccessMode::FullAccess {
         profiles.push("workspace".into());
     }
-    if has_project {
+    if scope.has_project {
         profiles.push("project".into());
     }
-    if policy.role != "worker" && !ledger {
+    if !scope.worker && !scope.ledger {
         profiles.retain(|name| name != "project" && name != "project-lifecycle");
     }
-    if policy.role != "worker" && !ledger || policy.access_mode == AccessMode::ReadOnly {
+    if !scope.worker && !scope.ledger || policy.access_mode == AccessMode::ReadOnly {
         profiles.retain(|name| name != "project-lifecycle");
     }
-    let mut names = if policy.role == "worker" {
-        catalog.worker_default.clone()
-    } else {
-        catalog.profile_names(&profiles)
-    };
-    if policy.role != "worker" && has_project && policy.access_mode == AccessMode::FullAccess {
-        names.insert("bind_session_git_worktree".into());
-    }
-    for name in &policy.required_tools {
-        let trimmed = name.trim();
-        if catalog.tool(trimmed).is_some()
-            && !(policy.role == "worker" && catalog.worker_forbidden.contains(trimmed))
-        {
-            names.insert(trimmed.into());
-        }
-    }
-    if !ledger || policy.access_mode == AccessMode::ReadOnly {
-        names.retain(|name| !catalog.project_mutations.contains(name));
-    }
-    if !ledger {
-        names.retain(|name| !catalog.project_inspection.contains(name));
-    }
-    names.extend(DISCOVERY.iter().map(|name| (*name).to_owned()));
+    profiles
+}
+
+/// Full access adds effect-free tools, commands, file writes and MCP calls;
+/// other modes keep only the non-full allowlist (commands only when asking first).
+fn apply_access_mode(
+    names: &mut HashSet<String>,
+    catalog: &GuidedCatalogSnapshot,
+    policy: &GuidedExecutionPolicy,
+    scope: AuthorizationScope,
+) {
     if policy.access_mode == AccessMode::FullAccess {
         for tool in &catalog.tools {
             if !tool.durable
@@ -132,82 +212,41 @@ pub(super) fn legacy_authorized<'a>(
             }
         }
         names.extend(["run_command", "write_file", "edit_file"].map(str::to_owned));
-        if has_project {
+        if scope.has_project {
             names.insert("bind_session_git_worktree".into());
         }
-    } else {
-        if policy.access_mode == AccessMode::AskFirst {
-            names.extend(
-                [
-                    "run_command",
-                    "write_file",
-                    "edit_file",
-                    "read_tool_output_artifact",
-                ]
-                .map(str::to_owned),
-            );
-        }
-        names.retain(|name| {
-            NON_FULL.contains(&name.as_str())
-                && (name != ToolName::RunCommand || policy.access_mode == AccessMode::AskFirst)
-        });
-    }
-    if policy.access_mode == AccessMode::FullAccess {
         names.insert("call_mcp_tool".into());
-    } else {
-        names.remove("call_mcp_tool");
+        return;
     }
-    if policy.role == "butler" {
-        names.extend(STEWARD_PARENT.iter().map(|name| (*name).to_owned()));
-    } else {
-        for name in STEWARD_PARENT {
-            names.remove(*name);
-        }
-    }
-    if policy.role == "steward" {
-        names.extend(WORKER_DELEGATION.iter().map(|name| (*name).to_owned()));
-    } else {
-        for name in WORKER_DELEGATION {
-            names.remove(*name);
-        }
-    }
-    names.retain(|name| {
-        !catalog.project_mutations.contains(name)
-            && (!catalog.work_tracking.contains(name)
-                || matches!(
-                    ToolName::parse(name.as_str()),
-                    Some(
-                        ToolName::UpdateTodoList
-                            | ToolName::ListTodoList
-                            | ToolName::ListWorkStreams
-                            | ToolName::UpdateWorkStreamState
-                    )
-                ))
-    });
-    if policy.access_mode != AccessMode::ReadOnly && ledger && has_project {
-        names.extend(catalog.managed_ledger_effects.iter().cloned());
-    }
-    if project_sources {
-        names.insert("read_project_source".into());
-    } else {
-        names.remove("read_project_source");
-    }
-    if policy.tracking_mode != "none" {
+    if policy.access_mode == AccessMode::AskFirst {
         names.extend(
-            catalog
-                .tools
-                .iter()
-                .filter(|tool| tool.durable)
-                .map(|tool| tool.name.clone()),
+            [
+                "run_command",
+                "write_file",
+                "edit_file",
+                "read_tool_output_artifact",
+            ]
+            .map(str::to_owned),
         );
     }
-    catalog
-        .tools
-        .iter()
-        .filter(|tool| {
-            names.contains(&tool.name) && (!tool.durable || policy.tracking_mode != "none")
-        })
-        .collect()
+    names.retain(|name| {
+        NON_FULL.contains(&name.as_str())
+            && (name != ToolName::RunCommand || policy.access_mode == AccessMode::AskFirst)
+    });
+    names.remove("call_mcp_tool");
+}
+
+/// Only the butler may delegate to stewards and only a steward to workers.
+fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
+    for (role, tools) in [("butler", STEWARD_PARENT), ("steward", WORKER_DELEGATION)] {
+        if policy.role == role {
+            names.extend(tools.iter().map(|name| (*name).to_owned()));
+        } else {
+            for name in tools {
+                names.remove(*name);
+            }
+        }
+    }
 }
 
 pub(super) fn legacy_visible<'a>(
@@ -295,8 +334,8 @@ pub(super) fn legacy_visible<'a>(
         .collect()
 }
 
-pub(super) fn phase_allows(phase: &str, tool: &GuidedCatalogTool) -> bool {
-    if phase == "execution" {
+pub(super) fn phase_allows(phase: GuidedPhase, tool: &GuidedCatalogTool) -> bool {
+    if phase == GuidedPhase::Execution {
         return true;
     }
     if tool.durable {
@@ -305,7 +344,7 @@ pub(super) fn phase_allows(phase: &str, tool: &GuidedCatalogTool) -> bool {
     if tool.effect_boundary.as_deref() != Some("none") {
         return false;
     }
-    phase != "direct"
+    phase != GuidedPhase::Direct
         || !matches!(
             tool.category.as_deref(),
             Some("project" | "command" | "file" | "work")
@@ -315,7 +354,7 @@ pub(super) fn phase_allows(phase: &str, tool: &GuidedCatalogTool) -> bool {
 pub(super) fn profile_initial<'a>(
     catalog: &'a GuidedCatalogSnapshot,
     profile: &str,
-    phase: &str,
+    phase: GuidedPhase,
 ) -> Vec<&'a GuidedCatalogTool> {
     if profile == "project-lifecycle" {
         return vec![];

@@ -47,6 +47,7 @@ export function PersonalizationProfilingSettings({
   return (
     <>
       <SettingsSelect
+        settingId="profiling-mode"
         label={settingsFields.profilingMode}
         description={settingsDescriptions.profilingMode}
         controlWidth="full"
@@ -64,6 +65,7 @@ export function PersonalizationProfilingSettings({
         disabled={disabled}
       />
       <SettingsSelect
+        settingId="profiling-model"
         label={settingsFields.profilingExtractorModel}
         description={settingsDescriptions.profilingExtractorModel}
         controlWidth="full"
@@ -85,6 +87,7 @@ export function PersonalizationProfilingSettings({
         disabled={disabled}
       />
       <SettingsSelect
+        settingId="profiling-reasoning"
         label={settingsFields.reasoning}
         value={profilingDraft.extractorReasoningEffort}
         onChange={(extractorReasoningEffort) =>

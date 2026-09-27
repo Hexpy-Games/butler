@@ -50,15 +50,11 @@
 }
 
 .slider:focus-visible::-webkit-slider-thumb {
-  box-shadow:
-    0 0 0 3px var(--ring),
-    var(--shadow-control);
+  box-shadow: var(--focus-ring), var(--shadow-control);
 }
 
 .slider:focus-visible::-moz-range-thumb {
-  box-shadow:
-    0 0 0 3px var(--ring),
-    var(--shadow-control);
+  box-shadow: var(--focus-ring), var(--shadow-control);
 }
 
 .slider:disabled {

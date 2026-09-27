@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { readRepoOrLedgerFile, repoOrLedgerExists } from "../support/project-ledger-root.ts";
+import { readRepoOrLedgerFile, repoOrLedgerExists, ledgerTest } from "../support/project-ledger-root.ts";
 
-test("Project Ledger PL-0 documents the governing plan spec and ADR", () => {
+ledgerTest("Project Ledger PL-0 documents the governing plan spec and ADR", () => {
   const planPath = "project-ledger/projects/butler/plans/plan-project-ledger.md";
   const specPath = "project-ledger/projects/butler/specs/project-ledger.md";
   const adrPath = "project-ledger/projects/butler/decisions/0001-project-ledger-repo-first-skill-packaged-cli.md";
@@ -21,7 +21,7 @@ test("Project Ledger PL-0 documents the governing plan spec and ADR", () => {
   expect(adr).toContain("Repo-First And Skill-Packaged");
 });
 
-test("Project Ledger plan includes all fixed phases and MVP commands", () => {
+ledgerTest("Project Ledger plan includes all fixed phases and MVP commands", () => {
   const plan = readRepoOrLedgerFile("project-ledger/projects/butler/plans/plan-project-ledger.md");
 
   for (const phase of ["PL-0", "PL-1", "PL-2", "PL-3", "PL-4", "PL-5", "PL-6", "PL-7"]) {
@@ -43,7 +43,7 @@ test("Project Ledger plan includes all fixed phases and MVP commands", () => {
   expect(plan).toContain("compact JSON");
 });
 
-test("Project Ledger spec defines source of truth layout privacy and success criteria", () => {
+ledgerTest("Project Ledger spec defines source of truth layout privacy and success criteria", () => {
   const spec = readRepoOrLedgerFile("project-ledger/projects/butler/specs/project-ledger.md");
 
   expect(spec).toContain("## Source Of Truth");
@@ -58,7 +58,7 @@ test("Project Ledger spec defines source of truth layout privacy and success cri
   expect(spec).toContain("tests/unit/project-ledger-plan.test.ts");
 });
 
-test("Project Ledger ADR records rejected alternatives and Butler decoupling", () => {
+ledgerTest("Project Ledger ADR records rejected alternatives and Butler decoupling", () => {
   const adr = readRepoOrLedgerFile(
     "project-ledger/projects/butler/decisions/0001-project-ledger-repo-first-skill-packaged-cli.md",
   );

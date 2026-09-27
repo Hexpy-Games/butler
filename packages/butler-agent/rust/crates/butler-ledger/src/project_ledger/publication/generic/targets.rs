@@ -39,7 +39,7 @@ pub(super) fn capture(
             .collect::<Vec<_>>();
         let (kind, path, parent_id) = match matches.as_slice() {
             [record] => {
-                let kind = match update.kind.clone() {
+                let kind = match update.kind {
                     Some(kind) => kind,
                     None => kind_from(&record.kind)
                         .ok_or(LedgerEffectError::Uncertain { source: None })?,
@@ -170,7 +170,6 @@ fn absent(
     }
     let kind = update
         .kind
-        .clone()
         .ok_or(LedgerEffectError::Uncertain { source: None })?;
     safe_id(&update.id)?;
     let path = match kind {

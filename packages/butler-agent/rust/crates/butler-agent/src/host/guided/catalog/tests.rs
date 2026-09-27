@@ -154,7 +154,7 @@ fn phase_selection_enforces_execution_policy_access_and_required_tools() {
             Ok((mode, phase, writes, work)) => {
                 let selection = selection.unwrap();
                 assert_eq!(
-                    (selection.mode, selection.phase),
+                    (selection.mode.as_str(), selection.phase.as_str()),
                     (mode, phase),
                     "{context}"
                 );

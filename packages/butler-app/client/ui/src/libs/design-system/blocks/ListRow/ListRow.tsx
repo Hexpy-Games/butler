@@ -1,10 +1,12 @@
+import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import type { ReactNode } from "react";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
 import styles from "./ListRow.module.css";
+import { dsClass } from "../../lib/internal";
 
-export interface ListRowProps {
+export interface ListRowProps extends DsPrivateStyleProps {
   /** Icon element */
   icon?: ReactNode;
   /** Row title */
@@ -13,8 +15,6 @@ export interface ListRowProps {
   description?: string;
   /** Optional metadata (date, size, etc.) */
   meta?: string;
-  /** Additional CSS class */
-  className?: string;
 }
 
 export function ListRow({
@@ -27,13 +27,13 @@ export function ListRow({
   return (
     <div className={cn(styles.row, className)}>
       {icon && <span className={styles.icon} aria-hidden="true">{icon}</span>}
-      <Stack gap="xs" className={styles.content}>
+      <Stack gap="xs" className={dsClass(styles.content)}>
         <Stack align="row" justify="between" cross="center">
-          <Typo.Body className={styles.title}>{title}</Typo.Body>
-          {meta && <Typo.Caption className={styles.meta}>{meta}</Typo.Caption>}
+          <Typo.Body className={dsClass(styles.title)}>{title}</Typo.Body>
+          {meta && <Typo.Caption className={dsClass(styles.meta)}>{meta}</Typo.Caption>}
         </Stack>
         {description && (
-          <Typo.Caption className={styles.description}>{description}</Typo.Caption>
+          <Typo.Caption className={dsClass(styles.description)}>{description}</Typo.Caption>
         )}
       </Stack>
     </div>

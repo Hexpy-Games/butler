@@ -5,6 +5,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::{StorageError, StorageResult};
 use crate::btcc::StorageCode;
 
+/// Identifies the runtime process that owns execution claims.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RuntimeOwnerIdentity {
     pub owner_id: String,
@@ -13,7 +14,9 @@ pub struct RuntimeOwnerIdentity {
     pub process_started_at_ms: u64,
 }
 
+/// Tells whether a claim owner's process still runs.
 pub trait ProcessLiveness: Send + Sync + 'static {
+    /// Whether the owner process is alive.
     fn is_alive(&self, identity: &RuntimeOwnerIdentity) -> bool;
 }
 

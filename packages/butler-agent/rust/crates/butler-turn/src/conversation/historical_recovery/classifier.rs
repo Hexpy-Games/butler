@@ -141,9 +141,85 @@ fn classify_transcript(
             None,
         );
     }
+    if is_placeholder_transcript(row, parse_timestamp) || is_internal_transcript(row) {
+        return build_decision(
+            Provenance::Discarded,
+            "transcript_placeholder_or_internal",
+            None,
+            None,
+        );
+    }
+    let role = match TranscriptKind::parse(&row.kind).role() {
+        Ok(role) => role,
+        Err((provenance, reason)) => return build_decision(provenance, reason, None, None),
+    };
+    let text = transcript_text(row.payload.as_ref());
+    if text.is_empty() {
+        return build_decision(
+            Provenance::Ambiguous,
+            "conversation_text_missing",
+            Some(role),
+            None,
+        );
+    }
+    build_decision(
+        Provenance::Recovered,
+        "clean_transcript_message_recovered",
+        Some(role),
+        Some(text),
+    )
+}
+
+impl TranscriptKind {
+    /// The conversation role of a recoverable kind, or why the row is not recovered.
+    fn role(self) -> Result<Role, (Provenance, &'static str)> {
+        match self {
+            Self::Inbound => Ok(Role::User),
+            Self::Outbound => Ok(Role::Assistant),
+            Self::NotSemantic => Err((Provenance::Discarded, "transcript_kind_not_semantic")),
+            Self::Turn => Err((
+                Provenance::Ambiguous,
+                "turn_text_requires_explicit_recovery_policy",
+            )),
+            Self::Other => Err((
+                Provenance::Ambiguous,
+                "historical_tool_or_unknown_requires_review",
+            )),
+        }
+    }
+}
+
+/// The recovery-relevant kinds of historical transcript rows.
+enum TranscriptKind {
+    Inbound,
+    Outbound,
+    /// Delivery, status, memory-note and system rows carry no conversation.
+    NotSemantic,
+    Turn,
+    Other,
+}
+
+impl TranscriptKind {
+    fn parse(kind: &str) -> Self {
+        match kind {
+            "inbound" => Self::Inbound,
+            "outbound" => Self::Outbound,
+            "delivery" | "worker_status" | "session_status" | "memory_note" | "system" => {
+                Self::NotSemantic
+            }
+            "turn" => Self::Turn,
+            _ => Self::Other,
+        }
+    }
+}
+
+/// Mock transports and epoch (or earlier) timestamps mark placeholder rows.
+fn is_placeholder_transcript(
+    row: &HistoricalTranscriptRow,
+    parse_timestamp: &dyn Fn(&str) -> Option<i64>,
+) -> bool {
     let payload = row.payload.as_ref();
-    let is_placeholder = timestamp_millis(&row.timestamp, parse_timestamp)
-        .is_some_and(|value| value <= 0)
+    timestamp_millis(&row.timestamp, parse_timestamp).is_some_and(|value| value <= 0)
         || row.transport.as_deref() == Some("mock")
         || payload
             .and_then(|value| value.get("eventId"))
@@ -155,8 +231,13 @@ fn classify_transcript(
             .and_then(|value| value.get("timestamp"))
             .and_then(Value::as_str)
             .and_then(|value| timestamp_millis(value, parse_timestamp))
-            .is_some_and(|value| value <= 0);
-    let internal = row.session_id.starts_with("steward/")
+            .is_some_and(|value| value <= 0)
+}
+
+/// Steward sessions and steward-routed events are internal traffic.
+fn is_internal_transcript(row: &HistoricalTranscriptRow) -> bool {
+    let payload = row.payload.as_ref();
+    row.session_id.starts_with("steward/")
         || payload
             .and_then(|value| value.get("route"))
             .and_then(Value::as_object)
@@ -164,59 +245,7 @@ fn classify_transcript(
             .filter(|value| !value.is_null())
             .or_else(|| payload.and_then(|value| value.get("role")))
             .and_then(Value::as_str)
-            == Some("steward");
-    if is_placeholder || internal {
-        return build_decision(
-            Provenance::Discarded,
-            "transcript_placeholder_or_internal",
-            None,
-            None,
-        );
-    }
-    let role = match row.kind.as_str() {
-        "inbound" => Some(Role::User),
-        "outbound" => Some(Role::Assistant),
-        _ => None,
-    };
-    if let Some(role) = role {
-        let text = transcript_text(payload);
-        if text.is_empty() {
-            return build_decision(
-                Provenance::Ambiguous,
-                "conversation_text_missing",
-                Some(role),
-                None,
-            );
-        }
-        return build_decision(
-            Provenance::Recovered,
-            "clean_transcript_message_recovered",
-            Some(role),
-            Some(text),
-        );
-    }
-    if [
-        "delivery",
-        "worker_status",
-        "session_status",
-        "memory_note",
-        "system",
-    ]
-    .contains(&row.kind.as_str())
-    {
-        return build_decision(
-            Provenance::Discarded,
-            "transcript_kind_not_semantic",
-            None,
-            None,
-        );
-    }
-    let reason = if row.kind == "turn" {
-        "turn_text_requires_explicit_recovery_policy"
-    } else {
-        "historical_tool_or_unknown_requires_review"
-    };
-    build_decision(Provenance::Ambiguous, reason, None, None)
+            == Some("steward")
 }
 
 fn classify_app_projection(

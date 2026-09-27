@@ -2,13 +2,16 @@
 
 use super::*;
 use crate::btcc::BtccCode;
+use butler_core::json;
 
 pub(super) fn render_input(packet: &Value, profile_prompt: Option<&str>) -> String {
     let base = format!(
         "role: worker\nassigned_objective: {}\nacceptance_criteria: {}\nimplementation_brief: {}\nReport the bounded result to the Steward.",
-        packet["objective"].as_str().unwrap_or(""),
-        packet["acceptance_criteria"],
-        packet["implementation_brief"].as_str().unwrap_or("")
+        json::at(packet, "/objective").as_str().unwrap_or(""),
+        json::at(packet, "/acceptance_criteria"),
+        json::at(packet, "/implementation_brief")
+            .as_str()
+            .unwrap_or("")
     );
     match profile_prompt.filter(|value| !value.trim().is_empty()) {
         Some(prompt) => format!("{base}\nworker_profile_prompt: {prompt}"),
@@ -18,8 +21,8 @@ pub(super) fn render_input(packet: &Value, profile_prompt: Option<&str>) -> Stri
 pub(super) fn render_steward_input(packet: &Value) -> String {
     format!(
         "role: steward\nrequest: {}\nacceptance_criteria: {}\nPlan, execute, review, and report this delegated request to Butler.",
-        packet["objective"].as_str().unwrap_or(""),
-        packet["acceptance_criteria"]
+        json::at(packet, "/objective").as_str().unwrap_or(""),
+        json::at(packet, "/acceptance_criteria")
     )
 }
 pub(super) fn allowed_effects(access: &str) -> Vec<&'static str> {
@@ -119,7 +122,7 @@ pub(super) fn child_metadata(
         Value::String("parent_session".into()),
     );
 
-    json!({"source":if role=="worker"{"btcc-worker"}else{"btcc-subsession"},"reasoning_effort":packet["reasoning_effort"],"subsession":{"relation_id":packet["relation_id"],"delegation_id":packet["delegation_id"],"task_id":packet["task_id"],"parent_session_id":packet["parent_session_id"],"execution_mode":packet["execution_mode"],"mutation_scope":packet["mutation_scope"],"allowed_tools_and_effects":packet["allowed_tools_and_effects"]},"runtimePolicy":runtime_policy})
+    json!({"source":if role=="worker"{"btcc-worker"}else{"btcc-subsession"},"reasoning_effort":json::at(packet, "/reasoning_effort"),"subsession":{"relation_id":json::at(packet, "/relation_id"),"delegation_id":json::at(packet, "/delegation_id"),"task_id":json::at(packet, "/task_id"),"parent_session_id":json::at(packet, "/parent_session_id"),"execution_mode":json::at(packet, "/execution_mode"),"mutation_scope":json::at(packet, "/mutation_scope"),"allowed_tools_and_effects":json::at(packet, "/allowed_tools_and_effects")},"runtimePolicy":runtime_policy})
 }
 
 pub(super) fn child_work_scope(
@@ -130,7 +133,7 @@ pub(super) fn child_work_scope(
     if binding.session_id != stored.child_session_id {
         return Err(error(BtccCode::SubsessionChildBindingMismatch));
     }
-    let role = stored.packet["child_role"].as_str();
+    let role = json::at(&stored.packet, "/child_role").as_str();
     let expected_role = match role {
         Some("steward") => crate::workspace::SessionRole::Steward,
         Some("worker") => crate::workspace::SessionRole::Worker,

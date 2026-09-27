@@ -22,21 +22,39 @@ pub(super) fn bounded_timeout(value: Option<f64>) -> Duration {
     ))
 }
 
+/// Why a pipeline stopped before its steps settled on their own.
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct Stop {
+    pub(super) timed_out: bool,
+    pub(super) cancelled: bool,
+}
+
+impl Stop {
+    pub(super) fn interrupted(self) -> bool {
+        self.timed_out || self.cancelled
+    }
+}
+
+/// Decoded stdout and stderr text of a pipeline.
+#[derive(Default)]
+pub(super) struct Captured {
+    pub(super) stdout: String,
+    pub(super) stderr: String,
+}
+
 pub(super) fn result(
     started: SystemTime,
-    stdout: String,
-    stderr: String,
+    captured: Captured,
     exit_code: Option<i32>,
-    timed_out: bool,
-    cancelled: bool,
+    stop: Stop,
     error: Option<CommandError>,
 ) -> StructuredCommandOutput {
     StructuredCommandOutput {
-        stdout,
-        stderr,
+        stdout: captured.stdout,
+        stderr: captured.stderr,
         exit_code,
-        timed_out,
-        cancelled,
+        timed_out: stop.timed_out,
+        cancelled: stop.cancelled,
         duration_ms: u64::try_from(
             SystemTime::now()
                 .duration_since(started)
@@ -47,4 +65,15 @@ pub(super) fn result(
         .unwrap_or(u64::MAX),
         error,
     }
+}
+
+/// A pipeline that failed before producing output.
+pub(super) fn failed(started: SystemTime, error: CommandError) -> StructuredCommandOutput {
+    result(
+        started,
+        Captured::default(),
+        None,
+        Stop::default(),
+        Some(error),
+    )
 }

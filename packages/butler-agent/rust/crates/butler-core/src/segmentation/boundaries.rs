@@ -7,6 +7,7 @@ pub struct TextSegment<'a> {
     pub end: usize,
 }
 
+/// Extended grapheme clusters with their byte ranges.
 pub fn grapheme_segments(text: &str) -> impl DoubleEndedIterator<Item = TextSegment<'_>> {
     text.grapheme_indices(true)
         .map(|(start, text)| TextSegment {
@@ -16,6 +17,7 @@ pub fn grapheme_segments(text: &str) -> impl DoubleEndedIterator<Item = TextSegm
         })
 }
 
+/// Unicode sentence-boundary segments with their byte ranges.
 pub fn sentence_segments(text: &str) -> impl Iterator<Item = TextSegment<'_>> {
     text.split_sentence_bound_indices()
         .map(|(start, text)| TextSegment {

@@ -17,6 +17,7 @@ use authority::resolve_authority;
 pub use git::ProjectWorkspaceInspection;
 use git::{inspect_project_workspace, validate_linked_worktree};
 
+/// Whether a session worktree is still valid.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SessionWorkspaceValidation {
     Valid { path: String, dirty: bool },
@@ -29,6 +30,7 @@ pub struct RecoveredSessionWorkspaceReference {
     pub validation: SessionWorkspaceValidation,
 }
 
+/// Recovers a session's workspace from its binding and marker.
 #[derive(Clone)]
 pub struct SessionWorkspaceRecovery {
     bindings: SessionBindingStore,
@@ -38,6 +40,7 @@ pub struct SessionWorkspaceRecovery {
 }
 
 impl SessionWorkspaceRecovery {
+    /// A recovery over the bindings, commands, files and environment.
     pub fn new(
         bindings: SessionBindingStore,
         commands: Commands,
@@ -52,6 +55,7 @@ impl SessionWorkspaceRecovery {
         }
     }
 
+    /// The session's recovered workspace.
     pub async fn recover(
         &self,
         session_id: &str,
@@ -128,6 +132,7 @@ impl SessionWorkspaceRecovery {
         })
     }
 
+    /// Whether a project workspace is a folder or git checkout.
     pub async fn inspect_project(
         &self,
         workspace_path: &str,

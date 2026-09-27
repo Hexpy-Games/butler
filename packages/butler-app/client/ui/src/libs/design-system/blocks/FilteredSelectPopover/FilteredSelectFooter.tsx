@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Button } from "../../components/Button";
+import { useScrollEdges } from "../../lib/useScrollEdges";
 import type { FilteredSelectFooterOption } from "./FilteredSelectPopover";
 import styles from "./FilteredSelectPopover.module.css";
 
@@ -10,6 +11,7 @@ export function FilteredSelectFooter({
   title?: ReactNode;
   options: readonly FilteredSelectFooterOption[];
 }) {
+  const optionsFadeRef = useScrollEdges("x");
   if (!title && options.length === 0) return null;
 
   return (
@@ -19,7 +21,7 @@ export function FilteredSelectFooter({
           {title}
         </div>
       ) : null}
-      <div className={styles.footerOptions}>
+      <div ref={optionsFadeRef} className={styles.footerOptions}>
         {options.map((option) => (
           <Button
             key={option.id}

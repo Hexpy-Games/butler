@@ -117,7 +117,9 @@ pub(super) fn capture(
             target.raw_record_sha256 = Some(head::sha(raw.as_bytes()));
         }
     }
-    if addressed[updates.len()..]
+    if addressed
+        .get(updates.len()..)
+        .unwrap_or_default()
         .iter()
         .any(|target| target.state != super::contracts::ProjectWorkTargetState::Absent)
     {
@@ -145,12 +147,9 @@ pub(super) fn target(
     scope: &ResolvedProjectWorkScope,
     update: &ProjectLedgerRecordUpdate,
 ) -> Result<ProjectWorkTarget, ProjectWorkPublicationError> {
-    let kind = update
-        .kind
-        .clone()
-        .ok_or(ProjectWorkPublicationError::adapter(
-            "project_work_publication_kind_invalid",
-        ))?;
+    let kind = update.kind.ok_or(ProjectWorkPublicationError::adapter(
+        "project_work_publication_kind_invalid",
+    ))?;
     let id = safe_id(&update.id)?;
     let path = match kind {
         ProjectLedgerRecordKind::Work => {

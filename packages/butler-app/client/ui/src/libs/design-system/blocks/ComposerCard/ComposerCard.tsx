@@ -1,18 +1,15 @@
-import type {
-  ButtonHTMLAttributes,
-  FormHTMLAttributes,
-  ReactNode,
-  Ref,
-  TextareaHTMLAttributes,
-} from "react";
-import { forwardRef } from "react";
+import type { DsBaseProps } from "../../lib/dsProps";
+import type { ButtonHTMLAttributes, FormHTMLAttributes, ReactNode, Ref, TextareaHTMLAttributes } from "react";
+import { createContext, forwardRef, useContext } from "react";
+import { Collapsible } from "../../components/Collapsible";
 import { SendHorizontal, Square } from "../../components/Icons";
 import { Spinner } from "../../components/Spinner";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import { cn } from "../../lib/utils";
 import styles from "./ComposerCard.module.css";
+import { dsClass } from "../../lib/internal";
 
-export interface ComposerCardProps extends FormHTMLAttributes<HTMLFormElement> {
+export interface ComposerCardProps extends DsBaseProps<FormHTMLAttributes<HTMLFormElement>> {
   large?: boolean;
   floating?: boolean;
   dropActive?: boolean;
@@ -22,6 +19,8 @@ export interface ComposerCardProps extends FormHTMLAttributes<HTMLFormElement> {
   containerRef?: Ref<HTMLDivElement>;
   expanded?: boolean;
 }
+
+const ComposerExpandedContext = createContext(true);
 
 export function ComposerCard({
   large = false,
@@ -59,7 +58,7 @@ export function ComposerCard({
             {adjunct}
           </div>
         ) : null}
-        {children}
+        <ComposerExpandedContext.Provider value={expanded}>{children}</ComposerExpandedContext.Provider>
       </form>
     </div>
   );
@@ -67,7 +66,7 @@ export function ComposerCard({
 
 export const ComposerCardTextarea = forwardRef<
   HTMLTextAreaElement,
-  TextareaHTMLAttributes<HTMLTextAreaElement>
+  DsBaseProps<TextareaHTMLAttributes<HTMLTextAreaElement>>
 >(function ComposerCardTextarea({ className, ...props }, ref) {
   return (
     <textarea
@@ -86,11 +85,13 @@ export function ComposerCardToolbar({ children }: { children: ReactNode }) {
   );
 }
 
+/** Editor region: Collapsible reveal, kept mounted and focusable while folded. */
 export function ComposerCardExpandedBody({ children }: { children: ReactNode }) {
+  const expanded = useContext(ComposerExpandedContext);
   return (
-    <div className={styles.expandedBody} data-slot="composer-expanded-body">
-      <div className={styles.expandedBodyInner}>{children}</div>
-    </div>
+    <Collapsible open={expanded} keepMounted="focusable" className={dsClass(styles.expandedBody)} data-slot="composer-expanded-body">
+      {children}
+    </Collapsible>
   );
 }
 
@@ -102,7 +103,7 @@ export function ComposerCardCompactPreview({
   children,
   className,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement>) {
+}: DsBaseProps<ButtonHTMLAttributes<HTMLButtonElement>>) {
   return (
     <button
       className={cn(styles.compactPreview, className)}
@@ -126,7 +127,7 @@ export function ComposerCardToolbarSpacer() {
 }
 
 export interface ComposerSendButtonProps
-  extends ButtonHTMLAttributes<HTMLButtonElement> {
+ extends DsBaseProps<ButtonHTMLAttributes<HTMLButtonElement>> {
   mode?: "send" | "stop";
   busy?: boolean;
 }
@@ -148,7 +149,7 @@ export function ComposerSendButton({
       disabled={busy || disabled}
       aria-busy={busy || undefined}
     >
-      {busy ? <Spinner size={16} /> : children ?? (mode === "stop" ? <Square size={14} /> : <SendHorizontal size={16} />)}
+      {busy ? <Spinner size={16} /> : children ?? (mode === "stop" ? <Square size="sm" /> : <SendHorizontal size="md" />)}
     </button>
   );
 }

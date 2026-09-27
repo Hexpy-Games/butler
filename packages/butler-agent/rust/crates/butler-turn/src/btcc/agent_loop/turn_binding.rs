@@ -12,6 +12,7 @@ use crate::btcc::{
 use super::contracts::SemanticTurn;
 use super::{AuthorityDecision, GuidedPolicyDependencies, ModelRoundPort, OperationResultRuntime};
 
+/// What binding a guided turn borrows before its first model round.
 pub struct GuidedTurnStart<'a> {
     pub turn: &'a TurnRecord,
     pub claim: &'a StateExecutionClaim,
@@ -22,6 +23,7 @@ pub struct GuidedTurnStart<'a> {
 
 /// Factories retain process services. They must not retain bound Turn owners.
 pub trait GuidedTurnFactory: Send + Sync {
+    /// Binds the guided turn's ports and inputs.
     fn bind_pre_model<'a>(
         &'a self,
         start: GuidedTurnStart<'a>,
@@ -38,8 +40,12 @@ pub struct GuidedTurnInputs {
     pub source_revision: GuidedSourceRevision,
 }
 
+/// A guided turn bound for execution.
 pub trait BoundGuidedTurn: Send + Sync {
+    /// Takes the bound inputs; a second call is an error.
     fn take_inputs(&mut self) -> Result<GuidedTurnInputs, BtccError>;
+    /// The progress sink scoped to this turn.
     fn progress(&self) -> &dyn AgentLoopProgress;
+    /// The unrouted model port.
     fn base(&self) -> &dyn ModelRoundPort;
 }

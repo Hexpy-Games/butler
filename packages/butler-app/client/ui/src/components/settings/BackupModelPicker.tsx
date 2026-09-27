@@ -86,7 +86,7 @@ export function BackupModelPicker({
           disabled={saving || fallback.models.length >= MAX_BACKUP_MODELS}
           data-test-class="settings-backup-model-add"
         >
-          <Plus size={15} /> {copy.add}
+          <Plus size="md" /> {copy.add}
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" sideOffset={8}>

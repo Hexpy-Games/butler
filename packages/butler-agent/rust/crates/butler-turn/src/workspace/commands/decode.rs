@@ -17,7 +17,10 @@ impl Utf8Decoder {
                     let valid = error.valid_up_to();
                     output.push_str(
                         // `valid_up_to` bytes decode by definition.
-                        std::str::from_utf8(&self.pending[..valid]).unwrap_or_default(),
+                        self.pending
+                            .get(..valid)
+                            .and_then(|bytes| std::str::from_utf8(bytes).ok())
+                            .unwrap_or_default(),
                     );
                     let bad = error.error_len();
                     self.pending.drain(..valid);

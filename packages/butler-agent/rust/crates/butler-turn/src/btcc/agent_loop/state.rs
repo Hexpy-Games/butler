@@ -3,27 +3,102 @@ use tokio_util::sync::CancellationToken;
 
 use crate::btcc::AgentLoopError;
 
-use super::continuation::AuthorityLoopContinuation;
+use super::continuation::{AuthorityBatch, AuthorityLoopContinuation, GuidedPresentation};
 use super::contracts::{
-    AgentLoopEvent, AuthorityDecision, ModelRoundMessage, ModelRoundRole, SteeringObservation,
+    AgentLoopEvent, AuthorityDecision, LoopPhase, ModelRoundMessage, ModelRoundRole,
+    ModelRoundToolCall, PreparedPolicy, SteeringObservation, ToolResult,
 };
 use super::ports::{AgentLoopObserver, propagated};
 use crate::btcc::BtccCode;
 
+/// The request segment a steering message opens when the user adds a new request.
+pub(super) const CURRENT_USER_REQUEST: &str = "current_user_request";
+
+/// The mutable transcript and bookkeeping of one agent-loop execution.
 pub(super) struct State {
     pub messages: Vec<ModelRoundMessage>,
-    pub tool_results: Vec<super::contracts::ToolResult>,
+    pub tool_results: Vec<ToolResult>,
+    /// Provider continuation handle echoed on the next request (passthrough JSON).
     pub provider_continuation: Option<Value>,
     pub next_item_ordinal: u64,
     pub model_round_index: u32,
     pub iteration: u32,
     pub empty_recovery_used: bool,
-    pub final_report: bool,
-    pub resumed_batch: Option<super::continuation::AuthorityBatch>,
-    pub resumed_call: Option<super::contracts::ModelRoundToolCall>,
-    pub presentation: Option<super::continuation::GuidedPresentation>,
+    pub phase: LoopPhase,
+    pub resumed_batch: Option<AuthorityBatch>,
+    pub resumed_call: Option<ModelRoundToolCall>,
+    pub presentation: Option<GuidedPresentation>,
     pub used_tools: Vec<String>,
     pub runtime_failure: Option<crate::btcc::RuntimeFailure>,
+}
+
+impl State {
+    /// A fresh execution: the rendered prompt becomes the first transcript item.
+    pub(super) fn fresh(prepared: &mut PreparedPolicy) -> Self {
+        let mut prompt = ModelRoundMessage::user(std::mem::take(&mut prepared.prompt), None);
+        prompt.continuation_item_id = Some("turn-item-0".into());
+        Self {
+            messages: vec![prompt],
+            tool_results: Vec::new(),
+            provider_continuation: None,
+            next_item_ordinal: 1,
+            model_round_index: 0,
+            iteration: 0,
+            empty_recovery_used: false,
+            phase: LoopPhase::Working,
+            resumed_batch: None,
+            resumed_call: prepared.resumed_tool_call.take(),
+            presentation: None,
+            used_tools: Vec::new(),
+            runtime_failure: None,
+        }
+    }
+
+    /// Resumes a suspended execution from its authority continuation.
+    ///
+    /// The continuation's instructions and stable cache prefix replace the
+    /// freshly rendered ones so the resumed request matches the suspended one.
+    pub(super) fn resumed(
+        restored: AuthorityLoopContinuation,
+        prepared: &mut PreparedPolicy,
+    ) -> Self {
+        drop(std::mem::take(&mut prepared.prompt));
+        prepared.instructions = restored.instructions;
+        prepared.request.stable_provider_cache_prefix = restored.stable_provider_cache_prefix;
+        let used_tools = restored
+            .tool_results
+            .iter()
+            .map(|result| result.name.clone())
+            .collect();
+        Self {
+            messages: restored.messages,
+            tool_results: restored.tool_results,
+            provider_continuation: restored.provider_continuation,
+            next_item_ordinal: restored.next_item_ordinal,
+            model_round_index: restored.model_round_index,
+            iteration: restored.iteration,
+            empty_recovery_used: restored.empty_response_recovery_used,
+            phase: LoopPhase::Working,
+            resumed_batch: Some(restored.batch),
+            resumed_call: prepared.resumed_tool_call.take(),
+            presentation: restored.presentation,
+            used_tools,
+            runtime_failure: None,
+        }
+    }
+
+    /// Starts the next iteration and returns the index of the one starting.
+    pub(super) fn begin_iteration(&mut self) -> u32 {
+        let iteration = self.iteration;
+        self.iteration = self.iteration.saturating_add(1);
+        iteration
+    }
+
+    /// Whether this iteration replays a suspended batch or an accepted call
+    /// instead of asking the model.
+    pub(super) fn is_replaying(&self, resumed_batch: Option<&AuthorityBatch>) -> bool {
+        resumed_batch.is_some() || self.resumed_call.is_some()
+    }
 }
 
 pub(super) fn append_observations(state: &mut State, observations: Vec<SteeringObservation>) {
@@ -31,8 +106,8 @@ pub(super) fn append_observations(state: &mut State, observations: Vec<SteeringO
         if observation.content.trim().is_empty() {
             continue;
         }
-        if observation.request_segment_kind == "current_user_request" {
-            state.final_report = false;
+        if observation.request_segment_kind == CURRENT_USER_REQUEST {
+            state.phase = LoopPhase::Working;
         }
         state.messages.push(ModelRoundMessage::user(
             observation.content,
@@ -68,7 +143,7 @@ pub(super) fn identify_response(response: &mut super::contracts::ModelRoundResul
 
 pub(super) fn assistant_message(
     content: String,
-    tool_calls: Vec<super::contracts::ModelRoundToolCall>,
+    tool_calls: Vec<ModelRoundToolCall>,
     provider_data: Option<Value>,
 ) -> ModelRoundMessage {
     ModelRoundMessage {
@@ -87,7 +162,7 @@ pub(super) fn assistant_message(
 }
 
 pub(super) fn begin_final_report(state: &mut State) {
-    state.final_report = true;
+    state.phase = LoopPhase::FinalReport;
     state.messages.push(ModelRoundMessage::user(
         "Execution is settled. Write the final factual report as your normal assistant response now; the runtime delivers it to the recipient automatically. No reporting tool or further tool call is needed. Include the outcome, checks performed, and any remaining work from the results already received."
             .into(),

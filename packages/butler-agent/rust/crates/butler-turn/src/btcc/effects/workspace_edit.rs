@@ -11,12 +11,14 @@ use tokio_util::sync::CancellationToken;
 use super::contracts::*;
 use crate::workspace::EffectFileScope;
 
+/// Workspace file edits as effects.
 pub struct WorkspaceFileEditEffectAdapter {
     scope: EffectFileScope,
     registered: Arc<dyn RegisteredEditPort>,
 }
 
 impl WorkspaceFileEditEffectAdapter {
+    /// An adapter confined to `scope` that edits through the registered port.
     pub fn new(scope: EffectFileScope, registered: Arc<dyn RegisteredEditPort>) -> Self {
         Self { scope, registered }
     }
@@ -67,6 +69,7 @@ impl EffectAdapter for WorkspaceFileEditEffectAdapter {
     }
 }
 
+/// The effect target of a batched edit of `paths`.
 pub fn batch_target(paths: &[String]) -> EffectResult<String> {
     normalized::batch_target(paths)
 }

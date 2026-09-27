@@ -19,7 +19,7 @@ pub(super) fn resolve_ledger_root(
 ) -> Result<PathBuf, ProjectLedgerReadError> {
     if id.is_empty()
         || id.len() > 120
-        || !id.as_bytes()[0].is_ascii_alphanumeric()
+        || !id.as_bytes().first().is_some_and(u8::is_ascii_alphanumeric)
         || !id
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))

@@ -6,6 +6,7 @@ import type { AutomationSummary, StatusPill } from "@/app/types.ts";
 
 export function useAutomationsList(reportStatus: (status: StatusPill) => void) {
   const [automations, setAutomations] = useState<AutomationSummary[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -14,9 +15,13 @@ export function useAutomationsList(reportStatus: (status: StatusPill) => void) {
         const data = await api<{ automations: AutomationSummary[] }>(
           "/automations",
         );
-        if (!cancelled) setAutomations(data.automations ?? []);
+        if (!cancelled) {
+          setAutomations(data.automations ?? []);
+          setLoaded(true);
+        }
       } catch (error) {
         if (!cancelled) {
+          setLoaded(true);
           notifyError(error, appCopy.interfacePanels.automationLoadFailed, {
             id: "automation-load",
           });
@@ -37,7 +42,8 @@ export function useAutomationsList(reportStatus: (status: StatusPill) => void) {
       "/automations",
     );
     setAutomations(data.automations ?? []);
+    setLoaded(true);
   }
 
-  return { automations, refresh };
+  return { automations, loaded, refresh };
 }

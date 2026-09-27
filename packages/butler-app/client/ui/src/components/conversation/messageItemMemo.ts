@@ -7,6 +7,7 @@ export function areMessageItemPropsEqual(
   return previous.message === next.message &&
     previous.topOffset === next.topOffset &&
     previous.copied === next.copied &&
+    previous.entering === next.entering &&
     previous.footerMeta === next.footerMeta &&
     previous.onCopyAssistantMessage === next.onCopyAssistantMessage &&
     previous.onCopyContextMenuText === next.onCopyContextMenuText &&

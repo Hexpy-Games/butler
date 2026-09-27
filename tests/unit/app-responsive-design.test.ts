@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import {
   classifyAdaptiveMode,
   adaptiveDrawerQuery,
@@ -95,15 +95,16 @@ describe("responsive adaptive design contracts", () => {
     expect(tokens).toContain("--typo-body-size: 16px");
     expect(tokens).toContain("--typo-caption-size: 14px");
     expect(tokens).toContain("--typo-label-size: 15px");
-    expect(tokens).toContain("--font-size-1: 14px");
-    expect(tokens).toContain("--font-size-2: 15px");
-    expect(tokens).toContain("--font-size-3: 16px");
-    expect(tokens).toContain("--font-size-4: 17px");
+    expect(tokens).toContain("--typo-app-title-size: 17px");
+    // The numeric --font-size-N scale aliases these role tokens, so it
+    // follows the compact sizes without its own overrides.
+    expect(tokens).toContain("--font-size-1: var(--typo-caption-size)");
+    expect(tokens).toContain("--font-size-3: var(--typo-body-size)");
   });
 
   test("keeps the adaptive scrim on a stable compositor layer", () => {
     const component = read(
-      "packages/butler-app/client/ui/src/libs/design-system/blocks/AdaptiveShell/AdaptiveShell.tsx",
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/AdaptiveShell/AdaptiveShellParts.tsx",
     );
     const styles = read(
       "packages/butler-app/client/ui/src/libs/design-system/blocks/AdaptiveShell/AdaptiveShell.module.css",
@@ -152,8 +153,36 @@ describe("responsive adaptive design contracts", () => {
     expect(shell).toContain('&[data-left-open="true"] .workspace');
     expect(tokens).toContain("--sidebar-row-height: 48px");
     expect(tokens).toContain("--sidebar-icon-size: 22px");
-    expect(navRow).toContain("var(--sidebar-icon-size, 17px)");
+    expect(navRow).toContain("var(--sidebar-icon-size, var(--icon-size-md))");
     expect(navRow).toContain("font-size: var(--font-size-4)");
+  });
+
+  test("narrows the medium-width workspace beside an open drawer instead of clipping it", () => {
+    const shell = read(
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/AdaptiveShell/AdaptiveShell.module.css",
+    );
+    const mediumStart = shell.indexOf("@media (width > 640px)");
+    expect(mediumStart).toBeGreaterThan(-1);
+    const medium = shell.slice(mediumStart, shell.indexOf("\n}\n", mediumStart));
+    // The width follows the committed track (after the push), never interpolated.
+    expect(medium).toContain('.root[data-panel-layout="drawer"][data-left-track="true"] .workspace');
+    expect(medium).toContain("width: calc(100% - var(--adaptive-drawer-width));");
+  });
+
+  test("limits the full-width sidebar drawer to compact widths", () => {
+    const shell = read(
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/AdaptiveShell/AdaptiveShell.module.css",
+    );
+    const compactStart = shell.indexOf("@media (width <= 640px)");
+    expect(compactStart).toBeGreaterThan(-1);
+    expect(shell.slice(0, compactStart)).not.toContain(
+      "--adaptive-drawer-width: 100vw",
+    );
+    const compact = shell.slice(compactStart);
+    expect(compact).toContain(
+      '[data-panel-layout="drawer"][data-compact-sidebar-full-width="true"]',
+    );
+    expect(compact).toContain("--adaptive-drawer-width: 100vw");
   });
 
   test("provides animated composer idle and engaged states at every width", () => {
@@ -189,18 +218,18 @@ describe("responsive adaptive design contracts", () => {
     expect(presentation).toContain('"pointercancel", cancelInternalPointer');
     expect(composer).toContain("onFocusCapture");
     expect(composer).toContain("onBlurCapture");
-    expect(textArea).toContain("const minRows = 1");
+    // The composer is a Lexical editor that auto-grows up to a row cap.
+    expect(textArea).toContain("data-max-auto-rows={COMPOSER_MAX_AUTO_ROWS}");
     expect(card).toContain("data-expanded={expanded}");
     expect(card).toContain("ComposerCardCompactPreview");
     expect(card).toContain("ComposerCardExpandedBody");
     expect(styles).toContain('.card[data-expanded="false"]');
     expect(styles).toContain("text-overflow: ellipsis");
-    expect(styles).toContain("grid-template-rows: 0fr");
+    // The editor folds through the DS Collapsible (kept mounted, focusable).
+    expect(card).toContain('keepMounted="focusable"');
+    expect(styles).not.toContain("grid-template-rows: 0fr");
     const compactMediaStart = styles.indexOf("@media (width <= 640px)");
     expect(compactMediaStart).toBeGreaterThan(-1);
-    expect(
-      styles.indexOf('.card[data-expanded="false"] .expandedBody'),
-    ).toBeLessThan(compactMediaStart);
     expect(
       styles.indexOf('.card[data-expanded="false"] .compactPreview'),
     ).toBeLessThan(compactMediaStart);
@@ -239,10 +268,10 @@ describe("responsive adaptive design contracts", () => {
       "packages/butler-app/client/ui/src/libs/design-system/blocks/SidebarShell/SidebarShell.module.css",
     );
     expect(prompt).toContain(".fluidBackground {\n    border-radius: 0;");
-    expect(sidebar).toContain(
-      "padding: max(var(--safe-area-top), var(--space-sm))",
-    );
-    expect(sidebar).toContain("display: var(--sidebar-compact-titlebar-display, none)");
+    // Phones: the shell starts at the safe area and keeps its titlebar row
+    // (the brand row) instead of a product override.
+    expect(sidebar).toContain("padding: var(--safe-area-top)");
+    expect(sidebar).not.toContain("--sidebar-compact-titlebar-display");
   });
 
   test("enlarges the compact shell toggle and omits titlebar new chat", () => {
@@ -294,7 +323,13 @@ describe("responsive adaptive design contracts", () => {
     expect(gesture).toContain("event.stopPropagation()");
     expect(navStyles).toContain(".compactHiddenActions");
     expect(navStyles).toContain("visibility: hidden");
-    expect(item).toContain('WebkitTouchCallout: "none"');
-    expect(item).toContain('userSelect: "none"');
+    // The sidebar shell suppresses the touch callout and text selection for every row.
+    const sidebarShellStyles = readFileSync(
+      join(root, "packages/butler-app/client/ui/src/libs/design-system/blocks/SidebarShell/SidebarShell.module.css"),
+      "utf8",
+    );
+    expect(sidebarShellStyles).toContain("-webkit-touch-callout: none");
+    expect(sidebarShellStyles).toContain("user-select: none");
+    expect(item).not.toContain("style=");
   });
 });

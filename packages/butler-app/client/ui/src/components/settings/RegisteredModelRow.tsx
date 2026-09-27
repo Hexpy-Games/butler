@@ -4,7 +4,6 @@ import {
   ButtonContainer,
   Pencil,
   Stack,
-  SurfacePanel,
   Trash2,
   Typo,
 } from "@/butler-ds";
@@ -31,7 +30,6 @@ export function RegisteredModelRow({
   const name = modelDisplayName(model);
 
   return (
-    <SurfacePanel elevation="none">
       <Stack align="row" justify="between" cross="center" gap="md" wrap>
         <div>
           <Typo.PanelSectionTitle as="h3">
@@ -53,7 +51,7 @@ export function RegisteredModelRow({
             onClick={onEdit}
             aria-label={copy.editLabel(name)}
           >
-            <Pencil size={14} /> {copy.edit}
+            <Pencil size="sm" /> {copy.edit}
           </Button>
           <Button
             type="button"
@@ -63,10 +61,9 @@ export function RegisteredModelRow({
             onClick={onDelete}
             aria-label={copy.deleteLabel(name)}
           >
-            <Trash2 size={14} /> {copy.delete}
+            <Trash2 size="sm" /> {copy.delete}
           </Button>
         </ButtonContainer>
       </Stack>
-    </SurfacePanel>
   );
 }

@@ -1,13 +1,12 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
-import { Stack, Typo } from "@/butler-ds";
-import styles from "./SpaceSidebar.module.css";
+import { SidebarBrand, Typo } from "@/butler-ds";
 
 export function SpaceBrand() {
   useAppLocale();
   return (
-    <Stack align="row" cross="center" className={styles.brand}>
+    <SidebarBrand>
       <Typo.AppTitle>{appCopy.firstRun.product}</Typo.AppTitle>
-    </Stack>
+    </SidebarBrand>
   );
 }

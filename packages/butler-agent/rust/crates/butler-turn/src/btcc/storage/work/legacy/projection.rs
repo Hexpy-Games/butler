@@ -36,67 +36,14 @@ pub(super) fn project(
         .unwrap_or_else(|| "Continue the unfinished Butler work.".into());
     let original_message_id = concise(field(goal, "originalMessageId"), 200);
     let sources = if tasks.is_empty() { works } else { tasks };
-    let actions = project_actions(sources, !tasks.is_empty());
-    let mut checks = Vec::new();
-    for task in tasks {
-        for reference in references(field(&task.content, "criterionRefs")) {
-            let criterion = read(&reference)?;
-            if let Some(statement) = concise(field(&criterion, "statement"), 300)
-                && !checks.contains(&statement)
-            {
-                checks.push(statement);
-            }
-            if checks.len() >= 16 {
-                break;
-            }
-        }
-        if checks.len() >= 16 {
-            break;
-        }
-    }
-    if checks.len() < 16
-        && let Some(acceptance) = concise(field(goal, "acceptanceIntent"), 300)
-        && !checks.contains(&acceptance)
-    {
-        checks.push(acceptance);
-    }
-    let checkpoint = if tasks.is_empty() {
-        None
+    let kind = if tasks.is_empty() {
+        LegacyItemKind::Work
     } else {
-        let accepted = tasks
-            .iter()
-            .filter(|task| task.status == "accepted")
-            .count();
-        let current = tasks.iter().position(|task| task.status != "accepted");
-        let next = current
-            .and_then(|index| actions.get(index))
-            .map(|action| action.description.clone())
-            .unwrap_or_else(|| "Review the imported work against the current request.".into());
-        Some(ProjectedCheckpoint {
-            stage: WorkStage::Execution,
-            actions: actions
-                .iter()
-                .enumerate()
-                .map(|(index, action)| ActionProgress {
-                    action_key: action.action_key.clone(),
-                    status: if tasks
-                        .get(index)
-                        .is_some_and(|task| task.status == "accepted")
-                    {
-                        ActionStatus::Done
-                    } else {
-                        ActionStatus::Pending
-                    },
-                    note: None,
-                })
-                .collect(),
-            summary: format!(
-                "Imported prior progress: {accepted} of {} planned actions have recorded accepted results.",
-                tasks.len()
-            ),
-            next,
-        })
+        LegacyItemKind::Task
     };
+    let actions = project_actions(sources, kind);
+    let checks = project_checks(goal, tasks, &mut read)?;
+    let checkpoint = (!tasks.is_empty()).then(|| project_checkpoint(tasks, &actions));
     Ok(Projection {
         objective,
         original_message_id,
@@ -106,17 +53,140 @@ pub(super) fn project(
     })
 }
 
-fn project_actions(items: &[LegacyItem], tasks: bool) -> Vec<PlanAction> {
-    let selected = &items[..items.len().min(20)];
-    let mut keys = Vec::with_capacity(selected.len());
+/// Up to 16 distinct checks: the tasks' acceptance criteria, then the
+/// goal's acceptance intent.
+fn project_checks(
+    goal: &Value,
+    tasks: &[LegacyItem],
+    read: &mut impl FnMut(&str) -> StorageResult<Value>,
+) -> StorageResult<Vec<String>> {
+    let mut checks = Vec::new();
+    let criteria = tasks
+        .iter()
+        .flat_map(|task| references(field(&task.content, "criterionRefs")));
+    for reference in criteria {
+        if checks.len() >= 16 {
+            break;
+        }
+        let criterion = read(&reference)?;
+        if let Some(statement) = concise(field(&criterion, "statement"), 300)
+            && !checks.contains(&statement)
+        {
+            checks.push(statement);
+        }
+    }
+    if checks.len() < 16
+        && let Some(acceptance) = concise(field(goal, "acceptanceIntent"), 300)
+        && !checks.contains(&acceptance)
+    {
+        checks.push(acceptance);
+    }
+    Ok(checks)
+}
+
+/// The execution checkpoint of imported tasks: accepted tasks are done and
+/// the first unaccepted one is next.
+fn project_checkpoint(tasks: &[LegacyItem], actions: &[PlanAction]) -> ProjectedCheckpoint {
+    let accepted = |task: &LegacyItem| task.status == "accepted";
+    let next = tasks
+        .iter()
+        .position(|task| !accepted(task))
+        .and_then(|index| actions.get(index))
+        .map(|action| action.description.clone())
+        .unwrap_or_else(|| "Review the imported work against the current request.".into());
+    ProjectedCheckpoint {
+        stage: WorkStage::Execution,
+        actions: actions
+            .iter()
+            .enumerate()
+            .map(|(index, action)| ActionProgress {
+                action_key: action.action_key.clone(),
+                status: if tasks.get(index).is_some_and(accepted) {
+                    ActionStatus::Done
+                } else {
+                    ActionStatus::Pending
+                },
+                note: None,
+            })
+            .collect(),
+        summary: format!(
+            "Imported prior progress: {} of {} planned actions have recorded accepted results.",
+            tasks.iter().filter(|task| accepted(task)).count(),
+            tasks.len()
+        ),
+        next,
+    }
+}
+
+/// Whether legacy plan actions come from task records or work records,
+/// which name their fields differently.
+#[derive(Clone, Copy)]
+enum LegacyItemKind {
+    Task,
+    Work,
+}
+
+impl LegacyItemKind {
+    fn key_field(self) -> &'static str {
+        match self {
+            Self::Task => "taskLogicalId",
+            Self::Work => "workLogicalId",
+        }
+    }
+    fn title_field(self) -> &'static str {
+        match self {
+            Self::Task => "displayTitle",
+            Self::Work => "workLogicalId",
+        }
+    }
+    fn outcome_field(self) -> &'static str {
+        match self {
+            Self::Task => "intendedOutcome",
+            Self::Work => "outcome",
+        }
+    }
+    fn dependencies_field(self) -> &'static str {
+        match self {
+            Self::Task => "dependencyTaskRefs",
+            Self::Work => "dependencyWorkRefs",
+        }
+    }
+}
+
+/// The first 20 legacy items as plan actions with unique keys and
+/// dependencies mapped to those keys.
+fn project_actions(items: &[LegacyItem], kind: LegacyItemKind) -> Vec<PlanAction> {
+    let selected = items.get(..items.len().min(20)).unwrap_or(items);
+    let keys = unique_action_keys(selected, kind);
+    let mut refs = HashMap::new();
+    for (item, key) in selected.iter().zip(&keys) {
+        refs.insert(item.id.clone(), key.clone());
+        if let Some(id) = reference(field(&item.content, "ref")) {
+            refs.insert(id, key.clone());
+        }
+    }
+    selected
+        .iter()
+        .zip(keys)
+        .enumerate()
+        .map(|(index, (item, action_key))| PlanAction {
+            action_key,
+            description: action_description(item, kind, index),
+            dependency_keys: references(field(&item.content, kind.dependencies_field()))
+                .into_iter()
+                .filter_map(|reference| refs.get(&reference).cloned())
+                .collect(),
+            effect: None,
+        })
+        .collect()
+}
+
+/// Logical ids (or positional keys) made unique with numeric suffixes.
+fn unique_action_keys(items: &[LegacyItem], kind: LegacyItemKind) -> Vec<String> {
+    let mut keys = Vec::with_capacity(items.len());
     let mut used = HashSet::new();
-    for (index, item) in selected.iter().enumerate() {
-        let field_name = if tasks {
-            "taskLogicalId"
-        } else {
-            "workLogicalId"
-        };
-        let base = concise(field(&item.content, field_name), 80)
+    for (index, item) in items.iter().enumerate() {
+        let base = concise(field(&item.content, kind.key_field()), 80)
             .unwrap_or_else(|| format!("legacy-action-{}", index + 1));
         let mut key = base.clone();
         let mut suffix = 2;
@@ -127,68 +197,28 @@ fn project_actions(items: &[LegacyItem], tasks: bool) -> Vec<PlanAction> {
         used.insert(key.clone());
         keys.push(key);
     }
-    let mut refs = HashMap::new();
-    for (item, key) in selected.iter().zip(&keys) {
-        refs.insert(item.id.clone(), key.clone());
-        if let Some(id) = reference(field(&item.content, "ref")) {
-            refs.insert(id, key.clone());
-        }
+    keys
+}
+
+/// "title: outcome" (without repeating an identical outcome), or a
+/// positional placeholder.
+fn action_description(item: &LegacyItem, kind: LegacyItemKind, index: usize) -> String {
+    let title = concise(field(&item.content, kind.title_field()), 160);
+    let outcome = concise(field(&item.content, kind.outcome_field()), 400);
+    let mut parts = Vec::new();
+    if let Some(title) = title {
+        parts.push(title);
     }
-    selected
-        .iter()
-        .enumerate()
-        .map(|(index, item)| {
-            let title = concise(
-                field(
-                    &item.content,
-                    if tasks {
-                        "displayTitle"
-                    } else {
-                        "workLogicalId"
-                    },
-                ),
-                160,
-            );
-            let outcome = concise(
-                field(
-                    &item.content,
-                    if tasks { "intendedOutcome" } else { "outcome" },
-                ),
-                400,
-            );
-            let mut parts = Vec::new();
-            if let Some(title) = title {
-                parts.push(title);
-            }
-            if let Some(outcome) = outcome
-                && !parts.contains(&outcome)
-            {
-                parts.push(outcome);
-            }
-            let description = if parts.is_empty() {
-                format!("Continue imported action {}.", index + 1)
-            } else {
-                parts.join(": ")
-            };
-            let dependency_keys = references(field(
-                &item.content,
-                if tasks {
-                    "dependencyTaskRefs"
-                } else {
-                    "dependencyWorkRefs"
-                },
-            ))
-            .into_iter()
-            .filter_map(|reference| refs.get(&reference).cloned())
-            .collect();
-            PlanAction {
-                action_key: keys[index].clone(),
-                description,
-                dependency_keys,
-                effect: None,
-            }
-        })
-        .collect()
+    if let Some(outcome) = outcome
+        && !parts.contains(&outcome)
+    {
+        parts.push(outcome);
+    }
+    if parts.is_empty() {
+        format!("Continue imported action {}.", index + 1)
+    } else {
+        parts.join(": ")
+    }
 }
 
 fn field<'a>(value: &'a Value, name: &str) -> &'a Value {

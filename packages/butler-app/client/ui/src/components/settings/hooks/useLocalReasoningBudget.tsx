@@ -11,7 +11,7 @@ import type { SettingsCopy } from "../settingsTypes";
 
 export function useLocalReasoningBudget(
   activeLocalModel: AppModelSummary | null,
-  draft: SettingsData,
+  draft: SettingsData | null,
   setModelCatalog: (catalog: ModelCatalogView) => void,
   update: (
     partial: Partial<SettingsData>,
@@ -38,7 +38,7 @@ export function useLocalReasoningBudget(
       setModelCatalog(result.catalog);
       if (
         ratio > 0 &&
-        draft.model === result.model.model_ref &&
+        draft?.model === result.model.model_ref &&
         draft.reasoning_effort === "none"
       ) {
         await update(

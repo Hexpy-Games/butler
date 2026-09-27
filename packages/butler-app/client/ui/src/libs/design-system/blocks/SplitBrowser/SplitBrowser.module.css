@@ -1,0 +1,22 @@
+.browser {
+  display: grid;
+  min-height: 0;
+  overflow: hidden;
+  grid-template-columns: minmax(12rem, 0.34fr) minmax(0, 1fr);
+}
+
+.navPane {
+  min-width: 0;
+  padding-right: var(--space-md);
+  border-right: var(--border-hairline) solid var(--line);
+}
+
+.contentPane {
+  min-width: 0;
+  padding-left: var(--space-md);
+}
+
+.scroller {
+  height: var(--split-browser-height);
+  min-height: 0;
+}

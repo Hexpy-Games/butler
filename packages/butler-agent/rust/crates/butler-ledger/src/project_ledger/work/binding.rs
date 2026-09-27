@@ -5,8 +5,10 @@ use butler_turn::btcc::{
     WorkTurnScope, WorkView,
 };
 
+use super::super::publication::ProjectLedgerRecordOperation;
 use super::super::publication::{ProjectLedgerRecordKind, ProjectLedgerRecordUpdate};
 use super::codec::{self, Snapshot};
+use super::publication::Projection;
 use super::relation::is_open;
 use super::start::binding_child;
 use super::{ProjectWorkRepository, invalid};
@@ -78,7 +80,7 @@ impl ProjectWorkRepository {
                         .await?,
                 ))
             },
-            true,
+            Projection::Recover,
         )
         .await?;
         Ok(Some(self.require_current(&id).await?.view))
@@ -98,44 +100,47 @@ impl ProjectWorkRepository {
         self.publish(
             identity,
             move || async move {
-                let relation = repo.relation(&command.input.scope).await?;
-                if let Some(binding) = relation.binding {
-                    if binding.view.work_id != requested_id {
-                        return Err(invalid("project_work_turn_already_bound"));
-                    }
-                    repo.require_bound_relation(
-                        &command.input.scope,
-                        relation.head.as_ref(),
-                        &binding,
-                    )
-                    .await?;
-                    let fresh = repo.require_current(&requested_id).await?;
-                    return Ok(Some(vec![
-                        repo.heartbeat_update(&fresh, &prepare_identity).await?,
-                    ]));
-                }
-                if relation
-                    .head
-                    .as_ref()
-                    .is_none_or(|head| head.view.work_id != requested_id)
-                {
-                    return Err(invalid("project_work_continuation_target_invalid"));
-                }
-                let current = repo.require_current(&requested_id).await?;
-                if !is_open(&current.view)
-                    || current.view.session_id != command.input.scope.session_id
-                {
-                    return Err(invalid("project_work_continuation_target_invalid"));
-                }
-                Ok(Some(
-                    repo.binding_updates(&current, &command.input.scope, &prepare_identity)
-                        .await?,
-                ))
+                repo.continue_updates(&command, &requested_id, &prepare_identity)
+                    .await
+                    .map(Some)
             },
-            true,
+            Projection::Recover,
         )
         .await?;
         Ok(self.require_current(&result_id).await?.view)
+    }
+
+    /// Continuing Work already bound to the turn is a heartbeat; otherwise
+    /// the session's open head Work is bound to it.
+    async fn continue_updates(
+        &self,
+        command: &ContinueWorkCommand,
+        requested_id: &str,
+        identity: &ProjectWorkOperationIdentity,
+    ) -> Result<Vec<ProjectLedgerRecordUpdate>, BtccError> {
+        let scope = &command.input.scope;
+        let relation = self.relation(scope).await?;
+        if let Some(binding) = relation.binding {
+            if binding.view.work_id != requested_id {
+                return Err(invalid("project_work_turn_already_bound"));
+            }
+            self.require_bound_relation(scope, relation.head.as_ref(), &binding)
+                .await?;
+            let fresh = self.require_current(requested_id).await?;
+            return Ok(vec![self.heartbeat_update(&fresh, identity).await?]);
+        }
+        if relation
+            .head
+            .as_ref()
+            .is_none_or(|head| head.view.work_id != requested_id)
+        {
+            return Err(invalid("project_work_continuation_target_invalid"));
+        }
+        let current = self.require_current(requested_id).await?;
+        if !is_open(&current.view) || current.view.session_id != scope.session_id {
+            return Err(invalid("project_work_continuation_target_invalid"));
+        }
+        self.binding_updates(&current, scope, identity).await
     }
 
     async fn binding_updates(
@@ -173,7 +178,7 @@ impl ProjectWorkRepository {
                 binding_refs: Value::Array(refs),
                 session_head: true,
                 revisions: &codec::revisions(&current.manifest),
-                create: false,
+                operation: ProjectLedgerRecordOperation::Update,
             })
             .await?,
         ];
@@ -214,7 +219,7 @@ impl ProjectWorkRepository {
                 .and_then(Value::as_bool)
                 .unwrap_or(true),
             revisions: &codec::revisions(&current.manifest),
-            create: false,
+            operation: ProjectLedgerRecordOperation::Update,
         })
         .await
     }
@@ -248,7 +253,9 @@ impl ProjectWorkRepository {
         kind: ProjectLedgerRecordKind,
         parent: Option<String>,
     ) -> Result<(), BtccError> {
-        let outcome = self.publish(identity, || async { Ok(None) }, true).await?;
+        let outcome = self
+            .publish(identity, || async { Ok(None) }, Projection::Recover)
+            .await?;
         if outcome.skipped
             || !outcome
                 .targets

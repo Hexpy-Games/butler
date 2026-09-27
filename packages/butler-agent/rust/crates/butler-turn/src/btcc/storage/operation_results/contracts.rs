@@ -8,6 +8,7 @@ pub(crate) type ExactProjectWorkResultAuthorityFuture<'a> = Pin<
     Box<dyn Future<Output = StorageResult<Arc<dyn ExactProjectWorkResultAuthority>>> + Send + 'a>,
 >;
 
+/// The project Work whose results an authority verifies.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProjectWorkResultAuthorityLocation {
     pub work_id: String,
@@ -15,13 +16,16 @@ pub struct ProjectWorkResultAuthorityLocation {
     pub ledger_project_id: String,
 }
 
+/// Prepares the ledger authority for a project Work.
 pub trait ProjectWorkResultAuthorityFactory: Send + Sync {
+    /// The authority for `location`.
     fn prepare(
         &self,
         location: ProjectWorkResultAuthorityLocation,
     ) -> ExactProjectWorkResultAuthorityFuture<'_>;
 }
 
+/// The ledger identity of a project Work result.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExactProjectWorkResultIdentity {
     pub result_ref: String,
@@ -36,6 +40,7 @@ pub struct ExactProjectWorkResultIdentity {
     pub result_sha256: String,
 }
 
+/// A project Work result to verify against the ledger.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExactProjectWorkResultVerification {
     pub result_ref: String,
@@ -49,11 +54,14 @@ pub struct ExactProjectWorkResultVerification {
     pub result_sha256: String,
 }
 
+/// The ledger authority over project Work results.
 pub trait ExactProjectWorkResultAuthority: Send + Sync {
+    /// The ledger identity of a turn's result, if the ledger projects it.
     fn resolve(
         &self,
         input: &OperationResultReferenceInput,
     ) -> StorageResult<Option<ExactProjectWorkResultIdentity>>;
+    /// Verifies a result's identity and digest against the ledger.
     fn verify(
         &self,
         input: &ExactProjectWorkResultVerification,
@@ -91,12 +99,14 @@ pub(crate) struct OperationResultDiscovery {
     pub next_cursor: Option<f64>,
 }
 
+/// Identifies a tool call's result.
 #[derive(Clone, Debug)]
 pub struct OperationResultReferenceInput {
     pub turn_id: String,
     pub call_id: String,
 }
 
+/// Where a tool call's exact result is stored.
 #[derive(Clone, Debug, PartialEq)]
 pub struct OperationResultReference {
     pub kind: &'static str,

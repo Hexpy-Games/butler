@@ -1,0 +1,18 @@
+/* Settings page: sections separated by the section gap (card -> next header). */
+.page {
+  display: grid;
+  gap: var(--settings-section-gap);
+  min-width: 0;
+}
+
+/* Page-wide actions stay reachable at the bottom of the detail scroll area. */
+.footer {
+  position: sticky;
+  z-index: 2;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-md) 0;
+  border-top: var(--border-hairline) solid var(--line);
+  background: var(--settings-bg);
+}

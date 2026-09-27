@@ -20,7 +20,7 @@ export function ComposerAttachments() {
 
   return (
     <AttachmentList
-      className="no-drag"
+      windowDrag="no-drag"
       items={attachments.map((attachment) => ({
         id: attachment.id,
         name: attachment.file.safe_name,
@@ -43,8 +43,8 @@ export function ComposerAttachments() {
 }
 
 function attachmentIcon(attachment: ComposerAttachment) {
-  if (attachment.kind === "project-document") return <BookOpenText size={13} />;
-  if (attachment.kind === "image") return <ImageIcon size={13} />;
-  if (attachment.kind === "text") return <FileText size={13} />;
-  return <Paperclip size={13} />;
+  if (attachment.kind === "project-document") return <BookOpenText size="sm" />;
+  if (attachment.kind === "image") return <ImageIcon size="sm" />;
+  if (attachment.kind === "text") return <FileText size="sm" />;
+  return <Paperclip size="sm" />;
 }

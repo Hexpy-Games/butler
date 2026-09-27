@@ -85,7 +85,7 @@ function normalizedProjectDocumentType(
 
 function documentIcon(document: ProjectDashboardDocument) {
   const type = normalizedProjectDocumentType(document);
-  if (type === "roadmap") return <BookOpenText size={15} />;
-  if (type === "task") return <ListChecks size={15} />;
-  return <FileText size={15} />;
+  if (type === "roadmap") return <BookOpenText size="md" />;
+  if (type === "task") return <ListChecks size="md" />;
+  return <FileText size="md" />;
 }

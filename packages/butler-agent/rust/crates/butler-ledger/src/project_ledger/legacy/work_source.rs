@@ -1,6 +1,7 @@
 //! Stable raw-R2 Project Ledger reads for the required legacy Work source port.
 
-use std::{fs, path::Path};
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value, json};
 
@@ -24,23 +25,30 @@ impl LegacyProjectWorkSource for ProjectLedger {
         Box::pin(async move {
             self.run(move |data, collation| read(data, &project_ref, program_ids, collation))
                 .await
-                .map_err(|error| {
-                    let code = match error {
-                        ProjectLedgerReadError::Resolution { code, .. }
-                        | ProjectLedgerReadError::RecordShow { code, .. }
-                        | ProjectLedgerReadError::Owner { code, .. }
-                        | ProjectLedgerReadError::DashboardInternal { code, .. }
-                        | ProjectLedgerReadError::DashboardUnavailable { code, .. } => code,
-                        ProjectLedgerReadError::DashboardChanged => {
-                            "project_work_legacy_source_changed"
-                        }
-                    };
-                    BtccError::relayed(code, code)
-                })
+                .map_err(source_error)
         })
     }
 }
 
+/// A read failure as the relayed BTCC error the legacy port reports.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err adapter taking the owned error"
+)]
+fn source_error(error: ProjectLedgerReadError) -> BtccError {
+    let code = match error {
+        ProjectLedgerReadError::Resolution { code, .. }
+        | ProjectLedgerReadError::RecordShow { code, .. }
+        | ProjectLedgerReadError::Owner { code, .. }
+        | ProjectLedgerReadError::DashboardInternal { code, .. }
+        | ProjectLedgerReadError::DashboardUnavailable { code, .. } => code,
+        ProjectLedgerReadError::DashboardChanged => "project_work_legacy_source_changed",
+    };
+    BtccError::relayed(code, code)
+}
+
+/// The one open legacy program among `ids`, read against a stable source
+/// head (retried once when the ledger changes while it is read).
 fn read(
     data: &Path,
     reference: &str,
@@ -53,18 +61,7 @@ fn read(
     if ids.is_empty() {
         return Ok(None);
     }
-    let root = if let Some(id) = reference.strip_prefix("project:") {
-        if !active_reference::safe_id(id) {
-            return Err(invalid());
-        }
-        let projects = data.join("project-ledger/projects");
-        let root = projects.join(id);
-        active_reference::canonical_containment(&projects, &root)?;
-        root
-    } else {
-        // The source resolver has no workspace fallback for this legacy lookup.
-        active_reference::resolve_workspace(data, "", reference)?
-    };
+    let root = resolve_root(data, reference)?;
     if !root.join("project.json").exists() || !root.join("ledger.jsonl").exists() {
         return Ok(None);
     }
@@ -72,54 +69,9 @@ fn read(
         let before = source_head::observe(&root, collation)?;
         let mut snapshots = Vec::new();
         for id in &ids {
-            let Some(body) = reference_body(&root, &format!("BTCC-PROGRAM-{id}"))? else {
-                continue;
-            };
-            let program = canonical_body(&body)?;
-            if program["programId"].as_str() != Some(id.as_str()) {
-                return Err(invalid());
+            if let Some(snapshot) = open_program(&root, id, &before)? {
+                snapshots.push(snapshot);
             }
-            let revision = program["manifestRevision"]
-                .as_f64()
-                .filter(|value| {
-                    value.is_finite()
-                        && value.fract() == 0.0
-                        && value.abs() <= 9_007_199_254_740_991.0
-                })
-                .ok_or_else(invalid)?;
-            let planning = text(&program, "planningState")?;
-            let frontier = text(&program, "frontier")?;
-            let goal_ref = decode_ref(&program["goalContractRef"])?;
-            // Decode before the openness decision, matching source decodeProgram.
-            let works = decode_items(&program["works"], "work")?;
-            let tasks = decode_items(&program["tasks"], "task")?;
-            let criteria = decode_criteria(&program["criteria"])?;
-            if planning != "unplanned" && matches!(frontier, "closed" | "cancelled") {
-                continue;
-            }
-            let goal = goal_contract(&root, &goal_ref)?;
-            let source_revision = digest_identity(&format!(
-                "btcc-r2-project-work-import.v1\0{}\0{}\0{}\0{}\0{}",
-                before.project_root.to_string_lossy(),
-                before.source_sha256,
-                before.source_file_count,
-                id,
-                js::stringify(&json!(revision)).map_err(|source| invalid().with_source(source))?,
-            ));
-            let planned = planning != "unplanned";
-            snapshots.push(LegacyProjectWorkSourceSnapshot {
-                source_program_id: id.clone(),
-                source_revision,
-                goal_contract: goal,
-                plan: if planned {
-                    program.get("plan").cloned().unwrap_or(Value::Null)
-                } else {
-                    Value::Null
-                },
-                works: if planned { works } else { Vec::new() },
-                tasks: if planned { tasks } else { Vec::new() },
-                referenced_records: if planned { criteria } else { Vec::new() },
-            });
         }
         let after = source_head::observe(&root, collation)?;
         if before.project_root != after.project_root
@@ -140,18 +92,89 @@ fn read(
     ))
 }
 
+/// `project:<id>` names a Ledger directly; anything else is an App project.
+fn resolve_root(data: &Path, reference: &str) -> Result<PathBuf, ProjectLedgerReadError> {
+    let Some(id) = reference.strip_prefix("project:") else {
+        // The source resolver has no workspace fallback for this legacy lookup.
+        return active_reference::resolve_workspace(data, "", reference);
+    };
+    if !active_reference::safe_id(id) {
+        return Err(invalid());
+    }
+    let projects = data.join("project-ledger/projects");
+    let root = projects.join(id);
+    active_reference::canonical_containment(&projects, &root)?;
+    Ok(root)
+}
+
+/// The program `id`'s snapshot when it exists and is still open.
+fn open_program(
+    root: &Path,
+    id: &str,
+    before: &source_head::SourceHead,
+) -> Result<Option<LegacyProjectWorkSourceSnapshot>, ProjectLedgerReadError> {
+    let Some(body) = reference_body(root, &format!("BTCC-PROGRAM-{id}"))? else {
+        return Ok(None);
+    };
+    let program = canonical_body(&body)?;
+    let field = |key: &str| program.get(key).unwrap_or(&Value::Null);
+    if field("programId").as_str() != Some(id) {
+        return Err(invalid());
+    }
+    let revision = field("manifestRevision")
+        .as_f64()
+        .filter(|value| {
+            value.is_finite() && value.fract() == 0.0 && value.abs() <= 9_007_199_254_740_991.0
+        })
+        .ok_or_else(invalid)?;
+    let planning = text(&program, "planningState")?;
+    let frontier = text(&program, "frontier")?;
+    let goal_ref = decode_ref(field("goalContractRef"))?;
+    // Decode before the openness decision, matching source decodeProgram.
+    let works = decode_items(field("works"), "work")?;
+    let tasks = decode_items(field("tasks"), "task")?;
+    let criteria = decode_criteria(field("criteria"))?;
+    if planning != "unplanned" && matches!(frontier, "closed" | "cancelled") {
+        return Ok(None);
+    }
+    let goal = goal_contract(root, &goal_ref)?;
+    let source_revision = digest_identity(&format!(
+        "btcc-r2-project-work-import.v1\0{}\0{}\0{}\0{}\0{}",
+        before.project_root.to_string_lossy(),
+        before.source_sha256,
+        before.source_file_count,
+        id,
+        js::stringify(&json!(revision)).map_err(|source| invalid().with_source(source))?,
+    ));
+    let planned = planning != "unplanned";
+    Ok(Some(LegacyProjectWorkSourceSnapshot {
+        source_program_id: id.to_owned(),
+        source_revision,
+        goal_contract: goal,
+        plan: if planned {
+            program.get("plan").cloned().unwrap_or(Value::Null)
+        } else {
+            Value::Null
+        },
+        works: if planned { works } else { Vec::new() },
+        tasks: if planned { tasks } else { Vec::new() },
+        referenced_records: if planned { criteria } else { Vec::new() },
+    }))
+}
+
 fn goal_contract(root: &Path, source: &Value) -> Result<Value, ProjectLedgerReadError> {
     let id = text(source, "id")?;
     let logical_id = format!("ledger-record:{id}");
     let body = reference_body(root, &logical_id)?.ok_or_else(invalid)?;
     let logical = canonical_body(&body)?;
-    let record = logical["record"].as_object().ok_or_else(invalid)?;
-    if logical["ref"]["id"].as_str() != Some(logical_id.as_str())
-        || logical["sourceId"].as_str() != Some(id)
+    let field = |key: &str| logical.get(key).unwrap_or(&Value::Null);
+    let record = field("record").as_object().ok_or_else(invalid)?;
+    if field("ref").get("id").and_then(Value::as_str) != Some(logical_id.as_str())
+        || field("sourceId").as_str() != Some(id)
     {
         return Err(invalid());
     }
-    let encoded = js::canonical_json(&logical["record"], js::CanonicalKeyOrder::Utf16Lexical)
+    let encoded = js::canonical_json(field("record"), js::CanonicalKeyOrder::Utf16Lexical)
         .map_err(|source| invalid().with_source(source))?;
     let sha = digest_identity(&encoded);
     if source["sha256"].as_str() != Some(sha.as_str())
@@ -192,7 +215,11 @@ fn decode_items(
         .flatten()
         .map(|item| {
             let mut content = item[key].as_object().ok_or_else(invalid)?.clone();
-            let reference = decode_ref(&item[key]["ref"])?;
+            let reference = decode_ref(
+                item.get(key)
+                    .and_then(|value| value.get("ref"))
+                    .unwrap_or(&Value::Null),
+            )?;
             let id = text(&reference, "id")?.to_owned();
             content.insert("ref".into(), reference);
             Ok(LegacyProjectWorkRecord {

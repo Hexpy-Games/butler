@@ -76,7 +76,7 @@ async fn nochange_compactor_selects_semantic_and_bounded_eviction_skips_steering
         .await
         .unwrap();
     assert!(matches!(projection.messages, ContextMessages::Semantic));
-    assert!(!projection.requires_rebase);
+    assert_eq!(projection.rebase, ContextRebase::NotRequired);
     drop(owner);
 
     let bounded = ContextPortAdapter::new(Arc::new(Steering(ports.clone())), None);
@@ -105,8 +105,7 @@ async fn nochange_compactor_selects_semantic_and_bounded_eviction_skips_steering
         )
         .await
         .unwrap();
-    assert!(projection.requires_rebase);
-    assert!(!projection.recheck_steering_on_rebase);
+    assert_eq!(projection.rebase, ContextRebase::Required);
     let ContextMessages::Owned(messages) = projection.messages else {
         panic!("eviction materializes")
     };

@@ -24,12 +24,12 @@ Body text.`);
 
   expect(view.body).toBe("# Visible title\n\nBody text.");
   expect(view.frontmatter).toEqual([
-    { key: "kind", label: "Kind", value: "spec" },
+    { key: "kind", label: "Document type", value: "spec" },
     { key: "id", label: "ID", value: "SPEC-1" },
-    { key: "status", label: "Status", value: "active" },
+    { key: "status", label: "Document status", value: "active" },
     {
       key: "updatedAt",
-      label: "Updated",
+      label: "Last updated",
       value: "2026-05-18T10:00:00Z",
     },
   ]);

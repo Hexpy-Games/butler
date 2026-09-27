@@ -10,8 +10,15 @@ can share a consistent trailing alignment. Nested identity controls may opt into
 Clickable's declared action/icon sizing; see Clickable's README.
 Use `meta` for a second line that spans the full row: the first-line actions do
 not consume its trailing space. Metadata aligns with the label after the icon.
-`--nav-action-edge-offset` may cancel the row inset for internally padded action
-targets; text metadata keeps its normal trailing inset.
+Inside a `SidebarShell` the shell cancels the row inset for internally padded
+action targets; text metadata keeps its normal trailing inset.
+`density` (`compact`, `comfortable`, `touch`) sizes a standalone row; inside a
+`SidebarShell` rows follow the shell's density. `reserveIcon` keeps an empty
+icon column so a label-only row (for example "More (12)") aligns with iconned
+rows. `NavRowSwap` is a trailing slot that shows its `rest` content (an
+activity status, a disclosure chevron) at rest and swaps in row actions (a row
+menu) on row hover, keyboard focus or while `open`; phones keep the rest
+content and open row menus with a long press.
 
 ## What is this block
 
@@ -23,7 +30,7 @@ Use NavRow for sidebar navigation items, project rows, session rows, settings it
 
 ## Container vs Presenter
 
-**NavRow is a presenter block.** It owns visual layout, states (active, disabled), hover behavior, and accessibility slots. It must not import Butler domain data, stores, routes, or app copy.
+**NavRow is a presenter block.** It owns visual layout, states (active, disabled), hover behavior, and accessibility slots. The active row is clearly stronger than hover: `--selection-strong` background, primary text, medium label weight, and a full-opacity icon; hover uses a softer tint of `--selection`. It must not import Butler domain data, stores, routes, or app copy.
 
 **Container responsibilities:** Domain components inject project names, session titles, route matching for active state, click handlers that navigate, app copy for labels, and domain-specific actions.
 
@@ -61,6 +68,14 @@ function ProjectRowContainer({ project }: { project: ProjectSummary }) {
   );
 }
 ```
+
+### Disabled tone
+
+Disabled options, menu items, rows and Clickables use the DS disabled tone:
+`--interactive-disabled-fg` (the theme's `--color-text-disabled`) and
+`--interactive-disabled-cursor`, never opacity, and they never take the hover
+or keyboard highlight fill. Product code passes `disabled`; it does not style
+the state.
 
 ## Accessibility
 

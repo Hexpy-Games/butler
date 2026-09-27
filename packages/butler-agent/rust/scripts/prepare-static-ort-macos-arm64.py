@@ -291,10 +291,38 @@ def prepare(stage, lock):
     return lib_path, protoc
 
 
+def prepare_protoc(cache_root, lock):
+    """Download and verify only the pinned protoc; ORT itself is needed only to link."""
+    spec = lock["sources"]["protoc"]
+    complete = cache_root / f"protoc-{spec['sha256'][:24]}"
+    protoc = complete / "bin/protoc"
+    if protoc.is_file():
+        return protoc
+    stage = cache_root / f".protoc.{os.getpid()}.{uuid.uuid4().hex}.tmp"
+    stage.mkdir()
+    try:
+        download(spec, stage / "protoc.zip")
+        extract(stage / "protoc.zip", stage / "protoc")
+        staged = stage / "protoc/bin/protoc"
+        if not staged.is_file():
+            fail(f"Pinned build tool missing: {staged}")
+        staged.chmod(staged.stat().st_mode | 0o111)
+        command([str(staged), "--version"])
+        (stage / "protoc").rename(complete)
+    finally:
+        if stage.exists():
+            shutil.rmtree(stage)
+    return protoc
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--verify-lib-path", type=pathlib.Path,
                         help="read-only inspection of an existing static ORT link directory")
+    parser.add_argument("--fingerprint", action="store_true",
+                        help="print the cache fingerprint without preparing anything")
+    parser.add_argument("--protoc-only", action="store_true",
+                        help="prepare only the pinned protoc (enough for cargo check/clippy)")
     args = parser.parse_args()
     if args.verify_lib_path:
         print(json.dumps({"libraries": verified_outputs(args.verify_lib_path.resolve())}, sort_keys=True))
@@ -306,8 +334,14 @@ def main():
     fingerprint = hashlib.sha256(json.dumps({
         "lock": lock, "script_sha256": sha256(SCRIPT), "host": identity,
     }, sort_keys=True).encode()).hexdigest()[:24]
+    if args.fingerprint:
+        print(fingerprint)
+        return
     cache_root = root_for_target()
     cache_root.mkdir(parents=True, exist_ok=True)
+    if args.protoc_only:
+        print(json.dumps({"protoc": str(prepare_protoc(cache_root, lock))}, sort_keys=True))
+        return
     guard = (cache_root / f".ort-{fingerprint}.lock").open("a+b")
     try:
         fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)

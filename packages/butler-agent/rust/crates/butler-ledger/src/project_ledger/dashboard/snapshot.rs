@@ -13,196 +13,256 @@ use super::{
 use super::{exact, managed};
 use crate::project_ledger::{ProjectLedgerReadError, committed};
 
+/// A consistent dashboard snapshot: indexed records plus every Work on disk,
+/// refreshed from their sources. Retried once when the ledger changes while
+/// it is read.
 pub(super) fn read(
     root: &Path,
     binding: &ProjectLedgerBinding,
     collation: &LocaleCollation,
 ) -> Result<DashboardLedgerSnapshot, ProjectLedgerReadError> {
     for _ in 0..2 {
-        let publication = committed::publication_version(root)?;
-        let raw_index = fs::read_to_string(root.join("index/project.json"))
-            .map_err(|source| invalid_index().with_source(source))?;
-        let mut records = indexed_records(&raw_index, &binding.ledger_project_id)?;
-        let metadata = source_metadata(root, &records)?;
-        let revision = format!(
-            "{:x}",
-            Sha256::digest(format!(
-                "{}\0{}\0{}\0{}\0{}",
-                binding.app_project_id, binding.ledger_project_id, publication, raw_index, metadata
-            ))
-        );
-        for id in work_ids(root)? {
-            if !records
-                .iter()
-                .any(|record| record.kind == "work" && record.id == id)
-            {
-                records.push(DashboardLedgerRecord {
-                    path: format!(
-                        "project-ledger/projects/{}/work/{id}/work.md",
-                        binding.ledger_project_id
-                    ),
-                    id: id.clone(),
-                    kind: "work".into(),
-                    title: id,
-                    status: "unknown".into(),
-                    parent_id: None,
-                    spec: None,
-                    updated_at: String::new(),
-                    priority: 100.0,
-                    unavailable: false,
-                });
-            }
+        if let Some(snapshot) = observe(root, binding, collation)? {
+            return Ok(snapshot);
         }
-        for record in &mut records {
-            if record.kind == "work" {
-                continue;
-            }
-            let relative = relative_record_path(&record.path)?;
-            let regular = fs::symlink_metadata(root.join(relative))
-                .is_ok_and(|stat| stat.is_file() && !stat.file_type().is_symlink());
-            if !regular {
-                record.status = "unknown".into();
-                record.unavailable = true;
-                continue;
-            }
-            if !matches!(record.kind.as_str(), "task" | "plan")
-                || record.spec.as_deref() == Some(managed::PROJECT_WORK_SPEC)
-            {
-                continue;
-            }
-            match exact::read_record(root, &binding.ledger_project_id, record) {
-                Ok(source)
-                    if source.metadata.get("schema").and_then(Value::as_str)
-                        == Some(format!("project-ledger.{}.v1", record.kind).as_str()) =>
-                {
-                    if let (Some(title), Some(status)) = (
-                        source.metadata.get("title").and_then(Value::as_str),
-                        source.metadata.get("status").and_then(Value::as_str),
-                    ) {
-                        record.title = title.to_owned();
-                        record.status = status.to_owned();
-                        if let Some(updated) = source.metadata.get("updatedAt") {
-                            record.updated_at = js_string(updated);
-                        }
-                    } else {
-                        record.status = "unknown".into();
-                        record.unavailable = true;
-                    }
-                }
-                _ => {
-                    record.status = "unknown".into();
-                    record.unavailable = true;
-                }
-            }
-        }
-        let mut works = Vec::new();
-        for record in records.iter().filter(|record| record.kind == "work") {
-            let resolved = (|| {
-                let source = exact::read_record(root, &binding.ledger_project_id, record)?;
-                if source.metadata.get("schema").and_then(Value::as_str)
-                    != Some("project-ledger.work.v1")
-                {
-                    return Err(invalid_index());
-                }
-                let title = source
-                    .metadata
-                    .get("title")
-                    .and_then(Value::as_str)
-                    .ok_or_else(invalid_index)?;
-                let status = source
-                    .metadata
-                    .get("status")
-                    .and_then(Value::as_str)
-                    .ok_or_else(invalid_index)?;
-                let mut current = record.clone();
-                current.title = title.into();
-                current.status = status.into();
-                current.spec = source
-                    .metadata
-                    .get("spec")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned);
-                if let Some(updated) = source.metadata.get("updatedAt") {
-                    current.updated_at = js_string(updated);
-                }
-                let managed = if current.spec.as_deref() == Some(managed::PROJECT_WORK_SPEC) {
-                    Some(managed::read_current(
-                        root, binding, &current, &source, collation,
-                    )?)
-                } else {
-                    None
-                };
-                Ok::<_, ProjectLedgerReadError>((current, source.revision, managed))
-            })();
-            match resolved {
-                Ok((record, revision, managed)) => works.push(DashboardLedgerWork {
-                    record,
-                    revision: Some(revision),
-                    availability: "ready",
-                    managed,
-                }),
-                Err(_) => works.push(DashboardLedgerWork {
-                    record: record.clone(),
-                    revision: None,
-                    availability: "unavailable",
-                    managed: None,
-                }),
-            }
-        }
-        if publication != committed::publication_version(root)?
-            || raw_index
-                != fs::read_to_string(root.join("index/project.json"))
-                    .map_err(|source| invalid_index().with_source(source))?
-            || metadata != source_metadata(root, &records)?
-        {
-            continue;
-        }
-        for work in &works {
-            if let Some(index) = records
-                .iter()
-                .position(|record| record.kind == "work" && record.id == work.record.id)
-            {
-                records[index] = work.record.clone();
-            }
-            if let Some(plan) = work
-                .managed
-                .as_ref()
-                .and_then(|managed| managed.current_plan.as_ref())
-            {
-                if records
-                    .iter()
-                    .any(|record| record.kind == "plan" && record.id == plan.id)
-                {
-                    continue;
-                }
-                records.push(DashboardLedgerRecord {
-                    id: plan.id.clone(),
-                    kind: "plan".into(),
-                    title: plan.objective.clone(),
-                    status: "active".into(),
-                    parent_id: Some(work.record.id.clone()),
-                    spec: Some(managed::PROJECT_WORK_SPEC.into()),
-                    path: format!(
-                        "project-ledger/projects/{}/plans/{}.md",
-                        binding.ledger_project_id,
-                        plan.id.to_lowercase()
-                    ),
-                    updated_at: plan.created_at.clone(),
-                    priority: 100.0,
-                    unavailable: false,
-                });
-            }
-        }
-        return Ok(DashboardLedgerSnapshot {
-            revision,
-            observed_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-            records,
-            works,
-        });
     }
     Err(ProjectLedgerReadError::record_show(
         "dashboard_ledger_changing",
     ))
+}
+
+/// One attempt; `None` when the publication, index or sources changed.
+fn observe(
+    root: &Path,
+    binding: &ProjectLedgerBinding,
+    collation: &LocaleCollation,
+) -> Result<Option<DashboardLedgerSnapshot>, ProjectLedgerReadError> {
+    let publication = committed::publication_version(root)?;
+    let raw_index = fs::read_to_string(root.join("index/project.json"))
+        .map_err(|source| invalid_index().with_source(source))?;
+    let mut records = indexed_records(&raw_index, &binding.ledger_project_id)?;
+    let metadata = source_metadata(root, &records)?;
+    let revision = format!(
+        "{:x}",
+        Sha256::digest(format!(
+            "{}\0{}\0{}\0{}\0{}",
+            binding.app_project_id, binding.ledger_project_id, publication, raw_index, metadata
+        ))
+    );
+    add_unindexed_works(root, binding, &mut records)?;
+    for record in &mut records {
+        if record.kind != "work" {
+            refresh_record(root, binding, record)?;
+        }
+    }
+    let works = records
+        .iter()
+        .filter(|record| record.kind == "work")
+        .map(|record| work(root, binding, record, collation))
+        .collect::<Vec<_>>();
+    if publication != committed::publication_version(root)?
+        || raw_index
+            != fs::read_to_string(root.join("index/project.json"))
+                .map_err(|source| invalid_index().with_source(source))?
+        || metadata != source_metadata(root, &records)?
+    {
+        return Ok(None);
+    }
+    merge_works(binding, &mut records, &works);
+    Ok(Some(DashboardLedgerSnapshot {
+        revision,
+        observed_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        records,
+        works,
+    }))
+}
+
+/// Work directories the index does not list yet, as placeholder records.
+fn add_unindexed_works(
+    root: &Path,
+    binding: &ProjectLedgerBinding,
+    records: &mut Vec<DashboardLedgerRecord>,
+) -> Result<(), ProjectLedgerReadError> {
+    for id in work_ids(root)? {
+        if records
+            .iter()
+            .any(|record| record.kind == "work" && record.id == id)
+        {
+            continue;
+        }
+        records.push(DashboardLedgerRecord {
+            path: format!(
+                "project-ledger/projects/{}/work/{id}/work.md",
+                binding.ledger_project_id
+            ),
+            id: id.clone(),
+            kind: "work".into(),
+            title: id,
+            status: "unknown".into(),
+            parent_id: None,
+            spec: None,
+            updated_at: String::new(),
+            priority: 100.0,
+            unavailable: false,
+        });
+    }
+    Ok(())
+}
+
+/// Marks a missing or irregular record unavailable, and refreshes an
+/// unmanaged task or plan's title, status and update time from its source.
+fn refresh_record(
+    root: &Path,
+    binding: &ProjectLedgerBinding,
+    record: &mut DashboardLedgerRecord,
+) -> Result<(), ProjectLedgerReadError> {
+    let relative = relative_record_path(&record.path)?;
+    let regular = fs::symlink_metadata(root.join(relative))
+        .is_ok_and(|stat| stat.is_file() && !stat.file_type().is_symlink());
+    if !regular {
+        mark_unavailable(record);
+        return Ok(());
+    }
+    if !matches!(record.kind.as_str(), "task" | "plan")
+        || record.spec.as_deref() == Some(managed::PROJECT_WORK_SPEC)
+    {
+        return Ok(());
+    }
+    let Ok(source) = exact::read_record(root, &binding.ledger_project_id, record) else {
+        mark_unavailable(record);
+        return Ok(());
+    };
+    let schema = format!("project-ledger.{}.v1", record.kind);
+    let metadata = &source.metadata;
+    let (Some(title), Some(status)) = (
+        metadata.get("title").and_then(Value::as_str),
+        metadata.get("status").and_then(Value::as_str),
+    ) else {
+        mark_unavailable(record);
+        return Ok(());
+    };
+    if metadata.get("schema").and_then(Value::as_str) != Some(schema.as_str()) {
+        mark_unavailable(record);
+        return Ok(());
+    }
+    record.title = title.to_owned();
+    record.status = status.to_owned();
+    if let Some(updated) = metadata.get("updatedAt") {
+        record.updated_at = js_string(updated);
+    }
+    Ok(())
+}
+
+fn mark_unavailable(record: &mut DashboardLedgerRecord) {
+    record.status = "unknown".into();
+    record.unavailable = true;
+}
+
+/// A Work record read from its source, with its managed view when it is
+/// Project Work; unavailable when its source does not read.
+fn work(
+    root: &Path,
+    binding: &ProjectLedgerBinding,
+    record: &DashboardLedgerRecord,
+    collation: &LocaleCollation,
+) -> DashboardLedgerWork {
+    match resolve_work(root, binding, record, collation) {
+        Ok((record, revision, managed)) => DashboardLedgerWork {
+            record,
+            revision: Some(revision),
+            availability: "ready",
+            managed,
+        },
+        Err(_) => DashboardLedgerWork {
+            record: record.clone(),
+            revision: None,
+            availability: "unavailable",
+            managed: None,
+        },
+    }
+}
+
+type ResolvedWork = (
+    DashboardLedgerRecord,
+    String,
+    Option<super::DashboardManagedWorkView>,
+);
+
+fn resolve_work(
+    root: &Path,
+    binding: &ProjectLedgerBinding,
+    record: &DashboardLedgerRecord,
+    collation: &LocaleCollation,
+) -> Result<ResolvedWork, ProjectLedgerReadError> {
+    let source = exact::read_record(root, &binding.ledger_project_id, record)?;
+    let metadata = &source.metadata;
+    if metadata.get("schema").and_then(Value::as_str) != Some("project-ledger.work.v1") {
+        return Err(invalid_index());
+    }
+    let text = |key: &str| metadata.get(key).and_then(Value::as_str);
+    let title = text("title").ok_or_else(invalid_index)?;
+    let status = text("status").ok_or_else(invalid_index)?;
+    let mut current = record.clone();
+    current.title = title.into();
+    current.status = status.into();
+    current.spec = text("spec").map(str::to_owned);
+    if let Some(updated) = metadata.get("updatedAt") {
+        current.updated_at = js_string(updated);
+    }
+    let managed = if current.spec.as_deref() == Some(managed::PROJECT_WORK_SPEC) {
+        Some(managed::read_current(
+            root, binding, &current, &source, collation,
+        )?)
+    } else {
+        None
+    };
+    Ok((current, source.revision, managed))
+}
+
+/// Replaces indexed Work records with their resolved form and adds each
+/// managed Work's current plan when the index does not list it.
+fn merge_works(
+    binding: &ProjectLedgerBinding,
+    records: &mut Vec<DashboardLedgerRecord>,
+    works: &[DashboardLedgerWork],
+) {
+    for work in works {
+        if let Some(slot) = records
+            .iter_mut()
+            .find(|record| record.kind == "work" && record.id == work.record.id)
+        {
+            *slot = work.record.clone();
+        }
+        let Some(plan) = work
+            .managed
+            .as_ref()
+            .and_then(|managed| managed.current_plan.as_ref())
+        else {
+            continue;
+        };
+        if records
+            .iter()
+            .any(|record| record.kind == "plan" && record.id == plan.id)
+        {
+            continue;
+        }
+        records.push(DashboardLedgerRecord {
+            id: plan.id.clone(),
+            kind: "plan".into(),
+            title: plan.objective.clone(),
+            status: "active".into(),
+            parent_id: Some(work.record.id.clone()),
+            spec: Some(managed::PROJECT_WORK_SPEC.into()),
+            path: format!(
+                "project-ledger/projects/{}/plans/{}.md",
+                binding.ledger_project_id,
+                plan.id.to_lowercase()
+            ),
+            updated_at: plan.created_at.clone(),
+            priority: 100.0,
+            unavailable: false,
+        });
+    }
 }
 
 fn indexed_records(

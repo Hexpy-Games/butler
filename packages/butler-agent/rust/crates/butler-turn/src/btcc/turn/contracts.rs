@@ -6,6 +6,7 @@ use crate::btcc::{
     ProgressDestination, RuntimeFailure, TurnRequest, WorkStatus,
 };
 
+/// The durable lifecycle state of a turn.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TurnSemanticState {
@@ -15,6 +16,7 @@ pub enum TurnSemanticState {
     Cancelled,
 }
 
+/// A turn request prepared for admission: its stored command and input hash.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PreparedTurn {
@@ -25,6 +27,7 @@ pub struct PreparedTurn {
     pub is_fresh: bool,
 }
 
+/// A stored turn (`btcc_turns`): its admission, route, state and delivery.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TurnRecord {
@@ -65,6 +68,7 @@ pub struct TurnRecord {
     pub final_disposition: Option<FinalDisposition>,
 }
 
+/// The authorization behind an authorized wake.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WakeIdentity {
@@ -74,6 +78,7 @@ pub struct WakeIdentity {
     pub result_scope_ref: Option<String>,
 }
 
+/// The checkpoint a turn executes from.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TurnCheckpoint {
@@ -82,6 +87,7 @@ pub struct TurnCheckpoint {
     pub semantic_state: TurnSemanticState,
 }
 
+/// Why a turn is suspended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SuspensionReason {
@@ -89,6 +95,7 @@ pub enum SuspensionReason {
     WaitingForWorker,
 }
 
+/// How a turn finally ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FinalDisposition {
@@ -96,12 +103,14 @@ pub enum FinalDisposition {
     Cancelled,
 }
 
+/// A content-addressed stored record.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ContentRef {
     pub id: String,
     pub sha256: String,
 }
 
+/// The pending delivery of a turn's answer as a canonical message.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeliveryOutbox {
@@ -112,6 +121,7 @@ pub struct DeliveryOutbox {
     pub status: DeliveryStatus,
 }
 
+/// A turn's accepted final answer (persisted and content-addressed).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FinalPayload {
@@ -142,6 +152,7 @@ pub struct FinalPayload {
     pub extensions: serde_json::Map<String, Value>,
 }
 
+/// How far an outbox delivery got.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DeliveryStatus {
@@ -150,6 +161,7 @@ pub enum DeliveryStatus {
     Observed,
 }
 
+/// This runtime's claim to execute one checkpoint of a turn.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StateExecutionClaim {
     pub claim_id: String,
@@ -161,6 +173,7 @@ pub struct StateExecutionClaim {
     pub execution_fence: u64,
 }
 
+/// The claim-checked binding under which model-route state is written.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModelRouteWrite {
     pub turn_id: String,
@@ -170,12 +183,133 @@ pub struct ModelRouteWrite {
     pub route: Value,
 }
 
+/// A model-route event recorded under the turn's claim; `binding.route`
+/// replaces the persisted route state when it is not `null`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModelRouteEventWrite {
     pub binding: ModelRouteWrite,
-    pub event: Value,
+    pub event: ModelRouteEvent,
 }
 
+/// The kind of a model-route event; the strings are persisted in
+/// `btcc_model_route_events.event_type` and in event ids.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ModelRouteEventKind {
+    AttemptStarted,
+    AttemptFailed,
+    AttemptSucceeded,
+    AttemptAbandonedAfterRestart,
+    FallbackSelected,
+}
+
+impl ModelRouteEventKind {
+    /// The persisted event type.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::AttemptStarted => "model.attempt.started",
+            Self::AttemptFailed => "model.attempt.failed",
+            Self::AttemptSucceeded => "model.attempt.succeeded",
+            Self::AttemptAbandonedAfterRestart => "model.attempt.abandoned_after_restart",
+            Self::FallbackSelected => "model.fallback.selected",
+        }
+    }
+
+    /// Parses a persisted event type.
+    pub fn parse(value: &str) -> Option<Self> {
+        [
+            Self::AttemptStarted,
+            Self::AttemptFailed,
+            Self::AttemptSucceeded,
+            Self::AttemptAbandonedAfterRestart,
+            Self::FallbackSelected,
+        ]
+        .into_iter()
+        .find(|kind| kind.as_str() == value)
+    }
+}
+
+/// One event of a round's model route: an attempt transition or a fallback.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModelRouteEvent {
+    pub kind: ModelRouteEventKind,
+    pub round_id: String,
+    pub candidate_index: u32,
+    pub model_ref: String,
+    /// The transport attempt; fallback selections have none.
+    pub transport_attempt: Option<u32>,
+    /// Why a failed attempt failed and what the route does about it.
+    pub failure: Option<AttemptFailure>,
+}
+
+/// The classified failure of one transport attempt.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AttemptFailure {
+    pub error_code: String,
+    pub disposition: FailureDisposition,
+}
+
+/// What the route does after a failed attempt.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FailureDisposition {
+    /// Retry the same candidate up to the route's retry ceiling.
+    Retry,
+    /// Fall back to the next candidate.
+    Advance,
+    /// Surface the failure to the turn.
+    Surface,
+}
+
+impl FailureDisposition {
+    /// The persisted (`snake_case`) name.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Retry => "retry",
+            Self::Advance => "advance",
+            Self::Surface => "surface",
+        }
+    }
+
+    /// Parses a persisted name.
+    pub fn parse(value: &str) -> Option<Self> {
+        [Self::Retry, Self::Advance, Self::Surface]
+            .into_iter()
+            .find(|disposition| disposition.as_str() == value)
+    }
+}
+
+/// How the store handled a recorded model-route event.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RouteEventStatus {
+    /// The event was recorded.
+    Recorded,
+    /// A replayed start whose attempt already ended; nothing was recorded.
+    AlreadyTerminal,
+    /// A replayed start of an attempt a restart interrupted; it is now
+    /// recorded as abandoned.
+    AbandonedAfterRestart,
+}
+
+/// The transport attempts of one round candidate, grouped by outcome.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AttemptHistory {
+    pub started: Vec<u32>,
+    pub failed: Vec<u32>,
+    /// Failed attempts that carry a known disposition.
+    pub failed_details: Vec<FailureRecord>,
+    pub succeeded: Vec<u32>,
+    pub abandoned: Vec<u32>,
+}
+
+/// One failed attempt with its disposition.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FailureRecord {
+    pub transport_attempt: u32,
+    pub error_code: String,
+    pub disposition: FailureDisposition,
+}
+
+/// Identifies one round candidate's attempts and acceptance.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ModelRoundKey {
     pub turn_id: String,
@@ -187,6 +321,7 @@ pub struct ModelRoundKey {
     pub checkpoint_revision: Option<u64>,
 }
 
+/// Durably accepts a round's response (serialized `ModelRoundResult`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModelRoundAcceptanceWrite {
     pub binding: ModelRouteWrite,
@@ -195,6 +330,7 @@ pub struct ModelRoundAcceptanceWrite {
     pub result: Value,
 }
 
+/// Applies a continuation-budget event under the turn claim.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ContinuationBudgetTransition {
     pub binding: ModelRouteWrite,
@@ -202,6 +338,7 @@ pub struct ContinuationBudgetTransition {
     pub now_ms: u64,
 }
 
+/// What the agent loop ended with: an answer or a suspension, and its facts.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AgentLoopResult {
     pub route: ExecutionRoute,
@@ -218,11 +355,13 @@ pub struct AgentLoopResult {
     pub model_identity: Option<ModelIdentity>,
 }
 
+/// A terminal outcome without visible content.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TerminalOutcome {
     NoVisible,
 }
 
+/// How a turn was executed: directly, assisted by tools, or managed Work.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionRoute {
@@ -231,6 +370,7 @@ pub enum ExecutionRoute {
     Managed,
 }
 
+/// A durable turn state change.
 #[derive(Clone, Debug, PartialEq)]
 pub enum TurnTransition {
     Suspend {
@@ -247,6 +387,7 @@ pub enum TurnTransition {
     },
 }
 
+/// The result of persisting a stop request.
 #[derive(Clone, Debug, PartialEq)]
 pub enum StopPersistenceOutcome {
     Cancelled,
@@ -255,6 +396,7 @@ pub enum StopPersistenceOutcome {
     AlreadyDelivered(Box<AlreadyDeliveredOutcome>),
 }
 
+/// Turn lifecycle progress events.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProgressEvent {
     Started,
@@ -265,6 +407,7 @@ pub enum ProgressEvent {
     Cancelled,
 }
 
+/// A progress event to append for a turn.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProgressWrite {
     pub session_id: String,

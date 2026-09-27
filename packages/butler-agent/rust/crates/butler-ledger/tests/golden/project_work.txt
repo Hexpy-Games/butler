@@ -1,0 +1,4516 @@
+=== ensure_project_ledger
+Ok(
+    (),
+)
+=== load_context before work
+Ok(
+    None,
+)
+=== start_work
+Ok(
+    WorkView {
+        work_id: "guided-work-<sha:1>",
+        session_id: "session-1",
+        scope: Project {
+            project_ref: "app-demo",
+        },
+        origin: WorkOrigin {
+            turn_id: "turn-1",
+            message_id: "message-turn-1",
+        },
+        objective: "Ship the feature",
+        status: Open,
+        current_stage: None,
+        allowed_next_stages: [
+            Conception,
+        ],
+        action_progress: [],
+        current_plan: None,
+        latest_checkpoint: None,
+        latest_plan_review: None,
+        latest_result_review: None,
+        latest_completion_validation: None,
+        latest_disposition: None,
+        effect_watermark: None,
+        effect_blockers: None,
+        result_refs: [],
+        created_at: "<ts>",
+        updated_at: "<ts>",
+    },
+)
+=== bound_work_for_turn
+Ok(
+    Some(
+        WorkView {
+            work_id: "guided-work-<sha:1>",
+            session_id: "session-1",
+            scope: Project {
+                project_ref: "app-demo",
+            },
+            origin: WorkOrigin {
+                turn_id: "turn-1",
+                message_id: "message-turn-1",
+            },
+            objective: "Ship the feature",
+            status: Open,
+            current_stage: None,
+            allowed_next_stages: [
+                Conception,
+            ],
+            action_progress: [],
+            current_plan: None,
+            latest_checkpoint: None,
+            latest_plan_review: None,
+            latest_result_review: None,
+            latest_completion_validation: None,
+            latest_disposition: None,
+            effect_watermark: None,
+            effect_blockers: None,
+            result_refs: [],
+            created_at: "<ts>",
+            updated_at: "<ts>",
+        },
+    ),
+)
+=== replace_plan
+Ok(
+    WorkView {
+        work_id: "guided-work-<sha:1>",
+        session_id: "session-1",
+        scope: Project {
+            project_ref: "app-demo",
+        },
+        origin: WorkOrigin {
+            turn_id: "turn-1",
+            message_id: "message-turn-1",
+        },
+        objective: "Ship the feature safely",
+        status: Open,
+        current_stage: Some(
+            Planning,
+        ),
+        allowed_next_stages: [
+            Review,
+        ],
+        action_progress: [
+            ActionProgress {
+                action_key: "write",
+                status: Pending,
+                note: None,
+            },
+            ActionProgress {
+                action_key: "test",
+                status: Pending,
+                note: None,
+            },
+        ],
+        current_plan: Some(
+            WorkPlan {
+                plan_revision_id: "guided-plan-<sha:2>",
+                revision: 1,
+                objective: "Ship the feature safely",
+                governing_refs: [
+                    "SPEC-1",
+                ],
+                execution_mode: None,
+                actions: [
+                    PlanAction {
+                        action_key: "write",
+                        description: "Write the code",
+                        dependency_keys: [],
+                        effect: None,
+                    },
+                    PlanAction {
+                        action_key: "test",
+                        description: "Test the code",
+                        dependency_keys: [
+                            "write",
+                        ],
+                        effect: None,
+                    },
+                ],
+                checks: [
+                    "tests pass",
+                ],
+                origin_turn_id: "turn-1",
+                created_at: "<ts>",
+            },
+        ),
+        latest_checkpoint: Some(
+            Checkpoint {
+                checkpoint_revision_id: "guided-checkpoint-<sha:3>",
+                revision: 2,
+                plan_revision_id: "guided-plan-<sha:2>",
+                stage: Planning,
+                action_progress: [
+                    ActionProgress {
+                        action_key: "write",
+                        status: Pending,
+                        note: None,
+                    },
+                    ActionProgress {
+                        action_key: "test",
+                        status: Pending,
+                        note: None,
+                    },
+                ],
+                public_summary: "Ship the feature safely",
+                next_step: "Write the code",
+                referenced_result_refs: [],
+                origin_turn_id: "turn-1",
+                created_at: "<ts>",
+            },
+        ),
+        latest_plan_review: None,
+        latest_result_review: None,
+        latest_completion_validation: None,
+        latest_disposition: None,
+        effect_watermark: None,
+        effect_blockers: None,
+        result_refs: [],
+        created_at: "<ts>",
+        updated_at: "<ts>",
+    },
+)
+=== record_checkpoint
+Ok(
+    WorkView {
+        work_id: "guided-work-<sha:1>",
+        session_id: "session-1",
+        scope: Project {
+            project_ref: "app-demo",
+        },
+        origin: WorkOrigin {
+            turn_id: "turn-1",
+            message_id: "message-turn-1",
+        },
+        objective: "Ship the feature safely",
+        status: Open,
+        current_stage: Some(
+            Execution,
+        ),
+        allowed_next_stages: [
+            Review,
+        ],
+        action_progress: [
+            ActionProgress {
+                action_key: "write",
+                status: Done,
+                note: None,
+            },
+            ActionProgress {
+                action_key: "test",
+                status: Active,
+                note: None,
+            },
+        ],
+        current_plan: Some(
+            WorkPlan {
+                plan_revision_id: "guided-plan-<sha:2>",
+                revision: 1,
+                objective: "Ship the feature safely",
+                governing_refs: [
+                    "SPEC-1",
+                ],
+                execution_mode: None,
+                actions: [
+                    PlanAction {
+                        action_key: "write",
+                        description: "Write the code",
+                        dependency_keys: [],
+                        effect: None,
+                    },
+                    PlanAction {
+                        action_key: "test",
+                        description: "Test the code",
+                        dependency_keys: [
+                            "write",
+                        ],
+                        effect: None,
+                    },
+                ],
+                checks: [
+                    "tests pass",
+                ],
+                origin_turn_id: "turn-1",
+                created_at: "<ts>",
+            },
+        ),
+        latest_checkpoint: Some(
+            Checkpoint {
+                checkpoint_revision_id: "guided-checkpoint-<sha:4>",
+                revision: 3,
+                plan_revision_id: "guided-plan-<sha:2>",
+                stage: Execution,
+                action_progress: [
+                    ActionProgress {
+                        action_key: "write",
+                        status: Done,
+                        note: None,
+                    },
+                    ActionProgress {
+                        action_key: "test",
+                        status: Active,
+                        note: None,
+                    },
+                ],
+                public_summary: "Code written",
+                next_step: "Run the tests",
+                referenced_result_refs: [],
+                origin_turn_id: "turn-1",
+                created_at: "<ts>",
+            },
+        ),
+        latest_plan_review: None,
+        latest_result_review: None,
+        latest_completion_validation: None,
+        latest_disposition: None,
+        effect_watermark: None,
+        effect_blockers: None,
+        result_refs: [],
+        created_at: "<ts>",
+        updated_at: "<ts>",
+    },
+)
+=== record_checkpoint stale
+Err(
+    "project_work_checkpoint_precondition_mismatch",
+)
+=== record_review
+Ok(
+    WorkView {
+        work_id: "guided-work-<sha:1>",
+        session_id: "session-1",
+        scope: Project {
+            project_ref: "app-demo",
+        },
+        origin: WorkOrigin {
+            turn_id: "turn-1",
+            message_id: "message-turn-1",
+        },
+        objective: "Ship the feature safely",
+        status: Open,
+        current_stage: Some(
+            Validation,
+        ),
+        allowed_next_stages: [
+            Planning,
+            Execution,
+            Review,
+            Reporting,
+        ],
+        action_progress: [
+            ActionProgress {
+                action_key: "write",
+                status: Done,
+                note: None,
+            },
+            ActionProgress {
+                action_key: "test",
+                status: Done,
+                note: None,
+            },
+        ],
+        current_plan: Some(
+            WorkPlan {
+                plan_revision_id: "guided-plan-<sha:2>",
+                revision: 1,
+                objective: "Ship the feature safely",
+                governing_refs: [
+                    "SPEC-1",
+                ],
+                execution_mode: None,
+                actions: [
+                    PlanAction {
+                        action_key: "write",
+                        description: "Write the code",
+                        dependency_keys: [],
+                        effect: None,
+                    },
+                    PlanAction {
+                        action_key: "test",
+                        description: "Test the code",
+                        dependency_keys: [
+                            "write",
+                        ],
+                        effect: None,
+                    },
+                ],
+                checks: [
+                    "tests pass",
+                ],
+                origin_turn_id: "turn-1",
+                created_at: "<ts>",
+            },
+        ),
+        latest_checkpoint: Some(
+            Checkpoint {
+                checkpoint_revision_id: "guided-checkpoint-<sha:5>",
+                revision: 5,
+                plan_revision_id: "guided-plan-<sha:2>",
+                stage: Validation,
+                action_progress: [
+                    ActionProgress {
+                        action_key: "write",
+                        status: Done,
+                        note: None,
+                    },
+                    ActionProgress {
+                        action_key: "test",
+                        status: Done,
+                        note: None,
+                    },
+                ],
+                public_summary: "Looks right",
+                next_step: "",
+                referenced_result_refs: [],
+                origin_turn_id: "turn-1",
+                created_at: "<ts>",
+            },
+        ),
+        latest_plan_review: None,
+        latest_result_review: Some(
+            WorkReview {
+                review_revision_id: "guided-review-<sha:6>",
+                revision: 1,
+                subject: Result,
+                verdict: Accept,
+                summary: "Looks right",
+                corrections: [],
+                bound_plan_revision_id: None,
+                bound_result_review_revision_id: None,
+                bound_action_progress: Some(
+                    [
+                        ActionProgress {
+                            action_key: "write",
+                            status: Done,
+                            note: None,
+                        },
+                        ActionProgress {
+                            action_key: "test",
+                            status: Done,
+                            note: None,
+                        },
+                    ],
+                ),
+                bound_result_refs: [],
+                origin_turn_id: "turn-1",
+                created_at: "<ts>",
+            },
+        ),
+        latest_completion_validation: None,
+        latest_disposition: None,
+        effect_watermark: None,
+        effect_blockers: None,
+        result_refs: [],
+        created_at: "<ts>",
+        updated_at: "<ts>",
+    },
+)
+=== record_disposition
+Ok(
+    WorkView {
+        work_id: "guided-work-<sha:1>",
+        session_id: "session-1",
+        scope: Project {
+            project_ref: "app-demo",
+        },
+        origin: WorkOrigin {
+            turn_id: "turn-1",
+            message_id: "message-turn-1",
+        },
+        objective: "Ship the feature safely",
+        status: Completed,
+        current_stage: Some(
+            Validation,
+        ),
+        allowed_next_stages: [
+            Planning,
+            Execution,
+            Review,
+            Reporting,
+        ],
+        action_progress: [
+            ActionProgress {
+                action_key: "write",
+                status: Done,
+                note: None,
+            },
+            ActionProgress {
+                action_key: "test",
+                status: Done,
+                note: Some(
+                    "green",
+                ),
+            },
+        ],
+        current_plan: Some(
+            WorkPlan {
+                plan_revision_id: "guided-plan-<sha:2>",
+                revision: 1,
+                objective: "Ship the feature safely",
+                governing_refs: [
+                    "SPEC-1",
+                ],
+                execution_mode: None,
+                actions: [
+                    PlanAction {
+                        action_key: "write",
+                        description: "Write the code",
+                        dependency_keys: [],
+                        effect: None,
+                    },
+                    PlanAction {
+                        action_key: "test",
+                        description: "Test the code",
+                        dependency_keys: [
+                            "write",
+                        ],
+                        effect: None,
+                    },
+                ],
+                checks: [
+                    "tests pass",
+                ],
+                origin_turn_id: "turn-1",
+                created_at: "<ts>",
+            },
+        ),
+        latest_checkpoint: Some(
+            Checkpoint {
+                checkpoint_revision_id: "guided-checkpoint-<sha:7>",
+                revision: 6,
+                plan_revision_id: "guided-plan-<sha:2>",
+                stage: Validation,
+                action_progress: [
+                    ActionProgress {
+                        action_key: "write",
+                        status: Done,
+                        note: None,
+                    },
+                    ActionProgress {
+                        action_key: "test",
+                        status: Done,
+                        note: Some(
+                            "green",
+                        ),
+                    },
+                ],
+                public_summary: "Shipped",
+                next_step: "",
+                referenced_result_refs: [],
+                origin_turn_id: "turn-1",
+                created_at: "<ts>",
+            },
+        ),
+        latest_plan_review: None,
+        latest_result_review: Some(
+            WorkReview {
+                review_revision_id: "guided-review-<sha:6>",
+                revision: 1,
+                subject: Result,
+                verdict: Accept,
+                summary: "Looks right",
+                corrections: [],
+                bound_plan_revision_id: None,
+                bound_result_review_revision_id: None,
+                bound_action_progress: Some(
+                    [
+                        ActionProgress {
+                            action_key: "write",
+                            status: Done,
+                            note: None,
+                        },
+                        ActionProgress {
+                            action_key: "test",
+                            status: Done,
+                            note: None,
+                        },
+                    ],
+                ),
+                bound_result_refs: [],
+                origin_turn_id: "turn-1",
+                created_at: "<ts>",
+            },
+        ),
+        latest_completion_validation: None,
+        latest_disposition: Some(
+            WorkDisposition {
+                disposition_revision_id: "guided-disposition-<sha:8>",
+                revision: 1,
+                result_sequence: 0,
+                material_fingerprint: "<sha:9>",
+                runtime_owned_open: false,
+                disposition: Completed,
+                summary: "Shipped",
+                action_updates: [
+                    DispositionActionUpdate {
+                        action_key: "test",
+                        status: Done,
+                        note: Some(
+                            "green",
+                        ),
+                    },
+                ],
+                remaining_actions: [],
+                next_condition: None,
+                evidence_refs: [],
+                evidence_snapshot: [],
+                followups: [
+                    "Announce it",
+                ],
+                origin_turn_id: "turn-1",
+                created_at: "<ts>",
+            },
+        ),
+        effect_watermark: None,
+        effect_blockers: None,
+        result_refs: [],
+        created_at: "<ts>",
+        updated_at: "<ts>",
+    },
+)
+=== load_context after disposition
+Ok(
+    Some(
+        WorkContext {
+            work: WorkView {
+                work_id: "guided-work-<sha:1>",
+                session_id: "session-1",
+                scope: Project {
+                    project_ref: "app-demo",
+                },
+                origin: WorkOrigin {
+                    turn_id: "turn-1",
+                    message_id: "message-turn-1",
+                },
+                objective: "Ship the feature safely",
+                status: Completed,
+                current_stage: Some(
+                    Validation,
+                ),
+                allowed_next_stages: [
+                    Planning,
+                    Execution,
+                    Review,
+                    Reporting,
+                ],
+                action_progress: [
+                    ActionProgress {
+                        action_key: "write",
+                        status: Done,
+                        note: None,
+                    },
+                    ActionProgress {
+                        action_key: "test",
+                        status: Done,
+                        note: Some(
+                            "green",
+                        ),
+                    },
+                ],
+                current_plan: Some(
+                    WorkPlan {
+                        plan_revision_id: "guided-plan-<sha:2>",
+                        revision: 1,
+                        objective: "Ship the feature safely",
+                        governing_refs: [
+                            "SPEC-1",
+                        ],
+                        execution_mode: None,
+                        actions: [
+                            PlanAction {
+                                action_key: "write",
+                                description: "Write the code",
+                                dependency_keys: [],
+                                effect: None,
+                            },
+                            PlanAction {
+                                action_key: "test",
+                                description: "Test the code",
+                                dependency_keys: [
+                                    "write",
+                                ],
+                                effect: None,
+                            },
+                        ],
+                        checks: [
+                            "tests pass",
+                        ],
+                        origin_turn_id: "turn-1",
+                        created_at: "<ts>",
+                    },
+                ),
+                latest_checkpoint: Some(
+                    Checkpoint {
+                        checkpoint_revision_id: "guided-checkpoint-<sha:7>",
+                        revision: 6,
+                        plan_revision_id: "guided-plan-<sha:2>",
+                        stage: Validation,
+                        action_progress: [
+                            ActionProgress {
+                                action_key: "write",
+                                status: Done,
+                                note: None,
+                            },
+                            ActionProgress {
+                                action_key: "test",
+                                status: Done,
+                                note: Some(
+                                    "green",
+                                ),
+                            },
+                        ],
+                        public_summary: "Shipped",
+                        next_step: "",
+                        referenced_result_refs: [],
+                        origin_turn_id: "turn-1",
+                        created_at: "<ts>",
+                    },
+                ),
+                latest_plan_review: None,
+                latest_result_review: Some(
+                    WorkReview {
+                        review_revision_id: "guided-review-<sha:6>",
+                        revision: 1,
+                        subject: Result,
+                        verdict: Accept,
+                        summary: "Looks right",
+                        corrections: [],
+                        bound_plan_revision_id: None,
+                        bound_result_review_revision_id: None,
+                        bound_action_progress: Some(
+                            [
+                                ActionProgress {
+                                    action_key: "write",
+                                    status: Done,
+                                    note: None,
+                                },
+                                ActionProgress {
+                                    action_key: "test",
+                                    status: Done,
+                                    note: None,
+                                },
+                            ],
+                        ),
+                        bound_result_refs: [],
+                        origin_turn_id: "turn-1",
+                        created_at: "<ts>",
+                    },
+                ),
+                latest_completion_validation: None,
+                latest_disposition: Some(
+                    WorkDisposition {
+                        disposition_revision_id: "guided-disposition-<sha:8>",
+                        revision: 1,
+                        result_sequence: 0,
+                        material_fingerprint: "<sha:9>",
+                        runtime_owned_open: false,
+                        disposition: Completed,
+                        summary: "Shipped",
+                        action_updates: [
+                            DispositionActionUpdate {
+                                action_key: "test",
+                                status: Done,
+                                note: Some(
+                                    "green",
+                                ),
+                            },
+                        ],
+                        remaining_actions: [],
+                        next_condition: None,
+                        evidence_refs: [],
+                        evidence_snapshot: [],
+                        followups: [
+                            "Announce it",
+                        ],
+                        origin_turn_id: "turn-1",
+                        created_at: "<ts>",
+                    },
+                ),
+                effect_watermark: None,
+                effect_blockers: None,
+                result_refs: [],
+                created_at: "<ts>",
+                updated_at: "<ts>",
+            },
+            original_request: OriginalRequest {
+                turn_id: "turn-1",
+                message_id: "message-turn-1",
+                content: "Ship the feature",
+            },
+            result_facts: [],
+        },
+    ),
+)
+=== claim_closeout_correction
+Ok(
+    true,
+)
+=== continue_work
+Err(
+    "project_work_continuation_target_invalid",
+)
+=== start_work second
+Ok(
+    WorkView {
+        work_id: "guided-work-<sha:10>",
+        session_id: "session-1",
+        scope: Project {
+            project_ref: "app-demo",
+        },
+        origin: WorkOrigin {
+            turn_id: "turn-3",
+            message_id: "message-turn-3",
+        },
+        objective: "Follow up",
+        status: Open,
+        current_stage: None,
+        allowed_next_stages: [
+            Conception,
+        ],
+        action_progress: [],
+        current_plan: None,
+        latest_checkpoint: None,
+        latest_plan_review: None,
+        latest_result_review: None,
+        latest_completion_validation: None,
+        latest_disposition: None,
+        effect_watermark: None,
+        effect_blockers: None,
+        result_refs: [],
+        created_at: "<ts>",
+        updated_at: "<ts>",
+    },
+)
+=== replace_plan second
+Ok(
+    WorkView {
+        work_id: "guided-work-<sha:10>",
+        session_id: "session-1",
+        scope: Project {
+            project_ref: "app-demo",
+        },
+        origin: WorkOrigin {
+            turn_id: "turn-3",
+            message_id: "message-turn-3",
+        },
+        objective: "Follow up",
+        status: Blocked,
+        current_stage: Some(
+            Planning,
+        ),
+        allowed_next_stages: [
+            Review,
+        ],
+        action_progress: [
+            ActionProgress {
+                action_key: "announce",
+                status: Blocked,
+                note: None,
+            },
+        ],
+        current_plan: Some(
+            WorkPlan {
+                plan_revision_id: "guided-plan-<sha:11>",
+                revision: 1,
+                objective: "Follow up",
+                governing_refs: [],
+                execution_mode: None,
+                actions: [
+                    PlanAction {
+                        action_key: "announce",
+                        description: "Announce it",
+                        dependency_keys: [],
+                        effect: None,
+                    },
+                ],
+                checks: [],
+                origin_turn_id: "turn-3",
+                created_at: "<ts>",
+            },
+        ),
+        latest_checkpoint: Some(
+            Checkpoint {
+                checkpoint_revision_id: "guided-checkpoint-<sha:12>",
+                revision: 1,
+                plan_revision_id: "guided-plan-<sha:11>",
+                stage: Planning,
+                action_progress: [
+                    ActionProgress {
+                        action_key: "announce",
+                        status: Blocked,
+                        note: None,
+                    },
+                ],
+                public_summary: "Follow up",
+                next_step: "Announce it",
+                referenced_result_refs: [],
+                origin_turn_id: "turn-3",
+                created_at: "<ts>",
+            },
+        ),
+        latest_plan_review: None,
+        latest_result_review: None,
+        latest_completion_validation: None,
+        latest_disposition: None,
+        effect_watermark: None,
+        effect_blockers: None,
+        result_refs: [],
+        created_at: "<ts>",
+        updated_at: "<ts>",
+    },
+)
+=== record_review plan revise
+Ok(
+    WorkView {
+        work_id: "guided-work-<sha:10>",
+        session_id: "session-1",
+        scope: Project {
+            project_ref: "app-demo",
+        },
+        origin: WorkOrigin {
+            turn_id: "turn-3",
+            message_id: "message-turn-3",
+        },
+        objective: "Follow up",
+        status: Blocked,
+        current_stage: Some(
+            Planning,
+        ),
+        allowed_next_stages: [
+            Review,
+        ],
+        action_progress: [
+            ActionProgress {
+                action_key: "announce",
+                status: Blocked,
+                note: None,
+            },
+        ],
+        current_plan: Some(
+            WorkPlan {
+                plan_revision_id: "guided-plan-<sha:11>",
+                revision: 1,
+                objective: "Follow up",
+                governing_refs: [],
+                execution_mode: None,
+                actions: [
+                    PlanAction {
+                        action_key: "announce",
+                        description: "Announce it",
+                        dependency_keys: [],
+                        effect: None,
+                    },
+                ],
+                checks: [],
+                origin_turn_id: "turn-3",
+                created_at: "<ts>",
+            },
+        ),
+        latest_checkpoint: Some(
+            Checkpoint {
+                checkpoint_revision_id: "guided-checkpoint-<sha:13>",
+                revision: 3,
+                plan_revision_id: "guided-plan-<sha:11>",
+                stage: Planning,
+                action_progress: [
+                    ActionProgress {
+                        action_key: "announce",
+                        status: Blocked,
+                        note: None,
+                    },
+                ],
+                public_summary: "Needs a date",
+                next_step: "Pick a date",
+                referenced_result_refs: [],
+                origin_turn_id: "turn-3",
+                created_at: "<ts>",
+            },
+        ),
+        latest_plan_review: Some(
+            WorkReview {
+                review_revision_id: "guided-review-<sha:14>",
+                revision: 1,
+                subject: Plan,
+                verdict: Revise,
+                summary: "Needs a date",
+                corrections: [
+                    "Pick a date",
+                ],
+                bound_plan_revision_id: Some(
+                    "guided-plan-<sha:11>",
+                ),
+                bound_result_review_revision_id: None,
+                bound_action_progress: None,
+                bound_result_refs: [],
+                origin_turn_id: "turn-3",
+                created_at: "<ts>",
+            },
+        ),
+        latest_result_review: None,
+        latest_completion_validation: None,
+        latest_disposition: None,
+        effect_watermark: None,
+        effect_blockers: None,
+        result_refs: [],
+        created_at: "<ts>",
+        updated_at: "<ts>",
+    },
+)
+=== abandon_bound_work_for_turn
+Ok(
+    Some(
+        WorkView {
+            work_id: "guided-work-<sha:10>",
+            session_id: "session-1",
+            scope: Project {
+                project_ref: "app-demo",
+            },
+            origin: WorkOrigin {
+                turn_id: "turn-3",
+                message_id: "message-turn-3",
+            },
+            objective: "Follow up",
+            status: Abandoned,
+            current_stage: Some(
+                Planning,
+            ),
+            allowed_next_stages: [
+                Review,
+            ],
+            action_progress: [
+                ActionProgress {
+                    action_key: "announce",
+                    status: Blocked,
+                    note: None,
+                },
+            ],
+            current_plan: Some(
+                WorkPlan {
+                    plan_revision_id: "guided-plan-<sha:11>",
+                    revision: 1,
+                    objective: "Follow up",
+                    governing_refs: [],
+                    execution_mode: None,
+                    actions: [
+                        PlanAction {
+                            action_key: "announce",
+                            description: "Announce it",
+                            dependency_keys: [],
+                            effect: None,
+                        },
+                    ],
+                    checks: [],
+                    origin_turn_id: "turn-3",
+                    created_at: "<ts>",
+                },
+            ),
+            latest_checkpoint: Some(
+                Checkpoint {
+                    checkpoint_revision_id: "guided-checkpoint-<sha:13>",
+                    revision: 3,
+                    plan_revision_id: "guided-plan-<sha:11>",
+                    stage: Planning,
+                    action_progress: [
+                        ActionProgress {
+                            action_key: "announce",
+                            status: Blocked,
+                            note: None,
+                        },
+                    ],
+                    public_summary: "Needs a date",
+                    next_step: "Pick a date",
+                    referenced_result_refs: [],
+                    origin_turn_id: "turn-3",
+                    created_at: "<ts>",
+                },
+            ),
+            latest_plan_review: Some(
+                WorkReview {
+                    review_revision_id: "guided-review-<sha:14>",
+                    revision: 1,
+                    subject: Plan,
+                    verdict: Revise,
+                    summary: "Needs a date",
+                    corrections: [
+                        "Pick a date",
+                    ],
+                    bound_plan_revision_id: Some(
+                        "guided-plan-<sha:11>",
+                    ),
+                    bound_result_review_revision_id: None,
+                    bound_action_progress: None,
+                    bound_result_refs: [],
+                    origin_turn_id: "turn-3",
+                    created_at: "<ts>",
+                },
+            ),
+            latest_result_review: None,
+            latest_completion_validation: None,
+            latest_disposition: None,
+            effect_watermark: None,
+            effect_blockers: None,
+            result_refs: [],
+            created_at: "<ts>",
+            updated_at: "<ts>",
+        },
+    ),
+)
+=== index
+{
+  "ok": true,
+  "command": "project-ledger index",
+  "data": {
+    "schema": "project-ledger.index.v1",
+    "generatedAt": "<ts>",
+    "project": {
+      "id": "demo",
+      "name": "Demo Project",
+      "status": "active",
+      "path": "project-ledger/projects/demo/project.json"
+    },
+    "counts": {
+      "records": 21,
+      "initiative": 0,
+      "work": 2,
+      "task": 0,
+      "attempt": 0,
+      "decision": 0,
+      "risk": 0,
+      "spec": 0,
+      "report": 0,
+      "plan": 2,
+      "handoff": 0,
+      "reference": 15,
+      "roadmap": 0
+    },
+    "records": [
+      {
+        "id": "guided-plan-<sha:11>",
+        "kind": "plan",
+        "title": "Guided Work Plan 1",
+        "status": "active",
+        "priority": 100,
+        "parentId": "guided-work-<sha:10>",
+        "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/plans/guided-plan-<sha:11>.md"
+      },
+      {
+        "id": "guided-plan-<sha:2>",
+        "kind": "plan",
+        "title": "Guided Work Plan 1",
+        "status": "active",
+        "priority": 100,
+        "parentId": "guided-work-<sha:1>",
+        "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/plans/guided-plan-<sha:2>.md"
+      },
+      {
+        "id": "demo",
+        "kind": "project",
+        "title": "Demo Project",
+        "status": "active",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/project.json"
+      },
+      {
+        "id": "demo",
+        "kind": "project",
+        "title": "Demo Project",
+        "status": "active",
+        "priority": 100,
+        "parentId": null,
+        "spec": null,
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/project.json"
+      },
+      {
+        "id": "guided-binding-<sha:15>",
+        "kind": "reference",
+        "title": "Guided Work Turn binding 1",
+        "status": "active",
+        "priority": 100,
+        "parentId": "guided-work-<sha:10>",
+        "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/references/guided-binding-<sha:15>.md"
+      },
+      {
+        "id": "guided-binding-<sha:16>",
+        "kind": "reference",
+        "title": "Guided Work Turn binding 1",
+        "status": "active",
+        "priority": 100,
+        "parentId": "guided-work-<sha:1>",
+        "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/references/guided-binding-<sha:16>.md"
+      },
+      {
+        "id": "guided-checkpoint-<sha:7>",
+        "kind": "reference",
+        "title": "Guided Work checkpoint 6",
+        "status": "active",
+        "priority": 100,
+        "parentId": "guided-work-<sha:1>",
+        "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:7>.md"
+      },
+      {
+        "id": "guided-checkpoint-<sha:12>",
+        "kind": "reference",
+        "title": "Guided Work checkpoint 1",
+        "status": "active",
+        "priority": 100,
+        "parentId": "guided-work-<sha:10>",
+        "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:12>.md"
+      },
+      {
+        "id": "guided-checkpoint-<sha:5>",
+        "kind": "reference",
+        "title": "Guided Work checkpoint 5",
+        "status": "active",
+        "priority": 100,
+        "parentId": "guided-work-<sha:1>",
+        "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:5>.md"
+      },
+      {
+        "id": "guided-checkpoint-<sha:17>",
+        "kind": "reference",
+        "title": "Guided Work checkpoint 4",
+        "status": "active",
+        "priority": 100,
+        "parentId": "guided-work-<sha:1>",
+        "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:17>.md"
+      },
+      {
+        "id": "guided-checkpoint-<sha:18>",
+        "kind": "reference",
+        "title": "Guided Work checkpoint 2",
+        "status": "active",
+        "priority": 100,
+        "parentId": "guided-work-<sha:10>",
+        "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:18>.md"
+      },
+      {
+        "id": "guided-checkpoint-<sha:3>",
+        "kind": "reference",
+        "title": "Guided Work checkpoint 2",
+        "status": "active",
+        "priority": 100,
+        "parentId": "guided-work-<sha:1>",
+        "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:3>.md"
+      },
+      {
+        "id": "guided-checkpoint-<sha:4>",
+        "kind": "reference",
+        "title": "Guided Work checkpoint 3",
+        "status": "active",
+        "priority": 100,
+        "parentId": "guided-work-<sha:1>",
+        "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:4>.md"
+      },
+      {
+        "id": "guided-checkpoint-<sha:19>",
+        "kind": "reference",
+        "title": "Guided Work checkpoint 1",
+        "status": "active",
+        "priority": 100,
+        "parentId": "guided-work-<sha:1>",
+        "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:19>.md"
+      },
+      {
+        "id": "guided-checkpoint-<sha:13>",
+        "kind": "reference",
+        "title": "Guided Work checkpoint 3",
+        "status": "active",
+        "priority": 100,
+        "parentId": "guided-work-<sha:10>",
+        "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:13>.md"
+      },
+      {
+        "id": "guided-diagnostic-<sha:20>",
+        "kind": "reference",
+        "title": "Guided Work closeout diagnostic",
+        "status": "active",
+        "priority": 100,
+        "parentId": "guided-work-<sha:1>",
+        "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/references/guided-diagnostic-<sha:20>.md"
+      },
+      {
+        "id": "guided-disposition-<sha:8>",
+        "kind": "reference",
+        "title": "Guided Work disposition 1",
+        "status": "active",
+        "priority": 100,
+        "parentId": "guided-work-<sha:1>",
+        "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/references/guided-disposition-<sha:8>.md"
+      },
+      {
+        "id": "guided-review-<sha:6>",
+        "kind": "reference",
+        "title": "Guided Work result Review",
+        "status": "active",
+        "priority": 100,
+        "parentId": "guided-work-<sha:1>",
+        "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/references/guided-review-<sha:6>.md"
+      },
+      {
+        "id": "guided-review-<sha:14>",
+        "kind": "reference",
+        "title": "Guided Work plan Review",
+        "status": "active",
+        "priority": 100,
+        "parentId": "guided-work-<sha:10>",
+        "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/references/guided-review-<sha:14>.md"
+      },
+      {
+        "id": "guided-work-<sha:10>",
+        "kind": "work",
+        "title": "Guided Work guided-work-<sha:10>",
+        "status": "cancelled",
+        "priority": 100,
+        "parentId": null,
+        "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/work/guided-work-<sha:10>/work.md"
+      },
+      {
+        "id": "guided-work-<sha:1>",
+        "kind": "work",
+        "title": "Guided Work guided-work-<sha:1>",
+        "status": "review",
+        "priority": 100,
+        "parentId": null,
+        "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+        "specExemption": false,
+        "acceptance": null,
+        "acceptanceExemption": false,
+        "requiresCommitEvidence": false,
+        "codeCommits": null,
+        "ledgerCommits": null,
+        "report": null,
+        "review": null,
+        "validation": null,
+        "implementation": null,
+        "mitigation": null,
+        "reason": null,
+        "updatedAt": "<ts>",
+        "path": "project-ledger/projects/demo/work/guided-work-<sha:1>/work.md"
+      }
+    ],
+    "issues": [],
+    "views": [
+      {
+        "name": "dashboard",
+        "path": "project-ledger/projects/demo/views/dashboard.md",
+        "exists": false,
+        "stale": true
+      },
+      {
+        "name": "handoff",
+        "path": "project-ledger/projects/demo/views/handoff.md",
+        "exists": false,
+        "stale": true
+      },
+      {
+        "name": "roadmap",
+        "path": "project-ledger/projects/demo/views/roadmap.md",
+        "exists": false,
+        "stale": true
+      }
+    ],
+    "index": {
+      "available": true,
+      "stale": false,
+      "generatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/index/project.json"
+    },
+    "privacy": {
+      "rawTextIncluded": false,
+      "secretsIncluded": false
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== check
+{
+  "ok": false,
+  "command": "project-ledger check",
+  "data": {
+    "ok": false,
+    "issueCount": 3,
+    "issues": [
+      {
+        "code": "stale_view",
+        "severity": "warning",
+        "message": "Generated view is missing",
+        "path": "project-ledger/projects/demo/views/dashboard.md",
+        "record": null
+      },
+      {
+        "code": "stale_view",
+        "severity": "warning",
+        "message": "Generated view is missing",
+        "path": "project-ledger/projects/demo/views/handoff.md",
+        "record": null
+      },
+      {
+        "code": "stale_view",
+        "severity": "warning",
+        "message": "Generated view is missing",
+        "path": "project-ledger/projects/demo/views/roadmap.md",
+        "record": null
+      }
+    ],
+    "counts": {
+      "records": 21,
+      "initiative": 0,
+      "work": 2,
+      "task": 0,
+      "attempt": 0,
+      "decision": 0,
+      "risk": 0,
+      "spec": 0,
+      "report": 0,
+      "plan": 2,
+      "handoff": 0,
+      "reference": 15,
+      "roadmap": 0
+    }
+  },
+  "error": {
+    "code": "project_ledger_check_failed",
+    "message": "Project Ledger check failed with 3 issues",
+    "details": [
+      {
+        "issueCount": 3,
+        "errorCount": 0,
+        "warningCount": 3
+      }
+    ],
+    "next": [
+      {
+        "command": "project-ledger check --verbose",
+        "reason": "Inspect the full issue list before retrying."
+      },
+      {
+        "command": "project-ledger index",
+        "reason": "Refresh the derived index after source-record repairs."
+      }
+    ]
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+=== dashboard_snapshot
+Ok(
+    DashboardLedgerSnapshot {
+        revision: "<sha:21>",
+        observed_at: "<ts>",
+        records: [
+            DashboardLedgerRecord {
+                id: "guided-plan-<sha:11>",
+                kind: "plan",
+                title: "Guided Work Plan 1",
+                status: "active",
+                path: "project-ledger/projects/demo/plans/guided-plan-<sha:11>.md",
+                parent_id: Some(
+                    "guided-work-<sha:10>",
+                ),
+                spec: Some(
+                    "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+                ),
+                updated_at: "<ts>",
+                priority: 100.0,
+                unavailable: false,
+            },
+            DashboardLedgerRecord {
+                id: "guided-plan-<sha:2>",
+                kind: "plan",
+                title: "Guided Work Plan 1",
+                status: "active",
+                path: "project-ledger/projects/demo/plans/guided-plan-<sha:2>.md",
+                parent_id: Some(
+                    "guided-work-<sha:1>",
+                ),
+                spec: Some(
+                    "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+                ),
+                updated_at: "<ts>",
+                priority: 100.0,
+                unavailable: false,
+            },
+            DashboardLedgerRecord {
+                id: "guided-work-<sha:10>",
+                kind: "work",
+                title: "Guided Work guided-work-<sha:10>",
+                status: "cancelled",
+                path: "project-ledger/projects/demo/work/guided-work-<sha:10>/work.md",
+                parent_id: None,
+                spec: Some(
+                    "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+                ),
+                updated_at: "<ts>",
+                priority: 100.0,
+                unavailable: false,
+            },
+            DashboardLedgerRecord {
+                id: "guided-work-<sha:1>",
+                kind: "work",
+                title: "Guided Work guided-work-<sha:1>",
+                status: "review",
+                path: "project-ledger/projects/demo/work/guided-work-<sha:1>/work.md",
+                parent_id: None,
+                spec: Some(
+                    "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+                ),
+                updated_at: "<ts>",
+                priority: 100.0,
+                unavailable: false,
+            },
+        ],
+        works: [
+            DashboardLedgerWork {
+                record: DashboardLedgerRecord {
+                    id: "guided-work-<sha:10>",
+                    kind: "work",
+                    title: "Guided Work guided-work-<sha:10>",
+                    status: "cancelled",
+                    path: "project-ledger/projects/demo/work/guided-work-<sha:10>/work.md",
+                    parent_id: None,
+                    spec: Some(
+                        "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+                    ),
+                    updated_at: "<ts>",
+                    priority: 100.0,
+                    unavailable: false,
+                },
+                revision: Some(
+                    "<sha:22>",
+                ),
+                availability: "ready",
+                managed: Some(
+                    DashboardManagedWorkView {
+                        objective: "Follow up",
+                        session_id: "session-1",
+                        status: "abandoned",
+                        current_stage: Some(
+                            "planning",
+                        ),
+                        action_progress: [
+                            DashboardActionProgress {
+                                status: "blocked",
+                            },
+                        ],
+                        current_plan: Some(
+                            DashboardManagedPlanView {
+                                id: "guided-plan-<sha:11>",
+                                objective: "Follow up",
+                                created_at: "<ts>",
+                                actions: [
+                                    "Announce it",
+                                ],
+                                checks: [],
+                            },
+                        ),
+                        latest_checkpoint: Some(
+                            DashboardCheckpointSummary {
+                                created_at: "<ts>",
+                                public_summary: "Needs a date",
+                                next_step: "Pick a date",
+                            },
+                        ),
+                        latest_disposition: None,
+                        latest_plan_review_corrections: [
+                            "Pick a date",
+                        ],
+                        latest_result_review_corrections: [],
+                        public_summary: Some(
+                            "Needs a date",
+                        ),
+                        remaining_actions: [],
+                        followups: [],
+                    },
+                ),
+            },
+            DashboardLedgerWork {
+                record: DashboardLedgerRecord {
+                    id: "guided-work-<sha:1>",
+                    kind: "work",
+                    title: "Guided Work guided-work-<sha:1>",
+                    status: "review",
+                    path: "project-ledger/projects/demo/work/guided-work-<sha:1>/work.md",
+                    parent_id: None,
+                    spec: Some(
+                        "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+                    ),
+                    updated_at: "<ts>",
+                    priority: 100.0,
+                    unavailable: false,
+                },
+                revision: Some(
+                    "<sha:23>",
+                ),
+                availability: "ready",
+                managed: Some(
+                    DashboardManagedWorkView {
+                        objective: "Ship the feature safely",
+                        session_id: "session-1",
+                        status: "completed",
+                        current_stage: Some(
+                            "validation",
+                        ),
+                        action_progress: [
+                            DashboardActionProgress {
+                                status: "done",
+                            },
+                            DashboardActionProgress {
+                                status: "done",
+                            },
+                        ],
+                        current_plan: Some(
+                            DashboardManagedPlanView {
+                                id: "guided-plan-<sha:2>",
+                                objective: "Ship the feature safely",
+                                created_at: "<ts>",
+                                actions: [
+                                    "Write the code",
+                                    "Test the code",
+                                ],
+                                checks: [
+                                    "tests pass",
+                                ],
+                            },
+                        ),
+                        latest_checkpoint: Some(
+                            DashboardCheckpointSummary {
+                                created_at: "<ts>",
+                                public_summary: "Shipped",
+                                next_step: "",
+                            },
+                        ),
+                        latest_disposition: Some(
+                            DashboardDispositionSummary {
+                                created_at: "<ts>",
+                                summary: "Shipped",
+                                next_condition: None,
+                                remaining_actions: [],
+                                followups: [
+                                    "Announce it",
+                                ],
+                            },
+                        ),
+                        latest_plan_review_corrections: [],
+                        latest_result_review_corrections: [],
+                        public_summary: Some(
+                            "Shipped",
+                        ),
+                        remaining_actions: [],
+                        followups: [
+                            "Announce it",
+                        ],
+                    },
+                ),
+            },
+        ],
+    },
+)
+=== read_dashboard_source work
+Ok(
+    DashboardLedgerSource {
+        title: "Ship the feature safely",
+        body: "# Ship the feature safely\n\nShipped\n\n- Announce it",
+        revision: "<sha:23>",
+        document_type: "work",
+        updated_at: "<ts>",
+        status: "review",
+    },
+)
+=== read_dashboard_source plan
+Ok(
+    DashboardLedgerSource {
+        title: "Ship the feature safely",
+        body: "# Ship the feature safely\n\n- Write the code\n\n- Test the code\n\n- tests pass",
+        revision: "<sha:24>",
+        document_type: "plan",
+        updated_at: "<ts>",
+        status: "active",
+    },
+)
+=== dashboard_work_history None
+Ok(
+    [
+        DashboardWorkHistoryEntry {
+            id: "guided-work-<sha:1>|guided-disposition-<sha:8>",
+            work_id: "guided-work-<sha:1>",
+            session_id: "session-1",
+            at: "<ts>",
+            action: "disposition",
+            title: "Ship the feature safely",
+            body: "{\n  \"disposition\": \"completed\",\n  \"summary\": \"Shipped\",\n  \"remainingActions\": [],\n  \"followups\": [\n    \"Announce it\"\n  ]\n}",
+            revision: "<sha:25>",
+            status: "completed",
+        },
+        DashboardWorkHistoryEntry {
+            id: "guided-work-<sha:10>|guided-review-<sha:14>",
+            work_id: "guided-work-<sha:10>",
+            session_id: "session-1",
+            at: "<ts>",
+            action: "reviewed",
+            title: "Follow up",
+            body: "{\n  \"subject\": \"plan\",\n  \"verdict\": \"revise\",\n  \"summary\": \"Needs a date\",\n  \"corrections\": [\n    \"Pick a date\"\n  ]\n}",
+            revision: "<sha:26>",
+            status: "revise",
+        },
+        DashboardWorkHistoryEntry {
+            id: "guided-work-<sha:1>|guided-review-<sha:6>",
+            work_id: "guided-work-<sha:1>",
+            session_id: "session-1",
+            at: "<ts>",
+            action: "reviewed",
+            title: "Ship the feature safely",
+            body: "{\n  \"subject\": \"result\",\n  \"verdict\": \"accept\",\n  \"summary\": \"Looks right\",\n  \"corrections\": []\n}",
+            revision: "<sha:27>",
+            status: "accept",
+        },
+    ],
+)
+=== read_dashboard_source reference
+Ok(
+    DashboardLedgerSource {
+        title: "Ship the feature safely",
+        body: "```json\n{\n  \"disposition\": \"completed\",\n  \"summary\": \"Shipped\",\n  \"remainingActions\": [],\n  \"followups\": [\n    \"Announce it\"\n  ]\n}\n```",
+        revision: "<sha:25>",
+        document_type: "reference",
+        updated_at: "<ts>",
+        status: "completed",
+    },
+)
+=== dashboard_work_history Some("guided-work-<sha:1>")
+Ok(
+    [
+        DashboardWorkHistoryEntry {
+            id: "guided-work-<sha:1>|guided-disposition-<sha:8>",
+            work_id: "guided-work-<sha:1>",
+            session_id: "session-1",
+            at: "<ts>",
+            action: "disposition",
+            title: "Ship the feature safely",
+            body: "{\n  \"disposition\": \"completed\",\n  \"summary\": \"Shipped\",\n  \"remainingActions\": [],\n  \"followups\": [\n    \"Announce it\"\n  ]\n}",
+            revision: "<sha:25>",
+            status: "completed",
+        },
+        DashboardWorkHistoryEntry {
+            id: "guided-work-<sha:1>|guided-review-<sha:6>",
+            work_id: "guided-work-<sha:1>",
+            session_id: "session-1",
+            at: "<ts>",
+            action: "reviewed",
+            title: "Ship the feature safely",
+            body: "{\n  \"subject\": \"result\",\n  \"verdict\": \"accept\",\n  \"summary\": \"Looks right\",\n  \"corrections\": []\n}",
+            revision: "<sha:27>",
+            status: "accept",
+        },
+    ],
+)
+=== read_dashboard_source reference
+Ok(
+    DashboardLedgerSource {
+        title: "Ship the feature safely",
+        body: "```json\n{\n  \"disposition\": \"completed\",\n  \"summary\": \"Shipped\",\n  \"remainingActions\": [],\n  \"followups\": [\n    \"Announce it\"\n  ]\n}\n```",
+        revision: "<sha:25>",
+        document_type: "reference",
+        updated_at: "<ts>",
+        status: "completed",
+    },
+)
+=== read_project_work_plan
+Ok(
+    Some(
+        ProjectWorkPlanFacts {
+            approved: false,
+            action_keys: [
+                "write",
+                "test",
+            ],
+            completed_action_keys: [
+                "write",
+                "test",
+            ],
+        },
+    ),
+)
+=== briefing_signals
+Ok(
+    [
+        ProjectBriefingSignal {
+            id: "app-demo",
+            display_name: "Demo",
+            summary: None,
+            recent_session_titles: [],
+            ledger_event_summary: [
+                "project_initialized x1",
+                "index_written x1",
+            ],
+            open_work_titles: [],
+            completed_work_titles: [],
+            excluded_topics: [],
+        },
+    ],
+)
+=== read_dashboard_ledger_history
+Ok(
+    DashboardLedgerHistory {
+        revision: "<inode>:285:<epoch-ms>:<epoch-ms>",
+        events: [],
+    },
+)
+
+##### files
+--- file runtime/mutation-lock-shards/*.sqlite3
+index sqlite_autoindex_active_lock_1: 
+table active_lock: CREATE TABLE active_lock(lock_key TEXT PRIMARY KEY, ownership_token TEXT NOT NULL, owner_id TEXT NOT NULL, acquired_at TEXT NOT NULL, renewed_at TEXT NOT NULL)
+table shard_fence: CREATE TABLE shard_fence(singleton INTEGER PRIMARY KEY CHECK(singleton=1), generation INTEGER NOT NULL)
+fence generations: 10
+held locks: 0
+--- file project-ledger/projects/demo/index/project.json
+{
+  "schema": "project-ledger.index.v1",
+  "generatedAt": "<ts>",
+  "project": {
+    "id": "demo",
+    "name": "Demo Project",
+    "status": "active",
+    "path": "project-ledger/projects/demo/project.json"
+  },
+  "counts": {
+    "records": 21,
+    "initiative": 0,
+    "work": 2,
+    "task": 0,
+    "attempt": 0,
+    "decision": 0,
+    "risk": 0,
+    "spec": 0,
+    "report": 0,
+    "plan": 2,
+    "handoff": 0,
+    "reference": 15,
+    "roadmap": 0
+  },
+  "records": [
+    {
+      "id": "guided-plan-<sha:11>",
+      "kind": "plan",
+      "title": "Guided Work Plan 1",
+      "status": "active",
+      "priority": 100,
+      "parentId": "guided-work-<sha:10>",
+      "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/plans/guided-plan-<sha:11>.md"
+    },
+    {
+      "id": "guided-plan-<sha:2>",
+      "kind": "plan",
+      "title": "Guided Work Plan 1",
+      "status": "active",
+      "priority": 100,
+      "parentId": "guided-work-<sha:1>",
+      "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/plans/guided-plan-<sha:2>.md"
+    },
+    {
+      "id": "demo",
+      "kind": "project",
+      "title": "Demo Project",
+      "status": "active",
+      "priority": 100,
+      "parentId": null,
+      "spec": null,
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/project.json"
+    },
+    {
+      "id": "demo",
+      "kind": "project",
+      "title": "Demo Project",
+      "status": "active",
+      "priority": 100,
+      "parentId": null,
+      "spec": null,
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/project.json"
+    },
+    {
+      "id": "guided-binding-<sha:15>",
+      "kind": "reference",
+      "title": "Guided Work Turn binding 1",
+      "status": "active",
+      "priority": 100,
+      "parentId": "guided-work-<sha:10>",
+      "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/references/guided-binding-<sha:15>.md"
+    },
+    {
+      "id": "guided-binding-<sha:16>",
+      "kind": "reference",
+      "title": "Guided Work Turn binding 1",
+      "status": "active",
+      "priority": 100,
+      "parentId": "guided-work-<sha:1>",
+      "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/references/guided-binding-<sha:16>.md"
+    },
+    {
+      "id": "guided-checkpoint-<sha:7>",
+      "kind": "reference",
+      "title": "Guided Work checkpoint 6",
+      "status": "active",
+      "priority": 100,
+      "parentId": "guided-work-<sha:1>",
+      "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:7>.md"
+    },
+    {
+      "id": "guided-checkpoint-<sha:12>",
+      "kind": "reference",
+      "title": "Guided Work checkpoint 1",
+      "status": "active",
+      "priority": 100,
+      "parentId": "guided-work-<sha:10>",
+      "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:12>.md"
+    },
+    {
+      "id": "guided-checkpoint-<sha:5>",
+      "kind": "reference",
+      "title": "Guided Work checkpoint 5",
+      "status": "active",
+      "priority": 100,
+      "parentId": "guided-work-<sha:1>",
+      "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:5>.md"
+    },
+    {
+      "id": "guided-checkpoint-<sha:17>",
+      "kind": "reference",
+      "title": "Guided Work checkpoint 4",
+      "status": "active",
+      "priority": 100,
+      "parentId": "guided-work-<sha:1>",
+      "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:17>.md"
+    },
+    {
+      "id": "guided-checkpoint-<sha:18>",
+      "kind": "reference",
+      "title": "Guided Work checkpoint 2",
+      "status": "active",
+      "priority": 100,
+      "parentId": "guided-work-<sha:10>",
+      "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:18>.md"
+    },
+    {
+      "id": "guided-checkpoint-<sha:3>",
+      "kind": "reference",
+      "title": "Guided Work checkpoint 2",
+      "status": "active",
+      "priority": 100,
+      "parentId": "guided-work-<sha:1>",
+      "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:3>.md"
+    },
+    {
+      "id": "guided-checkpoint-<sha:4>",
+      "kind": "reference",
+      "title": "Guided Work checkpoint 3",
+      "status": "active",
+      "priority": 100,
+      "parentId": "guided-work-<sha:1>",
+      "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:4>.md"
+    },
+    {
+      "id": "guided-checkpoint-<sha:19>",
+      "kind": "reference",
+      "title": "Guided Work checkpoint 1",
+      "status": "active",
+      "priority": 100,
+      "parentId": "guided-work-<sha:1>",
+      "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:19>.md"
+    },
+    {
+      "id": "guided-checkpoint-<sha:13>",
+      "kind": "reference",
+      "title": "Guided Work checkpoint 3",
+      "status": "active",
+      "priority": 100,
+      "parentId": "guided-work-<sha:10>",
+      "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:13>.md"
+    },
+    {
+      "id": "guided-diagnostic-<sha:20>",
+      "kind": "reference",
+      "title": "Guided Work closeout diagnostic",
+      "status": "active",
+      "priority": 100,
+      "parentId": "guided-work-<sha:1>",
+      "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/references/guided-diagnostic-<sha:20>.md"
+    },
+    {
+      "id": "guided-disposition-<sha:8>",
+      "kind": "reference",
+      "title": "Guided Work disposition 1",
+      "status": "active",
+      "priority": 100,
+      "parentId": "guided-work-<sha:1>",
+      "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/references/guided-disposition-<sha:8>.md"
+    },
+    {
+      "id": "guided-review-<sha:6>",
+      "kind": "reference",
+      "title": "Guided Work result Review",
+      "status": "active",
+      "priority": 100,
+      "parentId": "guided-work-<sha:1>",
+      "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/references/guided-review-<sha:6>.md"
+    },
+    {
+      "id": "guided-review-<sha:14>",
+      "kind": "reference",
+      "title": "Guided Work plan Review",
+      "status": "active",
+      "priority": 100,
+      "parentId": "guided-work-<sha:10>",
+      "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/references/guided-review-<sha:14>.md"
+    },
+    {
+      "id": "guided-work-<sha:10>",
+      "kind": "work",
+      "title": "Guided Work guided-work-<sha:10>",
+      "status": "cancelled",
+      "priority": 100,
+      "parentId": null,
+      "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/work/guided-work-<sha:10>/work.md"
+    },
+    {
+      "id": "guided-work-<sha:1>",
+      "kind": "work",
+      "title": "Guided Work guided-work-<sha:1>",
+      "status": "review",
+      "priority": 100,
+      "parentId": null,
+      "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/demo/work/guided-work-<sha:1>/work.md"
+    }
+  ],
+  "issues": [],
+  "views": [
+    {
+      "name": "dashboard",
+      "path": "project-ledger/projects/demo/views/dashboard.md",
+      "exists": false,
+      "stale": true
+    },
+    {
+      "name": "handoff",
+      "path": "project-ledger/projects/demo/views/handoff.md",
+      "exists": false,
+      "stale": true
+    },
+    {
+      "name": "roadmap",
+      "path": "project-ledger/projects/demo/views/roadmap.md",
+      "exists": false,
+      "stale": true
+    }
+  ],
+  "index": {
+    "available": true,
+    "stale": false,
+    "generatedAt": "<ts>",
+    "path": "project-ledger/projects/demo/index/project.json"
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+--- file project-ledger/projects/demo/ledger.jsonl
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"project_initialized","projectId":"demo","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":21,"issues":0,"source":"project-ledger"}
+--- file project-ledger/projects/demo/plans/guided-plan-<sha:11>.md
+---
+schema: "project-ledger.plan.v1"
+kind: "plan"
+id: "guided-plan-<sha:11>"
+title: "Guided Work Plan 1"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
+parentId: "guided-work-<sha:10>"
+---
+
+{"operationIdentity":{"id":"call-plan-2","kind":"mutation_call","mutationCallId":"call-plan-2","requestSha256":"<sha:28>"},"plan":{"actions":[{"actionKey":"announce","dependencyKeys":[],"description":"Announce it"}],"checks":[],"createdAt":"<ts>","governingRefs":[],"objective":"Follow up","originTurnId":"turn-3","planRevisionId":"guided-plan-<sha:11>","revision":1},"recordSha256":"<sha:29>","schema":"butler.btcc-project-work-plan.v1","workId":"guided-work-<sha:10>"}
+<no trailing newline>
+--- file project-ledger/projects/demo/plans/guided-plan-<sha:2>.md
+---
+schema: "project-ledger.plan.v1"
+kind: "plan"
+id: "guided-plan-<sha:2>"
+title: "Guided Work Plan 1"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
+parentId: "guided-work-<sha:1>"
+---
+
+{"operationIdentity":{"id":"call-plan","kind":"mutation_call","mutationCallId":"call-plan","requestSha256":"<sha:30>"},"plan":{"actions":[{"actionKey":"write","dependencyKeys":[],"description":"Write the code"},{"actionKey":"test","dependencyKeys":["write"],"description":"Test the code"}],"checks":["tests pass"],"createdAt":"<ts>","governingRefs":["SPEC-1"],"objective":"Ship the feature safely","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","revision":1},"recordSha256":"<sha:31>","schema":"butler.btcc-project-work-plan.v1","workId":"guided-work-<sha:1>"}
+<no trailing newline>
+--- file project-ledger/projects/demo/project.json
+{
+  "schema": "project-ledger.project.v1",
+  "id": "demo",
+  "name": "Demo Project",
+  "status": "active",
+  "createdAt": "<ts>",
+  "updatedAt": "<ts>"
+}
+--- file project-ledger/projects/demo/references/guided-binding-<sha:15>.md
+---
+schema: "project-ledger.reference.v1"
+kind: "reference"
+id: "guided-binding-<sha:15>"
+title: "Guided Work Turn binding 1"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
+parentId: "guided-work-<sha:10>"
+---
+
+{"binding":{"bindingRevisionId":"guided-binding-<sha:15>","boundAt":"<ts>","revision":1,"sessionId":"session-1","turnId":"turn-3"},"operationIdentity":{"id":"call-start-2","kind":"mutation_call","mutationCallId":"call-start-2","requestSha256":"<sha:32>"},"recordSha256":"<sha:33>","schema":"butler.btcc-project-work-binding.v1","workId":"guided-work-<sha:10>"}
+<no trailing newline>
+--- file project-ledger/projects/demo/references/guided-binding-<sha:16>.md
+---
+schema: "project-ledger.reference.v1"
+kind: "reference"
+id: "guided-binding-<sha:16>"
+title: "Guided Work Turn binding 1"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
+parentId: "guided-work-<sha:1>"
+---
+
+{"binding":{"bindingRevisionId":"guided-binding-<sha:16>","boundAt":"<ts>","revision":1,"sessionId":"session-1","turnId":"turn-1"},"operationIdentity":{"id":"call-start","kind":"mutation_call","mutationCallId":"call-start","requestSha256":"<sha:34>"},"recordSha256":"<sha:35>","schema":"butler.btcc-project-work-binding.v1","workId":"guided-work-<sha:1>"}
+<no trailing newline>
+--- file project-ledger/projects/demo/references/guided-checkpoint-<sha:12>.md
+---
+schema: "project-ledger.reference.v1"
+kind: "reference"
+id: "guided-checkpoint-<sha:12>"
+title: "Guided Work checkpoint 1"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
+parentId: "guided-work-<sha:10>"
+---
+
+{"checkpoint":{"actionProgress":[{"actionKey":"announce","status":"blocked"}],"checkpointRevisionId":"guided-checkpoint-<sha:12>","createdAt":"<ts>","nextStep":"Announce it","originTurnId":"turn-3","planRevisionId":"guided-plan-<sha:11>","publicSummary":"Follow up","referencedResultRefs":[],"revision":1,"stage":"planning"},"checkpointIdentity":"call-plan-2\u0000plan","operationIdentity":{"id":"call-plan-2","kind":"mutation_call","mutationCallId":"call-plan-2","requestSha256":"<sha:28>"},"recordSha256":"<sha:36>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:10>"}
+<no trailing newline>
+--- file project-ledger/projects/demo/references/guided-checkpoint-<sha:13>.md
+---
+schema: "project-ledger.reference.v1"
+kind: "reference"
+id: "guided-checkpoint-<sha:13>"
+title: "Guided Work checkpoint 3"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
+parentId: "guided-work-<sha:10>"
+---
+
+{"checkpoint":{"actionProgress":[{"actionKey":"announce","status":"blocked"}],"checkpointRevisionId":"guided-checkpoint-<sha:13>","createdAt":"<ts>","nextStep":"Pick a date","originTurnId":"turn-3","planRevisionId":"guided-plan-<sha:11>","publicSummary":"Needs a date","referencedResultRefs":[],"revision":3,"stage":"planning"},"checkpointIdentity":"call-review-2\u0000review-exit","operationIdentity":{"id":"call-review-2","kind":"mutation_call","mutationCallId":"call-review-2","requestSha256":"<sha:37>"},"recordSha256":"<sha:38>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:10>"}
+<no trailing newline>
+--- file project-ledger/projects/demo/references/guided-checkpoint-<sha:17>.md
+---
+schema: "project-ledger.reference.v1"
+kind: "reference"
+id: "guided-checkpoint-<sha:17>"
+title: "Guided Work checkpoint 4"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
+parentId: "guided-work-<sha:1>"
+---
+
+{"checkpoint":{"actionProgress":[{"actionKey":"write","status":"done"},{"actionKey":"test","status":"done"}],"checkpointRevisionId":"guided-checkpoint-<sha:17>","createdAt":"<ts>","nextStep":"","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","publicSummary":"Looks right","referencedResultRefs":[],"revision":4,"stage":"review"},"checkpointIdentity":"call-review\u0000review-entry","operationIdentity":{"id":"call-review","kind":"mutation_call","mutationCallId":"call-review","requestSha256":"<sha:39>"},"recordSha256":"<sha:40>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:1>"}
+<no trailing newline>
+--- file project-ledger/projects/demo/references/guided-checkpoint-<sha:18>.md
+---
+schema: "project-ledger.reference.v1"
+kind: "reference"
+id: "guided-checkpoint-<sha:18>"
+title: "Guided Work checkpoint 2"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
+parentId: "guided-work-<sha:10>"
+---
+
+{"checkpoint":{"actionProgress":[{"actionKey":"announce","status":"blocked"}],"checkpointRevisionId":"guided-checkpoint-<sha:18>","createdAt":"<ts>","nextStep":"Pick a date","originTurnId":"turn-3","planRevisionId":"guided-plan-<sha:11>","publicSummary":"Needs a date","referencedResultRefs":[],"revision":2,"stage":"review"},"checkpointIdentity":"call-review-2\u0000review-entry","operationIdentity":{"id":"call-review-2","kind":"mutation_call","mutationCallId":"call-review-2","requestSha256":"<sha:37>"},"recordSha256":"<sha:41>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:10>"}
+<no trailing newline>
+--- file project-ledger/projects/demo/references/guided-checkpoint-<sha:19>.md
+---
+schema: "project-ledger.reference.v1"
+kind: "reference"
+id: "guided-checkpoint-<sha:19>"
+title: "Guided Work checkpoint 1"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
+parentId: "guided-work-<sha:1>"
+---
+
+{"checkpoint":{"actionProgress":[{"actionKey":"write","status":"pending"},{"actionKey":"test","status":"pending"}],"checkpointRevisionId":"guided-checkpoint-<sha:19>","createdAt":"<ts>","nextStep":"Write the code","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","publicSummary":"Ship the feature safely","referencedResultRefs":[],"revision":1,"stage":"conception"},"checkpointIdentity":"call-plan\u0000conception","operationIdentity":{"id":"call-plan","kind":"mutation_call","mutationCallId":"call-plan","requestSha256":"<sha:30>"},"recordSha256":"<sha:42>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:1>"}
+<no trailing newline>
+--- file project-ledger/projects/demo/references/guided-checkpoint-<sha:3>.md
+---
+schema: "project-ledger.reference.v1"
+kind: "reference"
+id: "guided-checkpoint-<sha:3>"
+title: "Guided Work checkpoint 2"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
+parentId: "guided-work-<sha:1>"
+---
+
+{"checkpoint":{"actionProgress":[{"actionKey":"write","status":"pending"},{"actionKey":"test","status":"pending"}],"checkpointRevisionId":"guided-checkpoint-<sha:3>","createdAt":"<ts>","nextStep":"Write the code","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","publicSummary":"Ship the feature safely","referencedResultRefs":[],"revision":2,"stage":"planning"},"checkpointIdentity":"call-plan\u0000plan","operationIdentity":{"id":"call-plan","kind":"mutation_call","mutationCallId":"call-plan","requestSha256":"<sha:30>"},"recordSha256":"<sha:43>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:1>"}
+<no trailing newline>
+--- file project-ledger/projects/demo/references/guided-checkpoint-<sha:4>.md
+---
+schema: "project-ledger.reference.v1"
+kind: "reference"
+id: "guided-checkpoint-<sha:4>"
+title: "Guided Work checkpoint 3"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
+parentId: "guided-work-<sha:1>"
+---
+
+{"checkpoint":{"actionProgress":[{"actionKey":"write","status":"done"},{"actionKey":"test","status":"active"}],"checkpointRevisionId":"guided-checkpoint-<sha:4>","createdAt":"<ts>","nextStep":"Run the tests","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","publicSummary":"Code written","referencedResultRefs":[],"revision":3,"stage":"execution"},"checkpointIdentity":"call-checkpoint","operationIdentity":{"id":"call-checkpoint","kind":"mutation_call","mutationCallId":"call-checkpoint","requestSha256":"<sha:44>"},"recordSha256":"<sha:45>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:1>"}
+<no trailing newline>
+--- file project-ledger/projects/demo/references/guided-checkpoint-<sha:5>.md
+---
+schema: "project-ledger.reference.v1"
+kind: "reference"
+id: "guided-checkpoint-<sha:5>"
+title: "Guided Work checkpoint 5"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
+parentId: "guided-work-<sha:1>"
+---
+
+{"checkpoint":{"actionProgress":[{"actionKey":"write","status":"done"},{"actionKey":"test","status":"done"}],"checkpointRevisionId":"guided-checkpoint-<sha:5>","createdAt":"<ts>","nextStep":"","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","publicSummary":"Looks right","referencedResultRefs":[],"revision":5,"stage":"validation"},"checkpointIdentity":"call-review\u0000review-exit","operationIdentity":{"id":"call-review","kind":"mutation_call","mutationCallId":"call-review","requestSha256":"<sha:39>"},"recordSha256":"<sha:46>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:1>"}
+<no trailing newline>
+--- file project-ledger/projects/demo/references/guided-checkpoint-<sha:7>.md
+---
+schema: "project-ledger.reference.v1"
+kind: "reference"
+id: "guided-checkpoint-<sha:7>"
+title: "Guided Work checkpoint 6"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
+parentId: "guided-work-<sha:1>"
+---
+
+{"checkpoint":{"actionProgress":[{"actionKey":"write","status":"done"},{"actionKey":"test","note":"green","status":"done"}],"checkpointRevisionId":"guided-checkpoint-<sha:7>","createdAt":"<ts>","nextStep":"","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","publicSummary":"Shipped","referencedResultRefs":[],"revision":6,"stage":"validation"},"checkpointIdentity":"call-disposition\u0000disposition","operationIdentity":{"id":"call-disposition","kind":"mutation_call","mutationCallId":"call-disposition","requestSha256":"<sha:47>"},"recordSha256":"<sha:48>","resultWindow":{"fromSequence":0,"toSequence":0},"schema":"butler.btcc-project-work-checkpoint.v1","workId":"guided-work-<sha:1>"}
+<no trailing newline>
+--- file project-ledger/projects/demo/references/guided-diagnostic-<sha:20>.md
+---
+schema: "project-ledger.reference.v1"
+kind: "reference"
+id: "guided-diagnostic-<sha:20>"
+title: "Guided Work closeout diagnostic"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
+parentId: "guided-work-<sha:1>"
+---
+
+{"diagnostic":{"code":"closeout_missing","createdAt":"<ts>","diagnosticId":"guided-diagnostic-<sha:20>","turnId":"turn-1"},"operationIdentity":{"id":"guided-diagnostic-<sha:20>","kind":"closeout_diagnostic","requestSha256":"<sha:49>"},"recordSha256":"<sha:50>","schema":"butler.btcc-project-work-closeout-diagnostic.v1","workId":"guided-work-<sha:1>"}
+<no trailing newline>
+--- file project-ledger/projects/demo/references/guided-disposition-<sha:8>.md
+---
+schema: "project-ledger.reference.v1"
+kind: "reference"
+id: "guided-disposition-<sha:8>"
+title: "Guided Work disposition 1"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
+parentId: "guided-work-<sha:1>"
+---
+
+{"disposition":{"actionUpdates":[{"actionKey":"test","note":"green","status":"done"}],"createdAt":"<ts>","disposition":"completed","dispositionRevisionId":"guided-disposition-<sha:8>","evidenceRefs":[],"evidenceSnapshot":[],"followups":["Announce it"],"materialFingerprint":"<sha:9>","originTurnId":"turn-1","remainingActions":[],"resultSequence":0,"revision":1,"runtimeOwnedOpen":false,"summary":"Shipped"},"materialSnapshot":{"actionProgress":[{"actionKey":"write","note":null,"status":"done"},{"actionKey":"test","note":"green","status":"done"}],"currentPlan":{"actions":[{"actionKey":"write","dependencyKeys":[],"description":"Write the code"},{"actionKey":"test","dependencyKeys":["write"],"description":"Test the code"}],"checks":["tests pass"],"createdAt":"<ts>","governingRefs":["SPEC-1"],"objective":"Ship the feature safely","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","revision":1},"effectBlockers":[],"effectWatermark":"<sha:51>","latestCheckpoint":{"actionProgress":[{"actionKey":"write","note":null,"status":"done"},{"actionKey":"test","note":"green","status":"done"}],"planRevisionId":"guided-plan-<sha:2>","referencedResultRefs":[],"resultSequence":0,"revision":6,"stage":"validation"},"materialFingerprint":"<sha:9>","resultRefs":[],"reviews":[null,{"boundActionProgress":[{"actionKey":"write","note":null,"status":"done"},{"actionKey":"test","note":null,"status":"done"}],"boundPlanRevisionId":null,"boundResultRefs":[],"boundResultReviewRevisionId":null,"reviewRevisionId":"guided-review-<sha:6>","revision":1,"verdict":"accept"},null],"status":"completed","workId":"guided-work-<sha:1>"},"operationIdentity":{"id":"call-disposition","kind":"mutation_call","mutationCallId":"call-disposition","requestSha256":"<sha:47>"},"recordSha256":"<sha:52>","schema":"butler.btcc-project-work-disposition.v1","workId":"guided-work-<sha:1>"}
+<no trailing newline>
+--- file project-ledger/projects/demo/references/guided-review-<sha:14>.md
+---
+schema: "project-ledger.reference.v1"
+kind: "reference"
+id: "guided-review-<sha:14>"
+title: "Guided Work plan Review"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
+parentId: "guided-work-<sha:10>"
+---
+
+{"boundResultSequence":0,"operationIdentity":{"id":"call-review-2","kind":"mutation_call","mutationCallId":"call-review-2","requestSha256":"<sha:37>"},"recordSha256":"<sha:53>","review":{"boundPlanRevisionId":"guided-plan-<sha:11>","boundResultRefs":[],"corrections":["Pick a date"],"createdAt":"<ts>","originTurnId":"turn-3","reviewRevisionId":"guided-review-<sha:14>","revision":1,"subject":"plan","summary":"Needs a date","verdict":"revise"},"schema":"butler.btcc-project-work-review.v1","workId":"guided-work-<sha:10>"}
+<no trailing newline>
+--- file project-ledger/projects/demo/references/guided-review-<sha:6>.md
+---
+schema: "project-ledger.reference.v1"
+kind: "reference"
+id: "guided-review-<sha:6>"
+title: "Guided Work result Review"
+status: "active"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
+parentId: "guided-work-<sha:1>"
+---
+
+{"boundResultSequence":0,"operationIdentity":{"id":"call-review","kind":"mutation_call","mutationCallId":"call-review","requestSha256":"<sha:39>"},"recordSha256":"<sha:54>","review":{"boundActionProgress":[{"actionKey":"write","status":"done"},{"actionKey":"test","status":"done"}],"boundResultRefs":[],"corrections":[],"createdAt":"<ts>","originTurnId":"turn-1","reviewRevisionId":"guided-review-<sha:6>","revision":1,"subject":"result","summary":"Looks right","verdict":"accept"},"schema":"butler.btcc-project-work-review.v1","workId":"guided-work-<sha:1>"}
+<no trailing newline>
+--- file project-ledger/projects/demo/work/guided-work-<sha:10>/work.md
+---
+schema: "project-ledger.work.v1"
+kind: "work"
+id: "guided-work-<sha:10>"
+title: "Guided Work guided-work-<sha:10>"
+status: "cancelled"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
+---
+
+{"actionProgress":[{"actionKey":"announce","status":"blocked"}],"allowedNextStages":["review"],"bindingRefs":[{"bindingRevisionId":"guided-binding-<sha:15>","revision":1,"turnId":"turn-3"}],"checkpointResultSequence":0,"checkpointRevision":3,"createdAt":"<ts>","currentPlanRevisionId":"guided-plan-<sha:11>","currentStage":"planning","dispositionRevision":0,"latestCheckpointRevisionId":"guided-checkpoint-<sha:13>","latestPlanReviewRevisionId":"guided-review-<sha:14>","materialFingerprint":"<sha:55>","materialSnapshot":{"actionProgress":[{"actionKey":"announce","note":null,"status":"blocked"}],"currentPlan":{"actions":[{"actionKey":"announce","dependencyKeys":[],"description":"Announce it"}],"checks":[],"createdAt":"<ts>","governingRefs":[],"objective":"Follow up","originTurnId":"turn-3","planRevisionId":"guided-plan-<sha:11>","revision":1},"effectBlockers":[],"effectWatermark":"<sha:51>","latestCheckpoint":{"actionProgress":[{"actionKey":"announce","note":null,"status":"blocked"}],"planRevisionId":"guided-plan-<sha:11>","referencedResultRefs":[],"resultSequence":0,"revision":3,"stage":"planning"},"materialFingerprint":"<sha:55>","resultRefs":[],"reviews":[{"boundActionProgress":null,"boundPlanRevisionId":"guided-plan-<sha:11>","boundResultRefs":[],"boundResultReviewRevisionId":null,"reviewRevisionId":"guided-review-<sha:14>","revision":1,"verdict":"revise"},null,null],"status":"abandoned","workId":"guided-work-<sha:10>"},"objective":"Follow up","operationIdentity":{"id":"guided-abandonment-<sha:56>","kind":"abandonment","requestSha256":"<sha:57>"},"origin":{"messageId":"message-turn-3","turnId":"turn-3"},"planRevision":1,"resultRefs":[],"resultSequence":0,"reviewRevision":1,"schema":"butler.btcc-project-work.v1","scope":{"appProjectId":"app-demo","ledgerProjectId":"demo"},"sessionHead":true,"sessionId":"session-1","status":"abandoned","updatedAt":"<ts>","workId":"guided-work-<sha:10>"}
+<no trailing newline>
+--- file project-ledger/projects/demo/work/guided-work-<sha:1>/work.md
+---
+schema: "project-ledger.work.v1"
+kind: "work"
+id: "guided-work-<sha:1>"
+title: "Guided Work guided-work-<sha:1>"
+status: "review"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-BTCC-R3-WORK-LEDGER-SCOPE"
+---
+
+{"actionProgress":[{"actionKey":"write","status":"done"},{"actionKey":"test","note":"green","status":"done"}],"allowedNextStages":["planning","execution","review","reporting"],"bindingRefs":[{"bindingRevisionId":"guided-binding-<sha:16>","revision":1,"turnId":"turn-1"}],"checkpointResultSequence":0,"checkpointRevision":6,"createdAt":"<ts>","currentPlanRevisionId":"guided-plan-<sha:2>","currentStage":"validation","dispositionRevision":1,"latestCheckpointRevisionId":"guided-checkpoint-<sha:7>","latestDispositionRevisionId":"guided-disposition-<sha:8>","latestResultReviewRevisionId":"guided-review-<sha:6>","materialFingerprint":"<sha:9>","materialSnapshot":{"actionProgress":[{"actionKey":"write","note":null,"status":"done"},{"actionKey":"test","note":"green","status":"done"}],"currentPlan":{"actions":[{"actionKey":"write","dependencyKeys":[],"description":"Write the code"},{"actionKey":"test","dependencyKeys":["write"],"description":"Test the code"}],"checks":["tests pass"],"createdAt":"<ts>","governingRefs":["SPEC-1"],"objective":"Ship the feature safely","originTurnId":"turn-1","planRevisionId":"guided-plan-<sha:2>","revision":1},"effectBlockers":[],"effectWatermark":"<sha:51>","latestCheckpoint":{"actionProgress":[{"actionKey":"write","note":null,"status":"done"},{"actionKey":"test","note":"green","status":"done"}],"planRevisionId":"guided-plan-<sha:2>","referencedResultRefs":[],"resultSequence":0,"revision":6,"stage":"validation"},"materialFingerprint":"<sha:9>","resultRefs":[],"reviews":[null,{"boundActionProgress":[{"actionKey":"write","note":null,"status":"done"},{"actionKey":"test","note":null,"status":"done"}],"boundPlanRevisionId":null,"boundResultRefs":[],"boundResultReviewRevisionId":null,"reviewRevisionId":"guided-review-<sha:6>","revision":1,"verdict":"accept"},null],"status":"completed","workId":"guided-work-<sha:1>"},"objective":"Ship the feature safely","operationIdentity":{"id":"call-start-2","kind":"mutation_call","mutationCallId":"call-start-2","requestSha256":"<sha:32>"},"origin":{"messageId":"message-turn-1","turnId":"turn-1"},"planRevision":1,"resultRefs":[],"resultSequence":0,"reviewRevision":1,"schema":"butler.btcc-project-work.v1","scope":{"appProjectId":"app-demo","ledgerProjectId":"demo"},"sessionHead":false,"sessionId":"session-1","status":"completed","updatedAt":"<ts>","workId":"guided-work-<sha:1>"}
+<no trailing newline>
+--- file runtime/btcc-project-ledger-effects-v2/journals/<sha:58>.json
+{
+  "schema": "project-ledger.publication-transaction.v1",
+  "publicationId": "<sha:58>",
+  "canonicalRoot": "$DATA/project-ledger/projects/demo",
+  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:58>",
+  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:58>.json",
+  "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
+  "base": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:59>",
+    "sourceFileCount": 1,
+    "storageSha256": "<sha:59>",
+    "storageEntryCount": 1,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:60>.md",
+      "references/btcc-project-work-proof-<sha:61>.md",
+      "references/guided-binding-<sha:16>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  },
+  "status": "observed",
+  "candidateHead": {
+    "schema": "project-ledger.source-head.v1",
+    "storageAuthority": "project-ledger-record-set-v1",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:58>",
+    "sourceSha256": "<sha:62>",
+    "sourceFileCount": 3,
+    "storageSha256": "<sha:62>",
+    "storageEntryCount": 3,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:60>.md",
+      "references/btcc-project-work-proof-<sha:61>.md",
+      "references/guided-binding-<sha:16>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/journals/<sha:63>.json
+{
+  "schema": "project-ledger.publication-transaction.v1",
+  "publicationId": "<sha:63>",
+  "canonicalRoot": "$DATA/project-ledger/projects/demo",
+  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:63>",
+  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:63>.json",
+  "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
+  "base": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:64>",
+    "sourceFileCount": 1,
+    "storageSha256": "<sha:64>",
+    "storageEntryCount": 1,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:65>.md",
+      "references/guided-diagnostic-<sha:20>.md"
+    ]
+  },
+  "status": "observed",
+  "candidateHead": {
+    "schema": "project-ledger.source-head.v1",
+    "storageAuthority": "project-ledger-record-set-v1",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:63>",
+    "sourceSha256": "<sha:66>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:66>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:65>.md",
+      "references/guided-diagnostic-<sha:20>.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/journals/<sha:67>.json
+{
+  "schema": "project-ledger.publication-transaction.v1",
+  "publicationId": "<sha:67>",
+  "canonicalRoot": "$DATA/project-ledger/projects/demo",
+  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:67>",
+  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:67>.json",
+  "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
+  "base": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:68>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:68>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "plans/guided-plan-<sha:11>.md",
+      "project.json",
+      "references/btcc-project-work-proof-<sha:69>.md",
+      "references/btcc-project-work-proof-<sha:70>.md",
+      "references/btcc-project-work-proof-<sha:71>.md",
+      "references/guided-checkpoint-<sha:12>.md",
+      "work/guided-work-<sha:10>/work.md"
+    ]
+  },
+  "status": "observed",
+  "candidateHead": {
+    "schema": "project-ledger.source-head.v1",
+    "storageAuthority": "project-ledger-record-set-v1",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:67>",
+    "sourceSha256": "<sha:72>",
+    "sourceFileCount": 4,
+    "storageSha256": "<sha:72>",
+    "storageEntryCount": 4,
+    "recordPaths": [
+      "plans/guided-plan-<sha:11>.md",
+      "project.json",
+      "references/btcc-project-work-proof-<sha:69>.md",
+      "references/btcc-project-work-proof-<sha:70>.md",
+      "references/btcc-project-work-proof-<sha:71>.md",
+      "references/guided-checkpoint-<sha:12>.md",
+      "work/guided-work-<sha:10>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/journals/<sha:73>.json
+{
+  "schema": "project-ledger.publication-transaction.v1",
+  "publicationId": "<sha:73>",
+  "canonicalRoot": "$DATA/project-ledger/projects/demo",
+  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:73>",
+  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:73>.json",
+  "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
+  "base": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:74>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:74>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "plans/guided-plan-<sha:2>.md",
+      "project.json",
+      "references/btcc-project-work-proof-<sha:75>.md",
+      "references/btcc-project-work-proof-<sha:76>.md",
+      "references/btcc-project-work-proof-<sha:77>.md",
+      "references/btcc-project-work-proof-<sha:78>.md",
+      "references/guided-checkpoint-<sha:3>.md",
+      "references/guided-checkpoint-<sha:19>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  },
+  "status": "observed",
+  "candidateHead": {
+    "schema": "project-ledger.source-head.v1",
+    "storageAuthority": "project-ledger-record-set-v1",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:73>",
+    "sourceSha256": "<sha:79>",
+    "sourceFileCount": 5,
+    "storageSha256": "<sha:79>",
+    "storageEntryCount": 5,
+    "recordPaths": [
+      "plans/guided-plan-<sha:2>.md",
+      "project.json",
+      "references/btcc-project-work-proof-<sha:75>.md",
+      "references/btcc-project-work-proof-<sha:76>.md",
+      "references/btcc-project-work-proof-<sha:77>.md",
+      "references/btcc-project-work-proof-<sha:78>.md",
+      "references/guided-checkpoint-<sha:3>.md",
+      "references/guided-checkpoint-<sha:19>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/journals/<sha:80>.json
+{
+  "schema": "project-ledger.publication-transaction.v1",
+  "publicationId": "<sha:80>",
+  "canonicalRoot": "$DATA/project-ledger/projects/demo",
+  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:80>",
+  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:80>.json",
+  "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
+  "base": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:81>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:81>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:82>.md",
+      "references/btcc-project-work-proof-<sha:83>.md",
+      "references/btcc-project-work-proof-<sha:84>.md",
+      "references/btcc-project-work-proof-<sha:85>.md",
+      "references/guided-checkpoint-<sha:18>.md",
+      "references/guided-checkpoint-<sha:13>.md",
+      "references/guided-review-<sha:14>.md",
+      "work/guided-work-<sha:10>/work.md"
+    ]
+  },
+  "status": "observed",
+  "candidateHead": {
+    "schema": "project-ledger.source-head.v1",
+    "storageAuthority": "project-ledger-record-set-v1",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:80>",
+    "sourceSha256": "<sha:86>",
+    "sourceFileCount": 5,
+    "storageSha256": "<sha:86>",
+    "storageEntryCount": 5,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:82>.md",
+      "references/btcc-project-work-proof-<sha:83>.md",
+      "references/btcc-project-work-proof-<sha:84>.md",
+      "references/btcc-project-work-proof-<sha:85>.md",
+      "references/guided-checkpoint-<sha:18>.md",
+      "references/guided-checkpoint-<sha:13>.md",
+      "references/guided-review-<sha:14>.md",
+      "work/guided-work-<sha:10>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/journals/<sha:87>.json
+{
+  "schema": "project-ledger.publication-transaction.v1",
+  "publicationId": "<sha:87>",
+  "canonicalRoot": "$DATA/project-ledger/projects/demo",
+  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:87>",
+  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:87>.json",
+  "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
+  "base": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:88>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:88>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:89>.md",
+      "references/btcc-project-work-proof-<sha:90>.md",
+      "references/btcc-project-work-proof-<sha:91>.md",
+      "references/btcc-project-work-proof-<sha:92>.md",
+      "references/guided-checkpoint-<sha:5>.md",
+      "references/guided-checkpoint-<sha:17>.md",
+      "references/guided-review-<sha:6>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  },
+  "status": "observed",
+  "candidateHead": {
+    "schema": "project-ledger.source-head.v1",
+    "storageAuthority": "project-ledger-record-set-v1",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:87>",
+    "sourceSha256": "<sha:93>",
+    "sourceFileCount": 5,
+    "storageSha256": "<sha:93>",
+    "storageEntryCount": 5,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:89>.md",
+      "references/btcc-project-work-proof-<sha:90>.md",
+      "references/btcc-project-work-proof-<sha:91>.md",
+      "references/btcc-project-work-proof-<sha:92>.md",
+      "references/guided-checkpoint-<sha:5>.md",
+      "references/guided-checkpoint-<sha:17>.md",
+      "references/guided-review-<sha:6>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/journals/<sha:94>.json
+{
+  "schema": "project-ledger.publication-transaction.v1",
+  "publicationId": "<sha:94>",
+  "canonicalRoot": "$DATA/project-ledger/projects/demo",
+  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:94>",
+  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:94>.json",
+  "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
+  "base": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:95>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:95>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:96>.md",
+      "references/btcc-project-work-proof-<sha:97>.md",
+      "references/btcc-project-work-proof-<sha:98>.md",
+      "references/guided-binding-<sha:15>.md",
+      "work/guided-work-<sha:10>/work.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  },
+  "status": "observed",
+  "candidateHead": {
+    "schema": "project-ledger.source-head.v1",
+    "storageAuthority": "project-ledger-record-set-v1",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:94>",
+    "sourceSha256": "<sha:99>",
+    "sourceFileCount": 4,
+    "storageSha256": "<sha:99>",
+    "storageEntryCount": 4,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:96>.md",
+      "references/btcc-project-work-proof-<sha:97>.md",
+      "references/btcc-project-work-proof-<sha:98>.md",
+      "references/guided-binding-<sha:15>.md",
+      "work/guided-work-<sha:10>/work.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/journals/<sha:100>.json
+{
+  "schema": "project-ledger.publication-transaction.v1",
+  "publicationId": "<sha:100>",
+  "canonicalRoot": "$DATA/project-ledger/projects/demo",
+  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:100>",
+  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:100>.json",
+  "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
+  "base": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:101>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:101>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:102>.md",
+      "references/btcc-project-work-proof-<sha:103>.md",
+      "references/btcc-project-work-proof-<sha:104>.md",
+      "references/guided-checkpoint-<sha:7>.md",
+      "references/guided-disposition-<sha:8>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  },
+  "status": "observed",
+  "candidateHead": {
+    "schema": "project-ledger.source-head.v1",
+    "storageAuthority": "project-ledger-record-set-v1",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:100>",
+    "sourceSha256": "<sha:105>",
+    "sourceFileCount": 4,
+    "storageSha256": "<sha:105>",
+    "storageEntryCount": 4,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:102>.md",
+      "references/btcc-project-work-proof-<sha:103>.md",
+      "references/btcc-project-work-proof-<sha:104>.md",
+      "references/guided-checkpoint-<sha:7>.md",
+      "references/guided-disposition-<sha:8>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/journals/<sha:106>.json
+{
+  "schema": "project-ledger.publication-transaction.v1",
+  "publicationId": "<sha:106>",
+  "canonicalRoot": "$DATA/project-ledger/projects/demo",
+  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:106>",
+  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:106>.json",
+  "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
+  "base": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:107>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:107>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:108>.md",
+      "references/btcc-project-work-proof-<sha:109>.md",
+      "references/guided-checkpoint-<sha:4>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  },
+  "status": "observed",
+  "candidateHead": {
+    "schema": "project-ledger.source-head.v1",
+    "storageAuthority": "project-ledger-record-set-v1",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:106>",
+    "sourceSha256": "<sha:110>",
+    "sourceFileCount": 3,
+    "storageSha256": "<sha:110>",
+    "storageEntryCount": 3,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:108>.md",
+      "references/btcc-project-work-proof-<sha:109>.md",
+      "references/guided-checkpoint-<sha:4>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/journals/<sha:111>.json
+{
+  "schema": "project-ledger.publication-transaction.v1",
+  "publicationId": "<sha:111>",
+  "canonicalRoot": "$DATA/project-ledger/projects/demo",
+  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:111>",
+  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:111>.json",
+  "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
+  "base": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:112>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:112>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:113>.md",
+      "work/guided-work-<sha:10>/work.md"
+    ]
+  },
+  "status": "observed",
+  "candidateHead": {
+    "schema": "project-ledger.source-head.v1",
+    "storageAuthority": "project-ledger-record-set-v1",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:111>",
+    "sourceSha256": "<sha:114>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:114>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:113>.md",
+      "work/guided-work-<sha:10>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:115>.json
+{
+  "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
+  "ledgerProjectId": "demo",
+  "ledgerRoot": "$DATA/project-ledger/projects/demo",
+  "operationIdentity": {
+    "kind": "abandonment",
+    "id": "guided-abandonment-<sha:56>"
+  },
+  "occurrenceId": "<sha:115>",
+  "status": "pending",
+  "attempts": [
+    {
+      "number": 1,
+      "status": "admitted",
+      "requestSha256": "<sha:57>",
+      "publicationId": "<sha:111>",
+      "expectedBase": {
+        "schema": "butler.btcc-project-ledger-head.v1",
+        "projectRoot": "$DATA/project-ledger/projects/demo",
+        "sourceSha256": "<sha:112>",
+        "sourceFileCount": 2,
+        "storageSha256": "<sha:112>",
+        "storageEntryCount": 2,
+        "recordPaths": [
+          "project.json",
+          "references/btcc-project-work-proof-<sha:113>.md",
+          "work/guided-work-<sha:10>/work.md"
+        ]
+      },
+      "targetPreconditions": [
+        {
+          "id": "guided-work-<sha:10>",
+          "kind": "work",
+          "path": "project-ledger/projects/demo/work/guided-work-<sha:10>/work.md",
+          "parentId": null,
+          "state": "present",
+          "rawRecordSha256": "<sha:116>"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:113>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:113>.md",
+          "parentId": null,
+          "state": "absent"
+        }
+      ]
+    }
+  ]
+}
+--- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:117>.json
+{
+  "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
+  "ledgerProjectId": "demo",
+  "ledgerRoot": "$DATA/project-ledger/projects/demo",
+  "operationIdentity": {
+    "kind": "closeout_diagnostic",
+    "id": "guided-diagnostic-<sha:20>"
+  },
+  "occurrenceId": "<sha:117>",
+  "status": "pending",
+  "attempts": [
+    {
+      "number": 1,
+      "status": "admitted",
+      "requestSha256": "<sha:49>",
+      "publicationId": "<sha:63>",
+      "expectedBase": {
+        "schema": "butler.btcc-project-ledger-head.v1",
+        "projectRoot": "$DATA/project-ledger/projects/demo",
+        "sourceSha256": "<sha:64>",
+        "sourceFileCount": 1,
+        "storageSha256": "<sha:64>",
+        "storageEntryCount": 1,
+        "recordPaths": [
+          "project.json",
+          "references/btcc-project-work-proof-<sha:65>.md",
+          "references/guided-diagnostic-<sha:20>.md"
+        ]
+      },
+      "targetPreconditions": [
+        {
+          "id": "guided-diagnostic-<sha:20>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/guided-diagnostic-<sha:20>.md",
+          "parentId": "guided-work-<sha:1>",
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:65>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:65>.md",
+          "parentId": null,
+          "state": "absent"
+        }
+      ]
+    }
+  ]
+}
+--- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:118>.json
+{
+  "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
+  "ledgerProjectId": "demo",
+  "ledgerRoot": "$DATA/project-ledger/projects/demo",
+  "operationIdentity": {
+    "kind": "mutation_call",
+    "id": "call-checkpoint"
+  },
+  "occurrenceId": "<sha:118>",
+  "status": "pending",
+  "attempts": [
+    {
+      "number": 1,
+      "status": "admitted",
+      "requestSha256": "<sha:44>",
+      "publicationId": "<sha:106>",
+      "expectedBase": {
+        "schema": "butler.btcc-project-ledger-head.v1",
+        "projectRoot": "$DATA/project-ledger/projects/demo",
+        "sourceSha256": "<sha:107>",
+        "sourceFileCount": 2,
+        "storageSha256": "<sha:107>",
+        "storageEntryCount": 2,
+        "recordPaths": [
+          "project.json",
+          "references/btcc-project-work-proof-<sha:108>.md",
+          "references/btcc-project-work-proof-<sha:109>.md",
+          "references/guided-checkpoint-<sha:4>.md",
+          "work/guided-work-<sha:1>/work.md"
+        ]
+      },
+      "targetPreconditions": [
+        {
+          "id": "guided-work-<sha:1>",
+          "kind": "work",
+          "path": "project-ledger/projects/demo/work/guided-work-<sha:1>/work.md",
+          "parentId": null,
+          "state": "present",
+          "rawRecordSha256": "<sha:119>"
+        },
+        {
+          "id": "guided-checkpoint-<sha:4>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:4>.md",
+          "parentId": "guided-work-<sha:1>",
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:109>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:109>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:108>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:108>.md",
+          "parentId": null,
+          "state": "absent"
+        }
+      ]
+    }
+  ]
+}
+--- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:120>.json
+{
+  "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
+  "ledgerProjectId": "demo",
+  "ledgerRoot": "$DATA/project-ledger/projects/demo",
+  "operationIdentity": {
+    "kind": "mutation_call",
+    "id": "call-disposition"
+  },
+  "occurrenceId": "<sha:120>",
+  "status": "pending",
+  "attempts": [
+    {
+      "number": 1,
+      "status": "admitted",
+      "requestSha256": "<sha:47>",
+      "publicationId": "<sha:100>",
+      "expectedBase": {
+        "schema": "butler.btcc-project-ledger-head.v1",
+        "projectRoot": "$DATA/project-ledger/projects/demo",
+        "sourceSha256": "<sha:101>",
+        "sourceFileCount": 2,
+        "storageSha256": "<sha:101>",
+        "storageEntryCount": 2,
+        "recordPaths": [
+          "project.json",
+          "references/btcc-project-work-proof-<sha:102>.md",
+          "references/btcc-project-work-proof-<sha:103>.md",
+          "references/btcc-project-work-proof-<sha:104>.md",
+          "references/guided-checkpoint-<sha:7>.md",
+          "references/guided-disposition-<sha:8>.md",
+          "work/guided-work-<sha:1>/work.md"
+        ]
+      },
+      "targetPreconditions": [
+        {
+          "id": "guided-work-<sha:1>",
+          "kind": "work",
+          "path": "project-ledger/projects/demo/work/guided-work-<sha:1>/work.md",
+          "parentId": null,
+          "state": "present",
+          "rawRecordSha256": "<sha:121>"
+        },
+        {
+          "id": "guided-disposition-<sha:8>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/guided-disposition-<sha:8>.md",
+          "parentId": "guided-work-<sha:1>",
+          "state": "absent"
+        },
+        {
+          "id": "guided-checkpoint-<sha:7>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:7>.md",
+          "parentId": "guided-work-<sha:1>",
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:103>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:103>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:104>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:104>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:102>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:102>.md",
+          "parentId": null,
+          "state": "absent"
+        }
+      ]
+    }
+  ]
+}
+--- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:122>.json
+{
+  "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
+  "ledgerProjectId": "demo",
+  "ledgerRoot": "$DATA/project-ledger/projects/demo",
+  "operationIdentity": {
+    "kind": "mutation_call",
+    "id": "call-plan"
+  },
+  "occurrenceId": "<sha:122>",
+  "status": "pending",
+  "attempts": [
+    {
+      "number": 1,
+      "status": "admitted",
+      "requestSha256": "<sha:30>",
+      "publicationId": "<sha:73>",
+      "expectedBase": {
+        "schema": "butler.btcc-project-ledger-head.v1",
+        "projectRoot": "$DATA/project-ledger/projects/demo",
+        "sourceSha256": "<sha:74>",
+        "sourceFileCount": 2,
+        "storageSha256": "<sha:74>",
+        "storageEntryCount": 2,
+        "recordPaths": [
+          "plans/guided-plan-<sha:2>.md",
+          "project.json",
+          "references/btcc-project-work-proof-<sha:75>.md",
+          "references/btcc-project-work-proof-<sha:76>.md",
+          "references/btcc-project-work-proof-<sha:77>.md",
+          "references/btcc-project-work-proof-<sha:78>.md",
+          "references/guided-checkpoint-<sha:3>.md",
+          "references/guided-checkpoint-<sha:19>.md",
+          "work/guided-work-<sha:1>/work.md"
+        ]
+      },
+      "targetPreconditions": [
+        {
+          "id": "guided-work-<sha:1>",
+          "kind": "work",
+          "path": "project-ledger/projects/demo/work/guided-work-<sha:1>/work.md",
+          "parentId": null,
+          "state": "present",
+          "rawRecordSha256": "<sha:123>"
+        },
+        {
+          "id": "guided-plan-<sha:2>",
+          "kind": "plan",
+          "path": "project-ledger/projects/demo/plans/guided-plan-<sha:2>.md",
+          "parentId": "guided-work-<sha:1>",
+          "state": "absent"
+        },
+        {
+          "id": "guided-checkpoint-<sha:19>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:19>.md",
+          "parentId": "guided-work-<sha:1>",
+          "state": "absent"
+        },
+        {
+          "id": "guided-checkpoint-<sha:3>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:3>.md",
+          "parentId": "guided-work-<sha:1>",
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:75>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:75>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:76>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:76>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:78>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:78>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:77>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:77>.md",
+          "parentId": null,
+          "state": "absent"
+        }
+      ]
+    }
+  ]
+}
+--- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:124>.json
+{
+  "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
+  "ledgerProjectId": "demo",
+  "ledgerRoot": "$DATA/project-ledger/projects/demo",
+  "operationIdentity": {
+    "kind": "mutation_call",
+    "id": "call-plan-2"
+  },
+  "occurrenceId": "<sha:124>",
+  "status": "pending",
+  "attempts": [
+    {
+      "number": 1,
+      "status": "admitted",
+      "requestSha256": "<sha:28>",
+      "publicationId": "<sha:67>",
+      "expectedBase": {
+        "schema": "butler.btcc-project-ledger-head.v1",
+        "projectRoot": "$DATA/project-ledger/projects/demo",
+        "sourceSha256": "<sha:68>",
+        "sourceFileCount": 2,
+        "storageSha256": "<sha:68>",
+        "storageEntryCount": 2,
+        "recordPaths": [
+          "plans/guided-plan-<sha:11>.md",
+          "project.json",
+          "references/btcc-project-work-proof-<sha:69>.md",
+          "references/btcc-project-work-proof-<sha:70>.md",
+          "references/btcc-project-work-proof-<sha:71>.md",
+          "references/guided-checkpoint-<sha:12>.md",
+          "work/guided-work-<sha:10>/work.md"
+        ]
+      },
+      "targetPreconditions": [
+        {
+          "id": "guided-work-<sha:10>",
+          "kind": "work",
+          "path": "project-ledger/projects/demo/work/guided-work-<sha:10>/work.md",
+          "parentId": null,
+          "state": "present",
+          "rawRecordSha256": "<sha:125>"
+        },
+        {
+          "id": "guided-plan-<sha:11>",
+          "kind": "plan",
+          "path": "project-ledger/projects/demo/plans/guided-plan-<sha:11>.md",
+          "parentId": "guided-work-<sha:10>",
+          "state": "absent"
+        },
+        {
+          "id": "guided-checkpoint-<sha:12>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:12>.md",
+          "parentId": "guided-work-<sha:10>",
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:71>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:71>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:70>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:70>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:69>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:69>.md",
+          "parentId": null,
+          "state": "absent"
+        }
+      ]
+    }
+  ]
+}
+--- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:126>.json
+{
+  "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
+  "ledgerProjectId": "demo",
+  "ledgerRoot": "$DATA/project-ledger/projects/demo",
+  "operationIdentity": {
+    "kind": "mutation_call",
+    "id": "call-review"
+  },
+  "occurrenceId": "<sha:126>",
+  "status": "pending",
+  "attempts": [
+    {
+      "number": 1,
+      "status": "admitted",
+      "requestSha256": "<sha:39>",
+      "publicationId": "<sha:87>",
+      "expectedBase": {
+        "schema": "butler.btcc-project-ledger-head.v1",
+        "projectRoot": "$DATA/project-ledger/projects/demo",
+        "sourceSha256": "<sha:88>",
+        "sourceFileCount": 2,
+        "storageSha256": "<sha:88>",
+        "storageEntryCount": 2,
+        "recordPaths": [
+          "project.json",
+          "references/btcc-project-work-proof-<sha:89>.md",
+          "references/btcc-project-work-proof-<sha:90>.md",
+          "references/btcc-project-work-proof-<sha:91>.md",
+          "references/btcc-project-work-proof-<sha:92>.md",
+          "references/guided-checkpoint-<sha:5>.md",
+          "references/guided-checkpoint-<sha:17>.md",
+          "references/guided-review-<sha:6>.md",
+          "work/guided-work-<sha:1>/work.md"
+        ]
+      },
+      "targetPreconditions": [
+        {
+          "id": "guided-work-<sha:1>",
+          "kind": "work",
+          "path": "project-ledger/projects/demo/work/guided-work-<sha:1>/work.md",
+          "parentId": null,
+          "state": "present",
+          "rawRecordSha256": "<sha:127>"
+        },
+        {
+          "id": "guided-checkpoint-<sha:17>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:17>.md",
+          "parentId": "guided-work-<sha:1>",
+          "state": "absent"
+        },
+        {
+          "id": "guided-review-<sha:6>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/guided-review-<sha:6>.md",
+          "parentId": "guided-work-<sha:1>",
+          "state": "absent"
+        },
+        {
+          "id": "guided-checkpoint-<sha:5>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:5>.md",
+          "parentId": "guided-work-<sha:1>",
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:89>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:89>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:90>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:90>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:91>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:91>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:92>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:92>.md",
+          "parentId": null,
+          "state": "absent"
+        }
+      ]
+    }
+  ]
+}
+--- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:128>.json
+{
+  "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
+  "ledgerProjectId": "demo",
+  "ledgerRoot": "$DATA/project-ledger/projects/demo",
+  "operationIdentity": {
+    "kind": "mutation_call",
+    "id": "call-review-2"
+  },
+  "occurrenceId": "<sha:128>",
+  "status": "pending",
+  "attempts": [
+    {
+      "number": 1,
+      "status": "admitted",
+      "requestSha256": "<sha:37>",
+      "publicationId": "<sha:80>",
+      "expectedBase": {
+        "schema": "butler.btcc-project-ledger-head.v1",
+        "projectRoot": "$DATA/project-ledger/projects/demo",
+        "sourceSha256": "<sha:81>",
+        "sourceFileCount": 2,
+        "storageSha256": "<sha:81>",
+        "storageEntryCount": 2,
+        "recordPaths": [
+          "project.json",
+          "references/btcc-project-work-proof-<sha:82>.md",
+          "references/btcc-project-work-proof-<sha:83>.md",
+          "references/btcc-project-work-proof-<sha:84>.md",
+          "references/btcc-project-work-proof-<sha:85>.md",
+          "references/guided-checkpoint-<sha:18>.md",
+          "references/guided-checkpoint-<sha:13>.md",
+          "references/guided-review-<sha:14>.md",
+          "work/guided-work-<sha:10>/work.md"
+        ]
+      },
+      "targetPreconditions": [
+        {
+          "id": "guided-work-<sha:10>",
+          "kind": "work",
+          "path": "project-ledger/projects/demo/work/guided-work-<sha:10>/work.md",
+          "parentId": null,
+          "state": "present",
+          "rawRecordSha256": "<sha:129>"
+        },
+        {
+          "id": "guided-checkpoint-<sha:18>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:18>.md",
+          "parentId": "guided-work-<sha:10>",
+          "state": "absent"
+        },
+        {
+          "id": "guided-review-<sha:14>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/guided-review-<sha:14>.md",
+          "parentId": "guided-work-<sha:10>",
+          "state": "absent"
+        },
+        {
+          "id": "guided-checkpoint-<sha:13>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/guided-checkpoint-<sha:13>.md",
+          "parentId": "guided-work-<sha:10>",
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:82>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:82>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:84>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:84>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:83>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:83>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:85>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:85>.md",
+          "parentId": null,
+          "state": "absent"
+        }
+      ]
+    }
+  ]
+}
+--- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:130>.json
+{
+  "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
+  "ledgerProjectId": "demo",
+  "ledgerRoot": "$DATA/project-ledger/projects/demo",
+  "operationIdentity": {
+    "kind": "mutation_call",
+    "id": "call-start"
+  },
+  "occurrenceId": "<sha:130>",
+  "status": "pending",
+  "attempts": [
+    {
+      "number": 1,
+      "status": "admitted",
+      "requestSha256": "<sha:34>",
+      "publicationId": "<sha:58>",
+      "expectedBase": {
+        "schema": "butler.btcc-project-ledger-head.v1",
+        "projectRoot": "$DATA/project-ledger/projects/demo",
+        "sourceSha256": "<sha:59>",
+        "sourceFileCount": 1,
+        "storageSha256": "<sha:59>",
+        "storageEntryCount": 1,
+        "recordPaths": [
+          "project.json",
+          "references/btcc-project-work-proof-<sha:60>.md",
+          "references/btcc-project-work-proof-<sha:61>.md",
+          "references/guided-binding-<sha:16>.md",
+          "work/guided-work-<sha:1>/work.md"
+        ]
+      },
+      "targetPreconditions": [
+        {
+          "id": "guided-work-<sha:1>",
+          "kind": "work",
+          "path": "project-ledger/projects/demo/work/guided-work-<sha:1>/work.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "guided-binding-<sha:16>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/guided-binding-<sha:16>.md",
+          "parentId": "guided-work-<sha:1>",
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:61>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:61>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:60>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:60>.md",
+          "parentId": null,
+          "state": "absent"
+        }
+      ]
+    }
+  ]
+}
+--- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:131>.json
+{
+  "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
+  "ledgerProjectId": "demo",
+  "ledgerRoot": "$DATA/project-ledger/projects/demo",
+  "operationIdentity": {
+    "kind": "mutation_call",
+    "id": "call-start-2"
+  },
+  "occurrenceId": "<sha:131>",
+  "status": "pending",
+  "attempts": [
+    {
+      "number": 1,
+      "status": "admitted",
+      "requestSha256": "<sha:32>",
+      "publicationId": "<sha:94>",
+      "expectedBase": {
+        "schema": "butler.btcc-project-ledger-head.v1",
+        "projectRoot": "$DATA/project-ledger/projects/demo",
+        "sourceSha256": "<sha:95>",
+        "sourceFileCount": 2,
+        "storageSha256": "<sha:95>",
+        "storageEntryCount": 2,
+        "recordPaths": [
+          "project.json",
+          "references/btcc-project-work-proof-<sha:96>.md",
+          "references/btcc-project-work-proof-<sha:97>.md",
+          "references/btcc-project-work-proof-<sha:98>.md",
+          "references/guided-binding-<sha:15>.md",
+          "work/guided-work-<sha:10>/work.md",
+          "work/guided-work-<sha:1>/work.md"
+        ]
+      },
+      "targetPreconditions": [
+        {
+          "id": "guided-work-<sha:1>",
+          "kind": "work",
+          "path": "project-ledger/projects/demo/work/guided-work-<sha:1>/work.md",
+          "parentId": null,
+          "state": "present",
+          "rawRecordSha256": "<sha:132>"
+        },
+        {
+          "id": "guided-work-<sha:10>",
+          "kind": "work",
+          "path": "project-ledger/projects/demo/work/guided-work-<sha:10>/work.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "guided-binding-<sha:15>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/guided-binding-<sha:15>.md",
+          "parentId": "guided-work-<sha:10>",
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:97>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:97>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:98>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:98>.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "btcc-project-work-proof-<sha:96>",
+          "kind": "reference",
+          "path": "project-ledger/projects/demo/references/btcc-project-work-proof-<sha:96>.md",
+          "parentId": null,
+          "state": "absent"
+        }
+      ]
+    }
+  ]
+}
+--- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:58>.json
+{
+  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
+  "occurrenceId": "<sha:130>",
+  "attemptNumber": 1,
+  "requestSha256": "<sha:34>",
+  "publicationId": "<sha:58>",
+  "status": "observed",
+  "baseHead": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:59>",
+    "sourceFileCount": 1,
+    "storageSha256": "<sha:59>",
+    "storageEntryCount": 1,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:60>.md",
+      "references/btcc-project-work-proof-<sha:61>.md",
+      "references/guided-binding-<sha:16>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  },
+  "candidateHead": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:62>",
+    "sourceFileCount": 3,
+    "storageSha256": "<sha:62>",
+    "storageEntryCount": 3,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:60>.md",
+      "references/btcc-project-work-proof-<sha:61>.md",
+      "references/guided-binding-<sha:16>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:63>.json
+{
+  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
+  "occurrenceId": "<sha:117>",
+  "attemptNumber": 1,
+  "requestSha256": "<sha:49>",
+  "publicationId": "<sha:63>",
+  "status": "observed",
+  "baseHead": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:64>",
+    "sourceFileCount": 1,
+    "storageSha256": "<sha:64>",
+    "storageEntryCount": 1,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:65>.md",
+      "references/guided-diagnostic-<sha:20>.md"
+    ]
+  },
+  "candidateHead": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:66>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:66>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:65>.md",
+      "references/guided-diagnostic-<sha:20>.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:67>.json
+{
+  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
+  "occurrenceId": "<sha:124>",
+  "attemptNumber": 1,
+  "requestSha256": "<sha:28>",
+  "publicationId": "<sha:67>",
+  "status": "observed",
+  "baseHead": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:68>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:68>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "plans/guided-plan-<sha:11>.md",
+      "project.json",
+      "references/btcc-project-work-proof-<sha:69>.md",
+      "references/btcc-project-work-proof-<sha:70>.md",
+      "references/btcc-project-work-proof-<sha:71>.md",
+      "references/guided-checkpoint-<sha:12>.md",
+      "work/guided-work-<sha:10>/work.md"
+    ]
+  },
+  "candidateHead": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:72>",
+    "sourceFileCount": 4,
+    "storageSha256": "<sha:72>",
+    "storageEntryCount": 4,
+    "recordPaths": [
+      "plans/guided-plan-<sha:11>.md",
+      "project.json",
+      "references/btcc-project-work-proof-<sha:69>.md",
+      "references/btcc-project-work-proof-<sha:70>.md",
+      "references/btcc-project-work-proof-<sha:71>.md",
+      "references/guided-checkpoint-<sha:12>.md",
+      "work/guided-work-<sha:10>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:73>.json
+{
+  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
+  "occurrenceId": "<sha:122>",
+  "attemptNumber": 1,
+  "requestSha256": "<sha:30>",
+  "publicationId": "<sha:73>",
+  "status": "observed",
+  "baseHead": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:74>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:74>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "plans/guided-plan-<sha:2>.md",
+      "project.json",
+      "references/btcc-project-work-proof-<sha:75>.md",
+      "references/btcc-project-work-proof-<sha:76>.md",
+      "references/btcc-project-work-proof-<sha:77>.md",
+      "references/btcc-project-work-proof-<sha:78>.md",
+      "references/guided-checkpoint-<sha:3>.md",
+      "references/guided-checkpoint-<sha:19>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  },
+  "candidateHead": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:79>",
+    "sourceFileCount": 5,
+    "storageSha256": "<sha:79>",
+    "storageEntryCount": 5,
+    "recordPaths": [
+      "plans/guided-plan-<sha:2>.md",
+      "project.json",
+      "references/btcc-project-work-proof-<sha:75>.md",
+      "references/btcc-project-work-proof-<sha:76>.md",
+      "references/btcc-project-work-proof-<sha:77>.md",
+      "references/btcc-project-work-proof-<sha:78>.md",
+      "references/guided-checkpoint-<sha:3>.md",
+      "references/guided-checkpoint-<sha:19>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:80>.json
+{
+  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
+  "occurrenceId": "<sha:128>",
+  "attemptNumber": 1,
+  "requestSha256": "<sha:37>",
+  "publicationId": "<sha:80>",
+  "status": "observed",
+  "baseHead": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:81>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:81>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:82>.md",
+      "references/btcc-project-work-proof-<sha:83>.md",
+      "references/btcc-project-work-proof-<sha:84>.md",
+      "references/btcc-project-work-proof-<sha:85>.md",
+      "references/guided-checkpoint-<sha:18>.md",
+      "references/guided-checkpoint-<sha:13>.md",
+      "references/guided-review-<sha:14>.md",
+      "work/guided-work-<sha:10>/work.md"
+    ]
+  },
+  "candidateHead": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:86>",
+    "sourceFileCount": 5,
+    "storageSha256": "<sha:86>",
+    "storageEntryCount": 5,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:82>.md",
+      "references/btcc-project-work-proof-<sha:83>.md",
+      "references/btcc-project-work-proof-<sha:84>.md",
+      "references/btcc-project-work-proof-<sha:85>.md",
+      "references/guided-checkpoint-<sha:18>.md",
+      "references/guided-checkpoint-<sha:13>.md",
+      "references/guided-review-<sha:14>.md",
+      "work/guided-work-<sha:10>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:87>.json
+{
+  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
+  "occurrenceId": "<sha:126>",
+  "attemptNumber": 1,
+  "requestSha256": "<sha:39>",
+  "publicationId": "<sha:87>",
+  "status": "observed",
+  "baseHead": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:88>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:88>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:89>.md",
+      "references/btcc-project-work-proof-<sha:90>.md",
+      "references/btcc-project-work-proof-<sha:91>.md",
+      "references/btcc-project-work-proof-<sha:92>.md",
+      "references/guided-checkpoint-<sha:5>.md",
+      "references/guided-checkpoint-<sha:17>.md",
+      "references/guided-review-<sha:6>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  },
+  "candidateHead": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:93>",
+    "sourceFileCount": 5,
+    "storageSha256": "<sha:93>",
+    "storageEntryCount": 5,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:89>.md",
+      "references/btcc-project-work-proof-<sha:90>.md",
+      "references/btcc-project-work-proof-<sha:91>.md",
+      "references/btcc-project-work-proof-<sha:92>.md",
+      "references/guided-checkpoint-<sha:5>.md",
+      "references/guided-checkpoint-<sha:17>.md",
+      "references/guided-review-<sha:6>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:94>.json
+{
+  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
+  "occurrenceId": "<sha:131>",
+  "attemptNumber": 1,
+  "requestSha256": "<sha:32>",
+  "publicationId": "<sha:94>",
+  "status": "observed",
+  "baseHead": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:95>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:95>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:96>.md",
+      "references/btcc-project-work-proof-<sha:97>.md",
+      "references/btcc-project-work-proof-<sha:98>.md",
+      "references/guided-binding-<sha:15>.md",
+      "work/guided-work-<sha:10>/work.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  },
+  "candidateHead": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:99>",
+    "sourceFileCount": 4,
+    "storageSha256": "<sha:99>",
+    "storageEntryCount": 4,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:96>.md",
+      "references/btcc-project-work-proof-<sha:97>.md",
+      "references/btcc-project-work-proof-<sha:98>.md",
+      "references/guided-binding-<sha:15>.md",
+      "work/guided-work-<sha:10>/work.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:100>.json
+{
+  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
+  "occurrenceId": "<sha:120>",
+  "attemptNumber": 1,
+  "requestSha256": "<sha:47>",
+  "publicationId": "<sha:100>",
+  "status": "observed",
+  "baseHead": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:101>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:101>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:102>.md",
+      "references/btcc-project-work-proof-<sha:103>.md",
+      "references/btcc-project-work-proof-<sha:104>.md",
+      "references/guided-checkpoint-<sha:7>.md",
+      "references/guided-disposition-<sha:8>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  },
+  "candidateHead": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:105>",
+    "sourceFileCount": 4,
+    "storageSha256": "<sha:105>",
+    "storageEntryCount": 4,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:102>.md",
+      "references/btcc-project-work-proof-<sha:103>.md",
+      "references/btcc-project-work-proof-<sha:104>.md",
+      "references/guided-checkpoint-<sha:7>.md",
+      "references/guided-disposition-<sha:8>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:106>.json
+{
+  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
+  "occurrenceId": "<sha:118>",
+  "attemptNumber": 1,
+  "requestSha256": "<sha:44>",
+  "publicationId": "<sha:106>",
+  "status": "observed",
+  "baseHead": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:107>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:107>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:108>.md",
+      "references/btcc-project-work-proof-<sha:109>.md",
+      "references/guided-checkpoint-<sha:4>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  },
+  "candidateHead": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:110>",
+    "sourceFileCount": 3,
+    "storageSha256": "<sha:110>",
+    "storageEntryCount": 3,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:108>.md",
+      "references/btcc-project-work-proof-<sha:109>.md",
+      "references/guided-checkpoint-<sha:4>.md",
+      "work/guided-work-<sha:1>/work.md"
+    ]
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:111>.json
+{
+  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
+  "occurrenceId": "<sha:115>",
+  "attemptNumber": 1,
+  "requestSha256": "<sha:57>",
+  "publicationId": "<sha:111>",
+  "status": "observed",
+  "baseHead": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:112>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:112>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:113>.md",
+      "work/guided-work-<sha:10>/work.md"
+    ]
+  },
+  "candidateHead": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:114>",
+    "sourceFileCount": 2,
+    "storageSha256": "<sha:114>",
+    "storageEntryCount": 2,
+    "recordPaths": [
+      "project.json",
+      "references/btcc-project-work-proof-<sha:113>.md",
+      "work/guided-work-<sha:10>/work.md"
+    ]
+  }
+}

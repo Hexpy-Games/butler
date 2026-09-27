@@ -62,7 +62,7 @@ export function SessionFolderMenu({
   return (
     <DropdownMenuSub onOpenChange={(open) => void loadTargets(open)}>
       <DropdownMenuSubTrigger disabled={disabled}>
-        <FolderOpen size={14} /> {appCopy.sessionActions.openSessionFolder}
+        <FolderOpen size="sm" /> {appCopy.sessionActions.openSessionFolder}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
         {loading ? (
@@ -75,7 +75,7 @@ export function SessionFolderMenu({
               key={target}
               onSelect={() => void launch(target)}
             >
-              {target === "vscode" ? <Monitor size={14} /> : <Terminal size={14} />}
+              {target === "vscode" ? <Monitor size="sm" /> : <Terminal size="sm" />}
               {target === "vscode"
                 ? appCopy.sessionActions.vsCode
                 : appCopy.sessionActions.terminal}

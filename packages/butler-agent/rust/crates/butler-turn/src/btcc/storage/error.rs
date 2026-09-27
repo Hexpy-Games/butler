@@ -323,6 +323,7 @@ impl StorageError {
         }
     }
 
+    /// The wire code.
     pub fn code(&self) -> &'static str {
         match self {
             Self::Sqlite { .. } => StorageCode::SqliteError.as_str(),
