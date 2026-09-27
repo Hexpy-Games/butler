@@ -14,6 +14,8 @@ use super::*;
 use crate::coordination::{CognitionCoordinationHost, CognitionProcessStatus, CoordinationResult};
 use butler_models::models::{ProviderPromptFuture, ProviderPromptResult};
 
+mod format_pin;
+
 struct Facts;
 impl CognitionCoordinationHost for Facts {
     fn process_id(&self) -> u32 {
