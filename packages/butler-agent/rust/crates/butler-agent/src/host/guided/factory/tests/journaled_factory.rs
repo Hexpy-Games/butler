@@ -50,11 +50,14 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
                 expected_revision: turn.revision,
                 execution_fence: turn.execution_fence,
                 claim_id: claim.claim_id.clone(),
-                route: json!({"schemaVersion":"butler.model-route.v1",
+                route: Some(
+                    serde_json::from_value(json!({"schemaVersion":"butler.model-route.v1",
             "routeDigest":"a".repeat(64),
             "candidates":[{"modelRef":"openai/gpt-5.5","reasoningEffort":"medium"}],
             "retryCeiling":1,"catalogGeneration":"loopback","activeCursor":0,
-            "consumedAttempts":[]}),
+            "consumedAttempts":[]}))
+                    .unwrap(),
+                ),
             },
             event: butler_turn::btcc::ModelRouteEvent {
                 kind: butler_turn::btcc::ModelRouteEventKind::FallbackSelected,

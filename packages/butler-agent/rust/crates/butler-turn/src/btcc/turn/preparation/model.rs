@@ -6,8 +6,8 @@ use super::{AdmissionModelCatalogSnapshot, AdmissionModelMetadata, js_truthy, ob
 use crate::btcc::BtccCode;
 use crate::btcc::identity::digest;
 use crate::btcc::{
-    AdmittedModelSelection, AdmittedRoute, BtccError, CommandModelSelection, ReasoningEffort,
-    RouteCandidate, RouteIdentity, VerifiedExecutionControls,
+    AdmittedModelSelection, BtccError, CommandModelSelection, ReasoningEffort, RouteCandidate,
+    RouteIdentity, RouteState, VerifiedExecutionControls,
 };
 use crate::workspace::StoredSessionBinding;
 use butler_core::json::stringify;
@@ -134,7 +134,7 @@ fn build_route(
     reasoning: &ReasoningEffort,
     controls: Option<&VerifiedExecutionControls>,
     catalog: &AdmissionModelCatalogSnapshot,
-) -> Result<AdmittedRoute, BtccError> {
+) -> Result<RouteState, BtccError> {
     let mut identities = HashSet::new();
     let mut candidates = Vec::new();
     for reference in refs
@@ -190,7 +190,7 @@ fn build_route(
     };
     let identity = serde_json::to_value(identity).map_err(json_error)?;
     let route_digest = digest(&stringify(&identity).map_err(json_error)?);
-    Ok(AdmittedRoute {
+    Ok(RouteState {
         schema_version: ROUTE_SCHEMA.into(),
         candidates,
         retry_ceiling,

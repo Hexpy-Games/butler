@@ -36,6 +36,14 @@ pub(super) fn stringify(value: &Value) -> StorageResult<String> {
     })
 }
 
+/// [`stringify`] of a typed record.
+pub(super) fn stringify_record<T: serde::Serialize>(record: &T) -> StorageResult<String> {
+    let value = serde_json::to_value(record).map_err(|error| {
+        StorageError::new(StorageCode::JsonStringify, error.to_string()).with_source(error)
+    })?;
+    stringify(&value)
+}
+
 pub(super) fn state_text(state: TurnSemanticState) -> &'static str {
     match state {
         TurnSemanticState::Admitted => "admitted",

@@ -93,21 +93,7 @@ pub struct CommandModelSelection {
     #[serde(flatten)]
     pub selection: AdmittedModelSelection,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub model_route: Option<AdmittedRoute>,
-}
-
-/// The model route as admitted. Field order is the admitted form; the first
-/// four fields (see [`RouteIdentity`]) are hashed into `route_digest`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AdmittedRoute {
-    pub schema_version: String,
-    pub candidates: Vec<RouteCandidate>,
-    pub retry_ceiling: u32,
-    pub catalog_generation: String,
-    pub route_digest: String,
-    pub active_cursor: u32,
-    pub consumed_attempts: Vec<String>,
+    pub model_route: Option<RouteState>,
 }
 
 /// The route fields `route_digest` is computed over.
@@ -120,15 +106,17 @@ pub struct RouteIdentity<'a> {
     pub catalog_generation: &'a str,
 }
 
-/// The model route state as the route runtime rewrites it.
+/// The model route state (`btcc_turns.route_state_json`), as admitted and as
+/// the route runtime advances it. Field order is the admitted form; the first
+/// four fields (see [`RouteIdentity`]) are hashed into `route_digest`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RouteState {
     pub schema_version: String,
-    pub route_digest: String,
     pub candidates: Vec<RouteCandidate>,
     pub retry_ceiling: u32,
     pub catalog_generation: String,
+    pub route_digest: String,
     pub active_cursor: u32,
     #[serde(default)]
     pub consumed_attempts: Vec<String>,

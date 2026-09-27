@@ -2,8 +2,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::btcc::{
-    AcceptedWorkResult, AlreadyDeliveredOutcome, ExecutionOutcome, FinalArtifact, ModelIdentity,
-    ProgressDestination, RuntimeFailure, TurnRequest, WorkStatus,
+    AcceptedWorkResult, AlreadyDeliveredOutcome, AuthorityLoopContinuation, ExecutionOutcome,
+    FinalArtifact, ModelIdentity, ProgressDestination, RouteState, RuntimeFailure, TurnRequest,
+    WorkStatus,
 };
 
 /// The durable lifecycle state of a turn.
@@ -41,7 +42,7 @@ pub struct TurnRecord {
     pub wake_identity: Option<WakeIdentity>,
     pub model_selection: Value,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub model_route: Option<Value>,
+    pub model_route: Option<RouteState>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub continuation_budget: Option<Value>,
     pub context: Value,
@@ -51,7 +52,7 @@ pub struct TurnRecord {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suspension: Option<SuspensionReason>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub authority_continuation: Option<Value>,
+    pub authority_continuation: Option<Box<AuthorityLoopContinuation>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub checkpoint: Option<TurnCheckpoint>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -180,11 +181,12 @@ pub struct ModelRouteWrite {
     pub expected_revision: u64,
     pub execution_fence: u64,
     pub claim_id: String,
-    pub route: Value,
+    /// The route state to persist with the write, if any.
+    pub route: Option<RouteState>,
 }
 
 /// A model-route event recorded under the turn's claim; `binding.route`
-/// replaces the persisted route state when it is not `null`.
+/// replaces the persisted route state when present.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModelRouteEventWrite {
     pub binding: ModelRouteWrite,
@@ -345,7 +347,7 @@ pub struct AgentLoopResult {
     pub content: String,
     pub terminal_outcome: Option<TerminalOutcome>,
     pub suspension: Option<SuspensionReason>,
-    pub authority_continuation: Option<Value>,
+    pub authority_continuation: Option<Box<AuthorityLoopContinuation>>,
     pub work_status: Option<WorkStatus>,
     pub accepted_work_result: Option<AcceptedWorkResult>,
     pub runtime_failure: Option<RuntimeFailure>,
@@ -375,7 +377,7 @@ pub enum ExecutionRoute {
 pub enum TurnTransition {
     Suspend {
         reason: SuspensionReason,
-        authority_continuation: Option<Value>,
+        authority_continuation: Option<Box<AuthorityLoopContinuation>>,
     },
     AcceptFinal {
         route: ExecutionRoute,

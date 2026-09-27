@@ -4,8 +4,8 @@ use serde_json::Value;
 
 use crate::btcc::{
     AttemptHistory, BtccError, ModelRoundAcceptanceWrite, ModelRoundKey, ModelRouteEvent,
-    ModelRouteEventWrite, ModelRouteWrite, RouteEventStatus, StateExecutionClaim, TurnRecord,
-    TurnStore,
+    ModelRouteEventWrite, ModelRouteWrite, RouteEventStatus, RouteState, StateExecutionClaim,
+    TurnRecord, TurnStore,
 };
 
 use super::failure;
@@ -24,7 +24,7 @@ impl RouteHooks {
         store: std::sync::Arc<dyn TurnStore>,
         turn: &TurnRecord,
         claim: &StateExecutionClaim,
-        route: Value,
+        route: RouteState,
         route_digest: String,
     ) -> Self {
         Self {
@@ -34,7 +34,7 @@ impl RouteHooks {
                 expected_revision: turn.revision,
                 execution_fence: turn.execution_fence,
                 claim_id: claim.claim_id.clone(),
-                route,
+                route: Some(route),
             },
             route_digest,
             checkpoint_id: claim.checkpoint_id.clone(),
@@ -45,10 +45,10 @@ impl RouteHooks {
     pub(super) async fn event(
         &self,
         event: ModelRouteEvent,
-        route: Option<Value>,
+        route: Option<RouteState>,
     ) -> Result<RouteEventStatus, crate::btcc::agent_loop::ModelRoundError> {
         let mut binding = self.binding.clone();
-        if let Some(route) = route {
+        if route.is_some() {
             binding.route = route;
         }
         self.retry("attempt_event_write", || {

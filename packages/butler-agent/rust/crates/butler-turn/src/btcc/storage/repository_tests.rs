@@ -149,13 +149,18 @@ async fn model_journal_abandons_restarted_attempt_and_budget_terminal_commits() 
         .acquire_state_claim(&turn)
         .await
         .expect("claim model turn");
-    let route = json!({"routeDigest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","activeCursor":0,"candidates":[{"modelRef":"openai/gpt"}]});
+    let route = serde_json::from_value(json!({"schemaVersion":"butler.model-route.v1",
+        "candidates":[{"modelRef":"openai/gpt","reasoningEffort":"medium"}],"retryCeiling":3,
+        "catalogGeneration":"test",
+        "routeDigest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "activeCursor":0}))
+    .unwrap();
     let binding = ModelRouteWrite {
         turn_id: turn.turn_id.clone(),
         expected_revision: turn.revision,
         execution_fence: turn.execution_fence,
         claim_id: claim.claim_id.clone(),
-        route,
+        route: Some(route),
     };
     let event = crate::btcc::ModelRouteEventWrite {
         binding: binding.clone(),

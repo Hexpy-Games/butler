@@ -2,8 +2,6 @@
 
 use std::sync::Arc;
 
-use serde_json::Value;
-
 use super::continuation_budget::{
     TurnContinuationBudgetEvent, TurnContinuationBudgetLimits, parse_turn_continuation_budget_state,
 };
@@ -72,7 +70,7 @@ impl GuidedContinuationBudgetFactory {
                 expected_revision: turn.revision,
                 execution_fence: turn.execution_fence,
                 claim_id: claim.claim_id.clone(),
-                route: Value::Null,
+                route: None,
             },
             store: store.clone(),
             clock: self.clock.clone(),

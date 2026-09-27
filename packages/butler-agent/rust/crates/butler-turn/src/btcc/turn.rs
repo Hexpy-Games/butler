@@ -25,8 +25,8 @@ pub use preparation::{
 };
 
 pub use command::{
-    AdmittedRoute, CommandMessage, CommandModelSelection, CommandTrigger, ResumeCommand,
-    RouteCandidate, RouteIdentity, RouteState, RunCommand, TurnCommand, WakeCommand,
+    CommandMessage, CommandModelSelection, CommandTrigger, ResumeCommand, RouteCandidate,
+    RouteIdentity, RouteState, RunCommand, TurnCommand, WakeCommand,
 };
 pub use contracts::{
     AgentLoopResult, AttemptFailure, AttemptHistory, ContentRef, ContinuationBudgetTransition,
