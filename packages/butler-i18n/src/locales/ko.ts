@@ -61,7 +61,7 @@ const firstRun = {
     safetyItems: [
       "파일 변경, 명령 실행, 외부 요청은 사용자의 지시 안에서만 진행됩니다.",
       "민감한 경로나 토큰이 포함된 요청은 실행 전에 한 번 더 확인하세요.",
-      "자동화 결과는 App 안의 기록과 진단 로그로 확인할 수 있습니다.",
+      "예약 작업 결과는 App 안의 기록과 진단 로그로 확인할 수 있습니다.",
     ],
     accept: "동의",
     installTitle: "Butler Agent를 준비합니다",
@@ -132,7 +132,7 @@ function koreanSkillFallbackSuggestions(
     {
       id: "useful-skill",
       title: "쓸모의 형태 정하기",
-      description: "작은 자동화로 남길지, 스킬로 굳힐지 기준을 세웁니다.",
+      description: "작은 예약 작업으로 남길지, 스킬로 굳힐지 기준을 세웁니다.",
       text: "유용한 스킬이 뭐가 있을까?",
     },
     {
@@ -751,7 +751,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     newChat: "새 대화",
     newSessionStarting: "새 세션 시작중...",
     search: "검색",
-    automations: "자동화",
+    automations: "예약 작업",
     projects: "프로젝트",
     chats: "대화",
     settings: "설정",
@@ -864,12 +864,12 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     readOnlyDesc: "파일 읽기만 가능",
   },
   automations: {
-    title: "자동화",
+    title: "예약 작업",
     scheduledCount: (count) => `예약된 프롬프트 ${count}개`,
-    empty: "아직 자동화가 없습니다",
-    new: "새 자동화",
+    empty: "아직 예약 작업이 없습니다",
+    new: "새 예약 작업",
     detailFallback: "상세",
-    backLabel: "자동화 목록으로 돌아가기",
+    backLabel: "예약 작업 목록으로 돌아가기",
     runNow: "지금 실행",
     resume: "재개",
     pause: "일시정지",
@@ -884,7 +884,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       runs: "실행 기록",
     },
     placeholders: {
-      title: "자동화 제목",
+      title: "예약 작업 제목",
       prompt: "프롬프트 내용",
     },
     runs: {
@@ -898,7 +898,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       notRun: "실행 전",
     },
     inspector: {
-      empty: "이 세션을 대상으로 하는 자동화가 없습니다",
+      empty: "이 세션을 대상으로 하는 예약 작업이 없습니다",
     },
   },
   artifacts: {
@@ -919,7 +919,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       activity: "활동",
       context: "맥락",
       artifacts: "아티팩트",
-      automations: "자동화",
+      automations: "예약 작업",
       workers: "Worker",
     },
     workers: {
@@ -1588,12 +1588,12 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
   },
   commandPalette: {
     label: "명령 팔레트",
-    placeholder: "대화, 프로젝트, 자동화, 설정 검색",
+    placeholder: "대화, 프로젝트, 예약 작업, 설정 검색",
     close: "명령 팔레트 닫기",
     loading: "검색 중입니다.",
     empty: "일치하는 항목이 없습니다. 다른 이름이나 제목으로 검색해 보세요.",
     failed: "검색하지 못했습니다. 연결을 확인하고 다시 시도해 주세요.",
-    kindLabels: { chat: "대화", project: "프로젝트", project_session: "프로젝트 대화", group: "스페이스", automation: "자동화", settings: "설정" },
+    kindLabels: { chat: "대화", project: "프로젝트", project_session: "프로젝트 대화", group: "스페이스", automation: "예약 작업", settings: "설정" },
     settingsSections: { general: "일반", appearance: "모양", "server-bridge": "서버", "models-access": "모델 및 접근 권한", "privacy-data": "개인정보 및 데이터", diagnostics: "진단", "system-events": "시스템 이벤트", archived: "아카이브" },
   },
   feedback: {

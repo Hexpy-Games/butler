@@ -123,7 +123,7 @@
 
 .scrollToBottomButton[data-unread-messages="true"] {
   border-color: color-mix(in srgb, var(--accent) 58%, var(--line));
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 @media (width <=720px) {
