@@ -1,6 +1,6 @@
 # Contributing to Butler
 
-This guide covers the repository layout, running Butler from source, the checks a change has to pass, and how releases are cut. To learn how to use Butler, read the [manual](https://hexpy-games.github.io/butler/docs/).
+This guide covers the repository layout, running Butler from source, the checks a change has to pass, and how releases are cut. To learn how to use Butler, read the [manual](https://butler.hexpy.games/help/).
 
 ## Repository layout
 
@@ -11,7 +11,7 @@ This guide covers the repository layout, running Butler from source, the checks 
 | `packages/butler-i18n` | English and Korean UI copy. |
 | `packages/butler-progress-projection` | The event-to-progress projection behind live progress rows. |
 | `packages/project-ledger` | The Project Ledger CLI (`pl`), record templates and skill. |
-| `packages/butler-site` | The manual, built with Astro and deployed to GitHub Pages. |
+| `packages/butler-site` | The public site, [butler.hexpy.games](https://butler.hexpy.games): the manual (Astro) at `/help/` and the DS Viewer at `/ds/`, deployed to GitHub Pages. |
 | `deploy/app` | The app release gate, packager and smoke check. |
 | `tests` | Unit tests (`unit`), smoke scripts (`smoke`), and shared fixtures and helpers. |
 | `tools` | Repository-wide tools: the validation runner and the git hook setup. |
@@ -84,6 +84,7 @@ bun run check
 | `bun run check:full` | `check` plus the packaging tests |
 | `bun run format` | Fixes what ESLint and Prettier can fix |
 | `bun run site:check` | The manual's style and prose lints, tests, token sync check and `astro check` |
+| `bun run site:build` | The whole site in `packages/butler-site/dist`: the manual, the DS Viewer at `/ds/`, and a check of the output |
 
 The pre-commit hook runs `lint` and `typecheck`. Scripts in `tests/smoke` drive the built UI, for example `bun run app:layout:smoke` and `bun run app:design-system:smoke`.
 
@@ -117,14 +118,14 @@ The end-to-end scenarios run the real binary against recorded provider traffic: 
 App UI is built only from the Butler design system (`@/butler-ds`). Before you change UI:
 
 - Read the [design-system skill](packages/butler-app/client/ui/src/libs/design-system/skills/butler-design-system/SKILL.md).
-- Browse the DS Viewer: start the UI dev server (`npm --prefix packages/butler-app/client/ui run dev`) and open `http://127.0.0.1:5173/?visual=design-system`.
+- Browse the DS Viewer at [butler.hexpy.games/ds](https://butler.hexpy.games/ds/), or locally: start the UI dev server (`npm --prefix packages/butler-app/client/ui run dev`) and open `http://127.0.0.1:5173/?visual=design-system`.
 - Render DS Viewer pages to `.tmp/ds-viewer` with `bun run render <Component> [--theme=dark] [--mobile]`.
 
 `lint:ds` and `lint:motion` are ratchets with per-file baselines that only shrink. After you remove violations, record the lower counts with `bun run lint:ds:baseline` or `bun run lint:motion:baseline`. Never raise a baseline.
 
 ## Manual
 
-The manual lives in `packages/butler-site`, with the Korean pages in `src/content/docs/ko`. `bun run site:dev` serves it locally. `.github/workflows/site.yml` deploys `main` to GitHub Pages. When a change alters what users see or do, update the matching page.
+The manual lives in `packages/butler-site`, with the Korean pages in `src/content/docs/ko`. `bun run site:dev` serves it locally. `.github/workflows/site.yml` deploys `main` to [butler.hexpy.games/help](https://butler.hexpy.games/help/). When a change alters what users see or do, update the matching page.
 
 ## Project records
 
@@ -154,7 +155,7 @@ Open an issue in [GitHub Issues](https://github.com/Hexpy-Games/butler/issues) a
 
 - the Butler version, your OS and your chip
 - what you did, what you expected and what happened
-- for a failed first-run setup, the output of **Copy diagnostics**, which hides tokens, secrets and user paths (see [Troubleshooting](https://hexpy-games.github.io/butler/docs/troubleshooting/))
+- for a failed first-run setup, the output of **Copy diagnostics**, which hides tokens, secrets and user paths (see [Troubleshooting](https://butler.hexpy.games/help/troubleshooting/))
 - for the standalone agent, the output of `butler doctor`
 
 Leave API keys, personal data and private conversation content out of issues.
