@@ -1,0 +1,6 @@
+transcript_action_invalid
+transcript_append_failed
+transcript_delivery_invalid
+transcript_event_json_invalid
+transcript_join_failed
+transcript_writer_closed

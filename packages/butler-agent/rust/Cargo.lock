@@ -693,43 +693,217 @@ checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 name = "butler-agent"
 version = "0.0.21"
 dependencies = [
- "arrow-array",
- "arrow-schema",
- "axum",
  "base64 0.22.1",
+ "butler-core",
+ "butler-gateway",
+ "butler-ledger",
+ "butler-memory",
+ "butler-models",
+ "butler-runtime",
+ "butler-test-support",
+ "butler-turn",
  "bytes",
  "chrono",
- "dom_smoothie",
+ "futures-util",
+ "image",
+ "indexmap 2.14.2",
+ "libproc",
+ "nix",
+ "parking_lot",
+ "regex",
+ "reqwest 0.12.28",
+ "rmcp",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha1",
+ "sha2 0.10.9",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tz-rs",
+ "unicode-normalization",
+ "unicode-segmentation",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "butler-core"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "butler-test-support",
+ "chrono",
+ "icu_collator",
+ "icu_locid",
+ "icu_provider 1.4.0",
+ "regex",
+ "ryu-js",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "unicode-normalization",
+ "unicode-segmentation",
+ "uuid",
+]
+
+[[package]]
+name = "butler-gateway"
+version = "0.0.0"
+dependencies = [
+ "axum",
+ "base64 0.22.1",
+ "butler-core",
+ "butler-memory",
+ "butler-models",
+ "butler-runtime",
+ "butler-test-support",
+ "butler-turn",
+ "bytes",
+ "chrono",
  "futures-core",
  "futures-util",
  "http",
  "http-body-util",
- "icu_collator",
- "icu_locid",
- "icu_provider 1.4.0",
- "image",
+ "indexmap 2.14.2",
+ "nix",
+ "notify",
+ "parking_lot",
+ "regex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "subtle",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tz-rs",
+ "unicode-normalization",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "butler-ledger"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "butler-core",
+ "butler-test-support",
+ "butler-turn",
+ "chrono",
+ "nix",
+ "parking_lot",
+ "regex",
+ "rusqlite",
+ "rustix 1.1.5",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "unicode-normalization",
+ "uuid",
+]
+
+[[package]]
+name = "butler-memory"
+version = "0.0.0"
+dependencies = [
+ "arrow-array",
+ "arrow-schema",
+ "base64 0.22.1",
+ "butler-core",
+ "butler-models",
+ "butler-runtime",
+ "butler-test-support",
+ "butler-turn",
+ "chrono",
+ "futures-util",
  "indexmap 2.14.2",
  "lance",
  "lancedb",
- "libproc",
+ "nix",
+ "ort",
+ "parking_lot",
+ "regex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror",
+ "tokenizers",
+ "tokio",
+ "tokio-util",
+ "unicode-normalization",
+ "unicode-segmentation",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "butler-models"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "butler-core",
+ "butler-test-support",
+ "butler-turn",
+ "bytes",
+ "chrono",
+ "futures-util",
+ "http",
+ "parking_lot",
+ "regex",
+ "reqwest 0.12.28",
+ "rmcp",
+ "ryu-js",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror",
+ "tiktoken-rs",
+ "tokio",
+ "tokio-util",
+ "url",
+ "uuid",
+ "webp",
+]
+
+[[package]]
+name = "butler-runtime"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "butler-core",
+ "butler-models",
+ "butler-runtime",
+ "butler-test-support",
+ "butler-turn",
+ "bytes",
+ "chrono",
+ "dom_smoothie",
+ "futures-util",
+ "http",
+ "image",
+ "indexmap 2.14.2",
  "lopdf",
  "nix",
- "notify",
- "ort",
+ "parking_lot",
  "regex",
  "regress",
  "reqwest 0.12.28",
- "rmcp",
  "rusqlite",
  "rustix 1.1.5",
  "ryu-js",
  "serde",
  "serde_json",
- "sha1",
  "sha2 0.10.9",
- "subtle",
- "tiktoken-rs",
- "tokenizers",
+ "thiserror",
  "tokio",
  "tokio-util",
  "tz-rs",
@@ -747,6 +921,39 @@ version = "0.0.0"
 dependencies = [
  "proc-macro2",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "butler-test-support"
+version = "0.0.0"
+dependencies = [
+ "tokio",
+]
+
+[[package]]
+name = "butler-turn"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "butler-core",
+ "butler-test-support",
+ "chrono",
+ "futures-util",
+ "indexmap 2.14.2",
+ "libproc",
+ "nix",
+ "parking_lot",
+ "regex",
+ "regress",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "unicode-normalization",
+ "uuid",
 ]
 
 [[package]]

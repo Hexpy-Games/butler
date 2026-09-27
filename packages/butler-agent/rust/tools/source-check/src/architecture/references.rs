@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use proc_macro2::{TokenStream, TokenTree};
 use syn::visit::{self, Visit};
 use syn::{Item, UseTree};
@@ -6,14 +8,17 @@ use super::modules::{Module, item_attributes, test_only};
 
 pub(super) struct References<'a> {
     module: &'a Module,
+    /// Workspace crate identifiers; their paths name domains like `crate::` does.
+    crates: &'a BTreeSet<String>,
     pub(super) paths: Vec<Vec<String>>,
     pub(super) errors: Vec<String>,
 }
 
 impl<'a> References<'a> {
-    pub(super) fn collect(module: &'a Module) -> Self {
+    pub(super) fn collect(module: &'a Module, crates: &'a BTreeSet<String>) -> Self {
         let mut visitor = Self {
             module,
+            crates,
             paths: Vec::new(),
             errors: Vec::new(),
         };
@@ -26,7 +31,7 @@ impl<'a> References<'a> {
         visitor
     }
 
-    fn path(&mut self, parts: Vec<String>) {
+    fn path(&mut self, parts: &[String]) {
         let Some(first) = parts.first().map(String::as_str) else {
             return;
         };
@@ -34,6 +39,7 @@ impl<'a> References<'a> {
             "crate" => (Vec::new(), 1),
             "self" => (self.module.path.clone(), 1),
             "super" => (self.module.path.clone(), 0),
+            name if self.crates.contains(name) => (Vec::new(), 1),
             _ => return,
         };
         while parts.get(cursor).is_some_and(|part| part == "super") {
@@ -66,14 +72,14 @@ impl<'a> References<'a> {
             UseTree::Name(name) => {
                 let mut parts = prefix.to_vec();
                 parts.push(name.ident.to_string());
-                self.path(parts);
+                self.path(&parts);
             }
             UseTree::Rename(name) => {
                 let mut parts = prefix.to_vec();
                 parts.push(name.ident.to_string());
-                self.path(parts);
+                self.path(&parts);
             }
-            UseTree::Glob(_) => self.path(prefix.to_vec()),
+            UseTree::Glob(_) => self.path(prefix),
         }
     }
 
@@ -86,7 +92,10 @@ impl<'a> References<'a> {
             let TokenTree::Ident(first) = token else {
                 continue;
             };
-            if !matches!(first.to_string().as_str(), "crate" | "self" | "super") {
+            let first_name = first.to_string();
+            if !matches!(first_name.as_str(), "crate" | "self" | "super")
+                && !self.crates.contains(&first_name)
+            {
                 continue;
             }
             let mut parts = vec![first.to_string()];
@@ -100,7 +109,7 @@ impl<'a> References<'a> {
                 cursor += 3;
             }
             if parts.len() > 1 {
-                self.path(parts);
+                self.path(&parts);
             }
         }
     }
@@ -124,10 +133,11 @@ impl<'ast> Visit<'ast> for References<'_> {
 
     fn visit_path(&mut self, path: &'ast syn::Path) {
         self.path(
-            path.segments
+            &path
+                .segments
                 .iter()
                 .map(|segment| segment.ident.to_string())
-                .collect(),
+                .collect::<Vec<_>>(),
         );
         visit::visit_path(self, path);
     }

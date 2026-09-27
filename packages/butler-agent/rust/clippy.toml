@@ -1,0 +1,5 @@
+# Test code may assert with unwrap/expect/panic; production code may not.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true
