@@ -21,12 +21,14 @@ const labels = {
     model: "Model", search: "Search models", clear: "Clear search", empty: "No models match.",
     models: [["gpt-5.1", "GPT-5.1"], ["claude-opus", "Claude Opus"], ["qwen-coder", "Qwen2.5 Coder 14B"]],
     anchor: "The popover anchors to this line, not to the button.", open: "Open",
+    context: "Context", narrow: "Narrow readout: min(280px, 100vw - 32px).",
   },
   "ko-KR": {
     access: "질문", accessTitle: "권한", accessBody: "Butler가 파일을 고치거나 명령을 실행하기 전에 묻습니다.",
     model: "모델", search: "모델 검색", clear: "검색 지우기", empty: "일치하는 모델이 없습니다.",
     models: [["gpt-5.1", "GPT-5.1"], ["claude-opus", "Claude Opus"], ["qwen-coder", "Qwen2.5 Coder 14B"]],
     anchor: "팝오버는 버튼이 아니라 이 줄에 붙습니다.", open: "열기",
+    context: "컨텍스트", narrow: "좁은 요약: min(280px, 100vw - 32px).",
   },
 } as const;
 
@@ -99,6 +101,16 @@ export const stories: ShowcaseStory[] = [
           <PopoverTrigger asChild><SelectButton>{text(context).open}</SelectButton></PopoverTrigger>
         </Stack>
         <PopoverContent align="start"><Typo.Body>{text(context).accessBody}</Typo.Body></PopoverContent>
+      </Popover>
+    ),
+  },
+  {
+    name: "Narrow width",
+    states: ["open"],
+    render: (context) => (
+      <Popover>
+        <PopoverTrigger asChild><SelectButton>{text(context).context}</SelectButton></PopoverTrigger>
+        <PopoverContent side="top" width="narrow"><Typo.Caption tone="secondary">{text(context).narrow}</Typo.Caption></PopoverContent>
       </Popover>
     ),
   },
