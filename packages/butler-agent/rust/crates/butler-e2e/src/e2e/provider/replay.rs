@@ -25,7 +25,8 @@ pub(super) fn learn_echo_ids(state: &State, request: &str) {
         [
             (r"guided-work-[0-9a-f]{64}".to_owned(), "ECHO_"),
             (r"guided-plan-[0-9a-f]{64}".to_owned(), "PLAN_ECHO_"),
-            (format!(r"\bmessage-{UUID}"), "MSG_ECHO_"),
+            // A streamed answer keeps its provisional id, `message-stream-<turn>`.
+            (format!(r"\bmessage-(?:stream-turn-)?{UUID}"), "MSG_ECHO_"),
         ]
         .into_iter()
         .filter_map(|(pattern, prefix)| {
