@@ -46,14 +46,16 @@ EFFORT = "medium"
 FALLBACK_OFF = {"enabled": False, "models": []}
 TIMEZONE = "Asia/Seoul"
 LOCALE = "ko-KR"
-LEGACY_INSTALLATION = Path(
-    "/Users/yeonwoo/.codex/artifacts/butler-rust-migration-20260919/"
-    "bun-baseline-b484052e5683109d0a2491566024a9110090fbb2/installation"
+# Default installation roots from the migration campaign; override the root with
+# BUTLER_MIGRATION_ARTIFACTS or each installation with its command-line flag.
+MIGRATION_ARTIFACTS = Path(os.environ.get(
+    "BUTLER_MIGRATION_ARTIFACTS",
+    Path.home() / ".codex" / "artifacts" / "butler-rust-migration-20260919",
+))
+LEGACY_INSTALLATION = (
+    MIGRATION_ARTIFACTS / "bun-baseline-b484052e5683109d0a2491566024a9110090fbb2" / "installation"
 )
-CANDIDATE_INSTALLATION = Path(
-    "/Users/yeonwoo/.codex/artifacts/butler-rust-migration-20260919/"
-    "native-final-release/candidate-installation"
-)
+CANDIDATE_INSTALLATION = MIGRATION_ARTIFACTS / "native-final-release" / "candidate-installation"
 FIXTURE_SEED_INSTALLATION = LEGACY_INSTALLATION
 LEGACY_MANIFEST_SHA256 = "41f70c8d64433ff62cd78a4f26de830093065fcff414cc62e5b654bbd942f4d3"
 CANDIDATE_MANIFEST_SHA256 = "c6a569c2f982afcf6045825a6ec2a9a8587c8893626a502260088d57a9e81239"
