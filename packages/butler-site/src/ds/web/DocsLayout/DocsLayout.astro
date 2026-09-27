@@ -1,0 +1,66 @@
+---
+import "../../base.css";
+import { THEME_STORAGE_KEY } from "../client/theme";
+import type { NavSectionItem } from "../../../site/nav";
+import { BUTLER_VERSION, REPOSITORY_URL } from "../../../site/meta";
+import type { Locale } from "../../../site/sections";
+import SearchDialog from "../SearchDialog/SearchDialog.astro";
+import SiteFooter from "../SiteFooter/SiteFooter.astro";
+import SiteSidebar from "../SiteSidebar/SiteSidebar.astro";
+import SiteTitlebar from "../SiteTitlebar/SiteTitlebar.astro";
+import styles from "./DocsLayout.module.css";
+
+interface Props {
+  title: string;
+  description: string;
+  locale: Locale;
+  nav: NavSectionItem[];
+  homeHref: string;
+  alternates: Partial<Record<Locale, string | null>>;
+}
+
+const { title, description, locale, nav, homeHref, alternates } = Astro.props;
+const base = import.meta.env.BASE_URL;
+const canonical = Astro.site ? new URL(Astro.url.pathname, Astro.site).href : undefined;
+---
+<!doctype html>
+<html lang={locale}>
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1, viewport-fit=cover" name="viewport" />
+    <title>{title} · Butler</title>
+    <meta content={description} name="description" />
+    {canonical && <link href={canonical} rel="canonical" />}
+    <link href={`${base.replace(/\/?$/u, "/")}favicon.svg`} rel="icon" type="image/svg+xml" />
+    <meta content="light dark" name="color-scheme" />
+    <script define:vars={{ key: THEME_STORAGE_KEY }} is:inline>
+      // Apply a stored light/dark choice before first paint; "system" needs nothing.
+      try {
+        const choice = localStorage.getItem(key);
+        if (choice === "light" || choice === "dark") document.documentElement.dataset.theme = choice;
+      } catch {}
+    </script>
+  </head>
+  <body>
+    <a class={styles.skip} href="#content">본문으로 건너뛰기</a>
+    <div class={styles.shell}>
+      <SiteSidebar alternates={alternates} homeHref={homeHref} locale={locale} nav={nav} />
+      <div class={styles.column} data-drawer-inert>
+        <SiteTitlebar alternates={alternates} homeHref={homeHref} locale={locale} repositoryUrl={REPOSITORY_URL} />
+        <div class={styles.page}>
+          <main class={styles.main} id="content">
+            <slot />
+            <SiteFooter repositoryUrl={REPOSITORY_URL} version={BUTLER_VERSION} />
+          </main>
+          <aside class={styles.toc} data-pagefind-ignore>
+            <slot name="toc" />
+          </aside>
+        </div>
+      </div>
+    </div>
+    <SearchDialog base={base.replace(/\/?$/u, "/")} />
+    <script>
+      import "../client/enhance";
+    </script>
+  </body>
+</html>

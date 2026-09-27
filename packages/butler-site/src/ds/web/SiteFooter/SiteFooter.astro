@@ -1,0 +1,17 @@
+---
+import styles from "./SiteFooter.module.css";
+
+interface Props {
+  version: string;
+  repositoryUrl: string;
+}
+
+const { version, repositoryUrl } = Astro.props;
+---
+<footer class={styles.footer} data-pagefind-ignore>
+  <span>Butler v{version} · 정식 출시 전</span>
+  <ul class={styles.links}>
+    <li><a class={styles.link} href={`${repositoryUrl}/releases`} rel="noopener" target="_blank">릴리스</a></li>
+    <li><a class={styles.link} href={repositoryUrl} rel="noopener" target="_blank">GitHub</a></li>
+  </ul>
+</footer>

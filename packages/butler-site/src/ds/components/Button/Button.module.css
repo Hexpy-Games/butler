@@ -1,0 +1,211 @@
+/* Forked from the app DS Button.module.css. */
+.button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: max-content;
+  max-width: 100%;
+  height: var(--control-height-md);
+  min-height: var(--control-height-md);
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font: inherit;
+  font-size: var(--font-size-3);
+  font-weight: var(--font-weight-regular);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  outline: none;
+  transition:
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    color var(--motion-fast) var(--motion-ease-standard),
+    scale var(--motion-fast) var(--motion-ease-standard);
+}
+
+.button[data-stretch="true"] {
+  width: 100%;
+}
+
+.button:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--selection);
+}
+
+/* Press feedback: a quick press-in, released on --motion-fast. The scale
+   token is 1 under reduced motion. The `scale` property composes with the
+   transform a caller positions the button with (transform would replace it). */
+.button:active:not(:disabled) {
+  scale: var(--motion-scale-press);
+  transition-duration: var(--motion-instant);
+}
+
+.button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.variantDefault:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary) 88%, var(--color-mix-light));
+}
+
+.variantOutline {
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface-raised) 86%, transparent);
+  color: var(--text-primary);
+}
+
+.variantBorderless {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.variantGhost {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.variantDestructive {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+.variantSecondary {
+  border: var(--border-hairline) solid var(--secondary-border);
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+}
+
+.variantLink {
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.sizeXs {
+  height: var(--control-height-xs);
+  min-height: var(--control-height-xs);
+  padding: 0 var(--space-sm);
+  font-size: var(--font-size-2);
+}
+
+.sizeSm {
+  height: var(--control-height-sm);
+  min-height: var(--control-height-sm);
+}
+
+.sizeLg {
+  height: var(--control-height-lg);
+  min-height: var(--control-height-lg);
+}
+
+.sizeIcon,
+.sizeIconXs,
+.sizeIconSm,
+.sizeIconLg {
+  padding: 0;
+}
+
+.sizeIcon {
+  width: var(--control-height-md);
+  height: var(--control-height-md);
+  min-height: var(--control-height-md);
+}
+
+.sizeIconXs {
+  width: var(--control-height-xs);
+  height: var(--control-height-xs);
+  min-height: var(--control-height-xs);
+}
+
+.sizeIconSm {
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  min-height: var(--control-height-sm);
+}
+
+.sizeIconLg {
+  width: var(--control-height-lg);
+  height: var(--control-height-lg);
+  min-height: var(--control-height-lg);
+}
+
+.button.variantInline {
+  width: max-content;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  border-color: transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.button.variantInline:hover:not(:disabled) {
+  background: transparent;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (width <= 640px), (pointer: coarse) {
+  .button:not(.variantLink, .variantInline) {
+    min-height: var(--control-hit-target);
+  }
+
+  .sizeIcon,
+  .sizeIconXs,
+  .sizeIconSm,
+  .sizeIconLg {
+    width: var(--control-hit-target);
+    height: var(--control-hit-target);
+    min-height: var(--control-hit-target);
+  }
+}
+
+.shapePill {
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background-clip: padding-box;
+}
+
+.button[data-has-icon-text="true"][data-icon-layout="start"] {
+  padding-right: 14px;
+}
+
+.button[data-has-icon-text="true"][data-icon-layout="end"] {
+  padding-left: 14px;
+}
+
+.button.variantInline[data-has-icon-text="true"] {
+  padding: 0;
+}
+
+.icon,
+.text {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  line-height: 1;
+}
+
+.icon > svg {
+  display: block;
+}
+
+.text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

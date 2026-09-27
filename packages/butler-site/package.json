@@ -1,0 +1,35 @@
+{
+  "name": "@butler/site",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build && pagefind --site dist",
+    "preview": "astro preview",
+    "lint": "bun run scripts/lint-site-styles.ts",
+    "lint:prose": "bun run scripts/lint-prose.ts",
+    "test": "bun test scripts src",
+    "tokens:check": "bun run scripts/check-token-sync.ts",
+    "typecheck": "astro check",
+    "check": "bun run lint && bun run lint:prose && bun run test && bun run tokens:check && bun run typecheck"
+  },
+  "dependencies": {
+    "@astrojs/mdx": "^8.0.2",
+    "@astrojs/react": "^7.0.0",
+    "@astrojs/sitemap": "^3.7.4",
+    "@hugeicons/core-free-icons": "^4.1.1",
+    "@hugeicons/react": "^1.1.6",
+    "astro": "^7.3.5",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "shiki": "^4.4.3"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.3",
+    "pagefind": "^1.5.2",
+    "typescript": "^5.9.3"
+  }
+}

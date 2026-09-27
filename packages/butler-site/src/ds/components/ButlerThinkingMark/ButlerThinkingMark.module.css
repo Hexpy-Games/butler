@@ -1,0 +1,66 @@
+/* Forked from the app DS ButlerThinkingMark (+ AspectFrame); the SVG logo is a web addition
+   that shows the mark before the island hydrates and without JS. */
+.frame {
+  position: relative;
+  display: block;
+  max-width: 100%;
+  aspect-ratio: 1;
+  contain: layout paint size;
+}
+
+.frame[data-size="md"] {
+  width: var(--icon-size-md);
+}
+
+.frame[data-size="lg"] {
+  width: var(--icon-size-lg);
+}
+
+.frame[data-size="xl"] {
+  width: var(--icon-size-xl);
+}
+
+.frame[data-size="2xl"] {
+  width: var(--icon-size-2xl);
+}
+
+.frame > canvas,
+.fallback {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.fallback {
+  fill: var(--web-mark-ink);
+  stroke: var(--web-mark-ink);
+}
+
+.frame[data-ready="true"] .fallback {
+  visibility: hidden;
+}
+
+/* Reduced motion: the canvas holds the still logo and breathes in opacity on
+   the Spinner's reduced-motion pulse, on the compositor with no frame loop. */
+.canvas[data-breathe="on"] {
+  animation: thinking-mark-breathe calc(var(--pulse-duration) * 2)
+    var(--spinner-easing) infinite alternate;
+}
+
+.canvas[data-breathe="settle"] {
+  animation: thinking-mark-settle var(--motion-slow) var(--motion-ease-standard);
+}
+
+@keyframes thinking-mark-breathe {
+  to {
+    opacity: 0.45;
+  }
+}
+
+@keyframes thinking-mark-settle {
+  from {
+    opacity: var(--thinking-mark-breathe-from, 1);
+  }
+}

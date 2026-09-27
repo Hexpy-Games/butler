@@ -1,0 +1,93 @@
+---
+title: "설치"
+description: "GitHub Releases에서 Butler 앱을 내려받아 설치하고 처음 실행합니다."
+section: getting-started
+order: 1
+status: published
+---
+
+## 지원 환경
+
+현재 릴리스는 Apple Silicon Mac(`darwin-arm64`)용으로 패키징하고 검증합니다.
+
+- Apple Silicon(M 시리즈 칩) Mac
+- macOS 12 이상
+
+<Notice tone="info">
+  Butler Agent는 앱에 포함되어 있어 따로 설치하지 않습니다. 앱에 포함된 Agent는 Butler가 열려 있는 동안에만 실행됩니다.
+</Notice>
+
+## 내려받기
+
+<Tabs
+  label="운영체제"
+  items={[
+    { value: "macos", label: "macOS" },
+    { value: "windows", label: "Windows" },
+    { value: "linux", label: "Linux" },
+  ]}
+>
+  <TabPanel value="macos">
+    <Steps>
+      1. [GitHub Releases](https://github.com/Hexpy-Games/butler/releases)에서 최신 릴리스를 엽니다.
+      2. `butler-app-<버전>-darwin-arm64.dmg`를 내려받습니다.
+      3. DMG를 열고 `Butler.app`을 응용 프로그램 폴더로 끌어다 놓습니다.
+    </Steps>
+  </TabPanel>
+  <TabPanel value="windows">
+    <Notice tone="warning" title="아직 지원하지 않습니다">
+      Windows용 네이티브 Agent 번들은 아직 지원하거나 검증하지 않았습니다.
+    </Notice>
+  </TabPanel>
+  <TabPanel value="linux">
+    <Notice tone="warning" title="아직 지원하지 않습니다">
+      Linux용 네이티브 Agent 번들은 아직 지원하거나 검증하지 않았습니다.
+    </Notice>
+  </TabPanel>
+</Tabs>
+
+<Notice tone="warning">
+  이전 릴리스에는 지금은 쓰지 않는 TypeScript/Bun Agent가 들어 있을 수 있습니다. 네이티브 Agent가 포함된 릴리스를 받습니다.
+</Notice>
+
+### 파일 확인 (선택)
+
+릴리스에는 파일마다 SHA-256 체크섬(`.sha256`)이 함께 올라갑니다. DMG와 체크섬 파일을 같은 폴더에 받은 뒤 확인합니다.
+
+```bash
+cd ~/Downloads
+shasum -a 256 -c butler-app-*-darwin-arm64.dmg.sha256
+```
+
+`OK`가 나오면 내려받은 파일이 게시된 파일과 같습니다.
+
+## 처음 열기
+
+Butler 앱은 ad-hoc 서명만 되어 있고 Apple 공증(notarization)을 거치지 않습니다. 그래서 처음 열 때 macOS가 실행을 막을 수 있습니다.
+
+<Steps>
+  1. 응용 프로그램 폴더에서 Butler를 엽니다.
+  2. 열리지 않으면 **시스템 설정 → 개인정보 보호 및 보안**에서 **그래도 열기**를 선택합니다.
+</Steps>
+
+## 첫 실행 설정
+
+처음 실행하면 앱 안에서 **언어**, **안전고지**, **설치**, **모델** 네 단계의 첫 실행 설정이 진행됩니다. 단계별 안내는 [첫 실행](/docs/getting-started/first-run/)을 참고합니다.
+
+설정을 마치면 <span data-mod-key><Kbd keys={["⌘", "K"]} label="Command K" /></span>로 [명령 팔레트](/docs/basics/command-palette/)를 열어 대화, 프로젝트, 예약 작업, 설정을 찾을 수 있습니다.
+
+## 앱 없이 Agent만 쓰기
+
+데스크톱 앱 없이 헤드리스 런타임만 필요하면 standalone Butler Agent 아카이브(`butler-agent-<버전>-darwin-arm64.tar.gz`)를 씁니다. Apple Silicon macOS 전용이며, 설치 절차는 [Butler Agent CLI](/docs/advanced/agent-cli/#설치)를 따릅니다.
+
+## 관련 문서
+
+<CardGrid>
+  <DocCard slug="getting-started/first-run" />
+  <DocCard slug="models/cloud" />
+  <DocCard
+    href="https://github.com/Hexpy-Games/butler/releases"
+    title="릴리스"
+    description="버전별 변경 사항과 배포 파일을 확인합니다."
+  />
+</CardGrid>

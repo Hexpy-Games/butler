@@ -1,0 +1,49 @@
+name: Butler Site
+
+# Builds packages/butler-site and deploys it to GitHub Pages as a project page
+# (https://<owner>.github.io/<repo>/; astro.config.ts reads GITHUB_REPOSITORY).
+# Pages must be enabled with "GitHub Actions" as the source in the repository settings.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/butler-site/**"
+      - ".github/workflows/site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Check and build the site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check, build and upload the Pages artifact
+        uses: withastro/action@v6
+        with:
+          path: packages/butler-site
+          package-manager: bun@1.3.11
+          build-cmd: bun run check && bun run build
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5

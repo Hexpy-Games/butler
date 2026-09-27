@@ -1,0 +1,165 @@
+---
+title: "스킬"
+description: "코어, 사용자, 프로젝트 스킬을 관리합니다."
+section: extensions
+order: 1
+# Hidden until Hexpy-Games/butler#222 (skill progressive disclosure) is merged; then set status: published.
+status: planned
+---
+
+스킬은 Butler가 특정 종류의 요청을 처리하는 방법을 적은 `SKILL.md` 파일입니다. Butler는 스킬 이름과 설명을 보고 요청에 맞는 스킬을 골라 씁니다.
+
+## 스킬 목록 보기
+
+<Steps>
+  1. 사이드바에서 **설정**을 열고 **스킬**을 선택합니다.
+  2. **기본** 탭에서 모든 대화에 쓰이는 스킬을 확인합니다.
+  3. **프로젝트** 탭에서 왼쪽 목록의 프로젝트를 고르면 그 프로젝트의 스킬이 나옵니다.
+</Steps>
+
+**기본** 탭에는 **코어 기본 스킬**과 **사용자 추가 스킬** 두 목록이 있습니다. 각 항목에는 스킬 이름과 설명이 표시되고, 설명이 없으면 `SKILL.md` 파일 경로가 대신 표시됩니다.
+
+## 스킬 종류
+
+- **코어 기본 스킬** — 앱에 포함된 스킬입니다. 모든 대화에서 쓰입니다.
+- **사용자 추가 스킬** — 직접 추가한 스킬입니다. 모든 대화에서 쓰입니다.
+- **프로젝트 스킬** — 특정 프로젝트에 추가한 스킬입니다. 그 프로젝트의 대화에서만 쓰입니다.
+
+직접 추가한 스킬은 기본 데이터 폴더(`~/.butler`) 아래에 폴더 단위로 저장됩니다.
+
+```text
+~/.butler/skills/default/<스킬 폴더>/SKILL.md
+~/.butler/skills/projects/<프로젝트 ID>/<스킬 폴더>/SKILL.md
+```
+
+## 스킬 추가하기
+
+### zip 파일로 가져오기
+
+<Steps>
+  1. **설정 → 스킬**을 엽니다.
+  2. 모든 대화에서 쓸 스킬이면 **기본** 탭을, 한 프로젝트에서만 쓸 스킬이면 **프로젝트** 탭에서 그 프로젝트를 고릅니다.
+  3. **가져오기**를 누르고 `.zip` 파일을 선택합니다.
+  4. 가져오기가 끝나면 목록이 새로 고쳐지고 추가한 스킬이 나타납니다.
+</Steps>
+
+zip 파일은 다음 규칙을 따릅니다.
+
+- 스킬마다 폴더를 하나 두고, 그 폴더 안에 `SKILL.md`를 넣습니다. zip 최상위에 바로 놓인 `SKILL.md`는 인식하지 않습니다.
+- zip 하나에 스킬 폴더를 여러 개 넣을 수 있습니다. 하위 폴더 안의 스킬 폴더도 찾습니다.
+- 스킬 폴더 안의 다른 파일도 함께 복사됩니다.
+- 폴더 이름이 설치되는 스킬 폴더 이름이 됩니다. 영문자, 숫자, `.`, `_`, `-` 외의 문자는 `-`로 바뀝니다.
+
+```text
+my-skills.zip
+├── weekly-report/
+│   └── SKILL.md
+└── release-notes/
+    ├── SKILL.md
+    └── template.md
+```
+
+### 대화해서 만들기
+
+<Steps>
+  1. **설정 → 스킬**에서 **기본** 탭을 열거나, **프로젝트** 탭에서 프로젝트를 고릅니다.
+  2. **대화해서 만들기**를 누릅니다.
+  3. 설정이 닫히고 스킬을 만드는 새 대화가 열립니다. 프로젝트 탭에서 눌렀다면 그 프로젝트의 대화로 열립니다.
+</Steps>
+
+## SKILL.md 형식
+
+`SKILL.md`는 frontmatter와 본문으로 구성됩니다.
+
+```markdown
+---
+name: weekly-report
+description: 한 주의 작업 기록을 주간 보고서로 정리합니다.
+applicability: 사용자가 주간 보고서나 한 주 요약을 요청할 때 사용합니다.
+allowed-tools: read_file, list_files
+dispatch: none
+review: recommended
+reporting: 보고서 초안과 빠진 정보를 함께 알립니다.
+user-invocable: true
+---
+
+## Instructions
+1. 이번 주에 바뀐 파일과 기록을 확인합니다.
+2. 완료한 일, 진행 중인 일, 막힌 일로 나눠 정리합니다.
+```
+
+### frontmatter 항목
+
+- `name` — 스킬 이름입니다. 없으면 스킬로 인식하지 않습니다.
+- `description` — 목록에 표시되는 설명입니다. Butler가 스킬을 고를 때 보는 설명이기도 합니다.
+- `applicability` — 이 스킬을 언제 쓸지 적습니다.
+- `allowed-tools` — 스킬에서 쓸 도구 이름을 쉼표로 구분해 적습니다.
+- `dispatch` — 진행 방식 선호입니다. `none`, `direct`, `planned`, `auto` 중 하나이며, 다른 값은 `none`으로 처리합니다.
+- `review` — 결과 검토 요구 수준입니다. `none`, `recommended`, `required` 중 하나이며, 다른 값은 `none`으로 처리합니다.
+- `reporting` — 결과를 어떻게 보고할지 적습니다.
+- `user-invocable` — `true`이면 사용자가 직접 요청해 쓰는 스킬로 표시합니다. 그 밖의 값은 내부용으로 취급합니다.
+
+### 작성 규칙
+
+- 파일은 `---` 한 줄로 시작하고, frontmatter는 다시 `---` 한 줄로 닫습니다.
+- 한 줄에 `키: 값`을 하나씩 씁니다. 여러 줄에 걸친 값은 읽지 않습니다. 값을 감싼 따옴표는 지워집니다.
+- 줄바꿈은 LF를 씁니다. CRLF로 저장한 파일은 frontmatter를 읽지 못합니다.
+- `description`, `applicability`, `allowed-tools`, `reporting`, 본문 중 비어 있는 것이 있거나 같은 `name`의 스킬이 둘 이상이면 검증 문제로 기록됩니다.
+
+## Butler가 스킬을 쓰는 방식
+
+Butler는 스킬을 필요한 만큼만 읽습니다.
+
+1. 대화에는 스킬마다 `name`과 `description`만 들어갑니다.
+2. 요청에 맞는 스킬이라고 판단하거나 사용자가 스킬을 지정해 요청하면, 그때 `SKILL.md` 본문 전체를 읽습니다.
+3. 스킬 폴더에 함께 넣은 파일은 작업에 필요할 때만 읽습니다.
+
+- 일반 대화에서는 코어 기본 스킬과 사용자 추가 스킬을 씁니다. 프로젝트 대화에서는 그 프로젝트의 스킬이 더해집니다.
+- 같은 `name`의 스킬이 여러 곳에 있으면 프로젝트 스킬, 사용자 추가 스킬, 코어 기본 스킬 순으로 앞선 하나만 씁니다.
+- 스킬을 추가하거나 지웠다면 새 대화에서 확인합니다.
+
+<Notice tone="info">
+  `description`에 스킬의 핵심 용도를 적습니다. Butler는 이 설명을 보고 스킬을 고릅니다.
+</Notice>
+
+## 스킬 삭제하기
+
+앱에는 스킬 삭제 버튼이 없습니다. 직접 추가한 스킬은 폴더를 지워 삭제합니다.
+
+<Steps>
+  1. Finder나 터미널에서 `~/.butler/skills/default/`(사용자 추가 스킬) 또는 `~/.butler/skills/projects/<프로젝트 ID>/`(프로젝트 스킬)를 엽니다.
+  2. 지울 스킬 폴더를 통째로 삭제합니다.
+  3. **설정 → 스킬**을 다시 열어 목록에서 빠졌는지 확인합니다.
+</Steps>
+
+## 명령줄에서 관리하기
+
+Butler Agent CLI의 `butler skills` 명령으로도 스킬을 다룰 수 있습니다. 검증 문제는 `validate`로 확인합니다.
+
+```bash
+butler skills list
+butler skills inspect <스킬 이름>
+butler skills import <zip 파일 경로>
+butler skills import <zip 파일 경로> --project <프로젝트 ID>
+butler skills validate
+```
+
+- `--project <프로젝트 ID>`를 붙이면 그 프로젝트의 스킬을 다룹니다.
+- `--json`을 붙이면 결과를 JSON으로 출력합니다.
+
+## 주의 사항
+
+<Notice tone="warning">
+  - 스킬을 하나씩 켜고 끄는 설정은 없습니다. 쓰지 않을 스킬은 폴더를 지웁니다.
+  - 코어 기본 스킬은 앱에 포함되어 있어 지우거나 고칠 수 없습니다.
+  - 같은 이름의 스킬 폴더를 다시 가져오면 기존 폴더를 지우고 새 내용으로 바꿉니다.
+</Notice>
+
+## 관련 문서
+
+<CardGrid>
+  <DocCard slug="extensions/mcp-servers" />
+  <DocCard slug="projects" />
+  <DocCard slug="advanced/agent-cli" />
+  <DocCard slug="settings" />
+</CardGrid>
