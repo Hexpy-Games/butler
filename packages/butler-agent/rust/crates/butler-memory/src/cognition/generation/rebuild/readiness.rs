@@ -1,22 +1,32 @@
-//! Source snapshot, graph, Lance, and retained-cache witness for a building generation.
+//! Readiness of a building generation: every expected source registered and
+//! every projection stage settled, witnessed against the source snapshot,
+//! graph, Lance table, and retained hot cache.
+//!
+//! [`compute`] is the read-only calculation; [`record`] recomputes it and
+//! stores it in the manifest under the write gate.
 
 pub(in crate::cognition::generation) mod cache;
 
 use crate::cognition::CognitionCode;
 use std::{collections::HashSet, fs, path::Path, sync::Arc};
 
-use serde_json::{Value, json};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
 use super::super::{
     initialize::durable,
+    manifest::{
+        GenerationManifest, GenerationReadiness, GenerationState, SemanticCounts, StageCounts,
+    },
     qualification_witness::{CandidateWitness, LiveWitness},
 };
 use super::{build_inventory, inventory};
 use crate::cognition::generation::cache::physical_entries;
 use crate::cognition::generation_vectors::invalid_persisted_rebuild_vectors;
-use crate::cognition::graph::{GraphRepository, StageReadiness};
+use crate::cognition::graph::{
+    CacheReadinessRow, GraphRepository, StageReadiness, VectorReadinessRow,
+};
 use crate::cognition::{
     CognitionError, CognitionPathEnvironment, CognitionResult, MemoryGenerationHandle,
     MemoryGenerationTarget, assert_mutation_authority, ensure_data_authority, resolve_generation,
@@ -24,6 +34,7 @@ use crate::cognition::{
 use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator};
 use butler_turn::conversation::ConversationSourceReader;
 
+/// Source, graph, and cache facts gathered on the blocking pool.
 struct GraphFacts {
     registered: usize,
     expected: usize,
@@ -41,13 +52,42 @@ struct GraphFacts {
     cache_sha256: Option<String>,
 }
 
+/// Everything readiness depends on; its hash binds qualification to it.
+#[derive(Serialize)]
+struct ReadinessEvidence<'a> {
+    schema: &'static str,
+    inventory_hash: &'a str,
+    as_of: &'a str,
+    embedding_version: Option<&'a str>,
+    extraction_version: Option<&'a str>,
+    unicode_version: Option<&'a str>,
+    icu_version: Option<&'a str>,
+    registered: usize,
+    expected: usize,
+    unexpected: usize,
+    semantic_invalid: usize,
+    vector_receipt_invalid: usize,
+    cache_static_invalid: usize,
+    graph_invalid: usize,
+    canonical_invalid: usize,
+    vector_actual_invalid: usize,
+    cache_actual_invalid: usize,
+    cache_sha256: Option<&'a str>,
+    cache_retained_ids: &'a [String],
+    cache_outcomes: &'a [(String, bool)],
+    vector_rows: &'a [VectorReadinessRow],
+    cache_rows: &'a [CacheReadinessRow],
+}
+
+/// Recomputes readiness and stores it in the candidate manifest. A changed
+/// readiness or evidence hash clears `required_acceptance_passed`.
 pub async fn record(
     data_root: &Path,
     environment: &CognitionPathEnvironment,
     coordinator: Arc<CognitionWriteCoordinator>,
     target: &MemoryGenerationTarget,
     cancellation: &CancellationToken,
-) -> CognitionResult<Value> {
+) -> CognitionResult<GenerationReadiness> {
     if cancellation.is_cancelled() {
         return Err(error(CognitionCode::MemoryOperationAborted));
     }
@@ -56,30 +96,7 @@ pub async fn record(
     };
     let handle = resolve_generation(data_root, environment, target)?;
     let lock = environment.consolidation_lock(data_root);
-    let active = environment
-        .memory_root(data_root)
-        .join("active-generation.json");
-    let manifest_path = handle.root.join("manifest.json");
-    let cache_path = handle.root.join("hot/cache.md");
-    let snapshot_path = handle.source_root.join("memory-source-inventory.json");
-    let canonical = handle
-        .canonical_snapshot_path
-        .as_deref()
-        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
-    ensure_data_authority(
-        data_root,
-        &[
-            &lock,
-            &active,
-            &manifest_path,
-            &handle.graph_path,
-            &cache_path,
-            &snapshot_path,
-            canonical,
-            &handle.root.join("butler.lance"),
-            &handle.root.join("butler.lance/butler_memory.lance"),
-        ],
-    )?;
+    ensure_record_authority(data_root, environment, &handle, &lock)?;
     let live = LiveWitness::open(data_root)?;
     let candidate = CandidateWitness::open(data_root, &handle).await?;
     let readiness = compute(data_root, environment, target, cancellation).await?;
@@ -101,63 +118,111 @@ pub async fn record(
         .await
         .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
         .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
+    let witnesses = (&live, &candidate, &handle);
     let result = async {
         lease
             .assert_for_path(&lock)
             .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
-        if cancellation.is_cancelled() {
-            return Err(error(CognitionCode::MemoryOperationAborted));
-        }
-        let current = resolve_generation(data_root, environment, target)?;
-        assert_mutation_authority(data_root, environment, target, &current)?;
-        if current
-            .embedding
-            .as_ref()
-            .map(super::super::types::GenerationEmbedding::version)
-            != handle
-                .embedding
-                .as_ref()
-                .map(super::super::types::GenerationEmbedding::version)
-        {
-            return Err(error(CognitionCode::MemoryEmbeddingVersionMismatch));
-        }
-        candidate.assert_current(&current).await?;
-        live.assert_current()?;
-        if cancellation.is_cancelled() {
-            return Err(error(CognitionCode::MemoryOperationAborted));
-        }
-        let mut manifest: Value =
-            serde_json::from_slice(&fs::read(&manifest_path).map_err(|source| {
-                error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
-            })?)
-            .map_err(|source| {
-                error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
-            })?;
-        if manifest["source_inventory_hash"] != readiness["inventory_hash"]
-            || manifest["state"] != "building"
-        {
-            return Err(error(CognitionCode::MemoryGenerationChanged));
-        }
-        let changed = manifest["readiness"]["sha256"] != readiness["sha256"]
-            || manifest["acceptance_binding"]["target_evidence_sha256"]
-                != readiness["evidence_sha256"];
-        manifest["readiness"] = readiness.clone();
-        manifest["registered_source_count"] = readiness["registered"].clone();
-        manifest["unaccounted_source_count"] = readiness["unaccounted"].clone();
-        if changed {
-            manifest["required_acceptance_passed"] = Value::Bool(false);
-        }
-        durable::write_json(&manifest_path, &manifest)?;
-        Ok(readiness)
+        commit_readiness(
+            data_root,
+            environment,
+            target,
+            witnesses,
+            &readiness,
+            cancellation,
+        )
+        .await
     }
     .await;
     let released = lease
         .release(result.is_ok())
         .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
-    result.and_then(|value| {
+    result.and_then(|()| {
         released?;
-        Ok(value)
+        Ok(readiness)
     })
+}
+
+fn ensure_record_authority(
+    data_root: &Path,
+    environment: &CognitionPathEnvironment,
+    handle: &MemoryGenerationHandle,
+    lock: &Path,
+) -> CognitionResult<()> {
+    let canonical = handle
+        .canonical_snapshot_path
+        .as_deref()
+        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
+    ensure_data_authority(
+        data_root,
+        &[
+            lock,
+            &environment
+                .memory_root(data_root)
+                .join("active-generation.json"),
+            &handle.root.join("manifest.json"),
+            &handle.graph_path,
+            &handle.root.join("hot/cache.md"),
+            &handle.source_root.join("memory-source-inventory.json"),
+            canonical,
+            &handle.root.join("butler.lance"),
+            &handle.root.join("butler.lance/butler_memory.lance"),
+        ],
+    )
+}
+
+/// Under the write gate: confirm nothing changed since `readiness` was
+/// computed, then store it.
+async fn commit_readiness(
+    data_root: &Path,
+    environment: &CognitionPathEnvironment,
+    target: &MemoryGenerationTarget,
+    (live, candidate, handle): (&LiveWitness, &CandidateWitness, &MemoryGenerationHandle),
+    readiness: &GenerationReadiness,
+    cancellation: &CancellationToken,
+) -> CognitionResult<()> {
+    if cancellation.is_cancelled() {
+        return Err(error(CognitionCode::MemoryOperationAborted));
+    }
+    let current = resolve_generation(data_root, environment, target)?;
+    assert_mutation_authority(data_root, environment, target, &current)?;
+    let version = |handle: &MemoryGenerationHandle| {
+        handle
+            .embedding
+            .as_ref()
+            .map(|embedding| embedding.version().to_owned())
+    };
+    if version(&current) != version(handle) {
+        return Err(error(CognitionCode::MemoryEmbeddingVersionMismatch));
+    }
+    candidate.assert_current(&current).await?;
+    live.assert_current()?;
+    if cancellation.is_cancelled() {
+        return Err(error(CognitionCode::MemoryOperationAborted));
+    }
+    let manifest_path = handle.root.join("manifest.json");
+    let mut manifest =
+        GenerationManifest::read(&manifest_path, CognitionCode::MemoryGenerationUnavailable)?;
+    if manifest.source_inventory_hash.as_deref() != Some(readiness.inventory_hash.as_str())
+        || manifest.state != Some(GenerationState::Building)
+    {
+        return Err(error(CognitionCode::MemoryGenerationChanged));
+    }
+    let changed = manifest
+        .readiness
+        .as_ref()
+        .and_then(|stored| stored.sha256.as_deref())
+        != readiness.sha256.as_deref()
+        || manifest
+            .acceptance_binding
+            .as_ref()
+            .map(|binding| binding.target_evidence_sha256.as_str())
+            != Some(readiness.evidence_sha256.as_str());
+    manifest.record_readiness(readiness);
+    if changed {
+        manifest.required_acceptance_passed = Some(false);
+    }
+    durable::write_json(&manifest_path, &manifest)
 }
 
 /// Read-only calculation shared with validation. The caller owns its candidate
@@ -167,7 +232,7 @@ pub async fn compute(
     environment: &CognitionPathEnvironment,
     target: &MemoryGenerationTarget,
     cancellation: &CancellationToken,
-) -> CognitionResult<Value> {
+) -> CognitionResult<GenerationReadiness> {
     if cancellation.is_cancelled() {
         return Err(error(CognitionCode::MemoryOperationAborted));
     }
@@ -193,9 +258,8 @@ pub async fn compute(
             &current.root.join("butler.lance/butler_memory.lance"),
         ],
     )?;
-    let data_for_graph = data_root.to_owned();
-    let current_for_graph = current.clone();
-    let cancel = cancellation.clone();
+    let (data_for_graph, current_for_graph, cancel) =
+        (data_root.to_owned(), current.clone(), cancellation.clone());
     let facts = tokio::task::spawn_blocking(move || {
         graph_facts(&data_for_graph, &current_for_graph, &cancel)
     })
@@ -211,21 +275,68 @@ pub async fn compute(
         &facts.historical,
     )
     .await?;
-    let manifest: Value =
-        serde_json::from_slice(&fs::read(&manifest_path).map_err(|source| {
-            error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
-        })?)
-        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
-    let stored: Value = serde_json::from_slice(
-        &fs::read(&snapshot_path)
-            .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?,
-    )
-    .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
-    let inventory_hash = manifest["source_inventory_hash"]
-        .as_str()
+    let manifest =
+        GenerationManifest::read(&manifest_path, CognitionCode::MemoryGenerationUnavailable)?;
+    let as_of = inventory::MemorySourceInventory::read(&snapshot_path)?.as_of;
+    let inventory_hash = manifest
+        .source_inventory_hash
+        .as_deref()
         .ok_or_else(|| error(CognitionCode::MemoryInventoryChanged))?;
-    let missing = facts.expected.saturating_sub(facts.registered);
-    let unaccounted = missing
+    let evidence = evidence(
+        &facts,
+        &manifest,
+        inventory_hash,
+        &as_of,
+        vector_actual_invalid,
+    );
+    let unaccounted = unaccounted(&facts, vector_actual_invalid);
+    let mut readiness = GenerationReadiness::new(
+        inventory_hash.to_owned(),
+        facts.registered,
+        unaccounted,
+        stored_counts(&facts.stage),
+        hash(&evidence)?,
+    );
+    readiness.sha256 = Some(hash(&readiness)?);
+    Ok(readiness)
+}
+
+fn evidence<'a>(
+    facts: &'a GraphFacts,
+    manifest: &'a GenerationManifest,
+    inventory_hash: &'a str,
+    as_of: &'a str,
+    vector_actual_invalid: usize,
+) -> ReadinessEvidence<'a> {
+    ReadinessEvidence {
+        schema: "butler.native-memory-readiness-evidence.v1",
+        inventory_hash,
+        as_of,
+        embedding_version: manifest.embedding_version(),
+        extraction_version: manifest.extraction_version.as_deref(),
+        unicode_version: manifest.unicode_version.as_deref(),
+        icu_version: manifest.icu_version.as_deref(),
+        registered: facts.registered,
+        expected: facts.expected,
+        unexpected: facts.unexpected,
+        semantic_invalid: facts.semantic_invalid,
+        vector_receipt_invalid: facts.vector_receipt_invalid,
+        cache_static_invalid: facts.cache_static_invalid,
+        graph_invalid: facts.graph_invalid,
+        canonical_invalid: facts.canonical_invalid,
+        vector_actual_invalid,
+        cache_actual_invalid: facts.cache_actual_invalid,
+        cache_sha256: facts.cache_sha256.as_deref(),
+        cache_retained_ids: &facts.valid_cache_ids,
+        cache_outcomes: &facts.cache_outcomes,
+        vector_rows: &facts.stage.vector_rows,
+        cache_rows: &facts.stage.cache_rows,
+    }
+}
+
+/// Sources missing from, unexpected in, or invalid in any stage.
+fn unaccounted(facts: &GraphFacts, vector_actual_invalid: usize) -> usize {
+    facts.expected.saturating_sub(facts.registered)
         + facts.unexpected
         + facts.semantic_invalid
         + facts.vector_receipt_invalid
@@ -233,40 +344,24 @@ pub async fn compute(
         + facts.graph_invalid
         + facts.canonical_invalid
         + vector_actual_invalid
-        + facts.cache_actual_invalid;
-    let evidence = json!({
-        "schema":"butler.native-memory-readiness-evidence.v1","inventory_hash":inventory_hash,
-        "as_of":stored["as_of"],"embedding_version":manifest["embedding"]["version"],
-        "extraction_version":manifest["extraction_version"],"unicode_version":manifest["unicode_version"],"icu_version":manifest["icu_version"],
-        "registered":facts.registered,"expected":facts.expected,"unexpected":facts.unexpected,
-        "semantic_invalid":facts.semantic_invalid,"vector_receipt_invalid":facts.vector_receipt_invalid,
-        "cache_static_invalid":facts.cache_static_invalid,"graph_invalid":facts.graph_invalid,
-        "canonical_invalid":facts.canonical_invalid,"vector_actual_invalid":vector_actual_invalid,
-        "cache_actual_invalid":facts.cache_actual_invalid,"cache_sha256":facts.cache_sha256,
-        "cache_retained_ids":facts.valid_cache_ids,"cache_outcomes":facts.cache_outcomes,
-        "vector_rows":facts.stage.vector_rows,"cache_rows":facts.stage.cache_rows,
+        + facts.cache_actual_invalid
+}
+
+/// Semantic, vector, and cache counts in their stored shapes.
+fn stored_counts(stage: &StageReadiness) -> (SemanticCounts, StageCounts, StageCounts) {
+    let semantic = SemanticCounts {
+        complete: stage.semantic.complete,
+        unsupported: stage.semantic.unsupported.unwrap_or(0),
+        pending: stage.semantic.pending,
+        failed: stage.semantic.failed,
+    };
+    let [vectors, cache] = [&stage.vectors, &stage.cache].map(|counts| StageCounts {
+        complete: counts.complete,
+        pending: counts.pending,
+        failed: counts.failed,
+        not_configured: counts.not_configured,
     });
-    let evidence_sha = hash(&evidence)?;
-    let semantic = &facts.stage.semantic;
-    let vectors = &facts.stage.vectors;
-    let cache = &facts.stage.cache;
-    let ready = unaccounted == 0
-        && semantic.pending == 0
-        && semantic.failed == 0
-        && vectors.pending == 0
-        && vectors.failed == 0
-        && vectors.not_configured == 0
-        && cache.pending == 0
-        && cache.failed == 0
-        && cache.not_configured == 0;
-    let mut readiness = json!({"schema":"butler.memory-generation-readiness.v1","inventory_hash":inventory_hash,
-        "registered":facts.registered,"unaccounted":unaccounted,
-        "semantic":{"complete":semantic.complete,"unsupported":semantic.unsupported.unwrap_or(0),"pending":semantic.pending,"failed":semantic.failed},
-        "vectors":{"complete":vectors.complete,"pending":vectors.pending,"failed":vectors.failed,"not_configured":vectors.not_configured},
-        "cache":{"complete":cache.complete,"pending":cache.pending,"failed":cache.failed,"not_configured":cache.not_configured},
-        "evidence_sha256":evidence_sha,"ready":ready});
-    readiness["sha256"] = Value::String(hash(&readiness)?);
-    Ok(readiness)
+    (semantic, vectors, cache)
 }
 
 fn graph_facts(
@@ -275,9 +370,7 @@ fn graph_facts(
     cancellation: &CancellationToken,
 ) -> CognitionResult<GraphFacts> {
     let stored = verified_live_inventory(data_root, handle, cancellation)?;
-    let as_of = stored["as_of"]
-        .as_str()
-        .ok_or_else(|| error(CognitionCode::MemoryInventoryChanged))?;
+    let as_of = stored.as_of.clone();
     let canonical = ConversationSourceReader::open(
         handle
             .canonical_snapshot_path
@@ -293,69 +386,11 @@ fn graph_facts(
         &handle.source_root,
     )?;
     let stage = graph.rebuild_stage_readiness(&handle.generation_id)?;
-    let cache_file = handle.root.join("hot/cache.md");
-    let cache_text = match fs::read_to_string(&cache_file) {
-        Ok(value) => Some(value),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-        Err(_) => return Err(error(CognitionCode::MemoryReadinessUnavailable)),
-    };
-    let physical = cache_text
-        .as_deref()
-        .map(physical_entries)
-        .unwrap_or_default();
-    let valid_cache = graph.valid_rebuild_cache_entries(
-        &handle.generation_id,
-        &physical,
-        &handle.source_root,
-        &canonical,
-        as_of,
-    )?;
-    let outcomes = graph.rebuild_cache_outcomes(&handle.generation_id)?;
-    let cache_evidence = cache::evaluate(
-        &stage.cache_rows,
-        &outcomes,
-        &valid_cache,
-        &handle.generation_id,
-    );
-    let mut cache_outcomes = outcomes.into_iter().collect::<Vec<_>>();
-    cache_outcomes.sort_by(|left, right| left.0.cmp(&right.0));
-    let mut valid_cache_ids = valid_cache.into_iter().collect::<Vec<_>>();
-    valid_cache_ids.sort();
-    let cache_sha256 = cache_text
-        .as_deref()
-        .map(|value| format!("{:x}", Sha256::digest(value.as_bytes())));
+    let cache = cache_facts(&graph, handle, &stage, &canonical, &as_of)?;
     let vector_receipt_invalid = stage
         .vector_rows
         .iter()
-        .filter(|row| {
-            if row.source_membership_invalid {
-                return true;
-            }
-            let Some(raw) = row.receipt_json.as_deref() else {
-                return true;
-            };
-            let Ok(receipt) = serde_json::from_str::<Value>(raw) else {
-                return true;
-            };
-            let Some(version) = handle
-                .embedding
-                .as_ref()
-                .map(super::super::types::GenerationEmbedding::version)
-            else {
-                return true;
-            };
-            let Some(refs) = row
-                .source_ids_json
-                .as_deref()
-                .and_then(|value| serde_json::from_str::<Vec<String>>(value).ok())
-            else {
-                return true;
-            };
-            receipt["generation"] != handle.generation_id
-                || receipt["embedding_version"] != version
-                || refs.is_empty()
-                || refs.iter().any(|id| !source.historical.contains(id))
-        })
+        .filter(|row| vector_receipt_invalid(row, handle, &source.historical))
         .count();
     graph.close()?;
     canonical
@@ -371,12 +406,108 @@ fn graph_facts(
         stage,
         vector_receipt_invalid,
         historical: source.historical,
-        cache_static_invalid: cache_evidence.static_invalid,
-        cache_actual_invalid: cache_evidence.actual_invalid,
-        valid_cache_ids,
-        cache_outcomes,
-        cache_sha256,
+        cache_static_invalid: cache.static_invalid,
+        cache_actual_invalid: cache.actual_invalid,
+        valid_cache_ids: cache.valid_ids,
+        cache_outcomes: cache.outcomes,
+        cache_sha256: cache.sha256,
     })
+}
+
+/// Retained hot-cache evidence of a candidate.
+struct CacheFacts {
+    static_invalid: usize,
+    actual_invalid: usize,
+    valid_ids: Vec<String>,
+    outcomes: Vec<(String, bool)>,
+    sha256: Option<String>,
+}
+
+fn cache_facts(
+    graph: &GraphRepository,
+    handle: &MemoryGenerationHandle,
+    stage: &StageReadiness,
+    canonical: &ConversationSourceReader,
+    as_of: &str,
+) -> CognitionResult<CacheFacts> {
+    let cache_text = match fs::read_to_string(handle.root.join("hot/cache.md")) {
+        Ok(value) => Some(value),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(_) => return Err(error(CognitionCode::MemoryReadinessUnavailable)),
+    };
+    let physical = cache_text
+        .as_deref()
+        .map(physical_entries)
+        .unwrap_or_default();
+    let valid_cache = graph.valid_rebuild_cache_entries(
+        &handle.generation_id,
+        &physical,
+        &handle.source_root,
+        canonical,
+        as_of,
+    )?;
+    let outcomes = graph.rebuild_cache_outcomes(&handle.generation_id)?;
+    let evaluated = cache::evaluate(
+        &stage.cache_rows,
+        &outcomes,
+        &valid_cache,
+        &handle.generation_id,
+    );
+    let mut sorted_outcomes = outcomes.into_iter().collect::<Vec<_>>();
+    sorted_outcomes.sort_by(|left, right| left.0.cmp(&right.0));
+    let mut valid_ids = valid_cache.into_iter().collect::<Vec<_>>();
+    valid_ids.sort();
+    Ok(CacheFacts {
+        static_invalid: evaluated.static_invalid,
+        actual_invalid: evaluated.actual_invalid,
+        valid_ids,
+        outcomes: sorted_outcomes,
+        sha256: cache_text.map(|value| format!("{:x}", Sha256::digest(value.as_bytes()))),
+    })
+}
+
+/// A stored vector receipt must name this generation and embedding version
+/// and reference only sources historically registered in the graph.
+fn vector_receipt_invalid(
+    row: &VectorReadinessRow,
+    handle: &MemoryGenerationHandle,
+    historical: &HashSet<String>,
+) -> bool {
+    #[derive(serde::Deserialize)]
+    struct Receipt {
+        #[serde(default, deserialize_with = "crate::lenient::option")]
+        generation: Option<String>,
+        #[serde(default, deserialize_with = "crate::lenient::option")]
+        embedding_version: Option<String>,
+    }
+    if row.source_membership_invalid {
+        return true;
+    }
+    let Some(receipt) = row
+        .receipt_json
+        .as_deref()
+        .and_then(|raw| serde_json::from_str::<Receipt>(raw).ok())
+    else {
+        return true;
+    };
+    let Some(version) = handle
+        .embedding
+        .as_ref()
+        .map(super::super::types::GenerationEmbedding::version)
+    else {
+        return true;
+    };
+    let Some(refs) = row
+        .source_ids_json
+        .as_deref()
+        .and_then(|value| serde_json::from_str::<Vec<String>>(value).ok())
+    else {
+        return true;
+    };
+    receipt.generation.as_deref() != Some(handle.generation_id.as_str())
+        || receipt.embedding_version.as_deref() != Some(version)
+        || refs.is_empty()
+        || refs.iter().any(|id| !historical.contains(id))
 }
 
 /// Exact live source hash/count check shared by readiness and qualification.
@@ -393,29 +524,23 @@ fn verified_live_inventory(
     data_root: &Path,
     handle: &MemoryGenerationHandle,
     cancellation: &CancellationToken,
-) -> CognitionResult<Value> {
+) -> CognitionResult<inventory::MemorySourceInventory> {
     let inventory = build_inventory::read(data_root, handle, cancellation)?;
-    let stored: Value = serde_json::from_slice(
-        &fs::read(handle.source_root.join("memory-source-inventory.json"))
-            .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?,
-    )
-    .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
-    let as_of = stored["as_of"]
-        .as_str()
-        .ok_or_else(|| error(CognitionCode::MemoryInventoryChanged))?;
+    let stored = inventory::MemorySourceInventory::read(
+        &handle.source_root.join("memory-source-inventory.json"),
+    )?;
+    let as_of = stored.as_of.as_str();
     let live = inventory::read(
         data_root,
         &data_root.join("runtime/conversation-store.sqlite"),
         as_of,
         cancellation,
     )?;
-    let manifest: Value = serde_json::from_slice(
-        &fs::read(handle.root.join("manifest.json")).map_err(|source| {
-            error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
-        })?,
-    )
-    .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
-    if live.hash != manifest["source_inventory_hash"]
+    let manifest = GenerationManifest::read(
+        &handle.root.join("manifest.json"),
+        CognitionCode::MemoryGenerationUnavailable,
+    )?;
+    if manifest.source_inventory_hash.as_deref() != Some(live.hash.as_str())
         || live.source_count != inventory.expected_source_count
     {
         return Err(error(CognitionCode::MemoryInventoryChanged));
@@ -423,11 +548,14 @@ fn verified_live_inventory(
     Ok(stored)
 }
 
-fn hash(value: &Value) -> CognitionResult<String> {
-    let serialized = butler_core::json::stringify(value)
+fn hash(value: &impl Serialize) -> CognitionResult<String> {
+    let unavailable = |source| error(CognitionCode::MemoryReadinessUnavailable).with_source(source);
+    let value = serde_json::to_value(value).map_err(unavailable)?;
+    let serialized = butler_core::json::stringify(&value)
         .map_err(|source| error(CognitionCode::MemoryReadinessUnavailable).with_source(source))?;
     Ok(format!("{:x}", Sha256::digest(serialized.as_bytes())))
 }
+
 fn error(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, code.as_str())
 }

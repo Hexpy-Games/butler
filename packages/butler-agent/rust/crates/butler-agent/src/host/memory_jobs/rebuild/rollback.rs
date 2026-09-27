@@ -12,7 +12,8 @@ use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
 use butler_memory::cognition::{
     CognitionError, CognitionPathEnvironment, CognitionRegistrationService, CognitionResult,
-    GenerationVectorAdapter, MemorySyncConsumer, inspect_memory_rebuild, rollback_memory_rebuild,
+    GenerationFormat, GenerationVectorAdapter, InitializationOrigin, MemorySyncConsumer,
+    RollbackOutcome, RollbackStep, inspect_memory_rebuild, rollback_memory_rebuild,
 };
 use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_models::models::ModelConfigurationClock;
@@ -24,79 +25,89 @@ pub(super) async fn run(
     generation: &str,
     cancellation: &CancellationToken,
 ) -> CognitionResult<Value> {
-    let mut result = rollback_memory_rebuild(
+    let mut outcome = rollback_memory_rebuild(
         data_root,
         paths,
         coordinator.clone(),
         Some(generation),
-        CutoverStamp {
-            now: &SystemIdentity.now_iso(),
-            verified_commit: option_env!("BUTLER_MEMORY_VERIFIED_COMMIT"),
-        },
+        stamp(&SystemIdentity.now_iso()),
         cancellation,
     )
     .await?;
     let mut build = None;
-    if result["next_step"] == "build" {
-        let target = result["target_generation_id"]
-            .as_str()
-            .ok_or_else(|| error(CognitionCode::MemoryGenerationChanged))?;
-        build =
-            Some(build::run(data_root, paths, coordinator.clone(), target, cancellation).await?);
-        result = rollback_memory_rebuild(
+    if let RollbackOutcome::Pending {
+        next_step: RollbackStep::Build,
+        target_generation_id,
+        ..
+    } = &outcome
+    {
+        build = Some(
+            build::run(
+                data_root,
+                paths,
+                coordinator.clone(),
+                target_generation_id,
+                cancellation,
+            )
+            .await?,
+        );
+        outcome = rollback_memory_rebuild(
             data_root,
             paths,
             coordinator.clone(),
             Some(generation),
-            CutoverStamp {
-                now: &SystemIdentity.now_iso(),
-                verified_commit: option_env!("BUTLER_MEMORY_VERIFIED_COMMIT"),
-            },
+            stamp(&SystemIdentity.now_iso()),
             cancellation,
         )
         .await?;
     }
-    if result.get("descriptor").is_none() {
+    let mut result = serde_json::to_value(&outcome)
+        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
+    let RollbackOutcome::Committed {
+        descriptor,
+        readiness,
+        ..
+    } = &outcome
+    else {
         result["build"] = build.unwrap_or(Value::Null);
         return Ok(result);
-    }
-    let target = result["descriptor"]["generation_id"]
-        .as_str()
-        .ok_or_else(|| error(CognitionCode::MemoryGenerationChanged))?;
+    };
+    let target = descriptor.generation_id.as_str();
     let first_status = inspect_memory_rebuild(data_root, paths, target)?;
-    let bootstrap = first_status["manifest"]["format"] == "v2"
-        && first_status["manifest"]["initialization_origin"] == "empty"
-        && result["readiness"].is_null();
+    let bootstrap = first_status.manifest.format == Some(GenerationFormat::V2)
+        && first_status.manifest.initialization_origin == Some(InitializationOrigin::Empty)
+        && readiness.is_none();
     let catchup = if bootstrap {
         Some(serving_catchup(data_root, paths, coordinator, cancellation).await?)
     } else {
         None
     };
     let status = inspect_memory_rebuild(data_root, paths, target)?;
-    let projection_pending = status["degraded"] == true
-        || !status["windows"].is_object()
-        || !status["vectors"].is_object()
-        || !status["cache"].is_object()
-        || ["windows", "vectors", "cache"].iter().any(|phase| {
-            status[*phase]["pending"].as_u64().unwrap_or(0) > 0
-                || status[*phase]["failed"].as_u64().unwrap_or(0) > 0
-        });
     let catchup_pending = catchup.as_ref().is_some_and(|value| {
         value["available"] != true || value["scanned"].as_u64().unwrap_or(0) >= 256
     });
-    result["rollback_pending"] =
-        json!(status["manifest"]["format"] == "v2" && (projection_pending || catchup_pending));
+    result["rollback_pending"] = json!(
+        status.manifest.format == Some(GenerationFormat::V2)
+            && (status.projection_pending() || catchup_pending)
+    );
     result["target_status"] = json!({
-        "available":status["degraded"] != true,
-        "reason":status["reason"],
-        "jobs":status["jobs"],
-        "windows":status["windows"],
-        "vectors":status["vectors"],
-        "cache":status["cache"],
+        "available":!status.degraded,
+        "reason":status.reason,
+        "jobs":status.jobs,
+        "windows":status.windows,
+        "vectors":status.vectors,
+        "cache":status.cache,
     });
     result["catchup"] = catchup.unwrap_or(Value::Null);
     result["build"] = build.unwrap_or(Value::Null);
     Ok(result)
+}
+
+fn stamp(now: &str) -> CutoverStamp<'_> {
+    CutoverStamp {
+        now,
+        verified_commit: option_env!("BUTLER_MEMORY_VERIFIED_COMMIT"),
+    }
 }
 
 async fn serving_catchup(

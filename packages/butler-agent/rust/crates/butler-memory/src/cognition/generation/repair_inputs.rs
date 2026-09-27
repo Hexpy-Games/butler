@@ -11,8 +11,8 @@ use crate::cognition::graph::{
     CandidateInputRepairRequest as GraphCandidateInputRepairRequest, GraphRepository,
 };
 use crate::cognition::{
-    CognitionError, CognitionPathEnvironment, CognitionResult, MemoryGenerationTarget,
-    assert_mutation_authority, ensure_data_authority, resolve_generation,
+    CognitionError, CognitionPathEnvironment, CognitionResult, assert_mutation_authority,
+    ensure_data_authority, resolve_generation,
 };
 use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator};
 use butler_turn::conversation::ConversationSourceReader;
@@ -53,22 +53,7 @@ pub async fn run(request: CandidateInputRepairRequest<'_>) -> CognitionResult<Va
     })?;
     let request = GraphCandidateInputRepairRequest::parse(&bytes)?;
     let memory_root = environment.memory_root(data_root);
-    let descriptor = read::read_descriptor(&memory_root)?;
-    let manifest = read::read_manifest(&memory_root, generation_id)?;
-    let target = if descriptor.generation_id == generation_id {
-        MemoryGenerationTarget::Active {
-            expected_generation: generation_id.to_owned(),
-        }
-    } else if manifest.state.as_deref() == Some("building") {
-        MemoryGenerationTarget::Rebuild {
-            generation_id: generation_id.to_owned(),
-            canonical_snapshot_id: manifest
-                .canonical_snapshot_id
-                .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?,
-        }
-    } else {
-        return Err(error(CognitionCode::MemoryGenerationChanged));
-    };
+    let target = read::operator_target(&memory_root, generation_id)?;
     let handle = resolve_generation(data_root, environment, &target)?;
     let canonical_path = handle
         .canonical_snapshot_path

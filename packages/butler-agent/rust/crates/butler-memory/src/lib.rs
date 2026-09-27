@@ -13,3 +13,5 @@ pub mod cognition;
 pub mod coordination;
 pub mod profile;
 pub mod work_records;
+
+mod lenient;

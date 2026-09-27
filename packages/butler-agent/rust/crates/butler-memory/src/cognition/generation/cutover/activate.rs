@@ -1,28 +1,41 @@
 //! Qualified candidate activation with source witnesses and a short descriptor CAS.
+//!
+//! Outside the write gate: check the candidate is ready and qualified,
+//! recompute its readiness, and revalidate the stored evidence. Under the
+//! gate: recheck every witness, swap the descriptor, and settle both manifest
+//! states.
 
 use std::{path::Path, sync::Arc};
 
-use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
 use super::{
-    CutoverStamp, descriptor, error, field, manifest_path, qualification::StoredQualification,
-    read_manifest,
+    CutoverStamp, descriptor, error, manifest_path,
+    qualification::{QualifiedTarget, StoredQualification},
+    read_manifest, required,
 };
 use crate::{
     cognition::{
-        CognitionPathEnvironment, CognitionResult, MemoryGenerationTarget, ensure_data_authority,
-        resolve_generation,
+        CognitionPathEnvironment, CognitionResult, MemoryGenerationHandle, MemoryGenerationTarget,
+        ensure_data_authority, resolve_generation,
     },
-    coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator},
+    coordination::{
+        CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator, CognitionWriteLease,
+    },
 };
 
 use super::super::{
+    manifest::{
+        ActiveDescriptor, GenerationFormat, GenerationManifest, GenerationReadiness,
+        GenerationState, ProjectionMode,
+    },
     qualification_witness::{CandidateWitness, LiveWitness},
     rebuild::{assert_live_inventory_matches_candidate, compute_rebuild_readiness},
 };
 use crate::cognition::CognitionCode;
 
+/// Makes a qualified `ready` candidate the serving generation and returns the
+/// installed descriptor.
 pub async fn activate(
     data_root: &Path,
     environment: &CognitionPathEnvironment,
@@ -31,7 +44,7 @@ pub async fn activate(
     expected_active: Option<&str>,
     stamp: CutoverStamp<'_>,
     cancellation: &CancellationToken,
-) -> CognitionResult<Value> {
+) -> CognitionResult<ActiveDescriptor> {
     super::repair_pending(data_root, environment, coordinator.clone(), cancellation).await?;
     if cancellation.is_cancelled() {
         return Err(error(CognitionCode::MemoryOperationAborted));
@@ -44,21 +57,11 @@ pub async fn activate(
     }
     let path = manifest_path(data_root, environment, generation_id)?;
     let (manifest, manifest_sha) = read_manifest(&path, generation_id)?;
-    let binding = manifest.get("acceptance_binding");
-    let stored_readiness = &manifest["readiness"];
-    if manifest["format"] != "v2"
-        || manifest["state"] != "ready"
-        || manifest["required_acceptance_passed"] != true
-        || stored_readiness["ready"] != true
-        || binding.is_none_or(Value::is_null)
-    {
-        return Err(error(CognitionCode::ActivationRequiresCatchup));
-    }
-    let inventory_hash = field(&manifest, "source_inventory_hash")?;
-    let snapshot_id = field(&manifest, "canonical_snapshot_id")?;
+    let stored_readiness = qualified_readiness(&manifest)?;
+    let inventory_hash = required(manifest.source_inventory_hash.as_deref())?;
     let target = MemoryGenerationTarget::Rebuild {
         generation_id: generation_id.to_owned(),
-        canonical_snapshot_id: snapshot_id.to_owned(),
+        canonical_snapshot_id: required(manifest.canonical_snapshot_id.as_deref())?.to_owned(),
     };
     let handle = resolve_generation(data_root, environment, &target)?;
     let live = LiveWitness::open(data_root)?;
@@ -69,20 +72,22 @@ pub async fn activate(
         compute_rebuild_readiness(data_root, environment, &target, cancellation).await?;
     candidate.assert_current(&handle).await?;
     live.assert_current()?;
-    if readiness["ready"] != true
-        || readiness["sha256"] != stored_readiness["sha256"]
-        || readiness["evidence_sha256"] != stored_readiness["evidence_sha256"]
-        || readiness["inventory_hash"] != inventory_hash
+    if !readiness.ready
+        || !readiness.same_as(stored_readiness)
+        || readiness.inventory_hash != inventory_hash
     {
         return Err(error(CognitionCode::ActivationRequiresCatchup));
     }
     let qualification = StoredQualification::open(
         data_root,
-        path.parent()
-            .ok_or_else(|| error(CognitionCode::MemoryGenerationUnavailable))?,
-        generation_id,
-        &manifest,
-        &readiness,
+        &QualifiedTarget {
+            generation_root: path
+                .parent()
+                .ok_or_else(|| error(CognitionCode::MemoryGenerationUnavailable))?,
+            generation_id,
+            manifest: &manifest,
+            readiness: &readiness,
+        },
         CognitionCode::ActivationRequiresCatchup,
         stamp.verified_commit,
     )?;
@@ -105,49 +110,22 @@ pub async fn activate(
         .await
         .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
         .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
+    let commit = Activation {
+        data_root,
+        environment,
+        lock: &lock,
+        path: &path,
+        generation_id,
+        descriptor: &descriptor,
+        manifest_sha: &manifest_sha,
+        inventory_hash,
+        readiness: &readiness,
+        witnesses: (&live, &candidate, &handle),
+        qualification: &qualification,
+        now: stamp.now,
+    };
     let mut cas_committed = false;
-    let result = async {
-        lease
-            .assert_for_path(&lock)
-            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
-        if cancellation.is_cancelled() {
-            return Err(error(CognitionCode::MemoryOperationAborted));
-        }
-        candidate.assert_current(&handle).await?;
-        live.assert_current()?;
-        qualification.assert_file_facts_current()?;
-        let (current_manifest, current_sha) = read_manifest(&path, generation_id)?;
-        if current_sha != manifest_sha
-            || current_manifest["source_inventory_hash"] != inventory_hash
-            || current_manifest["readiness"]["sha256"] != readiness["sha256"]
-        {
-            return Err(error(CognitionCode::ActivationRequiresCatchup));
-        }
-        let next = descriptor::next_descriptor(
-            generation_id,
-            &descriptor.fields.generation_id,
-            stamp.now,
-            "running",
-        );
-        let transitioned = descriptor::commit_descriptor_transition(
-            data_root,
-            environment,
-            &lease,
-            &descriptor.raw,
-            generation_id,
-            &manifest_sha,
-            next,
-        )?;
-        cas_committed = true;
-        descriptor::reconcile_committed_manifest_states(
-            data_root,
-            environment,
-            &lease,
-            &transitioned,
-        )?;
-        Ok(transitioned)
-    }
-    .await;
+    let result = commit.run(&lease, cancellation, &mut cas_committed).await;
     let released = lease
         .release(cas_committed)
         .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
@@ -155,4 +133,97 @@ pub async fn activate(
         released?;
         Ok(value)
     })
+}
+
+/// The stored readiness of a v2 candidate that is `ready` and still bound to
+/// passed qualification.
+fn qualified_readiness(manifest: &GenerationManifest) -> CognitionResult<&GenerationReadiness> {
+    match &manifest.readiness {
+        Some(readiness)
+            if manifest.format == Some(GenerationFormat::V2)
+                && manifest.state == Some(GenerationState::Ready)
+                && manifest.required_acceptance_passed == Some(true)
+                && readiness.ready
+                && manifest.acceptance_binding.is_some() =>
+        {
+            Ok(readiness)
+        }
+        _ => Err(error(CognitionCode::ActivationRequiresCatchup)),
+    }
+}
+
+/// Everything the leased activation step rechecks before its descriptor CAS.
+struct Activation<'a> {
+    data_root: &'a Path,
+    environment: &'a CognitionPathEnvironment,
+    lock: &'a Path,
+    path: &'a Path,
+    generation_id: &'a str,
+    descriptor: &'a descriptor::DescriptorCapture,
+    manifest_sha: &'a str,
+    inventory_hash: &'a str,
+    readiness: &'a GenerationReadiness,
+    witnesses: (
+        &'a LiveWitness,
+        &'a CandidateWitness,
+        &'a MemoryGenerationHandle,
+    ),
+    qualification: &'a StoredQualification,
+    now: &'a str,
+}
+
+impl Activation<'_> {
+    async fn run(
+        &self,
+        lease: &CognitionWriteLease,
+        cancellation: &CancellationToken,
+        cas_committed: &mut bool,
+    ) -> CognitionResult<ActiveDescriptor> {
+        lease
+            .assert_for_path(self.lock)
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
+        if cancellation.is_cancelled() {
+            return Err(error(CognitionCode::MemoryOperationAborted));
+        }
+        let (live, candidate, handle) = self.witnesses;
+        candidate.assert_current(handle).await?;
+        live.assert_current()?;
+        self.qualification.assert_file_facts_current()?;
+        let (current_manifest, current_sha) = read_manifest(self.path, self.generation_id)?;
+        if current_sha != self.manifest_sha
+            || current_manifest.source_inventory_hash.as_deref() != Some(self.inventory_hash)
+            || current_manifest
+                .readiness
+                .as_ref()
+                .and_then(|readiness| readiness.sha256.as_deref())
+                != self.readiness.sha256.as_deref()
+        {
+            return Err(error(CognitionCode::ActivationRequiresCatchup));
+        }
+        let next = descriptor::next_descriptor(
+            self.generation_id,
+            &self.descriptor.fields.generation_id,
+            self.now,
+            ProjectionMode::Running,
+        );
+        let transitioned = descriptor::commit_descriptor_transition(
+            self.data_root,
+            self.environment,
+            lease,
+            &descriptor::TransitionGuard {
+                expected: self.descriptor,
+                target_generation_id: self.generation_id,
+                target_manifest_sha256: self.manifest_sha,
+            },
+            &next,
+        )?;
+        *cas_committed = true;
+        descriptor::reconcile_committed_manifest_states(
+            self.data_root,
+            self.environment,
+            lease,
+            &transitioned,
+        )?;
+        Ok(transitioned.fields)
+    }
 }

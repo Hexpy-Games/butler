@@ -8,10 +8,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::Value;
 
 use super::{GraphRepository, db_error, vector_registration::source_row};
-use crate::cognition::CognitionCode;
+use crate::cognition::generation::MemorySourceInventory;
 use crate::cognition::{CognitionResult, CognitionSourceRow, sources::hydrate_typed_source};
 use butler_turn::conversation::ConversationSourceReader;
 
@@ -39,12 +38,12 @@ impl GraphRepository {
     pub(in crate::cognition) fn rebuild_source_readiness(
         &self,
         generation: &str,
-        inventory: &Value,
+        inventory: &MemorySourceInventory,
         canonical: &ConversationSourceReader,
         source_root: &Path,
     ) -> CognitionResult<SourceReadiness> {
         let db = self.connection()?;
-        let expected = expected_sources(inventory)?;
+        let expected = expected_sources(inventory);
         let registered_rows = registered_leaves(db, generation)?;
         let mut result = SourceReadiness {
             expected_count: expected.len(),
@@ -90,44 +89,36 @@ impl GraphRepository {
     }
 }
 
-fn expected_sources(inventory: &Value) -> CognitionResult<HashMap<String, Expected>> {
+fn expected_sources(inventory: &MemorySourceInventory) -> HashMap<String, Expected> {
     let mut expected = HashMap::new();
-    for entry in array(inventory, "entries")? {
-        let revision = string(entry, "revision")?.to_owned();
-        let hashes = string_array(entry, "sourceHashes")?
-            .into_iter()
-            .collect::<HashSet<_>>();
-        let origins = Some(
-            string_array(entry, "originKinds")?
-                .into_iter()
-                .collect::<HashSet<_>>(),
-        );
-        for id in string_array(entry, "sourceIds")? {
+    for entry in &inventory.entries {
+        let hashes = entry.source_hashes.iter().cloned().collect::<HashSet<_>>();
+        let origins = Some(entry.origin_kinds.iter().cloned().collect::<HashSet<_>>());
+        for id in &entry.source_ids {
             expected.insert(
-                id,
+                id.clone(),
                 Expected {
-                    revision: revision.clone(),
+                    revision: entry.revision.clone(),
                     hashes: hashes.clone(),
                     origins: origins.clone(),
                 },
             );
         }
     }
-    for entry in array(inventory, "typed")? {
-        let revision = string(entry, "revision")?.to_owned();
-        let hashes = HashSet::from([string(entry, "content_hash")?.to_owned()]);
-        for id in string_array(entry, "source_ids")? {
+    for entry in &inventory.typed {
+        let hashes = HashSet::from([entry.content_hash.clone()]);
+        for id in &entry.source_ids {
             expected.insert(
-                id,
+                id.clone(),
                 Expected {
-                    revision: revision.clone(),
+                    revision: entry.revision.clone(),
                     hashes: hashes.clone(),
                     origins: None,
                 },
             );
         }
     }
-    Ok(expected)
+    expected
 }
 
 fn registered_leaves(db: &Connection, generation: &str) -> CognitionResult<HashSet<String>> {
@@ -281,34 +272,4 @@ fn semantic_invalid(
 
 fn graph_invalid(db: &Connection, generation: &str) -> CognitionResult<usize> {
     db.query_row("SELECT COUNT(*) FROM edge_evidence ee JOIN edges e ON e.edge_id=ee.edge_id AND e.status='active' LEFT JOIN memory_chunk_sources s ON s.source_id=ee.chunk_source_id LEFT JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision LEFT JOIN memory_projection_jobs j ON j.episode_id=c.memory_chunk_id AND j.revision=c.current_revision AND j.generation=?1 WHERE j.job_id IS NULL", params![generation], |row| row.get::<_, usize>(0)).map_err(db_error)
-}
-
-fn array<'a>(value: &'a Value, field: &str) -> CognitionResult<&'a [Value]> {
-    value
-        .get(field)
-        .and_then(Value::as_array)
-        .map(Vec::as_slice)
-        .ok_or_else(invalid_inventory)
-}
-fn string<'a>(value: &'a Value, field: &str) -> CognitionResult<&'a str> {
-    value
-        .get(field)
-        .and_then(Value::as_str)
-        .ok_or_else(invalid_inventory)
-}
-fn string_array(value: &Value, field: &str) -> CognitionResult<Vec<String>> {
-    array(value, field)?
-        .iter()
-        .map(|item| {
-            item.as_str()
-                .map(str::to_owned)
-                .ok_or_else(invalid_inventory)
-        })
-        .collect()
-}
-fn invalid_inventory() -> crate::cognition::CognitionError {
-    crate::cognition::CognitionError::new(
-        CognitionCode::MemoryInventoryChanged,
-        "memory_inventory_changed",
-    )
 }

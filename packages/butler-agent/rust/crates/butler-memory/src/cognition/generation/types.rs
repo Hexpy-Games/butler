@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, embedding::EmbeddingIdentity};
 
-const NATIVE_EMBEDDING_SCHEMA: &str = "butler.native-embedding-identity.v1";
+pub(super) const NATIVE_EMBEDDING_SCHEMA: &str = "butler.native-embedding-identity.v1";
 const CHECKED_PREPROCESSING: &str = "tokenizer-json-special-tokens-checked-v1";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -147,21 +147,6 @@ pub struct MemoryGenerationHandle {
     pub embedding: Option<GenerationEmbedding>,
     pub source_root: PathBuf,
     pub canonical_snapshot_path: Option<PathBuf>,
-}
-
-pub(super) struct ActiveDescriptor {
-    pub generation_id: String,
-    pub projection_mode: Option<String>,
-}
-
-pub(super) struct GenerationManifest {
-    pub schema: String,
-    pub generation_id: String,
-    pub format: String,
-    pub state: Option<String>,
-    pub embedding: Option<GenerationEmbedding>,
-    pub canonical_snapshot_id: Option<String>,
-    pub canonical_snapshot_path: Option<String>,
 }
 
 pub(super) fn validate_generation_embedding(

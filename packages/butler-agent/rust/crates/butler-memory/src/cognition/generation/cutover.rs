@@ -8,7 +8,6 @@ mod rollback;
 use crate::cognition::CognitionCode;
 use std::{fs, path::Path, sync::Arc};
 
-use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
@@ -18,6 +17,9 @@ use crate::{
 };
 
 pub use activate::activate;
+pub use rollback::{RollbackOutcome, RollbackStep};
+
+use super::manifest::{GenerationManifest, GenerationState};
 
 /// When a cutover happens and which implementation commit its qualification
 /// must name (`None` for builds that cannot claim one).
@@ -26,9 +28,9 @@ pub struct CutoverStamp<'a> {
     pub now: &'a str,
     pub verified_commit: Option<&'a str>,
 }
-pub use rollback::rollback;
 #[cfg(test)]
 pub(super) use descriptor::next_descriptor as next_descriptor_for_pin;
+pub use rollback::rollback;
 
 pub(crate) async fn repair_pending(
     data_root: &Path,
@@ -51,15 +53,16 @@ pub(crate) async fn repair_pending(
     // A previous target may be rebuilding or freshly requalified while the
     // descriptor still points at the current active generation. Only a
     // confirmed descriptor target awaiting its state write needs repair.
-    if target_manifest["state"] == "active"
+    let active = Some(GenerationState::Active);
+    if target_manifest.state == active
         && matches!(
-            previous_manifest["state"].as_str(),
-            Some("retired" | "building" | "ready")
+            previous_manifest.state,
+            Some(GenerationState::Retired | GenerationState::Building | GenerationState::Ready)
         )
     {
         return Ok(());
     }
-    if target_manifest["state"] != "active" && previous_manifest["state"] != "active" {
+    if target_manifest.state != active && previous_manifest.state != active {
         return Err(error(CognitionCode::MemoryGenerationChanged));
     }
     let lease = coordinator
@@ -78,12 +81,7 @@ pub(crate) async fn repair_pending(
     let result = if cancellation.is_cancelled() {
         Err(error(CognitionCode::MemoryOperationAborted))
     } else {
-        descriptor::reconcile_committed_manifest_states(
-            data_root,
-            environment,
-            &lease,
-            &capture.raw,
-        )
+        descriptor::reconcile_committed_manifest_states(data_root, environment, &lease, &capture)
     };
     let released = lease
         .release(result.is_ok())
@@ -107,23 +105,23 @@ fn manifest_path(
     Ok(path)
 }
 
-fn read_manifest(path: &Path, generation_id: &str) -> CognitionResult<(Value, String)> {
+/// Reads a manifest with the SHA-256 of the exact bytes read.
+fn read_manifest(
+    path: &Path,
+    generation_id: &str,
+) -> CognitionResult<(GenerationManifest, String)> {
     let bytes = fs::read(path)
         .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
-    let manifest: Value = serde_json::from_slice(&bytes)
-        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
-    if manifest["schema"] != "butler.memory-generation.v2"
-        || manifest["generation_id"] != generation_id
-    {
+    let manifest = GenerationManifest::parse(&bytes, CognitionCode::MemoryGenerationUnavailable)?;
+    if !manifest.is_for(generation_id) {
         return Err(error(CognitionCode::MemoryGenerationVersionUnsupported));
     }
     Ok((manifest, format!("{:x}", Sha256::digest(bytes))))
 }
 
-fn field<'a>(value: &'a Value, key: &str) -> CognitionResult<&'a str> {
-    value[key]
-        .as_str()
-        .ok_or_else(|| error(CognitionCode::MemoryGenerationChanged))
+/// A string fact the cutover requires.
+fn required(value: Option<&str>) -> CognitionResult<&str> {
+    value.ok_or_else(|| error(CognitionCode::MemoryGenerationChanged))
 }
 
 fn error(code: CognitionCode) -> CognitionError {

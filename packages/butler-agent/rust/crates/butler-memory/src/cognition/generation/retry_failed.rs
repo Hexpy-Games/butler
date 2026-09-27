@@ -9,8 +9,8 @@ use tokio_util::sync::CancellationToken;
 use super::read;
 use crate::{
     cognition::{
-        CognitionError, CognitionPathEnvironment, CognitionResult, MemoryGenerationTarget,
-        assert_mutation_authority, ensure_data_authority,
+        CognitionError, CognitionPathEnvironment, CognitionResult, assert_mutation_authority,
+        ensure_data_authority,
         graph::{GraphRepository, VectorRepairRequest},
         resolve_generation,
     },
@@ -32,22 +32,7 @@ pub async fn run(
     read::safe_generation_id(generation_id)?;
     let request = repair_input.map(read_request).transpose()?;
     let memory_root = environment.memory_root(data_root);
-    let descriptor = read::read_descriptor(&memory_root)?;
-    let manifest = read::read_manifest(&memory_root, generation_id)?;
-    let target = if descriptor.generation_id == generation_id {
-        MemoryGenerationTarget::Active {
-            expected_generation: generation_id.to_owned(),
-        }
-    } else if manifest.state.as_deref() == Some("building") {
-        MemoryGenerationTarget::Rebuild {
-            generation_id: generation_id.to_owned(),
-            canonical_snapshot_id: manifest
-                .canonical_snapshot_id
-                .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?,
-        }
-    } else {
-        return Err(error(CognitionCode::MemoryGenerationChanged));
-    };
+    let target = read::operator_target(&memory_root, generation_id)?;
     let handle = resolve_generation(data_root, environment, &target)?;
     let lock = environment.consolidation_lock(data_root);
     let manifest_path = memory_root

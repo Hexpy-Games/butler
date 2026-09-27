@@ -88,15 +88,19 @@ pub use exact_query::ExactMemoryQuery;
 pub use extraction::{CandidateSearchInput, CognitionVectorSearch, VectorSearchFuture};
 pub use feedback_buffer::{FeedbackBufferService, FeedbackTarget};
 pub use generation::{
-    BuildInventory, CandidateInputRepairRequest, CutoverStamp, GenerationEmbedding,
-    MemoryGenerationHandle, MemoryGenerationTarget, activate_memory_rebuild,
-    active_memory_descriptor_exists, advance_rebuild_cache, assert_mutation_authority,
-    assert_rebuild_sources_registered, bind_native_embedding_identity, compute_rebuild_readiness,
-    initialize_empty_memory_generation, inspect_memory_rebuild, prepare_memory_rebuild,
-    read_build_inventory, rebuild_typed_cursor, reconcile_rebuild_vector_representatives,
-    record_rebuild_readiness, refresh_memory_rebuild_snapshot, repair_memory_candidate_inputs,
-    resolve_active_generation, resolve_generation, retry_failed_memory_generation,
-    rollback_memory_rebuild, set_extractor_memory_generation, validate_memory_rebuild,
+    AcceptanceBinding, ActiveDescriptor, BuildInventory, CandidateInputRepairRequest,
+    CanonicalSnapshot, CutoverStamp, EmbeddingSlot, GenerationEmbedding, GenerationFormat,
+    GenerationManifest, GenerationReadiness, GenerationState, InitializationOrigin,
+    MemoryGenerationHandle, MemoryGenerationTarget, ProjectionMode, RebuildInspection,
+    RollbackOutcome, RollbackStep, SemanticCounts, StageCounts, VectorCounts,
+    activate_memory_rebuild, active_memory_descriptor_exists, advance_rebuild_cache,
+    assert_mutation_authority, assert_rebuild_sources_registered, bind_native_embedding_identity,
+    compute_rebuild_readiness, initialize_empty_memory_generation, inspect_memory_rebuild,
+    prepare_memory_rebuild, read_build_inventory, rebuild_typed_cursor,
+    reconcile_rebuild_vector_representatives, record_rebuild_readiness,
+    refresh_memory_rebuild_snapshot, repair_memory_candidate_inputs, resolve_active_generation,
+    resolve_generation, retry_failed_memory_generation, rollback_memory_rebuild,
+    set_extractor_memory_generation, validate_memory_rebuild,
 };
 pub use generation_vectors::GenerationVectorAdapter;
 pub use graph::{GraphProgress, ProjectionModelPolicyInput};

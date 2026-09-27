@@ -9,8 +9,8 @@ use tokio_util::sync::CancellationToken;
 use super::read;
 use crate::{
     cognition::{
-        CognitionError, CognitionPathEnvironment, CognitionResult, MemoryGenerationTarget,
-        assert_mutation_authority, ensure_data_authority,
+        CognitionError, CognitionPathEnvironment, CognitionResult, assert_mutation_authority,
+        ensure_data_authority,
         graph::{GraphRepository, ProjectionModelPolicyInput},
         resolve_generation,
     },
@@ -30,15 +30,10 @@ pub async fn run(
     let memory_root = environment.memory_root(data_root);
     let descriptor = read::read_descriptor(&memory_root)?;
     let manifest = read::read_manifest(&memory_root, generation_id)?;
-    if descriptor.generation_id == generation_id || manifest.state.as_deref() != Some("building") {
+    if descriptor.generation_id == generation_id {
         return Err(error(CognitionCode::MemoryGenerationChanged));
     }
-    let target = MemoryGenerationTarget::Rebuild {
-        generation_id: generation_id.to_owned(),
-        canonical_snapshot_id: manifest
-            .canonical_snapshot_id
-            .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?,
-    };
+    let target = read::candidate_target(generation_id, manifest)?;
     let handle = resolve_generation(data_root, environment, &target)?;
     let lock = environment.consolidation_lock(data_root);
     let manifest_path = memory_root

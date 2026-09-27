@@ -21,15 +21,21 @@ pub use build_inventory::{
     BuildInventory, assert_registered as assert_rebuild_sources_registered,
     read as read_build_inventory, typed_cursor as rebuild_typed_cursor,
 };
+pub(in crate::cognition) use inventory::MemorySourceInventory;
 pub(in crate::cognition::generation) use readiness::assert_live_inventory_matches_candidate;
 pub use readiness::{compute as compute_rebuild_readiness, record as record_rebuild_readiness};
 pub use refresh::refresh_if_changed as refresh_memory_rebuild_snapshot;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
-use serde_json::{Value, json};
+use serde::Serialize;
+use serde_json::json;
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
 use super::initialize::durable;
+use super::manifest::{
+    CanonicalSnapshot, GenerationFormat, GenerationManifest, GenerationState, InitializationOrigin,
+    NewManifest, RuntimeVersions, SemanticCounts, StageCounts,
+};
 use crate::{
     cognition::{
         CognitionError, CognitionPathEnvironment, CognitionResult, ensure_data_authority,
@@ -38,6 +44,7 @@ use crate::{
     coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator},
 };
 
+/// Identity of a freshly prepared rebuild candidate.
 pub struct PreparedRebuild {
     pub generation_id: String,
     pub canonical_snapshot_id: String,
@@ -52,6 +59,8 @@ impl Drop for StagedCleanup {
         }
     }
 }
+/// Stages a snapshot-backed rebuild candidate and publishes it as `building`.
+/// Preparation never activates it.
 pub async fn prepare(
     data_root: PathBuf,
     environment: CognitionPathEnvironment,
@@ -89,15 +98,17 @@ pub async fn prepare(
     let staged = generations.join(format!(".prepare-{generation_id}"));
     let published = generations.join(&generation_id);
     ensure_data_authority(&data_root, &[&staged, &published])?;
-    let stage_data = data_root.clone();
-    let stage_cancel = cancellation.clone();
-    let stage_now = now.clone();
-    let stage_id = generation_id.clone();
-    let staged_clone = staged.clone();
+    let (stage_data, stage_path, stage_id, stage_now, stage_cancel) = (
+        data_root.clone(),
+        staged.clone(),
+        generation_id.clone(),
+        now.clone(),
+        cancellation.clone(),
+    );
     let snapshot = tokio::task::spawn_blocking(move || {
         stage(
             &stage_data,
-            &staged_clone,
+            &stage_path,
             &stage_id,
             &stage_now,
             &stage_cancel,
@@ -105,7 +116,7 @@ pub async fn prepare(
     })
     .await
     .map_err(|source| error(CognitionCode::MemoryRebuildPrepareFailed).with_source(source))??;
-    let mut staged_cleanup = StagedCleanup(Some(staged.clone()));
+    let staged_cleanup = StagedCleanup(Some(staged.clone()));
     if cancellation.is_cancelled() {
         return Err(error(CognitionCode::MemoryOperationAborted));
     }
@@ -122,55 +133,125 @@ pub async fn prepare(
         .await
         .map_err(gate_error)?
         .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
-    crate::cognition::generation::stage::leased(lease, CognitionCode::MemoryRebuildPrepareFailed, move |lease| {
+    let publication = Publication {
+        data_root,
+        canonical,
+        lock,
+        generations,
+        staged,
+        published,
+        generation_id,
+        now,
+        unicode_version,
+        icu_version,
+        cancellation,
+        snapshot,
+        staged_cleanup,
+    };
+    crate::cognition::generation::stage::leased(
+        lease,
+        CognitionCode::MemoryRebuildPrepareFailed,
+        move |lease| publication.publish(lease),
+    )
+    .await
+}
+
+/// A staged candidate waiting to be published under the write lease.
+struct Publication {
+    data_root: PathBuf,
+    canonical: PathBuf,
+    lock: PathBuf,
+    generations: PathBuf,
+    staged: PathBuf,
+    published: PathBuf,
+    generation_id: String,
+    now: String,
+    unicode_version: String,
+    icu_version: String,
+    cancellation: CancellationToken,
+    snapshot: Staged,
+    staged_cleanup: StagedCleanup,
+}
+
+impl Publication {
+    /// Rechecks the live sources against the staged snapshot, writes the
+    /// `building` manifest, and renames the staged directory into place.
+    fn publish(
+        mut self,
+        lease: &crate::coordination::CognitionWriteLease,
+    ) -> CognitionResult<PreparedRebuild> {
         lease
-            .assert_for_path(&lock)
+            .assert_for_path(&self.lock)
             .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
-        if cancellation.is_cancelled() {
+        if self.cancellation.is_cancelled() {
             return Err(error(CognitionCode::MemoryOperationAborted));
         }
-        let current = inventory::read(&data_root, &canonical, &now, &cancellation)?;
-        if current.canonical_revision != snapshot.canonical_revision
-            || current.hash != snapshot.source_inventory_hash
+        let current = inventory::read(
+            &self.data_root,
+            &self.canonical,
+            &self.now,
+            &self.cancellation,
+        )?;
+        if current.canonical_revision != self.snapshot.canonical_revision
+            || current.hash != self.snapshot.source_inventory_hash
         {
             return Err(error(CognitionCode::MemorySourceChanged));
         }
-        if published.exists() {
+        if self.published.exists() {
             return Err(error(CognitionCode::MemoryGenerationChanged));
         }
-        ensure_data_authority(&data_root, &[&staged, &published, &lock])?;
-        let snapshot_id = snapshot_id(&generation_id, &snapshot.source_inventory_hash)?;
-        let manifest = json!({
-            "schema":"butler.memory-generation.v2", "generation_id":generation_id,
-            "format":"v2", "state":"building", "initialization_origin":"rebuild",
-            "schema_version":3, "extraction_version":"memory-extract-v3",
-            "ranking_version":2, "embedding":null, "unicode_version":unicode_version,
-            "icu_version":icu_version, "canonical_snapshot_id":snapshot_id,
-            "canonical_snapshot_path":"source-snapshot/runtime/conversation-store.sqlite",
-            "canonical_snapshot": {
-                "file_sha256":snapshot.canonical_sha256, "bytes":snapshot.canonical_bytes,
-                "duration_ms":snapshot.duration_ms, "canonical_revision":snapshot.canonical_revision,
-                "base_snapshot_id":null, "delta_from_snapshot_id":null,
-            },
-            "source_inventory_hash":snapshot.source_inventory_hash,
-            "registered_source_count":0, "unaccounted_source_count":snapshot.source_count,
-            "required_acceptance_passed":false,
-        });
-        durable::write_json(&staged.join("manifest.json"), &manifest)?;
-        fs::rename(&staged, &published).map_err(io_error)?;
-        staged_cleanup.0.take();
-        File::open(&generations)
+        ensure_data_authority(
+            &self.data_root,
+            &[&self.staged, &self.published, &self.lock],
+        )?;
+        let snapshot_id = snapshot_id(&self.generation_id, &self.snapshot.source_inventory_hash)?;
+        let manifest = self.manifest(&snapshot_id);
+        durable::write_json(&self.staged.join("manifest.json"), &manifest)?;
+        fs::rename(&self.staged, &self.published).map_err(io_error)?;
+        self.staged_cleanup.0.take();
+        File::open(&self.generations)
             .and_then(|directory| directory.sync_all())
             .map_err(io_error)?;
         Ok(PreparedRebuild {
-            generation_id,
+            generation_id: self.generation_id,
             canonical_snapshot_id: snapshot_id,
-            source_inventory_hash: snapshot.source_inventory_hash,
-            unaccounted_source_count: snapshot.source_count,
+            source_inventory_hash: self.snapshot.source_inventory_hash,
+            unaccounted_source_count: self.snapshot.source_count,
         })
-    })
-    .await
+    }
+
+    fn manifest(&self, snapshot_id: &str) -> GenerationManifest {
+        let snapshot = &self.snapshot;
+        let mut manifest = GenerationManifest::new(
+            NewManifest {
+                generation_id: &self.generation_id,
+                format: GenerationFormat::V2,
+                state: GenerationState::Building,
+                origin: InitializationOrigin::Rebuild,
+                canonical_snapshot_id: snapshot_id.to_owned(),
+                source_inventory_hash: snapshot.source_inventory_hash.clone(),
+                unaccounted_source_count: snapshot.source_count as u64,
+            },
+            Some(&RuntimeVersions {
+                unicode: &self.unicode_version,
+                icu: &self.icu_version,
+            }),
+        );
+        manifest.canonical_snapshot_path = Some(CANONICAL_SNAPSHOT_PATH.into());
+        manifest.canonical_snapshot = Some(CanonicalSnapshot {
+            file_sha256: snapshot.canonical_sha256.clone(),
+            bytes: snapshot.canonical_bytes,
+            duration_ms: snapshot.duration_ms,
+            canonical_revision: snapshot.canonical_revision,
+            base_snapshot_id: None,
+            delta_from_snapshot_id: None,
+        });
+        manifest
+    }
 }
+
+/// Canonical store inside a prepared candidate, relative to its root.
+const CANONICAL_SNAPSHOT_PATH: &str = "source-snapshot/runtime/conversation-store.sqlite";
 
 struct Staged {
     source_inventory_hash: String,
@@ -229,14 +310,14 @@ fn stage(
         }
         let snapshot = inventory::read(&snapshot_root, &snapshot_path, as_of, cancellation)?;
         if snapshot.hash != live.hash
-            || snapshot.value != live.value
+            || snapshot.inventory != live.inventory
             || snapshot.canonical_revision != live.canonical_revision
         {
             return Err(error(CognitionCode::MemorySnapshotChanged));
         }
         durable::write_json(
             &snapshot_root.join("memory-source-inventory.json"),
-            &live.value,
+            &live.inventory,
         )?;
         GraphRepository::create_fresh(&staged.join("graph.sqlite"), as_of)?;
         File::open(staged.join("graph.sqlite"))
@@ -271,11 +352,68 @@ fn stage(
     result
 }
 
+/// Vector unit counts of a candidate graph.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct VectorCounts {
+    /// Units with a stored vector.
+    pub complete: usize,
+    /// Units queued or running.
+    pub pending: usize,
+    /// Units that failed.
+    pub failed: usize,
+}
+
+/// Read-only status of a rebuild candidate, as `memory rebuild inspect`
+/// prints it. Counts are `None` when the candidate graph is missing.
+#[derive(Clone, Debug, Serialize)]
+pub struct RebuildInspection {
+    /// The stored manifest.
+    pub manifest: GenerationManifest,
+    /// The candidate graph file.
+    pub graph_path: PathBuf,
+    /// True when the graph is unavailable.
+    pub degraded: bool,
+    /// Why the candidate is degraded.
+    pub reason: Option<&'static str>,
+    /// Projection jobs in the graph.
+    pub jobs: Option<usize>,
+    /// Sources registered in the graph.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub registered_sources: Option<usize>,
+    /// Last typed source the build registered for this snapshot.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub typed_cursor: Option<Option<String>>,
+    /// Semantic projection window counts.
+    pub windows: Option<SemanticCounts>,
+    /// Vector unit counts.
+    pub vectors: Option<VectorCounts>,
+    /// Hot-cache job counts.
+    pub cache: Option<StageCounts>,
+}
+
+impl RebuildInspection {
+    /// Whether any projection stage is unavailable, pending, or failed.
+    pub fn projection_pending(&self) -> bool {
+        let (Some(windows), Some(vectors), Some(cache)) = (self.windows, self.vectors, self.cache)
+        else {
+            return true;
+        };
+        self.degraded
+            || windows.pending > 0
+            || windows.failed > 0
+            || vectors.pending > 0
+            || vectors.failed > 0
+            || cache.pending > 0
+            || cache.failed > 0
+    }
+}
+
+/// Reads a candidate's manifest and graph status without taking the write gate.
 pub fn inspect(
     data_root: &Path,
     environment: &CognitionPathEnvironment,
     generation_id: &str,
-) -> CognitionResult<Value> {
+) -> CognitionResult<RebuildInspection> {
     if generation_id.len() != 36
         || !generation_id
             .bytes()
@@ -290,29 +428,57 @@ pub fn inspect(
     let graph = root.join("graph.sqlite");
     let manifest_path = root.join("manifest.json");
     ensure_data_authority(data_root, &[&root, &graph, &manifest_path])?;
-    let manifest: Value =
-        serde_json::from_slice(&fs::read(manifest_path).map_err(|source| {
-            error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
-        })?)
-        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
-    if manifest["schema"] != "butler.memory-generation.v2"
-        || manifest["generation_id"] != generation_id
-    {
+    let manifest =
+        GenerationManifest::read(&manifest_path, CognitionCode::MemoryGenerationUnavailable)?;
+    if !manifest.is_for(generation_id) {
         return Err(error(CognitionCode::MemoryGenerationVersionUnsupported));
     }
     if !graph.is_file() {
-        return Ok(
-            json!({"manifest":manifest,"graph_path":graph,"degraded":true,
-            "reason":"graph_unavailable","jobs":null,"windows":null,"vectors":null,"cache":null}),
-        );
+        return Ok(RebuildInspection {
+            manifest,
+            graph_path: graph,
+            degraded: true,
+            reason: Some("graph_unavailable"),
+            jobs: None,
+            registered_sources: None,
+            typed_cursor: None,
+            windows: None,
+            vectors: None,
+            cache: None,
+        });
     }
     let db = Connection::open_with_flags(&graph, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
-    let count = |sql: &str| -> CognitionResult<i64> {
-        db.query_row(sql, [], |row| row.get(0))
-            .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))
-    };
-    let stored_cursor: Option<String> = db
+    let counts = GraphCounts(&db);
+    let typed_cursor = stored_typed_cursor(&db, manifest.canonical_snapshot_id.as_deref())?;
+    Ok(RebuildInspection {
+        jobs: Some(counts.count("SELECT COUNT(*) FROM memory_projection_jobs")?),
+        registered_sources: Some(counts.count("SELECT COUNT(*) FROM memory_chunk_sources")?),
+        typed_cursor: Some(typed_cursor),
+        windows: Some(counts.windows()?),
+        vectors: Some(counts.vectors()?),
+        cache: Some(counts.cache()?),
+        manifest,
+        graph_path: graph,
+        degraded: false,
+        reason: None,
+    })
+}
+
+/// The typed cursor stored for `snapshot_id`; a cursor from an older snapshot
+/// does not apply.
+fn stored_typed_cursor(
+    db: &Connection,
+    snapshot_id: Option<&str>,
+) -> CognitionResult<Option<String>> {
+    #[derive(serde::Deserialize)]
+    struct StoredCursor {
+        #[serde(default, deserialize_with = "crate::lenient::option")]
+        snapshot_id: Option<String>,
+        #[serde(default, deserialize_with = "crate::lenient::option")]
+        source_key: Option<String>,
+    }
+    let stored: Option<String> = db
         .query_row(
             "SELECT value FROM memory_state WHERE key='rebuild_typed_cursor'",
             [],
@@ -320,28 +486,66 @@ pub fn inspect(
         )
         .optional()
         .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
-    let typed_cursor = stored_cursor
-        .and_then(|value| serde_json::from_str::<Value>(&value).ok())
-        .filter(|value| value["snapshot_id"] == manifest["canonical_snapshot_id"])
-        .and_then(|value| value["source_key"].as_str().map(str::to_owned));
-    Ok(
-        json!({"manifest":manifest,"graph_path":graph,"degraded":false,"reason":null,
-            "jobs":count("SELECT COUNT(*) FROM memory_projection_jobs")?,
-            "registered_sources":count("SELECT COUNT(*) FROM memory_chunk_sources")?,
-            "typed_cursor":typed_cursor,
-            "windows": {"complete":count("SELECT COUNT(*) FROM memory_projection_windows WHERE state='complete'")?,
-                "unsupported":count("SELECT COUNT(*) FROM memory_projection_windows WHERE state='unsupported'")?,
-                "pending":count("SELECT COUNT(*) FROM memory_projection_windows WHERE state IN ('pending','planned','running')")?,
-                "failed":count("SELECT COUNT(*) FROM memory_projection_windows WHERE state='failed'")?},
-            "vectors": {"complete":count("SELECT COUNT(*) FROM memory_vector_units WHERE state='complete'")?,
-                "pending":count("SELECT COUNT(*) FROM memory_vector_units WHERE state IN ('pending','running')")?,
-                "failed":count("SELECT COUNT(*) FROM memory_vector_units WHERE state='failed'")?},
-            "cache": {"complete":count("SELECT COUNT(*) FROM memory_projection_jobs WHERE json_extract(hot_cache_state,'$.state')='complete'")?,
-                "pending":count("SELECT COUNT(*) FROM memory_projection_jobs WHERE json_extract(hot_cache_state,'$.state') IN ('pending','running','partial')")?,
-                "failed":count("SELECT COUNT(*) FROM memory_projection_jobs WHERE json_extract(hot_cache_state,'$.state')='failed'")?,
-                "not_configured":count("SELECT COUNT(*) FROM memory_projection_jobs WHERE json_extract(hot_cache_state,'$.state')='not_configured'")?},
-        }),
-    )
+    Ok(stored
+        .and_then(|value| serde_json::from_str::<StoredCursor>(&value).ok())
+        .filter(|cursor| cursor.snapshot_id.as_deref() == snapshot_id)
+        .and_then(|cursor| cursor.source_key))
+}
+
+/// Status counts read from a candidate graph.
+struct GraphCounts<'a>(&'a Connection);
+
+impl GraphCounts<'_> {
+    fn count(&self, sql: &str) -> CognitionResult<usize> {
+        let count: i64 = self
+            .0
+            .query_row(sql, [], |row| row.get(0))
+            .map_err(|source| {
+                error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
+            })?;
+        Ok(usize::try_from(count).unwrap_or(0))
+    }
+
+    fn windows(&self) -> CognitionResult<SemanticCounts> {
+        let state = |filter: &str| {
+            self.count(&format!(
+                "SELECT COUNT(*) FROM memory_projection_windows WHERE state{filter}"
+            ))
+        };
+        Ok(SemanticCounts {
+            complete: state("='complete'")?,
+            unsupported: state("='unsupported'")?,
+            pending: state(" IN ('pending','planned','running')")?,
+            failed: state("='failed'")?,
+        })
+    }
+
+    fn vectors(&self) -> CognitionResult<VectorCounts> {
+        let state = |filter: &str| {
+            self.count(&format!(
+                "SELECT COUNT(*) FROM memory_vector_units WHERE state{filter}"
+            ))
+        };
+        Ok(VectorCounts {
+            complete: state("='complete'")?,
+            pending: state(" IN ('pending','running')")?,
+            failed: state("='failed'")?,
+        })
+    }
+
+    fn cache(&self) -> CognitionResult<StageCounts> {
+        let state = |filter: &str| {
+            self.count(&format!(
+                "SELECT COUNT(*) FROM memory_projection_jobs WHERE json_extract(hot_cache_state,'$.state'){filter}"
+            ))
+        };
+        Ok(StageCounts {
+            complete: state("='complete'")?,
+            pending: state(" IN ('pending','running','partial')")?,
+            failed: state("='failed'")?,
+            not_configured: state("='not_configured'")?,
+        })
+    }
 }
 
 fn snapshot_id(generation_id: &str, inventory_hash: &str) -> CognitionResult<String> {

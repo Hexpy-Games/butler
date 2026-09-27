@@ -239,15 +239,15 @@ async fn generation_files_and_results_keep_their_pre_typing_bytes() {
     );
     let recorded_text = read(&rebuild_root.join("manifest.json"));
     pin("readiness-manifest.json", &normalize.apply(&recorded_text));
-    let inspected = super::inspect_memory_rebuild(&data.0, &environment, &prepared.generation_id)
-        .unwrap();
+    let inspected =
+        super::inspect_memory_rebuild(&data.0, &environment, &prepared.generation_id).unwrap();
     let inspected = serde_json::to_string(&inspected)
         .unwrap()
         .replace(&data.0.to_string_lossy().into_owned(), "<DATA>");
     pin("inspect-result.json", &normalize.apply(&inspected));
 
     // Qualification and activation writers.
-    let mut qualified: serde_json::Value = serde_json::from_str(&recorded_text).unwrap();
+    let mut qualified: super::GenerationManifest = serde_json::from_str(&recorded_text).unwrap();
     super::qualification_service::qualify_manifest(
         &mut qualified,
         &readiness,
@@ -262,10 +262,20 @@ async fn generation_files_and_results_keep_their_pre_typing_bytes() {
     );
     let qualified_path = data.0.join("qualified.json");
     super::initialize::durable::write_json(&qualified_path, &qualified).unwrap();
-    pin("qualified-manifest.json", &normalize.apply(&read(&qualified_path)));
-    let next =
-        super::cutover::next_descriptor_for_pin(&prepared.generation_id, &legacy_id, NOW, "running");
+    pin(
+        "qualified-manifest.json",
+        &normalize.apply(&read(&qualified_path)),
+    );
+    let next = super::cutover::next_descriptor_for_pin(
+        &prepared.generation_id,
+        &legacy_id,
+        NOW,
+        super::ProjectionMode::Running,
+    );
     let next_path = data.0.join("next-descriptor.json");
     super::initialize::durable::write_json(&next_path, &next).unwrap();
-    pin("activated-descriptor.json", &normalize.apply(&read(&next_path)));
+    pin(
+        "activated-descriptor.json",
+        &normalize.apply(&read(&next_path)),
+    );
 }

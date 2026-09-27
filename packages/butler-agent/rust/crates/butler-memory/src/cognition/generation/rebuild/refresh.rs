@@ -8,7 +8,6 @@ use std::{
 };
 
 use rusqlite::{Connection, OpenFlags, params};
-use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 use super::{error, hash_file, inventory, io_error, snapshot_id, typed_snapshot};
@@ -18,12 +17,31 @@ use crate::{
         CognitionPathEnvironment, CognitionResult, MemoryGenerationTarget, ensure_data_authority,
         generation::{
             initialize::durable,
+            manifest::{
+                ACTIVE_DESCRIPTOR_SCHEMA, CanonicalSnapshot, DescriptorView, GenerationManifest,
+                GenerationState,
+            },
             qualification_witness::{CandidateWitness, LiveWitness},
         },
         resolve_generation,
     },
     coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator},
 };
+
+/// The live inventory a refreshed snapshot must reproduce exactly.
+struct ExpectedSnapshot {
+    hash: String,
+    inventory: inventory::MemorySourceInventory,
+    canonical_revision: i64,
+}
+
+impl ExpectedSnapshot {
+    fn matches(&self, actual: &inventory::SourceInventory) -> bool {
+        actual.hash == self.hash
+            && actual.inventory == self.inventory
+            && actual.canonical_revision == self.canonical_revision
+    }
+}
 
 struct Snapshot {
     path: PathBuf,
@@ -60,9 +78,9 @@ pub async fn refresh_if_changed(
             &lock,
         ],
     )?;
-    let initial = read_json(&manifest_path)?;
-    let old_snapshot_id = field(&initial, "canonical_snapshot_id")?.to_owned();
-    let old_inventory_hash = field(&initial, "source_inventory_hash")?.to_owned();
+    let initial = read_manifest(&manifest_path)?;
+    let old_snapshot_id = required(initial.canonical_snapshot_id.as_deref())?.to_owned();
+    let old_inventory_hash = required(initial.source_inventory_hash.as_deref())?.to_owned();
     let target = MemoryGenerationTarget::Rebuild {
         generation_id: generation_id.to_owned(),
         canonical_snapshot_id: old_snapshot_id.clone(),
@@ -104,11 +122,11 @@ pub async fn refresh_if_changed(
     let stage_name = name.clone();
     let stage_as_of = now.to_owned();
     let stage_token = cancellation.clone();
-    let expected = (
-        live.hash.clone(),
-        live.value.clone(),
-        live.canonical_revision,
-    );
+    let expected = ExpectedSnapshot {
+        hash: live.hash.clone(),
+        inventory: live.inventory.clone(),
+        canonical_revision: live.canonical_revision,
+    };
     let snapshot = tokio::task::spawn_blocking(move || {
         stage_snapshot(
             &stage_data,
@@ -143,31 +161,51 @@ pub async fn refresh_if_changed(
         .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
         .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
     let result = async {
-        lease.assert_for_path(&lock).map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
-        if cancellation.is_cancelled() { return Err(error(CognitionCode::MemoryOperationAborted)); }
+        lease
+            .assert_for_path(&lock)
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
+        if cancellation.is_cancelled() {
+            return Err(error(CognitionCode::MemoryOperationAborted));
+        }
         live_witness.assert_current()?;
         live_witness.assert_public_revision(live.canonical_revision)?;
         candidate.assert_current(&old_handle).await?;
-        assert_building_inactive(data_root, &manifest_path, &active_path, generation_id, &old_snapshot_id, &old_inventory_hash)?;
-        let mut current = read_json(&manifest_path)?;
-        current["state"] = json!("building");
-        current["canonical_snapshot_id"] = json!(new_snapshot_id);
-        current["canonical_snapshot_path"] = json!(format!("{name}/runtime/conversation-store.sqlite"));
-        current["canonical_snapshot"] = json!({
-            "file_sha256":snapshot.sha256,"bytes":snapshot.bytes,"duration_ms":snapshot.duration_ms,
-            "canonical_revision":live.canonical_revision,
-            "base_snapshot_id":initial["canonical_snapshot"]["base_snapshot_id"].as_str().unwrap_or(&old_snapshot_id),
-            "delta_from_snapshot_id":old_snapshot_id,
+        assert_building_inactive(
+            data_root,
+            &manifest_path,
+            &active_path,
+            generation_id,
+            &old_snapshot_id,
+            &old_inventory_hash,
+        )?;
+        let mut current = read_manifest(&manifest_path)?;
+        current.state = Some(GenerationState::Building);
+        current.canonical_snapshot_id = Some(new_snapshot_id.clone());
+        current.canonical_snapshot_path = Some(format!("{name}/runtime/conversation-store.sqlite"));
+        current.canonical_snapshot = Some(CanonicalSnapshot {
+            file_sha256: snapshot.sha256.clone(),
+            bytes: snapshot.bytes,
+            duration_ms: snapshot.duration_ms,
+            canonical_revision: live.canonical_revision,
+            base_snapshot_id: Some(
+                initial
+                    .canonical_snapshot
+                    .as_ref()
+                    .and_then(|previous| previous.base_snapshot_id.clone())
+                    .unwrap_or_else(|| old_snapshot_id.clone()),
+            ),
+            delta_from_snapshot_id: Some(old_snapshot_id.clone()),
         });
-        current["source_inventory_hash"] = json!(live.hash);
-        current["registered_source_count"] = json!(0);
-        current["unaccounted_source_count"] = json!(live.source_count);
-        current["required_acceptance_passed"] = json!(false);
-        current.as_object_mut().ok_or_else(|| error(CognitionCode::MemoryGenerationChanged))?.remove("readiness");
+        current.source_inventory_hash = Some(live.hash.clone());
+        current.registered_source_count = Some(0);
+        current.unaccounted_source_count = Some(live.source_count as u64);
+        current.required_acceptance_passed = Some(false);
+        current.readiness = None;
         ensure_data_authority(data_root, &[&manifest_path, &snapshot.path, &lock])?;
         durable::write_json(&manifest_path, &current)?;
         Ok(new_snapshot_id.clone())
-    }.await;
+    }
+    .await;
     let released = lease
         .release(result.is_ok())
         .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
@@ -183,7 +221,7 @@ fn stage_snapshot(
     name: &str,
     staged: &Path,
     as_of: &str,
-    expected: &(String, Value, i64),
+    expected: &ExpectedSnapshot,
     cancellation: &CancellationToken,
 ) -> CognitionResult<Snapshot> {
     let published = generation_root.join(name);
@@ -231,15 +269,13 @@ fn stage_snapshot(
             }
             typed_snapshot::copy_typed_sources(data_root, staged)?;
             let copied = inventory::read(staged, &staged_snapshot, as_of, cancellation)?;
-            if (
-                copied.hash.as_str(),
-                &copied.value,
-                copied.canonical_revision,
-            ) != (expected.0.as_str(), &expected.1, expected.2)
-            {
+            if !expected.matches(&copied) {
                 return Err(error(CognitionCode::MemorySnapshotChanged));
             }
-            durable::write_json(&staged.join("memory-source-inventory.json"), &copied.value)?;
+            durable::write_json(
+                &staged.join("memory-source-inventory.json"),
+                &copied.inventory,
+            )?;
             File::open(staged)
                 .and_then(|dir| dir.sync_all())
                 .map_err(io_error)?;
@@ -259,12 +295,7 @@ fn stage_snapshot(
     }
     let canonical = published.join("runtime/conversation-store.sqlite");
     let actual = inventory::read(&published, &canonical, as_of, cancellation)?;
-    if (
-        actual.hash.as_str(),
-        &actual.value,
-        actual.canonical_revision,
-    ) != (expected.0.as_str(), &expected.1, expected.2)
-    {
+    if !expected.matches(&actual) {
         return Err(error(CognitionCode::MemorySnapshotChanged));
     }
     let bytes = fs::metadata(&canonical).map_err(io_error)?.len();
@@ -294,33 +325,28 @@ fn assert_building_inactive(
     expected_hash: &str,
 ) -> CognitionResult<()> {
     ensure_data_authority(data_root, &[manifest_path, active_path])?;
-    let manifest = read_json(manifest_path)?;
-    let active = read_json(active_path)?;
-    if manifest["schema"] != "butler.memory-generation.v2"
-        || manifest["generation_id"] != generation_id
-        || manifest["format"] != "v2"
-        || manifest["canonical_snapshot_id"] != expected_snapshot_id
-        || manifest["source_inventory_hash"] != expected_hash
-        || manifest["state"] != "building"
-        || active["schema"] != "butler.memory-active-generation.v2"
-        || active["generation_id"] == generation_id
+    let manifest = read_manifest(manifest_path)?;
+    let active: DescriptorView =
+        serde_json::from_slice(&fs::read(active_path).map_err(|source| {
+            error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
+        })?)
+        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
+    if !manifest.is_for(generation_id)
+        || !manifest.is_v2_in(GenerationState::Building)
+        || manifest.canonical_snapshot_id.as_deref() != Some(expected_snapshot_id)
+        || manifest.source_inventory_hash.as_deref() != Some(expected_hash)
+        || active.schema.as_deref() != Some(ACTIVE_DESCRIPTOR_SCHEMA)
+        || active.generation_id.as_deref() == Some(generation_id)
     {
         return Err(error(CognitionCode::MemorySnapshotChanged));
     }
     Ok(())
 }
 
-fn read_json(path: &Path) -> CognitionResult<Value> {
-    serde_json::from_slice(
-        &fs::read(path).map_err(|source| {
-            error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
-        })?,
-    )
-    .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))
+fn read_manifest(path: &Path) -> CognitionResult<GenerationManifest> {
+    GenerationManifest::read(path, CognitionCode::MemoryGenerationUnavailable)
 }
 
-fn field<'a>(value: &'a Value, name: &str) -> CognitionResult<&'a str> {
-    value[name]
-        .as_str()
-        .ok_or_else(|| error(CognitionCode::MemoryGenerationChanged))
+fn required(value: Option<&str>) -> CognitionResult<&str> {
+    value.ok_or_else(|| error(CognitionCode::MemoryGenerationChanged))
 }
