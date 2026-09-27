@@ -70,15 +70,10 @@ impl Coordinator {
             let task = tokio::spawn(async move {
                 let turn_id = request.turn_id.clone();
                 let session_id = request.session_id.clone();
-                let result = AssertUnwindSafe(async {
-                    if let Some(predecessor) = predecessor {
-                        let _ = predecessor.wait().await;
-                    }
-                    coordinator.facade.run(request).await
-                })
-                .catch_unwind()
-                .await
-                .unwrap_or_else(|_| Err(panicked_task_error()));
+                let result = AssertUnwindSafe(coordinator.run_after(predecessor, request))
+                    .catch_unwind()
+                    .await
+                    .unwrap_or_else(|_| Err(panicked_task_error()));
                 spawned.complete(result).await;
                 coordinator.remove_flight(&turn_id, &session_id, &spawned);
             });
@@ -137,6 +132,32 @@ impl Coordinator {
         result
     }
 
+    /// Runs the turn once the session's previous turn has settled.
+    async fn run_after(
+        &self,
+        predecessor: Option<Arc<Flight<TurnOutcome>>>,
+        request: TurnRequest,
+    ) -> Result<TurnOutcome, BtccError> {
+        if let Some(predecessor) = predecessor {
+            let _ = predecessor.wait().await;
+        }
+        self.facade.run(request).await
+    }
+
+    /// Closes the dependencies once every active turn and stop has settled.
+    async fn close_after(&self, active: Vec<Arc<Flight<TurnOutcome>>>) -> Result<(), BtccError> {
+        for flight in active {
+            let _ = flight.wait().await;
+        }
+        {
+            let mut state = self.state.lock();
+            state.active.clear();
+            state.active_stops.clear();
+            state.session_tails.clear();
+        }
+        self.dependencies.close().await
+    }
+
     pub(super) async fn close(self: &Arc<Self>) -> Result<(), BtccError> {
         let (close, leader, active) = {
             let mut state = self.state.lock();
@@ -159,21 +180,10 @@ impl Coordinator {
             let coordinator = self.clone();
             let completion = close.clone();
             let task = tokio::spawn(async move {
-                let result = AssertUnwindSafe(async {
-                    for flight in active {
-                        let _ = flight.wait().await;
-                    }
-                    {
-                        let mut state = coordinator.state.lock();
-                        state.active.clear();
-                        state.active_stops.clear();
-                        state.session_tails.clear();
-                    }
-                    coordinator.dependencies.close().await
-                })
-                .catch_unwind()
-                .await
-                .unwrap_or_else(|_| Err(panicked_task_error()));
+                let result = AssertUnwindSafe(coordinator.close_after(active))
+                    .catch_unwind()
+                    .await
+                    .unwrap_or_else(|_| Err(panicked_task_error()));
                 completion.complete(result).await;
             });
             close.attach(task).await;

@@ -42,21 +42,37 @@ pub(super) fn project(
         LegacyItemKind::Task
     };
     let actions = project_actions(sources, kind);
+    let checks = project_checks(goal, tasks, &mut read)?;
+    let checkpoint = (!tasks.is_empty()).then(|| project_checkpoint(tasks, &actions));
+    Ok(Projection {
+        objective,
+        original_message_id,
+        actions,
+        checks,
+        checkpoint,
+    })
+}
+
+/// Up to 16 distinct checks: the tasks' acceptance criteria, then the
+/// goal's acceptance intent.
+fn project_checks(
+    goal: &Value,
+    tasks: &[LegacyItem],
+    read: &mut impl FnMut(&str) -> StorageResult<Value>,
+) -> StorageResult<Vec<String>> {
     let mut checks = Vec::new();
-    for task in tasks {
-        for reference in references(field(&task.content, "criterionRefs")) {
-            let criterion = read(&reference)?;
-            if let Some(statement) = concise(field(&criterion, "statement"), 300)
-                && !checks.contains(&statement)
-            {
-                checks.push(statement);
-            }
-            if checks.len() >= 16 {
-                break;
-            }
-        }
+    let criteria = tasks
+        .iter()
+        .flat_map(|task| references(field(&task.content, "criterionRefs")));
+    for reference in criteria {
         if checks.len() >= 16 {
             break;
+        }
+        let criterion = read(&reference)?;
+        if let Some(statement) = concise(field(&criterion, "statement"), 300)
+            && !checks.contains(&statement)
+        {
+            checks.push(statement);
         }
     }
     if checks.len() < 16
@@ -65,50 +81,41 @@ pub(super) fn project(
     {
         checks.push(acceptance);
     }
-    let checkpoint = if tasks.is_empty() {
-        None
-    } else {
-        let accepted = tasks
+    Ok(checks)
+}
+
+/// The execution checkpoint of imported tasks: accepted tasks are done and
+/// the first unaccepted one is next.
+fn project_checkpoint(tasks: &[LegacyItem], actions: &[PlanAction]) -> ProjectedCheckpoint {
+    let accepted = |task: &LegacyItem| task.status == "accepted";
+    let next = tasks
+        .iter()
+        .position(|task| !accepted(task))
+        .and_then(|index| actions.get(index))
+        .map(|action| action.description.clone())
+        .unwrap_or_else(|| "Review the imported work against the current request.".into());
+    ProjectedCheckpoint {
+        stage: WorkStage::Execution,
+        actions: actions
             .iter()
-            .filter(|task| task.status == "accepted")
-            .count();
-        let current = tasks.iter().position(|task| task.status != "accepted");
-        let next = current
-            .and_then(|index| actions.get(index))
-            .map(|action| action.description.clone())
-            .unwrap_or_else(|| "Review the imported work against the current request.".into());
-        Some(ProjectedCheckpoint {
-            stage: WorkStage::Execution,
-            actions: actions
-                .iter()
-                .enumerate()
-                .map(|(index, action)| ActionProgress {
-                    action_key: action.action_key.clone(),
-                    status: if tasks
-                        .get(index)
-                        .is_some_and(|task| task.status == "accepted")
-                    {
-                        ActionStatus::Done
-                    } else {
-                        ActionStatus::Pending
-                    },
-                    note: None,
-                })
-                .collect(),
-            summary: format!(
-                "Imported prior progress: {accepted} of {} planned actions have recorded accepted results.",
-                tasks.len()
-            ),
-            next,
-        })
-    };
-    Ok(Projection {
-        objective,
-        original_message_id,
-        actions,
-        checks,
-        checkpoint,
-    })
+            .enumerate()
+            .map(|(index, action)| ActionProgress {
+                action_key: action.action_key.clone(),
+                status: if tasks.get(index).is_some_and(accepted) {
+                    ActionStatus::Done
+                } else {
+                    ActionStatus::Pending
+                },
+                note: None,
+            })
+            .collect(),
+        summary: format!(
+            "Imported prior progress: {} of {} planned actions have recorded accepted results.",
+            tasks.iter().filter(|task| accepted(task)).count(),
+            tasks.len()
+        ),
+        next,
+    }
 }
 
 /// Whether legacy plan actions come from task records or work records,

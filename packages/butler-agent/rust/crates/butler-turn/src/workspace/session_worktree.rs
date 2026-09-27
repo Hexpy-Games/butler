@@ -308,7 +308,10 @@ impl Owner {
             .clock
             .iso_from_epoch_millis(self.clock.now_epoch_millis())?;
         let mut metadata = binding.metadata.unwrap_or_default();
-        metadata.insert("sessionWorkspace".into(), marker(anchor, bound.branch, &now));
+        metadata.insert(
+            "sessionWorkspace".into(),
+            marker(anchor, bound.branch, &now),
+        );
         let rebind = RebindWorkspaceInput {
             session_id: input.session_id,
             expected_updated_at: binding.updated_at,

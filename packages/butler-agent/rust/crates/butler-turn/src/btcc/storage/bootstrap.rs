@@ -150,8 +150,7 @@ impl FreshStorage<'_> {
         )
         .map_err(StorageError::sqlite)?;
         validate::readiness(&db, self.id)?;
-        db.close()
-            .map_err(|(_, error)| StorageError::sqlite(error))
+        db.close().map_err(|(_, error)| StorageError::sqlite(error))
     }
 }
 

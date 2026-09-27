@@ -209,21 +209,7 @@ impl SessionBindingStore {
             // Detached on purpose: close waiters receive the join result, and the join
             // must finish even when the caller that started closing is cancelled.
             tokio::spawn(async move {
-                let result = tokio::task::spawn_blocking(move || thread.join())
-                    .await
-                    .map_err(|error| {
-                        WorkspaceError::new(WorkspaceCode::WorkspaceJoinFailed, error.to_string())
-                            .with_source(error)
-                    })
-                    .and_then(|joined| {
-                        // A panic payload is not an Error; the code records the panic.
-                        joined.map_err(|_panic_payload| {
-                            WorkspaceError::new(
-                                WorkspaceCode::WorkspaceThreadPanicked,
-                                "Workspace SQLite owner thread panicked",
-                            )
-                        })?
-                    });
+                let result = join_owner_thread(thread).await;
                 let mut lane = inner.lane.lock().await;
                 lane.close_result = Some(result.clone());
                 let waiters = std::mem::take(&mut lane.close_waiters);
@@ -319,3 +305,22 @@ async fn join_failed_initialization(thread: JoinHandle<WorkspaceResult<()>>) {
 
 #[cfg(test)]
 mod tests;
+
+/// Joins the SQLite owner thread off the async runtime; a panic is reported
+/// with its own code (the payload is not an error).
+async fn join_owner_thread(
+    thread: std::thread::JoinHandle<WorkspaceResult<()>>,
+) -> WorkspaceResult<()> {
+    let joined = tokio::task::spawn_blocking(move || thread.join())
+        .await
+        .map_err(|error| {
+            WorkspaceError::new(WorkspaceCode::WorkspaceJoinFailed, error.to_string())
+                .with_source(error)
+        })?;
+    joined.map_err(|_panic_payload| {
+        WorkspaceError::new(
+            WorkspaceCode::WorkspaceThreadPanicked,
+            "Workspace SQLite owner thread panicked",
+        )
+    })?
+}

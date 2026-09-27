@@ -113,28 +113,7 @@ impl GuidedPolicyPort for GuidedPolicy {
             ToolName::parse(call.name.as_str()),
             Some(ToolName::ListOperationResults | ToolName::ReadOperationResults)
         ) {
-            return Box::pin(async move {
-                let runtime = invocation.operation_results.ok_or_else(|| {
-                    ToolExecutionError::Integrity(crate::btcc::BtccError::detected(
-                        BtccCode::OperationResultExactReadUnavailable,
-                        "operation_result_exact_read_unavailable",
-                    ))
-                })?;
-                if call.name == ToolName::ListOperationResults {
-                    runtime.list_tool(&call.arguments).await
-                } else {
-                    runtime.read_tool(&call.arguments).await
-                }
-                .map_err(ToolExecutionError::Integrity)
-                .and_then(|value| {
-                    butler_core::json::JsonDocument::from_value(&value).map_err(|error| {
-                        ToolExecutionError::Integrity(crate::btcc::BtccError::detected(
-                            BtccCode::GuidedToolResultJson,
-                            error.to_string(),
-                        ))
-                    })
-                })
-            });
+            return Box::pin(read_operation_results(invocation, call));
         }
         self.dependencies
             .tools
@@ -289,4 +268,29 @@ impl GuidedPolicyPort for GuidedPolicy {
             })
         })
     }
+}
+
+/// Serves the exact operation-result reader tools from the turn's runtime.
+async fn read_operation_results(
+    invocation: GuidedInvocation<'_>,
+    call: &ModelRoundToolCall,
+) -> Result<butler_core::json::JsonDocument, ToolExecutionError> {
+    let runtime = invocation.operation_results.ok_or_else(|| {
+        ToolExecutionError::Integrity(crate::btcc::BtccError::detected(
+            BtccCode::OperationResultExactReadUnavailable,
+            "operation_result_exact_read_unavailable",
+        ))
+    })?;
+    let value = if call.name == ToolName::ListOperationResults {
+        runtime.list_tool(&call.arguments).await
+    } else {
+        runtime.read_tool(&call.arguments).await
+    }
+    .map_err(ToolExecutionError::Integrity)?;
+    butler_core::json::JsonDocument::from_value(&value).map_err(|error| {
+        ToolExecutionError::Integrity(crate::btcc::BtccError::detected(
+            BtccCode::GuidedToolResultJson,
+            error.to_string(),
+        ))
+    })
 }

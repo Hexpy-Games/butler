@@ -256,21 +256,7 @@ impl BtccStorage {
             // Detached on purpose: close waiters receive the join result, and the join
             // must finish even when the caller that started closing is cancelled.
             tokio::spawn(async move {
-                let result = tokio::task::spawn_blocking(move || thread.join())
-                    .await
-                    .map_err(|error| {
-                        StorageError::new(StorageCode::SqliteJoinFailed, error.to_string())
-                            .with_source(error)
-                    })
-                    .and_then(|joined| {
-                        // A panic payload is not an Error; the code records the panic.
-                        joined.map_err(|_panic_payload| {
-                            StorageError::new(
-                                StorageCode::SqliteThreadPanicked,
-                                "BTCC SQLite owner thread panicked",
-                            )
-                        })?
-                    });
+                let result = join_owner_thread(thread).await;
                 let mut lane = inner.lane.lock().await;
                 lane.close_result = Some(result.clone());
                 let waiters = std::mem::take(&mut lane.close_waiters);
@@ -460,6 +446,22 @@ fn storage_marker(
 fn parse_marker(value: &str, code: StorageCode) -> StorageResult<Value> {
     serde_json::from_str(value)
         .map_err(|error| StorageError::new(code, error.to_string()).with_source(error))
+}
+
+/// Joins the SQLite owner thread off the async runtime; a panic is reported
+/// with its own code (the payload is not an error).
+async fn join_owner_thread(thread: JoinHandle<StorageResult<()>>) -> StorageResult<()> {
+    let joined = tokio::task::spawn_blocking(move || thread.join())
+        .await
+        .map_err(|error| {
+            StorageError::new(StorageCode::SqliteJoinFailed, error.to_string()).with_source(error)
+        })?;
+    joined.map_err(|_panic_payload| {
+        StorageError::new(
+            StorageCode::SqliteThreadPanicked,
+            "BTCC SQLite owner thread panicked",
+        )
+    })?
 }
 
 async fn join_failed_initialization(thread: JoinHandle<StorageResult<()>>) {

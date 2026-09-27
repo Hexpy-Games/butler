@@ -29,16 +29,18 @@ pub fn decode_message_scalars(
                 }
             }
             ConversationPartKind::MessageContent => {
-                if let Some(items) = part.content_json.as_array() {
-                    for (index, item) in items.iter().enumerate() {
-                        if let Some(text) = item
-                            .as_object()
-                            .and_then(|value| value.get("text"))
-                            .and_then(Value::as_str)
-                        {
-                            push(&mut output, message, part, format!("/{index}/text"), text);
-                        }
-                    }
+                let texts = part
+                    .content_json
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .enumerate()
+                    .filter_map(|(index, item)| {
+                        let text = item.as_object()?.get("text")?.as_str()?;
+                        Some((index, text))
+                    });
+                for (index, text) in texts {
+                    push(&mut output, message, part, format!("/{index}/text"), text);
                 }
             }
             _ => {}
