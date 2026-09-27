@@ -7,13 +7,13 @@ use std::{
 
 use serde_json::Value;
 
-use crate::gateway::AppContextBudgetFacts;
-use crate::gateway::AppContextReadFacts;
-use crate::gateway::AppContextReadPort;
-use crate::gateway::AppContextReadQuery;
-use crate::gateway::AppContextUsage;
-use crate::gateway::ApplicationFuture;
-use crate::gateway::GatewayApplicationError;
+use butler_gateway::gateway::AppContextBudgetFacts;
+use butler_gateway::gateway::AppContextReadFacts;
+use butler_gateway::gateway::AppContextReadPort;
+use butler_gateway::gateway::AppContextReadQuery;
+use butler_gateway::gateway::AppContextUsage;
+use butler_gateway::gateway::ApplicationFuture;
+use butler_gateway::gateway::GatewayApplicationError;
 use butler_runtime::context::ContextBudgetOverrides;
 use butler_runtime::context::ContextBudgetOwner;
 use butler_runtime::context::WorkingContextBudgetInput;

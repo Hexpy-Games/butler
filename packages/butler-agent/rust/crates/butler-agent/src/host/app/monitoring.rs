@@ -8,12 +8,12 @@ use std::{path::PathBuf, sync::Arc};
 
 use serde_json::{Value, json};
 
-use crate::gateway::AppBoundWorkStatusFact;
-use crate::gateway::AppDeveloperLogsQuery;
-use crate::gateway::AppMonitorPage;
-use crate::gateway::AppMonitoringPort;
-use crate::gateway::AppUsageMonitorQuery;
-use crate::gateway::ApplicationFuture;
+use butler_gateway::gateway::AppBoundWorkStatusFact;
+use butler_gateway::gateway::AppDeveloperLogsQuery;
+use butler_gateway::gateway::AppMonitorPage;
+use butler_gateway::gateway::AppMonitoringPort;
+use butler_gateway::gateway::AppUsageMonitorQuery;
+use butler_gateway::gateway::ApplicationFuture;
 use butler_turn::btcc::SessionWorkRepository;
 
 pub(crate) struct AppMonitoring {

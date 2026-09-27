@@ -2,16 +2,16 @@
 
 use std::sync::Arc;
 
-use crate::gateway::AppAdmissionAuthority;
-use crate::gateway::AppImageFiles;
-use crate::gateway::AppLedgerSourceRequest;
-use crate::gateway::AppMessageFiles;
-use crate::gateway::AppSourceDocument;
-use crate::gateway::AppSourceSnapshotRequest;
-use crate::gateway::ApplicationFuture;
-use crate::gateway::GatewayApplicationError;
-use crate::gateway::MaterializedResponderFile;
-use crate::gateway::VisualAdmissionRequest;
+use butler_gateway::gateway::AppAdmissionAuthority;
+use butler_gateway::gateway::AppImageFiles;
+use butler_gateway::gateway::AppLedgerSourceRequest;
+use butler_gateway::gateway::AppMessageFiles;
+use butler_gateway::gateway::AppSourceDocument;
+use butler_gateway::gateway::AppSourceSnapshotRequest;
+use butler_gateway::gateway::ApplicationFuture;
+use butler_gateway::gateway::GatewayApplicationError;
+use butler_gateway::gateway::MaterializedResponderFile;
+use butler_gateway::gateway::VisualAdmissionRequest;
 use butler_ledger::project_ledger::ProjectLedger;
 use butler_ledger::project_ledger::ProjectLedgerBinding;
 use butler_ledger::project_ledger::ProjectLedgerReadError;

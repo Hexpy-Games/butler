@@ -4,13 +4,13 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::gateway::AppPersonalizationCommand;
-use crate::gateway::AppPersonalizationEvent;
-use crate::gateway::AppPersonalizationPort;
-use crate::gateway::AppPersonalizationResult;
-use crate::gateway::ApplicationFuture;
-use crate::gateway::GatewayApplicationError;
 use crate::host::ResolvedInstallation;
+use butler_gateway::gateway::AppPersonalizationCommand;
+use butler_gateway::gateway::AppPersonalizationEvent;
+use butler_gateway::gateway::AppPersonalizationPort;
+use butler_gateway::gateway::AppPersonalizationResult;
+use butler_gateway::gateway::ApplicationFuture;
+use butler_gateway::gateway::GatewayApplicationError;
 use butler_memory::profile::ClearProfilingResult;
 use butler_memory::profile::PersonalizationProfileUpdate;
 use butler_memory::profile::ProfileService;
@@ -31,7 +31,7 @@ pub(crate) struct AppPersonalization {
     installation: ResolvedInstallation,
     data_root: PathBuf,
     response_language_environment: Option<String>,
-    clock: Arc<dyn crate::gateway::AppIdentityClock>,
+    clock: Arc<dyn butler_gateway::gateway::AppIdentityClock>,
 }
 
 impl AppPersonalization {
@@ -40,7 +40,7 @@ impl AppPersonalization {
         configuration: Arc<ModelConfiguration>,
         installation: ResolvedInstallation,
         data_root: PathBuf,
-        clock: Arc<dyn crate::gateway::AppIdentityClock>,
+        clock: Arc<dyn butler_gateway::gateway::AppIdentityClock>,
     ) -> Self {
         Self {
             profile,

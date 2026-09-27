@@ -15,9 +15,9 @@ use std::{
 use serde_json::Value;
 use tokio::{sync::Mutex, task::JoinSet};
 
-use crate::gateway::InboundQueue;
-use crate::gateway::InboundQueueError;
 use crate::host::service::restart_handoff::RestartHandoff;
+use butler_gateway::gateway::InboundQueue;
+use butler_gateway::gateway::InboundQueueError;
 use butler_turn::btcc::Btcc;
 use butler_turn::btcc::PrincipalAuthority;
 use butler_turn::workspace::SessionBindingStore;

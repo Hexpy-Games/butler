@@ -12,10 +12,10 @@ use std::{path::PathBuf, sync::Arc, thread::JoinHandle};
 use serde_json::Value;
 use tokio::sync::{Mutex, mpsc, oneshot};
 
-use crate::gateway::AppWorkStreamQuery;
-use crate::gateway::AppWorkStreamReader;
-use crate::gateway::AppWorkStreamTurnOutcome;
-use crate::gateway::ApplicationFuture;
+use butler_gateway::gateway::AppWorkStreamQuery;
+use butler_gateway::gateway::AppWorkStreamReader;
+use butler_gateway::gateway::AppWorkStreamTurnOutcome;
+use butler_gateway::gateway::ApplicationFuture;
 use butler_turn::btcc::BtccError;
 
 const CAPACITY: usize = 32;
@@ -212,7 +212,7 @@ impl AppWorkStreamReader for WorkStreams {
         Box::pin(async move {
             Self::submit_state(state, |reply| Job::Active(query, reply))
                 .await
-                .map_err(crate::gateway::GatewayApplicationError::internal_from)
+                .map_err(butler_gateway::gateway::GatewayApplicationError::internal_from)
         })
     }
 
@@ -222,7 +222,7 @@ impl AppWorkStreamReader for WorkStreams {
             Self::submit_state(state, |reply| Job::Reconcile(outcome, reply))
                 .await
                 .map(|_| ())
-                .map_err(crate::gateway::GatewayApplicationError::internal_from)
+                .map_err(butler_gateway::gateway::GatewayApplicationError::internal_from)
         })
     }
 }

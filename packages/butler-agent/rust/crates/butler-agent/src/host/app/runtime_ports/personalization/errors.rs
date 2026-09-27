@@ -1,4 +1,4 @@
-use crate::gateway::GatewayApplicationError;
+use butler_gateway::gateway::GatewayApplicationError;
 
 #[expect(
     clippy::needless_pass_by_value,

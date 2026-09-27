@@ -17,9 +17,9 @@ mod topic_branch;
 
 use std::sync::Arc;
 
-use crate::gateway::AppApprovalClaims;
-use crate::gateway::ApplicationFuture;
-use crate::gateway::GatewayApplicationError;
+use butler_gateway::gateway::AppApprovalClaims;
+use butler_gateway::gateway::ApplicationFuture;
+use butler_gateway::gateway::GatewayApplicationError;
 use butler_turn::btcc::PrincipalAuthority;
 
 pub(crate) use admission::AppAdmission;

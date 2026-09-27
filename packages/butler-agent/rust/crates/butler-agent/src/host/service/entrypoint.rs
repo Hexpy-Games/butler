@@ -8,7 +8,7 @@ use serde_json::json;
 use tokio::signal::unix::{Signal, SignalKind, signal};
 use tokio::{sync::oneshot, task::JoinSet, time::MissedTickBehavior};
 
-use crate::gateway::TranscriptWriter;
+use butler_gateway::gateway::TranscriptWriter;
 use butler_models::models::ModelConfigurationClock;
 use butler_runtime::operations::ServiceReadiness;
 use butler_turn::btcc::BtccError;
@@ -360,7 +360,7 @@ async fn serve(
 
 struct PollOwners<'a> {
     dispatcher: &'a IngressDispatcher,
-    queue: Arc<crate::gateway::InboundQueue>,
+    queue: Arc<butler_gateway::gateway::InboundQueue>,
     progress: Arc<ProgressPublisher>,
     config: &'a ServiceConfiguration,
     subsessions: &'a butler_turn::btcc::SqliteSubsessionRepository,

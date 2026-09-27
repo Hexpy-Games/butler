@@ -3,8 +3,8 @@ use std::{collections::HashSet, fs};
 use serde_json::json;
 
 use super::eligible_for_claim;
-use crate::gateway::InboundQueue;
 use butler_core::json::JsonDocument;
+use butler_gateway::gateway::InboundQueue;
 
 #[test]
 fn waiting_source_session_admits_control_then_released_ordinary_event() {

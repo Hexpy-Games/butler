@@ -7,13 +7,13 @@ use std::{
 
 use serde_json::{Value, json};
 
-use crate::gateway::AppImageFiles;
-use crate::gateway::AppNativeAssetResolver;
-use crate::gateway::ApplicationFuture;
-use crate::gateway::ClaimedNativeSnapshot;
-use crate::gateway::GatewayApplicationError;
-use crate::gateway::ResolvedNativeAssets;
-use crate::gateway::resolve_session_references;
+use butler_gateway::gateway::AppImageFiles;
+use butler_gateway::gateway::AppNativeAssetResolver;
+use butler_gateway::gateway::ApplicationFuture;
+use butler_gateway::gateway::ClaimedNativeSnapshot;
+use butler_gateway::gateway::GatewayApplicationError;
+use butler_gateway::gateway::ResolvedNativeAssets;
+use butler_gateway::gateway::resolve_session_references;
 use butler_models::models::ModelConfiguration;
 use butler_models::models::VisualImageAdmissionResult;
 use butler_turn::conversation::AgentConversationStore;

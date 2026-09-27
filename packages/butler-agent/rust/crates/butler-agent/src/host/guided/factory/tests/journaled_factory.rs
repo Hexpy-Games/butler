@@ -85,7 +85,7 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
         butler_turn::btcc::SqliteSubsessionRepository::new(storage.clone()),
         bindings.clone(),
         Arc::new(crate::host::runtime::SubsessionQueue(Arc::new(
-            crate::gateway::InboundQueue::new(&scratch.0.clone()),
+            butler_gateway::gateway::InboundQueue::new(&scratch.0.clone()),
         ))),
         Arc::new(EmptyProfiles),
         work.clone(),
@@ -191,7 +191,7 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
             parse_date: Arc::new(butler_core::js_date::parse_iso_millis),
             now_millis: Arc::new(|| 0),
             enqueue: Arc::new(crate::host::AutomationQueue(Arc::new(
-                crate::gateway::InboundQueue::new(&scratch.0.clone()),
+                butler_gateway::gateway::InboundQueue::new(&scratch.0.clone()),
             ))),
             scheduler_interval: std::time::Duration::from_secs(60),
         },
@@ -240,7 +240,9 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
         attachment_context: Arc::new(butler_runtime::context::AttachmentContext::new(
             scratch.0.clone(),
         )),
-        verified_image_payload: Arc::new(crate::gateway::AppImageFiles::new(&scratch.0.clone())),
+        verified_image_payload: Arc::new(butler_gateway::gateway::AppImageFiles::new(
+            &scratch.0.clone(),
+        )),
         butler_data: scratch.0.clone(),
         installation_root: scratch.0.clone(),
         protected_ledger_roots: vec![],

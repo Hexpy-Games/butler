@@ -7,6 +7,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+butler-gateway = { path = "../butler-gateway" }
 butler-memory = { path = "../butler-memory" }
 butler-ledger = { path = "../butler-ledger" }
 butler-runtime = { path = "../butler-runtime" }

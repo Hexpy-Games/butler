@@ -12,10 +12,10 @@ use super::{
     IngressDelivery, IngressPoll, action,
     bind::{self, Envelope},
 };
-use crate::gateway::ClaimedInboundEvent;
-use crate::gateway::InboundQueue;
-use crate::gateway::QueuedInboundEvent;
 use crate::host::service::restart_handoff::RestartHandoff;
+use butler_gateway::gateway::ClaimedInboundEvent;
+use butler_gateway::gateway::InboundQueue;
+use butler_gateway::gateway::QueuedInboundEvent;
 use butler_turn::btcc::Btcc;
 use butler_turn::btcc::StopRequest;
 use butler_turn::btcc::TurnOutcomeKind;

@@ -3,9 +3,9 @@
 use serde_json::{Value, json};
 
 use super::{base_metadata, peer};
-use crate::gateway::ClaimedInboundEvent;
 use crate::host::service::ingress::bind;
 use crate::host::service::ingress::bind::Envelope;
+use butler_gateway::gateway::ClaimedInboundEvent;
 use butler_turn::btcc::TurnOutcomeKind;
 use butler_turn::workspace::SessionTransportBinding;
 

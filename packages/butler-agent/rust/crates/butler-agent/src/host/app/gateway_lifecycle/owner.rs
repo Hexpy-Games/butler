@@ -5,7 +5,7 @@ use std::{path::PathBuf, sync::Arc};
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
 
-use crate::gateway::InboundQueue;
+use butler_gateway::gateway::InboundQueue;
 use butler_runtime::operations::ServiceReadiness;
 use butler_turn::btcc::BtccError;
 
@@ -299,7 +299,7 @@ impl AppGatewayLifecycle {
     }
 }
 
-async fn health_check(base_url: &str, auth: crate::gateway::LocalAuthConfig) -> bool {
+async fn health_check(base_url: &str, auth: butler_gateway::gateway::LocalAuthConfig) -> bool {
     let Ok(client) = reqwest::Client::builder()
         .timeout(std::time::Duration::from_millis(500))
         .build()

@@ -8,7 +8,7 @@ pub(super) struct RuntimeOwners {
     pub(super) project_work: Arc<ProjectWork>,
     pub(super) project_tools: Arc<crate::host::guided::project_tools::GuidedProjectTools>,
     pub(super) session_worktrees: SessionWorktrees,
-    pub(super) image_files: Arc<crate::gateway::AppImageFiles>,
+    pub(super) image_files: Arc<butler_gateway::gateway::AppImageFiles>,
     pub(super) attachment_context: Arc<butler_runtime::context::AttachmentContext>,
     pub(super) memory_sync: crate::host::memory_jobs::sync::MemorySync,
     #[cfg(unix)]

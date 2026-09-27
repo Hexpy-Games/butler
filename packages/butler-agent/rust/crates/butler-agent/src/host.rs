@@ -84,7 +84,7 @@ use butler_core::js_date as date;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use crate::gateway::AppIdentityClock;
+use butler_gateway::gateway::AppIdentityClock;
 use butler_turn::conversation::ConversationIdentityClock;
 use butler_turn::workspace::WorkspaceClock;
 use butler_turn::workspace::WorkspaceCode;

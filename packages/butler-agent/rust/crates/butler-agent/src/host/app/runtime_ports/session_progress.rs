@@ -2,10 +2,10 @@
 
 use std::{collections::HashSet, sync::Arc};
 
-use crate::gateway::AppSessionWorkProgress;
-use crate::gateway::AppWorkProgress;
-use crate::gateway::ApplicationFuture;
-use crate::gateway::GatewayApplicationError;
+use butler_gateway::gateway::AppSessionWorkProgress;
+use butler_gateway::gateway::AppWorkProgress;
+use butler_gateway::gateway::ApplicationFuture;
+use butler_gateway::gateway::GatewayApplicationError;
 use butler_ledger::project_ledger::ProjectLedger;
 use butler_ledger::project_ledger::ProjectWorkPlanRead;
 use butler_turn::btcc::SessionPlanObservation;

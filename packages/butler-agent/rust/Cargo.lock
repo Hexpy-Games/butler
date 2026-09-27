@@ -698,6 +698,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "butler-core",
+ "butler-gateway",
  "butler-ledger",
  "butler-memory",
  "butler-models",
@@ -768,6 +769,43 @@ dependencies = [
  "tokio",
  "unicode-normalization",
  "unicode-segmentation",
+ "uuid",
+]
+
+[[package]]
+name = "butler-gateway"
+version = "0.0.0"
+dependencies = [
+ "axum",
+ "base64 0.22.1",
+ "butler-core",
+ "butler-memory",
+ "butler-models",
+ "butler-runtime",
+ "butler-test-support",
+ "butler-turn",
+ "bytes",
+ "chrono",
+ "futures-core",
+ "futures-util",
+ "http",
+ "http-body-util",
+ "indexmap 2.14.2",
+ "nix",
+ "notify",
+ "parking_lot",
+ "regex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "subtle",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tz-rs",
+ "unicode-normalization",
+ "url",
  "uuid",
 ]
 

@@ -1,4 +1,4 @@
-use crate::gateway::GatewayApplicationError;
+use butler_gateway::gateway::GatewayApplicationError;
 use butler_models::mcp_client::McpClient;
 use butler_models::models::ModelConfiguration;
 use butler_models::models::ModelProviderMetadata;

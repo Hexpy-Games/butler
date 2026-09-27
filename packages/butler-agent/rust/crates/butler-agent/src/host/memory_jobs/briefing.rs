@@ -6,10 +6,10 @@ use chrono::{DateTime, Utc};
 use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
 
-use crate::gateway::read_new_chat_briefing_projects;
-use crate::gateway::read_new_chat_briefing_settings;
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
+use butler_gateway::gateway::read_new_chat_briefing_projects;
+use butler_gateway::gateway::read_new_chat_briefing_settings;
 use butler_ledger::project_ledger::ProjectBriefingTarget;
 use butler_ledger::project_ledger::ProjectLedger;
 use butler_memory::cognition::BriefingGenerationError;

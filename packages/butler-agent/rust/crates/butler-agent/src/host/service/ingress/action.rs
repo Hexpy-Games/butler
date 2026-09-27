@@ -12,7 +12,7 @@ use super::{
     IngressError,
     bind::{self, Envelope},
 };
-use crate::gateway::ClaimedInboundEvent;
+use butler_gateway::gateway::ClaimedInboundEvent;
 use butler_turn::btcc::TurnOutcome;
 use butler_turn::btcc::TurnOutcomeKind;
 use butler_turn::workspace::SessionTransportBinding;

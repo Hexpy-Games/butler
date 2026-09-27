@@ -24,7 +24,7 @@ impl DeveloperDiagnosticsSettingsPort for Settings {
         let database_path = self.database_path.clone();
         Box::pin(async move {
             tokio::task::spawn_blocking(move || {
-                crate::gateway::diagnostics_enabled_readonly(&database_path)
+                butler_gateway::gateway::diagnostics_enabled_readonly(&database_path)
             })
             .await
             .unwrap_or(false)

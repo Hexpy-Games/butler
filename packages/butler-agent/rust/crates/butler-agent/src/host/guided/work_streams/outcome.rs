@@ -1,7 +1,7 @@
 use serde_json::{Value, json};
 
 use super::{storage::Store, support::*};
-use crate::gateway::AppWorkStreamTurnOutcome;
+use butler_gateway::gateway::AppWorkStreamTurnOutcome;
 use butler_turn::btcc::BtccError;
 
 impl Store {

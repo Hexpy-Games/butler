@@ -5,10 +5,11 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::gateway::{
-    AppModelCatalogCommand, AppModelCatalogPort, ApplicationFuture, GatewayApplicationError,
-};
 use crate::host::ResolvedInstallation;
+use butler_gateway::gateway::AppModelCatalogCommand;
+use butler_gateway::gateway::AppModelCatalogPort;
+use butler_gateway::gateway::ApplicationFuture;
+use butler_gateway::gateway::GatewayApplicationError;
 use butler_models::models::HostedModelMutation;
 use butler_models::models::LocalModelMutation;
 use butler_models::models::ModelCatalogError;

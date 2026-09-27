@@ -1,8 +1,3 @@
-#[macro_use]
-extern crate butler_core;
-
-pub(crate) mod gateway;
-
 mod host;
 #[cfg(test)]
 mod scenarios;

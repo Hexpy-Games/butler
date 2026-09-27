@@ -2,11 +2,11 @@
 
 use std::sync::Arc;
 
-use crate::gateway::AppSessionViewPage;
-use crate::gateway::AppSubsessionPort;
-use crate::gateway::ApplicationFuture;
-use crate::gateway::GatewayApplicationError;
-use crate::gateway::OperationOutputChunk;
+use butler_gateway::gateway::AppSessionViewPage;
+use butler_gateway::gateway::AppSubsessionPort;
+use butler_gateway::gateway::ApplicationFuture;
+use butler_gateway::gateway::GatewayApplicationError;
+use butler_gateway::gateway::OperationOutputChunk;
 use butler_turn::btcc::StorageProgressPublication;
 use butler_turn::btcc::SubsessionCancelRequest;
 use butler_turn::btcc::SubsessionResumeRequest;

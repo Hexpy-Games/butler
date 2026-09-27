@@ -125,7 +125,9 @@ impl AgentRuntime {
             embedding.clone(),
         ));
         let files = WorkspaceFiles::new(4);
-        let image_files = Arc::new(crate::gateway::AppImageFiles::new(&paths.data_root.clone()));
+        let image_files = Arc::new(butler_gateway::gateway::AppImageFiles::new(
+            &paths.data_root.clone(),
+        ));
         let attachment_context = Arc::new(butler_runtime::context::AttachmentContext::new(
             paths.data_root.clone(),
         ));
@@ -354,7 +356,9 @@ impl AgentRuntime {
             host_environment.clone(),
         );
         let work_service = Arc::new(DurableWorkService::new(work_repository));
-        let inbound_queue = Arc::new(crate::gateway::InboundQueue::new(&paths.data_root.clone()));
+        let inbound_queue = Arc::new(butler_gateway::gateway::InboundQueue::new(
+            &paths.data_root.clone(),
+        ));
         let automations =
             super::open_automation_service(&paths.data_root, date_parser, inbound_queue.clone());
         let subsessions = Arc::new(butler_turn::btcc::SubsessionService::new(

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
-use crate::gateway::GatewayApplicationError;
+use butler_gateway::gateway::GatewayApplicationError;
 
 use super::{AppPersonalization, errors::unsafe_personalization_path};
 

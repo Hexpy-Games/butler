@@ -3,8 +3,8 @@ use std::fs;
 use serde_json::{Value, json};
 
 use super::*;
-use crate::gateway::InboundQueue;
 use butler_core::json::JsonDocument;
+use butler_gateway::gateway::InboundQueue;
 use butler_turn::btcc::AlreadyDeliveredOutcome;
 use butler_turn::btcc::ArtifactKind;
 use butler_turn::btcc::DeliveredOutcome;

@@ -1,6 +1,6 @@
 use std::{path::Path, sync::Arc, time::Duration};
 
-use crate::gateway::InboundQueue;
+use butler_gateway::gateway::InboundQueue;
 use butler_runtime::operations::AutomationService;
 
 use crate::host::{AutomationQueue, DateParser, SystemIdentity};

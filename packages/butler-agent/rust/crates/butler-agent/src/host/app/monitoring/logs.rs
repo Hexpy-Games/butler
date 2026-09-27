@@ -5,7 +5,8 @@ use std::{fs, path::Path};
 use serde_json::{Value, json};
 
 use super::now_iso;
-use crate::gateway::{AppDeveloperLogsQuery, GatewayApplicationError};
+use butler_gateway::gateway::AppDeveloperLogsQuery;
+use butler_gateway::gateway::GatewayApplicationError;
 
 fn string(value: Option<&Value>) -> Option<String> {
     value.and_then(Value::as_str).map(str::to_owned)

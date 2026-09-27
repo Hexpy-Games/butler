@@ -1,6 +1,6 @@
 //! Source queue-owner incarnation and OS-process liveness policy.
 
-use crate::gateway::AppQueueOwnerLiveness;
+use butler_gateway::gateway::AppQueueOwnerLiveness;
 
 pub(crate) struct AppQueueOwnerLivenessAdapter;
 

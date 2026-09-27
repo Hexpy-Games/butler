@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use serde_json::{Map, Value};
 
-use crate::gateway::InboundQueue;
 use butler_core::json::JsonDocument;
+use butler_gateway::gateway::InboundQueue;
 use butler_runtime::operations::AutomationCode;
 use butler_runtime::operations::AutomationEnqueue;
 use butler_runtime::operations::AutomationError;

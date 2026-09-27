@@ -3,8 +3,8 @@
 use parking_lot::RwLock;
 use std::{net::SocketAddr, path::PathBuf};
 
-use crate::gateway::LocalAuthConfig;
 use crate::host::service::configuration::AppServiceConfiguration;
+use butler_gateway::gateway::LocalAuthConfig;
 
 #[derive(Clone, Default)]
 pub(crate) struct ActiveAppEndpoint {

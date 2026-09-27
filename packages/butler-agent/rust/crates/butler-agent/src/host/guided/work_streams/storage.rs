@@ -4,7 +4,7 @@ use rusqlite::params;
 use serde_json::{Value, json};
 
 use super::WorkStreamScope;
-use crate::gateway::AppWorkStreamQuery;
+use butler_gateway::gateway::AppWorkStreamQuery;
 use butler_turn::btcc::BtccError;
 
 use super::support::*;

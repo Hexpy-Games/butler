@@ -5,7 +5,7 @@ use std::{fs, path::Path, time::SystemTime};
 use serde_json::{Value, json};
 
 use super::now_iso;
-use crate::gateway::AppMonitorPage;
+use butler_gateway::gateway::AppMonitorPage;
 
 const SCHEDULER_JOBS: [(&str, &str); 3] = [
     ("session-sync", "Session sync"),

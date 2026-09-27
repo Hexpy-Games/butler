@@ -6,11 +6,11 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use crate::gateway::AppModelFallbackFacts;
-use crate::gateway::AppModelMetadata;
-use crate::gateway::AppSettingsFacts;
-use crate::gateway::AppSettingsFactsProvider;
-use crate::gateway::GatewayApplicationError;
+use butler_gateway::gateway::AppModelFallbackFacts;
+use butler_gateway::gateway::AppModelMetadata;
+use butler_gateway::gateway::AppSettingsFacts;
+use butler_gateway::gateway::AppSettingsFactsProvider;
+use butler_gateway::gateway::GatewayApplicationError;
 use butler_memory::profile::ProfileService;
 use butler_models::models::ModelConfiguration;
 use butler_models::models::ModelProviderMetadata;
@@ -73,7 +73,7 @@ impl AppSettingsFactsProvider for AppSettingsFactsAdapter {
         Ok(self.current.read().clone())
     }
 
-    fn refresh(&self) -> crate::gateway::ApplicationFuture<()> {
+    fn refresh(&self) -> butler_gateway::gateway::ApplicationFuture<()> {
         let this = self.clone_for_refresh();
         Box::pin(async move { this.refresh().await })
     }

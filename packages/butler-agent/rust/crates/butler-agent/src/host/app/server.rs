@@ -8,15 +8,15 @@ use std::sync::{
 
 use tokio::net::TcpListener;
 
-use crate::gateway::AppApplication;
-use crate::gateway::AppApplicationConfig;
-use crate::gateway::AppApplicationDependencies;
-use crate::gateway::AppIdentityClock;
-use crate::gateway::AppMessageFiles;
-use crate::gateway::GatewayApplicationError;
-use crate::gateway::GatewayServer;
-use crate::gateway::InboundQueue;
-use crate::gateway::serve_gateway;
+use butler_gateway::gateway::AppApplication;
+use butler_gateway::gateway::AppApplicationConfig;
+use butler_gateway::gateway::AppApplicationDependencies;
+use butler_gateway::gateway::AppIdentityClock;
+use butler_gateway::gateway::AppMessageFiles;
+use butler_gateway::gateway::GatewayApplicationError;
+use butler_gateway::gateway::GatewayServer;
+use butler_gateway::gateway::InboundQueue;
+use butler_gateway::gateway::serve_gateway;
 use butler_runtime::operations::ServiceReadiness;
 use butler_turn::btcc::BtccError;
 
@@ -221,7 +221,7 @@ impl AppServer {
         };
         let mut gateway_config = app_config.gateway_config();
         gateway_config.static_ui_root = Some(installation.resources().join("app-client/dist"));
-        let server = match serve_gateway(listener, application.clone(), gateway_config).await {
+        let server = match serve_gateway(listener, application.clone(), gateway_config) {
             Ok(server) => server,
             Err(error) => {
                 let _ = application.close().await;

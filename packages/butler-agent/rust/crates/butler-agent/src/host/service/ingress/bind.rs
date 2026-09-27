@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 use super::IngressError;
-use crate::gateway::QueuedInboundEvent;
+use butler_gateway::gateway::QueuedInboundEvent;
 use butler_turn::btcc::AttachmentRef;
 use butler_turn::btcc::ExecutionControls;
 use butler_turn::btcc::Peer;

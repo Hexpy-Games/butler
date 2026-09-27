@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 
-use crate::gateway::{TranscriptWriter, normalize_committed_turn_event};
+use butler_gateway::gateway::TranscriptWriter;
+use butler_gateway::gateway::normalize_committed_turn_event;
 use butler_turn::btcc::BtccError;
 use butler_turn::btcc::CommittedProgressEvent;
 use butler_turn::btcc::EventVisibility;

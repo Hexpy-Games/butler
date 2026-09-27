@@ -7,10 +7,10 @@ use std::sync::Arc;
 
 use serde_json::{Map, Value};
 
-use crate::gateway::AppSessionWorkspaceProvisioner;
-use crate::gateway::AppSessionWorkspaceSnapshot;
-use crate::gateway::ApplicationFuture;
-use crate::gateway::GatewayApplicationError;
+use butler_gateway::gateway::AppSessionWorkspaceProvisioner;
+use butler_gateway::gateway::AppSessionWorkspaceSnapshot;
+use butler_gateway::gateway::ApplicationFuture;
+use butler_gateway::gateway::GatewayApplicationError;
 use butler_turn::btcc::SubsessionService;
 use butler_turn::conversation::AgentConversationStore;
 use butler_turn::workspace::BindSessionWorktreeInput;
@@ -149,7 +149,7 @@ impl AppSessionWorkspaceProvisioner for AppSessionWorkspaces {
 
     fn branch_info(
         &self,
-        query: crate::gateway::AppSessionBranchQuery,
+        query: butler_gateway::gateway::AppSessionBranchQuery,
         cancellation: tokio_util::sync::CancellationToken,
     ) -> ApplicationFuture<Value> {
         let recovery = self.recovery.clone();

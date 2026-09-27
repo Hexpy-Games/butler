@@ -9,7 +9,7 @@ pub(super) async fn deliver_parent_results(
     client: &reqwest::Client,
     repository: &butler_turn::btcc::SqliteSubsessionRepository,
     base: &str,
-    auth: &crate::gateway::LocalAuthConfig,
+    auth: &butler_gateway::gateway::LocalAuthConfig,
 ) -> Result<(), BtccError> {
     for pending in repository
         .pending_parent_inputs()

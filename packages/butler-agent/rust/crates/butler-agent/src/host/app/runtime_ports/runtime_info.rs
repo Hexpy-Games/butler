@@ -1,4 +1,5 @@
-use crate::gateway::{AppRuntimeInfoProvider, GatewayApplicationError};
+use butler_gateway::gateway::AppRuntimeInfoProvider;
+use butler_gateway::gateway::GatewayApplicationError;
 
 pub(crate) struct AppRuntimeInfo {
     app_version: Option<String>,

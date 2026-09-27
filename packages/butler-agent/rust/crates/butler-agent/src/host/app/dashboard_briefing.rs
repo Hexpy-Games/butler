@@ -4,10 +4,10 @@ use std::sync::Arc;
 
 use tokio_util::sync::CancellationToken;
 
-use crate::gateway::AppProjectDashboardBriefingPort;
-use crate::gateway::AppProjectDashboardBriefingPrompt;
-use crate::gateway::ApplicationFuture;
-use crate::gateway::GatewayApplicationError;
+use butler_gateway::gateway::AppProjectDashboardBriefingPort;
+use butler_gateway::gateway::AppProjectDashboardBriefingPrompt;
+use butler_gateway::gateway::ApplicationFuture;
+use butler_gateway::gateway::GatewayApplicationError;
 use butler_models::models::ModelCatalog;
 use butler_models::models::ModelConfiguration;
 use butler_models::models::ModelProvider;

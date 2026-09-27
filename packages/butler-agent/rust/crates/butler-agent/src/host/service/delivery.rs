@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 
-use crate::gateway::TranscriptWriter;
 use crate::host::service::ingress::{IngressDelivery, IngressError};
+use butler_gateway::gateway::TranscriptWriter;
 
 pub(in crate::host) struct AppDelivery {
     writer: Arc<TranscriptWriter>,
