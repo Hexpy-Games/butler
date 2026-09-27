@@ -97,7 +97,7 @@ impl TurnStore for Store {
     fn transition_continuation_budget(
         &self,
         _: ContinuationBudgetTransition,
-    ) -> PortFuture<'_, Value> {
+    ) -> PortFuture<'_, crate::btcc::TurnContinuationBudgetState> {
         panic!("not used by this test")
     }
 }

@@ -227,13 +227,18 @@ async fn model_journal_abandons_restarted_attempt_and_budget_terminal_commits() 
         "model_checkpoint_stale"
     );
 
-    let now = turn.continuation_budget.as_ref().expect("budget")["startedAtMs"]
-        .as_u64()
-        .expect("start time");
+    let now = turn
+        .continuation_budget
+        .as_ref()
+        .expect("budget")
+        .started_at_ms;
     let error = repositories
         .transition_continuation_budget(crate::btcc::ContinuationBudgetTransition {
             binding,
-            event: json!({"kind":"record_output","roundId":"round-1","outputBytes":4}),
+            event: crate::btcc::TurnContinuationBudgetEvent::RecordOutput {
+                round_id: "round-1".into(),
+                output_bytes: 4,
+            },
             now_ms: now + 1,
         })
         .await
@@ -245,8 +250,13 @@ async fn model_journal_abandons_restarted_attempt_and_budget_terminal_commits() 
         .expect("load turn")
         .expect("turn");
     assert_eq!(
-        persisted.continuation_budget.expect("budget")["terminal"]["reason"],
-        "max_output_bytes"
+        persisted
+            .continuation_budget
+            .expect("budget")
+            .terminal
+            .expect("terminal")
+            .reason,
+        crate::btcc::TurnContinuationBudgetTerminalReason::MaxOutputBytes
     );
     repositories.close().await.expect("close repository");
 }

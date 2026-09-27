@@ -78,7 +78,7 @@ pub trait TurnStore: Send + Sync {
     fn transition_continuation_budget(
         &self,
         write: ContinuationBudgetTransition,
-    ) -> PortFuture<'_, Value>;
+    ) -> PortFuture<'_, crate::btcc::TurnContinuationBudgetState>;
 }
 
 /// A turn transition could not be committed.

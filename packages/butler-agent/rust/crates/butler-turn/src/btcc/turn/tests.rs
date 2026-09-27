@@ -197,8 +197,8 @@ impl TurnStore for Harness {
     fn transition_continuation_budget(
         &self,
         _: ContinuationBudgetTransition,
-    ) -> PortFuture<'_, Value> {
-        Box::pin(async { Ok(json!({})) })
+    ) -> PortFuture<'_, crate::btcc::TurnContinuationBudgetState> {
+        Box::pin(async { panic!("not used by this test") })
     }
 }
 

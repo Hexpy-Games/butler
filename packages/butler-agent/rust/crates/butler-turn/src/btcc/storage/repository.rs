@@ -165,7 +165,7 @@ impl TurnStore for BtccRepositories {
     fn transition_continuation_budget(
         &self,
         write: ContinuationBudgetTransition,
-    ) -> PortFuture<'_, Value> {
+    ) -> PortFuture<'_, crate::btcc::TurnContinuationBudgetState> {
         let storage = self.storage.clone();
         Box::pin(async move {
             let result = storage

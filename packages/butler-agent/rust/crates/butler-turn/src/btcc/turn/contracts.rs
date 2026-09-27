@@ -4,7 +4,8 @@ use serde_json::Value;
 use crate::btcc::{
     AcceptedWorkResult, AlreadyDeliveredOutcome, AuthorityLoopContinuation, ChangedFileSummary,
     ExecutionOutcome, FinalArtifact, ModelIdentity, ProgressDestination, RouteState,
-    RuntimeFailure, TurnRequest, WorkStatus,
+    RuntimeFailure, TurnContinuationBudgetEvent, TurnContinuationBudgetState, TurnRequest,
+    WorkStatus,
 };
 
 /// The durable lifecycle state of a turn.
@@ -44,7 +45,7 @@ pub struct TurnRecord {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_route: Option<RouteState>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub continuation_budget: Option<Value>,
+    pub continuation_budget: Option<TurnContinuationBudgetState>,
     pub context: Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub progress_destination: Option<ProgressDestination>,
@@ -337,7 +338,7 @@ pub struct ModelRoundAcceptanceWrite {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ContinuationBudgetTransition {
     pub binding: ModelRouteWrite,
-    pub event: Value,
+    pub event: TurnContinuationBudgetEvent,
     pub now_ms: u64,
 }
 
