@@ -554,6 +554,46 @@ test("first-run model setup retries default-save failure after adding a model", 
   await act(async () => rendered.root.unmount());
 });
 
+test("first-run model setup explains an unavailable default model without a futile retry", async () => {
+  const rendered = await renderFirstRun(
+    {
+      ...createInitialFirstRunState("ko"),
+      step: "model",
+      language_confirmed: true,
+      safety_accepted: true,
+      install_status: "ready",
+    },
+    {
+      rejectDefaultModelUnavailable: true,
+      settings: { ...EMPTY_SETTINGS, model: "missing/model" },
+    },
+  );
+
+  await waitForText(rendered.container, "API 키");
+  await clickButton(rendered.container, "추가");
+  await waitForText(
+    rendered.container,
+    "지금은 이 모델을 사용할 수 없습니다. 아래에서 다른 모델을 선택해 주세요.",
+  );
+  // Localized and actionable: no raw gateway text, no retry of the same model.
+  expect(rendered.container.textContent).not.toContain("settings_model_unavailable");
+  expect(rendered.container.textContent).not.toContain("not an available model");
+  expect(rendered.container.textContent).not.toContain("모델 설정을 저장하지 못했습니다.");
+  expect(buttonByLabel(rendered.container, "다시 불러오기")).toBeUndefined();
+  expect(buttonByLabel(rendered.container, "저장하고 시작")).toBeUndefined();
+  expect(rendered.completedStates).toHaveLength(0);
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+  expect(
+    rendered.settingsPatches.filter(
+      (patch) => typeof patch === "object" && patch !== null && "model" in patch,
+    ),
+  ).toHaveLength(1);
+
+  await act(async () => rendered.root.unmount());
+});
+
 test("first-run setup shows concise retry after install readiness failure", async () => {
   const rendered = await renderFirstRun(
     {
@@ -638,6 +678,7 @@ async function renderFirstRun(
   options: {
     failHealthOnce?: boolean;
     failDefaultSaveOnce?: boolean;
+    rejectDefaultModelUnavailable?: boolean;
     failLanguageSaveOnce?: boolean;
     failModelCatalogOnce?: boolean;
     holdBundledAgent?: Promise<void>;
@@ -795,6 +836,22 @@ async function renderFirstRun(
         ) {
           languageSaveFailures -= 1;
           throw new Error("language save failed");
+        }
+        if (
+          options.rejectDefaultModelUnavailable &&
+          typeof patch === "object" &&
+          patch !== null &&
+          "model" in patch
+        ) {
+          // Same envelope the Electron preload returns for a gateway 400.
+          return {
+            ok: false,
+            error: {
+              schema: "butler.app.bridge-error.v1",
+              code: "settings_model_unavailable",
+              status: 400,
+            },
+          };
         }
         if (
           defaultSaveFailures > 0 &&

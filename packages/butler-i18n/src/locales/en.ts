@@ -85,6 +85,7 @@ const firstRun = {
     modelSaving: "Saving",
     modelSaved: "Model settings saved.",
     modelSaveFailed: "Model settings could not be saved.",
+    modelUnavailable: "This model is not available right now. Choose another model below.",
   };
 
 function englishProjectFallbackSuggestions(
@@ -210,7 +211,7 @@ export const enUsCopy: AppCopy = {
     space_changed: "The list changed. Refresh it and try again.", space_invalid_group: "Select two different conversations.", space_invalid_scope: "Group conversations within the same project.", space_invalid_pin: "Pin a conversation or project.", space_undo_expired: "Other changes prevent undoing this action.", space_invalid_title: "Enter a group name between 1 and 120 characters.",
     branch_source_required: "A source conversation is required.", branch_source_invalid: "Select a response from this conversation.", branch_source_unavailable: "No completed response is available to branch.", branch_cancelled: "Conversation creation was cancelled.", branch_identity_conflict: "The creation request changed.", branch_request_invalid: "Check the new conversation title and source.",
     session_relocating: "The conversation is moving. Try again shortly.", relocation_identity_conflict: "The move request changed.", relocation_aborted: "The move did not finish. Check its status.", session_context_changed: "The conversation environment changed; the move could not finish.", session_not_movable: "This conversation cannot be moved.", space_invalid_target: "Select a different destination.", project_unavailable: "Select an available project.", same_session_context: "Use list organization to move within the same project.", model_not_configured: "Configure a model first.", session_context_conflict: "The move environment needs attention. Existing work is preserved.", relocation_preparation_missing: "Move preparation information is unavailable.", session_busy: "Wait for active work and queued messages to finish.",
-    space_node_not_found: "Item not found. Refresh the list.", space_invalid_parent: "Items cannot be placed inside a conversation.", space_scope_conflict: "Use project relocation to change the parent project.", space_cycle: "An item cannot be moved into its own descendants.", invalid_message_content: "Check the conversation reference format.", image_payload_invalid: "Could not process the image attachment.",
+    space_node_not_found: "Item not found. Refresh the list.", space_invalid_parent: "Items cannot be placed inside a conversation.", space_scope_conflict: "Use project relocation to change the parent project.", space_cycle: "An item cannot be moved into its own descendants.", invalid_message_content: "Check the conversation reference format.", settings_model_unavailable: "The selected model is no longer available. Choose another model in Settings > Models.", image_payload_invalid: "Could not process the image attachment.",
   },
   runtimeMessages: {
     ungroundedWorkerDispatch: () => "I could not verify worker execution for this response.\n\nI will not claim background work has started until the execution record confirms it. If you ask again, I will first verify the state and then continue safely.",

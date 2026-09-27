@@ -85,6 +85,7 @@ const firstRun = {
     modelSaving: "저장 중",
     modelSaved: "모델 설정을 저장했습니다.",
     modelSaveFailed: "모델 설정을 저장하지 못했습니다.",
+    modelUnavailable: "지금은 이 모델을 사용할 수 없습니다. 아래에서 다른 모델을 선택해 주세요.",
   };
 
 function koreanProjectFallbackSuggestions(
@@ -233,7 +234,7 @@ export const koKrCopy: AppCopy = {
     space_changed: "목록이 변경되었습니다. 최신 목록에서 다시 시도해 주세요.", space_invalid_group: "서로 다른 두 대화를 선택해 주세요.", space_invalid_scope: "같은 프로젝트의 대화끼리 묶을 수 있습니다.", space_invalid_pin: "대화 또는 프로젝트를 즐겨찾기에 추가해 주세요.", space_undo_expired: "다른 변경이 있어 되돌릴 수 없습니다.", space_invalid_title: "그룹 이름은 1~120자로 입력해 주세요.",
     branch_source_required: "출처 대화가 필요합니다.", branch_source_invalid: "이 대화의 답변을 선택해 주세요.", branch_source_unavailable: "분리할 완료된 답변이 없습니다.", branch_cancelled: "새 대화 만들기가 취소되었습니다.", branch_identity_conflict: "같은 생성 요청의 내용이 변경되었습니다.", branch_request_invalid: "새 대화의 제목과 출처를 확인해 주세요.",
     session_relocating: "대화를 이동하고 있습니다. 잠시 후 다시 시도해 주세요.", relocation_identity_conflict: "이동 요청의 내용이 달라졌습니다.", relocation_aborted: "이동이 완료되지 않았습니다. 이동 상태를 확인해 주세요.", session_context_changed: "대화의 실행 환경이 변경되어 이동하지 못했습니다.", session_not_movable: "이 대화는 이동할 수 없습니다.", space_invalid_target: "다른 이동 위치를 선택해 주세요.", project_unavailable: "사용 가능한 프로젝트를 선택해 주세요.", same_session_context: "같은 프로젝트 안에서는 목록 이동을 사용해 주세요.", model_not_configured: "먼저 사용할 모델을 설정해 주세요.", session_context_conflict: "대화 이동의 실행 환경을 확인해야 합니다. 기존 작업은 보존되어 있습니다.", relocation_preparation_missing: "이동 준비 정보를 확인할 수 없습니다.", session_busy: "진행 중인 작업과 대기 메시지가 끝난 뒤 다시 시도해 주세요.",
-    space_node_not_found: "항목을 찾을 수 없습니다. 목록을 새로 확인해 주세요.", space_invalid_parent: "대화 안에 항목을 넣을 수 없습니다.", space_scope_conflict: "프로젝트 소속을 바꾸려면 프로젝트 이동을 사용해 주세요.", space_cycle: "항목을 자신의 하위로 옮길 수 없습니다.", invalid_message_content: "대화 참조의 형식이 올바르지 않습니다.", image_payload_invalid: "이미지 첨부를 처리할 수 없습니다.",
+    space_node_not_found: "항목을 찾을 수 없습니다. 목록을 새로 확인해 주세요.", space_invalid_parent: "대화 안에 항목을 넣을 수 없습니다.", space_scope_conflict: "프로젝트 소속을 바꾸려면 프로젝트 이동을 사용해 주세요.", space_cycle: "항목을 자신의 하위로 옮길 수 없습니다.", invalid_message_content: "대화 참조의 형식이 올바르지 않습니다.", settings_model_unavailable: "선택한 모델을 더 이상 사용할 수 없습니다. 설정 > 모델에서 다른 모델을 선택해 주세요.", image_payload_invalid: "이미지 첨부를 처리할 수 없습니다.",
   },
   runtimeMessages: {
     ungroundedWorkerDispatch: () => "이번 답변에서는 Worker 또는 백그라운드 작업 실행을 확인하지 못했습니다.\n\n실행 기록으로 확인되기 전에는 백그라운드 작업이 시작됐다고 단정하지 않겠습니다. 다시 요청하시면 먼저 상태를 확인한 뒤 안전하게 이어가겠습니다.",

@@ -6,6 +6,7 @@ import type {
   SkillImportResult,
   TimelineEvent,
   SessionView,
+  SessionViewBridgeError,
   SessionViewBridgeInput,
   SessionViewBridgeResult,
   WorkStatusView,
@@ -360,7 +361,9 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       modelRef: decodeURIComponent(localModelMatch[1]!),
     });
   }
-  if (method === "PATCH" && url.pathname === "/settings") return await callBridge<T>(bridge, "updateSettings", parseBody(options.body));
+  if (method === "PATCH" && url.pathname === "/settings") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "updateSettings", parseBody(options.body)));
+  }
   if (method === "GET" && url.pathname === "/command-palette") {
     return await callBridge<T>(bridge, "searchCommandPalette", { query: url.searchParams.get("query") ?? "" });
   }
@@ -817,6 +820,38 @@ export function isProjectFolderPickerUnavailable(error: unknown): boolean {
     "code" in error &&
     (error as { code?: unknown }).code === "project_folder_picker_unavailable"
   );
+}
+
+/** The public error code of a failed App request, if the gateway sent one. */
+export function apiErrorCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("code" in error)) return undefined;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
+}
+
+type BridgeResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: SessionViewBridgeError };
+
+/**
+ * Unwrap a preload result envelope (see bridgeErrorEnvelope in preload.cjs).
+ * contextBridge drops custom Error fields, so failures arrive as a bounded
+ * code; the renderer turns that code into localized copy, never raw text.
+ * Direct values pass through for browser/test bridge doubles.
+ */
+function unwrapBridgeResult<T>(value: BridgeResult<T> | T): T {
+  if (!value || typeof value !== "object" || !Object.prototype.hasOwnProperty.call(value, "ok")) {
+    return value as T;
+  }
+  const result = value as BridgeResult<T>;
+  if (result.ok) return result.data;
+  const code = typeof result.error?.code === "string" ? result.error.code : "request_failed";
+  const error = new Error(appCopy.serverErrors[code] ?? appCopy.interfaceFeedback.requestFailed);
+  Object.assign(error, {
+    code,
+    ...(typeof result.error?.status === "number" ? { status: result.error.status } : {}),
+  });
+  throw error;
 }
 
 async function callBridge<T>(bridge: ButlerAppBridge, method: string, input?: unknown): Promise<T> {

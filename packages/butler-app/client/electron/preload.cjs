@@ -935,7 +935,9 @@ const butlerApp = Object.freeze({
   deleteLocalModel: ({ modelRef } = {}) => requestJson(`/model-catalog/local-models/${encodeURIComponent(modelRef ?? "")}`, {
     method: "DELETE",
   }),
-  updateSettings: (settings) => requestJson("/settings", {
+  // Envelope, not a throw: the renderer needs the public error code
+  // (e.g. settings_model_unavailable) to show localized, actionable copy.
+  updateSettings: (settings) => requestBridgeResult("/settings", {
     method: "PATCH",
     body: JSON.stringify(settings ?? {}),
   }),

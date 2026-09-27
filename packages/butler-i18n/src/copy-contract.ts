@@ -28,6 +28,7 @@ modelSave: string;
 modelSaving: string;
 modelSaved: string;
 modelSaveFailed: string;
+modelUnavailable: string;
 }
 export interface NewChatBriefingSuggestion { id: string; title: string; description: string; text: string; }
 
