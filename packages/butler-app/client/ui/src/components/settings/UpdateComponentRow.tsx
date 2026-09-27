@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import type {
   ComponentUpdateStatus,
   UpdateComponentId,
@@ -5,7 +6,6 @@ import type {
 import { Button, Field, FieldLabel, Stack, Typo } from "@/butler-ds";
 import {
   bundledAgentVersionLabel,
-  COMPONENT_LABELS,
   UPDATE_COMPONENTS,
 } from "./updateComponentDisplay";
 
@@ -38,7 +38,7 @@ export function UpdateComponentRow({
     >
       <Stack align="row" justify="between" cross="center" gap="md" wrap>
         <Stack gap="xs">
-          <FieldLabel>{COMPONENT_LABELS[status.component]}</FieldLabel>
+          <FieldLabel>{appCopy.settings.updateComponents[status.component]}</FieldLabel>
           <Typo.Caption>{versionLabel(status)}</Typo.Caption>
           {bundledAgentDetail ? <Typo.Caption>{bundledAgentDetail}</Typo.Caption> : null}
           {status.stage_status === "rolled_back" && status.rollback_reason ? (

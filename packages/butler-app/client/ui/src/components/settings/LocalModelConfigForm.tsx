@@ -13,6 +13,8 @@ const PLATFORM_OPTIONS = [
 ] as const;
 
 interface LocalModelConfigFormProps {
+  apiKey: string | undefined;
+  setApiKey: (value: string) => void;
   platform: LocalModelDiscoveryRequest["platform"];
   setPlatform: (value: LocalModelDiscoveryRequest["platform"]) => void;
   serverUrl: string;
@@ -22,6 +24,8 @@ interface LocalModelConfigFormProps {
 }
 
 export function LocalModelConfigForm({
+  apiKey,
+  setApiKey,
   platform,
   setPlatform,
   serverUrl,
@@ -47,13 +51,31 @@ export function LocalModelConfigForm({
           />
         }
       />
+      <SettingsField
+        id="custom-model-api-key"
+        label={copy.apiKey}
+        description={copy.apiKeyDescription}
+        control={
+          <Input
+            id="custom-model-api-key"
+            type="password"
+            autoComplete="new-password"
+            value={apiKey ?? ""}
+            placeholder={apiKey === "" ? copy.apiKeyRemoved : copy.apiKeyPlaceholder}
+            onChange={(event) => setApiKey(event.target.value)}
+          />
+        }
+      />
+      <Button type="button" variant="ghost" size="sm" onClick={() => setApiKey("")}>
+        {copy.removeApiKey}
+      </Button>
       <Button
         type="button"
         variant="ghost"
         size="sm"
         onClick={() => setAdvancedOpen(!advancedOpen)}
       >
-        <SlidersHorizontal size={15} />{" "}
+        <SlidersHorizontal size="md" />{" "}
         {advancedOpen ? copy.hideAdvanced : copy.showAdvanced}
       </Button>
       {advancedOpen ? (

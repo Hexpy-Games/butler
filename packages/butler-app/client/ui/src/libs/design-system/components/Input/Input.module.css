@@ -1,7 +1,3 @@
-.fixture {
-  min-width: 0;
-}
-
 .input {
   width: 100%;
   min-height: 34px;
@@ -12,6 +8,12 @@
   color: var(--text-primary);
   font: inherit;
   outline: none;
+}
+
+.input[data-compact] {
+  width: 5.5rem;
+  min-height: var(--control-height-sm);
+  padding: var(--space-xs) var(--space-sm);
 }
 
 .input::placeholder {
@@ -25,11 +27,26 @@
 
 .input:focus {
   border-color: color-mix(in srgb, var(--accent) 52%, var(--line));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.input:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+/* Disabled: the disabled tone and surface, never an editable look. */
+.input:disabled {
+  background: var(--color-disabled-bg);
+  color: var(--interactive-disabled-fg);
+  cursor: var(--interactive-disabled-cursor);
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--color-danger-border);
 }
 
 @media (width <= 640px), (pointer: coarse) {
-  .input {
+  .input,
+  .input[data-compact] {
     min-height: var(--control-hit-target);
   }
 }

@@ -5,7 +5,6 @@ import {
   Button,
   ButtonContainer,
   Stack,
-  SurfacePanel,
   Typo,
 } from "@/butler-ds";
 import { archiveSubtitle, type ArchiveItem } from "./archiveSettingsUtils";
@@ -23,7 +22,6 @@ export function ArchiveItemRow({
 }) {
   useAppLocale();
   return (
-    <SurfacePanel elevation="none">
       <Stack align="row" cross="center" gap="md" justify="between" wrap>
         <Stack gap="xs">
           <Typo.Body as="div">{item.title}</Typo.Body>
@@ -50,6 +48,5 @@ export function ArchiveItemRow({
             {appCopy.interfaceDetails.delete}</Button>
         </ButtonContainer>
       </Stack>
-    </SurfacePanel>
   );
 }

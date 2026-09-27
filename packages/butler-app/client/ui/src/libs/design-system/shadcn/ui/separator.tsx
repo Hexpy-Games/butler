@@ -1,3 +1,4 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import * as React from "react";
 import * as SeparatorPrimitive from "@radix-ui/react-separator";
 
@@ -8,7 +9,7 @@ type SeparatorTone = "default" | "strong" | "muted" | "accent";
 type SeparatorSpace = "none" | "xs" | "sm" | "md" | "lg";
 
 interface SeparatorProps
-  extends React.ComponentPropsWithoutRef<typeof SeparatorPrimitive.Root> {
+ extends DsBaseProps<React.ComponentPropsWithoutRef<typeof SeparatorPrimitive.Root>> {
   line?: boolean;
   space?: SeparatorSpace;
   tone?: SeparatorTone;

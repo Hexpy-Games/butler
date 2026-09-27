@@ -26,3 +26,6 @@ Do not use it for generic history lists. Use `ActivityFeed`.
 
 ## Tags
 worker, activity, inspector, actions
+
+## Success state
+When a mounted row's `phase` changes to `complete`, it gets `data-completed-now` for one `--motion-deliberate` pulse: the icon fades and scales in from `--motion-scale-menu` in the success color and the last phase dot fills. Rows that mount already complete do not animate; under reduced motion the pulse is a short fade.

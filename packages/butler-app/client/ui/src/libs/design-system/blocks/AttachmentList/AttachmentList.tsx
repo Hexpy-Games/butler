@@ -1,11 +1,13 @@
+import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import type { ReactNode } from "react";
 import { Button } from "../../components/Button";
 import { FileText, X } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
 import { Tooltip } from "../../components/Tooltip";
 import { Typo } from "../../components/Typo";
-import { cn } from "../../lib/utils";
+import { windowDragClassName, type WindowDragProps } from "../../lib/windowDrag";
 import styles from "./AttachmentList.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface AttachmentListItem {
   id: string;
@@ -19,11 +21,10 @@ export interface AttachmentListItem {
   };
 }
 
-export interface AttachmentListProps {
+export interface AttachmentListProps extends DsPrivateStyleProps, WindowDragProps {
   items: AttachmentListItem[];
   emptyLabel?: string;
   onRemove?: (id: string) => void;
-  className?: string;
   variant?: "list" | "chips";
 }
 
@@ -33,10 +34,11 @@ export function AttachmentList({
   onRemove,
   className,
   variant = "list",
+  windowDrag,
 }: AttachmentListProps) {
   if (items.length === 0) {
     return (
-      <Typo.Caption className={cn(styles.empty, className)}>
+      <Typo.Caption className={dsClass(styles.empty, windowDragClassName(windowDrag), className)}>
         {emptyLabel}
       </Typo.Caption>
     );
@@ -44,7 +46,7 @@ export function AttachmentList({
 
   return (
     <Stack
-      className={cn(styles.list, styles[variant], className)}
+      className={dsClass(styles.list, styles[variant], windowDragClassName(windowDrag), className)}
       data-slot="attachment-list"
       gap={variant === "chips" ? "none" : "xs"}
     >
@@ -63,7 +65,7 @@ export function AttachmentList({
               data-slot="attachment-icon"
               aria-hidden="true"
             >
-              {item.icon ?? <FileText size={14} />}
+              {item.icon ?? <FileText size="sm" />}
             </span>
           )}
           {item.href ? (
@@ -93,11 +95,11 @@ export function AttachmentList({
               type="button"
               onClick={() => onRemove(item.id)}
             >
-              <X size={13} />
+              <X size="sm" />
             </Button>
           ) : null}
           {item.meta ? (
-            <Typo.Caption className={styles.meta} data-slot="attachment-meta">
+            <Typo.Caption className={dsClass(styles.meta)} data-slot="attachment-meta">
               {item.meta}
             </Typo.Caption>
           ) : null}

@@ -1,0 +1,169 @@
+.box {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.box[data-padding="none"] {
+  padding: var(--space-none);
+}
+
+.box[data-padding="xs"] {
+  padding: var(--space-xs);
+}
+
+.box[data-padding="sm"] {
+  padding: var(--space-sm);
+}
+
+.box[data-padding="md"] {
+  padding: var(--space-md);
+}
+
+.box[data-padding="lg"] {
+  padding: var(--space-lg);
+}
+
+.box[data-padding="xl"] {
+  padding: var(--space-xl);
+}
+
+.box[data-padding="2xl"] {
+  padding: var(--space-2xl);
+}
+
+.box[data-padding-x="none"] {
+  padding-inline: var(--space-none);
+}
+
+.box[data-padding-x="xs"] {
+  padding-inline: var(--space-xs);
+}
+
+.box[data-padding-x="sm"] {
+  padding-inline: var(--space-sm);
+}
+
+.box[data-padding-x="md"] {
+  padding-inline: var(--space-md);
+}
+
+.box[data-padding-x="lg"] {
+  padding-inline: var(--space-lg);
+}
+
+.box[data-padding-x="xl"] {
+  padding-inline: var(--space-xl);
+}
+
+.box[data-padding-x="2xl"] {
+  padding-inline: var(--space-2xl);
+}
+
+.box[data-padding-y="none"] {
+  padding-block: var(--space-none);
+}
+
+.box[data-padding-y="xs"] {
+  padding-block: var(--space-xs);
+}
+
+.box[data-padding-y="sm"] {
+  padding-block: var(--space-sm);
+}
+
+.box[data-padding-y="md"] {
+  padding-block: var(--space-md);
+}
+
+.box[data-padding-y="lg"] {
+  padding-block: var(--space-lg);
+}
+
+.box[data-padding-y="xl"] {
+  padding-block: var(--space-xl);
+}
+
+.box[data-padding-y="2xl"] {
+  padding-block: var(--space-2xl);
+}
+
+.box[data-radius="control"] {
+  border-radius: var(--radius-control);
+}
+
+.box[data-radius="panel"] {
+  border-radius: var(--radius-panel);
+}
+
+.box[data-radius="popover"] {
+  border-radius: var(--radius-popover);
+}
+
+.box[data-radius="pill"] {
+  border-radius: var(--radius-pill);
+}
+
+.box[data-radius="none"] {
+  border-radius: 0;
+}
+
+.box[data-surface="none"] {
+  background: transparent;
+}
+
+.box[data-surface="base"] {
+  background: var(--surface);
+}
+
+.box[data-surface="raised"] {
+  background: var(--surface-raised);
+}
+
+.box[data-surface="overlay"] {
+  background: var(--color-surface-overlay);
+}
+
+.box[data-surface="muted"] {
+  background: var(--muted);
+}
+
+.box[data-border="none"] {
+  border: 0;
+}
+
+.box[data-border="hairline"] {
+  border: var(--border-hairline) solid var(--line);
+}
+
+.box[data-border="strong"] {
+  border: var(--border-width-strong) solid var(--line-strong);
+}
+
+/* Inline-start padding (indented rows); after padding/paddingX so it wins. */
+.box[data-padding-start="none"] {
+  padding-inline-start: var(--space-none);
+}
+
+.box[data-padding-start="xs"] {
+  padding-inline-start: var(--space-xs);
+}
+
+.box[data-padding-start="sm"] {
+  padding-inline-start: var(--space-sm);
+}
+
+.box[data-padding-start="md"] {
+  padding-inline-start: var(--space-md);
+}
+
+.box[data-padding-start="lg"] {
+  padding-inline-start: var(--space-lg);
+}
+
+.box[data-padding-start="xl"] {
+  padding-inline-start: var(--space-xl);
+}
+
+.box[data-padding-start="2xl"] {
+  padding-inline-start: var(--space-2xl);
+}

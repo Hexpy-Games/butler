@@ -1,20 +1,90 @@
+/* Grouped settings section: header outside the card, card holds only fields.
+   Header -> card is tight (--settings-section-header-gap) so the header
+   belongs to the card below it; the wider card -> next header gap is the
+   SettingsShell section gap. */
 .section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--settings-section-header-gap);
   width: 100%;
-  padding: var(--space-lg);
-  border: 1px solid var(--line);
+  min-width: 0;
+  color: var(--text-primary);
+}
+
+/* Flush with the card's outer edge (and the page title): an 18px heading
+   anchors to the same left edge as the surface it names. */
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  align-items: flex-end;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.copy {
+  display: flex;
+  flex: 1 1 18rem;
+  flex-direction: column;
+  gap: var(--settings-field-copy-gap);
+  min-width: 0;
+}
+
+/* Section toolbar: page-level controls for single-list sections, compact
+   header controls (Worker profiles). Wraps under the copy when narrow. */
+.actions {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+  min-width: 0;
+}
+
+/* A toolbar without a title (single-list pages) spans the header; text
+   inputs in it share the row instead of taking a full line each. */
+.actions:only-child {
+  flex: 1 1 100%;
+}
+
+.actions > [data-slot="input"]:not([data-compact]) {
+  flex: 1 1 10rem;
+  width: auto;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--settings-field-gap);
+  min-width: 0;
+  padding: var(--settings-section-padding);
+  border: var(--border-hairline) solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--settings-panel-bg);
-  color: var(--text-primary);
+}
+
+/* Lists, status and info rows sit closer than stacked form fields. */
+.card[data-kind="list"],
+.card[data-kind="status"],
+.card[data-kind="info"] {
+  gap: var(--space-md);
+}
+
+/* List rows are delimited by a hairline (dense repeated items, unlike the
+   stacked form fields, which proximity alone groups). */
+.card[data-kind="list"] > * + * {
+  padding-top: var(--space-md);
+  border-top: var(--border-hairline) solid var(--line);
 }
 
 .title {
   color: var(--text-primary);
 }
 
+/* One step below the body-size field label, above field descriptions. */
 .description {
+  max-width: 60ch;
   color: var(--text-secondary);
-}
-
-.fields {
-  gap: var(--space-xl);
+  font-size: var(--font-size-2);
+  line-height: var(--typo-label-line-height);
 }

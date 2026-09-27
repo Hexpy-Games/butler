@@ -1,6 +1,6 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useMemo, useState } from "react";
-import { Stack } from "@/butler-ds";
+import { SettingsSection, Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
@@ -66,13 +66,16 @@ export function ModelAddEditPage({
     <ModelRouteFrame title={title}>
       <Stack gap="md">
         {route.page !== "edit" && (
+          <SettingsSection id="model-provider" kind="form">
           <SettingsSelect
+            settingId="model-provider"
             label={copy.provider}
             triggerTestClass="model-add-provider-select"
             value={providerId}
             onChange={setProviderId}
             options={providerOptions}
           />
+          </SettingsSection>
         )}
         {isLocal ? (
           <LocalModelSettings

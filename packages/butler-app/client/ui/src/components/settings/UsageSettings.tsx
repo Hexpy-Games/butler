@@ -3,8 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { UsageMonitorView } from "@/app/types.ts";
-import { Button, Stack, Typo } from "@/butler-ds";
-import { SettingsSection } from "./SettingsSection";
+import { Button, ButtonContainer, Stack, type SettingsSectionState } from "@/butler-ds";
+import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 import { UsageBucketPanel } from "./UsageBucketPanel";
 import { UsageMonitorMetrics } from "./UsageMonitorMetrics";
 import { UsageProviderPanel } from "./UsageProviderPanel";
@@ -25,19 +25,19 @@ export function UsageSettings() {
   const [range, setRange] = useState<UsageRange>("24h");
   const [view, setView] = useState<UsageMonitorView | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
   const selected = rangeOptions().find((item) => item.id === range)!;
 
   const refresh = useCallback(async () => {
     const params = new URLSearchParams();
     if (selected.hours !== null) params.set("since_hours", String(selected.hours));
     setLoading(true);
-    setError(null);
+    setError(false);
     try {
       const query = params.toString();
       setView(await api<UsageMonitorView>(query ? `/usage-monitor?${query}` : "/usage-monitor"));
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : appCopy.interfacePanels.usageFailed);
+    } catch {
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -72,60 +72,77 @@ export function UsageSettings() {
   );
   const providerUsage = view?.providerUsage;
 
+  const copy = appCopy.interfaceDetails;
+  const empty = appCopy.settings.descriptions.usageMonitorEmpty;
+  const listState = (count: number): SettingsSectionState =>
+    view === null ? (error ? "error" : "loading") : count === 0 ? "empty" : "ready";
+  const listProps = (count: number) => ({
+    kind: "list" as const,
+    state: listState(count),
+    emptyMessage: empty,
+    errorMessage: appCopy.interfacePanels.usageFailed,
+    onRetry: () => void refresh(),
+  });
+
   return (
-    <SettingsSection
-      title={appCopy.settings.panels.usageMonitor}
-      description={appCopy.settings.descriptions.usageMonitor}
-    >
-      <Stack gap="lg">
-        <Stack
-          align="row"
-          justify="between"
-          gap="md"
-          wrap
-        >
-          <Stack align="row" gap="xs" wrap>
-            {rangeOptions().map((option) => (
-              <Button
-                key={option.id}
-                type="button"
-                size="sm"
-                variant={range === option.id ? "default" : "outline"}
-                aria-pressed={range === option.id}
-                onClick={() => setRange(option.id)}
-              >
-                {option.label}
-              </Button>
-            ))}
+    <SettingsPage>
+      <SettingsSection
+        id="usage-overview"
+        kind="status"
+        title={appCopy.settings.pageSections.usageOverview}
+        description={[
+          appCopy.settings.descriptions.usageMonitor,
+          view?.generated_at ? formatTimestamp(view.generated_at) : null,
+        ].filter(Boolean).join(" · ")}
+        state={view === null ? (error ? "error" : "loading") : "ready"}
+        errorMessage={appCopy.interfacePanels.usageFailed}
+        onRetry={() => void refresh()}
+        actions={
+          <Stack align="row" gap="sm" wrap>
+            <ButtonContainer size="sm">
+              {rangeOptions().map((option) => (
+                <Button
+                  key={option.id}
+                  type="button"
+                  size="sm"
+                  variant={range === option.id ? "default" : "outline"}
+                  aria-pressed={range === option.id}
+                  onClick={() => setRange(option.id)}
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </ButtonContainer>
+            <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => void refresh()}>
+              {appCopy.common.refresh}
+            </Button>
           </Stack>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={loading}
-            onClick={() => void refresh()}
-          >
-            {appCopy.common.refresh}
-          </Button>
-        </Stack>
-
-        {error && <Typo.Body>{error}</Typo.Body>}
-
+        }
+      >
         <UsageMonitorMetrics view={view} />
-
-        <UsageProviderPanel
-          activeProviderId={providerUsage?.activeProviderId ?? null}
-          providers={providerUsage?.providers ?? []}
-        />
-        <UsageBucketPanel title={appCopy.interfaceDetails.scopeTokens} rows={scopeRows} />
-        <UsageBucketPanel title={appCopy.interfaceDetails.modelTokens} rows={modelRows} />
+      </SettingsSection>
+      <SettingsSection
+        id="usage-providers"
+        title={copy.apiProviderUsage}
+        description={providerUsage?.activeProviderId
+          ? appCopy.interfaceTemplates.activeProvider(providerUsage.activeProviderId)
+          : undefined}
+        {...listProps(providerUsage?.providers.length ?? 0)}
+      >
+        <UsageProviderPanel providers={providerUsage?.providers ?? []} />
+      </SettingsSection>
+      <SettingsSection id="usage-scope-tokens" title={copy.scopeTokens} {...listProps(scopeRows.length)}>
+        <UsageBucketPanel rows={scopeRows} />
+      </SettingsSection>
+      <SettingsSection id="usage-model-tokens" title={copy.modelTokens} {...listProps(modelRows.length)}>
+        <UsageBucketPanel rows={modelRows} />
+      </SettingsSection>
+      <SettingsSection id="usage-prompt-sections" title={copy.contextEstimates} {...listProps(sectionRows.length)}>
         <UsageSectionPanel rows={sectionRows} />
+      </SettingsSection>
+      <SettingsSection id="usage-tools" title={copy.callsByTool} {...listProps(toolRows.length)}>
         <UsageToolPanel rows={toolRows} />
-        <Typo.Caption>
-          {view?.generated_at ? `${formatTimestamp(view.generated_at)} · ` : ""}
-          raw text excluded
-        </Typo.Caption>
-      </Stack>
-    </SettingsSection>
+      </SettingsSection>
+    </SettingsPage>
   );
 }

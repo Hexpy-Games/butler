@@ -44,7 +44,7 @@ export function MessageArtifacts({
           id: artifact.id,
           title: artifact.title,
           description: artifactDescription(artifact),
-          icon: <FileText size={20} />,
+          icon: <FileText size="lg" />,
           actions: artifactCardActions(artifact),
           onOpen: () => openArtifact(artifact.id, artifact),
         }))}

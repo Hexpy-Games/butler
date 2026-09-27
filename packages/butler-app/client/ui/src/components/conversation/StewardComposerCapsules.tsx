@@ -3,15 +3,13 @@ import { appCopy } from "@/app/copy.ts";
 import type { StewardSessionSummaryView } from "@/app/types.ts";
 import type { ReactNode } from "react";
 import { useButlerStore } from "@/app/store.ts";
-import { PillButton, Stack } from "@/butler-ds";
-import { ButlerThinkingMark } from "@/components/common/ButlerThinkingMark.tsx";
+import { ButlerThinkingMark, PillButton, Stack, StatusCapsule } from "@/butler-ds";
 import {
   activeStewardChildren,
   stewardCurrentActivityTitle,
   stewardPlanProgress,
 } from "./stewardProgressPresentation.ts";
 import { useButlerMarkTheme } from "./hooks/useButlerMarkTheme.ts";
-import styles from "./StewardComposerCapsules.module.css";
 
 type SynthesisContext = {
   relation_id: string;
@@ -40,7 +38,7 @@ export function StewardComposerCapsules({
   const mark = (
     <ButlerThinkingMark
       state="working"
-      style={{ height: 14, width: 14 }}
+      size="sm"
       theme={markTheme}
     />
   );
@@ -58,7 +56,6 @@ export function StewardComposerCapsules({
       {synthesis ? (
         <PillButton
           aria-label={appCopy.interfaceTemplates.reportPreparing(synthesis.safe_title)}
-          className={styles.capsule}
           data-truncation="ellipsis"
           data-test-class="steward-synthesis-capsule"
           disabled={!synthesisChild}
@@ -97,33 +94,19 @@ function StewardProgressCapsule({
   const activityTitle = stewardCurrentActivityTitle(child);
   const progress = stewardPlanProgress(child);
   return (
-    <PillButton
+    <StatusCapsule
       aria-label={appCopy.interfaceTemplates.progressDetails(taskTitle, activityTitle, progress)}
-      className={styles.capsule}
       data-test-class="steward-progress-capsule"
       icon={mark}
       onClick={onOpen}
       title={taskTitle}
-      type="button"
-      surface="glass"
-    >
-        <span className={styles.content}>
-          <span className={styles.taskTitle} data-test-class="steward-capsule-task">
-            {taskTitle}
-          </span>
-          <span aria-hidden="true" className={styles.separator}>·</span>
-          <span className={styles.activityTitle} data-test-class="steward-capsule-activity">
-            {activityTitle}
-          </span>
-          {progress ? (
-            <>
-              <span aria-hidden="true" className={styles.separator}>·</span>
-              <span className={styles.progress} data-test-class="steward-capsule-progress">
-                {progress}
-              </span>
-            </>
-          ) : null}
-        </span>
-    </PillButton>
+      detail={activityTitle}
+      progress={progress || undefined}
+      partTestClasses={{
+        title: "steward-capsule-task",
+        detail: "steward-capsule-activity",
+        progress: "steward-capsule-progress",
+      }}
+    />
   );
 }

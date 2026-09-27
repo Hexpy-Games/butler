@@ -1,10 +1,10 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { ArrowLeft, Clock3, Play, RotateCcw, Save, Trash2 } from "@/butler-ds";
-import { Button, ButtonContainer } from "@/butler-ds";
+import { Button, ButtonContainer, IconButton } from "@/butler-ds";
 import {
   Breadcrumb,
   BreadcrumbItem,
-  BreadcrumbLink,
+  BreadcrumbButton,
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
@@ -44,23 +44,13 @@ export function AutomationActions({
       data-test-class="automation-detail-titlebar"
     >
       <Stack align="row" cross="center" gap="sm">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          onClick={onBack}
-          aria-label={copy.backLabel}
-        >
-          <ArrowLeft size={15} />
-        </Button>
-        <Breadcrumb>
+        <IconButton label={copy.backLabel} onClick={onBack}>
+          <ArrowLeft size="md" />
+        </IconButton>
+        <Breadcrumb label={appCopy.common.breadcrumb}>
           <BreadcrumbList>
             <BreadcrumbItem>
-              <BreadcrumbLink asChild>
-                <button type="button" onClick={onBack}>
-                  {copy.title}
-                </button>
-              </BreadcrumbLink>
+              <BreadcrumbButton onClick={onBack}>{copy.title}</BreadcrumbButton>
             </BreadcrumbItem>
             <BreadcrumbSeparator />
             <BreadcrumbItem>
@@ -75,24 +65,24 @@ export function AutomationActions({
         {!isNew && (
           <>
             <Button type="button" variant="outline" onClick={onRun}>
-              <Play size={15} /> {copy.runNow}
+              <Play size="md" /> {copy.runNow}
             </Button>
             {state === "paused" ? (
               <Button type="button" variant="outline" onClick={onResume}>
-                <RotateCcw size={15} /> {copy.resume}
+                <RotateCcw size="md" /> {copy.resume}
               </Button>
             ) : (
               <Button type="button" variant="outline" onClick={onPause}>
-                <Clock3 size={15} /> {copy.pause}
+                <Clock3 size="md" /> {copy.pause}
               </Button>
             )}
             <Button type="button" variant="destructive" onClick={onDelete}>
-              <Trash2 size={15} /> {appCopy.common.delete}
+              <Trash2 size="md" /> {appCopy.common.delete}
             </Button>
           </>
         )}
         <Button type="submit" disabled={saving}>
-          <Save size={15} /> {appCopy.common.save}
+          <Save size="md" /> {appCopy.common.save}
         </Button>
       </ButtonContainer>
     </Stack>

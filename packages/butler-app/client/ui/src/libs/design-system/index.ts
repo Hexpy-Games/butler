@@ -1,5 +1,17 @@
+// Prop contracts (DsBaseProps, UnsafeStyle); lib/internal stays DS-private.
+export type { DsBaseProps, DsPrivateStyleProps, UnsafeStyle, UnsafeStyleProps } from "./lib/dsProps";
+
+export type { PermissionTone } from "./lib/permissionTone";
+export type { WindowDrag } from "./lib/windowDrag";
+
 // Primitives
 export * from "./lib/floatingConstraints";
+export { useScrollEdges, type ScrollEdgeAxis } from "./lib/useScrollEdges";
+export * from "./lib/motion";
+export * from "./lib/dropZones";
+export * from "./lib/useHotkey";
+export { useEnteringKeys, ENTER_WINDOW_MS } from "./lib/useEnteringKeys";
+export { recordSendOrigin, useSendFlight } from "./lib/sendFlight";
 export * from "./responsive";
 export * from "./components/Breadcrumb";
 export * from "./components/Button";
@@ -7,6 +19,8 @@ export * from "./components/ButtonContainer";
 export * from "./components/Card";
 export * from "./components/Chart";
 export * from "./components/Clickable";
+export * from "./components/Collapsible";
+export * from "./components/CopyButton";
 export * from "./components/InlineReference";
 export * from "./components/ColorSwatchInput";
 export * from "./components/ContextMenu";
@@ -17,6 +31,7 @@ export * from "./components/Input";
 export * from "./components/Label";
 export * from "./components/NativeSelect";
 export * from "./components/Popover";
+export * from "./components/Presence";
 export * from "./components/RollingStatusLine";
 export * from "./components/RollingSwap";
 export * from "./components/PillButton";
@@ -24,6 +39,9 @@ export * from "./components/Select";
 export * from "./components/Separator";
 export * from "./components/Skeleton";
 export { Spinner, type SpinnerProps } from "./components/Spinner";
+export { SuccessCheck, type SuccessCheckProps } from "./components/SuccessCheck";
+export { LoadingIndicator, type LoadingIndicatorProps, type LoadingIndicatorState } from "./components/LoadingIndicator";
+export * from "./components/ButlerThinkingMark";
 export * from "./components/Slider";
 export * from "./components/Switch";
 export * from "./components/Tag";
@@ -36,18 +54,29 @@ export * from "./components/Grid";
 export * from "./components/Section";
 export * from "./components/Space";
 export * from "./components/Stack";
+export * from "./components/Inline";
+export * from "./components/Layout";
+export * from "./components/Box";
+export * from "./components/MetaList";
+export * from "./components/AnimatedNumber";
+export * from "./components/PageContainer";
+export * from "./components/SegmentedControl";
 export * from "./components/Typo";
 export * from "./components/Icons";
 export * from "./components/IconButton";
+export * from "./components/Kbd";
+export * from "./components/IconSlot";
+export * from "./components/AspectFrame";
+export * from "./components/GlyphToggle";
 
 // Blocks
 export * from "./blocks/AdaptiveShell";
 export * from "./blocks/NavRow";
+export * from "./blocks/NavDropTarget";
+export * from "./blocks/SplitButton";
 export * from "./blocks/NavSection";
 export * from "./blocks/CollapsibleNavGroup";
-export * from "./blocks/RowActionCluster";
 export * from "./blocks/OverflowActionMenu";
-export * from "./blocks/FormRow";
 export * from "./blocks/FormSection";
 export * from "./blocks/PanelHeader";
 export * from "./blocks/PromptSuggestionList";
@@ -57,8 +86,6 @@ export * from "./blocks/MetricGrid";
 export * from "./blocks/CardList";
 export * from "./blocks/SortableCardList";
 export * from "./blocks/ListRow";
-export * from "./blocks/ResourceSummary";
-export * from "./blocks/ResourceTile";
 export * from "./blocks/EmptyLine";
 export * from "./blocks/Notice";
 export * from "./blocks/ConversationShell";
@@ -68,11 +95,13 @@ export * from "./blocks/FilteredSelectPopover";
 export * from "./blocks/ContextDonutButton";
 export * from "./blocks/ComposerCard";
 export * from "./blocks/ComposerAdjunctPanel";
-export * from "./blocks/ComposerQueuePanel";
+export * from "./blocks/ComposerDecisionPanel";
 export * from "./blocks/AttachmentList";
 export * from "./blocks/MessageRow";
+export * from "./blocks/QueuedMessage";
 export * from "./blocks/MessageAvatarBlock";
 export * from "./blocks/ActivityFeed";
+export * from "./blocks/EventTimeline";
 export * from "./blocks/WorkActivityBlock";
 export * from "./blocks/DisclosureRow";
 export * from "./blocks/ChangedLineDiff";
@@ -80,12 +109,12 @@ export * from "./blocks/InspectorPanel";
 export * from "./blocks/InspectorShell";
 export * from "./blocks/KeyValueRow";
 export * from "./blocks/ProgressMeter";
-export * from "./blocks/ProgressStepper";
 export * from "./blocks/SetupWizardShell";
 export * from "./blocks/TodoProgressPanel";
 export * from "./blocks/WorkerActivityPanel";
 export * from "./blocks/WorkerActivityRow";
 export * from "./blocks/SettingsField";
+export * from "./blocks/SettingsSection";
 export * from "./blocks/SettingsHeader";
 export * from "./blocks/SettingsNav";
 export * from "./blocks/SettingsShell";
@@ -96,8 +125,6 @@ export * from "./blocks/ManagementPage";
 export * from "./blocks/DashboardHeader";
 export * from "./blocks/DocumentTile";
 export { DocumentReader, type DocumentReaderProps } from "./blocks/DocumentReader";
-export * from "./blocks/SessionRow";
-export * from "./blocks/AutomationRow";
 export * from "./blocks/AutomationRunList";
 export * from "./blocks/ActivityHeatmap";
 export * from "./blocks/ArtifactList";
@@ -109,12 +136,7 @@ export * from "./blocks/DialogForm";
 export * from "./blocks/ChromeFrame";
 export * from "./blocks/TitlebarShell";
 export * from "./blocks/SidebarShell";
-
-export {
-  designSystemComponents,
-  designSystemBlocks,
-  designSystemTokenGroups,
-  type DesignSystemComponentMeta,
-  type DesignSystemBlockMeta,
-  type DesignSystemTokenGroup,
-} from "./registry";
+export * from "./blocks/ActivityStrip";
+export * from "./blocks/KanbanBoard";
+export * from "./blocks/SplitBrowser";
+export * from "./blocks/StatusCapsule";

@@ -1,3 +1,4 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type {
   HTMLAttributes,
   IframeHTMLAttributes,
@@ -7,7 +8,7 @@ import type {
 import { cn } from "../../lib/utils";
 import styles from "./ArtifactPreview.module.css";
 
-export interface ArtifactPreviewProps extends HTMLAttributes<HTMLDivElement> {
+export interface ArtifactPreviewProps extends DsBaseProps<HTMLAttributes<HTMLDivElement>> {
   children: ReactNode;
 }
 
@@ -26,14 +27,14 @@ export function ArtifactPreview({
 export function ArtifactPreviewImage({
   className,
   ...props
-}: ImgHTMLAttributes<HTMLImageElement>) {
+}: DsBaseProps<ImgHTMLAttributes<HTMLImageElement>>) {
   return <img className={cn(styles.image, className)} {...props} />;
 }
 
 export function ArtifactPreviewFrame({
   className,
   ...props
-}: IframeHTMLAttributes<HTMLIFrameElement>) {
+}: DsBaseProps<IframeHTMLAttributes<HTMLIFrameElement>>) {
   return <iframe className={cn(styles.frame, className)} {...props} />;
 }
 
@@ -41,7 +42,7 @@ export function ArtifactPreviewPre({
   children,
   className,
   ...props
-}: HTMLAttributes<HTMLPreElement>) {
+}: DsBaseProps<HTMLAttributes<HTMLPreElement>>) {
   return (
     <pre className={cn(styles.pre, className)} {...props}>
       {children}

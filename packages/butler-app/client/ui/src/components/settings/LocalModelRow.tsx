@@ -51,7 +51,7 @@ export function LocalModelRow({
             onClick={onEdit}
             aria-label={copy.editLabel(modelDisplayName(model))}
           >
-            <Pencil size={14} />
+            <Pencil size="sm" />
           </Button>
           <Button
             type="button"
@@ -61,7 +61,7 @@ export function LocalModelRow({
             onClick={onDelete}
             aria-label={copy.deleteLabel(modelDisplayName(model))}
           >
-            <Trash2 size={14} />
+            <Trash2 size="sm" />
           </Button>
         </ButtonContainer>
       </Stack>

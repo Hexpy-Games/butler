@@ -1,0 +1,8 @@
+/* DS Viewer frame: the shell fills its parent's height in the app. */
+.frame {
+  position: relative;
+  height: 420px;
+  overflow: hidden;
+  border: var(--border-hairline) solid var(--line);
+  border-radius: var(--radius-panel);
+}

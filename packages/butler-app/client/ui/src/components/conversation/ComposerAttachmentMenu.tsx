@@ -2,7 +2,7 @@ import { useAppLocale } from "@/app/copy.ts";
 import { useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
-import { appThemeClasses } from "@/app/utils.ts";
+import { appShellTheme } from "@/app/utils.ts";
 import {
   IconButton,
   ListChecks,
@@ -35,7 +35,7 @@ export function ComposerAttachmentMenu() {
     (store) => store.openAttachmentPicker,
   );
   const [open, setOpen] = useState(false);
-  const themeClass = appThemeClasses(settings);
+  const theme = appShellTheme(settings);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -45,12 +45,12 @@ export function ComposerAttachmentMenu() {
           disabled={uploadingCount > 0}
           label={appCopy.composer.featureDrawer}
         >
-          <Plus size={16} />
+          <Plus size="md" />
         </IconButton>
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className={themeClass}
+        theme={theme}
         data-menu-size="content"
         onOpenAutoFocus={(event) => {
           const menu = event.currentTarget as HTMLElement;
@@ -67,13 +67,13 @@ export function ComposerAttachmentMenu() {
           <OptionMenuSection title={appCopy.composer.attachments}>
             {projectId ? (
               <ComposerProjectDocumentMenu
-                className={themeClass}
+                theme={theme}
                 onClose={() => setOpen(false)}
                 projectId={projectId}
               />
             ) : null}
             <OptionMenuItem
-              icon={<Paperclip size={15} />}
+              icon={<Paperclip size="md" />}
               label={appCopy.composer.attachFile}
               onClick={() => {
                 openAttachmentPicker();
@@ -83,7 +83,7 @@ export function ComposerAttachmentMenu() {
           </OptionMenuSection>
           <OptionMenuSection title={appCopy.composer.responseMode}>
             <OptionMenuItem
-              icon={<MessageSquarePlus size={15} />}
+              icon={<MessageSquarePlus size="md" />}
               label={appCopy.composer.normal}
               selected={!planMode}
               onClick={() => {
@@ -93,7 +93,7 @@ export function ComposerAttachmentMenu() {
             />
             {projectId ? (
               <OptionMenuItem
-                icon={<ListChecks size={15} />}
+                icon={<ListChecks size="md" />}
                 label={appCopy.composer.plan}
                 selected={planMode}
                 onClick={() => {

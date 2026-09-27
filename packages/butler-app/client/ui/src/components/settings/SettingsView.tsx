@@ -112,12 +112,16 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
     <SettingsShell
       active={isActive}
       compactPane={compactPane}
+      pageTitle={title}
+      pageDescription={activeDescriptor?.description}
+      pageKey={activeSection}
+      pageOrder={sections.findIndex((item) => item.id === activeSection)}
       detailNavigation={
         <IconButton
           label={settingsCopy.back}
           onClick={() => setCompactPane("master")}
         >
-          <ArrowLeft size={18} />
+          <ArrowLeft size="lg" />
         </IconButton>
       }
       sidebar={

@@ -150,6 +150,8 @@ export interface ModelCatalogView {
 }
 
 export interface LocalModelDiscoveryRequest {
+  api_key?: string;
+  model_ref?: string;
   provider_id: "local";
   api_type: "openai_compatible";
   platform: "llama_cpp" | "ollama" | "lm_studio" | "custom";
@@ -804,6 +806,8 @@ export interface QueuedMessageRecord {
   id: string;
   chat_id: string;
   text: string;
+  /** Transport id of the send; the delivered user message reuses it. */
+  client_message_id?: string;
   plan_id?: string;
   attachments?: MessageFileRef[];
   controls: {
@@ -1635,6 +1639,6 @@ export interface AuthorityApprovalProjection {
   permissions?: ConversationPermissionView[];
 }
 
-export type IconElement = ReactElement<{ size?: number }>;
+export type IconElement = ReactElement<{ size?: number | "xs" | "sm" | "md" | "lg" | "xl" | "2xl" }>;
 export type ChildrenProps = { children?: ReactNode };
 import type { InterfaceContentReferences, InterfaceTextReference } from "../../../../../butler-i18n/src/index.ts";

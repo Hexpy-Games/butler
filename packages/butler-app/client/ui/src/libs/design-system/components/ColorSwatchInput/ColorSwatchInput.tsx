@@ -1,8 +1,9 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { ComponentPropsWithoutRef } from "react";
 import styles from "./ColorSwatchInput.module.css";
 
 interface ColorSwatchInputProps extends Omit<
-  ComponentPropsWithoutRef<"input">,
+  DsBaseProps<ComponentPropsWithoutRef<"input">>,
   "className" | "type"
 > {
   dataTestClass?: string;

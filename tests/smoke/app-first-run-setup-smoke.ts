@@ -1,8 +1,9 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { prepareBundledAgentResource } from "../../packages/butler-app/scripts/release/package-app-release.ts";
 
 const root = process.cwd();
 const electronBin = resolve(
@@ -26,6 +27,8 @@ const uiRoot = resolve(root, "packages", "butler-app", "client", "ui", "dist");
 const tempDir = mkdtempSync(join(tmpdir(), "butler-app-first-run-smoke-"));
 const dataDir = join(tempDir, "data");
 const electronProfileDir = join(tempDir, "electron-profile");
+const smokeHome = join(tempDir, "home");
+mkdirSync(join(smokeHome, ".codex"), { recursive: true });
 const firstRunSelector = "[data-test-class=\"first-run-setup\"]";
 const forbiddenCopy = [
   "gateway",
@@ -147,6 +150,7 @@ async function connectToElectronPage(
 ): Promise<CdpClient> {
   const origin = new URL(appUrl).origin;
   const startedAt = Date.now();
+  let lastTargets: CdpTarget[] = [];
   while (Date.now() - startedAt < 60_000) {
     if (electronProcess && electronProcess.exitCode !== null) {
       throw new Error(
@@ -156,6 +160,7 @@ async function connectToElectronPage(
     try {
       const targets = (await fetch(`http://127.0.0.1:${debugPort}/json/list`)
         .then((response) => response.json())) as CdpTarget[];
+      lastTargets = targets;
       const target = targets.find((item) =>
         item.type === "page" &&
         (
@@ -176,7 +181,10 @@ async function connectToElectronPage(
     }
     await new Promise((resolveWait) => setTimeout(resolveWait, 150));
   }
-  throw new Error(`Timed out waiting for Electron page target at ${origin}.`);
+  const seen = lastTargets.map((item) => `${item.type ?? "?"} ${item.url ?? ""}`);
+  throw new Error(
+    `Timed out waiting for Electron page target at ${origin}. Last targets: ${JSON.stringify(seen)}`,
+  );
 }
 
 async function connectCdp(url: string): Promise<CdpClient> {
@@ -371,6 +379,30 @@ async function expectNoForbiddenCopy(
   }
 }
 
+function stageNativeAgentInstallation(workDir: string): string {
+  const prebuilt = process.env.BUTLER_FIRST_RUN_NATIVE_AGENT_EXECUTABLE?.trim();
+  if (!prebuilt) {
+    return join(prepareBundledAgentResource(root, workDir).resourceDir, "bin", "butler-agent");
+  }
+  assert(isAbsolute(prebuilt) && existsSync(prebuilt), `BUTLER_FIRST_RUN_NATIVE_AGENT_EXECUTABLE is not an absolute existing path: ${prebuilt}`);
+  const installation = join(workDir, "bundled-agent");
+  const resources = join(installation, "resources");
+  mkdirSync(join(installation, "bin"), { recursive: true });
+  cpSync(prebuilt, join(installation, "bin", "butler-agent"), { mode: 2 /* COPYFILE_FICLONE */ });
+  cpSync(resolve(root, "packages", "butler-agent", "resources"), resources, { recursive: true });
+  cpSync(uiRoot, join(resources, "app-client", "dist"), { recursive: true });
+  // Same manifest prepare-native-agent.mjs writes; Electron checks its version.
+  const cargo = readFileSync(resolve(root, "packages", "butler-agent", "rust", "crates", "butler-agent", "Cargo.toml"), "utf8");
+  const version = cargo.match(/^version\s*=\s*"([^"]+)"/mu)?.[1];
+  const appVersion = JSON.parse(readFileSync(join(electronAppRoot, "package.json"), "utf8")).version;
+  assert(version && appVersion, "native Agent or App version is missing");
+  writeFileSync(join(installation, "native-agent-manifest.json"), `${JSON.stringify({
+    schema: "butler.native-agent-payload.v1", version, appVersion, platform: process.platform,
+    architecture: process.arch, binary: "bin/butler-agent", resources: "resources",
+  }, null, 2)}\n`);
+  return join(installation, "bin", "butler-agent");
+}
+
 async function main(): Promise<void> {
   assert(
     existsSync(electronBin),
@@ -386,6 +418,17 @@ async function main(): Promise<void> {
   const debugPort = await freePort();
   assertPortAvailable(serverPort);
   assertPortAvailable(debugPort);
+  // Unpackaged Electron resolves the native Agent from an absolute
+  // BUTLER_NATIVE_AGENT_EXECUTABLE whose installation root (bin/..) carries
+  // resources/ (bundled-native-agent.mjs). By default the smoke stages that
+  // installation with the release producer (prepare-native-agent.mjs, static
+  // ONNX Runtime; its cache lives under the Rust target dir). Set
+  // BUTLER_FIRST_RUN_NATIVE_AGENT_EXECUTABLE to a prebuilt/locally built
+  // butler-agent to skip the producer; it is staged with the repository
+  // resources and the built UI the same way.
+  const nativeAgentExecutable = stageNativeAgentInstallation(
+    join(tempDir, "bundled-agent-resource"),
+  );
   const nodePath = spawnSync("which", ["node"], { encoding: "utf8" }).stdout.trim();
   const smokePath = nodePath
     ? `${dirname(nodePath)}:/usr/bin:/bin:/usr/sbin:/sbin`
@@ -395,7 +438,10 @@ async function main(): Promise<void> {
     BUTLER_BUN: process.execPath,
     BUTLER_DATA: dataDir,
     BUTLER_HOME: root,
+    HOME: smokeHome,
+    CODEX_HOME: join(smokeHome, ".codex"),
     BUTLER_APP_GATEWAY_PID_FILE: "off",
+    BUTLER_NATIVE_AGENT_EXECUTABLE: nativeAgentExecutable,
     BUTLER_APP_SERVER_PORT: String(serverPort),
     LANG: "ko_KR.UTF-8",
     LC_ALL: "ko_KR.UTF-8",
@@ -407,6 +453,7 @@ async function main(): Promise<void> {
   delete env.BUTLER_APP_SERVER_BRIDGE;
   delete env.BUTLER_APP_SERVER_DB;
   delete env.BUTLER_APP_BUTLER_HOME;
+  delete env.BUTLER_APP_BUNDLED_AGENT_DIR;
 
   electronProcess = spawn(
     electronBin,
@@ -457,6 +504,25 @@ async function main(): Promise<void> {
     "system language did not preselect Korean",
   );
 
+  await cdp.send("Emulation.setEmulatedMedia", {
+    features: [{ name: "prefers-color-scheme", value: "dark" }],
+  });
+  await waitForExpression(
+    cdp,
+    "document.body.classList.contains('theme-dark')",
+    "first-run dark theme class",
+  );
+  const firstRunDarkText = await evaluateString(
+    cdp,
+    `getComputedStyle(document.querySelector(${JSON.stringify(firstRunSelector)})).color`,
+  );
+  const darkTextChannels = firstRunDarkText.match(/\d+(?:\.\d+)?/gu)?.slice(0, 3).map(Number) ?? [];
+  assert(
+    darkTextChannels.length === 3 && darkTextChannels.every((channel) => channel > 180),
+    `first-run text should use dark-theme foreground, got ${firstRunDarkText}`,
+  );
+  await cdp.send("Emulation.setEmulatedMedia", { features: [] });
+
   await clickButton(cdp, "계속");
   await waitForHeading(cdp, "안전고지");
   await expectNoForbiddenCopy(cdp);
@@ -475,7 +541,7 @@ async function main(): Promise<void> {
 
   await waitForHeading(cdp, "모델 설정");
   await waitForHeading(cdp, "모델 추가");
-  await waitForText(cdp, "API key");
+  await waitForText(cdp, "API 키");
   await expectNoForbiddenCopy(cdp, new Set(["이름"]));
   assert(
     await evaluateBoolean(
@@ -514,6 +580,7 @@ async function main(): Promise<void> {
       "electron-first-run-visible",
       "first-run-drag-lane",
       "system-language-ko-preselected",
+      "first-run-honors-dark-theme",
       "language-safety-install-model-order",
       "agent-progress-title",
       "no-normal-gateway-selector",

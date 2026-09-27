@@ -1,6 +1,6 @@
 /// <reference types="bun" />
 
-import { afterEach, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, expect, mock, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -17,6 +17,18 @@ import type {
   SettingsView,
   SpaceView,
 } from "@/app/types.ts";
+import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
+import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
+
+// First-run language choices switch the app locale and the model step drives
+// the real settings UI store (model route, draft); hand both back unchanged so
+// later files in the same bun process (e.g. SettingsSectionHeaders) start clean.
+const initialAppLocale = getAppLocale();
+const initialSettingsUIState = useSettingsUIStore.getState();
+afterAll(() => {
+  setAppCopyLanguage(initialAppLocale);
+  useSettingsUIStore.setState(initialSettingsUIState, true);
+});
 
 interface TestStoreState {
   navigation: { space: SpaceView };
@@ -67,7 +79,40 @@ const storeState: TestStoreState = {
 };
 
 const storeListeners = new Set<() => void>();
+const portalThemeCalls: Array<boolean | undefined> = [];
+let systemPrefersDarkForTest = false;
 let cachedStoreSnapshot: TestStoreState | null = null;
+
+// mock.module is process-wide in bun; put the real modules back for later test files.
+const mockedModuleSpecifiers = [
+  "@/components/layout/Chrome.tsx",
+  "@/components/layout/RightPanelOverlayTitlebar.tsx",
+  "@/components/layout/Sidebar.tsx",
+  "@/components/layout/Titlebar.tsx",
+  "@/components/conversation/Conversation.tsx",
+  "@/components/inspector/Inspector.tsx",
+  "@/components/management/ProjectDashboardView.tsx",
+  "@/components/management/AutomationsView.tsx",
+  "@/components/settings/SettingsView.tsx",
+  "@/components/command/CommandPalette.tsx",
+  "@/components/layout/ProjectRenameDialog.tsx",
+  "@/components/layout/SessionRenameDialog.tsx",
+  "@/components/common/AppToaster.tsx",
+  "@/hooks/useAppBootstrap.ts",
+  "@/hooks/useNativeAppearanceTheme.ts",
+  "@/hooks/useNativeShellPreferences.ts",
+  "@/hooks/usePortalThemeClasses.ts",
+  "@/hooks/useSystemThemePreference.ts",
+  "@/hooks/useNarrowRightPanelAutoCollapse.ts",
+  "@/hooks/usePanelResize.ts",
+  "@/app/store.ts",
+];
+const originalModules = await Promise.all(
+  mockedModuleSpecifiers.map(async (specifier) => [specifier, { ...(await import(specifier)) }] as const),
+);
+afterAll(() => {
+  for (const [specifier, original] of originalModules) mock.module(specifier, () => original);
+});
 
 mock.module("@/components/layout/Chrome.tsx", () => ({
   WindowChromeLayer: () => <div data-test-class="chrome-layer" />,
@@ -118,10 +163,12 @@ mock.module("@/hooks/useNativeShellPreferences.ts", () => ({
   useNativeShellPreferences: () => undefined,
 }));
 mock.module("@/hooks/usePortalThemeClasses.ts", () => ({
-  usePortalThemeClasses: () => undefined,
+  usePortalThemeClasses: (_settings: SettingsView, prefersDark?: boolean) => {
+    portalThemeCalls.push(prefersDark);
+  },
 }));
 mock.module("@/hooks/useSystemThemePreference.ts", () => ({
-  useSystemThemePreference: () => false,
+  useSystemThemePreference: () => systemPrefersDarkForTest,
 }));
 mock.module("@/hooks/useNarrowRightPanelAutoCollapse.ts", () => ({
   useNarrowRightPanelAutoCollapse: () => undefined,
@@ -194,6 +241,8 @@ afterEach(() => {
   storeState.settings = { ...EMPTY_SETTINGS, sidebar_style: "translucent" };
   storeListeners.clear();
   cachedStoreSnapshot = null;
+  portalThemeCalls.length = 0;
+  systemPrefersDarkForTest = false;
 });
 
 test("AppShell gates workspace behind pending first-run setup", async () => {
@@ -240,6 +289,32 @@ test("AppShell keeps model setup inside first-run wizard", async () => {
 
   expect(storeState.openSettingsCalls).toEqual([]);
   expect(rendered.container.textContent).toContain("Workspace");
+
+  await act(async () => rendered.root.unmount());
+});
+
+test("AppShell applies the resolved theme while first-run setup is pending", async () => {
+  systemPrefersDarkForTest = true;
+  const rendered = await renderAppShell({
+    [FIRST_RUN_STORAGE_KEY]: JSON.stringify(createInitialFirstRunState("ko")),
+  });
+
+  expect(rendered.container.textContent).toContain("언어 선택");
+  expect(portalThemeCalls).toContain(true);
+
+  await act(async () => rendered.root.unmount());
+});
+
+test("first-run keeps the workspace chrome unmounted and gives the wizard the resolved dark backdrop", async () => {
+  systemPrefersDarkForTest = true;
+  const rendered = await renderAppShell({
+    [FIRST_RUN_STORAGE_KEY]: JSON.stringify(createInitialFirstRunState("ko")),
+  });
+
+  expect(rendered.container.textContent).not.toContain("Sidebar");
+  expect(rendered.container.textContent).not.toContain("Titlebar");
+  const wizard = rendered.container.querySelector('[data-test-class="first-run-setup"]')!;
+  expect(wizard.getAttribute("data-tone")).toBe("dark");
 
   await act(async () => rendered.root.unmount());
 });
@@ -341,7 +416,7 @@ async function clickButton(container: HTMLElement, label: string): Promise<void>
 }
 
 async function addHostedModelAndFinish(container: HTMLElement): Promise<void> {
-  await waitForText(container, "API key");
+  await waitForText(container, "API 키");
   expect(buttonByLabel(container, "저장하고 시작")).toBeUndefined();
   await clickButton(container, "추가");
   await waitForText(container, "Workspace");

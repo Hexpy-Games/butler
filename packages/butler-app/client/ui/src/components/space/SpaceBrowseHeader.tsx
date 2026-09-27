@@ -17,7 +17,6 @@ import {
 import { useButlerStore } from "@/app/store";
 import { useOrganization } from "@/app/space/organization";
 import { SpaceRow } from "./SpaceRow";
-import styles from "./SpaceSidebar.module.css";
 
 /** One sticky browse region; its measured height offsets nested tree headers. */
 export function SpaceBrowseHeader() {
@@ -29,8 +28,8 @@ export function SpaceBrowseHeader() {
     s.navigation.chats.some((c) => c.id === "general"),
   );
   return (
-    <Stack gap={tab === "all" ? "2" : "4"} className={styles.browseHeader}>
-      <Stack gap="3">
+    <Stack gap={tab === "all" ? "sm" : "lg"} compactGap="lg">
+      <Stack gap="md">
         <Tabs
           value={tab}
           onValueChange={(value) => setTab(value as typeof tab)}
@@ -56,7 +55,7 @@ export function SpaceBrowseHeader() {
           tab === "all" ? appCopy.space.space : tab === "recent" ? appCopy.space.recent : appCopy.space.running
         }
         actions={
-          <ButtonContainer size="icon-sm" className={styles.browseActions}>
+          <ButtonContainer size="icon-sm">
             {tab === "all" && <IconButton
               label={appCopy.space.createGroup}
               onClick={() => setDialog({ kind: "create", parentKey: null })}

@@ -34,7 +34,7 @@ export function AutomationsView({
     (view.kind === "automation-detail" ? view.automationId : null);
   const [selectedId, setSelectedId] = useState(resolvedAutomationId);
   const reportStatus = onStatus ?? setStatus;
-  const { automations, refresh: refreshAutomations } =
+  const { automations, loaded, refresh: refreshAutomations } =
     useAutomationsList(reportStatus);
 
   useEffect(() => {
@@ -68,6 +68,7 @@ export function AutomationsView({
     return (
       <AutomationsList
         automations={automations}
+        loaded={loaded}
         selectedId={selectedId}
         onSelectAutomation={handleSelectAutomation}
         onNewAutomation={newAutomation}

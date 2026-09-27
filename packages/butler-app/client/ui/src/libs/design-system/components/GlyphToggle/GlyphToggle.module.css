@@ -1,0 +1,39 @@
+/* The toggle sits over the row glyph; sizes follow the sidebar density. */
+.slot {
+  position: relative;
+  display: inline-block;
+  width: var(--sidebar-icon-size, var(--icon-size-md));
+  height: var(--sidebar-icon-size, var(--icon-size-md));
+}
+
+.toggle {
+  position: absolute;
+  top: 50%;
+  min-width: var(--control-hit-target);
+  max-width: none;
+  flex: none;
+  color: inherit;
+  inset-inline-start: 50%;
+  /* translate (not transform) so the IconButton press scale composes with it. */
+  translate: -50% -50%;
+}
+
+.glyph,
+.toggleGlyph {
+  display: inline-grid;
+  grid-area: 1 / 1;
+}
+
+.toggleGlyph {
+  opacity: 0;
+}
+
+.toggle:hover .toggleGlyph,
+.toggle:focus-visible .toggleGlyph {
+  opacity: 1;
+}
+
+.toggle:hover .glyph,
+.toggle:focus-visible .glyph {
+  opacity: 0;
+}

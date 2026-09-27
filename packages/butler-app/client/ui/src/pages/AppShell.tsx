@@ -22,6 +22,7 @@ import { ProjectDashboardView } from "@/components/management/ProjectDashboardVi
 import { AutomationsView } from "@/components/management/AutomationsView.tsx";
 import { SettingsView } from "@/components/settings/SettingsView.tsx";
 import { CommandPalette } from "@/components/command/CommandPalette.tsx";
+import { useCommandPaletteHotkey } from "@/components/command/useCommandPaletteHotkey.ts";
 import { ProjectRenameDialog } from "@/components/layout/ProjectRenameDialog.tsx";
 import { ProjectCreateDialog } from "@/components/layout/ProjectCreateDialog.tsx";
 import { SessionRenameDialog } from "@/components/layout/SessionRenameDialog.tsx";
@@ -29,7 +30,7 @@ import { SessionObserverDialog } from "@/components/layout/SessionObserverDialog
 import { AppToaster } from "@/components/common/AppToaster.tsx";
 import { chromeEnvironment } from "@/app/chromeEnvironment.ts";
 import { nativePlatform } from "@/app/nativeNotifications.ts";
-import { appThemeClasses, isDraftChatId } from "@/app/utils.ts";
+import { appShellTheme, isDraftChatId } from "@/app/utils.ts";
 import {
   selectEffectiveRightOpen,
   selectIsSettingsView,
@@ -63,6 +64,7 @@ export function AppShell() {
   if (firstRunState.status !== "complete") {
     return (
       <>
+        <FirstRunTheme />
         <FirstRunSetup
           initialState={firstRunState}
           onComplete={(mode, completedState) => {
@@ -75,6 +77,15 @@ export function AppShell() {
     );
   }
   return <AppWorkspaceShell />;
+}
+
+/** First-run renders outside the themed workspace, so theme the portal root. */
+function FirstRunTheme() {
+  const settings = useButlerStore((state) => state.settings);
+  const systemPrefersDark = useSystemThemePreference();
+  useNativeAppearanceTheme(settings.appearance_theme);
+  usePortalThemeClasses(settings, systemPrefersDark);
+  return null;
 }
 
 function AppWorkspaceShell() {
@@ -92,6 +103,7 @@ function AppWorkspaceShell() {
   useNativeShellPreferences(settings);
   usePortalThemeClasses(settings, systemPrefersDark);
   const commandOpen = useButlerStore((state) => state.commandOpen);
+  useCommandPaletteHotkey();
   const renameProject = useButlerStore((state) => state.renameProject);
   const renameSession = useButlerStore((state) => state.renameSession);
   const projectCreateDialogOpen = useButlerStore(
@@ -135,7 +147,7 @@ function AppWorkspaceShell() {
   return (
     <AdaptiveShell
       ref={shellRef}
-      className={`mac-window ${appThemeClasses(settings, systemPrefersDark)}`}
+      theme={appShellTheme(settings, systemPrefersDark)}
       chromeEnvironment={chromeEnvironment()}
       data-test-class="mac-window"
       leftOpen={leftOpen}
@@ -144,7 +156,7 @@ function AppWorkspaceShell() {
       resizing={Boolean(resizingPanel)}
       rightOpen={effectiveRightOpen}
       settingsActive={isSettingsView}
-      style={panelStyle}
+      UNSAFE_style={panelStyle}
       transparentWorkspace={
         newChatActive &&
         (settings.main_screen_theme === "bloom" ||
@@ -156,7 +168,6 @@ function AppWorkspaceShell() {
       ) : (
         <>
           <AdaptiveShellSidebar
-            className="sidebar-slot"
             data-test-class="sidebar-slot"
             id="butler-left-sidebar"
             open={leftOpen}
@@ -164,7 +175,6 @@ function AppWorkspaceShell() {
             <Sidebar />
           </AdaptiveShellSidebar>
           <AdaptiveShellWorkspace
-            className="workspace"
             data-test-class="workspace"
           >
             <Titlebar />
@@ -200,7 +210,6 @@ function AppWorkspaceShell() {
       )}
       {!isSettingsView && rightAvailable && (
         <AdaptiveShellInspector
-          className="right-panel-slot"
           data-test-class="right-panel-slot"
           open={effectiveRightOpen}
         >
@@ -238,7 +247,7 @@ function AppWorkspaceShell() {
         </AdaptiveShellChrome>
       )}
       {!isSettingsView && effectiveRightOpen && <RightPanelOverlayTitlebar />}
-      {commandOpen && <CommandPalette />}
+      <CommandPalette open={commandOpen} />
       {projectCreateDialogOpen && <ProjectCreateDialog />}
       {renameProject && <ProjectRenameDialog />}
       {renameSession && <SessionRenameDialog />}

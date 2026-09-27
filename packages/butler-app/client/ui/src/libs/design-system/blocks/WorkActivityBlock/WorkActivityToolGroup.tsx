@@ -1,15 +1,18 @@
 import { useState, type ReactNode } from "react";
+import { Collapsible } from "../../components/Collapsible";
 import { ChevronDown, ChevronRight } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
 import { WorkActivityToolRow } from "./WorkActivityToolRow";
 import styles from "./WorkActivityBlock.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface WorkActivityToolItem {
   id: string;
   icon?: ReactNode;
   title: ReactNode;
   details?: ReactNode;
-  summaryLabel?: string;
+  /** Localized group noun counted in the collapsed summary ("2 Search"); supplied by the caller. */
+  summaryLabel: string;
   /** Always-visible footer below the containing disclosure and its expanded list. */
   after?: ReactNode;
 }
@@ -18,7 +21,7 @@ export function WorkActivityToolGroup({ tools }: { tools: WorkActivityToolItem[]
   const [expanded, setExpanded] = useState(false);
   if (tools.length === 1 && !tools[0]!.after) return <WorkActivityToolRow tool={tools[0]!} />;
   return (
-    <Stack gap="xs" className={styles.toolRow} data-test-class="turn-work-tool-row turn-work-tool-group">
+    <Stack gap="xs" className={dsClass(styles.toolRow)} data-test-class="turn-work-tool-row turn-work-tool-group">
       <button
         aria-expanded={expanded}
         className={styles.toolGroup}
@@ -27,14 +30,14 @@ export function WorkActivityToolGroup({ tools }: { tools: WorkActivityToolItem[]
       >
         <span className={styles.toolGroupSummary}>{toolSummary(tools)}</span>
         <span className={styles.toolGroupChevron} aria-hidden="true">
-          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          {expanded ? <ChevronDown size="sm" /> : <ChevronRight size="sm" />}
         </span>
       </button>
-      {expanded ? (
+      <Collapsible open={expanded}>
         <div className={styles.toolDetailList} data-test-class="turn-activity-details turn-work-tool-detail-list">
           {tools.map((tool) => <WorkActivityToolRow key={tool.id} tool={tool} nested />)}
         </div>
-      ) : null}
+      </Collapsible>
       {tools.filter((tool) => tool.after).map((tool) => (
         <div key={tool.id} className={styles.toolAttachment}>{tool.after}</div>
       ))}
@@ -45,8 +48,8 @@ export function WorkActivityToolGroup({ tools }: { tools: WorkActivityToolItem[]
 function toolSummary(tools: WorkActivityToolItem[]): string {
   const counts = new Map<string, number>();
   for (const tool of tools) {
-    const label = tool.summaryLabel?.trim() || "도구";
+    const label = tool.summaryLabel.trim();
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
-  return [...counts.entries()].map(([label, count]) => `${count} ${label}`).join(", ");
+  return [...counts.entries()].map(([label, count]) => `${count} ${label}`.trim()).join(", ");
 }

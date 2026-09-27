@@ -1,3 +1,4 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import * as React from "react";
 import type { VariantProps } from "class-variance-authority";
 import { cva } from "class-variance-authority";
@@ -9,7 +10,7 @@ function Tabs({
   className,
   orientation = "horizontal",
   ...props
-}: React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>>) {
   return (
     <TabsPrimitive.Root
       data-slot="tabs"
@@ -38,7 +39,7 @@ function TabsList({
   className,
   variant = "default",
   ...props
-}: React.ComponentPropsWithoutRef<typeof TabsPrimitive.List> &
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>> &
   VariantProps<typeof tabsListVariants>) {
   return (
     <TabsPrimitive.List
@@ -52,7 +53,7 @@ function TabsList({
 function TabsTrigger({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>>) {
   return (
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
@@ -70,7 +71,7 @@ function TabsTrigger({
 function TabsContent({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content>>) {
   return (
     <TabsPrimitive.Content
       data-slot="tabs-content"

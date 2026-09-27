@@ -26,7 +26,7 @@ export function WindowChromeLayer({
         label={leftOpen ? appCopy.titlebar.hideLeftPanel : appCopy.titlebar.showLeftPanel}
         onClick={toggle}
       >
-        {leftOpen ? <PanelLeftOpen size={16} /> : <PanelLeft size={16} />}
+        {leftOpen ? <PanelLeftOpen size="md" /> : <PanelLeft size="md" />}
       </IconButton>
     </ChromeFloatingToggleLayer>
   );

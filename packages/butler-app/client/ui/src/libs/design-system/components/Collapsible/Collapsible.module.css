@@ -1,0 +1,87 @@
+/* Height reveal (DS spec Motion Contract): interpolate-size lets height
+   transition to auto; overflow: clip keeps the reveal contained. */
+.collapsible {
+  interpolate-size: allow-keywords;
+  overflow: clip;
+  /* A drop scope (NavDropScope) widens the clip while a drag moves rows. */
+  overflow-clip-margin: var(--collapsible-clip-margin, 0);
+  height: auto;
+  /* A flex or grid item (a row in a Stack) would otherwise keep its content
+     height as its automatic minimum and never fold. */
+  min-height: 0;
+  opacity: 1;
+  transition:
+    height var(--motion-base) var(--motion-ease-standard),
+    opacity var(--motion-base) var(--motion-ease-standard);
+}
+
+@starting-style {
+  .collapsible[data-enter="true"][data-state="open"] {
+    height: 0;
+    opacity: 0;
+  }
+}
+
+.collapsible[data-state="closed"] {
+  height: 0;
+  opacity: 0;
+  transition-duration: var(--motion-exit-base);
+  transition-timing-function: var(--motion-ease-accelerate);
+}
+
+/* Kept-mounted content hides once collapsed so it leaves the tab order and
+   the accessibility tree; visibility flips after the exit. */
+.collapsible[data-keep-mounted] {
+  transition:
+    height var(--motion-base) var(--motion-ease-standard),
+    opacity var(--motion-base) var(--motion-ease-standard),
+    visibility 0s var(--motion-ease-linear);
+}
+
+.collapsible[data-state="closed"][data-keep-mounted="focusable"] {
+  pointer-events: none;
+}
+
+.collapsible[data-state="closed"][data-keep-mounted="hidden"] {
+  visibility: hidden;
+}
+
+.collapsible[data-state="closed"][data-keep-mounted] {
+  transition:
+    height var(--motion-exit-base) var(--motion-ease-accelerate),
+    opacity var(--motion-exit-base) var(--motion-ease-accelerate),
+    visibility 0s var(--motion-ease-linear) var(--motion-exit-base);
+}
+
+/* Reduced motion: height never animates. Opening snaps open and fades in;
+   closing fades out first and only then snaps shut, so the collapse still
+   reads as feedback instead of an instant jump. */
+@media (prefers-reduced-motion: reduce) {
+  .collapsible {
+    transition:
+      height 0s,
+      opacity var(--motion-fast) var(--motion-ease-standard);
+  }
+
+  .collapsible[data-state="closed"] {
+    transition:
+      opacity var(--motion-exit-base) var(--motion-ease-accelerate),
+      height 0s var(--motion-exit-base);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collapsible[data-keep-mounted] {
+    transition:
+      height 0s,
+      opacity var(--motion-fast) var(--motion-ease-standard),
+      visibility 0s var(--motion-ease-linear);
+  }
+
+  .collapsible[data-state="closed"][data-keep-mounted] {
+    transition:
+      opacity var(--motion-exit-base) var(--motion-ease-accelerate),
+      height 0s var(--motion-exit-base),
+      visibility 0s var(--motion-ease-linear) var(--motion-exit-base);
+  }
+}

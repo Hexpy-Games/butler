@@ -15,7 +15,18 @@ exclusive open-panel state.
 
 ## Responsive behavior
 
-- Expanded layouts use resizable grid tracks.
+- Expanded layouts use resizable grid tracks. Tracks never interpolate: the
+  docked sidebar slides with a transform while the workspace is
+  FLIP-translated (and clipped) in step. Closing collapses the track at once;
+  opening keeps the collapsed track until the slide ends, so the workspace
+  reflows once. Reduced motion commits at once and the sidebar only fades.
+  The docked right inspector uses the same model
+  (`useInspectorTrackMotion`): it keeps its full width at the right edge and
+  slides with a transform; opening keeps the 0px right track while the panel
+  slides in over the workspace (clipped in step) and commits the track when
+  the slide ends; closing commits the 0px track at once and the panel slides
+  out. In the medium drawer layout the workspace width follows the committed
+  track after the push, never a width transition.
 - The workspace is an inline-size query container. Product resize geometry may
   retain a 320px workspace and give the inspector all remaining width; the shell
   accepts the measured widths and a standard root ref without owning preferences.
@@ -24,7 +35,9 @@ exclusive open-panel state.
 - The shared `adaptiveDrawerQuery` drives both the shell and panel-state policy.
 - Drawers push the full-width workspace, with a full-cover right sheet in compact.
 - Pass `compactSidebarFullWidth` for navigation that should fully cover the
-  drawer viewport. The default bounded drawer remains available.
+  compact (`width <= 640px`) drawer viewport. Medium drawer widths always use
+  the bounded `--adaptive-drawer-width` (`min(88vw, 320px)`) over the scrim so
+  the workspace stays visible beside the sidebar.
 - The window chrome toggle stays fixed while the workspace moves.
 - Panels animate with transform and honor reduced motion.
 - The always-mounted scrim keeps a promoted compositor layer and animates only

@@ -7,7 +7,9 @@
 - `electron/`: native desktop shell, preload bridge, desktop package metadata,
   and app startup orchestration.
 - `ui/`: renderer UI, design system, app state, and browser-compatible app
-  screens.
+  screens. UI work (human or agent) follows the design-system skill:
+  `ui/src/libs/design-system/skills/butler-design-system/SKILL.md` (assemble
+  UI only from `@/butler-ds`; the DS Viewer is at `?visual=design-system`).
 
 ## Boundaries
 

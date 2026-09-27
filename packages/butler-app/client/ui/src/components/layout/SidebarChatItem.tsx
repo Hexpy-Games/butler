@@ -23,7 +23,6 @@ export function SidebarChatItem({
     <SidebarItem
       active={active}
       badge={<span>{relativeAge(chat.last_activity_at)}</span>}
-      className="chat-row"
       right={
         <SidebarSessionActions
           menuOpen={menuOpen}

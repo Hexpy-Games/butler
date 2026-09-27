@@ -1,0 +1,24 @@
+/* Reduced motion: the canvas holds the still logo and breathes in opacity on
+   the Spinner's reduced-motion pulse (same cadence, easing and floor), on the
+   compositor with no frame loop. */
+.canvas[data-breathe="on"] {
+  animation: thinking-mark-breathe calc(var(--pulse-duration) * 2)
+    var(--spinner-easing) infinite alternate;
+}
+
+/* Leaving the breathe settles from the current opacity back to 1. */
+.canvas[data-breathe="settle"] {
+  animation: thinking-mark-settle var(--motion-slow) var(--motion-ease-standard);
+}
+
+@keyframes thinking-mark-breathe {
+  to {
+    opacity: 0.45;
+  }
+}
+
+@keyframes thinking-mark-settle {
+  from {
+    opacity: var(--thinking-mark-breathe-from, 1);
+  }
+}

@@ -16,11 +16,11 @@ export function ProjectStatsGrid({
   return (
     <MetricGrid>
       <DashboardStat
-        label="7d messages"
+        label={appCopy.interfacePanels.messages7d}
         value={String(stats?.recent_messages_7d ?? 0)}
       />
       <DashboardStat
-        label="30d messages"
+        label={appCopy.interfacePanels.messages30d}
         value={String(stats?.recent_messages_30d ?? 0)}
       />
       <DashboardStat

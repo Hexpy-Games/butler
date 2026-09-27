@@ -3,6 +3,9 @@ import { SetupWizardShell } from "@/butler-ds";
 import { FirstRunStepContent } from "./FirstRunStepContent";
 import { useFirstRunSetupController } from "./useFirstRunSetupController";
 import { WindowControls } from "@/components/layout/WindowControls";
+import { useButlerStore } from "@/app/store.ts";
+import { resolveAppearanceTheme } from "@/app/utils.ts";
+import { useSystemThemePreference } from "@/hooks/useSystemThemePreference.ts";
 
 interface FirstRunSetupProps {
   initialState: FirstRunState;
@@ -14,6 +17,8 @@ export function FirstRunSetup({
   onComplete,
 }: FirstRunSetupProps) {
   const setup = useFirstRunSetupController(initialState, onComplete);
+  const appearance = useButlerStore((state) => state.settings.appearance_theme);
+  const tone = resolveAppearanceTheme(appearance, useSystemThemePreference());
 
   return (
     <SetupWizardShell
@@ -22,6 +27,7 @@ export function FirstRunSetup({
       progressLabel="First-run setup steps"
       steps={setup.copy.steps.map((label) => ({ id: label, label }))}
       title={setup.copy.product}
+      tone={tone}
       windowControls={<WindowControls />}
     >
       <FirstRunStepContent

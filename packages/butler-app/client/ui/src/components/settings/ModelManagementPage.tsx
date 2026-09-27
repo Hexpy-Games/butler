@@ -1,6 +1,6 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { useState } from "react";
-import { Button, Plus, Stack, Typo } from "@/butler-ds";
+import { Button, Plus } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import { modelDisplayName } from "@/app/utils.ts";
@@ -43,25 +43,27 @@ export function ModelManagementPage() {
 
   return (
     <ModelRouteFrame title={copy.title}>
-      <SettingsSection title={copy.registeredTitle}>
-        <Stack gap="md">
+      <SettingsSection
+        id="registered-models"
+        kind="list"
+        title={copy.registeredTitle}
+        state={models.length === 0 ? "empty" : "ready"}
+        emptyMessage={copy.emptyRegistered}
+        actions={
           <Button type="button" onClick={openAdd} size="sm">
-            <Plus size={15} /> {copy.addButton}
+            <Plus size="md" /> {copy.addButton}
           </Button>
-          {models.length === 0 ? (
-            <Typo.Caption>{copy.emptyRegistered}</Typo.Caption>
-          ) : (
-            models.map((model) => (
-              <RegisteredModelRow
-                key={model.model_ref}
-                model={model}
-                busy={busyModelRef === model.model_ref}
-                onEdit={() => openEdit(model.model_ref)}
-                onDelete={() => void remove(model)}
-              />
-            ))
-          )}
-        </Stack>
+        }
+      >
+        {models.map((model) => (
+          <RegisteredModelRow
+            key={model.model_ref}
+            model={model}
+            busy={busyModelRef === model.model_ref}
+            onEdit={() => openEdit(model.model_ref)}
+            onDelete={() => void remove(model)}
+          />
+        ))}
       </SettingsSection>
     </ModelRouteFrame>
   );

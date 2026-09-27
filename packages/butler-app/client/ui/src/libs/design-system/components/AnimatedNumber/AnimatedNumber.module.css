@@ -1,0 +1,30 @@
+.root {
+  position: relative;
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.stack {
+  display: inline-grid;
+  justify-items: end;
+}
+
+.sizer,
+.value {
+  grid-area: 1 / 1;
+}
+
+.sizer {
+  visibility: hidden;
+}
+
+/* Visually hidden; the final value is what assistive tech reads. */
+.final {
+  position: absolute;
+  width: var(--border-hairline);
+  height: var(--border-hairline);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

@@ -1,10 +1,15 @@
 import { useState, type ReactNode } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Button, ButtonContainer, ChartContainer, ChartTooltip, ChartTooltipContent, Section, Stack, Typo } from "@/butler-ds";
+import { Button, ChartContainer, ChartLegend, ChartTooltip, ChartTooltipContent, Inline, Section, Stack, Typo, Box, chartColor, type ChartColor } from "@/butler-ds";
 import type { DashboardStatisticSeries } from "../../../../shared/app-contracts.ts";
 import { ProjectStatisticSources } from "./ProjectStatisticSources.tsx";
-import styles from "./ProjectStatisticsPanel.module.css";
+
+/** Series colors: bars and the legend share these DS chart tokens. */
+const TONES: Record<string, ChartColor> = {
+  created: "chart-1", completed: "success", executed: "chart-4", delivered: "success", failed: "danger",
+  cancelled: "chart-5", updated: "chart-2", spec: "chart-1", plan: "chart-2", report: "chart-3", artifacts: "chart-4",
+};
 
 export function ProjectStatisticChart({ title, description, series, stacked = false, actions, horizontal = false }: {
   title: string; description: string; series: DashboardStatisticSeries; stacked?: boolean; actions?: ReactNode; horizontal?: boolean;
@@ -17,20 +22,16 @@ export function ProjectStatisticChart({ title, description, series, stacked = fa
   const hasData = series.buckets.some((bucket) => Object.values(bucket.values).some((items) => items.length));
   const rows = series.buckets.map((bucket) => ({ label: bucket.label, displayLabel: copy.labels[bucket.label] ?? bucket.label.slice(5),
     ...Object.fromEntries(series.keys.map((key) => [key, bucket.values[key]?.length ?? 0])) }));
-  const colors: Record<string, string> = { created: "var(--context-chart-1)", completed: "var(--ok)", executed: "var(--context-chart-4)",
-    delivered: "var(--ok)", failed: "var(--danger)", cancelled: "var(--text-tertiary)", updated: "var(--context-chart-2)",
-    spec: "var(--context-chart-1)", plan: "var(--context-chart-2)", report: "var(--context-chart-3)", artifacts: "var(--context-chart-4)" };
-  const config = Object.fromEntries(keys.map((key) => [key, { label: copy.labels[key] ?? key, color: colors[key] ?? "var(--context-chart-1)" }]));
+  const tone = (key: string): ChartColor => TONES[key] ?? "chart-1";
+  const config = Object.fromEntries(keys.map((key) => [key, { label: copy.labels[key] ?? key, color: chartColor(tone(key)) }]));
   const label = (value: string) => copy.labels[value] ?? value.slice(5);
   const selection = selected === undefined ? undefined : series.buckets[selected];
   const select = (index: number) => { if (index >= 0 && index < rows.length) { setSelected(index); setMetric(undefined); } };
   return <Section title={title} description={description} actions={actions}>
-    <Stack gap="md" className={styles.surface}>
+    <Box border="hairline" radius="control" paddingX="lg" paddingY="md"><Stack gap="md">
       {!hasData ? <Typo.Caption>{keys.length ? copy.empty : copy.unavailable}</Typo.Caption> : <>
-        <div className={styles.legend}>{keys.map((key) => <Typo.Caption key={key}>
-          <span className={styles.swatch} style={{ background: config[key]!.color }} />{copy.labels[key] ?? key}
-        </Typo.Caption>)}</div>
-        <ChartContainer className={styles.chart} config={config} aria-label={title}
+        <ChartLegend items={keys.map((key) => ({ key, label: copy.labels[key] ?? key, color: tone(key) }))} />
+        <ChartContainer size="panel" config={config} aria-label={title}
           onKeyDownCapture={(event) => {
             if (event.key === "ArrowRight") select(Math.min(rows.length - 1, (selected ?? -1) + 1));
             if (event.key === "ArrowLeft") select(Math.max(0, (selected ?? rows.length) - 1));
@@ -47,21 +48,21 @@ export function ProjectStatisticChart({ title, description, series, stacked = fa
             </Bar>)}
           </BarChart>
         </ChartContainer>
-        <ButtonContainer size="sm" className={styles.legend}>
+        <Inline gap="sm" rowGap="sm">
           <Button size="sm" variant="inline" aria-label={`${copy.selected} −1`} onClick={() => select(Math.max(0, (selected ?? rows.length) - 1))}>←</Button>
           <Button size="sm" variant="inline" aria-label={`${copy.selected} +1`} onClick={() => select(Math.min(rows.length - 1, (selected ?? -1) + 1))}>→</Button>
           <Typo.Caption>{selection ? label(selection.label) : copy.selected}</Typo.Caption>
-        </ButtonContainer>
+        </Inline>
         {selection && <>
-          <ButtonContainer size="sm" className={styles.legend}>
+          <Inline gap="sm" rowGap="sm">
             <Button size="sm" variant={metric ? "borderless" : "outline"} onClick={() => setMetric(undefined)}>{copy.all}</Button>
             {keys.map((key) => <Button size="sm" key={key} variant={metric === key ? "outline" : "borderless"} onClick={() => setMetric(key)}>
               {copy.labels[key] ?? key} {selection.values[key]?.length ?? 0}
             </Button>)}
-          </ButtonContainer>
+          </Inline>
           <ProjectStatisticSources key={`${selected}:${metric}`} sourceKeys={metric ? selection.values[metric] ?? [] : Object.values(selection.values).flat()} />
         </>}
       </>}
-    </Stack>
+    </Stack></Box>
   </Section>;
 }
