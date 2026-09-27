@@ -1,0 +1,28 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/codex/responses",
+    "key": {
+      "path": "/codex/responses",
+      "model": "gpt-6-sol",
+      "effort": "low",
+      "user_request": "Reply with exactly the word: unauthorized",
+      "round": []
+    }
+  },
+  "response": {
+    "status": 401,
+    "headers": [
+      [
+        "content-type",
+        "application/json"
+      ]
+    ],
+    "chunks": [
+      {
+        "delay_ms": 0,
+        "text": "{\"detail\":\"Could not parse your authentication token. Please try signing in again.\"}"
+      }
+    ]
+  }
+}

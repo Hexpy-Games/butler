@@ -222,7 +222,10 @@ async fn live_06_image_understanding() -> Result<(), HarnessError> {
         s.gw.upload("number.png", "image/png", &png, Some("general"))
             .await?;
     assert_eq!(upload.status, 201, "{}", upload.text);
-    let file_id = upload.data()["file"]["id"].as_str().unwrap().to_owned();
+    let file_id = upload.data()["file"]["file_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     live::spend_turn()?;
     let accepted = s
         .gw

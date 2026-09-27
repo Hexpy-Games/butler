@@ -250,3 +250,47 @@ async fn onb_04_gateway_requires_its_token() -> Result<(), HarnessError> {
     assert!(s.gw.healthy().await);
     s.finish().await
 }
+
+/// ONB-02 (inject) — credential present, provider answers the recorded real
+/// 401: same user-facing class, bounded, no retry storm.
+#[tokio::test]
+async fn onb_02_provider_401_fails_without_retry_storm() -> Result<(), HarnessError> {
+    use butler_e2e::e2e::faults::{Fault, Transform};
+    let s = Setup::new("ONB-02-401")?.cassette("ONB-02").start().await?;
+    if s.recording() {
+        return s.finish().await;
+    }
+    let exchange = s.provider()?.exchange_for("connected", 0)?;
+    s.provider()?.inject(Fault::always(
+        exchange,
+        Transform::ErrorFromLibrary("codex-401".into()),
+    ))?;
+    let started = std::time::Instant::now();
+    let (_, turn) = s
+        .turn("general", "Reply with exactly the word: connected")
+        .await?;
+    assert_eq!(turn_state(&turn), "failed", "{turn}");
+    assert!(
+        started.elapsed() < Duration::from_secs(30),
+        "401 not terminal in time: {:?}",
+        started.elapsed()
+    );
+    assert!(
+        s.provider()?.served() <= 3,
+        "retry storm: {} provider calls",
+        s.provider()?.served()
+    );
+    let text = s.gw.get("/messages?chat_id=general").await?.text
+        + &s.gw.get("/turns?chat_id=general").await?.text;
+    let lowered = text.to_lowercase();
+    assert!(
+        lowered.contains("auth") || lowered.contains("sign in") || lowered.contains("credential"),
+        "401 not reported as an authentication problem: {text}"
+    );
+    assert!(
+        !text.contains("e2e-replay-placeholder"),
+        "credential leaked into the public error"
+    );
+    assert!(s.gw.healthy().await);
+    s.finish().await
+}
