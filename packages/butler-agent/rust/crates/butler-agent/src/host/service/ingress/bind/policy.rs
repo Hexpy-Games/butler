@@ -246,7 +246,7 @@ struct ApprovalFreeFacts<'a> {
 
 /// The required tools of the approval-free actions this turn may take:
 /// first-conversation onboarding (or the selected memory-write profile, which
-/// includes it), memory save when selected, and analysis of an admitted
+/// includes it), memory save in a Butler session, and analysis of an admitted
 /// attached image. Full access and ask-first offer them; read-only does not.
 fn approval_free_tools(access: &str, facts: ApprovalFreeFacts<'_>) -> Vec<&'static str> {
     let mode = serde_json::from_value::<AccessMode>(Value::String(access.to_owned()))
@@ -268,8 +268,13 @@ fn approval_free_tools(access: &str, facts: ApprovalFreeFacts<'_>) -> Vec<&'stat
             ToolName::SummarizeUserProfile,
         ]);
     }
+    // A Butler session saves what the principal asks it to remember (MEM-01);
+    // task-memory ingest stays with the legacy memory-write profile.
+    if facts.butler_role || facts.selected_memory_write {
+        selected.push(ToolName::UpdateExplicitMemory);
+    }
     if facts.selected_memory_write {
-        selected.extend([ToolName::IngestTaskMemory, ToolName::UpdateExplicitMemory]);
+        selected.push(ToolName::IngestTaskMemory);
     }
     if super::image_admission::admits_zai_image_tool(facts.envelope) {
         selected.push(ToolName::AnalyzeAttachedImage);

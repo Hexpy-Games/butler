@@ -80,9 +80,9 @@ async fn acc_01_onboarding_saves_without_approval_in_ask_first() -> Result<(), H
 }
 
 /// ACC-02 — In ask-first, asking Butler to remember something saves it
-/// without an approval: the fact is recallable after ingest. Recall needs the
-/// local embedding model (`BUTLER_E2E_EMBEDDING_ASSETS`); without it only the
-/// no-approval part runs.
+/// without an approval: the explicit memory tool runs and the fact is
+/// recallable. Recall needs the local embedding model
+/// (`BUTLER_E2E_EMBEDDING_ASSETS`); without it only the write is checked.
 #[tokio::test]
 async fn acc_02_memory_save_proceeds_without_approval_in_ask_first() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -96,11 +96,27 @@ async fn acc_02_memory_save_proceeds_without_approval_in_ask_first() -> Result<(
     let accepted =
         s.gw.say(
             "general",
-            &format!("Please remember this for later: my locker combination is {code}."),
+            &format!(
+                "Please save this as a durable explicit memory so you remember it in future \
+                 conversations: my locker combination is {code}. Use your explicit memory \
+                 tool, then confirm in one short sentence."
+            ),
         )
         .await?;
     let turn_id = accepted_turn_id(&accepted)?;
     delivered_without_asking(&s, "general", &turn_id).await?;
+    let rows = tool_rows(&s.gw.messages("general").await?, &turn_id);
+    let write = rows
+        .iter()
+        .find(|row| {
+            row.to_string().contains("update_explicit_memory") && row["state"] == "delivered"
+        })
+        .unwrap_or_else(|| panic!("no delivered explicit memory write: {rows:#?}"));
+    let output = s.gw.operation_output(&turn_id, write).await?;
+    assert!(
+        !output.contains("requires_full_access"),
+        "the memory write was refused: {output}"
+    );
     if !recall {
         live::report(
             "ACC-02",
@@ -108,34 +124,16 @@ async fn acc_02_memory_save_proceeds_without_approval_in_ask_first() -> Result<(
         );
         return s.finish().await;
     }
-    let sessions = s.gw.get("/sessions").await?;
-    let hint = sessions.data()["sessions"]
-        .as_array()
-        .and_then(|list| list.iter().find(|session| session["id"] == "general"))
-        .and_then(|session| session["session_hint"].as_str())
-        .unwrap_or("general")
-        .to_owned();
-    let ingest = s
-        .agent
-        .cli(&[
-            "cognition",
-            "memory",
-            "ingest",
-            "--session",
-            &hint,
-            "--json",
-        ])?
-        .json()?;
-    assert_eq!(ingest["ok"], true, "{ingest}");
     let result = s
         .agent
-        .cli(&[
+        .cli_async(&[
             "cognition",
             "memory",
             "recall",
             "locker combination",
             "--json",
-        ])?
+        ])
+        .await?
         .json()?;
     assert!(
         result["data"]["results"].to_string().contains(&code),

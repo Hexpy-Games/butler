@@ -227,7 +227,9 @@ impl Setup {
         match fixture {
             Fixture::Ready => fixtures::ready(&sandbox.data, &choice.model)?,
             Fixture::Legacy => fixtures::legacy(&sandbox.data, &choice.model)?,
-            Fixture::FirstConversation => fixtures::first_conversation(&sandbox.data, &choice.model)?,
+            Fixture::FirstConversation => {
+                fixtures::first_conversation(&sandbox.data, &choice.model)?
+            }
             Fixture::Empty => {}
         }
         let (agent, gw) = Agent::start(launch).await?;
@@ -247,7 +249,9 @@ impl Setup {
         if fixture != Fixture::Empty {
             let mut settings = model_settings(&scenario.model);
             settings["access_mode"] = access.as_str().into();
-            scenario.patch_settings(settings, &scenario.model.label()).await?;
+            scenario
+                .patch_settings(settings, &scenario.model.label())
+                .await?;
         }
         Ok(scenario)
     }
