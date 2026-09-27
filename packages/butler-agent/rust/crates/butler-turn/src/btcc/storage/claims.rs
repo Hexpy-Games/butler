@@ -55,7 +55,12 @@ pub(super) fn acquire(
         params![claim_id, turn.turn_id, turn.revision, state, checkpoint.checkpoint_id,
             checkpoint.checkpoint_revision, turn.execution_fence, owner.owner_id(), owner.generation()],
     ).map_err(StorageError::sqlite)?;
-    take_ownership(&transaction, owner, &claim_id, checkpoint.checkpoint_revision)?;
+    take_ownership(
+        &transaction,
+        owner,
+        &claim_id,
+        checkpoint.checkpoint_revision,
+    )?;
     assert_owned(
         &transaction,
         owner,

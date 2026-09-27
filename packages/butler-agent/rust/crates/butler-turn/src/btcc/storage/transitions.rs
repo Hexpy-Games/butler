@@ -199,11 +199,13 @@ fn park_authority_call(
             "authority_source_call_mismatch",
         ));
     }
-    let pending = connection.execute(
-        "UPDATE btcc_guided_tool_calls SET status = 'awaiting_authority' WHERE call_id = ?1 \
+    let pending = connection
+        .execute(
+            "UPDATE btcc_guided_tool_calls SET status = 'awaiting_authority' WHERE call_id = ?1 \
          AND turn_id = ?2 AND status IN ('started','awaiting_authority')",
-        params![call_id, turn.turn_id],
-    ).map_err(StorageError::sqlite)?;
+            params![call_id, turn.turn_id],
+        )
+        .map_err(StorageError::sqlite)?;
     if pending != 1 {
         return Err(error(
             StorageCode::AuthoritySourceCallNotPending,

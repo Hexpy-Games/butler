@@ -343,7 +343,10 @@ pub(super) fn read_exact(
         ExactResultSource::Result => result.as_bytes(),
     };
     let end = input.offset.saturating_add(input.length).min(bytes.len());
-    let Some(range) = bytes.get(input.offset..end).filter(|_| input.offset < bytes.len()) else {
+    let Some(range) = bytes
+        .get(input.offset..end)
+        .filter(|_| input.offset < bytes.len())
+    else {
         return Err(error(StorageCode::OperationResultRangeOutOfBounds));
     };
     Ok(ExactResultRange {

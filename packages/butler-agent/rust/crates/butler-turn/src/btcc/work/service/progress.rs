@@ -122,29 +122,7 @@ impl DurableWorkService {
             input.action_updates.as_deref().unwrap_or(&[]),
         )?;
         let accepted_review = super::super::policy::accepted_current_result_review(&context.work);
-        let mut identity = serde_json::Map::new();
-        with_null_project(&input.scope, &mut identity);
-        identity.insert(
-            "mutationCallId".into(),
-            Value::String(input.mutation_call_id.clone()),
-        );
-        identity.insert("subject".into(), serialized(&input.subject)?);
-        identity.insert("verdict".into(), serialized(&input.verdict)?);
-        identity.insert("summary".into(), Value::String(input.summary.clone()));
-        identity.insert("corrections".into(), serialized(&input.corrections)?);
-        identity.insert(
-            "actionUpdates".into(),
-            serialized(&input.action_updates.as_deref().unwrap_or(&[]))?,
-        );
-        identity.insert(
-            "correctionScope".into(),
-            input
-                .correction_scope
-                .map(|value| serialized(&value))
-                .transpose()?
-                .unwrap_or(Value::Null),
-        );
-        let request_sha256 = fingerprint("record_review", &Value::Object(identity))?;
+        let request_sha256 = review_fingerprint(&input)?;
         let expected_result_review_revision_id = if input.subject == ReviewSubject::Completion {
             accepted_review.map(|review| review.review_revision_id.clone())
         } else {
@@ -172,4 +150,31 @@ impl DurableWorkService {
         };
         self.repository.record_review(command).await
     }
+}
+
+/// The idempotency fingerprint of a review request.
+fn review_fingerprint(input: &ReviewInput) -> Result<String, BtccError> {
+    let mut identity = serde_json::Map::new();
+    with_null_project(&input.scope, &mut identity);
+    identity.insert(
+        "mutationCallId".into(),
+        Value::String(input.mutation_call_id.clone()),
+    );
+    identity.insert("subject".into(), serialized(&input.subject)?);
+    identity.insert("verdict".into(), serialized(&input.verdict)?);
+    identity.insert("summary".into(), Value::String(input.summary.clone()));
+    identity.insert("corrections".into(), serialized(&input.corrections)?);
+    identity.insert(
+        "actionUpdates".into(),
+        serialized(&input.action_updates.as_deref().unwrap_or(&[]))?,
+    );
+    identity.insert(
+        "correctionScope".into(),
+        input
+            .correction_scope
+            .map(|value| serialized(&value))
+            .transpose()?
+            .unwrap_or(Value::Null),
+    );
+    fingerprint("record_review", &Value::Object(identity))
 }
