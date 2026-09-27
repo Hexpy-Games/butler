@@ -52,9 +52,11 @@ for (const file of ["CNAME", "404.html", "LICENSE.txt", "third-party-licenses.tx
 
 const port = await freePort();
 const origin = `http://127.0.0.1:${port}`;
+// Spawn vite's own entry (not npx) so killing this child stops the server and nothing outlives the test.
+const viteBin = join(uiRoot, "node_modules", "vite", "bin", "vite.js");
 const preview = spawn(
-  process.platform === "win32" ? "npx.cmd" : "npx",
-  ["vite", "preview", "--config", "vite.ds-site.config.ts", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
+  "node",
+  [viteBin, "preview", "--config", "vite.ds-site.config.ts", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
   { cwd: uiRoot, stdio: ["ignore", "pipe", "pipe"] },
 );
 let previewLog = "";
@@ -95,8 +97,10 @@ try {
   console.log(`ds-site smoke passed: overview + 3 deep links, 0 foreign requests (${origin})`);
 } catch (error) {
   if (previewLog) console.error(previewLog);
-  throw error;
+  console.error(error);
+  process.exitCode = 1;
 } finally {
   await browser.close();
   preview.kill();
 }
+process.exit();

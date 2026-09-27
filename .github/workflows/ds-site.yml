@@ -63,6 +63,7 @@ jobs:
         run: bunx playwright install --with-deps chromium
 
       - name: Smoke (overview + deep links, no foreign requests)
+        timeout-minutes: 5
         run: bun run tests/smoke/ds-site-smoke.ts
 
       - name: Upload Pages artifact
