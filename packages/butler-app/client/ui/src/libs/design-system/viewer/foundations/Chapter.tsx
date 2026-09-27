@@ -181,15 +181,16 @@ export function DoDont({ doCaption, dontCaption, doRender, dontRender, lang }: {
   doCaption: string; dontCaption: string; doRender: ReactNode; dontRender: ReactNode; lang?: string;
 }) {
   return (
-    <div className={styles.doDont} data-ds-do-dont>
-      <div className={styles.verdict} data-verdict="do">
-        <div className={styles.verdictBody} lang={lang}>{doRender}</div>
-        <div className={styles.verdictCaption}><Typo.Caption><strong>Do</strong>{` · ${doCaption}`}</Typo.Caption></div>
-      </div>
-      <div className={styles.verdict} data-verdict="dont">
-        <div className={styles.verdictBody} lang={lang}>{dontRender}</div>
-        <div className={styles.verdictCaption}><Typo.Caption><strong>Don't</strong>{` · ${dontCaption}`}</Typo.Caption></div>
-      </div>
+    <div className={f.doDont} data-ds-do-dont>
+      {([["do", "Do", doCaption, doRender], ["dont", "Don't", dontCaption, dontRender]] as const).map(([verdict, label, caption, render]) => (
+        <div className={f.verdict} data-verdict={verdict} key={verdict}>
+          <div className={f.verdictBody} lang={lang}>{render}</div>
+          <Stack gap="none">
+            <Typo.Label as="span" tone={verdict === "do" ? "success" : "danger"}>{label}</Typo.Label>
+            <Typo.Caption tone="secondary">{caption}</Typo.Caption>
+          </Stack>
+        </div>
+      ))}
     </div>
   );
 }

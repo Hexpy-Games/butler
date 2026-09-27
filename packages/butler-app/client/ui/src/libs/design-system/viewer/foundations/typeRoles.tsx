@@ -48,15 +48,14 @@ export function roleComponentName(role: string): string {
 }
 
 /** Text set in a role: through its Typo variant, or straight from its tokens. */
-export function RoleText({ role, children, lang, lineBoxes, ref }: {
+export function RoleText({ role, children, lang, ref }: {
   role: TypeRole;
   children: ReactNode;
   lang?: SampleLocale;
-  lineBoxes?: boolean;
   ref?: Ref<HTMLElement>;
 }) {
   const component = ROLE_COMPONENTS[role.role];
-  const className = dsClass(f.roleText, lineBoxes && f.lineBoxes);
+  const className = dsClass(f.roleText);
   if (component) {
     const [Variant] = component;
     return <Variant as="div" className={className} lang={lang} ref={ref} wrap="normal">{children}</Variant>;

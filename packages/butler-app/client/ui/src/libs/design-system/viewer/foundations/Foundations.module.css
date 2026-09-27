@@ -14,8 +14,6 @@
 .chapterHead {
   display: grid;
   gap: var(--space-lg);
-  padding-bottom: var(--space-2xl);
-  border-bottom: var(--border-hairline) solid var(--line);
 }
 
 .chapterKicker {
@@ -64,7 +62,6 @@
 
 .chapterMain > .guideSection:first-child {
   padding-top: 0;
-  border-top: none;
 }
 
 .toc {
@@ -78,8 +75,6 @@
   display: grid;
   gap: var(--space-xl);
   min-width: 0;
-  padding-top: var(--space-2xl);
-  border-top: var(--border-hairline) solid var(--line);
 }
 
 .guideHead {
@@ -102,10 +97,30 @@
   gap: var(--space-md);
   justify-content: space-between;
   padding-top: var(--space-2xl);
-  border-top: var(--border-hairline) solid var(--line);
 }
 
 /* ---- Shared specimen frames ---- */
+
+/* Do / don't: two tinted plates; the verdict is a colored word, not a rule. */
+.doDont {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+.verdict {
+  display: grid;
+  gap: var(--space-md);
+  align-content: start;
+  min-width: 0;
+  padding: var(--space-lg);
+  border-radius: var(--radius-panel);
+  background: var(--selection);
+}
+
+.verdictBody {
+  min-width: 0;
+}
 
 .themePanes {
   display: grid;
@@ -121,7 +136,6 @@
   align-content: start;
   min-width: 0;
   padding: var(--space-2xl) var(--space-lg) var(--space-lg);
-  border: var(--border-hairline) solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--color-surface-base);
   color: var(--text-primary);
@@ -140,9 +154,8 @@
   display: grid;
   min-width: 0;
   margin: 0;
-  border: var(--border-hairline) solid var(--line);
   border-radius: var(--radius-panel);
-  background: var(--surface-raised);
+  background: var(--selection);
 }
 
 .specimen[data-tone="sunken"] {
@@ -156,18 +169,6 @@
 
 .specimenCaption {
   padding: var(--space-sm) var(--space-lg);
-  border-top: var(--border-hairline) solid var(--line);
-}
-
-/* Horizontal lines at every line box: the leading, made visible. */
-.lineBoxes,
-.measured,
-.leadingSample {
-  background-image: repeating-linear-gradient(
-    to bottom,
-    transparent 0 calc(1lh - var(--border-hairline)),
-    var(--line) calc(1lh - var(--border-hairline)) 1lh
-  );
 }
 
 /* ---- Typography: voice ---- */
@@ -178,9 +179,8 @@
   gap: var(--space-3xl);
   align-items: center;
   padding: var(--space-2xl) var(--space-3xl);
-  border: var(--border-hairline) solid var(--line);
   border-radius: var(--radius-composer);
-  background: var(--surface-raised);
+  background: var(--selection);
 }
 
 .voiceGlyph {
@@ -229,7 +229,6 @@
 
 .glyphTable {
   display: grid;
-  border-top: var(--border-hairline) solid var(--line);
 }
 
 .glyphRow {
@@ -238,7 +237,6 @@
   gap: var(--space-lg);
   align-items: baseline;
   padding: var(--space-md) 0;
-  border-bottom: var(--border-hairline) solid var(--line);
 }
 
 .glyphs {
@@ -259,16 +257,7 @@
 
 .ladder {
   display: grid;
-  border-top: var(--border-hairline) solid var(--line);
-}
-
-.ladderLegend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-  justify-content: space-between;
-  padding: var(--space-sm) 0;
-  border-bottom: var(--border-hairline) solid var(--line);
+  gap: var(--space-2xl);
 }
 
 .rung {
@@ -276,8 +265,6 @@
   grid-template-columns: minmax(0, 1fr) 19rem;
   gap: var(--space-2xl);
   align-items: start;
-  padding: var(--space-xl) 0;
-  border-bottom: var(--border-hairline) solid var(--line);
   scroll-margin-top: var(--space-4xl);
 }
 
@@ -296,7 +283,6 @@
   gap: var(--space-sm);
   min-width: 0;
   padding-left: var(--space-lg);
-  border-left: var(--border-hairline) solid var(--line);
 }
 
 .specGrid {
@@ -341,15 +327,13 @@
   align-content: start;
   min-width: 0;
   padding: var(--space-md);
-  border: var(--border-hairline) solid var(--line);
   border-radius: var(--radius-panel);
-  background: var(--surface-raised);
+  background: var(--selection);
 }
 
 .contextStage {
   min-width: 0;
   padding: var(--space-lg);
-  border: var(--border-hairline) solid var(--line);
   border-radius: var(--radius-control);
   background: var(--conversation-bg);
 }
@@ -469,7 +453,6 @@
   grid-auto-columns: minmax(0, 1fr);
   grid-auto-flow: column;
   overflow: hidden;
-  border: var(--border-hairline) solid var(--line);
   border-radius: var(--radius-panel);
 }
 
@@ -520,7 +503,6 @@
   align-items: center;
   min-width: 0;
   padding: var(--space-sm);
-  border: var(--border-hairline) solid var(--line);
   border-radius: var(--radius-control);
 }
 
@@ -583,7 +565,6 @@
   align-items: center;
   min-width: 0;
   padding: var(--space-xs) 0;
-  border-bottom: var(--border-hairline) solid var(--line);
 }
 
 .pairDots {
@@ -669,7 +650,6 @@
 .syntax {
   margin: 0;
   padding: var(--space-md);
-  border: var(--border-hairline) solid var(--line);
   border-radius: var(--radius-control);
   background: var(--surface);
   color: var(--text-primary);
@@ -744,9 +724,8 @@
   gap: var(--space-lg) var(--space-xl);
   align-items: flex-end;
   padding: var(--space-xl);
-  border: var(--border-hairline) solid var(--line);
   border-radius: var(--radius-panel);
-  background: var(--surface-raised);
+  background: var(--selection);
 }
 
 .stairStep {
@@ -839,7 +818,6 @@
 .rhythmStage {
   min-width: 0;
   padding: var(--space-lg);
-  border: var(--border-hairline) solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--settings-bg);
 }
@@ -1044,9 +1022,8 @@
   justify-items: center;
   min-width: 0;
   padding: var(--space-lg) var(--space-md);
-  border: var(--border-hairline) solid var(--line);
   border-radius: var(--radius-panel);
-  background: var(--surface-raised);
+  background: var(--selection);
   text-align: center;
 }
 
@@ -1083,9 +1060,8 @@
   gap: var(--space-2xl);
   align-items: center;
   padding: var(--space-xl);
-  border: var(--border-hairline) solid var(--line);
   border-radius: var(--radius-panel);
-  background: var(--surface-raised);
+  background: var(--selection);
 }
 
 .ringSample {
@@ -1371,8 +1347,6 @@
   .rungSpec {
     padding-top: var(--space-sm);
     padding-left: 0;
-    border-top: var(--border-hairline) dashed var(--line);
-    border-left: none;
   }
 
   .voice {
@@ -1382,6 +1356,10 @@
 }
 
 @media (width <= 640px) {
+  .doDont {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .themePanes {
     grid-template-columns: minmax(0, 1fr);
   }

@@ -29,7 +29,7 @@ function Rung({ role, locale }: { role: TypeRole; locale: SampleLocale }) {
   return (
     <div className={f.rung} id={`type-${role.role}`} data-ds-type-role={role.role}>
       <div className={f.rungSample}>
-        <RoleText lineBoxes lang={locale} ref={ref} role={role}>{copy[locale]}</RoleText>
+        <RoleText lang={locale} ref={ref} role={role}>{copy[locale]}</RoleText>
         <RoleText lang={other} role={role}>{copy[other]}</RoleText>
       </div>
       <div className={f.rungSpec}>
@@ -56,10 +56,6 @@ export function TypeLadder({ locale }: { locale: SampleLocale }) {
   const roles = typeRoles(tokenCatalog);
   return (
     <div className={f.ladder} data-ds-type-ladder={roles.length}>
-      <div className={f.ladderLegend} aria-hidden="true">
-        <Typo.Caption tone="tertiary">Specimen · lines show the leading</Typo.Caption>
-        <Typo.Caption tone="tertiary">px as applied at this width</Typo.Caption>
-      </div>
       {roles.map((role) => <Rung key={role.role} locale={locale} role={role} />)}
     </div>
   );

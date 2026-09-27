@@ -39,7 +39,7 @@ export function TypeFace({ locale }: { locale: SampleLocale }) {
           <Stack gap="xs">
             <Typo.SectionTitle tone="tertiary">Typeface · --font-body</Typo.SectionTitle>
             <Typo.H2>{`${families[0] ?? "System UI"} + ${families.find((family) => /Gothic|KR/u.test(family)) ?? "Hangul system font"}`}</Typo.H2>
-            <Typo.Caption tone="secondary" wrap="anywhere">{`System stack, no web font: ${families.join(" · ")}`}</Typo.Caption>
+            <Typo.Caption tone="secondary" wrap="anywhere">{`Stack: ${families.join(" · ")}`}</Typo.Caption>
           </Stack>
           <div className={f.weights}>
             {fontWeights(tokenCatalog).map((token) => (

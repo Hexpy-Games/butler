@@ -13,9 +13,9 @@ export function TypographyChapter({ chapter, locale, anchor, onOpen }: ChapterPr
   ]);
   return (
     <ChapterLayout anchor={anchor} chapter={chapter} onOpen={onOpen} sections={s.list}
-      lead="One voice across Latin and Hangul: the platform system font, a role scale instead of raw sizes, and four calm weights. Pick the role for the job; the role owns size, leading, weight and tracking."
+      lead="One voice across Latin and Hangul: one font stack, a role scale instead of raw sizes, and four calm weights. Pick the role for the job; the role owns size, leading, weight and tracking."
       headerExtra={<Button size="xs" variant="borderless" text="Typo component" onClick={() => onOpen("components/Typo")} />}>
-      <GuideSection spec={s.at("typeface")} lead="The system stack sets Latin in SF Pro and Hangul in Apple SD Gothic Neo (Segoe UI and Malgun Gothic on Windows). No web font to load.">
+      <GuideSection spec={s.at("typeface")} lead="Shown from the current --font-body and --font-family-code stacks in tokens.css; the page follows them when they change.">
         <TypeFace locale={locale} />
       </GuideSection>
       <GuideSection spec={s.at("type-scale")} lead="Every --typo-* role, set in its own style. The spec on the right is read from the rendered sample.">

@@ -45,8 +45,10 @@ describe("specimens are derived from tokens.css", () => {
 
   test("weights and families come from the font tokens", () => {
     expect(fontWeights(catalog).map((token) => token.light)).toEqual(["400", "500", "560", "620"]);
-    expect(fontFamilies(byName.get("--font-body")!.light)).toContain("Apple SD Gothic Neo");
-    expect(fontFamilies(byName.get("--font-body")!.light)[0]).toBe("SF Pro Text");
+    // The hero names whatever the stack is: families only, generic keywords dropped.
+    const families = fontFamilies(byName.get("--font-body")!.light);
+    expect(families.length).toBeGreaterThan(0);
+    expect(families.some((family) => /^(ui-|system-ui|sans-serif|-apple-system|BlinkMacSystemFont)/u.test(family))).toBe(false);
   });
 
   test("palette ramps group every numbered step", () => {
