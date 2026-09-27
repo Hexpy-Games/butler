@@ -75,6 +75,8 @@ pub(super) async fn reconcile(
     }
 }
 
+/// Claims the dispatch marker, re-checks permission after the marker, calls
+/// the adapter once and records what it reports.
 async fn dispatch(context: &Context<'_>, current: &EffectRecord) -> EffectResult<EffectOutcome> {
     if let Some(denied) = outcomes::permission(context.input) {
         return Ok(EffectOutcome::Rejected(denied));
@@ -92,21 +94,18 @@ async fn dispatch(context: &Context<'_>, current: &EffectRecord) -> EffectResult
         .reached("after_dispatch_marker", identity)
         .await?;
     if let Some(denied) = outcomes::permission(context.input) {
-        return Ok(
-            if context
-                .journal
-                .return_prepared(claimed.identity.effect_id.clone(), claimed.journal_revision)
-                .await?
-                .is_some()
-            {
-                EffectOutcome::Rejected(denied)
-            } else {
-                outcomes::resolve_conflict(context.journal, identity).await?
-            },
-        );
+        let returned = context
+            .journal
+            .return_prepared(claimed.identity.effect_id.clone(), claimed.journal_revision)
+            .await?;
+        return match returned {
+            Some(_) => Ok(EffectOutcome::Rejected(denied)),
+            None => outcomes::resolve_conflict(context.journal, identity).await,
+        };
     }
-    let adapter = context.input.adapter.as_ref();
-    let response = adapter
+    let response = context
+        .input
+        .adapter
         .dispatch(
             &context.resolved.normalized_target,
             &context.resolved.normalized_input,
@@ -114,46 +113,46 @@ async fn dispatch(context: &Context<'_>, current: &EffectRecord) -> EffectResult
             &context.input.signal,
         )
         .await;
-    let response = match response {
-        Ok(response) => response,
-        Err(error) => {
-            return record_uncertain(
-                context,
-                &claimed,
-                EffectError::new("effect_reconciliation_required", error.message()),
-            )
-            .await;
-        }
-    };
     match response {
-        AdapterOutcome::NotApplied(error) => {
-            let diagnostic = EffectError {
-                code: "effect_dispatch_failed".into(),
-                message: format!("{}: {}", error.code, error.message),
-                recoverable: error.recoverable.unwrap_or(true),
-                source_code: None,
-            };
-            let recorded = context
-                .journal
-                .record_failed(
-                    claimed.identity.effect_id.clone(),
-                    claimed.journal_revision,
-                    diagnostic.clone(),
-                )
-                .await?;
-            if recorded.is_some() {
-                Ok(EffectOutcome::Failed(diagnostic))
-            } else {
-                outcomes::resolve_conflict(context.journal, identity).await
-            }
+        Err(error) => {
+            let diagnostic = EffectError::new("effect_reconciliation_required", error.message());
+            record_uncertain(context, &claimed, diagnostic).await
         }
-        AdapterOutcome::Uncertain(error) => {
+        Ok(AdapterOutcome::NotApplied(error)) => record_failed(context, &claimed, &error).await,
+        Ok(AdapterOutcome::Uncertain(error)) => {
             record_uncertain(context, &claimed, reconciliation_error(error.as_ref())).await
         }
-        AdapterOutcome::Applied(result) => {
+        Ok(AdapterOutcome::Applied(result)) => {
             context.fault.reached("after_dispatch", identity).await?;
             record_applied(context, &claimed, result).await
         }
+    }
+}
+
+/// Records a dispatch the adapter reports not applied as failed.
+async fn record_failed(
+    context: &Context<'_>,
+    claimed: &EffectRecord,
+    error: &EffectAdapterError,
+) -> EffectResult<EffectOutcome> {
+    let diagnostic = EffectError {
+        code: "effect_dispatch_failed".into(),
+        message: format!("{}: {}", error.code, error.message),
+        recoverable: error.recoverable.unwrap_or(true),
+        source_code: None,
+    };
+    let recorded = context
+        .journal
+        .record_failed(
+            claimed.identity.effect_id.clone(),
+            claimed.journal_revision,
+            diagnostic.clone(),
+        )
+        .await?;
+    if recorded.is_some() {
+        Ok(EffectOutcome::Failed(diagnostic))
+    } else {
+        outcomes::resolve_conflict(context.journal, &context.resolved.identity).await
     }
 }
 

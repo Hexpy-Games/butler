@@ -76,29 +76,14 @@ pub(in crate::btcc::storage::work) fn record(
     let now = clock();
     let disposition_id = insert_disposition(db, &work.id, command, &normalized, &snapshot, &now)?;
     if let Some(plan) = &current.current_plan {
-        let next = normalized
-            .remaining
-            .first()
-            .map(String::as_str)
-            .or(normalized.next_condition.as_deref())
-            .unwrap_or("");
-        insert_progress(
-            db,
-            ProgressInput {
-                work_id: &work.id,
-                plan_revision_id: &plan.plan_revision_id,
-                stage: current
-                    .current_stage
-                    .unwrap_or(crate::btcc::work::WorkStage::Planning),
-                actions: &action_progress,
-                summary: &command.normalized_summary,
-                next,
-                result_sequence: common::latest_result_sequence(db, &work.id)?,
-                origin_turn_id: &input.scope.turn_id,
-                identity: &format!("{}\0disposition", input.mutation_call_id),
-                now: &now,
-            },
-        )?;
+        let progress = DispositionProgress {
+            plan_revision_id: &plan.plan_revision_id,
+            stage: current
+                .current_stage
+                .unwrap_or(crate::btcc::work::WorkStage::Planning),
+            actions: &action_progress,
+        };
+        record_progress(db, &work.id, command, &normalized, progress, &now)?;
     }
     db.execute("UPDATE btcc_guided_works SET status = ?1, updated_at = ?2 WHERE work_id = ?3 AND (status IN ('open', 'blocked') OR (?4 = 1 AND status = 'completed'))", params![common::enum_text(input.disposition)?, now, work.id, i32::from(transition == RuntimeTransition::Reopen)]).map_err(StorageError::sqlite)?;
     db.execute("INSERT INTO btcc_guided_work_disposition_commands (mutation_call_id, request_sha256, work_id, disposition_revision_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5)", params![input.mutation_call_id, command.request_sha256, work.id, disposition_id, now]).map_err(StorageError::sqlite)?;
@@ -117,6 +102,49 @@ struct NormalizedDisposition {
     next_condition: Option<String>,
     evidence_refs: Vec<String>,
     followups: Vec<String>,
+}
+
+/// The progress a disposition records against the current Plan.
+#[derive(Clone, Copy)]
+struct DispositionProgress<'a> {
+    plan_revision_id: &'a str,
+    stage: crate::btcc::work::WorkStage,
+    actions: &'a [ActionProgress],
+}
+
+/// Records progress at the Work's current stage; its next step is the first
+/// remaining action or the next condition.
+fn record_progress(
+    db: &Connection,
+    work_id: &str,
+    command: &DispositionCommand,
+    normalized: &NormalizedDisposition,
+    progress: DispositionProgress<'_>,
+    now: &str,
+) -> StorageResult<()> {
+    let input = &command.input;
+    let next = normalized
+        .remaining
+        .first()
+        .map(String::as_str)
+        .or(normalized.next_condition.as_deref())
+        .unwrap_or("");
+    insert_progress(
+        db,
+        ProgressInput {
+            work_id,
+            plan_revision_id: progress.plan_revision_id,
+            stage: progress.stage,
+            actions: progress.actions,
+            summary: &command.normalized_summary,
+            next,
+            result_sequence: common::latest_result_sequence(db, work_id)?,
+            origin_turn_id: &input.scope.turn_id,
+            identity: &format!("{}\0disposition", input.mutation_call_id),
+            now,
+        },
+    )?;
+    Ok(())
 }
 
 /// The Work's action progress with the disposition's action updates applied.

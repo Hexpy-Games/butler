@@ -41,6 +41,9 @@ pub(super) fn read(
     Ok(QueueEvidence { complete, matches })
 }
 
+/// Scans the durable inbound queue for the candidates' events, in the
+/// source's lexical order across all states, publishing matches every 500
+/// records; a malformed record or the one-minute budget ends the scan.
 fn scan(
     data_root: &Path,
     locators: &[&HistoricalOriginCandidate],
@@ -55,29 +58,8 @@ fn scan(
     let root = data_root.join("runtime/inbound-events");
     let mut page_matches = HashMap::new();
     let mut page_scanned = 0usize;
-    // The source scans lexically ordered durable queue records across all states.
-    // Keep only filenames and one parsed envelope at a time.
     for state in ["failed", "pending", "processed", "processing"] {
-        let directory = root.join(state);
-        if !directory.exists() {
-            continue;
-        }
-        let mut names = fs::read_dir(&directory)
-            .map_err(evidence_unavailable)?
-            .map(|entry| entry.map(|entry| entry.path()))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(evidence_unavailable)?;
-        names.retain(|path| {
-            path.extension()
-                .is_some_and(|extension| extension == "json")
-        });
-        names.sort_by(|left, right| {
-            left.as_os_str()
-                .to_string_lossy()
-                .encode_utf16()
-                .cmp(right.as_os_str().to_string_lossy().encode_utf16())
-        });
-        for path in names {
+        for path in queue_records(&root.join(state))? {
             if page_scanned == 500 {
                 matches.extend(page_matches.drain());
                 page_scanned = 0;
@@ -87,51 +69,84 @@ fn scan(
                     ConversationCode::MemoryOriginEvidenceUnavailable,
                 ));
             }
-            let bytes = fs::read(path).map_err(evidence_unavailable)?;
-            let record: Value = serde_json::from_slice(&bytes).map_err(evidence_unavailable)?;
-            if record["version"].as_f64() != Some(1.0)
-                || !record["queueId"].is_string()
-                || !record["envelope"]["eventId"].is_string()
-            {
-                return Err(evidence_error(
-                    ConversationCode::MemoryOriginEvidenceUnavailable,
-                ));
-            }
+            let record = read_record(&path)?;
             page_scanned += 1;
-            let envelope = &record["envelope"];
-            let Some(event_id) = envelope["eventId"].as_str() else {
+            let Some(event_id) = record["envelope"]["eventId"].as_str() else {
                 continue;
             };
             let Some(locator) = wanted.get(event_id) else {
                 continue;
             };
-            let matched = envelope["routingHints"]["sessionId"].as_str()
-                == locator.external_session_id.as_deref()
-                && (locator.turn_id.is_none()
-                    || envelope["routingHints"]["turnId"].as_str() == locator.turn_id.as_deref());
-            let controls = &envelope["executionControls"];
-            let controls_internal = !controls.is_null()
-                && controls_valid(controls)?
-                && super::truthy(&controls["subsession_result"]);
-            let internal = super::truthy(&envelope["nativeStewardContext"])
-                || super::truthy(&envelope["control"])
-                || super::truthy(&envelope["appTurnContext"]["authorityRequestRef"])
-                || super::truthy(&envelope["routingHints"]["authorityRequestRef"])
-                || controls_internal;
-            let json = butler_core::json::stringify(envelope).map_err(evidence_unavailable)?;
-            page_matches.insert(
-                event_id.to_owned(),
-                Match {
-                    matched,
-                    internal_control: internal,
-                    reference: record["queueId"].as_str().unwrap_or_default().to_owned(),
-                    sha256: sha256(json),
-                },
-            );
+            page_matches.insert(event_id.to_owned(), record_match(&record, locator)?);
         }
     }
     matches.extend(page_matches);
     Ok(())
+}
+
+/// The JSON record files of one queue state, in UTF-16 path order. Only
+/// file names are kept; records are parsed one at a time.
+fn queue_records(directory: &Path) -> ConversationResult<Vec<std::path::PathBuf>> {
+    if !directory.exists() {
+        return Ok(Vec::new());
+    }
+    let mut names = fs::read_dir(directory)
+        .map_err(evidence_unavailable)?
+        .map(|entry| entry.map(|entry| entry.path()))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(evidence_unavailable)?;
+    names.retain(|path| {
+        path.extension()
+            .is_some_and(|extension| extension == "json")
+    });
+    names.sort_by(|left, right| {
+        left.as_os_str()
+            .to_string_lossy()
+            .encode_utf16()
+            .cmp(right.as_os_str().to_string_lossy().encode_utf16())
+    });
+    Ok(names)
+}
+
+/// A version-1 queue record with a queue id and an envelope event id.
+fn read_record(path: &Path) -> ConversationResult<Value> {
+    let bytes = fs::read(path).map_err(evidence_unavailable)?;
+    let record: Value = serde_json::from_slice(&bytes).map_err(evidence_unavailable)?;
+    if record["version"].as_f64() != Some(1.0)
+        || !record["queueId"].is_string()
+        || !record["envelope"]["eventId"].is_string()
+    {
+        return Err(evidence_error(
+            ConversationCode::MemoryOriginEvidenceUnavailable,
+        ));
+    }
+    Ok(record)
+}
+
+/// Whether the record's routing matches the candidate and whether its
+/// envelope is internal control, with the envelope digest as evidence.
+fn record_match(record: &Value, locator: &HistoricalOriginCandidate) -> ConversationResult<Match> {
+    let envelope = &record["envelope"];
+    let matched = envelope["routingHints"]["sessionId"].as_str()
+        == locator.external_session_id.as_deref()
+        && (locator.turn_id.is_none()
+            || envelope["routingHints"]["turnId"].as_str() == locator.turn_id.as_deref());
+    let controls = &envelope["executionControls"];
+    let controls_internal = !controls.is_null()
+        && controls_valid(controls)?
+        && super::truthy(&controls["subsession_result"]);
+    let internal = super::truthy(&envelope["nativeStewardContext"])
+        || super::truthy(&envelope["control"])
+        || super::truthy(&envelope["appTurnContext"]["authorityRequestRef"])
+        || super::truthy(&envelope["routingHints"]["authorityRequestRef"])
+        || controls_internal;
+    let json = butler_core::json::stringify(envelope).map_err(evidence_unavailable)?;
+    Ok(Match {
+        matched,
+        internal_control: internal,
+        reference: record["queueId"].as_str().unwrap_or_default().to_owned(),
+        sha256: sha256(json),
+    })
 }
 
 pub(super) fn controls_valid(value: &Value) -> ConversationResult<bool> {

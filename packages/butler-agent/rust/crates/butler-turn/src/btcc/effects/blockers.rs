@@ -119,26 +119,11 @@ async fn reconcile_blocker(
             Verdict::Settled(outcome)
         }
     };
-    let adapter = &context.input.adapter;
-    let prior_input = match adapter.normalize_input(&blocker.input) {
-        Ok(value) => value,
-        Err(error) => return Ok(unconfirmed(prior_error(&error))),
+    let observed = match observe_prior(context, &blocker, custom).await {
+        Ok(observed) => observed,
+        Err(Prior::Unconfirmed(outcome)) => return Ok(unconfirmed(outcome)),
+        Err(Prior::Settled(outcome)) => return Ok(Verdict::Settled(outcome)),
     };
-    let prior_target = match adapter.normalize_target(&blocker.target) {
-        Ok(value) => value,
-        Err(error) if !custom => return Ok(Verdict::Settled(prior_error(&error))),
-        Err(_) => context.resolved.normalized_target.clone(),
-    };
-    let observed = adapter
-        .reconcile(
-            &prior_target,
-            &prior_input,
-            &blocker.idempotency_key,
-            &context.input.signal,
-            1,
-            None,
-        )
-        .await;
     let result = match observed {
         Err(error) => return Ok(unconfirmed(prior_error(&error))),
         Ok(AdapterOutcome::Uncertain(error)) => {
@@ -162,18 +147,7 @@ async fn reconcile_blocker(
         Ok(AdapterOutcome::Applied(result)) => result,
     };
     if blocker.status == BlockerStatus::Unresolved {
-        context
-            .journal
-            .resolve_blockers(
-                context.resolved.identity.work_id.clone(),
-                blocker.source_occurrence_id.clone(),
-                "applied".into(),
-            )
-            .await?;
-        context
-            .fault
-            .reached("after_blocker_resolution", &context.resolved.identity)
-            .await?;
+        resolve_applied(context, &blocker).await?;
     }
     Ok(match relation {
         BlockerRelation::Ambiguous => Verdict::Settled(outcomes::uncertain(
@@ -186,6 +160,61 @@ async fn reconcile_blocker(
         BlockerRelation::Equivalent => Verdict::Adopt(result),
         BlockerRelation::Overlapping | BlockerRelation::Unrelated => Verdict::Dispatch,
     })
+}
+
+/// Why a blocker's prior occurrence could not be observed.
+enum Prior {
+    /// Its input could not be normalized.
+    Unconfirmed(EffectOutcome),
+    /// Its target could not be normalized for a non-custom adapter.
+    Settled(EffectOutcome),
+}
+
+/// Asks the adapter to reconcile the prior occurrence. A custom adapter
+/// whose legacy target no longer normalizes is asked about the current target.
+async fn observe_prior(
+    context: &execution::Context<'_>,
+    blocker: &EffectBlocker,
+    custom: bool,
+) -> Result<EffectResult<AdapterOutcome>, Prior> {
+    let adapter = &context.input.adapter;
+    let prior_input = adapter
+        .normalize_input(&blocker.input)
+        .map_err(|error| Prior::Unconfirmed(prior_error(&error)))?;
+    let prior_target = match adapter.normalize_target(&blocker.target) {
+        Ok(value) => value,
+        Err(error) if !custom => return Err(Prior::Settled(prior_error(&error))),
+        Err(_) => context.resolved.normalized_target.clone(),
+    };
+    Ok(adapter
+        .reconcile(
+            &prior_target,
+            &prior_input,
+            &blocker.idempotency_key,
+            &context.input.signal,
+            1,
+            None,
+        )
+        .await)
+}
+
+/// Records the blocker's prior occurrence as applied.
+async fn resolve_applied(
+    context: &execution::Context<'_>,
+    blocker: &EffectBlocker,
+) -> EffectResult<()> {
+    context
+        .journal
+        .resolve_blockers(
+            context.resolved.identity.work_id.clone(),
+            blocker.source_occurrence_id.clone(),
+            "applied".into(),
+        )
+        .await?;
+    context
+        .fault
+        .reached("after_blocker_resolution", &context.resolved.identity)
+        .await
 }
 
 fn prior_error(error: &EffectFailure) -> EffectOutcome {

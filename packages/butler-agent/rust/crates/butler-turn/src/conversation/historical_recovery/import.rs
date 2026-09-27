@@ -214,34 +214,18 @@ fn write_recovered_turn(
     super::super::messages::append_in_transaction(
         transaction,
         clock,
-        AppendMessageInput {
-            session_id: session_id.to_owned(),
-            turn_id: Some(turn_id.clone()),
-            text,
-            message_id: Some(message_id.to_owned()),
-            role: role.conversation(),
-            status: Some(ConversationStatus::Complete),
-            visibility: Some(ConversationVisibility::Model),
-            provenance: Some(match decision.provenance {
-                Provenance::Trusted => ConversationProvenance::Trusted,
-                _ => ConversationProvenance::Recovered,
-            }),
-            source_gateway: Some(
-                match decision.kind {
-                    SourceKind::Transcript => "transcript-recovery",
-                    SourceKind::AppProjection => "app-projection-recovery",
-                }
-                .into(),
-            ),
-            source_ref: Some(source_ref),
-            origin_kind: Some(ConversationOriginKind::Unknown),
-            origin_ref: None,
-            origin_reason: None,
-            origin_version: None,
-            origin_evidence: None,
-            now: Some(now.clone()),
-            parts: None,
-        },
+        recovered_message(
+            decision,
+            RecoveredMessage {
+                session_id,
+                turn_id: &turn_id,
+                message_id,
+                source_ref,
+                role,
+                text,
+                now: &now,
+            },
+        ),
         &now,
     )?;
     super::super::turns::finalize_in_transaction(
@@ -256,6 +240,49 @@ fn write_recovered_turn(
         &now,
     )?;
     Ok(())
+}
+
+/// The pieces of a recovered message.
+struct RecoveredMessage<'a> {
+    session_id: &'a str,
+    turn_id: &'a str,
+    message_id: &'a str,
+    source_ref: String,
+    role: super::classifier::Role,
+    text: String,
+    now: &'a str,
+}
+
+/// A completed, model-visible message that records how it was recovered.
+fn recovered_message(decision: &Decision, message: RecoveredMessage<'_>) -> AppendMessageInput {
+    AppendMessageInput {
+        session_id: message.session_id.to_owned(),
+        turn_id: Some(message.turn_id.to_owned()),
+        text: message.text,
+        message_id: Some(message.message_id.to_owned()),
+        role: message.role.conversation(),
+        status: Some(ConversationStatus::Complete),
+        visibility: Some(ConversationVisibility::Model),
+        provenance: Some(match decision.provenance {
+            Provenance::Trusted => ConversationProvenance::Trusted,
+            _ => ConversationProvenance::Recovered,
+        }),
+        source_gateway: Some(
+            match decision.kind {
+                SourceKind::Transcript => "transcript-recovery",
+                SourceKind::AppProjection => "app-projection-recovery",
+            }
+            .into(),
+        ),
+        source_ref: Some(message.source_ref),
+        origin_kind: Some(ConversationOriginKind::Unknown),
+        origin_ref: None,
+        origin_reason: None,
+        origin_version: None,
+        origin_evidence: None,
+        now: Some(message.now.to_owned()),
+        parts: None,
+    }
 }
 
 fn read_by_source_ref(
