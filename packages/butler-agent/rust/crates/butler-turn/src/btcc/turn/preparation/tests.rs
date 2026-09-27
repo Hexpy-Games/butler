@@ -191,7 +191,8 @@ async fn actual_sqlite_fresh_and_replay_skip_changed_context_and_catalog() {
             context_window_tokens: Some(200_000.0),
         }],
     };
-    let truthy = model::admit(&coercion_binding, None, &catalog).unwrap();
+    let truthy =
+        serde_json::to_value(model::admit(&coercion_binding, None, &catalog).unwrap()).unwrap();
     assert_eq!(truthy["controls"]["planMode"], true);
     assert_eq!(truthy["controls"]["accessMode"], "full_access");
     assert_eq!(truthy["reasoningEffort"], "medium");
@@ -201,7 +202,8 @@ async fn actual_sqlite_fresh_and_replay_skip_changed_context_and_catalog() {
         .unwrap()
         .insert("plan_mode".into(), 0.into());
     assert_eq!(
-        model::admit(&coercion_binding, None, &catalog).unwrap()["controls"]["planMode"],
+        serde_json::to_value(model::admit(&coercion_binding, None, &catalog).unwrap()).unwrap()["controls"]
+            ["planMode"],
         false
     );
     let conversation = AgentConversationStore::open(ConversationStoreConfig {
@@ -229,19 +231,25 @@ async fn actual_sqlite_fresh_and_replay_skip_changed_context_and_catalog() {
     );
     let request = request();
     let first = preparation.prepare(request.clone()).await.unwrap();
+    let first_command = serde_json::to_value(&first.turn.command).unwrap();
     // KEEP: pins the persisted `btcc_turns.context_json` of a butler turn.
     assert_eq!(
-        butler_core::json::stringify(&first.turn.command["context"]).unwrap(),
+        butler_core::json::stringify(&first_command["context"]).unwrap(),
         BUTLER_CONTEXT_GOLDEN
     );
-    assert!(first.turn.is_fresh);
-    assert_eq!(first.turn.command["kind"], "run");
+    // KEEP: pins the persisted `btcc_inbound_inbox.command_json`.
     assert_eq!(
-        first.turn.command["context"]["messageContent"],
+        butler_core::json::stringify(&first_command).unwrap(),
+        BUTLER_COMMAND_GOLDEN
+    );
+    assert!(first.turn.is_fresh);
+    assert_eq!(first_command["kind"], "run");
+    assert_eq!(
+        first_command["context"]["messageContent"],
         json!([{"type":"text","text":"hello"}])
     );
     assert_eq!(
-        first.turn.command["modelSelection"]["modelRoute"]["routeDigest"],
+        first_command["modelSelection"]["modelRoute"]["routeDigest"],
         "90182b3cf33aa888f4d42b624e22d8e3b61fd5796a72feda43614fdf1e68f181"
     );
     assert_eq!(
@@ -324,8 +332,14 @@ async fn actual_sqlite_fresh_and_replay_skip_changed_context_and_catalog() {
         *result_scope_ref = Some("scope-ref".into());
     }
     let wake = preparation.prepare(wake).await.unwrap();
-    assert_eq!(wake.turn.command["kind"], "wake");
-    let scopes = wake.turn.command["context"]["baselineObservationScopeRefs"]
+    let wake_command = serde_json::to_value(&wake.turn.command).unwrap();
+    // KEEP: pins the persisted command_json of an authorized wake.
+    assert_eq!(
+        butler_core::json::stringify(&wake_command).unwrap(),
+        WAKE_COMMAND_GOLDEN
+    );
+    assert_eq!(wake_command["kind"], "wake");
+    let scopes = wake_command["context"]["baselineObservationScopeRefs"]
         .as_array()
         .unwrap();
     assert_eq!(scopes.last(), Some(&json!("scope-ref")));
@@ -404,7 +418,8 @@ async fn actual_sqlite_fresh_and_replay_skip_changed_context_and_catalog() {
         "sessionReferences":[{"id":"prior"}]
     }));
     let subsession = preparation.prepare(subsession_request).await.unwrap();
-    let subsession_context = &subsession.turn.command["context"];
+    let subsession_command = serde_json::to_value(&subsession.turn.command).unwrap();
+    let subsession_context = &subsession_command["context"];
     // KEEP: pins the persisted `btcc_turns.context_json` of a steward subsession turn.
     assert_eq!(
         butler_core::json::stringify(subsession_context).unwrap(),
@@ -448,11 +463,11 @@ async fn actual_sqlite_fresh_and_replay_skip_changed_context_and_catalog() {
         "full_access"
     );
     assert_eq!(
-        subsession.turn.command["modelSelection"]["modelRoute"]["candidates"][1]["modelRef"],
+        subsession_command["modelSelection"]["modelRoute"]["candidates"][1]["modelRef"],
         "backup/model"
     );
     assert_eq!(
-        subsession.turn.command["modelSelection"]["modelRoute"]["catalogGeneration"],
+        subsession_command["modelSelection"]["modelRoute"]["catalogGeneration"],
         "catalog-1"
     );
     drop(subsession);
@@ -462,7 +477,10 @@ async fn actual_sqlite_fresh_and_replay_skip_changed_context_and_catalog() {
     *models.changed.lock().unwrap() = true;
     let replay = preparation.prepare(request).await.unwrap();
     assert!(!replay.turn.is_fresh);
-    assert_eq!(replay.turn.command["kind"], "resume");
+    assert!(matches!(
+        replay.turn.command,
+        crate::btcc::TurnCommand::Resume(_)
+    ));
     assert_eq!(context.calls.load(AtomicOrdering::Relaxed), 3);
     assert_eq!(models.calls.load(AtomicOrdering::Relaxed), 3);
     drop(replay);
@@ -472,6 +490,8 @@ async fn actual_sqlite_fresh_and_replay_skip_changed_context_and_catalog() {
     let _ = std::fs::remove_dir_all(root);
 }
 
+const BUTLER_COMMAND_GOLDEN: &str = r#"{"kind":"run","turnId":"turn-1","sessionId":"session-1","triggerKey":"event-1","message":{"messageId":"message-1","content":"hello"},"modelSelection":{"provider":"provider","model":"model","reasoningEffort":"medium","controls":{"accessMode":"read_only","planMode":false,"source":"stored_session_binding"},"controlsHash":"3e74c3e500b053b72377729f243dcd09c6c955c22f43143ee53a996df9300e31","contextWindowTokens":200000,"modelRoute":{"schemaVersion":"butler.model-route.v1","candidates":[{"modelRef":"provider/model","reasoningEffort":"medium"}],"retryCeiling":3,"catalogGeneration":"unknown","routeDigest":"90182b3cf33aa888f4d42b624e22d8e3b61fd5796a72feda43614fdf1e68f181","activeCursor":0,"consumedAttempts":[]}},"progressDestination":{"transport":"app","accountId":"local","peer":{"kind":"dm","id":"chat"},"replyToMessageId":"message-1","appQueueClaimId":"claim"},"context":{"userRef":"local-principal","projectRef":"project-1","profileRefs":["684e90a6eb7356496122d54509ff218ebfda082f5089e8865ee6b33798b1b427"],"recentFeedbackRefs":[],"mandatoryHotCacheRefs":[],"optionalHotCacheRefs":[],"baselineObservationScopeRefs":["workspace:/workspace","web:current","memory:local-principal","ledger:project-1"],"executionPolicy":{"role":"butler","accessMode":"read_only","trackingMode":"ledger","requiredNativeToolProfiles":[],"requiredNativeTools":[],"workspacePath":"/workspace","projectId":"project-1"},"appSessionId":"app-session","messageContent":[{"text":"hello","type":"text"}]}}"#;
+const WAKE_COMMAND_GOLDEN: &str = r#"{"kind":"wake","turnId":"turn-wake","sessionId":"session-1","triggerKey":"event-wake","trigger":{"triggerId":"trigger-wake","sourceTurnId":"source-turn","authorizationRef":"authority-ref","resultScopeRef":"scope-ref","content":"hello"},"modelSelection":{"provider":"provider","model":"model","reasoningEffort":"medium","controls":{"accessMode":"read_only","planMode":false,"source":"stored_session_binding"},"controlsHash":"3e74c3e500b053b72377729f243dcd09c6c955c22f43143ee53a996df9300e31","contextWindowTokens":200000,"modelRoute":{"schemaVersion":"butler.model-route.v1","candidates":[{"modelRef":"provider/model","reasoningEffort":"medium"}],"retryCeiling":3,"catalogGeneration":"unknown","routeDigest":"90182b3cf33aa888f4d42b624e22d8e3b61fd5796a72feda43614fdf1e68f181","activeCursor":0,"consumedAttempts":[]}},"progressDestination":{"transport":"app","accountId":"local","peer":{"kind":"dm","id":"chat"},"replyToMessageId":"message-1","appQueueClaimId":"claim"},"context":{"userRef":"local-principal","projectRef":"project-1","profileRefs":["684e90a6eb7356496122d54509ff218ebfda082f5089e8865ee6b33798b1b427"],"recentFeedbackRefs":[],"mandatoryHotCacheRefs":[],"optionalHotCacheRefs":[],"baselineObservationScopeRefs":["workspace:/workspace","web:current","memory:local-principal","ledger:project-1","scope-ref"],"executionPolicy":{"role":"butler","accessMode":"read_only","trackingMode":"ledger","requiredNativeToolProfiles":[],"requiredNativeTools":[],"workspacePath":"/workspace","projectId":"project-1"},"appSessionId":"app-session","messageContent":[{"text":"hello","type":"text"}]}}"#;
 const BUTLER_CONTEXT_GOLDEN: &str = r#"{"userRef":"local-principal","projectRef":"project-1","profileRefs":["684e90a6eb7356496122d54509ff218ebfda082f5089e8865ee6b33798b1b427"],"recentFeedbackRefs":[],"mandatoryHotCacheRefs":[],"optionalHotCacheRefs":[],"baselineObservationScopeRefs":["workspace:/workspace","web:current","memory:local-principal","ledger:project-1"],"executionPolicy":{"role":"butler","accessMode":"read_only","trackingMode":"ledger","requiredNativeToolProfiles":[],"requiredNativeTools":[],"workspacePath":"/workspace","projectId":"project-1"},"appSessionId":"app-session","messageContent":[{"text":"hello","type":"text"}]}"#;
 const SUBSESSION_CONTEXT_GOLDEN: &str = r#"{"userRef":"steward-role","projectRef":"sub-project","profileRefs":["85fbd7259784b3f72c0f11eabd76f3f86f0943d5d07f2d1616fbb290c07a8d83"],"recentFeedbackRefs":["feedback"],"mandatoryHotCacheRefs":["mandatory"],"optionalHotCacheRefs":["optional"],"baselineObservationScopeRefs":[],"executionPolicy":{"role":"steward","accessMode":"full_access","trackingMode":"ledger","requiredNativeToolProfiles":[],"requiredNativeTools":["read_project_source","read_conversation_session"],"workspacePath":"/workspace","subsession":{"relationId":"relation","delegationId":"delegation","taskId":"task","executionMode":"read_only","mutationScope":[],"allowedToolsAndEffects":["grep_files:workspace","list_files:workspace","read_file:workspace","web_read:network","web_search:network"],"recentFeedbackRefs":["feedback"],"projectContext":{"projectId":"sub-project","mandatoryHotCacheRefs":["mandatory"],"optionalHotCacheRefs":["optional"]}},"projectId":"project-1"},"attachments":[{"id":"image","kind":"image","mimeType":"image/png","sizeBytes":-4.5},{"id":"text","kind":"document","mimeType":"text/plain","fileName":"note.txt","sizeBytes":8.25,"localPath":"/workspace/note.txt"},{"id":"non-finite","kind":"binary"}],"appSessionId":"app-subsession","projectSources":[{"id":"source"}],"sessionReferences":[{"id":"prior"}]}"#;
 

@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use serde_json::{Map, Value};
+use serde_json::Map;
 
 use crate::btcc::BtccError;
 
@@ -112,17 +112,11 @@ pub(crate) fn create_turn_continuation_budget_state(
     })
 }
 
-pub(crate) fn parse_turn_continuation_budget_state(
-    value: Value,
+/// Validates a decoded budget of `turn_id`.
+pub(crate) fn validate_turn_continuation_budget_state(
+    state: TurnContinuationBudgetState,
     turn_id: &str,
 ) -> Result<TurnContinuationBudgetState, BtccError> {
-    let state: TurnContinuationBudgetState = serde_json::from_value(value).map_err(|source| {
-        BtccError::detected(
-            BtccCode::InvalidContinuationBudget,
-            "invalid_continuation_budget",
-        )
-        .with_source(source)
-    })?;
     validate_state(state, turn_id)
 }
 pub(super) fn validate_state(

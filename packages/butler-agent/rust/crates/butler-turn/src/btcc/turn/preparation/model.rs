@@ -1,11 +1,14 @@
 use std::collections::HashSet;
 
-use serde_json::{Map, Number, Value};
+use serde_json::{Map, Value};
 
 use super::{AdmissionModelCatalogSnapshot, AdmissionModelMetadata, js_truthy, object};
 use crate::btcc::BtccCode;
 use crate::btcc::identity::digest;
-use crate::btcc::{BtccError, ReasoningEffort, VerifiedExecutionControls};
+use crate::btcc::{
+    AdmittedModelSelection, BtccError, CommandModelSelection, ReasoningEffort, RouteCandidate,
+    RouteIdentity, RouteState, VerifiedExecutionControls,
+};
 use crate::workspace::StoredSessionBinding;
 use butler_core::json::stringify;
 use butler_core::public_text::trim_js_whitespace;
@@ -40,7 +43,7 @@ pub(super) fn admit(
     binding: &StoredSessionBinding,
     controls: Option<&VerifiedExecutionControls>,
     catalog: &AdmissionModelCatalogSnapshot,
-) -> Result<Value, BtccError> {
+) -> Result<CommandModelSelection, BtccError> {
     let refs = requested_refs(binding, controls)?;
     let Some(primary) = refs.first() else {
         return Err(BtccError::detected(
@@ -90,10 +93,9 @@ pub(super) fn admit(
         admitted_controls.insert("planMode".into(), plan.into());
         admitted_controls.insert("source".into(), "stored_session_binding".into());
     }
-    let controls_value = Value::Object(admitted_controls);
     let controls_hash = match controls {
         Some(value) => value.integrity_hash.clone(),
-        None => digest(&stringify(&controls_value).map_err(json_error)?),
+        None => digest(&stringify(&Value::Object(admitted_controls.clone())).map_err(json_error)?),
     };
     let route = build_route(&refs, &reasoning, controls, catalog)?;
     let configured = binding
@@ -109,18 +111,22 @@ pub(super) fn admit(
                 .and_then(|value| value.context_window_tokens)
         })
         .unwrap_or(200_000.0);
-    let mut selection = Map::new();
-    selection.insert("provider".into(), primary[..separator].into());
-    selection.insert("model".into(), primary[separator + 1..].into());
-    selection.insert(
-        "reasoningEffort".into(),
-        serde_json::to_value(reasoning).map_err(json_error)?,
-    );
-    selection.insert("controls".into(), controls_value);
-    selection.insert("controlsHash".into(), controls_hash.into());
-    selection.insert("contextWindowTokens".into(), number(context_window)?);
-    selection.insert("modelRoute".into(), route);
-    Ok(Value::Object(selection))
+    if !context_window.is_finite() {
+        return Err(number_error());
+    }
+    let (provider, model) = primary.split_at(separator);
+    Ok(CommandModelSelection {
+        selection: AdmittedModelSelection {
+            provider: provider.into(),
+            model: model.get(1..).unwrap_or_default().into(),
+            reasoning_effort: reasoning,
+            controls: admitted_controls,
+            controls_hash,
+            context_window_tokens: Some(context_window),
+            extensions: Map::new(),
+        },
+        model_route: Some(route),
+    })
 }
 
 fn build_route(
@@ -128,7 +134,7 @@ fn build_route(
     reasoning: &ReasoningEffort,
     controls: Option<&VerifiedExecutionControls>,
     catalog: &AdmissionModelCatalogSnapshot,
-) -> Result<Value, BtccError> {
+) -> Result<RouteState, BtccError> {
     let mut identities = HashSet::new();
     let mut candidates = Vec::new();
     for reference in refs
@@ -156,13 +162,10 @@ fn build_route(
         } else {
             &metadata.default_reasoning_effort
         };
-        candidates.push(Value::Object(Map::from_iter([
-            ("modelRef".into(), reference.into()),
-            (
-                "reasoningEffort".into(),
-                serde_json::to_value(admitted).map_err(json_error)?,
-            ),
-        ])));
+        candidates.push(RouteCandidate {
+            model_ref: reference.into(),
+            reasoning_effort: admitted.clone(),
+        });
         if candidates.len() == 6 {
             break;
         }
@@ -177,17 +180,28 @@ fn build_route(
         .map(|v| trim_js_whitespace(&v.catalog_generation))
         .filter(|v| !v.is_empty())
         .unwrap_or("unknown");
-    let mut body = Map::new();
-    body.insert("schemaVersion".into(), "butler.model-route.v1".into());
-    body.insert("candidates".into(), Value::Array(candidates));
-    body.insert("retryCeiling".into(), number(retry)?);
-    body.insert("catalogGeneration".into(), generation.into());
-    let route_digest = digest(&stringify(&Value::Object(body.clone())).map_err(json_error)?);
-    body.insert("routeDigest".into(), route_digest.into());
-    body.insert("activeCursor".into(), 0.into());
-    body.insert("consumedAttempts".into(), Value::Array(Vec::new()));
-    Ok(Value::Object(body))
+    // `retry` is a whole number clamped to 1..=5.
+    let retry_ceiling = butler_core::json::saturating_u32(retry);
+    let identity = RouteIdentity {
+        schema_version: ROUTE_SCHEMA,
+        candidates: &candidates,
+        retry_ceiling,
+        catalog_generation: generation,
+    };
+    let identity = serde_json::to_value(identity).map_err(json_error)?;
+    let route_digest = digest(&stringify(&identity).map_err(json_error)?);
+    Ok(RouteState {
+        schema_version: ROUTE_SCHEMA.into(),
+        candidates,
+        retry_ceiling,
+        catalog_generation: generation.into(),
+        route_digest,
+        active_cursor: 0,
+        consumed_attempts: Vec::new(),
+    })
 }
+
+const ROUTE_SCHEMA: &str = "butler.model-route.v1";
 
 fn metadata<'a>(
     catalog: &'a AdmissionModelCatalogSnapshot,
@@ -246,10 +260,8 @@ fn required_text<'a>(value: &'a str, label: &str) -> Result<&'a str, BtccError> 
         Ok(value)
     }
 }
-fn number(value: f64) -> Result<Value, BtccError> {
-    Number::from_f64(value).map(Value::Number).ok_or_else(|| {
-        BtccError::detected(BtccCode::ModelNumberInvalid, "BTCC model number is invalid")
-    })
+fn number_error() -> BtccError {
+    BtccError::detected(BtccCode::ModelNumberInvalid, "BTCC model number is invalid")
 }
 fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> BtccError {
     BtccError::detected(BtccCode::BtccJsonError, error.to_string()).with_source(error)

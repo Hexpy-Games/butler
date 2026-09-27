@@ -27,9 +27,7 @@ async fn guided_budget_uses_real_claim_and_persists_once_without_retained_histor
         .await
         .unwrap();
     let claim = repository.acquire_state_claim(&turn).await.unwrap();
-    let started = turn.continuation_budget.as_ref().unwrap()["startedAtMs"]
-        .as_u64()
-        .unwrap();
+    let started = turn.continuation_budget.as_ref().unwrap().started_at_ms;
     let now = Arc::new(AtomicU64::new(started + 1));
     let clock = {
         let now = now.clone();
@@ -63,6 +61,7 @@ async fn guided_budget_uses_real_claim_and_persists_once_without_retained_histor
         .unwrap()
         .unwrap()
         .continuation_budget
+        .map(|budget| serde_json::to_value(budget).unwrap())
         .unwrap();
     assert_eq!(persisted["admittedRequests"].as_array().unwrap().len(), 1);
     assert_eq!(persisted["consumedModelFacingBytes"], 50);
@@ -88,6 +87,7 @@ async fn guided_budget_uses_real_claim_and_persists_once_without_retained_histor
             .unwrap()
             .unwrap()
             .continuation_budget
+            .map(|budget| serde_json::to_value(budget).unwrap())
             .unwrap(),
         persisted
     );
@@ -99,6 +99,7 @@ async fn guided_budget_uses_real_claim_and_persists_once_without_retained_histor
         .unwrap()
         .unwrap()
         .continuation_budget
+        .map(|budget| serde_json::to_value(budget).unwrap())
         .unwrap();
     assert_eq!(terminal["terminal"]["reason"], "max_output_bytes");
     assert_eq!(terminal["consumedOutputBytes"], 11);
@@ -122,6 +123,7 @@ async fn guided_budget_uses_real_claim_and_persists_once_without_retained_histor
             .unwrap()
             .unwrap()
             .continuation_budget
+            .map(|budget| serde_json::to_value(budget).unwrap())
             .unwrap(),
         terminal
     );

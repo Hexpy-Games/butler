@@ -62,9 +62,16 @@ pub fn prepared() -> PreparedTurn {
     PreparedTurn {
         preparation_id: "preparation".into(),
         request,
-        command: json!({"kind":"run","turnId":"turn","sessionId":"session","triggerKey":"event",
-            "message":{"messageId":"message","content":"hello"},"modelSelection":{"provider":"openai","model":"gpt"},
-            "context":{"messageContent":"hello"}}),
+        command: crate::btcc::TurnCommand::fixture_run(
+            "turn",
+            "session",
+            "event",
+            crate::btcc::CommandMessage {
+                message_id: "message".into(),
+                content: "hello".into(),
+            },
+            json!({"messageContent":"hello"}),
+        ),
         admission_input_hash: "hash".into(),
         is_fresh: true,
     }

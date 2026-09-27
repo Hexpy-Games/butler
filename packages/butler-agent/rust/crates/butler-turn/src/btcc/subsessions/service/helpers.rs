@@ -1,45 +1,54 @@
 //! Deterministic subsession packets and host envelopes.
 
 use super::*;
-use crate::btcc::BtccCode;
-use butler_core::json;
+use crate::btcc::{
+    BtccCode, ChildEnvelope, ChildRole, EnvelopeMessage, EnvelopePeer, EnvelopeRaw,
+    EnvelopeRouting, EnvelopeSender, NativeStewardContext, SubsessionPacket,
+};
 
-pub(super) fn render_input(packet: &Value, profile_prompt: Option<&str>) -> String {
+/// The acceptance criteria as the rendered JSON array.
+fn criteria(packet: &SubsessionPacket) -> String {
+    serde_json::to_string(&packet.acceptance_criteria).unwrap_or_default()
+}
+
+pub(super) fn render_input(packet: &SubsessionPacket, profile_prompt: Option<&str>) -> String {
     let base = format!(
         "role: worker\nassigned_objective: {}\nacceptance_criteria: {}\nimplementation_brief: {}\nReport the bounded result to the Steward.",
-        json::at(packet, "/objective").as_str().unwrap_or(""),
-        json::at(packet, "/acceptance_criteria"),
-        json::at(packet, "/implementation_brief")
-            .as_str()
-            .unwrap_or("")
+        packet.objective,
+        criteria(packet),
+        packet.implementation_brief.as_deref().unwrap_or("")
     );
     match profile_prompt.filter(|value| !value.trim().is_empty()) {
         Some(prompt) => format!("{base}\nworker_profile_prompt: {prompt}"),
         None => base,
     }
 }
-pub(super) fn render_steward_input(packet: &Value) -> String {
+pub(super) fn render_steward_input(packet: &SubsessionPacket) -> String {
     format!(
         "role: steward\nrequest: {}\nacceptance_criteria: {}\nPlan, execute, review, and report this delegated request to Butler.",
-        json::at(packet, "/objective").as_str().unwrap_or(""),
-        json::at(packet, "/acceptance_criteria")
+        packet.objective,
+        criteria(packet)
     )
 }
-pub(super) fn allowed_effects(access: &str) -> Vec<&'static str> {
+pub(super) fn allowed_effects(access: &str) -> Vec<String> {
     if access == "read_only" {
-        vec![
+        [
             "grep_files:workspace",
             "list_files:workspace",
             "read_file:workspace",
             "web_read:network",
             "web_search:network",
         ]
+        .map(String::from)
+        .to_vec()
     } else {
-        vec![
+        [
             "edit_file:workspace",
             "run_command:workspace",
             "write_file:workspace",
         ]
+        .map(String::from)
+        .to_vec()
     }
 }
 pub(super) fn mutation_scope(access: &str) -> Vec<String> {
@@ -49,12 +58,15 @@ pub(super) fn mutation_scope(access: &str) -> Vec<String> {
         vec![".".to_owned()]
     }
 }
+/// The child's session-binding metadata (passthrough: binding metadata is a
+/// free-form map shared with the App runtime policy).
 pub(super) fn child_metadata(
-    role: &str,
-    packet: &Value,
+    role: ChildRole,
+    packet: &SubsessionPacket,
     access: &str,
     parent: &crate::workspace::StoredSessionBinding,
-) -> Value {
+) -> Map<String, Value> {
+    let role = role.as_str();
     let mut runtime_policy = if role == "steward" {
         parent
             .metadata
@@ -122,7 +134,11 @@ pub(super) fn child_metadata(
         Value::String("parent_session".into()),
     );
 
-    json!({"source":if role=="worker"{"btcc-worker"}else{"btcc-subsession"},"reasoning_effort":json::at(packet, "/reasoning_effort"),"subsession":{"relation_id":json::at(packet, "/relation_id"),"delegation_id":json::at(packet, "/delegation_id"),"task_id":json::at(packet, "/task_id"),"parent_session_id":json::at(packet, "/parent_session_id"),"execution_mode":json::at(packet, "/execution_mode"),"mutation_scope":json::at(packet, "/mutation_scope"),"allowed_tools_and_effects":json::at(packet, "/allowed_tools_and_effects")},"runtimePolicy":runtime_policy})
+    let metadata = json!({"source":if role=="worker"{"btcc-worker"}else{"btcc-subsession"},"reasoning_effort":packet.reasoning_effort,"subsession":{"relation_id":packet.relation_id,"delegation_id":packet.delegation_id,"task_id":packet.task_id,"parent_session_id":packet.parent_session_id,"execution_mode":packet.execution_mode,"mutation_scope":packet.mutation_scope,"allowed_tools_and_effects":packet.allowed_tools_and_effects},"runtimePolicy":runtime_policy});
+    match metadata {
+        Value::Object(metadata) => metadata,
+        _ => Map::new(),
+    }
 }
 
 pub(super) fn child_work_scope(
@@ -133,16 +149,15 @@ pub(super) fn child_work_scope(
     if binding.session_id != stored.child_session_id {
         return Err(error(BtccCode::SubsessionChildBindingMismatch));
     }
-    let role = json::at(&stored.packet, "/child_role").as_str();
+    let role = stored.packet.child_role;
     let expected_role = match role {
-        Some("steward") => crate::workspace::SessionRole::Steward,
-        Some("worker") => crate::workspace::SessionRole::Worker,
-        _ => return Err(error(BtccCode::SubsessionChildRoleInvalid)),
+        ChildRole::Steward => crate::workspace::SessionRole::Steward,
+        ChildRole::Worker => crate::workspace::SessionRole::Worker,
     };
     if binding.role != expected_role {
         return Err(error(BtccCode::SubsessionChildBindingMismatch));
     }
-    let project_ref = if role == Some("steward") {
+    let project_ref = if role == ChildRole::Steward {
         let policy = binding
             .metadata
             .as_ref()
@@ -240,7 +255,7 @@ pub(super) struct ChildEnvelopeInput<'a> {
     pub now: &'a str,
 }
 
-pub(super) fn child_envelope(input: ChildEnvelopeInput<'_>) -> Value {
+pub(super) fn child_envelope(input: ChildEnvelopeInput<'_>) -> ChildEnvelope {
     let ChildEnvelopeInput {
         role,
         delegation,
@@ -253,11 +268,97 @@ pub(super) fn child_envelope(input: ChildEnvelopeInput<'_>) -> Value {
         text,
         now,
     } = input;
-    json!({"eventId":format!("{role}:{delegation}"),"transport":"app","accountId":"local","peer":{"kind":"dm","id":child,"parentId":parent_id},"sender":{"id":format!("butler-{role}-dispatch"),"displayName":if role=="worker"{"Butler Worker"}else{"Butler Steward"}},"message":{"id":format!("{role}-message:{delegation}"),"text":text,"timestamp":now},"routingHints":{"sessionId":child,"turnId":turn},"nativeStewardContext":{"version":1,"role":role,"projectName":parent.project_id.clone().unwrap_or_default(),"workspacePath":parent.workspace_path,"modelRef":model,"reasoningEffort":reasoning},"raw":{"source":if role=="worker"{"btcc-worker-delegation"}else{"btcc-subsession-delegation"}}})
+    let worker = role == "worker";
+    ChildEnvelope {
+        event_id: format!("{role}:{delegation}"),
+        transport: "app".into(),
+        account_id: "local".into(),
+        peer: EnvelopePeer {
+            kind: "dm".into(),
+            id: child.into(),
+            parent_id: Some(parent_id.into()),
+        },
+        sender: EnvelopeSender {
+            id: format!("butler-{role}-dispatch"),
+            display_name: if worker {
+                "Butler Worker"
+            } else {
+                "Butler Steward"
+            }
+            .into(),
+        },
+        message: EnvelopeMessage {
+            id: format!("{role}-message:{delegation}"),
+            text,
+            timestamp: now.into(),
+        },
+        routing_hints: EnvelopeRouting {
+            session_id: child.into(),
+            turn_id: turn.into(),
+        },
+        native_steward_context: NativeStewardContext {
+            version: 1,
+            role: role.into(),
+            project_name: parent.project_id.clone().unwrap_or_default(),
+            workspace_path: parent.workspace_path.clone(),
+            model_ref: model.into(),
+            reasoning_effort: reasoning.into(),
+        },
+        raw: EnvelopeRaw {
+            source: if worker {
+                "btcc-worker-delegation"
+            } else {
+                "btcc-subsession-delegation"
+            }
+            .into(),
+            result_id: None,
+            parent_relation_id: None,
+        },
+    }
 }
 pub(super) fn delegation_output(stored: &crate::btcc::StoredSubsessionDelegation) -> Value {
     json!({"ok":true,"status":"queued","relation_id":stored.relation_id,"child_session_id":stored.child_session_id})
 }
 pub(super) fn error(code: BtccCode) -> BtccError {
     BtccError::detected(code, code.as_str())
+}
+
+/// The request identity a steward delegation id is derived from (persisted
+/// through the id, so its field order is part of the format).
+#[derive(serde::Serialize)]
+pub(super) struct StewardIdentity<'a> {
+    pub(super) parent_session_id: &'a str,
+    pub(super) parent_turn_id: &'a str,
+    pub(super) request: &'a str,
+    pub(super) work_id: &'a str,
+    pub(super) plan_revision_id: &'a str,
+    pub(super) review_revision_id: &'a str,
+}
+
+/// The request identity a worker delegation id is derived from.
+#[derive(serde::Serialize)]
+pub(super) struct WorkerIdentity<'a> {
+    pub(super) parent_session_id: &'a str,
+    pub(super) parent_turn_id: &'a str,
+    pub(super) action_key: &'a str,
+    pub(super) objective: &'a str,
+    pub(super) acceptance_criteria: &'a [String],
+    pub(super) implementation_brief: &'a str,
+    pub(super) profile_id: &'a str,
+}
+
+/// The reviewed parent Work a delegation executes.
+pub(super) fn parent_work_ref(
+    reviewed: &WorkView,
+    parent_turn_id: &str,
+    plan: &crate::btcc::WorkPlan,
+    review: &crate::btcc::WorkReview,
+) -> crate::btcc::ParentWorkRef {
+    crate::btcc::ParentWorkRef {
+        work_id: reviewed.work_id.clone(),
+        session_id: reviewed.session_id.clone(),
+        turn_id: parent_turn_id.into(),
+        plan_revision_id: plan.plan_revision_id.clone(),
+        review_revision_id: review.review_revision_id.clone(),
+    }
 }

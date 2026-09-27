@@ -1,6 +1,9 @@
 //! Durable subsession state on the existing BTCC SQLite owner.
 
 mod activity;
+mod records;
+
+pub use records::*;
 
 use rusqlite::{OptionalExtension, params};
 use serde_json::Value;
@@ -21,12 +24,12 @@ pub struct SubsessionCreate {
     pub anchor_message_id: String,
     pub safe_title: String,
     pub root_work_id: String,
-    pub packet: Value,
-    pub dispatch_intent: Value,
+    pub packet: SubsessionPacket,
+    pub dispatch_intent: DispatchIntent,
     pub created_at: String,
 }
 
-/// A persisted subsession delegation (packet and dispatch intent are passthrough JSON).
+/// A persisted subsession delegation.
 #[derive(Clone, Debug)]
 pub struct StoredSubsessionDelegation {
     pub relation_id: String,
@@ -37,8 +40,8 @@ pub struct StoredSubsessionDelegation {
     pub child_session_id: String,
     pub child_turn_id: String,
     pub root_work_id: String,
-    pub packet: Value,
-    pub dispatch_intent: Value,
+    pub packet: SubsessionPacket,
+    pub dispatch_intent: DispatchIntent,
     pub anchor_message_id: String,
     pub ordinal: i64,
     pub safe_title: String,
@@ -69,7 +72,7 @@ pub struct PendingParentInput {
     pub result_id: String,
     pub parent_session_id: String,
     pub route: ParentResultRoute,
-    pub input: Value,
+    pub input: ParentResultInput,
 }
 
 /// Where a child result is delivered.
@@ -92,6 +95,12 @@ impl SqliteSubsessionRepository {
     }
 
     pub(crate) async fn create(&self, input: SubsessionCreate) -> Result<bool, StorageError> {
+        let encode = |error: serde_json::Error| {
+            StorageError::new(StorageCode::SubsessionPacketInvalid, error.to_string())
+                .with_source(error)
+        };
+        let packet_json = serde_json::to_string(&input.packet).map_err(encode)?;
+        let intent_json = serde_json::to_string(&input.dispatch_intent).map_err(encode)?;
         self.storage.execute(move |db| {
             let tx = db.transaction().map_err(StorageError::sqlite)?;
             let ordinal: i64 = tx.query_row(
@@ -105,7 +114,7 @@ impl SqliteSubsessionRepository {
             if inserted {
                 tx.execute(
                     "INSERT INTO btcc_subsession_delegations (delegation_id,relation_id,task_id,child_turn_id,root_work_id,packet_json,dispatch_intent_json,dispatch_state,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending',?8)",
-                    params![input.delegation_id,input.relation_id,input.task_id,input.child_turn_id,input.root_work_id,input.packet.to_string(),input.dispatch_intent.to_string(),input.created_at],
+                    params![input.delegation_id,input.relation_id,input.task_id,input.child_turn_id,input.root_work_id,packet_json,intent_json,input.created_at],
                 ).map_err(StorageError::sqlite)?;
             }
             tx.commit().map_err(StorageError::sqlite)?;
@@ -361,34 +370,34 @@ impl SqliteSubsessionRepository {
         self.storage.execute(move |db| {
             let delegation = read(db,"r.child_session_id=?1",&child_session)?.ok_or_else(|| StorageError::new(StorageCode::SubsessionRelationMissing,"Subsession relation is missing"))?;
             let result_id = format!("result-{}", crate::btcc::digest_identity(&format!("btcc.subsession.result.v1\0{child_session}\0{child_turn}")));
-            let packet = delegation.packet.as_object().ok_or_else(|| StorageError::new(StorageCode::SubsessionPacketInvalid,"Subsession packet is invalid"))?;
-            let model = packet.get("model_ref").and_then(Value::as_str).unwrap_or("");
-            let reasoning = packet.get("reasoning_effort").and_then(Value::as_str).unwrap_or("");
-            let access = required_packet_string(packet, "access_mode")?;
-            let child_role = required_packet_string(packet, "child_role")?;
-            let parent_chat = packet.get("parent_chat_id").and_then(Value::as_str);
+            let packet = &delegation.packet;
+            let model = packet.model_ref.as_str();
+            let reasoning = packet.reasoning_effort.as_str();
+            let access = required_packet_string(&packet.access_mode, "access_mode")?;
+            let parent_chat = packet.parent_chat_id.as_deref();
             if model.is_empty() || reasoning.is_empty() { return Err(StorageError::new(StorageCode::SubsessionParentModelContextMissing,"Subsession model context is missing")); }
             let tx = db.transaction().map_err(StorageError::sqlite)?;
             let evidence_json=serde_json::to_string(&evidence_refs).map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid,e.to_string()).with_source(e))?;
             tx.execute("INSERT OR IGNORE INTO btcc_steward_results (result_id,relation_id,task_id,child_session_id,child_turn_id,status,code,summary,acceptance_evidence_json,changed_artifacts_json,created_at) VALUES (?1,?2,?3,?4,?5,?6,NULL,?7,?8,'[]',?9)",params![result_id,delegation.relation_id,delegation.task_id,child_session,child_turn,status,summary,evidence_json,now]).map_err(StorageError::sqlite)?;
             let text = format!("Delegated result\nstatus: {status}\nsummary: {summary}\nevidence_refs: {evidence_json}");
-            let input = match child_role {
-                "worker" => serde_json::json!({
-                    "route":"steward_queue","text":text,"model_ref":model,
-                    "reasoning_effort":reasoning,"timestamp":now,
+            let input = match packet.child_role {
+                ChildRole::Worker => ParentResultInput::StewardQueue(WorkerResultInput {
+                    text: text.clone(), model_ref: model.into(),
+                    reasoning_effort: reasoning.into(), timestamp: now.clone(),
                 }),
-                "steward" => serde_json::json!({
-                    "route":"butler_app","relation_id":delegation.relation_id,
-                    "result_id":result_id,"parent_session_id":delegation.parent_session_id,
-                    "parent_turn_id":delegation.parent_turn_id,
-                    "parent_chat_id":parent_chat.ok_or_else(|| StorageError::new(StorageCode::ParentAppBindingRequired,"Parent App binding is missing"))?,
-                    "message_id":format!("subsession-result-message:{result_id}"),
-                    "safe_title":"Delegated result","text":text,"model_ref":model,
-                    "reasoning_effort":reasoning,"access_mode":access,"timestamp":now,
+                ChildRole::Steward => ParentResultInput::ButlerApp(StewardResultInput {
+                    relation_id: delegation.relation_id.clone(),
+                    result_id: result_id.clone(),
+                    parent_session_id: delegation.parent_session_id.clone(),
+                    parent_turn_id: delegation.parent_turn_id.clone(),
+                    parent_chat_id: parent_chat.ok_or_else(|| StorageError::new(StorageCode::ParentAppBindingRequired,"Parent App binding is missing"))?.into(),
+                    message_id: format!("subsession-result-message:{result_id}"),
+                    safe_title: "Delegated result".into(), text: text.clone(), model_ref: model.into(),
+                    reasoning_effort: reasoning.into(), access_mode: access.into(), timestamp: now.clone(),
                 }),
-                _ => return Err(StorageError::new(StorageCode::SubsessionChildRoleInvalid,"Subsession child role is invalid")),
             };
-            tx.execute("INSERT OR IGNORE INTO btcc_subsession_outbox (outbox_id,relation_id,result_id,parent_session_id,parent_turn_id,message_id,input_json,status,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending',?8)",params![format!("outbox-{result_id}"),delegation.relation_id,result_id,delegation.parent_session_id,delegation.parent_turn_id,format!("subsession-result-message:{result_id}"),input.to_string(),now]).map_err(StorageError::sqlite)?;
+            let input = serde_json::to_string(&input).map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid,e.to_string()).with_source(e))?;
+            tx.execute("INSERT OR IGNORE INTO btcc_subsession_outbox (outbox_id,relation_id,result_id,parent_session_id,parent_turn_id,message_id,input_json,status,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending',?8)",params![format!("outbox-{result_id}"),delegation.relation_id,result_id,delegation.parent_session_id,delegation.parent_turn_id,format!("subsession-result-message:{result_id}"),input,now]).map_err(StorageError::sqlite)?;
             tx.commit().map_err(StorageError::sqlite)?;
             Ok(())
         }).await
@@ -401,12 +410,14 @@ impl SqliteSubsessionRepository {
             let rows=statement.query_map([],|row| Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,String>(2)?))).map_err(StorageError::sqlite)?;
             rows.map(|value| {
                 let (result_id,parent_session_id,encoded)=value.map_err(StorageError::sqlite)?;
-                let input:Value=serde_json::from_str(&encoded).map_err(|e| StorageError::new(StorageCode::SubsessionOutboxInvalid,e.to_string()).with_source(e))?;
-                let route=match input.get("route").and_then(Value::as_str) {
+                let invalid=|e: serde_json::Error| StorageError::new(StorageCode::SubsessionOutboxInvalid,e.to_string()).with_source(e);
+                let tag:RouteTag=serde_json::from_str(&encoded).map_err(invalid)?;
+                let route=match tag.route.as_deref() {
                     Some("steward_queue")=>ParentResultRoute::StewardQueue,
                     Some("butler_app")=>ParentResultRoute::ButlerApp,
                     _=>return Err(StorageError::new(StorageCode::SubsessionOutboxRouteInvalid,"Subsession outbox route is invalid")),
                 };
+                let input=serde_json::from_str(&encoded).map_err(invalid)?;
                 Ok(PendingParentInput{result_id,parent_session_id,route,input})
             }).collect()
         }).await
@@ -465,13 +476,14 @@ fn direction_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredSubsessionDi
     })
 }
 
-fn required_packet_string<'a>(
-    packet: &'a serde_json::Map<String, Value>,
-    key: &str,
-) -> Result<&'a str, StorageError> {
-    packet
-        .get(key)
-        .and_then(Value::as_str)
+/// The route of an outbox row, read before the row is decoded.
+#[derive(serde::Deserialize)]
+struct RouteTag {
+    route: Option<String>,
+}
+
+fn required_packet_string<'a>(value: &'a str, key: &str) -> Result<&'a str, StorageError> {
+    Some(value)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| {
             StorageError::new(

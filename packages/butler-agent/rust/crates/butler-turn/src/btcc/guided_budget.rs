@@ -2,10 +2,9 @@
 
 use std::sync::Arc;
 
-use serde_json::Value;
-
 use super::continuation_budget::{
-    TurnContinuationBudgetEvent, TurnContinuationBudgetLimits, parse_turn_continuation_budget_state,
+    TurnContinuationBudgetEvent, TurnContinuationBudgetLimits,
+    validate_turn_continuation_budget_state,
 };
 use super::{
     BtccError, ContinuationBudgetTransition, ModelRouteWrite, PortFuture, StateExecutionClaim,
@@ -63,7 +62,7 @@ impl GuidedContinuationBudgetFactory {
                 "turn_continuation_dependency_missing",
             )
         })?;
-        let initial = parse_turn_continuation_budget_state(value.clone(), &turn.turn_id)?;
+        let initial = validate_turn_continuation_budget_state(value.clone(), &turn.turn_id)?;
         Ok(Some(Arc::new(GuidedContinuationBudget {
             // No second mutable copy of request/output history is retained.
             limits: initial.limits,
@@ -72,7 +71,7 @@ impl GuidedContinuationBudgetFactory {
                 expected_revision: turn.revision,
                 execution_fence: turn.execution_fence,
                 claim_id: claim.claim_id.clone(),
-                route: Value::Null,
+                route: None,
             },
             store: store.clone(),
             clock: self.clock.clone(),
@@ -89,10 +88,6 @@ struct GuidedContinuationBudget {
 
 impl GuidedContinuationBudget {
     async fn transition(&self, event: TurnContinuationBudgetEvent) -> Result<(), BtccError> {
-        let event = serde_json::to_value(event).map_err(|error| {
-            BtccError::detected(BtccCode::InvalidContinuationBudgetEvent, error.to_string())
-                .with_source(error)
-        })?;
         let now_ms = (self.clock)();
         self.store
             .transition_continuation_budget(ContinuationBudgetTransition {

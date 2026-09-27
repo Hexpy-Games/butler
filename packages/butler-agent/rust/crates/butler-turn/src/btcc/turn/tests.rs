@@ -197,8 +197,8 @@ impl TurnStore for Harness {
     fn transition_continuation_budget(
         &self,
         _: ContinuationBudgetTransition,
-    ) -> PortFuture<'_, Value> {
-        Box::pin(async { Ok(json!({})) })
+    ) -> PortFuture<'_, crate::btcc::TurnContinuationBudgetState> {
+        Box::pin(async { panic!("not used by this test") })
     }
 }
 
@@ -230,7 +230,9 @@ impl AgentLoop for Harness {
             let mut result = agent_result();
             if self.suspend_agent.load(Ordering::SeqCst) {
                 result.suspension = Some(SuspensionReason::WaitingForWorker);
-                result.authority_continuation = Some(json!({"continuation": true}));
+                result.authority_continuation = Some(Box::new(
+                    crate::btcc::AuthorityLoopContinuation::fixture("request", "call"),
+                ));
             }
             Ok(result)
         })

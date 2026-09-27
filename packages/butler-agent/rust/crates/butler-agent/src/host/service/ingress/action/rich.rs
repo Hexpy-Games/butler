@@ -2,7 +2,7 @@
 
 use serde_json::{Map, Value};
 
-use butler_turn::btcc::FinalArtifact;
+use butler_turn::btcc::{ChangedFileSummary, FinalArtifact};
 
 pub(super) fn artifacts(source: &[FinalArtifact]) -> Vec<Value> {
     source
@@ -44,17 +44,11 @@ pub(super) fn artifacts(source: &[FinalArtifact]) -> Vec<Value> {
         .collect()
 }
 
-pub(super) fn changed_files(source: &[Value]) -> Vec<Value> {
+pub(super) fn changed_files(source: &[ChangedFileSummary]) -> Vec<Value> {
     source
         .iter()
-        .filter(|candidate| {
-            candidate.as_object().is_some_and(|file| {
-                file.get("path").is_some_and(Value::is_string)
-                    && file.get("lines").is_some_and(Value::is_array)
-            })
-        })
         .take(40)
-        .cloned()
+        .filter_map(|file| serde_json::to_value(file).ok())
         .collect()
 }
 

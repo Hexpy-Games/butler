@@ -11,7 +11,6 @@ mod worker;
 
 pub use control::{SubsessionCancelRequest, SubsessionDirectionRequest, SubsessionResumeRequest};
 
-use butler_core::json;
 use delegation::accepted_plan;
 use helpers::*;
 
@@ -20,8 +19,9 @@ use std::sync::Arc;
 
 use crate::btcc::BtccCode;
 use crate::btcc::{
-    ActionStatus, BtccError, DurableWorkService, ExecutionMode, ParentResultRoute, PortFuture,
-    SqliteSubsessionRepository, StartWorkInput, SubsessionCreate, WorkTurnScope, WorkView,
+    ActionStatus, BtccError, ChildRole, DispatchIntent, DispatchMetadata, DurableWorkService,
+    ExecutionMode, PacketExecutionMode, ParentResultRoute, PortFuture, SqliteSubsessionRepository,
+    StartWorkInput, SubsessionCreate, SubsessionPacket, WorkTurnScope, WorkView,
 };
 use crate::workspace::{OwnOptional, SessionBindingStore, SessionRole, UpsertSessionBinding};
 
@@ -36,10 +36,12 @@ pub struct InterruptedSubsessionEvent {
     pub recovery_id: String,
 }
 
-/// A child-session envelope to enqueue (passthrough JSON for the gateway queue).
+/// A child-session envelope to enqueue.
 #[derive(Clone, Debug)]
 pub struct SubsessionEnqueue {
+    /// Passthrough: the gateway inbound envelope (dispatch or control), stored verbatim by the queue.
     pub envelope: Value,
+    /// Passthrough: queue record metadata, stored verbatim by the queue.
     pub metadata: Map<String, Value>,
 }
 
@@ -65,6 +67,7 @@ pub struct WorkerProfile {
     pub model_ref: String,
     pub reasoning_effort: String,
     pub prompt: Option<String>,
+    /// Passthrough: the configured job, opaque to BTCC.
     pub job: Value,
 }
 
@@ -161,14 +164,44 @@ impl SubsessionService {
             .find(|binding| binding.transport == "app" && !binding.peer_id.trim().is_empty())
             .map(|binding| binding.peer_id.clone())
             .ok_or_else(|| error(BtccCode::ParentAppBindingRequired))?;
-        let identity = json!({"parent_session_id":request.parent_session_id,"parent_turn_id":request.parent_turn_id,"request":request.request,"work_id":reviewed.work_id,"plan_revision_id":plan.plan_revision_id,"review_revision_id":review.review_revision_id});
+        let identity = StewardIdentity {
+            parent_session_id: &request.parent_session_id,
+            parent_turn_id: &request.parent_turn_id,
+            request: &request.request,
+            work_id: &reviewed.work_id,
+            plan_revision_id: &plan.plan_revision_id,
+            review_revision_id: &review.review_revision_id,
+        };
         let delegation_id = delegation::delegation_id(&delegation::STEWARD, &identity)?;
         if let Some(existing) = self.replay_existing(&delegation_id).await? {
             return Ok(delegation_output(&existing));
         }
         let ids = delegation::DelegationIds::derive(&delegation::STEWARD, delegation_id);
         let now = (self.now)();
-        let packet = json!({"child_role":"steward","delegation_id":ids.delegation_id,"task_id":ids.task_id,"parent_session_id":request.parent_session_id,"parent_turn_id":request.parent_turn_id,"parent_chat_id":parent_chat_id,"relation_id":ids.relation_id,"access_mode":request.access_mode,"execution_mode":if request.access_mode=="read_only"{"read_only"}else{"mutation"},"objective":request.request,"acceptance_criteria":plan.checks,"task_or_plan_refs":[plan.plan_revision_id],"constraints_and_non_goals":[],"allowed_tools_and_effects":allowed_effects(&request.access_mode),"mutation_scope":mutation_scope(&request.access_mode),"parent_work_ref":{"work_id":reviewed.work_id,"session_id":reviewed.session_id,"turn_id":request.parent_turn_id,"plan_revision_id":plan.plan_revision_id,"review_revision_id":review.review_revision_id},"model_ref":request.model_ref,"reasoning_effort":request.reasoning_effort});
+        let packet = SubsessionPacket {
+            child_role: ChildRole::Steward,
+            delegation_id: ids.delegation_id.clone(),
+            source_tool_call_id: None,
+            task_id: ids.task_id.clone(),
+            parent_session_id: request.parent_session_id.clone(),
+            parent_turn_id: request.parent_turn_id.clone(),
+            parent_chat_id: Some(parent_chat_id),
+            relation_id: ids.relation_id.clone(),
+            access_mode: request.access_mode.clone(),
+            execution_mode: PacketExecutionMode::for_access(&request.access_mode),
+            objective: request.request.clone(),
+            acceptance_criteria: plan.checks.clone(),
+            implementation_brief: None,
+            plan_action: None,
+            task_or_plan_refs: vec![plan.plan_revision_id.clone()],
+            constraints_and_non_goals: Vec::new(),
+            allowed_tools_and_effects: allowed_effects(&request.access_mode),
+            mutation_scope: mutation_scope(&request.access_mode),
+            parent_work_ref: parent_work_ref(reviewed, &request.parent_turn_id, plan, review),
+            worker_profile: None,
+            model_ref: request.model_ref.clone(),
+            reasoning_effort: request.reasoning_effort.clone(),
+        };
         let envelope = child_envelope(ChildEnvelopeInput {
             role: "steward",
             delegation: &ids.delegation_id,
@@ -181,8 +214,12 @@ impl SubsessionService {
             text: render_steward_input(&packet),
             now: &now,
         });
-        let intent =
-            json!({"envelope":envelope,"metadata":{"source":"btcc-subsession-delegation"}});
+        let intent = DispatchIntent {
+            envelope,
+            metadata: DispatchMetadata {
+                source: "btcc-subsession-delegation".into(),
+            },
+        };
         let stored = self
             .create_and_dispatch(
                 ids.create(
@@ -266,7 +303,7 @@ impl SubsessionService {
         stored: &crate::btcc::StoredSubsessionDelegation,
         parent: &crate::workspace::StoredSessionBinding,
         role: SessionRole,
-        metadata: Value,
+        metadata: Map<String, Value>,
     ) -> Result<(), BtccError> {
         self.bindings
             .upsert(UpsertSessionBinding {
@@ -283,17 +320,14 @@ impl SubsessionService {
                     .map_or(OwnOptional::Null, OwnOptional::Value),
                 workspace_path: parent.workspace_path.clone(),
                 runtime_adapter_id: "btcc-turn-runtime".into(),
-                model_provider_id: json::at(&stored.packet, "/model_ref")
-                    .as_str()
-                    .unwrap_or("")
+                model_provider_id: stored
+                    .packet
+                    .model_ref
                     .split('/')
                     .next()
                     .unwrap_or("")
                     .into(),
-                model_ref: json::at(&stored.packet, "/model_ref")
-                    .as_str()
-                    .unwrap_or("")
-                    .into(),
+                model_ref: stored.packet.model_ref.clone(),
                 runtime_session_ref: None,
                 provider_thread_ref: None,
                 transport_bindings: Vec::new(),
@@ -301,7 +335,7 @@ impl SubsessionService {
                 created_at: None,
                 updated_at: None,
                 last_active_at: None,
-                metadata: metadata.as_object().cloned(),
+                metadata: Some(metadata),
             })
             .await
             .map_err(BtccError::from)?;
@@ -311,10 +345,10 @@ impl SubsessionService {
         &self,
         stored: &crate::btcc::StoredSubsessionDelegation,
     ) -> Result<(), BtccError> {
-        let (role, role_name) = match json::at(&stored.packet, "/child_role").as_str() {
-            Some("steward") => (SessionRole::Steward, "steward"),
-            Some("worker") => (SessionRole::Worker, "worker"),
-            _ => return Err(error(BtccCode::SubsessionChildRoleInvalid)),
+        let role_name = stored.packet.child_role;
+        let role = match role_name {
+            ChildRole::Steward => SessionRole::Steward,
+            ChildRole::Worker => SessionRole::Worker,
         };
         if let Some(existing) = self
             .bindings
@@ -333,9 +367,7 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?
             .ok_or_else(|| error(BtccCode::SubsessionParentBindingMissing))?;
-        let access = json::at(&stored.packet, "/access_mode")
-            .as_str()
-            .ok_or_else(|| error(BtccCode::SubsessionAccessModeInvalid))?;
+        let access = stored.packet.access_mode.as_str();
         let metadata = child_metadata(role_name, &stored.packet, access, &parent);
         self.create_child_binding(stored, &parent, role, metadata)
             .await
@@ -344,11 +376,10 @@ impl SubsessionService {
         &self,
         stored: &crate::btcc::StoredSubsessionDelegation,
     ) -> Result<(), BtccError> {
-        let envelope = stored
-            .dispatch_intent
-            .get("envelope")
-            .cloned()
-            .ok_or_else(|| error(BtccCode::SubsessionDispatchIntentInvalid))?;
+        let envelope =
+            serde_json::to_value(&stored.dispatch_intent.envelope).map_err(|source| {
+                error(BtccCode::SubsessionDispatchIntentInvalid).with_source(source)
+            })?;
         self.queue.enqueue(SubsessionEnqueue {
             envelope,
             metadata: Map::new(),

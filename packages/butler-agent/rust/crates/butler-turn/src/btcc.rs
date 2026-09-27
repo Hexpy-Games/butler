@@ -25,10 +25,11 @@ use std::sync::Arc;
 
 pub use contracts::{
     AcceptedWorkResult, AcceptedWorkStatus, AccessMode, AdmissionKind, AlreadyDeliveredOutcome,
-    ArtifactKind, AttachmentKind, AttachmentRef, DeliveredOutcome, ExecutionOutcome, FinalArtifact,
-    ModelIdentity, Peer, PeerKind, ProgressDestination, ReasoningEffort, RuntimeFailure, Sender,
-    SessionRole, StopRequest, TurnMessage, TurnOutcome, TurnOutcomeKind, TurnRequest, TurnRoute,
-    TurnTrigger, WorkStatus,
+    ArtifactKind, AttachmentKind, AttachmentRef, ChangedFileLine, ChangedFileSummary,
+    ChangedLineKind, DeliveredOutcome, ExecutionOutcome, FinalArtifact, ModelIdentity, Peer,
+    PeerKind, ProgressDestination, ReasoningEffort, RuntimeFailure, Sender, SessionRole,
+    StopRequest, TurnMessage, TurnOutcome, TurnOutcomeKind, TurnRequest, TurnRoute, TurnTrigger,
+    WorkStatus,
 };
 pub use error::{BtccCode, BtccError, BtccSource};
 
@@ -47,6 +48,10 @@ pub use turn::{
     FailureRecord, FinalPayload, ModelRouteEvent, ModelRouteEventKind, PreparedTurn,
     ProgressEventRepository, ProgressWrite, RouteEventStatus, StopPersistenceOutcome,
     StorageReadiness, TransitionCommitError, TurnTransition,
+};
+pub use turn::{
+    CommandMessage, CommandModelSelection, CommandTrigger, ResumeCommand, RouteCandidate,
+    RouteIdentity, RouteState, RunCommand, TurnCommand, WakeCommand,
 };
 
 #[cfg(any(test, feature = "test-support"))]
@@ -72,16 +77,23 @@ pub use agent_loop::{
     UsageAttribution, VerifiedImagePayloadPort, WorkFinalState, WorkPort,
     latest_work_anchor_indices,
 };
+pub use agent_loop::{
+    AdmittedModelSelection, ButlerContext, EmptyResponsePolicy, ExecutionPolicy, TrackingMode,
+};
 pub use authority::contracts::{
     AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityDecisionInput, AuthorityError,
     AuthorityExecutionInput, AuthorityOutcomeInput, PrincipalAuthority,
 };
-pub use continuation_budget::{TurnContinuationBudgetLimits, select_turn_continuation_budget};
+pub use continuation_budget::{
+    TurnContinuationAdmission, TurnContinuationBudgetEvent, TurnContinuationBudgetLimits,
+    TurnContinuationBudgetState, TurnContinuationBudgetTerminal,
+    TurnContinuationBudgetTerminalReason, select_turn_continuation_budget,
+};
 pub use effects::contracts::{
     Access as EffectAccess, AdapterOutcome, BlockerRelation, EffectAdapter, EffectAdapterError,
     EffectBlocker, EffectError, EffectFailure, EffectFuture, EffectJournal, EffectOutcome,
-    EffectRecord, EffectStatus, ExecuteEffect, PlanBinding, PreparedWrite, RecoveryHint,
-    RegisteredEditPort, RegisteredWritePort,
+    EffectRecord, EffectStatus, ExecuteEffect, PlanBinding, PreparedEdit, PreparedEditEntry,
+    PreparedWrite, RecoveryHint, RegisteredEditPort, RegisteredWritePort,
 };
 pub use effects::workspace_edit::{
     WorkspaceFileEditEffectAdapter, batch_target as workspace_edit_batch_target,
@@ -122,6 +134,12 @@ pub use storage::{
     ToolJournalCloseoutRow, ToolJournalFinish, ToolJournalFinishStatus, ToolJournalRecord,
     ToolJournalRepository, ToolJournalSignature, ToolJournalStart, WorkStatusObservation,
     bootstrap_fresh_storage, read_activated_storage_manifest,
+};
+pub use storage::{
+    ChildEnvelope, ChildRole, DispatchIntent, DispatchMetadata, EnvelopeMessage, EnvelopePeer,
+    EnvelopeRaw, EnvelopeRouting, EnvelopeSender, NativeStewardContext, PacketExecutionMode,
+    PacketPlanAction, PacketWorkerProfile, ParentResultInput, ParentWorkRef, StewardResultInput,
+    SubsessionPacket, WorkerResultInput,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub use storage::{ContextDocumentInput, TestStorageFixture, test_prepared_turn};

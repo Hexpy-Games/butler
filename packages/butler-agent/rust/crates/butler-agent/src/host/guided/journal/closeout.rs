@@ -47,7 +47,6 @@ pub(super) async fn collect(
     Ok(JournalCloseout {
         artifacts: artifacts.finish(),
         changed_files: changed.finish(),
-        plan: None,
     })
 }
 
