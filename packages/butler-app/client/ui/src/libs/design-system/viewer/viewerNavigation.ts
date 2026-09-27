@@ -4,7 +4,7 @@ import {
   type ShowcaseCategory,
 } from "../showcase/categories";
 import type { ShowcaseEntry, ShowcaseKind } from "../showcase/collectShowcaseEntries";
-import { TOKEN_CATEGORIES, type TokenCategory } from "./foundations/tokenCatalog";
+import { chapterById, type FoundationChapter } from "./foundations/chapters";
 
 export type GallerySection = "components" | "blocks";
 
@@ -13,7 +13,7 @@ export type ViewerPage =
   | { kind: "guide" }
   | { kind: "recipes" }
   | { kind: "foundations" }
-  | { kind: "tokens"; category: TokenCategory }
+  | { kind: "foundation"; chapter: FoundationChapter }
   | { kind: "motion" }
   | { kind: "gallery"; section: GallerySection }
   | { kind: "patterns" }
@@ -42,8 +42,10 @@ const FIXED: Record<string, ViewerPage> = {
 export function resolveViewerPage(pageId: string, entries: ShowcaseEntry[], patternIds: readonly string[] = []): ViewerPage {
   const fixed = FIXED[pageId];
   if (fixed) return fixed;
-  const token = /^foundations\/(.+)$/u.exec(pageId)?.[1];
-  if (token && (TOKEN_CATEGORIES as readonly string[]).includes(token)) return { kind: "tokens", category: token as TokenCategory };
+  // Chapters, plus the category routes they absorbed (foundations/shadow, foundations/settings).
+  const chapterId = /^foundations\/(.+)$/u.exec(pageId)?.[1];
+  const chapter = chapterId ? chapterById(chapterId) : undefined;
+  if (chapter) return chapter.id === "motion" ? { kind: "motion" } : { kind: "foundation", chapter };
   const pattern = /^patterns\/(.+)$/u.exec(pageId)?.[1];
   if (pattern && patternIds.includes(pattern)) return { kind: "pattern", id: pattern };
   const lower = pageId.toLowerCase();

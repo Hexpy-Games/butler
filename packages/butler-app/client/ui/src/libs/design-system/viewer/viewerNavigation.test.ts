@@ -34,7 +34,14 @@ describe("DS Viewer navigation", () => {
     expect(resolveViewerPage("guide", entries)).toEqual({ kind: "guide" });
     expect(resolveViewerPage("recipes", entries)).toEqual({ kind: "recipes" });
     expect(resolveViewerPage("foundations", entries)).toEqual({ kind: "foundations" });
-    expect(resolveViewerPage("foundations/color", entries)).toEqual({ kind: "tokens", category: "color" });
+    const chapter = (id: string) => { const page = resolveViewerPage(`foundations/${id}`, entries); return page.kind === "foundation" ? page.chapter.id : page.kind; };
+    expect(chapter("color")).toBe("color");
+    expect(chapter("typography")).toBe("typography");
+    expect(chapter("iconography")).toBe("iconography");
+    // Category routes absorbed by a chapter still resolve (search results and old links).
+    expect(chapter("shadow")).toBe("radius");
+    expect(chapter("settings")).toBe("spacing");
+    expect(resolveViewerPage("foundations/motion", entries)).toEqual({ kind: "motion" });
     expect(resolveViewerPage("foundations/nope", entries)).toEqual({ kind: "not-found", id: "foundations/nope" });
     expect(resolveViewerPage("motion", entries)).toEqual({ kind: "motion" });
     expect(resolveViewerPage("components", entries)).toEqual({ kind: "gallery", section: "components" });

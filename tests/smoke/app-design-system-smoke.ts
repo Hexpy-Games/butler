@@ -28,8 +28,13 @@ async function assertWorkbench(page: Page, baseUrl: string, label: string): Prom
   await openViewerPage(page, baseUrl, "foundations");
   await page.locator('[data-ds-foundations="index"] [data-ds-token-category]').first().waitFor({ state: "visible" });
   await assertNoHorizontalOverflow(page, `${label} foundations index`);
-  // Token pages are generated from tokens.css; color carries raw, semantic, alias and context tokens.
+  // Chapters are guidebook specimens first; the raw table (generated from tokens.css) is one click away.
   await openViewerPage(page, baseUrl, "foundations/color");
+  await page.locator('[data-ds-foundations="color"] [data-ds-guide-section="roles"]').waitFor({ state: "visible" });
+  await page.waitForFunction(() => document.querySelectorAll('[data-ds-foundations="color"] [data-ds-specimen^="role-"] [data-ds-theme]').length >= 20
+    && [...document.querySelectorAll('[data-ds-specimen^="role-"]')].every((card) => /\d\.\d:1/u.test(card.textContent ?? "")));
+  assert(await page.locator("[data-ds-token-name]").count() === 0, `${label}: the token table should start collapsed`);
+  await page.locator('[data-ds-foundations="color"] [data-ds-all-tokens-toggle]').click();
   await page.locator('[data-ds-foundations="color"] [data-ds-token-name]').first().waitFor({ state: "visible" });
   const tokenInventory = await page.evaluate(() => {
     const names = Array.from(
@@ -52,6 +57,11 @@ async function assertWorkbench(page: Page, baseUrl: string, label: string): Prom
   assert(tokenInventory.hasAppAlias, `${label}: app alias color tokens are missing`);
   assert(tokenInventory.hasContext, `${label}: context color tokens are missing`);
   await assertNoHorizontalOverflow(page, `${label} foundations`);
+  await openViewerPage(page, baseUrl, "foundations/typography");
+  const ladder = await page.locator("[data-ds-type-ladder]").getAttribute("data-ds-type-ladder");
+  const rungs = await page.locator("[data-ds-type-role]").count();
+  assert(Number(ladder) >= 17 && rungs === Number(ladder), `${label}: type ladder should render every --typo-* role (${rungs}/${ladder})`);
+  await assertNoHorizontalOverflow(page, `${label} typography`);
   await openViewerPage(page, baseUrl, "blocks");
   const blockCount = await page.locator("[data-ds-component]").count();
   await assertNoHorizontalOverflow(page, `${label} blocks`);
