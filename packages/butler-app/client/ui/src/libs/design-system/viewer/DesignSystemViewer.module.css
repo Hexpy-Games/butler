@@ -427,6 +427,10 @@
   align-items: stretch;
   min-width: 0;
   overflow-x: auto;
+  /* The containing block of positioned parts (CopyButton's sr-only live
+     region): they scroll and clip with the matrix instead of escaping it and
+     widening the page scroller. */
+  position: relative;
   /* A theme scope: its text color resolves here, not in the chrome. */
   color: var(--text-primary);
 }
