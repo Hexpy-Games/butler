@@ -92,12 +92,20 @@ mod tests {
 
     use super::*;
 
+    /// Method, Sec-Fetch-Site, allowed Origin, loopback Host, outcome.
+    type Case = (
+        Method,
+        Option<&'static str>,
+        bool,
+        bool,
+        Result<(), SessionRefusal>,
+    );
+
     /// Security boundary: which cookie requests may use the browser session.
     #[test]
     fn only_the_butler_page_and_the_user_use_the_session() {
         use SessionRefusal::{ForeignSite, OriginRequired};
-        // Method, Sec-Fetch-Site, allowed Origin, loopback Host, outcome.
-        let cases: [(Method, Option<&str>, bool, bool, Result<(), SessionRefusal>); 14] = [
+        let cases: [Case; 14] = [
             (Method::GET, Some("same-origin"), false, true, Ok(())),
             (Method::GET, Some("none"), false, true, Ok(())),
             (Method::HEAD, Some("same-origin"), false, true, Ok(())),

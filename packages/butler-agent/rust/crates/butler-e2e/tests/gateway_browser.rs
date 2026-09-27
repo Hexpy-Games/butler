@@ -186,6 +186,9 @@ async fn sec_05_one_time_link_sets_a_cookie_and_cannot_be_reused() -> Result<(),
     s.finish().await
 }
 
+/// Request headers as `(name, value)` pairs.
+type Headers<'a> = &'a [(&'a str, &'a str)];
+
 /// SEC-05: the cookie reads without a token from the Butler page
 /// (`Sec-Fetch-Site: same-origin`) and a navigation the user started
 /// (`none`). Another port of this host (`same-site`) or another site is
@@ -197,7 +200,8 @@ async fn assert_cookie_reads(
     cookie: &str,
 ) -> Result<(), HarnessError> {
     let own_origin = gw.base.as_str();
-    let cases: [(&[(&str, &str)], u16, Option<&str>); 7] = [
+    // Request headers, expected status, expected error code.
+    let cases: [(Headers<'_>, u16, Option<&str>); 7] = [
         (&[("sec-fetch-site", "same-origin")], 200, None),
         (&[("sec-fetch-site", "none")], 200, None),
         (&[("origin", own_origin)], 200, None),
