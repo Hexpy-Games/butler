@@ -714,10 +714,10 @@ export interface ProjectSummary {
   sessions?: SessionSummary[];
 }
 
-export type { SpaceCommand, SpaceNode, SpaceGroup, SpaceView, SpaceMutationResult } from "../../../../../butler-agent/src/gateways/app/interface/protocol/app-protocol.ts";
+export type { SpaceCommand, SpaceNode, SpaceGroup, SpaceView, SpaceMutationResult } from "../../../shared/app-contracts.ts";
 
 export interface NavigationView {
-  space: import("../../../../../butler-agent/src/gateways/app/interface/protocol/app-protocol.ts").SpaceView;
+  space: import("../../../shared/app-contracts.ts").SpaceView;
   chats: SessionSummary[];
   projects: ProjectSummary[];
   automations_summary: {
@@ -1050,7 +1050,7 @@ export interface StewardSessionSummaryView {
 }
 
 export interface SessionView {
-  branch_seed?: import("../../../../../butler-agent/src/foundation/session-branch.ts").SessionBranchSeed;
+  branch_seed?: import("../../../shared/app-contracts.ts").SessionBranchSeed;
   protocol_version?: string;
   session_id: string;
   kind: ChatKind;
@@ -1350,10 +1350,10 @@ export interface PaginationView {
 }
 
 export interface ProjectDashboardView {
-  briefing?: import("../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts").DashboardBriefingView;
+  briefing?: import("../../../shared/app-contracts.ts").DashboardBriefingView;
   description?: string | null;
   preferences?: { revision: number; pinnedSourceRefs: Array<{ kind: string; id: string; revision: string }> };
-  overview?: import("../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts").DashboardOverview;
+  overview?: import("../../../shared/app-contracts.ts").DashboardOverview;
   project: ProjectSummary;
   stats: {
     active_sessions: number;
@@ -1451,7 +1451,7 @@ export interface WorkStreamSummary {
 }
 
 export interface SessionSummaryView {
-  branch_seed?: import("../../../../../butler-agent/src/foundation/session-branch.ts").SessionBranchSeed;
+  branch_seed?: import("../../../shared/app-contracts.ts").SessionBranchSeed;
   session_id?: string;
   turn_state?: string;
   latest_progress?: TurnProgressSnapshot;

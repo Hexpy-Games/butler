@@ -1,16 +1,20 @@
 #!/usr/bin/env bun
 import { readFileSync } from "node:fs";
-import {
-  createAppReleaseManifest,
-  validateAppReleaseManifest,
-  type AppReleaseVersionBaseline,
-} from "./manifest.ts";
+import { type AppReleaseVersionBaseline } from "./manifest.ts";
+import { createNativeMacReleaseManifest, validateNativeMacReleaseManifest } from "./native-mac-manifest.ts";
 
 const root = process.cwd();
 const verbose = (process.env.BUTLER_VALIDATE_VERBOSE === "1" || process.argv.includes("--verbose")) &&
   !process.argv.includes("--silent");
-const manifest = createAppReleaseManifest(root);
 const args = process.argv.slice(2);
+const requestedPlatforms = args.flatMap((arg, index) =>
+  arg.startsWith("--platform=") ? [arg.slice("--platform=".length)] :
+  arg === "--platform" ? [args[index + 1] ?? ""] : [],
+);
+if (requestedPlatforms.some((platform) => platform !== "darwin-arm64")) {
+  throw new Error("native agent-bundled App release is supported only on darwin-arm64");
+}
+const manifest = createNativeMacReleaseManifest(root);
 const previousManifestArgs = previousManifestPathFromArgs(args);
 const allowMissingPreviousManifest =
   args.includes("--allow-missing-previous-manifest") ||
@@ -29,9 +33,7 @@ const issues = [
     ? ["previous app release manifest is required for App release gate"]
     : []),
   ...(previousManifestResult.issue ? [previousManifestResult.issue] : []),
-  ...validateAppReleaseManifest(root, manifest, {
-    previousManifest: previousManifestResult.manifest,
-  }),
+  ...validateNativeMacReleaseManifest(root, manifest, previousManifestResult.manifest),
 ];
 
 if (issues.length > 0) {
@@ -42,11 +44,7 @@ if (issues.length > 0) {
 
 if (verbose) {
   console.log(`App release gate passed: ${manifest.name}@${manifest.version}`);
-  console.log(
-    `Components: ${manifest.components
-      .map((component) => `${component.id}@${component.version}`)
-      .join(", ")}`,
-  );
+  console.log(`Components: app@${manifest.version}`);
   if (previousManifestPath) {
     console.log(`Previous manifest: ${previousManifestPath}`);
   }

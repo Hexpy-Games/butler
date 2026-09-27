@@ -7,7 +7,7 @@ import { projectDocumentPickerFilters } from "@/app/projectDocuments.ts";
 import type {
   ProjectDashboardDocument,
 } from "@/app/types.ts";
-import type { DashboardMaterialsPage } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
+import type { DashboardMaterialsPage } from "../../../../shared/app-contracts.ts";
 import {
   ChevronRight,
   FileText,

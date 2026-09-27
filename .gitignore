@@ -3,6 +3,11 @@ data/
 .project-ledger/
 .dev-butler/
 
+# Project-management drafts belong in the external Project Ledger.
+/docs/
+/reports/
+/.codex-ledger-drafts/
+
 # ── Private top-level runtime paths must live under $BUTLER_DATA instead ─────
 .env
 /tasks/

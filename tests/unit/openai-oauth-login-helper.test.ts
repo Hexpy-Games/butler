@@ -1,201 +1,91 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  APP_MANAGED_RUNTIME_POINTER_SCHEMA,
-  appManagedAgentPointerPath,
-} from "../../packages/butler-app/client/electron/app-managed-runtime.mjs";
-import { resolveOpenAIOAuthLoginHelper } from "../../packages/butler-app/client/electron/openai-oauth-login-helper.mjs";
+import { resolveOpenAIAuthProfilePath, resolveOpenAIOAuthLoginHelper } from "../../packages/butler-app/client/electron/openai-oauth-login-helper.mjs";
 
-test("OpenAI OAuth helper resolves from active App-managed Agent pointer", () => {
+test("OpenAI OAuth helper uses the installed native executable and immutable resources", () => {
   const root = mkdtempSync(join(tmpdir(), "butler-oauth-helper-"));
   try {
+    const resourcesPath = join(root, "resources");
+    const binary = join(resourcesPath, "bundled-agent", "bin", "butler-agent");
+    const resourceRoot = join(resourcesPath, "bundled-agent", "resources");
+    const execPath = join(root, "electron");
     const butlerData = join(root, "data");
-    const runtimeHomeLabel = join("app", "runtime", "agent", "versions", "1.2.3");
-    const runtimeHome = join(butlerData, runtimeHomeLabel);
-    const scriptPath = join(
-      runtimeHome,
-      "packages",
-      "butler-agent",
-      "scripts",
-      "openai-oauth-login.ts",
-    );
-    const runtime = join(
-      runtimeHome,
-      "packages",
-      "butler-agent",
-      "resources",
-      "runtime",
-      "bin",
-      "bun",
-    );
-    mkdirSync(join(scriptPath, ".."), { recursive: true });
-    mkdirSync(join(runtime, ".."), { recursive: true });
-    writeFileSync(scriptPath, "");
-    writeFileSync(runtime, "");
-    writePointer(butlerData, runtimeHomeLabel);
-
-    const helper = resolveOpenAIOAuthLoginHelper({
-      butlerData,
-      repoRoot: join(root, "repo"),
-      resourcesPath: join(root, "missing-resources"),
-      fallbackRuntime: "bun",
-      platform: "linux",
-    });
-
-    expect(helper).toEqual({
-      source: "app-managed",
-      scriptPath,
-      runtime,
-      butlerHome: runtimeHome,
+    mkdirSync(join(binary, ".."), { recursive: true });
+    mkdirSync(resourceRoot, { recursive: true });
+    writeFileSync(binary, "");
+    chmodSync(binary, 0o755);
+    writeFileSync(execPath, "");
+    expect(resolveOpenAIOAuthLoginHelper({ butlerData, resourcesPath, execPath, platform: "linux" })).toEqual({
+      command: binary,
+      args: ["--installation-root", root, "--resource-root", resourceRoot, "oauth-login"],
+      env: { BUTLER_DATA: butlerData },
     });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("OpenAI OAuth helper resolves bun.exe from the App-managed Agent on Windows", () => {
+test("OpenAI OAuth helper requires the packaged native payload", () => {
   const root = mkdtempSync(join(tmpdir(), "butler-oauth-helper-"));
   try {
-    const butlerData = join(root, "data");
-    const runtimeHomeLabel = join("app", "runtime", "agent", "versions", "1.2.3");
-    const runtimeHome = join(butlerData, runtimeHomeLabel);
-    const scriptPath = join(
-      runtimeHome,
-      "packages",
-      "butler-agent",
-      "scripts",
-      "openai-oauth-login.ts",
-    );
-    const runtime = join(
-      runtimeHome,
-      "packages",
-      "butler-agent",
-      "resources",
-      "runtime",
-      "bin",
-      "bun.exe",
-    );
-    mkdirSync(join(scriptPath, ".."), { recursive: true });
-    mkdirSync(join(runtime, ".."), { recursive: true });
-    writeFileSync(scriptPath, "");
-    writeFileSync(runtime, "");
-    writePointer(butlerData, runtimeHomeLabel);
+    expect(() => resolveOpenAIOAuthLoginHelper({
+      butlerData: join(root, "data"),
+      resourcesPath: join(root, "missing"),
+      execPath: join(root, "electron"),
+      platform: "linux",
+    })).toThrow("missing bundled native Agent resources");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
+test("OpenAI OAuth helper uses the explicit native installation in development", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-oauth-native-dev-"));
+  try {
+    const installationRoot = join(root, "installation");
+    const binary = join(installationRoot, "bin", "butler-agent");
+    const alias = join(root, "agent-alias");
+    const resourceRoot = join(installationRoot, "resources");
+    const butlerData = join(root, "data");
+    mkdirSync(join(binary, ".."), { recursive: true });
+    mkdirSync(resourceRoot);
+    writeFileSync(binary, "native executable fixture\n");
+    chmodSync(binary, 0o755);
+    symlinkSync(binary, alias);
+    const actualBinary = realpathSync(binary);
+    const actualInstallationRoot = join(actualBinary, "..", "..");
     expect(resolveOpenAIOAuthLoginHelper({
       butlerData,
-      repoRoot: join(root, "repo"),
+      isPackaged: false,
+      env: { BUTLER_NATIVE_AGENT_EXECUTABLE: alias, BUTLER_HOME: join(root, "misleading") },
       resourcesPath: join(root, "missing-resources"),
-      fallbackRuntime: "bun",
-      platform: "win32",
-      allowBundledResourceFallback: false,
-      allowDevelopmentFallback: false,
     })).toEqual({
-      source: "app-managed",
-      scriptPath,
-      runtime,
-      butlerHome: runtimeHome,
+      command: actualBinary,
+      args: ["--installation-root", actualInstallationRoot, "--resource-root", join(actualInstallationRoot, "resources"), "oauth-login"],
+      env: { BUTLER_DATA: butlerData },
     });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("OpenAI OAuth helper ignores unsafe App-managed runtime pointers", () => {
-  const root = mkdtempSync(join(tmpdir(), "butler-oauth-helper-"));
+test("OpenAI OAuth profile reader follows an in-data override and rejects outside paths", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-oauth-profile-"));
   try {
     const butlerData = join(root, "data");
-    const repoRoot = join(root, "repo");
-    const repoScript = join(
-      repoRoot,
-      "packages",
-      "butler-agent",
-      "scripts",
-      "openai-oauth-login.ts",
-    );
-    mkdirSync(join(repoScript, ".."), { recursive: true });
-    writeFileSync(repoScript, "");
-    writePointer(butlerData, "../outside");
-
-    const helper = resolveOpenAIOAuthLoginHelper({
-      butlerData,
-      repoRoot,
-      resourcesPath: join(root, "missing-resources"),
-      fallbackRuntime: "bun",
-    });
-
-    expect(helper).toEqual({
-      source: "repo",
-      scriptPath: repoScript,
-      runtime: "bun",
-      butlerHome: repoRoot,
-    });
+    mkdirSync(butlerData);
+    const configured = join(butlerData, "auth", "custom.json");
+    const canonical = join(realpathSync(butlerData), "auth", "custom.json");
+    expect(resolveOpenAIAuthProfilePath({ butlerData, env: { BUTLER_CODEX_AUTH_PROFILE: configured } })).toBe(canonical);
+    expect(resolveOpenAIAuthProfilePath({ butlerData, env: { BUTLER_OPENAI_AUTH_PROFILE: "auth/custom.json" } })).toBe(canonical);
+    expect(() => resolveOpenAIAuthProfilePath({ butlerData, env: { BUTLER_CODEX_AUTH_PROFILE: join(root, "outside.json") } })).toThrow("inside BUTLER_DATA");
+    symlinkSync(root, join(butlerData, "outside-link"));
+    expect(() => resolveOpenAIAuthProfilePath({ butlerData, env: { BUTLER_CODEX_AUTH_PROFILE: "outside-link/profile.json" } })).toThrow("inside BUTLER_DATA");
+    symlinkSync(join(root, "new-outside.json"), join(butlerData, "dangling-link.json"));
+    expect(() => resolveOpenAIAuthProfilePath({ butlerData, env: { BUTLER_CODEX_AUTH_PROFILE: "dangling-link.json" } })).toThrow();
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
-
-test("OpenAI OAuth helper can require App-managed runtime without development fallback", () => {
-  const root = mkdtempSync(join(tmpdir(), "butler-oauth-helper-"));
-  try {
-    const butlerData = join(root, "data");
-    const repoRoot = join(root, "repo");
-    const repoScript = join(
-      repoRoot,
-      "packages",
-      "butler-agent",
-      "scripts",
-      "openai-oauth-login.ts",
-    );
-    mkdirSync(join(repoScript, ".."), { recursive: true });
-    writeFileSync(repoScript, "");
-    writePointer(butlerData, "../outside");
-
-    const helper = resolveOpenAIOAuthLoginHelper({
-      butlerData,
-      repoRoot,
-      resourcesPath: join(root, "missing-resources"),
-      fallbackRuntime: "bun",
-      allowBundledResourceFallback: false,
-      allowDevelopmentFallback: false,
-    });
-
-    expect(helper).toBeNull();
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("OpenAI OAuth helper returns null when no helper script is present", () => {
-  const root = mkdtempSync(join(tmpdir(), "butler-oauth-helper-"));
-  try {
-    const helper = resolveOpenAIOAuthLoginHelper({
-      butlerData: join(root, "data"),
-      repoRoot: join(root, "repo"),
-      resourcesPath: join(root, "missing-resources"),
-      fallbackRuntime: "bun",
-    });
-    expect(helper).toBeNull();
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-function writePointer(butlerData: string, runtimeHome: string): void {
-  const pointerPath = appManagedAgentPointerPath(butlerData);
-  mkdirSync(join(pointerPath, ".."), { recursive: true });
-  writeFileSync(
-    pointerPath,
-    `${JSON.stringify({
-      schema: APP_MANAGED_RUNTIME_POINTER_SCHEMA,
-      product: "butler-app",
-      gateway_profile: "electron",
-      version: "1.2.3",
-      runtime_home: runtimeHome,
-      raw_text_included: false,
-    }, null, 2)}\n`,
-  );
-  expect(readFileSync(pointerPath, "utf8")).toContain(runtimeHome);
-  expect(existsSync(pointerPath)).toBe(true);
-}

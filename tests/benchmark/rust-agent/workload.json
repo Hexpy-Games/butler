@@ -1,0 +1,26 @@
+{
+  "schema": "butler.rust-benchmark.workload.v1",
+  "source_prefix": "이 답변이나 작업에 필요한 사실은 기억 검색 후 원문 대화를 확인해서 사용해 주세요. ",
+  "sources": [
+    {"id":"F1","session_id":"cs_rust_benchmark_f1","turn_id":"ct_rust_benchmark_f1","message_id":"cm_rust_benchmark_f1","at":"2026-01-01T00:00:00.000Z","text":"Atlas 출시 코드: 현재 CEDAR-4821. CEDAR-4281은 폐기된 샌드박스에만 쓰인 코드입니다."},
+    {"id":"F2","session_id":"cs_rust_benchmark_f2","turn_id":"ct_rust_benchmark_f2","message_id":"cm_rust_benchmark_f2","at":"2026-01-02T00:00:00.000Z","text":"제 자전거 별명은 은하수이고 정비 요일은 목요일입니다."},
+    {"id":"F3","session_id":"cs_rust_benchmark_f3","turn_id":"ct_rust_benchmark_f3","message_id":"cm_rust_benchmark_f3","at":"2026-01-03T00:00:00.000Z","text":"오로라 회의실 번호는 301입니다."},
+    {"id":"F4","session_id":"cs_rust_benchmark_f4","turn_id":"ct_rust_benchmark_f4","message_id":"cm_rust_benchmark_f4","at":"2026-01-04T00:00:00.000Z","text":"오로라 회의실 번호를 417로 변경했습니다. 이전 301은 폐기되었습니다."},
+    {"id":"F5","session_id":"cs_rust_benchmark_f5","turn_id":"ct_rust_benchmark_f5","message_id":"cm_rust_benchmark_f5","at":"2026-01-05T00:00:00.000Z","text":"벤치마크 보고서의 UTF-8 TSV 헤더는 item\tstatus\towner이고 줄 끝은 LF입니다."},
+    {"id":"F6","session_id":"cs_rust_benchmark_f6","turn_id":"ct_rust_benchmark_f6","message_id":"cm_rust_benchmark_f6","at":"2026-01-06T00:00:00.000Z","text":"Orchid 패키지의 색상은 violet, 배치 번호는 23, 체크섬 단어는 LANTERN입니다."},
+    {"id":"F7","session_id":"cs_rust_benchmark_f7","turn_id":"ct_rust_benchmark_f7","message_id":"cm_rust_benchmark_f7","at":"2026-01-07T00:00:00.000Z","text":"여행 예약 코드 KITE-903의 현재 게이트는 B12입니다. 초안의 C07 게이트는 취소되었습니다."}
+  ],
+  "workspace_seed": {"path":"inputs/package-name.txt","text":"Orchid\n"},
+  "cases": [
+    {"id":1,"source_ids":["F1"],"prompt":"이전 대화에서 Atlas의 현재 출시 코드만 답해 주세요."},
+    {"id":2,"source_ids":["F2"],"prompt":"예전에 말한 제 자전거 별명과 정비 요일을 답해 주세요."},
+    {"id":3,"source_ids":["F3","F4"],"prompt":"오로라 회의실의 최신 번호와 이전 번호의 상태를 알려 주세요."},
+    {"id":4,"source_ids":["F5"],"prompt":"이전에 정한 벤치마크 TSV 헤더를 한 줄만 출력해 주세요."},
+    {"id":5,"source_ids":["F6"],"prompt":"예전에 이야기한 보라색 패키지의 이름, 배치 번호, 체크섬 단어를 찾아 주세요."},
+    {"id":6,"source_ids":["F7"],"prompt":"이전 여행 대화의 예약 코드와 현재 게이트만 답해 주세요."},
+    {"id":7,"source_ids":["F1"],"prompt":"이전 대화의 Atlas 현재 출시 코드를 찾아 out/atlas-code.txt에 코드와 LF만 저장하고 완료를 알려 주세요.","output":{"path":"out/atlas-code.txt","text":"CEDAR-4821\n","sha256":"ce962eb9d75c02d320f36c6e0141119f7a60d443910a081985c9d565b2079783"}},
+    {"id":8,"source_ids":["F5"],"prompt":"이전에 정한 TSV 헤더를 찾아 out/report-header.tsv에 UTF-8 LF 형식으로 저장하고 완료를 알려 주세요.","output":{"path":"out/report-header.tsv","text":"item\tstatus\towner\n","sha256":"ab03bdfcd744dfaa7dbc4e143a7ae45e1c2b66a7f223691ac94e2b9fd2add420"}},
+    {"id":9,"source_ids":["F6"],"prompt":"inputs/package-name.txt를 읽고, 그 패키지에 대해 이전 대화에서 정한 color, batch, checksum을 찾아 out/orchid.json에 package,batch,checksum,color 키 순서의 한 줄 JSON과 LF로 저장해 주세요.","output":{"path":"out/orchid.json","text":"{\"package\":\"Orchid\",\"batch\":23,\"checksum\":\"LANTERN\",\"color\":\"violet\"}\n","sha256":"e6b4fa41e0426f821c496e86caff2ac14af7a2be7128982d71dd5285861ab0e5"}},
+    {"id":10,"source_ids":["F7"],"prompt":"이전 여행 대화의 예약 코드와 현재 게이트를 out/travel.txt에 한 칸으로 구분해 저장하고, run_command로 SHA-256을 확인한 뒤 해시를 답해 주세요.","output":{"path":"out/travel.txt","text":"KITE-903 B12\n","sha256":"7b2aed2a758bcd60e47d00af6309e86f2a7222ee762053628a4b77525ac11081"}}
+  ]
+}

@@ -1,0 +1,43 @@
+use butler_gateway::gateway::GatewayApplicationError;
+
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
+pub(super) fn profile_error(
+    error: butler_memory::profile::ProfileError,
+) -> GatewayApplicationError {
+    GatewayApplicationError::Public {
+        status: 500,
+        code: error.code().into(),
+        message: "Personalization operation failed.".into(),
+        source: None,
+    }
+}
+
+pub(super) fn model_error(_error: butler_models::models::SettingsError) -> GatewayApplicationError {
+    GatewayApplicationError::Public {
+        status: 500,
+        code: "personalization_settings_unavailable".into(),
+        message: "Personalization settings are unavailable.".into(),
+        source: None,
+    }
+}
+
+pub(super) fn invalid_request() -> GatewayApplicationError {
+    GatewayApplicationError::Public {
+        status: 400,
+        code: "invalid_personalization_request".into(),
+        message: "Personalization update contains unsupported fields.".into(),
+        source: None,
+    }
+}
+
+pub(super) fn unsafe_personalization_path() -> GatewayApplicationError {
+    GatewayApplicationError::Public {
+        status: 409,
+        code: "unsafe_personalization_path".into(),
+        message: "Personalization storage is outside the selected DATA directory.".into(),
+        source: None,
+    }
+}

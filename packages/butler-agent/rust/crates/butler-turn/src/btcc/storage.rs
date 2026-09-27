@@ -1,0 +1,484 @@
+//! BTCC-owned SQLite connection lifecycle and serialized execution lane.
+
+mod admission;
+mod authority;
+mod bootstrap;
+mod budget;
+mod canonical;
+mod claims;
+mod common;
+mod context_compactions;
+mod context_documents;
+mod effects;
+mod error;
+mod hydration;
+mod legacy_cutover;
+mod migration;
+mod model;
+mod operation_input;
+mod operation_results;
+mod progress;
+mod progress_publication;
+mod project_work_runtime;
+mod readiness;
+mod repository;
+mod runtime_owner;
+mod schema;
+mod stop;
+mod subsessions;
+mod tool_journal;
+mod transitions;
+mod wake;
+mod work;
+
+pub(crate) use authority::SqliteAuthorityRepository;
+pub use bootstrap::{bootstrap_fresh_storage, read_activated_storage_manifest};
+pub use context_compactions::{ContextCompactionRecord, ContextCompactionRepository};
+pub use context_documents::{ContextDocumentInput, ContextDocumentRead};
+pub use effects::StorageEffectJournal;
+pub use error::{StorageCode, StorageError};
+pub use operation_results::*;
+pub use progress_publication::{CommittedProgressEvent, StorageProgressPublication};
+pub use project_work_runtime::SqliteProjectWorkRuntime;
+pub(in crate::btcc) use project_work_runtime::material::snapshot as project_work_material_snapshot;
+pub use repository::BtccRepositories;
+pub use subsessions::{
+    ParentResultRoute, SqliteSubsessionRepository, StoredSubsessionDelegation,
+    StoredSubsessionDirection, SubsessionCreate,
+};
+pub use tool_journal::{
+    ToolJournalCloseoutRow, ToolJournalFinish, ToolJournalFinishStatus, ToolJournalRecord,
+    ToolJournalRepository, ToolJournalSignature, ToolJournalStart,
+};
+pub(crate) use wake::WakeAuthorization;
+pub use work::{
+    PersistedWorkTurnScope, SessionPlanObservation, SessionWorkRepository, WorkStatusObservation,
+};
+
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::thread::JoinHandle;
+use std::time::Duration;
+
+use rusqlite::{Connection, OptionalExtension};
+use serde_json::Value;
+use tokio::sync::{Mutex as AsyncMutex, mpsc, oneshot};
+
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) use runtime_owner::ConservativeProcessLiveness;
+use runtime_owner::RuntimeOwner;
+pub use runtime_owner::{ProcessLiveness, RuntimeOwnerIdentity};
+
+const OPERATION_QUEUE_CAPACITY: usize = 64;
+
+type StorageResult<T> = Result<T, StorageError>;
+type DatabaseOperation = Box<dyn FnOnce(&mut Connection, &RuntimeOwner) + Send + 'static>;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StorageProfile {
+    Durable,
+    #[cfg(any(test, feature = "test-support"))]
+    Ephemeral,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StorageActivation {
+    pub manifest_id: String,
+}
+
+pub struct BtccStorageConfig {
+    pub path: PathBuf,
+    pub profile: StorageProfile,
+    pub activation: StorageActivation,
+    pub runtime_owner: RuntimeOwnerIdentity,
+    pub process_liveness: Arc<dyn ProcessLiveness>,
+}
+
+#[derive(Clone)]
+pub struct BtccStorage {
+    inner: Arc<StorageInner>,
+}
+
+struct StorageInner {
+    lane: AsyncMutex<LaneState>,
+    #[cfg(any(test, feature = "test-support"))]
+    owner_id: String,
+    #[cfg(any(test, feature = "test-support"))]
+    owner_generation: u64,
+}
+
+struct LaneState {
+    sender: Option<mpsc::Sender<DatabaseOperation>>,
+    thread: Option<JoinHandle<StorageResult<()>>>,
+    close_result: Option<StorageResult<()>>,
+    close_waiters: Vec<oneshot::Sender<StorageResult<()>>>,
+}
+
+impl BtccStorage {
+    pub async fn open(config: BtccStorageConfig) -> StorageResult<Self> {
+        let (sender, receiver) = mpsc::channel(OPERATION_QUEUE_CAPACITY);
+        let (initialized_tx, initialized_rx) = oneshot::channel();
+        let path = config.path;
+        let profile = config.profile;
+        let activation = config.activation;
+        let identity = config.runtime_owner;
+        let liveness = config.process_liveness;
+        let thread = std::thread::Builder::new()
+            .name("butler-btcc-sqlite".to_owned())
+            .spawn(move || {
+                run_connection_lane(
+                    &path,
+                    profile,
+                    &activation,
+                    identity,
+                    liveness,
+                    receiver,
+                    initialized_tx,
+                )
+            })
+            .map_err(|error| {
+                StorageError::new(StorageCode::SqliteThreadSpawnFailed, error.to_string())
+                    .with_source(error)
+            })?;
+
+        let initialized = initialized_rx.await.map_err(|source| {
+            StorageError::new(
+                StorageCode::SqliteInitializationChannelClosed,
+                "BTCC SQLite owner exited before initialization completed",
+            )
+            .with_source(source)
+        });
+        let owner = match initialized {
+            Ok(Ok(owner)) => owner,
+            Ok(Err(error)) | Err(error) => {
+                join_failed_initialization(thread).await;
+                return Err(error);
+            }
+        };
+        // The owner identity is only retained for test assertions.
+        #[cfg(not(test))]
+        let _ = owner;
+        Ok(Self {
+            inner: Arc::new(StorageInner {
+                lane: AsyncMutex::new(LaneState {
+                    sender: Some(sender),
+                    thread: Some(thread),
+                    close_result: None,
+                    close_waiters: Vec::new(),
+                }),
+                #[cfg(any(test, feature = "test-support"))]
+                owner_id: owner.0,
+                #[cfg(any(test, feature = "test-support"))]
+                owner_generation: owner.1,
+            }),
+        })
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn owner_id(&self) -> &str {
+        &self.inner.owner_id
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn owner_generation(&self) -> u64 {
+        self.inner.owner_generation
+    }
+
+    pub(super) async fn execute<T, F>(&self, operation: F) -> StorageResult<T>
+    where
+        T: Send + 'static,
+        F: FnOnce(&mut Connection) -> StorageResult<T> + Send + 'static,
+    {
+        self.execute_with_owner(move |connection, _owner| operation(connection))
+            .await
+    }
+
+    async fn execute_with_owner<T, F>(&self, operation: F) -> StorageResult<T>
+    where
+        T: Send + 'static,
+        F: FnOnce(&mut Connection, &RuntimeOwner) -> StorageResult<T> + Send + 'static,
+    {
+        let (completion_tx, completion_rx) = oneshot::channel();
+        let job: DatabaseOperation = Box::new(move |connection, owner| {
+            let result = operation(connection, owner);
+            let _ignored_cancelled_caller = completion_tx.send(result);
+        });
+        let lane = self.inner.lane.lock().await;
+        let sender = lane.sender.as_ref().ok_or_else(|| {
+            StorageError::new(
+                StorageCode::SqliteOwnerClosed,
+                "BTCC SQLite owner is closing or closed",
+            )
+        })?;
+        let permit = sender.reserve().await.map_err(|source| {
+            StorageError::new(
+                StorageCode::SqliteOwnerClosed,
+                "BTCC SQLite execution lane has closed",
+            )
+            .with_source(source)
+        })?;
+        permit.send(job);
+        drop(lane);
+        completion_rx.await.map_err(|source| {
+            StorageError::new(
+                StorageCode::SqliteOperationCompletionLost,
+                "BTCC SQLite operation ended without a completion result",
+            )
+            .with_source(source)
+        })?
+    }
+
+    pub async fn close(&self) -> StorageResult<()> {
+        let (waiter_tx, waiter_rx) = oneshot::channel();
+        let mut lane = self.inner.lane.lock().await;
+        if let Some(result) = &lane.close_result {
+            return result.clone();
+        }
+        let thread = if lane.sender.take().is_some() {
+            match lane.thread.take() {
+                Some(thread) => Some(thread),
+                None => {
+                    let error = StorageError::new(
+                        StorageCode::SqliteThreadMissing,
+                        "BTCC SQLite owner thread was unavailable during close",
+                    );
+                    lane.close_result = Some(Err(error.clone()));
+                    return Err(error);
+                }
+            }
+        } else {
+            None
+        };
+        lane.close_waiters.push(waiter_tx);
+        drop(lane);
+        if let Some(thread) = thread {
+            let inner = Arc::clone(&self.inner);
+            // Detached on purpose: close waiters receive the join result, and the join
+            // must finish even when the caller that started closing is cancelled.
+            tokio::spawn(async move {
+                let result = tokio::task::spawn_blocking(move || thread.join())
+                    .await
+                    .map_err(|error| {
+                        StorageError::new(StorageCode::SqliteJoinFailed, error.to_string())
+                            .with_source(error)
+                    })
+                    .and_then(|joined| {
+                        // A panic payload is not an Error; the code records the panic.
+                        joined.map_err(|_panic_payload| {
+                            StorageError::new(
+                                StorageCode::SqliteThreadPanicked,
+                                "BTCC SQLite owner thread panicked",
+                            )
+                        })?
+                    });
+                let mut lane = inner.lane.lock().await;
+                lane.close_result = Some(result.clone());
+                let waiters = std::mem::take(&mut lane.close_waiters);
+                drop(lane);
+                for waiter in waiters {
+                    let _ignored_cancelled_closer = waiter.send(result.clone());
+                }
+            });
+        }
+        waiter_rx.await.map_err(|source| {
+            StorageError::new(
+                StorageCode::SqliteCloseCompletionLost,
+                "BTCC SQLite close ended without a completion result",
+            )
+            .with_source(source)
+        })?
+    }
+}
+
+impl Drop for StorageInner {
+    fn drop(&mut self) {
+        if let Ok(mut lane) = self.lane.try_lock() {
+            lane.sender.take();
+            // Dropping the final sender drains admitted jobs. The thread owns
+            // owner-row closure and Connection destruction; Drop never reports success.
+            lane.thread.take();
+        }
+    }
+}
+
+fn run_connection_lane(
+    path: &Path,
+    profile: StorageProfile,
+    activation: &StorageActivation,
+    identity: RuntimeOwnerIdentity,
+    liveness: Arc<dyn ProcessLiveness>,
+    mut receiver: mpsc::Receiver<DatabaseOperation>,
+    initialized: oneshot::Sender<StorageResult<(String, u64)>>,
+) -> StorageResult<()> {
+    let setup: StorageResult<(Connection, RuntimeOwner)> = (|| {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| {
+                StorageError::new(StorageCode::SqliteParentCreateFailed, error.to_string())
+                    .with_source(error)
+            })?;
+        }
+        let mut connection = Connection::open(path).map_err(StorageError::sqlite)?;
+        configure(&connection, profile)?;
+        validate_activation(&connection, activation)?;
+        schema::create_current(&connection).map_err(StorageError::sqlite)?;
+        migration::apply(&mut connection).map_err(StorageError::sqlite)?;
+        legacy_cutover::apply(&mut connection)?;
+        let owner = RuntimeOwner::register(&mut connection, identity, liveness)?;
+        Ok((connection, owner))
+    })();
+    let (mut connection, owner) = match setup {
+        Ok(value) => value,
+        Err(error) => {
+            let _ignored_closed_opener = initialized.send(Err(error.clone()));
+            return Err(error);
+        }
+    };
+    if initialized
+        .send(Ok((owner.owner_id().to_owned(), owner.generation())))
+        .is_err()
+    {
+        owner.close(&connection)?;
+        return Ok(());
+    }
+    while let Some(operation) = receiver.blocking_recv() {
+        operation(&mut connection, &owner);
+    }
+    owner.close(&connection)?;
+    if !connection.is_autocommit() {
+        return Err(StorageError::new(
+            StorageCode::SqliteTransactionOpenAtClose,
+            "BTCC database transaction remained open at close",
+        ));
+    }
+    connection
+        .close()
+        .map_err(|(_, error)| StorageError::sqlite(error))
+}
+
+fn configure(connection: &Connection, profile: StorageProfile) -> StorageResult<()> {
+    connection
+        .busy_timeout(Duration::from_millis(5_000))
+        .map_err(StorageError::sqlite)?;
+    connection
+        .pragma_update(
+            None,
+            "journal_mode",
+            match profile {
+                StorageProfile::Durable => "WAL",
+                #[cfg(any(test, feature = "test-support"))]
+                StorageProfile::Ephemeral => "DELETE",
+            },
+        )
+        .map_err(StorageError::sqlite)?;
+    connection
+        .pragma_update(None, "foreign_keys", "ON")
+        .map_err(StorageError::sqlite)?;
+    connection
+        .pragma_update(None, "synchronous", "NORMAL")
+        .map_err(StorageError::sqlite)
+}
+
+fn validate_activation(
+    connection: &Connection,
+    activation: &StorageActivation,
+) -> StorageResult<()> {
+    let receipt = storage_marker(
+        connection,
+        "agent_storage_migration_receipt",
+        "receipt_json",
+    )?
+    .ok_or_else(|| {
+        StorageError::new(
+            StorageCode::AgentBtccStorageReceiptMissing,
+            "missing receipt",
+        )
+    })?;
+    let marker = storage_marker(connection, "agent_storage_activation_marker", "marker_json")?
+        .ok_or_else(|| {
+            StorageError::new(
+                StorageCode::AgentBtccStorageActivationMissing,
+                "missing marker",
+            )
+        })?;
+    let receipt_json = parse_marker(&receipt.1, StorageCode::AgentBtccStorageReceiptInvalid)?;
+    let marker_json = parse_marker(&marker.1, StorageCode::AgentBtccStorageActivationInvalid)?;
+    let valid = receipt.0 == activation.manifest_id
+        && marker.0 == activation.manifest_id
+        && receipt_json.get("manifestId").and_then(Value::as_str)
+            == Some(activation.manifest_id.as_str())
+        && receipt_json.get("schema").and_then(Value::as_str)
+            == Some("butler.agent-btcc-storage-migration.v1")
+        && marker_json.get("manifestId").and_then(Value::as_str)
+            == Some(activation.manifest_id.as_str())
+        && marker_json.get("schema").and_then(Value::as_str)
+            == Some("butler.agent-btcc-storage-activation.v1")
+        && marker_json.get("storageContract").and_then(Value::as_str) == Some("split-v1")
+        && marker_json
+            .get("firstActivatedAt")
+            .and_then(Value::as_str)
+            .is_some_and(|v| !v.is_empty())
+        && marker_json
+            .get("activatedAt")
+            .and_then(Value::as_str)
+            .is_some_and(|v| !v.is_empty());
+    if !valid {
+        return Err(StorageError::new(
+            StorageCode::AgentBtccStorageActivationInvalid,
+            "BTCC split activation does not match its validated migration receipt",
+        ));
+    }
+    Ok(())
+}
+
+fn storage_marker(
+    connection: &Connection,
+    table: &str,
+    json_column: &str,
+) -> StorageResult<Option<(String, String)>> {
+    let exists = connection
+        .query_row(
+            "SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ?1",
+            [table],
+            |_| Ok(()),
+        )
+        .optional()
+        .map_err(StorageError::sqlite)?
+        .is_some();
+    if !exists {
+        return Ok(None);
+    }
+    connection
+        .query_row(
+            &format!("SELECT manifest_id, {json_column} FROM {table} WHERE singleton = 1"),
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(StorageError::sqlite)
+}
+
+fn parse_marker(value: &str, code: StorageCode) -> StorageResult<Value> {
+    serde_json::from_str(value)
+        .map_err(|error| StorageError::new(code, error.to_string()).with_source(error))
+}
+
+async fn join_failed_initialization(thread: JoinHandle<StorageResult<()>>) {
+    let _ignored_initialization_result = tokio::task::spawn_blocking(move || thread.join()).await;
+}
+
+#[cfg(test)]
+mod guided_budget_tests;
+#[cfg(test)]
+mod progress_tests;
+#[cfg(test)]
+mod readiness_tests;
+#[cfg(test)]
+mod repository_tests;
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) mod testing;
+#[cfg(any(test, feature = "test-support"))]
+pub use testing::{Fixture as TestStorageFixture, prepared as test_prepared_turn};
+#[cfg(test)]
+mod tests;
+#[cfg(test)]
+mod transition_tests;

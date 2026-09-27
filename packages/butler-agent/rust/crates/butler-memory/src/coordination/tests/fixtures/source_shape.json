@@ -1,0 +1,16 @@
+{
+  "states": [
+    "initialization_available",
+    "held",
+    "free"
+  ],
+  "purpose": "projection",
+  "fenceRaw": "{\"schema\":\"butler.memory-write-fence.v1\",\"format_version\":1,\"fence_id\":\"<uuid>\",\"created_at\":\"<iso>\"}",
+  "ownerRaw": "{\"pid\":<pid>,\"startedAt\":\"<iso>\",\"host\":\"<host>\",\"owner_nonce\":\"<uuid>\",\"purpose\":\"projection\"}",
+  "coordinator": {
+    "singleton": 1,
+    "format_version": 1,
+    "fence_hash_length": 64,
+    "journal_mode": "delete"
+  }
+}

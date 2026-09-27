@@ -4,7 +4,7 @@ import { rememberDashboardLoadedCount, useProjectDashboardState } from "@/app/pr
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { Button, ButtonContainer, ChevronRight, FileText, IconButton, MessageSquarePlus, NavRow, Pin, Notice, Section, Stack, Typo } from "@/butler-ds";
 import styles from "./ProjectInformation.module.css";
-import type { DashboardArtifactPage } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
+import type { DashboardArtifactPage } from "../../../../shared/app-contracts.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { useProjectArtifactAttachment } from "@/hooks/useProjectArtifactAttachment.ts";
 import type { ProjectDashboardDocument } from "@/app/types.ts";

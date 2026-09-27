@@ -5,15 +5,15 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, normalize } from "node:path";
+import { dirname, join } from "node:path";
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import {
   prepareAppManagedEmbedHealthPort,
   prepareAppManagedEmbedSocket,
 } from "./app-managed-embed-endpoint.mjs";
-import { appManagedAgentPointerPath } from "./app-managed-runtime.mjs";
 import { prepareAppLocalAuth } from "./app-agent-supervisor.mjs";
+import { resolveBundledNativeAgentInstallation } from "./bundled-native-agent.mjs";
 
 export {
   prepareAppManagedEmbedHealthPort,
@@ -41,7 +41,8 @@ export function createAppAgentNativeServiceBridge({
   systemdUnit = DEFAULT_SYSTEMD_UNIT,
   getPort = () => 18765,
   getAppVersion = () => null,
-  ensureRuntimePointer = () => {},
+  resourcesPath = process.resourcesPath,
+  execPath = process.execPath,
   prepareLocalAuth = () => prepareAppLocalAuth({ butlerData }),
   menuBarHelper = null,
   isPidRunning = defaultIsPidRunning,
@@ -71,7 +72,8 @@ export function createAppAgentNativeServiceBridge({
           systemdUnit: resolvedSystemdUnit,
           getPort,
           getAppVersion,
-          ensureRuntimePointer,
+          resourcesPath,
+          execPath,
           prepareLocalAuth,
           menuBarHelper: resolvedMenuBarHelper,
           isPidRunning,
@@ -96,7 +98,8 @@ export function createAppAgentNativeServiceBridge({
           systemdUnit: resolvedSystemdUnit,
           getPort,
           getAppVersion,
-          ensureRuntimePointer,
+          resourcesPath,
+          execPath,
           prepareLocalAuth,
           menuBarHelper: resolvedMenuBarHelper,
           isPidRunning,
@@ -123,7 +126,8 @@ export function createAppAgentNativeServiceBridge({
           systemdUnit: resolvedSystemdUnit,
           getPort,
           getAppVersion,
-          ensureRuntimePointer,
+          resourcesPath,
+          execPath,
           prepareLocalAuth,
           menuBarHelper: resolvedMenuBarHelper,
           isPidRunning,
@@ -179,7 +183,8 @@ function createRegistrationPlan({
   systemdUnit,
   getPort,
   getAppVersion,
-  ensureRuntimePointer,
+  resourcesPath,
+  execPath,
   prepareLocalAuth,
   menuBarHelper,
   isPidRunning,
@@ -192,77 +197,45 @@ function createRegistrationPlan({
       ? launchdPlan({ action, homeDir, runtime: null, serviceLabel, butlerData })
       : systemdPlan({ action, homeDir, runtime: null, systemdUnit });
   }
-  const activation = ensureRuntimePointer();
-  try {
-    const runtime = resolveAppManagedServiceRuntime({
+  const runtime = resolveAppManagedServiceRuntime({
+    butlerData,
+    platform,
+    resourcesPath,
+    execPath,
+    getPort,
+    getAppVersion,
+    prepareLocalAuth,
+  });
+  if (platform === "darwin") {
+    return launchdPlan({
+      action,
+      homeDir,
+      runtime,
+      serviceLabel,
       butlerData,
-      platform,
-      getPort,
-      getAppVersion,
-      prepareLocalAuth,
+      menuBarHelper,
+      helperRunning: isMenuBarHelperPidRunning({ butlerData, isPidRunning }),
     });
-    if (platform === "darwin") {
-      return {
-        ...launchdPlan({
-          action,
-          homeDir,
-          runtime,
-          serviceLabel,
-          butlerData,
-          menuBarHelper,
-          helperRunning: isMenuBarHelperPidRunning({ butlerData, isPidRunning }),
-        }),
-        activation,
-      };
-    }
-    return { ...systemdPlan({ action, homeDir, runtime, systemdUnit }), activation };
-  } catch (error) {
-    activation?.rollbackActivation?.(normalizeError(error));
-    throw error;
   }
+  return systemdPlan({ action, homeDir, runtime, systemdUnit });
 }
 
-function resolveAppManagedServiceRuntime({ butlerData, platform, getPort, getAppVersion, prepareLocalAuth }) {
-  const pointerPath = appManagedAgentPointerPath(butlerData);
-  const pointer = readJson(pointerPath);
-  if (
-    !pointer ||
-    pointer.schema !== "butler.app-managed-agent-runtime-pointer.v1" ||
-    pointer.product !== "butler-app" ||
-    pointer.gateway_profile !== "electron" ||
-    typeof pointer.runtime_home !== "string" ||
-    !pointer.runtime_home.trim() ||
-    isAbsolute(pointer.runtime_home)
-  ) {
-    throw new Error("invalid App-managed Agent runtime pointer");
-  }
-  const normalized = normalize(pointer.runtime_home);
-  if (normalized === "." || normalized.startsWith("..")) {
-    throw new Error("invalid App-managed Agent runtime pointer");
-  }
-  const runtimeHome = join(butlerData, normalized);
-  const runtimeExecutable = join(
-    runtimeHome,
-    "packages",
-    "butler-agent",
-    "resources",
-    "runtime",
-    "bin",
-    "bun",
-  );
-  const serviceDaemon = join(
-    runtimeHome,
-    "packages",
-    "butler-agent",
-    "scripts",
-    "service-daemon.sh",
-  );
-  if (!existsSync(serviceDaemon)) {
-    throw new Error("missing App-managed service daemon");
-  }
-  if (!existsSync(runtimeExecutable)) {
-    throw new Error("missing App-managed runtime executable");
-  }
+function resolveAppManagedServiceRuntime({
+  butlerData,
+  platform,
+  resourcesPath,
+  execPath,
+  getPort,
+  getAppVersion,
+  prepareLocalAuth,
+}) {
+  const installation = resolveBundledNativeAgentInstallation({
+    butlerData,
+    platform,
+    resourcesPath,
+    execPath,
+  });
+  if (!installation) throw new Error("missing bundled native Agent installation");
   const localAuth = prepareLocalAuth();
   const port = Number(getPort());
   if (!Number.isInteger(port) || port <= 0 || port > 65_535) {
@@ -276,17 +249,12 @@ function resolveAppManagedServiceRuntime({ butlerData, platform, getPort, getApp
   const embedIdleRecycleMs = safeString(process.env.EMBED_IDLE_RECYCLE_MS);
   const appVersion = safeString(getAppVersion());
   return {
+    ...installation,
     butlerData,
-    runtimeHome,
-    runtimeExecutable,
-    serviceDaemon,
     port,
     env: {
-      BUTLER_HOME: runtimeHome,
+      ...installation.env,
       BUTLER_DATA: butlerData,
-      BUTLER_BUN: runtimeExecutable,
-      BUTLER_APP_MANAGED_RUNTIME_POINTER: pointerPath,
-      BUTLER_APP_MANAGED_RUNTIME_HOME: runtimeHome,
       BUTLER_APP_SERVER_HOST: "127.0.0.1",
       BUTLER_APP_LOCAL_AUTH_FILE: localAuth.filePath,
       BUTLER_APP_LOCAL_AUTH_REQUIRED: "1",
@@ -438,8 +406,7 @@ function launchdPlist(runtime, serviceLabel) {
   <string>${xml(serviceLabel)}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/bin/bash</string>
-    <string>${xml(runtime.serviceDaemon)}</string>
+${[runtime.command, ...runtime.args].map((value) => `    <string>${xml(value)}</string>`).join("\n")}
   </array>
   <key>EnvironmentVariables</key>
   <dict>
@@ -512,7 +479,7 @@ WorkingDirectory=${systemdPathValue(runtime.butlerData)}
 ${Object.entries(runtime.env).map(([key, value]) =>
     `Environment=${key}=${systemdValue(value)}`,
   ).join("\n")}
-ExecStart=/bin/bash ${systemdValue(runtime.serviceDaemon)}
+ExecStart=${[runtime.command, ...runtime.args].map(systemdValue).join(" ")}
 Restart=always
 RestartSec=5
 KillMode=control-group
@@ -534,56 +501,51 @@ async function applyPlan(
     sleepMs = defaultSleepMs,
   },
 ) {
-  try {
-    if (plan.body) {
-      writeFile(plan.serviceFile, plan.body);
+  if (plan.body) {
+    writeFile(plan.serviceFile, plan.body);
+  }
+  for (const file of plan.files ?? []) {
+    writeFile(file.path, file.body);
+  }
+  for (const step of plan.steps) {
+    if (step.kind === "terminate-native-service-children") {
+      terminateNativeServiceChildren(plan.runtime?.butlerData ?? plan.butlerData, {
+        isPidRunning,
+        isProcessGroupRunning,
+        killPid,
+      });
+      continue;
     }
-    for (const file of plan.files ?? []) {
-      writeFile(file.path, file.body);
-    }
-    for (const step of plan.steps) {
-      if (step.kind === "terminate-native-service-children") {
-        terminateNativeServiceChildren(plan.runtime?.butlerData ?? plan.butlerData, {
+    if (step.kind === "wait-native-service-children-exit") {
+      const exited = await waitForNativeServiceChildrenExit(
+        plan.runtime?.butlerData ?? plan.butlerData,
+        {
           isPidRunning,
           isProcessGroupRunning,
-          killPid,
-        });
-        continue;
-      }
-      if (step.kind === "wait-native-service-children-exit") {
-        const exited = await waitForNativeServiceChildrenExit(
-          plan.runtime?.butlerData ?? plan.butlerData,
-          {
-            isPidRunning,
-            isProcessGroupRunning,
-            sleepMs,
-            timeoutMs: step.timeoutMs,
-          },
-        );
-        if (!exited && !step.optional) {
-          throw new Error("App Agent service children did not exit after launchd bootout");
-        }
-        continue;
-      }
-      if (step.kind === "wait-app-gateway-port-release") {
-        const released = await waitForAppGatewayPortRelease(plan.runtime, {
-          isPortAvailable,
           sleepMs,
           timeoutMs: step.timeoutMs,
-        });
-        if (!released && !step.optional) {
-          throw new Error("App Agent service gateway port did not release after launchd bootout");
-        }
-        continue;
+        },
+      );
+      if (!exited && !step.optional) {
+        throw new Error("App Agent service children did not exit after launchd bootout");
       }
-      const result = await runCommand(step.argv);
-      if ((result?.exitCode ?? 1) !== 0 && !step.optional) {
-        throw new Error(`App Agent service command failed: ${step.argv.join(" ")}`);
-      }
+      continue;
     }
-  } catch (error) {
-    plan.activation?.rollbackActivation?.(normalizeError(error));
-    throw error;
+    if (step.kind === "wait-app-gateway-port-release") {
+      const released = await waitForAppGatewayPortRelease(plan.runtime, {
+        isPortAvailable,
+        sleepMs,
+        timeoutMs: step.timeoutMs,
+      });
+      if (!released && !step.optional) {
+        throw new Error("App Agent service gateway port did not release after launchd bootout");
+      }
+      continue;
+    }
+    const result = await runCommand(step.argv);
+    if ((result?.exitCode ?? 1) !== 0 && !step.optional) {
+      throw new Error(`App Agent service command failed: ${step.argv.join(" ")}`);
+    }
   }
 }
 
@@ -806,10 +768,6 @@ function defaultRunCommand(argv) {
       resolve({ exitCode: code ?? 1 });
     });
   });
-}
-
-function normalizeError(error) {
-  return error instanceof Error ? error : new Error("App Agent service registration failed");
 }
 
 function defaultIsPidRunning(pid) {

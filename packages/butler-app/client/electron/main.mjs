@@ -39,11 +39,10 @@ import { reconcileAgentServiceOnAppLaunch } from "./app-agent-launch-reconciler.
 import { createAppAgentNativeServiceBridge } from "./app-agent-native-service-bridge.mjs";
 import { createAppAgentServiceAdapter } from "./app-agent-service-adapter.mjs";
 import {
-  appManagedAgentPointerPath,
-  resolveBundledAgentResourceRoot,
   resolveAppManagedForegroundCommand,
   resolveAppManagedGatewayCommand,
 } from "./app-managed-runtime.mjs";
+import { resolveNativeAgentInstallation } from "./bundled-native-agent.mjs";
 import {
   APP_FOREGROUND_LIFECYCLE_MODES,
   appForegroundInstancePath,
@@ -66,7 +65,7 @@ import {
   confirmAppForegroundQuit,
 } from "./app-foreground-quit.mjs";
 import { migrateLegacyAppService } from "./app-legacy-service-migration.mjs";
-import { resolveOpenAIOAuthLoginHelper } from "./openai-oauth-login-helper.mjs";
+import { resolveOpenAIAuthProfilePath, resolveOpenAIOAuthLoginHelper } from "./openai-oauth-login-helper.mjs";
 import { createAgentServiceControl } from "./service-control.mjs";
 import { createFirstRunSetupBridge } from "./setup-bridge.mjs";
 import {
@@ -290,7 +289,8 @@ const appAgentNativeServiceBridge = shouldUseAppAgentNativeServiceBridge()
       systemdUnit: appAgentSystemdUnit(),
       getPort: () => port,
       getAppVersion: () => appInfoView().version,
-      ensureRuntimePointer: ensureAppManagedAgentRuntimePointer,
+      resourcesPath: process.resourcesPath,
+      execPath: process.execPath,
       menuBarHelper: appManagedMenuBarHelperRegistration(),
     })
   : null;
@@ -389,37 +389,13 @@ function managedGatewayCommand() {
     butlerData: butlerDataRoot,
     env: process.env,
     resourcesPath: process.resourcesPath,
+    execPath: process.execPath,
+    isPackaged: app.isPackaged,
     ...(usesAppForegroundLifecycle
       ? { onProgress: (stage) => recordAppStartupProgress(stage) }
       : {}),
   });
-  if (appManagedGateway) return appManagedGateway;
-  if (app.isPackaged) {
-    throw new Error("Packaged Butler App is missing bundled Agent resources.");
-  }
-  for (const home of candidateButlerHomes()) {
-    const localButlerCli = resolve(home, "bin", "butler.js");
-    if (!existsSync(localButlerCli)) continue;
-    const data = butlerDataRoot;
-    const runtime = resolveButlerRuntime(data);
-    return {
-      command: runtime,
-      args: [localButlerCli, "gateway", "app"],
-      cwd: data,
-      appManaged: false,
-      env: {
-        BUTLER_HOME: home,
-        BUTLER_DATA: data,
-        BUTLER_BUN: runtime,
-      },
-    };
-  }
-  return {
-    command: process.env.BUTLER_CLI || "butler",
-    args: ["gateway", "app"],
-    cwd: undefined,
-    appManaged: false,
-  };
+  return appManagedGateway;
 }
 
 function prepareAppForegroundGatewayLaunch(gateway) {
@@ -434,21 +410,6 @@ function prepareAppForegroundGatewayLaunch(gateway) {
   gateway.env ??= {};
   gateway.env.BUTLER_APP_FOREGROUND_GENERATION = foregroundInstance.generation;
   gateway.env.BUTLER_APP_FOREGROUND_NONCE = launch.nonce;
-}
-
-function ensureAppManagedAgentRuntimePointer() {
-  const appManagedGateway = resolveAppManagedGatewayCommand({
-    butlerData: butlerDataRoot,
-    env: process.env,
-    resourcesPath: process.resourcesPath,
-  });
-  if (!appManagedGateway?.appManaged) {
-    const error = new Error("App-managed Agent runtime is unavailable.");
-    error.code = "app_managed_runtime_unavailable";
-    throw error;
-  }
-  appManagedGateway.commitActivation?.();
-  return appManagedGateway;
 }
 
 function shouldUseAppAgentNativeServiceBridge() {
@@ -493,37 +454,6 @@ function assertNativeServiceTestBridgeEnvironment() {
 function isInsidePath(parent, child) {
   const diff = relative(parent, child);
   return diff === "" || (!diff.startsWith("..") && !isAbsolute(diff));
-}
-
-function candidateButlerHomes() {
-  const homes = [
-    repoRoot,
-    process.env.BUTLER_HOME,
-    join(userHome, "butler"),
-    process.platform === "linux" ? "/opt/butler" : null,
-  ];
-  const seen = new Set();
-  return homes
-    .filter((home) => typeof home === "string" && home.trim())
-    .map((home) => resolve(home))
-    .filter((home) => {
-      if (seen.has(home)) return false;
-      seen.add(home);
-      return true;
-    });
-}
-
-function resolveButlerRuntime(data) {
-  const candidates = [
-    process.env.BUTLER_BUN,
-    join(data, "runtime", "bun", "current", "bin", "bun"),
-    "/opt/homebrew/bin/bun",
-    "/usr/local/bin/bun",
-  ];
-  for (const candidate of candidates) {
-    if (candidate && existsSync(candidate)) return candidate;
-  }
-  return "bun";
 }
 
 async function healthOk(localAuth = null) {
@@ -652,7 +582,7 @@ function readFirstRunRuntimeDiagnostics() {
       phase: nativeServiceGatewayReady ? "running" : "failed",
       bundled_agent: {
         source: "app-managed",
-        version_configured: appManagedRuntimePointerReady(),
+        version_configured: nativeAgentInstallationReady(),
       },
       local_auth: {
         required: true,
@@ -704,16 +634,23 @@ function readAppForegroundDiagnosticRecord(path) {
   }
 }
 
-function appManagedRuntimePointerReady() {
+function nativeAgentInstallationReady() {
   try {
-    const pointer = JSON.parse(readFileSync(appManagedAgentPointerPath(butlerDataRoot), "utf8"));
-    return pointer?.product === "butler-app" &&
-      pointer?.gateway_profile === "electron" &&
-      typeof pointer?.runtime_home === "string" &&
-      pointer.runtime_home.length > 0;
+    return Boolean(currentNativeAgentInstallation());
   } catch {
     return false;
   }
+}
+
+function currentNativeAgentInstallation() {
+  return resolveNativeAgentInstallation({
+    butlerData: butlerDataRoot,
+    resourcesPath: process.resourcesPath,
+    execPath: process.execPath,
+    platform: process.platform,
+    isPackaged: app.isPackaged,
+    env: process.env,
+  });
 }
 
 function codexOAuthClientId() {
@@ -725,16 +662,13 @@ function codexOAuthClientId() {
 }
 
 function codexAuthProfilePath() {
-  return (
-    process.env.BUTLER_CODEX_AUTH_PROFILE ||
-    process.env.BUTLER_OPENAI_AUTH_PROFILE ||
-    join(butlerDataRoot, "auth", "openai-codex.json")
-  );
+  return resolveOpenAIAuthProfilePath({ butlerData: butlerDataRoot });
 }
 
 async function readCodexAuthProfileLabel() {
+  const profilePath = codexAuthProfilePath();
   try {
-    const parsed = JSON.parse(await readFile(codexAuthProfilePath(), "utf8"));
+    const parsed = JSON.parse(await readFile(profilePath, "utf8"));
     return safeString(parsed.email) ||
       safeString(parsed.accountId) ||
       "OpenAI account";
@@ -756,22 +690,20 @@ async function startOpenAIOAuthLogin(input = {}) {
   }
   const helper = resolveOpenAIOAuthLoginHelper({
     butlerData: butlerDataRoot,
-    repoRoot,
     resourcesPath: process.resourcesPath,
-    fallbackRuntime: resolveButlerRuntime(butlerDataRoot),
-    allowBundledResourceFallback: !app.isPackaged,
-    allowDevelopmentFallback: !app.isPackaged,
+    execPath: process.execPath,
+    isPackaged: app.isPackaged,
+    env: process.env,
   });
   if (!helper) throw new Error("OpenAI OAuth login helper is missing.");
   const env = {
     ...process.env,
-    BUTLER_HOME: helper.butlerHome,
-    BUTLER_DATA: butlerDataRoot,
-    BUTLER_BUN: helper.runtime,
+    ...helper.env,
     BUTLER_CODEX_OAUTH_CLIENT_ID: codexOAuthClientId(),
     BUTLER_CODEX_OAUTH_NO_BROWSER: "1",
   };
-  return await beginOAuthLoginProcess(helper.runtime, ["run", helper.scriptPath], env);
+  delete env.BUTLER_HOME;
+  return await beginOAuthLoginProcess(helper.command, helper.args, env);
 }
 
 async function openAIOAuthLoginStatus() {
@@ -2081,51 +2013,19 @@ async function reconcileAppAgentServiceForLaunch() {
 }
 
 function appManagedAgentRuntimeCurrent() {
-  const expectedVersion = currentBundledAgentVersion();
-  if (!expectedVersion) {
-    return {
-      current: false,
-      reason: "bundled_agent_version_unavailable",
-    };
-  }
   try {
-    const pointer = JSON.parse(readFileSync(appManagedAgentPointerPath(butlerDataRoot), "utf8"));
-    const activeVersion = safeString(pointer?.bundled_agent_version) ||
-      safeString(pointer?.version);
+    const installation = currentNativeAgentInstallation();
+    const expectedVersion = installation.bundledAgentVersion;
     return {
-      current: pointer?.product === "butler-app" &&
-        pointer?.gateway_profile === "electron" &&
-        activeVersion === expectedVersion,
-      expectedVersion,
-      activeVersion: activeVersion ?? "missing",
+      current: true,
+      expectedVersion: expectedVersion ?? "unavailable",
+      activeVersion: expectedVersion ?? "unavailable",
     };
-  } catch (error) {
-    return {
-      current: false,
-      expectedVersion,
-      reason: error?.code === "ENOENT" ? "runtime_pointer_missing" : "runtime_pointer_unreadable",
-    };
-  }
-}
-
-function currentBundledAgentVersion() {
-  const resourceRoot = resolveBundledAgentResourceRoot({
-    env: process.env,
-    resourcesPath: process.resourcesPath,
-  });
-  if (!resourceRoot) return null;
-  try {
-    const manifest = JSON.parse(
-      readFileSync(join(resourceRoot, "agent-release-manifest.json"), "utf8"),
-    );
-    const artifact = Array.isArray(manifest?.artifacts)
-      ? manifest.artifacts.find((item) =>
-          item?.product === "butler-agent" && typeof item?.version === "string",
-        ) ?? manifest.artifacts.find((item) => typeof item?.version === "string")
-      : null;
-    return safeString(artifact?.version);
   } catch {
-    return null;
+    return {
+      current: false,
+      reason: "native_agent_installation_unavailable",
+    };
   }
 }
 

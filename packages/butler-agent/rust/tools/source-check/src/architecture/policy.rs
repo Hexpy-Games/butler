@@ -1,0 +1,37 @@
+//! Root-reviewed dependency directions between the domains of one crate. A
+//! facade is not permission to cycle. Directions between crates are declared
+//! in each crate's Cargo.toml and enforced by Cargo.
+
+#[expect(
+    clippy::match_same_arms,
+    reason = "arms are grouped per crate so the table reads as the crate layout"
+)]
+pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
+    Some(match domain {
+        // butler-core: leaf codecs and mirrors; JSON sanitizes public text.
+        "configuration" | "js_date" | "json_lines" | "locale" | "public_text" | "segmentation"
+        | "tool_protocol" => &[],
+        "json" => &["public_text"],
+        // butler-turn: BTCC owns the turn and reads the transcript and workspace.
+        "btcc" => &["conversation", "workspace"],
+        "conversation" | "workspace" => &[],
+        // butler-models
+        "models" | "mcp_client" => &[],
+        // butler-runtime: capability adapters consume the skills facade; catalog
+        // internals remain private. Operations and web access build on Context.
+        "capabilities" => &["skills"],
+        "context" | "skills" => &[],
+        "operations" => &["context"],
+        "web_access" => &["context", "operations"],
+        // butler-ledger: SQLite ownership stays behind BTCC's Project Work port.
+        "project_ledger" => &[],
+        // butler-memory: Cognition coordinates writers, reads the profile and
+        // records completed work.
+        "cognition" => &["work_records", "coordination", "profile"],
+        "profile" => &["coordination"],
+        "coordination" | "work_records" => &[],
+        // butler-gateway and the host binary are single-domain crates.
+        "gateway" | "host" => &[],
+        _ => return None,
+    })
+}

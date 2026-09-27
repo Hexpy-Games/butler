@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import { api } from "@/app/api";
 import { useButlerStore } from "@/app/store";
 import type { SessionSummary } from "@/app/types";
-import type { SessionBranchRequest } from "../../../../../../../butler-agent/src/foundation/session-branch.ts";
+import type { SessionBranchRequest } from "../../../../../shared/app-contracts.ts";
 
 export function useSessionBranch() {
   const [pending, setPending] = useState(false);

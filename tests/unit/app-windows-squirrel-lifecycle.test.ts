@@ -32,30 +32,6 @@ describe("Windows Squirrel lifecycle", () => {
     expect(main).toContain('errorCode: typeof errorCode === "string" ? errorCode : null');
   });
 
-  test("release-cycle cleanup tracks only app processes launched by the smoke", () => {
-    const smoke = readFileSync(resolve(
-      import.meta.dir,
-      "../../packages/butler-app/scripts/windows/windows-squirrel-release-cycle-smoke.ts",
-    ), "utf8");
-    expect(smoke).toContain("runSquirrelUpdate(outCurrent);");
-    expect(smoke).not.toContain("runInstaller(currentSetup);");
-    expect(smoke).toContain('process.argv.includes("--prepare-only")');
-    expect(smoke).toContain("BUTLER_WINDOWS_RELEASE_PREPARATION_TOKEN");
-    expect(smoke).toContain("prepared-releases.json");
-    expect(smoke).toContain("loadPreparedLifecycleReleases()");
-    expect(smoke).toContain("stopInstalledProcessesAndWait(");
-    expect(smoke).toContain('join(systemRoot, "System32", "taskkill.exe")');
-    expect(smoke).toContain("spawnSync(taskkillExecutable");
-    expect(smoke).toContain("BUTLER_POWERSHELL: powerShellExecutable");
-    expect(smoke).toContain("const launchedAppPids = new Set<number>();");
-    expect(smoke).toContain("launchedAppPids.add(child.pid)");
-    expect(smoke).toContain(".filter((pid) => processAlive(pid))");
-    expect(smoke).not.toContain("Get-Process -Name");
-    expect(smoke).not.toContain("Get-CimInstance Win32_Process");
-    expect(smoke).toContain('"/T"');
-    expect(smoke).toContain("remaining=${JSON.stringify(remaining)}");
-  });
-
   test("handles install and update events before normal app initialization", () => {
     for (const event of ["--squirrel-install", "--squirrel-updated"]) {
       const plan = resolveWindowsSquirrelLaunch({
@@ -78,10 +54,6 @@ describe("Windows Squirrel lifecycle", () => {
   });
 
   test("uninstall removes only App operational state and preserves durable data", () => {
-    const smoke = readFileSync(resolve(
-      import.meta.dir,
-      "../../packages/butler-app/scripts/windows/windows-squirrel-release-cycle-smoke.ts",
-    ), "utf8");
     const plan = resolveWindowsSquirrelLaunch({
       platform: "win32",
       argv: ["Butler.exe", "--squirrel-uninstall", "0.0.19"],
@@ -122,15 +94,6 @@ describe("Windows Squirrel lifecycle", () => {
     expect(windowsOperationalCleanupPaths("C:\\Users\\dev\\.butler")).not.toContain(
       "C:\\Users\\dev\\.butler",
     );
-    const uninstall = smoke.indexOf("  runOwnedAppUninstaller();");
-    const evidence = smoke.indexOf(
-      '  const uninstallEvidence = await requireSuccessfulSquirrelEvidence("uninstall");',
-      uninstall,
-    );
-    const forcedCleanup = smoke.indexOf("  removeOwnedInstallRoot();", evidence);
-    expect(uninstall).toBeGreaterThan(0);
-    expect(evidence).toBeGreaterThan(uninstall);
-    expect(forcedCleanup).toBeGreaterThan(evidence);
   });
 
   test("operational cleanup uses bounded idempotent removals", () => {

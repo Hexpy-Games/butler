@@ -1,0 +1,7 @@
+{
+  "workId": "guided-work-e26b89f1fb19497d4ee218103011a12aac428860ce96cceaf173ab791745b00c",
+  "bindingId": "guided-binding-adb6f965bc8e5cc0a88ff8fd2767e313dc44d55faf396828ae48d1fd890ac345",
+  "startHash": "81bbb6caa2c65985f1196352ab4f03aaaa73846f81a0d6c13a94ccd3305a9cb2",
+  "continueHash": "899ebdc086dc179cfd5abf253ad2208af0a33a80cb75ce62c7b55328eac2043e",
+  "sqliteMutationHash": "98ef7b4bb3a40636558b6a6a0708eaf4cea0c6f9a1735212ec4871ee08ade70b"
+}

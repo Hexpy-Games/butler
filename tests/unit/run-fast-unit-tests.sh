@@ -8,11 +8,7 @@ tests=()
 while IFS= read -r test_file; do
   case "$test_file" in
     tests/unit/app-first-run-smoke-script.test.ts|\
-    tests/unit/app-managed-runtime.test.ts|\
-    tests/unit/install-service-registration.test.ts|\
-    tests/unit/install-upgrade.test.ts|\
-    tests/unit/release-packaging.test.ts|\
-    tests/unit/release-workflow.test.ts)
+    tests/unit/native-mac-release.test.ts)
       ;;
     *)
       tests+=("$test_file")

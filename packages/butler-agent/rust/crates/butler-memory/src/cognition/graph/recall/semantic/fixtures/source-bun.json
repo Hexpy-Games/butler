@@ -1,0 +1,51 @@
+{
+  "all": {
+    "allSeeds": [
+      "n-active",
+      "n-other-project",
+      "n-other-session",
+      "n-task"
+    ],
+    "coverageCodes": []
+  },
+  "current_session": {
+    "allSeeds": [
+      "n-active"
+    ],
+    "coverageCodes": []
+  },
+  "current_project": {
+    "allSeeds": [
+      "n-active",
+      "n-other-session",
+      "n-task"
+    ],
+    "coverageCodes": []
+  },
+  "selected_project": {
+    "allSeeds": [
+      "n-other-project"
+    ],
+    "coverageCodes": []
+  },
+  "include_internal": {
+    "allSeeds": [
+      "n-active",
+      "n-internal",
+      "n-other-project",
+      "n-other-session",
+      "n-task"
+    ],
+    "coverageCodes": []
+  },
+  "event_window": {
+    "allSeeds": [
+      "n-active",
+      "n-expired",
+      "n-other-project",
+      "n-other-session",
+      "n-task"
+    ],
+    "coverageCodes": []
+  }
+}

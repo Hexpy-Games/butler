@@ -1,0 +1,47 @@
+{
+  "claim": {
+    "schema": "project-ledger.publication-claim.v1",
+    "claimId": "source-fixture",
+    "publicationId": "source-fixture",
+    "canonicalRoot": "$ROOT",
+    "baseSha256": "bf3649ac445479528a041143261e8c30cef72ad62a850668a224194184274eac",
+    "journalPath": "$JOURNAL"
+  },
+  "journal": {
+    "schema": "project-ledger.publication-transaction.v1",
+    "publicationId": "source-fixture",
+    "canonicalRoot": "$ROOT",
+    "candidateRoot": "$CANDIDATE",
+    "journalPath": "$JOURNAL",
+    "claimPath": "$CLAIM",
+    "base": {
+      "schema": "project-ledger.source-head.v1",
+      "storageAuthority": "project-ledger-record-set-v1",
+      "projectRoot": "$ROOT",
+      "sourceSha256": "bf3649ac445479528a041143261e8c30cef72ad62a850668a224194184274eac",
+      "sourceFileCount": 2,
+      "storageSha256": "bf3649ac445479528a041143261e8c30cef72ad62a850668a224194184274eac",
+      "storageEntryCount": 2,
+      "recordPaths": [
+        "plans/plan-1.md",
+        "project.json"
+      ]
+    },
+    "candidateHead": {
+      "schema": "project-ledger.source-head.v1",
+      "storageAuthority": "project-ledger-record-set-v1",
+      "projectRoot": "$CANDIDATE",
+      "sourceSha256": "01903d68cd3023ac07cb6953120b9e8488d9ec3f6d1808aba22788bf9db980d0",
+      "sourceFileCount": 2,
+      "storageSha256": "01903d68cd3023ac07cb6953120b9e8488d9ec3f6d1808aba22788bf9db980d0",
+      "storageEntryCount": 2,
+      "recordPaths": [
+        "plans/plan-1.md",
+        "project.json"
+      ]
+    },
+    "status": "promoted"
+  },
+  "before": "---\nschema: \"project-ledger.plan.v1\"\nkind: \"plan\"\nid: \"PLAN-1\"\ntitle: \"Active\"\nstatus: \"active\"\ncreatedAt: \"2026-09-19T12:47:55.517Z\"\nupdatedAt: \"2026-09-19T12:47:55.518Z\"\n---\n\nSource Plan body\nline two\n",
+  "current": "---\nschema: \"project-ledger.plan.v1\"\nkind: \"plan\"\nid: \"PLAN-1\"\ntitle: \"Active\"\nstatus: \"closed\"\ncreatedAt: \"2026-09-19T12:47:55.517Z\"\nupdatedAt: \"2026-09-19T12:47:55.518Z\"\n---\n\nSource Plan body\nline two\n"
+}

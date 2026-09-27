@@ -1,0 +1,76 @@
+{
+  "original": {
+    "stdout": "A🚀B\nnext line\nx x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x 🚀 b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b",
+    "stderr": "ERR🚀\nsecond\n",
+    "exit_code": 0,
+    "timed_out": false
+  },
+  "results": [
+    {
+      "name": "low_start",
+      "args": {
+        "path": "artifact",
+        "stream": "stdout",
+        "offsetChars": 2,
+        "maxTokens": 50
+      },
+      "document": "{\"schema_version\":\"butler.tool-evidence-rehydration.v1\",\"terminal_evidence_observation\":true,\"ok\":true,\"rawTextStored\":false,\"artifact\":{\"id\":\"<id>\",\"path\":\"<path>\",\"created_at\":\"2026-09-19T00:00:00.000Z\",\"command\":\"printf\",\"cwd\":\"/tmp\",\"raw_tokens\":170},\"limits\":{\"requested_max_tokens\":50,\"applied_max_tokens\":50,\"requested_limit_lines\":null,\"applied_limit_lines\":80},\"stdout\":{\"text\":\"\\ude80B\\nnext line\\nx x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x\",\"start_line\":0,\"returned_lines\":3,\"total_lines\":3,\"estimated_tokens\":50,\"truncated_by_lines\":false,\"truncated_by_tokens\":true,\"start_char\":2,\"next_offset_chars\":102,\"total_chars\":315,\"applied_max_tokens\":50}}"
+    },
+    {
+      "name": "high_end",
+      "args": {
+        "artifactId": "artifact",
+        "stream": "stdout",
+        "offsetLines": 2,
+        "maxTokens": 50
+      },
+      "document": "{\"schema_version\":\"butler.tool-evidence-rehydration.v1\",\"terminal_evidence_observation\":true,\"ok\":true,\"rawTextStored\":false,\"artifact\":{\"id\":\"<id>\",\"path\":\"<path>\",\"created_at\":\"2026-09-19T00:00:00.000Z\",\"command\":\"printf\",\"cwd\":\"/tmp\",\"raw_tokens\":170},\"limits\":{\"requested_max_tokens\":50,\"applied_max_tokens\":50,\"requested_limit_lines\":null,\"applied_limit_lines\":80},\"stdout\":{\"text\":\"x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x \\ud83d\",\"start_line\":2,\"returned_lines\":1,\"total_lines\":3,\"estimated_tokens\":50,\"truncated_by_lines\":false,\"truncated_by_tokens\":true,\"start_char\":15,\"next_offset_chars\":114,\"total_chars\":315,\"applied_max_tokens\":50}}"
+    },
+    {
+      "name": "both_search",
+      "args": {
+        "path": "artifact",
+        "stream": "both",
+        "search": "🚀",
+        "maxTokens": 51
+      },
+      "document": "{\"schema_version\":\"butler.tool-evidence-rehydration.v1\",\"terminal_evidence_observation\":true,\"ok\":true,\"rawTextStored\":false,\"artifact\":{\"id\":\"<id>\",\"path\":\"<path>\",\"created_at\":\"2026-09-19T00:00:00.000Z\",\"command\":\"printf\",\"cwd\":\"/tmp\",\"raw_tokens\":170},\"limits\":{\"requested_max_tokens\":51,\"applied_max_tokens\":51,\"requested_limit_lines\":null,\"applied_limit_lines\":80},\"stdout\":{\"text\":\"🚀B\\nnext line\\nx x x x x x x x x x x x x x x x x x\",\"start_line\":0,\"returned_lines\":3,\"total_lines\":3,\"estimated_tokens\":25,\"truncated_by_lines\":false,\"truncated_by_tokens\":true,\"start_char\":1,\"next_offset_chars\":50,\"total_chars\":315,\"applied_max_tokens\":25,\"search\":{\"query\":\"🚀\",\"found\":true,\"match_char\":1}},\"stderr\":{\"text\":\"🚀\\nsecond\\n\",\"start_line\":0,\"returned_lines\":2,\"total_lines\":3,\"estimated_tokens\":5,\"truncated_by_lines\":false,\"truncated_by_tokens\":false,\"start_char\":3,\"next_offset_chars\":null,\"total_chars\":13,\"applied_max_tokens\":25,\"search\":{\"query\":\"🚀\",\"found\":true,\"match_char\":3}}}"
+    },
+    {
+      "name": "search_missing",
+      "args": {
+        "path": "artifact",
+        "stream": "stderr",
+        "search": "not-present",
+        "maxTokens": 50
+      },
+      "document": "{\"schema_version\":\"butler.tool-evidence-rehydration.v1\",\"terminal_evidence_observation\":true,\"ok\":true,\"rawTextStored\":false,\"artifact\":{\"id\":\"<id>\",\"path\":\"<path>\",\"created_at\":\"2026-09-19T00:00:00.000Z\",\"command\":\"printf\",\"cwd\":\"/tmp\",\"raw_tokens\":170},\"limits\":{\"requested_max_tokens\":50,\"applied_max_tokens\":50,\"requested_limit_lines\":null,\"applied_limit_lines\":80},\"stderr\":{\"text\":\"\",\"start_line\":2,\"returned_lines\":0,\"total_lines\":3,\"estimated_tokens\":0,\"truncated_by_lines\":false,\"truncated_by_tokens\":false,\"start_char\":13,\"next_offset_chars\":null,\"total_chars\":13,\"applied_max_tokens\":50,\"search\":{\"query\":\"not-present\",\"found\":false,\"match_char\":null}}}"
+    },
+    {
+      "name": "line_offset",
+      "args": {
+        "path": "artifact",
+        "stream": "stdout",
+        "offsetLines": 1,
+        "limitLines": 1,
+        "maxTokens": 1200
+      },
+      "document": "{\"schema_version\":\"butler.tool-evidence-rehydration.v1\",\"terminal_evidence_observation\":true,\"ok\":true,\"rawTextStored\":false,\"artifact\":{\"id\":\"<id>\",\"path\":\"<path>\",\"created_at\":\"2026-09-19T00:00:00.000Z\",\"command\":\"printf\",\"cwd\":\"/tmp\",\"raw_tokens\":170},\"limits\":{\"requested_max_tokens\":1200,\"applied_max_tokens\":1200,\"requested_limit_lines\":1,\"applied_limit_lines\":1},\"stdout\":{\"text\":\"next line\\n\",\"start_line\":1,\"returned_lines\":1,\"total_lines\":3,\"estimated_tokens\":3,\"truncated_by_lines\":true,\"truncated_by_tokens\":false,\"start_char\":5,\"next_offset_chars\":15,\"total_chars\":315,\"applied_max_tokens\":1200}}"
+    },
+    {
+      "name": "unsafe_path",
+      "args": {
+        "path": "outside",
+        "stream": "both"
+      },
+      "document": "{\"ok\":false,\"error\":\"unsafe_artifact_path\",\"rawTextStored\":false}"
+    },
+    {
+      "name": "missing_ref",
+      "args": {
+        "stream": "both"
+      },
+      "document": "{\"ok\":false,\"error\":\"artifact_reference_required\",\"rawTextStored\":false}"
+    }
+  ]
+}

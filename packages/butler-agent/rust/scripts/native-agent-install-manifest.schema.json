@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://butler.hexpy.games/schemas/native-agent-install.v1.json",
+  "title": "Butler standalone native Agent installation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "version",
+    "platform",
+    "architecture",
+    "binary",
+    "resources",
+    "launcher",
+    "binarySha256",
+    "resourcesSha256"
+  ],
+  "properties": {
+    "schema": { "const": "butler.native-agent-install.v1" },
+    "version": { "type": "string", "minLength": 1 },
+    "appVersion": { "type": ["string", "null"] },
+    "platform": { "const": "darwin" },
+    "architecture": { "const": "arm64" },
+    "binary": { "const": "butler-agent" },
+    "resources": { "const": "resources" },
+    "launcher": { "const": "butler" },
+    "binarySha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "resourcesSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

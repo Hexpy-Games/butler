@@ -1,0 +1,26 @@
+{
+  "conversation": {
+    "episodeIds": [
+      "e-n-active",
+      "e-n-other-session",
+      "e-n-other-project",
+      "e-n-task"
+    ],
+    "seeds": [
+      "n-active",
+      "n-other-session",
+      "n-other-project",
+      "n-task"
+    ]
+  },
+  "event": {
+    "episodeIds": [
+      "e-n-active",
+      "e-n-expired"
+    ],
+    "seeds": [
+      "n-active",
+      "n-expired"
+    ]
+  }
+}

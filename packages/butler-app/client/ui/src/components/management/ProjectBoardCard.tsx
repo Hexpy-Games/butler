@@ -1,6 +1,6 @@
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { Button, Clickable, MessageSquare, Spinner, Stack, Typo } from "@/butler-ds";
-import type { DashboardBoardCard } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
+import type { DashboardBoardCard } from "../../../../shared/app-contracts.ts";
 import styles from "./ProjectWorkBoard.module.css";
 
 export function ProjectBoardCard({ card, running, onOpen, onOpenSession }: {

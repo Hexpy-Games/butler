@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/app/api.ts";
-import type { DashboardStatisticsView } from "../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
+import type { DashboardStatisticsView } from "../../../shared/app-contracts.ts";
 
 const STATISTICS_WAIT_MS = 20_000;
 type Result = { key: string; data?: DashboardStatisticsView; loading: boolean; error: boolean };

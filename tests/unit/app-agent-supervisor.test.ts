@@ -123,10 +123,10 @@ test("bundled Agent supervisor starts, health-checks, restarts, and stops", asyn
       resolveGateway: () => {
         resolved += 1;
         return {
-          command: "/runtime/bun",
-          args: ["/runtime/bin/butler.js", "gateway", "app"],
+          command: "/runtime/butler-agent",
+          args: ["service", "run"],
           cwd: "/runtime",
-          env: { BUTLER_HOME: "/runtime" },
+          env: { BUTLER_DATA: "/data" },
           appManaged: true,
           foregroundHost: true,
           bundledAgentVersion: "1.2.3",
@@ -186,8 +186,8 @@ test("bundled Agent supervisor starts, health-checks, restarts, and stops", asyn
       foregroundHost: true,
     });
     expect(spawned[0]?.spawn).toMatchObject({
-      command: "/runtime/bun",
-      args: ["/runtime/bin/butler.js", "gateway", "app"],
+      command: "/runtime/butler-agent",
+      args: ["service", "run"],
       options: {
         cwd: "/runtime",
         detached: false,
@@ -275,7 +275,7 @@ test("bundled Agent supervisor shares one startup operation across concurrent en
       resolveGateway: () => {
         resolved += 1;
         return {
-          command: "/runtime/bun",
+          command: "/runtime/butler-agent",
           args: ["gateway"],
           env: {},
           commitActivation: () => undefined,
@@ -344,7 +344,7 @@ test("bundled Agent supervisor adopts its live child after transient readiness w
     const supervisor = createBundledAgentSupervisor({
       butlerData: root,
       resolveGateway: () => ({
-        command: "/runtime/bun",
+        command: "/runtime/butler-agent",
         args: ["gateway"],
         env: {},
         commitActivation: () => {
@@ -414,7 +414,7 @@ test("bundled Agent supervisor commits an uncommitted adopted child once and reu
       resolveGateway: () => {
         resolved += 1;
         return {
-          command: "/runtime/bun",
+          command: "/runtime/butler-agent",
           args: ["gateway"],
           env: {},
           commitActivation: () => {
@@ -477,7 +477,7 @@ test("bundled Agent supervisor preserves early-exit failure while adopting a liv
     const supervisor = createBundledAgentSupervisor({
       butlerData: root,
       resolveGateway: () => ({
-        command: "/runtime/bun",
+        command: "/runtime/butler-agent",
         args: ["gateway"],
         env: {},
         commitActivation: () => undefined,
@@ -534,7 +534,7 @@ test("bundled Agent supervisor preserves spawn failure while adopting a live chi
     const supervisor = createBundledAgentSupervisor({
       butlerData: root,
       resolveGateway: () => ({
-        command: "/runtime/bun",
+        command: "/runtime/butler-agent",
         args: ["gateway"],
         env: {},
         commitActivation: () => undefined,
@@ -598,7 +598,7 @@ test("bundled Agent supervisor cleans up an adopted child at the existing deadli
     const supervisor = createBundledAgentSupervisor({
       butlerData: root,
       resolveGateway: () => ({
-        command: "/runtime/bun",
+        command: "/runtime/butler-agent",
         args: ["gateway"],
         env: {},
         commitActivation: () => undefined,
@@ -801,7 +801,7 @@ test("supervisor relocates App-managed runtime when a healthy listener already e
     const supervisor = createBundledAgentSupervisor({
       butlerData: join(tempDir, "data"),
       resolveGateway: () => ({
-        command: "/runtime/bun",
+        command: "/runtime/butler-agent",
         args: ["gateway"],
         commitActivation: () => {
           committed += 1;
@@ -842,7 +842,7 @@ test("supervisor diagnostics redact startup error text and local auth token", as
     const supervisor = createBundledAgentSupervisor({
       butlerData: join(tempDir, "data"),
       resolveGateway: () => ({
-        command: "/runtime/bun",
+        command: "/runtime/butler-agent",
         args: ["gateway"],
       }),
       spawnProcess: () => {
@@ -884,10 +884,10 @@ test("supervisor rolls back prepared App-managed runtime on health timeout", asy
     const supervisor = createBundledAgentSupervisor({
       butlerData: join(tempDir, "data"),
       resolveGateway: () => ({
-        command: "/runtime/bun",
-        args: ["/runtime/bin/butler.js", "gateway", "app"],
+        command: "/runtime/butler-agent",
+        args: ["service", "run"],
         cwd: "/runtime",
-        env: { BUTLER_HOME: "/runtime" },
+        env: { BUTLER_DATA: "/data" },
         appManaged: true,
         bundledAgentVersion: "2.0.0",
         commitActivation: () => {
@@ -931,7 +931,7 @@ test("supervisor publishes the candidate runtime pointer before spawning its hos
     const supervisor = createBundledAgentSupervisor({
       butlerData: join(tempDir, "data"),
       resolveGateway: () => ({
-        command: "/runtime/bun",
+        command: "/runtime/butler-agent",
         args: ["/runtime/native-service-daemon.ts"],
         publishLaunchPointer: () => { pointerPublished = true; },
         commitActivation: () => undefined,
@@ -969,8 +969,8 @@ test("supervisor startup deadline overrides a shorter attempt count", async () =
     const supervisor = createBundledAgentSupervisor({
       butlerData: join(tempDir, "data"),
       resolveGateway: () => ({
-        command: "/runtime/bun",
-        args: ["/runtime/bin/butler.js", "gateway", "app"],
+        command: "/runtime/butler-agent",
+        args: ["service", "run"],
       }),
       spawnProcess: () => new FakeChildProcess(9350, killed),
       healthCheck: () => {
@@ -1018,10 +1018,10 @@ test("supervisor rolls back prepared App-managed runtime when readiness never pa
     const supervisor = createBundledAgentSupervisor({
       butlerData: join(tempDir, "data"),
       resolveGateway: () => ({
-        command: "/runtime/bun",
-        args: ["/runtime/bin/butler.js", "gateway", "app"],
+        command: "/runtime/butler-agent",
+        args: ["service", "run"],
         cwd: "/runtime",
-        env: { BUTLER_HOME: "/runtime" },
+        env: { BUTLER_DATA: "/data" },
         appManaged: true,
         bundledAgentVersion: "2.0.0",
         commitActivation: () => {
@@ -1072,10 +1072,10 @@ test("supervisor stops candidate and rolls back when activation commit fails", a
     const supervisor = createBundledAgentSupervisor({
       butlerData: join(tempDir, "data"),
       resolveGateway: () => ({
-        command: "/runtime/bun",
-        args: ["/runtime/bin/butler.js", "gateway", "app"],
+        command: "/runtime/butler-agent",
+        args: ["service", "run"],
         cwd: "/runtime",
-        env: { BUTLER_HOME: "/runtime" },
+        env: { BUTLER_DATA: "/data" },
         appManaged: true,
         bundledAgentVersion: "2.0.0",
         commitActivation: () => {
@@ -1123,10 +1123,10 @@ test("supervisor probe timeout rolls back when health check hangs", async () => 
     const supervisor = createBundledAgentSupervisor({
       butlerData: join(tempDir, "data"),
       resolveGateway: () => ({
-        command: "/runtime/bun",
-        args: ["/runtime/bin/butler.js", "gateway", "app"],
+        command: "/runtime/butler-agent",
+        args: ["service", "run"],
         cwd: "/runtime",
-        env: { BUTLER_HOME: "/runtime" },
+        env: { BUTLER_DATA: "/data" },
         appManaged: true,
         bundledAgentVersion: "2.0.0",
         commitActivation: () => {
@@ -1173,10 +1173,10 @@ test("supervisor probe timeout rolls back when readiness check hangs", async () 
     const supervisor = createBundledAgentSupervisor({
       butlerData: join(tempDir, "data"),
       resolveGateway: () => ({
-        command: "/runtime/bun",
-        args: ["/runtime/bin/butler.js", "gateway", "app"],
+        command: "/runtime/butler-agent",
+        args: ["service", "run"],
         cwd: "/runtime",
-        env: { BUTLER_HOME: "/runtime" },
+        env: { BUTLER_DATA: "/data" },
         appManaged: true,
         bundledAgentVersion: "2.0.0",
         commitActivation: () => {

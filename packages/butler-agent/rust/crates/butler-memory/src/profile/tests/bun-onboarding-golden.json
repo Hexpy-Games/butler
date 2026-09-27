@@ -1,0 +1,30 @@
+{
+  "prompt": "First-chat onboarding is still pending.\nThis is not an installer or settings wizard. Treat it as Butler's first natural meeting with the principal.\n\nConversation rules:\n- Ask like a friendly first meeting, not a form.\n- Ask only one question at a time.\n- Respect skip answers and move on.\n- If the principal also asks for a real task, answer briefly and then continue onboarding naturally.\n- Persist confirmed answers with the `update_onboarding_profile` tool.\n- When saving a persona preset, pass the listed persona_preset id to `persona_preset`. Do not imitate the preview text as `persona_custom`.\n- At the end, apply the selected persona and mark onboarding complete.\n\nRecommended order:\n1. Ask the principal's name.\n2. Ask how Butler should address the principal.\n3. Ask what the principal likes or is interested in, with permission to skip.\n4. Ask about work, profession, or main field, with permission to skip.\n5. Ask what Butler should be called.\n6. Ask how Butler should behave, offering persona presets or custom editing.\n7. Ask whether Butler may maintain a long-term user profile. Offer `off` (disabled), `basic` (explicit answers only), and `deep` (broader conversation learning). Store `off` unless the principal explicitly accepts profile learning.\n\nSettings persona preset options:\n- Custom\n\nKnown fields: none\nNext priority question: principal name",
+  "result": {
+    "ok": true,
+    "status": "complete",
+    "updated_fields": [
+      "preferred_address",
+      "principal_name",
+      "profiling_mode"
+    ],
+    "skipped_fields": [
+      "interests"
+    ],
+    "profile": {
+      "has_principal_name": true,
+      "has_preferred_address": true,
+      "has_butler_nickname": false
+    },
+    "persona": {
+      "preset": null,
+      "applied": false
+    },
+    "profiling": {
+      "mode": "basic",
+      "captured_candidate_count": 0,
+      "raw_text_included": false
+    },
+    "storage_label": "personalization/onboarding.json"
+  }
+}
