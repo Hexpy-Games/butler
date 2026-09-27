@@ -11,6 +11,7 @@ use std::path::Path;
 use serde_json::{Value, json};
 
 use crate::project_ledger::committed;
+use crate::project_ledger::events::{self, Event};
 use butler_core::locale::LocaleCollation;
 
 use super::{CliFailure, CommandContext, display_path, io_failure, now_iso};
@@ -177,15 +178,12 @@ fn write_unlocked(root: &Path) -> Result<Value, CliFailure> {
         serde_json::to_vec_pretty(&index).map_err(|source| io_failure().with_source(source))?;
     bytes.push(b'\n');
     fs::write(&path, bytes).map_err(|source| io_failure().with_source(source))?;
-    let event = json!({
-        "schema":"project-ledger.event.v1",
-        "ts":now_iso()?,
-        "type":"index_written",
-        "records":index.pointer("/counts/records"),
-        "issues":index.get("issues").and_then(Value::as_array).map(Vec::len),
-        "source":"project-ledger",
-    });
-    let mut event = butler_core::json::stringify(&event)
+    let event = Event::IndexWritten {
+        r#type: "index_written",
+        records: index.pointer("/counts/records"),
+        issues: index.get("issues").and_then(Value::as_array).map(Vec::len),
+    };
+    let mut event = events::line(&now_iso()?, event)
         .map_err(|source| io_failure().with_source(source))?
         .into_bytes();
     event.push(b'\n');

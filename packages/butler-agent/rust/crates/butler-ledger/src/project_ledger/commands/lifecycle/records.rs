@@ -2,10 +2,11 @@
 
 use std::path::Path;
 
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use super::{markdown, options, state};
 use crate::project_ledger::commands::contracts::CliFailure;
+use crate::project_ledger::events::Event;
 use crate::project_ledger::publication::ProjectLedgerRecordKind;
 use crate::project_ledger::status::Lifecycle;
 
@@ -153,12 +154,15 @@ pub(super) fn update_generic(root: &Path, args: &Value) -> Result<Value, CliFail
         }
     }
     markdown::update(&current.path, &updates, body.as_deref())?;
-    let event = json!({
-        "type":format!("{kind}_updated"),"id":id,"kind":kind,
-        "path":current.record.get("path").cloned().unwrap_or(Value::Null),
-        "source":"project-ledger"
-    });
-    markdown::append_event(root, &event)?;
+    markdown::append_event(
+        root,
+        Event::Updated {
+            r#type: &format!("{kind}_updated"),
+            id: &id,
+            kind,
+            path: current.record.get("path").unwrap_or(&Value::Null),
+        },
+    )?;
     let record = super::read_back(root, &current.path)?;
     Ok(super::super::refresh_index_after_mutation(root, record))
 }
@@ -187,12 +191,16 @@ fn create_record(
     let status = metadata.get("status").cloned().unwrap_or(Value::Null);
     markdown::create(path, metadata, body.as_deref())?;
     let record = super::read_back(root, path)?;
-    let event = json!({
-        "type":event_type,"id":id,"kind":kind,"status":status,
-        "path":record.get("path").cloned().unwrap_or(Value::Null),
-        "source":"project-ledger"
-    });
-    markdown::append_event(root, &event)?;
+    markdown::append_event(
+        root,
+        Event::Created {
+            r#type: event_type,
+            id,
+            kind,
+            status: &status,
+            path: record.get("path").unwrap_or(&Value::Null),
+        },
+    )?;
     Ok(super::super::refresh_index_after_mutation(root, record))
 }
 

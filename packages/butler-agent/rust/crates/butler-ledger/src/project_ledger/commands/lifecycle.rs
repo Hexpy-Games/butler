@@ -7,10 +7,11 @@ pub(in crate::project_ledger) mod state;
 
 use std::path::Path;
 
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use super::contracts::{CliFailure, LedgerCommand, LedgerCommandRequest};
 use super::{envelope, refresh_index_after_mutation};
+use crate::project_ledger::events::Event;
 use crate::project_ledger::status::Lifecycle;
 use butler_core::locale::LocaleCollation;
 
@@ -102,17 +103,23 @@ fn update_work(root: &Path, options: &Value, change: Change) -> Result<Value, Cl
     }
     let body = options::body(options)?;
     markdown::update(&current.path, &updates, body.as_deref())?;
+    let report = updates
+        .get("report")
+        .or_else(|| current.record.get("report"))
+        .unwrap_or(&Value::Null);
     let event = if complete {
-        let report = updates
-            .get("report")
-            .cloned()
-            .or_else(|| current.record.get("report").cloned())
-            .unwrap_or(Value::Null);
-        json!({"type":"work_completed","id":id,"report":report,"source":"project-ledger"})
+        Event::Completed {
+            r#type: "work_completed",
+            id: &id,
+            report,
+        }
     } else {
-        json!({"type":"work_updated","id":id,"source":"project-ledger"})
+        Event::Changed {
+            r#type: "work_updated",
+            id: &id,
+        }
     };
-    markdown::append_event(root, &event)?;
+    markdown::append_event(root, event)?;
     let record = read_back(root, &current.path)?;
     Ok(refresh_index_after_mutation(root, record))
 }
@@ -138,7 +145,10 @@ fn update_task(root: &Path, options: &Value, change: Change) -> Result<Value, Cl
     markdown::update(&current.path, &updates, body.as_deref())?;
     markdown::append_event(
         root,
-        &json!({"type":"task_updated","id":id,"source":"project-ledger"}),
+        Event::Changed {
+            r#type: "task_updated",
+            id: &id,
+        },
     )?;
     let record = read_back(root, &current.path)?;
     Ok(refresh_index_after_mutation(root, record))
@@ -202,10 +212,13 @@ fn start_attempt(root: &Path, options: &Value) -> Result<Value, CliFailure> {
     let record = read_back(root, &path)?;
     markdown::append_event(
         root,
-        &json!({
-            "type":"attempt_started","id":id,"kind":"attempt","status":"started",
-            "path":record.get("path").cloned().unwrap_or(Value::Null),"source":"project-ledger"
-        }),
+        Event::Created {
+            r#type: "attempt_started",
+            id: &id,
+            kind: "attempt",
+            status: &Value::String("started".into()),
+            path: record.get("path").unwrap_or(&Value::Null),
+        },
     )?;
     Ok(refresh_index_after_mutation(root, record))
 }
@@ -232,7 +245,10 @@ fn update_attempt(root: &Path, options: &Value, target: &str) -> Result<Value, C
     markdown::update(&current.path, &updates, body.as_deref())?;
     markdown::append_event(
         root,
-        &json!({"type":format!("attempt_{target}"),"id":id,"source":"project-ledger"}),
+        Event::Changed {
+            r#type: &format!("attempt_{target}"),
+            id: &id,
+        },
     )?;
     let record = read_back(root, &current.path)?;
     Ok(refresh_index_after_mutation(root, record))

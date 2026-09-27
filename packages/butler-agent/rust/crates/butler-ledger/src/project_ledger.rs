@@ -5,6 +5,7 @@ mod briefing_signals;
 mod commands;
 mod committed;
 mod dashboard;
+mod events;
 mod project_work_plan;
 mod publication;
 mod records;

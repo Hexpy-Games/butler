@@ -6,6 +6,7 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 
+use crate::project_ledger::events::{self, Event};
 use butler_core::locale::LocaleCollation;
 
 use super::{
@@ -109,11 +110,12 @@ fn write_view(
     fs::create_dir_all(path.parent().ok_or_else(io_failure)?)
         .map_err(|source| io_failure().with_source(source))?;
     fs::write(&path, markdown.as_bytes()).map_err(|source| io_failure().with_source(source))?;
-    let event = json!({
-        "schema":"project-ledger.event.v1","ts":now_iso()?,
-        "type":"view_rendered","view":view.name(),"path":display,"source":"project-ledger",
-    });
-    let mut line = butler_core::json::stringify(&event)
+    let event = Event::ViewRendered {
+        r#type: "view_rendered",
+        view: view.name(),
+        path: display,
+    };
+    let mut line = events::line(&now_iso()?, event)
         .map_err(|source| io_failure().with_source(source))?
         .into_bytes();
     line.push(b'\n');
