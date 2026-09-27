@@ -1,14 +1,14 @@
 //! Current canonical episode/revision checks before serving graph evidence.
 
-use serde_json::{Number, Value};
-
 use crate::cognition::{CognitionSourceRow, recall::RecallSourceEpisode};
 use butler_turn::conversation::{
     ConversationMessageWithParts, ConversationOriginKind, ConversationProvenance, ConversationRole,
     ConversationSourceReader, ConversationStatus, decode_message_scalars,
 };
 
-use super::super::identity::{projection_hash, recovered_parts_hash};
+use super::super::identity::{
+    RevisionTail, episode_revision, projection_hash, recovered_parts_hash,
+};
 
 pub(super) fn episode(
     reader: &ConversationSourceReader,
@@ -75,10 +75,11 @@ fn turn_current(
     if let Some(assistant) = assistant {
         messages.push(assistant);
     }
-    let Some(generation) = Number::from_f64(outcome.generation) else {
+    if !outcome.generation.is_finite() {
         return false;
-    };
-    revision(&messages, Value::Number(generation)).as_deref() == Some(&identity.revision)
+    }
+    revision(&messages, &RevisionTail::Generation(outcome.generation)).as_deref()
+        == Some(&identity.revision)
 }
 
 fn standalone_current(
@@ -125,23 +126,16 @@ fn standalone_current(
     let Ok(source_hash) = recovered_parts_hash(&message) else {
         return false;
     };
-    revision(&[message], Value::String(source_hash)).as_deref() == Some(&identity.revision)
+    revision(&[message], &RevisionTail::SourceHash(source_hash)).as_deref()
+        == Some(&identity.revision)
 }
 
-fn revision(messages: &[ConversationMessageWithParts], tail: Value) -> Option<String> {
-    let mut values = vec![Value::String("episode-revision".into())];
-    for message in messages {
-        for scalar in decode_message_scalars(message) {
-            values.extend([
-                scalar.message.message.id.clone().into(),
-                scalar.part.id.clone().into(),
-                scalar.pointer.into(),
-                scalar.hash.into(),
-            ]);
-        }
-    }
-    values.push(tail);
-    hash(&values)
+fn revision(messages: &[ConversationMessageWithParts], tail: &RevisionTail) -> Option<String> {
+    let scalars = messages
+        .iter()
+        .flat_map(decode_message_scalars)
+        .collect::<Vec<_>>();
+    episode_revision(&scalars, tail).ok()
 }
 fn hash(parts: &(impl serde::Serialize + ?Sized)) -> Option<String> {
     projection_hash(parts).ok()

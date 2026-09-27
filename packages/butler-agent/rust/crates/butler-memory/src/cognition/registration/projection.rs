@@ -198,12 +198,42 @@ async fn execute(
     owners: &ActiveProjectionWindowOwners,
     deps: &ProjectionDependencies,
 ) -> CognitionResult<Option<GraphProgress>> {
+    let Some(claim) = claim_window(operation, owners, deps).await? else {
+        return Ok(None);
+    };
+    let key = (
+        claim.job_id.clone(),
+        claim.window_ref.clone(),
+        claim.owner_nonce.clone(),
+    );
+    let _active = ActiveWindow {
+        owners: owners.clone(),
+        key,
+    };
+    let claim = Arc::new(claim);
+    let adapter_entered = Arc::new(AtomicBool::new(false));
+    let result = execute_claimed(operation, &claim, deps, adapter_entered.clone()).await;
+    match result {
+        Ok(progress) => Ok(Some(progress)),
+        Err(error) => settle_failure(operation, &claim, deps, &error, &adapter_entered)
+            .await
+            .map(Some),
+    }
+}
+
+/// Claims the job's next projection window for this process, registering
+/// the claim as active.
+async fn claim_window(
+    operation: &Operation,
+    owners: &ActiveProjectionWindowOwners,
+    deps: &ProjectionDependencies,
+) -> CognitionResult<Option<crate::cognition::graph::ClaimedProjectionWindow>> {
     let host = deps.host.clone();
     let active = owners.lock().clone();
     let claim_owners = owners.clone();
     let nonce = host.new_uuid();
     let now = (operation.clock)();
-    let claim = operation
+    operation
         .write(move |state| {
             let claim = state.graph.claim_projection_window(
                 crate::cognition::graph::ClaimProjectionWindowInput {
@@ -224,88 +254,71 @@ async fn execute(
             }
             Ok(claim)
         })
-        .await?;
-    let Some(claim) = claim else { return Ok(None) };
-    let key = (
-        claim.job_id.clone(),
-        claim.window_ref.clone(),
-        claim.owner_nonce.clone(),
-    );
-    let _active = ActiveWindow {
-        owners: owners.clone(),
-        key,
-    };
-    let claim = Arc::new(claim);
-    let adapter_entered = Arc::new(AtomicBool::new(false));
-    let result = execute_claimed(operation, &claim, deps, adapter_entered.clone()).await;
-    match result {
-        Ok(progress) => Ok(Some(progress)),
-        Err(error) => {
-            let settlement =
-                operation.settlement(deps.host.now_epoch_millis().saturating_add(5_000));
-            let job = claim.job_id.clone();
-            let window = claim.window_ref.clone();
-            let nonce = claim.owner_nonce.clone();
-            let code = error.code();
-            let repair_exhausted = error.message().starts_with("repair_exhausted:");
-            let clock = operation.clock.clone();
-            let invoked = adapter_entered.load(Ordering::Acquire);
-            settlement
-                .write(move |state| {
-                    assert_current(state, &clock())?;
-                    if matches!(
-                        code,
-                        "memory_extract_needs_context" | "memory_extract_unsupported"
-                    ) {
-                        let pinned = state.graph.pinned_extract_input(&window, &nonce)?;
-                        let revised = if code == "memory_extract_needs_context"
-                            && pinned.context_expansion.unwrap_or(0.0) < 1.0
-                        {
-                            state
-                                .graph
-                                .expand_context(
-                                    &state.canonical,
-                                    &state.handle.source_root,
-                                    &pinned,
-                                )
-                                .ok()
-                        } else {
-                            None
-                        };
-                        state.graph.record_window_disposition(
-                            crate::cognition::graph::ProjectionWindowOwner {
-                                job_id: &job,
-                                window_ref: &window,
-                                nonce: &nonce,
-                            },
-                            if code == "memory_extract_needs_context" {
-                                "needs_context"
-                            } else {
-                                "unsupported"
-                            },
-                            revised.as_ref(),
-                            &clock(),
-                            invoked,
-                        )?;
+        .await
+}
+
+/// Records why the claimed window failed: a context expansion or an
+/// unsupported disposition when the extractor said so, else a failure.
+async fn settle_failure(
+    operation: &Operation,
+    claim: &crate::cognition::graph::ClaimedProjectionWindow,
+    deps: &ProjectionDependencies,
+    error: &CognitionError,
+    adapter_entered: &AtomicBool,
+) -> CognitionResult<GraphProgress> {
+    let invoked = adapter_entered.load(Ordering::Acquire);
+    let settlement = operation.settlement(deps.host.now_epoch_millis().saturating_add(5_000));
+    let job = claim.job_id.clone();
+    let window = claim.window_ref.clone();
+    let nonce = claim.owner_nonce.clone();
+    let code = error.code();
+    let repair_exhausted = error.message().starts_with("repair_exhausted:");
+    let clock = operation.clock.clone();
+    settlement
+        .write(move |state| {
+            assert_current(state, &clock())?;
+            let owner = crate::cognition::graph::ProjectionWindowOwner {
+                job_id: &job,
+                window_ref: &window,
+                nonce: &nonce,
+            };
+            if matches!(
+                code,
+                "memory_extract_needs_context" | "memory_extract_unsupported"
+            ) {
+                let needs_context = code == "memory_extract_needs_context";
+                let pinned = state.graph.pinned_extract_input(&window, &nonce)?;
+                let revised = (needs_context && pinned.context_expansion.unwrap_or(0.0) < 1.0)
+                    .then(|| {
+                        state
+                            .graph
+                            .expand_context(&state.canonical, &state.handle.source_root, &pinned)
+                            .ok()
+                    })
+                    .flatten();
+                state.graph.record_window_disposition(
+                    owner,
+                    if needs_context {
+                        "needs_context"
                     } else {
-                        state.graph.settle_window_failure(
-                            crate::cognition::graph::ProjectionWindowOwner {
-                                job_id: &job,
-                                window_ref: &window,
-                                nonce: &nonce,
-                            },
-                            code,
-                            &clock(),
-                            invoked,
-                            repair_exhausted,
-                        )?;
-                    }
-                    state.graph.progress(&job)
-                })
-                .await
-                .map(Some)
-        }
-    }
+                        "unsupported"
+                    },
+                    revised.as_ref(),
+                    &clock(),
+                    invoked,
+                )?;
+            } else {
+                state.graph.settle_window_failure(
+                    owner,
+                    code,
+                    &clock(),
+                    invoked,
+                    repair_exhausted,
+                )?;
+            }
+            state.graph.progress(&job)
+        })
+        .await
 }
 
 async fn execute_claimed(

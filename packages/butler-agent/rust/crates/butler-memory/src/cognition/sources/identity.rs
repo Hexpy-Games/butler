@@ -13,6 +13,57 @@ pub(in crate::cognition) fn projection_hash(
     Ok(sha256(json.as_bytes()))
 }
 
+/// What versions an episode revision besides its scalars.
+pub(super) enum RevisionTail {
+    /// The recovered-parts hash of a standalone message.
+    SourceHash(String),
+    /// The outcome generation of a turn; a non-finite one hashes as `null`.
+    Generation(f64),
+}
+
+impl serde::Serialize for RevisionTail {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::SourceHash(hash) => serializer.serialize_str(hash),
+            Self::Generation(generation) => match serde_json::Number::from_f64(*generation) {
+                Some(number) => number.serialize(serializer),
+                None => serializer.serialize_none(),
+            },
+        }
+    }
+}
+
+/// The hashed parts of an episode revision: a marker, each scalar's
+/// message, part, pointer and hash, then the tail.
+struct EpisodeRevision<'a> {
+    scalars: &'a [butler_turn::conversation::ConversationScalar<'a>],
+    tail: &'a RevisionTail,
+}
+
+impl serde::Serialize for EpisodeRevision<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeSeq;
+        let mut parts = serializer.serialize_seq(Some(2 + self.scalars.len() * 4))?;
+        parts.serialize_element("episode-revision")?;
+        for scalar in self.scalars {
+            parts.serialize_element(&scalar.message.message.id)?;
+            parts.serialize_element(&scalar.part.id)?;
+            parts.serialize_element(&scalar.pointer)?;
+            parts.serialize_element(&scalar.hash)?;
+        }
+        parts.serialize_element(self.tail)?;
+        parts.end()
+    }
+}
+
+/// The revision id of an episode made of `scalars`.
+pub(super) fn episode_revision(
+    scalars: &[butler_turn::conversation::ConversationScalar<'_>],
+    tail: &RevisionTail,
+) -> Result<String, CognitionSourceError> {
+    projection_hash(&EpisodeRevision { scalars, tail })
+}
+
 pub(super) fn recovered_parts_hash(
     message: &butler_turn::conversation::ConversationMessageWithParts,
 ) -> Result<String, CognitionSourceError> {

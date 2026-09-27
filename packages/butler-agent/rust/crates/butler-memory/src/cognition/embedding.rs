@@ -90,6 +90,88 @@ pub struct Tokenization {
     pub(crate) max_tokens: usize,
 }
 
+/// The model and tokenizer files under the data root.
+struct Assets {
+    root: std::path::PathBuf,
+    tokenizer_file: std::path::PathBuf,
+    tokenizer_config: std::path::PathBuf,
+    model_config: std::path::PathBuf,
+    model_file: std::path::PathBuf,
+}
+
+impl Assets {
+    /// The asset paths, checked to stay inside the data root and to exist.
+    fn new(data_root: &Path) -> Result<Self, EmbeddingFailure> {
+        let root = data_root.join("cache/models/Xenova/bge-m3");
+        let assets = Self {
+            tokenizer_file: root.join("tokenizer.json"),
+            tokenizer_config: root.join("tokenizer_config.json"),
+            model_config: root.join("config.json"),
+            model_file: root.join(MODEL_FILE),
+            root,
+        };
+        ensure_data_authority(
+            data_root,
+            &[
+                &assets.root,
+                &assets.tokenizer_file,
+                &assets.tokenizer_config,
+                &assets.model_config,
+                &assets.model_file,
+            ],
+        )
+        .map_err(EmbeddingFailure::caused("embed_asset_path_unsafe"))?;
+        for path in [
+            &assets.tokenizer_file,
+            &assets.tokenizer_config,
+            &assets.model_config,
+            &assets.model_file,
+        ] {
+            if !path.is_file() {
+                return Err(EmbeddingFailure::new("embed_asset_unavailable"));
+            }
+        }
+        Ok(assets)
+    }
+}
+
+/// A single-threaded ONNX session whose inputs the engine can feed.
+fn load_session(model_file: &Path) -> Result<Session, EmbeddingFailure> {
+    let builder =
+        Session::builder().map_err(EmbeddingFailure::caused("embed_model_unavailable"))?;
+    // Builder errors own the (non-Send) builder, so they cannot be kept.
+    let builder = builder
+        .with_intra_threads(1)
+        .map_err(|_builder_error| EmbeddingFailure::new("embed_model_unavailable"))?;
+    let mut builder = builder
+        .with_inter_threads(1)
+        .map_err(|_builder_error| EmbeddingFailure::new("embed_model_unavailable"))?;
+    let session = builder
+        .commit_from_file(model_file)
+        .map_err(EmbeddingFailure::caused("embed_model_unavailable"))?;
+    if session.inputs().is_empty()
+        || session.inputs().iter().any(|input| {
+            !matches!(
+                input.name(),
+                "input_ids" | "attention_mask" | "token_type_ids"
+            )
+        })
+    {
+        return Err(EmbeddingFailure::new("embed_model_input_unsupported"));
+    }
+    Ok(session)
+}
+
+/// `identity` with its version: the hash of its JSON with an empty
+/// version.
+fn identity(mut identity: EmbeddingIdentity) -> Result<EmbeddingIdentity, EmbeddingFailure> {
+    identity.version = hash_bytes(
+        &serde_json::to_vec(&identity)
+            .map_err(EmbeddingFailure::caused("embed_identity_invalid"))?,
+    );
+    Ok(identity)
+}
+
 pub struct EmbeddingEngine {
     strict_tokenizer: Tokenizer,
     session: Session,
@@ -99,80 +181,35 @@ pub struct EmbeddingEngine {
 }
 
 impl EmbeddingEngine {
+    /// Loads the local BGE-M3 tokenizer and ONNX model and derives the
+    /// identities of the checked and legacy embedding modes.
     pub fn load(data_root: &Path) -> Result<Self, EmbeddingFailure> {
-        let root = data_root.join("cache/models/Xenova/bge-m3");
-        let tokenizer_file = root.join("tokenizer.json");
-        let tokenizer_config = root.join("tokenizer_config.json");
-        let model_config = root.join("config.json");
-        let model_file = root.join(MODEL_FILE);
-        ensure_data_authority(
-            data_root,
-            &[
-                &root,
-                &tokenizer_file,
-                &tokenizer_config,
-                &model_config,
-                &model_file,
-            ],
-        )
-        .map_err(EmbeddingFailure::caused("embed_asset_path_unsafe"))?;
-        for path in [
-            &tokenizer_file,
-            &tokenizer_config,
-            &model_config,
-            &model_file,
-        ] {
-            if !path.is_file() {
-                return Err(EmbeddingFailure::new("embed_asset_unavailable"));
-            }
-        }
+        let assets = Assets::new(data_root)?;
         let tokenizer_asset_sha256 =
-            aggregate_hash(&root, &["tokenizer.json", "tokenizer_config.json"])?;
-        let model_asset_sha256 = aggregate_hash(&root, &["config.json", MODEL_FILE])?;
-        let mut strict_tokenizer = Tokenizer::from_file(&tokenizer_file)
+            aggregate_hash(&assets.root, &["tokenizer.json", "tokenizer_config.json"])?;
+        let model_asset_sha256 = aggregate_hash(&assets.root, &["config.json", MODEL_FILE])?;
+        let mut strict_tokenizer = Tokenizer::from_file(&assets.tokenizer_file)
             .map_err(EmbeddingFailure::caused("embed_tokenizer_unavailable"))?;
         strict_tokenizer
             .with_truncation(None)
             .map_err(EmbeddingFailure::caused("embed_tokenizer_unavailable"))?;
         strict_tokenizer.with_padding(None);
         let max_tokens = [
-            positive_json_integer(&tokenizer_config, "model_max_length"),
-            positive_json_integer(&model_config, "max_position_embeddings"),
+            positive_json_integer(&assets.tokenizer_config, "model_max_length"),
+            positive_json_integer(&assets.model_config, "max_position_embeddings"),
         ]
         .into_iter()
         .flatten()
         .min()
         .ok_or(EmbeddingFailure::new("embed_tokenizer_limit_unavailable"))?;
-        let builder =
-            Session::builder().map_err(EmbeddingFailure::caused("embed_model_unavailable"))?;
-        // Builder errors own the (non-Send) builder, so they cannot be kept.
-        let builder = builder
-            .with_intra_threads(1)
-            .map_err(|_builder_error| EmbeddingFailure::new("embed_model_unavailable"))?;
-        let mut builder = builder
-            .with_inter_threads(1)
-            .map_err(|_builder_error| EmbeddingFailure::new("embed_model_unavailable"))?;
-        let session = builder
-            .commit_from_file(&model_file)
-            .map_err(EmbeddingFailure::caused("embed_model_unavailable"))?;
-        if session.inputs().is_empty()
-            || session.inputs().iter().any(|input| {
-                !matches!(
-                    input.name(),
-                    "input_ids" | "attention_mask" | "token_type_ids"
-                )
-            })
-        {
-            return Err(EmbeddingFailure::new("embed_model_input_unsupported"));
-        }
-        let runtime_build_info_sha256 = hash_bytes(ort::info().as_bytes());
-        let mut checked_identity = EmbeddingIdentity {
+        let session = load_session(&assets.model_file)?;
+        let checked_identity = identity(EmbeddingIdentity {
             schema: "butler.native-embedding-identity.v1".to_owned(),
             model: MODEL_ID.to_owned(),
             runtime: "onnxruntime-cpu-static".to_owned(),
             ort_wrapper_version: ORT_WRAPPER_VERSION.to_owned(),
             ort_api: ort::MINOR_VERSION,
-            runtime_build_info_sha256,
+            runtime_build_info_sha256: hash_bytes(ort::info().as_bytes()),
             tokenizer_runtime_version: TOKENIZER_VERSION.to_owned(),
             tokenizer_asset_sha256,
             model_asset_sha256,
@@ -183,21 +220,14 @@ impl EmbeddingEngine {
             max_tokens,
             dimension: EXPECTED_DIMENSION,
             version: String::new(),
-        };
-        checked_identity.version = hash_bytes(
-            &serde_json::to_vec(&checked_identity)
-                .map_err(EmbeddingFailure::caused("embed_identity_invalid"))?,
-        );
-        let mut unchecked_identity = checked_identity.clone();
-        unchecked_identity.preprocessing =
-            "tokenizer-json-special-tokens-legacy-mean-v1".to_owned();
-        unchecked_identity.pooling = "attention-mask-mean".to_owned();
-        unchecked_identity.truncation = "postprocess-right-to-max-tokens".to_owned();
-        unchecked_identity.version.clear();
-        unchecked_identity.version = hash_bytes(
-            &serde_json::to_vec(&unchecked_identity)
-                .map_err(EmbeddingFailure::caused("embed_identity_invalid"))?,
-        );
+        })?;
+        let unchecked_identity = identity(EmbeddingIdentity {
+            preprocessing: "tokenizer-json-special-tokens-legacy-mean-v1".to_owned(),
+            pooling: "attention-mask-mean".to_owned(),
+            truncation: "postprocess-right-to-max-tokens".to_owned(),
+            version: String::new(),
+            ..checked_identity.clone()
+        })?;
         Ok(Self {
             strict_tokenizer,
             session,

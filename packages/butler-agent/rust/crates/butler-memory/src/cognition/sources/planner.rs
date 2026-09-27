@@ -1,11 +1,9 @@
-use serde_json::{Number, Value};
-
 use butler_turn::conversation::{
     ConversationMessageWithParts, ConversationOriginKind, ConversationProvenance, ConversationRole,
     ConversationSourceReader, ConversationStatus, decode_message_scalars,
 };
 
-use super::identity::{projection_hash, recovered_parts_hash};
+use super::identity::{RevisionTail, episode_revision, projection_hash, recovered_parts_hash};
 use super::types::{
     CognitionSourceError, CognitionSourcePlan, CognitionSourceRow, ConversationSourceNotice,
     PreparedConversationSource,
@@ -116,7 +114,7 @@ fn turn(
         messages,
         source_key: format!("conversation_turn:{turn_id}"),
         episode_id,
-        revision_tail: number(outcome.generation),
+        revision_tail: RevisionTail::Generation(outcome.generation),
         extraction_version,
         turn_id: Some(turn_id.to_owned()),
         turn_started_at: Some(turn.started_at),
@@ -153,7 +151,7 @@ fn standalone(
         messages: vec![message],
         source_key: format!("conversation_message:{message_id}"),
         episode_id,
-        revision_tail: Value::String(source_hash.to_owned()),
+        revision_tail: RevisionTail::SourceHash(source_hash.to_owned()),
         extraction_version,
         turn_id: None,
         turn_started_at: None,
@@ -228,7 +226,7 @@ struct PlanInput<'a> {
     messages: Vec<ConversationMessageWithParts>,
     source_key: String,
     episode_id: String,
-    revision_tail: Value,
+    revision_tail: RevisionTail,
     extraction_version: &'a str,
     turn_id: Option<String>,
     turn_started_at: Option<String>,
@@ -262,30 +260,52 @@ fn plan(input: PlanInput<'_>) -> Result<CognitionSourcePlan, CognitionSourceErro
         .iter()
         .flat_map(decode_message_scalars)
         .collect::<Vec<_>>();
-    let mut revision_parts = vec![Value::String("episode-revision".into())];
-    for scalar in &scalars {
-        revision_parts.extend([
-            scalar.message.message.id.clone().into(),
-            scalar.part.id.clone().into(),
-            scalar.pointer.clone().into(),
-            scalar.hash.clone().into(),
-        ]);
-    }
-    revision_parts.push(revision_tail);
-    let revision = projection_hash(&revision_parts)?;
+    let revision = episode_revision(&scalars, &revision_tail)?;
     let job_id = projection_hash(&(
         "memory-projection",
         &episode_id,
         &revision,
         extraction_version,
     ))?;
+    let rows = source_rows(scalars, &episode_id, &revision)?;
+    if rows.is_empty() {
+        return Err(error(CognitionCode::MemorySourceTextMissing));
+    }
+    let windows = rows.iter().map(|row| vec![row.source_id.clone()]).collect();
+    let source_hash = revision.clone();
+    Ok(CognitionSourcePlan {
+        source_key,
+        episode_id,
+        revision,
+        job_id,
+        extraction_version: extraction_version.into(),
+        session_id: messages
+            .first()
+            .map(|message| message.message.session_id.clone())
+            .unwrap_or_default(),
+        turn_id,
+        conversation_start,
+        conversation_end,
+        source_hash,
+        origin_kind: combined_origin(&messages).into(),
+        rows,
+        windows,
+    })
+}
+
+/// One source row per scalar span of at most the source window size.
+fn source_rows(
+    scalars: Vec<butler_turn::conversation::ConversationScalar<'_>>,
+    episode_id: &str,
+    revision: &str,
+) -> Result<Vec<CognitionSourceRow>, CognitionSourceError> {
     let mut rows = Vec::new();
     for scalar in scalars {
         for span in split_historical_source_spans(scalar.text, MEMORY_SOURCE_WINDOW_BYTES) {
             let source_id = projection_hash(&(
                 "memory-source",
-                &episode_id,
-                &revision,
+                episode_id,
+                revision,
                 "conversation",
                 &scalar.message.message.id,
                 &scalar.part.id,
@@ -296,8 +316,8 @@ fn plan(input: PlanInput<'_>) -> Result<CognitionSourcePlan, CognitionSourceErro
             ))?;
             rows.push(CognitionSourceRow {
                 source_id,
-                episode_id: episode_id.clone(),
-                revision: revision.clone(),
+                episode_id: episode_id.to_owned(),
+                revision: revision.to_owned(),
                 source_kind: "conversation".into(),
                 conversation_session_id: Some(scalar.message.message.session_id.clone()),
                 conversation_message_id: Some(scalar.message.message.id.clone()),
@@ -318,26 +338,7 @@ fn plan(input: PlanInput<'_>) -> Result<CognitionSourcePlan, CognitionSourceErro
             });
         }
     }
-    if rows.is_empty() {
-        return Err(error(CognitionCode::MemorySourceTextMissing));
-    }
-    let windows = rows.iter().map(|row| vec![row.source_id.clone()]).collect();
-    let source_hash = revision.clone();
-    Ok(CognitionSourcePlan {
-        source_key,
-        episode_id,
-        revision,
-        job_id,
-        extraction_version: extraction_version.into(),
-        session_id: messages[0].message.session_id.clone(),
-        turn_id,
-        conversation_start,
-        conversation_end,
-        source_hash,
-        origin_kind: combined_origin(&messages).into(),
-        rows,
-        windows,
-    })
+    Ok(rows)
 }
 
 fn combined_origin(messages: &[ConversationMessageWithParts]) -> &'static str {
@@ -373,12 +374,6 @@ fn origin(value: ConversationOriginKind) -> &'static str {
         ConversationOriginKind::InternalControl => "internal_control",
         ConversationOriginKind::Unknown => "unknown",
     }
-}
-
-fn number(value: f64) -> Value {
-    Number::from_f64(value)
-        .map(Value::Number)
-        .unwrap_or(Value::Null)
 }
 
 fn error(code: crate::cognition::CognitionCode) -> CognitionSourceError {

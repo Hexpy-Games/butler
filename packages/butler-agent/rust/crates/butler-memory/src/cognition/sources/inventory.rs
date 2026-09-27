@@ -3,18 +3,17 @@
 use std::{cmp::Ordering, collections::HashSet};
 
 use indexmap::IndexMap;
-use serde_json::{Number, Value};
 
 use crate::cognition::recall::{RecallProjectFilter, RecallRequest, RecallScope, RecallTimeBasis};
 use crate::cognition::{
     CognitionError, CognitionResult, MEMORY_SOURCE_WINDOW_BYTES, split_historical_source_spans,
 };
 use butler_turn::conversation::{
-    ConversationOriginKind, ConversationRole, ConversationSourceReader, ConversationStatus,
-    decode_message_scalars,
+    ConversationMessageWithParts, ConversationOriginKind, ConversationRole,
+    ConversationSourceReader, ConversationStatus, decode_message_scalars,
 };
 
-use super::identity::{projection_hash, recovered_parts_hash};
+use super::identity::{RevisionTail, episode_revision, projection_hash, recovered_parts_hash};
 use crate::cognition::CognitionCode;
 
 #[derive(Clone, Debug)]
@@ -202,23 +201,21 @@ impl Scan<'_> {
             }
             let source_hash = recovered_parts_hash(&message).map_err(unavailable)?;
             let episode_id = hash(&("canonical-conversation-message", &message.message.id))?;
-            self.entries
-                .push(entry(&episode_id, &scalars, Value::String(source_hash))?);
+            self.entries.push(entry(
+                &episode_id,
+                &scalars,
+                &RevisionTail::SourceHash(source_hash),
+            )?);
         }
         Ok(len)
     }
+    /// Adds the turn of one recall outcome when its session is in scope,
+    /// the turn is terminal and its messages are eligible and in time.
     fn outcome(
         &mut self,
         outcome: &butler_turn::conversation::RecallOutcomeRow,
     ) -> CognitionResult<()> {
-        let session = self
-            .reader
-            .read_session(&outcome.session_id)
-            .map_err(unavailable)?;
-        if session.as_ref().is_none_or(|session| {
-            session.status == "deleted"
-                || !self.in_scope(&session.id, session.project_id.as_deref())
-        }) {
+        if !self.session_in_scope(&outcome.session_id)? {
             self.exclude("scope_or_session");
             return Ok(());
         }
@@ -234,83 +231,15 @@ impl Scan<'_> {
             self.exclude("turn_not_terminal");
             return Ok(());
         }
-        let request = outcome
-            .request_message_id
-            .as_deref()
-            .map(|id| self.reader.read_message(id))
-            .transpose()
-            .map_err(unavailable)?
-            .flatten();
-        let assistant = outcome
-            .public_assistant_message_id
-            .as_deref()
-            .map(|id| self.reader.read_message(id))
-            .transpose()
-            .map_err(unavailable)?
-            .flatten();
-        if request.as_ref().is_none_or(|message| {
-            message.message.role != ConversationRole::User
-                || !matches!(
-                    message.message.status,
-                    ConversationStatus::Complete | ConversationStatus::Compacted
-                )
-                || message.message.origin_kind != ConversationOriginKind::UserInput
-        }) {
-            self.exclude(
-                if request.as_ref().is_some_and(|message| {
-                    message.message.origin_kind == ConversationOriginKind::Unknown
-                }) {
-                    "unknown_origin"
-                } else {
-                    "request_ineligible"
-                },
-            );
-            return Ok(());
-        }
-        if outcome.public_assistant_message_id.is_some()
-            && assistant.as_ref().is_none_or(|message| {
-                message.message.role != ConversationRole::Assistant
-                    || message.message.status != ConversationStatus::Complete
-                    || message.message.origin_kind != ConversationOriginKind::AssistantPublic
-            })
-        {
-            self.exclude(
-                if assistant.as_ref().is_some_and(|message| {
-                    message.message.origin_kind == ConversationOriginKind::Unknown
-                }) {
-                    "unknown_origin"
-                } else {
-                    "assistant_ineligible"
-                },
-            );
-            return Ok(());
-        }
-        let Some(request) = request else {
-            return Ok(());
+        let messages = match self.turn_messages(outcome)? {
+            Ok(messages) => messages,
+            Err(Some(exclusion)) => {
+                self.exclude(exclusion);
+                return Ok(());
+            }
+            Err(None) => return Ok(()),
         };
-        let mut messages = vec![request];
-        if let Some(assistant) = assistant {
-            messages.push(assistant);
-        }
-        let observed = messages
-            .iter()
-            .filter(|message| {
-                (self.parse_date)(&message.message.created_at)
-                    <= (self.parse_date)(&self.input.as_of)
-            })
-            .collect::<Vec<_>>();
-        if observed.is_empty() {
-            return Ok(());
-        }
-        if self
-            .input
-            .time
-            .as_ref()
-            .is_some_and(|time| time.basis == RecallTimeBasis::Conversation)
-            && !observed
-                .iter()
-                .any(|message| self.time_contains(&message.message.created_at))
-        {
+        if !self.turn_in_time(&messages) {
             return Ok(());
         }
         let scalars = messages
@@ -322,31 +251,112 @@ impl Scan<'_> {
             return Ok(());
         }
         let episode_id = hash(&("canonical-conversation-turn", &outcome.turn_id))?;
-        let generation = Number::from_f64(outcome.generation).ok_or_else(|| {
-            CognitionError::new(CognitionCode::MemorySourceUnavailable, "invalid_generation")
-        })?;
-        self.entries
-            .push(entry(&episode_id, &scalars, Value::Number(generation))?);
+        if !outcome.generation.is_finite() {
+            return Err(CognitionError::new(
+                CognitionCode::MemorySourceUnavailable,
+                "invalid_generation",
+            ));
+        }
+        self.entries.push(entry(
+            &episode_id,
+            &scalars,
+            &RevisionTail::Generation(outcome.generation),
+        )?);
         Ok(())
+    }
+
+    fn session_in_scope(&self, session_id: &str) -> CognitionResult<bool> {
+        let session = self.reader.read_session(session_id).map_err(unavailable)?;
+        Ok(session.as_ref().is_some_and(|session| {
+            session.status != "deleted" && self.in_scope(&session.id, session.project_id.as_deref())
+        }))
+    }
+
+    /// The turn's request and public answer; `Err` with the exclusion code
+    /// when one is ineligible (or `None` when there is no request).
+    fn turn_messages(
+        &self,
+        outcome: &butler_turn::conversation::RecallOutcomeRow,
+    ) -> CognitionResult<Result<Vec<ConversationMessageWithParts>, Option<&'static str>>> {
+        let read = |id: Option<&str>| {
+            id.map(|id| self.reader.read_message(id))
+                .transpose()
+                .map_err(unavailable)
+                .map(Option::flatten)
+        };
+        let request = read(outcome.request_message_id.as_deref())?;
+        let assistant = read(outcome.public_assistant_message_id.as_deref())?;
+        let unknown = |message: &Option<ConversationMessageWithParts>| {
+            message.as_ref().is_some_and(|message| {
+                message.message.origin_kind == ConversationOriginKind::Unknown
+            })
+        };
+        if request.as_ref().is_none_or(|message| {
+            message.message.role != ConversationRole::User
+                || !matches!(
+                    message.message.status,
+                    ConversationStatus::Complete | ConversationStatus::Compacted
+                )
+                || message.message.origin_kind != ConversationOriginKind::UserInput
+        }) {
+            return Ok(Err(Some(if unknown(&request) {
+                "unknown_origin"
+            } else {
+                "request_ineligible"
+            })));
+        }
+        if outcome.public_assistant_message_id.is_some()
+            && assistant.as_ref().is_none_or(|message| {
+                message.message.role != ConversationRole::Assistant
+                    || message.message.status != ConversationStatus::Complete
+                    || message.message.origin_kind != ConversationOriginKind::AssistantPublic
+            })
+        {
+            return Ok(Err(Some(if unknown(&assistant) {
+                "unknown_origin"
+            } else {
+                "assistant_ineligible"
+            })));
+        }
+        let Some(request) = request else {
+            return Ok(Err(None));
+        };
+        Ok(Ok([Some(request), assistant]
+            .into_iter()
+            .flatten()
+            .collect()))
+    }
+
+    /// Whether any message was observed by the recall's cutoff and, for a
+    /// conversation-time window, inside it.
+    fn turn_in_time(&self, messages: &[ConversationMessageWithParts]) -> bool {
+        let observed = messages
+            .iter()
+            .filter(|message| {
+                (self.parse_date)(&message.message.created_at)
+                    <= (self.parse_date)(&self.input.as_of)
+            })
+            .collect::<Vec<_>>();
+        if observed.is_empty() {
+            return false;
+        }
+        !self
+            .input
+            .time
+            .as_ref()
+            .is_some_and(|time| time.basis == RecallTimeBasis::Conversation)
+            || observed
+                .iter()
+                .any(|message| self.time_contains(&message.message.created_at))
     }
 }
 
 fn entry(
     episode_id: &str,
     scalars: &[butler_turn::conversation::ConversationScalar<'_>],
-    tail: Value,
+    tail: &RevisionTail,
 ) -> CognitionResult<CanonicalInventoryEntry> {
-    let mut parts = vec![Value::String("episode-revision".into())];
-    for scalar in scalars {
-        parts.extend([
-            scalar.message.message.id.clone().into(),
-            scalar.part.id.clone().into(),
-            scalar.pointer.clone().into(),
-            scalar.hash.clone().into(),
-        ]);
-    }
-    parts.push(tail);
-    let revision = hash(&parts)?;
+    let revision = episode_revision(scalars, tail).map_err(unavailable)?;
     let mut source_ids = Vec::new();
     let mut hashes = HashSet::new();
     let mut origins = HashSet::new();
