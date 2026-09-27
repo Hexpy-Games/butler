@@ -175,7 +175,7 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
         Arc::new(HashMap::new()),
     ));
     let project_tools = Arc::new(crate::host::guided::project_tools::GuidedProjectTools::new(
-        crate::project_ledger::ProjectLedger::new(&scratch.0, 1),
+        butler_ledger::project_ledger::ProjectLedger::new(&scratch.0, 1),
         commands.clone(),
         Arc::new(HashMap::new()),
         crate::work_records::WorkRecordReader::new(&scratch.0),

@@ -5,7 +5,7 @@ use serde_json::Value;
 use super::contained_root;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum LedgerCommand {
+pub enum LedgerCommand {
     Status,
     Query,
     Show,
@@ -44,7 +44,7 @@ impl LedgerCommand {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct LedgerCommandRequest {
+pub struct LedgerCommandRequest {
     pub project_root: PathBuf,
     pub command: LedgerCommand,
     /// Source parseArgs option keys remain dashed; body is an owned inline string.

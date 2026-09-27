@@ -10,6 +10,9 @@ mod publication;
 mod records;
 mod result_authority;
 mod source_head;
+/// The Bun source-plan fixture, shared with tests of dependent crates.
+#[cfg(any(test, feature = "test-support"))]
+pub const SOURCE_PLAN_FIXTURE: &str = include_str!("project_ledger/tests/source-plan.json");
 #[cfg(test)]
 mod tests;
 mod tool_scope;
@@ -30,35 +33,35 @@ tokio::task_local! {
     static IN_PUBLICATION: ();
 }
 
-pub(crate) use briefing_signals::{ProjectBriefingSignal, ProjectBriefingTarget};
-pub(crate) use commands::{LedgerCommand, LedgerCommandRequest};
-pub(crate) use dashboard::{
+pub use briefing_signals::{ProjectBriefingSignal, ProjectBriefingTarget};
+pub use commands::{LedgerCommand, LedgerCommandRequest};
+pub use dashboard::{
     DashboardLedgerHistory, DashboardLedgerRecord, DashboardLedgerSnapshot, DashboardLedgerSource,
     DashboardManagedWorkView, DashboardWorkHistoryEntry, ProjectLedgerBinding,
 };
-pub(crate) use project_work_plan::{ProjectWorkPlanFacts, ProjectWorkPlanRead};
-pub(crate) use publication::{
+pub use project_work_plan::{ProjectWorkPlanFacts, ProjectWorkPlanRead};
+pub use publication::{
     LedgerEffectError, LedgerEffectReconciliation, LedgerEffectRequest, ProjectLedgerRecordUpdate,
     ProjectWorkPublicationError, ProjectWorkPublicationOutcome,
 };
 pub(crate) use records::PlanRecordShow;
-pub(crate) use result_authority::prepare_exact_project_work_result_authority;
-pub(crate) use tool_scope::ProjectLedgerToolScopeLookup;
+pub use result_authority::prepare_exact_project_work_result_authority;
+pub use tool_scope::ProjectLedgerToolScopeLookup;
 mod legacy;
 mod read_error;
-pub(crate) use read_error::ProjectLedgerReadError;
-pub(crate) use work::ProjectWork;
-pub(crate) use work_scope::ProjectWorkScopeLookup;
+pub use read_error::ProjectLedgerReadError;
+pub use work::ProjectWork;
+pub use work_scope::ProjectWorkScopeLookup;
 
 #[derive(Clone, Debug)]
-pub(crate) struct PlanRecordRead {
+pub struct PlanRecordRead {
     pub workspace_path: String,
     pub app_project_id: String,
     pub plan_id: String,
 }
 
 #[derive(Clone)]
-pub(crate) struct ProjectLedger {
+pub struct ProjectLedger {
     data_root: PathBuf,
     owner: Arc<ReadOwner>,
     collation: Arc<LocaleCollation>,
@@ -88,7 +91,7 @@ impl Drop for ActiveRead {
 }
 
 impl ProjectLedger {
-    pub(crate) async fn briefing_signals(
+    pub async fn briefing_signals(
         &self,
         targets: Option<Vec<ProjectBriefingTarget>>,
         consolidation_root: PathBuf,
@@ -98,8 +101,8 @@ impl ProjectLedger {
         })
         .await
     }
-    #[cfg(test)]
-    pub(crate) fn new(butler_data: &Path, max_blocking_reads: usize) -> Self {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn new(butler_data: &Path, max_blocking_reads: usize) -> Self {
         Self::with_collation(
             butler_data,
             max_blocking_reads,
@@ -107,7 +110,7 @@ impl ProjectLedger {
         )
     }
 
-    pub(crate) fn with_collation(
+    pub fn with_collation(
         butler_data: &Path,
         max_blocking_reads: usize,
         collation: Arc<LocaleCollation>,
@@ -127,7 +130,7 @@ impl ProjectLedger {
         }
     }
 
-    pub(crate) async fn show_plan_record(
+    pub async fn show_plan_record(
         &self,
         input: PlanRecordRead,
     ) -> Result<PlanRecordShow, ProjectLedgerReadError> {
@@ -139,7 +142,7 @@ impl ProjectLedger {
     }
 
     /// Resolve an App-owned Project Ledger reference before a Plan decision.
-    pub(crate) async fn resolve_app_plan_root(
+    pub async fn resolve_app_plan_root(
         &self,
         app_project_id: String,
         ledger_project_id: String,
@@ -155,7 +158,7 @@ impl ProjectLedger {
         .await
     }
 
-    pub(crate) async fn dashboard_snapshot(
+    pub async fn dashboard_snapshot(
         &self,
         binding: ProjectLedgerBinding,
     ) -> Result<DashboardLedgerSnapshot, ProjectLedgerReadError> {
@@ -163,7 +166,7 @@ impl ProjectLedger {
             .await
     }
 
-    pub(crate) async fn read_dashboard_source(
+    pub async fn read_dashboard_source(
         &self,
         binding: ProjectLedgerBinding,
         kind: String,
@@ -176,7 +179,7 @@ impl ProjectLedger {
         .await
     }
 
-    pub(crate) async fn dashboard_work_history_for_revision(
+    pub async fn dashboard_work_history_for_revision(
         &self,
         binding: ProjectLedgerBinding,
         expected_snapshot_revision: String,
@@ -192,7 +195,7 @@ impl ProjectLedger {
         .await
     }
 
-    pub(crate) async fn read_dashboard_ledger_history(
+    pub async fn read_dashboard_ledger_history(
         &self,
         ledger_project_id: String,
     ) -> Result<DashboardLedgerHistory, ProjectLedgerReadError> {
@@ -200,7 +203,7 @@ impl ProjectLedger {
             .await
     }
 
-    pub(crate) async fn read_project_work_plan(
+    pub async fn read_project_work_plan(
         &self,
         input: ProjectWorkPlanRead,
     ) -> Result<Option<ProjectWorkPlanFacts>, ProjectLedgerReadError> {
@@ -208,7 +211,7 @@ impl ProjectLedger {
             .await
     }
 
-    pub(crate) async fn find_canonical_record_kinds(
+    pub async fn find_canonical_record_kinds(
         &self,
         project_root: PathBuf,
         id: String,
@@ -222,7 +225,7 @@ impl ProjectLedger {
     }
 
     /// Execute one source Project Ledger command on this owner's tracked FS lane.
-    pub(crate) async fn execute_command(
+    pub async fn execute_command(
         &self,
         request: LedgerCommandRequest,
     ) -> Result<serde_json::Value, ProjectLedgerReadError> {
@@ -252,7 +255,7 @@ impl ProjectLedger {
         })
     }
 
-    pub(crate) async fn ensure_project_ledger(
+    pub async fn ensure_project_ledger(
         &self,
         scope: ResolvedProjectWorkScope,
         display_name: String,
@@ -319,7 +322,7 @@ impl ProjectLedger {
         })?
     }
 
-    pub(crate) async fn apply_record_effect(
+    pub async fn apply_record_effect(
         &self,
         request: LedgerEffectRequest,
     ) -> Result<serde_json::Value, LedgerEffectError> {
@@ -346,7 +349,7 @@ impl ProjectLedger {
         .map_err(|_| LedgerEffectError::Owner("project_ledger_worker_failed"))?
     }
 
-    pub(crate) async fn reconcile_record_effect(
+    pub async fn reconcile_record_effect(
         &self,
         request: LedgerEffectRequest,
     ) -> Result<LedgerEffectReconciliation, LedgerEffectError> {
@@ -428,7 +431,7 @@ impl ProjectLedger {
         })?
     }
 
-    pub(crate) async fn close(&self) {
+    pub async fn close(&self) {
         {
             self.owner.state.lock().closing = true;
         }

@@ -17,7 +17,7 @@ use serde_json::{Value, json};
 use butler_core::locale::LocaleCollation;
 
 use contracts::{CliFailure, CommandContext};
-pub(crate) use contracts::{LedgerCommand, LedgerCommandRequest};
+pub use contracts::{LedgerCommand, LedgerCommandRequest};
 pub(in crate::project_ledger) use effect_update::apply as apply_candidate_effect_update;
 
 pub(in crate::project_ledger) fn execute_sync(

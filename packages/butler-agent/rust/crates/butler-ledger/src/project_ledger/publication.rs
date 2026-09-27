@@ -15,11 +15,11 @@ use tokio::sync::Semaphore;
 use butler_turn::btcc::ProjectWorkOperationIdentity;
 use butler_turn::btcc::ResolvedProjectWorkScope;
 
-pub(crate) use contracts::{
-    ProjectLedgerRecordKind, ProjectLedgerRecordOperation, ProjectLedgerRecordUpdate,
-    ProjectWorkPublicationError, ProjectWorkPublicationOutcome,
+pub(crate) use contracts::{ProjectLedgerRecordKind, ProjectLedgerRecordOperation};
+pub use contracts::{
+    ProjectLedgerRecordUpdate, ProjectWorkPublicationError, ProjectWorkPublicationOutcome,
 };
-pub(crate) use generic::{LedgerEffectError, LedgerEffectReconciliation, LedgerEffectRequest};
+pub use generic::{LedgerEffectError, LedgerEffectReconciliation, LedgerEffectRequest};
 pub(super) use init::with_mutation_claim;
 
 pub(super) use generic::{apply as apply_record_effect, reconcile as reconcile_record_effect};

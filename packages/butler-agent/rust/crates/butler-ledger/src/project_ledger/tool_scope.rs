@@ -3,14 +3,14 @@
 use super::{ProjectLedger, ProjectLedgerReadError, active_reference};
 use std::path::PathBuf;
 
-pub(crate) struct ProjectLedgerToolScopeLookup {
+pub struct ProjectLedgerToolScopeLookup {
     pub app_project_id: Option<String>,
     pub workspace_path: Option<PathBuf>,
     pub explicit_reference: Option<String>,
 }
 
 impl ProjectLedger {
-    pub(crate) async fn resolve_tool_scope(
+    pub async fn resolve_tool_scope(
         &self,
         input: ProjectLedgerToolScopeLookup,
     ) -> Result<PathBuf, ProjectLedgerReadError> {

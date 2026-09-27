@@ -7,7 +7,7 @@ use super::ProjectLedgerReadError;
 use super::committed;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct PlanRecordShow {
+pub struct PlanRecordShow {
     pub id: String,
     pub title: String,
     pub status: String,

@@ -12,7 +12,7 @@ use std::path::Path;
 use super::ProjectLedgerReadError;
 use butler_core::locale::LocaleCollation;
 
-pub(crate) use ledger_history::DashboardLedgerHistory;
+pub use ledger_history::DashboardLedgerHistory;
 pub(super) use managed::{decode_child_body, decode_manifest_body};
 
 pub(in crate::project_ledger) fn validate_managed_work(
@@ -47,13 +47,13 @@ pub(in crate::project_ledger) fn validate_managed_work(
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct ProjectLedgerBinding {
+pub struct ProjectLedgerBinding {
     pub app_project_id: String,
     pub ledger_project_id: String,
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct DashboardLedgerRecord {
+pub struct DashboardLedgerRecord {
     pub id: String,
     pub kind: String,
     pub title: String,
@@ -67,7 +67,7 @@ pub(crate) struct DashboardLedgerRecord {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct DashboardLedgerWork {
+pub struct DashboardLedgerWork {
     pub record: DashboardLedgerRecord,
     pub revision: Option<String>,
     pub availability: &'static str,
@@ -75,7 +75,7 @@ pub(crate) struct DashboardLedgerWork {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct DashboardLedgerSnapshot {
+pub struct DashboardLedgerSnapshot {
     pub revision: String,
     pub observed_at: String,
     pub records: Vec<DashboardLedgerRecord>,
@@ -83,7 +83,7 @@ pub(crate) struct DashboardLedgerSnapshot {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct DashboardManagedWorkView {
+pub struct DashboardManagedWorkView {
     pub objective: String,
     pub session_id: String,
     pub status: String,
@@ -100,12 +100,12 @@ pub(crate) struct DashboardManagedWorkView {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct DashboardActionProgress {
+pub struct DashboardActionProgress {
     pub status: String,
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct DashboardManagedPlanView {
+pub struct DashboardManagedPlanView {
     pub id: String,
     pub objective: String,
     pub created_at: String,
@@ -114,14 +114,14 @@ pub(crate) struct DashboardManagedPlanView {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct DashboardCheckpointSummary {
+pub struct DashboardCheckpointSummary {
     pub created_at: String,
     pub public_summary: String,
     pub next_step: String,
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct DashboardDispositionSummary {
+pub struct DashboardDispositionSummary {
     pub created_at: String,
     pub summary: String,
     pub next_condition: Option<String>,
@@ -130,7 +130,7 @@ pub(crate) struct DashboardDispositionSummary {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct DashboardLedgerSource {
+pub struct DashboardLedgerSource {
     pub title: String,
     pub body: String,
     pub revision: String,
@@ -140,7 +140,7 @@ pub(crate) struct DashboardLedgerSource {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct DashboardWorkHistoryEntry {
+pub struct DashboardWorkHistoryEntry {
     pub id: String,
     pub work_id: String,
     pub session_id: String,

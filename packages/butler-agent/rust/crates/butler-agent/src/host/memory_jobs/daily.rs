@@ -24,7 +24,7 @@ use crate::cognition::active_memory_descriptor_exists;
 use crate::cognition::resolve_active_generation;
 use crate::coordination::CognitionWriteCoordinator;
 use crate::profile::ProfileService;
-use crate::project_ledger::ProjectLedger;
+use butler_ledger::project_ledger::ProjectLedger;
 use butler_models::models::ModelConfiguration;
 use butler_models::models::ModelProvider;
 use butler_runtime::operations::CycleMetrics;

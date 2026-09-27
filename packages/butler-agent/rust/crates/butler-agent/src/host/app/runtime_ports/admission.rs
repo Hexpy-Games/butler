@@ -12,9 +12,9 @@ use crate::gateway::ApplicationFuture;
 use crate::gateway::GatewayApplicationError;
 use crate::gateway::MaterializedResponderFile;
 use crate::gateway::VisualAdmissionRequest;
-use crate::project_ledger::ProjectLedger;
-use crate::project_ledger::ProjectLedgerBinding;
-use crate::project_ledger::ProjectLedgerReadError;
+use butler_ledger::project_ledger::ProjectLedger;
+use butler_ledger::project_ledger::ProjectLedgerBinding;
+use butler_ledger::project_ledger::ProjectLedgerReadError;
 use butler_models::models::ModelConfiguration;
 
 pub(crate) struct AppAdmission {

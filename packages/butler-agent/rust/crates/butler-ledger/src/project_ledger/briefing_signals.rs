@@ -13,7 +13,7 @@ use super::{ProjectLedgerReadError, active_reference};
 use butler_core::locale::LocaleCollation;
 
 #[derive(Clone, Debug)]
-pub(crate) struct ProjectBriefingTarget {
+pub struct ProjectBriefingTarget {
     pub id: String,
     pub display_name: String,
     pub ledger_project_id: String,
@@ -21,7 +21,7 @@ pub(crate) struct ProjectBriefingTarget {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct ProjectBriefingSignal {
+pub struct ProjectBriefingSignal {
     pub id: String,
     pub display_name: String,
     pub summary: Option<String>,

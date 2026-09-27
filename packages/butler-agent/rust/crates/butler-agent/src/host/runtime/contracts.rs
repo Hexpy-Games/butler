@@ -1,8 +1,8 @@
 use std::{path::PathBuf, sync::Arc};
 
 use crate::host::memory_jobs::context_maintenance::ContextMaintenance;
-use crate::project_ledger::ProjectLedger;
 use butler_core::locale::LocaleCollation;
+use butler_ledger::project_ledger::ProjectLedger;
 use butler_runtime::context::ContextBudgetOwner;
 use butler_runtime::skills::Skills;
 use butler_turn::btcc::Btcc;

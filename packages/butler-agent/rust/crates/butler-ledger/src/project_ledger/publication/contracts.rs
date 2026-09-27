@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum ProjectLedgerRecordKind {
+pub enum ProjectLedgerRecordKind {
     Initiative,
     Decision,
     Risk,
@@ -38,14 +38,14 @@ impl ProjectLedgerRecordKind {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum ProjectLedgerRecordOperation {
+pub enum ProjectLedgerRecordOperation {
     Create,
     Update,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ProjectLedgerRecordUpdate {
+pub struct ProjectLedgerRecordUpdate {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub operation: Option<ProjectLedgerRecordOperation>,
     pub id: String,
@@ -117,7 +117,7 @@ impl ProjectLedgerRecordUpdate {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
-pub(crate) struct ProjectWorkTarget {
+pub struct ProjectWorkTarget {
     pub id: String,
     pub kind: ProjectLedgerRecordKind,
     pub path: String,
@@ -129,13 +129,13 @@ pub(crate) struct ProjectWorkTarget {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum ProjectWorkTargetState {
+pub enum ProjectWorkTargetState {
     Absent,
     Present,
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct ProjectWorkPublicationOutcome {
+pub struct ProjectWorkPublicationOutcome {
     pub replayed: bool,
     pub skipped: bool,
     pub targets: Vec<ProjectWorkTarget>,
@@ -153,7 +153,7 @@ impl ProjectWorkPublicationOutcome {
 
 /// Failures publishing Project Work to the ledger. `code()` is the wire code.
 #[derive(Clone, Debug, thiserror::Error)]
-pub(crate) enum ProjectWorkPublicationError {
+pub enum ProjectWorkPublicationError {
     /// The publication request or a stored record was rejected; `code` says
     /// which check failed and `source` is the decode error when there was one.
     #[error("{code}")]
@@ -187,7 +187,7 @@ pub(crate) enum ProjectWorkPublicationError {
 }
 
 impl ProjectWorkPublicationError {
-    pub(crate) fn code(&self) -> &str {
+    pub fn code(&self) -> &str {
         match self {
             Self::Adapter { code, .. } | Self::Io { code, .. } | Self::Owner(code) => code,
             Self::Work(error) => error.code(),

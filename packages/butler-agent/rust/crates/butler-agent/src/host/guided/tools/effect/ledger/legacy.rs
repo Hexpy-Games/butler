@@ -5,8 +5,9 @@ use std::path::PathBuf;
 
 use serde_json::{Map, Value};
 
-use crate::project_ledger::{ProjectLedger, ProjectLedgerRecordUpdate};
 use butler_core::public_text::trim_js_whitespace;
+use butler_ledger::project_ledger::ProjectLedger;
+use butler_ledger::project_ledger::ProjectLedgerRecordUpdate;
 use butler_turn::btcc::BlockerRelation;
 use butler_turn::btcc::EffectBlocker;
 use butler_turn::btcc::EffectFailure;

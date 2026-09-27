@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use crate::project_ledger::ProjectLedgerReadError;
+use butler_ledger::project_ledger::ProjectLedgerReadError;
 use butler_turn::btcc::AuthorityDecision;
 use butler_turn::btcc::BtccError;
 use butler_turn::btcc::DurableWorkService;

@@ -6,7 +6,6 @@ mod coordination;
 pub(crate) mod gateway;
 
 mod profile;
-mod project_ledger;
 
 mod host;
 #[cfg(test)]

@@ -3,7 +3,9 @@
 #[cfg(test)]
 use std::path::Path;
 
-use crate::project_ledger::{PlanRecordRead, ProjectLedger, ProjectLedgerReadError};
+use butler_ledger::project_ledger::PlanRecordRead;
+use butler_ledger::project_ledger::ProjectLedger;
+use butler_ledger::project_ledger::ProjectLedgerReadError;
 use butler_turn::btcc::ProjectLedgerPlan;
 use butler_turn::btcc::ProjectLedgerPlanInput;
 use butler_turn::btcc::accepted_project_plan;
@@ -77,8 +79,7 @@ mod tests {
         fs::create_dir_all(root.join("plans")).unwrap();
         fs::write(workspace.join("project.json"), r#"{"id":"demo"}"#).unwrap();
         let source: Value =
-            serde_json::from_str(include_str!("../../project_ledger/tests/source-plan.json"))
-                .unwrap();
+            serde_json::from_str(butler_ledger::project_ledger::SOURCE_PLAN_FIXTURE).unwrap();
         for (key, path) in [
             ("project", "project.json"),
             ("ledger", "ledger.jsonl"),

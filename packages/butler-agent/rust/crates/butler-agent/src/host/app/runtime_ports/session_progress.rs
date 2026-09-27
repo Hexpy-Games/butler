@@ -6,8 +6,8 @@ use crate::gateway::AppSessionWorkProgress;
 use crate::gateway::AppWorkProgress;
 use crate::gateway::ApplicationFuture;
 use crate::gateway::GatewayApplicationError;
-use crate::project_ledger::ProjectLedger;
-use crate::project_ledger::ProjectWorkPlanRead;
+use butler_ledger::project_ledger::ProjectLedger;
+use butler_ledger::project_ledger::ProjectWorkPlanRead;
 use butler_turn::btcc::SessionPlanObservation;
 use butler_turn::btcc::SessionWorkRepository;
 

@@ -47,7 +47,7 @@ fn invalid(code: &'static str) -> BtccError {
     BtccError::relayed(code, code)
 }
 
-pub(crate) struct ProjectWork {
+pub struct ProjectWork {
     shared: Arc<Shared>,
 }
 
@@ -74,7 +74,7 @@ struct MutationState {
 }
 
 impl ProjectWork {
-    pub(crate) fn new(
+    pub fn new(
         ledger: ProjectLedger,
         projection: Arc<dyn ProjectWorkRuntimeProjection>,
         results: Arc<dyn ProjectWorkResultRuntime>,
@@ -94,17 +94,14 @@ impl ProjectWork {
         }
     }
 
-    pub(crate) fn repository(
-        &self,
-        scope: ResolvedProjectWorkScope,
-    ) -> Arc<dyn DurableWorkRepository> {
+    pub fn repository(&self, scope: ResolvedProjectWorkScope) -> Arc<dyn DurableWorkRepository> {
         Arc::new(ProjectWorkRepository {
             shared: self.shared.clone(),
             scope,
         })
     }
 
-    pub(crate) async fn close(&self) {
+    pub async fn close(&self) {
         self.shared.mutations.close().await;
     }
 }

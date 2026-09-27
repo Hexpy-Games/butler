@@ -8,14 +8,14 @@ use super::{ProjectLedgerReadError, committed, dashboard, records};
 use butler_core::locale::LocaleCollation;
 
 #[derive(Clone, Debug)]
-pub(crate) struct ProjectWorkPlanRead {
+pub struct ProjectWorkPlanRead {
     pub app_project_id: String,
     pub ledger_project_id: String,
     pub work_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct ProjectWorkPlanFacts {
+pub struct ProjectWorkPlanFacts {
     pub approved: bool,
     pub action_keys: Vec<String>,
     pub completed_action_keys: Vec<String>,

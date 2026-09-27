@@ -17,7 +17,7 @@ use serde_json::{Value, json};
 
 use butler_core::locale::LocaleCollation;
 
-pub(crate) use contracts::{LedgerEffectError, LedgerEffectReconciliation, LedgerEffectRequest};
+pub use contracts::{LedgerEffectError, LedgerEffectReconciliation, LedgerEffectRequest};
 use evidence::{Applied, Reconciled};
 
 pub(in crate::project_ledger) fn apply(

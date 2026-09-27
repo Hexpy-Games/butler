@@ -16,7 +16,7 @@ use super::{ProjectLedger, ProjectLedgerReadError, active_reference, work};
 
 const RESULT_SCHEMA: &str = "butler.btcc-project-work-result-reference.v1";
 
-pub(crate) async fn prepare_exact_project_work_result_authority(
+pub async fn prepare_exact_project_work_result_authority(
     ledger: &ProjectLedger,
     scope: ResolvedProjectWorkScope,
     work_ids: Vec<String>,

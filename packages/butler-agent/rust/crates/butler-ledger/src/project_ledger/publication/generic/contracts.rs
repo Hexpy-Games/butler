@@ -5,14 +5,14 @@ use serde_json::Value;
 use super::super::contracts::ProjectLedgerRecordUpdate;
 
 #[derive(Clone, Debug)]
-pub(crate) struct LedgerEffectRequest {
+pub struct LedgerEffectRequest {
     pub project_root: PathBuf,
     pub effect_key: String,
     pub updates: Vec<ProjectLedgerRecordUpdate>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum LedgerEffectReconciliation {
+pub enum LedgerEffectReconciliation {
     Applied(Value),
     NotApplied,
     Uncertain,
@@ -21,7 +21,7 @@ pub(crate) enum LedgerEffectReconciliation {
 /// Failures of a generic Project Ledger effect. `code()`/`message()` are the
 /// wire fields; `Display` is the message.
 #[derive(Clone, Debug, thiserror::Error)]
-pub(crate) enum LedgerEffectError {
+pub enum LedgerEffectError {
     /// The effect occurrence conflicts with an earlier request.
     #[error("{}", self.message())]
     Conflict,
@@ -41,7 +41,7 @@ pub(crate) enum LedgerEffectError {
 }
 
 impl LedgerEffectError {
-    pub(crate) fn code(&self) -> &'static str {
+    pub fn code(&self) -> &'static str {
         match self {
             Self::Conflict => "project_ledger_effect_occurrence_conflict",
             Self::NotApplied => "project_ledger_effect_not_applied",
@@ -57,7 +57,7 @@ impl LedgerEffectError {
         }
     }
 
-    pub(crate) fn message(&self) -> &'static str {
+    pub fn message(&self) -> &'static str {
         match self {
             Self::Conflict => "Project Ledger effect occurrence conflicts with an earlier request.",
             Self::NotApplied => "The Project Ledger publication was not applied.",

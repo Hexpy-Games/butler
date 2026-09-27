@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 
-use crate::project_ledger::ProjectLedger;
-use crate::project_ledger::ProjectWork;
-use crate::project_ledger::ProjectWorkScopeLookup;
+use butler_ledger::project_ledger::ProjectLedger;
+use butler_ledger::project_ledger::ProjectWork;
+use butler_ledger::project_ledger::ProjectWorkScopeLookup;
 use butler_turn::btcc::BtccError;
 use butler_turn::btcc::DurableWorkRepository;
 use butler_turn::btcc::PortFuture;
@@ -92,7 +92,7 @@ impl butler_turn::btcc::ProjectWorkResultAuthorityFactory for ProjectResultAutho
                 ledger_project_id: location.ledger_project_id,
                 app_project_id: location.app_project_id,
             };
-            crate::project_ledger::prepare_exact_project_work_result_authority(
+            butler_ledger::project_ledger::prepare_exact_project_work_result_authority(
                 &self.ledger,
                 scope,
                 vec![location.work_id],

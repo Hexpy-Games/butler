@@ -5,14 +5,14 @@ use butler_turn::btcc::ResolvedProjectWorkScope;
 use super::publication::ProjectWorkPublicationError;
 use super::{ProjectLedger, ProjectLedgerReadError, active_reference};
 
-pub(crate) struct ProjectWorkScopeLookup {
+pub struct ProjectWorkScopeLookup {
     pub app_project_id: String,
     pub workspace_path: String,
     pub ledger_project_id: Option<String>,
 }
 
 impl ProjectLedger {
-    pub(crate) async fn resolve_work_scope(
+    pub async fn resolve_work_scope(
         &self,
         input: ProjectWorkScopeLookup,
     ) -> Result<ResolvedProjectWorkScope, ProjectWorkPublicationError> {

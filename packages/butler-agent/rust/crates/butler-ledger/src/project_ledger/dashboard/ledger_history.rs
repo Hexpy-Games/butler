@@ -11,7 +11,7 @@ const MAX_HISTORY_EVENTS: usize = 100_000;
 const MAX_HISTORY_LINE_BYTES: usize = 262_144;
 
 #[derive(Clone, Debug)]
-pub(crate) struct DashboardLedgerEvent {
+pub struct DashboardLedgerEvent {
     pub id: String,
     pub record_id: String,
     pub kind: String,
@@ -20,7 +20,7 @@ pub(crate) struct DashboardLedgerEvent {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct DashboardLedgerHistory {
+pub struct DashboardLedgerHistory {
     pub revision: String,
     pub events: Vec<DashboardLedgerEvent>,
 }

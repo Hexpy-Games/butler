@@ -5,7 +5,7 @@ use std::sync::Arc;
 /// Failures of Project Ledger reads. `code()` is the wire code; `source`
 /// keeps the file, JSON or task error behind the failure when there was one.
 #[derive(Clone, Debug, thiserror::Error)]
-pub(crate) enum ProjectLedgerReadError {
+pub enum ProjectLedgerReadError {
     /// The project or work item could not be resolved.
     #[error("{code}")]
     Resolution {
@@ -47,7 +47,7 @@ pub(crate) enum ProjectLedgerReadError {
 }
 
 impl ProjectLedgerReadError {
-    pub(crate) fn resolution(code: &'static str) -> Self {
+    pub fn resolution(code: &'static str) -> Self {
         Self::Resolution { code, source: None }
     }
 
