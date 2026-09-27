@@ -1,0 +1,6 @@
+---
+// The root is kept for an intro page; until then it opens the manual.
+import RedirectPage from "../site/RedirectPage.astro";
+import { docsRoot } from "../site/nav";
+---
+<RedirectPage to={docsRoot(import.meta.env.BASE_URL, "ko")} />

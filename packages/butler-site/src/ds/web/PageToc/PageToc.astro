@@ -1,0 +1,35 @@
+---
+import type { MarkdownHeading } from "astro";
+import { ArrowRight } from "../../components/Icons";
+import { Typo } from "../../components/Typo";
+import styles from "./PageToc.module.css";
+
+interface Props {
+  headings: MarkdownHeading[];
+  title: string;
+  /** rail: sticky side column; disclosure: collapsible block above the article. */
+  variant: "rail" | "disclosure";
+}
+
+const { headings, title, variant } = Astro.props;
+const items = headings.filter((heading) => heading.depth === 2 || heading.depth === 3);
+const list = items.map((heading) => ({ ...heading, href: `#${heading.slug}` }));
+---
+{list.length > 0 && variant === "rail" && (
+  <nav aria-label={title} class={styles.rail} data-toc>
+    <span class={styles.title}><Typo.SectionTitle>{title}</Typo.SectionTitle></span>
+    <ul class={styles.list} data-scroll-fade="y">
+      {list.map((item) => <li><a class={styles.link} data-depth={item.depth} href={item.href}>{item.text}</a></li>)}
+    </ul>
+  </nav>
+)}
+{list.length > 0 && variant === "disclosure" && (
+  <details class={styles.disclosure}>
+    <summary class={styles.summary}>{title}<span class={styles.chevron}><ArrowRight size="sm" /></span></summary>
+    <nav aria-label={title}>
+      <ul class={styles.list}>
+        {list.map((item) => <li><a class={styles.link} data-depth={item.depth} href={item.href}>{item.text}</a></li>)}
+      </ul>
+    </nav>
+  </details>
+)}

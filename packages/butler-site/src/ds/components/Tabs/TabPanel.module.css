@@ -1,0 +1,14 @@
+.panel {
+  min-width: 0;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+.panel:focus-visible {
+  border-radius: var(--radius-control);
+  box-shadow: var(--focus-ring);
+}

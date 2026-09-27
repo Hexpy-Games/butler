@@ -1,0 +1,24 @@
+---
+import { Computer, Moon, Sun } from "../../components/Icons";
+import styles from "./ThemeToggle.module.css";
+
+const options = [
+  { value: "system", label: "시스템 테마", Icon: Computer },
+  { value: "light", label: "밝은 테마", Icon: Sun },
+  { value: "dark", label: "어두운 테마", Icon: Moon },
+] as const;
+---
+<div class={styles.group} role="group" aria-label="테마">
+  {options.map(({ value, label, Icon }) => (
+    <button
+      aria-label={label}
+      aria-pressed={value === "system" ? "true" : "false"}
+      class={styles.option}
+      data-theme-choice={value}
+      title={label}
+      type="button"
+    >
+      <Icon size="sm" />
+    </button>
+  ))}
+</div>

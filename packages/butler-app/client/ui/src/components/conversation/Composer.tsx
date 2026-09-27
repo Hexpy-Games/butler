@@ -23,10 +23,9 @@ import { useComposerDecision } from "./hooks/useComposerDecision";
 interface ComposerProps {
   scope?: ComposerDraftScope;
   onReserveChange: (height: number) => void;
-  onOpenContext: () => void;
   large: boolean;
 }
-export function Composer({ large, onOpenContext, onReserveChange, scope }: ComposerProps) {
+export function Composer({ large, onReserveChange, scope }: ComposerProps) {
   const session = useComposerSession(scope);
   const referenceDragging = useSpaceDrag(state => state.source?.startsWith("s:") ?? false);
   useComposerDraftSession(scope?.draftKey ?? session.activeChatId);
@@ -111,7 +110,6 @@ export function Composer({ large, onOpenContext, onReserveChange, scope }: Compo
     isSending: session.isActiveChatSending,
     large,
     modelMenuOpen,
-    onOpenContext,
     onStop: session.cancelActiveTurn,
     setAccessMenuOpen,
     setContextPopoverOpen,

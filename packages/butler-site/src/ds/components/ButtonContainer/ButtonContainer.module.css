@@ -1,0 +1,19 @@
+/* Forked from the app DS ButtonContainer (a wrapping row of same-size buttons). */
+.container {
+  display: flex;
+  min-width: 0;
+  flex-flow: row wrap;
+  align-items: center;
+}
+
+.container[data-gap="xs"] {
+  gap: var(--space-xs);
+}
+
+.container[data-gap="sm"] {
+  gap: var(--space-sm);
+}
+
+.container[data-gap="md"] {
+  gap: var(--space-md);
+}
