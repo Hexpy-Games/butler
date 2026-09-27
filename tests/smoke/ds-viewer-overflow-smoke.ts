@@ -9,7 +9,10 @@ import { createNativeAppServer } from "../support/native-app-server.ts";
 // (side-by-side frames, states matrices) resolves its own text color. Runs
 // side-by-side (light and dark panels) at 1440 under a dark system chrome and
 // at 900 under a light one, so each panel is nested in the opposite theme once.
-// Portaled overlays render outside the cell and are not checked here.
+// Portaled overlays render outside the cell and are not checked here. A Grid
+// (`[data-columns]`) must never be wider than itself: its tracks shrink with
+// the container whatever the content. A keyboard-focused NativeSelect rings
+// its control box only, never the chevron.
 // `bun tests/smoke/ds-viewer-overflow-smoke.ts [ItemName...]` narrows the run.
 
 const uiRoot = resolve(process.cwd(), "packages", "butler-app", "client", "ui", "dist");
@@ -101,6 +104,14 @@ function auditPage(tolerance: number) {
       }
     }
     if (worst) offenders.push({ cell: label, element: worst.element, overflow: worst.overflow });
+    for (const grid of cell.querySelectorAll("[data-columns]")) {
+      // A grid that scrolls itself (KanbanBoard scroll lanes) is meant to be wider inside.
+      if (getComputedStyle(grid).overflowX !== "visible") continue;
+      const excess = grid.scrollWidth - grid.clientWidth;
+      if (excess > tolerance) {
+        offenders.push({ cell: label, element: `grid[${grid.getAttribute("data-columns")}]`, overflow: `tracks +${excess}px` });
+      }
+    }
   }
 
   // A theme scope must paint its own text color, not the chrome's inherited one.
@@ -115,6 +126,27 @@ function auditPage(tolerance: number) {
     return actual === expected ? [] : [{ cell: `theme scope ${scope.className}`, element: "color", overflow: `${actual} != ${expected}` }];
   });
   return [...offenders, ...foreignScopes];
+}
+
+/** Keyboard-focuses each NativeSelect: the ring belongs on the trigger box, never on the chevron. */
+async function auditNativeSelectFocus(page: Page): Promise<Array<{ cell: string; element: string; overflow: string }>> {
+  const found: Array<{ cell: string; element: string; overflow: string }> = [];
+  const selects = page.locator('[data-ds-examples] select[data-slot="native-select"]:not(:disabled)');
+  const count = await selects.count();
+  if (count === 0) found.push({ cell: "focus", element: "native-select", overflow: "no enabled select to focus" });
+  for (let index = 0; index < count; index += 1) {
+    await selects.nth(index).focus();
+    const state = await selects.nth(index).evaluate((select) => {
+      const wrapper = select.closest('[data-slot="native-select-wrapper"]')!;
+      const shadow = (slot: string) => getComputedStyle(wrapper.querySelector(`[data-slot="${slot}"]`)!).boxShadow;
+      return { focusVisible: select.matches(":focus-visible"), trigger: shadow("native-select-trigger"), icon: shadow("native-select-icon") };
+    });
+    const label = `focus #${index}`;
+    if (!state.focusVisible) found.push({ cell: label, element: "select", overflow: "not :focus-visible" });
+    if (state.icon !== "none") found.push({ cell: label, element: "icon", overflow: `ring on chevron: ${state.icon}` });
+    if (state.trigger === "none") found.push({ cell: label, element: "trigger", overflow: "no ring on control box" });
+  }
+  return found;
 }
 
 async function waitForLayout(page: Page): Promise<void> {
@@ -142,6 +174,9 @@ try {
       await page.locator(`[data-ds-detail="${name}"] [data-ds-examples]`).waitFor({ state: "visible" });
       await waitForLayout(page);
       for (const found of await page.evaluate(auditPage, TOLERANCE)) offenders.push({ item: name, run: runLabel, ...found });
+      if (name === "NativeSelect") {
+        for (const found of await auditNativeSelectFocus(page)) offenders.push({ item: name, run: runLabel, ...found });
+      }
       checkedPages += 1;
     }
     await page.close();

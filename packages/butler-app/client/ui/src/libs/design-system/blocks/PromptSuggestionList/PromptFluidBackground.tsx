@@ -5,22 +5,25 @@ import {
   type FluidTone,
   type FluidVariant,
 } from "./promptFluid";
+import { useThemeScopeTone } from "./promptFluidTone";
 import styles from "./PromptSuggestionList.module.css";
 
 const FRAME_INTERVAL_MS = 1000 / 20;
 
 interface PromptFluidBackgroundProps {
   palette?: FluidPalette;
+  /** Omit to follow the nearest theme scope, live. */
   tone?: FluidTone;
   variant?: FluidVariant;
 }
 
 export function PromptFluidBackground({
   palette,
-  tone = "light",
+  tone: explicitTone,
   variant = "bloom",
 }: PromptFluidBackgroundProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const tone = useThemeScopeTone(canvasRef, explicitTone);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -76,6 +79,7 @@ export function PromptFluidBackground({
       aria-hidden="true"
       className={styles.fluidBackground}
       data-test-class="new-chat-fluid-gradient"
+      data-tone={tone}
       ref={canvasRef}
     />
   );

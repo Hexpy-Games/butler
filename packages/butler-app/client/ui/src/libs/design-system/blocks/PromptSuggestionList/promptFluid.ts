@@ -8,6 +8,8 @@ import {
   VERTEX_SHADER,
 } from "./promptFluidShaders";
 import { fluidShaderTime, type FluidVariant } from "./promptFluidTime";
+import type { FluidTone } from "./promptFluidTone";
+export type { FluidTone } from "./promptFluidTone";
 export {
   FLUID_TIME_PERIOD_SECONDS,
   fluidShaderTime,
@@ -32,7 +34,6 @@ type FluidRenderer = {
   dispose: () => void;
   draw: (time?: number) => void;
 };
-export type FluidTone = "dark" | "light";
 
 export const VISIBLE_LIQUID_SATURATION = 24;
 const MAX_FLUID_CANVAS_PIXELS = 1_400_000;
