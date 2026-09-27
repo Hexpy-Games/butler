@@ -26,6 +26,7 @@ impl StoredQualification {
         manifest: &Value,
         readiness: &Value,
         error_code: CognitionCode,
+        verified_commit: Option<&str>,
     ) -> CognitionResult<Self> {
         let binding = manifest
             .get("acceptance_binding")
@@ -36,8 +37,8 @@ impl StoredQualification {
         let acceptance = generation_root.join(qualification_ref);
         let evidence_root = generation_root.join(root_ref);
         ensure_data_authority(data_root, &[generation_root, &acceptance, &evidence_root])?;
-        let commit = option_env!("BUTLER_MEMORY_VERIFIED_COMMIT")
-            .ok_or_else(|| error(CognitionCode::MemoryAcceptanceVersionMismatch))?;
+        let commit =
+            verified_commit.ok_or_else(|| error(CognitionCode::MemoryAcceptanceVersionMismatch))?;
         let extraction = field(manifest, "extraction_version")?;
         let embedding = manifest["embedding"]["version"]
             .as_str()

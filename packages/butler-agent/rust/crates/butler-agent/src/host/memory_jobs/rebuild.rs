@@ -14,6 +14,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::cognition::CognitionError;
 use crate::cognition::CognitionPathEnvironment;
+use crate::cognition::CutoverStamp;
 use crate::cognition::activate_memory_rebuild;
 use crate::cognition::ensure_data_authority;
 use crate::cognition::inspect_memory_rebuild;
@@ -199,7 +200,10 @@ pub(crate) async fn run(
                             coordinator,
                             generation,
                             expected_active.as_deref(),
-                            &SystemIdentity.now_iso(),
+                            CutoverStamp {
+                                now: &SystemIdentity.now_iso(),
+                                verified_commit: option_env!("BUTLER_MEMORY_VERIFIED_COMMIT"),
+                            },
                             &cancellation,
                         )
                         .await

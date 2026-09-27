@@ -18,6 +18,14 @@ use crate::{
 };
 
 pub(crate) use activate::activate;
+
+/// When a cutover happens and which implementation commit its qualification
+/// must name (`None` for builds that cannot claim one).
+#[derive(Clone, Copy)]
+pub(crate) struct CutoverStamp<'a> {
+    pub now: &'a str,
+    pub verified_commit: Option<&'a str>,
+}
 pub(crate) use rollback::rollback;
 
 pub(crate) async fn repair_pending(

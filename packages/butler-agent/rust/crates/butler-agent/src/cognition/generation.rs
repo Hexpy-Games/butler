@@ -22,7 +22,7 @@ pub(in crate::cognition) use cache::{
     physical_entries as physical_hot_cache_entries, read_hot_cache_health,
 };
 pub(crate) use cutover::{
-    activate as activate_memory_rebuild, rollback as rollback_memory_rebuild,
+    CutoverStamp, activate as activate_memory_rebuild, rollback as rollback_memory_rebuild,
 };
 pub(crate) use initialize::initialize_empty_memory_generation;
 pub(crate) use qualification_service::validate as validate_memory_rebuild;

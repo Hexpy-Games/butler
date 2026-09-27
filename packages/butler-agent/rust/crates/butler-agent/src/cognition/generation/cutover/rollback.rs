@@ -10,7 +10,8 @@ use super::super::{
     rebuild::{assert_live_inventory_matches_candidate, compute_rebuild_readiness},
 };
 use super::{
-    descriptor, error, field, manifest_path, qualification::StoredQualification, read_manifest,
+    CutoverStamp, descriptor, error, field, manifest_path, qualification::StoredQualification,
+    read_manifest,
 };
 use crate::cognition::CognitionCode;
 use crate::{
@@ -26,7 +27,7 @@ pub(crate) async fn rollback(
     environment: &CognitionPathEnvironment,
     coordinator: Arc<CognitionWriteCoordinator>,
     expected_active: Option<&str>,
-    now: &str,
+    stamp: CutoverStamp<'_>,
     cancellation: &CancellationToken,
 ) -> CognitionResult<Value> {
     super::repair_pending(data_root, environment, coordinator.clone(), cancellation).await?;
@@ -140,6 +141,7 @@ pub(crate) async fn rollback(
                 &previous,
                 &readiness,
                 CognitionCode::MemoryRollbackRequiresCatchup,
+                stamp.verified_commit,
             )?);
             witness.assert_current(&handle).await?;
             candidate = Some((handle, witness));
@@ -190,7 +192,7 @@ pub(crate) async fn rollback(
             "schema":"butler.memory-active-generation.v2",
             "generation_id":previous_id,
             "previous_generation_id":descriptor.fields.generation_id,
-            "activated_at":now,
+            "activated_at":stamp.now,
             "projection_mode":if format == "v2" {"running"} else {"paused"},
         });
         let transitioned = descriptor::commit_descriptor_transition(

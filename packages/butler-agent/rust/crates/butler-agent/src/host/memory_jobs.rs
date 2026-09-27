@@ -18,7 +18,6 @@ pub(super) mod profile_sources;
 #[cfg(unix)]
 pub(super) mod rebuild;
 pub(super) mod recall_metrics;
-pub(super) mod source;
 pub(super) mod sync;
 #[cfg(unix)]
 pub(super) mod transcript_sync;

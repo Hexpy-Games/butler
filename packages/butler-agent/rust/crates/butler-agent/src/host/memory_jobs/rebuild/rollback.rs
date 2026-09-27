@@ -1,6 +1,7 @@
 //! One command-owned serving catchup after a bootstrap rollback.
 
 use crate::cognition::CognitionCode;
+use crate::cognition::CutoverStamp;
 use std::{path::Path, sync::Arc};
 
 use serde_json::{Value, json};
@@ -33,7 +34,10 @@ pub(super) async fn run(
         paths,
         coordinator.clone(),
         Some(generation),
-        &SystemIdentity.now_iso(),
+        CutoverStamp {
+            now: &SystemIdentity.now_iso(),
+            verified_commit: option_env!("BUTLER_MEMORY_VERIFIED_COMMIT"),
+        },
         cancellation,
     )
     .await?;
@@ -49,7 +53,10 @@ pub(super) async fn run(
             paths,
             coordinator.clone(),
             Some(generation),
-            &SystemIdentity.now_iso(),
+            CutoverStamp {
+                now: &SystemIdentity.now_iso(),
+                verified_commit: option_env!("BUTLER_MEMORY_VERIFIED_COMMIT"),
+            },
             cancellation,
         )
         .await?;

@@ -7,8 +7,8 @@ mod error;
 mod installation;
 #[cfg(unix)]
 mod mcp;
+pub(crate) use crate::cognition::MemorySourceReader;
 pub(crate) use crate::host::guided::tool_artifact::ToolArtifactReader;
-pub(crate) use crate::host::memory_jobs::source::MemorySourceReader;
 mod runtime;
 
 #[cfg(unix)]

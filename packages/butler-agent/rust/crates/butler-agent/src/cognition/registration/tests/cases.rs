@@ -37,7 +37,7 @@ async fn internal_control_without_graph_projection_completes_idempotently() {
 #[tokio::test]
 async fn registered_memory_source_reads_original_scalar_after_reopen() {
     use crate::cognition::CognitionPathEnvironment;
-    use crate::host::MemorySourceReader;
+    use crate::cognition::MemorySourceReader;
     use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
     use butler_runtime::context::ConversationSessionReference;
     use butler_turn::conversation::CanonicalMemoryReadBinding;

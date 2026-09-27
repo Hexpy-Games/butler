@@ -6,7 +6,8 @@ use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 use super::{
-    descriptor, error, field, manifest_path, qualification::StoredQualification, read_manifest,
+    CutoverStamp, descriptor, error, field, manifest_path, qualification::StoredQualification,
+    read_manifest,
 };
 use crate::{
     cognition::{
@@ -28,7 +29,7 @@ pub(crate) async fn activate(
     coordinator: Arc<CognitionWriteCoordinator>,
     generation_id: &str,
     expected_active: Option<&str>,
-    now: &str,
+    stamp: CutoverStamp<'_>,
     cancellation: &CancellationToken,
 ) -> CognitionResult<Value> {
     super::repair_pending(data_root, environment, coordinator.clone(), cancellation).await?;
@@ -83,6 +84,7 @@ pub(crate) async fn activate(
         &manifest,
         &readiness,
         CognitionCode::ActivationRequiresCatchup,
+        stamp.verified_commit,
     )?;
     qualification.assert_current()?;
     let lock = environment.consolidation_lock(data_root);
@@ -125,7 +127,7 @@ pub(crate) async fn activate(
             "schema":"butler.memory-active-generation.v2",
             "generation_id":generation_id,
             "previous_generation_id":descriptor.fields.generation_id,
-            "activated_at":now,
+            "activated_at":stamp.now,
             "projection_mode":"running",
         });
         let transitioned = descriptor::commit_descriptor_transition(
