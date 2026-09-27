@@ -2283,6 +2283,13 @@ ipcMain.handle("butler:get-local-auth-headers", async () =>
   await appLocalAuthHeaders(),
 );
 
+// A rotated connection code (security.connection_code_rotated, a rotate
+// response or a 401 live stream) invalidates the cached token; the data
+// folder token file holds the new one.
+ipcMain.handle("butler:reload-local-auth", () => ({
+  reloaded: bundledAgentSupervisor.reloadLocalAuth(),
+}));
+
 ipcMain.handle("butler:start-openai-oauth-login", async () =>
   await startOpenAIOAuthLogin(),
 );

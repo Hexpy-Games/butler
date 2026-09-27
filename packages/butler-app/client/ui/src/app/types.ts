@@ -16,6 +16,7 @@ export type SettingsSectionId =
   | "logs"
   | "personalization"
   | "privacy"
+  | "security"
   | "system"
   | "archives"
   | "about";
@@ -546,6 +547,19 @@ export interface SettingsView {
   web_search: WebSearchSettingsView;
   model_fallback: ModelFallbackSettingsView;
   profile_label: string;
+  security?: SecuritySettingsView;
+}
+
+export interface SecuritySettingsView {
+  remote_access_enabled: boolean;
+}
+
+/** GET /security: loopback clients only (403 otherwise). */
+export interface SecurityView {
+  remote_access_enabled: boolean;
+  bind_addresses: string[];
+  lan_urls: string[];
+  connection_code: { masked: string; created_at: string };
 }
 
 export interface ModelFallbackSettingsView {

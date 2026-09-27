@@ -1799,6 +1799,7 @@ export function appThemeClasses(
 export function normalizeSettingsSectionId(value: unknown): SettingsSectionId {
   const section = String(value ?? "general").toLocaleLowerCase("en-US");
   if (section === "updates") return "updates";
+  if (section.includes("security") || section.includes("보안")) return "security";
   if (
     section === "logs" ||
     section.includes("developer-log") ||

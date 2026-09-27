@@ -11,6 +11,7 @@ const BASE_SETTINGS_SECTION_IDS: SettingsSectionId[] = [
   "usage",
   "personalization",
   "privacy",
+  "security",
   "system",
   "archives",
   "about",

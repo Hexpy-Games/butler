@@ -190,6 +190,17 @@ async function localAuthHeaders() {
   }
 }
 
+const connectionCodeRotatedEvent = "security.connection_code_rotated";
+
+/** Main re-reads the data-folder token file after the connection code rotates. */
+async function reloadLocalAuth() {
+  try {
+    await ipcRenderer.invoke("butler:reload-local-auth");
+  } catch {
+    // The next request retries with whatever token main holds.
+  }
+}
+
 function liveEventsPath(cursor = 0) {
   const parsed = Number(cursor);
   const safeCursor = Number.isFinite(parsed) && parsed > 0
@@ -238,9 +249,13 @@ function liveEventErrorPayload(error) {
 }
 
 function subscribeLiveEvents({ cursor = 0 } = {}, handlers = {}) {
-  const onEvent = typeof handlers?.onEvent === "function"
+  const forwardEvent = typeof handlers?.onEvent === "function"
     ? handlers.onEvent
     : () => {};
+  const onEvent = (event) => {
+    if (event?.type === connectionCodeRotatedEvent) void reloadLocalAuth();
+    forwardEvent(event);
+  };
   const onError = typeof handlers?.onError === "function"
     ? handlers.onError
     : () => {};
@@ -261,6 +276,8 @@ function subscribeLiveEvents({ cursor = 0 } = {}, handlers = {}) {
         signal: abortController.signal,
       });
       if (!response.ok) {
+        // A code rotated while the stream was down: reconnect with the new token.
+        if (response.status === 401) await reloadLocalAuth();
         const error = new Error(`Live event stream failed with status ${response.status}.`);
         error.status = response.status;
         throw error;
@@ -949,6 +966,18 @@ const butlerApp = Object.freeze({
     method: "PATCH",
     body: JSON.stringify(settings ?? {}),
   }),
+  // Envelopes keep the 403 status of the gateway's loopback-only rule.
+  getSecurity: () => requestBridgeResult("/security"),
+  revealConnectionCode: () => requestBridgeResult("/security/connection-code/reveal", {
+    method: "POST",
+  }),
+  rotateConnectionCode: async () => {
+    const result = await requestBridgeResult("/security/connection-code/rotate", {
+      method: "POST",
+    });
+    if (result.ok) await reloadLocalAuth();
+    return result;
+  },
   listArchives: ({ limit, offset } = {}) => {
     const params = new URLSearchParams();
     if (limit !== undefined) params.set("limit", String(limit));

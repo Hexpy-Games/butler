@@ -811,6 +811,7 @@ export interface AppCopy {
       logs: string;
       personalization: string;
       privacy: string;
+      security: string;
       system: string;
       archives: string;
       about: string;
@@ -827,6 +828,7 @@ export interface AppCopy {
       logs: string;
       personalization: string;
       privacy: string;
+      security: string;
       system: string;
       archives: string;
       about: string;
@@ -843,13 +845,14 @@ export interface AppCopy {
       logs: string[];
       personalization: string[];
       privacy: string[];
+      security: string[];
       system: string[];
       archives: string[];
       about: string[];
     };
     sectionState: { loading: string; error: string; retry: string; empty: string };
     updateComponents: { app: string; service: string };
-    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "fallbackConsolidation" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview", string>;
+    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "fallbackConsolidation" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "connectionCode", string>;
     pageSectionDescriptions: Record<"notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning" | "fallbackConsolidation", string>;
     panels: {
       butlerModel: string;
@@ -1111,6 +1114,26 @@ export interface AppCopy {
         windows: string;
         fallback: string;
       };
+    };
+    security: {
+      remoteAccess: string;
+      remoteAccessDescription: string;
+      addresses: string;
+      noAddresses: string;
+      copyAddress: string;
+      copied: string;
+      code: string;
+      createdAt: (date: string) => string;
+      reveal: string;
+      hide: string;
+      copy: string;
+      rotate: string;
+      rotateTitle: string;
+      rotateConfirm: string;
+      rotated: string;
+      hostOnly: string;
+      revealFailed: string;
+      rotateFailed: string;
     };
     workStatus: {
       title: string;

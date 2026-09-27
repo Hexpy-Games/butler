@@ -67,6 +67,11 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   ],
   logs: [{ id: "developer-logs", kind: "list", fields: [] }],
   privacy: [{ id: "diagnostics", kind: "form", fields: ["diagnostics"] }],
+  security: [
+    { id: "remote-access", kind: "form", fields: ["remote-access-enabled", "lan-urls"] },
+    // Absent when the gateway refuses a non-loopback client (403).
+    { id: "connection-code", kind: "form", fields: ["connection-code"], optional: true },
+  ],
   system: [{ id: "system-events", kind: "list", fields: [] }],
   archives: [{ id: "archives", kind: "list", fields: [] }],
   about: [

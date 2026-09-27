@@ -24,7 +24,7 @@ test("settings navigation groups existing pages without placeholder categories",
   ).toEqual([
     ["general", "appearance", "personalization"],
     ["models", "mcp", "skills"],
-    ["server", "updates", "usage", "privacy", "system", "archives", "about"],
+    ["server", "updates", "usage", "privacy", "security", "system", "archives", "about"],
   ]);
   expect(
     groups.flatMap((group) => group.sections).map((section) => section.id),
@@ -41,6 +41,7 @@ test("developer logs stay in the app group when enabled", () => {
     "usage",
     "logs",
     "privacy",
+    "security",
     "system",
     "archives",
     "about",
@@ -58,6 +59,8 @@ test("settings search matches labels, descriptions, and bounded aliases", () => 
   expect(sectionIds("project folder")).toEqual(["server"]);
   expect(sectionIds("worker")).toEqual(["models"]);
   expect(sectionIds("developer logs")).toEqual(["logs"]);
+  expect(sectionIds("connection code")).toEqual(["security"]);
+  expect(sectionIds("remote access")).toEqual(["security"]);
   expect(sectionIds("does not exist")).toEqual([]);
   expect(filterSettingsSectionGroups(groups, " ")).toBe(groups);
 });
