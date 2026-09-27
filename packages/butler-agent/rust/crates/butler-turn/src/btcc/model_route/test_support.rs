@@ -334,7 +334,7 @@ pub(super) fn turn(model_route: Value) -> TurnRecord {
         original_message_id: "message".into(),
         original_message: "hello".into(),
         wake_identity: None,
-        model_selection: json!({"provider":"openai","model":"a","reasoningEffort":"high","controls":{},"controlsHash":"hash"}),
+        model_selection: serde_json::from_value(json!({"provider":"openai","model":"a","reasoningEffort":"high","controls":{},"controlsHash":"hash"})).unwrap(),
         model_route: Some(serde_json::from_value(model_route).expect("fixture route")),
         continuation_budget: None,
         context: json!({"userRef":"user","profileRefs":[],"recentFeedbackRefs":[],"mandatoryHotCacheRefs":[],"optionalHotCacheRefs":[],"baselineObservationScopeRefs":[]}),

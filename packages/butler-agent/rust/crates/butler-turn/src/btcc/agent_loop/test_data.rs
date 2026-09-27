@@ -58,7 +58,7 @@ pub fn turn(
         original_message_id: "message".into(),
         original_message: "hello".into(),
         wake_identity: None,
-        model_selection: json!({"provider":"openai","model":"model","reasoningEffort":"medium","controls":{},"controlsHash":"hash"}),
+        model_selection: serde_json::from_value(json!({"provider":"openai","model":"model","reasoningEffort":"medium","controls":{},"controlsHash":"hash"})).unwrap(),
         model_route: None,
         continuation_budget: None,
         context: json!({"userRef":"user-1","profileRefs":[],"recentFeedbackRefs":[],"mandatoryHotCacheRefs":[],"optionalHotCacheRefs":[],"baselineObservationScopeRefs":[],"emptyResponsePolicy": empty}),

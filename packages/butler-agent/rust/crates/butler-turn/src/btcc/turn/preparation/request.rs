@@ -97,14 +97,9 @@ pub(super) fn replay_binding(
         Some("worker") => WorkspaceRole::Worker,
         _ => WorkspaceRole::Butler,
     };
-    let selection = turn.model_selection.as_object().ok_or_else(|| {
-        BtccError::detected(
-            BtccCode::TurnReplayModelInvalid,
-            "BTCC replay model selection is invalid",
-        )
-    })?;
-    let provider = required_string(selection, "provider")?;
-    let model = required_string(selection, "model")?;
+    let selection = &turn.model_selection;
+    let provider = selection.provider.clone();
+    let model = &selection.model;
     let mut metadata = Map::new();
     metadata.insert(
         "accessMode".into(),
@@ -116,10 +111,7 @@ pub(super) fn replay_binding(
     );
     metadata.insert(
         "reasoning_effort".into(),
-        selection
-            .get("reasoningEffort")
-            .cloned()
-            .unwrap_or(Value::Null),
+        serde_json::to_value(&selection.reasoning_effort).map_err(json_error)?,
     );
     Ok(StoredSessionBinding {
         session_id: turn.session_id.clone(),
@@ -389,18 +381,6 @@ fn message_content(request: &TurnRequest) -> Option<&Value> {
         .as_ref()?
         .as_object()?
         .get("contentParts")
-}
-fn required_string(object: &Map<String, Value>, key: &str) -> Result<String, BtccError> {
-    object
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-        .ok_or_else(|| {
-            BtccError::detected(
-                BtccCode::TurnReplayModelInvalid,
-                "BTCC replay model selection is invalid",
-            )
-        })
 }
 fn role_text(role: &WorkspaceRole) -> &str {
     match role {

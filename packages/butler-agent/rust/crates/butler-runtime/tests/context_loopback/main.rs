@@ -229,8 +229,9 @@ async fn summary_persists_and_reopens_with_physical_request_admission() {
         .await
         .unwrap();
     let claim = repositories.acquire_state_claim(&turn).await.unwrap();
-    turn.model_selection = json!({"provider":"openai","model":"gpt-5.5",
-        "reasoningEffort":"medium","controls":{},"controlsHash":"hash"});
+    turn.model_selection = serde_json::from_value(json!({"provider":"openai","model":"gpt-5.5",
+        "reasoningEffort":"medium","controls":{},"controlsHash":"hash"}))
+    .unwrap();
     let started = turn.continuation_budget.as_ref().unwrap().started_at_ms;
     let budget_factory = GuidedContinuationBudgetFactory::new(
         Some(repositories.clone()),

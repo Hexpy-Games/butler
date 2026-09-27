@@ -90,7 +90,7 @@ fn hydrate(connection: &Connection, row: TurnRow) -> StorageResult<TurnRecord> {
         .transpose()?;
     let turn = TurnRecord {
         wake_identity: load_wake_identity(connection, &row.turn_id)?,
-        model_selection: json(
+        model_selection: typed(
             &row.model_selection_json,
             StorageCode::InvalidModelSelection,
         )?,

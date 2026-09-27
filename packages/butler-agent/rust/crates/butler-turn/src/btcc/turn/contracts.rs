@@ -2,10 +2,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::btcc::{
-    AcceptedWorkResult, AlreadyDeliveredOutcome, AuthorityLoopContinuation, ChangedFileSummary,
-    ExecutionOutcome, FinalArtifact, ModelIdentity, ProgressDestination, RouteState,
-    RuntimeFailure, TurnContinuationBudgetEvent, TurnContinuationBudgetState, TurnRequest,
-    WorkStatus,
+    AcceptedWorkResult, AdmittedModelSelection, AlreadyDeliveredOutcome, AuthorityLoopContinuation,
+    ChangedFileSummary, ExecutionOutcome, FinalArtifact, ModelIdentity, ProgressDestination,
+    RouteState, RuntimeFailure, TurnContinuationBudgetEvent, TurnContinuationBudgetState,
+    TurnRequest, WorkStatus,
 };
 
 /// The durable lifecycle state of a turn.
@@ -41,7 +41,7 @@ pub struct TurnRecord {
     pub original_message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wake_identity: Option<WakeIdentity>,
-    pub model_selection: Value,
+    pub model_selection: AdmittedModelSelection,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_route: Option<RouteState>,
     #[serde(skip_serializing_if = "Option::is_none")]

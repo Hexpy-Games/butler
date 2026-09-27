@@ -28,7 +28,7 @@ pub(super) fn record(turn_id: &str, session_id: &str, state: TurnSemanticState) 
         original_message_id: "message".into(),
         original_message: "hello".into(),
         wake_identity: None,
-        model_selection: json!({}),
+        model_selection: crate::btcc::CommandModelSelection::fixture().selection,
         model_route: None,
         continuation_budget: None,
         context: json!({}),

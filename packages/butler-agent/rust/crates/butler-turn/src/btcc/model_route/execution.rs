@@ -44,7 +44,7 @@ impl ModelExecutionFactory for TurnModelExecutionFactory {
         let store = self.store.clone();
         let retry = self.retry;
         Box::pin(async move {
-            let selected = selected(&input.turn.model_selection)?;
+            let selected = selected(&input.turn.model_selection);
             let source_revision = input.source_revision;
             let Some(route) = input.turn.model_route.clone() else {
                 return Ok(Box::new(PassthroughExecution {

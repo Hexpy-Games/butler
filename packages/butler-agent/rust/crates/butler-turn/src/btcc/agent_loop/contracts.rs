@@ -116,10 +116,7 @@ pub struct SemanticTurn {
 impl SemanticTurn {
     /// Decodes the persisted model selection, context and authority continuation.
     pub fn parse(turn: &TurnRecord) -> Result<Self, BtccError> {
-        let model =
-            AdmittedModelSelection::deserialize(&turn.model_selection).map_err(|source| {
-                super::invalid_contract(BtccCode::InvalidAdmittedModelSelection).with_source(source)
-            })?;
+        let model = turn.model_selection.clone();
         let context = ButlerContext::deserialize(&turn.context).map_err(|source| {
             super::invalid_contract(BtccCode::InvalidButlerContext).with_source(source)
         })?;

@@ -26,8 +26,8 @@ impl GuidedExecutionPolicy {
     ) -> Result<Self, GuidedPreparationError> {
         let admitted = access(
             turn.model_selection
-                .get("controls")
-                .and_then(|value| value.get("accessMode"))
+                .controls
+                .get("accessMode")
                 .and_then(Value::as_str)
                 .unwrap_or("read_only"),
         );

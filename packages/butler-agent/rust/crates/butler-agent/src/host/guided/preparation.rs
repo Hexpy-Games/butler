@@ -72,10 +72,7 @@ impl GuidedPreparation {
                 .get("projectRef")
                 .and_then(serde_json::Value::as_str)
         });
-        let plan_mode = turn
-            .model_selection
-            .get("controls")
-            .and_then(|v| v.get("planMode"))
+        let plan_mode = turn.model_selection.controls.get("planMode")
             == Some(&serde_json::Value::Bool(true))
             && policy.tracking_mode == "ledger"
             && project_id.is_some_and(|v| !v.is_empty());

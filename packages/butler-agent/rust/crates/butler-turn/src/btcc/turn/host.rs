@@ -70,10 +70,11 @@ impl Coordinator {
             let task = tokio::spawn(async move {
                 let turn_id = request.turn_id.clone();
                 let session_id = request.session_id.clone();
-                let result = AssertUnwindSafe(coordinator.run_after(predecessor, request))
-                    .catch_unwind()
-                    .await
-                    .unwrap_or_else(|_| Err(panicked_task_error()));
+                let result =
+                    AssertUnwindSafe(Box::pin(coordinator.run_after(predecessor, request)))
+                        .catch_unwind()
+                        .await
+                        .unwrap_or_else(|_| Err(panicked_task_error()));
                 spawned.complete(result).await;
                 coordinator.remove_flight(&turn_id, &session_id, &spawned);
             });

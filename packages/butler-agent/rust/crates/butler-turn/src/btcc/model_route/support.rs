@@ -48,30 +48,13 @@ pub(super) fn recovered(value: &FailureRecord) -> ModelRoundError {
     }
 }
 
-pub(super) fn selected(value: &Value) -> Result<(String, ReasoningEffort), BtccError> {
-    let provider = value
-        .get("provider")
-        .and_then(Value::as_str)
-        .ok_or_else(|| {
-            BtccError::detected(BtccCode::InvalidAdmittedModelSelection, "missing provider")
-        })?;
-    let model = value.get("model").and_then(Value::as_str).ok_or_else(|| {
-        BtccError::detected(BtccCode::InvalidAdmittedModelSelection, "missing model")
-    })?;
-    let reasoning = serde_json::from_value(
-        value
-            .get("reasoningEffort")
-            .cloned()
-            .unwrap_or(Value::String("medium".into())),
+pub(super) fn selected(
+    selection: &crate::btcc::AdmittedModelSelection,
+) -> (String, ReasoningEffort) {
+    (
+        format!("{}/{}", selection.provider, selection.model),
+        selection.reasoning_effort.clone(),
     )
-    .map_err(|source| {
-        BtccError::detected(
-            BtccCode::InvalidAdmittedModelSelection,
-            "invalid reasoning effort",
-        )
-        .with_source(source)
-    })?;
-    Ok((format!("{provider}/{model}"), reasoning))
 }
 pub(super) fn validate(route: &RouteState) -> Result<(), BtccError> {
     if route.schema_version != "butler.model-route.v1"
