@@ -277,6 +277,9 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
   startupTimeoutMs: 120_000,
   onUnexpectedExit: () => { void recoverUnexpectedForegroundExit(); },
   onGatewayStarting: prepareAppForegroundGatewayLaunch,
+  onIntentionalExit: handleIntentionalAgentExit,
+  onExternalAttach: handleExternalAgentAttach,
+  onRestartReconnectFailed: handleAgentRestartReconnectFailed,
 });
 const sessionFolderLauncher = createSessionFolderLauncher({
   platform: process.platform,
@@ -544,6 +547,79 @@ async function recoverUnexpectedForegroundExit() {
     console.error(error);
     scheduleTrayMenuRefresh();
   }
+}
+
+// `butler stop` / `butler restart` (CLI or MCP) leave an intent that the
+// supervisor reads when the Agent exits; these keep App state in step with it.
+function handleIntentionalAgentExit({ reason }) {
+  if (usesAppForegroundLifecycle && !isQuitting && foregroundInstance) {
+    advanceForegroundInstance(
+      reason === "stop" ? ["stopping", "stopped"] : ["degraded", "recovering"],
+    );
+    if (reason === "stop") {
+      writeAppForegroundLastExit(butlerDataRoot, {
+        generation: foregroundInstance.generation,
+        exitReason: "agent_stop_requested",
+        graceful: true,
+      });
+    }
+  }
+  publishAgentState();
+}
+
+function handleExternalAgentAttach({ pid, port: attachedPort }) {
+  if (usesAppForegroundLifecycle && !isQuitting) {
+    const launch = createAppForegroundLaunch({
+      appVersion: appInfoView().version,
+      bundledAgentVersion: null,
+      port: attachedPort,
+    });
+    foregroundInstance = transitionAppForeground(
+      transitionAppForeground(launch.record, "starting"),
+      "ready",
+      { patch: { agent_host_pid: pid, containment_kind: "external" } },
+    );
+    writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+    clearAppForegroundStartupFailure(butlerDataRoot);
+  }
+  publishAgentState();
+}
+
+function handleAgentRestartReconnectFailed() {
+  if (usesAppForegroundLifecycle && !isQuitting) advanceForegroundInstance(["failed"]);
+  publishAgentState();
+}
+
+function advanceForegroundInstance(states) {
+  if (!foregroundInstance) return;
+  for (const state of states) {
+    try {
+      foregroundInstance = transitionAppForeground(foregroundInstance, state);
+    } catch {
+      // Skip a step the current state does not allow; every step stays validated.
+    }
+  }
+  writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+}
+
+function publishAgentState() {
+  const state = bundledAgentSupervisor.agentState();
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send("butler:agent-state", state);
+  }
+  scheduleTrayMenuRefresh();
+}
+
+async function startAgentFromApp() {
+  try {
+    if (!shouldUseAppAgentNativeServiceBridge()) {
+      await bundledAgentSupervisor.resume();
+    }
+    await ensureServer();
+  } finally {
+    publishAgentState();
+  }
+  return bundledAgentSupervisor.agentState();
 }
 
 async function waitForNativeServiceGatewayReady({
@@ -1381,7 +1457,13 @@ async function trayAgentServiceStatus() {
 
 async function runTrayAgentServiceAction(action) {
   if (usesAppForegroundLifecycle) {
-    if (action === "restart") await bundledAgentSupervisor.restart();
+    if (action === "restart") {
+      try {
+        await bundledAgentSupervisor.restart();
+      } finally {
+        publishAgentState();
+      }
+    }
     await refreshTrayMenu();
     return;
   }
@@ -2073,6 +2155,10 @@ ipcMain.handle("butler:ensure-server", async () => {
 
 ipcMain.handle("butler:get-server-url", () => serverUrl);
 
+ipcMain.handle("butler:agent-state", () => bundledAgentSupervisor.agentState());
+
+ipcMain.handle("butler:agent-start", async () => await startAgentFromApp());
+
 ipcMain.handle("butler:first-run-setup-cancel", () =>
   firstRunSetupBridge.cancel(),
 );
@@ -2564,11 +2650,14 @@ async function stopServerProcess({
         );
       }
     }
-    foregroundInstance = transitionAppForeground(foregroundInstance, "stopping");
-    writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+    // An external `butler stop` may already have left the instance stopped.
+    if (foregroundInstance.state !== "stopped") {
+      foregroundInstance = transitionAppForeground(foregroundInstance, "stopping");
+      writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+    }
   }
   const stopResult = await bundledAgentSupervisor.stop({ wait: true });
-  if (usesAppForegroundLifecycle && foregroundInstance) {
+  if (usesAppForegroundLifecycle && foregroundInstance?.state === "stopping") {
     foregroundInstance = transitionAppForeground(foregroundInstance, "stopped", {
       patch: { clean_exit: true },
     });

@@ -7,11 +7,36 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
+import {
+  AGENT_RESTART_RECONNECT_TIMEOUT_MS,
+  decideAgentExit,
+  processIsAlive,
+  readAgentStopIntent,
+  readNativeServiceInstance,
+  selectReplacementInstance,
+  writeAgentStopIntent,
+} from "./app-agent-stop-intent.mjs";
 
 export const APP_LOCAL_AUTH_SCHEMA = "butler.app-local-agent-auth.v1";
 
 export function appLocalAuthPath(butlerData) {
   return join(butlerData, "app", "runtime", "auth", "local-agent-auth.json");
+}
+
+/**
+ * Reads the DATA-owned local auth file without writing it. App-spawned and
+ * CLI-started Agents read the same file, so any token-bearing file is reused
+ * rather than overwritten, whichever side created it.
+ */
+export function readAppLocalAuth({ butlerData }) {
+  const path = appLocalAuthPath(butlerData);
+  const existing = readJsonIfPresent(path);
+  if (typeof existing?.token !== "string" || existing.token.length < 32) return null;
+  return {
+    filePath: path,
+    created: false,
+    token: existing.token,
+  };
 }
 
 export function prepareAppLocalAuth({
@@ -20,18 +45,8 @@ export function prepareAppLocalAuth({
   generateToken = () => randomBytes(32).toString("base64url"),
 }) {
   const path = appLocalAuthPath(butlerData);
-  const existing = readJsonIfPresent(path);
-  if (
-    existing?.schema === APP_LOCAL_AUTH_SCHEMA &&
-    typeof existing.token === "string" &&
-    existing.token.length >= 32
-  ) {
-    return {
-      filePath: path,
-      created: false,
-      token: existing.token,
-    };
-  }
+  const existing = readAppLocalAuth({ butlerData });
+  if (existing) return existing;
   const token = generateToken();
   if (typeof token !== "string" || token.length < 32) {
     throw new Error("App local auth token generation failed");
@@ -109,6 +124,17 @@ export function createBundledAgentSupervisor({
   stdio = "inherit",
   onUnexpectedExit = () => {},
   onGatewayStarting = () => {},
+  readStopIntent = () => readAgentStopIntent(butlerData),
+  writeStopIntent = (intent) => writeAgentStopIntent(butlerData, intent),
+  readInstanceRecord = () => readNativeServiceInstance(butlerData),
+  isProcessAlive = (pid) => processIsAlive(pid),
+  restartReconnectTimeoutMs = AGENT_RESTART_RECONNECT_TIMEOUT_MS,
+  externalPollMs = 1000,
+  schedulePoll = defaultSchedulePoll,
+  cancelPoll = (timer) => clearTimeout(timer),
+  onIntentionalExit = () => {},
+  onExternalAttach = () => {},
+  onRestartReconnectFailed = () => {},
 }) {
   let child = null;
   let childSpawnError = null;
@@ -121,6 +147,17 @@ export function createBundledAgentSupervisor({
   let localAuth = null;
   let activeGateway = null;
   let readyGateway = null;
+  // Identity of the spawned child once its native service record is ready.
+  let childInstanceId = null;
+  // A ready Agent this App did not spawn (external start/restart, or launch adoption).
+  let attached = null;
+  // An intentional external stop or a timed-out external restart. Only an
+  // explicit start/restart from the App (or an external start) clears it.
+  let halt = null;
+  let restartWait = null;
+  let exitGeneration = 0;
+  let lastExited = null;
+  let pollTimer = null;
 
   async function ensureReady() {
     if (startupPromise) return startupPromise;
@@ -139,8 +176,18 @@ export function createBundledAgentSupervisor({
       await waitForExplicitServerReady();
       return;
     }
+    reconcileAttachedExit();
+    if (halt) throw haltError();
+    if (restartWait) {
+      await restartWait;
+      return;
+    }
     if (child) {
       await adoptOwnedChild(child, activeGateway ?? readyGateway);
+      return;
+    }
+    if (attached && (await checkGatewayReadiness()).ready) {
+      phase = "running";
       return;
     }
     let gateway;
@@ -161,9 +208,14 @@ export function createBundledAgentSupervisor({
       if (!gateway.commitActivation) {
         phase = "running";
         readyGateway = gateway;
+        adoptListenerIdentity();
         return;
       }
       updatePort(await findAvailablePort(getPort() + 1));
+    }
+    if (!gateway.commitActivation && await attachReplacement(null)) {
+      readyGateway = gateway;
+      return;
     }
     if (!(await isPortAvailable(getPort()))) {
       updatePort(await findAvailablePort(getPort() + 1));
@@ -279,6 +331,7 @@ export function createBundledAgentSupervisor({
     readyGateway = gateway;
     lastErrorCode = null;
     lastErrorDetails = null;
+    if (child) childInstanceId = instanceIdForPid(child.pid);
   }
 
   async function start(gateway = resolveGateway()) {
@@ -291,6 +344,8 @@ export function createBundledAgentSupervisor({
     lastErrorCode = null;
     lastExit = null;
     childSpawnError = null;
+    childInstanceId = null;
+    attached = null;
     localAuth = localAuth ?? prepareAppLocalAuth({ butlerData });
     onGatewayStarting(gateway);
     const env = buildBundledAgentSupervisorEnv({
@@ -326,22 +381,27 @@ export function createBundledAgentSupervisor({
       throw error;
     }
     let earlyExit = null;
+    const spawned = child;
     child.once("error", (error) => {
       childSpawnError = error;
     });
     child.once("exit", (code, signal) => {
       const wasRunning = phase === "running";
+      const appRequested = phase === "stopping";
+      const pid = typeof spawned.pid === "number" ? spawned.pid : null;
+      const exited = { pid, instanceId: childInstanceId ?? instanceIdForPid(pid) };
       earlyExit = { code, signal };
       lastExit = earlyExit;
       clearShutdownTimer();
       child = null;
+      childInstanceId = null;
       if (phase !== "stopping") phase = "stopped";
       if (wasRunning) {
         invalidateGatewayRuntimeReceipt(gateway);
         if (readyGateway === gateway) readyGateway = null;
         if (activeGateway === gateway) activeGateway = null;
-        queueMicrotask(() => onUnexpectedExit(earlyExit));
       }
+      if (!appRequested) handleAgentExit(exited, earlyExit, { wasRunning });
     });
 
     let observedHealthy = false;
@@ -361,12 +421,21 @@ export function createBundledAgentSupervisor({
   }
 
   async function restart() {
-    await stop({ wait: true });
+    await stop({ wait: true, reason: "restart" });
+    halt = null;
+    await ensureReady();
+  }
+
+  async function resume() {
+    halt = null;
+    lastErrorCode = null;
+    lastErrorDetails = null;
     await ensureReady();
   }
 
   async function repair() {
-    await stop({ wait: true });
+    await stop({ wait: true, reason: "restart" });
+    halt = null;
     invalidateGatewayRuntimeReceipt(readyGateway ?? activeGateway);
     readyGateway = null;
     activeGateway = null;
@@ -377,7 +446,12 @@ export function createBundledAgentSupervisor({
     await ensureReady();
   }
 
-  async function stop({ wait = false } = {}) {
+  async function stop({ wait = false, reason = "stop" } = {}) {
+    cancelRestartWait();
+    cancelPollTick();
+    // An attached Agent was not spawned by this App. Its record pid alone is
+    // not authority to signal it, so the App only detaches from it.
+    attached = null;
     if (!child) {
       phase = "stopped";
       return {
@@ -389,6 +463,7 @@ export function createBundledAgentSupervisor({
     }
     phase = "stopping";
     const stopping = child;
+    recordAppStopIntent(stopping, reason);
     stopping.kill("SIGTERM");
     shutdownKillTimer = setKillTimer(() => {
       if (child === stopping) stopping.kill("SIGKILL");
@@ -450,8 +525,177 @@ export function createBundledAgentSupervisor({
         }
         : null,
       last_exit: lastExit,
+      agent_state: agentState().state,
+      external_agent_attached: attached !== null,
       raw_text_included: false,
     };
+  }
+
+  function agentState() {
+    let state;
+    if (halt?.reason === "stop") state = "stopped";
+    else if (halt?.reason === "restart_timeout") state = "restart_failed";
+    else if (restartWait) state = "restarting";
+    else if (["running", "starting", "failed"].includes(phase)) state = phase;
+    else state = "idle";
+    return {
+      state,
+      requested_by: halt?.requestedBy ?? null,
+      raw_text_included: false,
+    };
+  }
+
+  function handleAgentExit(exited, exit, { wasRunning }) {
+    lastExited = exited;
+    const decision = decideAgentExit({ intent: safeReadStopIntent(), exited });
+    if (decision.action === "stay_stopped") {
+      halt = { reason: "stop", requestedBy: decision.requestedBy };
+      phase = "stopped";
+      schedulePollTick();
+      queueMicrotask(() =>
+        onIntentionalExit({ reason: "stop", requestedBy: decision.requestedBy, exit }));
+      return;
+    }
+    if (decision.action === "await_restart") {
+      phase = "restarting";
+      const wait = awaitReplacement(exited, decision.requestedBy, ++exitGeneration);
+      restartWait = wait;
+      wait.catch(() => {});
+      queueMicrotask(() =>
+        onIntentionalExit({ reason: "restart", requestedBy: decision.requestedBy, exit }));
+      return;
+    }
+    if (wasRunning) queueMicrotask(() => onUnexpectedExit(exit));
+  }
+
+  async function awaitReplacement(exited, requestedBy, generation) {
+    const deadline = nowMs() + restartReconnectTimeoutMs;
+    try {
+      while (generation === exitGeneration) {
+        if (await attachReplacement(exited)) return;
+        if (nowMs() >= deadline) break;
+        await sleepMs(Math.min(externalPollMs, Math.max(0, deadline - nowMs())));
+      }
+    } finally {
+      if (generation === exitGeneration) restartWait = null;
+    }
+    if (generation !== exitGeneration) return;
+    halt = { reason: "restart_timeout", requestedBy };
+    recordError("restart_reconnect_timeout", { timeout_ms: restartReconnectTimeoutMs });
+    schedulePollTick();
+    queueMicrotask(() => onRestartReconnectFailed());
+    throw haltError();
+  }
+
+  async function attachReplacement(exited) {
+    const candidate = selectReplacementInstance(safeReadInstanceRecord(), {
+      exitedInstanceId: exited?.instanceId ?? null,
+      isProcessAlive,
+    });
+    if (!candidate) return false;
+    if (candidate.port !== getPort()) updatePort(candidate.port);
+    // An external Agent authenticates with the DATA-owned auth file, never an
+    // App-only in-memory token.
+    localAuth = readAppLocalAuth({ butlerData }) ?? localAuth;
+    if (!(await checkGatewayReadiness()).ready || child) return false;
+    markAttached(candidate);
+    return true;
+  }
+
+  function adoptListenerIdentity() {
+    if (attached || child) return;
+    const record = safeReadInstanceRecord();
+    if (record?.state !== "ready" || record.port !== getPort()) return;
+    if (!isProcessAlive(record.pid)) return;
+    markAttached(record);
+  }
+
+  function markAttached(record) {
+    attached = { pid: record.pid, instanceId: record.instanceId };
+    halt = null;
+    phase = "running";
+    lastErrorCode = null;
+    lastErrorDetails = null;
+    schedulePollTick();
+    const event = { pid: record.pid, instanceId: record.instanceId, port: getPort() };
+    queueMicrotask(() => onExternalAttach(event));
+  }
+
+  function reconcileAttachedExit() {
+    if (!attached || child || isProcessAlive(attached.pid)) return;
+    const exited = attached;
+    attached = null;
+    phase = "stopped";
+    handleAgentExit(exited, { code: null, signal: null }, { wasRunning: true });
+  }
+
+  function schedulePollTick() {
+    if (pollTimer !== null) return;
+    pollTimer = schedulePoll(() => {
+      pollTimer = null;
+      return pollTick();
+    }, externalPollMs);
+  }
+
+  function cancelPollTick() {
+    if (pollTimer === null) return;
+    cancelPoll(pollTimer);
+    pollTimer = null;
+  }
+
+  async function pollTick() {
+    if (child) return;
+    if (attached) reconcileAttachedExit();
+    else if (halt && !restartWait) await attachReplacement(lastExited);
+    if (!child && (attached || halt)) schedulePollTick();
+  }
+
+  function cancelRestartWait() {
+    exitGeneration += 1;
+    restartWait = null;
+  }
+
+  function haltError() {
+    const timedOut = halt?.reason === "restart_timeout";
+    const error = new Error(timedOut
+      ? "Butler Agent did not come back after an external restart."
+      : "Butler Agent was stopped.");
+    error.code = timedOut ? "agent_restart_timeout" : "agent_stopped";
+    return error;
+  }
+
+  function recordAppStopIntent(target, reason) {
+    const pid = typeof target?.pid === "number" ? target.pid : null;
+    const instanceId = childInstanceId ?? instanceIdForPid(pid);
+    // Without a published instance id the Agent never became observable, so
+    // no other supervisor can mistake this exit; skip the intent.
+    if (!pid || !instanceId) return;
+    try {
+      writeStopIntent({ reason, pid, instanceId, requestedBy: "app" });
+    } catch {
+      // This supervisor already treats the exit as intentional (phase stopping).
+    }
+  }
+
+  function instanceIdForPid(pid) {
+    const record = safeReadInstanceRecord();
+    return record && record.pid === pid ? record.instanceId : null;
+  }
+
+  function safeReadStopIntent() {
+    try {
+      return readStopIntent();
+    } catch {
+      return null;
+    }
+  }
+
+  function safeReadInstanceRecord() {
+    try {
+      return readInstanceRecord();
+    } catch {
+      return null;
+    }
   }
 
   function authHeaders() {
@@ -558,14 +802,22 @@ export function createBundledAgentSupervisor({
   }
 
   return {
+    agentState,
     authHeaders,
     diagnostics,
     ensureReady,
     repair,
     restart,
+    resume,
     start,
     stop,
   };
+}
+
+function defaultSchedulePoll(fn, ms) {
+  const timer = setTimeout(fn, ms);
+  timer.unref?.();
+  return timer;
 }
 
 function readJsonIfPresent(path) {

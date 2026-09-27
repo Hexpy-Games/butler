@@ -1,6 +1,23 @@
+import type { AgentStopIntent, NativeServiceInstance } from "./app-agent-stop-intent.mjs";
+
+export type AgentRuntimeState =
+  | "running"
+  | "starting"
+  | "stopped"
+  | "restarting"
+  | "restart_failed"
+  | "failed"
+  | "idle";
+
 export const APP_LOCAL_AUTH_SCHEMA: "butler.app-local-agent-auth.v1";
 
 export function appLocalAuthPath(butlerData: string): string;
+
+export function readAppLocalAuth(input: { butlerData: string }): {
+  filePath: string;
+  created: false;
+  token: string;
+} | null;
 
 export function prepareAppLocalAuth(input: {
   butlerData: string;
@@ -88,7 +105,33 @@ export function createBundledAgentSupervisor(input: {
     env?: Record<string, string | undefined>;
     bundledAgentVersion?: string;
   }) => void;
+  onUnexpectedExit?: (exit: { code: number | null; signal: string | null }) => void;
+  readStopIntent?: () => AgentStopIntent | null;
+  writeStopIntent?: (intent: {
+    reason: "stop" | "restart";
+    pid: number;
+    instanceId: string;
+    requestedBy: "app";
+  }) => unknown;
+  readInstanceRecord?: () => NativeServiceInstance | null;
+  isProcessAlive?: (pid: number) => boolean;
+  restartReconnectTimeoutMs?: number;
+  externalPollMs?: number;
+  schedulePoll?: (fn: () => unknown, ms: number) => unknown;
+  cancelPoll?: (timer: unknown) => void;
+  onIntentionalExit?: (event: {
+    reason: "stop" | "restart";
+    requestedBy: "cli" | "app" | "mcp";
+    exit: { code: number | null; signal: string | null };
+  }) => void;
+  onExternalAttach?: (event: { pid: number; instanceId: string; port: number }) => void;
+  onRestartReconnectFailed?: () => void;
 }): {
+  agentState(): {
+    state: AgentRuntimeState;
+    requested_by: "cli" | "app" | "mcp" | null;
+    raw_text_included: false;
+  };
   diagnostics(): {
     phase: string;
     pid: number | null;
@@ -113,14 +156,17 @@ export function createBundledAgentSupervisor(input: {
     };
     last_error_code: string | null;
     last_exit: { code: number | null; signal: string | null } | null;
+    agent_state: AgentRuntimeState;
+    external_agent_attached: boolean;
     raw_text_included: false;
   };
   authHeaders(): Record<string, string>;
   ensureReady(): Promise<void>;
   repair(): Promise<void>;
   restart(): Promise<void>;
+  resume(): Promise<void>;
   start(): Promise<void>;
-  stop(input?: { wait?: boolean }): Promise<{
+  stop(input?: { wait?: boolean; reason?: "stop" | "restart" }): Promise<{
     stopped: boolean;
     containment_released: boolean;
     raw_text_included: false;

@@ -32,6 +32,7 @@ import {
   writeCachedSettings,
 } from "./settingsCache.ts";
 import { browserRandomId } from "./id.ts";
+import type { AgentNotice } from "./agentRuntime.ts";
 import {
   type OptimisticSessionStart,
   findSessionSummary,
@@ -163,6 +164,8 @@ interface ButlerStore {
   projectCreateDialogOpen: boolean;
   commandOpen: boolean;
   liveConnectionLost: boolean;
+  /** Set while the Agent is intentionally stopped, restarting externally, or that restart failed. */
+  agentNotice: AgentNotice | null;
   renameProject: ProjectSummary | null;
   renameSession: SessionSummary | null;
   setLeftOpen: (value: Updater<boolean>) => void;
@@ -942,6 +945,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   projectCreateDialogOpen: false,
   commandOpen: false,
   liveConnectionLost: false,
+  agentNotice: null,
   renameProject: null,
   renameSession: null,
 
