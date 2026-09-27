@@ -3,21 +3,26 @@
   box-sizing: border-box;
 }
 
+/* Cells shrink below their content's width (truncation, scrollers); tracks never widen the grid. */
+.grid > * {
+  min-width: 0;
+}
+
 /* Column presets */
 .columns-1 {
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .columns-2 {
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .columns-3 {
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .columns-4 {
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .columns-6 {
@@ -25,7 +30,7 @@
 }
 
 .columns-12 {
-  grid-template-columns: repeat(12, 1fr);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
 }
 
 .columns-auto-fit {
@@ -40,8 +45,9 @@
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
 }
 
+/* The label keeps 7rem unless the container is too narrow for it. */
 .columns-label-value {
-  grid-template-columns: minmax(7rem, 0.28fr) minmax(0, 1fr);
+  grid-template-columns: minmax(min(7rem, 40%), 0.28fr) minmax(0, 1fr);
   align-items: baseline;
 }
 
@@ -82,6 +88,11 @@
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
 }
 
+.responsive[data-columns="label-value"] {
+  grid-template-columns: minmax(min(7rem, 40%), 0.28fr) minmax(0, 1fr);
+  align-items: baseline;
+}
+
 @container page (min-width: 48rem) {
   .responsive[data-columns-wide="1"] {
     grid-template-columns: minmax(0, 1fr);
@@ -117,6 +128,11 @@
 
   .responsive[data-columns-wide="main-aside"] {
     grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+
+  .responsive[data-columns-wide="label-value"] {
+    grid-template-columns: minmax(min(7rem, 40%), 0.28fr) minmax(0, 1fr);
+    align-items: baseline;
   }
 }
 

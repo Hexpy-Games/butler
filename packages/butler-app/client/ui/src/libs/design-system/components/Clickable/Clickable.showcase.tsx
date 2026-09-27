@@ -44,7 +44,7 @@ function Suggestion({ context, disabled }: { context: ShowcaseRenderContext; dis
   return (
     <Clickable disabled={disabled} onClick={() => undefined} aria-label={text(context).suggestion}>
       <Sparkles size="md" />
-      <span>{text(context).suggestion}</span>
+      <Typo.Text truncate>{text(context).suggestion}</Typo.Text>
     </Clickable>
   );
 }

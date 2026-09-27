@@ -1,4 +1,5 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
+import { Box } from "../../components/Box";
 import { Tag } from "../../components/Tag";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
@@ -56,26 +57,29 @@ export const stories: ShowcaseStory[] = [
   },
   {
     // ContextPanel legend: the scrollbar sits in the inspector gutter; content stays on the column.
+    // The Box stands in for the inspector's inline padding that the bleed uses.
     name: "Bleed into the inspector gutter",
     render: (context) => (
-      <Stack gap="xs">
+      <Box paddingX="sm">
         <ScrollArea bleed="inline-end" maxHeight="xs">
           <Stack gap="sm">
             {Array.from({ length: 10 }, (_, index) => <Typo.Body key={index}>{text(context).row(index + 1)}</Typo.Body>)}
           </Stack>
         </ScrollArea>
-      </Stack>
+      </Box>
     ),
   },
   {
     // ContextPanel legend with two categories: minHeight keeps the 96px floor.
     name: "Minimum height",
     render: (context) => (
-      <ScrollArea bleed="inline-end" minHeight="xs">
-        <Stack gap="sm">
-          {Array.from({ length: 2 }, (_, index) => <Typo.Body key={index}>{text(context).row(index + 1)}</Typo.Body>)}
-        </Stack>
-      </ScrollArea>
+      <Box paddingX="sm">
+        <ScrollArea bleed="inline-end" minHeight="xs">
+          <Stack gap="sm">
+            {Array.from({ length: 2 }, (_, index) => <Typo.Body key={index}>{text(context).row(index + 1)}</Typo.Body>)}
+          </Stack>
+        </ScrollArea>
+      </Box>
     ),
   },
 ];

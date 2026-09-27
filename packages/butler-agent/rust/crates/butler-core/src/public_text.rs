@@ -40,6 +40,32 @@ pub fn sanitize_public_text(value: &str, fallback: &str) -> String {
     }
 }
 
+/// A streamed fragment of public text (one text delta of an answer) fit for a
+/// public surface: control characters other than tab and newline removed,
+/// secrets and bearer tokens redacted. Unlike [`sanitize_public_text`] it
+/// keeps whitespace exactly, since fragments are concatenated (a leading space
+/// separates words, newlines carry Markdown), and it never falls back.
+pub fn sanitize_public_delta(value: &str) -> String {
+    let stripped: Cow<'_, str> = if value
+        .chars()
+        .any(|c| is_control(c) && !matches!(c, '\t' | '\n'))
+    {
+        Cow::Owned(
+            value
+                .chars()
+                .filter(|c| !is_control(*c) || matches!(c, '\t' | '\n'))
+                .collect(),
+        )
+    } else {
+        Cow::Borrowed(value)
+    };
+    let secrets = PATTERNS.secrets.replace(&stripped, "[redacted]");
+    PATTERNS
+        .bearer
+        .replace(&secrets, "Bearer [redacted]")
+        .into_owned()
+}
+
 /// [`sanitize_public_text`] of a JSON scalar's JavaScript string form;
 /// non-scalars become `fallback`.
 pub fn sanitize_public_value(value: &Value, fallback: &str) -> String {

@@ -7,7 +7,7 @@ mod settlement;
 
 pub(super) use claim::{claim, recover_stale};
 pub(super) use identity::{enqueue_idempotent, find_idempotent};
-pub(super) use settlement::{park, recover_runtime_interruptions, settle};
+pub(super) use settlement::{defer, park, recover_runtime_interruptions, settle};
 
 use std::path::{Path, PathBuf};
 

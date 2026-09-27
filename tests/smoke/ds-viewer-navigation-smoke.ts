@@ -5,6 +5,8 @@ import { chromium, type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 
 // DS Viewer deep links (page/theme/locale/width/motion, #anchors), toolbar URL writes, "/" filter and Cmd+K palette.
+// The Overview hero's fluid background follows the chrome theme it sits in (every viewer theme, both system
+// schemes), live when the hero's theme toggle flips, and its pixels are dark in dark and light in light.
 
 const uiRoot = resolve(process.cwd(), "packages", "butler-app", "client", "ui", "dist");
 const tempDir = mkdtempSync(join(tmpdir(), "butler-ds-viewer-navigation-"));
@@ -74,7 +76,13 @@ async function assertDeepLinks(page: Page, baseUrl: string, label: string): Prom
     ["guide", "[data-ds-decision-guide]"],
     ["recipes", "[data-ds-recipes]"],
     ["foundations", '[data-ds-foundations="index"]'],
-    ["foundations/color", '[data-ds-foundations="color"] [data-ds-token-name]'],
+    ["foundations/color", '[data-ds-foundations="color"] [data-ds-guide-section="palette"]'],
+    ["foundations/typography", '[data-ds-foundations="typography"] [data-ds-type-ladder]'],
+    ["foundations/shadow", '[data-ds-foundations="radius"] [data-ds-guide-section="layers"]'],
+    ["foundations/iconography", '[data-ds-foundations="iconography"] [data-ds-specimen="icon-md"]'],
+    ["foundations/typography#korean", '[data-ds-foundations="typography"] #korean'],
+    ["foundations/spacing#token--space-md", '[data-ds-token-name="--space-md"]'],
+    ["foundations/motion", "[data-ds-motion-page] [data-ds-chapter-head=\"motion\"]"],
     ["motion", "[data-ds-motion-page]"],
     ["components/DoesNotExist", '[data-ds-not-found="components/DoesNotExist"]'],
   ] as const) {
@@ -144,6 +152,60 @@ async function assertSearch(page: Page, baseUrl: string, label: string): Promise
   assert(param(page, "page") === "blocks", `${label}: sidebar navigation did not write the page param`);
 }
 
+type HeroState = { chrome: string | undefined; tone: string | null; luminance: number | null };
+
+async function heroState(page: Page): Promise<HeroState> {
+  return page.evaluate(() => {
+    const canvas = document.querySelector<HTMLCanvasElement>("[data-ds-hero] canvas");
+    const chrome = document.body.className.match(/theme-(light|dark)/u)?.[1];
+    if (!canvas) return { chrome, tone: null, luminance: null };
+    // Mean luminance of the rendered fluid; null when WebGL is unavailable (blank buffer).
+    const probe = document.createElement("canvas");
+    probe.width = 32;
+    probe.height = 32;
+    const context = probe.getContext("2d")!;
+    context.drawImage(canvas, 0, 0, 32, 32);
+    const pixels = context.getImageData(0, 0, 32, 32).data;
+    let sum = 0;
+    let opaque = 0;
+    for (let index = 0; index < pixels.length; index += 4) {
+      if (pixels[index + 3] === 0) continue;
+      opaque += 1;
+      sum += (0.2126 * pixels[index]! + 0.7152 * pixels[index + 1]! + 0.0722 * pixels[index + 2]!) / 255;
+    }
+    return { chrome, tone: canvas.getAttribute("data-tone"), luminance: opaque ? sum / opaque : null };
+  });
+}
+
+function assertHero(state: HeroState, label: string): void {
+  assert(state.chrome && state.tone === state.chrome, `${label}: hero fluid tone ${state.tone} != chrome theme ${state.chrome}`);
+  if (state.luminance === null) return;
+  const ok = state.chrome === "dark" ? state.luminance < 0.35 : state.luminance > 0.65;
+  assert(ok, `${label}: hero fluid luminance ${state.luminance.toFixed(2)} does not match the ${state.chrome} theme`);
+}
+
+async function assertHeroTheme(browser: Awaited<ReturnType<typeof chromium.launch>>, baseUrl: string): Promise<void> {
+  for (const colorScheme of ["light", "dark"] as const) {
+    for (const theme of ["system", "light", "dark", "side-by-side"] as const) {
+      const label = `hero system=${colorScheme} viewer=${theme}`;
+      const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, colorScheme });
+      await page.goto(viewerUrl(baseUrl, { page: "overview", motion: "reduced", ...(theme === "system" ? {} : { theme }) }), { waitUntil: "networkidle" });
+      await page.locator("[data-ds-hero] canvas").waitFor({ state: "attached" });
+      await page.waitForTimeout(150);
+      assertHero(await heroState(page), label);
+      if (theme === "light" || theme === "dark") {
+        // The hero's own toggle flips the chrome; the fluid follows without a reload.
+        const next = theme === "light" ? "Dark" : "Light";
+        await page.getByRole("radiogroup", { name: "Hero theme" }).getByRole("radio", { name: next }).click();
+        await page.waitForFunction((tone) => document.querySelector("[data-ds-hero] canvas")?.getAttribute("data-tone") === tone, next.toLowerCase());
+        await page.waitForTimeout(150);
+        assertHero(await heroState(page), `${label} -> ${next}`);
+      }
+      await page.close();
+    }
+  }
+}
+
 assert(existsSync(join(uiRoot, "index.html")), "UI dist is missing; run npm --prefix packages/butler-app/client/ui run build first.");
 
 const server = await createNativeAppServer({ uiRoot });
@@ -159,6 +221,7 @@ try {
     await assertSearch(page, server.url, viewport.label);
     await page.close();
   }
+  await assertHeroTheme(browser, server.url);
   console.log("ds-viewer-navigation-smoke: ok");
 } finally {
   await browser.close();

@@ -3,10 +3,11 @@
 ## What is this component
 Butler's identity mark and its thinking animation (the riso halftone design),
 drawn on a canvas inside an `AspectFrame`. `state="idle"` draws the exact
-filled logo (fused bowtie and ring). `state="working"` granulates the bowtie
-into halftone dots from the crossing outward, rounds it into a lit moon, orbits
-the light and sweeps riso blue and fluorescent pink across the shadows. Back to
-`idle`, it settles exactly to the logo and stops drawing.
+filled logo (fused bowtie and ring). `state="working"` morphs the bowtie straight
+into a lit halftone moon in one continuous transformation: the outline, the
+fill resolving into dots, the riso blue and fluorescent pink, and the orbiting
+light all advance together from one progress value. Back to `idle` is the same
+single morph in reverse; it settles on exactly the idle logo and stops drawing.
 
 ## Props
 
@@ -27,9 +28,17 @@ import { ButlerThinkingMark } from "@/butler-ds";
 ```
 
 ## Motion
-- The morph is a spring (`MORPH_SPRING`, k 9, zeta 0.95) that starts at zero
-  velocity, so the first frame carries almost none of the change; the motion
-  clock follows the morph and stops as the logo returns. The spring and the
+- One critically damped spring (`MORPH_SPRING`, k 6, zeta 1: ~0.7s to half,
+  ~1.9s to 95%, no overshoot) produces one progress value, and every channel
+  reads it with no thresholds or stagger: the outline (ribbon SDF blended into
+  the moon's disc SDF, so the lobes pull in while the waist rounds out), the dot
+  field (fused fill -> screened dots; each cell keeps its dot, radii change
+  continuously, nothing cross-fades), the riso inks and their misregistration,
+  and the motion clock (speed = progress, so the thinking motion runs from the
+  first frame and is at full speed exactly as the morph lands). The dots are
+  clipped to the traced morph outline, so rest is the exact logo edge.
+- The spring starts at zero velocity, so the first frame carries almost none of
+  the change; the motion clock stops as the logo returns. The spring and the
   simulation rates are intrinsic to the engine and allowlisted in
   `lint:motion` (`CANVAS_MOTION_ENGINES`).
 - Reduced motion (the prop, the OS setting or the DS `data-motion="reduced"`

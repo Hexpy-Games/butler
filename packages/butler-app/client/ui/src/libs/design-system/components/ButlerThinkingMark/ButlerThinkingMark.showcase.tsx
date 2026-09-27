@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { Button } from "../Button";
 import { ButtonContainer } from "../ButtonContainer";
@@ -16,15 +16,17 @@ export const meta: ShowcaseMeta = {
 };
 
 const SIZES: IconSize[] = ["sm", "md", "lg", "xl", "2xl"];
+/** Round trip demo: hold the thinking form (the morph lands in ~2s) before settling back. */
+const ROUND_TRIP_HOLD_MS = 3200;
 
 const labels = {
   "en-US": {
-    start: "Start working", finish: "Finish", replay: "Replay", idle: "Idle (the logo)", working: "Working",
+    start: "Start working", finish: "Finish", replay: "Replay", roundTrip: "Replay idle → thinking → idle", idle: "Idle (the logo)", working: "Working",
     reduced: "Reduced motion: the logo breathes in opacity", fill: "Fill (no size)",
     thinking: "Thinking", worked: "Worked for 12s", task: "Build the token pages", running: "Running", complete: "Complete",
   },
   "ko-KR": {
-    start: "작업 시작", finish: "완료", replay: "다시 재생", idle: "대기 (로고)", working: "작업 중",
+    start: "작업 시작", finish: "완료", replay: "다시 재생", roundTrip: "대기 → 생각 → 대기 다시 재생", idle: "대기 (로고)", working: "작업 중",
     reduced: "모션 줄이기: 로고가 불투명도로 숨 쉼", fill: "채우기 (size 없음)",
     thinking: "생각 중", worked: "12초 동안 작업함", task: "토큰 페이지 빌드", running: "진행 중", complete: "완료",
   },
@@ -47,16 +49,26 @@ function Row({ state, reducedMotion }: { state: ButlerThinkingMarkState; reduced
   );
 }
 
+/** One continuous morph each way: the clean logo straight into the halftone moon, and back. */
 function IdleToWorking({ context }: { context: ShowcaseRenderContext }) {
   const [state, setState] = useState<ButlerThinkingMarkState>("idle");
   const [run, setRun] = useState(0);
+  const [roundTrip, setRoundTrip] = useState(0);
   const copy = text(context);
+  useEffect(() => {
+    if (roundTrip === 0) return undefined;
+    setState("working");
+    const settle = window.setTimeout(() => setState("idle"), ROUND_TRIP_HOLD_MS);
+    return () => window.clearTimeout(settle);
+  }, [roundTrip]);
   return (
     <Stack gap="md" data-ds-thinking-mark-demo={state}>
       <Stack key={run}><Row state={state} /></Stack>
       <ButtonContainer size="sm">
         <Button size="sm" variant="outline" data-ds-motion="thinking-mark" text={state === "idle" ? copy.start : copy.finish}
           onClick={() => setState(state === "idle" ? "working" : "idle")} />
+        <Button size="sm" variant="borderless" data-ds-motion="thinking-mark-round-trip" text={copy.roundTrip}
+          onClick={() => setRoundTrip(roundTrip + 1)} />
         <Button size="sm" variant="borderless" data-ds-motion="thinking-mark-replay" text={copy.replay}
           onClick={() => { setState("working"); setRun(run + 1); }} />
       </ButtonContainer>

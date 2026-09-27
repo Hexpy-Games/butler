@@ -2,7 +2,10 @@ import { useAppLocale } from "@/app/copy.ts";
 import { AlertCircle, Button, Notice, Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { MessageRecord } from "@/app/types.ts";
-import { isRuntimeFaultRetryableMessage } from "@/app/utils.ts";
+import {
+  canRetryWithCurrentControls,
+  isRetryableFailureMessage,
+} from "@/app/utils.ts";
 
 export function FailureNotice({
   message,
@@ -33,7 +36,7 @@ export function FailureNotice({
         title={appCopy.conversation.failure.title}
         message={reason}
         action={
-          isRuntimeFaultRetryableMessage(message) && message.turn_id ? (
+          isRetryableFailureMessage(message) && message.turn_id ? (
             <Stack align="row" justify="end">
               <Button
                 type="button"
@@ -48,21 +51,23 @@ export function FailureNotice({
                   ? appCopy.conversation.failure.retrying
                   : appCopy.conversation.failure.retry}
               </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  if (message.turn_id) {
-                    onRetryTurnWithCurrentControls(message.turn_id);
-                  }
-                }}
-                disabled={retrying}
-              >
-                {retrying
-                  ? appCopy.conversation.failure.retrying
-                  : appCopy.conversation.failure.retryCurrent}
-              </Button>
+              {canRetryWithCurrentControls(message) ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    if (message.turn_id) {
+                      onRetryTurnWithCurrentControls(message.turn_id);
+                    }
+                  }}
+                  disabled={retrying}
+                >
+                  {retrying
+                    ? appCopy.conversation.failure.retrying
+                    : appCopy.conversation.failure.retryCurrent}
+                </Button>
+              ) : null}
             </Stack>
           ) : null
         }

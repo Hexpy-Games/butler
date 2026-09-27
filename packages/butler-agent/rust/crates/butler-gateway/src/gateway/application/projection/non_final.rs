@@ -4,6 +4,7 @@ mod operations;
 mod progress;
 mod runtime_progress;
 mod runtime_values;
+mod stream_message;
 mod values;
 
 use operations::*;
@@ -104,7 +105,7 @@ pub(super) fn apply(
             terminal_turn: None,
         });
     }
-    let claim_status = queue::claim_status(&tx, chat_id, &turn_id, claim_id.as_deref())?;
+    let claim_status = current_claim_status(&tx, chat_id, &turn_id, claim_id.as_deref(), outbound)?;
     if claim_status == QueuedTurnClaimStatus::Stale {
         checkpoint::save(&tx, cursor, now)?;
         tx.commit().map_err(AppStorageError::sqlite)?;
@@ -282,6 +283,33 @@ struct RuntimeInput<'a> {
     now: &'a str,
     generated_id: &'a str,
 }
+/// The status of `claim` for this outbound. The restarted App may have
+/// recovered the claim of the crashed process before the restarted service
+/// reported the interruption (turn_failed, turn_interrupted); the report
+/// then restores and settles that same claim, so the message is not
+/// dispatched again.
+fn current_claim_status(
+    db: &Connection,
+    chat_id: &str,
+    turn_id: &str,
+    claim: Option<&str>,
+    outbound: &TranscriptEvent,
+) -> Result<QueuedTurnClaimStatus, AppStorageError> {
+    let status = queue::claim_status(db, chat_id, turn_id, claim)?;
+    let metadata = object(outbound.payload.get("metadata"));
+    let reply_to = token(object(outbound.payload.get("message")).get("replyToMessageId"));
+    if status == QueuedTurnClaimStatus::Stale
+        && text(metadata.get("kind")).as_deref() == Some("turn_failed")
+        && token(metadata.get("safeErrorCode")).as_deref()
+            == Some(crate::gateway::application::retry::INTERRUPTED_TURN_CODE)
+        && let (Some(claim), Some(reply_to)) = (claim, reply_to)
+        && queue::restore_interrupted_claim(db, chat_id, turn_id, claim, &reply_to)?
+    {
+        return Ok(QueuedTurnClaimStatus::Current);
+    }
+    Ok(status)
+}
+
 fn project_runtime_event(input: RuntimeInput<'_>) -> Result<Option<&'static str>, AppStorageError> {
     let RuntimeInput {
         db,
@@ -289,7 +317,7 @@ fn project_runtime_event(input: RuntimeInput<'_>) -> Result<Option<&'static str>
         chat,
         turn,
         metadata,
-        message,
+        message: _,
         now,
         generated_id,
     } = input;
@@ -350,6 +378,7 @@ fn project_runtime_event(input: RuntimeInput<'_>) -> Result<Option<&'static str>
             }))?,
             now,
         )?;
+        stream_message::project(&input, &kind, object(event.get("payload")))?;
         if let Some(row) = progress_row {
             append_progress(&ProgressAppend {
                 db,
@@ -364,29 +393,7 @@ fn project_runtime_event(input: RuntimeInput<'_>) -> Result<Option<&'static str>
         }
     }
     if kind == "runtime.fault" {
-        let payload = object(source.get("payload"));
-        let mut fault_meta = metadata.clone();
-        fault_meta.insert("safeErrorCode".into(), "runtime_fault".into());
-        let mut fault_message = message.clone();
-        if let Some(summary) = payload.get("publicSummary") {
-            fault_message.insert("text".into(), summary.clone());
-        }
-        project_failed(
-            db,
-            subscribers,
-            chat,
-            turn,
-            FailedProjection {
-                metadata: &fault_meta,
-                message: &fault_message,
-                retryable: payload.get("retryable").and_then(Value::as_bool) == Some(true),
-            },
-            now,
-            &ProjectionIds {
-                event_id: generated_id.to_owned(),
-                message_id: format!("message-{generated_id}"),
-            },
-        )?;
+        project_runtime_fault(input, object(source.get("payload")))?;
         return Ok(Some("runtime_fault"));
     }
     if kind == "turn.cancelled" {
@@ -394,6 +401,35 @@ fn project_runtime_event(input: RuntimeInput<'_>) -> Result<Option<&'static str>
         return Ok(Some("turn_cancelled"));
     }
     Ok(None)
+}
+
+/// Projects a runtime fault event as a failed (runtime_fault) turn.
+fn project_runtime_fault(
+    input: RuntimeInput<'_>,
+    payload: &Map<String, Value>,
+) -> Result<(), AppStorageError> {
+    let mut fault_meta = input.metadata.clone();
+    fault_meta.insert("safeErrorCode".into(), "runtime_fault".into());
+    let mut fault_message = input.message.clone();
+    if let Some(summary) = payload.get("publicSummary") {
+        fault_message.insert("text".into(), summary.clone());
+    }
+    project_failed(
+        input.db,
+        input.subscribers,
+        input.chat,
+        input.turn,
+        FailedProjection {
+            metadata: &fault_meta,
+            message: &fault_message,
+            retryable: payload.get("retryable").and_then(Value::as_bool) == Some(true),
+        },
+        input.now,
+        &ProjectionIds {
+            event_id: input.generated_id.to_owned(),
+            message_id: format!("message-{}", input.generated_id),
+        },
+    )
 }
 
 pub(super) fn finish(
