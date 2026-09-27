@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use crate::cognition::{CognitionResult, FeedbackTarget};
 
-use super::document::{KnowHowDocument, KnowHowEntry, round3};
+use super::document::{KnowHowDocument, KnowHowStatus, RevisionKind, round3};
 use super::{KnowHowAggregateReport, KnowHowService, entries, error, quality};
 use crate::cognition::CognitionCode;
 use crate::lenient::{Arg, Obj};
@@ -46,10 +46,7 @@ impl KnowHowService {
     /// Every entry, newest first.
     pub async fn operator_entries(&self) -> CognitionResult<Vec<Value>> {
         self.with_lease("knowhow_operator_list", |root| {
-            Ok(list(&root)?
-                .into_iter()
-                .map(KnowHowDocument::into_value)
-                .collect())
+            list(&root)?.iter().map(KnowHowDocument::to_value).collect()
         })
         .await
     }
@@ -58,7 +55,10 @@ impl KnowHowService {
     pub async fn operator_read(&self, id: &str) -> CognitionResult<Option<Value>> {
         let id = id.to_owned();
         self.with_lease("knowhow_operator_show", move |root| {
-            Ok(entries::read_id(&root, &id)?.map(KnowHowDocument::into_value))
+            entries::read_id(&root, &id)?
+                .as_ref()
+                .map(KnowHowDocument::to_value)
+                .transpose()
         })
         .await
     }
@@ -119,15 +119,19 @@ pub(super) fn disable(root: &Path, id: &str) -> CognitionResult<Option<Value>> {
     let Some(mut document) = entries::read_id(root, id)? else {
         return Ok(None);
     };
-    let entry = document.entry();
-    let previous_status = entry.status.valid().cloned();
+    let previous_status = document.status.valid().cloned();
     let now = now_iso();
-    document.set_status("disabled", &now)?;
+    document.set_status(KnowHowStatus::Disabled, &now);
     let previous_status =
         previous_status.ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
-    document.push_history("operator_disable", None, &previous_status, now_iso())?;
+    document.push_history(
+        RevisionKind::OperatorDisable,
+        None,
+        previous_status,
+        now_iso(),
+    )?;
     entries::write(root, &document)?;
-    Ok(Some(document.into_value()))
+    document.to_value().map(Some)
 }
 
 pub(super) fn retrieve(
@@ -142,8 +146,8 @@ pub(super) fn retrieve(
         .into_iter()
         .filter(|document| {
             matches!(
-                document.entry().status.valid().map(String::as_str),
-                Some("active" | "candidate" | "needs_review")
+                document.status.valid(),
+                Some(KnowHowStatus::Active | KnowHowStatus::Candidate | KnowHowStatus::NeedsReview)
             )
         })
         .map(|document| candidate(document, &normalized_query, &query_tokens, feedback))
@@ -170,10 +174,9 @@ fn candidate(
     query_tokens: &[String],
     feedback: &[FeedbackTarget],
 ) -> CognitionResult<RetrievalCandidate> {
-    let entry = document.entry();
-    let match_score = match_score(&entry, query, query_tokens)?;
-    let id = KnowHowEntry::required(&entry.knowhow_id)?;
-    let Arg::Valid(Obj(strategy)) = &entry.strategy else {
+    let match_score = match_score(&document, query, query_tokens)?;
+    let id = KnowHowDocument::required(&document.knowhow_id)?;
+    let Arg::Valid(Obj(strategy)) = &document.strategy else {
         return Err(error(CognitionCode::MemoryKnowhowEntryInvalid));
     };
     let preferred_sources = strategy
@@ -197,10 +200,10 @@ fn candidate(
         })
         .map(|feedback| feedback.feedback_id.clone())
         .collect::<Vec<_>>();
-    let quality_score = entry
+    let quality_score = document
         .quality()
         .ok()
-        .and_then(|quality| quality.score.valid().copied())
+        .and_then(|quality| quality.score.valid().and_then(serde_json::Number::as_f64))
         .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
     let final_score = if suppressed.is_empty() {
         round3(match_score * 0.65 + quality_score * 0.35)
@@ -219,14 +222,18 @@ fn candidate(
 /// The best weighted match of the query against the entry's name (1.0),
 /// aliases (0.95), topics (0.8), examples (0.65) and summary (0.35): a
 /// substring match counts fully, a token overlap proportionally.
-fn match_score(entry: &KnowHowEntry, query: &str, query_tokens: &[String]) -> CognitionResult<f64> {
-    let required = KnowHowEntry::required;
+fn match_score(
+    entry: &KnowHowDocument,
+    query: &str,
+    query_tokens: &[String],
+) -> CognitionResult<f64> {
+    let required = KnowHowDocument::required;
     let name = required(&entry.name)?;
-    let aliases = KnowHowEntry::strings(&entry.aliases)?;
+    let aliases = KnowHowDocument::strings(&entry.aliases)?;
     let (topics, examples) = match &entry.intent_match {
         Arg::Valid(Obj(intent)) => (
-            KnowHowEntry::strings(&intent.topics)?,
-            KnowHowEntry::strings(&intent.examples)?,
+            KnowHowDocument::strings(&intent.topics)?,
+            KnowHowDocument::strings(&intent.examples)?,
         ),
         _ => return Err(error(CognitionCode::MemoryKnowhowEntryInvalid)),
     };

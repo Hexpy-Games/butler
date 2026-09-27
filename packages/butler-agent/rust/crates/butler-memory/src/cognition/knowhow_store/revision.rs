@@ -8,7 +8,7 @@ use std::{
 use crate::cognition::{CognitionResult, FeedbackTarget};
 use butler_core::js_date;
 
-use super::document::{KnowHowDocument, KnowHowEntry};
+use super::document::{KnowHowDocument, KnowHowStatus, RevisionKind};
 use super::entries::EntryPath;
 
 pub(super) struct Snapshot {
@@ -18,10 +18,10 @@ pub(super) struct Snapshot {
 
 /// Active feedback aimed at this entry or at one of its preferred sources.
 pub(super) fn targeted_feedback(
-    entry: &KnowHowEntry,
+    entry: &KnowHowDocument,
     active_feedback: &[FeedbackTarget],
 ) -> CognitionResult<Vec<FeedbackTarget>> {
-    let id = KnowHowEntry::required(&entry.knowhow_id)?;
+    let id = KnowHowDocument::required(&entry.knowhow_id)?;
     let targets = entry
         .preferred_sources()?
         .into_iter()
@@ -44,18 +44,21 @@ pub(super) fn revise_from_feedback(
     targeted: &[FeedbackTarget],
 ) -> CognitionResult<KnowHowDocument> {
     let mut next = document.clone();
-    let entry = document.entry();
-    let previous_status = KnowHowEntry::required(&entry.status)?;
+    let previous_status = document.required_status()?.clone();
     let disable = targeted
         .iter()
         .any(|feedback| feedback.category == "source_policy");
     next.set_status(
-        if disable { "disabled" } else { "needs_review" },
+        if disable {
+            KnowHowStatus::Disabled
+        } else {
+            KnowHowStatus::NeedsReview
+        },
         &now_iso(),
-    )?;
+    );
     next.record_negative_feedback(targeted)?;
     next.push_history(
-        "feedback_revision",
+        RevisionKind::FeedbackRevision,
         Some(targeted),
         previous_status,
         now_iso(),
@@ -69,24 +72,25 @@ pub(super) fn demote_for_source_quality(
     document: &mut KnowHowDocument,
     quality_by_source: &HashMap<String, f64>,
 ) -> CognitionResult<bool> {
-    let entry = document.entry();
-    let scores = entry
+    let scores = document
         .preferred_sources()?
         .into_iter()
         .map(|source| quality_by_source.get(source).copied())
         .collect::<Vec<_>>();
-    let current_status = KnowHowEntry::required(&entry.status)?;
+    let current_status = document.required_status()?;
     let next_status = if scores.iter().flatten().any(|score| *score < 0.35) {
-        Some("disabled")
-    } else if scores.iter().flatten().any(|score| *score < 0.55) && current_status == "active" {
-        Some("needs_review")
+        Some(KnowHowStatus::Disabled)
+    } else if scores.iter().flatten().any(|score| *score < 0.55)
+        && *current_status == KnowHowStatus::Active
+    {
+        Some(KnowHowStatus::NeedsReview)
     } else {
         None
     };
     let Some(next_status) = next_status else {
         return Ok(false);
     };
-    document.set_status(next_status, &now_iso())?;
+    document.set_status(next_status, &now_iso());
     Ok(true)
 }
 

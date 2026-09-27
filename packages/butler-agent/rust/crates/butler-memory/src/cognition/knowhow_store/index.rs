@@ -13,7 +13,7 @@ use rusqlite::{Connection, Transaction, params};
 
 use crate::cognition::CognitionResult;
 
-use super::document::{IntentMatch, KnowHowEntry};
+use super::document::{IntentMatch, KnowHowDocument};
 use super::{entries, error, quality::SourceQualitySummary};
 use crate::cognition::CognitionCode;
 use crate::lenient::{Arg, Obj};
@@ -31,7 +31,7 @@ pub(super) fn rebuild(root: &Path, quality: &[SourceQualitySummary]) -> Cognitio
         create_schema(&database)?;
         let mut indexed = 0;
         for entry_path in &entry_paths {
-            let entry = entries::read_one(root, entry_path)?.entry();
+            let entry = entries::read_one(root, entry_path)?;
             if !entries::validate(&entry).is_empty() {
                 continue;
             }
@@ -103,11 +103,11 @@ fn create_schema(database: &Connection) -> CognitionResult<()> {
 }
 
 /// One entry row and its name, alias, topic, example and source terms.
-fn insert_entry(database: &Transaction<'_>, entry: &KnowHowEntry) -> CognitionResult<()> {
-    let required = KnowHowEntry::required;
+fn insert_entry(database: &Transaction<'_>, entry: &KnowHowDocument) -> CognitionResult<()> {
+    let required = KnowHowDocument::required;
     let id = required(&entry.knowhow_id)?;
     let name = required(&entry.name)?;
-    let status = required(&entry.status)?;
+    let status = entry.required_status()?.as_str();
     let scope = required(&entry.scope)?;
     let summary = entry.summary.valid();
     let updated_at = required(&entry.updated_at)?;
@@ -130,21 +130,29 @@ fn insert_entry(database: &Transaction<'_>, entry: &KnowHowEntry) -> CognitionRe
         database,
         id,
         "alias",
-        &KnowHowEntry::strings(&entry.aliases)?,
+        &KnowHowDocument::strings(&entry.aliases)?,
     )?;
-    let Arg::Valid(Obj(IntentMatch { topics, examples })) = &entry.intent_match else {
+    let Arg::Valid(Obj(IntentMatch {
+        topics, examples, ..
+    })) = &entry.intent_match
+    else {
         return Err(error(CognitionCode::MemoryKnowhowEntryInvalid));
     };
-    insert_terms(database, id, "topic", &KnowHowEntry::strings(topics)?)?;
-    insert_terms(database, id, "example", &KnowHowEntry::strings(examples)?)?;
+    insert_terms(database, id, "topic", &KnowHowDocument::strings(topics)?)?;
+    insert_terms(
+        database,
+        id,
+        "example",
+        &KnowHowDocument::strings(examples)?,
+    )?;
     insert_terms(database, id, "source", &entry.preferred_sources()?)?;
     Ok(())
 }
 
-fn number(value: &Arg<f64>) -> CognitionResult<f64> {
+fn number(value: &Arg<serde_json::Number>) -> CognitionResult<f64> {
     value
         .valid()
-        .copied()
+        .and_then(serde_json::Number::as_f64)
         .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))
 }
 

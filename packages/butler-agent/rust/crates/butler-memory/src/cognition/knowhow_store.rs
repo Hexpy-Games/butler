@@ -116,7 +116,7 @@ impl KnowHowService {
                     entries::read_one(&root, &entry_path)
                 })
                 .await?;
-            let targeted = revision::targeted_feedback(&entry.entry(), &active_feedback)?;
+            let targeted = revision::targeted_feedback(&entry, &active_feedback)?;
             let mut next = if targeted.is_empty() {
                 entry.clone()
             } else {
