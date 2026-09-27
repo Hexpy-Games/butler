@@ -8,6 +8,7 @@ mod decision;
 #[cfg(test)]
 mod tests;
 
+use crate::tool_protocol::ToolName;
 use std::sync::Arc;
 
 use crate::btcc::{
@@ -140,14 +141,14 @@ impl WorkPort for NativeGuidedWork {
             self.check_turn(invocation)?;
             let final_disposition = calls
                 .last()
-                .is_some_and(|call| call.name == "record_work_disposition")
-                && results
-                    .last()
-                    .is_some_and(|result| result.ok && result.name == "record_work_disposition");
+                .is_some_and(|call| call.name == ToolName::RecordWorkDisposition)
+                && results.last().is_some_and(|result| {
+                    result.ok && result.name == ToolName::RecordWorkDisposition
+                });
             let waiting = calls.last().is_some_and(|call| {
                 matches!(
-                    call.name.as_str(),
-                    "delegate_to_steward" | "wait_for_worker"
+                    ToolName::parse(call.name.as_str()),
+                    Some(ToolName::DelegateToSteward | ToolName::WaitForWorker)
                 )
             }) && results.last().is_some_and(|result| result.ok);
             if waiting {

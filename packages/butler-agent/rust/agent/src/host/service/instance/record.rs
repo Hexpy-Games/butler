@@ -85,7 +85,8 @@ pub(super) fn write_record(
     if result.is_err() {
         let _ = fs::remove_file(temporary);
     }
-    result}
+    result
+}
 
 pub(super) fn acquire_record_update_lock(
     path: &Path,

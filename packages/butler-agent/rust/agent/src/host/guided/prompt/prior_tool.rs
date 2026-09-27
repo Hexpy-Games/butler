@@ -3,6 +3,7 @@
 mod semantic;
 mod value;
 
+use crate::tool_protocol::ToolName;
 use sha2::{Digest, Sha256};
 
 use crate::btcc::{BtccError, ToolJournalRecord};
@@ -40,10 +41,10 @@ fn project_record(
 ) -> Result<Option<String>, BtccError> {
     let mut arguments = record.arguments;
     if let Some(object) = arguments.as_object_mut() {
-        if record.tool_name == "write_file" || record.tool_name == "edit_file" {
+        if record.tool_name == ToolName::WriteFile || record.tool_name == ToolName::EditFile {
             object.shift_remove("expected_sha256");
         }
-        if record.tool_name == "write_file" {
+        if record.tool_name == ToolName::WriteFile {
             object.shift_remove("overwrite");
         }
     }

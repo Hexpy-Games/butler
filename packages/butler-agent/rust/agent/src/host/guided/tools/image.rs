@@ -5,6 +5,7 @@ use std::{
     time::Duration,
 };
 
+use crate::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
@@ -23,7 +24,7 @@ const MAX_PROMPT_UNITS: usize = 4_000;
 const MCP_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub(super) fn supports(name: &str) -> bool {
-    name == "analyze_attached_image"
+    name == ToolName::AnalyzeAttachedImage
 }
 
 pub(super) async fn execute(

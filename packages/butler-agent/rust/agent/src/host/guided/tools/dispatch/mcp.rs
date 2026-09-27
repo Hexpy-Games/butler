@@ -2,11 +2,15 @@ use serde_json::{Value, json};
 
 use crate::btcc::{GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 use crate::json::JsonDocument;
+use crate::tool_protocol::ToolName;
 
 use super::super::NativeGuidedTools;
 
 pub(super) fn supports(name: &str) -> bool {
-    matches!(name, "list_mcp_capabilities" | "read_mcp_resource")
+    matches!(
+        ToolName::parse(name),
+        Some(ToolName::ListMcpCapabilities | ToolName::ReadMcpResource)
+    )
 }
 
 pub(super) async fn execute(

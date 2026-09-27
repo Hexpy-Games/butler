@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
@@ -13,7 +14,7 @@ use crate::{
 use super::super::NativeGuidedTools;
 
 pub(super) fn supports(name: &str) -> bool {
-    name == "call_mcp_tool"
+    name == ToolName::CallMcpTool
 }
 
 pub(super) fn prepare(

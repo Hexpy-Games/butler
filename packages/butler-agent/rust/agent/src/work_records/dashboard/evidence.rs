@@ -1,5 +1,6 @@
 //! Dashboard-consumed worker completion safety from durable task evidence.
 
+use crate::tool_protocol::ToolName;
 use parking_lot::Mutex;
 use std::{
     collections::HashMap,
@@ -346,7 +347,7 @@ fn collect(directory: &Path) -> Facts {
                     })
                     .unwrap_or("");
                 let text = format!("{}\n{}\n{}", field(payload, "name"), command, result);
-                facts.execution |= field(payload, "name") == "run_command";
+                facts.execution |= field(payload, "name") == ToolName::RunCommand;
                 facts.implementation |= result
                     .get("written_files")
                     .and_then(Value::as_array)

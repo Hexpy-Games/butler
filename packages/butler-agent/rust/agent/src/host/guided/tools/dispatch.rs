@@ -3,6 +3,8 @@
 mod mcp;
 mod publication;
 mod web;
+mod work;
+use crate::tool_protocol::ToolName;
 pub(super) use publication::publish_work_result;
 
 use serde_json::{Value, json};
@@ -13,6 +15,7 @@ use crate::json::JsonDocument;
 
 use super::NativeGuidedTools;
 use crate::host::NativeGuidedWorkTools;
+pub(super) use work::execute_work;
 
 pub(super) async fn execute(
     owner: &NativeGuidedTools,
@@ -30,12 +33,12 @@ pub(super) async fn execute(
         return web::execute(owner, invocation, call).await;
     }
     if matches!(
-        call.name.as_str(),
-        "tool_search" | "tool_describe" | "tool_call"
+        ToolName::parse(call.name.as_str()),
+        Some(ToolName::ToolSearch | ToolName::ToolDescribe | ToolName::ToolCall)
     ) {
         return Box::pin(super::discovery::execute(owner, invocation, call, call_id)).await;
     }
-    if call.name == "call_mcp_tool" {
+    if call.name == ToolName::CallMcpTool {
         return super::effect::execute(owner, invocation, call, call_id).await;
     }
     if super::profile::supports(&call.name) {
@@ -44,13 +47,13 @@ pub(super) async fn execute(
     if super::monitoring::supports(&call.name) {
         return super::monitoring::execute(owner, call).await;
     }
-    if call.name == "read_project_source" {
+    if call.name == ToolName::ReadProjectSource {
         return super::project_source::execute(owner, call).await;
     }
     if mcp::supports(&call.name) {
         return Box::pin(mcp::execute(owner, invocation, call)).await;
     }
-    if call.name == "delegate_to_steward" {
+    if call.name == ToolName::DelegateToSteward {
         let request = call
             .arguments
             .get("request")
@@ -117,7 +120,7 @@ pub(super) async fn execute(
         }
         return encoded(&result);
     }
-    if call.name == "list_automations" {
+    if call.name == ToolName::ListAutomations {
         let result = owner
             .automations
             .execute(
@@ -133,7 +136,7 @@ pub(super) async fn execute(
             }})
         }));
     }
-    if call.name == "delegate_to_worker" {
+    if call.name == ToolName::DelegateToWorker {
         let required = |key: &str| {
             call.arguments
                 .get(key)
@@ -235,7 +238,10 @@ pub(super) async fn execute(
         }
         return encoded(&result);
     }
-    if matches!(call.name.as_str(), "steer_steward" | "steer_worker") {
+    if matches!(
+        ToolName::parse(call.name.as_str()),
+        Some(ToolName::SteerSteward | ToolName::SteerWorker)
+    ) {
         let instruction = call
             .arguments
             .get("instruction")
@@ -268,7 +274,7 @@ pub(super) async fn execute(
                     .and_then(Value::as_str)
                     .map(str::to_owned),
                 instruction: instruction.into(),
-                child_role: if call.name == "steer_worker" {
+                child_role: if call.name == ToolName::SteerWorker {
                     crate::workspace::SessionRole::Worker
                 } else {
                     crate::workspace::SessionRole::Steward
@@ -284,7 +290,7 @@ pub(super) async fn execute(
             .map_err(ToolExecutionError::Integrity)?;
         return encoded(&result);
     }
-    if call.name == "cancel_steward" {
+    if call.name == ToolName::CancelSteward {
         let result = owner
             .subsessions
             .cancel(crate::btcc::SubsessionCancelRequest {
@@ -307,7 +313,7 @@ pub(super) async fn execute(
             .map_err(ToolExecutionError::Integrity)?;
         return encoded(&result);
     }
-    if call.name == "wait_for_worker" {
+    if call.name == ToolName::WaitForWorker {
         let waiting = owner
             .subsessions
             .should_wait_for_child(&owner.binding.source_session_id)
@@ -319,8 +325,13 @@ pub(super) async fn execute(
         return encoded(&execute_work(owner, call, call_id).await?);
     }
     if matches!(
-        call.name.as_str(),
-        "update_todo_list" | "list_todo_list" | "list_work_streams" | "update_work_stream_state"
+        ToolName::parse(call.name.as_str()),
+        Some(
+            ToolName::UpdateTodoList
+                | ToolName::ListTodoList
+                | ToolName::ListWorkStreams
+                | ToolName::UpdateWorkStreamState
+        )
     ) {
         let result = owner
             .work_streams
@@ -339,16 +350,18 @@ pub(super) async fn execute(
         return encoded(&result);
     }
     if matches!(
-        call.name.as_str(),
-        "run_command"
-            | "write_file"
-            | "edit_file"
-            | "bind_session_git_worktree"
-            | "start_topic_conversation"
-            | "request_service_restart"
-            | "create_automation"
-            | "delete_automation"
-            | "run_due_automations"
+        ToolName::parse(call.name.as_str()),
+        Some(
+            ToolName::RunCommand
+                | ToolName::WriteFile
+                | ToolName::EditFile
+                | ToolName::BindSessionGitWorktree
+                | ToolName::StartTopicConversation
+                | ToolName::RequestServiceRestart
+                | ToolName::CreateAutomation
+                | ToolName::DeleteAutomation
+                | ToolName::RunDueAutomations
+        )
     ) || super::effect::is_managed_project_ledger_effect(&call.name)
     {
         return super::effect::execute(owner, invocation, call, call_id).await;
@@ -379,10 +392,10 @@ pub(super) async fn execute(
     }
     let args = Value::Object(call.arguments.clone());
     if matches!(
-        call.name.as_str(),
-        "read_tool_output_artifact" | "read_tool_evidence_artifact"
+        ToolName::parse(call.name.as_str()),
+        Some(ToolName::ReadToolOutputArtifact | ToolName::ReadToolEvidenceArtifact)
     ) {
-        let result = if call.name == "read_tool_output_artifact" {
+        let result = if call.name == ToolName::ReadToolOutputArtifact {
             owner.tool_artifacts.read_output(args).await
         } else {
             owner.tool_artifacts.read_evidence(args).await
@@ -460,36 +473,4 @@ fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError> {
             error.to_string(),
         ))
     })
-}
-
-pub(super) async fn execute_work(
-    owner: &NativeGuidedTools,
-    call: &ModelRoundToolCall,
-    call_id: &str,
-) -> Result<Value, ToolExecutionError> {
-    let prior = if NativeGuidedWorkTools::repairs_completed_relation(&call.name) {
-        owner
-            .journal
-            .completed_call_identities(owner.binding.turn_id.clone())
-            .await
-            .map_err(|error| ToolExecutionError::Integrity(error.into()))?
-            .into_iter()
-            .filter(|(_, name)| !NativeGuidedWorkTools::is_work_tool(name))
-            .map(|(id, _)| id)
-            .collect::<Vec<_>>()
-    } else {
-        Vec::new()
-    };
-    owner
-        .work
-        .execute(
-            &owner.binding.turn_id,
-            &call.name,
-            &call.arguments,
-            call_id,
-            &prior,
-            None,
-        )
-        .await
-        .map_err(ToolExecutionError::Integrity)
 }

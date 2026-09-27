@@ -3,6 +3,7 @@ use serde_json::Value;
 use crate::btcc::{
     AgentLoopError, AgentLoopResult, ExecutionRoute, SuspensionReason, TerminalOutcome,
 };
+use crate::tool_protocol::ToolName;
 
 use super::contracts::{AgentLoopEvent, BatchDisposition, CloseoutInput, ToolOutcome, ToolResult};
 use super::driver::Invocation;
@@ -136,12 +137,14 @@ fn route(used_tools: &[String], has_final_work: bool) -> ExecutionRoute {
 
 fn durable_work_tool(name: &str) -> bool {
     matches!(
-        name,
-        "start_work"
-            | "continue_work"
-            | "replace_work_plan"
-            | "record_work_checkpoint"
-            | "record_work_review"
-            | "record_work_disposition"
+        ToolName::parse(name),
+        Some(
+            ToolName::StartWork
+                | ToolName::ContinueWork
+                | ToolName::ReplaceWorkPlan
+                | ToolName::RecordWorkCheckpoint
+                | ToolName::RecordWorkReview
+                | ToolName::RecordWorkDisposition
+        )
     )
 }

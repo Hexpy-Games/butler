@@ -8,6 +8,7 @@ use crate::btcc::{
 };
 use crate::host::NativeGuidedWorkTools;
 use crate::json::JsonDocument;
+use crate::tool_protocol::ToolName;
 
 use super::NativeGuidedTools;
 use super::occurrence::{Occurrence, occurrence};
@@ -105,10 +106,12 @@ pub(super) async fn execute(
             "started" | "awaiting_authority"
                 if !NativeGuidedTools::supports(&call.name)
                     || matches!(
-                        effective_name.as_str(),
-                        "update_onboarding_profile"
-                            | "ingest_task_memory"
-                            | "update_explicit_memory"
+                        ToolName::parse(effective_name.as_str()),
+                        Some(
+                            ToolName::UpdateOnboardingProfile
+                                | ToolName::IngestTaskMemory
+                                | ToolName::UpdateExplicitMemory
+                        )
                     ) =>
             {
                 return uncertain_mutation(&effective_name);

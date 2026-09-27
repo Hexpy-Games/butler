@@ -1,5 +1,6 @@
 //! Public memory-write adapters using the current Turn's canonical provenance.
 
+use crate::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
 use crate::btcc::{AccessMode, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
@@ -15,7 +16,10 @@ use crate::json::JsonDocument;
 use super::NativeGuidedTools;
 
 pub(super) fn supports(name: &str) -> bool {
-    matches!(name, "ingest_task_memory" | "update_explicit_memory")
+    matches!(
+        ToolName::parse(name),
+        Some(ToolName::IngestTaskMemory | ToolName::UpdateExplicitMemory)
+    )
 }
 
 pub(super) fn execute(

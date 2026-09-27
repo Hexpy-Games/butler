@@ -1,5 +1,6 @@
 //! Source task/work completion planning and durable Ledger closeout.
 
+use crate::tool_protocol::ToolName;
 use std::path::Path;
 
 use serde_json::{Map, Value, json};
@@ -161,7 +162,7 @@ fn completed(
     let mut matches = ["validation", "review", "report"].iter().all(|key| {
         !text(args.get(*key)).is_empty() && text(args.get(*key)) == text(data.get(*key))
     });
-    if name == "project_ledger_work_complete" {
+    if name == ToolName::ProjectLedgerWorkComplete {
         matches &= text(args.get("acceptance")).is_empty()
             || text(args.get("acceptance")) == text(data.get("acceptance"));
         matches &= data.get("requiresCommitEvidence") != Some(&Value::Bool(true))

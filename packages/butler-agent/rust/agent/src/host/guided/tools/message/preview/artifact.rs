@@ -1,6 +1,7 @@
 //! Public artifact identity and delivered page facts, without full result DOMs.
 
 mod page;
+use crate::tool_protocol::ToolName;
 pub(super) use page::fit;
 
 use crate::btcc::BtccError;
@@ -19,7 +20,7 @@ pub(super) fn project(name: &str, raw: &str) -> Result<String, BtccError> {
     if let Some(artifact) = field(raw, "artifact")?.filter(|raw| object(raw)) {
         append_field(&mut output, "artifact", &identity(artifact)?)?;
     }
-    for key in if name == "read_tool_output_artifact" {
+    for key in if name == ToolName::ReadToolOutputArtifact {
         &["stdout", "stderr"][..]
     } else {
         &["text"][..]

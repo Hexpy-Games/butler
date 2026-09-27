@@ -1,6 +1,7 @@
 use crate::btcc::AccessMode;
 
 use super::super::policy::GuidedExecutionPolicy;
+use crate::tool_protocol::ToolName;
 
 pub(in crate::btcc::guided_turn::phase) fn turn_admits_zai_image_tool(
     policy: &GuidedExecutionPolicy,
@@ -9,5 +10,5 @@ pub(in crate::btcc::guided_turn::phase) fn turn_admits_zai_image_tool(
         && policy
             .required_tools
             .iter()
-            .any(|name| name == "analyze_attached_image")
+            .any(|name| name == ToolName::AnalyzeAttachedImage)
 }

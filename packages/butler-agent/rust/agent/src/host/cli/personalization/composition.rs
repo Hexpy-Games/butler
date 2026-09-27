@@ -92,7 +92,8 @@ fn validate_cognition_paths(
             "profile cognition paths must remain inside DATA without symlinks",
         )
         .with_source(source)
-    })}
+    })
+}
 
 fn process_locale() -> String {
     let locale = ["LC_ALL", "LC_MESSAGES", "LANG"]

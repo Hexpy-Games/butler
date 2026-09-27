@@ -1,3 +1,4 @@
+use crate::tool_protocol::ToolName;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::{Map, Value, json};
@@ -26,7 +27,7 @@ pub(super) fn decode(value: &Value) -> Option<ListCursor> {
     let bytes = super::super::cursor::decode_buffer_base64url(raw);
     let decoded: Value = serde_json::from_slice(&bytes).ok()?;
     let fields = decoded.as_object()?;
-    if fields.get("v")?.as_f64()? != 1.0 || fields.get("tool")?.as_str()? != "list_files" {
+    if fields.get("v")?.as_f64()? != 1.0 || fields.get("tool")?.as_str()? != ToolName::ListFiles {
         return None;
     }
     let query = fields.get("query")?.as_str()?;

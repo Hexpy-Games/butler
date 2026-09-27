@@ -1,5 +1,6 @@
 //! Source guided-project-ledger-effect-input: one reviewed record update.
 
+use crate::tool_protocol::ToolName;
 use serde_json::{Map, Value};
 
 use crate::btcc::BtccError;
@@ -7,14 +8,16 @@ use crate::public_text::trim_js_whitespace;
 
 pub(super) fn managed(name: &str) -> bool {
     matches!(
-        name,
-        "project_ledger_create"
-            | "project_ledger_update"
-            | "project_ledger_work_update"
-            | "project_ledger_task_update"
-            | "project_ledger_task_complete"
-            | "project_ledger_attempt_succeed"
-            | "project_ledger_attempt_fail"
+        ToolName::parse(name),
+        Some(
+            ToolName::ProjectLedgerCreate
+                | ToolName::ProjectLedgerUpdate
+                | ToolName::ProjectLedgerWorkUpdate
+                | ToolName::ProjectLedgerTaskUpdate
+                | ToolName::ProjectLedgerTaskComplete
+                | ToolName::ProjectLedgerAttemptSucceed
+                | ToolName::ProjectLedgerAttemptFail
+        )
     )
 }
 
@@ -33,7 +36,7 @@ pub(super) fn prepare(
             "Project Ledger mutation target differs from the active project. Omit project_ref or use the active project.",
         ));
     }
-    let create = name == "project_ledger_create";
+    let create = name == ToolName::ProjectLedgerCreate;
     let id = required_string(args, "id")?;
     let kind = match name {
         "project_ledger_work_update" => "work".to_owned(),

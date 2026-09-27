@@ -1,3 +1,4 @@
+use crate::tool_protocol::ToolName;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -365,7 +366,7 @@ fn recover(
                 before_sha256,
                 after_sha256,
             },
-        ) if capability == "edit_file" && *start_line > 0 => {
+        ) if capability == ToolName::EditFile && *start_line > 0 => {
             vec![json!({"path":first.path,"start_line":start_line,
                 "old_text":first.old_text,"new_text":first.new_text,
                 "before_sha256":before_sha256,"after_sha256":after_sha256})]
@@ -376,7 +377,7 @@ fn recover(
                 capability,
                 entries: hints,
             },
-        ) if capability == "edit_file" && hints.len() == edits.len() => edits
+        ) if capability == ToolName::EditFile && hints.len() == edits.len() => edits
             .iter()
             .zip(hints)
             .map(|(edit, hint)| {

@@ -330,11 +330,10 @@ fn spawn_service(
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr))
         .process_group(0);
-    command
-        .spawn()
-        .map_err(|source| {
-            crate::host::HostError::new("native_service_spawn_failed").with_source(source)
-        })}
+    command.spawn().map_err(|source| {
+        crate::host::HostError::new("native_service_spawn_failed").with_source(source)
+    })
+}
 
 fn log_file(
     path: &Path,
@@ -358,7 +357,8 @@ fn log_file(
         .open(path)
         .map_err(|source| {
             crate::host::HostError::new("native_service_logs_unavailable").with_source(source)
-        })}
+        })
+}
 
 fn resolve_data_root(
     explicit: Option<&str>,
@@ -377,7 +377,8 @@ fn resolve_data_root(
         .validate_data_root(&requested)
         .map_err(|source| {
             crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
-        })}
+        })
+}
 
 fn service_configuration(
     installation: &ResolvedInstallation,

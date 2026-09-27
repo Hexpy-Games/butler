@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::tool_protocol::ToolName;
 use serde_json::{Value, json};
 
 use crate::btcc::{BtccError, ToolJournalCloseoutRow};
@@ -33,11 +34,14 @@ impl ChangedCollector {
             return Ok(());
         };
         if result.field("ok").map_err(invalid)? == Some("false")
-            || !matches!(row.tool_name.as_str(), "write_file" | "edit_file")
+            || !matches!(
+                ToolName::parse(row.tool_name.as_str()),
+                Some(ToolName::WriteFile | ToolName::EditFile)
+            )
         {
             return Ok(());
         }
-        if row.tool_name == "edit_file"
+        if row.tool_name == ToolName::EditFile
             && let Some(raw) = result.field("changed_files").map_err(invalid)?
             && raw.starts_with('[')
         {
@@ -48,7 +52,7 @@ impl ChangedCollector {
         {
             return self.add_one(raw);
         }
-        if row.tool_name == "edit_file"
+        if row.tool_name == ToolName::EditFile
             && result.field("effect").map_err(invalid)? == Some("\"workspace_file_edit_batch\"")
         {
             if let Some(raw) = row.arguments.field("edits").map_err(invalid)?

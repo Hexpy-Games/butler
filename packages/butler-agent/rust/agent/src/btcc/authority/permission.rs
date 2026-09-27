@@ -5,6 +5,7 @@ use super::contracts::{
     ConversationPermission,
 };
 use super::identity::{canonical, digest};
+use crate::tool_protocol::ToolName;
 
 pub(super) fn for_admission(
     input: &AuthorityAdmissionInput,
@@ -71,7 +72,10 @@ fn permission(facts: PermissionFacts<'_>) -> AuthorityResult<ConversationPermiss
         executable,
         collation,
     } = facts;
-    let file_edit = matches!(capability, "write_file" | "edit_file");
+    let file_edit = matches!(
+        ToolName::parse(capability),
+        Some(ToolName::WriteFile | ToolName::EditFile)
+    );
     let command = matches!(capability, "run_command" | "run_command_remote_observation");
     let scope = if file_edit {
         json!({"kind":"workspace_file_edit"})

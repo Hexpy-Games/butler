@@ -1,5 +1,6 @@
 //! Source selectors for registered command, grep, and conversation results.
 
+use crate::tool_protocol::ToolName;
 use std::collections::HashSet;
 
 use crate::btcc::BtccError;
@@ -36,7 +37,7 @@ pub(super) fn project(name: &str, raw: &str) -> Result<String, BtccError> {
         Ok(())
     })
     .map_err(|source| failure().with_source(source))?;
-    if name == "grep_files" {
+    if name == ToolName::GrepFiles {
         let mut paths = String::from("[");
         let mut seen = HashSet::new();
         let mut count = 0usize;

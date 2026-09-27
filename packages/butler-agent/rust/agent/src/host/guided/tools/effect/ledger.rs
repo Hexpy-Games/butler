@@ -1,5 +1,6 @@
 //! Reviewed Project Ledger record effects over the existing durable EffectService.
 
+use crate::tool_protocol::ToolName;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
@@ -119,7 +120,7 @@ impl LedgerEffectAdapter {
         if initialized(&self.root) {
             return Ok(true);
         }
-        if self.name != "project_ledger_create" {
+        if self.name != ToolName::ProjectLedgerCreate {
             return Ok(false);
         }
         let id = self

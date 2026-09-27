@@ -14,6 +14,7 @@ pub(super) fn is_managed_project_ledger_effect(name: &str) -> bool {
     ledger_input::managed(name)
 }
 
+use crate::tool_protocol::ToolName;
 use serde_json::{Value, json};
 
 use crate::btcc::{
@@ -40,7 +41,7 @@ pub(super) async fn execute(
         allowed_tools_and_effects: owner.binding.allowed_tools_and_effects.as_deref(),
         installation_root: owner.binding.installation_root.as_deref(),
     };
-    if call.name == "run_command"
+    if call.name == ToolName::RunCommand
         && !matches!(
             call.arguments.get("state_effect").and_then(Value::as_str),
             Some("mutation" | "remote_observation")
@@ -62,7 +63,7 @@ pub(super) async fn execute(
             None,
         );
     }
-    if call.name == "bind_session_git_worktree"
+    if call.name == ToolName::BindSessionGitWorktree
         && (owner.binding.access_mode != AccessMode::FullAccess
             || owner.binding.project_id.is_none())
     {
@@ -72,7 +73,8 @@ pub(super) async fn execute(
             None,
         );
     }
-    if call.name == "request_service_restart" && owner.binding.access_mode != AccessMode::FullAccess
+    if call.name == ToolName::RequestServiceRestart
+        && owner.binding.access_mode != AccessMode::FullAccess
     {
         return ordinary(
             "restart_full_access_required",
@@ -100,9 +102,9 @@ pub(super) async fn execute(
         automation::prepare(owner, call, occurrence)
     } else if topic_conversation::supports(&call.name) {
         topic_conversation::prepare(owner, call, occurrence)
-    } else if call.name == "request_service_restart" {
+    } else if call.name == ToolName::RequestServiceRestart {
         restart::prepare(owner, &call.arguments)
-    } else if call.name == "run_command" {
+    } else if call.name == ToolName::RunCommand {
         owner
             .command
             .prepare_effect(&call.arguments, scope)

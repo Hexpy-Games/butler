@@ -1,5 +1,6 @@
 //! Executable native next steps for source Project Ledger CLI errors.
 
+use crate::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
 use crate::public_text::trim_js_whitespace;
@@ -80,7 +81,7 @@ fn native_next(error: &Map<String, Value>, name: &str, args: &Map<String, Value>
     let Some(id) = text(args.get("id")) else {
         return Vec::new();
     };
-    if name == "project_ledger_create"
+    if name == ToolName::ProjectLedgerCreate
         || !matches!(
             code,
             "invalid_state"

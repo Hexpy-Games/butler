@@ -1,5 +1,6 @@
 //! Translate source tool arguments to the canonical command's parsed CLI options.
 
+use crate::tool_protocol::ToolName;
 use serde_json::{Map, Value};
 
 use crate::{btcc::BtccError, project_ledger::LedgerCommand, public_text::trim_js_whitespace};
@@ -70,7 +71,7 @@ pub(super) fn command(
         }
         "project_ledger_render" | "render_project_dashboard" => {
             let view = text(args, "view").unwrap_or("");
-            if name == "render_project_dashboard" && view.is_empty() {
+            if name == ToolName::RenderProjectDashboard && view.is_empty() {
                 return Err(error("render_project_dashboard requires view"));
             }
             options.insert("view".into(), view.into());
@@ -123,7 +124,7 @@ pub(super) fn command(
             | LedgerCommand::AttemptSucceed
             | LedgerCommand::AttemptFail
     ) {
-        if name == "project_ledger_attempt_start" {
+        if name == ToolName::ProjectLedgerAttemptStart {
             options.insert("task".into(), text(args, "task_id").unwrap_or("").into());
             string(&mut options, args, "id", "id");
         } else {

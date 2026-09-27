@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::tool_protocol::ToolName;
 use serde_json::Value;
 
 use super::{WebAccessError, WebSession};
@@ -13,7 +14,7 @@ impl WebSession {
         &self,
         tool_name: &str,
     ) -> Option<(&'static str, &'static str)> {
-        if tool_name == "web_search"
+        if tool_name == ToolName::WebSearch
             && self.access.configured_provider().ok().as_deref() == Some("disabled")
         {
             return Some((

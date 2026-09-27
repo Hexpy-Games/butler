@@ -3,6 +3,7 @@
 mod invoke;
 mod mcp;
 
+use crate::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
 use crate::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
@@ -31,7 +32,7 @@ pub(super) async fn execute(
 }
 
 pub(super) fn effective(call: &ModelRoundToolCall) -> (String, Value, Option<String>) {
-    if call.name == "tool_call"
+    if call.name == ToolName::ToolCall
         && let Some(id) = call
             .arguments
             .get("id")
@@ -219,7 +220,7 @@ pub(super) fn remember_described(
     call: &ModelRoundToolCall,
     result: &JsonDocument,
 ) -> Result<(), ToolExecutionError> {
-    if call.name != "tool_describe" {
+    if call.name != ToolName::ToolDescribe {
         return Ok(());
     }
     let Some(array) = result.field("descriptions").map_err(|error| {
@@ -265,7 +266,10 @@ fn projection<'a>(
     let enabled = configured_disabled.is_none()
         && owner.binding.authorized_names.contains(tool.name)
         && NativeGuidedTools::supports(tool.name)
-        && !matches!(tool.name, "tool_search" | "tool_describe" | "tool_call");
+        && !matches!(
+            ToolName::parse(tool.name),
+            Some(ToolName::ToolSearch | ToolName::ToolDescribe | ToolName::ToolCall)
+        );
     BridgeCatalogTool {
         name: tool.name,
         definition: tool.definition,

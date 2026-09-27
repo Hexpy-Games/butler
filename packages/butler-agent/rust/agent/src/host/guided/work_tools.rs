@@ -6,6 +6,7 @@ mod view;
 #[cfg(test)]
 mod tests;
 
+use crate::tool_protocol::ToolName;
 use std::sync::Arc;
 
 use serde_json::{Map, Value, json};
@@ -26,18 +27,23 @@ impl NativeGuidedWorkTools {
 
     pub(crate) fn is_work_tool(name: &str) -> bool {
         matches!(
-            name,
-            "start_work"
-                | "continue_work"
-                | "replace_work_plan"
-                | "record_work_checkpoint"
-                | "record_work_review"
-                | "record_work_disposition"
+            ToolName::parse(name),
+            Some(
+                ToolName::StartWork
+                    | ToolName::ContinueWork
+                    | ToolName::ReplaceWorkPlan
+                    | ToolName::RecordWorkCheckpoint
+                    | ToolName::RecordWorkReview
+                    | ToolName::RecordWorkDisposition
+            )
         )
     }
 
     pub(crate) fn repairs_completed_relation(name: &str) -> bool {
-        matches!(name, "start_work" | "continue_work" | "replace_work_plan")
+        matches!(
+            ToolName::parse(name),
+            Some(ToolName::StartWork | ToolName::ContinueWork | ToolName::ReplaceWorkPlan)
+        )
     }
 
     pub(crate) async fn execute(
@@ -63,7 +69,10 @@ impl NativeGuidedWorkTools {
         }
         // Source safeBindOpenWork runs outside the tool result catch for these
         // non-relationship mutations; it must not silently choose unrelated Work.
-        if !matches!(name, "start_work" | "continue_work" | "replace_work_plan") {
+        if !matches!(
+            ToolName::parse(name),
+            Some(ToolName::StartWork | ToolName::ContinueWork | ToolName::ReplaceWorkPlan)
+        ) {
             self.service
                 .bind_open_work(self.scope.clone(), None)
                 .await?;
@@ -107,7 +116,7 @@ impl NativeGuidedWorkTools {
         if !Self::is_work_tool(name) {
             return Ok(None);
         }
-        if name == "replace_work_plan" {
+        if name == ToolName::ReplaceWorkPlan {
             self.service
                 .bind_open_work(self.scope.clone(), None)
                 .await?;

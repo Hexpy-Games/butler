@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::tool_protocol::ToolName;
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
@@ -16,8 +17,8 @@ use super::super::NativeGuidedTools;
 
 pub(super) fn supports(name: &str) -> bool {
     matches!(
-        name,
-        "create_automation" | "delete_automation" | "run_due_automations"
+        ToolName::parse(name),
+        Some(ToolName::CreateAutomation | ToolName::DeleteAutomation | ToolName::RunDueAutomations)
     )
 }
 

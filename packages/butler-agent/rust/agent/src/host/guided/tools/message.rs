@@ -7,6 +7,7 @@ use crate::btcc::{
     BtccError, ModelRoundMessage, ModelRoundRole, OperationResultMessageReferences, ToolResult,
     TurnRecord,
 };
+use crate::tool_protocol::ToolName;
 
 use super::NativeGuidedTools;
 
@@ -37,7 +38,7 @@ pub(super) fn result_message(
         content.push_str(",\"output\":");
         let encoded = output.as_str().trim();
         if encoded.starts_with('{') {
-            if result.name == "read_operation_results"
+            if result.name == ToolName::ReadOperationResults
                 && output
                     .field("data")
                     .map_err(|source| {

@@ -287,7 +287,8 @@ async fn configured_summary(
         crate::host::HostError::new("legacy_hot_summary_timeout").with_source(source)
     })?
     .map(|result| result.text)
-    .map_err(|source| crate::host::HostError::new("legacy_hot_summary_failed").with_source(source))}
+    .map_err(|source| crate::host::HostError::new("legacy_hot_summary_failed").with_source(source))
+}
 
 fn process_models(
     data_root: &std::path::Path,

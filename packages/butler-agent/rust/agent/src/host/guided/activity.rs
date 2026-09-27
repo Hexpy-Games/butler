@@ -4,6 +4,7 @@ mod content;
 mod publication;
 mod snapshot;
 
+use crate::tool_protocol::ToolName;
 use indexmap::IndexMap;
 use parking_lot::Mutex;
 use serde_json::{Map, Value};
@@ -293,7 +294,8 @@ fn new_group(
     } = content(first, calls, text);
     let id = format!("guided-activity:{turn_id}:{}", uuid::Uuid::new_v4());
     let kind = activity_kind(&first.name);
-    let deferred = first.name == "continue_work" || !matches!(kind, "ordinary" | "work_selection");
+    let deferred =
+        first.name == ToolName::ContinueWork || !matches!(kind, "ordinary" | "work_selection");
     let mut group = Group {
         id: id.clone(),
         stage,
@@ -306,19 +308,19 @@ fn new_group(
         preceding: Vec::new(),
         following: Vec::new(),
         starts_execution: false,
-        resumes_work: first.name == "continue_work",
+        resumes_work: first.name == ToolName::ContinueWork,
         next_execution_title: None,
         published: false,
         extensions: Map::new(),
     };
-    if first.name == "record_work_review"
+    if first.name == ToolName::RecordWorkReview
         && first.arguments.get("subject").and_then(Value::as_str) == Some("plan")
         && first.arguments.get("verdict").and_then(Value::as_str) == Some("accept")
     {
         group.starts_execution = true;
         group.next_execution_title = next_execution_title;
     }
-    if first.name == "replace_work_plan" {
+    if first.name == ToolName::ReplaceWorkPlan {
         let before = format!("guided-activity:{turn_id}:{}", uuid::Uuid::new_v4());
         let conception = content::conception(&group.summary);
         state.groups.insert(
@@ -343,7 +345,7 @@ fn new_group(
         );
         group.preceding.push(before);
     }
-    if first.name == "record_work_review"
+    if first.name == ToolName::RecordWorkReview
         && first.arguments.get("subject").and_then(Value::as_str) == Some("completion")
         && first.arguments.get("verdict").and_then(Value::as_str) == Some("accept")
         && let Some(report) = content::reporting(text)

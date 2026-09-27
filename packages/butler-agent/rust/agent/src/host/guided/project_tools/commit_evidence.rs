@@ -1,5 +1,6 @@
 //! Source Git commit evidence normalization using the existing tracked command owner.
 
+use crate::tool_protocol::ToolName;
 use crate::workspace::CommandError;
 use std::{collections::HashMap, path::Path};
 
@@ -22,7 +23,7 @@ pub(super) async fn normalize(
     host_environment: &HashMap<String, String>,
     cancel: CancellationToken,
 ) -> Result<Map<String, Value>, Value> {
-    if name != "project_ledger_work_complete" {
+    if name != ToolName::ProjectLedgerWorkComplete {
         return Ok(args.clone());
     }
     let code_commit = text(args.get("code_commit"));

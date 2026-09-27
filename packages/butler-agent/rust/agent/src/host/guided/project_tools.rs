@@ -6,6 +6,7 @@ mod lifecycle;
 mod options;
 mod recovery;
 
+use crate::tool_protocol::ToolName;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -66,27 +67,29 @@ impl NativeGuidedProjectTools {
 
     pub(crate) fn supports(name: &str) -> bool {
         matches!(
-            name,
-            "get_work_dashboard"
-                | "project_ledger_status"
-                | "project_ledger_index"
-                | "project_ledger_list"
-                | "project_ledger_show"
-                | "project_ledger_check"
-                | "project_ledger_render"
-                | "inspect_project_status"
-                | "query_project_work"
-                | "render_project_dashboard"
-                | "project_ledger_create"
-                | "project_ledger_update"
-                | "project_ledger_work_update"
-                | "project_ledger_work_complete"
-                | "project_ledger_task_update"
-                | "project_ledger_task_complete"
-                | "project_ledger_attempt_start"
-                | "project_ledger_attempt_succeed"
-                | "project_ledger_attempt_fail"
-                | "complete_project_work"
+            ToolName::parse(name),
+            Some(
+                ToolName::GetWorkDashboard
+                    | ToolName::ProjectLedgerStatus
+                    | ToolName::ProjectLedgerIndex
+                    | ToolName::ProjectLedgerList
+                    | ToolName::ProjectLedgerShow
+                    | ToolName::ProjectLedgerCheck
+                    | ToolName::ProjectLedgerRender
+                    | ToolName::InspectProjectStatus
+                    | ToolName::QueryProjectWork
+                    | ToolName::RenderProjectDashboard
+                    | ToolName::ProjectLedgerCreate
+                    | ToolName::ProjectLedgerUpdate
+                    | ToolName::ProjectLedgerWorkUpdate
+                    | ToolName::ProjectLedgerWorkComplete
+                    | ToolName::ProjectLedgerTaskUpdate
+                    | ToolName::ProjectLedgerTaskComplete
+                    | ToolName::ProjectLedgerAttemptStart
+                    | ToolName::ProjectLedgerAttemptSucceed
+                    | ToolName::ProjectLedgerAttemptFail
+                    | ToolName::CompleteProjectWork
+            )
         )
     }
 
@@ -133,7 +136,7 @@ impl NativeGuidedProjectTools {
         args: Map<String, Value>,
         scope: ProjectToolScope,
     ) -> Result<Value, BtccError> {
-        if name == "get_work_dashboard" {
+        if name == ToolName::GetWorkDashboard {
             let reader = self.work_records.clone();
             let collation = self.collation.clone();
             let debug = args.get("debug") == Some(&Value::Bool(true));
@@ -146,7 +149,7 @@ impl NativeGuidedProjectTools {
             result["ok"] = Value::Bool(true);
             return Ok(evidence::attach(name, &args, Path::new(""), result));
         }
-        let name = if name == "complete_project_work" {
+        let name = if name == ToolName::CompleteProjectWork {
             "project_ledger_work_complete"
         } else {
             name
@@ -224,20 +227,25 @@ impl NativeGuidedProjectTools {
         if native {
             result = recovery::attach(name, &args, result);
         }
-        if matches!(name, "project_ledger_create" | "project_ledger_update") {
+        if matches!(
+            ToolName::parse(name),
+            Some(ToolName::ProjectLedgerCreate | ToolName::ProjectLedgerUpdate)
+        ) {
             result = plan_body(&self.ledger, &root, &args, result)
                 .await
                 .map_err(ledger_error)?;
         }
         if result.get("ok") == Some(&Value::Bool(true))
             && matches!(
-                name,
-                "project_ledger_create"
-                    | "project_ledger_update"
-                    | "project_ledger_work_update"
-                    | "project_ledger_work_complete"
-                    | "project_ledger_task_update"
-                    | "project_ledger_task_complete"
+                ToolName::parse(name),
+                Some(
+                    ToolName::ProjectLedgerCreate
+                        | ToolName::ProjectLedgerUpdate
+                        | ToolName::ProjectLedgerWorkUpdate
+                        | ToolName::ProjectLedgerWorkComplete
+                        | ToolName::ProjectLedgerTaskUpdate
+                        | ToolName::ProjectLedgerTaskComplete
+                )
             )
         {
             result = lifecycle::closeout(&self.ledger, &root, result)

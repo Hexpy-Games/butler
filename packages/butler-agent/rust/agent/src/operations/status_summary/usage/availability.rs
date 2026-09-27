@@ -1,5 +1,6 @@
 //! Read-only web-search and transcript availability projections.
 
+use crate::tool_protocol::ToolName;
 use std::{
     collections::BTreeMap,
     fs::File,
@@ -139,7 +140,7 @@ fn read_session_tools(data_root: &Path, session_id: &str, since_ts: Option<f64>)
                         "__other__"
                     };
                     let bucket = by_tool.entry(key.to_owned()).or_default();
-                    let index = if kind == "tool_call" {
+                    let index = if kind == ToolName::ToolCall {
                         0
                     } else if event.pointer("/payload/ok") == Some(&Value::Bool(false)) {
                         3

@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use crate::tool_protocol::ToolName;
 use serde_json::{Value, json};
 
 use crate::btcc::{AccessMode, TurnRecord};
@@ -55,7 +56,7 @@ pub(crate) fn select_phase(
     let catalog = input.catalog;
     let image_tool_admitted = turn_admits_zai_image_tool(&policy);
     let mut authorized = legacy_authorized(catalog, &policy, project_ref, project_sources);
-    authorized.retain(|tool| tool.name != "analyze_attached_image" || image_tool_admitted);
+    authorized.retain(|tool| tool.name != ToolName::AnalyzeAttachedImage || image_tool_admitted);
     // Current source exact-read capability is always available, independently of replay replacement.
     for name in ["read_operation_results", "list_operation_results"] {
         if !authorized.iter().any(|tool| tool.name == name)
@@ -159,7 +160,7 @@ pub(crate) fn select_phase(
     authorized.retain(|tool| {
         (tool.durable && policy.subsession.is_some() && policy.tracking_mode != "none"
             || phase_allows(phase, tool))
-            && (tool.name != "analyze_attached_image" || image_tool_admitted)
+            && (tool.name != ToolName::AnalyzeAttachedImage || image_tool_admitted)
     });
     for name in &policy.required_tools {
         if !authorized.iter().any(|tool| &tool.name == name) {
@@ -181,8 +182,8 @@ pub(crate) fn select_phase(
         .filter(|tool| {
             provider_names.contains(tool.name.as_str())
                 || matches!(
-                    tool.name.as_str(),
-                    "read_operation_results" | "list_operation_results"
+                    ToolName::parse(tool.name.as_str()),
+                    Some(ToolName::ReadOperationResults | ToolName::ListOperationResults)
                 )
         })
         .copied()
@@ -292,7 +293,7 @@ fn provider_candidates(
         names.insert("analyze_attached_image".to_owned());
     }
     for tool in authorized {
-        if tool.name == "update_todo_list" {
+        if tool.name == ToolName::UpdateTodoList {
             names.insert(tool.name.clone());
         }
         if tool.category.as_deref() == Some("control")

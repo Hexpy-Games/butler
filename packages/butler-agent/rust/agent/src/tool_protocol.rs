@@ -1,6 +1,9 @@
 //! Pure catalog identity and guided-call envelope interpretation.
 
+mod tool_name;
+
 use std::borrow::Cow;
+pub(crate) use tool_name::ToolName;
 
 use serde_json::{Map, Value};
 
@@ -57,8 +60,8 @@ pub(crate) fn normalize_guided_tool_call<'a>(
         .and_then(parse_tool_catalog_id);
     if let (Some(_), Some(target)) = (nested, target)
         && !target.name.is_empty()
-        && target.name != "tool_call"
-        && (tool_name == "tool_call" || target.name == tool_name)
+        && target.name != ToolName::ToolCall
+        && (tool_name == ToolName::ToolCall || target.name == tool_name)
     {
         return NormalizedGuidedToolCall { name: target.name };
     }

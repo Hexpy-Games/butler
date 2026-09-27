@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use crate::btcc::AccessMode;
+use crate::tool_protocol::ToolName;
 
 use super::catalog::{GuidedCatalogSnapshot, GuidedCatalogTool};
 use super::policy::GuidedExecutionPolicy;
@@ -151,7 +152,7 @@ pub(super) fn legacy_authorized<'a>(
         }
         names.retain(|name| {
             NON_FULL.contains(&name.as_str())
-                && (name != "run_command" || policy.access_mode == AccessMode::AskFirst)
+                && (name != ToolName::RunCommand || policy.access_mode == AccessMode::AskFirst)
         });
     }
     if policy.access_mode == AccessMode::FullAccess {
@@ -177,11 +178,13 @@ pub(super) fn legacy_authorized<'a>(
         !catalog.project_mutations.contains(name)
             && (!catalog.work_tracking.contains(name)
                 || matches!(
-                    name.as_str(),
-                    "update_todo_list"
-                        | "list_todo_list"
-                        | "list_work_streams"
-                        | "update_work_stream_state"
+                    ToolName::parse(name.as_str()),
+                    Some(
+                        ToolName::UpdateTodoList
+                            | ToolName::ListTodoList
+                            | ToolName::ListWorkStreams
+                            | ToolName::UpdateWorkStreamState
+                    )
                 ))
     });
     if policy.access_mode != AccessMode::ReadOnly && ledger && has_project {
@@ -282,7 +285,7 @@ pub(super) fn legacy_visible<'a>(
             }
             if authorized
                 .iter()
-                .any(|tool| tool.name == "analyze_attached_image")
+                .any(|tool| tool.name == ToolName::AnalyzeAttachedImage)
             {
                 names.insert("analyze_attached_image");
             }

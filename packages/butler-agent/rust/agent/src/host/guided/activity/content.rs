@@ -1,5 +1,6 @@
 //! Source English activity copy and public argument projection.
 
+use crate::tool_protocol::ToolName;
 use serde_json::{Value, json};
 
 use crate::btcc::{ModelRoundToolCall, WorkStage, WorkView};
@@ -31,8 +32,11 @@ pub(super) fn content(
 ) -> Content {
     let args = &first.arguments;
     let name = first.name.as_str();
-    if matches!(name, "start_work" | "continue_work") {
-        let continuing = name == "continue_work";
+    if matches!(
+        ToolName::parse(name),
+        Some(ToolName::StartWork | ToolName::ContinueWork)
+    ) {
+        let continuing = name == ToolName::ContinueWork;
         let title = tool_title(name, args);
         let summary = if continuing {
             "Checking previous work and its current state."
@@ -53,7 +57,7 @@ pub(super) fn content(
             next_execution_title: None,
         };
     }
-    if name == "replace_work_plan" {
+    if name == ToolName::ReplaceWorkPlan {
         let title = tool_title(name, args);
         let summary = public(args.get("objective"))
             .or_else(|| public_str(assistant_text))
@@ -73,7 +77,7 @@ pub(super) fn content(
             next_execution_title: None,
         };
     }
-    if name == "record_work_review" {
+    if name == ToolName::RecordWorkReview {
         let title = tool_title(name, args);
         let summary = public(args.get("summary"))
             .or_else(|| public_str(assistant_text))
@@ -102,7 +106,7 @@ pub(super) fn content(
             next_execution_title: active_action_title(args),
         };
     }
-    if name == "record_work_checkpoint" {
+    if name == ToolName::RecordWorkCheckpoint {
         let title = tool_title(name, args);
         let summary = public(args.get("public_summary"))
             .or_else(|| public_str(assistant_text))
@@ -319,7 +323,7 @@ fn tool_title(name: &str, args: &serde_json::Map<String, Value>) -> String {
 }
 
 fn title_ref(name: &str, args: &serde_json::Map<String, Value>) -> Value {
-    let name = if name == "record_work_review" {
+    let name = if name == ToolName::RecordWorkReview {
         match args.get("subject").and_then(Value::as_str) {
             Some("plan") => "plan_review",
             Some("completion") => "completion_review",
@@ -336,10 +340,13 @@ fn title_ref(name: &str, args: &serde_json::Map<String, Value>) -> Value {
 }
 
 fn safe_file_target(name: &str, args: &serde_json::Map<String, Value>) -> Option<String> {
-    if !matches!(name, "read_file" | "write_file" | "edit_file") {
+    if !matches!(
+        ToolName::parse(name),
+        Some(ToolName::ReadFile | ToolName::WriteFile | ToolName::EditFile)
+    ) {
         return None;
     }
-    let first = if name == "read_file" {
+    let first = if name == ToolName::ReadFile {
         args.get("requests")
             .and_then(Value::as_array)
             .and_then(|requests| requests.iter().find_map(Value::as_object))

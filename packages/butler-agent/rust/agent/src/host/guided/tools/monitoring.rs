@@ -1,5 +1,6 @@
 //! Per-Turn monitoring adapters; domain readers own facts and the outer ToolPort journals.
 
+use crate::tool_protocol::ToolName;
 use std::{path::PathBuf, sync::Arc};
 
 use serde_json::{Value, json};
@@ -93,11 +94,13 @@ const CATEGORIES: [&str; 14] = [
 
 pub(super) fn supports(name: &str) -> bool {
     matches!(
-        name,
-        "get_context_monitor"
-            | "get_usage_monitor"
-            | "get_memory_health"
-            | "list_tool_capabilities"
+        ToolName::parse(name),
+        Some(
+            ToolName::GetContextMonitor
+                | ToolName::GetUsageMonitor
+                | ToolName::GetMemoryHealth
+                | ToolName::ListToolCapabilities
+        )
     )
 }
 

@@ -16,6 +16,7 @@ mod project_source;
 mod resume;
 pub(in crate::host) use message::structured_raw as structured_tool_preview;
 
+use crate::tool_protocol::ToolName;
 use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
@@ -202,7 +203,7 @@ impl NativeGuidedTools {
             .into_iter()
             .flat_map(|continuation| &continuation.messages)
             .flat_map(|message| message.tool_calls.as_deref().unwrap_or(&[]))
-            .filter(|call| call.name == "tool_call")
+            .filter(|call| call.name == ToolName::ToolCall)
             .filter_map(|call| call.arguments.get("id").and_then(Value::as_str))
             .map(str::to_owned)
             .collect();
@@ -248,58 +249,60 @@ impl NativeGuidedTools {
 
     pub(crate) fn supports(name: &str) -> bool {
         matches!(
-            name,
-            "read_file"
-                | "run_command"
-                | "write_file"
-                | "edit_file"
-                | "grep_files"
-                | "read_tool_output_artifact"
-                | "read_tool_evidence_artifact"
-                | "list_files"
-                | "list_skills"
-                | "list_operation_results"
-                | "read_operation_results"
-                | "query_memory"
-                | "recall_memory"
-                | "ingest_task_memory"
-                | "update_explicit_memory"
-                | "analyze_attached_image"
-                | "read_conversation_session"
-                | "list_conversation_sessions"
-                | "read_conversation_context"
-                | "tool_search"
-                | "tool_describe"
-                | "tool_call"
-                | "list_mcp_capabilities"
-                | "summarize_user_profile"
-                | "update_onboarding_profile"
-                | "read_project_source"
-                | "bind_session_git_worktree"
-                | "start_topic_conversation"
-                | "request_service_restart"
-                | "call_mcp_tool"
-                | "read_mcp_resource"
-                | "delegate_to_steward"
-                | "delegate_to_worker"
-                | "steer_steward"
-                | "steer_worker"
-                | "cancel_steward"
-                | "wait_for_worker"
-                | "update_todo_list"
-                | "list_todo_list"
-                | "get_context_monitor"
-                | "get_usage_monitor"
-                | "get_memory_health"
-                | "list_tool_capabilities"
-                | "list_work_streams"
-                | "update_work_stream_state"
-                | "create_automation"
-                | "list_automations"
-                | "delete_automation"
-                | "run_due_automations"
-                | "web_search"
-                | "web_read"
+            ToolName::parse(name),
+            Some(
+                ToolName::ReadFile
+                    | ToolName::RunCommand
+                    | ToolName::WriteFile
+                    | ToolName::EditFile
+                    | ToolName::GrepFiles
+                    | ToolName::ReadToolOutputArtifact
+                    | ToolName::ReadToolEvidenceArtifact
+                    | ToolName::ListFiles
+                    | ToolName::ListSkills
+                    | ToolName::ListOperationResults
+                    | ToolName::ReadOperationResults
+                    | ToolName::QueryMemory
+                    | ToolName::RecallMemory
+                    | ToolName::IngestTaskMemory
+                    | ToolName::UpdateExplicitMemory
+                    | ToolName::AnalyzeAttachedImage
+                    | ToolName::ReadConversationSession
+                    | ToolName::ListConversationSessions
+                    | ToolName::ReadConversationContext
+                    | ToolName::ToolSearch
+                    | ToolName::ToolDescribe
+                    | ToolName::ToolCall
+                    | ToolName::ListMcpCapabilities
+                    | ToolName::SummarizeUserProfile
+                    | ToolName::UpdateOnboardingProfile
+                    | ToolName::ReadProjectSource
+                    | ToolName::BindSessionGitWorktree
+                    | ToolName::StartTopicConversation
+                    | ToolName::RequestServiceRestart
+                    | ToolName::CallMcpTool
+                    | ToolName::ReadMcpResource
+                    | ToolName::DelegateToSteward
+                    | ToolName::DelegateToWorker
+                    | ToolName::SteerSteward
+                    | ToolName::SteerWorker
+                    | ToolName::CancelSteward
+                    | ToolName::WaitForWorker
+                    | ToolName::UpdateTodoList
+                    | ToolName::ListTodoList
+                    | ToolName::GetContextMonitor
+                    | ToolName::GetUsageMonitor
+                    | ToolName::GetMemoryHealth
+                    | ToolName::ListToolCapabilities
+                    | ToolName::ListWorkStreams
+                    | ToolName::UpdateWorkStreamState
+                    | ToolName::CreateAutomation
+                    | ToolName::ListAutomations
+                    | ToolName::DeleteAutomation
+                    | ToolName::RunDueAutomations
+                    | ToolName::WebSearch
+                    | ToolName::WebRead
+            )
         ) || NativeGuidedWorkTools::is_work_tool(name)
             || crate::host::guided::project_tools::NativeGuidedProjectTools::supports(name)
     }
@@ -329,8 +332,8 @@ impl ToolPort for NativeGuidedTools {
             self.same_turn(invocation)?;
             if self.binding.visible_names.iter().any(|name| {
                 matches!(
-                    name.as_str(),
-                    "list_operation_results" | "read_operation_results"
+                    ToolName::parse(name.as_str()),
+                    Some(ToolName::ListOperationResults | ToolName::ReadOperationResults)
                 )
             }) && invocation.operation_results.is_none()
             {

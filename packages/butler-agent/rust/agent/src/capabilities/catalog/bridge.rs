@@ -1,5 +1,6 @@
 //! Borrowed native catalog projection for one progressive discovery call.
 
+use crate::tool_protocol::ToolName;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -117,7 +118,10 @@ pub(crate) fn search_native<'a>(
         tags.dedup();
         let risk = if tool.definition.get("concurrencySafe") != Some(&Value::Bool(true))
             || tool.category == "file"
-                && !matches!(tool.name, "read_file" | "grep_files" | "list_files")
+                && !matches!(
+                    ToolName::parse(tool.name),
+                    Some(ToolName::ReadFile | ToolName::GrepFiles | ToolName::ListFiles)
+                )
             || matches!(
                 tool.category,
                 "command" | "automation" | "dispatch" | "mcp" | "work"

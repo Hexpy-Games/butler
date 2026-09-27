@@ -4,6 +4,7 @@ use super::{NativeGuidedTools, bridge_error, encoded, projection, text};
 use crate::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 use crate::capabilities::{describe_native, validate_native_arguments};
 use crate::json::JsonDocument;
+use crate::tool_protocol::ToolName;
 use serde_json::{Value, json};
 
 pub(super) async fn run(
@@ -87,7 +88,10 @@ pub(super) async fn run(
         error["error"]["next_action"] = Value::String("Call tool_describe for this exact catalog id, inspect the schema, then retry tool_call with schema-valid arguments.".into());
         return encoded(&error);
     }
-    if matches!(name, "tool_search" | "tool_describe" | "tool_call") {
+    if matches!(
+        ToolName::parse(name),
+        Some(ToolName::ToolSearch | ToolName::ToolDescribe | ToolName::ToolCall)
+    ) {
         return encoded(&bridge_error(
             "forbidden_bridge_target",
             "Bridge tools cannot recursively invoke bridge tools.",
@@ -116,7 +120,7 @@ pub(super) async fn run(
     };
     // Dispatch through the existing guarded domain owner. Never recurse into
     // ToolPort::execute: that would create a second journal occurrence.
-    let result = if name == "read_operation_results" {
+    let result = if name == ToolName::ReadOperationResults {
         let Some(runtime) = invocation.operation_results else {
             return encoded(&underlying(id, "operation_result_exact_read_unavailable"));
         };

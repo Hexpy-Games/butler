@@ -10,6 +10,7 @@ use crate::btcc::{BtccError, OperationResultMessageReferences, ToolResult};
 #[cfg(test)]
 use crate::json::JsonDocument;
 use crate::json::visit_raw_object;
+use crate::tool_protocol::ToolName;
 
 const MAX_BYTES: usize = 50 * 1024;
 
@@ -19,18 +20,19 @@ pub(in crate::host) fn structured_raw(name: &str, raw: &str) -> Result<String, B
     let candidate = tool_payload(raw, keys(name), 0)?.unwrap_or(raw);
     if work::supports(name) && candidate.trim().starts_with('{') {
         work::project_raw(name, candidate)
-    } else if name == "read_operation_results" && field(candidate, "data")?.is_some_and(string_raw)
+    } else if name == ToolName::ReadOperationResults
+        && field(candidate, "data")?.is_some_and(string_raw)
     {
         exact::project_raw(candidate)
     } else if matches!(
-        name,
-        "read_tool_output_artifact" | "read_tool_evidence_artifact"
+        ToolName::parse(name),
+        Some(ToolName::ReadToolOutputArtifact | ToolName::ReadToolEvidenceArtifact)
     ) && candidate.trim_start().starts_with('{')
     {
         artifact::project(name, candidate)
     } else if matches!(
-        name,
-        "run_command" | "grep_files" | "read_conversation_context"
+        ToolName::parse(name),
+        Some(ToolName::RunCommand | ToolName::GrepFiles | ToolName::ReadConversationContext)
     ) && candidate.trim_start().starts_with('{')
     {
         retained::project(name, candidate)
@@ -46,19 +48,21 @@ pub(super) fn fit(
 ) -> Result<String, BtccError> {
     let specialized = work::supports(&result.name)
         || matches!(
-            result.name.as_str(),
-            "read_operation_results"
-                | "run_command"
-                | "grep_files"
-                | "read_conversation_context"
-                | "read_tool_output_artifact"
-                | "read_tool_evidence_artifact"
+            ToolName::parse(result.name.as_str()),
+            Some(
+                ToolName::ReadOperationResults
+                    | ToolName::RunCommand
+                    | ToolName::GrepFiles
+                    | ToolName::ReadConversationContext
+                    | ToolName::ReadToolOutputArtifact
+                    | ToolName::ReadToolEvidenceArtifact
+            )
         );
     let output = result.output.as_ref();
-    let partial_exact = result.name != "read_operation_results"
+    let partial_exact = result.name != ToolName::ReadOperationResults
         && references.exact_read.is_some()
         && output.is_some_and(|value| bound::signals_partial(value.as_str()));
-    let nested_file = result.name == "read_file"
+    let nested_file = result.name == ToolName::ReadFile
         && output.is_some_and(|value| {
             field(value.as_str(), "files").ok().flatten().is_none()
                 && tool_payload(value.as_str(), &["files"], 0)
@@ -86,7 +90,7 @@ pub(super) fn fit(
         projected.push_str(",\"output\":");
         projected.push_str(&structured_raw(&result.name, output.as_str())?);
     }
-    let exact_read = if result.name == "read_operation_results" {
+    let exact_read = if result.name == ToolName::ReadOperationResults {
         None
     } else {
         references
@@ -106,11 +110,11 @@ pub(super) fn fit(
         );
     }
     projected.push('}');
-    let encoded = if result.name == "read_operation_results" {
+    let encoded = if result.name == ToolName::ReadOperationResults {
         exact::fit(&projected, MAX_BYTES)?
     } else if matches!(
-        result.name.as_str(),
-        "read_tool_output_artifact" | "read_tool_evidence_artifact"
+        ToolName::parse(result.name.as_str()),
+        Some(ToolName::ReadToolOutputArtifact | ToolName::ReadToolEvidenceArtifact)
     ) {
         artifact::fit(&projected, MAX_BYTES)?
     } else {

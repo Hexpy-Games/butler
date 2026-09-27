@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
 use crate::btcc::storage::{
@@ -437,7 +438,7 @@ impl OperationResultRuntime for OperationResultReplayRuntime {
                 });
             };
             let reference = self.reference_for(&record).await.map_err(contract_error)?;
-            let exact_read = if provider_tool_name != "read_operation_results"
+            let exact_read = if provider_tool_name != ToolName::ReadOperationResults
                 && self.selection.exact_read_capability
             {
                 let total_bytes = result.as_str().len();

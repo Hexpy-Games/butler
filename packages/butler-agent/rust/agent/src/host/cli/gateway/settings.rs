@@ -157,10 +157,10 @@ fn write_settings(
     if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
         return Err("gateway_settings_path_ambiguous".into());
     }
-    crate::configuration::write_json_atomic(&path, value)
-        .map_err(|source| {
-            crate::host::HostError::new("gateway_settings_unavailable").with_source(source)
-        })}
+    crate::configuration::write_json_atomic(&path, value).map_err(|source| {
+        crate::host::HostError::new("gateway_settings_unavailable").with_source(source)
+    })
+}
 
 fn settings_path(data_root: &Path) -> PathBuf {
     data_root.join("gateways/app.json")

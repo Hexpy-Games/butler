@@ -1,5 +1,6 @@
 //! Historical Project Ledger effect input, kept separate from current tool input.
 
+use crate::tool_protocol::ToolName;
 use std::path::PathBuf;
 
 use serde_json::{Map, Value};
@@ -32,8 +33,8 @@ pub(super) async fn classify(
     target: &str,
     input: &Value,
 ) -> BlockerRelation {
-    if blocker.capability != "project_ledger_update"
-        || capability == "project_ledger_create"
+    if blocker.capability != ToolName::ProjectLedgerUpdate
+        || capability == ToolName::ProjectLedgerCreate
         || input.get("operation").and_then(Value::as_str) != Some("update")
     {
         return BlockerRelation::Unrelated;

@@ -129,7 +129,8 @@ impl GatewayControlServer {
             })?
             .map_err(|source| {
                 crate::host::HostError::new("gateway_control_task_failed").with_source(source)
-            })}
+            })
+    }
 }
 
 async fn serve_one(
@@ -324,12 +325,10 @@ async fn write_frame<T: Serialize>(
     stream.write_all(&bytes).await.map_err(|source| {
         crate::host::HostError::new("gateway_control_response_failed").with_source(source)
     })?;
-    stream
-        .flush()
-        .await
-        .map_err(|source| {
-            crate::host::HostError::new("gateway_control_response_failed").with_source(source)
-        })}
+    stream.flush().await.map_err(|source| {
+        crate::host::HostError::new("gateway_control_response_failed").with_source(source)
+    })
+}
 
 fn constant_time_equal(left: &[u8], right: &[u8]) -> bool {
     let mut difference = left.len() ^ right.len();

@@ -2,6 +2,7 @@
 //! Source classifies onboarding as turn_local and summary as none; an
 //! interrupted onboarding write is never replayed from a started journal row.
 
+use crate::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
 use crate::{
@@ -14,7 +15,10 @@ use super::NativeGuidedTools;
 use crate::profile::ProfileCode;
 
 pub(super) fn supports(name: &str) -> bool {
-    matches!(name, "update_onboarding_profile" | "summarize_user_profile")
+    matches!(
+        ToolName::parse(name),
+        Some(ToolName::UpdateOnboardingProfile | ToolName::SummarizeUserProfile)
+    )
 }
 
 pub(super) async fn execute(

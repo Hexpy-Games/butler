@@ -302,7 +302,8 @@ fn resolve_data(
         .validate_data_root(&requested)
         .map_err(|source| {
             crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
-        })}
+        })
+}
 
 fn expand_home_path(value: &str) -> PathBuf {
     let home = std::env::var_os("HOME").map(PathBuf::from);

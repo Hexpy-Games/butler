@@ -6,6 +6,7 @@ use crate::json::{CanonicalKeyOrder, canonical_json};
 use crate::public_text::trim_js_whitespace;
 
 use super::GuidedToolError;
+use crate::tool_protocol::ToolName;
 
 pub(super) struct Occurrence {
     pub call_id: String,
@@ -22,7 +23,7 @@ pub(super) fn occurrence(
     let provider = (!provider.is_empty()).then_some(provider);
     // Direct native read/write/edit calls do not use the progressive catalog
     // wrapper or run_command's presentation-only summary normalization.
-    let catalog_id = (call.name == "tool_call")
+    let catalog_id = (call.name == ToolName::ToolCall)
         .then(|| call.arguments.get("id").and_then(Value::as_str))
         .flatten()
         .map(trim_js_whitespace)
@@ -45,7 +46,7 @@ pub(super) fn occurrence(
     } else {
         &call.name
     };
-    if effective_name == "run_command" {
+    if effective_name == ToolName::RunCommand {
         normalized.remove("summary");
     }
     let arguments = if catalog_id.is_some() {

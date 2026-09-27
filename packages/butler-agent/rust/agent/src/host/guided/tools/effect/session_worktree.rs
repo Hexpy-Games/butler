@@ -1,5 +1,6 @@
 //! Reviewed session worktree effect over the existing session-owned Git owner.
 
+use crate::tool_protocol::ToolName;
 use std::sync::Arc;
 
 use serde_json::{Map, Value, json};
@@ -18,7 +19,7 @@ use crate::workspace::{
 use super::super::NativeGuidedTools;
 
 pub(super) fn supports(name: &str) -> bool {
-    name == "bind_session_git_worktree"
+    name == ToolName::BindSessionGitWorktree
 }
 
 pub(super) fn prepare(

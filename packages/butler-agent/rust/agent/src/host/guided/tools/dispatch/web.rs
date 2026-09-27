@@ -3,9 +3,13 @@ use serde_json::{Value, json};
 use super::NativeGuidedTools;
 use crate::btcc::{GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 use crate::json::JsonDocument;
+use crate::tool_protocol::ToolName;
 
 pub(super) fn supports(name: &str) -> bool {
-    matches!(name, "web_search" | "web_read")
+    matches!(
+        ToolName::parse(name),
+        Some(ToolName::WebSearch | ToolName::WebRead)
+    )
 }
 
 pub(super) async fn execute(
@@ -14,7 +18,7 @@ pub(super) async fn execute(
     call: &ModelRoundToolCall,
 ) -> Result<JsonDocument, ToolExecutionError> {
     let arguments = Value::Object(call.arguments.clone());
-    let result = if call.name == "web_search" {
+    let result = if call.name == ToolName::WebSearch {
         owner
             .web_session
             .web_search(&arguments, invocation.cancellation)

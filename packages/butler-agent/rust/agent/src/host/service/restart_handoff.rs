@@ -1,5 +1,6 @@
 //! One-shot post-delivery service restart handoff over the existing effect journal.
 
+use crate::tool_protocol::ToolName;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -173,7 +174,7 @@ impl NativeRestartHandoff {
             .await
             .map_err(|error| error.code().to_owned())?;
         for call in calls {
-            if call.tool_name != "request_service_restart" || call.status != "completed" {
+            if call.tool_name != ToolName::RequestServiceRestart || call.status != "completed" {
                 continue;
             }
             let Some(result) = call.result else { continue };

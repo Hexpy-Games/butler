@@ -1,6 +1,7 @@
 use std::pin::Pin;
 
 use crate::btcc::{PortFuture, TurnRecord};
+use crate::tool_protocol::ToolName;
 
 use super::continuation::GuidedPresentation;
 use super::contracts::{
@@ -114,8 +115,8 @@ impl GuidedPolicyPort for GuidedPolicy {
         Box<dyn Future<Output = Result<crate::json::JsonDocument, ToolExecutionError>> + Send + 'a>,
     > {
         if matches!(
-            call.name.as_str(),
-            "list_operation_results" | "read_operation_results"
+            ToolName::parse(call.name.as_str()),
+            Some(ToolName::ListOperationResults | ToolName::ReadOperationResults)
         ) {
             return Box::pin(async move {
                 let runtime = invocation.operation_results.ok_or_else(|| {
@@ -124,7 +125,7 @@ impl GuidedPolicyPort for GuidedPolicy {
                         "operation_result_exact_read_unavailable",
                     ))
                 })?;
-                if call.name == "list_operation_results" {
+                if call.name == ToolName::ListOperationResults {
                     runtime.list_tool(&call.arguments).await
                 } else {
                     runtime.read_tool(&call.arguments).await

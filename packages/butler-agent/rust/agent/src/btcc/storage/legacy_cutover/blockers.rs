@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 
+use crate::tool_protocol::ToolName;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 
@@ -230,7 +231,7 @@ fn external_effect(
 }
 
 fn exact_targets(capability: &str, source: &str, input: &Value) -> Vec<String> {
-    if capability != "project_ledger_update" {
+    if capability != ToolName::ProjectLedgerUpdate {
         return vec![source.to_owned()];
     }
     let mut targets = BTreeSet::new();

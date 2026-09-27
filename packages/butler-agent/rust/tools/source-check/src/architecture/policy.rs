@@ -23,7 +23,13 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
             "js_date",
         ],
         // Capability adapters consume the skills facade; catalog internals remain private.
-        "capabilities" => &["workspace", "skills", "json", "public_text"],
+        "capabilities" => &[
+            "workspace",
+            "skills",
+            "json",
+            "public_text",
+            "tool_protocol",
+        ],
         "configuration" | "js_date" | "locale" | "public_text" | "segmentation"
         | "tool_protocol" | "json_lines" => &[],
         "context" => &[
@@ -38,7 +44,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
             // Shared pure timestamp parsing for canonical conversation filters.
             "js_date",
         ],
-        "conversation" | "work_records" => &["json", "locale", "public_text"],
+        "conversation" => &["json", "locale", "public_text"],
+        "work_records" => &["json", "locale", "public_text", "tool_protocol"],
         "coordination" | "json" => &["public_text"],
         "gateway" => &[
             "btcc",
@@ -85,10 +92,12 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
             // Host composes the skills lifecycle and consumes neutral bounded JSONL IO.
             "skills",
             "json_lines",
+            "tool_protocol",
         ],
         "models" => &["btcc", "configuration", "json", "locale", "public_text"],
         "mcp_client" => &["configuration", "json"],
         "operations" => &[
+            "tool_protocol",
             "btcc",
             "context",
             "models",
@@ -120,6 +129,7 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
             "models",
             "operations",
             "public_text",
+            "tool_protocol",
         ],
         // Ledger implements the declared BTCC Project Work port. SQLite ownership
         // remains behind that port; canonical files remain owned by Ledger.

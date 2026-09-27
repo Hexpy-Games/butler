@@ -1,5 +1,6 @@
 //! One admitted, durable authority occurrence gates persistent Effects.
 
+use crate::tool_protocol::ToolName;
 use serde_json::{Value, json};
 
 use crate::btcc::{
@@ -26,7 +27,7 @@ fn error(code: &str, message: &str) -> Result<Gate, ToolExecutionError> {
 }
 
 fn public_action_title(call: &ModelRoundToolCall) -> Option<String> {
-    if call.name != "run_command" {
+    if call.name != ToolName::RunCommand {
         return None;
     }
     let raw = call.arguments.get("summary")?.as_str()?;
@@ -128,7 +129,7 @@ pub(super) async fn gate(
         target: normalized_target,
         model_ref: owner.binding.model_ref.clone(),
         reasoning_effort: owner.binding.reasoning_effort.clone(),
-        category: (call.name != "run_command").then(|| "reviewed_effect".to_owned()),
+        category: (call.name != ToolName::RunCommand).then(|| "reviewed_effect".to_owned()),
         normalized_input,
     };
     let admitted = match owner.authority.admit(input).await {
