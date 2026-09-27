@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "build:ds-site": "vite build --config vite.ds-site.config.ts",
+    "build:ds-site:ds": "DS_SITE_BASE=/ds/ vite build --config vite.ds-site.config.ts",
     "dev": "vite --configLoader runner --host 127.0.0.1",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

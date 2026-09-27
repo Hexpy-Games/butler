@@ -1222,6 +1222,8 @@ export interface UsageTokenBucketView {
   cachedTokens: number;
   uncachedTokens: number;
   outputTokens: number;
+  /** Present only when the provider reports reasoning tokens. */
+  reasoningTokens?: number;
   totalTokens: number;
   missingTotalTokenCount: number;
 }
@@ -1274,9 +1276,12 @@ export interface UsageMonitorView {
     }>;
   };
   cost: {
-    available: false;
-    estimatedUsd: null;
+    /** False until the gateway prices usage from its rate table. */
+    available: boolean;
+    estimatedUsd: number | null;
     reason: string;
+    /** Rate table date; present when the cost is an estimate. */
+    asOf?: string | null;
   };
   privacy: {
     rawTextStored: false;

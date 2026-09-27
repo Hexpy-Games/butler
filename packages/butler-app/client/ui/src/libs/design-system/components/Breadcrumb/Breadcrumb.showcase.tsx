@@ -21,8 +21,8 @@ export const meta: ShowcaseMeta = {
 };
 
 const labels = {
-  "en-US": { back: "Back", models: "Models", management: "Model management", add: "Add model", automations: "Automations", nightly: "Nightly release notes", docs: "Docs", trail: "Location", more: "More" },
-  "ko-KR": { back: "뒤로", models: "모델", management: "모델 관리", add: "모델 추가", automations: "자동화", nightly: "야간 릴리스 노트", docs: "문서", trail: "현재 위치", more: "더보기" },
+  "en-US": { back: "Back", models: "Models", management: "Model management", add: "Add model", automations: "Schedules", nightly: "Nightly release notes", docs: "Docs", trail: "Location", more: "More" },
+  "ko-KR": { back: "뒤로", models: "모델", management: "모델 관리", add: "모델 추가", automations: "예약 작업", nightly: "야간 릴리스 노트", docs: "문서", trail: "현재 위치", more: "더보기" },
 } as const;
 
 function text({ locale }: ShowcaseRenderContext) {

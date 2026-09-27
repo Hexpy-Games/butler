@@ -11,8 +11,8 @@ export const meta: ShowcaseMeta = {
 };
 
 const labels = {
-  "en-US": { automations: "No automations yet.", artifacts: "No artifacts in this conversation.", sessions: "No conversations yet", create: "New chat" },
-  "ko-KR": { automations: "아직 자동화가 없습니다.", artifacts: "이 대화에는 산출물이 없습니다.", sessions: "아직 대화가 없습니다", create: "새 채팅" },
+  "en-US": { automations: "No schedules yet.", artifacts: "No artifacts in this conversation.", sessions: "No conversations yet", create: "New chat" },
+  "ko-KR": { automations: "아직 예약 작업이 없습니다.", artifacts: "이 대화에는 산출물이 없습니다.", sessions: "아직 대화가 없습니다", create: "새 채팅" },
 } as const;
 
 function text({ locale }: ShowcaseRenderContext) {

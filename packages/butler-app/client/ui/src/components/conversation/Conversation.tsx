@@ -15,7 +15,6 @@ import {
 import { ConversationScroll, ConversationShell } from "@/butler-ds";
 import { useSessionViewSubscription } from
   "@/components/layout/hooks/useSessionViewSubscription.ts";
-import { useDeveloperMode } from "@/hooks/useDeveloperMode.ts";
 
 void appCopy;
 
@@ -37,9 +36,6 @@ export function Conversation() {
   const sendingOperations = useButlerStore((state) => state.sendingOperations);
   const sendMessage = useButlerStore((state) => state.sendMessage);
   const refreshSessionView = useButlerStore((state) => state.refreshSessionView);
-  const setRightOpen = useButlerStore((state) => state.setRightOpen);
-  const setRightTab = useButlerStore((state) => state.setRightTab);
-  const developerMode = useDeveloperMode();
 
   const activeChat = useMemo(
     () => activeChatFromNavigation(navigation, activeChatId),
@@ -61,12 +57,6 @@ export function Conversation() {
       Math.abs(current - nextReserve) < 1 ? current : nextReserve,
     );
   }, []);
-  const openContext = useCallback(() => {
-    // The Context tab is a developer-mode tab; the hover popover shows usage.
-    if (!developerMode) return;
-    setRightOpen(true);
-    setRightTab("context");
-  }, [developerMode, setRightOpen, setRightTab]);
 
   const hasMessages = messages.length > 0;
   const stewardParentSubscriptionId = summary?.steward_children?.some(
@@ -116,7 +106,6 @@ export function Conversation() {
       )}
       <Composer
         onReserveChange={updateComposerReserve}
-        onOpenContext={openContext}
         large={composerLarge}
       />
     </ConversationShell>
