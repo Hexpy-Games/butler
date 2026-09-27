@@ -5,9 +5,9 @@ use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
 use super::contracts::{
-    AgentLoopResult, ContinuationBudgetTransition, ModelRoundAcceptanceWrite, ModelRoundKey,
-    ModelRouteEventWrite, PreparedTurn, ProgressWrite, StateExecutionClaim, StopPersistenceOutcome,
-    TurnRecord, TurnTransition,
+    AgentLoopResult, AttemptHistory, ContinuationBudgetTransition, ModelRoundAcceptanceWrite,
+    ModelRoundKey, ModelRouteEventWrite, PreparedTurn, ProgressWrite, RouteEventStatus,
+    StateExecutionClaim, StopPersistenceOutcome, TurnRecord, TurnTransition,
 };
 use crate::btcc::{BtccError, TurnOutcome, TurnRequest};
 
@@ -51,8 +51,11 @@ pub trait TurnStore: Send + Sync {
     fn record_model_route_event(
         &self,
         write: ModelRouteEventWrite,
-    ) -> PortFuture<'_, Option<Value>>;
-    fn load_model_route_attempt_history(&self, key: ModelRoundKey) -> PortFuture<'_, Value>;
+    ) -> PortFuture<'_, RouteEventStatus>;
+    fn load_model_route_attempt_history(
+        &self,
+        key: ModelRoundKey,
+    ) -> PortFuture<'_, AttemptHistory>;
     fn load_model_round_acceptance(&self, key: ModelRoundKey) -> PortFuture<'_, Option<Value>>;
     fn record_model_round_acceptance(&self, write: ModelRoundAcceptanceWrite)
     -> PortFuture<'_, ()>;

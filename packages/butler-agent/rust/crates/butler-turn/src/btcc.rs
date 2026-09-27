@@ -43,8 +43,10 @@ pub use turn::{
     TurnFacadeDependencies, TurnRecord, TurnSemanticState, TurnStore, WakeIdentity,
 };
 pub use turn::{
-    CanonicalMessageStore, DeliveryStatus, FinalPayload, PreparedTurn, ProgressEventRepository,
-    ProgressWrite, StopPersistenceOutcome, StorageReadiness, TransitionCommitError, TurnTransition,
+    AttemptFailure, AttemptHistory, CanonicalMessageStore, DeliveryStatus, FailureDisposition,
+    FailureRecord, FinalPayload, ModelRouteEvent, ModelRouteEventKind, PreparedTurn,
+    ProgressEventRepository, ProgressWrite, RouteEventStatus, StopPersistenceOutcome,
+    StorageReadiness, TransitionCommitError, TurnTransition,
 };
 
 #[cfg(any(test, feature = "test-support"))]

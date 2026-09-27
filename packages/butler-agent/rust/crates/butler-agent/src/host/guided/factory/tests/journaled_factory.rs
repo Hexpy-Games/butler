@@ -53,8 +53,14 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
             "retryCeiling":1,"catalogGeneration":"loopback","activeCursor":0,
             "consumedAttempts":[]}),
             },
-            event: json!({"type":"model.route.updated","roundId":"route-state",
-                "candidateIndex":0,"modelRef":"openai/gpt-5.5"}),
+            event: butler_turn::btcc::ModelRouteEvent {
+                kind: butler_turn::btcc::ModelRouteEventKind::FallbackSelected,
+                round_id: "route-state".into(),
+                candidate_index: 0,
+                model_ref: "openai/gpt-5.5".into(),
+                transport_attempt: None,
+                failure: None,
+            },
         })
         .await
         .unwrap();

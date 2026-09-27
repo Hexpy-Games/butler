@@ -119,7 +119,7 @@ impl TurnStore for BtccRepositories {
     fn record_model_route_event(
         &self,
         write: ModelRouteEventWrite,
-    ) -> PortFuture<'_, Option<Value>> {
+    ) -> PortFuture<'_, crate::btcc::RouteEventStatus> {
         let storage = self.storage.clone();
         Box::pin(async move {
             storage
@@ -128,7 +128,10 @@ impl TurnStore for BtccRepositories {
                 .map_err(BtccError::from)
         })
     }
-    fn load_model_route_attempt_history(&self, key: ModelRoundKey) -> PortFuture<'_, Value> {
+    fn load_model_route_attempt_history(
+        &self,
+        key: ModelRoundKey,
+    ) -> PortFuture<'_, crate::btcc::AttemptHistory> {
         let storage = self.storage.clone();
         Box::pin(async move {
             storage

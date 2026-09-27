@@ -1,34 +1,112 @@
-use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::{Map, Value, json};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use serde_json::Value;
 
 use super::super::common::{error, json as parse_json, stringify};
 use super::super::{StorageError, StorageResult};
 use crate::btcc::StorageCode;
-use crate::btcc::turn::{ModelRoundKey, ModelRouteEventWrite};
+use crate::btcc::turn::{
+    AttemptHistory, FailureDisposition, FailureRecord, ModelRoundKey, ModelRouteEvent,
+    ModelRouteEventKind, ModelRouteEventWrite, RouteEventStatus,
+};
 
+/// Records a model-route event under the turn claim. A replayed attempt start
+/// is not recorded again: it reports whether the attempt already ended or was
+/// interrupted by a restart (then recorded as abandoned).
 pub(in crate::btcc::storage) fn record_event(
     connection: &mut Connection,
     write: &ModelRouteEventWrite,
-) -> StorageResult<Option<Value>> {
+) -> StorageResult<RouteEventStatus> {
     let tx = connection.transaction().map_err(StorageError::sqlite)?;
+    let binding = &write.binding;
     assert_claim(
         &tx,
-        &write.binding.turn_id,
-        write.binding.expected_revision,
-        write.binding.execution_fence,
-        &write.binding.claim_id,
+        &binding.turn_id,
+        binding.expected_revision,
+        binding.execution_fence,
+        &binding.claim_id,
     )?;
-    let event = write.event.as_object().ok_or_else(|| {
-        error(
-            StorageCode::ModelEventInvalid,
-            "model route event must be an object",
+    let row = EventRow {
+        turn_id: &binding.turn_id,
+        route_digest: route_digest(&tx, write)?,
+        created_at: tx
+            .query_row("SELECT strftime('%Y-%m-%dT%H:%M:%fZ', 'now')", [], |row| {
+                row.get(0)
+            })
+            .map_err(StorageError::sqlite)?,
+        event: &write.event,
+    };
+    if write.event.kind == ModelRouteEventKind::AttemptStarted
+        && let Some(status) = replayed_start(&tx, &row)?
+    {
+        tx.commit().map_err(StorageError::sqlite)?;
+        return Ok(status);
+    }
+    row.insert(&tx, write.event.kind, &row.event_id())?;
+    if !binding.route.is_null() {
+        persist_route(&tx, write)?;
+    }
+    tx.commit().map_err(StorageError::sqlite)?;
+    Ok(RouteEventStatus::Recorded)
+}
+
+/// One `btcc_model_route_events` row being written.
+struct EventRow<'a> {
+    turn_id: &'a str,
+    route_digest: String,
+    created_at: String,
+    event: &'a ModelRouteEvent,
+}
+
+impl EventRow<'_> {
+    fn event_id(&self) -> String {
+        let event = self.event;
+        format!(
+            "{}:{}:{}:{}:{}:{}",
+            self.turn_id,
+            event.kind.as_str(),
+            event.round_id,
+            event.candidate_index,
+            event.transport_attempt.unwrap_or(0),
+            event.model_ref
         )
-    })?;
-    let event_type = string(event, "type")?;
-    let round_id = string(event, "roundId")?;
-    let model_ref = string(event, "modelRef")?;
-    let candidate = unsigned(event, "candidateIndex")?;
-    let attempt = optional_unsigned(event, "transportAttempt")?;
+    }
+
+    fn insert(
+        &self,
+        tx: &Transaction<'_>,
+        kind: ModelRouteEventKind,
+        event_id: &str,
+    ) -> StorageResult<()> {
+        let event = self.event;
+        let failure = event.failure.as_ref();
+        tx.execute(
+            "INSERT OR IGNORE INTO btcc_model_route_events (event_id, turn_id, route_digest, \
+            event_type, round_id, candidate_index, transport_attempt, model_ref, error_code, \
+            failure_disposition, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+            params![
+                event_id,
+                self.turn_id,
+                self.route_digest,
+                kind.as_str(),
+                event.round_id,
+                event.candidate_index,
+                event.transport_attempt,
+                event.model_ref,
+                failure.map(|failure| failure.error_code.as_str()),
+                failure.map(|failure| failure.disposition.as_str()),
+                self.created_at
+            ],
+        )
+        .map_err(StorageError::sqlite)?;
+        Ok(())
+    }
+}
+
+/// The route digest of the written route, else of the persisted one.
+fn route_digest(tx: &Transaction<'_>, write: &ModelRouteEventWrite) -> StorageResult<String> {
+    if let Some(digest) = write.binding.route.get("routeDigest").and_then(Value::as_str) {
+        return Ok(digest.to_owned());
+    }
     let route_raw: Option<String> = tx
         .query_row(
             "SELECT route_state_json FROM btcc_turns WHERE turn_id=?1",
@@ -38,119 +116,99 @@ pub(in crate::btcc::storage) fn record_event(
         .optional()
         .map_err(StorageError::sqlite)?
         .flatten();
-    let route_digest = write
-        .binding
-        .route
-        .get("routeDigest")
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-        .or_else(|| {
-            route_raw.as_deref().and_then(|raw| {
-                parse_json(raw, StorageCode::ModelRouteInvalid)
-                    .ok()?
-                    .get("routeDigest")?
-                    .as_str()
-                    .map(str::to_owned)
-            })
+    Ok(route_raw
+        .as_deref()
+        .and_then(|raw| {
+            parse_json(raw, StorageCode::ModelRouteInvalid)
+                .ok()?
+                .get("routeDigest")?
+                .as_str()
+                .map(str::to_owned)
         })
-        .unwrap_or_else(|| "unknown".to_owned());
-    let created_at: String = tx
-        .query_row("SELECT strftime('%Y-%m-%dT%H:%M:%fZ', 'now')", [], |row| {
-            row.get(0)
-        })
+        .unwrap_or_else(|| "unknown".to_owned()))
+}
+
+/// The status of an attempt start that was already recorded, or `None` for a
+/// first start.
+fn replayed_start(
+    tx: &Transaction<'_>,
+    row: &EventRow<'_>,
+) -> StorageResult<Option<RouteEventStatus>> {
+    let event_id = row.event_id();
+    let exists = tx
+        .query_row(
+            "SELECT 1 FROM btcc_model_route_events WHERE event_id=?1",
+            [&event_id],
+            |_| Ok(()),
+        )
+        .optional()
+        .map_err(StorageError::sqlite)?
+        .is_some();
+    if !exists {
+        return Ok(None);
+    }
+    let event = row.event;
+    let terminal: Option<String> = tx
+        .query_row(
+            "SELECT event_type FROM btcc_model_route_events WHERE turn_id=?1 AND round_id=?2 \
+             AND candidate_index=?3 AND transport_attempt=?4 AND model_ref=?5 AND event_type IN \
+             ('model.attempt.failed','model.attempt.succeeded','model.attempt.abandoned_after_restart') \
+             ORDER BY created_at DESC LIMIT 1",
+            params![
+                row.turn_id,
+                event.round_id,
+                event.candidate_index,
+                event.transport_attempt.unwrap_or(0),
+                event.model_ref
+            ],
+            |row| row.get(0),
+        )
+        .optional()
         .map_err(StorageError::sqlite)?;
-    let event_id = format!(
-        "{}:{event_type}:{round_id}:{candidate}:{}:{model_ref}",
-        write.binding.turn_id,
-        attempt.unwrap_or(0)
-    );
-    let mut result = None;
-    if event_type == "model.attempt.started" {
-        let exists = tx
-            .query_row(
-                "SELECT 1 FROM btcc_model_route_events WHERE event_id=?1",
-                [&event_id],
-                |_| Ok(()),
-            )
-            .optional()
-            .map_err(StorageError::sqlite)?
-            .is_some();
-        if exists {
-            let terminal: Option<String> = tx.query_row(
-                "SELECT event_type FROM btcc_model_route_events WHERE turn_id=?1 AND round_id=?2 \
-                 AND candidate_index=?3 AND transport_attempt=?4 AND model_ref=?5 AND event_type IN \
-                 ('model.attempt.failed','model.attempt.succeeded','model.attempt.abandoned_after_restart') \
-                 ORDER BY created_at DESC LIMIT 1",
-                params![write.binding.turn_id, round_id, candidate, attempt.unwrap_or(0), model_ref],
-                |row| row.get(0),
-            ).optional().map_err(StorageError::sqlite)?;
-            let status = match terminal.as_deref() {
-                Some("model.attempt.abandoned_after_restart") => "abandoned_after_restart",
-                Some(_) => "already_terminal",
-                None => {
-                    tx.execute("INSERT OR IGNORE INTO btcc_model_route_events (event_id, turn_id, \
-                        route_digest, event_type, round_id, candidate_index, transport_attempt, \
-                        model_ref, error_code, failure_disposition, created_at) VALUES \
-                        (?1,?2,?3,'model.attempt.abandoned_after_restart',?4,?5,?6,?7,NULL,NULL,?8)",
-                        params![format!("{event_id}:abandoned_after_restart"), write.binding.turn_id,
-                            route_digest, round_id, candidate, attempt, model_ref, created_at])
-                        .map_err(StorageError::sqlite)?;
-                    "abandoned_after_restart"
-                }
-            };
-            result = Some(json!({"status": status}));
+    match terminal.as_deref().map(ModelRouteEventKind::parse) {
+        Some(Some(ModelRouteEventKind::AttemptAbandonedAfterRestart)) => {
+            Ok(Some(RouteEventStatus::AbandonedAfterRestart))
+        }
+        Some(_) => Ok(Some(RouteEventStatus::AlreadyTerminal)),
+        None => {
+            row.insert(
+                tx,
+                ModelRouteEventKind::AttemptAbandonedAfterRestart,
+                &format!("{event_id}:abandoned_after_restart"),
+            )?;
+            Ok(Some(RouteEventStatus::AbandonedAfterRestart))
         }
     }
-    if result.is_none() {
-        tx.execute(
-            "INSERT OR IGNORE INTO btcc_model_route_events (event_id, turn_id, route_digest, \
-            event_type, round_id, candidate_index, transport_attempt, model_ref, error_code, \
-            failure_disposition, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+}
+
+/// Replaces the persisted route state under the turn's revision and fence.
+fn persist_route(tx: &Transaction<'_>, write: &ModelRouteEventWrite) -> StorageResult<()> {
+    let binding = &write.binding;
+    let changed = tx
+        .execute(
+            "UPDATE btcc_turns SET route_state_json=?1 WHERE turn_id=?2 \
+            AND revision=?3 AND execution_fence=?4",
             params![
-                event_id,
-                write.binding.turn_id,
-                route_digest,
-                event_type,
-                round_id,
-                candidate,
-                attempt,
-                model_ref,
-                event.get("errorCode").and_then(Value::as_str),
-                event.get("failureDisposition").and_then(Value::as_str),
-                created_at
+                stringify(&binding.route)?,
+                binding.turn_id,
+                binding.expected_revision,
+                binding.execution_fence
             ],
         )
         .map_err(StorageError::sqlite)?;
-        if !write.binding.route.is_null() {
-            let changed = tx
-                .execute(
-                    "UPDATE btcc_turns SET route_state_json=?1 WHERE turn_id=?2 \
-                AND revision=?3 AND execution_fence=?4",
-                    params![
-                        stringify(&write.binding.route)?,
-                        write.binding.turn_id,
-                        write.binding.expected_revision,
-                        write.binding.execution_fence
-                    ],
-                )
-                .map_err(StorageError::sqlite)?;
-            if changed != 1 {
-                return Err(error(
-                    StorageCode::ModelRouteCas,
-                    "BTCC model route persistence lost Turn CAS",
-                ));
-            }
-        }
-        result = Some(json!({"status":"recorded"}));
+    if changed != 1 {
+        return Err(error(
+            StorageCode::ModelRouteCas,
+            "BTCC model route persistence lost Turn CAS",
+        ));
     }
-    tx.commit().map_err(StorageError::sqlite)?;
-    Ok(result)
+    Ok(())
 }
 
 pub(in crate::btcc::storage) fn load_history(
     connection: &Connection,
     key: &ModelRoundKey,
-) -> StorageResult<Value> {
+) -> StorageResult<AttemptHistory> {
     let mut statement = connection
         .prepare(
             "SELECT event_type, transport_attempt, error_code, \
@@ -178,35 +236,30 @@ pub(in crate::btcc::storage) fn load_history(
             },
         )
         .map_err(StorageError::sqlite)?;
-    let (mut started, mut failed, mut details, mut succeeded, mut abandoned) =
-        (vec![], vec![], vec![], vec![], vec![]);
+    let mut history = AttemptHistory::default();
     for row in rows {
         let (kind, attempt, code, disposition) = row.map_err(StorageError::sqlite)?;
-        match kind.as_str() {
-            "model.attempt.started" => started.push(attempt),
-            "model.attempt.succeeded" => succeeded.push(attempt),
-            "model.attempt.abandoned_after_restart" => abandoned.push(attempt),
-            "model.attempt.failed" => {
-                failed.push(attempt);
-                if disposition
-                    .as_deref()
-                    .is_some_and(|v| matches!(v, "retry" | "advance" | "surface"))
+        match ModelRouteEventKind::parse(&kind) {
+            Some(ModelRouteEventKind::AttemptStarted) => history.started.push(attempt),
+            Some(ModelRouteEventKind::AttemptSucceeded) => history.succeeded.push(attempt),
+            Some(ModelRouteEventKind::AttemptAbandonedAfterRestart) => {
+                history.abandoned.push(attempt);
+            }
+            Some(ModelRouteEventKind::AttemptFailed) => {
+                history.failed.push(attempt);
+                if let Some(disposition) = disposition.as_deref().and_then(FailureDisposition::parse)
                 {
-                    details.push(json!({"transportAttempt":attempt,"errorCode":code.unwrap_or_else(||"provider_unknown_error".into()),"disposition":disposition}));
+                    history.failed_details.push(FailureRecord {
+                        transport_attempt: attempt,
+                        error_code: code.unwrap_or_else(|| "provider_unknown_error".into()),
+                        disposition,
+                    });
                 }
             }
-            _ => {}
+            Some(ModelRouteEventKind::FallbackSelected) | None => {}
         }
     }
-    let mut value = Map::new();
-    value.insert("started".into(), json!(started));
-    value.insert("failed".into(), json!(failed));
-    if !details.is_empty() {
-        value.insert("failedDetails".into(), Value::Array(details));
-    }
-    value.insert("succeeded".into(), json!(succeeded));
-    value.insert("abandoned".into(), json!(abandoned));
-    Ok(Value::Object(value))
+    Ok(history)
 }
 
 pub(in crate::btcc::storage) fn assert_claim(
@@ -242,23 +295,4 @@ pub(in crate::btcc::storage) fn assert_claim(
         ));
     }
     Ok(())
-}
-
-fn string<'a>(o: &'a Map<String, Value>, key: &str) -> StorageResult<&'a str> {
-    o.get(key)
-        .and_then(Value::as_str)
-        .ok_or_else(|| error(StorageCode::ModelEventInvalid, format!("missing {key}")))
-}
-fn unsigned(o: &Map<String, Value>, key: &str) -> StorageResult<u64> {
-    o.get(key)
-        .and_then(Value::as_u64)
-        .ok_or_else(|| error(StorageCode::ModelEventInvalid, format!("invalid {key}")))
-}
-fn optional_unsigned(o: &Map<String, Value>, key: &str) -> StorageResult<Option<u64>> {
-    o.get(key)
-        .map(|v| {
-            v.as_u64()
-                .ok_or_else(|| error(StorageCode::ModelEventInvalid, format!("invalid {key}")))
-        })
-        .transpose()
 }

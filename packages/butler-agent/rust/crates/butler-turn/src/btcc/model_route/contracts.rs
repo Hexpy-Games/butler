@@ -119,44 +119,4 @@ pub(super) struct RouteCandidate {
     pub reasoning_effort: ReasoningEffort,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(super) enum FailureDisposition {
-    Retry,
-    Advance,
-    Surface,
-}
-
-impl FailureDisposition {
-    /// The serde (`snake_case`) name.
-    pub(super) fn as_str(self) -> &'static str {
-        match self {
-            Self::Retry => "retry",
-            Self::Advance => "advance",
-            Self::Surface => "surface",
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct AttemptHistory {
-    #[serde(default)]
-    pub started: Vec<u32>,
-    #[serde(default)]
-    pub failed: Vec<u32>,
-    #[serde(default)]
-    pub failed_details: Vec<FailureRecord>,
-    #[serde(default)]
-    pub succeeded: Vec<u32>,
-    #[serde(default)]
-    pub abandoned: Vec<u32>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct FailureRecord {
-    pub transport_attempt: u32,
-    pub error_code: String,
-    pub disposition: FailureDisposition,
-}
+pub(super) use crate::btcc::turn::{AttemptHistory, FailureDisposition, FailureRecord};

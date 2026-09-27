@@ -3,8 +3,9 @@ use std::future::Future;
 use serde_json::Value;
 
 use crate::btcc::{
-    BtccError, ModelRoundAcceptanceWrite, ModelRoundKey, ModelRouteEventWrite, ModelRouteWrite,
-    StateExecutionClaim, TurnRecord, TurnStore,
+    AttemptHistory, BtccError, ModelRoundAcceptanceWrite, ModelRoundKey, ModelRouteEvent,
+    ModelRouteEventWrite, ModelRouteWrite, RouteEventStatus, StateExecutionClaim, TurnRecord,
+    TurnStore,
 };
 
 use super::failure;
@@ -43,9 +44,9 @@ impl RouteHooks {
 
     pub(super) async fn event(
         &self,
-        event: Value,
+        event: ModelRouteEvent,
         route: Option<Value>,
-    ) -> Result<Option<Value>, crate::btcc::agent_loop::ModelRoundError> {
+    ) -> Result<RouteEventStatus, crate::btcc::agent_loop::ModelRoundError> {
         let mut binding = self.binding.clone();
         if let Some(route) = route {
             binding.route = route;
@@ -64,7 +65,7 @@ impl RouteHooks {
         round: &str,
         candidate: u32,
         model: &str,
-    ) -> Result<Value, crate::btcc::agent_loop::ModelRoundError> {
+    ) -> Result<AttemptHistory, crate::btcc::agent_loop::ModelRoundError> {
         let key = self.key(round, candidate, model, false);
         self.retry("attempt_history_read", || {
             self.store.load_model_route_attempt_history(key.clone())

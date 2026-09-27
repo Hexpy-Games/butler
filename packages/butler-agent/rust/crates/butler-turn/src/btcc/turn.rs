@@ -24,11 +24,13 @@ pub use preparation::{
 };
 
 pub use contracts::{
-    AgentLoopResult, ContentRef, ContinuationBudgetTransition, DeliveryOutbox, DeliveryStatus,
-    ExecutionRoute, FinalDisposition, FinalPayload, ModelRoundAcceptanceWrite, ModelRoundKey,
-    ModelRouteEventWrite, ModelRouteWrite, PreparedTurn, ProgressEvent, ProgressWrite,
-    StateExecutionClaim, StopPersistenceOutcome, SuspensionReason, TerminalOutcome, TurnCheckpoint,
-    TurnRecord, TurnSemanticState, TurnTransition, WakeIdentity,
+    AgentLoopResult, AttemptFailure, AttemptHistory, ContentRef, ContinuationBudgetTransition,
+    DeliveryOutbox, DeliveryStatus, ExecutionRoute, FailureDisposition, FailureRecord,
+    FinalDisposition, FinalPayload, ModelRoundAcceptanceWrite, ModelRoundKey, ModelRouteEvent,
+    ModelRouteEventKind, ModelRouteEventWrite, ModelRouteWrite, PreparedTurn, ProgressEvent,
+    ProgressWrite, RouteEventStatus, StateExecutionClaim, StopPersistenceOutcome,
+    SuspensionReason, TerminalOutcome, TurnCheckpoint, TurnRecord, TurnSemanticState,
+    TurnTransition, WakeIdentity,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use ports::NoopTurnDeveloperLogCapturePort;
