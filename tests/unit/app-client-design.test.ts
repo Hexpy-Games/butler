@@ -111,12 +111,10 @@ test("dedicated client design foundation uses React and Hugeicons", () => {
   expect(rootPackage.scripts["app:design-system:smoke"]).toContain(
     "app-design-system-smoke.ts",
   );
-  expect(rootPackage.scripts["app:client:managed-server:smoke"]).toContain(
-    "app-client-managed-server-smoke.ts",
-  );
-  expect(rootPackage.scripts["app:client:model-management:e2e"]).toContain(
-    "app-model-management-e2e.ts",
-  );
+  // The TS managed-server smoke and model-management e2e were retired with the
+  // TypeScript App server (native gateway cutover); their scripts must stay gone.
+  expect(rootPackage.scripts["app:client:managed-server:smoke"]).toBeUndefined();
+  expect(rootPackage.scripts["app:client:model-management:e2e"]).toBeUndefined();
   expect(rootPackage.scripts["app:client:multiturn:e2e"]).toBeUndefined();
   expect(read("stylelint.config.mjs")).toContain("stylelint-config-standard");
   expect(read("stylelint.config.mjs")).toContain(
@@ -1026,9 +1024,9 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(electronMain).toContain("reconcileAppAgentServiceForLaunch");
   expect(electronMain).toContain("let appAgentLaunchReconcilePromise = null");
   expect(electronMain).toContain("appManagedAgentRuntimeCurrent");
-  expect(electronMain).toContain("currentBundledAgentVersion");
+  expect(electronMain).toContain("currentNativeAgentInstallation");
   expect(electronMain).toContain('source: "app-launch"');
-  expect(electronMain).toContain("bundled_agent_version");
+  expect(electronMain).toContain("installation.bundledAgentVersion");
   expect(electronMain).toContain(
     "const launchReconcile = reconcileAppAgentServiceForLaunch();\n  if (rendererUrl === serverUrl && shouldUseAppAgentNativeServiceBridge()) {\n    await launchReconcile;\n    await ensureServer();\n  }",
   );
@@ -2648,10 +2646,10 @@ test("layout smoke captures real browser screenshots instead of placeholder imag
   const smoke = read("tests/smoke/app-layout-smoke.ts");
   const hmrSmoke = read("packages/butler-app/scripts/app-ui-hmr-smoke.ts");
   const devScript = read("packages/butler-app/scripts/app-client-dev.ts");
-  const managedServerSmoke = read(
-    "packages/butler-app/scripts/app-client-managed-server-smoke.ts",
-  );
-  const modelManagementE2e = read("tests/e2e/app-model-management-e2e.ts");
+  // The TS managed-server smoke and model-management e2e were retired with the
+  // TypeScript App server; the native gateway smokes replace them.
+  expect(existsSync(join(root, "packages/butler-app/scripts/app-client-managed-server-smoke.ts"))).toBe(false);
+  expect(existsSync(join(root, "tests/e2e/app-model-management-e2e.ts"))).toBe(false);
   const electronMain = read("packages/butler-app/client/electron/main.mjs");
 
   expect(smoke).toContain('from "playwright"');
@@ -2773,15 +2771,6 @@ test("layout smoke captures real browser screenshots instead of placeholder imag
   expect(devScript).toContain("/usr/libexec/PlistBuddy");
   expect(devScript).toContain("/usr/bin/codesign");
   expect(devScript).toContain("spawnManaged(electronLaunch.command");
-  expect(managedServerSmoke).toContain("managed-app-server-healthy");
-  expect(managedServerSmoke).toContain("single-slash-health-url");
-  expect(managedServerSmoke).toContain("BUTLER_APP_SERVER_BRIDGE");
-  expect(modelManagementE2e).toContain("Model management E2E passed");
-  expect(modelManagementE2e).toContain("xAI / Grok");
-  expect(modelManagementE2e).toContain("Qwen Cloud");
-  expect(modelManagementE2e).toContain("Moonshot / Kimi");
-  expect(modelManagementE2e).toContain("Z.AI Coding Plan");
-  expect(modelManagementE2e).toContain("Z.AI API");
   expect(electronMain).toContain("findAvailablePort");
   expect(electronMain).toContain("syncPreloadServerEnvironment");
   expect(electronMain).toContain("createBundledAgentSupervisor");
@@ -3441,9 +3430,13 @@ describe("app-client design system foundation", () => {
     const componentCssModules = listUiSourceFiles(
       "packages/butler-app/client/ui/src/components",
     ).filter((file) => file.endsWith(".module.css"));
-    const componentSources = readUiSources(
+    // Guard tests may name retired module files; only product sources count.
+    const componentSources = listUiSourceFiles(
       "packages/butler-app/client/ui/src/components",
-    );
+    )
+      .filter((file) => /\.(?:ts|tsx|css)$/u.test(file) && !/\.test\.tsx?$/u.test(file))
+      .map(read)
+      .join("\n");
 
     expect(componentCssModules).toEqual([]);
     expect(componentSources).not.toContain("@/styles/components");
