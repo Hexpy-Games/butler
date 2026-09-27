@@ -4,7 +4,11 @@ import { isMessageContent, messageContentText } from "@/app/messageContent";
 import { $nodesForContent, contentFromSerializedNodes } from "./serialization";
 
 export const BUTLER_CONTENT_MIME = "application/x-butler-message-content";
-export function registerComposerClipboard(editor: LexicalEditor, knownSession: (id: string) => boolean): () => void {
+export function registerComposerClipboard(
+  editor: LexicalEditor,
+  knownSession: (id: string) => boolean,
+  onFiles: (files: FileList) => void = () => {},
+): () => void {
   function copy(event: ClipboardEvent | KeyboardEvent | null, cut: boolean): boolean {
     const selection = $getSelection();
     if (!event || !("clipboardData" in event) || !event.clipboardData || !selection) return false;
@@ -20,7 +24,12 @@ export function registerComposerClipboard(editor: LexicalEditor, knownSession: (
     editor.registerCommand(COPY_COMMAND, event => copy(event, false), COMMAND_PRIORITY_HIGH),
     editor.registerCommand(CUT_COMMAND, event => copy(event, true), COMMAND_PRIORITY_HIGH),
     editor.registerCommand(PASTE_COMMAND, event => {
-      if (!(event instanceof ClipboardEvent) || !event.clipboardData || event.clipboardData.files.length) return false;
+      const pastedFiles = event && "clipboardData" in event ? event.clipboardData?.files : undefined;
+      if (pastedFiles?.length) {
+        // Pasted files share the picker/drop gate (model image capability).
+        event.preventDefault(); onFiles(pastedFiles); return true;
+      }
+      if (!(event instanceof ClipboardEvent) || !event.clipboardData) return false;
       const raw = event.clipboardData.getData(BUTLER_CONTENT_MIME);
       if (raw) {
         try {

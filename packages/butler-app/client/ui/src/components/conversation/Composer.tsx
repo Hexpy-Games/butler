@@ -14,6 +14,8 @@ import { useComposerStoreBridge } from "./hooks/useComposerStoreBridge";
 import { usePendingProjectDocumentAttachment } from "./hooks/usePendingProjectDocumentAttachment";
 import { useComposerPresentation } from "./hooks/useComposerPresentation";
 import { useComposerFileDrop } from "./hooks/useComposerFileDrop";
+import { composerImagePolicy } from "./composerImagePolicy";
+import { runtimeModels } from "@/app/utils.ts";
 import { useReserveHeight } from "./hooks/useReserveHeight";
 import { ComposerCard } from "@/butler-ds";
 import { ComposerNotices } from "./ComposerNotices.tsx";
@@ -43,7 +45,10 @@ export function Composer({ large, onOpenContext, onReserveChange, scope }: Compo
     session.modelCatalogState,
     session.settings,
   );
-  const files = useFileAttachments(scope?.draftKey ?? session.activeChatId);
+  const imagePolicy = composerImagePolicy(
+    runtimeModels(session.modelCatalog).find((model) => model.model_ref === controls.model),
+  );
+  const files = useFileAttachments(scope?.draftKey ?? session.activeChatId, imagePolicy);
   const fileDrop = useComposerFileDrop((nextFiles) => void files.addFiles(nextFiles));
   usePendingProjectDocumentAttachment({
     activeChatId: session.activeChatId,
