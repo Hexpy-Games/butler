@@ -200,7 +200,7 @@ impl AppApplication {
                 }
                 Err(error) => {
                     self.fail_admission(&chat_id, &queued_id, &error).await?;
-                    return Err(error);
+                    return Err(self.localized_admission_error(error).await);
                 }
             }
         }

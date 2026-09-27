@@ -58,6 +58,7 @@ pub(super) use session::{
     session_context_settings, session_controls_view, session_workspace_settings,
     update_session_controls,
 };
+pub(super) use view::ui_language;
 
 pub(super) fn resolve_for_message_send(
     db: &Connection,

@@ -188,7 +188,7 @@ impl AppApplication {
                 }
                 Err(error) => {
                     self.fail_admission(&chat_id, &queued_id, &error).await?;
-                    return Err(error);
+                    return Err(self.localized_admission_error(error).await);
                 }
             }
         }
@@ -336,14 +336,18 @@ impl AppApplication {
             &prepared,
             request.plan_id.as_deref(),
         )?;
-        let visual = self
+        let visual = match self
             .dependencies
             .admission
             .admit_visual(VisualAdmissionRequest {
                 model_ref: resolved.resolution.model.clone(),
                 files: inspected.files,
             })
-            .await?;
+            .await
+        {
+            Ok(visual) => visual,
+            Err(error) => return Err(self.localized_admission_error(error).await),
+        };
 
         let now = self.dependencies.identity_clock.now_iso();
         let old_digest = current.input_identity_digest.unwrap_or_default();

@@ -14,6 +14,26 @@ use normalize::{
     native_value, notifications, object, timezone, ui_defaults, workspace_label,
 };
 
+/// The language the App shows (`language` of the settings view): Settings,
+/// else `user.language` of butler.config.json, else English.
+pub(in crate::gateway::application) fn ui_language(
+    db: &Connection,
+    facts: &AppSettingsFacts,
+) -> Result<&'static str, AppStorageError> {
+    let stored = read_json(db, SETTINGS_KEY)?
+        .and_then(|value| value.as_object().cloned())
+        .unwrap_or_default();
+    let native = facts
+        .native_settings
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    Ok(language(
+        stored.get("language"),
+        native_value(&native, "config_user").get("language"),
+    ))
+}
+
 pub(super) fn read(
     db: &Connection,
     subscribers: &EventSubscribers,

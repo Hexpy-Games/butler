@@ -175,6 +175,29 @@ impl AppApplication {
         }).await.map_err(app_error)
     }
 
+    /// Gives an image admission refusal the App's language.
+    pub(super) async fn localized_admission_error(
+        &self,
+        error: GatewayApplicationError,
+    ) -> GatewayApplicationError {
+        let is_image = matches!(
+            &error,
+            GatewayApplicationError::Public { code, .. } if code.starts_with("image_")
+        );
+        if !is_image {
+            return error;
+        }
+        let Ok(facts) = self.dependencies.settings_facts.snapshot() else {
+            return error;
+        };
+        let language = self
+            .storage
+            .execute(move |db| settings::ui_language(db, &facts))
+            .await
+            .unwrap_or("en");
+        crate::gateway::image_files::localize_image_error(error, language)
+    }
+
     pub(super) async fn fail_admission(
         &self,
         chat_id: &str,
