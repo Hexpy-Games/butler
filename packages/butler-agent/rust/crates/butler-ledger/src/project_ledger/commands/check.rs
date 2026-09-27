@@ -38,9 +38,8 @@ pub(super) fn check(
     _collation: &LocaleCollation,
 ) -> Result<Value, CliFailure> {
     let root = &context.root;
-    let index_available = root.join("index/project.json").exists();
     let index = index::build(root)?;
-    let mut issues = index_issues(root, &index, index_available);
+    let mut issues = index_issues(root, &index);
     scan_privacy(root, &mut issues)?;
     let issue_count = issues.len();
     let error_count = issues
@@ -76,13 +75,13 @@ pub(super) fn check(
 
 /// The index's own issues, led by a missing or stale index and followed by
 /// stale or missing generated views.
-fn index_issues(root: &Path, index: &Value, index_available: bool) -> Vec<Value> {
+fn index_issues(root: &Path, index: &Value) -> Vec<Value> {
     let mut issues = index
         .get("issues")
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    if !index_available {
+    if !root.join("index/project.json").exists() {
         issues.insert(
             0,
             issue(

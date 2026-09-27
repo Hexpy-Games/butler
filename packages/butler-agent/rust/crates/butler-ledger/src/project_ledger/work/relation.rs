@@ -19,6 +19,15 @@ pub(super) struct Relation {
     pub binding: Option<Snapshot>,
 }
 
+/// Which bound Work an operation may act on.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Bound {
+    /// Only open (or blocked) Work.
+    Open,
+    /// Open Work, or completed Work a runtime-owned reopen may still touch.
+    OpenOrCompleted,
+}
+
 impl ProjectWorkRepository {
     pub(super) fn assert_scope(&self, scope: &WorkTurnScope) -> Result<(), BtccError> {
         if scope.project_ref.as_deref() != Some(self.scope.app_project_id.as_str()) {
@@ -120,7 +129,7 @@ impl ProjectWorkRepository {
     pub(super) async fn require_bound(
         &self,
         scope: &WorkTurnScope,
-        allow_completed: bool,
+        bound: Bound,
     ) -> Result<Snapshot, BtccError> {
         let relation = self.relation(scope).await?;
         let binding = relation
@@ -135,7 +144,7 @@ impl ProjectWorkRepository {
             return Err(invalid("project_work_turn_binding_stale"));
         }
         if !(is_open(&binding.view)
-            || allow_completed && binding.view.status == WorkStatus::Completed)
+            || bound == Bound::OpenOrCompleted && binding.view.status == WorkStatus::Completed)
         {
             return Err(invalid("project_work_not_open"));
         }

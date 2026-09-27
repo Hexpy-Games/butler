@@ -17,6 +17,7 @@ use butler_turn::btcc::{ProjectWorkOperationIdentity, ResolvedProjectWorkScope};
 pub(crate) use contracts::{ProjectLedgerRecordKind, ProjectLedgerRecordOperation};
 pub use contracts::{
     ProjectLedgerRecordUpdate, ProjectWorkPublicationError, ProjectWorkPublicationOutcome,
+    RecordEvidence, RecordSections,
 };
 pub use generic::{LedgerEffectError, LedgerEffectReconciliation, LedgerEffectRequest};
 pub(super) use init::with_mutation_claim;

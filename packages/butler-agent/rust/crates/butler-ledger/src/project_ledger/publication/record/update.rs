@@ -11,7 +11,7 @@ use super::super::contracts::{
 };
 use super::record_path;
 use crate::project_ledger::records;
-use crate::project_ledger::status::Lifecycle;
+use crate::project_ledger::status::{Lifecycle, Status};
 
 /// Creates or updates one record file in the publication candidate: the
 /// update's fields are merged over the existing frontmatter (or a new one),
@@ -48,7 +48,10 @@ pub(super) fn apply(
         return Err(invalid());
     }
     if kind == &ProjectLedgerRecordKind::Work {
-        check_work_status(&metadata, update, existing.is_some())?;
+        let (current, target) = work_statuses(&metadata, update)?;
+        if existing.is_some() {
+            check_work_move(current, target)?;
+        }
     }
     merge(&mut metadata, update)?;
     let body = update.body.as_deref().or_else(|| {
@@ -93,26 +96,27 @@ fn new_metadata(
     Ok(map)
 }
 
-/// A Work's target status is a Work status, reachable from its current one.
-fn check_work_status(
-    metadata: &Map<String, Value>,
+/// A Work's current status text and its target, which must be a Work status.
+fn work_statuses<'a>(
+    metadata: &'a Map<String, Value>,
     update: &ProjectLedgerRecordUpdate,
-    exists: bool,
-) -> Result<(), ProjectWorkPublicationError> {
+) -> Result<(&'a str, Status), ProjectWorkPublicationError> {
     let current = metadata.get("status").and_then(Value::as_str).unwrap_or("");
     let target = update.status.as_deref().unwrap_or(current);
-    let Some(target) = Lifecycle::Work.status(target) else {
-        return Err(invalid());
-    };
-    if exists && current != target.as_str() {
-        let reachable = Lifecycle::Work
+    let target = Lifecycle::Work.status(target).ok_or_else(invalid)?;
+    Ok((current, target))
+}
+
+/// An existing Work may stay where it is or move as publication allows.
+fn check_work_move(current: &str, target: Status) -> Result<(), ProjectWorkPublicationError> {
+    if current == target.as_str()
+        || Lifecycle::Work
             .status(current)
-            .is_some_and(|current| current.publishes_to(target));
-        if !reachable {
-            return Err(ProjectWorkPublicationError::adapter("invalid_transition"));
-        }
+            .is_some_and(|current| current.publishes_to(target))
+    {
+        return Ok(());
     }
-    Ok(())
+    Err(ProjectWorkPublicationError::adapter("invalid_transition"))
 }
 
 /// Copies every field the update sets over the frontmatter.
@@ -123,17 +127,17 @@ fn merge(
     for (key, value) in [
         ("title", &update.title),
         ("status", &update.status),
-        ("spec", &update.spec),
+        ("spec", &update.sections.spec),
         ("parentId", &update.parent_id),
-        ("acceptance", &update.acceptance),
-        ("validation", &update.validation),
-        ("review", &update.review),
-        ("report", &update.report),
-        ("implementation", &update.implementation),
-        ("mitigation", &update.mitigation),
-        ("reason", &update.reason),
-        ("codeCommits", &update.code_commits),
-        ("ledgerCommits", &update.ledger_commits),
+        ("acceptance", &update.sections.acceptance),
+        ("validation", &update.sections.validation),
+        ("review", &update.sections.review),
+        ("report", &update.sections.report),
+        ("implementation", &update.sections.implementation),
+        ("mitigation", &update.sections.mitigation),
+        ("reason", &update.sections.reason),
+        ("codeCommits", &update.evidence.code_commits),
+        ("ledgerCommits", &update.evidence.ledger_commits),
     ] {
         put_text(metadata, key, value.as_deref());
     }
@@ -143,10 +147,10 @@ fn merge(
             serde_json::to_value(value).map_err(|source| invalid().with_source(source))?,
         );
     }
-    if update.requires_commit_evidence == Some(true) {
+    if update.evidence.requires_commit_evidence == Some(true) {
         metadata.insert("requiresCommitEvidence".into(), Value::Bool(true));
     }
-    if update.spec_exemption == Some(true)
+    if update.evidence.spec_exemption == Some(true)
         && metadata
             .get("spec")
             .and_then(Value::as_str)

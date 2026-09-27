@@ -7,9 +7,12 @@ use butler_turn::btcc::{
     ProjectWorkOperationIdentity, ReplacePlanCommand, WorkPlan, WorkStage, WorkView,
 };
 
+use super::super::publication::ProjectLedgerRecordOperation;
 use super::super::publication::ProjectLedgerRecordUpdate;
 use super::codec::{self, Snapshot};
+use super::publication::Projection;
 use super::publication::published_work_id;
+use super::relation::Bound;
 use super::relation::is_open;
 use super::start::{binding_child, opening_view};
 use super::{ProjectWorkRepository, invalid};
@@ -20,7 +23,7 @@ struct PlanUpdatesInput<'a> {
     identity: &'a ProjectWorkOperationIdentity,
     at: &'a str,
     opening: Option<Value>,
-    create: bool,
+    operation: ProjectLedgerRecordOperation,
     leading: Vec<ProjectLedgerRecordUpdate>,
 }
 
@@ -43,8 +46,8 @@ impl ProjectWorkRepository {
             if command.start_new && relation.binding.is_some() { return Err(invalid("project_work_turn_already_bound")); }
             let current = if command.start_new { None } else { repo.current_for_scope(&command.input.scope).await? };
             let at = repo.recorded_at(prepare_identity.clone()).await?;
-            let (current, opening, create, leading) = if let Some(current) = current {
-                (current, None, false, Vec::new())
+            let (current, opening, operation, leading) = if let Some(current) = current {
+                (current, None, ProjectLedgerRecordOperation::Update, Vec::new())
             } else {
                 let work_id = codec::record_id("work", &command.input.mutation_call_id);
                 let original = repo.shared.projection.load_original_request(command.input.scope.clone()).await?;
@@ -79,10 +82,10 @@ impl ProjectWorkRepository {
                             .ok_or_else(|| invalid("project_work_managed_record_invalid"))?,
                         session_head: false,
                         revisions: &codec::revisions(&prior.manifest),
-                        create: false,
+                        operation: ProjectLedgerRecordOperation::Update,
                     }).await?);
                 }
-                (virtual_current, Some(child), true, leading)
+                (virtual_current, Some(child), ProjectLedgerRecordOperation::Create, leading)
             };
             repo.plan_updates(PlanUpdatesInput {
                 current: &current,
@@ -90,10 +93,10 @@ impl ProjectWorkRepository {
                 identity: &prepare_identity,
                 at: &at,
                 opening,
-                create,
+                operation,
                 leading,
             }).await.map(Some)
-        }, true).await?;
+        }, Projection::Recover).await?;
         Ok(self.require_current(&target_id).await?.view)
     }
 
@@ -109,7 +112,7 @@ impl ProjectWorkRepository {
             identity,
             at,
             opening,
-            create,
+            operation,
             leading,
         } = input;
         plan_preconditions(current, command)?;
@@ -174,7 +177,7 @@ impl ProjectWorkRepository {
             identity,
             revisions: &revisions,
             children,
-            create,
+            operation,
             leading,
         })
         .await
@@ -192,72 +195,81 @@ impl ProjectWorkRepository {
             .publish(
                 identity,
                 move || async move {
-                    let current = repo.require_bound(&command.input.scope, false).await?;
-                    if current
-                        .manifest
-                        .get("currentPlanRevisionId")
-                        .and_then(Value::as_str)
-                        != Some(command.expected_plan_revision_id.as_str())
-                        || current
-                            .manifest
-                            .get("checkpointRevision")
-                            .and_then(Value::as_u64)
-                            != Some(command.expected_progress_revision)
-                    {
-                        return Err(invalid("project_work_checkpoint_precondition_mismatch"));
-                    }
-                    let at = repo.recorded_at(prepare_identity.clone()).await?;
-                    let revision = codec::number(&current.manifest, "checkpointRevision")? + 1;
-                    let child = checkpoint_child(CheckpointChildInput {
-                        current: &current,
-                        turn_id: &command.input.scope.turn_id,
-                        identity: &prepare_identity,
-                        at: &at,
-                        revision,
-                        stage: command.stage,
-                        plan_id: &command.expected_plan_revision_id,
-                        progress: &command.action_progress,
-                        summary: &command.public_summary,
-                        next: &command.next_step,
-                        checkpoint_identity: &command.input.mutation_call_id,
-                    })?;
-                    let checkpoint: Checkpoint = codec::typed(
-                        child
-                            .get("checkpoint")
-                            .cloned()
-                            .ok_or_else(|| invalid("project_work_managed_record_invalid"))?,
-                    )?;
-                    let mut view = current.view.clone();
-                    view.status = status_for_progress(&command.action_progress);
-                    view.current_stage = Some(command.stage);
-                    view.allowed_next_stages =
-                        butler_turn::btcc::allowed_next_work_stages(Some(command.stage));
-                    view.action_progress = command.action_progress.clone();
-                    view.latest_checkpoint = Some(checkpoint);
-                    view.updated_at = at;
-                    let mut revisions = codec::revisions(&current.manifest);
-                    revisions["checkpointRevision"] = Value::from(revision);
-                    revisions["checkpointResultSequence"] =
-                        Value::from(current.view.result_refs.len() as u64);
-                    Ok(Some(
-                        repo.view_updates(super::write::WorkViewUpdates {
-                            current: &current,
-                            view: &view,
-                            identity: &prepare_identity,
-                            revisions: &revisions,
-                            children: vec![child],
-                            create: false,
-                            leading: Vec::new(),
-                        })
-                        .await?,
-                    ))
+                    repo.checkpoint_updates(&command, &prepare_identity)
+                        .await
+                        .map(Some)
                 },
-                true,
+                Projection::Recover,
             )
             .await?;
         let work_id = published_work_id(&outcome)
             .ok_or_else(|| invalid("project_work_replay_target_missing"))?;
         Ok(self.require_current(&work_id).await?.view)
+    }
+
+    /// The checkpoint child at the command's stage and the manifest it moves.
+    async fn checkpoint_updates(
+        &self,
+        command: &CheckpointCommand,
+        identity: &ProjectWorkOperationIdentity,
+    ) -> Result<Vec<ProjectLedgerRecordUpdate>, BtccError> {
+        let current = self
+            .require_bound(&command.input.scope, Bound::Open)
+            .await?;
+        if current
+            .manifest
+            .get("currentPlanRevisionId")
+            .and_then(Value::as_str)
+            != Some(command.expected_plan_revision_id.as_str())
+            || current
+                .manifest
+                .get("checkpointRevision")
+                .and_then(Value::as_u64)
+                != Some(command.expected_progress_revision)
+        {
+            return Err(invalid("project_work_checkpoint_precondition_mismatch"));
+        }
+        let at = self.recorded_at(identity.clone()).await?;
+        let revision = codec::number(&current.manifest, "checkpointRevision")? + 1;
+        let child = checkpoint_child(CheckpointChildInput {
+            current: &current,
+            turn_id: &command.input.scope.turn_id,
+            identity,
+            at: &at,
+            revision,
+            stage: command.stage,
+            plan_id: &command.expected_plan_revision_id,
+            progress: &command.action_progress,
+            summary: &command.public_summary,
+            next: &command.next_step,
+            checkpoint_identity: &command.input.mutation_call_id,
+        })?;
+        let checkpoint: Checkpoint = codec::typed(
+            child
+                .get("checkpoint")
+                .cloned()
+                .ok_or_else(|| invalid("project_work_managed_record_invalid"))?,
+        )?;
+        let mut view = current.view.clone();
+        view.status = status_for_progress(&command.action_progress);
+        view.current_stage = Some(command.stage);
+        view.allowed_next_stages = butler_turn::btcc::allowed_next_work_stages(Some(command.stage));
+        view.action_progress = command.action_progress.clone();
+        view.latest_checkpoint = Some(checkpoint);
+        view.updated_at = at;
+        let mut revisions = codec::revisions(&current.manifest);
+        revisions["checkpointRevision"] = Value::from(revision);
+        revisions["checkpointResultSequence"] = Value::from(current.view.result_refs.len() as u64);
+        self.view_updates(super::write::WorkViewUpdates {
+            current: &current,
+            view: &view,
+            identity,
+            revisions: &revisions,
+            children: vec![child],
+            operation: ProjectLedgerRecordOperation::Update,
+            leading: Vec::new(),
+        })
+        .await
     }
 }
 

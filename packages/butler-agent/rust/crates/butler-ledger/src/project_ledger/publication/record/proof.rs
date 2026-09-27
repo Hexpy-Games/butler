@@ -25,6 +25,7 @@ pub(super) fn updates(
             .filter(|value| !value.is_empty())
             .ok_or_else(invalid)?;
         let spec = update
+            .sections
             .spec
             .as_deref()
             .filter(|value| !value.is_empty())

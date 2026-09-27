@@ -24,7 +24,7 @@ impl ProjectWorkRepository {
             identity,
             revisions,
             children,
-            create,
+            operation,
             leading,
         } = input;
         let mut updates = leading;
@@ -44,7 +44,7 @@ impl ProjectWorkRepository {
                     .and_then(Value::as_bool)
                     .unwrap_or(true),
                 revisions,
-                create,
+                operation,
             })
             .await?,
         );
@@ -71,7 +71,7 @@ impl ProjectWorkRepository {
             binding_refs,
             session_head,
             revisions,
-            create,
+            operation,
         } = input;
         let material = self
             .shared
@@ -91,7 +91,7 @@ impl ProjectWorkRepository {
             material: &material,
             revisions,
         })?;
-        codec::work_update(&manifest, create, &self.shared.ledger.collation)
+        codec::work_update(&manifest, operation, &self.shared.ledger.collation)
     }
 
     /// The create update for an immutable child record, or `None` when the
@@ -166,7 +166,7 @@ impl ChildRecord {
         update.parent_id = Some(self.work_id);
         update.title = Some(self.title);
         update.status = Some("active".into());
-        update.spec = Some(codec::SPEC.into());
+        update.sections.spec = Some(codec::SPEC.into());
         update.body = Some(body);
         Ok(Some(update))
     }
@@ -205,7 +205,7 @@ pub(super) struct WorkViewUpdates<'a> {
     pub identity: &'a ProjectWorkOperationIdentity,
     pub revisions: &'a Value,
     pub children: Vec<Value>,
-    pub create: bool,
+    pub operation: ProjectLedgerRecordOperation,
     pub leading: Vec<ProjectLedgerRecordUpdate>,
 }
 
@@ -216,7 +216,7 @@ pub(super) struct ManifestPublicationInput<'a> {
     pub binding_refs: Value,
     pub session_head: bool,
     pub revisions: &'a Value,
-    pub create: bool,
+    pub operation: ProjectLedgerRecordOperation,
 }
 
 pub(super) fn child_metadata(

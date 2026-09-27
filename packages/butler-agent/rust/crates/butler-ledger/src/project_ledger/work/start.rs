@@ -5,8 +5,10 @@ use butler_turn::btcc::{
     WorkOrigin, WorkScope, WorkView,
 };
 
+use super::super::publication::ProjectLedgerRecordOperation;
 use super::super::publication::{ProjectLedgerRecordKind, ProjectLedgerRecordUpdate};
 use super::codec;
+use super::publication::Projection;
 use super::relation::is_open;
 use super::{ProjectWorkRepository, invalid};
 
@@ -48,7 +50,7 @@ impl ProjectWorkRepository {
                         .ok_or_else(|| invalid("project_work_managed_record_invalid"))?,
                     session_head: false,
                     revisions: &codec::revisions(&prior.manifest),
-                    create: false,
+                    operation: ProjectLedgerRecordOperation::Update,
                 }).await?);
             }
             updates.push(repo.manifest_update(super::write::ManifestPublicationInput {
@@ -58,14 +60,14 @@ impl ProjectWorkRepository {
                 binding_refs: json!([{"bindingRevisionId":binding_id,"turnId":command.input.scope.turn_id,"revision":1}]),
                 session_head: true,
                 revisions: &json!({"planRevision":0,"checkpointRevision":0,"checkpointResultSequence":0,"reviewRevision":0,"dispositionRevision":0}),
-                create: true,
+                operation: ProjectLedgerRecordOperation::Create,
             }).await?);
             if let Some(child) = repo.child_update(&requested_id, &binding_id, ProjectLedgerRecordKind::Reference,
                 "Guided Work Turn binding 1".into(), binding).await? {
                 updates.push(child);
             }
             Ok(Some(updates))
-        }, true).await?;
+        }, Projection::Recover).await?;
         Ok(self.require_current(&work_id).await?.view)
     }
 }

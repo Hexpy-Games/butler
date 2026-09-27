@@ -25,7 +25,7 @@ pub(in crate::project_ledger) fn apply(
     request: &LedgerEffectRequest,
     collation: &LocaleCollation,
 ) -> Result<Value, LedgerEffectError> {
-    match run(data_root, request, collation, false)? {
+    match run(data_root, request, collation, Mode::Apply)? {
         LedgerEffectReconciliation::Applied(result) => Ok(result),
         LedgerEffectReconciliation::NotApplied => Err(LedgerEffectError::NotApplied),
         LedgerEffectReconciliation::Uncertain => Err(LedgerEffectError::Uncertain { source: None }),
@@ -37,18 +37,25 @@ pub(in crate::project_ledger) fn reconcile(
     request: &LedgerEffectRequest,
     collation: &LocaleCollation,
 ) -> Result<LedgerEffectReconciliation, LedgerEffectError> {
-    match run(data_root, request, collation, true) {
+    match run(data_root, request, collation, Mode::Reconcile) {
         Ok(result) => Ok(result),
         Err(LedgerEffectError::Conflict) => Err(LedgerEffectError::Conflict),
         Err(_) => Ok(LedgerEffectReconciliation::Uncertain),
     }
 }
 
+/// Whether an effect request may publish, or only reports what happened.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Apply,
+    Reconcile,
+}
+
 fn run(
     data_root: &Path,
     request: &LedgerEffectRequest,
     collation: &LocaleCollation,
-    only_reconcile: bool,
+    mode: Mode,
 ) -> Result<LedgerEffectReconciliation, LedgerEffectError> {
     if request.updates.is_empty() || request.effect_key.is_empty() {
         return Err(LedgerEffectError::Uncertain { source: None });
@@ -78,7 +85,7 @@ fn run(
                 return result(&scope, request, &applied, collation)
                     .map(LedgerEffectReconciliation::Applied);
             }
-            Reconciled::NotAppliedWithReceipt if !only_reconcile => {
+            Reconciled::NotAppliedWithReceipt if mode == Mode::Apply => {
                 let (base, targets) = snapshot(&scope, &request.updates, collation)?;
                 let next = occurrence::append(
                     data_root,
@@ -99,7 +106,7 @@ fn run(
             }
         }
     }
-    if only_reconcile {
+    if mode == Mode::Reconcile {
         return Ok(LedgerEffectReconciliation::NotApplied);
     }
     let (base, targets) = snapshot(&scope, &request.updates, collation)?;

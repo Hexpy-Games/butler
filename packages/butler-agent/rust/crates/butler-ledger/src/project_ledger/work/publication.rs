@@ -15,12 +15,20 @@ use super::super::publication::{
 use super::codec::Snapshot;
 use super::{ProjectWorkRepository, invalid};
 
+/// Whether a publication observes the Work it wrote back into the runtime's
+/// projection, or leaves the projection as it is.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Projection {
+    Recover,
+    Keep,
+}
+
 impl ProjectWorkRepository {
     pub(super) async fn publish<F, Fut>(
         &self,
         identity: ProjectWorkOperationIdentity,
         prepare: F,
-        recover_projection: bool,
+        projection: Projection,
     ) -> Result<ProjectWorkPublicationOutcome, BtccError>
     where
         F: FnOnce() -> Fut + Send + 'static,
@@ -36,7 +44,7 @@ impl ProjectWorkRepository {
             })
             .await
             .map_err(publication_error)?;
-        if !outcome.skipped && recover_projection {
+        if !outcome.skipped && projection == Projection::Recover {
             let mut work_ids = Vec::new();
             let mut seen = HashSet::new();
             for target in &outcome.targets {

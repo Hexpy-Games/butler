@@ -5,8 +5,10 @@ use butler_turn::btcc::{
     WorkTurnScope, WorkView,
 };
 
+use super::super::publication::ProjectLedgerRecordOperation;
 use super::super::publication::{ProjectLedgerRecordKind, ProjectLedgerRecordUpdate};
 use super::codec::{self, Snapshot};
+use super::publication::Projection;
 use super::relation::is_open;
 use super::start::binding_child;
 use super::{ProjectWorkRepository, invalid};
@@ -78,7 +80,7 @@ impl ProjectWorkRepository {
                         .await?,
                 ))
             },
-            true,
+            Projection::Recover,
         )
         .await?;
         Ok(Some(self.require_current(&id).await?.view))
@@ -132,7 +134,7 @@ impl ProjectWorkRepository {
                         .await?,
                 ))
             },
-            true,
+            Projection::Recover,
         )
         .await?;
         Ok(self.require_current(&result_id).await?.view)
@@ -173,7 +175,7 @@ impl ProjectWorkRepository {
                 binding_refs: Value::Array(refs),
                 session_head: true,
                 revisions: &codec::revisions(&current.manifest),
-                create: false,
+                operation: ProjectLedgerRecordOperation::Update,
             })
             .await?,
         ];
@@ -214,7 +216,7 @@ impl ProjectWorkRepository {
                 .and_then(Value::as_bool)
                 .unwrap_or(true),
             revisions: &codec::revisions(&current.manifest),
-            create: false,
+            operation: ProjectLedgerRecordOperation::Update,
         })
         .await
     }
@@ -248,7 +250,9 @@ impl ProjectWorkRepository {
         kind: ProjectLedgerRecordKind,
         parent: Option<String>,
     ) -> Result<(), BtccError> {
-        let outcome = self.publish(identity, || async { Ok(None) }, true).await?;
+        let outcome = self
+            .publish(identity, || async { Ok(None) }, Projection::Recover)
+            .await?;
         if outcome.skipped
             || !outcome
                 .targets

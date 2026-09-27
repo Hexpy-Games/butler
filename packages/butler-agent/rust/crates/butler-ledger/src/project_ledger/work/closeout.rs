@@ -11,8 +11,11 @@ use super::super::publication::{ProjectLedgerRecordKind, ProjectLedgerRecordUpda
 use super::codec::{self, Snapshot};
 mod trail;
 
+use super::super::publication::ProjectLedgerRecordOperation;
 use super::progress::status_for_progress;
+use super::publication::Projection;
 use super::publication::published_work_id;
+use super::relation::Bound;
 use super::{ProjectWorkRepository, invalid};
 use trail::Trail;
 
@@ -30,7 +33,7 @@ impl ProjectWorkRepository {
                         .await
                         .map(Some)
                 },
-                true,
+                Projection::Recover,
             )
             .await?;
         let id = published_work_id(&outcome)
@@ -45,7 +48,9 @@ impl ProjectWorkRepository {
         command: &ReviewCommand,
         identity: &ProjectWorkOperationIdentity,
     ) -> Result<Vec<ProjectLedgerRecordUpdate>, BtccError> {
-        let current = self.require_bound(&command.input.scope, false).await?;
+        let current = self
+            .require_bound(&command.input.scope, Bound::Open)
+            .await?;
         review_preconditions(&current, command)?;
         let at = self.recorded_at(identity.clone()).await?;
         let mut trail = Trail::new(&current, identity, &at)?;
@@ -88,7 +93,7 @@ impl ProjectWorkRepository {
             identity,
             revisions: &revisions,
             children: trail.children,
-            create: false,
+            operation: ProjectLedgerRecordOperation::Update,
             leading: Vec::new(),
         })
         .await
@@ -107,7 +112,7 @@ impl ProjectWorkRepository {
         self.publish(
             identity,
             move || async move { repo.disposition_updates(&command, &prepare_identity).await },
-            true,
+            Projection::Recover,
         )
         .await?;
         Ok(self.require_current(&work_id).await?.view)
@@ -126,9 +131,12 @@ impl ProjectWorkRepository {
                 .input
                 .runtime_owned_open_generation
                 .is_some_and(|value| value.version == 1);
-        let current = self
-            .require_bound(&command.input.scope, runtime_owned_open)
-            .await?;
+        let bound = if runtime_owned_open {
+            Bound::OpenOrCompleted
+        } else {
+            Bound::Open
+        };
+        let current = self.require_bound(&command.input.scope, bound).await?;
         disposition_preconditions(&current, command)?;
         let decision = self
             .shared
@@ -224,7 +232,7 @@ impl ProjectWorkRepository {
         })?;
         let mut updates = vec![codec::work_update(
             &manifest,
-            false,
+            ProjectLedgerRecordOperation::Update,
             &self.shared.ledger.collation,
         )?];
         for child in children {
@@ -261,7 +269,7 @@ impl ProjectWorkRepository {
         let repo = self.clone();
         let prepare_identity = identity.clone();
         let outcome = self.publish(identity, move || async move {
-            let current = repo.require_bound(&input.scope, true).await?;
+            let current = repo.require_bound(&input.scope, Bound::OpenOrCompleted).await?;
             if current.view.work_id != input.work_id { return Err(invalid("project_work_closeout_target_mismatch")); }
             let child = json!({
                 "schema":"butler.btcc-project-work-closeout-diagnostic.v1","workId":input.work_id,
@@ -274,7 +282,7 @@ impl ProjectWorkRepository {
                 return Err(invalid("project_work_occurrence_receipt_missing"));
             };
             Ok(Some(vec![update]))
-        }, true).await?;
+        }, Projection::Recover).await?;
         Ok(!outcome.replayed)
     }
 }

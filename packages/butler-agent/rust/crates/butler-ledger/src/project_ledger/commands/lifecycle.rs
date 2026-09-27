@@ -23,11 +23,15 @@ pub(super) fn execute(
         LedgerCommand::RecordCreate => records::create_top_level(project_root, &request.options),
         LedgerCommand::RecordUpdate => records::update_generic(project_root, &request.options),
         LedgerCommand::WorkCreate => records::create_work(project_root, &request.options),
-        LedgerCommand::WorkUpdate => update_work(project_root, &request.options, false),
-        LedgerCommand::WorkComplete => update_work(project_root, &request.options, true),
+        LedgerCommand::WorkUpdate => update_work(project_root, &request.options, Change::Update),
+        LedgerCommand::WorkComplete => {
+            update_work(project_root, &request.options, Change::Complete)
+        }
         LedgerCommand::TaskCreate => records::create_task(project_root, &request.options),
-        LedgerCommand::TaskUpdate => update_task(project_root, &request.options, false),
-        LedgerCommand::TaskComplete => update_task(project_root, &request.options, true),
+        LedgerCommand::TaskUpdate => update_task(project_root, &request.options, Change::Update),
+        LedgerCommand::TaskComplete => {
+            update_task(project_root, &request.options, Change::Complete)
+        }
         LedgerCommand::AttemptStart => start_attempt(project_root, &request.options),
         LedgerCommand::AttemptSucceed => {
             update_attempt(project_root, &request.options, "succeeded")
@@ -41,7 +45,15 @@ pub(super) fn execute(
     envelope(request.command.label(), result)
 }
 
-fn update_work(root: &Path, options: &Value, complete: bool) -> Result<Value, CliFailure> {
+/// Whether a Work or Task command updates the record or completes it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Change {
+    Update,
+    Complete,
+}
+
+fn update_work(root: &Path, options: &Value, change: Change) -> Result<Value, CliFailure> {
+    let complete = change == Change::Complete;
     let id = options::required(options, "id")?;
     let current = super::show::resolve_record(root, &id, Some("work"))?;
     if complete && current.record.get("status").and_then(Value::as_str) == Some("done") {
@@ -105,7 +117,8 @@ fn update_work(root: &Path, options: &Value, complete: bool) -> Result<Value, Cl
     Ok(refresh_index_after_mutation(root, record))
 }
 
-fn update_task(root: &Path, options: &Value, complete: bool) -> Result<Value, CliFailure> {
+fn update_task(root: &Path, options: &Value, change: Change) -> Result<Value, CliFailure> {
+    let complete = change == Change::Complete;
     let id = options::required(options, "id")?;
     let current = super::show::resolve_record(root, &id, Some("task"))?;
     let status = if complete {

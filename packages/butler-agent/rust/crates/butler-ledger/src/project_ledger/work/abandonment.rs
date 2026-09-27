@@ -5,8 +5,10 @@ use butler_turn::btcc::{
     ProjectWorkOperationKind, WorkView,
 };
 
+use super::super::publication::ProjectLedgerRecordOperation;
 use super::super::publication::{ProjectLedgerRecordKind, ProjectLedgerRecordUpdate};
 use super::codec::{self, Snapshot};
+use super::publication::Projection;
 use super::relation::{has_binding, is_open};
 use super::{ProjectWorkRepository, invalid};
 
@@ -97,7 +99,7 @@ impl ProjectWorkRepository {
                         .await
                         .map(|update| Some(vec![update]))
                 },
-                true,
+                Projection::Recover,
             )
             .await?;
         if !published
@@ -138,7 +140,7 @@ impl ProjectWorkRepository {
                 .and_then(Value::as_bool)
                 .unwrap_or(true),
             revisions: &codec::revisions(&fresh.manifest),
-            create: false,
+            operation: ProjectLedgerRecordOperation::Update,
         })
         .await
     }

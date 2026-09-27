@@ -298,7 +298,7 @@ pub(super) fn revisions(manifest: &Value) -> Value {
 
 pub(super) fn work_update(
     manifest: &Value,
-    create: bool,
+    operation: ProjectLedgerRecordOperation,
     collation: &butler_core::locale::LocaleCollation,
 ) -> Result<ProjectLedgerRecordUpdate, butler_turn::btcc::BtccError> {
     let work_id = text(manifest, "workId")?;
@@ -311,15 +311,11 @@ pub(super) fn work_update(
         _ => return Err(invalid("project_work_managed_record_invalid")),
     };
     let mut update = ProjectLedgerRecordUpdate::new(work_id.into());
-    update.operation = Some(if create {
-        ProjectLedgerRecordOperation::Create
-    } else {
-        ProjectLedgerRecordOperation::Update
-    });
+    update.operation = Some(operation);
     update.kind = Some(ProjectLedgerRecordKind::Work);
     update.title = Some(format!("Guided Work {work_id}"));
     update.status = Some(official.into());
-    update.spec = Some(SPEC.into());
+    update.sections.spec = Some(SPEC.into());
     update.body = Some(
         super::super::work_json::canonical(manifest, collation)
             .map_err(super::snapshot::read_error)?,

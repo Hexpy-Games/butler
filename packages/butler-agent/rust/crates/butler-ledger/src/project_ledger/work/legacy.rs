@@ -9,10 +9,12 @@ use butler_turn::btcc::{
     ProjectWorkOperationIdentity, ProjectWorkOperationKind, WorkTurnScope, WorkView,
 };
 
+use super::super::publication::ProjectLedgerRecordOperation;
 use super::super::publication::{
     ProjectLedgerRecordKind, ProjectLedgerRecordUpdate, ProjectWorkPublicationOutcome,
 };
 use super::codec;
+use super::publication::Projection;
 use super::{ProjectWorkRepository, invalid};
 
 impl ProjectWorkRepository {
@@ -84,7 +86,9 @@ impl ProjectWorkRepository {
             format!("r2:{source_program_id}:{work_id}")
         };
         let identity = self.legacy_identity(&source_identity, source_sha256)?;
-        let receipt = self.publish(identity, || async { Ok(None) }, false).await?;
+        let receipt = self
+            .publish(identity, || async { Ok(None) }, Projection::Keep)
+            .await?;
         if receipt.skipped
             || !receipt.targets.iter().any(|target| {
                 target.id == work_id
@@ -128,7 +132,7 @@ impl ProjectWorkRepository {
                     .await
                     .map(Some)
             },
-            false,
+            Projection::Keep,
         )
         .await
     }
@@ -171,7 +175,7 @@ impl ProjectWorkRepository {
         })?;
         let mut updates = vec![codec::work_update(
             &manifest,
-            true,
+            ProjectLedgerRecordOperation::Create,
             &self.shared.ledger.collation,
         )?];
         for child in children {

@@ -36,58 +36,102 @@ impl ProjectLedgerRecordKind {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// Whether a record update creates the record or changes an existing one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ProjectLedgerRecordOperation {
     Create,
     Update,
 }
 
+/// One record create or update in a Project Ledger publication, as a
+/// `project_ledger_create`/`project_ledger_update` call sends it. The core
+/// names the record and where it sits; the optional content comes in two
+/// flattened groups, so the JSON stays one flat object.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectLedgerRecordUpdate {
+    /// Create or update; an update when absent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub operation: Option<ProjectLedgerRecordOperation>,
+    /// The record id.
     pub id: String,
+    /// The record kind; inferred from the existing record when absent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kind: Option<ProjectLedgerRecordKind>,
+    /// The parent record (a task's Work, a managed child's Work).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<String>,
+    /// The record title.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /// The record status, in its kind's lifecycle when it has one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
+    /// The Markdown body.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub spec: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub acceptance: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub validation: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub review: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub report: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub implementation: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub mitigation: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub code_commits: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub ledger_commits: Option<String>,
+    /// Dashboard ordering; lower comes first.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<f64>,
+    /// Text sections of the record.
+    #[serde(flatten)]
+    pub sections: RecordSections,
+    /// Completion evidence and the gates it satisfies.
+    #[serde(flatten)]
+    pub evidence: RecordEvidence,
+}
+
+/// The text sections a record update may set.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordSections {
+    /// The governing spec id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spec: Option<String>,
+    /// Acceptance criteria.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub acceptance: Option<String>,
+    /// How the result was validated.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub validation: Option<String>,
+    /// Review notes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub review: Option<String>,
+    /// The report path or text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub report: Option<String>,
+    /// What implements a decision.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub implementation: Option<String>,
+    /// A risk's mitigation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mitigation: Option<String>,
+    /// Why the record changed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+/// Commit evidence and completion-gate flags a record update may set.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordEvidence {
+    /// JSON array of `{repo, hash, message}` code commits.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code_commits: Option<String>,
+    /// Ledger commit references.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ledger_commits: Option<String>,
+    /// Completing the Work requires code commit evidence.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub requires_commit_evidence: Option<bool>,
+    /// The Work needs no spec.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub spec_exemption: Option<bool>,
 }
 
 impl ProjectLedgerRecordUpdate {
+    /// An update of `id` that sets nothing yet.
     pub(crate) fn new(id: String) -> Self {
         Self {
             operation: None,
@@ -97,19 +141,9 @@ impl ProjectLedgerRecordUpdate {
             title: None,
             status: None,
             body: None,
-            spec: None,
-            acceptance: None,
-            validation: None,
-            review: None,
-            report: None,
-            implementation: None,
-            mitigation: None,
-            reason: None,
-            code_commits: None,
-            ledger_commits: None,
             priority: None,
-            requires_commit_evidence: None,
-            spec_exemption: None,
+            sections: RecordSections::default(),
+            evidence: RecordEvidence::default(),
         }
     }
 }
