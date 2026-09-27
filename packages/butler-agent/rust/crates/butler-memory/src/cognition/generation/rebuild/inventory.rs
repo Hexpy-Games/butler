@@ -10,7 +10,7 @@ use std::{
 use indexmap::IndexMap;
 use rusqlite::{Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
@@ -474,25 +474,25 @@ fn quality_operations(
 }
 
 fn entry(record: crate::cognition::sources::TypedMemoryRecord) -> CognitionResult<TypedEntry> {
-    let episode = crate::cognition::sources::projection_hash_for_graph(vec![
-        json!("typed-memory-record"),
-        json!(record.source_kind),
-        json!(record.record_id),
-    ])
+    let episode = crate::cognition::sources::projection_hash_for_graph(&(
+        "typed-memory-record",
+        &record.source_kind,
+        &record.record_id,
+    ))
     .map_err(|source| error(CognitionCode::MemoryInventoryIncomplete).with_source(source))?;
     let mut source_ids = Vec::new();
     for span in split_historical_source_spans(&record.text, 32_768.0) {
         source_ids.push(
-            crate::cognition::sources::projection_hash_for_graph(vec![
-                json!("memory-source"),
-                json!(episode),
-                json!(record.revision),
-                json!(record.source_kind),
-                json!(record.record_id),
-                json!(span.start),
-                json!(span.end),
-                json!(record.content_hash),
-            ])
+            crate::cognition::sources::projection_hash_for_graph(&(
+                "memory-source",
+                &episode,
+                &record.revision,
+                &record.source_kind,
+                &record.record_id,
+                &span.start,
+                &span.end,
+                &record.content_hash,
+            ))
             .map_err(|source| {
                 error(CognitionCode::MemoryInventoryIncomplete).with_source(source)
             })?,

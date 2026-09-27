@@ -206,11 +206,8 @@ pub(super) fn insert_windows(
                 "memory_extract_source_window_exceeds_budget",
             ));
         }
-        let window_ref = sources::projection_hash_for_graph(vec![
-            Value::String("memory-window".into()),
-            Value::String(plan.revision.clone()),
-            Value::String(source_id.clone()),
-        ])?;
+        let window_ref =
+            sources::projection_hash_for_graph(&("memory-window", &plan.revision, &source_id))?;
         let refs = vec![source_id.clone()];
         connection
             .execute(

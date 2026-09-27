@@ -38,9 +38,7 @@ fn turn_current(
     {
         return false;
     }
-    if hash(vec!["canonical-conversation-turn".into(), turn_id.into()]).as_deref()
-        != Some(&identity.episode_id)
-    {
+    if hash(&("canonical-conversation-turn", turn_id)).as_deref() != Some(&identity.episode_id) {
         return false;
     }
     let request = outcome
@@ -119,11 +117,7 @@ fn standalone_current(
         _ => false,
     };
     if !eligible
-        || hash(vec![
-            "canonical-conversation-message".into(),
-            message.message.id.clone().into(),
-        ])
-        .as_deref()
+        || hash(&("canonical-conversation-message", &message.message.id)).as_deref()
             != Some(&identity.episode_id)
     {
         return false;
@@ -147,8 +141,8 @@ fn revision(messages: &[ConversationMessageWithParts], tail: Value) -> Option<St
         }
     }
     values.push(tail);
-    hash(values)
+    hash(&values)
 }
-fn hash(values: Vec<Value>) -> Option<String> {
-    projection_hash(values).ok()
+fn hash(parts: &(impl serde::Serialize + ?Sized)) -> Option<String> {
+    projection_hash(parts).ok()
 }

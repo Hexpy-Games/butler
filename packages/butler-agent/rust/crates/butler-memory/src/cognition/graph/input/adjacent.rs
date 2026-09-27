@@ -4,8 +4,6 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use serde_json::json;
-
 use crate::cognition::CognitionCode;
 use crate::cognition::{
     CognitionError, CognitionResult, CognitionSourceRow,
@@ -157,11 +155,11 @@ impl Sources<'_> {
             focus_end: focus_end as f64,
             prefix_bytes: (row_start + focus_start - start) as f64,
         };
-        let hash = crate::cognition::sources::projection_hash_for_graph(vec![
-            json!(source_ref),
-            json!(revision),
+        let hash = crate::cognition::sources::projection_hash_for_graph(&(
+            &source_ref,
+            &revision,
             serde_json::to_value(&span).map_err(json_error)?,
-        ])?;
+        ))?;
         Ok(Some(ProjectionContextUnit {
             ref_id: format!("memory-excerpt:{}", hash.get(..48).unwrap_or(&hash)),
             text: scalar.get(start..end).ok_or_else(changed)?.into(),

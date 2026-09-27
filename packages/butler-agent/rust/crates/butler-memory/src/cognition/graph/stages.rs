@@ -23,10 +23,7 @@ pub(super) fn pin_binding_candidates(
 ) -> CognitionResult<()> {
     let json = butler_core::json::stringify(&serde_json::to_value(input).map_err(json_error)?)
         .map_err(json_error)?;
-    let sha = crate::cognition::sources::projection_hash_for_graph(vec![
-        Value::String("extract-input".into()),
-        Value::String(json.clone()),
-    ])?;
+    let sha = crate::cognition::sources::projection_hash_for_graph(&("extract-input", &json))?;
     if connection.execute("UPDATE memory_projection_windows SET input_json=?1,input_sha256=?2 WHERE window_ref=?3 AND state='running' AND owner_nonce=?4",params![json,sha,window,nonce]).map_err(db_error)?!=1 {return Err(changed());}
     Ok(())
 }

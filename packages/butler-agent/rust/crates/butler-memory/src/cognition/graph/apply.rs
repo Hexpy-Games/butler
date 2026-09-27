@@ -386,7 +386,7 @@ fn meaning_input_hash(input: &ExtractInput) -> CognitionResult<String> {
         ));
     };
     object.insert("candidates".into(), json!([]));
-    crate::cognition::sources::projection_hash_for_graph(vec![json!("meaning-input"), value])
+    crate::cognition::sources::projection_hash_for_graph(&("meaning-input", value))
 }
 fn increment_graph_revision(tx: &Connection) -> CognitionResult<()> {
     tx.execute(

@@ -4,7 +4,7 @@ use crate::cognition::graph::StageWrite;
 use std::collections::HashSet;
 
 use rusqlite::{Connection, Transaction, params};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use super::{
     CognitionError, CognitionResult, EPISODE_CHUNK_BYTES, EpisodeProjectionSource,
@@ -67,15 +67,15 @@ fn register_episodes(
                 let mut byte_start = source.byte_start;
                 for text in chunks {
                     let byte_end = byte_start + i64::try_from(text.len()).unwrap_or(i64::MAX);
-                    let chunk_revision = digest(vec![
-                        json!("episode-vector-chunk"),
-                        json!(episode_id),
-                        json!(revision),
-                        json!(source.source_id),
-                        json!(byte_start),
-                        json!(byte_end),
-                        json!(text),
-                    ])?;
+                    let chunk_revision = digest(&(
+                        "episode-vector-chunk",
+                        &episode_id,
+                        &revision,
+                        &source.source_id,
+                        &byte_start,
+                        &byte_end,
+                        &text,
+                    ))?;
                     let unit_id = vector_unit_id(job_id, "episode", episode_id, &chunk_revision)?;
                     desired.insert(unit_id.clone());
                     tx.execute(
@@ -99,13 +99,13 @@ fn register_episodes(
                 }
             }
             Err(()) => {
-                let chunk_revision = digest(vec![
-                    json!("episode-vector-oversized"),
-                    json!(episode_id),
-                    json!(revision),
-                    json!(source.source_id),
-                    json!(source.byte_start),
-                ])?;
+                let chunk_revision = digest(&(
+                    "episode-vector-oversized",
+                    &episode_id,
+                    &revision,
+                    &source.source_id,
+                    &source.byte_start,
+                ))?;
                 let unit_id = vector_unit_id(job_id, "episode", episode_id, &chunk_revision)?;
                 desired.insert(unit_id.clone());
                 let byte_end =
@@ -139,13 +139,7 @@ fn vector_unit_id(
     owner_id: &str,
     chunk_revision: &str,
 ) -> CognitionResult<String> {
-    digest(vec![
-        json!("vector-unit"),
-        json!(job_id),
-        json!(kind),
-        json!(owner_id),
-        json!(chunk_revision),
-    ])
+    digest(&("vector-unit", &job_id, &kind, &owner_id, &chunk_revision))
 }
 
 fn supersede_obsolete(

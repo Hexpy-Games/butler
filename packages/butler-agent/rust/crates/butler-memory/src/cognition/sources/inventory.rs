@@ -201,10 +201,7 @@ impl Scan<'_> {
                 continue;
             }
             let source_hash = recovered_parts_hash(&message).map_err(unavailable)?;
-            let episode_id = hash(vec![
-                "canonical-conversation-message".into(),
-                message.message.id.clone().into(),
-            ])?;
+            let episode_id = hash(&("canonical-conversation-message", &message.message.id))?;
             self.entries
                 .push(entry(&episode_id, &scalars, Value::String(source_hash))?);
         }
@@ -324,10 +321,7 @@ impl Scan<'_> {
             self.exclude("source_text_missing");
             return Ok(());
         }
-        let episode_id = hash(vec![
-            "canonical-conversation-turn".into(),
-            outcome.turn_id.clone().into(),
-        ])?;
+        let episode_id = hash(&("canonical-conversation-turn", &outcome.turn_id))?;
         let generation = Number::from_f64(outcome.generation).ok_or_else(|| {
             CognitionError::new(CognitionCode::MemorySourceUnavailable, "invalid_generation")
         })?;
@@ -352,7 +346,7 @@ fn entry(
         ]);
     }
     parts.push(tail);
-    let revision = hash(parts)?;
+    let revision = hash(&parts)?;
     let mut source_ids = Vec::new();
     let mut hashes = HashSet::new();
     let mut origins = HashSet::new();
@@ -360,18 +354,18 @@ fn entry(
         hashes.insert(scalar.hash.clone());
         origins.insert(origin(scalar.message.message.origin_kind));
         for span in split_historical_source_spans(scalar.text, MEMORY_SOURCE_WINDOW_BYTES) {
-            source_ids.push(hash(vec![
-                "memory-source".into(),
-                episode_id.into(),
-                revision.clone().into(),
-                "conversation".into(),
-                scalar.message.message.id.clone().into(),
-                scalar.part.id.clone().into(),
-                scalar.pointer.clone().into(),
-                span.start.into(),
-                span.end.into(),
-                scalar.hash.clone().into(),
-            ])?);
+            source_ids.push(hash(&(
+                "memory-source",
+                episode_id,
+                &revision,
+                "conversation",
+                &scalar.message.message.id,
+                &scalar.part.id,
+                &scalar.pointer,
+                span.start,
+                span.end,
+                &scalar.hash,
+            ))?);
         }
     }
     source_ids.sort();
@@ -397,8 +391,8 @@ fn origin(value: ConversationOriginKind) -> &'static str {
         ConversationOriginKind::Unknown => "unknown",
     }
 }
-fn hash(values: Vec<Value>) -> CognitionResult<String> {
-    projection_hash(values).map_err(unavailable)
+fn hash(parts: &(impl serde::Serialize + ?Sized)) -> CognitionResult<String> {
+    projection_hash(parts).map_err(unavailable)
 }
 fn unavailable(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
     CognitionError::new(CognitionCode::MemorySourceUnavailable, error.to_string())

@@ -6,7 +6,6 @@ use std::collections::{HashMap, HashSet};
 use indexmap::IndexMap;
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
 
 use super::db_error;
 use crate::cognition::{
@@ -132,12 +131,12 @@ impl Planner<'_> {
                 &mut self.selected,
                 &node.local_ref,
             )?;
-            let id = hash(vec![
-                json!("memory-node"),
-                json!(input.window_ref),
-                json!(node.local_ref),
-                json!(node.label),
-            ])?;
+            let id = hash(&(
+                "memory-node",
+                &input.window_ref,
+                &node.local_ref,
+                &node.label,
+            ))?;
             self.refs.insert(node.local_ref.clone(), id);
         }
         for claim in &output.claims {
@@ -156,11 +155,7 @@ impl Planner<'_> {
             if let Some(object) = content.as_object_mut() {
                 object.shift_remove("resolution");
             }
-            let id = hash(vec![
-                json!("memory-claim"),
-                json!(input.window_ref),
-                content,
-            ])?;
+            let id = hash(&("memory-claim", &input.window_ref, content))?;
             self.refs.insert(claim.local_ref.clone(), id);
         }
         if self.refs.len() != output.nodes.len() + output.claims.len() {
@@ -416,8 +411,8 @@ fn validate_basis(input: &ExtractInput, basis: &str, quotes: &[QuoteRef]) -> Cog
     Ok(())
 }
 
-fn hash(value: Vec<Value>) -> CognitionResult<String> {
-    crate::cognition::sources::projection_hash_for_graph(value)
+fn hash(parts: &(impl serde::Serialize + ?Sized)) -> CognitionResult<String> {
+    crate::cognition::sources::projection_hash_for_graph(parts)
 }
 fn error(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, code.as_str())

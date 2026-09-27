@@ -516,10 +516,7 @@ fn remaining_candidate_bytes(pinned: &StoredInput) -> CognitionResult<usize> {
 }
 
 fn extract_input_sha256(serialized: &str) -> CognitionResult<String> {
-    crate::cognition::sources::projection_hash_for_graph(vec![
-        Value::String("extract-input".into()),
-        Value::String(serialized.into()),
-    ])
+    crate::cognition::sources::projection_hash_for_graph(&("extract-input", serialized))
 }
 
 fn repair_receipt_ref(
@@ -527,12 +524,12 @@ fn repair_receipt_ref(
     prior_sha256: &str,
     repaired_sha256: &str,
 ) -> CognitionResult<String> {
-    crate::cognition::sources::projection_hash_for_graph(vec![
-        Value::String("candidate-input-repair".into()),
-        Value::String(window_ref.into()),
-        Value::String(prior_sha256.into()),
-        Value::String(repaired_sha256.into()),
-    ])
+    crate::cognition::sources::projection_hash_for_graph(&(
+        "candidate-input-repair",
+        window_ref,
+        prior_sha256,
+        repaired_sha256,
+    ))
 }
 
 fn stringify(value: &Value) -> CognitionResult<String> {

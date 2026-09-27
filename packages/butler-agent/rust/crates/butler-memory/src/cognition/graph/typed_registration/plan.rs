@@ -1,5 +1,4 @@
 use rusqlite::Connection;
-use serde_json::Value;
 
 use super::{TypedRegistrationInput, source_changed};
 use crate::cognition::{CognitionResult, MEMORY_SOURCE_WINDOW_BYTES, sources};
@@ -7,17 +6,17 @@ use crate::cognition::{CognitionResult, MEMORY_SOURCE_WINDOW_BYTES, sources};
 pub(super) fn validate(input: &TypedRegistrationInput<'_>) -> CognitionResult<()> {
     let owner = input.owner;
     let plan = input.plan;
-    let episode_id = sources::projection_hash_for_graph(vec![
-        Value::String("typed-memory-record".into()),
-        Value::String(owner.source_kind.into()),
-        Value::String(owner.record_id.clone()),
-    ])?;
-    let job_id = sources::projection_hash_for_graph(vec![
-        Value::String("memory-projection".into()),
-        Value::String(episode_id.clone()),
-        Value::String(owner.revision.clone()),
-        Value::String("memory-extract-v3".into()),
-    ])?;
+    let episode_id = sources::projection_hash_for_graph(&(
+        "typed-memory-record",
+        owner.source_kind,
+        &owner.record_id,
+    ))?;
+    let job_id = sources::projection_hash_for_graph(&(
+        "memory-projection",
+        &episode_id,
+        &owner.revision,
+        "memory-extract-v3",
+    ))?;
     if plan.source_key != format!("{}:{}", owner.source_kind, owner.record_id)
         || plan.episode_id != episode_id
         || plan.revision != owner.revision
@@ -54,16 +53,16 @@ pub(super) fn validate(input: &TypedRegistrationInput<'_>) -> CognitionResult<()
         }
         expected_start = end;
         let expected_text = owner.text.get(start..end).ok_or_else(source_changed)?;
-        let source_id = sources::projection_hash_for_graph(vec![
-            Value::String("memory-source".into()),
-            Value::String(episode_id.clone()),
-            Value::String(owner.revision.clone()),
-            Value::String(owner.source_kind.into()),
-            Value::String(owner.record_id.clone()),
-            Value::Number((start as u64).into()),
-            Value::Number((end as u64).into()),
-            Value::String(owner.content_hash.clone()),
-        ])?;
+        let source_id = sources::projection_hash_for_graph(&(
+            "memory-source",
+            &episode_id,
+            &owner.revision,
+            owner.source_kind,
+            &owner.record_id,
+            start as u64,
+            end as u64,
+            &owner.content_hash,
+        ))?;
         if span.text != expected_text
             || row.source_id != source_id
             || row.episode_id != episode_id

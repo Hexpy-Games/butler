@@ -111,7 +111,7 @@ fn turn(
         request,
         outcome.public_assistant_message_id.as_ref(),
     )?;
-    let episode_id = projection_hash(vec!["canonical-conversation-turn".into(), turn_id.into()])?;
+    let episode_id = projection_hash(&("canonical-conversation-turn", turn_id))?;
     plan(PlanInput {
         messages,
         source_key: format!("conversation_turn:{turn_id}"),
@@ -148,10 +148,7 @@ fn standalone(
     if actual_hash != source_hash {
         return Err(error(CognitionCode::MemorySourceChanged));
     }
-    let episode_id = projection_hash(vec![
-        "canonical-conversation-message".into(),
-        message_id.into(),
-    ])?;
+    let episode_id = projection_hash(&("canonical-conversation-message", message_id))?;
     plan(PlanInput {
         messages: vec![message],
         source_key: format!("conversation_message:{message_id}"),
@@ -275,28 +272,28 @@ fn plan(input: PlanInput<'_>) -> Result<CognitionSourcePlan, CognitionSourceErro
         ]);
     }
     revision_parts.push(revision_tail);
-    let revision = projection_hash(revision_parts)?;
-    let job_id = projection_hash(vec![
-        "memory-projection".into(),
-        episode_id.clone().into(),
-        revision.clone().into(),
-        extraction_version.into(),
-    ])?;
+    let revision = projection_hash(&revision_parts)?;
+    let job_id = projection_hash(&(
+        "memory-projection",
+        &episode_id,
+        &revision,
+        extraction_version,
+    ))?;
     let mut rows = Vec::new();
     for scalar in scalars {
         for span in split_historical_source_spans(scalar.text, MEMORY_SOURCE_WINDOW_BYTES) {
-            let source_id = projection_hash(vec![
-                "memory-source".into(),
-                episode_id.clone().into(),
-                revision.clone().into(),
-                "conversation".into(),
-                scalar.message.message.id.clone().into(),
-                scalar.part.id.clone().into(),
-                scalar.pointer.clone().into(),
-                span.start.into(),
-                span.end.into(),
-                scalar.hash.clone().into(),
-            ])?;
+            let source_id = projection_hash(&(
+                "memory-source",
+                &episode_id,
+                &revision,
+                "conversation",
+                &scalar.message.message.id,
+                &scalar.part.id,
+                &scalar.pointer,
+                span.start,
+                span.end,
+                &scalar.hash,
+            ))?;
             rows.push(CognitionSourceRow {
                 source_id,
                 episode_id: episode_id.clone(),

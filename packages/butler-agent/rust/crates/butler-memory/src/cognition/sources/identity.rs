@@ -1,19 +1,15 @@
-use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use super::types::CognitionSourceError;
 use crate::cognition::CognitionCode;
 
+/// SHA-256 of the `JSON.stringify` form of `parts` (a tuple or array), the
+/// identity hash of every projection record.
 pub(in crate::cognition) fn projection_hash(
-    values: Vec<Value>,
+    parts: &(impl serde::Serialize + ?Sized),
 ) -> Result<String, CognitionSourceError> {
-    let json = butler_core::json::stringify(&Value::Array(values)).map_err(|error| {
-        crate::cognition::CognitionError::new(
-            CognitionCode::CognitionSourceJsonError,
-            error.to_string(),
-        )
-        .with_source(error)
-    })?;
+    let value = serde_json::to_value(parts).map_err(json_error)?;
+    let json = butler_core::json::stringify(&value).map_err(json_error)?;
     Ok(sha256(json.as_bytes()))
 }
 

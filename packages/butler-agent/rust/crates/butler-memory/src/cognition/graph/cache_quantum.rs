@@ -236,14 +236,14 @@ fn window_entry(
     let plan: StoredPlan = parse_evidence(window.plan_json.as_deref())?;
     let quoted = quoted_sources(connection, job, &input, &summary.evidence)?;
     let body = summary.text.trim().to_owned();
-    let entry_id = projection_hash_for_graph(vec![
-        json!("hot-cache-window-summary"),
-        json!(job.generation),
-        json!(job.episode_id),
-        json!(window.window_ref),
-        json!(job.revision),
-        json!(body),
-    ])?;
+    let entry_id = projection_hash_for_graph(&(
+        "hot-cache-window-summary",
+        &job.generation,
+        &job.episode_id,
+        &window.window_ref,
+        &job.revision,
+        &body,
+    ))?;
     let mut node_refs = plan
         .refs
         .into_values()

@@ -2,7 +2,7 @@
 
 use chrono::{DateTime, Duration};
 use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::{Value, json};
+use serde_json::json;
 
 use super::{db_error, jobs};
 use crate::cognition::CognitionCode;
@@ -64,16 +64,14 @@ pub(super) fn disposition(
         let next_json =
             butler_core::json::stringify(&serde_json::to_value(next).map_err(json_error)?)
                 .map_err(json_error)?;
-        let next_sha = crate::cognition::sources::projection_hash_for_graph(vec![
-            Value::String("extract-input".into()),
-            Value::String(next_json.clone()),
-        ])?;
-        let recovery = crate::cognition::sources::projection_hash_for_graph(vec![
-            json!("memory-context-revision"),
-            json!(window),
-            json!(row.1),
-            json!(next_sha),
-        ])?;
+        let next_sha =
+            crate::cognition::sources::projection_hash_for_graph(&("extract-input", &next_json))?;
+        let recovery = crate::cognition::sources::projection_hash_for_graph(&(
+            "memory-context-revision",
+            &window,
+            &row.1,
+            &next_sha,
+        ))?;
         let request = json!({"reason":"adjacent_source_context","prior_recovery_revision":row.2,
             "previous_input_json":row.3,"previous_input_sha256":row.1,"next_input_json":next_json,"next_input_sha256":next_sha});
         tx.execute("INSERT INTO memory_projection_attempts(attempt_ref,window_ref,job_id,attempt_count,state,error_code,input_sha256,recorded_at,attempt_kind,provider_invoked,outcome_known,recovery_revision,recovery_request_json) \

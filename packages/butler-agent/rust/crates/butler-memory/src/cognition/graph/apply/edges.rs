@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use rusqlite::{Connection, params};
-use serde_json::{Value, json};
+use serde_json::json;
 
 use super::{resolve_quotes, stringify};
 use crate::cognition::CognitionCode;
@@ -37,13 +37,7 @@ pub(super) fn add(tx: &Connection, edge_input: EdgeInput<'_>) -> CognitionResult
     let from = plan.refs.get(from).ok_or_else(invalid_ref)?;
     let to = plan.refs.get(to).ok_or_else(invalid_ref)?;
     let claim = plan.refs.get(claim).ok_or_else(invalid_ref)?;
-    let edge = hash(vec![
-        json!("memory-edge"),
-        json!(from),
-        json!(to),
-        json!(relation),
-        json!(claim),
-    ])?;
+    let edge = hash(&("memory-edge", &from, &to, &relation, &claim))?;
     tx.execute("INSERT OR IGNORE INTO edges(edge_id,source_node_id,target_node_id,rel_type,claim_node_id,qualifiers) VALUES(?1,?2,?3,?4,?5,'{}')",params![edge,from,to,relation,claim]).map_err(db_error)?;
     evidence_rows(tx, input, &edge, evidence, basis)
 }
@@ -63,11 +57,7 @@ pub(super) fn identity_match(
         return Ok(());
     };
     let target = candidates.get(node_ref).ok_or_else(candidate_changed)?;
-    let edge = hash(vec![
-        json!("identity-match"),
-        json!(local_id),
-        json!(target),
-    ])?;
+    let edge = hash(&("identity-match", &local_id, &target))?;
     tx.execute("INSERT OR IGNORE INTO edges(edge_id,source_node_id,target_node_id,rel_type,qualifiers) VALUES(?1,?2,?3,'identity_match','{}')",params![edge,local_id,target]).map_err(db_error)?;
     evidence_rows(tx, input, &edge, evidence, "inference")
 }
@@ -87,7 +77,7 @@ pub(super) fn same_claim(
         return Ok(());
     };
     let target = candidates.get(node_ref).ok_or_else(candidate_changed)?;
-    let edge = hash(vec![json!("same-claim"), json!(local_id), json!(target)])?;
+    let edge = hash(&("same-claim", &local_id, &target))?;
     tx.execute("INSERT OR IGNORE INTO edges(edge_id,source_node_id,target_node_id,rel_type,qualifiers) VALUES(?1,?2,?3,'same_claim','{}')",params![edge,local_id,target]).map_err(db_error)?;
     evidence_rows(tx, input, &edge, evidence, "inference")
 }
@@ -115,7 +105,7 @@ pub(super) fn refinements_and_corrections(
             if original == bound {
                 continue;
             }
-            let edge = hash(vec![json!("refines"), json!(bound), json!(original)])?;
+            let edge = hash(&("refines", &bound, &original))?;
             tx.execute("INSERT OR IGNORE INTO edges(edge_id,source_node_id,target_node_id,rel_type,claim_node_id,qualifiers) VALUES(?1,?2,?3,'refines',?2,'{}')",params![edge,bound,original]).map_err(db_error)?;
             evidence_rows(tx, input, &edge, &claim.evidence, "inference")?;
         }
@@ -130,13 +120,13 @@ pub(super) fn refinements_and_corrections(
             .refs
             .get(&correction.replacement_claim_ref)
             .ok_or_else(invalid_ref)?;
-        let edge = hash(vec![
-            json!("memory-edge"),
-            json!(replacement_id),
-            json!(correction.previous_claim_ref),
-            json!(correction.relation),
-            json!(replacement_id),
-        ])?;
+        let edge = hash(&(
+            "memory-edge",
+            &replacement_id,
+            &correction.previous_claim_ref,
+            &correction.relation,
+            &replacement_id,
+        ))?;
         tx.execute("INSERT OR IGNORE INTO edges(edge_id,source_node_id,target_node_id,rel_type,claim_node_id,qualifiers,valid_from) VALUES(?1,?2,?3,?4,?2,?5,?6)",params![edge,replacement_id,correction.previous_claim_ref,correction.relation,stringify(&json!({"effective_at":correction.effective_at}))?,correction.effective_at]).map_err(db_error)?;
         evidence_rows(tx, input, &edge, &correction.evidence, &replacement.basis)?;
     }
@@ -156,8 +146,8 @@ fn evidence_rows(
     }
     Ok(())
 }
-fn hash(value: Vec<Value>) -> CognitionResult<String> {
-    crate::cognition::sources::projection_hash_for_graph(value)
+fn hash(parts: &(impl serde::Serialize + ?Sized)) -> CognitionResult<String> {
+    crate::cognition::sources::projection_hash_for_graph(parts)
 }
 fn invalid_ref() -> CognitionError {
     CognitionError::new(

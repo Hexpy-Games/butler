@@ -201,8 +201,8 @@ fn integer_byte_offset(value: f64) -> CognitionResult<i64> {
     }
 }
 
-fn digest(values: Vec<Value>) -> CognitionResult<String> {
-    crate::cognition::sources::projection_hash_for_graph(values)
+fn digest(parts: &(impl serde::Serialize + ?Sized)) -> CognitionResult<String> {
+    crate::cognition::sources::projection_hash_for_graph(parts)
 }
 
 fn json_array(values: &[String]) -> CognitionResult<String> {

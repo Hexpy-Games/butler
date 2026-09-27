@@ -115,10 +115,7 @@ pub(super) fn pin_input(
     migration_note: Option<&str>,
 ) -> CognitionResult<()> {
     let json = stringify(input)?;
-    let sha = crate::cognition::sources::projection_hash_for_graph(vec![
-        Value::String("extract-input".into()),
-        Value::String(json.clone()),
-    ])?;
+    let sha = crate::cognition::sources::projection_hash_for_graph(&("extract-input", &json))?;
     let changed_rows = connection
         .execute(
             "UPDATE memory_projection_windows SET \

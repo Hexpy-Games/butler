@@ -1,7 +1,7 @@
 //! Node vector projection and unit registration.
 
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::collections::HashSet;
 
 use super::super::{
@@ -93,23 +93,19 @@ pub(super) fn register(
         });
         let claim = claim(tx, &node.id)?;
         let projection = node_projection(&node.node_type, &label, &claim, &aliases)?;
-        let node_revision = digest(vec![
-            json!("node-vector"),
-            json!(node.id),
+        let node_revision = digest(&(
+            "node-vector",
+            &node.id,
             option_value(project_id),
-            json!(node.origin_kind),
-            json!(projection),
-        ])?;
+            &node.origin_kind,
+            &projection,
+        ))?;
         let source_ids = node_source_ids(tx, &node.id, episode_id, revision, &node.origin_kind)?;
         match chunks(&projection, NODE_CHUNK_BYTES) {
             Ok(chunks) => {
                 for (ordinal, text) in chunks.into_iter().enumerate() {
-                    let chunk_revision = digest(vec![
-                        json!("node-vector-chunk"),
-                        json!(node_revision),
-                        json!(ordinal),
-                        json!(text),
-                    ])?;
+                    let chunk_revision =
+                        digest(&("node-vector-chunk", &node_revision, &ordinal, &text))?;
                     let unit_id = vector_unit_id(job_id, "node", &node.id, &chunk_revision)?;
                     desired.insert(unit_id.clone());
                     tx.execute(
@@ -138,8 +134,7 @@ pub(super) fn register(
                 }
             }
             Err(()) => {
-                let chunk_revision =
-                    digest(vec![json!("node-vector-oversized"), json!(node_revision)])?;
+                let chunk_revision = digest(&("node-vector-oversized", &node_revision))?;
                 let unit_id = vector_unit_id(job_id, "node", &node.id, &chunk_revision)?;
                 desired.insert(unit_id.clone());
                 tx.execute(
