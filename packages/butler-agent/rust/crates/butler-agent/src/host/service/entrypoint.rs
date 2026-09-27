@@ -176,10 +176,11 @@ async fn run(
 fn repair_cli_launcher(config: &ServiceConfiguration, logs: ServiceLogMode) {
     use crate::host::service::cli_launcher::{LauncherRepair, repair};
     match repair(&config.data_root, &config.installation) {
-        Ok(LauncherRepair::Absent | LauncherRepair::Current) => {}
+        Ok(LauncherRepair::Absent | LauncherRepair::NotInstalled | LauncherRepair::Current) => {}
         Ok(LauncherRepair::Updated) => logs.write("[native-cli] launcher updated"),
-        Ok(LauncherRepair::ReplacedForeign) => {
-            logs.write("[native-cli] stale launcher replaced (kept as bin/butler.previous)");
+        Ok(LauncherRepair::ReplacedStale) => logs.write("[native-cli] stale launcher replaced"),
+        Ok(LauncherRepair::Foreign) => {
+            logs.write("[native-cli] bin/butler is not a Butler launcher; left unchanged");
         }
         Err(error) => logs.write(&format!(
             "[native-cli] launcher repair failed kind={:?}",
