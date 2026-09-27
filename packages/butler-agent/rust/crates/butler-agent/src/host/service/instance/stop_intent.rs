@@ -42,22 +42,13 @@ pub(crate) enum StopRequester {
 }
 
 impl StopRequester {
-    /// Parses the `--requested-by` option value.
+    /// Parses the `--requested-by` option value, spelled as on the wire.
     pub(crate) fn parse(value: &str) -> Option<Self> {
         match value {
             "cli" => Some(Self::Cli),
             "app" => Some(Self::App),
             "mcp" => Some(Self::Mcp),
             _ => None,
-        }
-    }
-
-    /// The option and wire spelling.
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::Cli => "cli",
-            Self::App => "app",
-            Self::Mcp => "mcp",
         }
     }
 }
@@ -215,8 +206,13 @@ mod tests {
                 "requested_at": "2026-09-28T01:02:03.456Z",
             })
         );
+        // The `--requested-by` spelling is the wire spelling.
         for requester in [StopRequester::Cli, StopRequester::App, StopRequester::Mcp] {
-            assert_eq!(StopRequester::parse(requester.as_str()), Some(requester));
+            let wire = serde_json::to_value(requester).unwrap();
+            assert_eq!(
+                StopRequester::parse(wire.as_str().unwrap()),
+                Some(requester)
+            );
         }
         assert_eq!(StopRequester::parse("launchd"), None);
     }
