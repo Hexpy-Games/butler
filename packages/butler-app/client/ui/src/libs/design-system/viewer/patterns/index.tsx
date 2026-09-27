@@ -66,7 +66,7 @@ export const PATTERNS: PatternDefinition[] = [
     title: "Korean typography",
     summary: "Korean wraps between words (keep-all), never inside one; long unbroken tokens such as paths and URLs still wrap instead of overflowing.",
     rules: [
-      "Set lang on the root; :root:lang(ko) applies word-break: keep-all and overflow-wrap globally.",
+      "Set lang on the root (or on a Korean subtree); :lang(ko) applies word-break: keep-all and overflow-wrap.",
       "Never add word-break overrides per component; write copy that fits instead.",
       "Check every screen in KO: labels are often longer and particles attach to words.",
     ],

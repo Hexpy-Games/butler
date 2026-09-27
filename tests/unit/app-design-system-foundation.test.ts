@@ -771,8 +771,9 @@ describe("motion tokens", () => {
 describe("Korean typography", () => {
   test("Korean text keeps words whole with an overflow-wrap safety net", () => {
     const tokens = read(`${uiSrc}/libs/design-system/tokens.css`);
+    // Every lang="ko" subtree, not only the root: a Korean message in an English window wraps the same way.
     expect(tokens).toMatch(
-      /:root:lang\(ko\) \{\s*word-break: keep-all;\s*overflow-wrap: break-word;\s*\}/u,
+      /\n:lang\(ko\) \{\s*word-break: keep-all;\s*overflow-wrap: break-word;\s*\}/u,
     );
   });
 });

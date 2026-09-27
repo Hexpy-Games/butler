@@ -1,7 +1,7 @@
 import type { ShowcaseEntry } from "../showcase/collectShowcaseEntries";
 import { decisionGuide } from "./decisionGuide";
-import { TOKEN_CATEGORIES, type TokenEntry } from "./foundations/tokenCatalog";
-import { TOKEN_CATEGORY_TITLES } from "./pageTrail";
+import { chapterForToken, chapterPage, FOUNDATION_CHAPTERS } from "./foundations/chapters";
+import type { TokenEntry } from "./foundations/tokenCatalog";
 import { PATTERNS } from "./patterns";
 import { RECIPES } from "./recipes";
 
@@ -19,7 +19,7 @@ export interface SearchItem {
 
 const PAGES: Array<[string, string, string]> = [
   ["overview", "Overview", "Start"], ["guide", "Decision guide", "I need X → use Y"], ["recipes", "Build a screen", "Recipes"],
-  ["foundations", "Foundations", "All tokens"], ["motion", "Motion", "Durations, easings and live demos"],
+  ["foundations", "Foundations", "The guidebook"], ["motion", "Motion", "Durations, easings and live demos"],
   ["components", "Components", "Gallery"], ["blocks", "Blocks", "Gallery"], ["patterns", "Patterns", "Composition patterns"],
   ["icons", "Icons", "Icon set"],
 ];
@@ -30,9 +30,9 @@ export function tokenAnchor(name: string): string {
 
 export function buildSearchIndex(entries: ShowcaseEntry[], tokens: TokenEntry[]): SearchItem[] {
   const items: SearchItem[] = PAGES.map(([id, title, subtitle]) => ({ id: `page:${id}`, kind: "page", title, subtitle, target: id, text: `${title} ${subtitle}` }));
-  for (const category of TOKEN_CATEGORIES) {
-    const title = TOKEN_CATEGORY_TITLES[category] ?? category;
-    items.push({ id: `page:foundations/${category}`, kind: "page", title, subtitle: "Foundations", target: `foundations/${category}`, text: `${title} tokens` });
+  for (const chapter of FOUNDATION_CHAPTERS) {
+    if (chapter.id === "motion") continue;
+    items.push({ id: `page:foundations/${chapter.id}`, kind: "page", title: chapter.title, subtitle: `Foundations ${chapter.number}`, target: chapterPage(chapter), text: `${chapter.title} ${chapter.summary}` });
   }
   for (const entry of entries) {
     items.push({
@@ -47,7 +47,7 @@ export function buildSearchIndex(entries: ShowcaseEntry[], tokens: TokenEntry[])
     items.push({ id: `recipe:${recipe.id}`, kind: "recipe", title: recipe.title, subtitle: "Build a screen", target: `recipes#recipe-${recipe.id}`, text: `${recipe.title} ${recipe.description}` });
   }
   for (const token of tokens) {
-    items.push({ id: `token:${token.name}`, kind: "token", title: token.name, subtitle: `Token · ${token.group}`, target: `foundations/${token.category}#${tokenAnchor(token.name)}`, text: `${token.name} ${token.group} ${token.light}` });
+    items.push({ id: `token:${token.name}`, kind: "token", title: token.name, subtitle: `Token · ${token.group}`, target: `${chapterPage(chapterForToken(token))}#${tokenAnchor(token.name)}`, text: `${token.name} ${token.group} ${token.light}` });
   }
   decisionGuide(entries).forEach((row, index) => {
     items.push({ id: `guide:${index}`, kind: "guide", title: `${row.need} → ${row.use}`, subtitle: "Decision guide", target: row.target, text: `${row.need} ${row.use}` });

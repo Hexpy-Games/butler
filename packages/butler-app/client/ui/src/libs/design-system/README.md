@@ -99,4 +99,5 @@ bun run render Button NavRow CollapsibleNavGroup
 bun run render Button NavRow --viewport=iphone
 bun run render Button NavRow --viewport=mobile
 bun run render all --viewport=all
+bun run render page:foundations/typography --full-page --locale=ko --theme=light,dark
 ```
