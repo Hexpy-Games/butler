@@ -31,8 +31,9 @@ use butler_turn::btcc::storage::{
     ToolJournalStart,
 };
 use butler_turn::btcc::{
-    AgentLoop, ModelRoundError, ModelRouteEvent, ModelRouteEventKind, ModelRouteEventWrite, ModelRouteRetryConfig, ModelRouteWrite,
-    PortFuture, TurnModelExecutionFactory, TurnSteeringPort, TurnStore,
+    AgentLoop, ModelRoundError, ModelRouteEvent, ModelRouteEventKind, ModelRouteEventWrite,
+    ModelRouteRetryConfig, ModelRouteWrite, PortFuture, TurnModelExecutionFactory,
+    TurnSteeringPort, TurnStore,
 };
 
 use butler_turn::btcc::agent_loop::contracts::SteeringObservation;

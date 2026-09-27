@@ -132,7 +132,8 @@ pub(super) async fn execute(
         max_matches_reached: false,
         max_output_reached: false,
         stopped_within_candidate: false,
-        elapsed_budget_reached: listed.stopped_by == Some("elapsed_ms")
+        elapsed_budget_reached: listed.stopped_by
+            == Some(butler_turn::workspace::ListStop::ElapsedMs)
             || Instant::now() >= deadline,
         window_start,
         window_end,

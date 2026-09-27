@@ -13,11 +13,11 @@ use super::contracts::{
     AttemptHistory, ContextSizing, ContextSizingRequest, FailureDisposition, FailureRecord,
     ModelRouteRetryConfig, RouteCandidate, RouteState,
 };
-use crate::btcc::{AttemptFailure, ModelRouteEventKind, RouteEventStatus};
 use super::execution::ViewState;
 use super::support::*;
 use super::{failure, hooks::RouteHooks, projection};
 use crate::btcc::BtccCode;
+use crate::btcc::{AttemptFailure, ModelRouteEventKind, RouteEventStatus};
 
 pub(super) struct RoutedRound<'a> {
     pub(super) base: &'a dyn ModelRoundPort,
@@ -153,13 +153,19 @@ impl RoutedRound<'_> {
                     continue;
                 }
             }
-            if self.start_attempt(route, &cursor, &candidate).await? != RouteEventStatus::Recorded
-            {
+            if self.start_attempt(route, &cursor, &candidate).await? != RouteEventStatus::Recorded {
                 cursor.loaded_key = None;
                 continue;
             }
-            match self.dispatch(route, &mut cursor, &candidate, &request).await {
-                Ok(result) => return self.accept(route, cursor, candidate, &request, result).await,
+            match self
+                .dispatch(route, &mut cursor, &candidate, &request)
+                .await
+            {
+                Ok(result) => {
+                    return self
+                        .accept(route, cursor, candidate, &request, result)
+                        .await;
+                }
                 Err(error) => {
                     self.recover(route, &mut cursor, &candidate, &key, &request, error)
                         .await?;
@@ -229,8 +235,12 @@ impl RoutedRound<'_> {
         match latest.disposition {
             FailureDisposition::Surface => Err(self.surface_recovered(latest).await),
             FailureDisposition::Retry if !exhausted => {
-                self.backoff(cursor.attempt - 1, route.retry_ceiling, &mut cursor.recovery)
-                    .await?;
+                self.backoff(
+                    cursor.attempt - 1,
+                    route.retry_ceiling,
+                    &mut cursor.recovery,
+                )
+                .await?;
                 Ok(Flow::Dispatch)
             }
             FailureDisposition::Retry if is_last_candidate(route) => {

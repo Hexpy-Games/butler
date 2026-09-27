@@ -12,6 +12,24 @@ use tokio::sync::oneshot;
 
 const MARKER_SCHEMA: &str = "butler.session-workspace-binding.v1";
 
+/// Whether a canonicalized path must be a directory.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DirectoryCheck {
+    Any,
+    Required,
+}
+
+/// A plan that works in `workspace_path` directly, without a session worktree.
+fn unmanaged_plan(input: RelocationWorkspaceInput, workspace_path: String) -> RelocationWorkspacePlan {
+    RelocationWorkspacePlan {
+        runtime_session_id: input.runtime_session_id,
+        operation_id: input.operation_id,
+        workspace_path,
+        marker: None,
+        created: false,
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct RelocationWorkspaceInput {
     pub runtime_session_id: String,
@@ -107,53 +125,26 @@ impl Owner {
         result
     }
 
+    /// Plans where a relocated session will work: the Butler data directory
+    /// without a project, the project itself outside git, else a deterministic
+    /// session worktree owned by the plan.
     async fn plan_relocation_unlocked(
         &self,
         input: RelocationWorkspaceInput,
     ) -> WorkspaceResult<RelocationWorkspacePlan> {
-        let Some(project_path) = input.project_path.as_deref() else {
-            let data = self.butler_data.clone();
-            let workspace_path = self
-                .files
-                .run(move || path::canonical_path(&data.to_string_lossy()))
-                .await
-                .map_err(WorkspaceError::from)?
-                .map_err(io_error)?
-                .to_string_lossy()
-                .into_owned();
-            return Ok(RelocationWorkspacePlan {
-                runtime_session_id: input.runtime_session_id,
-                operation_id: input.operation_id,
-                workspace_path,
-                marker: None,
-                created: false,
-            });
+        let Some(project_path) = input.project_path.clone() else {
+            let data = self.butler_data.to_string_lossy().into_owned();
+            let workspace_path = self.canonical_directory(data, DirectoryCheck::Any).await?;
+            return Ok(unmanaged_plan(input, workspace_path));
         };
-        let project_path = project_path.to_owned();
         let canonical_project = self
-            .files
-            .run(move || {
-                let canonical = path::canonical_path(&project_path)?;
-                if !canonical.is_dir() {
-                    return Err(std::io::Error::other("workspace is not a directory"));
-                }
-                Ok(canonical)
-            })
-            .await
-            .map_err(WorkspaceError::from)?
-            .map_err(io_error)?;
-        let canonical_project = canonical_project.to_string_lossy().into_owned();
+            .canonical_directory(project_path, DirectoryCheck::Required)
+            .await?;
         let git = self.git();
         let anchor = match git.repository_anchor(&canonical_project).await? {
             Ok(anchor) => anchor,
             Err(WorkspaceCode::GitRepositoryRequired) => {
-                return Ok(RelocationWorkspacePlan {
-                    runtime_session_id: input.runtime_session_id,
-                    operation_id: input.operation_id,
-                    workspace_path: canonical_project,
-                    marker: None,
-                    created: false,
-                });
+                return Ok(unmanaged_plan(input, canonical_project));
             }
             Err(code) => return Err(workspace_error(code)),
         };
@@ -161,39 +152,12 @@ impl Owner {
             "{}:{}",
             input.runtime_session_id, input.operation_id
         ));
-        let data = self.butler_data.clone();
-        let session = input.runtime_session_id.clone();
-        let branch_for_path = branch.clone();
-        let project_name = input.project_name.clone();
-        let target = self
-            .files
-            .run(move || {
-                path::deterministic_target(
-                    &data,
-                    &session,
-                    &branch_for_path,
-                    project_name.as_deref(),
-                )
-            })
-            .await
-            .map_err(WorkspaceError::from)?
-            .map_err(io_error)?;
-        let entries = git
-            .list(&anchor, self.shutdown.child_token())
+        let target = self.deterministic_target(&input, &branch).await?;
+        if !self
+            .worktree_bound_at(&git, &anchor, &branch, &target)
             .await?
-            .map_err(workspace_error)?;
-        let mut existing = false;
-        for entry in entries {
-            if entry.branch.as_deref() == Some(branch.as_str())
-                && git
-                    .same_path(&entry.path.to_string_lossy(), &target)
-                    .await?
-            {
-                existing = true;
-                break;
-            }
-        }
-        if !existing && git.occupied(&target).await? {
+            && git.occupied(&target).await?
+        {
             return Err(workspace_error(WorkspaceCode::WorktreeTargetOccupied));
         }
         let bound_at = self
@@ -214,6 +178,68 @@ impl Owner {
             // it already exists or is created by the following prepare step.
             created: true,
         })
+    }
+
+    async fn canonical_directory(
+        &self,
+        path: String,
+        check: DirectoryCheck,
+    ) -> WorkspaceResult<String> {
+        let canonical = self
+            .files
+            .run(move || {
+                let canonical = path::canonical_path(&path)?;
+                if check == DirectoryCheck::Required && !canonical.is_dir() {
+                    return Err(std::io::Error::other("workspace is not a directory"));
+                }
+                Ok(canonical)
+            })
+            .await
+            .map_err(WorkspaceError::from)?
+            .map_err(io_error)?;
+        Ok(canonical.to_string_lossy().into_owned())
+    }
+
+    async fn deterministic_target(
+        &self,
+        input: &RelocationWorkspaceInput,
+        branch: &str,
+    ) -> WorkspaceResult<String> {
+        let data = self.butler_data.clone();
+        let session = input.runtime_session_id.clone();
+        let branch = branch.to_owned();
+        let project_name = input.project_name.clone();
+        self.files
+            .run(move || {
+                path::deterministic_target(&data, &session, &branch, project_name.as_deref())
+            })
+            .await
+            .map_err(WorkspaceError::from)?
+            .map_err(io_error)
+    }
+
+    /// Whether `target` is already a linked worktree of `branch`.
+    async fn worktree_bound_at(
+        &self,
+        git: &GitWorktrees<'_>,
+        anchor: &str,
+        branch: &str,
+        target: &str,
+    ) -> WorkspaceResult<bool> {
+        let entries = git
+            .list(anchor, self.shutdown.child_token())
+            .await?
+            .map_err(workspace_error)?;
+        for entry in entries {
+            if entry.branch.as_deref() == Some(branch)
+                && git
+                    .same_path(&entry.path.to_string_lossy(), target)
+                    .await?
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     async fn prepare_relocation(

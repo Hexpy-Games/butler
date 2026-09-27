@@ -514,16 +514,12 @@ impl Supervisor<'_> {
                 Ok(Err(error)) => error.to_string(),
                 Err(error) => error.to_string(),
             };
-            stream_error = Some(CommandError::new(
-                CommandCode::CommandStreamFailed,
-                failure,
-            ));
+            stream_error = Some(CommandError::new(CommandCode::CommandStreamFailed, failure));
         }
         let exit = if self.stop.interrupted() {
             None
         } else {
-            pipeline_exit(&self.statuses)
-                .or((dialect == Dialect::Legacy).then_some(1))
+            pipeline_exit(&self.statuses).or((dialect == Dialect::Legacy).then_some(1))
         };
         result(self.started, self.captured, exit, self.stop, stream_error)
     }

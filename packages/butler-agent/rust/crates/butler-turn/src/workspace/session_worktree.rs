@@ -20,7 +20,7 @@ use super::{
     Commands, RebindWorkspaceInput, RebindWorkspaceResult, SessionBindingStore, WorkspaceClock,
     WorkspaceFiles, WorkspaceReference, WorkspaceResult,
 };
-use git::GitWorktrees;
+use git::{GitWorktrees, Validated};
 use path::{marker, normalize_ref, public_label, safe_ref};
 
 use crate::workspace::WorkspaceCode;
@@ -218,6 +218,8 @@ impl Owner {
         }
     }
 
+    /// Binds the session to a linked worktree: validates the request, resolves
+    /// or creates the worktree, inspects it and persists the rebinding.
     async fn bind_unlocked(
         &self,
         input: BindSessionWorktreeInput,
@@ -225,23 +227,10 @@ impl Owner {
         abort: CancellationToken,
     ) -> WorkspaceResult<BindSessionWorktreeResult> {
         let action = input.action;
-        if !safe_ref(branch, false) {
-            return Ok(failure(action, None, "invalid_branch"));
-        }
-        if action == SessionWorktreeAction::Select && input.start_point.is_some() {
-            return Ok(failure(action, Some(branch), "invalid_start_point"));
-        }
-        let start_point = input.start_point.as_deref().map(normalize_ref);
-        if action == SessionWorktreeAction::Create
-            && start_point
-                .as_ref()
-                .is_some_and(|value| !safe_ref(value, true))
-        {
-            return Ok(failure(action, Some(branch), "invalid_start_point"));
-        }
-        if abort.is_cancelled() {
-            return Ok(failure(action, Some(branch), "cancelled"));
-        }
+        let start_point = match validate_request(&input, branch, &abort) {
+            Ok(start_point) => start_point,
+            Err(failed) => return Ok(failed),
+        };
         let Some(binding) = self.bindings.get_by_session_id(&input.session_id).await? else {
             return Ok(failure(action, Some(branch), "session_binding_required"));
         };
@@ -252,187 +241,76 @@ impl Owner {
                 "session_workspace_unavailable",
             ));
         };
+        let attempt = BindAttempt {
+            git: GitWorktrees::new(&self.commands, &self.files, &self.host_environment),
+            action,
+            branch,
+            abort,
+        };
         let anchor_path = existing_marker
             .as_ref()
             .map_or(binding.workspace_path.as_str(), |value| {
                 value.repository_anchor_path.as_str()
             });
-        let git = GitWorktrees::new(&self.commands, &self.files, &self.host_environment);
-        let anchor = match git.repository_anchor(anchor_path).await? {
+        let anchor = match attempt.git.repository_anchor(anchor_path).await? {
             Ok(path) => path,
-            Err(code) => return Ok(failure(action, Some(branch), code.as_str())),
+            Err(code) => return Ok(attempt.fail(code.as_str())),
         };
-        let target = if action == SessionWorktreeAction::Create {
-            let data = self.butler_data.clone();
-            let session = input.session_id.clone();
-            let branch_for_path = branch.to_owned();
-            let project = input.project_name.clone();
-            let prepared = self
-                .files
-                .run(move || {
-                    path::prepare_target(&data, &session, &branch_for_path, project.as_deref())
-                })
-                .await;
-            match prepared {
-                Ok(Ok(path)) => Some(path),
-                _ => {
-                    return Ok(failure(action, Some(branch), "worktree_target_occupied"));
-                }
-            }
-        } else {
-            None
+        let created_path = match action {
+            SessionWorktreeAction::Create => match self.prepare_target_path(&input, branch).await {
+                Some(path) => Some(path),
+                None => return Ok(attempt.fail("worktree_target_occupied")),
+            },
+            SessionWorktreeAction::Select => None,
         };
-        if let Some(code) = git
+        if let Some(code) = attempt
+            .git
             .failure(
                 &anchor,
                 &["check-ref-format", "--branch", branch],
-                abort.clone(),
+                attempt.abort.clone(),
                 WorkspaceCode::InvalidBranch,
             )
             .await?
         {
-            return self
-                .cancel_or_fail(
-                    &git,
-                    action,
-                    branch,
-                    target.as_deref(),
-                    &anchor,
-                    code.as_str(),
-                )
+            return attempt
+                .cancel_or_fail(created_path.as_deref(), &anchor, code.as_str())
                 .await;
         }
-        let entries = match git.list(&anchor, abort.clone()).await? {
-            Ok(entries) => entries,
-            Err(code) => return Ok(failure(action, Some(branch), code.as_str())),
+        let target = match attempt
+            .resolve_target(&anchor, created_path, start_point)
+            .await?
+        {
+            Ok(target) => target,
+            Err(failed) => return Ok(failed),
         };
-        let branch_entries: Vec<_> = entries
-            .iter()
-            .filter(|entry| entry.branch.as_deref() == Some(branch))
-            .collect();
         let same_marker = existing_marker
             .as_ref()
             .is_some_and(|value| value.branch == branch);
-        let (target, reusable, idempotent) = if action == SessionWorktreeAction::Select {
-            let Some(selected) = branch_entries.first() else {
-                return Ok(failure(action, Some(branch), "linked_worktree_not_found"));
-            };
-            let path = selected.path.to_string_lossy().into_owned();
-            let same = same_marker && git.same_path(&path, &binding.workspace_path).await?;
-            (path, true, same)
-        } else {
-            let Some(target) = target else {
-                return Ok(failure(action, Some(branch), "git_operation_failed"));
-            };
-            let mut target_entry = None;
-            for entry in &entries {
-                if git
-                    .same_path(&entry.path.to_string_lossy(), &target)
-                    .await?
-                {
-                    target_entry = Some(entry);
-                    break;
-                }
-            }
-            if !branch_entries.is_empty()
-                && target_entry.is_none_or(|entry| entry.branch.as_deref() != Some(branch))
-            {
-                return Ok(failure(action, Some(branch), "branch_already_checked_out"));
-            }
-            if target_entry.is_some_and(|entry| entry.branch.as_deref() == Some(branch)) {
-                let same = same_marker && git.same_path(&binding.workspace_path, &target).await?;
-                (target, true, same)
-            } else if target_entry.is_some() || git.occupied(&target).await? {
-                return Ok(failure(action, Some(branch), "worktree_target_occupied"));
-            } else {
-                let exists = git
-                    .local_branch_exists(&anchor, branch, abort.clone())
-                    .await?;
-                let args = if exists {
-                    vec![
-                        "worktree".into(),
-                        "add".into(),
-                        target.clone(),
-                        branch.into(),
-                    ]
-                } else {
-                    vec![
-                        "worktree".into(),
-                        "add".into(),
-                        "-b".into(),
-                        branch.into(),
-                        target.clone(),
-                        start_point.unwrap_or_else(|| "HEAD".into()),
-                    ]
-                };
-                let created = git.run(&anchor, args, abort.clone()).await?;
-                if let Some(code) =
-                    git::command_failure(&created, WorkspaceCode::GitOperationFailed)
-                {
-                    return self
-                        .cancel_or_fail(&git, action, branch, Some(&target), &anchor, code.as_str())
-                        .await;
-                }
-                (target, false, false)
-            }
-        };
-        let validated = match git
-            .validate(&anchor, &target, branch, abort.clone())
-            .await?
-        {
-            Ok(value) => value,
-            Err(code) => {
-                if code == WorkspaceCode::Cancelled
-                    && !reusable
-                    && action == SessionWorktreeAction::Create
-                {
-                    return self
-                        .cancel_or_fail(&git, action, branch, Some(&target), &anchor, code.as_str())
-                        .await;
-                }
-                return Ok(failure(action, Some(branch), code.as_str()));
-            }
-        };
-        let source_dirty = match git.dirty(&anchor, abort.clone()).await? {
-            Ok(value) => value,
-            Err(code) => {
-                if code == WorkspaceCode::Cancelled
-                    && !reusable
-                    && action == SessionWorktreeAction::Create
-                {
-                    return self
-                        .cancel_or_fail(&git, action, branch, Some(&target), &anchor, code.as_str())
-                        .await;
-                }
-                return Ok(failure(action, Some(branch), code.as_str()));
-            }
+        let idempotent = target.origin == TargetOrigin::Reused
+            && same_marker
+            && attempt
+                .git
+                .same_path(&target.path, &binding.workspace_path)
+                .await?;
+        let (validated, source_dirty) = match attempt.inspect(&anchor, &target).await? {
+            Ok(inspected) => inspected,
+            Err(failed) => return Ok(failed),
         };
         let now = self
             .clock
             .iso_from_epoch_millis(self.clock.now_epoch_millis())?;
         let mut metadata = binding.metadata.unwrap_or_else(Map::new);
         metadata.insert("sessionWorkspace".into(), marker(&anchor, branch, &now));
-        let result = self
-            .bindings
-            .rebind_workspace(RebindWorkspaceInput {
-                session_id: input.session_id,
-                expected_updated_at: binding.updated_at,
-                workspace_path: validated.path.clone(),
-                metadata,
-                updated_at: Some(now),
-            })
-            .await;
-        let Ok(persisted) = result else {
-            return Ok(failure(action, Some(branch), "binding_persist_failed"));
+        let rebind = RebindWorkspaceInput {
+            session_id: input.session_id,
+            expected_updated_at: binding.updated_at,
+            workspace_path: validated.path.clone(),
+            metadata,
+            updated_at: Some(now),
         };
-        match persisted {
-            RebindWorkspaceResult::Missing => {
-                return Ok(failure(action, Some(branch), "session_binding_required"));
-            }
-            RebindWorkspaceResult::Changed(_) => {
-                return Ok(failure(action, Some(branch), "session_binding_changed"));
-            }
-            RebindWorkspaceResult::Applied(_) => {}
+        if let Some(code) = self.persist_rebinding(rebind).await {
+            return Ok(attempt.fail(code));
         }
         input
             .workspace_reference
@@ -450,21 +328,242 @@ impl Owner {
         })
     }
 
+    /// Reserves the directory a created worktree will live in; `None` when it
+    /// cannot be prepared.
+    async fn prepare_target_path(
+        &self,
+        input: &BindSessionWorktreeInput,
+        branch: &str,
+    ) -> Option<String> {
+        let data = self.butler_data.clone();
+        let session = input.session_id.clone();
+        let branch = branch.to_owned();
+        let project = input.project_name.clone();
+        let prepared = self
+            .files
+            .run(move || path::prepare_target(&data, &session, &branch, project.as_deref()))
+            .await;
+        match prepared {
+            Ok(Ok(path)) => Some(path),
+            _ => None,
+        }
+    }
+
+    /// Compare-and-swaps the session binding; the failure code when it did not apply.
+    async fn persist_rebinding(&self, rebind: RebindWorkspaceInput) -> Option<&'static str> {
+        match self.bindings.rebind_workspace(rebind).await {
+            Err(_) => Some("binding_persist_failed"),
+            Ok(RebindWorkspaceResult::Missing) => Some("session_binding_required"),
+            Ok(RebindWorkspaceResult::Changed(_)) => Some("session_binding_changed"),
+            Ok(RebindWorkspaceResult::Applied(_)) => None,
+        }
+    }
+}
+
+/// Checks the request before any git work; the normalized start point of a create.
+fn validate_request(
+    input: &BindSessionWorktreeInput,
+    branch: &str,
+    abort: &CancellationToken,
+) -> Result<Option<String>, BindSessionWorktreeResult> {
+    let action = input.action;
+    if !safe_ref(branch, false) {
+        return Err(failure(action, None, "invalid_branch"));
+    }
+    if action == SessionWorktreeAction::Select && input.start_point.is_some() {
+        return Err(failure(action, Some(branch), "invalid_start_point"));
+    }
+    let start_point = input.start_point.as_deref().map(normalize_ref);
+    if action == SessionWorktreeAction::Create
+        && start_point
+            .as_ref()
+            .is_some_and(|value| !safe_ref(value, true))
+    {
+        return Err(failure(action, Some(branch), "invalid_start_point"));
+    }
+    if abort.is_cancelled() {
+        return Err(failure(action, Some(branch), "cancelled"));
+    }
+    Ok(start_point)
+}
+
+/// A bind step's result: a value, or the failure the bind reports.
+type BindStep<T> = WorkspaceResult<Result<T, BindSessionWorktreeResult>>;
+
+/// Whether the bound worktree already existed or this bind created it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TargetOrigin {
+    Reused,
+    Created,
+}
+
+/// The worktree a bind resolves to.
+struct Target {
+    path: String,
+    origin: TargetOrigin,
+}
+
+/// The git side of one bind request.
+struct BindAttempt<'a> {
+    git: GitWorktrees<'a>,
+    action: SessionWorktreeAction,
+    branch: &'a str,
+    abort: CancellationToken,
+}
+
+impl BindAttempt<'_> {
+    fn fail(&self, code: &'static str) -> BindSessionWorktreeResult {
+        failure(self.action, Some(self.branch), code)
+    }
+
+    /// Selects the existing worktree of the branch, or creates (or reuses) the
+    /// one at the prepared path.
+    async fn resolve_target(
+        &self,
+        anchor: &str,
+        created_path: Option<String>,
+        start_point: Option<String>,
+    ) -> BindStep<Target> {
+        let entries = match self.git.list(anchor, self.abort.clone()).await? {
+            Ok(entries) => entries,
+            Err(code) => return Ok(Err(self.fail(code.as_str()))),
+        };
+        let branch_entries: Vec<_> = entries
+            .iter()
+            .filter(|entry| entry.branch.as_deref() == Some(self.branch))
+            .collect();
+        if self.action == SessionWorktreeAction::Select {
+            let Some(selected) = branch_entries.first() else {
+                return Ok(Err(self.fail("linked_worktree_not_found")));
+            };
+            return Ok(Ok(Target {
+                path: selected.path.to_string_lossy().into_owned(),
+                origin: TargetOrigin::Reused,
+            }));
+        }
+        let Some(target) = created_path else {
+            return Ok(Err(self.fail("git_operation_failed")));
+        };
+        let mut target_entry = None;
+        for entry in &entries {
+            if self
+                .git
+                .same_path(&entry.path.to_string_lossy(), &target)
+                .await?
+            {
+                target_entry = Some(entry);
+                break;
+            }
+        }
+        let target_on_branch =
+            target_entry.is_some_and(|entry| entry.branch.as_deref() == Some(self.branch));
+        if !branch_entries.is_empty() && !target_on_branch {
+            return Ok(Err(self.fail("branch_already_checked_out")));
+        }
+        if target_on_branch {
+            return Ok(Ok(Target {
+                path: target,
+                origin: TargetOrigin::Reused,
+            }));
+        }
+        if target_entry.is_some() || self.git.occupied(&target).await? {
+            return Ok(Err(self.fail("worktree_target_occupied")));
+        }
+        self.add_worktree(anchor, target, start_point).await
+    }
+
+    /// `git worktree add` for an existing local branch, or with `-b` from the
+    /// start point (default `HEAD`).
+    async fn add_worktree(
+        &self,
+        anchor: &str,
+        target: String,
+        start_point: Option<String>,
+    ) -> BindStep<Target> {
+        let exists = self
+            .git
+            .local_branch_exists(anchor, self.branch, self.abort.clone())
+            .await?;
+        let args = if exists {
+            vec![
+                "worktree".into(),
+                "add".into(),
+                target.clone(),
+                self.branch.into(),
+            ]
+        } else {
+            vec![
+                "worktree".into(),
+                "add".into(),
+                "-b".into(),
+                self.branch.into(),
+                target.clone(),
+                start_point.unwrap_or_else(|| "HEAD".into()),
+            ]
+        };
+        let created = self.git.run(anchor, args, self.abort.clone()).await?;
+        if let Some(code) = git::command_failure(&created, WorkspaceCode::GitOperationFailed) {
+            return self
+                .cancel_or_fail(Some(&target), anchor, code.as_str())
+                .await
+                .map(Err);
+        }
+        Ok(Ok(Target {
+            path: target,
+            origin: TargetOrigin::Created,
+        }))
+    }
+
+    /// Validates the worktree and reads whether the source checkout is dirty.
+    async fn inspect(&self, anchor: &str, target: &Target) -> BindStep<(Validated, bool)> {
+        let validated = match self
+            .git
+            .validate(anchor, &target.path, self.branch, self.abort.clone())
+            .await?
+        {
+            Ok(value) => value,
+            Err(code) => return self.probe_failed(anchor, target, code).await.map(Err),
+        };
+        match self.git.dirty(anchor, self.abort.clone()).await? {
+            Ok(source_dirty) => Ok(Ok((validated, source_dirty))),
+            Err(code) => self.probe_failed(anchor, target, code).await.map(Err),
+        }
+    }
+
+    /// A cancelled probe of a worktree this bind created may have left a
+    /// partial creation behind; other probe failures report their code.
+    async fn probe_failed(
+        &self,
+        anchor: &str,
+        target: &Target,
+        code: WorkspaceCode,
+    ) -> WorkspaceResult<BindSessionWorktreeResult> {
+        if code == WorkspaceCode::Cancelled
+            && target.origin == TargetOrigin::Created
+            && self.action == SessionWorktreeAction::Create
+        {
+            return self
+                .cancel_or_fail(Some(&target.path), anchor, code.as_str())
+                .await;
+        }
+        Ok(self.fail(code.as_str()))
+    }
+
     async fn cancel_or_fail(
         &self,
-        git: &GitWorktrees<'_>,
-        action: SessionWorktreeAction,
-        branch: &str,
         target: Option<&str>,
         anchor: &str,
         code: &'static str,
     ) -> WorkspaceResult<BindSessionWorktreeResult> {
         if (code == "cancelled" || code == "git_operation_failed")
             && let Some(target) = target
-            && git.partial_creation(anchor, target, branch).await?
+            && self
+                .git
+                .partial_creation(anchor, target, self.branch)
+                .await?
         {
-            return Ok(failure(action, Some(branch), "partial_creation"));
+            return Ok(self.fail("partial_creation"));
         }
-        Ok(failure(action, Some(branch), code))
+        Ok(self.fail(code))
     }
 }

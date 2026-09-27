@@ -21,7 +21,7 @@ pub use commands::{
     StructuredCommandOutput,
 };
 pub use discovery::{
-    WorkspaceListEntry, WorkspaceListInput, WorkspaceListLimits, WorkspaceListOutcome,
+    ListStop, WorkspaceListEntry, WorkspaceListInput, WorkspaceListLimits, WorkspaceListOutcome,
     WorkspaceListRejection, WorkspaceListResult,
 };
 pub use effect_file::{

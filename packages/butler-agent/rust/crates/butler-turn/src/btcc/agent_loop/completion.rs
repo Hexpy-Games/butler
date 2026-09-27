@@ -97,9 +97,9 @@ pub(super) async fn finish_outcome(
     outcome: Option<ToolOutcome>,
 ) -> Result<Option<AgentLoopResult>, AgentLoopError> {
     match outcome {
-        Some(ToolOutcome::Suspend(reason)) => {
-            finish(input, state, Ending::Suspend(reason)).await.map(Some)
-        }
+        Some(ToolOutcome::Suspend(reason)) => finish(input, state, Ending::Suspend(reason))
+            .await
+            .map(Some),
         None => Ok(None),
     }
 }

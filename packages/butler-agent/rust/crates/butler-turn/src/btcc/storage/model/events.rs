@@ -104,7 +104,12 @@ impl EventRow<'_> {
 
 /// The route digest of the written route, else of the persisted one.
 fn route_digest(tx: &Transaction<'_>, write: &ModelRouteEventWrite) -> StorageResult<String> {
-    if let Some(digest) = write.binding.route.get("routeDigest").and_then(Value::as_str) {
+    if let Some(digest) = write
+        .binding
+        .route
+        .get("routeDigest")
+        .and_then(Value::as_str)
+    {
         return Ok(digest.to_owned());
     }
     let route_raw: Option<String> = tx
@@ -247,7 +252,8 @@ pub(in crate::btcc::storage) fn load_history(
             }
             Some(ModelRouteEventKind::AttemptFailed) => {
                 history.failed.push(attempt);
-                if let Some(disposition) = disposition.as_deref().and_then(FailureDisposition::parse)
+                if let Some(disposition) =
+                    disposition.as_deref().and_then(FailureDisposition::parse)
                 {
                     history.failed_details.push(FailureRecord {
                         transport_attempt: attempt,

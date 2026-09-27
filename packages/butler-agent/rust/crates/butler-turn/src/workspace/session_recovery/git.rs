@@ -19,6 +19,28 @@ pub enum ProjectWorkspaceInspection {
     Unavailable { code: &'static str },
 }
 
+/// Runs git commands for one inspection or validation under a shared abort.
+struct GitProbe<'a> {
+    commands: &'a Commands,
+    host_environment: &'a Arc<HashMap<String, String>>,
+    abort: CancellationToken,
+}
+
+impl GitProbe<'_> {
+    async fn run(&self, cwd: &str, args: &[&str]) -> WorkspaceResult<StructuredCommandOutput> {
+        git(
+            self.commands,
+            self.host_environment,
+            cwd,
+            args,
+            self.abort.clone(),
+        )
+        .await
+    }
+}
+
+/// Classifies a project workspace as a plain folder, a git checkout (with
+/// its current branch and dirtiness) or unavailable.
 pub(super) async fn inspect_project_workspace(
     commands: &Commands,
     files: &WorkspaceFiles,
@@ -26,6 +48,7 @@ pub(super) async fn inspect_project_workspace(
     workspace_path: &str,
     abort: CancellationToken,
 ) -> WorkspaceResult<ProjectWorkspaceInspection> {
+    let unavailable = |code| ProjectWorkspaceInspection::Unavailable { code };
     let path = workspace_path.to_owned();
     let exists = files
         .run(move || {
@@ -36,83 +59,62 @@ pub(super) async fn inspect_project_workspace(
         .await
         .map_err(WorkspaceError::from)?;
     if !exists {
-        return Ok(ProjectWorkspaceInspection::Unavailable {
-            code: "git_workspace_unavailable",
-        });
+        return Ok(unavailable("git_workspace_unavailable"));
     }
-    let version = git(
+    let probe = GitProbe {
         commands,
         host_environment,
-        workspace_path,
-        &["--version"],
-        abort.clone(),
-    )
-    .await?;
+        abort,
+    };
+    let version = probe.run(workspace_path, &["--version"]).await?;
     if let Some(code) = command_failure_code(&version, WorkspaceCode::GitWorkspaceUnavailable) {
-        return Ok(ProjectWorkspaceInspection::Unavailable {
-            code: code.as_str(),
-        });
+        return Ok(unavailable(code.as_str()));
     }
-    let probe = git(
-        commands,
-        host_environment,
-        workspace_path,
-        &["rev-parse", "--is-inside-work-tree"],
-        abort.clone(),
-    )
-    .await?;
-    if probe.error.is_none()
-        && (probe.exit_code != Some(0)
-            || butler_core::public_text::trim_js_whitespace(&probe.stdout) != "true")
+    let inside = probe
+        .run(workspace_path, &["rev-parse", "--is-inside-work-tree"])
+        .await?;
+    if inside.error.is_none()
+        && (inside.exit_code != Some(0)
+            || butler_core::public_text::trim_js_whitespace(&inside.stdout) != "true")
     {
         return Ok(ProjectWorkspaceInspection::Folder);
     }
-    if let Some(code) = command_failure_code(&probe, WorkspaceCode::GitWorkspaceUnavailable) {
-        return Ok(ProjectWorkspaceInspection::Unavailable {
-            code: code.as_str(),
-        });
+    if let Some(code) = command_failure_code(&inside, WorkspaceCode::GitWorkspaceUnavailable) {
+        return Ok(unavailable(code.as_str()));
     }
-    let branch = git(
-        commands,
-        host_environment,
-        workspace_path,
-        &["branch", "--show-current"],
-        abort.clone(),
-    )
-    .await?;
+    let branch = probe
+        .run(workspace_path, &["branch", "--show-current"])
+        .await?;
     if command_failure(&branch, WorkspaceCode::GitWorkspaceUnavailable).is_some() {
-        return Ok(ProjectWorkspaceInspection::Unavailable {
-            code: "git_workspace_unavailable",
-        });
+        return Ok(unavailable("git_workspace_unavailable"));
     }
-    let status = git(
-        commands,
-        host_environment,
-        workspace_path,
-        &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
-        abort,
-    )
-    .await?;
+    let status = probe.run(workspace_path, &STATUS_ARGS).await?;
     if command_failure(&status, WorkspaceCode::GitWorkspaceUnavailable).is_some() {
-        return Ok(ProjectWorkspaceInspection::Unavailable {
-            code: "git_workspace_unavailable",
-        });
+        return Ok(unavailable("git_workspace_unavailable"));
     }
-    let branch = butler_core::public_text::trim_js_whitespace(&branch.stdout);
-    let branch: String = branch
-        .chars()
-        .filter(|character| {
-            let code = *character as u32;
-            code > 31 && code != 127
-        })
-        .take(80)
-        .collect();
+    let branch = public_branch_name(&branch.stdout);
     Ok(ProjectWorkspaceInspection::Git {
         branch: (!branch.is_empty()).then_some(branch),
         dirty: !status.stdout.is_empty(),
     })
 }
 
+const STATUS_ARGS: [&str; 4] = ["status", "--porcelain=v1", "-z", "--untracked-files=all"];
+
+/// The trimmed branch name without control characters, at most 80 characters.
+fn public_branch_name(stdout: &str) -> String {
+    butler_core::public_text::trim_js_whitespace(stdout)
+        .chars()
+        .filter(|character| {
+            let code = *character as u32;
+            code > 31 && code != 127
+        })
+        .take(80)
+        .collect()
+}
+
+/// Validates that `target` is a linked worktree of `anchor` with `branch`
+/// checked out, and reports its canonical path and dirtiness.
 pub(super) async fn validate_linked_worktree(
     commands: &Commands,
     files: &WorkspaceFiles,
@@ -133,79 +135,44 @@ pub(super) async fn validate_linked_worktree(
     if !exists {
         return Ok(invalid("session_workspace_unavailable"));
     }
-    let top_failure = {
-        let top = git(
-            commands,
-            host_environment,
-            target,
-            &["rev-parse", "--show-toplevel"],
-            abort.clone(),
-        )
-        .await?;
-        command_failure(&top, WorkspaceCode::SessionWorkspaceUnavailable)
+    let probe = GitProbe {
+        commands,
+        host_environment,
+        abort,
     };
-    if let Some(validation) = top_failure {
+    let unavailable = WorkspaceCode::SessionWorkspaceUnavailable;
+    let top = probe.run(target, &["rev-parse", "--show-toplevel"]).await?;
+    if let Some(validation) = command_failure(&top, unavailable) {
         return Ok(validation);
     }
-    let stdout = {
-        let worktrees = git(
-            commands,
-            host_environment,
-            anchor,
-            &["worktree", "list", "--porcelain", "-z"],
-            abort.clone(),
-        )
+    let worktrees = probe
+        .run(anchor, &["worktree", "list", "--porcelain", "-z"])
         .await?;
-        if let Some(validation) =
-            command_failure(&worktrees, WorkspaceCode::SessionWorkspaceUnavailable)
-        {
-            return Ok(validation);
-        }
-        worktrees.stdout
-    };
-    let target_for_list = target.to_owned();
-    let branch_for_list = branch.to_owned();
+    if let Some(validation) = command_failure(&worktrees, unavailable) {
+        return Ok(validation);
+    }
+    let (target_for_list, branch_for_list) = (target.to_owned(), branch.to_owned());
     let listed = files
-        .run(move || listed_worktree_matches(&stdout, &target_for_list, &branch_for_list))
+        .run(move || listed_worktree_matches(&worktrees.stdout, &target_for_list, &branch_for_list))
         .await
         .map_err(WorkspaceError::from)?
         .map_err(io_error)?;
     if !listed {
         return Ok(invalid("session_workspace_unavailable"));
     }
-    let symbolic_failure = {
-        let symbolic = git(
-            commands,
-            host_environment,
-            target,
-            &["symbolic-ref", "--quiet", "--short", "HEAD"],
-            abort.clone(),
-        )
+    let symbolic = probe
+        .run(target, &["symbolic-ref", "--quiet", "--short", "HEAD"])
         .await?;
-        command_failure(&symbolic, WorkspaceCode::SessionWorkspaceUnavailable).or_else(|| {
-            (butler_core::public_text::trim_js_whitespace(&symbolic.stdout) != branch)
-                .then(|| invalid("session_workspace_unavailable"))
-        })
-    };
-    if let Some(validation) = symbolic_failure {
+    if let Some(validation) = command_failure(&symbolic, unavailable) {
         return Ok(validation);
     }
-    let dirty = {
-        let status = git(
-            commands,
-            host_environment,
-            target,
-            &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
-            abort,
-        )
-        .await?;
-        if let Some(validation) =
-            command_failure(&status, WorkspaceCode::SessionWorkspaceUnavailable)
-        {
-            return Ok(validation);
-        }
-        !status.stdout.is_empty()
-    };
+    if butler_core::public_text::trim_js_whitespace(&symbolic.stdout) != branch {
+        return Ok(invalid("session_workspace_unavailable"));
+    }
+    let status = probe.run(target, &STATUS_ARGS).await?;
+    if let Some(validation) = command_failure(&status, unavailable) {
+        return Ok(validation);
+    }
     let target_for_final = target.to_owned();
     let path = files
         .run(move || canonical_path(&target_for_final))
@@ -214,7 +181,7 @@ pub(super) async fn validate_linked_worktree(
         .map_err(io_error)?;
     Ok(SessionWorkspaceValidation::Valid {
         path: path.to_string_lossy().into_owned(),
-        dirty,
+        dirty: !status.stdout.is_empty(),
     })
 }
 

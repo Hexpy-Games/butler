@@ -28,9 +28,8 @@ pub use contracts::{
     DeliveryOutbox, DeliveryStatus, ExecutionRoute, FailureDisposition, FailureRecord,
     FinalDisposition, FinalPayload, ModelRoundAcceptanceWrite, ModelRoundKey, ModelRouteEvent,
     ModelRouteEventKind, ModelRouteEventWrite, ModelRouteWrite, PreparedTurn, ProgressEvent,
-    ProgressWrite, RouteEventStatus, StateExecutionClaim, StopPersistenceOutcome,
-    SuspensionReason, TerminalOutcome, TurnCheckpoint, TurnRecord, TurnSemanticState,
-    TurnTransition, WakeIdentity,
+    ProgressWrite, RouteEventStatus, StateExecutionClaim, StopPersistenceOutcome, SuspensionReason,
+    TerminalOutcome, TurnCheckpoint, TurnRecord, TurnSemanticState, TurnTransition, WakeIdentity,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use ports::NoopTurnDeveloperLogCapturePort;

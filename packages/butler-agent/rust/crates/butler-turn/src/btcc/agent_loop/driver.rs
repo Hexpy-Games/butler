@@ -16,7 +16,7 @@ use crate::btcc::{
 
 use super::completion::{Ending, OutcomeCheck, after_batch, finish, finish_outcome, record_result};
 use super::continuation::{
-    AuthorityBatch, AuthorityLoopContinuation, RefusedCall, Refusal, pending_authority,
+    AuthorityBatch, AuthorityLoopContinuation, Refusal, RefusedCall, pending_authority,
     unexecuted_call,
 };
 use super::contracts::{
@@ -140,17 +140,18 @@ async fn run_iteration(
             calls: batch.calls.clone(),
             text_call_names: Vec::new(),
         },
-        None => match obtain_reply(input, state, prepared, iteration, &mut surface, context).await
-        {
-            Ok(reply) => reply,
-            Err(AgentLoopError::Runtime(failure)) => {
-                state.runtime_failure = Some(failure);
-                return finish(input, state, Ending::Answer(""))
-                    .await
-                    .map(Step::finished);
+        None => {
+            match obtain_reply(input, state, prepared, iteration, &mut surface, context).await {
+                Ok(reply) => reply,
+                Err(AgentLoopError::Runtime(failure)) => {
+                    state.runtime_failure = Some(failure);
+                    return finish(input, state, Ending::Answer(""))
+                        .await
+                        .map(Step::finished);
+                }
+                Err(error) => return Err(error),
             }
-            Err(error) => return Err(error),
-        },
+        }
     };
     reject_text_tool_calls(input, state, &reply, iteration).await?;
     if reply.calls.is_empty() {
@@ -362,7 +363,14 @@ async fn run_tool_batch(
             run_sequential_batch(input, state, prepared, &batch, BatchCursor::fresh()).await
         };
     };
-    run_sequential_batch(input, state, prepared, &batch, BatchCursor::resumed(resumed)).await
+    run_sequential_batch(
+        input,
+        state,
+        prepared,
+        &batch,
+        BatchCursor::resumed(resumed),
+    )
+    .await
 }
 
 /// One tool batch of an iteration.
@@ -556,7 +564,14 @@ async fn refuse_call(
         .record_unexecuted(GuidedInvocation::from(input), call, &result)
         .await
         .map_err(propagated)?;
-    operation(input.progress, &call.id, &call.name, Status::Cancelled, None).await;
+    operation(
+        input.progress,
+        &call.id,
+        &call.name,
+        Status::Cancelled,
+        None,
+    )
+    .await;
     Ok(result)
 }
 

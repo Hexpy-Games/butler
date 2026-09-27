@@ -5,9 +5,9 @@ use super::contracts::{
     ModelRoundRequest, ModelRoundResult, PreparedPolicy, ReplayPreparation, ToolSurface,
     UsageAttribution,
 };
-use super::guided_ports::TurnContextProjection;
 use super::driver::Invocation;
 use super::guided_ports::GuidedInvocation;
+use super::guided_ports::TurnContextProjection;
 use super::operation_result_replay::OperationResultError;
 use super::ports::{ModelRoundError, propagated, runtime};
 use super::progress::{Status, model_waiting};
@@ -108,8 +108,7 @@ async fn attempt_round(
     identify_messages(&mut state.messages, &mut state.next_item_ordinal);
     let mut response_item_id = next_item_id(&mut state.next_item_ordinal);
     let replay = replay_transcript(round, state).await?;
-    let mut projection =
-        project_context(round, state, &replay, surface, &response_item_id).await?;
+    let mut projection = project_context(round, state, &replay, surface, &response_item_id).await?;
     if projection.rebase == ContextRebase::RequiredWithSteeringRecheck
         && steer_after_rebase(round, state, surface).await?
     {

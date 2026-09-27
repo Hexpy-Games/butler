@@ -4,8 +4,8 @@ use crate::btcc::agent_loop::{ModelRoundError, ModelRoundRequest, ModelRoundResu
 use crate::btcc::{BtccError, ModelIdentity, ReasoningEffort};
 
 use super::contracts::{AttemptHistory, FailureRecord, RouteState};
-use crate::btcc::{ModelRouteEvent, ModelRouteEventKind};
 use crate::btcc::BtccCode;
+use crate::btcc::{ModelRouteEvent, ModelRouteEventKind};
 
 pub(super) fn event(
     kind: ModelRouteEventKind,
