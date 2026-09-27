@@ -11,6 +11,9 @@ use super::{evidence, replay};
 use crate::btcc::StorageCode;
 use mutation::{ProgressInput, insert_progress};
 
+/// Records a disposition (completed, open or blocked) of the bound Work with
+/// its normalized evidence, progress and the material fingerprint of the
+/// resulting Work.
 pub(in crate::btcc::storage::work) fn record(
     db: &Connection,
     command: &DispositionCommand,
@@ -48,45 +51,43 @@ pub(in crate::btcc::storage::work) fn record(
         return Ok(current);
     }
     validate_expected_material(command, &current)?;
-    let action_progress = if command.action_updates.is_empty() {
-        current.action_progress.clone()
-    } else {
-        let updates = command
-            .action_updates
-            .iter()
-            .map(|update| ActionProgress {
-                action_key: update.action_key.clone(),
-                status: update.status,
-                note: update.note.clone(),
-            })
-            .collect::<Vec<_>>();
-        crate::btcc::work::policy::apply_work_action_updates(&current, &updates).map_err(
-            |error| common::error(StorageCode::DurableWorkProgressInvalid, error.message()),
-        )?
+    let action_progress = updated_action_progress(command, &current)?;
+    let normalized = NormalizedDisposition {
+        runtime_owned_open,
+        remaining: evidence::normalize_list(&command.remaining_actions),
+        next_condition: evidence::normalize_optional(input.next_condition.as_deref()),
+        evidence_refs: evidence::normalize_list(&command.evidence_refs),
+        followups: evidence::normalize_list(&command.followups),
     };
-    let remaining = evidence::normalize_list(&command.remaining_actions);
-    let next_condition = evidence::normalize_optional(input.next_condition.as_deref());
-    let evidence_refs = evidence::normalize_list(&command.evidence_refs);
-    let followups = evidence::normalize_list(&command.followups);
-    let snapshot = evidence::resolve(db, &work.id, &input.scope.turn_id, &evidence_refs)?;
+    let snapshot = evidence::resolve(
+        db,
+        &work.id,
+        &input.scope.turn_id,
+        &normalized.evidence_refs,
+    )?;
     validate_disposition(
         db,
         command,
         &action_progress,
-        &remaining,
-        next_condition.as_deref(),
+        &normalized.remaining,
+        normalized.next_condition.as_deref(),
         &work.id,
     )?;
     let now = clock();
-    let revision = common::next_revision(db, "btcc_guided_work_disposition_revisions", &work.id)?;
-    let result_sequence = common::latest_result_sequence(db, &work.id)?;
-    let disposition_id = common::record_id("disposition", &input.mutation_call_id);
-    db.execute("INSERT INTO btcc_guided_work_disposition_revisions (disposition_revision_id, work_id, revision, result_sequence, disposition, summary, material_fingerprint, runtime_owned_open, action_updates_json, remaining_actions_json, next_condition, evidence_refs_json, evidence_snapshot_json, followups_json, origin_turn_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, '', ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)", params![disposition_id, work.id, revision, result_sequence, common::enum_text(input.disposition)?, command.normalized_summary, i32::from(runtime_owned_open), common::stable(&command.action_updates)?, common::stable(&remaining)?, next_condition, common::stable(&evidence_refs)?, common::stable(&snapshot)?, common::stable(&followups)?, input.scope.turn_id, now]).map_err(StorageError::sqlite)?;
+    let disposition_id = insert_disposition(
+        db,
+        &work.id,
+        command,
+        &normalized,
+        &snapshot,
+        &now,
+    )?;
     if let Some(plan) = &current.current_plan {
-        let next = remaining
+        let next = normalized
+            .remaining
             .first()
             .map(String::as_str)
-            .or(next_condition.as_deref())
+            .or(normalized.next_condition.as_deref())
             .unwrap_or("");
         insert_progress(
             db,
@@ -112,6 +113,56 @@ pub(in crate::btcc::storage::work) fn record(
     let fingerprint = material_fingerprint(&persisted)?;
     db.execute("UPDATE btcc_guided_work_disposition_revisions SET material_fingerprint = ?1 WHERE disposition_revision_id = ?2", params![fingerprint, disposition_id]).map_err(StorageError::sqlite)?;
     read::view(db, &work.id)
+}
+
+/// The disposition's normalized remaining actions, next condition, evidence
+/// references and follow-ups.
+struct NormalizedDisposition {
+    /// An open disposition that the runtime owns (it may reopen completed Work).
+    runtime_owned_open: bool,
+    remaining: Vec<String>,
+    next_condition: Option<String>,
+    evidence_refs: Vec<String>,
+    followups: Vec<String>,
+}
+
+/// The Work's action progress with the disposition's action updates applied.
+fn updated_action_progress(
+    command: &DispositionCommand,
+    current: &WorkView,
+) -> StorageResult<Vec<ActionProgress>> {
+    if command.action_updates.is_empty() {
+        return Ok(current.action_progress.clone());
+    }
+    let updates = command
+        .action_updates
+        .iter()
+        .map(|update| ActionProgress {
+            action_key: update.action_key.clone(),
+            status: update.status,
+            note: update.note.clone(),
+        })
+        .collect::<Vec<_>>();
+    crate::btcc::work::policy::apply_work_action_updates(current, &updates)
+        .map_err(|error| common::error(StorageCode::DurableWorkProgressInvalid, error.message()))
+}
+
+/// Inserts the disposition revision (its fingerprint is filled in once the
+/// resulting Work is persisted) and returns its id.
+fn insert_disposition(
+    db: &Connection,
+    work_id: &str,
+    command: &DispositionCommand,
+    normalized: &NormalizedDisposition,
+    snapshot: &[String],
+    now: &str,
+) -> StorageResult<String> {
+    let input = &command.input;
+    let revision = common::next_revision(db, "btcc_guided_work_disposition_revisions", work_id)?;
+    let result_sequence = common::latest_result_sequence(db, work_id)?;
+    let disposition_id = common::record_id("disposition", &input.mutation_call_id);
+    db.execute("INSERT INTO btcc_guided_work_disposition_revisions (disposition_revision_id, work_id, revision, result_sequence, disposition, summary, material_fingerprint, runtime_owned_open, action_updates_json, remaining_actions_json, next_condition, evidence_refs_json, evidence_snapshot_json, followups_json, origin_turn_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, '', ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)", params![disposition_id, work_id, revision, result_sequence, common::enum_text(input.disposition)?, command.normalized_summary, i32::from(normalized.runtime_owned_open), common::stable(&command.action_updates)?, common::stable(&normalized.remaining)?, normalized.next_condition, common::stable(&normalized.evidence_refs)?, common::stable(&snapshot)?, common::stable(&normalized.followups)?, input.scope.turn_id, now]).map_err(StorageError::sqlite)?;
+    Ok(disposition_id)
 }
 
 fn attach_current_turn(
