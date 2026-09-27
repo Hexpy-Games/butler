@@ -1,41 +1,100 @@
 .shell {
   --sidebar-scrollbar-offset: 10px;
-  --sidebar-scroll-fade-size: 14px;
-  --sidebar-scroll-edge-padding: var(--sidebar-content-inset, 16px);
+  --sidebar-scroll-fade-size: var(--scroll-fade-size);
+  --sidebar-scroll-edge-padding: 0px;
+  /* The sidebar surface. Density tokens (data-sidebar-density, tokens.css)
+     size rows, icons and action targets; these adapt the shared blocks. */
+  --clickable-action-size: var(--sidebar-action-size);
+  --clickable-action-icon-size: var(--sidebar-icon-size);
+  --icon-button-surface: radial-gradient(
+      circle closest-side,
+      var(--selection) 98%,
+      transparent 100%
+    )
+    center / var(--sidebar-icon-surface-size) var(--sidebar-icon-surface-size)
+    no-repeat;
+  --icon-button-radius: var(--radius-control);
+  --nav-action-edge-offset: calc(-1 * var(--space-sm));
+  --nav-sticky-surface: transparent;
+  --nav-sticky-filter: none;
+  --selection-strong: color-mix(in srgb, var(--selection) 75%, transparent);
+  --nav-tree-indent: var(--space-sm);
+  --nav-section-heading-inset: var(--space-xs);
+  --nav-section-heading-min-height: var(--sidebar-action-size);
+  --nav-section-actions-edge-offset: calc(-1 * var(--space-xs));
 
   display: flex;
   position: relative;
-  width: var(--sidebar-width);
+  width: 100%;
   max-width: 100%;
   min-width: 0;
-  height: var(--adaptive-viewport-block-size);
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
-  padding: 0 14px 16px;
+  padding: 0 var(--sidebar-padding-inline) var(--space-lg);
   overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  /* Long press opens row menus, not the touch callout. */
+  -webkit-touch-callout: none;
+}
+
+/* Icons in the sidebar share the density icon size and optical offset. */
+.shell svg {
+  width: var(--sidebar-icon-size);
+  height: var(--sidebar-icon-size);
+  translate: 0 var(--sidebar-icon-optical-offset);
+}
+
+/* Icon action clusters (row actions, heading actions) sit tight. */
+.shell [data-slot="button-container"][data-button-size^="icon"] {
+  gap: calc(var(--space-xs) / 2);
+}
+
+.brand {
+  display: flex;
+  min-height: var(--sidebar-action-size);
+  align-items: center;
+}
+
+.titlebar .brand {
+  min-height: var(--titlebar-height);
+}
+
+.scrollContent[data-sticky-header] > .scrollHeader {
+  padding-bottom: var(--space-2xl);
 }
 
 @media (width <= 640px) {
   .shell {
     width: 100%;
-    padding: max(var(--safe-area-top), var(--space-sm))
-      max(14px, var(--safe-area-right)) max(16px, var(--safe-area-bottom))
-      max(14px, var(--safe-area-left));
+    flex-basis: 100%;
+    padding: var(--safe-area-top)
+      max(var(--sidebar-padding-inline), var(--safe-area-right))
+      max(var(--space-lg), var(--safe-area-bottom))
+      max(var(--sidebar-padding-inline), var(--safe-area-left));
   }
 }
 
+/* Header row: titlebar height, content centered, starting after the
+   floating sidebar toggle (and the traffic lights on macOS Electron). */
 .titlebar {
   display: flex;
   height: var(--titlebar-height);
   flex: none;
   align-items: center;
   gap: var(--space-2);
+  padding-inline-start: var(--sidebar-titlebar-leading);
   user-select: none;
   app-region: drag;
   -webkit-app-region: drag;
 }
 
+/* Keeps the titlebar row (drag region) when it has no brand; the reserve
+   itself is part of --sidebar-titlebar-leading. */
 .trafficSpace {
-  width: var(--traffic-controls-width);
+  width: 0;
   height: 100%;
   flex: none;
 }
@@ -48,12 +107,12 @@
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: var(--sidebar-region-gap, 10px);
+  gap: var(--space-xs);
   overflow: visible;
   transition:
-    opacity 160ms ease,
-    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    visibility 0s linear;
+    opacity var(--motion-base) var(--motion-ease-standard),
+    transform var(--motion-slow) var(--motion-ease-emphasized),
+    visibility 0s var(--motion-ease-linear);
 }
 
 .contentCollapsed {
@@ -62,9 +121,9 @@
   pointer-events: none;
   transform: translateX(-18px);
   transition:
-    opacity 120ms ease,
-    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    visibility 0s linear 120ms;
+    opacity var(--motion-fast) var(--motion-ease-standard),
+    transform var(--motion-base) var(--motion-ease-emphasized),
+    visibility 0s var(--motion-ease-linear) var(--motion-fast);
 }
 
 .header {
@@ -96,38 +155,7 @@
   scrollbar-color: color-mix(in srgb, var(--line-strong) 70%, transparent)
     transparent;
   scrollbar-width: thin;
-  -webkit-mask-image:
-    linear-gradient(
-      to bottom,
-      transparent 0,
-      var(--text-primary) var(--sidebar-scroll-fade-size),
-      var(--text-primary) calc(100% - var(--sidebar-scroll-fade-size)),
-      transparent 100%
-    ),
-    linear-gradient(var(--text-primary), var(--text-primary));
-  -webkit-mask-position:
-    0 0,
-    right top;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-size:
-    calc(100% - var(--sidebar-scrollbar-offset)) 100%,
-    var(--sidebar-scrollbar-offset) 100%;
-  mask-image:
-    linear-gradient(
-      to bottom,
-      transparent 0,
-      var(--text-primary) var(--sidebar-scroll-fade-size),
-      var(--text-primary) calc(100% - var(--sidebar-scroll-fade-size)),
-      transparent 100%
-    ),
-    linear-gradient(var(--text-primary), var(--text-primary));
-  mask-position:
-    0 0,
-    right top;
-  mask-repeat: no-repeat;
-  mask-size:
-    calc(100% - var(--sidebar-scrollbar-offset)) 100%,
-    var(--sidebar-scrollbar-offset) 100%;
+  --scroll-fade-gutter: var(--sidebar-scrollbar-offset);
 }
 
 .scrollContent {
@@ -142,11 +170,6 @@
   padding-block: var(--sidebar-scroll-edge-padding);
 }
 
-.scroll.unmasked {
-  -webkit-mask-image: none;
-  mask-image: none;
-}
-
 .scrollContent[data-sticky-header] {
   gap: 0;
   --nav-sticky-offset: calc(
@@ -155,6 +178,7 @@
 }
 
 .stickyHeader {
+  container-type: scroll-state;
   position: sticky;
   top: var(--sidebar-scroll-fade-size);
   z-index: 30;
@@ -170,14 +194,23 @@
   clip-path: inset(var(--sticky-clip-top, 0) 0 0);
 }
 
-.stickyHeader::before {
-  content: "";
+/* Covers rows that scroll under the top fade while the header is stuck. At
+   rest it would paint over the row just above the header, so it only shows
+   once the header is actually stuck. */
+.stickyCover {
   position: absolute;
   inset-inline: 0;
   bottom: 100%;
   height: var(--sidebar-scroll-fade-size);
-  background: inherit;
+  background: var(--nav-sticky-surface, var(--color-surface-base));
   pointer-events: none;
+  visibility: hidden;
+}
+
+@container scroll-state(stuck: top) {
+  .stickyCover {
+    visibility: visible;
+  }
 }
 
 .scroll::-webkit-scrollbar {
@@ -200,7 +233,6 @@
   max-width: 100%;
   min-width: 0;
   flex: none;
-  border-top: var(--sidebar-footer-border-width, 1px) solid var(--line);
   padding-top: 10px;
 }
 
@@ -209,12 +241,12 @@
   width: 100%;
   min-width: 0;
   grid-template-columns: minmax(0, 1fr);
-  gap: 2px;
+  gap: var(--sidebar-row-spacing, var(--space-xs));
 }
 
 @media (width <= 640px) {
-  .titlebar {
-    display: var(--sidebar-compact-titlebar-display, none);
+  .brand {
+    --typo-app-title-size: var(--font-size-6);
   }
 
   .trafficSpace {

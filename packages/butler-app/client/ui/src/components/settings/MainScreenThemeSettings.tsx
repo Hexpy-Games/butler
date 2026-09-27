@@ -36,6 +36,7 @@ export function MainScreenThemeSettings() {
   return (
     <>
       <SettingsSelect
+        settingId="main-screen-theme"
         label={copy.fields.mainScreenTheme}
         description={copy.descriptions.mainScreenTheme}
         triggerTestClass="settings-main-screen-theme-select"
@@ -55,6 +56,7 @@ export function MainScreenThemeSettings() {
       {draft.main_screen_theme === "bloom" ? (
         <>
           <SettingsSelect
+            settingId="main-screen-preset"
             label={copy.fields.mainScreenThemePreset}
             description={copy.descriptions.mainScreenThemePreset}
             triggerTestClass="settings-main-screen-theme-preset-select"
@@ -79,6 +81,7 @@ export function MainScreenThemeSettings() {
           />
           {draft.main_screen_theme_preset === "custom" ? (
             <SettingsField
+              settingId="main-screen-colors"
               data-test-class="settings-field settings-main-screen-theme-colors"
               label={copy.fields.mainScreenThemeColors}
               description={copy.descriptions.mainScreenThemeColors}

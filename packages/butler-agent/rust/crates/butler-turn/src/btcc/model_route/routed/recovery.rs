@@ -147,7 +147,12 @@ impl RoutedRound<'_> {
             .candidates
             .get(route.active_cursor as usize)
             .ok_or_else(gateway_failed)?;
-
+        let route_value = serde_json::to_value(&*route).map_err(|source| {
+            ModelRoundError::Integrity(
+                BtccError::detected(BtccCode::ModelRouteInvalid, "cannot encode model route")
+                    .with_source(source),
+            )
+        })?;
         self.hooks
             .event(
                 event(
@@ -157,7 +162,7 @@ impl RoutedRound<'_> {
                     None,
                     &candidate.model_ref,
                 ),
-                Some(route.clone()),
+                Some(route_value),
             )
             .await?;
         *self.view.active.lock() = candidate.model_ref.clone();

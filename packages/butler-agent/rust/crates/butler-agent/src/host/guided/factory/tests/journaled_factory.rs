@@ -27,7 +27,7 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
     std::fs::write(workspace.join("proof.txt"), "native-file-proof\n").unwrap();
     let mut prepared = test_prepared_turn();
     prepared.request.route.workspace_path = workspace.to_string_lossy().into_owned();
-    let context = json!({
+    prepared.command["context"] = json!({
         "messageContent":"Read proof.txt and answer with its content.",
         "userRef":"user", "profileRefs":[profile_ref],
         "executionPolicy":{"role":"butler","accessMode":"read_only",
@@ -35,12 +35,9 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
             "requiredNativeTools":["read_file","web_search","web_read"],
             "workspacePath":workspace.to_string_lossy()}
     });
-    prepared.command.edit_json(|command| {
-        command["context"] = context;
-        command["modelSelection"] = json!({"provider":"openai","model":"gpt-5.5",
-            "reasoningEffort":"medium","controls":{"accessMode":"read_only"},
-            "controlsHash":"smoke"});
-    });
+    prepared.command["modelSelection"] = json!({"provider":"openai","model":"gpt-5.5",
+        "reasoningEffort":"medium","controls":{"accessMode":"read_only"},
+        "controlsHash":"smoke"});
     let (turn, _) = documents.load_or_admit(&prepared).await.unwrap();
     let claim = documents.acquire_state_claim(&turn).await.unwrap();
     documents
@@ -50,14 +47,11 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
                 expected_revision: turn.revision,
                 execution_fence: turn.execution_fence,
                 claim_id: claim.claim_id.clone(),
-                route: Some(
-                    serde_json::from_value(json!({"schemaVersion":"butler.model-route.v1",
+                route: json!({"schemaVersion":"butler.model-route.v1",
             "routeDigest":"a".repeat(64),
             "candidates":[{"modelRef":"openai/gpt-5.5","reasoningEffort":"medium"}],
             "retryCeiling":1,"catalogGeneration":"loopback","activeCursor":0,
-            "consumedAttempts":[]}))
-                    .unwrap(),
-                ),
+            "consumedAttempts":[]}),
             },
             event: butler_turn::btcc::ModelRouteEvent {
                 kind: butler_turn::btcc::ModelRouteEventKind::FallbackSelected,

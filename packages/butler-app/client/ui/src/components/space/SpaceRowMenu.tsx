@@ -9,15 +9,13 @@ import {
   PencilLine,
   Pin,
   Trash2,
+  NavRowSwap,
   OverflowActionMenu,
-  ButtonContainer,
 } from "@/butler-ds";
 import { useButlerStore } from "@/app/store";
 import { useComposerStore } from "../conversation/composerStore";
 import { useOrganization } from "@/app/space/organization";
-import { spaceActivity } from "@/app/space/activity";
 import type { SpaceRowData } from "@/app/space/projection";
-import styles from "./SpaceInteractions.module.css";
 
 export function SpaceRowMenu({
   row,
@@ -32,7 +30,6 @@ export function SpaceRowMenu({
   const app = useButlerStore;
   const mutate = useOrganization((s) => s.mutate);
   const setDialog = useOrganization((s) => s.setDialog);
-  const activity = spaceActivity(row.session);
   const items = [
     ...(row.session ? [{
       icon: <MessageSquarePlus />,
@@ -135,23 +132,15 @@ export function SpaceRowMenu({
             : []),
         ]),
   ];
+  // The activity status rests in the trailing slot; the row menu replaces it on hover or focus.
   return (
-    <ButtonContainer
-      size="icon-sm"
-      wrap={false}
-      className={styles.menuAction}
-      data-has-status={activity || undefined}
-      data-menu-open={open || undefined}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <SpaceActivity session={row.session} />
+    <NavRowSwap rest={<SpaceActivity session={row.session} />} open={open}>
       <OverflowActionMenu
-        className={styles.menuButton}
         label={appCopy.space.rowMenu(row.title)}
         items={row.node.entityId === "general" ? items.slice(0, 1) : items}
         open={open}
         onOpenChange={onOpenChange}
       />
-    </ButtonContainer>
+    </NavRowSwap>
   );
 }

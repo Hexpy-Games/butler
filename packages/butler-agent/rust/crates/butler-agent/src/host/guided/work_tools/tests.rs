@@ -16,9 +16,7 @@ async fn model_work_calls_create_reviewed_plan_in_canonical_store() {
         .unwrap();
     let repository = BtccRepositories::new(storage.clone(), None);
     let mut prepared = test_prepared_turn();
-    prepared.command.edit_json(|command| {
-        command["context"] = json!({"messageContent":"Create a small file"});
-    });
+    prepared.command["context"] = json!({"messageContent":"Create a small file"});
     let (turn, _) = repository.load_or_admit(&prepared).await.unwrap();
     let service = Arc::new(DurableWorkService::new(Arc::new(
         SessionWorkRepository::new(storage.clone(), Arc::new(|| "now".into())),

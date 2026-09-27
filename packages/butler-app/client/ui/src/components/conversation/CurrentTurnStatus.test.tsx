@@ -1,10 +1,16 @@
 /// <reference types="bun" />
 
-import { expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ProgressRow } from "@/app/types.ts";
 import { CurrentTurnStatus } from "./CurrentTurnStatus";
+import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
+
+// These expectations are the Korean copy; pin the locale instead of inheriting it.
+const previousLocale = getAppLocale();
+beforeAll(() => setAppCopyLanguage("ko-KR"));
+afterAll(() => setAppCopyLanguage(previousLocale));
 
 test("current status reserves one clipped line with the public operation title", () => {
   const publicLabel = "실행: git commit";
@@ -32,12 +38,12 @@ test("model waiting and operation status share typography while waiting keeps lo
       created_at: new Date(Date.now() - 3_000).toISOString(),
     }} />,
   );
-  const operationStyle = operationHtml.match(
-    /data-test-class="turn-phase-activity"[^>]*style="([^"]+)"/u,
-  )?.[1];
-  const waitingStyle = waitingHtml.match(
-    /data-test-class="turn-model-round-waiting"[^>]*style="([^"]+)"/u,
-  )?.[1];
+  // Typography comes from DS Typo props (class + data-tone/data-min-width),
+  // not inline style, since 079728031.
+  const typography = (html: string, testClass: string) =>
+    html.match(new RegExp(`<p (class="[^"]*" data-tone="[^"]+" data-min-width="[^"]+")[^>]*data-test-class="${testClass}"`, "u"))?.[1];
+  const operationStyle = typography(operationHtml, "turn-phase-activity");
+  const waitingStyle = typography(waitingHtml, "turn-model-round-waiting");
 
   expect(waitingHtml).toContain("응답 생성 중");
   expect(waitingHtml).toMatch(/응답 생성 중 · 0분 [23]초/u);

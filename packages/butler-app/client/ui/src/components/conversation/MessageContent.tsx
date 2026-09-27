@@ -64,6 +64,7 @@ function MessageContentComponent({
               ) : (
                 <MessageMarkdown
                   attachments={message.attachments}
+                  streaming={message.status === "streaming"}
                   text={message.text}
                 />
               )}
@@ -74,6 +75,7 @@ function MessageContentComponent({
           ) : (
             <MessageMarkdown
               attachments={message.attachments}
+              streaming={message.status === "streaming"}
               text={message.text}
             />
           )}

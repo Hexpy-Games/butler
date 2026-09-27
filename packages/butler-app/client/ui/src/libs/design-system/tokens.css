@@ -1,3 +1,6 @@
+@import url("./scroll-fade.css");
+@import url("./overlay-exit.css");
+
 :root {
   color-scheme: light;
   --adaptive-viewport-block-size: 100vh;
@@ -9,16 +12,151 @@
   --titlebar-height: 48px;
   --titlebar-safe-area-top: calc(var(--titlebar-height) + var(--safe-area-top));
   --control-hit-target: 30px;
+  /* Fixed touch target (the touch sidebar density, phone rows). */
+  --touch-target: 44px;
   --control-height-xs: 24px;
   --control-height-sm: 28px;
   --control-height-md: 30px;
   --control-height-lg: 34px;
+  /* Tag: a comfortable pill; the height holds the caption at line-height tight. */
+  --tag-height-sm: 22px;
+  --tag-height-md: var(--control-height-xs);
+  --tag-padding-block: calc(var(--space-xs) / 2);
+  --tag-padding-inline-sm: var(--space-sm);
+  --tag-padding-inline-md: calc(var(--space-sm) + var(--space-xs) / 2);
+  --menu-item-height: 32px;
+  --menu-item-padding-block: 6px;
+  --menu-item-line-height: calc(
+    var(--menu-item-height) - 2 * var(--menu-item-padding-block)
+  );
+  /* Menu group labels (dropdown, option menu, filtered select): the
+     sidebar section-label voice, quieter and smaller than body-size items. */
+  --menu-group-label-size: var(--typo-section-title-size);
+  --menu-group-label-weight: var(--font-weight-medium);
+  --menu-group-label-color: var(--text-tertiary);
+  --menu-group-label-line-height: var(--line-height-compact);
+  --menu-group-label-padding: var(--space-sm) var(--space-2) var(--space-xs);
+  --scroll-fade-size: 14px;
+  --focus-ring-width: 2px;
+  /* Layering scale: tooltips and popovers opened inside dialogs stay above them. */
+  --z-sticky: 50;
+  --z-drawer: 60;
+  --z-overlay: 80;
+  --z-dialog: 90;
+  --z-popover: 100;
+  --z-tooltip: 110;
+  --z-drag: 120;
+  /* Sidebar tree drag feedback, above sticky group headers (20 - depth). */
+  --z-drop-indicator: 30;
+  --z-drop-hint: 31;
   --adaptive-page-gutter: var(--space-xl);
   --adaptive-composer-inset: 44px;
   --adaptive-composer-radius: 30px;
-  --adaptive-panel-duration: 220ms;
-  --adaptive-panel-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Motion scale ("Linear-crisp", see the DS spec Motion Contract): instant
+     for press feedback, menu for dropdown/context/select, fast for hover,
+     tooltips, popovers and dialogs, base for disclosure, message insert and
+     route motion, slow for panels and drawers, deliberate for rare large
+     surfaces. Exits run at about 0.7x on the exit tokens. */
+  --motion-instant: 60ms;
+  --motion-menu: 90ms;
+  --motion-fast: 120ms;
+  --motion-base: 160ms;
+  --motion-slow: 220ms;
+  --motion-deliberate: 320ms;
+  --motion-exit-menu: 60ms;
+  --motion-exit-fast: 90ms;
+  --motion-exit-base: 110ms;
+  --motion-exit-slow: 150ms;
+  /* The command palette opens between fast and base (Cmd+K). */
+  --motion-palette: 140ms;
+  /* Overlay enters run on --motion-ease-enter (the standard curve) and last
+     long enough that the first 60Hz frame carries at most ~30% of the change
+     (standard: 140ms -> 23%, 160ms -> 17%; the old 90-120ms decelerate
+     enters landed 53-60% in the first frame and read as instant). Menus,
+     selects and tooltips stay quicker than popovers, toasts and dialogs;
+     exits keep the faster --motion-exit-* tokens. */
+  --motion-enter-menu: 140ms;
+  --motion-enter-overlay: var(--motion-base);
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-decelerate: cubic-bezier(0, 0, 0, 1);
+  --motion-ease-accelerate: cubic-bezier(0.3, 0, 1, 1);
+  --motion-ease-emphasized: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Damped spring with about 3% overshoot; reserved for the Switch thumb. */
+  --motion-ease-spring: linear(
+    0,
+    0.0855,
+    0.2683,
+    0.472,
+    0.6547,
+    0.7991,
+    0.9021,
+    0.9686,
+    1.0067,
+    1.0247,
+    1.0299,
+    1.028,
+    1.0227,
+    1.0166,
+    1.011,
+    1.0065,
+    1.0033,
+    1.0011,
+    0.9999,
+    0.9993,
+    1
+  );
+  /* Loops (spinner, shimmer) only. */
+  --motion-ease-linear: linear;
+  --motion-ease-enter: var(--motion-ease-standard);
+  --motion-ease-exit: var(--motion-ease-accelerate);
+  /* Travel and scale are tokens so reduced motion can zero them globally and
+     every token-driven animation becomes a pure opacity fade. */
+  --motion-distance-xs: 2px;
+  --motion-distance-sm: 4px;
+  --motion-distance-md: 8px;
+  --motion-distance-lg: 24px;
+  --motion-scale-menu: 0.97;
+  --motion-scale-dialog: 0.96;
+  --motion-scale-press: 0.97;
+  --motion-scale-palette: 0.98;
+  /* SuccessCheck pop-in: subtle, from 85%. */
+  --motion-scale-check: 0.85;
+  /* A dragged card or a drop target lifts toward the pointer (spring). */
+  --motion-scale-lift: 1.02;
+  /* How far moved rows may paint past a folded list clip during a drag (at
+     least one touch row slot). A plain length: Chromium ignores calc() in
+     overflow-clip-margin. */
+  --drop-clip-margin: 64px;
+  --adaptive-panel-duration: var(--motion-slow);
+  --adaptive-panel-easing: var(--motion-ease-emphasized);
+  /* Spinner: arc grow/shrink cycle and the slower whole-arc rotation. */
   --spinner-duration: 1320ms;
+  --spinner-rotate-duration: 2000ms;
+  --pulse-duration: 1250ms;
+  --shimmer-duration: 1400ms;
+  /* Skeleton heights for a text line and a heading line. */
+  --skeleton-height-line: 0.75rem;
+  --skeleton-height-title: 1.125rem;
+  /* Dialog widths (DialogContent size). */
+  --dialog-width-sm: 380px;
+  --dialog-width-md: 520px;
+  --dialog-width-lg: 720px;
+  --dialog-width-xl: 880px;
+  /* ScrollArea maxHeight caps (raw log blocks). */
+  --scroll-area-max-height-xs: 180px;
+  --scroll-area-max-height-sm: 320px;
+  /* ScrollArea minHeight floor (the inspector context legend). */
+  --scroll-area-min-height-xs: 96px;
+  /* Chart height for dashboard panel charts (ChartContainer size="panel"). */
+  --chart-height-panel: 13rem;
+  /* Fixed pane heights of the document board and the spec browser. */
+  --kanban-lane-height: 22rem;
+  /* Minimum lane width of a sideways-scrolling board (KanbanBoard scroll). */
+  --kanban-lane-min-width: 15rem;
+  --split-browser-height: 14.5rem;
+  /* StatusCapsule part caps (composer work capsules). */
+  --status-capsule-title-max: min(34vw, 240px);
+  --status-capsule-detail-max: min(30vw, 220px);
   --spinner-easing: linear(
     0,
     0.0363,
@@ -43,12 +181,33 @@
   --adaptive-panel-bg: var(--neutral-white);
   --windows-sidebar-overlay-filter: saturate(1.3) blur(24px);
   --adaptive-scrim-bg: rgba(0, 0, 0, 0.12);
-  --chrome-floating-toggle-top: 10px;
+  /* Sidebar header row: the floating sidebar toggle is a standard IconButton
+     centered in the titlebar row. It starts at the sidebar content inset,
+     after the native traffic-light reserve (72px on macOS Electron: lights at
+     x 20, three 12px buttons, 8px gaps; 0px elsewhere, set by AdaptiveShell).
+     The derived offsets are re-declared on AdaptiveShell's root so platform
+     overrides of the reserve flow into them. */
+  --chrome-floating-toggle-size: var(--control-height-md);
+  --chrome-floating-toggle-icon-size: var(--icon-size-md);
+  --chrome-floating-toggle-top: calc(
+    var(--safe-area-top) +
+      ((var(--titlebar-height) - var(--chrome-floating-toggle-size)) / 2)
+  );
+  --sidebar-padding-inline: 14px;
+  --chrome-toggle-inset: var(--sidebar-padding-inline);
+  --traffic-controls-width: 72px;
   --chrome-floating-toggle-left: calc(
-    var(--traffic-controls-width) + var(--space-2)
+    var(--traffic-controls-width) + var(--chrome-toggle-inset)
+  );
+  --sidebar-titlebar-leading: calc(
+    var(--chrome-floating-toggle-left) - var(--sidebar-padding-inline) +
+      var(--chrome-floating-toggle-size) + var(--space-sm)
+  );
+  --titlebar-collapsed-left-padding: calc(
+    var(--chrome-floating-toggle-left) + var(--chrome-floating-toggle-size) +
+      var(--space-md)
   );
   --sidebar-width: 304px;
-  --traffic-controls-width: 78px;
   --right-panel-width: 376px;
   --composer-reserve: 260px;
   /* Semantic spacing tokens */
@@ -59,6 +218,8 @@
   --space-lg: 16px;
   --space-xl: 20px;
   --space-2xl: 24px;
+  --space-3xl: 32px;
+  --space-4xl: 40px;
 
   /* Legacy numeric aliases for backwards compatibility */
   --space-1: var(--space-xs);
@@ -68,16 +229,53 @@
   --space-5: var(--space-xl);
   --space-6: var(--space-2xl);
 
+  /* Line tabs: space between a tab label and its sliding underline. */
+  --tabs-line-indicator-gap: var(--space-md);
+
+  /* Settings hierarchy (proximity). Grouped settings: the section header
+     sits above its card, so header -> card (12) is far tighter than card ->
+     next section header (40, at least 3x). Inside the card the field ramp
+     runs label -> description (6), description -> control (12), field ->
+     field (20); the section gap stays at least 1.5x the field gap. The copy
+     gap is the one half step (6px) between xs and sm: label and description
+     (and section title and description) read as one block without
+     touching. */
+  --settings-field-copy-gap: 6px;
+  --settings-field-control-gap: var(--space-md);
+  --settings-section-header-gap: var(--space-md);
+  --settings-field-gap: var(--space-xl);
+  --settings-section-gap: var(--space-4xl);
+  --settings-section-padding: var(--space-2xl);
+
+  /* Border widths: hairline rules and offsets, strong emphasis borders. */
+  --border-hairline: 1px;
+  --border-width-strong: 2px;
+
+  /* Flex-basis scale for layout item props (Stack/Inline children). */
+  --layout-basis-xs: 160px;
+  --layout-basis-sm: 200px;
+  --layout-basis-md: 260px;
+  --layout-basis-lg: 460px;
+
+  /* Page max-width scale: forms, reading columns, dashboards. */
+  --page-max-width-narrow: 38rem;
+  --page-max-width-reading: 760px;
+  --page-max-width-wide: 72rem;
+  --page-container-narrow: var(--page-max-width-reading);
+  --page-container-default: var(--page-max-width-wide);
+  --page-container-gutter: clamp(var(--space-lg), 3vw, 40px);
+
   /* Source color literals. Semantic tokens below must reference these. */
   --neutral-white: #ffffff;
   --neutral-light-text-primary: #222326;
   --neutral-light-text-secondary: #696d73;
   --neutral-light-text-disabled: #a7abb0;
+  --neutral-light-placeholder: #6e7278;
   --neutral-dark-text-secondary: #b5b8bd;
   --neutral-dark-text-tertiary: #858991;
   --neutral-dark-text-disabled: #5a5d64;
   --neutral-dark-icon-muted: #c5c7cb;
-  --neutral-dark-placeholder: #74777d;
+  --neutral-dark-placeholder: #8e9197;
   --neutral-dark-send-stop: #e8e9eb;
 
   --orange-06: #c85f1b;
@@ -144,15 +342,16 @@
   --amber-10: #805600;
 
   /* Semantic Color Tokens */
-  --color-text-primary: var(--grayscale-10);
-  --color-text-secondary: var(--grayscale-07);
-  --color-text-tertiary: var(--grayscale-06);
-  --color-text-disabled: var(--grayscale-05);
-  --color-text-inverse: var(--grayscale-01);
+  --color-text-primary: var(--neutral-light-text-primary);
+  --color-text-secondary: var(--neutral-light-text-secondary);
+  --color-text-tertiary: var(--grayscale-07);
+  --color-text-disabled: var(--neutral-light-text-disabled);
+  /* Disabled tone for rows, menu items and options: text color, not opacity. */
+  --interactive-disabled-fg: var(--color-text-disabled);
+  --interactive-disabled-cursor: not-allowed;
+  --color-text-inverse: var(--neutral-white);
 
   --color-action-primary: var(--blue-06);
-  --color-action-primary-hover: var(--blue-07);
-  --color-action-primary-active: var(--blue-08);
 
   --color-success: var(--green-06);
   --color-success-bg: var(--green-01);
@@ -160,6 +359,15 @@
   --color-warning-bg: var(--amber-01);
   --color-danger: var(--red-07);
   --color-danger-bg: var(--red-01);
+  --color-success-border: var(--green-02);
+  --color-success-text: var(--color-success);
+  --color-warning-border: var(--amber-02);
+  --color-warning-text: var(--amber-08);
+  --color-danger-border: var(--red-02);
+  --color-danger-text: var(--color-danger);
+  --color-info-bg: var(--blue-01);
+  --color-info-border: var(--blue-02);
+  --color-info-text: var(--blue-07);
 
   --color-border-default: var(--grayscale-03);
   --color-border-strong: var(--grayscale-04);
@@ -168,12 +376,13 @@
   --color-surface-base: var(--grayscale-01);
   --color-surface-raised: rgba(255, 255, 255, 0.96);
   --color-surface-overlay: rgba(255, 255, 255, 0.98);
-  --color-surface-sunken: var(--grayscale-02);
 
   --color-disabled-bg: var(--grayscale-02);
   --color-disabled-fg: var(--grayscale-05);
 
-  --color-focus-ring: rgba(0, 122, 255, 0.34);
+  --focus-ring-color: var(--color-action-primary);
+  --focus-ring: 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
+  --color-focus-ring: var(--focus-ring-color);
 
   /* Typography Role Tokens */
   --typo-h1-size: 32px;
@@ -268,23 +477,37 @@
 
   --font-body:
     ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-    "Segoe UI", sans-serif;
+    "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic",
+    sans-serif;
   --font-family-code: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --font-code: var(--font-size-2)/var(--line-height-body)
     var(--font-family-code);
-  --font-size-1: 12px;
-  --font-size-2: 13px;
-  --font-size-3: 14px;
-  --font-size-4: 15px;
-  --font-size-5: 18px;
-  --font-size-6: 24px;
-  --font-size-display: clamp(28px, 3vw, 40px);
+  /* Deprecated numeric scale: aliases of the canonical --typo-* role scale.
+     Prefer the --typo-* role token in new code. */
+  --font-size-1: var(--typo-caption-size);
+  --font-size-2: var(--typo-label-size);
+  --font-size-3: var(--typo-body-size);
+  --font-size-4: var(--typo-app-title-size);
+  --font-size-5: var(--typo-h4-size);
+  --font-size-6: var(--typo-h2-size);
   --font-weight-regular: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 560;
   --font-weight-strong: 620;
+  --line-height-none: 1;
+  --line-height-tight: 1.2;
+  --line-height-snug: 1.35;
   --line-height-body: 1.45;
   --line-height-document: 1.58;
+  /* Role alias: compact single-line UI labels (menu and filtered-select
+     section titles, attachment chips, composer decision rows). */
+  --line-height-compact: var(--line-height-snug);
+  --icon-size-xs: 12px;
+  --icon-size-sm: 14px;
+  --icon-size-md: 16px;
+  --icon-size-lg: 20px;
+  --icon-size-xl: 24px;
+  --icon-size-2xl: 32px;
   --sidebar-row-height: 30px;
   --sidebar-action-size: 24px;
   --sidebar-icon-column: 18px;
@@ -295,7 +518,7 @@
   --radius-composer: 22px;
   --radius-pill: 999px;
   --surface: rgba(255, 255, 255, 0.9);
-  --surface-raised: rgba(255, 255, 255, 0.96);
+  --surface-raised: var(--color-surface-raised);
   --workspace-bg: rgba(255, 255, 255, 0.94);
   --titlebar-bg: rgba(255, 255, 255, 0.72);
   --conversation-bg: linear-gradient(
@@ -316,7 +539,7 @@
   --composer-glass-lowlight: rgba(0, 0, 0, 0.035);
   --composer-glass-glint: transparent;
   --composer-glass-shadow: 0 12px 28px rgba(0, 0, 0, 0.06);
-  --composer-glass-blur: 36px;
+  --composer-glass-blur: 4px;
   --composer-glass-filter: saturate(1.35) blur(var(--composer-glass-blur));
   --tinted-glass-bg: var(--composer-glass-bg);
   --tinted-glass-tint: rgba(255, 255, 255, 1);
@@ -330,8 +553,6 @@
   --danger-bg: rgba(255, 245, 244, 0.86);
   --danger-banner-bg: rgba(255, 239, 238, 0.96);
   --worker-panel-bg: rgba(241, 242, 244, 0.96);
-  --worker-title-bg: rgba(0, 0, 0, 0.14);
-  --automation-details-bg: rgba(248, 248, 247, 0.9);
   /* Tuned for macOS light-mode translucency over Electron under-window material. */
   --sidebar-bg: rgba(255, 255, 255, 0.52);
   --windows-sidebar-bg: rgba(255, 255, 255, 0.36);
@@ -347,10 +568,10 @@
   --ok: var(--color-success);
   --danger: var(--color-danger);
   --icon-muted: var(--grayscale-08);
-  --placeholder: var(--grayscale-05);
+  --placeholder: var(--neutral-light-placeholder);
   --send-bg: var(--grayscale-10);
   --send-stop-bg: var(--grayscale-11);
-  --send-fg: var(--neutral-white);
+  --send-fg: var(--color-text-inverse);
   --send-disabled-bg: var(--grayscale-04);
   --worker-active: var(--green-worker-active);
   --worker-warning: var(--amber-worker-warning);
@@ -377,26 +598,40 @@
   --context-chart-free: var(--context-track-bg);
   --color-mix-light: var(--neutral-white);
   --shadow-card: 0 10px 28px rgba(0, 0, 0, 0.08);
+  --shadow-drag-lift:
+    0 10px 24px rgba(0, 0, 0, 0.14), 0 2px 6px rgba(0, 0, 0, 0.1);
   --shadow-window: 0 18px 48px rgba(0, 0, 0, 0.14);
   --shadow-control: 0 1px 3px rgba(0, 0, 0, 0.22);
   --shadow-switch: 0 1px 3px rgba(0, 0, 0, 0.18);
-  --shadow-command: 0 18px 48px rgba(0, 0, 0, 0.16);
   --background: var(--surface-raised);
   --foreground: var(--text-primary);
-  --popover: rgba(255, 255, 255, 0.98);
+  --popover: var(--color-surface-overlay);
   --popover-foreground: var(--text-primary);
   --primary: var(--send-bg);
   --primary-foreground: var(--color-text-inverse);
   --secondary: rgba(32, 35, 39, 0.08);
   --secondary-foreground: var(--text-primary);
+  /* Secondary buttons need no outline on light surfaces (the fill reads). */
+  --secondary-border: transparent;
   --muted: rgba(32, 35, 39, 0.06);
   --muted-foreground: var(--text-secondary);
-  --accent-foreground: var(--text-primary);
   --destructive: var(--danger);
   --border: var(--line);
   --input: var(--line);
-  --ring: rgba(0, 122, 255, 0.34);
+  --ring: var(--focus-ring-color);
   --radius: var(--radius-control);
+
+  /* Syntax highlighting (code blocks) */
+  --syntax-keyword: var(--blue-08);
+  --syntax-string: var(--green-08);
+  --syntax-comment: var(--grayscale-07);
+  --syntax-number: var(--amber-09);
+  --syntax-title: var(--blue-07);
+  --syntax-type: var(--amber-10);
+  --syntax-variable: var(--red-07);
+  --syntax-meta: var(--grayscale-08);
+  --syntax-addition: var(--green-08);
+  --syntax-deletion: var(--red-07);
 }
 
 @supports (height: 100dvh) {
@@ -411,13 +646,100 @@
   }
 }
 
+/* Sidebar density (SidebarShell / NavRow `density`): row height,
+   inline padding, icon size, label gap, row spacing and trailing action
+   target. The shell sets the attribute on its root; a row may override it. */
+[data-sidebar-density="compact"] {
+  --sidebar-row-height: var(--control-height-sm);
+  --sidebar-row-padding-inline: var(--space-sm);
+  --sidebar-icon-size: var(--icon-size-sm);
+  --sidebar-row-gap: var(--space-sm);
+  --sidebar-row-spacing: calc(var(--space-xs) / 2);
+  --sidebar-action-size: var(--control-height-xs);
+  --sidebar-icon-surface-size: var(--space-lg);
+  --sidebar-icon-optical-offset: 0px;
+}
+
+[data-sidebar-density="comfortable"] {
+  --sidebar-row-height: var(--control-height-md);
+  --sidebar-row-padding-inline: var(--space-sm);
+  --sidebar-icon-size: var(--icon-size-md);
+  --sidebar-row-gap: 10px;
+  --sidebar-row-spacing: var(--space-xs);
+  --sidebar-action-size: var(--control-hit-target);
+  --sidebar-icon-surface-size: var(--space-xl);
+  --sidebar-icon-optical-offset: 0px;
+}
+
+[data-sidebar-density="touch"] {
+  --sidebar-row-height: var(--touch-target);
+  --sidebar-row-padding-inline: var(--space-sm);
+  --sidebar-icon-size: var(--icon-size-lg);
+  --sidebar-row-gap: var(--space-md);
+  --sidebar-row-spacing: var(--space-sm);
+  --sidebar-action-size: var(--touch-target);
+  --sidebar-icon-surface-size: var(--control-height-xs);
+  --sidebar-icon-optical-offset: calc(var(--font-size-4) * -0.03);
+}
+
+/* Comfortable is the touch density on phones and coarse pointers. */
+@media (width <= 640px), (pointer: coarse) {
+  [data-sidebar-density="comfortable"] {
+    --sidebar-row-height: var(--touch-target);
+    --sidebar-icon-size: var(--icon-size-lg);
+    --sidebar-row-gap: var(--space-md);
+    --sidebar-row-spacing: var(--space-sm);
+    --sidebar-action-size: var(--touch-target);
+    --sidebar-icon-surface-size: var(--control-height-xs);
+    --sidebar-icon-optical-offset: calc(var(--font-size-4) * -0.03);
+  }
+}
+
+/* Reduced motion is an opacity fade, not zero motion: zeroing travel and
+   scale turns every token-driven transform animation into a pure fade. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-distance-xs: 0px;
+    --motion-distance-sm: 0px;
+    --motion-distance-md: 0px;
+    --motion-distance-lg: 0px;
+    --motion-scale-menu: 1;
+    --motion-scale-dialog: 1;
+    --motion-scale-press: 1;
+    --motion-scale-lift: 1;
+    --motion-scale-palette: 1;
+    --motion-scale-check: 1;
+  }
+}
+
+/* The same overrides as a scope: the DS Viewer's reduced-motion toggle sets
+   data-motion="reduced" (lib/motion.ts reads it too). */
+[data-motion="reduced"] {
+  --motion-distance-xs: 0px;
+  --motion-distance-sm: 0px;
+  --motion-distance-md: 0px;
+  --motion-distance-lg: 0px;
+  --motion-scale-menu: 1;
+  --motion-scale-dialog: 1;
+  --motion-scale-press: 1;
+  --motion-scale-lift: 1;
+  --motion-scale-palette: 1;
+  --motion-scale-check: 1;
+}
+
+/* Compact settings (single-pane SettingsShell) keep the ramp and only
+   tighten the section card inset. */
+@media (width <= 760px) {
+  :root {
+    --settings-section-padding: var(--space-lg);
+  }
+}
+
 @media (width <= 640px) {
   :root {
     --titlebar-height: 56px;
-    --chrome-floating-toggle-top: calc(
-      var(--safe-area-top) +
-        ((var(--titlebar-height) - var(--chrome-floating-toggle-size)) / 2)
-    );
+    /* The 52px touch target carries its own inset. */
+    --chrome-toggle-inset: 0px;
     --chrome-floating-toggle-size: 52px;
     --chrome-floating-toggle-icon-size: 22px;
     --titlebar-action-size: 52px;
@@ -449,12 +771,6 @@
     --typo-section-title-size: 15px;
     --typo-panel-section-title-size: 17px;
     --typo-metric-value-size: 20px;
-    --font-size-1: 14px;
-    --font-size-2: 15px;
-    --font-size-3: 16px;
-    --font-size-4: 17px;
-    --font-size-5: 20px;
-    --font-size-6: 26px;
   }
 }
 
@@ -465,11 +781,11 @@
   --color-text-secondary: var(--neutral-dark-text-secondary);
   --color-text-tertiary: var(--neutral-dark-text-tertiary);
   --color-text-disabled: var(--neutral-dark-text-disabled);
+  /* Disabled tone for rows, menu items and options: text color, not opacity. */
+  --interactive-disabled-fg: var(--color-text-disabled);
   --color-text-inverse: var(--grayscale-11);
 
   --color-action-primary: var(--blue-06);
-  --color-action-primary-hover: var(--blue-05);
-  --color-action-primary-active: var(--blue-04);
 
   --color-success: var(--green-05);
   --color-success-bg: rgba(42, 159, 72, 0.12);
@@ -477,6 +793,15 @@
   --color-warning-bg: rgba(230, 176, 0, 0.12);
   --color-danger: var(--red-06);
   --color-danger-bg: rgba(190, 56, 54, 0.16);
+  --color-success-border: rgba(42, 159, 72, 0.32);
+  --color-success-text: var(--green-04);
+  --color-warning-border: rgba(230, 176, 0, 0.32);
+  --color-warning-text: var(--amber-05);
+  --color-danger-border: rgba(190, 56, 54, 0.4);
+  --color-danger-text: var(--red-05);
+  --color-info-bg: rgba(0, 122, 255, 0.14);
+  --color-info-border: rgba(0, 122, 255, 0.32);
+  --color-info-text: var(--blue-04);
 
   --color-border-default: rgba(255, 255, 255, 0.1);
   --color-border-strong: rgba(255, 255, 255, 0.16);
@@ -485,16 +810,18 @@
   --color-surface-base: var(--grayscale-11);
   --color-surface-raised: rgba(35, 36, 39, 0.96);
   --color-surface-overlay: rgba(37, 38, 41, 0.98);
-  --color-surface-sunken: var(--grayscale-12);
 
   --color-disabled-bg: rgba(255, 255, 255, 0.08);
   --color-disabled-fg: var(--neutral-dark-text-disabled);
 
-  --color-focus-ring: rgba(0, 122, 255, 0.34);
+  --focus-ring-color: var(--color-action-primary);
+  --focus-ring: 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
+  --color-focus-ring: var(--focus-ring-color);
+  --ring: var(--focus-ring-color);
   --surface: rgba(30, 31, 34, 0.9);
   --adaptive-panel-bg: var(--grayscale-11);
   --adaptive-scrim-bg: rgba(0, 0, 0, 0.34);
-  --surface-raised: rgba(35, 36, 39, 0.96);
+  --surface-raised: var(--color-surface-raised);
   --workspace-bg: rgba(26, 27, 30, 0.94);
   --titlebar-bg: rgba(26, 27, 30, 0.76);
   --conversation-bg: linear-gradient(
@@ -537,8 +864,6 @@
   --danger-bg: rgba(190, 56, 54, 0.16);
   --danger-banner-bg: rgba(190, 56, 54, 0.18);
   --worker-panel-bg: rgba(37, 38, 41, 0.96);
-  --worker-title-bg: rgba(255, 255, 255, 0.08);
-  --automation-details-bg: rgba(255, 255, 255, 0.05);
   --sidebar-bg: rgba(36, 37, 40, 0.72);
   --windows-sidebar-bg: rgba(24, 25, 28, 0.46);
   --sidebar-collapsed-bg: rgba(20, 21, 23, 0.18);
@@ -565,30 +890,72 @@
   --danger-line-strong: rgba(210, 64, 58, 0.34);
   --context-track-bg: rgba(255, 255, 255, 0.14);
   --shadow-card: 0 16px 34px rgba(0, 0, 0, 0.32);
+  --shadow-drag-lift:
+    0 10px 24px rgba(0, 0, 0, 0.36), 0 2px 6px rgba(0, 0, 0, 0.28);
   --shadow-window: 0 18px 48px rgba(0, 0, 0, 0.38);
   --shadow-control: 0 1px 3px rgba(0, 0, 0, 0.32);
   --shadow-switch: 0 1px 3px rgba(0, 0, 0, 0.28);
-  --shadow-command: 0 18px 48px rgba(0, 0, 0, 0.42);
   --background: var(--surface-raised);
   --foreground: var(--text-primary);
-  --popover: rgba(37, 38, 41, 0.98);
+  --popover: var(--color-surface-overlay);
   --popover-foreground: var(--text-primary);
   --primary: var(--send-bg);
   --primary-foreground: var(--color-text-inverse);
+  --secondary: rgba(255, 255, 255, 0.08);
+  /* A 3:1 boundary on dark base, raised and composer surfaces (Deny). */
+  --secondary-border: rgba(255, 255, 255, 0.4);
+  --muted: rgba(255, 255, 255, 0.06);
+  --color-mix-light: var(--neutral-white);
+
+  /* Syntax highlighting (code blocks) */
+  --syntax-keyword: var(--blue-03);
+  --syntax-string: var(--green-03);
+  --syntax-comment: var(--grayscale-06);
+  --syntax-number: var(--amber-04);
+  --syntax-title: var(--blue-02);
+  --syntax-type: var(--amber-03);
+  --syntax-variable: var(--red-04);
+  --syntax-meta: var(--grayscale-05);
+  --syntax-addition: var(--green-04);
+  --syntax-deletion: var(--red-05);
 }
 
 .theme-light {
   color-scheme: light;
+  --color-success: var(--green-06);
+  --color-success-bg: var(--green-01);
+  --color-warning: var(--amber-06);
+  --color-warning-bg: var(--amber-01);
+  --color-danger: var(--red-07);
+  --color-danger-bg: var(--red-01);
+  --color-success-border: var(--green-02);
+  --color-success-text: var(--color-success);
+  --color-warning-border: var(--amber-02);
+  --color-warning-text: var(--amber-08);
+  --color-danger-border: var(--red-02);
+  --color-danger-text: var(--color-danger);
+  --color-info-bg: var(--blue-01);
+  --color-info-border: var(--blue-02);
+  --color-info-text: var(--blue-07);
+  --color-surface-raised: rgba(255, 255, 255, 0.96);
+  --color-surface-overlay: rgba(255, 255, 255, 0.98);
   --color-text-primary: var(--neutral-light-text-primary);
   --color-text-secondary: var(--neutral-light-text-secondary);
   --color-text-tertiary: var(--grayscale-07);
   --color-text-disabled: var(--neutral-light-text-disabled);
+  /* Disabled tone for rows, menu items and options: text color, not opacity. */
+  --interactive-disabled-fg: var(--color-text-disabled);
   --color-text-inverse: var(--neutral-white);
+
+  --focus-ring-color: var(--color-action-primary);
+  --focus-ring: 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
+  --color-focus-ring: var(--focus-ring-color);
+  --ring: var(--focus-ring-color);
 
   --surface: rgba(255, 255, 255, 0.9);
   --adaptive-panel-bg: var(--neutral-white);
   --adaptive-scrim-bg: rgba(0, 0, 0, 0.12);
-  --surface-raised: rgba(255, 255, 255, 0.96);
+  --surface-raised: var(--color-surface-raised);
   --workspace-bg: rgba(255, 255, 255, 0.94);
   --titlebar-bg: rgba(255, 255, 255, 0.72);
   --conversation-bg: linear-gradient(
@@ -607,13 +974,7 @@
   --composer-glass-divider: rgba(0, 0, 0, 0.045);
   --composer-glass-highlight: rgba(255, 255, 255, 0.42);
   --composer-glass-lowlight: rgba(0, 0, 0, 0.035);
-  --composer-glass-glint: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 1) 20%,
-    rgba(255, 255, 255, 1) 80%,
-    rgba(255, 255, 255, 0) 100%
-  );
+  --composer-glass-glint: transparent;
   --composer-glass-shadow: 0 12px 28px rgba(0, 0, 0, 0.06);
   --composer-glass-blur: 4px;
   --composer-glass-filter: saturate(1.35) blur(var(--composer-glass-blur));
@@ -629,8 +990,6 @@
   --danger-bg: rgba(255, 245, 244, 0.86);
   --danger-banner-bg: rgba(255, 239, 238, 0.96);
   --worker-panel-bg: rgba(241, 242, 244, 0.96);
-  --worker-title-bg: rgba(0, 0, 0, 0.14);
-  --automation-details-bg: rgba(248, 248, 247, 0.9);
   --sidebar-bg: rgba(255, 255, 255, 0.52);
   --windows-sidebar-bg: rgba(255, 255, 255, 0.36);
   --sidebar-collapsed-bg: rgba(244, 245, 247, 0.18);
@@ -642,7 +1001,7 @@
   --selection: rgba(32, 35, 39, 0.07);
   --selection-strong: rgba(32, 35, 39, 0.1);
   --icon-muted: var(--grayscale-08);
-  --placeholder: var(--grayscale-05);
+  --placeholder: var(--neutral-light-placeholder);
   --send-bg: var(--grayscale-10);
   --send-stop-bg: var(--grayscale-11);
   --send-fg: var(--color-text-inverse);
@@ -659,10 +1018,49 @@
   --color-mix-light: var(--neutral-white);
   --background: var(--surface-raised);
   --foreground: var(--text-primary);
-  --popover: rgba(255, 255, 255, 0.98);
+  --popover: var(--color-surface-overlay);
   --popover-foreground: var(--text-primary);
   --primary: var(--send-bg);
   --primary-foreground: var(--color-text-inverse);
+
+  /* Syntax highlighting (code blocks) */
+  --syntax-keyword: var(--blue-08);
+  --syntax-string: var(--green-08);
+  --syntax-comment: var(--grayscale-07);
+  --syntax-number: var(--amber-09);
+  --syntax-title: var(--blue-07);
+  --syntax-type: var(--amber-10);
+  --syntax-variable: var(--red-07);
+  --syntax-meta: var(--grayscale-08);
+  --syntax-addition: var(--green-08);
+  --syntax-deletion: var(--red-07);
+}
+
+/* Aliases of theme tokens. A custom property that references another is
+   computed where it is declared, so an alias declared only on :root would
+   keep the light value inside .theme-dark (the dark Deny button's text).
+   Re-declaring them on each theme scope resolves them against that theme. */
+.theme-dark,
+.theme-light {
+  --menu-group-label-color: var(--text-tertiary);
+  --accent: var(--color-action-primary);
+  --ok: var(--color-success);
+  --danger: var(--color-danger);
+  --access-ask: var(--accent);
+  --access-read: var(--text-primary);
+  --access-read-icon: var(--text-tertiary);
+  --context-chart-1: var(--accent);
+  --context-chart-2: var(--ok);
+  --context-chart-3: var(--icon-muted);
+  --context-chart-4: var(--text-secondary);
+  --context-chart-5: var(--text-tertiary);
+  --context-chart-6: var(--line-strong);
+  --context-chart-free: var(--context-track-bg);
+  --secondary-foreground: var(--text-primary);
+  --muted-foreground: var(--text-secondary);
+  --destructive: var(--danger);
+  --border: var(--line);
+  --input: var(--line);
 }
 
 .sidebar-solid {
@@ -702,6 +1100,13 @@ body {
   letter-spacing: 0;
 }
 
+/* Korean wraps between words, never inside one; long unbroken tokens (paths,
+   URLs) still wrap instead of overflowing. Inherited by every surface. */
+:root:lang(ko) {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
 button,
 input,
 select,
@@ -724,6 +1129,11 @@ input::placeholder,
 textarea::placeholder {
   color: var(--placeholder);
   opacity: 1;
+}
+
+:where(:focus-visible) {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: 1px;
 }
 
 .sr-only {

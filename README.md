@@ -181,6 +181,11 @@ bun run app:ui:build
 bun run app:client
 ```
 
+App UI is assembled only from the Butler design system. Before changing UI,
+read the design-system skill
+(`packages/butler-app/client/ui/src/libs/design-system/skills/butler-design-system/SKILL.md`)
+and browse the DS Viewer at `?visual=design-system`.
+
 ## Status
 
 Butler is `v0.0.21` and pre-release. Expect breaking changes before `v1.0.0`.

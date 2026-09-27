@@ -22,7 +22,7 @@ Product containers and higher-level blocks.
 Format numbers and units before passing them in.
 
 ## Wrong use cases
-Do not use it for editable fields. Use `SettingsField` or `FormRow`.
+Do not use it for editable fields. Use `SettingsField`.
 
 ## Tags
 key-value, inspector, metadata, summary

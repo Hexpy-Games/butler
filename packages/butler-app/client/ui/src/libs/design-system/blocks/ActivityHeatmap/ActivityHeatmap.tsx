@@ -1,5 +1,7 @@
 import { Button } from "../../components/Button";
+import { useScrollEdges } from "../../lib/useScrollEdges";
 import styles from "./ActivityHeatmap.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface ActivityHeatmapDay {
   id: string;
@@ -21,6 +23,7 @@ export interface ActivityHeatmapProps {
 
 export function ActivityHeatmap({ days, ariaLabel, startWeekday = 0, weekdayLabels,
   selectedId, onSelect, legend }: ActivityHeatmapProps) {
+  const viewportFadeRef = useScrollEdges("x");
   const offset = Math.max(0, Math.min(6, startWeekday));
   const weeks = Math.ceil((offset + days.length) / 7);
   const months: Array<{ label: string; start: number; span: number }> = [];
@@ -31,7 +34,7 @@ export function ActivityHeatmap({ days, ariaLabel, startWeekday = 0, weekdayLabe
     else months.push({ label, start: week + 1, span: 1 });
   }
   return <div className={styles.root} aria-label={ariaLabel}>
-  <div className={styles.viewport}>
+  <div ref={viewportFadeRef} className={styles.viewport}>
     <div className={styles.calendar}>
     {days.some((day) => day.monthLabel) && <>
       {weekdayLabels && <span />}
@@ -49,7 +52,7 @@ export function ActivityHeatmap({ days, ariaLabel, startWeekday = 0, weekdayLabe
         const level = day.count === null ? "unknown" : day.count <= 0 ? 0
           : day.count === 1 ? 1 : day.count < 5 ? 2 : day.count < 10 ? 3 : 4;
         const label = day.count === null ? day.label : `${day.label}: ${day.countLabel ?? day.count}`;
-        return onSelect ? <Button key={day.id} variant="borderless" className={styles.day}
+        return onSelect ? <Button key={day.id} variant="borderless" className={dsClass(styles.day)}
           aria-label={label} title={label} data-level={level} aria-pressed={selectedId === day.id}
           onClick={() => onSelect(day.id)} />
           : <span key={day.id} className={styles.day} data-level={level} aria-label={label} title={label} />;

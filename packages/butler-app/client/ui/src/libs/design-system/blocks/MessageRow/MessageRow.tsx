@@ -1,11 +1,7 @@
-import { forwardRef } from "react";
-import type {
-  CSSProperties,
-  HTMLAttributes,
-  MutableRefObject,
-  ReactNode,
-  Ref,
-} from "react";
+import type { DsBaseProps } from "../../lib/dsProps";
+import { forwardRef, useRef } from "react";
+import type { HTMLAttributes, MutableRefObject, ReactNode, Ref } from "react";
+import { useSendFlight } from "../../lib/sendFlight";
 import { cn } from "../../lib/utils";
 import styles from "./MessageRow.module.css";
 
@@ -19,7 +15,7 @@ export type MessageRowRole =
 export type MessageRowTone = "pending" | "failed" | "complete";
 
 export interface MessageRowProps extends Omit<
-  HTMLAttributes<HTMLElement>,
+  DsBaseProps<HTMLAttributes<HTMLElement>>,
   "role"
 > {
   role: MessageRowRole;
@@ -29,10 +25,14 @@ export interface MessageRowProps extends Omit<
   tone?: MessageRowTone;
   compactionEvent?: boolean;
   activity?: boolean;
+  /** Newly inserted row: fades in with a small rise (a just-sent user bubble flies
+   * in from the composer); "delivered" resolves a QueuedMessage bubble in place. */
+  entering?: boolean | "delivered";
   index?: number;
-  style?: CSSProperties;
   rowRef?: Ref<HTMLElement>;
   dataTestClass?: string;
+  /** Virtual list placement: the row's vertical offset (translateY, px). */
+  offsetY?: number;
 }
 
 function assignRef(
@@ -57,8 +57,10 @@ export const MessageRow = forwardRef<HTMLElement, MessageRowProps>(
       tone = "complete",
       compactionEvent = false,
       activity = false,
+      entering = false,
       index,
       style,
+      offsetY,
       rowRef,
       dataTestClass,
       className,
@@ -66,6 +68,8 @@ export const MessageRow = forwardRef<HTMLElement, MessageRowProps>(
     },
     forwardedRef,
   ) {
+    const bodyRef = useRef<HTMLDivElement | null>(null);
+    const flying = useSendFlight(bodyRef, entering === true && role === "user");
     return (
       <article
         {...props}
@@ -80,15 +84,16 @@ export const MessageRow = forwardRef<HTMLElement, MessageRowProps>(
           className,
         )}
         data-test-class={dataTestClass}
+        data-enter={flying && entering === true ? "fly" : entering === "delivered" ? "delivered" : entering ? "true" : undefined}
         data-index={index}
         ref={(node) => {
           assignRef(rowRef, node);
           assignRef(forwardedRef, node);
         }}
-        style={style}
+        style={offsetY === undefined ? style : { ...style, transform: `translateY(${offsetY}px)` }}
       >
         {avatar}
-        <div className={styles.body} data-test-class="message-body">
+        <div className={styles.body} data-test-class="message-body" ref={bodyRef}>
           {children}
         </div>
         {footer && <div className={styles.rowFooter}>{footer}</div>}
@@ -125,11 +130,14 @@ export function MessageStatusLabel({
   children,
   dataTestClass,
   mark,
+  shimmer = false,
   title,
 }: {
   children: ReactNode;
   dataTestClass?: string;
   mark: ReactNode;
+  /** In-progress label (thinking, working): the text shimmers. */
+  shimmer?: boolean;
   title?: string;
 }) {
   return (
@@ -141,7 +149,9 @@ export function MessageStatusLabel({
       <span aria-hidden="true" className={styles.statusMark}>
         {mark}
       </span>
-      <div className={styles.statusContent}>{children}</div>
+      <div className={styles.statusContent} data-shimmer={shimmer ? "true" : undefined}>
+        {children}
+      </div>
     </div>
   );
 }

@@ -135,9 +135,6 @@ test("observer dialog is named, focus-contained, read-only, and closes on Escape
     timelineText.indexOf("Safe activity transcript"),
   );
   expect(timelineText.indexOf("Safe activity transcript")).toBeLessThan(
-    timelineText.indexOf("Implementation Worker"),
-  );
-  expect(timelineText.indexOf("Implementation Worker")).toBeLessThan(
     timelineText.indexOf("Butler direction"),
   );
   expect(dialog.querySelectorAll(
@@ -147,19 +144,16 @@ test("observer dialog is named, focus-contained, read-only, and closes on Escape
     '[data-test-class="turn-current-phase-activity"]',
   )).toHaveLength(1);
   expect(timelineText).toContain("Waiting for Worker results.");
-  expect(timelineText).toContain("Implementation Worker");
-  const assistantMessage = Array.from(dialog.querySelectorAll(
-    '[data-test-class="steward-observer-message"]',
-  )).find((row) => row.textContent?.includes("Safe activity transcript"));
-  expect(assistantMessage?.querySelector(
+  // Since 3d8720aab a Worker is shown only through the activity that called it
+  // (WorkerCallCapsule, see WorkerCallCapsule.test.tsx); the observer renders no
+  // standalone Worker rows, so this uncalled Worker stays out of the timeline.
+  expect(dialog.querySelector(
+    '[data-test-class="steward-observer-worker-message"]',
+  )).toBeNull();
+  expect(dialog.querySelector(
     '[data-test-class="steward-observer-worker-capsules"]',
   )).toBeNull();
-  const workerMessage = dialog.querySelector(
-    '[data-test-class="steward-observer-worker-message"]',
-  );
-  expect(workerMessage?.querySelector(
-    '[data-test-class="steward-observer-worker-capsules"]',
-  )?.textContent).toContain("Implementation Worker");
+  expect(timelineText).not.toContain("Implementation Worker");
   const stopButton = Array.from(dialog.querySelectorAll("button")).find((button) =>
     /중지|stop/iu.test(button.textContent ?? ""),
   );

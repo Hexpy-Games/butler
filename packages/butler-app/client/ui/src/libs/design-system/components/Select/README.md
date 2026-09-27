@@ -19,11 +19,25 @@ Import from the public design-system alias:
 import { Select } from "@/butler-ds";
 ```
 
-Use `SelectPillTrigger` for a floating composer selector. It renders the same
-`PillButton surface="glass"` used by active-work and jump-to-latest capsules,
-with an optional icon and the selected label. Its styling stays owned by PillButton.
+A select inside the composer toolbar (the Local / Worktree workspace chip) uses
+`ComposerSelectControl` from the ComposerControl block, so it matches the other
+composer controls; see the ComposerControl showcase. `SelectPillTrigger` (a
+glass `PillButton` trigger) remains for floating selectors outside the
+composer toolbar.
 
-Prefer token-backed spacing and responsive composition. Validate the fixture in the design-system workbench before using it in a domain flow.
+Use `SelectButton` for a select-looking trigger that opens a custom popover,
+such as a searchable list inside `Popover`. It shares the `SelectTrigger` border,
+height, left-aligned value, and plain chevron.
+
+Prefer token-backed spacing and responsive composition. Check its showcase and usage guidance in the DS Viewer before using it in a domain flow.
+
+### Disabled tone
+
+Disabled options, menu items, rows and Clickables use the DS disabled tone:
+`--interactive-disabled-fg` (the theme's `--color-text-disabled`) and
+`--interactive-disabled-cursor`, never opacity, and they never take the hover
+or keyboard highlight fill. Product code passes `disabled`; it does not style
+the state.
 
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.

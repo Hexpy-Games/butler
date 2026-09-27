@@ -55,3 +55,6 @@ import { MetricCard } from "@/butler-ds";
 ## Tags
 
 metric, dashboard, analytics, kpi, stats
+
+## Numeric values
+Pass a number (and optionally `format`) to count between values with `AnimatedNumber`; strings render statically. The value always uses tabular numerals.

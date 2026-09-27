@@ -6,7 +6,7 @@ use super::{base_metadata, peer};
 use crate::host::service::ingress::IngressError;
 use crate::host::service::ingress::bind::Envelope;
 use butler_gateway::gateway::ClaimedInboundEvent;
-use butler_turn::btcc::{ChangedFileSummary, FinalArtifact, TurnOutcomeKind};
+use butler_turn::btcc::{FinalArtifact, TurnOutcomeKind};
 use butler_turn::workspace::SessionTransportBinding;
 
 pub(super) struct Terminal<'a> {
@@ -18,7 +18,7 @@ pub(super) struct Terminal<'a> {
     suspension: Option<&'a str>,
     model: Option<Value>,
     pub(super) artifacts: &'a [FinalArtifact],
-    pub(super) changed_files: &'a [ChangedFileSummary],
+    pub(super) changed_files: &'a [Value],
     pub(super) plan: Option<&'a Value>,
 }
 

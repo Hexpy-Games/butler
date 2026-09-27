@@ -59,27 +59,10 @@ pub trait RegisteredWritePort: Send + Sync {
     /// Writes the file and returns the registered receipt (passthrough JSON).
     fn write(&self, prepared: PreparedWrite) -> EffectFuture<'_, Value>;
 }
-/// One reviewed edit for the registered edit tool.
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-pub struct PreparedEditEntry {
-    pub path: String,
-    pub start_line: u64,
-    pub old_text: String,
-    pub new_text: String,
-    pub expected_sha256: String,
-}
-/// A reviewed edit or batch for the registered edit tool; serializes as the
-/// tool's arguments (`{..entry}` or `{"edits":[..]}`).
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-#[serde(untagged)]
-pub enum PreparedEdit {
-    Batch { edits: Vec<PreparedEditEntry> },
-    Single(PreparedEditEntry),
-}
 /// Performs a registered workspace file edit and returns its receipt.
 pub trait RegisteredEditPort: Send + Sync {
-    /// Applies the edit and returns the registered receipt (passthrough JSON).
-    fn edit(&self, prepared: PreparedEdit) -> EffectFuture<'_, Value>;
+    /// Applies the normalized edit (passthrough JSON) and returns its receipt.
+    fn edit(&self, prepared: Value) -> EffectFuture<'_, Value>;
 }
 /// One effect capability: normalizes targets and inputs, dispatches once
 /// per idempotency key and reconciles an earlier dispatch after a restart.

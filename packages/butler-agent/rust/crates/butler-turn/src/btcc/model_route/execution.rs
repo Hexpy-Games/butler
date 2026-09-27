@@ -11,7 +11,7 @@ use crate::btcc::{BtccError, ModelIdentity, ReasoningEffort, TurnStore};
 
 use super::contracts::{
     ModelExecution, ModelExecutionFactory, ModelExecutionInput, ModelExecutionView,
-    ModelRouteRetryConfig,
+    ModelRouteRetryConfig, RouteState,
 };
 use super::support::{selected, validate};
 use super::{hooks::RouteHooks, routed::RoutedRound};
@@ -46,13 +46,17 @@ impl ModelExecutionFactory for TurnModelExecutionFactory {
         Box::pin(async move {
             let selected = selected(&input.turn.model_selection)?;
             let source_revision = input.source_revision;
-            let Some(route) = input.turn.model_route.clone() else {
+            let Some(value) = &input.turn.model_route else {
                 return Ok(Box::new(PassthroughExecution {
                     base: input.base,
                     active: selected.0,
                     reasoning: selected.1,
                 }) as Box<dyn ModelExecution>);
             };
+            let route: RouteState = serde_json::from_value(value.clone()).map_err(|source| {
+                BtccError::detected(BtccCode::ModelRouteInvalid, "invalid admitted model route")
+                    .with_source(source)
+            })?;
             validate(&route)?;
             let candidate = route
                 .candidates
@@ -68,7 +72,7 @@ impl ModelExecutionFactory for TurnModelExecutionFactory {
                 store,
                 input.turn,
                 input.claim,
-                route.clone(),
+                value.clone(),
                 route.route_digest.clone(),
             );
             Ok(Box::new(RoutedExecution {

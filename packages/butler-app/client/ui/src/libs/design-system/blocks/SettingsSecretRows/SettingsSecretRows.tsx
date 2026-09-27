@@ -1,17 +1,19 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes, ReactNode } from "react";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
 import styles from "./SettingsSecretRows.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface SettingsSecretRowsProps
-  extends Omit<HTMLAttributes<HTMLDivElement>, "title"> {
+  extends Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "title"> {
   title: ReactNode;
   actions?: ReactNode;
   emptyState?: ReactNode;
   children?: ReactNode;
 }
 
-export interface SettingsSecretRowProps extends HTMLAttributes<HTMLDivElement> {
+export interface SettingsSecretRowProps extends DsBaseProps<HTMLAttributes<HTMLDivElement>> {
   sourceControl: ReactNode;
   keyControl: ReactNode;
   valueControl: ReactNode;
@@ -34,7 +36,7 @@ export function SettingsSecretRows({
       </div>
       <div className={styles.rowList}>{children}</div>
       {emptyState ? (
-        <Typo.Caption className={styles.empty}>{emptyState}</Typo.Caption>
+        <Typo.Caption className={dsClass(styles.empty)}>{emptyState}</Typo.Caption>
       ) : null}
     </div>
   );

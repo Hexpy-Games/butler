@@ -16,8 +16,10 @@ impl GuidedSourceRevision {
         let restored = turn
             .authority_continuation
             .as_ref()
-            .and_then(|continuation| continuation.presentation.as_ref())
-            .map_or(0, |presentation| presentation.source_revision);
+            .and_then(|value| value.get("presentation"))
+            .and_then(|value| value.get("sourceRevision"))
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0);
         Self(Arc::new(AtomicU64::new(restored)))
     }
 
@@ -40,15 +42,13 @@ mod tests {
         ModelExecutionFactory, ModelExecutionInput, ModelRouteRetryConfig,
         TurnModelExecutionFactory,
     };
+    use serde_json::json;
     use tokio_util::sync::CancellationToken;
 
     #[tokio::test]
     async fn route_and_activity_share_one_restored_source_revision_counter() {
         let mut turn = turn(route(0, 1));
-        turn.authority_continuation = Some(Box::new(
-            crate::btcc::AuthorityLoopContinuation::fixture("request", "call")
-                .with_source_revision(7),
-        ));
+        turn.authority_continuation = Some(json!({"presentation":{"sourceRevision":7}}));
         let revisions = GuidedSourceRevision::from_turn(&turn);
         let other_turn = GuidedSourceRevision::from_turn(&turn);
         let store = Arc::new(Store::default());

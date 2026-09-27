@@ -26,7 +26,7 @@ Any product container that owns attachment data.
 Format file sizes and download URLs outside the design system.
 
 ## Wrong use cases
-Do not use it for project documents. Use `DocumentTile` or `ResourceTile`.
+Do not use it for project documents. Use `DocumentTile`.
 
 ## Tags
 attachment, file, composer, message

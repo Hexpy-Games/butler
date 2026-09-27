@@ -2,7 +2,6 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use super::WriteInput;
 use crate::btcc::effects::contracts::{EffectFailure, EffectResult};
 
 fn invalid(message: impl Into<String>) -> EffectFailure {
@@ -96,8 +95,7 @@ fn lexical_absolute(path: &Path) -> EffectResult<PathBuf> {
     }
     Ok(clean)
 }
-/// Validates raw write_file tool arguments (passthrough JSON) into the normalized input.
-pub(super) fn input(value: &Value, workspace: &Path) -> EffectResult<WriteInput> {
+pub(super) fn input(value: &Value, workspace: &Path) -> EffectResult<Value> {
     let record = value
         .as_object()
         .ok_or_else(|| invalid("write_file effect input must be an object"))?;
@@ -134,36 +132,25 @@ pub(super) fn input(value: &Value, workspace: &Path) -> EffectResult<WriteInput>
         .get("path")
         .and_then(Value::as_str)
         .ok_or_else(|| invalid("write_file effect path must be a non-empty string"))?;
-    let path = contained(workspace, path)?;
-    let overwrite = record
-        .get("overwrite")
-        .map(|overwrite| {
-            overwrite
-                .as_bool()
-                .ok_or_else(|| invalid("write_file effect overwrite must be a boolean"))
-        })
-        .transpose()?;
-    let expected_sha256 = record
-        .get("expected_sha256")
-        .map(|expected| {
-            expected
-                .as_str()
-                .filter(|value| {
-                    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
-                })
-                .map(str::to_ascii_lowercase)
-                .ok_or_else(|| {
-                    invalid("write_file effect expected_sha256 must be a SHA-256 digest")
-                })
-        })
-        .transpose()?;
-    Ok(WriteInput {
-        path,
-        content: content.to_owned(),
-        create_parents,
-        overwrite,
-        expected_sha256,
-    })
+    let mut normalized = serde_json::json!({"path":contained(workspace,path)?,"content":content,"create_parents":create_parents});
+    if let Some(overwrite) = record.get("overwrite") {
+        let overwrite = overwrite
+            .as_bool()
+            .ok_or_else(|| invalid("write_file effect overwrite must be a boolean"))?;
+        butler_core::json::object_mut(&mut normalized)
+            .insert("overwrite".into(), Value::Bool(overwrite));
+    }
+    if let Some(expected) = record.get("expected_sha256") {
+        let expected = expected
+            .as_str()
+            .filter(|value| value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()))
+            .ok_or_else(|| invalid("write_file effect expected_sha256 must be a SHA-256 digest"))?;
+        butler_core::json::object_mut(&mut normalized).insert(
+            "expected_sha256".into(),
+            Value::String(expected.to_ascii_lowercase()),
+        );
+    }
+    Ok(normalized)
 }
 pub(super) fn target(value: &str) -> EffectResult<String> {
     let value = required(value, "target")?;

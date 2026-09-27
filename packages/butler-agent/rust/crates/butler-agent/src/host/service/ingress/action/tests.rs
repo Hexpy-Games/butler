@@ -25,13 +25,8 @@ fn app_final_projects_bounded_rich_result_then_source_ordered_cancellation() {
         size_bytes: Some(28),
         created_at: None,
     };
-    let files = (0..41)
-        .map(|index| butler_turn::btcc::ChangedFileSummary {
-            path: format!("file-{index}"),
-            additions: 0,
-            deletions: 0,
-            lines: vec![],
-        })
+    let files = std::iter::once(json!({"path":"invalid"}))
+        .chain((0..41).map(|index| json!({"path":format!("file-{index}"),"lines":[]})))
         .collect();
     let delivered = TurnOutcome {
         result: TurnOutcomeKind::Delivered(Box::new(DeliveredOutcome {

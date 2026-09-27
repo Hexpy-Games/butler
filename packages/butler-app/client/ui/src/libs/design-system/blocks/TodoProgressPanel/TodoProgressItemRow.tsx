@@ -1,18 +1,19 @@
 import { memo } from "react";
 import {
-  CheckCircle2,
   Circle,
   CircleAlert,
   CircleX,
+  ICON_SIZE,
   Minus,
 } from "../../components/Icons";
 import { Typo } from "../../components/Typo";
-import { Spinner } from "../../components/Spinner";
+import { LoadingIndicator } from "../../components/LoadingIndicator";
 import type {
   TodoProgressPanelItem,
   TodoProgressPanelItemState,
 } from "./TodoProgressPanel";
 import styles from "./TodoProgressPanel.module.css";
+import { dsClass } from "../../lib/internal";
 
 export const TodoProgressItemRow = memo(function TodoProgressItemRow({
   item,
@@ -28,13 +29,13 @@ export const TodoProgressItemRow = memo(function TodoProgressItemRow({
         <Typo.Body
           as="span"
           aria-label={item.fullTitle ?? item.title}
-          className={styles.title}
+          className={dsClass(styles.title)}
           title={item.fullTitle ?? item.title}
         >
           {item.title}
         </Typo.Body>
       </span>
-      <Typo.Caption as="span" className={styles.status}>
+      <Typo.Caption as="span" className={dsClass(styles.status)}>
         {item.statusLabel}
       </Typo.Caption>
     </li>
@@ -47,13 +48,14 @@ export const TodoProgressItemRow = memo(function TodoProgressItemRow({
   previous.item.statusLabel === next.item.statusLabel,
 );
 
+/** Running and completed share one LoadingIndicator, so running -> completed draws the check. */
 function itemIcon(state: TodoProgressPanelItemState) {
-  if (state === "completed") return <CheckCircle2 size={15} />;
-  if (state === "blocked") return <CircleAlert size={15} />;
-  if (state === "skipped") return <Minus size={15} />;
+  if (state === "completed") return <LoadingIndicator state="done" size={ICON_SIZE.md} />;
+  if (state === "blocked") return <CircleAlert size="md" />;
+  if (state === "skipped") return <Minus size="md" />;
   if (state === "correction-required" || state === "stopped")
-    return <CircleX size={15} />;
+    return <CircleX size="md" />;
   if (state === "running" || state === "reviewing")
-    return <Spinner size={15} />;
-  return <Circle size={15} />;
+    return <LoadingIndicator state="loading" size={ICON_SIZE.md} />;
+  return <Circle size="md" />;
 }

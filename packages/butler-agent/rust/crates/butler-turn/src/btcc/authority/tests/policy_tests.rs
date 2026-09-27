@@ -90,9 +90,7 @@ async fn ready(name: &str) -> Ready {
             &claim,
             &TurnTransition::Suspend {
                 reason: SuspensionReason::AuthorityPending,
-                authority_continuation: Some(Box::new(
-                    crate::btcc::AuthorityLoopContinuation::fixture(&request_ref, "call-1"),
-                )),
+                authority_continuation: Some(json!({"requestRef":request_ref,"callId":"call-1"})),
             },
         )
         .await

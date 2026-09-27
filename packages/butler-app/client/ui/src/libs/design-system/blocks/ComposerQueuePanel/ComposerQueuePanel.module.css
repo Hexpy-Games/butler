@@ -1,8 +1,0 @@
-.panel {
-  width: 100%;
-}
-
-.list {
-  display: grid;
-  gap: var(--space-1);
-}

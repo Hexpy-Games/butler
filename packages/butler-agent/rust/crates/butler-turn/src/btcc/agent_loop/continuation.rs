@@ -34,41 +34,8 @@ pub struct AuthorityLoopContinuation {
     pub extensions: Map<String, Value>,
 }
 
-#[cfg(any(test, feature = "test-support"))]
-impl AuthorityLoopContinuation {
-    /// An empty continuation parked on `call_id` of `request_ref` (fixtures).
-    pub fn fixture(request_ref: &str, call_id: &str) -> Self {
-        Self {
-            request_ref: request_ref.into(),
-            call_id: call_id.into(),
-            messages: Vec::new(),
-            next_item_ordinal: 0,
-            provider_continuation: None,
-            instructions: None,
-            stable_provider_cache_prefix: None,
-            model_round_index: 0,
-            iteration: 0,
-            empty_response_recovery_used: false,
-            tool_results: Vec::new(),
-            presentation: None,
-            batch: AuthorityBatch::default(),
-            extensions: Map::new(),
-        }
-    }
-
-    /// The fixture with a presentation at `source_revision`.
-    #[must_use]
-    pub fn with_source_revision(mut self, source_revision: u64) -> Self {
-        self.presentation = Some(GuidedPresentation {
-            source_revision,
-            activity: GuidedActivitySnapshot::default(),
-        });
-        self
-    }
-}
-
 /// The tool batch interrupted by the authority request, with the cursor of the pending call.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthorityBatch {
     pub tools: Vec<ModelRoundTool>,
@@ -87,7 +54,7 @@ pub struct GuidedPresentation {
 }
 
 /// Snapshot of guided activity grouping: which tool calls belong to which activity.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GuidedActivitySnapshot {
     pub managed: bool,

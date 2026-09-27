@@ -1,0 +1,6 @@
+/* Closing popper overlays keep their last anchored position (lib/popperExit.ts)
+   so an anchor that unmounts mid-exit cannot drag them to the viewport origin. */
+[data-radix-popper-content-wrapper][data-exit-frozen] {
+  transform: var(--popper-exit-transform) !important;
+  --radix-popper-transform-origin: var(--popper-exit-origin) !important;
+}

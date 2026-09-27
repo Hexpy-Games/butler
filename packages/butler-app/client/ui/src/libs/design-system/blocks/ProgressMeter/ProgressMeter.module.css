@@ -15,11 +15,16 @@
   background: var(--selection);
 }
 
+/* The fill spans the track and scales from the inline start, so value
+   changes animate on the compositor instead of animating width. */
 .fill {
   display: block;
+  width: 100%;
   height: 100%;
-  border-radius: inherit;
   background: var(--accent);
+  transform: scaleX(var(--progress-scale));
+  transform-origin: left center;
+  transition: transform var(--motion-deliberate) var(--motion-ease-decelerate);
 }
 
 .success {
@@ -32,4 +37,14 @@
 
 .danger {
   background: var(--color-danger);
+}
+
+.root[data-bare="true"] .track {
+  height: var(--space-xs);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill {
+    transition: none;
+  }
 }

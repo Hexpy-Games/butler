@@ -4,6 +4,17 @@
   min-width: 0;
 }
 
+.inline {
+  display: inline-flex;
+}
+
+/* Lists laid out as stacks carry no list chrome. */
+.stack:is(ul, ol) {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .fill {
   flex: 1 1 auto;
   min-height: 0;
@@ -47,29 +58,33 @@
   gap: var(--space-2xl);
 }
 
-/* Gap - Legacy numeric aliases */
-.gap-1 {
-  gap: var(--space-1);
+/* Row gap between wrapped lines; overrides the row part of gap. */
+.stack[data-row-gap="none"] {
+  row-gap: var(--space-none);
 }
 
-.gap-2 {
-  gap: var(--space-2);
+.stack[data-row-gap="xs"] {
+  row-gap: var(--space-xs);
 }
 
-.gap-3 {
-  gap: var(--space-3);
+.stack[data-row-gap="sm"] {
+  row-gap: var(--space-sm);
 }
 
-.gap-4 {
-  gap: var(--space-4);
+.stack[data-row-gap="md"] {
+  row-gap: var(--space-md);
 }
 
-.gap-5 {
-  gap: var(--space-5);
+.stack[data-row-gap="lg"] {
+  row-gap: var(--space-lg);
 }
 
-.gap-6 {
-  gap: var(--space-6);
+.stack[data-row-gap="xl"] {
+  row-gap: var(--space-xl);
+}
+
+.stack[data-row-gap="2xl"] {
+  row-gap: var(--space-2xl);
 }
 
 /* Main axis alignment */
@@ -121,4 +136,29 @@
 /* Wrapping */
 .wrap {
   flex-wrap: wrap;
+}
+
+/* Phone-width gap (compactGap). */
+@media (width <= 640px) {
+  .stack[data-compact-gap="none"] {
+    gap: var(--space-none);
+  }
+  .stack[data-compact-gap="xs"] {
+    gap: var(--space-xs);
+  }
+  .stack[data-compact-gap="sm"] {
+    gap: var(--space-sm);
+  }
+  .stack[data-compact-gap="md"] {
+    gap: var(--space-md);
+  }
+  .stack[data-compact-gap="lg"] {
+    gap: var(--space-lg);
+  }
+  .stack[data-compact-gap="xl"] {
+    gap: var(--space-xl);
+  }
+  .stack[data-compact-gap="2xl"] {
+    gap: var(--space-2xl);
+  }
 }

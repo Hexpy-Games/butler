@@ -1,0 +1,17 @@
+{
+  "schema": "butler-e2e.legacy-manifest.v1",
+  "note": "Expected content of app-server.sql as the App must show it after migration.",
+  "chats": [
+    {"id": "general", "messages": [
+      {"id": "legacy-m-0001", "role": "user", "text": "Which vegetables can I plant in early spring?", "created_at": "2025-11-02T09:00:00.000Z"},
+      {"id": "legacy-m-0002", "role": "assistant", "text": "Peas, spinach, radishes and lettuce tolerate early spring cold.", "created_at": "2025-11-02T09:00:07.000Z"},
+      {"id": "legacy-m-0003", "role": "user", "text": "How deep should peas be sown?", "created_at": "2025-11-02T09:04:30.000Z"},
+      {"id": "legacy-m-0004", "role": "assistant", "text": "About 2 to 3 cm deep, 5 cm apart.", "created_at": "2025-11-02T09:05:00.000Z"}
+    ]},
+    {"id": "chat-legacy-0002", "messages": [
+      {"id": "legacy-m-0101", "role": "user", "text": "Name three paste tomatoes.", "created_at": "2025-11-03T18:20:00.000Z"},
+      {"id": "legacy-m-0102", "role": "assistant", "text": "Roma, San Marzano and Amish Paste.", "created_at": "2025-11-03T18:31:00.000Z"}
+    ]}
+  ],
+  "preserved_files": ["legacy-notes/README.txt"]
+}

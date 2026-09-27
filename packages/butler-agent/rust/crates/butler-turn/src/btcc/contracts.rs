@@ -294,38 +294,6 @@ pub struct ModelIdentity {
     pub(crate) provider_reported_model_ref: Option<String>,
 }
 
-/// A changed file as a turn reports it (`changedFiles` of final payloads
-/// and outcomes): its path and the added and deleted lines.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ChangedFileSummary {
-    pub path: String,
-    #[serde(default)]
-    pub additions: u64,
-    #[serde(default)]
-    pub deletions: u64,
-    pub lines: Vec<ChangedFileLine>,
-}
-
-/// One added or deleted line of a changed file.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ChangedFileLine {
-    #[serde(rename = "type")]
-    pub kind: ChangedLineKind,
-    pub content: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub old_line: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub new_line: Option<u64>,
-}
-
-/// Whether a changed line was added or deleted.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ChangedLineKind {
-    Added,
-    Deleted,
-}
-
 /// A turn delivered now.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -344,8 +312,7 @@ pub struct DeliveredOutcome {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub artifacts: Vec<FinalArtifact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub changed_files: Vec<ChangedFileSummary>,
-    /// Passthrough: only pre-cutover payloads carry a plan; it is relayed as stored.
+    pub changed_files: Vec<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -370,7 +337,7 @@ pub struct AlreadyDeliveredOutcome {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub artifacts: Vec<FinalArtifact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub changed_files: Vec<ChangedFileSummary>,
+    pub changed_files: Vec<Value>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

@@ -78,11 +78,7 @@ fn cumulative_exhaustion_retains_consumption_and_unknown_fields() {
         "consumedOutputBytes":0,"consumedModelFacingBytes":0,"startedAtMs":10,
         "lastProgressAtMs":10,"terminal":null,"futureState":"kept"
     });
-    let state = validate_turn_continuation_budget_state(
-        serde_json::from_value(value).expect("decode extensions"),
-        "turn-1",
-    )
-    .expect("parse extensions");
+    let state = parse_turn_continuation_budget_state(value, "turn-1").expect("parse extensions");
     let error = transition_turn_continuation_budget(
         state,
         TurnContinuationBudgetEvent::RecordOutput {

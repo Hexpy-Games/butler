@@ -190,7 +190,7 @@ async fn provider_context_and_replay_share_one_turn_owner() {
                 expected_revision: turn.revision,
                 execution_fence: turn.execution_fence,
                 claim_id: claim.claim_id.clone(),
-                route: Some(serde_json::from_value(route.clone()).unwrap()),
+                route: route.clone(),
             },
             event: ModelRouteEvent {
                 kind: ModelRouteEventKind::FallbackSelected,

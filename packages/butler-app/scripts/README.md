@@ -41,6 +41,9 @@ gateway or Electron runtime.
   `release/package-app-release.ts` validate and package app artifacts without
   depending on service release internals.
 - UI quality: `lint/`.
+- Codemods: `codemods/ds-unsafe-style.ts` (ts-morph) moves geometry-only `style` on
+  design-system components to `UNSAFE_style` and fails while any `className`/`style`
+  remains on one.
 
 ## Boundaries
 

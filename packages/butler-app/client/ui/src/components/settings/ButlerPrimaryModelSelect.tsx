@@ -34,6 +34,7 @@ export function ButlerPrimaryModelSelect({
 
   return (
     <SettingsSelect
+      settingId="primary-model"
       label={settingsFields.butlerModel}
       triggerTestClass="settings-primary-model-select"
       value={activeModel?.model_ref ?? EMPTY_MODEL_CATALOG.default_model_ref}
@@ -47,7 +48,7 @@ export function ButlerPrimaryModelSelect({
           data-test-class="settings-model-management-button"
           onClick={onManage}
         >
-          <Settings size={15} /> {settingsCopy.modelManagement.manageButton}
+          <Settings size="md" /> {settingsCopy.modelManagement.manageButton}
         </Button>
       }
       onChange={(value) => {

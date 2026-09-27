@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { Collapsible } from "../../components/Collapsible";
 import { ChevronDown, ChevronRight } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import type { WorkActivityToolItem } from "./WorkActivityToolGroup";
 import styles from "./WorkActivityBlock.module.css";
+import { dsClass } from "../../lib/internal";
 
 export function WorkActivityToolRow({ tool, nested = false }: { tool: WorkActivityToolItem; nested?: boolean }) {
   const [expanded, setExpanded] = useState(false);
@@ -14,11 +16,11 @@ export function WorkActivityToolRow({ tool, nested = false }: { tool: WorkActivi
         <span className={styles.toolIcon} aria-hidden={!tool.icon}>{tool.icon}</span>
       ) : null}
       <span className={styles.toolCopy}>
-        <Typo.Body as="span" className={styles.toolTitle}>{tool.title}</Typo.Body>
+        <Typo.Body as="span" className={dsClass(styles.toolTitle)}>{tool.title}</Typo.Body>
       </span>
       {nested && hasDetails ? (
         <span className={styles.toolDetailChevron} aria-hidden="true">
-          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          {expanded ? <ChevronDown size="sm" /> : <ChevronRight size="sm" />}
         </span>
       ) : null}
     </>
@@ -35,14 +37,16 @@ export function WorkActivityToolRow({ tool, nested = false }: { tool: WorkActivi
             {content}
           </button>
         ) : <div className={className}>{content}</div>}
-        {expanded ? (
-          <Typo.Caption
-            className={`${styles.toolDetails} ${styles.toolDetailText}`}
-            data-slot="work-activity-tool-details"
-            data-test-class="turn-work-tool-detail-text"
-          >
-            {tool.details}
-          </Typo.Caption>
+        {hasDetails ? (
+          <Collapsible open={expanded}>
+            <Typo.Caption
+              className={dsClass(`${styles.toolDetails} ${styles.toolDetailText}`)}
+              data-slot="work-activity-tool-details"
+              data-test-class="turn-work-tool-detail-text"
+            >
+              {tool.details}
+            </Typo.Caption>
+          </Collapsible>
         ) : null}
       </Stack>
     </div>

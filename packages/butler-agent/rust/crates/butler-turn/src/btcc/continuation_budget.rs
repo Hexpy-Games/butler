@@ -8,16 +8,16 @@ use serde_json::Map;
 
 use crate::btcc::BtccError;
 
-pub(crate) use types::TurnContinuationBudgetError;
-pub use types::{
-    TurnContinuationAdmission, TurnContinuationBudgetEvent, TurnContinuationBudgetLimits,
+pub use types::TurnContinuationBudgetLimits;
+pub(crate) use types::{
+    TurnContinuationAdmission, TurnContinuationBudgetError, TurnContinuationBudgetEvent,
     TurnContinuationBudgetState, TurnContinuationBudgetTerminal,
     TurnContinuationBudgetTerminalReason,
 };
 pub use validation::select_turn_continuation_budget;
 pub(crate) use validation::{
     continuation_limits_for_model, create_turn_continuation_budget_state, model_context_byte_limit,
-    validate_turn_continuation_budget_state,
+    parse_turn_continuation_budget_state,
 };
 use validation::{integer, required_digest, required_text, safe_add, validate_state};
 

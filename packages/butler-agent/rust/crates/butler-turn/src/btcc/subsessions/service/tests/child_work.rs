@@ -143,33 +143,24 @@ async fn child_creation_binds_work(
         .await
         .unwrap();
     let expected_work_id = format!("root-work-{child_role_name}");
-    assert!(
-        repository
-            .create(SubsessionCreate {
-                relation_id: format!("relation-{child_role_name}"),
-                delegation_id: format!("delegation-{child_role_name}"),
-                task_id: format!("task-{child_role_name}"),
-                parent_session_id,
-                parent_turn_id: "parent-turn".into(),
-                child_session_id: child_session_id.into(),
-                child_turn_id: child_turn_id.into(),
-                anchor_message_id: "anchor".into(),
-                safe_title: "Delegated task".into(),
-                root_work_id: expected_work_id.clone(),
-                packet: crate::btcc::SubsessionPacket::fixture(
-                    if child_role_name == "worker" {
-                        crate::btcc::ChildRole::Worker
-                    } else {
-                        crate::btcc::ChildRole::Steward
-                    },
-                    "Complete task.",
-                ),
-                dispatch_intent: crate::btcc::DispatchIntent::fixture(),
-                created_at: "now".into(),
-            })
-            .await
-            .unwrap()
-    );
+    assert!(repository
+        .create(SubsessionCreate {
+            relation_id: format!("relation-{child_role_name}"),
+            delegation_id: format!("delegation-{child_role_name}"),
+            task_id: format!("task-{child_role_name}"),
+            parent_session_id,
+            parent_turn_id: "parent-turn".into(),
+            child_session_id: child_session_id.into(),
+            child_turn_id: child_turn_id.into(),
+            anchor_message_id: "anchor".into(),
+            safe_title: "Delegated task".into(),
+            root_work_id: expected_work_id.clone(),
+            packet: json!({"child_role":child_role_name,"access_mode":"full_access","model_ref":"provider/model","reasoning_effort":"medium","objective":"Complete task."}),
+            dispatch_intent: json!({}),
+            created_at: "now".into(),
+        })
+        .await
+        .unwrap());
     let stored = repository
         .by_child(child_session_id.into())
         .await

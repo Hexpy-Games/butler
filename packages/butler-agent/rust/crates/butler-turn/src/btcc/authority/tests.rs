@@ -146,9 +146,7 @@ async fn real_turn_work_journal_authority_resume_outcome_and_reopen() {
             &claim,
             &TurnTransition::Suspend {
                 reason: SuspensionReason::AuthorityPending,
-                authority_continuation: Some(Box::new(
-                    crate::btcc::AuthorityLoopContinuation::fixture(&request_ref, "call-1"),
-                )),
+                authority_continuation: Some(json!({"requestRef":request_ref,"callId":"call-1"})),
             },
         )
         .await

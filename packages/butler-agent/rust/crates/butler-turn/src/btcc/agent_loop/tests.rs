@@ -350,7 +350,7 @@ async fn authority_snapshot_roundtrips_and_resumes_allow_deny_and_modify() {
         serde_json::to_string(&continuation).unwrap(),
         AUTHORITY_CONTINUATION_GOLDEN
     );
-    let decoded: AuthorityLoopContinuation = (*continuation).clone();
+    let decoded: AuthorityLoopContinuation = serde_json::from_value(continuation.clone()).unwrap();
     assert_eq!(decoded.request_ref, "request-1");
     assert_eq!(decoded.call_id, "journal-pending");
     assert_eq!(decoded.batch.next_call_index, 0);
@@ -363,7 +363,7 @@ async fn authority_snapshot_roundtrips_and_resumes_allow_deny_and_modify() {
     let encoded = serde_json::to_string(&decoded).unwrap();
     assert!(encoded.contains("continuationItemId"));
     assert!(!encoded.contains(":null"));
-    assert_eq!(decoded, *continuation);
+    assert_eq!(serde_json::to_value(decoded).unwrap(), continuation);
 
     for decision in [
         AuthorityDecision::Allow,

@@ -25,11 +25,11 @@ export function GitDependencyNoticePresenter({
             </a>
           </Button>
           <IconButton label={closeLabel} onClick={onDismiss}>
-            <X size={16} />
+            <X size="md" />
           </IconButton>
         </Stack>
       }
-      icon={<CircleAlert size={18} />}
+      icon={<CircleAlert size="lg" />}
       message={message}
       title={title}
       tone="warning"

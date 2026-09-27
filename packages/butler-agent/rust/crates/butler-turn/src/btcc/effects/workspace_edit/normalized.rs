@@ -1,92 +1,14 @@
-use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::workspace::EffectFileScope;
 
-use super::super::contracts::{
-    EffectFailure, EffectResult, PreparedEdit, PreparedEditEntry, RecoveryEntry, RecoveryHint,
-};
-
-/// One normalized edit. Field order is the journaled (identity-hashed) form.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
-pub(super) struct EditEntry {
-    pub(super) path: String,
-    pub(super) start_line: u64,
-    pub(super) old_text: String,
-    pub(super) new_text: String,
-    pub(super) before_sha256: String,
-    pub(super) after_sha256: String,
-}
-
-/// The normalized input of an edit_file effect: one edit or a batch.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub(super) enum EditInput {
-    Batch { edits: Vec<EditEntry> },
-    Single(EditEntry),
-}
-
-/// Which side of an edit a file state is compared with.
-#[derive(Clone, Copy)]
-pub(super) enum Side {
-    Before,
-    After,
-}
-
-impl EditEntry {
-    pub(super) fn sha(&self, side: Side) -> &str {
-        match side {
-            Side::Before => &self.before_sha256,
-            Side::After => &self.after_sha256,
-        }
-    }
-
-    fn prepared(&self) -> PreparedEditEntry {
-        PreparedEditEntry {
-            path: self.path.clone(),
-            start_line: self.start_line,
-            old_text: self.old_text.clone(),
-            new_text: self.new_text.clone(),
-            expected_sha256: self.before_sha256.clone(),
-        }
-    }
-}
-
-impl EditInput {
-    /// Decodes a journaled normalized input.
-    pub(super) fn decode(input: &Value) -> Result<Self, serde_json::Error> {
-        Self::deserialize(input)
-    }
-
-    pub(super) fn is_batch(&self) -> bool {
-        matches!(self, Self::Batch { .. })
-    }
-
-    pub(super) fn entries(&self) -> Vec<&EditEntry> {
-        match self {
-            Self::Batch { edits } => edits.iter().collect(),
-            Self::Single(entry) => vec![entry],
-        }
-    }
-
-    /// The request for the registered edit tool.
-    pub(super) fn prepared(&self) -> PreparedEdit {
-        match self {
-            Self::Batch { edits } => PreparedEdit::Batch {
-                edits: edits.iter().map(EditEntry::prepared).collect(),
-            },
-            Self::Single(entry) => PreparedEdit::Single(entry.prepared()),
-        }
-    }
-}
+use super::super::contracts::{EffectFailure, EffectResult, RecoveryEntry, RecoveryHint};
 
 fn invalid(message: impl Into<String>) -> EffectFailure {
     EffectFailure::policy("effect_request_invalid", message)
 }
 
-/// Validates raw edit_file tool arguments (passthrough JSON) into the normalized input.
-pub(super) fn input(value: &Value, scope: &EffectFileScope) -> EffectResult<EditInput> {
+pub(super) fn input(value: &Value, scope: &EffectFileScope) -> EffectResult<Value> {
     let object = value
         .as_object()
         .ok_or_else(|| invalid("edit_file effect input must be an object"))?;
@@ -100,17 +22,15 @@ pub(super) fn input(value: &Value, scope: &EffectFileScope) -> EffectResult<Edit
             .as_array()
             .filter(|items| (2..=20).contains(&items.len()))
             .ok_or_else(|| invalid("edit_file batch requires 2-20 entries"))?;
-        return Ok(EditInput::Batch {
-            edits: edits
-                .iter()
-                .map(|entry| normalize_entry(entry, scope))
-                .collect::<EffectResult<Vec<_>>>()?,
-        });
+        return Ok(
+            json!({"edits":edits.iter().map(|entry| normalize_entry(entry, scope))
+            .collect::<EffectResult<Vec<_>>>()?}),
+        );
     }
-    normalize_entry(value, scope).map(EditInput::Single)
+    normalize_entry(value, scope)
 }
 
-fn normalize_entry(value: &Value, scope: &EffectFileScope) -> EffectResult<EditEntry> {
+fn normalize_entry(value: &Value, scope: &EffectFileScope) -> EffectResult<Value> {
     let object = value
         .as_object()
         .ok_or_else(|| invalid("edit_file effect entry must be an object"))?;
@@ -151,14 +71,10 @@ fn normalize_entry(value: &Value, scope: &EffectFileScope) -> EffectResult<EditE
         .ok_or_else(|| invalid("edit_file effect new_text must be a string"))?;
     let before = sha(object.get("before_sha256"), "before_sha256")?;
     let after = sha(object.get("after_sha256"), "after_sha256")?;
-    Ok(EditEntry {
-        path,
-        start_line: line,
-        old_text: old_text.to_owned(),
-        new_text: new_text.to_owned(),
-        before_sha256: before,
-        after_sha256: after,
-    })
+    Ok(
+        json!({"path":path,"start_line":line,"old_text":old_text,"new_text":new_text,
+        "before_sha256":before,"after_sha256":after}),
+    )
 }
 
 fn sha(value: Option<&Value>, field: &str) -> EffectResult<String> {
@@ -167,6 +83,14 @@ fn sha(value: Option<&Value>, field: &str) -> EffectResult<String> {
         .filter(|text| text.len() == 64 && text.bytes().all(|byte| byte.is_ascii_hexdigit()))
         .map(str::to_ascii_lowercase)
         .ok_or_else(|| invalid(format!("edit_file effect requires {field}")))
+}
+
+pub(super) fn entries(input: &Value) -> Vec<&Value> {
+    input
+        .get("edits")
+        .and_then(Value::as_array)
+        .map(|items| items.iter().collect())
+        .unwrap_or_else(|| vec![input])
 }
 
 pub(super) fn target(value: &str) -> EffectResult<String> {
@@ -181,15 +105,19 @@ pub(super) fn target(value: &str) -> EffectResult<String> {
     crate::btcc::effects::workspace_file::normalized_workspace_effect_target(value)
 }
 
-pub(super) fn target_for(input: &EditInput) -> EffectResult<String> {
-    match input {
-        EditInput::Batch { edits } => batch_target(
-            &edits
+pub(super) fn target_for(input: &Value) -> EffectResult<String> {
+    if input.get("edits").is_some() {
+        batch_target(
+            &entries(input)
                 .iter()
-                .map(|entry| entry.path.clone())
+                .filter_map(|entry| entry.get("path").and_then(Value::as_str).map(str::to_owned))
                 .collect::<Vec<_>>(),
-        ),
-        EditInput::Single(entry) => Ok(format!("workspace:{}", entry.path)),
+        )
+    } else {
+        Ok(format!(
+            "workspace:{}",
+            input["path"].as_str().unwrap_or("")
+        ))
     }
 }
 
@@ -204,26 +132,29 @@ pub(super) fn batch_target(paths: &[String]) -> EffectResult<String> {
     ))
 }
 
-pub(super) fn recovery_hint(input: &EditInput) -> RecoveryHint {
-    let start_line = |entry: &EditEntry| i64::try_from(entry.start_line).unwrap_or(0);
-    match input {
-        EditInput::Batch { edits } => RecoveryHint::Batch {
+pub(super) fn recovery_hint(input: &Value) -> EffectResult<RecoveryHint> {
+    let entries = entries(input);
+    if input.get("edits").is_some() {
+        Ok(RecoveryHint::Batch {
             capability: "edit_file".into(),
-            entries: edits
+            entries: entries
                 .iter()
-                .map(|entry| RecoveryEntry {
-                    path: entry.path.clone(),
-                    start_line: start_line(entry),
-                    before_sha256: entry.before_sha256.clone(),
-                    after_sha256: entry.after_sha256.clone(),
+                .map(|entry| {
+                    Ok(RecoveryEntry {
+                        path: entry["path"].as_str().unwrap_or("").into(),
+                        start_line: entry["start_line"].as_i64().unwrap_or(0),
+                        before_sha256: entry["before_sha256"].as_str().unwrap_or("").into(),
+                        after_sha256: entry["after_sha256"].as_str().unwrap_or("").into(),
+                    })
                 })
-                .collect(),
-        },
-        EditInput::Single(entry) => RecoveryHint::Single {
+                .collect::<EffectResult<Vec<_>>>()?,
+        })
+    } else {
+        Ok(RecoveryHint::Single {
             capability: "edit_file".into(),
-            start_line: start_line(entry),
-            before_sha256: entry.before_sha256.clone(),
-            after_sha256: entry.after_sha256.clone(),
-        },
+            start_line: input["start_line"].as_i64().unwrap_or(0),
+            before_sha256: input["before_sha256"].as_str().unwrap_or("").into(),
+            after_sha256: input["after_sha256"].as_str().unwrap_or("").into(),
+        })
     }
 }

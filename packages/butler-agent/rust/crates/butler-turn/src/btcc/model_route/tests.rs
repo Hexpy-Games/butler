@@ -140,9 +140,7 @@ async fn fallback_projection_waits_for_persisted_start_and_shares_source_revisio
         Ok(result("fallback")),
     ]);
     let mut turn = turn(route(0, 1));
-    turn.authority_continuation = Some(Box::new(
-        crate::btcc::AuthorityLoopContinuation::fixture("request", "call").with_source_revision(7),
-    ));
+    turn.authority_continuation = Some(json!({"presentation":{"sourceRevision":7}}));
     let claim = claim();
     let progress = Progress::default();
     let execution = make_execution(

@@ -25,7 +25,8 @@ and footer controls with ad hoc CSS.
 
 Pass `role`, optional `status`, optional `avatar`, and rendered body content.
 Pass `index` when tests or diagnostics need a stable row order marker. Pass
-`rowRef` and `style` from the virtualizer only from the list container.
+`rowRef` and `offsetY` (the virtual row's translateY in px) from the
+virtualizer only from the list container.
 
 ## Who can use this component
 
@@ -41,6 +42,14 @@ messages use this slot for their sent date/time and full-text copy action.
 Long user text is folded by the conversation container at five rendered lines;
 attachments remain outside the folded text. Neither folding nor copying changes
 the stored message.
+
+Motion: pass `entering` for a row that was just sent or just arrived (the
+list decides with `useEnteringKeys`, so opening a chat or scrolling a
+virtualized list never replays it); the row fades in with a
+`--motion-distance-sm` rise on the `translate` property, because the
+virtualizer positions rows with `transform`. `MessageStatusLabel shimmer`
+sweeps a highlight across in-progress labels such as "Thinking"; reduced
+motion shows static text.
 
 ## Wrong use cases
 

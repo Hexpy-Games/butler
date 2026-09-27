@@ -20,12 +20,13 @@ test("Steward UI keeps the neutral capsule and adjunct ordering contract", () =>
 
   expect(adjunct).not.toContain("StewardComposerPanel");
   expect(adjunct).not.toContain("stewardChildren");
+  expect(adjunct.indexOf("<WorkProgressPanel")).toBeGreaterThan(-1);
   expect(adjunct.indexOf("<WorkProgressPanel")).toBeLessThan(
-    adjunct.indexOf("<QueuedComposerPanel"),
-  );
-  expect(adjunct.indexOf("<QueuedComposerPanel")).toBeLessThan(
     adjunct.indexOf("<WorkerComposerPanel"),
   );
+  // Queued follow-ups are shown in the conversation (QueuedMessage), not the composer.
+  expect(adjunct).not.toContain("QueuedComposerPanel");
+  expect(adjunct).not.toContain("queuedMessages");
 });
 
 test("observer UI is read-only, session-addressed, and accessible", () => {
@@ -37,8 +38,13 @@ test("observer UI is read-only, session-addressed, and accessible", () => {
   );
 
   expect(dialog).toContain("state.sessionViews[sessionId]");
-  expect(dialog).toContain("<DialogTitle>");
-  expect(dialog).toContain("<DialogDescription id=\"steward-observer-description\">");
+  // Title and description are rendered by the extracted SessionObserverHeader.
+  const header = read(
+    "packages/butler-app/client/ui/src/components/layout/SessionObserverHeader.tsx",
+  );
+  expect(dialog).toContain("<SessionObserverHeader />");
+  expect(header).toContain("<DialogTitle>");
+  expect(header).toContain("<DialogDescription id=\"steward-observer-description\">");
   expect(dialog).toContain("aria-describedby=\"steward-observer-description\"");
   expect(dialog).toContain("aria-label={appCopy.inspector.tabs.activity}");
   expect(dialog).not.toContain("<Composer");

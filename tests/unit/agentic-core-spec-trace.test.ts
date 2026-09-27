@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readRepoOrLedgerFile, repoOrLedgerExists } from "../support/project-ledger-root.ts";
+import { readRepoOrLedgerFile, repoOrLedgerExists, ledgerTest } from "../support/project-ledger-root.ts";
 
 const dedicatedCapabilitySpecs = [
   {
@@ -52,7 +52,7 @@ const btccSubordinateCapabilities = [
   },
 ];
 
-test("Agentic Core capabilities resolve to current governing specs", () => {
+ledgerTest("Agentic Core capabilities resolve to current governing specs", () => {
   const index = readRepoOrLedgerFile("project-ledger/projects/butler/specs/agentic-core-capabilities.md");
 
   expect(index).toContain("index and trace hub");
@@ -85,7 +85,7 @@ test("Agentic Core capabilities resolve to current governing specs", () => {
   }
 });
 
-test("Agentic Core plan references the dedicated governing specs", () => {
+ledgerTest("Agentic Core plan references the dedicated governing specs", () => {
   const plan = readRepoOrLedgerFile(
     "project-ledger/projects/butler/plans/plan-agentic-core-capabilities.md",
   );

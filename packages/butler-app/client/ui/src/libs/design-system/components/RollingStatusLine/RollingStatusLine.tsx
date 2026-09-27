@@ -1,7 +1,8 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes, ReactNode } from "react";
 import styles from "./RollingStatusLine.module.css";
 
-export interface RollingStatusLineProps extends HTMLAttributes<HTMLDivElement> {
+export interface RollingStatusLineProps extends DsBaseProps<HTMLAttributes<HTMLDivElement>> {
   children?: ReactNode;
 }
 

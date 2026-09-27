@@ -50,11 +50,12 @@ const [expanded, setExpanded] = useState(true);
 - Default child rows keep the same width and horizontal alignment as the group row
 - Use `indented` for an explicitly hierarchical tree: each child level is inset
   by `--nav-tree-indent` (defaults to `--space-lg`, 16px). Supplied header actions remain visible in this mode.
-- Smooth expand/collapse animation
+- Expand/collapse uses the DS `Collapsible` (height via `interpolate-size` +
+  opacity); collapsed children unmount after the exit transition
 - Optional `stickyDepth` pins a header inside its branch, stacking below that
-  many ancestor rows. Use a shared scrolling list outside the groups. This mode
-  removes intermediate overflow clipping and uses immediate collapse so native
-  sticky positioning works; existing non-sticky groups retain their animation.
+  many ancestor rows. Use a shared scrolling list outside the groups. The
+  reveal uses `overflow: clip`, which does not create a scroll container, so
+  native sticky positioning keeps working and sticky groups animate too.
   Inside SidebarShell's sticky layout, the shell measures the declared child
   boundary and clips it below this header. This permits a transparent
   `--nav-sticky-surface` without overlapping text or losing native vibrancy.

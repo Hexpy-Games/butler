@@ -1,17 +1,11 @@
 import { useAppLocale } from "@/app/copy.ts";
-import {
-  SettingsField,
-  Stack,
-  Switch,
-  Typo,
-} from "@/butler-ds";
+import { SettingsField, Stack, Switch } from "@/butler-ds";
 import { useId } from "react";
 import { appCopy } from "@/app/copy.ts";
 import type { AppModelSummary, SettingsView } from "@/app/types.ts";
 import type { SettingsUpdate } from "./settingsTypes";
 import { BackupModelCards } from "./BackupModelCards";
 import { BackupModelPicker } from "./BackupModelPicker";
-import { BackupModelsDescription } from "./BackupModelsDescription";
 import { selectableBackupModels } from "./backupModelsUtils";
 
 interface BackupModelsSettingsProps {
@@ -30,6 +24,7 @@ export function BackupModelsSettings({
   useAppLocale();
   const copy = appCopy.settings.backupModels;
   const descriptionId = useId();
+  const listDescriptionId = useId();
   const fallback = draft.model_fallback;
   const candidates = selectableBackupModels(
     models,
@@ -47,11 +42,11 @@ export function BackupModelsSettings({
   }
 
   return (
-    <Stack gap="md" data-test-class="settings-backup-models">
-      <Typo.Body>{copy.title}</Typo.Body>
+    <>
       <SettingsField
+        settingId="backup-models-enabled"
         id="model-fallback-enabled"
-        data-test-class="settings-backup-models-toggle"
+        data-test-class="settings-backup-models settings-backup-models-toggle"
         label={copy.enabled}
         description={copy.enabledDescription}
         descriptionId={descriptionId}
@@ -70,25 +65,34 @@ export function BackupModelsSettings({
         }
       />
       {fallback.enabled && (
-        <Stack gap="sm">
-          <Stack align="row" cross="center" justify="between" gap="sm">
-            <BackupModelsDescription />
-            <BackupModelPicker
-              models={candidates}
-              fallback={fallback}
-              saving={saving}
-              onUpdate={onUpdate}
-            />
-          </Stack>
-          <BackupModelCards
-            models={models}
-            fallback={fallback}
-            saving={saving}
-            onUpdate={updateModels}
-          />
-        </Stack>
+        <SettingsField
+          settingId="backup-models"
+          data-test-class="settings-backup-models-list-field"
+          label={copy.title}
+          description={copy.description}
+          descriptionId={listDescriptionId}
+          controlWidth="full"
+          control={
+            <Stack gap="sm" cross="start">
+              <BackupModelPicker
+                models={candidates}
+                fallback={fallback}
+                saving={saving}
+                onUpdate={onUpdate}
+              />
+              <Stack.Item alignSelf="stretch">
+                <BackupModelCards
+                  models={models}
+                  fallback={fallback}
+                  saving={saving}
+                  onUpdate={updateModels}
+                />
+              </Stack.Item>
+            </Stack>
+          }
+        />
       )}
-    </Stack>
+    </>
   );
 }
 

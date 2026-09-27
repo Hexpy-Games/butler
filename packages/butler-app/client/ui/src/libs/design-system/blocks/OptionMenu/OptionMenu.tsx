@@ -1,11 +1,12 @@
+import type { DsPrivateStyleProps, DsBaseProps } from "../../lib/dsProps";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "../../lib/utils";
+import type { PermissionTone } from "../../lib/permissionTone";
 import styles from "./OptionMenu.module.css";
 
-export interface OptionMenuProps {
+export interface OptionMenuProps extends DsPrivateStyleProps {
   title: ReactNode;
   children: ReactNode;
-  className?: string;
   size?: "default" | "fit";
 }
 
@@ -29,10 +30,9 @@ export function OptionMenu({
   );
 }
 
-export interface OptionMenuSectionProps {
+export interface OptionMenuSectionProps extends DsPrivateStyleProps {
   title: ReactNode;
   children: ReactNode;
-  className?: string;
 }
 
 export function OptionMenuSection({
@@ -56,13 +56,15 @@ export function OptionMenuSection({
   );
 }
 
-export interface OptionMenuItemProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface OptionMenuItemProps extends DsBaseProps<ButtonHTMLAttributes<HTMLButtonElement>> {
   icon?: ReactNode;
   label: ReactNode;
   description?: ReactNode;
   descriptionPlacement?: "inline" | "block";
   selected?: boolean;
   tone?: "default" | "accent" | "warning" | "muted";
+  /** Access-mode colors for the label and icon (overrides `tone`'s color). */
+  permissionTone?: PermissionTone;
 }
 
 export function OptionMenuItem({
@@ -72,6 +74,7 @@ export function OptionMenuItem({
   descriptionPlacement = "inline",
   selected = false,
   tone = "default",
+  permissionTone,
   type = "button",
   className,
   ...props
@@ -86,6 +89,7 @@ export function OptionMenuItem({
       }
       data-selected={selected ? "true" : undefined}
       data-tone={tone}
+      data-permission-tone={permissionTone}
       data-slot="option-menu-item"
       type={type}
       {...props}

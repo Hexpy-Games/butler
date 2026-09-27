@@ -1,0 +1,6 @@
+/* DS Viewer stage: a bounded, painted box so the fixed fluid layer stays inside. */
+.showcaseStage {
+  position: relative;
+  height: 640px;
+  contain: layout paint;
+}

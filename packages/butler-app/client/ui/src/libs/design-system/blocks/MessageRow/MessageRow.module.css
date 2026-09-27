@@ -1,7 +1,7 @@
 .row {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);
-  gap: 12px;
+  gap: var(--space-md);
   align-items: start;
   padding-bottom: 18px;
 }
@@ -26,7 +26,7 @@
 
 .compactionEvent {
   grid-template-columns: minmax(0, 1fr);
-  padding: 20px 0 28px;
+  padding: var(--space-xl) 0 28px;
 }
 
 .user {
@@ -56,7 +56,7 @@
 }
 
 .assistant .body {
-  padding: 2px 0 4px;
+  padding: 2px 0 var(--space-xs);
   color: var(--text-primary);
   white-space: normal;
 }
@@ -77,6 +77,10 @@
 }
 
 .footer {
+  /* Footer icon actions keep the 26px footer row and control radius. */
+  --icon-button-size: 26px;
+  --icon-button-radius: var(--radius-control);
+
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -159,4 +163,74 @@
 
 .statusContent > * {
   margin: 0;
+}
+
+/* Motion (DS spec Motion Contract). Rows are positioned by the virtualizer
+   through transform, so the insert rise animates the independent translate
+   property. */
+.row[data-enter="true"] {
+  animation: message-enter var(--motion-base) var(--motion-ease-decelerate);
+}
+
+@keyframes message-enter {
+  from {
+    opacity: 0;
+    translate: 0 var(--motion-distance-sm);
+  }
+}
+
+/* A delivered queued message resolves from the QueuedMessage bubble (dashed
+   hairline outline, subdued fill and text) into the solid user bubble. */
+.row[data-enter="delivered"] .body {
+  outline: var(--border-hairline) dashed transparent;
+  outline-offset: calc(var(--border-hairline) * -1);
+  animation: message-delivered var(--motion-slow) var(--motion-ease-decelerate);
+}
+
+@keyframes message-delivered {
+  from {
+    outline-color: var(--line-strong);
+    background-color: color-mix(
+      in srgb,
+      var(--user-message-bg) 40%,
+      transparent
+    );
+    color: var(--text-secondary);
+  }
+}
+
+/* Thinking shimmer: a highlight band sweeps across the label text. */
+.statusContent[data-shimmer="true"] > * {
+  background: linear-gradient(
+      90deg,
+      var(--text-secondary) 0%,
+      var(--text-secondary) 40%,
+      var(--text-primary) 50%,
+      var(--text-secondary) 60%,
+      var(--text-secondary) 100%
+    )
+    0 0 / 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: status-shimmer var(--shimmer-duration) var(--motion-ease-linear)
+    infinite;
+}
+
+@keyframes status-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: 0% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .statusContent[data-shimmer="true"] > * {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentcolor;
+  }
 }

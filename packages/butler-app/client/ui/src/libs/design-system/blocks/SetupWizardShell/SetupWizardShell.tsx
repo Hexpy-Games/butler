@@ -1,19 +1,28 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes, ReactNode } from "react";
+import { PageContainer } from "../../components/PageContainer";
 import { Stack } from "../../components/Stack";
 import { TintedGlass } from "../../components/TintedGlass";
 import { ScrollArea } from "../ScrollArea";
-import { ProgressStepper, type ProgressStepperStep } from "../ProgressStepper";
+import { SetupWizardProgress, type SetupWizardStep } from "./SetupWizardProgress";
 import { PromptFluidBackground } from "../PromptSuggestionList/PromptFluidBackground";
 import styles from "./SetupWizardShell.module.css";
+import { dsClass } from "../../lib/internal";
+
+export type { SetupWizardStep } from "./SetupWizardProgress";
 
 interface SetupWizardShellProps
-  extends Omit<HTMLAttributes<HTMLElement>, "title"> {
+  extends Omit<DsBaseProps<HTMLAttributes<HTMLElement>>, "title"> {
   activeIndex: number;
   children: ReactNode;
-  steps: ProgressStepperStep[];
+  steps: SetupWizardStep[];
   title: ReactNode;
   progressLabel?: string;
   windowControls?: ReactNode;
+  /** Resolved appearance theme for the fluid backdrop. */
+  tone?: "light" | "dark";
+  /** Contain the full-screen layers in the element (DS Viewer previews). */
+  embedded?: boolean;
 }
 
 interface SetupWizardContentProps {
@@ -28,13 +37,15 @@ export function SetupWizardShell({
   steps,
   title,
   windowControls,
+  tone = "light",
+  embedded = false,
   ...props
 }: SetupWizardShellProps) {
   const regionLabel = typeof title === "string" ? title : undefined;
 
   return (
-    <main className={styles.screen} {...props}>
-      <PromptFluidBackground variant="bloom" />
+    <main className={styles.screen} data-tone={tone} data-embedded={embedded ? "true" : undefined} {...props}>
+      <PromptFluidBackground variant="bloom" tone={tone} />
       <div
         aria-hidden="true"
         className={`${styles.dragLane} drag-region`}
@@ -45,15 +56,16 @@ export function SetupWizardShell({
           {windowControls}
         </div>
       ) : null}
-      <Stack
+      <PageContainer
         as="section"
-        className={styles.shell}
-        gap="lg"
+        width="narrow"
+        gutter="none"
+        className={dsClass(styles.shell)}
         aria-label={regionLabel}
       >
-        <Stack className={`${styles.header} drag-region`} gap="sm">
+        <Stack className={dsClass(`${styles.header} drag-region`)} gap="sm">
           <p className={styles.productTitle}>{title}</p>
-          <ProgressStepper
+          <SetupWizardProgress
             activeIndex={activeIndex}
             ariaLabel={progressLabel}
             steps={steps}
@@ -61,19 +73,19 @@ export function SetupWizardShell({
         </Stack>
         <TintedGlass
           as="section"
-          className={styles.body}
-          padding="lg"
+          className={dsClass(styles.body)}
+          padding="none"
           radius="panel"
         >
           <ScrollArea
-            className={styles.scrollArea}
-            contentClassName={styles.scrollContent}
+            className={dsClass(styles.scrollArea)}
+            contentClassName={dsClass(styles.scrollContent)}
             dataTestClass="setup-wizard-scroll"
           >
             {children}
           </ScrollArea>
         </TintedGlass>
-      </Stack>
+      </PageContainer>
     </main>
   );
 }
@@ -83,7 +95,7 @@ export function SetupWizardContent({
   width = "default",
 }: SetupWizardContentProps) {
   return (
-    <Stack className={styles.content} data-width={width} gap="lg">
+    <Stack className={dsClass(styles.content)} data-width={width} gap="lg">
       {children}
     </Stack>
   );
@@ -91,7 +103,7 @@ export function SetupWizardContent({
 
 export function SetupWizardList({ children }: SetupWizardContentProps) {
   return (
-    <Stack as="ul" className={styles.list} gap="sm">
+    <Stack as="ul" className={dsClass(styles.list)} gap="sm">
       {children}
     </Stack>
   );

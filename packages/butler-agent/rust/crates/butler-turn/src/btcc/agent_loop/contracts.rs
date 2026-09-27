@@ -123,7 +123,14 @@ impl SemanticTurn {
         let context = ButlerContext::deserialize(&turn.context).map_err(|source| {
             super::invalid_contract(BtccCode::InvalidButlerContext).with_source(source)
         })?;
-        let authority = turn.authority_continuation.as_deref().cloned();
+        let authority = turn
+            .authority_continuation
+            .as_ref()
+            .map(AuthorityLoopContinuation::deserialize)
+            .transpose()
+            .map_err(|source| {
+                super::invalid_contract(BtccCode::InvalidAuthorityContinuation).with_source(source)
+            })?;
         Ok(Self {
             model,
             context,

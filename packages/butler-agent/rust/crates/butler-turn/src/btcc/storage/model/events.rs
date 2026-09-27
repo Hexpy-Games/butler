@@ -1,11 +1,12 @@
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use serde_json::Value;
 
-use super::super::common::{error, json as parse_json, stringify_record};
+use super::super::common::{error, json as parse_json, stringify};
 use super::super::{StorageError, StorageResult};
 use crate::btcc::StorageCode;
 use crate::btcc::turn::{
     AttemptHistory, FailureDisposition, FailureRecord, ModelRoundKey, ModelRouteEvent,
-    ModelRouteEventKind, ModelRouteEventWrite, RouteEventStatus, RouteState,
+    ModelRouteEventKind, ModelRouteEventWrite, RouteEventStatus,
 };
 
 /// Records a model-route event under the turn claim. A replayed attempt start
@@ -41,8 +42,8 @@ pub(in crate::btcc::storage) fn record_event(
         return Ok(status);
     }
     row.insert(&tx, write.event.kind, &row.event_id())?;
-    if let Some(route) = &binding.route {
-        persist_route(&tx, write, route)?;
+    if !binding.route.is_null() {
+        persist_route(&tx, write)?;
     }
     tx.commit().map_err(StorageError::sqlite)?;
     Ok(RouteEventStatus::Recorded)
@@ -103,8 +104,13 @@ impl EventRow<'_> {
 
 /// The route digest of the written route, else of the persisted one.
 fn route_digest(tx: &Transaction<'_>, write: &ModelRouteEventWrite) -> StorageResult<String> {
-    if let Some(route) = &write.binding.route {
-        return Ok(route.route_digest.clone());
+    if let Some(digest) = write
+        .binding
+        .route
+        .get("routeDigest")
+        .and_then(Value::as_str)
+    {
+        return Ok(digest.to_owned());
     }
     let route_raw: Option<String> = tx
         .query_row(
@@ -181,18 +187,14 @@ fn replayed_start(
 }
 
 /// Replaces the persisted route state under the turn's revision and fence.
-fn persist_route(
-    tx: &Transaction<'_>,
-    write: &ModelRouteEventWrite,
-    route: &RouteState,
-) -> StorageResult<()> {
+fn persist_route(tx: &Transaction<'_>, write: &ModelRouteEventWrite) -> StorageResult<()> {
     let binding = &write.binding;
     let changed = tx
         .execute(
             "UPDATE btcc_turns SET route_state_json=?1 WHERE turn_id=?2 \
             AND revision=?3 AND execution_fence=?4",
             params![
-                stringify_record(route)?,
+                stringify(&binding.route)?,
                 binding.turn_id,
                 binding.expected_revision,
                 binding.execution_fence

@@ -29,11 +29,16 @@ impl SubsessionService {
                 .await
                 .map_err(BtccError::from)?
                 .ok_or_else(|| error(BtccCode::SubsessionRelationMissing))?;
-            let crate::btcc::ParentResultInput::StewardQueue(input) = &pending.input else {
-                return Err(error(BtccCode::SubsessionOutboxInvalid));
-            };
-            let timestamp = &input.timestamp;
-            let text = &input.text;
+            let timestamp = pending
+                .input
+                .get("timestamp")
+                .and_then(Value::as_str)
+                .ok_or_else(|| error(BtccCode::SubsessionOutboxInvalid))?;
+            let text = pending
+                .input
+                .get("text")
+                .and_then(Value::as_str)
+                .ok_or_else(|| error(BtccCode::SubsessionOutboxInvalid))?;
             let reasoning_effort = parent
                 .metadata
                 .as_ref()

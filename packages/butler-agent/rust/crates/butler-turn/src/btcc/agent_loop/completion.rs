@@ -1,3 +1,5 @@
+use serde_json::Value;
+
 use crate::btcc::{
     AgentLoopError, AgentLoopResult, ExecutionRoute, SuspensionReason, TerminalOutcome,
 };
@@ -24,8 +26,9 @@ pub(super) enum Ending<'a> {
     Answer(&'a str),
     /// The turn suspends for a reason that carries no continuation.
     Suspend(SuspensionReason),
-    /// The turn suspends on a pending authority request with this continuation.
-    AwaitAuthority(Box<super::continuation::AuthorityLoopContinuation>),
+    /// The turn suspends on a pending authority request with this serialized
+    /// `AuthorityLoopContinuation`.
+    AwaitAuthority(Value),
 }
 
 /// Records one tool result in the transcript and asks the policy whether it
@@ -147,6 +150,7 @@ pub(super) async fn finish(
             .or_else(|| state.runtime_failure.clone()),
         artifacts: closeout.artifacts,
         changed_files: closeout.changed_files,
+        plan: closeout.plan,
         model_identity: closeout.model_identity,
     })
 }

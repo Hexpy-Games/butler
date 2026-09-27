@@ -51,7 +51,10 @@ impl SubsessionService {
             .start_work(StartWorkInput {
                 scope,
                 mutation_call_id: mutation,
-                objective: stored.packet.objective.clone(),
+                objective: json::at(&stored.packet, "/objective")
+                    .as_str()
+                    .unwrap_or("Complete the bounded subsession task.")
+                    .into(),
                 backfill_tool_call_ids: None,
             })
             .await?;

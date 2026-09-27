@@ -12,6 +12,7 @@ export default tseslint.config(
       "src/**/node_modules/**",
       "packages/butler-app/client/ui/dist/**",
       "packages/butler-app/client/electron/dist/**",
+      "packages/butler-app/client/electron/.native-agent-payload/**",
       // Cargo output, including the static ONNX Runtime source/build cache that
       // scripts/prepare-static-ort-macos-arm64.py keeps under target/native-deps.
       "packages/butler-agent/rust/target/**",
@@ -56,6 +57,19 @@ export default tseslint.config(
       "@stylistic/comma-dangle": ["warn", "always-multiline"],
       "@stylistic/object-curly-spacing": ["warn", "always"],
       "@stylistic/comma-spacing": ["warn", { before: false, after: true }],
+    },
+  },
+  {
+    // DS styling capability (dsClass / dsStyle, DsClassName / DsStyle) stays inside the design system.
+    files: ["packages/butler-app/client/ui/src/**/*.{ts,tsx}"],
+    ignores: ["packages/butler-app/client/ui/src/libs/design-system/**"],
+    rules: {
+      "no-restricted-imports": ["error", {
+        patterns: [{
+          regex: "(^|/)(butler-ds|libs/design-system)/lib/internal(\\.ts)?$",
+          message: "lib/internal is private to the design system; style DS components through their props (or UNSAFE_style for allowlisted geometry).",
+        }],
+      }],
     },
   },
 );

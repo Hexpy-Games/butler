@@ -2,10 +2,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::btcc::{
-    AcceptedWorkResult, AlreadyDeliveredOutcome, AuthorityLoopContinuation, ChangedFileSummary,
-    ExecutionOutcome, FinalArtifact, ModelIdentity, ProgressDestination, RouteState,
-    RuntimeFailure, TurnContinuationBudgetEvent, TurnContinuationBudgetState, TurnRequest,
-    WorkStatus,
+    AcceptedWorkResult, AlreadyDeliveredOutcome, ExecutionOutcome, FinalArtifact, ModelIdentity,
+    ProgressDestination, RuntimeFailure, TurnRequest, WorkStatus,
 };
 
 /// The durable lifecycle state of a turn.
@@ -24,7 +22,7 @@ pub enum TurnSemanticState {
 pub struct PreparedTurn {
     pub preparation_id: String,
     pub request: TurnRequest,
-    pub command: crate::btcc::TurnCommand,
+    pub command: Value,
     pub admission_input_hash: String,
     pub is_fresh: bool,
 }
@@ -43,9 +41,9 @@ pub struct TurnRecord {
     pub wake_identity: Option<WakeIdentity>,
     pub model_selection: Value,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub model_route: Option<RouteState>,
+    pub model_route: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub continuation_budget: Option<TurnContinuationBudgetState>,
+    pub continuation_budget: Option<Value>,
     pub context: Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub progress_destination: Option<ProgressDestination>,
@@ -53,7 +51,7 @@ pub struct TurnRecord {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suspension: Option<SuspensionReason>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub authority_continuation: Option<Box<AuthorityLoopContinuation>>,
+    pub authority_continuation: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub checkpoint: Option<TurnCheckpoint>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -145,8 +143,7 @@ pub struct FinalPayload {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub artifacts: Vec<FinalArtifact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub changed_files: Vec<ChangedFileSummary>,
-    /// Passthrough: only pre-cutover payloads carry a plan; it is relayed as stored.
+    pub changed_files: Vec<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -183,12 +180,11 @@ pub struct ModelRouteWrite {
     pub expected_revision: u64,
     pub execution_fence: u64,
     pub claim_id: String,
-    /// The route state to persist with the write, if any.
-    pub route: Option<RouteState>,
+    pub route: Value,
 }
 
 /// A model-route event recorded under the turn's claim; `binding.route`
-/// replaces the persisted route state when present.
+/// replaces the persisted route state when it is not `null`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModelRouteEventWrite {
     pub binding: ModelRouteWrite,
@@ -338,7 +334,7 @@ pub struct ModelRoundAcceptanceWrite {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ContinuationBudgetTransition {
     pub binding: ModelRouteWrite,
-    pub event: TurnContinuationBudgetEvent,
+    pub event: Value,
     pub now_ms: u64,
 }
 
@@ -349,12 +345,13 @@ pub struct AgentLoopResult {
     pub content: String,
     pub terminal_outcome: Option<TerminalOutcome>,
     pub suspension: Option<SuspensionReason>,
-    pub authority_continuation: Option<Box<AuthorityLoopContinuation>>,
+    pub authority_continuation: Option<Value>,
     pub work_status: Option<WorkStatus>,
     pub accepted_work_result: Option<AcceptedWorkResult>,
     pub runtime_failure: Option<RuntimeFailure>,
     pub artifacts: Vec<FinalArtifact>,
-    pub changed_files: Vec<ChangedFileSummary>,
+    pub changed_files: Vec<Value>,
+    pub plan: Option<Value>,
     pub model_identity: Option<ModelIdentity>,
 }
 
@@ -378,7 +375,7 @@ pub enum ExecutionRoute {
 pub enum TurnTransition {
     Suspend {
         reason: SuspensionReason,
-        authority_continuation: Option<Box<AuthorityLoopContinuation>>,
+        authority_continuation: Option<Value>,
     },
     AcceptFinal {
         route: ExecutionRoute,

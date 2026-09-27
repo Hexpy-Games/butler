@@ -1,3 +1,4 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { SVGProps } from "react";
 import { cn } from "../../lib/utils";
 import styles from "./Spinner.module.css";
@@ -6,7 +7,7 @@ const MIN_STROKE_PX = 1.35;
 const STROKE_SIZE_RATIO = 0.071;
 const VIEWBOX_SIZE = 100;
 
-export interface SpinnerProps extends Omit<SVGProps<SVGSVGElement>, "children"> {
+export interface SpinnerProps extends Omit<DsBaseProps<SVGProps<SVGSVGElement>>, "children"> {
   size?: number;
   label?: string;
 }

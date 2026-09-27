@@ -2,7 +2,6 @@ import { useAppLocale } from "@/app/copy.ts";
 import { ArrowLeft, Button, DialogDescription, DialogHeader, DialogTitle, Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
-import styles from "./SessionObserverDialog.module.css";
 
 export function SessionObserverHeader() {
   useAppLocale();
@@ -13,7 +12,7 @@ export function SessionObserverHeader() {
   const canGoBack = useButlerStore((state) => state.observerHistory.length > 0);
   const goBack = useButlerStore((state) => state.goBackSessionObserver);
   return (
-    <DialogHeader className={styles.header} data-test-class="steward-observer-header">
+    <DialogHeader data-test-class="steward-observer-header">
       <Stack align="row" cross="center" gap="xs">
         {canGoBack ? (
           <Button
@@ -23,7 +22,7 @@ export function SessionObserverHeader() {
             title={appCopy.common.back}
             onClick={goBack}
           >
-            <ArrowLeft size={18} />
+            <ArrowLeft size="lg" />
           </Button>
         ) : null}
         <DialogTitle>{title}</DialogTitle>

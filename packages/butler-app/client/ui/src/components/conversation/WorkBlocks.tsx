@@ -42,7 +42,7 @@ function CollapsedTurnActivityComponent({
           <Button
             aria-expanded={expanded}
             data-test-class="toggle-turn-activity-disclosure"
-            iconEnd={expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            iconEnd={expanded ? <ChevronDown size="sm" /> : <ChevronRight size="sm" />}
             onClick={() => setExpanded((value) => !value)}
             text={headerLabel}
             type="button"
@@ -62,7 +62,7 @@ function CollapsedTurnActivityComponent({
               <Button
                 aria-label={workCopy.collapseHistoryLabel(latest.label, blocks.length)}
                 data-test-class="collapse-turn-activity-history"
-                iconStart={<ListChecks size={14} />}
+                iconStart={<ListChecks size="sm" />}
                 onClick={() => setExpanded(false)}
                 size="xs"
                 text={workCopy.collapseLabel}

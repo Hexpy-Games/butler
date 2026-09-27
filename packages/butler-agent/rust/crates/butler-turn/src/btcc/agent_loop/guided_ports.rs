@@ -1,5 +1,7 @@
 use std::{future::Future, pin::Pin, sync::Arc};
 
+use serde_json::Value;
+
 #[cfg(any(test, feature = "test-support"))]
 use crate::btcc::StateExecutionClaim;
 use crate::btcc::{
@@ -202,14 +204,15 @@ pub trait JournalPort: Send + Sync {
         result: &'a ToolResult,
     ) -> PortFuture<'a, Option<ToolOutcome>>;
 
-    /// The artifacts and changes the turn produced.
+    /// The artifacts, changes and plan the turn produced.
     fn closeout<'a>(&'a self, invocation: GuidedInvocation<'a>) -> PortFuture<'a, JournalCloseout>;
 }
 
 /// What the journal contributes to the final payload.
 pub struct JournalCloseout {
     pub artifacts: Vec<FinalArtifact>,
-    pub changed_files: Vec<crate::btcc::ChangedFileSummary>,
+    pub changed_files: Vec<Value>,
+    pub plan: Option<Value>,
 }
 
 /// Durable Work of a guided turn.

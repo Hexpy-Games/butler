@@ -4238,6 +4238,88 @@ test("sendMessage queues active-turn follow-ups without keeping an optimistic ti
   expect(useButlerStore.getState().isSending).toBe(false);
 });
 
+test("sendMessage shows an active-turn follow-up as an optimistic queued record until the server queues it", async () => {
+  let posted = null as Record<string, unknown> | null;
+  let respond: (response: Response) => void = () => undefined;
+  let queueReads = 0;
+  globalThis.fetch = (async (
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ) => {
+    const path = String(input);
+    if (path === "/messages" && init?.method === "POST") {
+      posted = JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
+      return await new Promise<Response>((resolve) => { respond = resolve; });
+    }
+    if (path.startsWith("/session-queue")) {
+      queueReads += 1;
+      return jsonResponse({ session_id: "session-active", queued_messages: [serverQueued()] });
+    }
+    return jsonResponse({});
+  }) as unknown as typeof fetch;
+  const serverQueued = () => ({
+    id: "queued-server-id",
+    chat_id: "session-active",
+    text: "queued follow-up",
+    client_message_id: String(posted?.client_message_id),
+    controls: { model: "openai/gpt-5.5", reasoning_effort: "medium", access_mode: "full_access", plan_mode: false },
+    state: "queued",
+    cursor: 1,
+    created_at: "2026-05-21T00:00:00.000Z",
+    updated_at: "2026-05-21T00:00:00.000Z",
+  });
+
+  useButlerStore.setState({
+    activeChatId: "session-active",
+    view: { kind: "session" },
+    sessionQueue: [],
+    messages: [messageRecord("existing-user", "session-active", "user", "current task", 1, "turn-active")],
+    summary: {
+      session_id: "session-active",
+      turn_state: "thinking",
+      latest_progress: { turn_id: "turn-active", state: "thinking", safe_progress_rows: [] },
+    },
+  });
+
+  const sending = useButlerStore.getState().sendMessage("queued follow-up", { queuePolicy: "enqueue_if_busy" });
+  await Promise.resolve();
+
+  expect(useButlerStore.getState().messages.map((message) => message.text)).toEqual(["current task"]);
+  expect(useButlerStore.getState().sessionQueue).toMatchObject([
+    { id: String(posted?.client_message_id), client_message_id: String(posted?.client_message_id), text: "queued follow-up", state: "queued" },
+  ]);
+
+  respond(jsonResponse({ queued: serverQueued(), replies: [], next_cursor: 1 }));
+  await sending;
+
+  expect(queueReads).toBeGreaterThan(0);
+  expect(useButlerStore.getState().sessionQueue.map((record) => record.id)).toEqual(["queued-server-id"]);
+});
+
+test("sendMessage removes the optimistic queued record when the send fails", async () => {
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const path = String(input);
+    if (path === "/messages" && init?.method === "POST") return new Response(JSON.stringify({ error: { message: "boom" } }), { status: 500 });
+    if (path.startsWith("/messages")) return jsonResponse({ messages: [], next_cursor: 0 });
+    return jsonResponse({});
+  }) as unknown as typeof fetch;
+  useButlerStore.setState({
+    activeChatId: "session-active",
+    view: { kind: "session" },
+    sessionQueue: [],
+    messages: [messageRecord("existing-user", "session-active", "user", "current task", 1, "turn-active")],
+    summary: {
+      session_id: "session-active",
+      turn_state: "thinking",
+      latest_progress: { turn_id: "turn-active", state: "thinking", safe_progress_rows: [] },
+    },
+  });
+
+  await useButlerStore.getState().sendMessage("queued follow-up", { queuePolicy: "enqueue_if_busy" });
+
+  expect(useButlerStore.getState().sessionQueue).toEqual([]);
+});
+
 test("sendMessage clears optimistic pending state when an immediate reply arrives", async () => {
   let acceptedUser: MessageRecord | null = null;
   let assistantReply: MessageRecord | null = null;

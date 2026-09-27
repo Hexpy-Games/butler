@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Stack, type StackProps } from "../Stack";
-import { cn } from "../../lib/utils";
 import styles from "./ButtonContainer.module.css";
+import { dsClass } from "../../lib/internal";
 
 export type ButtonContainerSize =
   | "xs"
@@ -19,9 +19,9 @@ interface ButtonContainerProps extends Omit<StackProps, "children" | "gap"> {
 }
 
 function gapForButtonSize(size: ButtonContainerSize): StackProps["gap"] {
-  if (size === "xs" || size === "icon-xs") return "1";
-  if (size === "lg" || size === "icon-lg") return "3";
-  return "2";
+  if (size === "xs" || size === "icon-xs") return "xs";
+  if (size === "lg" || size === "icon-lg") return "md";
+  return "sm";
 }
 
 export function ButtonContainer({
@@ -36,7 +36,7 @@ export function ButtonContainer({
   return (
     <Stack
       align={align}
-      className={cn(styles.container, className)}
+      className={dsClass(styles.container, className)}
       cross={cross}
       data-button-size={size}
       data-slot="button-container"

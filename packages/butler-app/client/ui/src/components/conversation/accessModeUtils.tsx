@@ -1,27 +1,13 @@
-import type { CSSProperties, ReactElement } from "react";
-import { ShieldCheck, ShieldQuestion, Eye } from "@/butler-ds";
+import type { ReactElement } from "react";
+import { ShieldCheck, ShieldQuestion, Eye, type IconSize, type PermissionTone } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { AccessMode } from "@/app/types.ts";
 
-export function accessModeStyle(mode: AccessMode): CSSProperties {
-  const colorToken = `var(${accessModeColorToken(mode)})`;
-  const iconColorToken = `var(${accessModeIconColorToken(mode)})`;
-  return {
-    "--composer-control-icon-color": iconColorToken,
-    "--option-menu-icon-color": iconColorToken,
-    color: colorToken,
-  } as CSSProperties;
-}
-
-export function accessModeColorToken(mode: AccessMode): string {
-  if (mode === "full_access") return "--access-full";
-  if (mode === "ask_first") return "--access-ask";
-  return "--access-read";
-}
-
-export function accessModeIconColorToken(mode: AccessMode): string {
-  if (mode === "read_only") return "--access-read-icon";
-  return accessModeColorToken(mode);
+/** The DS permission tone (label and icon colors) of an access mode. */
+export function accessPermissionTone(mode: AccessMode): PermissionTone {
+  if (mode === "full_access") return "full";
+  if (mode === "ask_first") return "ask";
+  return "read";
 }
 
 export function accessModeTone(
@@ -32,7 +18,7 @@ export function accessModeTone(
   return "default";
 }
 
-export function accessModeIcon(mode: AccessMode, size = 15): ReactElement {
+export function accessModeIcon(mode: AccessMode, size: IconSize = "md"): ReactElement {
   if (mode === "full_access") return <ShieldCheck size={size} />;
   if (mode === "ask_first") return <ShieldQuestion size={size} />;
   return <Eye size={size} />;

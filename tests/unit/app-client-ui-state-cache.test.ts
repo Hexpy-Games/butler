@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
-import { snapshotForAppUiState } from "../../packages/butler-app/client/ui/src/app/appUiStateCache.ts";
+import {
+  freshAppUiPanelState,
+  snapshotForAppUiState,
+} from "../../packages/butler-app/client/ui/src/app/appUiStateCache.ts";
 
 test("app UI state cache clamps panel widths and deduplicates collapsed groups", () => {
   const snapshot = snapshotForAppUiState({
@@ -26,10 +29,22 @@ test("app UI state cache clamps panel widths and deduplicates collapsed groups",
   ]);
 });
 
-test("app UI state cache defaults fresh sidebar state to collapsed", () => {
+test("app UI state cache defaults fresh sidebar state to open", () => {
   const snapshot = snapshotForAppUiState({});
 
-  expect(snapshot.left_open).toBe(false);
+  expect(snapshot.left_open).toBe(true);
   expect(snapshot.right_open).toBe(true);
   expect(snapshot.active_session_id).toBe("draft:chat");
+});
+
+test("a saved sidebar choice wins over the fresh default", () => {
+  expect(snapshotForAppUiState({ left_open: false }).left_open).toBe(false);
+  expect(snapshotForAppUiState({ left_open: true }).left_open).toBe(true);
+});
+
+test("fresh installs open the sidebar only at expanded widths", () => {
+  expect(freshAppUiPanelState("expanded", true).leftOpen).toBe(true);
+  expect(freshAppUiPanelState("expanded", true).rightOpen).toBe(true);
+  expect(freshAppUiPanelState("medium", true).leftOpen).toBe(false);
+  expect(freshAppUiPanelState("compact", true).leftOpen).toBe(false);
 });

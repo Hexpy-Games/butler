@@ -109,5 +109,24 @@ pub trait ModelExecution: ModelExecutionView {
     fn base(&self) -> &dyn ModelRoundPort;
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct RouteState {
+    pub schema_version: String,
+    pub route_digest: String,
+    pub candidates: Vec<RouteCandidate>,
+    pub retry_ceiling: u32,
+    pub catalog_generation: String,
+    pub active_cursor: u32,
+    #[serde(default)]
+    pub consumed_attempts: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct RouteCandidate {
+    pub model_ref: String,
+    pub reasoning_effort: ReasoningEffort,
+}
+
 pub(super) use crate::btcc::turn::{AttemptHistory, FailureDisposition, FailureRecord};
-pub(super) use crate::btcc::turn::{RouteCandidate, RouteState};

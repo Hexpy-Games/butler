@@ -8,10 +8,7 @@ impl TurnPreparation for Harness {
                 turn: PreparedTurn {
                     preparation_id: turn_id,
                     request,
-                    command: crate::btcc::TurnCommand::Resume(crate::btcc::ResumeCommand {
-                        turn_id: "harness".into(),
-                        recovery_attempt: None,
-                    }),
+                    command: json!({"kind": "run"}),
                     admission_input_hash: "hash".into(),
                     is_fresh: true,
                 },

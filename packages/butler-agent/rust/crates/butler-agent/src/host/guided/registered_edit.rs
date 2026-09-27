@@ -5,7 +5,7 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 
 use butler_runtime::capabilities::{Capabilities, CapabilityInvocation};
-use butler_turn::btcc::{EffectFailure, EffectFuture, PreparedEdit, RegisteredEditPort};
+use butler_turn::btcc::{EffectFailure, EffectFuture, RegisteredEditPort};
 
 use crate::host::RegisteredWriteContext;
 
@@ -22,7 +22,7 @@ impl RegisteredEdit {
     }
 }
 impl RegisteredEditPort for RegisteredEdit {
-    fn edit(&self, prepared: PreparedEdit) -> EffectFuture<'_, Value> {
+    fn edit(&self, prepared: Value) -> EffectFuture<'_, Value> {
         Box::pin(async move {
             let call = json!({"arguments":prepared});
             self.capabilities

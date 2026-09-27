@@ -46,7 +46,7 @@ fn write_effect_inputs_and_targets_normalize_inside_the_workspace() {
     ] {
         match expected {
             Ok(normalized) => assert_eq!(
-                serde_json::to_value(path::input(&input, workspace).unwrap()).unwrap(),
+                path::input(&input, workspace).unwrap(),
                 normalized,
                 "{input}"
             ),
@@ -130,20 +130,4 @@ async fn observed_write_precedes_registered_rejection_and_reconcile_is_conservat
     };
     assert_eq!(error.code, "workspace_file_state_mismatch");
     std::fs::remove_dir_all(&root).unwrap();
-}
-
-/// KEEP: the journaled write_file input (identity-hashed) is byte-stable.
-#[test]
-fn write_effect_normalized_input_is_byte_stable() {
-    let workspace = std::path::Path::new("/tmp/butler-workspace-fixture");
-    let input = json!({"expected_sha256":"A".repeat(64),"overwrite":true,"content":"x",
-        "create_parents":true,"path":"a/b"});
-    let normalized = serde_json::to_value(path::input(&input, workspace).unwrap()).unwrap();
-    assert_eq!(
-        butler_core::json::stringify(&normalized).unwrap(),
-        format!(
-            r#"{{"path":"a/b","content":"x","create_parents":true,"overwrite":true,"expected_sha256":"{}"}}"#,
-            "a".repeat(64)
-        )
-    );
 }

@@ -25,8 +25,18 @@ pub async fn guided_authority_loop_decision(
             "authority_context_missing",
         ));
     };
-    let request_ref = &cursor.request_ref;
-    let call_id = cursor.call_id.as_str();
+    let request_ref = cursor
+        .get("requestRef")
+        .and_then(|value| value.as_str())
+        .ok_or(GuidedPreparationError::Contract(
+            "invalid_authority_continuation",
+        ))?;
+    let call_id = cursor
+        .get("callId")
+        .and_then(|value| value.as_str())
+        .ok_or(GuidedPreparationError::Contract(
+            "invalid_authority_continuation",
+        ))?;
     let execution = authority
         .execution(AuthorityExecutionInput {
             owner_session_id: owner_session_id.to_owned(),

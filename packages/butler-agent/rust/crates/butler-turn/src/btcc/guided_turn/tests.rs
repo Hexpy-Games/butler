@@ -130,9 +130,7 @@ async fn real_work_and_authority_resume_prepare_against_one_reopened_storage_own
             &claim,
             &TurnTransition::Suspend {
                 reason: SuspensionReason::AuthorityPending,
-                authority_continuation: Some(Box::new(
-                    crate::btcc::AuthorityLoopContinuation::fixture(&request_ref, "call-1"),
-                )),
+                authority_continuation: Some(json!({"requestRef":request_ref,"callId":"call-1"})),
             },
         )
         .await
@@ -157,7 +155,7 @@ async fn real_work_and_authority_resume_prepare_against_one_reopened_storage_own
         .unwrap();
     assert_eq!(decision, Some(GuidedAuthorityDecision::Allow));
     let mut wrong_call = resumed.clone();
-    wrong_call.authority_continuation.as_mut().unwrap().call_id = "other-call".into();
+    wrong_call.authority_continuation.as_mut().unwrap()["callId"] = json!("other-call");
     assert!(matches!(
         guided_authority_loop_decision(Some(&principal), &wrong_call, "session").await,
         Err(GuidedPreparationError::Contract(

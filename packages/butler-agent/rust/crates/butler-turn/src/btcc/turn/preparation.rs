@@ -239,7 +239,7 @@ impl DefaultTurnPreparation {
         &self,
         request: TurnRequest,
         binding: StoredSessionBinding,
-        command: crate::btcc::TurnCommand,
+        command: Value,
         admission_kind: Admission,
     ) -> Result<PreparedExecution, BtccError> {
         let origin = origin::resolve(

@@ -16,7 +16,6 @@ import {
   stewardProgressStatus,
   stewardToolRows,
 } from "./stewardProgressPresentation.ts";
-import styles from "./StewardParentProgress.module.css";
 
 export function StewardParentProgress({
   progress,
@@ -45,17 +44,13 @@ export function StewardParentProgress({
     >
       <Stack gap="sm">
         <Stack align="row" cross="start" gap="sm" justify="between">
-          <Typo.Label
-            as="span"
-            className={styles.title}
-            title={child.title}
-          >
+          <Typo.Label as="span" minWidth="0" title={child.title} truncate>
             {child.title}
           </Typo.Label>
           <Stack align="row" gap="xs">
             {turn?.retryable && !child.active_turn && !child.result ? (
               <IconButton
-                className={styles.observerAction}
+                opticalAlign="top-end"
                 data-test-class="steward-resume-action"
                 disabled={resuming}
                 label={appCopy.conversation.work.resumeInterrupted}
@@ -65,16 +60,16 @@ export function StewardParentProgress({
                     .finally(() => setResuming(false));
                 }}
               >
-                <Play size={16} />
+                <Play size="md" />
               </IconButton>
             ) : null}
             <IconButton
-              className={styles.observerAction}
+              opticalAlign="top-end"
               data-test-class="steward-observer-action"
               label={appCopy.interfaceDetails.progressDetails}
               onClick={() => openSessionObserver(child.session_id)}
             >
-              <Eye size={16} />
+              <Eye size="md" />
             </IconButton>
           </Stack>
         </Stack>
@@ -88,8 +83,8 @@ export function StewardParentProgress({
           gap="xs"
           wrap
         >
-          <Typo.Caption className={styles.toolLabel}>{appCopy.interfaceDetails.toolUsage}</Typo.Caption>
-          <Typo.Caption className={styles.toolSummary}>
+          <Typo.Caption tone="tertiary">{appCopy.interfaceDetails.toolUsage}</Typo.Caption>
+          <Typo.Caption tone="secondary">
             {toolSummary || appCopy.interfaceDetails.noHistory}
           </Typo.Caption>
         </Stack>

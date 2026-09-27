@@ -19,6 +19,9 @@ const ALIAS_JOIN: &str = "JOIN memory_nodes e ON e.id=a.node_id
         JOIN memory_chunk_sources s ON s.source_id=a.source_id
         JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision";
 
+/// Aliases as `(node id, folded grams)`.
+type Documents = Vec<(String, Vec<String>)>;
+
 /// The eligible alias corpus: claim and source scope predicates.
 struct Corpus {
     claim_sql: String,
@@ -97,7 +100,7 @@ impl Corpus {
         query_grams: &[String],
         deadline_at: i64,
         now_millis: &mut impl FnMut() -> i64,
-    ) -> CognitionResult<(Vec<(String, Vec<String>)>, bool)> {
+    ) -> CognitionResult<(Documents, bool)> {
         let sql = format!(
             "SELECT DISTINCT p.node_id,p.source_id,p.surface_original
              FROM memory_alias_postings p

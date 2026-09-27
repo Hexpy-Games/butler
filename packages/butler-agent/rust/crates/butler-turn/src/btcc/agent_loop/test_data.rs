@@ -1,4 +1,4 @@
-use serde_json::json;
+use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 use crate::btcc::{AgentLoop, StateExecutionClaim, TurnRecord};
@@ -46,10 +46,7 @@ pub(crate) fn tool(name: &str, concurrent: bool) -> ModelRoundTool {
     }
 }
 
-pub fn turn(
-    authority: Option<Box<crate::btcc::AuthorityLoopContinuation>>,
-    empty: &str,
-) -> TurnRecord {
+pub fn turn(authority: Option<Value>, empty: &str) -> TurnRecord {
     TurnRecord {
         turn_id: "turn-1".into(),
         session_id: "session-1".into(),

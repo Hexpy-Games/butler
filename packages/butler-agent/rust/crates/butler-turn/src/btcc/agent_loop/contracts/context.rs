@@ -108,8 +108,9 @@ pub(crate) struct GuidedCloseout {
     pub accepted_work_result: Option<AcceptedWorkResult>,
     pub runtime_failure: Option<RuntimeFailure>,
     pub artifacts: Vec<FinalArtifact>,
-    /// Journal-owned change records, forwarded to the final payload unchanged.
-    pub changed_files: Vec<crate::btcc::ChangedFileSummary>,
+    /// Journal-owned change and plan records, forwarded to the final payload unchanged.
+    pub changed_files: Vec<Value>,
+    pub plan: Option<Value>,
     pub model_identity: Option<ModelIdentity>,
     pub has_final_work: bool,
 }

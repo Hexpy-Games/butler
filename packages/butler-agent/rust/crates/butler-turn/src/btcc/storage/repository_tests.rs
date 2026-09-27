@@ -54,9 +54,7 @@ async fn repository_admission_replay_claim_and_pre_admission_stop_are_durable() 
     assert_eq!(replayed.turn_id, turn.turn_id);
 
     let mut conflict = ordinary.clone();
-    conflict
-        .command
-        .edit_json(|command| command["message"]["content"] = json!("different"));
+    conflict.command["message"]["content"] = json!("different");
     let error = repositories
         .load_or_admit(&conflict)
         .await
@@ -66,17 +64,13 @@ async fn repository_admission_replay_claim_and_pre_admission_stop_are_durable() 
     // JSON.stringify(undefined) differs from JSON.stringify(null) in the
     // legacy replay authority. An absent field must not become explicit null.
     let mut null_content = prepared("turn-null", "trigger-null", "hash-null");
-    null_content
-        .command
-        .edit_json(|command| command["context"]["messageContent"] = json!(null));
+    null_content.command["context"]["messageContent"] = json!(null);
     repositories.load_or_admit(&null_content).await.unwrap();
     let mut absent_content = null_content.clone();
-    absent_content.command.edit_json(|command| {
-        command["context"]
-            .as_object_mut()
-            .unwrap()
-            .shift_remove("messageContent");
-    });
+    absent_content.command["context"]
+        .as_object_mut()
+        .unwrap()
+        .shift_remove("messageContent");
     assert_eq!(
         repositories
             .load_or_admit(&absent_content)
@@ -94,21 +88,13 @@ async fn repository_admission_replay_claim_and_pre_admission_stop_are_durable() 
         authorization_ref: "authority-ref".into(),
         result_scope_ref: Some("result-scope".into()),
     };
-    wake.command = crate::btcc::TurnCommand::Wake(crate::btcc::WakeCommand {
-        turn_id: "turn-wake".into(),
-        recovery_attempt: None,
-        session_id: "session-1".into(),
-        trigger_key: "trigger-wake".into(),
-        trigger: crate::btcc::CommandTrigger {
-            trigger_id: "wake-id".into(),
-            source_turn_id: "source-turn".into(),
-            authorization_ref: "authority-ref".into(),
-            result_scope_ref: Some("result-scope".into()),
-            content: "worker complete".into(),
-        },
-        model_selection: crate::btcc::CommandModelSelection::fixture(),
-        progress_destination: None,
-        context: json!({"messageContent":"worker complete"}),
+    wake.command = json!({
+        "kind":"wake","turnId":"turn-wake","sessionId":"session-1",
+        "triggerKey":"trigger-wake","trigger":{"triggerId":"wake-id",
+        "sourceTurnId":"source-turn","authorizationRef":"authority-ref",
+        "resultScopeRef":"result-scope","content":"worker complete"},
+        "modelSelection":{"provider":"openai","model":"gpt","reasoningEffort":"medium",
+        "contextWindowTokens":100},"context":{"messageContent":"worker complete"}
     });
     let (woken, fresh) = repositories.load_or_admit(&wake).await.expect("admit wake");
     assert!(fresh);
@@ -149,18 +135,13 @@ async fn model_journal_abandons_restarted_attempt_and_budget_terminal_commits() 
         .acquire_state_claim(&turn)
         .await
         .expect("claim model turn");
-    let route = serde_json::from_value(json!({"schemaVersion":"butler.model-route.v1",
-        "candidates":[{"modelRef":"openai/gpt","reasoningEffort":"medium"}],"retryCeiling":3,
-        "catalogGeneration":"test",
-        "routeDigest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "activeCursor":0}))
-    .unwrap();
+    let route = json!({"routeDigest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","activeCursor":0,"candidates":[{"modelRef":"openai/gpt"}]});
     let binding = ModelRouteWrite {
         turn_id: turn.turn_id.clone(),
         expected_revision: turn.revision,
         execution_fence: turn.execution_fence,
         claim_id: claim.claim_id.clone(),
-        route: Some(route),
+        route,
     };
     let event = crate::btcc::ModelRouteEventWrite {
         binding: binding.clone(),
@@ -227,18 +208,13 @@ async fn model_journal_abandons_restarted_attempt_and_budget_terminal_commits() 
         "model_checkpoint_stale"
     );
 
-    let now = turn
-        .continuation_budget
-        .as_ref()
-        .expect("budget")
-        .started_at_ms;
+    let now = turn.continuation_budget.as_ref().expect("budget")["startedAtMs"]
+        .as_u64()
+        .expect("start time");
     let error = repositories
         .transition_continuation_budget(crate::btcc::ContinuationBudgetTransition {
             binding,
-            event: crate::btcc::TurnContinuationBudgetEvent::RecordOutput {
-                round_id: "round-1".into(),
-                output_bytes: 4,
-            },
+            event: json!({"kind":"record_output","roundId":"round-1","outputBytes":4}),
             now_ms: now + 1,
         })
         .await
@@ -250,13 +226,8 @@ async fn model_journal_abandons_restarted_attempt_and_budget_terminal_commits() 
         .expect("load turn")
         .expect("turn");
     assert_eq!(
-        persisted
-            .continuation_budget
-            .expect("budget")
-            .terminal
-            .expect("terminal")
-            .reason,
-        crate::btcc::TurnContinuationBudgetTerminalReason::MaxOutputBytes
+        persisted.continuation_budget.expect("budget")["terminal"]["reason"],
+        "max_output_bytes"
     );
     repositories.close().await.expect("close repository");
 }
@@ -490,16 +461,10 @@ pub(super) fn prepared(turn_id: &str, trigger_key: &str, hash: &str) -> Prepared
         app_queue_claim_id: None,
         preparation_cancellation: Default::default(),
     };
-    let command = crate::btcc::TurnCommand::fixture_run(
-        turn_id,
-        "session-1",
-        trigger_key,
-        crate::btcc::CommandMessage {
-            message_id: format!("message-{turn_id}"),
-            content: "hello".into(),
-        },
-        json!({"messageContent":"hello"}),
-    );
+    let command = json!({"kind":"run","turnId":turn_id,"sessionId":"session-1","triggerKey":trigger_key,
+        "message":{"messageId":format!("message-{turn_id}"),"content":"hello"},
+        "modelSelection":{"provider":"openai","model":"gpt","reasoningEffort":"medium","contextWindowTokens":100},
+        "context":{"messageContent":"hello"}});
     PreparedTurn {
         preparation_id: format!("preparation-{turn_id}"),
         request,

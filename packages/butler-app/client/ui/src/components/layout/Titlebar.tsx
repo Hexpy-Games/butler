@@ -23,7 +23,6 @@ import { selectRightAvailable, useButlerStore } from "@/app/store.ts";
 import {
   activeChatFromNavigation,
   activeTitleForView,
-  appThemeClasses,
   sessionFromNavigation,
 } from "@/app/utils.ts";
 import type { ActiveChatView } from "@/app/types.ts";
@@ -41,7 +40,6 @@ export function Titlebar() {
   const leftOpen = useButlerStore((state) => state.leftOpen);
   const rightOpen = useButlerStore((state) => state.rightOpen);
   const rightAvailable = useButlerStore(selectRightAvailable);
-  const settings = useButlerStore((state) => state.settings);
   const runSessionAction = useButlerStore((state) => state.runSessionAction);
   const setRightOpen = useButlerStore((state) => state.setRightOpen);
   const { title, subtitle } = useMemo(
@@ -82,7 +80,7 @@ export function Titlebar() {
         ) : undefined
       }
       collapsed={!leftOpen}
-      className="drag-region"
+      dragRegion
       dataTestClass="custom-titlebar"
       windowControls={<WindowControls />}
       trailing={
@@ -97,11 +95,10 @@ export function Titlebar() {
                   label={appCopy.sessionActions.menuLabel}
                   selected={sessionMenuOpen}
                 >
-                  <MoreHorizontal size={16} />
+                  <MoreHorizontal size="md" />
                 </IconButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent
-                className={appThemeClasses(settings)}
                 align="end"
                 onInteractOutside={() => setSessionMenuOpen(false)}
                 sideOffset={TITLEBAR_MENU_SIDE_OFFSET_PX}
@@ -110,7 +107,7 @@ export function Titlebar() {
                   <DropdownMenuItem
                     onSelect={() => runSessionAction(activeSession, "rename")}
                   >
-                    <PencilLine size={14} /> {appCopy.sessionActions.rename}
+                    <PencilLine size="sm" /> {appCopy.sessionActions.rename}
                   </DropdownMenuItem>
                   <SessionFolderMenu
                     disabled={!canOpenSessionFolder}
@@ -119,7 +116,7 @@ export function Titlebar() {
                   <DropdownMenuItem
                     onSelect={() => runSessionAction(activeSession, "archive")}
                   >
-                    <Archive size={14} /> {appCopy.sessionActions.archive}
+                    <Archive size="sm" /> {appCopy.sessionActions.archive}
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>
@@ -136,9 +133,9 @@ export function Titlebar() {
               onClick={() => setRightOpen((value) => !value)}
             >
               {rightOpen ? (
-                <PanelRightClose size={17} />
+                <PanelRightClose size="md" />
               ) : (
-                <PanelRight size={17} />
+                <PanelRight size="md" />
               )}
             </IconButton>
           )}

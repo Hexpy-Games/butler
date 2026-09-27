@@ -8,7 +8,7 @@ import { useProjectDashboardState } from "@/app/projectDashboardState.ts";
 
 test("board restores the previously loaded window through real page cursors instead of losing deep reading position", async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: "http://localhost" });
-  const saved = Object.fromEntries(["window", "document", "navigator", "HTMLElement", "Node", "IS_REACT_ACT_ENVIRONMENT"].map((key) => [key, (globalThis as any)[key]]));
+  const saved = Object.fromEntries(["window", "document", "navigator", "HTMLElement", "Node", "IS_REACT_ACT_ENVIRONMENT"].map((key) => [key, (globalThis as unknown as Record<string, unknown>)[key]]));
   Object.assign(globalThis, { window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
     HTMLElement: dom.window.HTMLElement, Node: dom.window.Node, IS_REACT_ACT_ENVIRONMENT: true });
   const calls: string[] = [];
@@ -18,7 +18,7 @@ test("board restores the previously loaded window through real page cursors inst
     return { status: "ready", sourceRevision: "r", total: 101, parents: [], laneCounts: {},
       items: Array.from({ length: offset === 100 ? 1 : 50 }, (_, n) => ({ id: String(offset + n) })),
       nextCursor: offset === 0 ? "second" : offset === 50 ? "third" : null };
-  } } as any;
+  } } as unknown as typeof dom.window.butlerApp;
   const previous = useProjectDashboardState.getState().projects;
   useProjectDashboardState.setState({ projects: { p: { loadedCounts: { "board:work:": 100 } } } });
   let current!: ReturnType<typeof useProjectBoard>;
@@ -38,7 +38,7 @@ test("board restores the previously loaded window through real page cursors inst
   } finally {
     await act(async () => root.unmount()); useProjectDashboardState.setState({ projects: previous });
     for (const [key, value] of Object.entries(saved)) {
-      if (value === undefined) delete (globalThis as any)[key]; else (globalThis as any)[key] = value;
+      if (value === undefined) delete (globalThis as unknown as Record<string, unknown>)[key]; else (globalThis as unknown as Record<string, unknown>)[key] = value;
     }
     dom.window.close();
   }
@@ -46,7 +46,7 @@ test("board restores the previously loaded window through real page cursors inst
 
 test("lane windows start at ten, expand independently and reset on kind change", async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: "http://localhost" });
-  const saved = Object.fromEntries(["window", "document", "navigator", "HTMLElement", "Node", "IS_REACT_ACT_ENVIRONMENT"].map((key) => [key, (globalThis as any)[key]]));
+  const saved = Object.fromEntries(["window", "document", "navigator", "HTMLElement", "Node", "IS_REACT_ACT_ENVIRONMENT"].map((key) => [key, (globalThis as unknown as Record<string, unknown>)[key]]));
   Object.assign(globalThis, { window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
     HTMLElement: dom.window.HTMLElement, Node: dom.window.Node, IS_REACT_ACT_ENVIRONMENT: true });
   const calls: string[] = [];
@@ -59,7 +59,7 @@ test("lane windows start at ten, expand independently and reset on kind change",
     return { status: "ready", sourceRevision: "r", total: 25, parents: [], laneCounts: {},
       items: Array.from({ length: Math.min(10, 25 - offset) }, (_, n) => ({ id: `${lane}-${offset + n}`, lane })),
       nextCursor: offset + 10 < 25 ? String(offset + 10) : null };
-  } } as any;
+  } } as unknown as typeof dom.window.butlerApp;
   let active!: ReturnType<typeof useProjectBoard>;
   let done!: ReturnType<typeof useProjectBoard>;
   function Harness({ kind }: { kind: "work" | "task" }) {
@@ -80,7 +80,7 @@ test("lane windows start at ten, expand independently and reset on kind change",
   } finally {
     await act(async () => root.unmount());
     for (const [key, value] of Object.entries(saved)) {
-      if (value === undefined) delete (globalThis as any)[key]; else (globalThis as any)[key] = value;
+      if (value === undefined) delete (globalThis as unknown as Record<string, unknown>)[key]; else (globalThis as unknown as Record<string, unknown>)[key] = value;
     }
     dom.window.close();
   }

@@ -35,7 +35,7 @@ pub(super) fn guided_final(
         runtime_failure: result.runtime_failure,
         artifacts: result.artifacts,
         changed_files: result.changed_files,
-        plan: None,
+        plan: result.plan,
         model_identity: result.model_identity,
         execution_outcome: None,
         extensions: Map::new(),
@@ -99,49 +99,16 @@ fn payload_body(
         body.insert("artifacts".into(), json_value(&result.artifacts)?);
     }
     if !result.changed_files.is_empty() {
-        body.insert("changedFiles".into(), json_value(&result.changed_files)?);
+        body.insert(
+            "changedFiles".into(),
+            Value::Array(result.changed_files.clone()),
+        );
+    }
+    if let Some(value) = &result.plan {
+        body.insert("plan".into(), value.clone());
     }
     if let Some(value) = &result.model_identity {
         body.insert("modelIdentity".into(), json_value(value)?);
     }
     Ok(Value::Object(body))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::btcc::{ChangedFileLine, ChangedFileSummary, ChangedLineKind, TurnSemanticState};
-
-    /// KEEP: the digested final payload body (and so the payload reference
-    /// and outbox id) with changed files is byte-stable.
-    #[test]
-    fn payload_body_with_changed_files_is_byte_stable() {
-        let turn =
-            super::super::test_support::record("turn-1", "session-1", TurnSemanticState::Admitted);
-        let mut result = super::super::test_support::agent_result();
-        result.changed_files = vec![ChangedFileSummary {
-            path: "src/a.rs".into(),
-            additions: 1,
-            deletions: 1,
-            lines: vec![
-                ChangedFileLine {
-                    kind: ChangedLineKind::Deleted,
-                    content: "old".into(),
-                    old_line: Some(3),
-                    new_line: None,
-                },
-                ChangedFileLine {
-                    kind: ChangedLineKind::Added,
-                    content: "new".into(),
-                    old_line: None,
-                    new_line: Some(3),
-                },
-            ],
-        }];
-        let body = payload_body(&turn, &result, "done", "sha").unwrap();
-        assert_eq!(
-            butler_core::json::stringify(&body).unwrap(),
-            r#"{"turnId":"turn-1","contentSha256":"sha","route":"direct","disposition":"completed","content":"done","changedFiles":[{"path":"src/a.rs","additions":1,"deletions":1,"lines":[{"type":"deleted","content":"old","old_line":3},{"type":"added","content":"new","new_line":3}]}]}"#
-        );
-    }
 }

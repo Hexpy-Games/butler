@@ -21,7 +21,7 @@ button.reference {
 }
 
 .reference:focus-visible {
-  outline: var(--focus-ring-width) solid var(--accent);
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
 }
 
 .icon {

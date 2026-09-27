@@ -3,12 +3,6 @@ import type { ProgressRow } from "@/app/types.ts";
 import { interfaceProgressLabel } from "@/app/copy.ts";
 import { Typo } from "@/butler-ds";
 
-const currentStatusTextStyle = {
-  color: "var(--text-secondary)",
-  minWidth: 0,
-  overflowWrap: "anywhere",
-} as const;
-
 export function CurrentStatusText({
   row,
   label,
@@ -29,7 +23,8 @@ export function CurrentStatusText({
       as="p"
       data-test-class={testClass}
       data-turn-state={row.state}
-      style={currentStatusTextStyle}
+      tone="secondary"
+      minWidth="0"
     >
       {label ?? interfaceProgressLabel(row)}
       {suffix ? ` · ${suffix}` : ""}

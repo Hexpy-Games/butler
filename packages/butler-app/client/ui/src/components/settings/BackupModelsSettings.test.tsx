@@ -2,7 +2,12 @@
 
 import { afterEach, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup as renderRaw } from "react-dom/server";
+import { SettingsFieldScopeProvider } from "@/butler-ds";
+
+/** Settings fields render inside a section scope (SettingsField throws outside one). */
+const renderToStaticMarkup = (node: React.ReactNode) =>
+  renderRaw(<SettingsFieldScopeProvider>{node}</SettingsFieldScopeProvider>);
 import { EMPTY_SETTINGS } from "@/app/constants.ts";
 import type { AppModelSummary, SettingsView } from "@/app/types.ts";
 import {
