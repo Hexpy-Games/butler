@@ -26,8 +26,9 @@ import type { FirstRunFlow } from "./useFirstRunFlow";
 /** "Pick an AI": the well-known services on top, the rest behind "more". */
 export function FirstRunProviderList({ flow }: { flow: FirstRunFlow }) {
   const { copy } = flow;
-  const [expanded, setExpanded] = useState(false);
   const layout = providerCardLayout({ localReachable: flow.local.reachable });
+  // Run setup again opens "more" when the AI in use is there.
+  const [expanded, setExpanded] = useState(() => Boolean(flow.currentCardId && layout.more.includes(flow.currentCardId)));
   return (
     <SetupWizardContent width="wide">
       <Stack gap="xs">
@@ -70,11 +71,15 @@ export function FirstRunProviderList({ flow }: { flow: FirstRunFlow }) {
 
 function TopCard({ cardId, flow }: { cardId: FirstRunProviderCardId; flow: FirstRunFlow }) {
   const view = providerCardView(cardId, flow, "card");
-  const tag = view.tag === "noKey" ? <Tag tone="accent">{flow.copy.tagNoKey}</Tag>
-    : view.tag === "local" ? <Tag tone="success">{flow.copy.tagLocal}</Tag> : null;
+  const current = flow.currentCardId === cardId;
+  const tag = current ? <Tag tone="accent">{flow.copy.tagCurrent}</Tag>
+    : view.tag === "noKey" ? <Tag tone="accent">{flow.copy.tagNoKey}</Tag>
+      : view.tag === "local" ? <Tag tone="success">{flow.copy.tagLocal}</Tag> : null;
   return (
     <ChoiceCard
+      aria-current={current ? true : undefined}
       data-card-id={cardId}
+      selected={current}
       description={view.description}
       icon={<CardGlyph cardId={cardId} />}
       state={view.state}
@@ -88,8 +93,11 @@ function TopCard({ cardId, flow }: { cardId: FirstRunProviderCardId; flow: First
 function MoreTile({ cardId, flow }: { cardId: FirstRunProviderCardId; flow: FirstRunFlow }) {
   const view = providerCardView(cardId, flow, "tile");
   const placeholder = cardId === "local";
+  const current = flow.currentCardId === cardId;
   return (
     <ChoiceTile
+      aria-current={current ? true : undefined}
+      selected={current}
       aria-label={placeholder ? `${flow.copy.providerNames.local}. ${flow.copy.localMissing}. ${flow.copy.rescan}` : undefined}
       cornerIcon={placeholder && view.state !== "loading" ? <RefreshCcw size="xs" /> : undefined}
       data-card-id={cardId}

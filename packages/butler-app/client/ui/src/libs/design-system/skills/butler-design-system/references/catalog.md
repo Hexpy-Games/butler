@@ -666,7 +666,7 @@ A Radix select with the Butler trigger and menu, for one value from a list.
 - Not for: Plain options in a dense form or on phones → `NativeSelect`
 - Not for: A searchable list with filters → `FilteredSelectPopover`
 - Not for: A trigger that opens a custom popover → `SelectButton`
-- Tokens: `--control-height-md`, `--menu-item-height`, `--radius-popover`, `--motion-enter-menu`, `--motion-scale-menu`
+- Tokens: `--control-height-md`, `--menu-item-height`, `--radius-popover`, `--motion-enter-menu`, `--motion-scale-menu`, `--icon-size-md`
 
 ### Slider
 

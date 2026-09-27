@@ -4,9 +4,9 @@ import { setAppCopyLanguage } from "@/app/copy.ts";
 import { detectFirstRunLanguage, firstRunCopy, type FirstRunLanguage } from "@/app/firstRunSetup.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { consentAcceptedPatch } from "@/app/onboarding.ts";
-import { PROVIDER_CARDS, type FirstRunProviderCardId, type LocalModelOption } from "@/app/setupProviders.ts";
+import { PROVIDER_CARDS, connectionCardId, type FirstRunProviderCardId, type LocalModelOption } from "@/app/setupProviders.ts";
 import { useButlerStore } from "@/app/store.ts";
-import type { SettingsView } from "@/app/types.ts";
+import type { ModelCatalogView, SettingsView } from "@/app/types.ts";
 import { useConnectionCommit } from "./useConnectionCommit";
 import { useLocalModelServers } from "./useLocalModelServers";
 import { useOnlineStatus } from "./useOnlineStatus";
@@ -27,6 +27,13 @@ export type ConnectView =
 /** What the first run connected, for the landing toast; null after a consent-only run. */
 export type FirstRunResult = { cardId: FirstRunProviderCardId } | null;
 
+/** The card of the model Butler uses now; only "Run setup again" shows it. */
+function currentCardId(mode: FirstRunMode, modelRef: string, catalog: ModelCatalogView): FirstRunProviderCardId | null {
+  if (mode !== "rerun" || !modelRef) return null;
+  const model = [...(catalog.registered_models ?? []), ...catalog.models].find((entry) => entry.model_ref === modelRef);
+  return connectionCardId(model);
+}
+
 function initialLanguage(mode: FirstRunMode): FirstRunLanguage {
   if (mode !== "first-run") return useButlerStore.getState().settings.language;
   return detectFirstRunLanguage(typeof navigator === "undefined" ? [] : navigator.languages);
@@ -46,6 +53,7 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   const copy = firstRunCopy[language];
   const setup = useSetupReadiness();
   const online = useOnlineStatus();
+  const current = useButlerStore((state) => currentCardId(mode, state.settings.model, state.modelCatalog));
   const local = useLocalModelServers({ enabled: screen === "connect", agentReady: setup.readiness.status === "ready" });
   const commit = useConnectionCommit({
     readinessStatus: setup.readiness.status,
@@ -98,6 +106,7 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
 
   return {
     mode, copy, language, setLanguage, online, screen, view, savingConsent, local, signIn, commit,
+    currentCardId: current,
     readiness: setup.readiness,
     retryPreparation: setup.retry,
     repairPreparation: setup.repair,

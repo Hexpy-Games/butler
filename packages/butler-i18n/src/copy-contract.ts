@@ -34,6 +34,8 @@ interface FirstRunCopy {
   providerDescriptions: Record<FirstRunProviderCardId, string>;
   tagNoKey: string;
   tagLocal: string;
+  /** Tag on the connected AI when setup runs again. */
+  tagCurrent: string;
   localModelCount: (count: number) => string;
   moreProviders: (count: number) => string;
   showLess: string;

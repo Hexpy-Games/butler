@@ -112,6 +112,7 @@ const firstRun = {
     },
     tagNoKey: "No key needed",
     tagLocal: "Free · Private",
+    tagCurrent: "In use",
     localModelCount: (count: number) => (count === 1 ? "1 model" : `${count} models`),
     moreProviders: (count: number) => `${count} more services`,
     showLess: "Show less",

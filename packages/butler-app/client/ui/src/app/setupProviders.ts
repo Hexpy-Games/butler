@@ -36,6 +36,30 @@ export const PROVIDER_CARDS: Record<FirstRunProviderCardId, ProviderCardSpec> = 
   other: { id: "other", kind: "custom", providerId: "local", icon: "server" },
 };
 
+const PROVIDER_LOGOS: Record<string, ProviderCardLogo> = {
+  openai: "openai", anthropic: "claude", google: "gemini", xai: "grok", qwen: "qwen",
+  kimi: "kimi", zai: "zai", "zai-api": "zai", "opencode-go": "opencode",
+};
+
+/** The DS logo of a catalog provider (a local server by its platform), or null for none. */
+export function providerLogoName(providerId: string, platform?: string): ProviderCardLogo | null {
+  if (providerId === "local") return platform === "ollama" ? "ollama" : platform === "lm_studio" ? "lmstudio" : null;
+  return PROVIDER_LOGOS[providerId] ?? null;
+}
+
+/** The first-run card a connected model came from ("Run setup again" marks it as current). */
+export function connectionCardId(
+  model: Pick<AppModelSummary, "provider_id" | "auth_type" | "platform"> | null | undefined,
+): FirstRunProviderCardId | null {
+  if (!model) return null;
+  const { provider_id: providerId, platform, auth_type: authType } = model;
+  if (providerId === "local") return platform === "ollama" || platform === "lm_studio" ? "local" : "other";
+  // ChatGPT sign-in and an OpenAI API key are separate cards for one provider.
+  if (authType === "codex_oauth") return "chatgpt";
+  const card = Object.values(PROVIDER_CARDS).find((spec) => spec.kind === "key" && spec.providerId === providerId);
+  return card?.id ?? null;
+}
+
 export const TOP_CARD_IDS: readonly FirstRunProviderCardId[] = ["chatgpt", "claude", "gemini"];
 export const MORE_CARD_IDS: readonly FirstRunProviderCardId[] = [
   "openai", "grok", "qwen", "kimi", "zaiCoding", "zaiApi", "opencodeGo", "other",

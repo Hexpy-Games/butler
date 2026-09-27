@@ -112,6 +112,7 @@ const firstRun = {
     },
     tagNoKey: "키 필요 없음",
     tagLocal: "무료 · 비공개",
+    tagCurrent: "사용 중",
     localModelCount: (count: number) => `모델 ${count}개`,
     moreProviders: (count: number) => `다른 서비스 ${count}개`,
     showLess: "접기",

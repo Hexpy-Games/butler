@@ -37,6 +37,8 @@ interface HarnessOptions {
   verify?: (apiKey: string) => Envelope;
   oauth?: { start: Record<string, unknown>; statuses?: Array<Record<string, unknown>> };
   settings?: Partial<SettingsView>;
+  /** The catalog the workspace already loaded (Run setup again). */
+  storeCatalog?: ModelCatalogView;
   /** Hosted registrations that fail before one succeeds. */
   failRegistrations?: number;
   discovered?: AppModelSummary[];
@@ -94,7 +96,10 @@ async function renderFirstRun(options: HarnessOptions = {}): Promise<Harness> {
   });
   Object.defineProperty(dom.window.HTMLCanvasElement.prototype, "getContext", { configurable: true, value: () => null });
   (globalThis as ReactActGlobal).IS_REACT_ACT_ENVIRONMENT = true;
-  useButlerStore.setState({ settings: { ...EMPTY_SETTINGS, onboarding: {}, ...options.settings } });
+  useButlerStore.setState({
+    settings: { ...EMPTY_SETTINGS, onboarding: {}, ...options.settings },
+    modelCatalog: options.storeCatalog ?? EMPTY_MODEL_CATALOG,
+  });
 
   const calls: Harness["calls"] = [];
   const results: FirstRunResult[] = [];
@@ -529,5 +534,47 @@ test("Other (OpenAI-compatible) finds the server's models and starts with the pi
     platform: "custom", model_id: "mistral-small", context_window_tokens: 32_000, api_key: "local-secret",
   });
   expect(harness.results[0]).toEqual({ cardId: "other" });
+  await unmount(harness);
+});
+
+test("Run setup again marks the connected AI as current and can be cancelled from the welcome", async () => {
+  const connected: AppModelSummary = { ...sonnet, registered: true, auth_type: "api_key" };
+  const harness = await renderFirstRun({
+    mode: "rerun",
+    settings: { language: "ko", model: connected.model_ref, onboarding: { consent_version: FIRST_RUN_CONSENT_VERSION, completed_at: "c" } },
+    storeCatalog: catalog([connected]),
+  });
+  expect(buttonByText(harness.container, "취소")).toBeDefined();
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="claude"]')), "claude card");
+  const current = card(harness, "claude");
+  expect(current.getAttribute("data-selected")).toBe("true");
+  expect(current.getAttribute("aria-current")).toBe("true");
+  expect(current.textContent).toContain("사용 중");
+  expect(card(harness, "chatgpt").getAttribute("data-selected")).toBeNull();
+  expect(card(harness, "chatgpt").getAttribute("aria-current")).toBeNull();
+  await unmount(harness);
+});
+
+test("a current AI behind \"more\" opens the grid with its tile marked", async () => {
+  const connected: AppModelSummary = { ...sol, registered: true, auth_type: "api_key" };
+  const harness = await renderFirstRun({
+    mode: "rerun",
+    settings: { language: "ko", model: connected.model_ref },
+    storeCatalog: catalog([connected]),
+  });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-test-class="first-run-more-providers"]')), "open grid");
+  expect(card(harness, "openai").getAttribute("data-selected")).toBe("true");
+  expect(card(harness, "openai").getAttribute("aria-current")).toBe("true");
+  expect(card(harness, "chatgpt").getAttribute("data-selected")).toBeNull();
+  await unmount(harness);
+});
+
+test("a first run marks no card as current", async () => {
+  const harness = await renderFirstRun({ settings: { model: sonnet.model_ref }, storeCatalog: catalog([{ ...sonnet, registered: true }]) });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="claude"]')), "claude card");
+  expect(harness.container.querySelector('[aria-current="true"]')).toBeNull();
   await unmount(harness);
 });

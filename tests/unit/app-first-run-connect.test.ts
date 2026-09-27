@@ -12,6 +12,8 @@ import {
 } from "../../packages/butler-app/client/ui/src/app/setupReadiness.ts";
 import {
   MORE_CARD_IDS,
+  connectionCardId,
+  providerLogoName,
   PROVIDER_CARDS,
   localModelOptions,
   providerCardLayout,
@@ -141,4 +143,35 @@ test("the default model patch sets the chat model, effort and every worker profi
   expect(patch).toMatchObject({ model: "anthropic/claude-sonnet-5", reasoning_effort: "medium", context_window_tokens: 200_000 });
   expect(patch.worker_profiles.length).toBeGreaterThan(0);
   expect(patch.worker_profiles.every((profile) => profile.model === model.model_ref && profile.reasoning_effort === "medium")).toBe(true);
+});
+
+test("the connected model maps back to its first-run card (Run setup again shows it as current)", () => {
+  const model = (patch: Partial<AppModelSummary>): AppModelSummary => ({ ...FIRST_RUN_TEST_MODEL, ...patch });
+  expect(connectionCardId(model({ provider_id: "openai", auth_type: "codex_oauth" }))).toBe("chatgpt");
+  expect(connectionCardId(model({ provider_id: "openai", auth_type: "api_key" }))).toBe("openai");
+  expect(connectionCardId(model({ provider_id: "anthropic" }))).toBe("claude");
+  expect(connectionCardId(model({ provider_id: "google" }))).toBe("gemini");
+  expect(connectionCardId(model({ provider_id: "zai-api" }))).toBe("zaiApi");
+  expect(connectionCardId(model({ provider_id: "local", platform: "ollama" }))).toBe("local");
+  expect(connectionCardId(model({ provider_id: "local", platform: "lm_studio" }))).toBe("local");
+  expect(connectionCardId(model({ provider_id: "local", platform: "custom" }))).toBe("other");
+  expect(connectionCardId(model({ provider_id: "unknown" }))).toBeNull();
+  expect(connectionCardId(undefined)).toBeNull();
+});
+
+test("provider logos: one DS logo name per provider, local servers by platform, none for a custom server", () => {
+  expect(providerLogoName("openai")).toBe("openai");
+  expect(providerLogoName("anthropic")).toBe("claude");
+  expect(providerLogoName("google")).toBe("gemini");
+  expect(providerLogoName("xai")).toBe("grok");
+  expect(providerLogoName("qwen")).toBe("qwen");
+  expect(providerLogoName("kimi")).toBe("kimi");
+  expect(providerLogoName("zai")).toBe("zai");
+  expect(providerLogoName("zai-api")).toBe("zai");
+  expect(providerLogoName("opencode-go")).toBe("opencode");
+  expect(providerLogoName("local", "ollama")).toBe("ollama");
+  expect(providerLogoName("local", "lm_studio")).toBe("lmstudio");
+  expect(providerLogoName("local", "custom")).toBeNull();
+  expect(providerLogoName("local")).toBeNull();
+  expect(providerLogoName("someone-new")).toBeNull();
 });
