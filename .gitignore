@@ -47,3 +47,6 @@ tests/capture_*
 # ── Backup files ──────────────────────────────────────────────────────────────
 *.bak
 data/personas/active.md
+
+# ── E2E fixtures are synthetic data dirs; the patterns above must not drop them
+!packages/butler-agent/rust/crates/butler-e2e/fixtures/**

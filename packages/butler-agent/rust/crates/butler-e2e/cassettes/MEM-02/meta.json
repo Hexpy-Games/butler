@@ -1,11 +1,11 @@
 {
   "scenario": "MEM-02",
   "provider": "openai-subscription",
-  "model": "openai/gpt-6-sol",
-  "effort": "low",
+  "model": "openai/gpt-6-luna",
+  "effort": "max",
   "wire_shape": "openai_responses",
-  "butler_git_sha": "0fe3aedb18d4",
-  "recorded_at": "2026-09-27T09:10:56Z",
+  "butler_git_sha": "87ecf04de06d",
+  "recorded_at": "2026-09-27T13:34:48Z",
   "recorder": "butler-e2e record proxy",
   "sanitization": [
     "per-run values -> {{W}}, {{D}}, {{SANDBOX}}, scenario nonces",
@@ -17,7 +17,11 @@
   "files": [
     {
       "file": "000.json",
-      "sha256": "91a60131a0c530dcf1edbf7568a129e0b619d3e37e1949ecb57c3bbc115df904"
+      "sha256": "60aa9a8a0da0d152762a6d271fc68041aed24db763d4574a2aa879ace28077c0"
+    },
+    {
+      "file": "001.json",
+      "sha256": "6ac577771f19692f3e6b581c9be02a6e76de092a6579c112e7333a990e7ab44a"
     }
   ],
   "fingerprint": [
@@ -26,8 +30,23 @@
       "response.created{response,sequence_number,type}",
       "response.in_progress{response,sequence_number,type}",
       "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
       "response.content_part.added{content_index,item_id,output_index,part,sequence_number,type}",
       "response.output_text.delta{content_index,delta,item_id,logprobs,obfuscation,output_index,sequence_number,type}",
+      "response.output_text.done{content_index,item_id,logprobs,output_index,sequence_number,text,type}",
+      "response.content_part.done{content_index,item_id,output_index,part,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.content_part.added{content_index,item_id,output_index,part,sequence_number,type}",
       "response.output_text.done{content_index,item_id,logprobs,output_index,sequence_number,text,type}",
       "response.content_part.done{content_index,item_id,output_index,part,sequence_number,type}",
       "response.output_item.done{item,output_index,sequence_number,type}",
