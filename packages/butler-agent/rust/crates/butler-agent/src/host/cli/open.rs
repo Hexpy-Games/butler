@@ -18,6 +18,10 @@ const COMMAND: &str = "butler open";
 const USAGE: &str = "open [--no-browser] [--json] [--quiet] [--data PATH]";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent command-line flags"
+)]
 #[derive(Default)]
 struct Options {
     data: Option<String>,
@@ -40,10 +44,9 @@ struct Envelope {
     data: ConnectionLink,
 }
 
-/// `open` followed only by its own options.
+/// `open [options]`; unknown options are reported by [`run`].
 pub(crate) fn recognizes(args: &[OsString]) -> bool {
     args.first().is_some_and(|arg| arg == "open")
-        && parse(args.get(1..).unwrap_or_default()).is_ok()
 }
 
 pub(crate) async fn run(installation: &ResolvedInstallation, args: &[OsString]) -> ExitCode {

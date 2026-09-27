@@ -194,26 +194,18 @@ async fn sec_03_app_origin_preflight_and_requests_succeed() -> Result<(), Harnes
             .send()
             .await?;
     assert_eq!(preflight.status().as_u16(), 204);
+    assert_app_cors(&preflight, "preflight");
     let headers = preflight.headers();
-    assert_eq!(header(headers, "access-control-allow-origin"), APP_ORIGIN);
     assert!(header(headers, "access-control-allow-methods").contains("PATCH"));
     assert!(header(headers, "access-control-allow-headers").contains("authorization"));
-    assert!(header(headers, "vary").contains("Origin"));
 
-    let patch =
-        s.gw.http()
-            .patch(url(&s.gw, "/settings"))
-            .bearer_auth(&s.gw.token)
-            .header("origin", APP_ORIGIN)
-            .header("content-type", "application/json")
-            .body(json!({"language": "ko"}).to_string())
-            .send()
-            .await?;
+    let patch = from_app(&s.gw, Method::PATCH, "/settings")
+        .header("content-type", "application/json")
+        .body(json!({"language": "ko"}).to_string())
+        .send()
+        .await?;
     assert_eq!(patch.status().as_u16(), 200);
-    assert_eq!(
-        header(patch.headers(), "access-control-allow-origin"),
-        APP_ORIGIN
-    );
+    assert_app_cors(&patch, "PATCH /settings");
 
     let (content_type, body) = media::multipart_file(
         "number.png",
@@ -221,51 +213,45 @@ async fn sec_03_app_origin_preflight_and_requests_succeed() -> Result<(), Harnes
         &media::digits_png("73", 8),
         Some("general"),
     );
-    let upload =
-        s.gw.http()
-            .post(url(&s.gw, "/message-files"))
-            .bearer_auth(&s.gw.token)
-            .header("origin", APP_ORIGIN)
-            .header("content-type", content_type)
-            .body(body)
-            .send()
-            .await?;
+    let upload = from_app(&s.gw, Method::POST, "/message-files")
+        .header("content-type", content_type)
+        .body(body)
+        .send()
+        .await?;
     assert_eq!(upload.status().as_u16(), 201);
-    assert_eq!(
-        header(upload.headers(), "access-control-allow-origin"),
-        APP_ORIGIN
-    );
+    assert_app_cors(&upload, "upload");
     let file: Value = upload.json().await?;
     let file_url = file["data"]["file"]["url"].as_str().unwrap().to_owned();
-    let download =
-        s.gw.http()
-            .get(url(&s.gw, &file_url))
-            .bearer_auth(&s.gw.token)
-            .header("origin", APP_ORIGIN)
-            .send()
-            .await?;
+    let download = from_app(&s.gw, Method::GET, &file_url).send().await?;
     assert_eq!(download.status().as_u16(), 200);
-    assert_eq!(
-        header(download.headers(), "access-control-allow-origin"),
-        APP_ORIGIN
-    );
+    assert_app_cors(&download, "message file");
 
-    let live =
-        s.gw.http()
-            .get(url(&s.gw, "/events/live?cursor=0"))
-            .bearer_auth(&s.gw.token)
-            .header("origin", APP_ORIGIN)
-            .header("accept", "text/event-stream")
-            .send()
-            .await?;
+    let live = from_app(&s.gw, Method::GET, "/events/live?cursor=0")
+        .header("accept", "text/event-stream")
+        .send()
+        .await?;
     assert_eq!(live.status().as_u16(), 200);
-    assert_eq!(
-        header(live.headers(), "access-control-allow-origin"),
-        APP_ORIGIN
-    );
-    assert!(header(live.headers(), "vary").contains("Origin"));
+    assert_app_cors(&live, "live events");
     drop(live);
     s.finish().await
+}
+
+/// A request from the `app://butler` renderer, token in the header.
+fn from_app(gw: &Gateway, method: Method, path: &str) -> reqwest::RequestBuilder {
+    gw.http()
+        .request(method, url(gw, path))
+        .bearer_auth(&gw.token)
+        .header("origin", APP_ORIGIN)
+}
+
+fn assert_app_cors(response: &reqwest::Response, what: &str) {
+    let headers = response.headers();
+    assert_eq!(
+        header(headers, "access-control-allow-origin"),
+        APP_ORIGIN,
+        "{what}"
+    );
+    assert!(header(headers, "vary").contains("Origin"), "{what}");
 }
 
 /// SEC-04 — `<img>` and the artifact viewer send no Authorization header:
@@ -305,7 +291,7 @@ async fn sec_04_signed_file_url_works_once_and_expires() -> Result<(), HarnessEr
     assert_eq!(served.bytes().await?.to_vec(), png);
 
     let query = signed.split_once('?').unwrap().1;
-    let tampered = format!("{}x", signed);
+    let tampered = format!("{signed}x");
     for (label, target) in [
         ("tampered", tampered),
         ("other route", format!("/settings?{query}")),
@@ -371,41 +357,7 @@ async fn sec_05_one_time_link_sets_a_cookie_and_cannot_be_reused() -> Result<(),
     let reused = browser.get(&link).send().await?;
     assert_eq!(reused.status().as_u16(), 401, "link reused");
     assert!(reused.headers().get("set-cookie").is_none());
-
-    let settings = browser
-        .get(url(&s.gw, "/settings"))
-        .header("cookie", &cookie)
-        .send()
-        .await?;
-    assert_eq!(settings.status().as_u16(), 200);
-    let own_origin = s.gw.base.clone();
-    let body = json!({"language": "ko"}).to_string();
-    for (origin, expected) in [(None, 403), (Some(own_origin.as_str()), 200)] {
-        let mut request = browser
-            .patch(url(&s.gw, "/settings"))
-            .header("cookie", &cookie)
-            .header("content-type", "application/json")
-            .body(body.clone());
-        if let Some(origin) = origin {
-            request = request.header("origin", origin);
-        }
-        assert_eq!(
-            request.send().await?.status().as_u16(),
-            expected,
-            "origin {origin:?}"
-        );
-    }
-    let minted = browser
-        .post(url(&s.gw, "/connection-codes"))
-        .header("cookie", &cookie)
-        .header("origin", &own_origin)
-        .send()
-        .await?;
-    assert_eq!(
-        minted.status().as_u16(),
-        403,
-        "a browser session minted a code"
-    );
+    assert_cookie_session(&s.gw, &browser, &cookie).await?;
 
     let (_, code) = open_link(&s)?;
     let typed = code.to_lowercase().replace('-', " ");
@@ -420,4 +372,41 @@ async fn sec_05_one_time_link_sets_a_cookie_and_cannot_be_reused() -> Result<(),
         "typed connection code refused"
     );
     s.finish().await
+}
+
+/// SEC-05: the session cookie reads without a token; a state change with it
+/// needs the page's own Origin; it cannot mint further codes.
+async fn assert_cookie_session(
+    gw: &Gateway,
+    browser: &reqwest::Client,
+    cookie: &str,
+) -> Result<(), HarnessError> {
+    let settings = browser
+        .get(url(gw, "/settings"))
+        .header("cookie", cookie)
+        .send()
+        .await?;
+    assert_eq!(settings.status().as_u16(), 200);
+    let own_origin = gw.base.as_str();
+    let body = json!({"language": "ko"}).to_string();
+    for (origin, expected) in [(None, 403), (Some(own_origin), 200)] {
+        let mut request = browser
+            .patch(url(gw, "/settings"))
+            .header("cookie", cookie)
+            .header("content-type", "application/json")
+            .body(body.clone());
+        if let Some(origin) = origin {
+            request = request.header("origin", origin);
+        }
+        let status = request.send().await?.status().as_u16();
+        assert_eq!(status, expected, "origin {origin:?}");
+    }
+    let minted = browser
+        .post(url(gw, "/connection-codes"))
+        .header("cookie", cookie)
+        .header("origin", own_origin)
+        .send()
+        .await?;
+    assert_eq!(minted.status().as_u16(), 403, "a session minted a code");
+    Ok(())
 }

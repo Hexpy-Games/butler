@@ -62,7 +62,7 @@ src/gateway/application/tests/projection_tests.rs	recovered_delivered_final_requ
 src/gateway/application/tests/projection_tests.rs	retention_owner_snapshots_terminal_progress_and_joins_on_close	86
 src/gateway/application/tests/retry.rs	retry_reuses_the_same_turn_attempt_controls_and_user_message	121
 src/gateway/application/tests/session_views.rs	session_view_projects_progress_for_active_and_terminal_latest_turn	137
-src/gateway/http.rs	route	191
+src/gateway/http.rs	route	188
 src/gateway/http/automations.rs	route	101
 src/gateway/http/dashboard.rs	route	244
 src/gateway/http/message_files/mime.rs	inferred_content_type	84

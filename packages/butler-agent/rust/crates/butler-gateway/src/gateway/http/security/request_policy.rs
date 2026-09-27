@@ -273,27 +273,26 @@ mod tests {
         ));
     }
 
+    type Headers = &'static [(&'static str, &'static str)];
+
     #[test]
     fn json_content_type_is_required_only_for_json_bodies() {
-        let json = [
+        const JSON: Headers = &[
             ("content-length", "2"),
             ("content-type", "application/json; charset=utf-8"),
         ];
-        let text = [("content-length", "2"), ("content-type", "text/plain")];
-        let empty = [("content-length", "0")];
-        let cases: [(Method, &str, &[(&'static str, &'static str)], bool); 7] = [
-            (Method::POST, "/messages", &json, true),
-            (Method::POST, "/messages", &text, false),
-            (
-                Method::PATCH,
-                "/settings",
-                &[("transfer-encoding", "chunked")],
-                false,
-            ),
-            (Method::POST, "/turns/t/cancel", &empty, true),
+        const TEXT: Headers = &[("content-length", "2"), ("content-type", "text/plain")];
+        const CHUNKED: Headers = &[("transfer-encoding", "chunked")];
+        const EMPTY: Headers = &[("content-length", "0")];
+        // Method, path, request headers, whether the body rule admits it.
+        let cases: [(Method, &str, Headers, bool); 7] = [
+            (Method::POST, "/messages", JSON, true),
+            (Method::POST, "/messages", TEXT, false),
+            (Method::PATCH, "/settings", CHUNKED, false),
+            (Method::POST, "/turns/t/cancel", EMPTY, true),
             (Method::DELETE, "/session-queue/q", &[], true),
-            (Method::POST, "/message-files", &text, true),
-            (Method::GET, "/settings", &text, true),
+            (Method::POST, "/message-files", TEXT, true),
+            (Method::GET, "/settings", TEXT, true),
         ];
         for (method, path, pairs, allowed) in cases {
             let result = require_json_body(&method, path, &headers(pairs));
