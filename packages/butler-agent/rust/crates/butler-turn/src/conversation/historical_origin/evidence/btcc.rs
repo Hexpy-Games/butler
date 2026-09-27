@@ -112,13 +112,14 @@ fn subsession_client_message_id(relation: &str, result: &str) -> String {
     let digest = sha256(format!(
         "butler.app.subsession-result.v1\0{relation}\0{result}"
     ));
+    let part = |range: std::ops::Range<usize>| digest.get(range).unwrap_or_default();
     format!(
         "client-{}-{}-4{}-8{}-{}",
-        &digest[..8],
-        &digest[8..12],
-        &digest[13..16],
-        &digest[17..20],
-        &digest[20..32]
+        part(0..8),
+        part(8..12),
+        part(13..16),
+        part(17..20),
+        part(20..32)
     )
 }
 
@@ -143,6 +144,21 @@ pub(super) fn admission(data_root: &Path, candidate: &HistoricalOriginCandidate)
         .unwrap_or_else(SourceEvidence::unavailable)
 }
 
+/// The stored admission of a turn and its inbox row.
+struct TurnAdmission {
+    turn_id: String,
+    session: String,
+    trigger: String,
+    original: String,
+    snapshot_ref: String,
+    command_json: String,
+    inbox_session: String,
+    inbox_turn: String,
+    inbox_trigger: String,
+}
+
+/// Admission evidence for a candidate: the turn's verified admission snapshot
+/// and command must match the candidate exactly. `None` means unavailable.
 fn read_admission(
     db: &Connection,
     candidate: &HistoricalOriginCandidate,
@@ -150,82 +166,110 @@ fn read_admission(
     turn: &str,
     source_ref: &str,
 ) -> Option<SourceEvidence> {
-    type TurnRow = (
-        String,
-        String,
-        String,
-        String,
-        String,
-        String,
-        String,
-        String,
-        String,
-        String,
-        String,
-        String,
-    );
-    let row: Option<TurnRow> = db.query_row(
-        "SELECT t.turn_id,t.session_id,t.trigger_key,t.original_message_id,t.inbox_id,t.admission_snapshot_ref,t.context_json,i.admission_input_hash,i.command_json,i.session_id,i.turn_id,i.trigger_key \
-         FROM btcc_turns t JOIN btcc_inbound_inbox i ON i.inbox_id=t.inbox_id WHERE t.turn_id=?1", [turn],
-        |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?,r.get(7)?,r.get(8)?,r.get(9)?,r.get(10)?,r.get(11)?)),
-    ).optional().ok()?;
-    let Some((
+    let Some(admission) = load_admission(db, turn)? else {
+        return Some(SourceEvidence::absent());
+    };
+    let (record_hash, context) = verified_snapshot(db, &admission.snapshot_ref)?;
+    let command: Value = serde_json::from_str(&admission.command_json).ok()?;
+    let kind = command["kind"].as_str().unwrap_or_default();
+    let source_id = match kind {
+        "run" => command["message"]["messageId"].as_str(),
+        "wake" => command["trigger"]["triggerId"].as_str(),
+        _ => None,
+    };
+    let TurnAdmission {
         turn_id,
         session,
         trigger,
         original,
-        _inbox,
-        snapshot_ref,
-        _context,
-        _input_hash,
-        command_json,
-        inbox_session,
-        inbox_turn,
-        inbox_trigger,
-    )) = row
-    else {
+        ..
+    } = &admission;
+    let matched = matches!(kind, "run" | "wake")
+        && session == external
+        && command["sessionId"].as_str() == Some(session)
+        && turn_id == turn
+        && command["turnId"].as_str() == Some(turn_id)
+        && admission.inbox_session == *session
+        && admission.inbox_turn == *turn_id
+        && admission.inbox_trigger == *trigger
+        && command["triggerKey"].as_str() == Some(trigger)
+        && candidate.request_id.as_deref() == Some(trigger)
+        && source_ref == trigger
+        && source_id == Some(original);
+    if !matched {
         return Some(SourceEvidence::absent());
-    };
-    let record: Option<(String,String)> = db.query_row(
-        "SELECT sha256,content_json FROM btcc_records WHERE record_id=?1 AND kind='admission_snapshot'", [&snapshot_ref],
-        |r| Ok((r.get(0)?,r.get(1)?)),
-    ).optional().ok()?;
+    }
+    Some(admission_evidence(
+        &command,
+        &context,
+        admission.snapshot_ref,
+        record_hash,
+    ))
+}
+
+fn load_admission(db: &Connection, turn: &str) -> Option<Option<TurnAdmission>> {
+    db.query_row(
+        "SELECT t.turn_id,t.session_id,t.trigger_key,t.original_message_id,t.inbox_id,t.admission_snapshot_ref,t.context_json,i.admission_input_hash,i.command_json,i.session_id,i.turn_id,i.trigger_key \
+         FROM btcc_turns t JOIN btcc_inbound_inbox i ON i.inbox_id=t.inbox_id WHERE t.turn_id=?1",
+        [turn],
+        |r| {
+            // The inbox id, context and input hash are not compared, but a
+            // row missing them is not a readable admission.
+            for unused in [4, 6, 7] {
+                r.get::<_, String>(unused)?;
+            }
+            Ok(TurnAdmission {
+                turn_id: r.get(0)?,
+                session: r.get(1)?,
+                trigger: r.get(2)?,
+                original: r.get(3)?,
+                snapshot_ref: r.get(5)?,
+                command_json: r.get(8)?,
+                inbox_session: r.get(9)?,
+                inbox_turn: r.get(10)?,
+                inbox_trigger: r.get(11)?,
+            })
+        },
+    )
+    .optional()
+    .ok()
+}
+
+/// The admission snapshot's digest and context, when its record hashes to
+/// its digest and is exactly the canonical `{"context": ..}` object.
+fn verified_snapshot(db: &Connection, snapshot_ref: &str) -> Option<(String, Value)> {
+    let record: Option<(String, String)> = db
+        .query_row(
+            "SELECT sha256,content_json FROM btcc_records WHERE record_id=?1 AND kind='admission_snapshot'",
+            [snapshot_ref],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()
+        .ok()?;
     let (record_hash, record_json) = record?;
     if sha256(record_json.as_bytes()) != record_hash {
         return None;
     }
-    let command: Value = serde_json::from_str(&command_json).ok()?;
     let snapshot: Value = serde_json::from_str(&record_json).ok()?;
-    let context = &snapshot["context"];
+    let context = snapshot.get("context")?;
     if !context.is_object()
         || canonical_json(&json!({"context":context}), CanonicalKeyOrder::Utf16Lexical).ok()?
             != record_json
     {
         return None;
     }
+    Some((record_hash, context.clone()))
+}
+
+/// The matched admission's evidence: the snapshot, plus subsession, wake and
+/// authority-continuation evidence; such turns are internal control.
+fn admission_evidence(
+    command: &Value,
+    context: &Value,
+    snapshot_ref: String,
+    record_hash: String,
+) -> SourceEvidence {
     let kind = command["kind"].as_str().unwrap_or_default();
-    let source_id = if kind == "run" {
-        command["message"]["messageId"].as_str()
-    } else if kind == "wake" {
-        command["trigger"]["triggerId"].as_str()
-    } else {
-        None
-    };
-    let matched = matches!(kind, "run" | "wake")
-        && session == external
-        && command["sessionId"].as_str() == Some(&session)
-        && turn_id == turn
-        && command["turnId"].as_str() == Some(&turn_id)
-        && inbox_session == session
-        && inbox_turn == turn_id
-        && inbox_trigger == trigger
-        && command["triggerKey"].as_str() == Some(&trigger)
-        && candidate.request_id.as_deref() == Some(&trigger)
-        && source_ref == trigger
-        && source_id == Some(&original);
-    if !matched {
-        return Some(SourceEvidence::absent());
-    }
     let role = context["executionPolicy"]["role"]
         .as_str()
         .unwrap_or_default();
@@ -242,7 +286,7 @@ fn read_admission(
     if subsession {
         evidence.push(ConversationOriginEvidence {
             kind: "subsession".into(),
-            reference: snapshot_ref.clone(),
+            reference: snapshot_ref,
             sha256: Some(record_hash),
         });
     }
@@ -263,11 +307,11 @@ fn read_admission(
             sha256: None,
         });
     }
-    Some(SourceEvidence {
+    SourceEvidence {
         available: true,
         matched: true,
         public_ingress: false,
         internal_control: internal,
         evidence,
-    })
+    }
 }

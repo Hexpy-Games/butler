@@ -104,6 +104,8 @@ fn planned_mapping(
     }
 }
 
+/// Imports one admitted recovery decision as a completed turn with one
+/// message, unless a message with its source ref or id already exists.
 pub(super) fn import_one(
     connection: &mut Connection,
     clock: &dyn ConversationIdentityClock,
@@ -132,6 +134,45 @@ pub(super) fn import_one(
         transaction.commit().map_err(ConversationError::sqlite)?;
         return Ok(outcome);
     }
+    let message_id = target_message_id(decision);
+    write_recovered_turn(
+        &transaction,
+        clock,
+        decision,
+        RecoveredTarget {
+            session_id: &session_id,
+            message_id: &message_id,
+            source_ref,
+        },
+    )?;
+    transaction.commit().map_err(ConversationError::sqlite)?;
+    Ok(Outcome {
+        mapping: Some(Mapping {
+            kind: decision.kind,
+            source_id: decision.source_id.clone(),
+            session_id,
+            message_id,
+            status: "imported",
+        }),
+        imported: true,
+        skipped_existing: false,
+    })
+}
+
+/// Where a recovered message is written.
+struct RecoveredTarget<'a> {
+    session_id: &'a str,
+    message_id: &'a str,
+    source_ref: String,
+}
+
+/// Begins, appends and finalizes the recovered turn inside the transaction.
+fn write_recovered_turn(
+    transaction: &Connection,
+    clock: &dyn ConversationIdentityClock,
+    decision: &Decision,
+    target: RecoveredTarget<'_>,
+) -> ConversationResult<()> {
     // Only admissible decisions reach import; they carry role, time and text.
     let (Some(role), Some(now), Some(text)) = (
         decision.role,
@@ -143,19 +184,22 @@ pub(super) fn import_one(
             "Recovery decision is not admissible",
         ));
     };
-    let message_id = target_message_id(decision);
+    let RecoveredTarget {
+        session_id,
+        message_id,
+        source_ref,
+    } = target;
     let turn_id = decision
         .conversation_turn_id
         .clone()
         .unwrap_or_else(|| recovered_id("ct", &source_ref));
-    let gateway = "historical-recovery".to_owned();
     super::super::turns::begin_in_transaction(
-        &transaction,
+        transaction,
         clock,
         BeginTurnInput {
-            gateway: gateway.clone(),
+            gateway: "historical-recovery".to_owned(),
             external_session_id: decision.session_id.clone(),
-            session_id: Some(session_id.clone()),
+            session_id: Some(session_id.to_owned()),
             workspace_id: None,
             project_id: None,
             actor: role.text().into(),
@@ -163,18 +207,18 @@ pub(super) fn import_one(
             turn_id: Some(turn_id.clone()),
             now: Some(now.clone()),
         },
-        &session_id.clone(),
+        session_id,
         turn_id.clone(),
-        &now.clone(),
+        &now,
     )?;
     super::super::messages::append_in_transaction(
-        &transaction,
+        transaction,
         clock,
         AppendMessageInput {
-            session_id: session_id.clone(),
+            session_id: session_id.to_owned(),
             turn_id: Some(turn_id.clone()),
             text,
-            message_id: Some(message_id.clone()),
+            message_id: Some(message_id.to_owned()),
             role: role.conversation(),
             status: Some(ConversationStatus::Complete),
             visibility: Some(ConversationVisibility::Model),
@@ -198,10 +242,10 @@ pub(super) fn import_one(
             now: Some(now.clone()),
             parts: None,
         },
-        &now.clone(),
+        &now,
     )?;
     super::super::turns::finalize_in_transaction(
-        &transaction,
+        transaction,
         clock,
         FinalizeTurnInput {
             turn_id,
@@ -211,18 +255,7 @@ pub(super) fn import_one(
         },
         &now,
     )?;
-    transaction.commit().map_err(ConversationError::sqlite)?;
-    Ok(Outcome {
-        mapping: Some(Mapping {
-            kind: decision.kind,
-            source_id: decision.source_id.clone(),
-            session_id,
-            message_id,
-            status: "imported",
-        }),
-        imported: true,
-        skipped_existing: false,
-    })
+    Ok(())
 }
 
 fn read_by_source_ref(
