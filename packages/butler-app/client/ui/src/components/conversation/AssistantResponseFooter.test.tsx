@@ -65,6 +65,16 @@ test("pending assistant footer does not duplicate the active status row", () => 
   expect(html).toContain("Copy");
 });
 
+test("a streaming answer claims no completion: no worked-for duration or finish time yet", () => {
+  for (const status of ["streaming", "pending"]) {
+    const html = renderFooter(status);
+    expect(html).toContain("Copy");
+    expect(html).not.toContain("Worked for");
+    expect(html).not.toContain("1:23 AM");
+  }
+  expect(renderFooter("delivered")).toContain("Worked for 12s");
+});
+
 function renderFooter(status?: string): string {
   return renderToStaticMarkup(
     <AssistantResponseFooter
