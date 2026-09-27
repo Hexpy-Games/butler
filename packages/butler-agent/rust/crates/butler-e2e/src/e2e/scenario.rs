@@ -291,7 +291,7 @@ impl Scenario {
             .gw
             .post(
                 "/model-catalog/provider-credentials",
-                json!({"provider": provider, "api_key": key}),
+                json!({"provider_id": provider, "auth_type": "api_key", "api_key": key}),
             )
             .await?;
         if reply.status >= 300 {

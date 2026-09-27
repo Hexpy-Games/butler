@@ -444,3 +444,30 @@ async fn q_02_cancel_pauses_the_queue() -> Result<(), HarnessError> {
     );
     s.finish().await
 }
+
+/// ATT-01 (image) — a PNG attached for a model whose catalog entry says
+/// `image_input_support: supported` is admitted (checked before any model call).
+#[tokio::test]
+#[ignore = "product gap: ATT-01-IMAGE — POST /messages with a PNG attachment for openai/gpt-6-sol (catalog: image input supported) answers 409 image_model_unsupported; the public error does not say which admission check failed"]
+async fn att_01_image_attachment_admitted_for_image_model() -> Result<(), HarnessError> {
+    let s = Setup::new("ATT-01-IMAGE")?.start().await?;
+    let png = media::digits_png("4821", 12);
+    let upload =
+        s.gw.upload("number.png", "image/png", &png, Some("general"))
+            .await?;
+    assert_eq!(upload.status, 201, "{}", upload.text);
+    let file_id = upload.data()["file"]["file_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let reply = s
+        .gw
+        .post(
+            "/messages",
+            json!({"chat_id": "general", "text": "What number is this?", "attachments": [{"file_id": file_id}],
+                "client_message_id": uuid::Uuid::new_v4().to_string()}),
+        )
+        .await?;
+    assert_eq!(reply.status, 202, "{}", reply.text);
+    s.finish().await
+}

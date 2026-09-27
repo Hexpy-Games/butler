@@ -69,7 +69,9 @@ async fn live_01_round_trip() -> Result<(), HarnessError> {
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
     assert!(answer(&s, "general", &turn_id).await?.contains(&n));
 
-    let reply = s.gw.patch("/settings", json!({"language": "ko"})).await?;
+    let reply =
+        s.gw.patch("/personalization", json!({"response_language": "ko"}))
+            .await?;
     assert_eq!(reply.status, 200, "{}", reply.text);
     let chat =
         s.gw.post("/sessions", json!({"kind": "chat", "title": "ko"}))
@@ -171,12 +173,20 @@ async fn live_05_cross_session_recall() -> Result<(), HarnessError> {
         &format!("Please remember: my locker combination is {n}."),
     )
     .await?;
+    // The CLI names sessions by their conversation id (the App's session hint).
+    let sessions = s.gw.get("/sessions").await?;
+    let hint = sessions.data()["sessions"]
+        .as_array()
+        .and_then(|list| list.iter().find(|session| session["id"] == "general"))
+        .and_then(|session| session["session_hint"].as_str())
+        .unwrap_or("general")
+        .to_owned();
     let ingest = s.agent.cli(&[
         "cognition",
         "memory",
         "ingest",
         "--session",
-        "general",
+        &hint,
         "--json",
     ])?;
     assert_eq!(

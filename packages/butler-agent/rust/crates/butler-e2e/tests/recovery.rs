@@ -241,6 +241,35 @@ async fn rec_03_crash_after_tool_effect_ends_failed_retryable() -> Result<(), Ha
     s.finish().await
 }
 
+/// REC-01 — Graceful stop (SIGTERM) during a turn: after start the turn is
+/// terminal, never stuck, with zero or one answer.
+#[tokio::test]
+async fn rec_01_graceful_stop_during_turn() -> Result<(), HarnessError> {
+    let mut s = Setup::new("REC-01")?.cassette("REC-01").start().await?;
+    if !s.recording() {
+        s.provider()?.set_pacing(butler_e2e::e2e::provider::Pacing {
+            scale: 1.0,
+            cap_ms: 300,
+            min_ms: 200,
+        });
+    }
+    let accepted = s.gw.say("general", LONG).await?;
+    let turn_id = accepted_turn_id(&accepted)?;
+    wait_served(&s, 1).await;
+    s.agent.terminate().await?;
+    s.gw = s.agent.start_again().await?;
+    let turn = settled(&mut s, &turn_id).await?;
+    assert!(TERMINAL.contains(&turn_state(&turn)), "{turn}");
+    let answers =
+        s.gw.messages("general")
+            .await?
+            .iter()
+            .filter(|m| m["role"] == "assistant")
+            .count();
+    assert!(answers <= 1, "{answers} answers");
+    s.finish().await
+}
+
 /// REC-05 — Stale lock of a dead process; second concurrent start refused.
 #[tokio::test]
 async fn rec_05_stale_instance_and_second_start() -> Result<(), HarnessError> {

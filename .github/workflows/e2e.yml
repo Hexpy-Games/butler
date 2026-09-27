@@ -1,0 +1,230 @@
+name: E2E
+
+# Real-binary end-to-end scenarios (packages/butler-agent/rust/crates/butler-e2e).
+# - e2e-stub: every PR and push to main; replays committed provider cassettes.
+# - e2e-live: nightly and on demand against a real provider; runs only when a
+#   credential secret is configured, otherwise the job reports SKIPPED.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/butler-agent/rust/**"
+      - "packages/butler-agent/resources/**"
+      - ".github/workflows/e2e.yml"
+  pull_request:
+    paths:
+      - "packages/butler-agent/rust/**"
+      - "packages/butler-agent/resources/**"
+      - ".github/workflows/e2e.yml"
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: "BUTLER_E2E_PROVIDER (openai-subscription, opencode-go, ...)"
+        default: "openai-subscription"
+      model:
+        description: "BUTLER_E2E_MODEL (provider/model@effort)"
+        default: "openai/gpt-6-sol@low"
+      matrix:
+        description: "BUTLER_E2E_MODEL_MATRIX for LIVE-07"
+        default: "openai/gpt-6-sol@low,openai/gpt-6-luna@max"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  e2e-stub:
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    # The agent links the static ONNX Runtime recipe, which targets macOS arm64.
+    name: E2E stub tier (macOS arm64)
+    runs-on: macos-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: packages/butler-agent/rust
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.91.0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Identify runner image
+        id: image
+        run: echo "version=${ImageOS:-unknown}-${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore static ONNX Runtime cache
+        id: ort-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/ort-cache/native-deps
+          key: static-ort-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.version }}-${{ hashFiles('packages/butler-agent/rust/scripts/static-ort-macos-arm64.lock.json', 'packages/butler-agent/rust/scripts/prepare-static-ort-macos-arm64.py', 'packages/butler-agent/rust/rust-toolchain.toml') }}
+
+      - name: Prepare pinned static ONNX Runtime and protoc
+        env:
+          ORT_CACHE_TARGET: ${{ runner.temp }}/ort-cache
+        run: |
+          set -euo pipefail
+          prepared="$(CARGO_TARGET_DIR="$ORT_CACHE_TARGET" python scripts/prepare-static-ort-macos-arm64.py)"
+          {
+            echo "ORT_LIB_PATH=$(jq -r .ort_lib_path <<<"$prepared")"
+            echo "PROTOC=$(jq -r .protoc <<<"$prepared")"
+            echo "ORT_PREFER_DYNAMIC_LINK=0"
+            echo "ORT_SKIP_DOWNLOAD=1"
+          } >> "$GITHUB_ENV"
+
+      - name: Save static ONNX Runtime cache
+        if: steps.ort-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/ort-cache/native-deps
+          key: ${{ steps.ort-cache.outputs.cache-primary-key }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/butler-agent/rust
+          cache-on-failure: true
+          key: e2e
+
+      - name: Build the agent binary under test
+        run: cargo build --locked -p butler-agent --bin butler-agent
+
+      - name: Run the stub tier
+        env:
+          BUTLER_E2E_TIER: stub
+          BUTLER_E2E_SKIP_BUILD: "1"
+          BUTLER_E2E_REPORT: ${{ runner.temp }}/e2e-report.txt
+        run: |
+          set -o pipefail
+          cargo test --locked -p butler-e2e 2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
+
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo "### E2E stub tier"
+            grep -E "^test .* (ok|FAILED|ignored)" "$RUNNER_TEMP/e2e-stub.log" | sed 's/^/    /' || true
+            echo
+            echo "Live scenarios: SKIPPED (tier: stub)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  e2e-live:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    name: E2E live tier
+    runs-on: macos-latest
+    timeout-minutes: 150
+    environment: live-e2e
+    defaults:
+      run:
+        working-directory: packages/butler-agent/rust
+    env:
+      BUTLER_E2E_PROVIDER: ${{ inputs.provider || 'openai-subscription' }}
+      BUTLER_E2E_MODEL: ${{ inputs.model || 'openai/gpt-6-sol@low' }}
+      BUTLER_E2E_MODEL_MATRIX: ${{ inputs.matrix || 'openai/gpt-6-sol@low,openai/gpt-6-luna@max' }}
+      BUTLER_E2E_LIVE_MAX_TURNS: "40"
+    steps:
+      - name: Check for a live credential
+        id: credential
+        working-directory: ${{ github.workspace }}
+        env:
+          CODEX_AUTH_SECRET: ${{ secrets.BUTLER_E2E_CODEX_AUTH_JSON }}
+          API_KEY_SECRET: ${{ secrets.BUTLER_E2E_API_KEY }}
+        run: |
+          if [ -n "$CODEX_AUTH_SECRET" ] || [ -n "$API_KEY_SECRET" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=E2E live tier SKIPPED::no credential secret (BUTLER_E2E_CODEX_AUTH_JSON or BUTLER_E2E_API_KEY) in the live-e2e environment"
+            {
+              echo "### E2E live tier"
+              echo "SKIPPED (no credentials: $BUTLER_E2E_PROVIDER). Configure BUTLER_E2E_CODEX_AUTH_JSON or BUTLER_E2E_API_KEY in the live-e2e environment."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.credential.outputs.available == 'true'
+
+      - uses: dtolnay/rust-toolchain@master
+        if: steps.credential.outputs.available == 'true'
+        with:
+          toolchain: 1.91.0
+
+      - uses: actions/setup-python@v5
+        if: steps.credential.outputs.available == 'true'
+        with:
+          python-version: "3.12"
+
+      - name: Prepare pinned static ONNX Runtime and protoc
+        if: steps.credential.outputs.available == 'true'
+        env:
+          ORT_CACHE_TARGET: ${{ runner.temp }}/ort-cache
+        run: |
+          set -euo pipefail
+          prepared="$(CARGO_TARGET_DIR="$ORT_CACHE_TARGET" python scripts/prepare-static-ort-macos-arm64.py)"
+          {
+            echo "ORT_LIB_PATH=$(jq -r .ort_lib_path <<<"$prepared")"
+            echo "PROTOC=$(jq -r .protoc <<<"$prepared")"
+            echo "ORT_PREFER_DYNAMIC_LINK=0"
+            echo "ORT_SKIP_DOWNLOAD=1"
+          } >> "$GITHUB_ENV"
+
+      - uses: Swatinem/rust-cache@v2
+        if: steps.credential.outputs.available == 'true'
+        with:
+          workspaces: packages/butler-agent/rust
+          key: e2e
+
+      - name: Install the credential
+        if: steps.credential.outputs.available == 'true'
+        env:
+          CODEX_AUTH_SECRET: ${{ secrets.BUTLER_E2E_CODEX_AUTH_JSON }}
+          API_KEY_SECRET: ${{ secrets.BUTLER_E2E_API_KEY }}
+        run: |
+          umask 077
+          if [ -n "$CODEX_AUTH_SECRET" ]; then
+            printf '%s' "$CODEX_AUTH_SECRET" > "$RUNNER_TEMP/codex-auth.json"
+            echo "BUTLER_E2E_CODEX_AUTH_JSON=$RUNNER_TEMP/codex-auth.json" >> "$GITHUB_ENV"
+          fi
+          if [ -n "$API_KEY_SECRET" ]; then
+            echo "::add-mask::$API_KEY_SECRET"
+            echo "BUTLER_E2E_API_KEY_ENV=BUTLER_E2E_API_KEY_VALUE" >> "$GITHUB_ENV"
+            echo "BUTLER_E2E_API_KEY_VALUE=$API_KEY_SECRET" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build the agent binary under test
+        if: steps.credential.outputs.available == 'true'
+        run: cargo build --locked -p butler-agent --bin butler-agent
+
+      - name: Run the live tier
+        if: steps.credential.outputs.available == 'true'
+        env:
+          BUTLER_E2E_TIER: live
+          BUTLER_E2E_SKIP_BUILD: "1"
+          BUTLER_E2E_REPORT: ${{ runner.temp }}/e2e-live-report.txt
+        run: cargo test --locked -p butler-e2e --test live -- --ignored --test-threads=1
+
+      - name: Summarize
+        if: always() && steps.credential.outputs.available == 'true'
+        run: |
+          {
+            echo "### E2E live tier ($BUTLER_E2E_PROVIDER, $BUTLER_E2E_MODEL)"
+            sed 's/^/    /' "$RUNNER_TEMP/e2e-live-report.txt" 2>/dev/null || echo "no report"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove the credential
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: rm -f "$RUNNER_TEMP/codex-auth.json"

@@ -20,7 +20,7 @@ const DIGITS: [[u8; 7]; 10] = [
     [0x0E, 0x11, 0x11, 0x0F, 0x01, 0x02, 0x0C],
 ];
 
-/// Black digits on white, `scale` pixels per glyph dot, grayscale PNG.
+/// Black digits on white, `scale` pixels per glyph dot, 8-bit RGB PNG.
 pub fn digits_png(text: &str, scale: usize) -> Vec<u8> {
     let digits: Vec<usize> = text
         .chars()
@@ -29,7 +29,7 @@ pub fn digits_png(text: &str, scale: usize) -> Vec<u8> {
     let margin = 2 * scale;
     let width = margin * 2 + digits.len() * 6 * scale;
     let height = margin * 2 + 7 * scale;
-    let mut raw = Vec::with_capacity((width + 1) * height);
+    let mut raw = Vec::with_capacity((width * 3 + 1) * height);
     for y in 0..height {
         raw.push(0); // filter: none
         for x in 0..width {
@@ -41,14 +41,15 @@ pub fn digits_png(text: &str, scale: usize) -> Vec<u8> {
                     ink = DIGITS[digits[index]][gy] & (0x10 >> column) != 0;
                 }
             }
-            raw.push(if ink { 0 } else { 255 });
+            let value = if ink { 0 } else { 255 };
+            raw.extend_from_slice(&[value, value, value]);
         }
     }
     let mut png = b"\x89PNG\r\n\x1a\n".to_vec();
     let mut header = Vec::new();
     header.extend_from_slice(&u32::try_from(width).unwrap_or(0).to_be_bytes());
     header.extend_from_slice(&u32::try_from(height).unwrap_or(0).to_be_bytes());
-    header.extend_from_slice(&[8, 0, 0, 0, 0]);
+    header.extend_from_slice(&[8, 2, 0, 0, 0]);
     chunk(&mut png, *b"IHDR", &header);
     chunk(&mut png, *b"IDAT", &zlib_stored(&raw));
     chunk(&mut png, *b"IEND", &[]);
