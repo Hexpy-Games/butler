@@ -112,6 +112,7 @@ async fn run(
     .map_err(|message| {
         failure("native_service_instance_unavailable", message.to_string()).with_source(message)
     })?;
+    repair_cli_launcher(&config, logs);
     let os = nix::sys::utsname::uname().map_err(io)?;
     let environment = ProcessEnvironment::capture(
         &config.data_root,
@@ -168,6 +169,22 @@ async fn run(
     match result {
         Err(error) => Err(error),
         Ok(session) => runtime_close.and(transcript_close).map(|()| session),
+    }
+}
+
+/// Self-repair of the user's `butler` command; never blocks the service.
+fn repair_cli_launcher(config: &ServiceConfiguration, logs: ServiceLogMode) {
+    use crate::host::service::cli_launcher::{LauncherRepair, repair};
+    match repair(&config.data_root, &config.installation) {
+        Ok(LauncherRepair::Absent | LauncherRepair::Current) => {}
+        Ok(LauncherRepair::Updated) => logs.write("[native-cli] launcher updated"),
+        Ok(LauncherRepair::ReplacedForeign) => {
+            logs.write("[native-cli] stale launcher replaced (kept as bin/butler.previous)");
+        }
+        Err(error) => logs.write(&format!(
+            "[native-cli] launcher repair failed kind={:?}",
+            error.kind()
+        )),
     }
 }
 
