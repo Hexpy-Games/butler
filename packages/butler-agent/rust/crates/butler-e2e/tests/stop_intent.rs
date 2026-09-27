@@ -125,7 +125,7 @@ async fn svc_02_stop_is_announced_and_sticks() -> Result<(), HarnessError> {
         stopped
             .stdout
             .lines()
-            .any(|line| line.starts_with("Schedules stop too")),
+            .any(|line| line.contains("schedules stop too until Butler starts again")),
         "stop output does not mention schedules: {stopped:?}"
     );
     let intent = read_intent(&data).expect("stop wrote no intent");

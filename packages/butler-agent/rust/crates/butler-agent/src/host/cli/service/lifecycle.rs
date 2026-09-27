@@ -30,9 +30,10 @@ const INSTANCE_PUBLISH_TIMEOUT: Duration = Duration::from_secs(10);
 const STOP_TIMEOUT: Duration = Duration::from_secs(8);
 const FORCE_STOP_TIMEOUT: Duration = Duration::from_secs(3);
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
-/// The line `butler stop` adds after a stop: schedules run inside the service.
+/// The line `butler stop` adds after a stop, worded like the App's quit dialog:
+/// schedules run inside the service.
 const SCHEDULES_STOPPED_NOTICE: &str =
-    "Schedules stop too; they do not run until Butler starts again (butler start).";
+    "Running work and schedules stop too until Butler starts again (butler start).";
 
 /// How a lifecycle command runs.
 #[derive(Clone, Copy)]
