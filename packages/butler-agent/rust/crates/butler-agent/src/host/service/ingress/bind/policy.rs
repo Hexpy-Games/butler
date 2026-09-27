@@ -157,7 +157,7 @@ pub(super) async fn upsert_app_binding(
     });
     let selected = approval_free_tools(
         access,
-        ApprovalFreeFacts {
+        &ApprovalFreeFacts {
             envelope,
             data_root,
             butler_role,
@@ -248,7 +248,7 @@ struct ApprovalFreeFacts<'a> {
 /// first-conversation onboarding (or the selected memory-write profile, which
 /// includes it), memory save in a Butler session, and analysis of an admitted
 /// attached image. Full access and ask-first offer them; read-only does not.
-fn approval_free_tools(access: &str, facts: ApprovalFreeFacts<'_>) -> Vec<&'static str> {
+fn approval_free_tools(access: &str, facts: &ApprovalFreeFacts<'_>) -> Vec<&'static str> {
     let mode = serde_json::from_value::<AccessMode>(Value::String(access.to_owned()))
         .unwrap_or(AccessMode::ReadOnly);
     let onboarding = mode

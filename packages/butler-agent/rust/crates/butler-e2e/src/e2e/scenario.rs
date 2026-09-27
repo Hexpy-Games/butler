@@ -228,7 +228,7 @@ impl Setup {
             Fixture::Ready => fixtures::ready(&sandbox.data, &choice.model)?,
             Fixture::Legacy => fixtures::legacy(&sandbox.data, &choice.model)?,
             Fixture::FirstConversation => {
-                fixtures::first_conversation(&sandbox.data, &choice.model)?
+                fixtures::first_conversation(&sandbox.data, &choice.model)?;
             }
             Fixture::Empty => {}
         }
