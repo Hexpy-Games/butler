@@ -37,7 +37,7 @@ fn recalled(result: &Value, needle: &str) -> bool {
 
 /// MEM-02 — Conversation ingest makes a past chat recallable, across restart.
 #[tokio::test]
-#[ignore = "product gap: MEM-02-INBOUND — App chat user messages are not written to the session transcript, so `butler cognition memory ingest --session` summarizes only Butler's replies (the ingest prompt holds just `butler: <reply>`) and a fact the user stated is never recallable. The MEM-02 cassette also lacks the ingest summary exchange: re-record it once this is fixed"]
+#[ignore = "product gap: MEM-02-INBOUND — App chat user messages are not written to the session transcript, so `butler cognition memory ingest --session` summarizes only Butler's replies: the recorded ingest prompt holds just `butler: Understood.`, the model's summary of it is empty, ingest saves nothing (savedChunks 0, warning legacy_hot_summary_failed) and the fact the user stated is not recallable"]
 async fn mem_02_conversation_ingest_is_recallable() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let code = nonce();
@@ -75,33 +75,14 @@ async fn mem_02_conversation_ingest_is_recallable() -> Result<(), HarnessError> 
     )
     .await?;
     assert_eq!(ingest["ok"], true, "{ingest}");
-    let result = cli_json(
-        &s,
-        &[
-            "cognition",
-            "memory",
-            "recall",
-            "greenhouse door code",
-            "--json",
-        ],
-    )
-    .await?;
+    let cue = "greenhouse door code";
+    let result = recall(&s, cue).await?;
     assert!(
         recalled(&result, &code),
         "ingested fact not recalled: {result}"
     );
     s.restart().await?;
-    let result = cli_json(
-        &s,
-        &[
-            "cognition",
-            "memory",
-            "recall",
-            "greenhouse door code",
-            "--json",
-        ],
-    )
-    .await?;
+    let result = recall(&s, cue).await?;
     assert!(
         recalled(&result, &code),
         "recall lost across restart: {result}"
