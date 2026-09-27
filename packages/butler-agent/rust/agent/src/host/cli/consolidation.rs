@@ -45,7 +45,7 @@ pub(crate) async fn run_native_consolidation_cli(
                 false,
                 "butler cognition consolidation",
                 "invalid_arguments",
-                &message,
+                message.message(),
                 2,
             );
         }
@@ -214,7 +214,7 @@ pub(crate) async fn run_native_consolidation_cli(
                 parsed.json,
                 "butler cognition consolidation run --manual",
                 "native_signal_unavailable",
-                &error,
+                error.message(),
                 1,
             );
         }
@@ -258,10 +258,12 @@ pub(crate) async fn run_native_consolidation_cli(
 
 fn start_signal_cancellation(
     cancellation: CancellationToken,
-) -> Result<tokio::task::JoinHandle<()>, String> {
+) -> Result<tokio::task::JoinHandle<()>, crate::host::HostError> {
     use tokio::signal::unix::{SignalKind, signal};
-    let mut interrupt = signal(SignalKind::interrupt()).map_err(|error| error.to_string())?;
-    let mut terminate = signal(SignalKind::terminate()).map_err(|error| error.to_string())?;
+    let mut interrupt =
+        signal(SignalKind::interrupt()).map_err(crate::host::HostError::from_error)?;
+    let mut terminate =
+        signal(SignalKind::terminate()).map_err(crate::host::HostError::from_error)?;
     Ok(tokio::spawn(async move {
         tokio::select! {
             _ = interrupt.recv() => {},
@@ -271,7 +273,10 @@ fn start_signal_cancellation(
     }))
 }
 
-fn parse(installation: &ResolvedInstallation, arguments: Vec<OsString>) -> Result<Options, String> {
+fn parse(
+    installation: &ResolvedInstallation,
+    arguments: Vec<OsString>,
+) -> Result<Options, crate::host::HostError> {
     let args: Vec<String> = arguments
         .into_iter()
         .map(|value| {
@@ -311,7 +316,9 @@ fn parse(installation: &ResolvedInstallation, arguments: Vec<OsString>) -> Resul
             "--home" => {
                 return Err("--home cannot override immutable installation resources".into());
             }
-            value if value.starts_with("--") => return Err(format!("unknown option: {value}")),
+            value if value.starts_with("--") => {
+                return Err(format!("unknown option: {value}").into());
+            }
             value => positional.push(value.to_owned()),
         }
         index += 1;

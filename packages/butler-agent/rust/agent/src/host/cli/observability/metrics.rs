@@ -24,7 +24,13 @@ pub(super) async fn set_enabled(
     ) {
         Ok(path) => path,
         Err(message) => {
-            return report_error(command.name(), options.json, "unsafe_path", &message, 1);
+            return report_error(
+                command.name(),
+                options.json,
+                "unsafe_path",
+                message.message(),
+                1,
+            );
         }
     };
     let writes = crate::configuration::ConfigurationWrites::new();
@@ -76,7 +82,13 @@ pub(super) fn tail(
         data_root.join("metrics/operational-events.jsonl"),
     ] {
         if let Err(message) = path::safe_data_file(installation, data_root, &candidate) {
-            return report_error(command.name(), options.json, "unsafe_path", &message, 1);
+            return report_error(
+                command.name(),
+                options.json,
+                "unsafe_path",
+                message.message(),
+                1,
+            );
         }
     }
     let lines = clamp_lines(options, 20, 500);

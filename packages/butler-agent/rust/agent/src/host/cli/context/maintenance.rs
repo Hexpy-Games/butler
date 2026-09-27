@@ -42,13 +42,18 @@ pub(super) async fn run(
                 record_telemetry: true,
             })
             .await
-            .map_err(|error| unavailable("native_context_prune_failed", error.to_string()))?;
+            .map_err(|error| {
+                unavailable("native_context_prune_failed", error.to_string()).with_source(error)
+            })?;
         completion
             .await
             .map_err(|error| {
                 unavailable("native_context_prune_completion_lost", error.to_string())
+                    .with_source(error)
             })?
-            .map_err(|error| unavailable("native_context_prune_failed", error.to_string()))
+            .map_err(|error| {
+                unavailable("native_context_prune_failed", error.to_string()).with_source(error)
+            })
     }
     .await;
     tool_output.close().await;
@@ -61,9 +66,11 @@ pub(super) async fn run(
             .await
             .map_err(|error| {
                 unavailable("native_context_metric_retention_failed", error.to_string())
+                    .with_source(error)
             })?
             .map_err(|error| {
                 unavailable("native_context_metric_retention_failed", error.to_string())
+                    .with_source(error)
             })?;
     let data = json!({
         "ok": true,

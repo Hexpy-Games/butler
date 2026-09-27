@@ -74,7 +74,7 @@ pub(crate) enum McpRegistryError {
     InvalidPath,
     /// The host's registry path guard refused the path; the message is the guard's.
     #[error("{0}")]
-    PathRejected(String),
+    PathRejected(#[source] Box<dyn std::error::Error + Send + Sync>),
     /// A server's secret file exists but could not be read.
     #[error("MCP secret file could not be read.")]
     SecretUnreadable(#[source] std::io::Error),

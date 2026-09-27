@@ -19,10 +19,10 @@ pub(super) async fn serve(
     installation: ResolvedInstallation,
     data_root: PathBuf,
     name: String,
-) -> Result<(), String> {
-    let mut shutdown = ShutdownSignals::install().map_err(|error| error.to_string())?;
+) -> Result<(), crate::host::HostError> {
+    let mut shutdown = ShutdownSignals::install().map_err(crate::host::HostError::from_error)?;
     let cancellation = CancellationToken::new();
-    let transport = NonblockingStdio::new().map_err(|error| error.to_string())?;
+    let transport = NonblockingStdio::new().map_err(crate::host::HostError::from_error)?;
     let initialization = McpServer::new(installation, data_root, name)
         .serve_with_ct(transport, cancellation.clone());
     tokio::pin!(initialization);
@@ -36,7 +36,7 @@ pub(super) async fn serve(
     let service = match initialized {
         Ok(service) => service,
         Err(rmcp::service::ServerInitializeError::Cancelled) => return Ok(()),
-        Err(error) => return Err(error.to_string()),
+        Err(error) => return Err(error.to_string().into()),
     };
     let mut waiter = tokio::spawn(service.waiting());
     tokio::select! {
@@ -79,10 +79,10 @@ fn flatten_wait(
         Result<rmcp::service::QuitReason, tokio::task::JoinError>,
         tokio::task::JoinError,
     >,
-) -> Result<(), String> {
+) -> Result<(), crate::host::HostError> {
     match result {
         Ok(Ok(_)) => Ok(()),
-        Ok(Err(error)) | Err(error) => Err(error.to_string()),
+        Ok(Err(error)) | Err(error) => Err(error.to_string().into()),
     }
 }
 
@@ -243,7 +243,7 @@ impl McpServer {
     async fn butler_status(&self, Parameters(_args): Parameters<EmptyArgs>) -> CallToolResult {
         match status::text(&self.data_root).await {
             Ok(text) => text_result(text),
-            Err(error) => CallToolResult::error(vec![ContentBlock::text(error)]),
+            Err(error) => CallToolResult::error(vec![ContentBlock::text(error.to_string())]),
         }
     }
 

@@ -3,6 +3,7 @@
 mod helpers;
 mod render;
 
+use crate::host::cli::error::CliError;
 use std::{ffi::OsString, path::PathBuf, process::ExitCode};
 
 use serde_json::json;
@@ -69,30 +70,6 @@ impl Command {
     }
 }
 
-struct CliError {
-    code: &'static str,
-    message: String,
-    exit: u8,
-}
-
-impl CliError {
-    fn invalid(message: impl Into<String>) -> Self {
-        Self {
-            code: "invalid_arguments",
-            message: message.into(),
-            exit: 2,
-        }
-    }
-
-    fn failed(code: &'static str, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-            exit: 1,
-        }
-    }
-}
-
 pub(crate) fn recognizes(args: &[OsString]) -> bool {
     positionals_without_options(args)
         .first()
@@ -116,14 +93,14 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
         return report_error(
             command.name(),
             options.json,
-            &CliError {
-                code: "unknown_command",
-                message: format!(
+            &CliError::failed(
+                "unknown_command",
+                format!(
                     "unknown automation command: {}",
                     options.positionals.get(1).map_or("", String::as_str)
                 ),
-                exit: 2,
-            },
+            )
+            .with_exit(2),
         );
     }
     if is_delete_command(&command) && !(options.yes || options.non_interactive) {
@@ -194,7 +171,9 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
     let result = match command {
         Command::List => store
             .list(options.include_deleted, options.status.as_deref())
-            .map_err(|error| CliError::failed("automation_store_unavailable", error.message()))
+            .map_err(|error| {
+                CliError::failed("automation_store_unavailable", error.message()).with_source(error)
+            })
             .map(|items| {
                 let items: Vec<_> = items.into_iter().map(safe_preview).collect();
                 let human = if items.is_empty() {
@@ -217,7 +196,9 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
             }),
         Command::Show(id) => store
             .show(&id)
-            .map_err(|error| CliError::failed("automation_store_unavailable", error.message()))
+            .map_err(|error| {
+                CliError::failed("automation_store_unavailable", error.message()).with_source(error)
+            })
             .and_then(|item| {
                 let item = item.ok_or_else(|| {
                     CliError::failed("not_found", format!("automation not found: {id}"))
@@ -233,7 +214,7 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
             }),
         Command::Run(id) => store
             .run_now(&id, now_millis())
-            .map_err(|error| CliError::failed("invalid_state", error.message()))
+            .map_err(|error| CliError::failed("invalid_state", error.message()).with_source(error))
             .map(|value| {
                 let automation = safe_preview(value["automation"].clone());
                 let envelope = redact_json_strings(value["envelope"].clone());

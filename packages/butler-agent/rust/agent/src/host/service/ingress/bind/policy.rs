@@ -236,7 +236,8 @@ pub(super) async fn upsert_app_binding(
             metadata: Some(metadata),
         })
         .await
-        .map_err(|_| {
+        .map_err(|source| {
             NativeIngressError::new("session_binding_unavailable", "Session binding unavailable")
+                .with_source(source)
         })
 }

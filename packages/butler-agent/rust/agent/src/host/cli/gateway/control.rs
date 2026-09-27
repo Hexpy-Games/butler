@@ -20,7 +20,7 @@ const MAX_FRAME_BYTES: usize = 8 * 1024;
 pub(super) fn verified_instance(
     data_root: &Path,
     installation: &ResolvedInstallation,
-) -> Result<Option<InstanceRecord>, String> {
+) -> Result<Option<InstanceRecord>, crate::host::HostError> {
     let locked = instance_is_locked(data_root)?;
     let record = read_record(data_root)?;
     match (locked, record) {
@@ -42,9 +42,15 @@ pub(super) fn verified_instance(
                 );
             }
             let executable = std::env::current_exe()
-                .map_err(|_| "native_service_executable_unavailable".to_owned())?
+                .map_err(|source| {
+                    crate::host::HostError::new("native_service_executable_unavailable")
+                        .with_source(source)
+                })?
                 .canonicalize()
-                .map_err(|_| "native_service_executable_unavailable".to_owned())?;
+                .map_err(|source| {
+                    crate::host::HostError::new("native_service_executable_unavailable")
+                        .with_source(source)
+                })?;
             if !executable.starts_with(installation.root())
                 || executable.to_string_lossy() != record.executable
             {
@@ -56,7 +62,10 @@ pub(super) fn verified_instance(
     }
 }
 
-pub(super) async fn request(record: &InstanceRecord, command: &str) -> Result<Value, String> {
+pub(super) async fn request(
+    record: &InstanceRecord,
+    command: &str,
+) -> Result<Value, crate::host::HostError> {
     if record.state != "ready" {
         return Err("native_service_not_ready".into());
     }
@@ -64,9 +73,9 @@ pub(super) async fn request(record: &InstanceRecord, command: &str) -> Result<Va
         .control_endpoint
         .as_deref()
         .ok_or_else(|| "gateway_control_unavailable".to_owned())?;
-    let address = endpoint
-        .parse::<SocketAddr>()
-        .map_err(|_| "gateway_control_identity_invalid".to_owned())?;
+    let address = endpoint.parse::<SocketAddr>().map_err(|source| {
+        crate::host::HostError::new("gateway_control_identity_invalid").with_source(source)
+    })?;
     if !address.ip().is_loopback() {
         return Err("gateway_control_identity_invalid".into());
     }
@@ -85,7 +94,9 @@ pub(super) async fn request(record: &InstanceRecord, command: &str) -> Result<Va
         "token":token,
         "command":command,
     }))
-    .map_err(|_| "gateway_control_request_invalid".to_owned())?;
+    .map_err(|source| {
+        crate::host::HostError::new("gateway_control_request_invalid").with_source(source)
+    })?;
     if payload.len() > MAX_FRAME_BYTES {
         return Err("gateway_control_request_invalid".into());
     }
@@ -142,6 +153,8 @@ pub(super) async fn request(record: &InstanceRecord, command: &str) -> Result<Va
             .ok_or_else(|| "gateway_control_response_invalid".to_owned())
     })
     .await
-    .map_err(|_| "gateway_control_timeout".to_owned())??;
+    .map_err(|source| {
+        crate::host::HostError::new("gateway_control_timeout").with_source(source)
+    })??;
     Ok(response)
 }

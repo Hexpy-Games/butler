@@ -20,25 +20,28 @@ pub(super) fn open(
     data_root: &Path,
     installation: &ResolvedInstallation,
     mutating: bool,
-) -> Result<Arc<ProfileService>, String> {
+) -> Result<Arc<ProfileService>, crate::host::HostError> {
     let host = Arc::new(SystemIdentity);
     let coordinator = Arc::new(
-        CognitionWriteCoordinator::new(host.clone())
-            .map_err(|_| "profile coordinator is unavailable".to_owned())?,
+        CognitionWriteCoordinator::new(host.clone()).map_err(|source| {
+            crate::host::HostError::new("profile coordinator is unavailable").with_source(source)
+        })?,
     );
     let home = env::var_os("HOME")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
         .unwrap_or_else(|| data_root.to_path_buf());
-    let os = nix::sys::utsname::uname().map_err(|_| "native environment is unavailable")?;
+    let os = nix::sys::utsname::uname().map_err(|source| {
+        crate::host::HostError::new("native environment is unavailable").with_source(source)
+    })?;
     let environment =
         NativeProcessEnvironment::capture(data_root, &home, &os.release().to_string_lossy());
     let cognition_root = environment.cognition_paths.cognition_root(data_root);
     validate_cognition_paths(data_root, installation, &cognition_root, mutating)?;
     let locale = process_locale();
-    let collation = Arc::new(
-        LocaleCollation::new(&locale).map_err(|_| "native locale is unavailable".to_owned())?,
-    );
+    let collation = Arc::new(LocaleCollation::new(&locale).map_err(|source| {
+        crate::host::HostError::new("native locale is unavailable").with_source(source)
+    })?);
     let writes = Arc::new(ConfigurationWrites::new());
     let models = NativeProcessModels::new(
         data_root.to_path_buf(),
@@ -46,7 +49,9 @@ pub(super) fn open(
         writes.clone(),
         collation,
     )
-    .map_err(|_| "native profile provider is unavailable".to_owned())?;
+    .map_err(|source| {
+        crate::host::HostError::new("native profile provider is unavailable").with_source(source)
+    })?;
     Ok(Arc::new(ProfileService::new(
         data_root.to_path_buf(),
         cognition_root,
@@ -66,7 +71,7 @@ fn validate_cognition_paths(
     installation: &ResolvedInstallation,
     cognition_root: &Path,
     mutating: bool,
-) -> Result<(), String> {
+) -> Result<(), crate::host::HostError> {
     if !mutating {
         return Ok(());
     }
@@ -82,8 +87,12 @@ fn validate_cognition_paths(
         installation,
         &[&lock, &coordinator, &journal],
     )
-    .map_err(|_| "profile cognition paths must remain inside DATA without symlinks".to_owned())
-}
+    .map_err(|source| {
+        crate::host::HostError::new(
+            "profile cognition paths must remain inside DATA without symlinks",
+        )
+        .with_source(source)
+    })}
 
 fn process_locale() -> String {
     let locale = ["LC_ALL", "LC_MESSAGES", "LANG"]

@@ -3,6 +3,7 @@ use std::{
     ffi::OsString,
 };
 
+pub(super) use crate::host::cli::error::CliError;
 use serde_json::{Map, Value, json};
 
 #[expect(
@@ -19,31 +20,6 @@ pub(super) struct Options {
     pub(super) positionals: Vec<String>,
     pub(super) values: HashMap<String, Vec<String>>,
     pub(super) flags: HashSet<String>,
-}
-
-#[derive(Debug)]
-pub(super) struct CliError {
-    pub(super) code: &'static str,
-    pub(super) message: String,
-    pub(super) exit: u8,
-}
-
-impl CliError {
-    pub(super) fn invalid(message: impl Into<String>) -> Self {
-        Self {
-            code: "invalid_arguments",
-            message: message.into(),
-            exit: 2,
-        }
-    }
-
-    pub(super) fn failed(code: &'static str, message: impl Into<String>, exit: u8) -> Self {
-        Self {
-            code,
-            message: message.into(),
-            exit,
-        }
-    }
 }
 
 pub(super) fn parse(args: &[OsString]) -> Result<Options, CliError> {
@@ -119,7 +95,7 @@ pub(super) fn values(options: &Options, key: &str) -> Vec<String> {
     options.values.get(key).cloned().unwrap_or_default()
 }
 
-pub(super) fn upsert_input(options: &Options, id: &str) -> Result<Value, String> {
+pub(super) fn upsert_input(options: &Options, id: &str) -> Result<Value, crate::host::HostError> {
     let transport = value(options, "--transport").unwrap_or_else(|| "stdio".into());
     if !matches!(transport.as_str(), "stdio" | "http" | "sse") {
         return Err("--transport must be stdio, http, or sse".into());
@@ -160,7 +136,11 @@ pub(super) fn upsert_input(options: &Options, id: &str) -> Result<Value, String>
     Ok(Value::Object(input))
 }
 
-fn secrets(options: &Options, names: &[&str], sources: &[&str]) -> Result<Vec<Value>, String> {
+fn secrets(
+    options: &Options,
+    names: &[&str],
+    sources: &[&str],
+) -> Result<Vec<Value>, crate::host::HostError> {
     let mut result = Vec::new();
     for (flag, source) in names.iter().zip(sources) {
         for value in values(options, flag) {

@@ -64,14 +64,14 @@ impl AdmissionLock {
     pub(crate) fn acquire(
         data_root: &Path,
         installation: &ResolvedInstallation,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, crate::host::HostError> {
         validate_write_destinations(data_root, installation)?;
         let path = admission_lock_path(data_root);
         let file = open_lock(&path, true)?;
         match Flock::lock(file, FlockArg::LockExclusiveNonblock) {
             Ok(lock) => Ok(Self { _lock: lock }),
             Err((_, Errno::EAGAIN)) => Err("service_start_admission_busy".into()),
-            Err((_, error)) => Err(format!("service_start_admission_failed: {error}")),
+            Err((_, error)) => Err(format!("service_start_admission_failed: {error}").into()),
         }
     }
 }
@@ -81,7 +81,7 @@ impl InstanceGuard {
         data_root: &Path,
         executable: &Path,
         installation: &ResolvedInstallation,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, crate::host::HostError> {
         validate_write_destinations(data_root, installation)?;
         let lock_path = instance_lock_path(data_root);
         let file = open_lock(&lock_path, true)?;
@@ -103,9 +103,9 @@ impl InstanceGuard {
             );
         }
 
-        let executable = executable
-            .canonicalize()
-            .map_err(|_| "native_service_executable_unavailable".to_owned())?;
+        let executable = executable.canonicalize().map_err(|source| {
+            crate::host::HostError::new("native_service_executable_unavailable").with_source(source)
+        })?;
         let pid = std::process::id();
         let process_start = process_start_identity(pid)?
             .ok_or_else(|| "native_service_process_identity_unavailable".to_owned())?;
@@ -146,7 +146,7 @@ impl InstanceGuard {
         app_endpoint: Option<String>,
         app_auth_required: bool,
         ready_at: String,
-    ) -> Result<(), String> {
+    ) -> Result<(), crate::host::HostError> {
         let data_root = self
             .record_path
             .parent()
@@ -180,7 +180,7 @@ impl InstanceGuard {
         &mut self,
         endpoint: String,
         token: String,
-    ) -> Result<(), String> {
+    ) -> Result<(), crate::host::HostError> {
         let data_root = self
             .record_path
             .parent()
@@ -237,26 +237,28 @@ impl Drop for InstanceGuard {
     }
 }
 
-pub(crate) fn read_record(data_root: &Path) -> Result<Option<InstanceRecord>, String> {
+pub(crate) fn read_record(
+    data_root: &Path,
+) -> Result<Option<InstanceRecord>, crate::host::HostError> {
     read_record_at(&instance_record_path(data_root))
 }
 
-pub(crate) fn instance_is_locked(data_root: &Path) -> Result<bool, String> {
+pub(crate) fn instance_is_locked(data_root: &Path) -> Result<bool, crate::host::HostError> {
     let path = instance_lock_path(data_root);
     let file = match open_lock(&path, false) {
         Ok(file) => file,
-        Err(error) if error == "service_lock_missing" => return Ok(false),
+        Err(error) if error.message() == "service_lock_missing" => return Ok(false),
         Err(error) => return Err(error),
     };
     match Flock::lock(file, FlockArg::LockExclusiveNonblock) {
         Ok(_) => Ok(false),
         Err((_, Errno::EAGAIN)) => Ok(true),
-        Err((_, error)) => Err(format!("service_lock_probe_failed: {error}")),
+        Err((_, error)) => Err(format!("service_lock_probe_failed: {error}").into()),
     }
 }
 
 /// Returns true only when the current process still matches the persisted OS identity.
-pub(crate) fn process_matches(record: &InstanceRecord) -> Result<bool, String> {
+pub(crate) fn process_matches(record: &InstanceRecord) -> Result<bool, crate::host::HostError> {
     if record.schema != INSTANCE_SCHEMA || record.pid == 0 || record.executable.is_empty() {
         return Err("native_service_instance_ambiguous: invalid instance record".into());
     }
@@ -273,7 +275,7 @@ pub(crate) fn mark_stopping(
     data_root: &Path,
     nonce: &str,
     installation: &ResolvedInstallation,
-) -> Result<(), String> {
+) -> Result<(), crate::host::HostError> {
     validate_write_destinations(data_root, installation)?;
     let path = instance_record_path(data_root);
     let _record_update_lock = acquire_record_update_lock(&record_update_lock_path(data_root))?;
@@ -296,30 +298,37 @@ pub(crate) fn mark_stopping(
 pub(crate) fn validate_write_destinations(
     data_root: &Path,
     installation: &ResolvedInstallation,
-) -> Result<(), String> {
+) -> Result<(), crate::host::HostError> {
     for destination in [data_root.join("state"), data_root.join("logs")] {
         installation
             .validate_data_root(&destination)
-            .map_err(|_| "native_path_configuration_invalid".to_owned())?;
+            .map_err(|source| {
+                crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
+            })?;
     }
     Ok(())
 }
 
-pub(crate) fn send_signal(record: &InstanceRecord, signal: Signal) -> Result<(), String> {
+pub(crate) fn send_signal(
+    record: &InstanceRecord,
+    signal: Signal,
+) -> Result<(), crate::host::HostError> {
     let pid = i32::try_from(record.pid)
         .ok()
         .filter(|pid| *pid > 0)
         .ok_or_else(|| "native_service_instance_ambiguous: invalid process id".to_owned())?;
-    kill(Pid::from_raw(pid), signal).map_err(|error| {
-        if error == Errno::ESRCH {
-            "native_service_process_exited".into()
-        } else {
-            format!("native_service_signal_failed: {error}")
-        }
-    })
+    kill(Pid::from_raw(pid), signal)
+        .map_err(|error| {
+            if error == Errno::ESRCH {
+                "native_service_process_exited".into()
+            } else {
+                format!("native_service_signal_failed: {error}")
+            }
+        })
+        .map_err(crate::host::HostError::from)
 }
 
-pub(crate) fn refuse_live_legacy_process(data_root: &Path) -> Result<(), String> {
+pub(crate) fn refuse_live_legacy_process(data_root: &Path) -> Result<(), crate::host::HostError> {
     for path in [
         data_root.join("state/services/butler-main.json"),
         data_root.join("state/butler-main-native.json"),
@@ -329,8 +338,9 @@ pub(crate) fn refuse_live_legacy_process(data_root: &Path) -> Result<(), String>
             Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
             Err(_) => return Err("native_service_legacy_state_unreadable".into()),
         };
-        let value: serde_json::Value = serde_json::from_slice(&bytes)
-            .map_err(|_| "native_service_legacy_state_ambiguous".to_owned())?;
+        let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|source| {
+            crate::host::HostError::new("native_service_legacy_state_ambiguous").with_source(source)
+        })?;
         let pid = value
             .get("pid")
             .and_then(serde_json::Value::as_u64)
@@ -340,13 +350,13 @@ pub(crate) fn refuse_live_legacy_process(data_root: &Path) -> Result<(), String>
         if process_is_alive(pid)? {
             return Err(format!(
                 "native_service_legacy_supervisor_pid_alive: legacy state references live PID {pid}; verify and stop the existing Butler supervisor before starting the native service"
-            ));
+            ).into());
         }
     }
     Ok(())
 }
 
-fn open_lock(path: &Path, create: bool) -> Result<File, String> {
+fn open_lock(path: &Path, create: bool) -> Result<File, crate::host::HostError> {
     if fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
         return Err("service_lock_path_ambiguous".into());
     }
@@ -358,7 +368,10 @@ fn open_lock(path: &Path, create: bool) -> Result<File, String> {
             .recursive(true)
             .mode(0o700)
             .create(parent)
-            .map_err(|_| "service_lock_directory_unavailable".to_owned())?;
+            .map_err(|source| {
+                crate::host::HostError::new("service_lock_directory_unavailable")
+                    .with_source(source)
+            })?;
     }
     let mut options = OpenOptions::new();
     options.read(true).write(true).mode(0o600);
@@ -374,7 +387,9 @@ fn open_lock(path: &Path, create: bool) -> Result<File, String> {
     })?;
     if !file
         .metadata()
-        .map_err(|_| "service_lock_unavailable".to_owned())?
+        .map_err(|source| {
+            crate::host::HostError::new("service_lock_unavailable").with_source(source)
+        })?
         .is_file()
     {
         return Err("service_lock_path_ambiguous".into());

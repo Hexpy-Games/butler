@@ -37,18 +37,22 @@ pub(in crate::host::cli::service) fn spawn_restart_handoff(
     data_root: &Path,
     expected: &RestartIdentity,
     intent_id: &str,
-) -> Result<(), String> {
+) -> Result<(), crate::host::HostError> {
     validate_identity(installation, expected)?;
     validate_intent_id(intent_id)?;
     let input = encode_input(expected, intent_id)?;
-    let data_root = data_root
-        .canonicalize()
-        .map_err(|_| "native_path_configuration_invalid".to_owned())?;
+    let data_root = data_root.canonicalize().map_err(|source| {
+        crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
+    })?;
     crate::host::service::instance::validate_write_destinations(&data_root, installation)?;
     let current = std::env::current_exe()
-        .map_err(|_| "native_service_executable_unavailable".to_owned())?
+        .map_err(|source| {
+            crate::host::HostError::new("native_service_executable_unavailable").with_source(source)
+        })?
         .canonicalize()
-        .map_err(|_| "native_service_executable_unavailable".to_owned())?;
+        .map_err(|source| {
+            crate::host::HostError::new("native_service_executable_unavailable").with_source(source)
+        })?;
     if current.as_path() != installation.executable() {
         return Err("native_service_executable_identity_mismatch".into());
     }
@@ -58,7 +62,9 @@ pub(in crate::host::cli::service) fn spawn_restart_handoff(
         .recursive(true)
         .mode(0o700)
         .create(&logs)
-        .map_err(|_| "native_service_logs_unavailable".to_owned())?;
+        .map_err(|source| {
+            crate::host::HostError::new("native_service_logs_unavailable").with_source(source)
+        })?;
     let stdout = log_file(&logs.join("butler-agent-service.stdout.log"), installation)?;
     let stderr = log_file(&logs.join("butler-agent-service.stderr.log"), installation)?;
     let (reaper, receiver) = mpsc::sync_channel::<Child>(1);
@@ -69,7 +75,10 @@ pub(in crate::host::cli::service) fn spawn_restart_handoff(
                 let _ = child.wait();
             }
         })
-        .map_err(|_| "native_service_restart_handoff_reaper_unavailable".to_owned())?;
+        .map_err(|source| {
+            crate::host::HostError::new("native_service_restart_handoff_reaper_unavailable")
+                .with_source(source)
+        })?;
     drop(reaper_thread);
 
     let mut command = Command::new(&current);
@@ -85,9 +94,10 @@ pub(in crate::host::cli::service) fn spawn_restart_handoff(
         .stderr(Stdio::from(stderr))
         .process_group(0);
     command.arg("--quiet");
-    let mut child = command
-        .spawn()
-        .map_err(|_| "native_service_restart_handoff_spawn_failed".to_owned())?;
+    let mut child = command.spawn().map_err(|source| {
+        crate::host::HostError::new("native_service_restart_handoff_spawn_failed")
+            .with_source(source)
+    })?;
     let Some(mut stdin) = child.stdin.take() else {
         let _ = child.kill();
         let _ = child.wait();
@@ -112,7 +122,7 @@ pub(in crate::host::cli::service) fn spawn_restart_handoff(
 pub(in crate::host::cli::service) async fn execute_restart_handoff(
     installation: ResolvedInstallation,
     data_argument: &str,
-) -> Result<Value, String> {
+) -> Result<Value, crate::host::HostError> {
     let input = read_input()?;
     let data_root = resolve_data_root(Some(data_argument), &installation)?;
     let intent_id = input.intent_id.as_str();
@@ -133,11 +143,11 @@ pub(in crate::host::cli::service) async fn execute_restart_handoff(
         (Ok(value), Ok(())) => Ok(value),
         (Ok(_), Err(report_error)) => Err(format!(
             "native_service_restart_handoff_terminal_report_failed: helper reached {terminal_state}; {report_error}"
-        )),
-        (Err((_, original_error)), Ok(())) => Err(original_error),
+        ).into()),
+        (Err((_, original_error)), Ok(())) => Err(original_error.into()),
         (Err((state, original_error)), Err(report_error)) => Err(format!(
             "{original_error}; helper outcome {state} could not be reported: {report_error}"
-        )),
+        ).into()),
     }
 }
 
@@ -162,20 +172,24 @@ async fn restart_once(
                 "native_service_restart_handoff_target_gone".into(),
             ));
         }
-        Err(error) => return Err(precondition_failure(error)),
+        Err(error) => return Err(precondition_failure(error.to_string())),
     };
-    validate_target(installation, expected, &active).map_err(|error| ("target_changed", error))?;
+    validate_target(installation, expected, &active)
+        .map_err(|error| ("target_changed", error.to_string()))?;
 
     let (stopped, admission) =
         match stop_service_admitted(data_root, installation, admission, Some(expected)).await {
             Ok(result) => result,
             Err(error) => {
-                let state = if error.starts_with("native_service_instance_changed") {
+                let state = if error
+                    .message()
+                    .starts_with("native_service_instance_changed")
+                {
                     "target_changed"
                 } else {
                     "stop_failed"
                 };
-                return Err((state, error));
+                return Err((state, error.to_string()));
             }
         };
     if stopped["alreadyStopped"] == true {
@@ -187,7 +201,7 @@ async fn restart_once(
     }
     let started = start_service_admitted(installation, &config, admission)
         .await
-        .map_err(|error| ("start_failed", error))?;
+        .map_err(|error| ("start_failed", error.to_string()))?;
     let active = match active_service(data_root) {
         Ok(Some(active)) => active,
         Ok(None) => {
@@ -196,7 +210,7 @@ async fn restart_once(
                 "native_service_restart_handoff_start_unverified".into(),
             ));
         }
-        Err(error) => return Err(("start_unverified", error)),
+        Err(error) => return Err(("start_unverified", error.to_string())),
     };
     if active.state != "ready"
         || active.ready_at.is_none()
@@ -211,15 +225,15 @@ async fn restart_once(
     Ok(started)
 }
 
-fn precondition_failure(error: String) -> (&'static str, String) {
-    ("precondition_failed", error)
+fn precondition_failure(error: impl std::fmt::Display) -> (&'static str, String) {
+    ("precondition_failed", error.to_string())
 }
 
 fn validate_target(
     installation: &ResolvedInstallation,
     expected: &RestartIdentity,
     active: &InstanceRecord,
-) -> Result<(), String> {
+) -> Result<(), crate::host::HostError> {
     if !expected.matches(active)
         || active.state != "ready"
         || active.executable.as_str() != installation.executable().to_string_lossy().as_ref()
@@ -232,7 +246,7 @@ fn validate_target(
 fn validate_identity(
     installation: &ResolvedInstallation,
     expected: &RestartIdentity,
-) -> Result<(), String> {
+) -> Result<(), crate::host::HostError> {
     if expected.pid == 0
         || expected.process_start.is_empty()
         || expected.nonce.is_empty()
@@ -244,7 +258,7 @@ fn validate_identity(
     Ok(())
 }
 
-fn validate_intent_id(intent_id: &str) -> Result<(), String> {
+fn validate_intent_id(intent_id: &str) -> Result<(), crate::host::HostError> {
     if intent_id.is_empty()
         || intent_id.len() > INTENT_ID_MAX_LEN
         || !intent_id
@@ -256,31 +270,42 @@ fn validate_intent_id(intent_id: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn encode_input(expected: &RestartIdentity, intent_id: &str) -> Result<Vec<u8>, String> {
+fn encode_input(
+    expected: &RestartIdentity,
+    intent_id: &str,
+) -> Result<Vec<u8>, crate::host::HostError> {
     validate_intent_id(intent_id)?;
     let bytes = serde_json::to_vec(&RestartHandoffInput {
         identity: expected.clone(),
         intent_id: intent_id.to_owned(),
     })
-    .map_err(|_| "native_service_restart_handoff_input_invalid".to_owned())?;
+    .map_err(|source| {
+        crate::host::HostError::new("native_service_restart_handoff_input_invalid")
+            .with_source(source)
+    })?;
     if bytes.is_empty() || bytes.len() > MAX_HANDOFF_INPUT_BYTES {
         return Err("native_service_restart_handoff_input_invalid".into());
     }
     Ok(bytes)
 }
 
-fn read_input() -> Result<RestartHandoffInput, String> {
+fn read_input() -> Result<RestartHandoffInput, crate::host::HostError> {
     let mut input = Vec::new();
     std::io::stdin()
         .lock()
         .take((MAX_HANDOFF_INPUT_BYTES + 1) as u64)
         .read_to_end(&mut input)
-        .map_err(|_| "native_service_restart_handoff_input_unavailable".to_owned())?;
+        .map_err(|source| {
+            crate::host::HostError::new("native_service_restart_handoff_input_unavailable")
+                .with_source(source)
+        })?;
     if input.is_empty() || input.len() > MAX_HANDOFF_INPUT_BYTES {
         return Err("native_service_restart_handoff_input_invalid".into());
     }
-    let envelope: RestartHandoffInput = serde_json::from_slice(&input)
-        .map_err(|_| "native_service_restart_handoff_input_invalid".to_owned())?;
+    let envelope: RestartHandoffInput = serde_json::from_slice(&input).map_err(|source| {
+        crate::host::HostError::new("native_service_restart_handoff_input_invalid")
+            .with_source(source)
+    })?;
     validate_intent_id(&envelope.intent_id)?;
     Ok(envelope)
 }

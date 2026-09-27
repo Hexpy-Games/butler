@@ -163,29 +163,36 @@ pub(super) async fn import(
             ));
         }
         let mut text = String::new();
-        std::io::stdin().read_to_string(&mut text).map_err(|_| {
-            CliError::failed(
-                "personalization_input_unavailable",
-                "Import input could not be read.",
-            )
-        })?;
+        std::io::stdin()
+            .read_to_string(&mut text)
+            .map_err(|source| {
+                CliError::failed(
+                    "personalization_input_unavailable",
+                    "Import input could not be read.",
+                )
+                .with_source(source)
+            })?;
         return import_text(profile, source, text, model).await;
     };
     if stdin {
         let mut text = String::new();
-        std::io::stdin().read_to_string(&mut text).map_err(|_| {
-            CliError::failed(
-                "personalization_input_unavailable",
-                "Import input could not be read.",
-            )
-        })?;
+        std::io::stdin()
+            .read_to_string(&mut text)
+            .map_err(|source| {
+                CliError::failed(
+                    "personalization_input_unavailable",
+                    "Import input could not be read.",
+                )
+                .with_source(source)
+            })?;
         return import_text(profile, source, text, model).await;
     }
-    let text = tokio::fs::read_to_string(file).await.map_err(|_| {
+    let text = tokio::fs::read_to_string(file).await.map_err(|source| {
         CliError::failed(
             "personalization_input_unavailable",
             "Import input could not be read.",
         )
+        .with_source(source)
     })?;
     import_text(profile, source, text, model).await
 }

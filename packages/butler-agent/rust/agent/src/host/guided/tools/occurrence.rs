@@ -55,7 +55,9 @@ pub(super) fn occurrence(
     } else {
         canonical_json(&Value::Object(normalized), CanonicalKeyOrder::Utf16Lexical)
     }
-    .map_err(|error| GuidedToolError::new("guided_tool_identity_json", error.to_string()))?;
+    .map_err(|error| {
+        GuidedToolError::new("guided_tool_identity_json", error.to_string()).with_source(error)
+    })?;
     let identity_fields = if let Some(id) = catalog_id {
         format!("{id}\0{effective_name}\0{arguments}")
     } else {
@@ -87,6 +89,7 @@ pub(super) fn occurrence(
             )
             .map_err(|error| {
                 GuidedToolError::new("guided_tool_identity_json", error.to_string())
+                    .with_source(error)
             })?,
         )
     } else {

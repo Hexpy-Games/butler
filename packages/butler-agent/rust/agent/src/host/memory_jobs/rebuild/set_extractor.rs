@@ -70,8 +70,10 @@ pub(super) async fn run(
         CognitionWriteCoordinator::new(Arc::new(SystemIdentity)).map_err(CognitionError::from)?,
     );
     let cancellation = CancellationToken::new();
-    let signal_task = signals(cancellation.clone())
-        .map_err(|message| CognitionError::new(CognitionCode::NativeSignalUnavailable, message))?;
+    let signal_task = signals(cancellation.clone()).map_err(|message| {
+        CognitionError::new(CognitionCode::NativeSignalUnavailable, message.to_string())
+            .with_source(message)
+    })?;
     let result = set_extractor_memory_generation(
         data,
         paths,

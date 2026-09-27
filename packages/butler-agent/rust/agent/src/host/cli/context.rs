@@ -1,5 +1,6 @@
 //! Native one-shot context status, compaction, and retention commands.
 
+use crate::host::cli::error::CliError;
 use std::{
     ffi::OsString,
     fs,
@@ -55,30 +56,6 @@ impl Command {
     }
 }
 
-struct CliError {
-    code: &'static str,
-    message: String,
-    exit: u8,
-}
-
-impl CliError {
-    fn invalid(message: impl Into<String>) -> Self {
-        Self {
-            code: "invalid_arguments",
-            message: message.into(),
-            exit: 2,
-        }
-    }
-
-    fn failed(code: &'static str, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-            exit: 1,
-        }
-    }
-}
-
 pub(crate) fn recognizes(args: &[OsString]) -> bool {
     let positionals = positionals_without_options(args);
     matches!(positionals.first().map(String::as_str), Some("context"))
@@ -101,7 +78,7 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
                 return report_error(
                     command.name(),
                     options.json,
-                    &CliError::failed("butler_data_unavailable", message),
+                    &CliError::failed("butler_data_unavailable", message.to_string()),
                 );
             }
         };
@@ -275,9 +252,9 @@ fn validate_write_destination(
     path: &Path,
     reject_leaf_symlink: bool,
 ) -> Result<(), CliError> {
-    installation
-        .validate_data_root(path)
-        .map_err(|_| CliError::failed("unsafe_path", "Context write destination is unsafe."))?;
+    installation.validate_data_root(path).map_err(|source| {
+        CliError::failed("unsafe_path", "Context write destination is unsafe.").with_source(source)
+    })?;
     if reject_leaf_symlink {
         match fs::symlink_metadata(path) {
             Ok(metadata) if metadata.file_type().is_symlink() => {
@@ -302,11 +279,12 @@ fn validate_write_destination(
 async fn open_status_models(data_root: &Path) -> Result<models::NativeStatusModels, CliError> {
     models::open_status_models(data_root.to_path_buf())
         .await
-        .map_err(|_| {
+        .map_err(|source| {
             unavailable(
                 "native_context_models_unavailable",
                 "Native model and context facts are unavailable.",
             )
+            .with_source(source)
         })
 }
 

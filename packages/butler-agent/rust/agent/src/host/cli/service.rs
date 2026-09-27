@@ -76,7 +76,7 @@ pub(crate) async fn run_native_service_cli(
     let parsed = parse(&args);
     let (options, action) = match parsed {
         Ok(value) => value,
-        Err(message) => return report_error("service", json_requested, &message),
+        Err(message) => return report_error("service", json_requested, message.message()),
     };
     if options.dry_run && matches!(action, Action::Run) {
         return report_error(
@@ -94,7 +94,7 @@ pub(crate) async fn run_native_service_cli(
     }
     let data = match expand_data(options.data.as_deref()) {
         Ok(data) => data,
-        Err(message) => return report_error("service", options.json, &message),
+        Err(message) => return report_error("service", options.json, message.message()),
     };
     if matches!(action, Action::RestartHandoff) {
         if options.dry_run {
@@ -113,7 +113,7 @@ pub(crate) async fn run_native_service_cli(
         };
         return match lifecycle::execute_restart_handoff(installation, data).await {
             Ok(_) => ExitCode::SUCCESS,
-            Err(message) => report_error(action.name(), options.json, &message),
+            Err(message) => report_error(action.name(), options.json, message.message()),
         };
     }
     if matches!(action, Action::Run) {
@@ -136,7 +136,7 @@ pub(crate) async fn run_native_service_cli(
                 }
                 ExitCode::SUCCESS
             }
-            Err(message) => report_error("service run", options.json, &message),
+            Err(message) => report_error("service run", options.json, message.message()),
         };
     }
     let result = lifecycle::execute(action, installation, data.as_deref(), options.dry_run).await;
@@ -152,7 +152,7 @@ pub(crate) async fn run_native_service_cli(
             }
             ExitCode::SUCCESS
         }
-        Err(message) => report_error(action.name(), options.json, &message),
+        Err(message) => report_error(action.name(), options.json, message.message()),
     }
 }
 
@@ -161,11 +161,11 @@ pub(crate) fn spawn_restart_handoff(
     data_root: &Path,
     expected: &RestartIdentity,
     intent_id: &str,
-) -> Result<(), String> {
+) -> Result<(), crate::host::HostError> {
     lifecycle::spawn_restart_handoff(installation, data_root, expected, intent_id)
 }
 
-fn parse(args: &[OsString]) -> Result<(Options, Action), String> {
+fn parse(args: &[OsString]) -> Result<(Options, Action), crate::host::HostError> {
     let mut options = Options::default();
     let mut index = 0;
     while index < args.len() {
@@ -187,7 +187,7 @@ fn parse(args: &[OsString]) -> Result<(Options, Action), String> {
             "--dry-run" => options.dry_run = true,
             "--detached" => options.detached = true,
             value if value.starts_with('-') => {
-                return Err(format!("unsupported service option: {value}"));
+                return Err(format!("unsupported service option: {value}").into());
             }
             _ => options.positionals.push(value.into_owned()),
         }
@@ -215,7 +215,7 @@ fn parse(args: &[OsString]) -> Result<(Options, Action), String> {
     Ok((options, action))
 }
 
-fn expand_data(data: Option<&str>) -> Result<Option<String>, String> {
+fn expand_data(data: Option<&str>) -> Result<Option<String>, crate::host::HostError> {
     let Some(data) = data else { return Ok(None) };
     let home = std::env::var_os("HOME")
         .filter(|home| !home.is_empty())

@@ -133,12 +133,12 @@ impl NativeAppSettingsMutation {
         let root = self
             .installation
             .validate_data_root(&self.data_root)
-            .map_err(|_| unsafe_path())?;
+            .map_err(|source| unsafe_path().with_source(source))?;
         for relative in destinations {
             let resolved = self
                 .installation
                 .validate_data_root(&self.data_root.join(relative))
-                .map_err(|_| unsafe_path())?;
+                .map_err(|source| unsafe_path().with_source(source))?;
             if !resolved.starts_with(&root) {
                 return Err(unsafe_path());
             }

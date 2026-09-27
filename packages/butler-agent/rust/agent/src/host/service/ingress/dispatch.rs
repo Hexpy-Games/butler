@@ -190,11 +190,12 @@ async fn execute(
             let binding = bindings
                 .get_by_session_id(&session_id)
                 .await
-                .map_err(|_| {
+                .map_err(|source| {
                     super::NativeIngressError::new(
                         "session_binding_unavailable",
                         "Session binding unavailable",
                     )
+                    .with_source(source)
                 })?
                 .ok_or_else(|| {
                     super::NativeIngressError::new(

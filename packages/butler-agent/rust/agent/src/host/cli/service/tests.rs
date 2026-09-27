@@ -11,7 +11,7 @@ fn lifecycle_parser_rejects_installation_home_override() {
     let Err(error) = parse(&arguments(&["start", "--home", "/tmp/butler"])) else {
         panic!("--home is not a data directory option");
     };
-    assert!(error.contains("--home is unsupported"));
+    assert!(error.message().contains("--home is unsupported"));
 }
 
 #[test]

@@ -1,5 +1,6 @@
 //! One-shot native Cognition operator commands backed by domain owners.
 
+use crate::host::cli::error::CliError;
 use std::{ffi::OsString, path::PathBuf, process::ExitCode, sync::Arc};
 
 use serde_json::{Value, json};
@@ -79,30 +80,6 @@ impl Command {
     }
 }
 
-struct CliError {
-    code: String,
-    message: String,
-    exit: u8,
-}
-
-impl CliError {
-    fn invalid(message: impl Into<String>) -> Self {
-        Self {
-            code: "invalid_arguments".into(),
-            message: message.into(),
-            exit: 2,
-        }
-    }
-
-    fn failed(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self {
-            code: code.into(),
-            message: message.into(),
-            exit: 1,
-        }
-    }
-}
-
 pub(crate) fn recognizes(args: &[OsString]) -> bool {
     let values = parser::positionals_without_options(args);
     let Some((command, _, _)) = parser::command_prefix(&values) else {
@@ -139,7 +116,7 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
                 return report_error(
                     &command_name,
                     options.json,
-                    &CliError::failed("butler_data_unavailable", message),
+                    &CliError::failed("butler_data_unavailable", message.to_string()),
                 );
             }
         };

@@ -223,7 +223,7 @@ pub(super) fn config_edit(
         return report_error(
             command.name(),
             options.json,
-            &CliError::failed("config_write_failed", message),
+            &CliError::failed("config_write_failed", message.to_string()),
         );
     }
     let editor = std::env::var("EDITOR")
@@ -269,11 +269,12 @@ pub(super) fn config_edit(
     )
 }
 
-fn ensure_config_exists(path: &Path) -> Result<(), String> {
+fn ensure_config_exists(path: &Path) -> Result<(), crate::host::HostError> {
     match std::fs::symlink_metadata(path) {
         Ok(_) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            configuration::write_json_atomic(path, &json!({})).map_err(|error| error.to_string())
+            configuration::write_json_atomic(path, &json!({}))
+                .map_err(crate::host::HostError::from_error)
         }
         Err(_) => Err("Config file could not be inspected.".into()),
     }

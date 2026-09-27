@@ -10,7 +10,7 @@ pub(in crate::host) struct ForegroundLease {
 }
 
 impl ForegroundLease {
-    pub(in crate::host) fn capture() -> Result<Self, String> {
+    pub(in crate::host) fn capture() -> Result<Self, crate::host::HostError> {
         let descriptor = nix::unistd::dup(std::io::stdin())
             .map_err(|error| format!("foreground_lease_unavailable: {error}"))?;
         let file = File::from(descriptor);
@@ -24,7 +24,7 @@ impl ForegroundLease {
         Ok(Self { input })
     }
 
-    pub(in crate::host) async fn closed(&self) -> Result<(), String> {
+    pub(in crate::host) async fn closed(&self) -> Result<(), crate::host::HostError> {
         let mut byte = [0_u8; 1];
         loop {
             let mut readable = self
@@ -38,7 +38,7 @@ impl ForegroundLease {
             }) {
                 Ok(Ok(0)) => return Ok(()),
                 Ok(Ok(_)) | Err(_) => {}
-                Ok(Err(error)) => return Err(format!("foreground_lease_failed: {error}")),
+                Ok(Err(error)) => return Err(format!("foreground_lease_failed: {error}").into()),
             }
         }
     }

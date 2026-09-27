@@ -26,7 +26,7 @@ pub(crate) fn recognizes(args: &[OsString]) -> bool {
 pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> ExitCode {
     let parsed = match parse(args) {
         Ok(value) => value,
-        Err(message) => return error(args.iter().any(|arg| arg == "--json"), &message),
+        Err(message) => return error(args.iter().any(|arg| arg == "--json"), message.message()),
     };
     let command = match parsed.action {
         Action::Help => "butler help",
@@ -46,11 +46,11 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
             let data_root =
                 match settings_cli::resolve_data_root_override(parsed.data, installation) {
                     Ok(value) => value,
-                    Err(message) => return error(parsed.json, &message),
+                    Err(message) => return error(parsed.json, message.message()),
                 };
             let provenance = match installation.native_payload_provenance() {
                 Ok(value) => value,
-                Err(message) => return error(parsed.json, &message),
+                Err(message) => return error(parsed.json, message.message()),
             };
             let version_available = provenance
                 .as_ref()
@@ -103,7 +103,7 @@ struct Parsed {
     quiet: bool,
 }
 
-fn parse(args: &[OsString]) -> Result<Parsed, String> {
+fn parse(args: &[OsString]) -> Result<Parsed, crate::host::HostError> {
     let mut data = None;
     let mut json = false;
     let mut quiet = false;
@@ -129,7 +129,7 @@ fn parse(args: &[OsString]) -> Result<Parsed, String> {
             "--verbose" => {}
             option if option.starts_with("--data=") => data = Some(PathBuf::from(&option[7..])),
             option if option.starts_with('-') => {
-                return Err(format!("unsupported option: {option}"));
+                return Err(format!("unsupported option: {option}").into());
             }
             _ => words.push(value.into_owned()),
         }

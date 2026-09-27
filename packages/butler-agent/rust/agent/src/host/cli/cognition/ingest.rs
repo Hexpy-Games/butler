@@ -89,7 +89,7 @@ pub(super) async fn run(
         {
             Ok(summary) => summary,
             Err(code) => {
-                warnings.push(warning(&chunk.chunk_id, "summarize", &code));
+                warnings.push(warning(&chunk.chunk_id, "summarize", code.message()));
                 record_raw_graph(
                     &data_root,
                     &paths,
@@ -153,7 +153,7 @@ pub(super) async fn run(
                     warnings.push(warning(&chunk.chunk_id, "hot_index", error.code()));
                 }
             }
-            Err(code) => warnings.push(warning(&chunk.chunk_id, "embedding_setup", &code)),
+            Err(code) => warnings.push(warning(&chunk.chunk_id, "embedding_setup", code.message())),
         }
         record_raw_graph(
             &data_root,
@@ -237,17 +237,18 @@ async fn configured_summary(
     data_root: &std::path::Path,
     text: &str,
     cancellation: &CancellationToken,
-) -> Result<String, String> {
+) -> Result<String, crate::host::HostError> {
     if models.is_none() && setup_failure.is_none() {
         match process_models(data_root) {
             Ok(value) => *models = Some(value),
-            Err(code) => *setup_failure = Some(code),
+            Err(code) => *setup_failure = Some(code.to_string()),
         }
     }
     let Some(models) = models.as_ref() else {
         return Err(setup_failure
             .clone()
-            .unwrap_or_else(|| "native_model_setup_failed".into()));
+            .unwrap_or_else(|| "native_model_setup_failed".into())
+            .into());
     };
     let text = crate::public_text::trim_js_whitespace(text);
     if text.is_empty() {
@@ -282,12 +283,15 @@ async fn configured_summary(
         ),
     )
     .await
-    .map_err(|_| "legacy_hot_summary_timeout".to_owned())?
+    .map_err(|source| {
+        crate::host::HostError::new("legacy_hot_summary_timeout").with_source(source)
+    })?
     .map(|result| result.text)
-    .map_err(|_| "legacy_hot_summary_failed".to_owned())
-}
+    .map_err(|source| crate::host::HostError::new("legacy_hot_summary_failed").with_source(source))}
 
-fn process_models(data_root: &std::path::Path) -> Result<crate::host::NativeProcessModels, String> {
+fn process_models(
+    data_root: &std::path::Path,
+) -> Result<crate::host::NativeProcessModels, crate::host::HostError> {
     let home = std::env::var_os("HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| data_root.to_owned());
@@ -295,9 +299,9 @@ fn process_models(data_root: &std::path::Path) -> Result<crate::host::NativeProc
         .map(|value| value.release().to_string_lossy().into_owned())
         .unwrap_or_else(|_| "unknown".into());
     let environment = crate::host::NativeProcessEnvironment::capture(data_root, &home, &os_release);
-    let collation = Arc::new(
-        LocaleCollation::new("en-US").map_err(|_| "native_locale_unavailable".to_owned())?,
-    );
+    let collation = Arc::new(LocaleCollation::new("en-US").map_err(|source| {
+        crate::host::HostError::new("native_locale_unavailable").with_source(source)
+    })?);
     crate::host::NativeProcessModels::new(
         data_root.to_owned(),
         environment.model,
@@ -305,6 +309,7 @@ fn process_models(data_root: &std::path::Path) -> Result<crate::host::NativeProc
         collation,
     )
     .map_err(|error| error.code().to_owned())
+    .map_err(crate::host::HostError::from)
 }
 
 fn ensure_index_owner<'a>(
@@ -313,7 +318,7 @@ fn ensure_index_owner<'a>(
     coordinator: Arc<crate::coordination::CognitionWriteCoordinator>,
     embedding: &mut Option<Arc<crate::host::NativeEmbeddingOwner>>,
     index: &'a mut Option<LegacyIndexService>,
-) -> Result<&'a LegacyIndexService, String> {
+) -> Result<&'a LegacyIndexService, crate::host::HostError> {
     if index.is_none() {
         let owner = match embedding {
             Some(owner) => owner.clone(),
@@ -334,6 +339,7 @@ fn ensure_index_owner<'a>(
     index
         .as_ref()
         .ok_or_else(|| "memory_index_unavailable".to_owned())
+        .map_err(crate::host::HostError::from)
 }
 
 fn record_raw_graph(

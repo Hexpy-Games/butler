@@ -61,11 +61,12 @@ pub(super) struct Hints {
 
 impl Envelope {
     pub(super) fn from_record(record: &QueuedInboundEvent) -> Result<Self, NativeIngressError> {
-        record.envelope.read().map_err(|_| {
+        record.envelope.read().map_err(|source| {
             NativeIngressError::new(
                 "inbound_envelope_invalid",
                 "Inbound envelope could not be decoded",
             )
+            .with_source(source)
         })
     }
 }
@@ -119,7 +120,7 @@ pub(super) async fn bind_and_request(
         .ok_or_else(|| invalid("Missing turn controls"))?;
     let verified = controls
         .verify()
-        .map_err(|_| invalid("Invalid turn controls"))?;
+        .map_err(|source| invalid("Invalid turn controls").with_source(source))?;
     if verified.turn_id != turn_id || verified.session_id != envelope.peer.id {
         return Err(invalid("Turn control identity mismatch"));
     }
@@ -128,9 +129,13 @@ pub(super) async fn bind_and_request(
         .as_ref()
         .ok_or_else(|| invalid("Missing App turn context"))?;
     verify_context(context, envelope, &verified.model_ref, turn_id)?;
-    let existing = bindings.get_by_session_id(session_id).await.map_err(|_| {
-        NativeIngressError::new("session_binding_unavailable", "Session binding unavailable")
-    })?;
+    let existing = bindings
+        .get_by_session_id(session_id)
+        .await
+        .map_err(|source| {
+            NativeIngressError::new("session_binding_unavailable", "Session binding unavailable")
+                .with_source(source)
+        })?;
     let binding = policy::upsert_app_binding(
         bindings,
         existing,
@@ -231,8 +236,9 @@ async fn automation_binding(
     let binding = bindings
         .get_by_session_id(session_id)
         .await
-        .map_err(|_| {
+        .map_err(|source| {
             NativeIngressError::new("session_binding_unavailable", "Session binding unavailable")
+                .with_source(source)
         })?
         .ok_or_else(|| {
             NativeIngressError::new("session_binding_missing", "Session binding unavailable")
@@ -243,8 +249,9 @@ async fn automation_binding(
     bindings
         .update_lifecycle_state(session_id, SessionLifecycleState::Active, None)
         .await
-        .map_err(|_| {
+        .map_err(|source| {
             NativeIngressError::new("session_binding_unavailable", "Session binding unavailable")
+                .with_source(source)
         })?
         .ok_or_else(|| {
             NativeIngressError::new("session_binding_missing", "Session binding unavailable")
@@ -319,8 +326,9 @@ pub(super) async fn existing_control_binding(
     let binding = bindings
         .get_by_session_id(session_id)
         .await
-        .map_err(|_| {
+        .map_err(|source| {
             NativeIngressError::new("session_binding_unavailable", "Session binding unavailable")
+                .with_source(source)
         })?
         .ok_or_else(|| {
             NativeIngressError::new("session_binding_missing", "Session binding unavailable")
@@ -334,8 +342,9 @@ pub(super) async fn existing_control_binding(
     bindings
         .update_lifecycle_state(session_id, SessionLifecycleState::Active, None)
         .await
-        .map_err(|_| {
+        .map_err(|source| {
             NativeIngressError::new("session_binding_unavailable", "Session binding unavailable")
+                .with_source(source)
         })?
         .ok_or_else(|| {
             NativeIngressError::new("session_binding_missing", "Session binding unavailable")

@@ -183,11 +183,12 @@ fn canonical_project_workspace(
             "continuity_project_workspace_unresolved",
         ));
     }
-    let workspace = fs::canonicalize(&workspace).map_err(|_| {
+    let workspace = fs::canonicalize(&workspace).map_err(|source| {
         CliError::failed(
             "continuity_project_workspace_unresolved",
             "continuity_project_workspace_unresolved",
         )
+        .with_source(source)
     })?;
     if !workspace.is_dir() {
         return Err(CliError::failed(
@@ -196,11 +197,12 @@ fn canonical_project_workspace(
         ));
     }
     let cache = workspace.join(".butler/hot-cache.md");
-    let install = fs::canonicalize(installation_root).map_err(|_| {
+    let install = fs::canonicalize(installation_root).map_err(|source| {
         CliError::failed(
             "installation_root_unavailable",
             "installation_root_unavailable",
         )
+        .with_source(source)
     })?;
     if cache.starts_with(&install) {
         return Err(CliError::failed(
@@ -288,11 +290,12 @@ fn action_value(
 }
 
 fn view_value(view: &ContinuityRecoveryManifestView) -> Result<Value, CliError> {
-    serde_json::to_value(view).map_err(|_| {
+    serde_json::to_value(view).map_err(|source| {
         CliError::failed(
             "invalid_output",
             "Could not serialize continuity recovery manifest",
         )
+        .with_source(source)
     })
 }
 

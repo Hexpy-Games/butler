@@ -29,10 +29,15 @@ pub(crate) trait NativeIngressDelivery: Send + Sync + 'static {
     fn deliver(&self, session_id: String, action: Value) -> DeliveryFuture;
 }
 
-#[derive(Clone, Debug)]
+/// A failed inbound dispatch: the wire code and message recorded for the
+/// queued event, plus the underlying error.
+#[derive(Clone, Debug, thiserror::Error)]
+#[error("{code}: {message}")]
 pub(crate) struct NativeIngressError {
     pub(crate) code: &'static str,
     pub(crate) message: String,
+    #[source]
+    source: Option<Arc<dyn std::error::Error + Send + Sync>>,
 }
 
 impl NativeIngressError {
@@ -40,21 +45,24 @@ impl NativeIngressError {
         Self {
             code,
             message: message.into(),
+            source: None,
         }
     }
-}
 
-impl std::fmt::Display for NativeIngressError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.code, self.message)
+    /// Records the underlying error.
+    #[must_use]
+    pub(crate) fn with_source(
+        mut self,
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        self.source = Some(Arc::new(source));
+        self
     }
 }
-
-impl std::error::Error for NativeIngressError {}
 
 impl From<NativeQueueError> for NativeIngressError {
     fn from(error: NativeQueueError) -> Self {
-        Self::new(error.code(), error.message())
+        Self::new(error.code(), error.message()).with_source(error)
     }
 }
 
@@ -169,11 +177,12 @@ impl NativeIngressDispatcher {
             .authority
             .waiting_source_sessions()
             .await
-            .map_err(|_| {
+            .map_err(|source| {
                 NativeIngressError::new(
                     "inbound_authority_state_unavailable",
                     "Waiting session state unavailable",
                 )
+                .with_source(source)
             })?
             .into_iter()
             .collect::<HashSet<_>>();

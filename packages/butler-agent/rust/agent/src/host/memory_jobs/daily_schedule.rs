@@ -22,9 +22,9 @@ pub(in crate::host) async fn run_due<F>(
     now_ms: i64,
     cancellation: &CancellationToken,
     operation: F,
-) -> Result<bool, String>
+) -> Result<bool, crate::host::HostError>
 where
-    F: Future<Output = Result<(), String>>,
+    F: Future<Output = Result<(), crate::host::HostError>>,
 {
     if !matches!(id, "session-sync" | "consolidation-cycle") {
         return Err("unknown_scheduler_job".into());
@@ -37,7 +37,9 @@ where
     let day_to_check = day.to_owned();
     let due = tokio::task::spawn_blocking(move || should_run(&root, &marker, &day_to_check))
         .await
-        .map_err(|_| "scheduler_state_worker_failed".to_owned())??;
+        .map_err(|source| {
+            crate::host::HostError::new("scheduler_state_worker_failed").with_source(source)
+        })??;
     if !due {
         return Ok(false);
     }
@@ -51,12 +53,14 @@ where
         "status": if result.is_ok() { "ok" } else { "error" },
     });
     if let Err(message) = &result {
-        marker["message"] = json!(message.chars().take(500).collect::<String>());
+        marker["message"] = json!(message.message().chars().take(500).collect::<String>());
     }
     let root = data_root.to_path_buf();
     tokio::task::spawn_blocking(move || write_state(&root, id, &marker))
         .await
-        .map_err(|_| "scheduler_state_worker_failed".to_owned())??;
+        .map_err(|source| {
+            crate::host::HostError::new("scheduler_state_worker_failed").with_source(source)
+        })??;
     result.map(|()| true)
 }
 
@@ -64,7 +68,7 @@ fn state_path(data_root: &Path, id: &str) -> PathBuf {
     data_root.join("state/scheduler").join(format!("{id}.json"))
 }
 
-fn should_run(data_root: &Path, path: &Path, day: &str) -> Result<bool, String> {
+fn should_run(data_root: &Path, path: &Path, day: &str) -> Result<bool, crate::host::HostError> {
     ensure_data_authority(data_root, &[path]).map_err(|error| error.code().to_owned())?;
     Ok(fs::read(path)
         .ok()
@@ -74,16 +78,17 @@ fn should_run(data_root: &Path, path: &Path, day: &str) -> Result<bool, String> 
         != Some(day))
 }
 
-fn write_state(data_root: &Path, id: &str, state: &Value) -> Result<(), String> {
+fn write_state(data_root: &Path, id: &str, state: &Value) -> Result<(), crate::host::HostError> {
     let path = state_path(data_root, id);
     let parent = path.parent().ok_or("scheduler_state_path_invalid")?;
     ensure_data_authority(data_root, &[parent, &path]).map_err(|error| error.code().to_owned())?;
-    fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    fs::create_dir_all(parent).map_err(crate::host::HostError::from_error)?;
     let temporary = parent.join(format!(".{id}-{}.tmp", uuid::Uuid::new_v4()));
     ensure_data_authority(data_root, &[&path, &temporary])
         .map_err(|error| error.code().to_owned())?;
     let result = (|| {
-        let mut bytes = serde_json::to_vec_pretty(state).map_err(|error| error.to_string())?;
+        let mut bytes =
+            serde_json::to_vec_pretty(state).map_err(crate::host::HostError::from_error)?;
         bytes.push(b'\n');
         let mut options = fs::OpenOptions::new();
         options.write(true).create_new(true);
@@ -94,13 +99,15 @@ fn write_state(data_root: &Path, id: &str, state: &Value) -> Result<(), String> 
         }
         let mut file = options
             .open(&temporary)
-            .map_err(|error| error.to_string())?;
-        file.write_all(&bytes).map_err(|error| error.to_string())?;
-        file.sync_all().map_err(|error| error.to_string())?;
+            .map_err(crate::host::HostError::from_error)?;
+        file.write_all(&bytes)
+            .map_err(crate::host::HostError::from_error)?;
+        file.sync_all()
+            .map_err(crate::host::HostError::from_error)?;
         drop(file);
         ensure_data_authority(data_root, &[&path, &temporary])
             .map_err(|error| error.code().to_owned())?;
-        fs::rename(&temporary, &path).map_err(|error| error.to_string())
+        fs::rename(&temporary, &path).map_err(crate::host::HostError::from_error)
     })();
     if result.is_err() {
         let _ = fs::remove_file(&temporary);

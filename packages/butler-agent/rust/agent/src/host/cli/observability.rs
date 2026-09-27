@@ -80,7 +80,7 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
                 error_command(&args),
                 json_requested,
                 "invalid_arguments",
-                &message,
+                message.message(),
                 2,
             );
         }
@@ -88,7 +88,13 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
     let data_root = match path::resolve_data_root(&options, &installation) {
         Ok(path) => path,
         Err(message) => {
-            return report_error(command.name(), options.json, "unsafe_path", &message, 1);
+            return report_error(
+                command.name(),
+                options.json,
+                "unsafe_path",
+                message.message(),
+                1,
+            );
         }
     };
     match command {
@@ -101,7 +107,7 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
     }
 }
 
-fn parse(args: &[OsString]) -> Result<(Options, Option<Command>), String> {
+fn parse(args: &[OsString]) -> Result<(Options, Option<Command>), crate::host::HostError> {
     let mut options = Options::default();
     let mut index = 0;
     while index < args.len() {
@@ -147,7 +153,9 @@ fn parse(args: &[OsString]) -> Result<(Options, Option<Command>), String> {
                 index += 1;
             }
             "--verbose" | "--yes" | "--non-interactive" => index += 1,
-            value if value.starts_with('-') => return Err(format!("unsupported option: {value}")),
+            value if value.starts_with('-') => {
+                return Err(format!("unsupported option: {value}").into());
+            }
             _ => {
                 options.positionals.push(value.into_owned());
                 index += 1;
@@ -175,11 +183,12 @@ fn required_value<'a>(
     args: &'a [OsString],
     index: usize,
     name: &str,
-) -> Result<&'a OsString, String> {
+) -> Result<&'a OsString, crate::host::HostError> {
     args.get(index + 1)
         .filter(|value| !value.to_string_lossy().starts_with("--"))
         .filter(|value| !value.is_empty())
         .ok_or_else(|| format!("{name} requires a value"))
+        .map_err(crate::host::HostError::from)
 }
 
 fn error_command(args: &[OsString]) -> &'static str {

@@ -25,10 +25,15 @@ pub(super) fn new(
     registry_writes: Arc<ConfigurationWrites>,
 ) -> Arc<NativeMcpClient> {
     let path_guard: Arc<RegistryPathGuard> = Arc::new(move |data_root, target| {
-        let data_real = super::super::installation::realpath_or_nearest(data_root)
-            .map_err(|_| "MCP registry DATA path is unavailable.".to_owned())?;
-        let target_real = super::super::installation::realpath_or_nearest(target)
-            .map_err(|_| "MCP registry path is unavailable.".to_owned())?;
+        let data_real =
+            super::super::installation::realpath_or_nearest(data_root).map_err(|source| {
+                crate::host::HostError::new("MCP registry DATA path is unavailable.")
+                    .with_source(source)
+            })?;
+        let target_real =
+            super::super::installation::realpath_or_nearest(target).map_err(|source| {
+                crate::host::HostError::new("MCP registry path is unavailable.").with_source(source)
+            })?;
         if !target_real.starts_with(&data_real) {
             return Err("MCP registry path escapes DATA.".into());
         }

@@ -30,11 +30,12 @@ pub(super) async fn run(
     validate_compaction_destinations(data_root, installation, session_id)?;
     let models = open_status_models(data_root).await?;
     let budget_owner = context_budget_owner(&models);
-    let collation = Arc::new(LocaleCollation::new("en-US").map_err(|_| {
+    let collation = Arc::new(LocaleCollation::new("en-US").map_err(|source| {
         unavailable(
             "native_context_collation_unavailable",
             "Conversation collation is unavailable.",
         )
+        .with_source(source)
     })?);
     let store = AgentConversationStore::open(ConversationStoreConfig {
         path: conversation_store_path(data_root),
@@ -42,7 +43,9 @@ pub(super) async fn run(
         collation,
     })
     .await
-    .map_err(|error| unavailable("native_context_conversation_unavailable", error.to_string()))?;
+    .map_err(|error| {
+        unavailable("native_context_conversation_unavailable", error.to_string()).with_source(error)
+    })?;
 
     let metrics = Arc::new(MetricFiles::new(data_root.to_path_buf()));
     let result = compact_transcript(
@@ -54,13 +57,15 @@ pub(super) async fn run(
     )
     .await;
     let close_result = store.close().await;
-    let snapshot = result
-        .map_err(|error| unavailable("native_context_compaction_failed", error.to_string()))?;
+    let snapshot = result.map_err(|error| {
+        unavailable("native_context_compaction_failed", error.to_string()).with_source(error)
+    })?;
     close_result.map_err(|error| {
         unavailable(
             "native_context_conversation_close_failed",
             error.to_string(),
         )
+        .with_source(error)
     })?;
     let data = json!({
         "snapshotId": snapshot.snapshot_id,

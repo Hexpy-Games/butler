@@ -100,7 +100,7 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
     }
 }
 
-fn parse(args: &[OsString]) -> Result<Options, String> {
+fn parse(args: &[OsString]) -> Result<Options, crate::host::HostError> {
     let mut options = Options::default();
     let mut index = 0;
     while index < args.len() {
@@ -121,7 +121,7 @@ fn parse(args: &[OsString]) -> Result<Options, String> {
                 index += 1;
             }
             value if value.starts_with('-') => {
-                return Err(format!("unsupported MCP option: {value}"));
+                return Err(format!("unsupported MCP option: {value}").into());
             }
             value => {
                 options.positionals.push(value.to_owned());
@@ -135,7 +135,7 @@ fn parse(args: &[OsString]) -> Result<Options, String> {
 fn resolve_data_root(
     explicit: Option<&str>,
     installation: &ResolvedInstallation,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf, crate::host::HostError> {
     let home = std::env::var_os("HOME")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)

@@ -16,20 +16,25 @@ pub(super) async fn wait_until_ready(
     config: &NativeServiceConfiguration,
     mut child: Option<&mut Child>,
     expected_nonce: Option<String>,
-) -> Result<InstanceRecord, String> {
+) -> Result<InstanceRecord, crate::host::HostError> {
     let deadline = Instant::now() + START_TIMEOUT;
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(2))
         .build()
-        .map_err(|_| "native_service_readiness_unavailable".to_owned())?;
+        .map_err(|source| {
+            crate::host::HostError::new("native_service_readiness_unavailable").with_source(source)
+        })?;
     let expected_pid = child.as_ref().map(|child| child.id());
     let mut observed_nonce = expected_nonce;
     loop {
         if let Some(process) = child.as_deref_mut()
             && process
                 .try_wait()
-                .map_err(|_| "native_service_start_child_unavailable".to_owned())?
+                .map_err(|source| {
+                    crate::host::HostError::new("native_service_start_child_unavailable")
+                        .with_source(source)
+                })?
                 .is_some()
         {
             return Err("native_service_start_failed: child exited before readiness".into());
@@ -38,7 +43,8 @@ pub(super) async fn wait_until_ready(
             Ok(active) => active,
             Err(error)
                 if child.is_some()
-                    && error == "native_service_instance_ambiguous: DATA lock has no record" =>
+                    && error.message()
+                        == "native_service_instance_ambiguous: DATA lock has no record" =>
             {
                 None
             }
@@ -77,12 +83,15 @@ pub(super) async fn wait_until_ready(
 pub(super) async fn wait_until_registered(
     data_root: &Path,
     child: &mut Child,
-) -> Result<InstanceRecord, String> {
+) -> Result<InstanceRecord, crate::host::HostError> {
     let deadline = Instant::now() + INSTANCE_PUBLISH_TIMEOUT;
     loop {
         if child
             .try_wait()
-            .map_err(|_| "native_service_start_child_unavailable".to_owned())?
+            .map_err(|source| {
+                crate::host::HostError::new("native_service_start_child_unavailable")
+                    .with_source(source)
+            })?
             .is_some()
         {
             return Err("native_service_start_failed: child exited before ownership record".into());
@@ -91,8 +100,9 @@ pub(super) async fn wait_until_registered(
             Ok(Some(record)) if record.pid == child.id() => return Ok(record),
             Ok(Some(_)) => return Err("native_service_start_identity_changed".into()),
             Ok(None) => {}
-            Err(error) if error == "native_service_instance_ambiguous: DATA lock has no record" => {
-            }
+            Err(error)
+                if error.message()
+                    == "native_service_instance_ambiguous: DATA lock has no record" => {}
             Err(error) => return Err(error),
         }
         if Instant::now() >= deadline {
@@ -106,7 +116,7 @@ async fn app_health_ready(
     client: &reqwest::Client,
     config: &NativeServiceConfiguration,
     record: &InstanceRecord,
-) -> Result<bool, String> {
+) -> Result<bool, crate::host::HostError> {
     if !record.app_enabled {
         return Ok(true);
     }
@@ -143,7 +153,7 @@ pub(super) async fn wait_for_stop(
     data_root: &Path,
     nonce: &str,
     timeout: Duration,
-) -> Result<bool, String> {
+) -> Result<bool, crate::host::HostError> {
     let deadline = Instant::now() + timeout;
     loop {
         let locked = instance_is_locked(data_root)?;

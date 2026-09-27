@@ -9,7 +9,9 @@ use nix::{
 
 use super::instance_lock_path;
 
-pub(crate) fn instance_lock_is_held_read_only(data_root: &Path) -> Result<bool, String> {
+pub(crate) fn instance_lock_is_held_read_only(
+    data_root: &Path,
+) -> Result<bool, crate::host::HostError> {
     let path = instance_lock_path(data_root);
     match fs::symlink_metadata(&path) {
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
@@ -19,13 +21,12 @@ pub(crate) fn instance_lock_is_held_read_only(data_root: &Path) -> Result<bool, 
         }
         Ok(_) => {}
     }
-    let file = OpenOptions::new()
-        .read(true)
-        .open(path)
-        .map_err(|_| "service_lock_unavailable".to_owned())?;
+    let file = OpenOptions::new().read(true).open(path).map_err(|source| {
+        crate::host::HostError::new("service_lock_unavailable").with_source(source)
+    })?;
     match Flock::lock(file, FlockArg::LockSharedNonblock) {
         Ok(_) => Ok(false),
         Err((_, Errno::EAGAIN)) => Ok(true),
-        Err((_, error)) => Err(format!("service_lock_probe_failed: {error}")),
+        Err((_, error)) => Err(format!("service_lock_probe_failed: {error}").into()),
     }
 }

@@ -33,11 +33,12 @@ pub(super) async fn run(
     };
     let model_ref = active_model.unwrap_or(&models.model_ref);
     let budget_owner = context_budget_owner(&models);
-    let budget_snapshot = budget_owner.snapshot().await.map_err(|_| {
+    let budget_snapshot = budget_owner.snapshot().await.map_err(|source| {
         unavailable(
             "native_context_budget_unavailable",
             "Context budget facts are unavailable.",
         )
+        .with_source(source)
     })?;
     let budget = budget_snapshot.resolve(Some(model_ref), &ContextBudgetOverrides::default());
 

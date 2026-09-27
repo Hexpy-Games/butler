@@ -34,10 +34,11 @@ const INBOUND_QUEUE_FALLBACK_POLL: Duration = Duration::from_millis(500);
 /// The product binary's sole entrypoint; domains remain crate-private.
 pub(crate) async fn run_native_service(
     installation: ResolvedInstallation,
-) -> Result<String, String> {
+) -> Result<String, crate::host::HostError> {
     run(installation, None, None, ServiceLogMode::desktop())
         .await
         .map_err(|error| format!("{}: {}", error.code(), error.message()))
+        .map_err(crate::host::HostError::from)
 }
 
 pub(crate) async fn run_native_service_with_options(
@@ -45,7 +46,7 @@ pub(crate) async fn run_native_service_with_options(
     explicit_data: Option<String>,
     detached: bool,
     quiet: bool,
-) -> Result<String, String> {
+) -> Result<String, crate::host::HostError> {
     let foreground_lease = if detached { Some(false) } else { None };
     run(
         installation,
@@ -55,6 +56,7 @@ pub(crate) async fn run_native_service_with_options(
     )
     .await
     .map_err(|error| format!("{}: {}", error.code(), error.message()))
+    .map_err(crate::host::HostError::from)
 }
 
 #[derive(Clone, Copy)]
@@ -107,7 +109,9 @@ async fn run(
         &executable,
         &config.installation,
     )
-    .map_err(|message| failure("native_service_instance_unavailable", message))?;
+    .map_err(|message| {
+        failure("native_service_instance_unavailable", message.to_string()).with_source(message)
+    })?;
     let os = nix::sys::utsname::uname().map_err(io)?;
     let environment = NativeProcessEnvironment::capture(
         &config.data_root,
@@ -267,7 +271,7 @@ async fn serve(
             let _ = gateway.close().await;
             let _ = dispatcher.close().await;
             drop(readiness);
-            return Err(failure("gateway_control_unavailable", message));
+            return Err(failure("gateway_control_unavailable", message.to_string()));
         }
     };
     if let Err(message) =
@@ -279,7 +283,7 @@ async fn serve(
         drop(readiness);
         return Err(failure(
             "native_service_instance_state_unavailable",
-            message,
+            message.to_string(),
         ));
     }
     logs.write(&format!("[native-butler] ready model={model}"));
@@ -296,7 +300,13 @@ async fn serve(
                     .is_some_and(|active| active.local_auth.required),
                 SystemIdentity.now_iso(),
             )
-            .map_err(|message| failure("native_service_instance_state_unavailable", message))?;
+            .map_err(|message| {
+                failure(
+                    "native_service_instance_state_unavailable",
+                    message.to_string(),
+                )
+                .with_source(message)
+            })?;
         Ok::<_, BtccError>(())
     }
     .await;
@@ -331,10 +341,9 @@ async fn serve(
     .await;
     // The private control plane stops admitting lifecycle requests before App
     // owners drain; BTCC, inbound dispatch, and transcript publication remain live.
-    let control_close = control
-        .close()
-        .await
-        .map_err(|message| failure("gateway_control_close_failed", message));
+    let control_close = control.close().await.map_err(|message| {
+        failure("gateway_control_close_failed", message.to_string()).with_source(message)
+    });
     let app_close = gateway.close().await;
     let close = dispatcher
         .close()
@@ -438,7 +447,9 @@ async fn poll_service(owners: PollOwners<'_>, shutdown: PollShutdown) -> Result<
     result.and(maintenance_result)
 }
 
-async fn wait_for_foreground_close(lease: Option<&ForegroundLease>) -> Result<(), String> {
+async fn wait_for_foreground_close(
+    lease: Option<&ForegroundLease>,
+) -> Result<(), crate::host::HostError> {
     match lease {
         Some(lease) => lease.closed().await,
         None => std::future::pending().await,

@@ -79,7 +79,9 @@ pub(crate) async fn run_native_status_cli(
     };
     let data_root = match resolve_data_root(&options, &installation) {
         Ok(path) => path,
-        Err(message) => return report_error(command.source_name(), options.json, &message),
+        Err(message) => {
+            return report_error(command.source_name(), options.json, message.message());
+        }
     };
     let models = match models::open_status_models(data_root.clone()).await {
         Ok(models) => models,
@@ -208,7 +210,7 @@ fn parse(args: &[OsString]) -> Result<(Options, Command), (&'static str, String)
 fn resolve_data_root(
     options: &Options,
     installation: &ResolvedInstallation,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf, crate::host::HostError> {
     let requested = options
         .data
         .as_deref()
@@ -225,7 +227,7 @@ fn resolve_data_root(
     installation.validate_data_root(&requested)
 }
 
-fn expand_tilde(path: PathBuf) -> Result<PathBuf, String> {
+fn expand_tilde(path: PathBuf) -> Result<PathBuf, crate::host::HostError> {
     let Some(value) = path.to_str() else {
         return Ok(path);
     };
@@ -324,7 +326,7 @@ fn service_health(data_root: &Path) -> Value {
     })
 }
 
-fn instance_lock_is_held(data_root: &Path) -> Result<bool, String> {
+fn instance_lock_is_held(data_root: &Path) -> Result<bool, crate::host::HostError> {
     let path = data_root.join("state/butler-agent-native-service.lock");
     match fs::symlink_metadata(&path) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
@@ -337,11 +339,13 @@ fn instance_lock_is_held(data_root: &Path) -> Result<bool, String> {
     let file = fs::OpenOptions::new()
         .read(true)
         .open(&path)
-        .map_err(|_| "service_lock_unavailable".to_owned())?;
+        .map_err(|source| {
+            crate::host::HostError::new("service_lock_unavailable").with_source(source)
+        })?;
     match Flock::lock(file, FlockArg::LockSharedNonblock) {
         Ok(_) => Ok(false),
         Err((_, Errno::EAGAIN)) => Ok(true),
-        Err((_, error)) => Err(format!("service_lock_probe_failed: {error}")),
+        Err((_, error)) => Err(format!("service_lock_probe_failed: {error}").into()),
     }
 }
 

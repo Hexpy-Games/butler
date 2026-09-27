@@ -51,7 +51,7 @@ fn instance_guard_holds_kernel_lock_and_leaves_lock_inode_persistent() {
             .is_some()
     );
     let duplicate = InstanceGuard::acquire(&data.0, &executable, &installation);
-    assert!(matches!(duplicate, Err(message) if message.contains("duplicate_writer")));
+    assert!(matches!(duplicate, Err(message) if message.message().contains("duplicate_writer")));
 
     drop(guard);
     assert!(!instance_is_locked(&data.0).expect("lock is released"));
@@ -99,7 +99,9 @@ fn start_admission_is_scoped_to_data_and_released_by_raii() {
     let admission =
         AdmissionLock::acquire(&data.0, &installation).expect("start admission is acquired");
     let competing = AdmissionLock::acquire(&data.0, &installation);
-    assert!(matches!(competing, Err(message) if message == "service_start_admission_busy"));
+    assert!(
+        matches!(competing, Err(message) if message.message() == "service_start_admission_busy")
+    );
 
     drop(admission);
     assert!(AdmissionLock::acquire(&data.0, &installation).is_ok());

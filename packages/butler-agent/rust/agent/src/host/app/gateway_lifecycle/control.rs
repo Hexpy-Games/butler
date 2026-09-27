@@ -58,13 +58,15 @@ impl GatewayControlServer {
         nonce: String,
         lifecycle: Arc<NativeAppGatewayLifecycle>,
         effects: Arc<StorageEffectJournal>,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, crate::host::HostError> {
         let listener = TcpListener::bind(("127.0.0.1", 0))
             .await
-            .map_err(|_| "gateway_control_bind_failed".to_owned())?;
-        let address = listener
-            .local_addr()
-            .map_err(|_| "gateway_control_bind_failed".to_owned())?;
+            .map_err(|source| {
+                crate::host::HostError::new("gateway_control_bind_failed").with_source(source)
+            })?;
+        let address = listener.local_addr().map_err(|source| {
+            crate::host::HostError::new("gateway_control_bind_failed").with_source(source)
+        })?;
         let endpoint = address.to_string();
         let token = uuid::Uuid::new_v4().to_string();
         let shutdown = CancellationToken::new();
@@ -114,7 +116,7 @@ impl GatewayControlServer {
         &self.token
     }
 
-    pub(crate) async fn close(mut self) -> Result<(), String> {
+    pub(crate) async fn close(mut self) -> Result<(), crate::host::HostError> {
         self.shutdown.cancel();
         let task = self
             .task
@@ -122,9 +124,12 @@ impl GatewayControlServer {
             .ok_or_else(|| "gateway_control_task_missing".to_owned())?;
         timeout(COMMAND_TIMEOUT + Duration::from_secs(4), task)
             .await
-            .map_err(|_| "gateway_control_shutdown_timeout".to_owned())?
-            .map_err(|_| "gateway_control_task_failed".to_owned())
-    }
+            .map_err(|source| {
+                crate::host::HostError::new("gateway_control_shutdown_timeout").with_source(source)
+            })?
+            .map_err(|source| {
+                crate::host::HostError::new("gateway_control_task_failed").with_source(source)
+            })}
 }
 
 async fn serve_one(
@@ -135,10 +140,12 @@ async fn serve_one(
     token: &str,
     lifecycle: &NativeAppGatewayLifecycle,
     effects: &StorageEffectJournal,
-) -> Result<(), String> {
+) -> Result<(), crate::host::HostError> {
     let request = timeout(IO_TIMEOUT, read_frame::<ControlRequest>(stream))
         .await
-        .map_err(|_| "gateway_control_request_timeout".to_owned())??;
+        .map_err(|source| {
+            crate::host::HostError::new("gateway_control_request_timeout").with_source(source)
+        })??;
     let valid = request.schema == CONTROL_SCHEMA
         && request.nonce == nonce
         && constant_time_equal(request.token.as_bytes(), token.as_bytes())
@@ -180,7 +187,7 @@ async fn serve_one(
             }
             Ok(Ok(data)) => json!({"ok":true,"data":data}),
             Ok(Err(message)) => {
-                let (code, message) = lifecycle_error_parts(&message);
+                let (code, message) = lifecycle_error_parts(message.message());
                 json!({"ok":false,"error":{"code":code,"message":message}})
             }
         }
@@ -198,10 +205,12 @@ async fn serve_one(
         ),
     )
     .await
-    .map_err(|_| "gateway_control_response_timeout".to_owned())?
+    .map_err(|source| {
+        crate::host::HostError::new("gateway_control_response_timeout").with_source(source)
+    })?
 }
 
-fn restart_outcome(value: Option<&str>) -> Result<&'static str, String> {
+fn restart_outcome(value: Option<&str>) -> Result<&'static str, crate::host::HostError> {
     match value {
         Some("ready") => Ok("ready"),
         Some("target_gone") => Ok("target_gone"),
@@ -218,15 +227,15 @@ pub(crate) async fn report_restart_handoff(
     record: &crate::host::service::instance::InstanceRecord,
     key: &str,
     outcome: &str,
-) -> Result<(), String> {
+) -> Result<(), crate::host::HostError> {
     restart_outcome(Some(outcome))?;
     let endpoint = record
         .control_endpoint
         .as_deref()
         .ok_or("gateway_control_unavailable")?;
-    let address: SocketAddr = endpoint
-        .parse()
-        .map_err(|_| "gateway_control_identity_invalid")?;
+    let address: SocketAddr = endpoint.parse().map_err(|source| {
+        crate::host::HostError::new("gateway_control_identity_invalid").with_source(source)
+    })?;
     if !address.ip().is_loopback() {
         return Err("gateway_control_identity_invalid".into());
     }
@@ -236,23 +245,32 @@ pub(crate) async fn report_restart_handoff(
         .ok_or("gateway_control_unavailable")?;
     let mut stream = timeout(IO_TIMEOUT, TcpStream::connect(address))
         .await
-        .map_err(|_| "gateway_control_timeout".to_owned())?
-        .map_err(|_| "gateway_control_unavailable".to_owned())?;
+        .map_err(|source| {
+            crate::host::HostError::new("gateway_control_timeout").with_source(source)
+        })?
+        .map_err(|source| {
+            crate::host::HostError::new("gateway_control_unavailable").with_source(source)
+        })?;
     let request = serde_json::json!({
         "schema":CONTROL_SCHEMA,"nonce":record.nonce,"token":token,
         "command":"restart_handoff_result","intent_id":key,"outcome":outcome,
     });
     timeout(IO_TIMEOUT, write_frame(&mut stream, &request))
         .await
-        .map_err(|_| "gateway_control_timeout".to_owned())??;
+        .map_err(|source| {
+            crate::host::HostError::new("gateway_control_timeout").with_source(source)
+        })??;
     let response: ControlResponse = timeout(IO_TIMEOUT, read_frame(&mut stream))
         .await
-        .map_err(|_| "gateway_control_timeout".to_owned())??;
+        .map_err(|source| {
+            crate::host::HostError::new("gateway_control_timeout").with_source(source)
+        })??;
     if response.schema != CONTROL_SCHEMA || response.result["ok"] != true {
         return Err(response.result["error"]["code"]
             .as_str()
             .unwrap_or("restart_handoff_result_failed")
-            .to_owned());
+            .to_owned()
+            .into());
     }
     Ok(())
 }
@@ -269,41 +287,49 @@ fn lifecycle_error_parts(message: &str) -> (&str, &str) {
         .unwrap_or(("gateway_lifecycle_failed", message))
 }
 
-async fn read_frame<T: for<'de> Deserialize<'de>>(stream: &mut TcpStream) -> Result<T, String> {
-    let length = stream
-        .read_u32()
-        .await
-        .map_err(|_| "gateway_control_request_invalid".to_owned())? as usize;
+async fn read_frame<T: for<'de> Deserialize<'de>>(
+    stream: &mut TcpStream,
+) -> Result<T, crate::host::HostError> {
+    let length = stream.read_u32().await.map_err(|source| {
+        crate::host::HostError::new("gateway_control_request_invalid").with_source(source)
+    })? as usize;
     if length == 0 || length > MAX_FRAME_BYTES {
         return Err("gateway_control_request_invalid".into());
     }
     let mut bytes = vec![0; length];
-    stream
-        .read_exact(&mut bytes)
-        .await
-        .map_err(|_| "gateway_control_request_invalid".to_owned())?;
-    serde_json::from_slice(&bytes).map_err(|_| "gateway_control_request_invalid".into())
+    stream.read_exact(&mut bytes).await.map_err(|source| {
+        crate::host::HostError::new("gateway_control_request_invalid").with_source(source)
+    })?;
+    serde_json::from_slice(&bytes).map_err(|source| {
+        crate::host::HostError::new("gateway_control_request_invalid").with_source(source)
+    })
 }
 
-async fn write_frame<T: Serialize>(stream: &mut TcpStream, value: &T) -> Result<(), String> {
-    let bytes =
-        serde_json::to_vec(value).map_err(|_| "gateway_control_response_invalid".to_owned())?;
+async fn write_frame<T: Serialize>(
+    stream: &mut TcpStream,
+    value: &T,
+) -> Result<(), crate::host::HostError> {
+    let bytes = serde_json::to_vec(value).map_err(|source| {
+        crate::host::HostError::new("gateway_control_response_invalid").with_source(source)
+    })?;
     if bytes.is_empty() || bytes.len() > MAX_FRAME_BYTES {
         return Err("gateway_control_response_invalid".into());
     }
     stream
         .write_u32(u32::try_from(bytes.len()).unwrap_or(u32::MAX))
         .await
-        .map_err(|_| "gateway_control_response_failed".to_owned())?;
-    stream
-        .write_all(&bytes)
-        .await
-        .map_err(|_| "gateway_control_response_failed".to_owned())?;
+        .map_err(|source| {
+            crate::host::HostError::new("gateway_control_response_failed").with_source(source)
+        })?;
+    stream.write_all(&bytes).await.map_err(|source| {
+        crate::host::HostError::new("gateway_control_response_failed").with_source(source)
+    })?;
     stream
         .flush()
         .await
-        .map_err(|_| "gateway_control_response_failed".to_owned())
-}
+        .map_err(|source| {
+            crate::host::HostError::new("gateway_control_response_failed").with_source(source)
+        })}
 
 fn constant_time_equal(left: &[u8], right: &[u8]) -> bool {
     let mut difference = left.len() ^ right.len();

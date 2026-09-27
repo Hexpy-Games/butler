@@ -78,7 +78,10 @@ impl NativeGuidedWorkTools {
         );
         let result = match command {
             Ok(command) => self.apply(command).await,
-            Err(message) => Err(BtccError::relayed("work_tool_decode_rejected", message)),
+            Err(message) => Err(BtccError::relayed(
+                "work_tool_decode_rejected",
+                message.to_string(),
+            )),
         };
         Ok(match result {
             Ok(work) => json!({"ok":true,"work":view::success(&work)}),

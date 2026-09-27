@@ -278,7 +278,7 @@ fn resolve_data_root(
         .unwrap_or_else(|| user_home().join(".butler"));
     installation
         .validate_data_root(&requested)
-        .map_err(|message| failure("native_path_configuration_invalid", message, 2))
+        .map_err(|message| failure("native_path_configuration_invalid", message.to_string(), 2))
 }
 
 fn expand_home(value: &str) -> PathBuf {

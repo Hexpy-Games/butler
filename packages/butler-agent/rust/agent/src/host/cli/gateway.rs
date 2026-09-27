@@ -23,7 +23,7 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
     let json_requested = args.iter().any(|arg| arg == "--json");
     let options = match arguments::parse(&args) {
         Ok(options) => options,
-        Err(message) => return output::error("butler gateway", json_requested, &message),
+        Err(message) => return output::error("butler gateway", json_requested, message.message()),
     };
     if options.help {
         let usage = "gateway app|list|status [app]|inspect app|enable app|disable app|configure app [--host HOST] [--port PORT] [--db PATH]|test app|start app|stop app|restart app|run app|logs app [--lines N] [--follow] [--json] [--data PATH]";
@@ -39,18 +39,26 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
     }
     let action = match arguments::action(&options.positionals) {
         Ok(action) => action,
-        Err(message) => return output::error("butler gateway", options.json, &message),
+        Err(message) => return output::error("butler gateway", options.json, message.message()),
     };
     let data_root = match resolve_data(options.data.as_deref(), &installation) {
         Ok(path) => path,
         Err(message) => {
-            return output::error(output::command_name(action), options.json, &message);
+            return output::error(
+                output::command_name(action),
+                options.json,
+                message.message(),
+            );
         }
     };
     if let Err(message) =
         crate::host::service::instance::validate_write_destinations(&data_root, &installation)
     {
-        return output::error(output::command_name(action), options.json, &message);
+        return output::error(
+            output::command_name(action),
+            options.json,
+            message.message(),
+        );
     }
     let follow_logs =
         matches!(action, Action::Logs) && options.follow && !options.json && !options.quiet;
@@ -70,7 +78,11 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
                 ExitCode::SUCCESS
             }
         }
-        Err(message) => output::error(output::command_name(action), options.json, &message),
+        Err(message) => output::error(
+            output::command_name(action),
+            options.json,
+            message.message(),
+        ),
     }
 }
 
@@ -79,7 +91,7 @@ async fn execute(
     installation: &ResolvedInstallation,
     data_root: &std::path::Path,
     options: &Options,
-) -> Result<Value, String> {
+) -> Result<Value, crate::host::HostError> {
     if matches!(action, Action::Logs) {
         return logs::read(data_root, installation, options.lines, options.follow);
     }
@@ -217,7 +229,7 @@ async fn status_value(
     app: &NativeAppServiceConfiguration,
     installation: &ResolvedInstallation,
     data_root: &std::path::Path,
-) -> Result<Value, String> {
+) -> Result<Value, crate::host::HostError> {
     let current = control::verified_instance(data_root, installation)?;
     if let Some(record) = current.as_ref().filter(|record| record.state == "ready") {
         return control::request(
@@ -252,7 +264,7 @@ async fn status_value(
 async fn start_service(
     installation: &ResolvedInstallation,
     data_root: &std::path::Path,
-) -> Result<(), String> {
+) -> Result<(), crate::host::HostError> {
     let code = crate::host::cli::service::run_native_service_cli(
         installation.clone(),
         vec![
@@ -273,7 +285,7 @@ async fn start_service(
 fn resolve_data(
     explicit: Option<&str>,
     installation: &ResolvedInstallation,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf, crate::host::HostError> {
     let home = std::env::var_os("HOME")
         .filter(|home| !home.is_empty())
         .map(PathBuf::from)
@@ -288,8 +300,9 @@ fn resolve_data(
         .unwrap_or_else(|| home.join(".butler"));
     installation
         .validate_data_root(&requested)
-        .map_err(|_| "native_path_configuration_invalid".to_owned())
-}
+        .map_err(|source| {
+            crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
+        })}
 
 fn expand_home_path(value: &str) -> PathBuf {
     let home = std::env::var_os("HOME").map(PathBuf::from);

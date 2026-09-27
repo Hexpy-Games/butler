@@ -13,7 +13,7 @@ pub(crate) fn mark_gateway_state(
     app_enabled: bool,
     app_endpoint: Option<String>,
     app_auth_required: bool,
-) -> Result<(), String> {
+) -> Result<(), crate::host::HostError> {
     validate_write_destinations(data_root, installation)?;
     let path = instance_record_path(data_root);
     let _lock = acquire_record_update_lock(&record_update_lock_path(data_root))?;

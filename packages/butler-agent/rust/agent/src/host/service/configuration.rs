@@ -40,7 +40,10 @@ impl NativeServiceConfiguration {
             source_path(explicit_data, "BUTLER_DATA").unwrap_or_else(|| user_home.join(".butler"));
         let data_root = installation
             .validate_data_root(&requested_data)
-            .map_err(|message| BtccError::relayed("native_path_configuration_invalid", message))?;
+            .map_err(|message| {
+                BtccError::relayed("native_path_configuration_invalid", message.to_string())
+                    .with_source(message)
+            })?;
         let config = read_butler_config(&data_root);
         let configured = source_model(&config).unwrap_or("");
         let provider_model = if crate::public_text::trim_js_whitespace(configured).is_empty() {
@@ -101,7 +104,11 @@ impl NativeServiceConfiguration {
         self.installation
             .validate_workspace_root(workspace)
             .map_err(|message| {
-                BtccError::relayed("native_workspace_configuration_invalid", message)
+                BtccError::relayed(
+                    "native_workspace_configuration_invalid",
+                    message.to_string(),
+                )
+                .with_source(message)
             })
     }
 }

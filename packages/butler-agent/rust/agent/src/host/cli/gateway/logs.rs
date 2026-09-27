@@ -18,14 +18,15 @@ pub(super) fn read(
     installation: &ResolvedInstallation,
     requested_lines: Option<usize>,
     follow: bool,
-) -> Result<Value, String> {
+) -> Result<Value, crate::host::HostError> {
     let files = select_files(data_root, installation)?;
     let limit = match requested_lines.unwrap_or(80) {
         0 => usize::MAX,
         lines => lines.min(1_000),
     };
-    let lines =
-        tail_log_entries(&files, limit).map_err(|_| "native_gateway_log_read_failed".to_owned())?;
+    let lines = tail_log_entries(&files, limit).map_err(|source| {
+        crate::host::HostError::new("native_gateway_log_read_failed").with_source(source)
+    })?;
     Ok(json!({
         "gateway":"app",
         "files":files.iter().map(|file| &file.name).collect::<Vec<_>>(),
@@ -37,7 +38,7 @@ pub(super) fn read(
 pub(super) async fn follow(data_root: &Path, installation: &ResolvedInstallation) -> ExitCode {
     let files = match select_files(data_root, installation) {
         Ok(files) => files,
-        Err(message) => return report_error(&message),
+        Err(message) => return report_error(message.message()),
     };
     let Ok(mut follower) = LogFollower::from_end(&files) else {
         return report_error("App gateway logs could not be followed.");
@@ -62,7 +63,7 @@ pub(super) async fn follow(data_root: &Path, installation: &ResolvedInstallation
             _ = interval.tick() => {
                 for path in follower.paths() {
                     if let Err(message) = safe_log_file(installation, data_root, path) {
-                        return report_error(&message);
+                        return report_error(message.message());
                     }
                 }
                 match follower.poll() {
@@ -81,7 +82,7 @@ pub(super) async fn follow(data_root: &Path, installation: &ResolvedInstallation
 fn select_files(
     data_root: &Path,
     installation: &ResolvedInstallation,
-) -> Result<Vec<LogFile>, String> {
+) -> Result<Vec<LogFile>, crate::host::HostError> {
     let mut files = Vec::new();
     for name in [
         "butler-agent-service.stdout.log",
@@ -106,21 +107,27 @@ fn safe_log_file(
     installation: &ResolvedInstallation,
     data_root: &Path,
     requested: &Path,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf, crate::host::HostError> {
     if !requested.starts_with(data_root) {
         return Err("path must remain inside DATA".into());
     }
     let parent = requested
         .parent()
         .ok_or_else(|| "path parent is unavailable".to_owned())?;
-    let parent_real = realpath_or_nearest(parent).map_err(|_| "path parent is unavailable")?;
-    let target_real = realpath_or_nearest(requested).map_err(|_| "path target is unavailable")?;
+    let parent_real = realpath_or_nearest(parent).map_err(|source| {
+        crate::host::HostError::new("path parent is unavailable").with_source(source)
+    })?;
+    let target_real = realpath_or_nearest(requested).map_err(|source| {
+        crate::host::HostError::new("path target is unavailable").with_source(source)
+    })?;
     if !parent_real.starts_with(data_root) || !target_real.starts_with(data_root) {
         return Err("path aliases outside DATA".into());
     }
     installation
         .validate_data_root(&target_real)
-        .map_err(|_| "path overlaps the installation".to_owned())?;
+        .map_err(|source| {
+            crate::host::HostError::new("path overlaps the installation").with_source(source)
+        })?;
     Ok(requested.to_path_buf())
 }
 

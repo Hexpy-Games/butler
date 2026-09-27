@@ -34,7 +34,7 @@ pub(super) async fn execute(
     installation: ResolvedInstallation,
     requested_data: Option<&str>,
     dry_run: bool,
-) -> Result<Value, String> {
+) -> Result<Value, crate::host::HostError> {
     let data_root = resolve_data_root(requested_data, &installation)?;
     validate_write_destinations(&data_root, &installation)?;
     match action {
@@ -92,7 +92,7 @@ async fn start_service(
     installation: &ResolvedInstallation,
     config: &NativeServiceConfiguration,
     dry_run: bool,
-) -> Result<Value, String> {
+) -> Result<Value, crate::host::HostError> {
     let data_root = &config.data_root;
     refuse_live_legacy_process(data_root)?;
     if dry_run {
@@ -113,7 +113,7 @@ async fn start_service_admitted(
     installation: &ResolvedInstallation,
     config: &NativeServiceConfiguration,
     admission: AdmissionLock,
-) -> Result<Value, String> {
+) -> Result<Value, crate::host::HostError> {
     let data_root = &config.data_root;
     refuse_live_legacy_process(data_root)?;
     let active = active_service(data_root)?;
@@ -163,7 +163,7 @@ async fn stop_service(
     data_root: &Path,
     installation: &ResolvedInstallation,
     dry_run: bool,
-) -> Result<Value, String> {
+) -> Result<Value, crate::host::HostError> {
     if dry_run {
         refuse_live_legacy_process(data_root)?;
         let active = active_service(data_root)?;
@@ -189,7 +189,7 @@ async fn stop_service_admitted(
     installation: &ResolvedInstallation,
     admission: AdmissionLock,
     expected: Option<&RestartIdentity>,
-) -> Result<(Value, AdmissionLock), String> {
+) -> Result<(Value, AdmissionLock), crate::host::HostError> {
     refuse_live_legacy_process(data_root)?;
     let Some(record) = active_service(data_root)? else {
         return Ok((
@@ -213,7 +213,7 @@ async fn stop_service_admitted(
         return Err("native_service_instance_ambiguous: refusing signal".into());
     }
     if let Err(error) = send_signal(&current, Signal::SIGTERM)
-        && error != "native_service_process_exited"
+        && error.message() != "native_service_process_exited"
     {
         return Err(error);
     }
@@ -252,12 +252,14 @@ async fn stop_service_admitted(
 async fn acquire_admission(
     data_root: &Path,
     installation: &ResolvedInstallation,
-) -> Result<AdmissionLock, String> {
+) -> Result<AdmissionLock, crate::host::HostError> {
     let end = Instant::now() + Duration::from_secs(3);
     loop {
         match AdmissionLock::acquire(data_root, installation) {
             Ok(lock) => return Ok(lock),
-            Err(error) if error == "service_start_admission_busy" && Instant::now() < end => {
+            Err(error)
+                if error.message() == "service_start_admission_busy" && Instant::now() < end =>
+            {
                 tokio::time::sleep(Duration::from_millis(25)).await;
             }
             Err(error) => return Err(error),
@@ -265,7 +267,7 @@ async fn acquire_admission(
     }
 }
 
-fn active_service(data_root: &Path) -> Result<Option<InstanceRecord>, String> {
+fn active_service(data_root: &Path) -> Result<Option<InstanceRecord>, crate::host::HostError> {
     let locked = instance_is_locked(data_root)?;
     let record = read_record(data_root)?;
     match (locked, record) {
@@ -292,18 +294,27 @@ fn active_service(data_root: &Path) -> Result<Option<InstanceRecord>, String> {
     }
 }
 
-fn spawn_service(installation: &ResolvedInstallation, data_root: &Path) -> Result<Child, String> {
+fn spawn_service(
+    installation: &ResolvedInstallation,
+    data_root: &Path,
+) -> Result<Child, crate::host::HostError> {
     validate_write_destinations(data_root, installation)?;
     let executable = std::env::current_exe()
-        .map_err(|_| "native_service_executable_unavailable".to_owned())?
+        .map_err(|source| {
+            crate::host::HostError::new("native_service_executable_unavailable").with_source(source)
+        })?
         .canonicalize()
-        .map_err(|_| "native_service_executable_unavailable".to_owned())?;
+        .map_err(|source| {
+            crate::host::HostError::new("native_service_executable_unavailable").with_source(source)
+        })?;
     let logs = data_root.join("logs");
     fs::DirBuilder::new()
         .recursive(true)
         .mode(0o700)
         .create(&logs)
-        .map_err(|_| "native_service_logs_unavailable".to_owned())?;
+        .map_err(|source| {
+            crate::host::HostError::new("native_service_logs_unavailable").with_source(source)
+        })?;
     let stdout = log_file(&logs.join("butler-agent-service.stdout.log"), installation)?;
     let stderr = log_file(&logs.join("butler-agent-service.stderr.log"), installation)?;
     let mut command = Command::new(executable);
@@ -321,10 +332,14 @@ fn spawn_service(installation: &ResolvedInstallation, data_root: &Path) -> Resul
         .process_group(0);
     command
         .spawn()
-        .map_err(|_| "native_service_spawn_failed".to_owned())
-}
+        .map_err(|source| {
+            crate::host::HostError::new("native_service_spawn_failed").with_source(source)
+        })}
 
-fn log_file(path: &Path, installation: &ResolvedInstallation) -> Result<std::fs::File, String> {
+fn log_file(
+    path: &Path,
+    installation: &ResolvedInstallation,
+) -> Result<std::fs::File, crate::host::HostError> {
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() => {
             return Err("native_service_logs_unavailable".into());
@@ -333,21 +348,22 @@ fn log_file(path: &Path, installation: &ResolvedInstallation) -> Result<std::fs:
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(_) => return Err("native_service_logs_unavailable".into()),
     }
-    installation
-        .validate_data_root(path)
-        .map_err(|_| "native_path_configuration_invalid".to_owned())?;
+    installation.validate_data_root(path).map_err(|source| {
+        crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
+    })?;
     OpenOptions::new()
         .create(true)
         .append(true)
         .mode(0o600)
         .open(path)
-        .map_err(|_| "native_service_logs_unavailable".to_owned())
-}
+        .map_err(|source| {
+            crate::host::HostError::new("native_service_logs_unavailable").with_source(source)
+        })}
 
 fn resolve_data_root(
     explicit: Option<&str>,
     installation: &ResolvedInstallation,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf, crate::host::HostError> {
     let home = user_home()?;
     let requested = explicit
         .map(PathBuf::from)
@@ -359,24 +375,28 @@ fn resolve_data_root(
         .unwrap_or_else(|| home.join(".butler"));
     installation
         .validate_data_root(&requested)
-        .map_err(|_| "native_path_configuration_invalid".to_owned())
-}
+        .map_err(|source| {
+            crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
+        })}
 
 fn service_configuration(
     installation: &ResolvedInstallation,
     data_root: &Path,
-) -> Result<NativeServiceConfiguration, String> {
+) -> Result<NativeServiceConfiguration, crate::host::HostError> {
     let home = user_home()?;
     let data = data_root.to_string_lossy();
-    NativeServiceConfiguration::capture(Some(&data), &home, installation)
-        .map_err(|error| format!("{}: {}", error.code(), error.message()))
+    NativeServiceConfiguration::capture(Some(&data), &home, installation).map_err(|error| {
+        crate::host::HostError::new(format!("{}: {}", error.code(), error.message()))
+            .with_source(error)
+    })
 }
 
-fn user_home() -> Result<PathBuf, String> {
+fn user_home() -> Result<PathBuf, crate::host::HostError> {
     std::env::var_os("HOME")
         .filter(|home| !home.is_empty())
         .map(PathBuf::from)
         .ok_or_else(|| "native_home_unavailable".to_owned())
+        .map_err(crate::host::HostError::from)
 }
 
 #[cfg(test)]

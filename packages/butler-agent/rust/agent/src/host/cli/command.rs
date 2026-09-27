@@ -122,7 +122,11 @@ impl Command {
     }
 
     /// Runs the command and returns the process exit code.
-    pub async fn run(self, installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
+    pub(crate) async fn run(
+        self,
+        installation: ResolvedInstallation,
+        args: Vec<OsString>,
+    ) -> ExitCode {
         use crate::host::{cli, memory_jobs};
         match self {
             Self::ConversationRecovery => cli::conversation_recovery::run(installation, args).await,
@@ -221,7 +225,9 @@ fn printed(stdout: &str, stderr: &str, exit_code: u8) -> ExitCode {
     ExitCode::from(exit_code)
 }
 
-fn installation(args: &[OsString]) -> Result<(ResolvedInstallation, Vec<OsString>), String> {
+fn installation(
+    args: &[OsString],
+) -> Result<(ResolvedInstallation, Vec<OsString>), crate::host::HostError> {
     let mut root = None;
     let mut resources = None;
     let mut command = Vec::new();
@@ -249,12 +255,12 @@ fn installation(args: &[OsString]) -> Result<(ResolvedInstallation, Vec<OsString
     let installation = match (root, resources) {
         (None, None) => ResolvedInstallation::standalone()?,
         (Some(root), Some(resources)) => ResolvedInstallation::desktop(
-            std::env::current_exe().map_err(|error| error.to_string())?,
+            std::env::current_exe().map_err(crate::host::HostError::from_error)?,
             root,
             resources,
         )?,
-        (None, Some(_)) => return Err("--installation-root is required".to_owned()),
-        (Some(_), None) => return Err("--resource-root is required".to_owned()),
+        (None, Some(_)) => return Err("--installation-root is required".to_owned().into()),
+        (Some(_), None) => return Err("--resource-root is required".to_owned().into()),
     };
     Ok((installation, command))
 }

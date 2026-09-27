@@ -9,7 +9,7 @@ use crate::host::installation::realpath_or_nearest;
 pub(super) fn resolve_data_root(
     options: &Options,
     installation: &ResolvedInstallation,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf, crate::host::HostError> {
     let home = std::env::var_os("HOME")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from);
@@ -25,8 +25,9 @@ pub(super) fn resolve_data_root(
         .ok_or_else(|| "native_home_unavailable".to_owned())?;
     let requested = expand_tilde(requested, home.as_deref())?;
     let requested = absolute_normalized(&requested)?;
-    let resolved =
-        realpath_or_nearest(&requested).map_err(|_| "butler_data_unavailable".to_owned())?;
+    let resolved = realpath_or_nearest(&requested).map_err(|source| {
+        crate::host::HostError::new("butler_data_unavailable").with_source(source)
+    })?;
     installation.validate_data_root(&absolute_normalized(&resolved)?)
 }
 
@@ -34,7 +35,7 @@ pub(super) fn safe_data_file(
     installation: &ResolvedInstallation,
     data_root: &Path,
     requested: &Path,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf, crate::host::HostError> {
     let root = absolute_normalized(data_root)?;
     let path = absolute_normalized(requested)?;
     if path == root || !path.starts_with(&root) {
@@ -43,27 +44,30 @@ pub(super) fn safe_data_file(
     let parent = path
         .parent()
         .ok_or_else(|| "path parent is unavailable".to_owned())?;
-    let parent_real = absolute_normalized(
-        &realpath_or_nearest(parent).map_err(|_| "path parent is unavailable".to_owned())?,
-    )?;
-    let target_real = absolute_normalized(
-        &realpath_or_nearest(&path).map_err(|_| "path target is unavailable".to_owned())?,
-    )?;
+    let parent_real = absolute_normalized(&realpath_or_nearest(parent).map_err(|source| {
+        crate::host::HostError::new("path parent is unavailable").with_source(source)
+    })?)?;
+    let target_real = absolute_normalized(&realpath_or_nearest(&path).map_err(|source| {
+        crate::host::HostError::new("path target is unavailable").with_source(source)
+    })?)?;
     if !parent_real.starts_with(&root) || !target_real.starts_with(&root) {
         return Err("path aliases outside DATA".into());
     }
     if let Ok(metadata) = fs::symlink_metadata(&path)
         && metadata.file_type().is_symlink()
     {
-        let link = fs::read_link(&path).map_err(|_| "path alias is unavailable".to_owned())?;
+        let link = fs::read_link(&path).map_err(|source| {
+            crate::host::HostError::new("path alias is unavailable").with_source(source)
+        })?;
         let target = if link.is_absolute() {
             link
         } else {
             parent.join(link)
         };
         let target = absolute_normalized(
-            &realpath_or_nearest(&absolute_normalized(&target)?)
-                .map_err(|_| "path alias is unavailable".to_owned())?,
+            &realpath_or_nearest(&absolute_normalized(&target)?).map_err(|source| {
+                crate::host::HostError::new("path alias is unavailable").with_source(source)
+            })?,
         )?;
         if !target.starts_with(&root) {
             return Err("path aliases outside DATA".into());
@@ -71,11 +75,13 @@ pub(super) fn safe_data_file(
     }
     installation
         .validate_data_root(&target_real)
-        .map_err(|_| "path overlaps the installation".to_owned())?;
+        .map_err(|source| {
+            crate::host::HostError::new("path overlaps the installation").with_source(source)
+        })?;
     Ok(path)
 }
 
-fn expand_tilde(path: PathBuf, home: Option<&Path>) -> Result<PathBuf, String> {
+fn expand_tilde(path: PathBuf, home: Option<&Path>) -> Result<PathBuf, crate::host::HostError> {
     let Some(value) = path.to_str() else {
         return Ok(path);
     };
@@ -93,12 +99,14 @@ fn expand_tilde(path: PathBuf, home: Option<&Path>) -> Result<PathBuf, String> {
     })
 }
 
-fn absolute_normalized(path: &Path) -> Result<PathBuf, String> {
+fn absolute_normalized(path: &Path) -> Result<PathBuf, crate::host::HostError> {
     let absolute = if path.is_absolute() {
         path.to_path_buf()
     } else {
         std::env::current_dir()
-            .map_err(|_| "working directory unavailable".to_owned())?
+            .map_err(|source| {
+                crate::host::HostError::new("working directory unavailable").with_source(source)
+            })?
             .join(path)
     };
     let mut normalized = PathBuf::new();

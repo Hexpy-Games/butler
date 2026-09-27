@@ -54,7 +54,7 @@ pub(super) fn recognizes(args: &[OsString]) -> bool {
     positional.first().is_some_and(|value| value == "gateway")
 }
 
-pub(super) fn parse(args: &[OsString]) -> Result<Options, String> {
+pub(super) fn parse(args: &[OsString]) -> Result<Options, crate::host::HostError> {
     let mut options = Options::default();
     let mut lines_seen = false;
     let mut index = 0;
@@ -83,7 +83,7 @@ pub(super) fn parse(args: &[OsString]) -> Result<Options, String> {
                                 })?,
                         );
                     }
-                    _ => return Err(format!("unknown option: {option}")),
+                    _ => return Err(format!("unknown option: {option}").into()),
                 }
                 index += 2;
             }
@@ -115,7 +115,7 @@ pub(super) fn parse(args: &[OsString]) -> Result<Options, String> {
             "--verbose" | "--yes" | "--non-interactive" => {}
             "--help" | "-h" => options.help = true,
             value if value.starts_with('-') => {
-                return Err(format!("unsupported gateway option: {value}"));
+                return Err(format!("unsupported gateway option: {value}").into());
             }
             _ => options.positionals.push(value.to_string()),
         }
@@ -129,7 +129,7 @@ pub(super) fn parse(args: &[OsString]) -> Result<Options, String> {
     Ok(options)
 }
 
-pub(super) fn action(positionals: &[String]) -> Result<Action, String> {
+pub(super) fn action(positionals: &[String]) -> Result<Action, crate::host::HostError> {
     match positionals {
         [gateway, command] if gateway == "gateway" && command == "list" => Ok(Action::List),
         [gateway, app] if gateway == "gateway" && app == "app" => Ok(Action::App),
@@ -196,6 +196,7 @@ mod tests {
         assert!(
             parse(&args(&["gateway", "status", "--home", "/tmp/home"]))
                 .unwrap_err()
+                .message()
                 .contains("--home is unsupported")
         );
     }

@@ -1,5 +1,6 @@
 //! Native one-shot transport status and mock-send smoke commands.
 
+use crate::host::cli::error::CliError;
 use std::{ffi::OsString, path::PathBuf, process::ExitCode};
 
 use serde_json::{Value, json};
@@ -43,30 +44,6 @@ impl Command {
     }
 }
 
-struct CliError {
-    code: &'static str,
-    message: String,
-    exit: u8,
-}
-
-impl CliError {
-    fn invalid(message: impl Into<String>) -> Self {
-        Self {
-            code: "invalid_arguments",
-            message: message.into(),
-            exit: 2,
-        }
-    }
-
-    fn failed(code: &'static str, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-            exit: 1,
-        }
-    }
-}
-
 pub(crate) fn recognizes(args: &[OsString]) -> bool {
     let values = positionals_without_options(args);
     matches!(values.first().map(String::as_str), Some("transport"))
@@ -85,7 +62,7 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
         return report_error(
             command.name(),
             options.json,
-            &CliError::failed("butler_data_unavailable", message),
+            &CliError::failed("butler_data_unavailable", message.to_string()),
         );
     }
 
@@ -149,9 +126,9 @@ impl MockTransportAdapter {
         }
     }
 
-    fn send(&mut self, action_transport: &str) -> Result<String, String> {
+    fn send(&mut self, action_transport: &str) -> Result<String, crate::host::HostError> {
         if action_transport != self.id {
-            return Err(format!("transport_mismatch:{action_transport}"));
+            return Err(format!("transport_mismatch:{action_transport}").into());
         }
         self.sent_actions += 1;
         Ok(format!("{}:{}", self.id, self.sent_actions))

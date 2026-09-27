@@ -184,7 +184,7 @@ impl NativeAppModelCatalog {
         let root = self
             .installation
             .validate_data_root(&self.data_root)
-            .map_err(|_| unsafe_model_path())?;
+            .map_err(|source| unsafe_model_path().with_source(source))?;
         for relative in [
             "butler.config.json",
             "auth",
@@ -194,7 +194,7 @@ impl NativeAppModelCatalog {
             let target = self
                 .installation
                 .validate_data_root(&self.data_root.join(relative))
-                .map_err(|_| unsafe_model_path())?;
+                .map_err(|source| unsafe_model_path().with_source(source))?;
             if !target.starts_with(&root) {
                 return Err(unsafe_model_path());
             }

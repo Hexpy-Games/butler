@@ -18,7 +18,7 @@ use crate::host::{NativeProcessEnvironment, ResolvedInstallation, SystemIdentity
 
 pub(crate) async fn run_native_oauth_login(
     installation: ResolvedInstallation,
-) -> Result<(), String> {
+) -> Result<(), crate::host::HostError> {
     let user_home = std::env::var_os("HOME")
         .filter(|home| !home.is_empty())
         .map(PathBuf::from)
@@ -34,7 +34,7 @@ pub(crate) async fn run_native_oauth_login(
 pub(crate) async fn run_native_oauth_login_for_data(
     installation: ResolvedInstallation,
     requested_data: PathBuf,
-) -> Result<(), String> {
+) -> Result<(), crate::host::HostError> {
     let user_home = std::env::var_os("HOME")
         .filter(|home| !home.is_empty())
         .map(PathBuf::from)
@@ -46,8 +46,8 @@ pub(crate) async fn run_native_oauth_login_for_data(
 async fn run_native_oauth_login_with_data(
     user_home: PathBuf,
     data_root: PathBuf,
-) -> Result<(), String> {
-    let os = nix::sys::utsname::uname().map_err(|error| error.to_string())?;
+) -> Result<(), crate::host::HostError> {
+    let os = nix::sys::utsname::uname().map_err(crate::host::HostError::from_error)?;
     let mut environment =
         NativeProcessEnvironment::capture(&data_root, &user_home, &os.release().to_string_lossy())
             .model;
@@ -69,8 +69,9 @@ async fn run_native_oauth_login_with_data(
     {
         return Err("OpenAI auth profile path is unavailable".into());
     }
-    let profile_path = realpath_or_nearest(&requested_profile)
-        .map_err(|_| "OpenAI auth profile path is unavailable".to_owned())?;
+    let profile_path = realpath_or_nearest(&requested_profile).map_err(|source| {
+        crate::host::HostError::new("OpenAI auth profile path is unavailable").with_source(source)
+    })?;
     if profile_path == data_root || !profile_path.starts_with(&data_root) {
         return Err("OpenAI auth profile path must be inside BUTLER_DATA".into());
     }
@@ -80,17 +81,19 @@ async fn run_native_oauth_login_with_data(
         data_root,
         environment,
         Arc::new(SystemIdentity),
-        Arc::new(ModelCatalog::new().map_err(|error| error.to_string())?),
-        Arc::new(LocaleCollation::new("en-US").map_err(|error| error.to_string())?),
-        provider_http_client().map_err(|error| error.to_string())?,
+        Arc::new(ModelCatalog::new().map_err(crate::host::HostError::from_error)?),
+        Arc::new(LocaleCollation::new("en-US").map_err(crate::host::HostError::from_error)?),
+        provider_http_client().map_err(crate::host::HostError::from_error)?,
         Arc::new(ConfigurationWrites::new()),
     )
-    .map_err(|error| error.to_string())?;
+    .map_err(crate::host::HostError::from_error)?;
 
     let port = first_env(&["BUTLER_CODEX_OAUTH_PORT", "BUTLER_OPENAI_OAUTH_PORT"])
         .unwrap_or_else(|| "1455".into())
         .parse::<u16>()
-        .map_err(|_| "OAuth callback port is invalid".to_owned())?;
+        .map_err(|source| {
+            crate::host::HostError::new("OAuth callback port is invalid").with_source(source)
+        })?;
     let redirect_uri = first_env(&[
         "BUTLER_CODEX_OAUTH_REDIRECT_URI",
         "BUTLER_OPENAI_OAUTH_REDIRECT_URI",
@@ -122,7 +125,7 @@ async fn run_native_oauth_login_with_data(
     let state = uuid::Uuid::new_v4().simple().to_string();
     let authorize_url = models
         .openai_authorize_url(&redirect_uri, &challenge, &state, None)
-        .map_err(|error| error.to_string())?;
+        .map_err(crate::host::HostError::from_error)?;
     println!("{authorize_url}");
     println!("Waiting for callback on {redirect_uri}. Press Ctrl+C to cancel.");
     if listen_host == "0.0.0.0" {
@@ -132,7 +135,7 @@ async fn run_native_oauth_login_with_data(
     }
     std::io::stdout()
         .flush()
-        .map_err(|error| error.to_string())?;
+        .map_err(crate::host::HostError::from_error)?;
     if should_open_browser() {
         let opened = open_browser(authorize_url.as_str()).await?;
         println!(
@@ -147,7 +150,10 @@ async fn run_native_oauth_login_with_data(
 
     let callback = async {
         loop {
-            let (mut stream, _) = listener.accept().await.map_err(|error| error.to_string())?;
+            let (mut stream, _) = listener
+                .accept()
+                .await
+                .map_err(crate::host::HostError::from_error)?;
             if let Some(code) = read_callback(&mut stream, &redirect_uri, &state).await? {
                 let result = models
                     .exchange_openai_oauth_code(&code, &redirect_uri, &verifier)
@@ -156,7 +162,7 @@ async fn run_native_oauth_login_with_data(
                     Ok(profile) => {
                         if let Err(error) = models.write_openai_auth_profile(&profile).await {
                             respond(&mut stream, 500, "Codex subscription login failed.").await;
-                            return Err(error.to_string());
+                            return Err(crate::host::HostError::from_error(error));
                         }
                         respond(
                             &mut stream,
@@ -175,7 +181,7 @@ async fn run_native_oauth_login_with_data(
                     }
                     Err(error) => {
                         respond(&mut stream, 500, "Codex subscription login failed.").await;
-                        return Err(error.to_string());
+                        return Err(crate::host::HostError::from_error(error));
                     }
                 }
             }
@@ -187,7 +193,7 @@ async fn run_native_oauth_login_with_data(
     }
 }
 
-async fn open_browser(url: &str) -> Result<bool, String> {
+async fn open_browser(url: &str) -> Result<bool, crate::host::HostError> {
     let command = if cfg!(target_os = "macos") {
         "open"
     } else {
@@ -219,7 +225,7 @@ async fn read_callback(
     stream: &mut TcpStream,
     redirect_uri: &str,
     state: &str,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, crate::host::HostError> {
     let mut request = vec![0_u8; 8192];
     let mut length = 0;
     loop {
@@ -230,7 +236,7 @@ async fn read_callback(
         let count = stream
             .read(&mut request[length..])
             .await
-            .map_err(|error| error.to_string())?;
+            .map_err(crate::host::HostError::from_error)?;
         if count == 0 {
             return Ok(None);
         }
@@ -279,7 +285,7 @@ async fn read_callback(
         });
     if let Some(error) = failure {
         respond(stream, 500, "Codex subscription login failed.").await;
-        return Err(error);
+        return Err(error.into());
     }
     Ok(params.get("code").cloned())
 }

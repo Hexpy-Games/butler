@@ -90,7 +90,7 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
         Err(message) => {
             return report_error(
                 &args,
-                &CliError::failed("native_settings_cli_failed", message, 1),
+                &CliError::failed("native_settings_cli_failed", message.to_string()).with_exit(1),
             );
         }
     };
@@ -99,7 +99,8 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
         Err(message) => {
             return report_error(
                 &args,
-                &CliError::failed("private_environment_unavailable", message, 1),
+                &CliError::failed("private_environment_unavailable", message.to_string())
+                    .with_exit(1),
             );
         }
     };
@@ -110,7 +111,7 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
             }
             Err(error) => report_error(
                 &args,
-                &CliError::failed("native_settings_cli_failed", error.to_string(), 1),
+                &CliError::failed("native_settings_cli_failed", error.to_string()).with_exit(1),
             ),
         },
         "add" | "set" => {
@@ -120,7 +121,9 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
             };
             let input = match upsert_input(&parsed, &id) {
                 Ok(input) => input,
-                Err(message) => return report_error(&args, &CliError::invalid(message)),
+                Err(message) => {
+                    return report_error(&args, &CliError::invalid(message.to_string()));
+                }
             };
             match client.upsert_server(input).await {
                 Ok(server) => report_success(
@@ -153,9 +156,10 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
                         server["id"].as_str().unwrap_or("")
                     ),
                 ),
-                Err(error) => {
-                    report_error(&args, &CliError::failed("not_found", error.to_string(), 1))
-                }
+                Err(error) => report_error(
+                    &args,
+                    &CliError::failed("not_found", error.to_string()).with_exit(1),
+                ),
             }
         }
         "delete" | "remove" => match client.delete_server(id).await {
@@ -172,7 +176,7 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
             }
             Err(error) => report_error(
                 &args,
-                &CliError::failed("native_settings_cli_failed", error.to_string(), 1),
+                &CliError::failed("native_settings_cli_failed", error.to_string()).with_exit(1),
             ),
         },
         "test" | "probe" => {
@@ -207,8 +211,8 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
             &CliError::failed(
                 "unknown_command",
                 format!("unknown mcp command: {subcommand}"),
-                2,
-            ),
+            )
+            .with_exit(2),
         ),
     }
 }
@@ -216,14 +220,19 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
 fn registry_client(
     data_root: PathBuf,
     installation: &ResolvedInstallation,
-) -> Result<NativeMcpClient, String> {
+) -> Result<NativeMcpClient, crate::host::HostError> {
     let install_root = installation.root().to_path_buf();
     let guard_installation = installation.clone();
     let guard: Arc<RegistryPathGuard> = Arc::new(move |root, target| {
-        let root_real = super::super::installation::realpath_or_nearest(root)
-            .map_err(|_| "MCP registry DATA path is unavailable.".to_owned())?;
-        let target_real = super::super::installation::realpath_or_nearest(target)
-            .map_err(|_| "MCP registry path is unavailable.".to_owned())?;
+        let root_real =
+            super::super::installation::realpath_or_nearest(root).map_err(|source| {
+                crate::host::HostError::new("MCP registry DATA path is unavailable.")
+                    .with_source(source)
+            })?;
+        let target_real =
+            super::super::installation::realpath_or_nearest(target).map_err(|source| {
+                crate::host::HostError::new("MCP registry path is unavailable.").with_source(source)
+            })?;
         if !target_real.starts_with(&root_real) {
             return Err("MCP registry path escapes DATA.".into());
         }
@@ -238,10 +247,15 @@ fn registry_client(
     });
     let mut environment = std::env::vars().collect::<HashMap<_, _>>();
     let private_env = data_root.join(".env");
-    let private_env_real = super::super::installation::realpath_or_nearest(&private_env)
-        .map_err(|_| "Private environment could not be read.".to_owned())?;
-    let data_real = super::super::installation::realpath_or_nearest(&data_root)
-        .map_err(|_| "DATA path is unavailable.".to_owned())?;
+    let private_env_real =
+        super::super::installation::realpath_or_nearest(&private_env).map_err(|source| {
+            crate::host::HostError::new("Private environment could not be read.")
+                .with_source(source)
+        })?;
+    let data_real =
+        super::super::installation::realpath_or_nearest(&data_root).map_err(|source| {
+            crate::host::HostError::new("DATA path is unavailable.").with_source(source)
+        })?;
     installation.validate_data_root(&private_env)?;
     if !private_env_real.starts_with(&data_real) {
         return Err("Private environment must remain inside DATA.".into());
@@ -286,7 +300,7 @@ fn registry_client(
 fn resolve_data_root(
     explicit: Option<&str>,
     installation: &ResolvedInstallation,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf, crate::host::HostError> {
     let home = std::env::var_os("HOME")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)

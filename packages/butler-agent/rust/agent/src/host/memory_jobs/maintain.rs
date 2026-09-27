@@ -42,7 +42,7 @@ pub(crate) async fn run(
     let requested_json = arguments.iter().any(|argument| argument == "--json");
     let options = match parse(&installation, arguments) {
         Ok(value) => value,
-        Err(error) => return fail(requested_json, "invalid_arguments", &error, 2),
+        Err(error) => return fail(requested_json, "invalid_arguments", error.message(), 2),
     };
     let paths = CognitionPathEnvironment {
         cognition_home: std::env::var("BUTLER_COGNITION_HOME").ok(),
@@ -60,7 +60,14 @@ pub(crate) async fn run(
     let cancellation = CancellationToken::new();
     let signal_task = match signals(cancellation.clone()) {
         Ok(value) => value,
-        Err(error) => return fail(options.json, "native_signal_unavailable", &error, 1),
+        Err(error) => {
+            return fail(
+                options.json,
+                "native_signal_unavailable",
+                error.message(),
+                1,
+            );
+        }
     };
     let embedding = match NativeEmbeddingOwner::new(options.data.clone()) {
         Ok(value) => Arc::new(value),
@@ -249,7 +256,10 @@ fn projection(report: &MemoryHealthReport) -> Value {
     json!({"maintenanceStatus":report.maintenance_status.as_str(),"queueBacklog":report.metric_dimensions["queue_backlog_count"],"graphEntityCount":report.metric_dimensions["graph_entities_count"],"graphEdgeCount":report.metric_dimensions["graph_edges_count"]})
 }
 
-fn parse(installation: &ResolvedInstallation, arguments: Vec<OsString>) -> Result<Options, String> {
+fn parse(
+    installation: &ResolvedInstallation,
+    arguments: Vec<OsString>,
+) -> Result<Options, crate::host::HostError> {
     let args: Vec<String> = arguments
         .into_iter()
         .map(|item| {
@@ -282,7 +292,9 @@ fn parse(installation: &ResolvedInstallation, arguments: Vec<OsString>) -> Resul
             "--home" => {
                 return Err("--home cannot override immutable installation resources".into());
             }
-            value if value.starts_with("--") => return Err(format!("unknown option: {value}")),
+            value if value.starts_with("--") => {
+                return Err(format!("unknown option: {value}").into());
+            }
             value => positional.push(value.to_owned()),
         }
         index += 1;
@@ -351,10 +363,12 @@ fn fail(json_mode: bool, code: &str, message: &str, exit_code: u8) -> NativeCons
 
 pub(in crate::host) fn signals(
     token: CancellationToken,
-) -> Result<tokio::task::JoinHandle<()>, String> {
+) -> Result<tokio::task::JoinHandle<()>, crate::host::HostError> {
     use tokio::signal::unix::{SignalKind, signal};
-    let mut interrupt = signal(SignalKind::interrupt()).map_err(|error| error.to_string())?;
-    let mut terminate = signal(SignalKind::terminate()).map_err(|error| error.to_string())?;
+    let mut interrupt =
+        signal(SignalKind::interrupt()).map_err(crate::host::HostError::from_error)?;
+    let mut terminate =
+        signal(SignalKind::terminate()).map_err(crate::host::HostError::from_error)?;
     Ok(tokio::spawn(async move {
         tokio::select! { _=interrupt.recv()=>{},_=terminate.recv()=>{} }
         token.cancel();

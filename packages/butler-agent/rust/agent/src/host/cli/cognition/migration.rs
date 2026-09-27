@@ -33,11 +33,12 @@ pub(super) async fn run(
                 ),
             ));
         }
-        let data = serde_json::to_value(&manifest).map_err(|_| {
+        let data = serde_json::to_value(&manifest).map_err(|source| {
             CliError::failed(
                 "invalid_output",
                 "Could not serialize Cognition migration result",
             )
+            .with_source(source)
         })?;
         return Ok((
             data,
@@ -65,11 +66,12 @@ pub(super) async fn run(
             format!("\nconflicts={}", plan.conflicts.join("; "))
         },
     );
-    let data = serde_json::to_value(&plan).map_err(|_| {
+    let data = serde_json::to_value(&plan).map_err(|source| {
         CliError::failed(
             "invalid_output",
             "Could not serialize Cognition migration plan",
         )
+        .with_source(source)
     })?;
     Ok((data, human))
 }

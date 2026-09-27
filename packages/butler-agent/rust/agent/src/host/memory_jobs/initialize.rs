@@ -21,7 +21,7 @@ pub(crate) async fn run(
     let json_mode = arguments.iter().any(|item| item == "--json");
     let data = match parse(&installation, &arguments) {
         Ok(path) => path,
-        Err(message) => return failure(json_mode, "invalid_arguments", &message, 2),
+        Err(message) => return failure(json_mode, "invalid_arguments", message.message(), 2),
     };
     let coordinator = match CognitionWriteCoordinator::new(Arc::new(SystemIdentity)) {
         Ok(value) => Arc::new(value),
@@ -61,7 +61,10 @@ pub(crate) async fn run(
     }
 }
 
-fn parse(installation: &ResolvedInstallation, arguments: &[OsString]) -> Result<PathBuf, String> {
+fn parse(
+    installation: &ResolvedInstallation,
+    arguments: &[OsString],
+) -> Result<PathBuf, crate::host::HostError> {
     let mut data = None;
     let mut positional = Vec::new();
     let mut index = 0;
@@ -75,7 +78,9 @@ fn parse(installation: &ResolvedInstallation, arguments: &[OsString]) -> Result<
                 ));
             }
             "--json" => {}
-            value if value.starts_with("--") => return Err(format!("unknown option: {value}")),
+            value if value.starts_with("--") => {
+                return Err(format!("unknown option: {value}").into());
+            }
             value => positional.push(value.to_owned()),
         }
         index += 1;

@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug)]
-pub struct ResolvedInstallation {
+pub(crate) struct ResolvedInstallation {
     executable_path: PathBuf,
     installation_root: PathBuf,
     resource_root: PathBuf,
@@ -24,7 +24,7 @@ pub(crate) struct NativePayloadProvenance {
 }
 
 impl ResolvedInstallation {
-    pub fn standalone() -> Result<Self, String> {
+    pub(crate) fn standalone() -> Result<Self, crate::host::HostError> {
         let executable = std::env::current_exe()
             .map_err(|error| format!("installation_executable_unavailable: {error}"))?;
         let executable = executable
@@ -38,11 +38,11 @@ impl ResolvedInstallation {
         Self::new(&executable, &root, &resources)
     }
 
-    pub fn desktop(
+    pub(crate) fn desktop(
         executable_path: impl Into<PathBuf>,
         installation_root: impl Into<PathBuf>,
         resource_root: impl Into<PathBuf>,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, crate::host::HostError> {
         Self::new(
             &executable_path.into(),
             &installation_root.into(),
@@ -50,14 +50,18 @@ impl ResolvedInstallation {
         )
     }
 
-    fn new(executable: &Path, root: &Path, resources: &Path) -> Result<Self, String> {
+    fn new(
+        executable: &Path,
+        root: &Path,
+        resources: &Path,
+    ) -> Result<Self, crate::host::HostError> {
         let executable_path = canonical_file(executable, "installation_executable_unavailable")?;
         let installation_root = canonical_dir(root, "installation_root_unavailable")?;
         let resource_root = canonical_dir(resources, "installation_resources_unavailable")?;
         if !executable_path.starts_with(&installation_root)
             || !resource_root.starts_with(&installation_root)
         {
-            return Err("installation_layout_invalid".to_owned());
+            return Err("installation_layout_invalid".to_owned().into());
         }
         Ok(Self {
             executable_path,
@@ -112,7 +116,7 @@ impl ResolvedInstallation {
 
     pub(crate) fn native_payload_provenance(
         &self,
-    ) -> Result<Option<NativePayloadProvenance>, String> {
+    ) -> Result<Option<NativePayloadProvenance>, crate::host::HostError> {
         let manifest_path = self.installation_root.join("native-agent-manifest.json");
         let metadata = match std::fs::symlink_metadata(&manifest_path) {
             Ok(metadata) => metadata,
@@ -122,16 +126,19 @@ impl ResolvedInstallation {
         if metadata.file_type().is_symlink() || !metadata.is_file() {
             return Err("installation_manifest_invalid".into());
         }
-        let manifest_path = manifest_path
-            .canonicalize()
-            .map_err(|_| "installation_manifest_unavailable")?;
+        let manifest_path = manifest_path.canonicalize().map_err(|source| {
+            crate::host::HostError::new("installation_manifest_unavailable").with_source(source)
+        })?;
         if !manifest_path.starts_with(&self.installation_root) {
             return Err("installation_manifest_invalid".into());
         }
-        let value: serde_json::Value = serde_json::from_slice(
-            &std::fs::read(&manifest_path).map_err(|_| "installation_manifest_unavailable")?,
-        )
-        .map_err(|_| "installation_manifest_invalid")?;
+        let value: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&manifest_path).map_err(|source| {
+                crate::host::HostError::new("installation_manifest_unavailable").with_source(source)
+            })?)
+            .map_err(|source| {
+                crate::host::HostError::new("installation_manifest_invalid").with_source(source)
+            })?;
         let schema = value["schema"]
             .as_str()
             .ok_or("installation_manifest_invalid")?;
@@ -197,24 +204,30 @@ impl ResolvedInstallation {
             .agent_version
     }
 
-    pub(crate) fn validate_data_root(&self, data_root: &Path) -> Result<PathBuf, String> {
+    pub(crate) fn validate_data_root(
+        &self,
+        data_root: &Path,
+    ) -> Result<PathBuf, crate::host::HostError> {
         let resolved = realpath_or_nearest(data_root)
             .map_err(|error| format!("butler_data_unavailable: {error}"))?;
         if resolved.starts_with(&self.installation_root)
             || self.installation_root.starts_with(&resolved)
         {
-            return Err("butler_data_overlaps_installation".to_owned());
+            return Err("butler_data_overlaps_installation".to_owned().into());
         }
         Ok(resolved)
     }
 
-    pub(crate) fn validate_workspace_root(&self, workspace: &Path) -> Result<(), String> {
+    pub(crate) fn validate_workspace_root(
+        &self,
+        workspace: &Path,
+    ) -> Result<(), crate::host::HostError> {
         let resolved = realpath_or_nearest(workspace)
             .map_err(|error| format!("workspace_unavailable: {error}"))?;
         if resolved.starts_with(&self.installation_root)
             || self.installation_root.starts_with(&resolved)
         {
-            return Err("workspace_overlaps_installation".to_owned());
+            return Err("workspace_overlaps_installation".to_owned().into());
         }
         Ok(())
     }
@@ -229,7 +242,7 @@ fn string_field(value: &serde_json::Value, field: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
-fn safe_manifest_path(root: &Path, relative: &str) -> Result<PathBuf, String> {
+fn safe_manifest_path(root: &Path, relative: &str) -> Result<PathBuf, crate::host::HostError> {
     let relative = Path::new(relative);
     if relative.as_os_str().is_empty()
         || relative.is_absolute()
@@ -239,10 +252,9 @@ fn safe_manifest_path(root: &Path, relative: &str) -> Result<PathBuf, String> {
     {
         return Err("installation_manifest_layout_invalid".into());
     }
-    let path = root
-        .join(relative)
-        .canonicalize()
-        .map_err(|_| "installation_manifest_layout_invalid")?;
+    let path = root.join(relative).canonicalize().map_err(|source| {
+        crate::host::HostError::new("installation_manifest_layout_invalid").with_source(source)
+    })?;
     if !path.starts_with(root) {
         return Err("installation_manifest_layout_invalid".into());
     }
@@ -255,22 +267,22 @@ fn launcher_is_expected(root: &Path) -> bool {
         && std::fs::read_link(launcher).is_ok_and(|target| target == Path::new("butler-agent"))
 }
 
-fn canonical_file(path: &Path, code: &str) -> Result<PathBuf, String> {
+fn canonical_file(path: &Path, code: &str) -> Result<PathBuf, crate::host::HostError> {
     let resolved = path
         .canonicalize()
         .map_err(|error| format!("{code}: {error}"))?;
     if !resolved.is_file() {
-        return Err(code.to_owned());
+        return Err(code.to_owned().into());
     }
     Ok(resolved)
 }
 
-fn canonical_dir(path: &Path, code: &str) -> Result<PathBuf, String> {
+fn canonical_dir(path: &Path, code: &str) -> Result<PathBuf, crate::host::HostError> {
     let resolved = path
         .canonicalize()
         .map_err(|error| format!("{code}: {error}"))?;
     if !resolved.is_dir() {
-        return Err(code.to_owned());
+        return Err(code.to_owned().into());
     }
     Ok(resolved)
 }

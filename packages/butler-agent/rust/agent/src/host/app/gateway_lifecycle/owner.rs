@@ -73,7 +73,10 @@ impl NativeAppGatewayLifecycle {
         self.start_locked(&mut current, initial).await
     }
 
-    pub(crate) async fn execute(&self, command: GatewayControlCommand) -> Result<Value, String> {
+    pub(crate) async fn execute(
+        &self,
+        command: GatewayControlCommand,
+    ) -> Result<Value, crate::host::HostError> {
         let mut current = self.current.lock().await;
         match command {
             GatewayControlCommand::Status => self.view(current.as_ref()).await,
@@ -129,9 +132,9 @@ impl NativeAppGatewayLifecycle {
 
     pub(crate) async fn close(&self) -> Result<(), BtccError> {
         let mut current = self.current.lock().await;
-        self.stop_locked(&mut current)
-            .await
-            .map_err(|message| BtccError::relayed("app_gateway_close_failed", message))
+        self.stop_locked(&mut current).await.map_err(|message| {
+            BtccError::relayed("app_gateway_close_failed", message.to_string()).with_source(message)
+        })
     }
 
     async fn start_locked(
@@ -182,19 +185,22 @@ impl NativeAppGatewayLifecycle {
             }
             return Err(BtccError::relayed(
                 "native_service_instance_state_unavailable",
-                error,
+                error.to_string(),
             ));
         }
         *current = Some(server);
         Ok(true)
     }
 
-    async fn stop_locked(&self, current: &mut Option<NativeAppServer>) -> Result<(), String> {
+    async fn stop_locked(
+        &self,
+        current: &mut Option<NativeAppServer>,
+    ) -> Result<(), crate::host::HostError> {
         if let Some(server) = current.as_mut() {
             server
                 .close_application()
                 .await
-                .map_err(|error| error.to_string())?;
+                .map_err(crate::host::HostError::from_error)?;
             drop(current.take());
         }
         self.endpoint.clear();
@@ -219,9 +225,10 @@ impl NativeAppGatewayLifecycle {
     fn require_captured_dependencies_text(
         &self,
         desired: &NativeAppServiceConfiguration,
-    ) -> Result<(), String> {
+    ) -> Result<(), crate::host::HostError> {
         self.require_captured_dependencies(desired)
             .map_err(error_text)
+            .map_err(crate::host::HostError::from)
     }
 
     fn persist(
@@ -229,7 +236,7 @@ impl NativeAppGatewayLifecycle {
         active: bool,
         address: Option<String>,
         config: &NativeAppServiceConfiguration,
-    ) -> Result<(), String> {
+    ) -> Result<(), crate::host::HostError> {
         mark_gateway_state(
             &self.data_root,
             &self.nonce,
@@ -240,7 +247,10 @@ impl NativeAppGatewayLifecycle {
         )
     }
 
-    async fn view(&self, current: Option<&NativeAppServer>) -> Result<Value, String> {
+    async fn view(
+        &self,
+        current: Option<&NativeAppServer>,
+    ) -> Result<Value, crate::host::HostError> {
         let desired = NativeAppServiceConfiguration::capture(&self.data_root);
         let active = self.endpoint.snapshot();
         let enabled = desired.enabled;
@@ -286,7 +296,10 @@ impl NativeAppGatewayLifecycle {
         }))
     }
 
-    async fn test(&self, current: Option<&NativeAppServer>) -> Result<Value, String> {
+    async fn test(
+        &self,
+        current: Option<&NativeAppServer>,
+    ) -> Result<Value, crate::host::HostError> {
         let mut view = self.view(current).await?;
         let result = view["enabled"] == true && view["running"] == true;
         view["ok"] = Value::Bool(result);

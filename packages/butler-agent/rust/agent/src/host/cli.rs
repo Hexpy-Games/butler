@@ -15,6 +15,7 @@ pub(super) mod context;
 pub(super) mod conversation_recovery;
 #[cfg(unix)]
 pub(super) mod doctor;
+pub(crate) mod error;
 #[cfg(unix)]
 pub(super) mod gateway;
 #[cfg(unix)]

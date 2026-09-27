@@ -42,7 +42,7 @@ pub(super) async fn prepare(
     let mut proposed = args.clone();
     proposed.insert("cwd".into(), Value::String(relative.clone()));
     let input = normalize(&Value::Object(proposed))
-        .map_err(|e| BtccError::relayed("command_effect_invalid", e))?;
+        .map_err(|e| BtccError::relayed("command_effect_invalid", e.to_string()).with_source(e))?;
     let Some(effect) = input.get("state_effect").and_then(Value::as_str) else {
         return Err(error("command_effect_invalid"));
     };
@@ -107,7 +107,8 @@ impl EffectAdapter for CommandEffectAdapter {
     }
     fn normalize_input(&self, input: &Value) -> Result<Value, crate::btcc::EffectFailure> {
         normalize(input).map_err(|message| {
-            crate::btcc::EffectFailure::policy("command_effect_invalid", message)
+            crate::btcc::EffectFailure::policy("command_effect_invalid", message.to_string())
+                .with_source(message)
         })
     }
     fn dispatch<'a>(
@@ -248,7 +249,7 @@ fn target(cwd: &str, effect: &str) -> String {
 fn adapter_error(code: &str, message: &str) -> EffectAdapterError {
     EffectAdapterError::new(code, message)
 }
-fn normalize(value: &Value) -> Result<Value, String> {
+fn normalize(value: &Value) -> Result<Value, crate::host::HostError> {
     let source = value
         .as_object()
         .ok_or("run_command effect input must be an object")?;
@@ -259,12 +260,13 @@ fn normalize(value: &Value) -> Result<Value, String> {
         .ok_or(
             "run_command persistent effect requires state_effect mutation or remote_observation",
         )?;
-    let required = |key: &str| -> Result<&str, String> {
+    let required = |key: &str| -> Result<&str, crate::host::HostError> {
         source
             .get(key)
             .and_then(Value::as_str)
             .filter(|value| !crate::public_text::trim_js_whitespace(value).is_empty())
             .ok_or_else(|| format!("run_command {key} must be a non-empty string"))
+            .map_err(crate::host::HostError::from)
     };
     let mut result = Map::new();
     result.insert("command".into(), Value::String(required("command")?.into()));

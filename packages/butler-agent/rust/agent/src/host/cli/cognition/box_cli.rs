@@ -104,8 +104,9 @@ pub(super) async fn run(
                 .rebuild_index()
                 .await
                 .map_err(|error| service_error(&error))?;
-            let data = serde_json::to_value(&report).map_err(|_| {
+            let data = serde_json::to_value(&report).map_err(|source| {
                 CliError::failed("invalid_output", "Could not serialize Box index report")
+                    .with_source(source)
             })?;
             Ok((
                 data,

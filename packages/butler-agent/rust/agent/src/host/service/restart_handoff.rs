@@ -34,14 +34,14 @@ pub(crate) async fn record_helper_terminal(
     installation: &ResolvedInstallation,
     intent_id: &str,
     state: &'static str,
-) -> Result<(), String> {
+) -> Result<(), crate::host::HostError> {
     crate::host::service::instance::validate_write_destinations(data_root, installation)?;
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(3);
     let _admission = loop {
         match crate::host::service::instance::AdmissionLock::acquire(data_root, installation) {
             Ok(lock) => break lock,
             Err(error)
-                if error == "service_start_admission_busy"
+                if error.message() == "service_start_admission_busy"
                     && tokio::time::Instant::now() < deadline =>
             {
                 tokio::time::sleep(std::time::Duration::from_millis(25)).await;
@@ -97,11 +97,12 @@ pub(crate) async fn record_helper_terminal(
     if !path.is_file() {
         return Err("restart_handoff_journal_unavailable".into());
     }
-    let manifest_id = read_activated_storage_manifest(&path)
-        .map_err(|_| "restart_handoff_journal_unavailable".to_owned())?;
-    let host_id = SystemIdentity
-        .hostname()
-        .map_err(|_| "restart_handoff_host_identity_unavailable".to_owned())?;
+    let manifest_id = read_activated_storage_manifest(&path).map_err(|source| {
+        crate::host::HostError::new("restart_handoff_journal_unavailable").with_source(source)
+    })?;
+    let host_id = SystemIdentity.hostname().map_err(|source| {
+        crate::host::HostError::new("restart_handoff_host_identity_unavailable").with_source(source)
+    })?;
     let storage = BtccStorage::open(BtccStorageConfig {
         path,
         profile: StorageProfile::Durable,
@@ -116,7 +117,9 @@ pub(crate) async fn record_helper_terminal(
         process_liveness: Arc::new(HandoffProcessLiveness { host_id }),
     })
     .await
-    .map_err(|_| "restart_handoff_journal_unavailable".to_owned())?;
+    .map_err(|source| {
+        crate::host::HostError::new("restart_handoff_journal_unavailable").with_source(source)
+    })?;
     let journal = StorageEffectJournal::new(
         storage.clone(),
         Arc::new(|| crate::js_date::iso_from_system_time(SystemTime::now())),
@@ -129,7 +132,7 @@ pub(crate) async fn record_helper_terminal(
         .close()
         .await
         .map_err(|_| "restart_handoff_journal_close_failed".to_owned());
-    result.and(closed)
+    result.and(closed).map_err(crate::host::HostError::from)
 }
 
 struct HandoffProcessLiveness {
@@ -163,7 +166,7 @@ impl NativeRestartHandoff {
     /// Called only after the canonical final App action and inbound queue.complete.
     /// The claim precedes spawn: a crash at this boundary leaves an explicit
     /// uncertain attempt and cannot cause an automatic second restart.
-    pub(crate) async fn after_final(&self, turn_id: &str) -> Result<(), String> {
+    pub(crate) async fn after_final(&self, turn_id: &str) -> Result<(), crate::host::HostError> {
         let calls = self
             .tools
             .restart_requests(turn_id.to_owned())
@@ -174,8 +177,11 @@ impl NativeRestartHandoff {
                 continue;
             }
             let Some(result) = call.result else { continue };
-            let parsed: serde_json::Value = serde_json::from_str(result.as_str())
-                .map_err(|_| "restart_handoff_result_invalid".to_owned())?;
+            let parsed: serde_json::Value =
+                serde_json::from_str(result.as_str()).map_err(|source| {
+                    crate::host::HostError::new("restart_handoff_result_invalid")
+                        .with_source(source)
+                })?;
             let value = parsed
                 .get("output")
                 .filter(|_| parsed["ok"] == true)

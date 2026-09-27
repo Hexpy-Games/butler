@@ -27,8 +27,10 @@ pub(super) async fn run(
         CognitionWriteCoordinator::new(Arc::new(SystemIdentity)).map_err(CognitionError::from)?,
     );
     let cancellation = CancellationToken::new();
-    let signal_task = signals(cancellation.clone())
-        .map_err(|message| CognitionError::new(CognitionCode::NativeSignalUnavailable, message))?;
+    let signal_task = signals(cancellation.clone()).map_err(|message| {
+        CognitionError::new(CognitionCode::NativeSignalUnavailable, message.to_string())
+            .with_source(message)
+    })?;
     let now = SystemIdentity.now_iso();
     let result = repair_memory_candidate_inputs(CandidateInputRepairRequest {
         data_root: data,

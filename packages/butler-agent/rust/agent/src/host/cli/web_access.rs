@@ -56,7 +56,13 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
         }
         Err(message) => {
             let command = command_name(&args);
-            return report_error(command, json_requested, "invalid_arguments", &message, 2);
+            return report_error(
+                command,
+                json_requested,
+                "invalid_arguments",
+                message.message(),
+                2,
+            );
         }
     };
     let data_root = match crate::host::cli::settings::resolve_data_root_override(
@@ -69,7 +75,7 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
                 command.source_name(),
                 options.json,
                 "unsafe_path",
-                &message,
+                message.message(),
                 1,
             );
         }
@@ -249,7 +255,7 @@ async fn run_search_test(
     }
 }
 
-fn parse(args: &[OsString]) -> Result<(Options, Option<Command>), String> {
+fn parse(args: &[OsString]) -> Result<(Options, Option<Command>), crate::host::HostError> {
     let mut options = Options::default();
     let mut index = 0;
     while index < args.len() {
@@ -270,7 +276,9 @@ fn parse(args: &[OsString]) -> Result<(Options, Option<Command>), String> {
                 index += 1;
             }
             "--verbose" | "--yes" | "--non-interactive" => index += 1,
-            value if value.starts_with('-') => return Err(format!("unsupported option: {value}")),
+            value if value.starts_with('-') => {
+                return Err(format!("unsupported option: {value}").into());
+            }
             _ => {
                 options.positionals.push(value.into_owned());
                 index += 1;
@@ -320,11 +328,12 @@ fn required_value<'a>(
     args: &'a [OsString],
     index: usize,
     name: &str,
-) -> Result<&'a OsString, String> {
+) -> Result<&'a OsString, crate::host::HostError> {
     args.get(index + 1)
         .filter(|value| !value.to_string_lossy().starts_with("--"))
         .filter(|value| !value.is_empty())
         .ok_or_else(|| format!("{name} requires a value"))
+        .map_err(crate::host::HostError::from)
 }
 
 fn positionals_without_options(args: &[OsString]) -> Vec<String> {

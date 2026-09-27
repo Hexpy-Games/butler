@@ -54,7 +54,7 @@ impl NativeLegacySessionSync {
     pub(in crate::host) async fn run(
         &self,
         cancellation: &CancellationToken,
-    ) -> Result<(), String> {
+    ) -> Result<(), crate::host::HostError> {
         let data_root = self.data_root.clone();
         let memory_root = self.paths.memory_root(&data_root);
         let transcript_root = data_root.join("transcripts");
@@ -83,7 +83,9 @@ impl NativeLegacySessionSync {
             }
         })
         .await
-        .map_err(|_| "legacy_session_offset_read_failed".to_owned())?
+        .map_err(|source| {
+            crate::host::HostError::new("legacy_session_offset_read_failed").with_source(source)
+        })?
         .map_err(|failure| failure.code().to_owned())?;
         let mut sessions = self
             .bindings
@@ -92,7 +94,9 @@ impl NativeLegacySessionSync {
                 SessionLifecycleState::Closing,
             ]))
             .await
-            .map_err(|_| "legacy_session_store_unavailable".to_owned())?;
+            .map_err(|source| {
+                crate::host::HostError::new("legacy_session_store_unavailable").with_source(source)
+            })?;
         sessions.sort_by(|a, b| a.updated_at.cmp(&b.updated_at));
         let mut visited = 0usize;
         for session in sessions {
@@ -128,7 +132,9 @@ impl NativeLegacySessionSync {
                 move || read_legacy_new_lines(&root, &path, &session_id, prior.as_ref())
             })
             .await
-            .map_err(|_| "legacy_transcript_read_failed".to_owned())?
+            .map_err(|source| {
+                crate::host::HostError::new("legacy_transcript_read_failed").with_source(source)
+            })?
             .map_err(|failure| failure.code().to_owned())?;
             if !lines.is_empty() {
                 let line_count = lines.len();
@@ -140,7 +146,9 @@ impl NativeLegacySessionSync {
                     move || index_legacy_transcript_query(&root, &path, &lines)
                 })
                 .await
-                .map_err(|_| "legacy_query_index_failed".to_owned())?;
+                .map_err(|source| {
+                    crate::host::HostError::new("legacy_query_index_failed").with_source(source)
+                })?;
                 query.map_err(|failure| failure.code().to_owned())?;
                 if message_count == 0 {
                     let root = data_root.clone();
@@ -157,7 +165,9 @@ impl NativeLegacySessionSync {
                         )
                     })
                     .await
-                    .map_err(|_| "legacy_diagnostic_failed".to_owned())?
+                    .map_err(|source| {
+                        crate::host::HostError::new("legacy_diagnostic_failed").with_source(source)
+                    })?
                     .map_err(|failure| failure.code().to_owned())?;
                 }
                 for chunk in chunks {
@@ -224,7 +234,10 @@ impl NativeLegacySessionSync {
         if visited > 0 {
             tokio::task::spawn_blocking(move || offsets.save(&data_root, &memory_root))
                 .await
-                .map_err(|_| "legacy_session_offset_write_failed".to_owned())?
+                .map_err(|source| {
+                    crate::host::HostError::new("legacy_session_offset_write_failed")
+                        .with_source(source)
+                })?
                 .map_err(|failure| failure.code().to_owned())?;
         }
         println!("[session-sync] legacySessions={visited}");

@@ -110,19 +110,32 @@ pub(crate) struct NativeGuidedTools {
     authority_consumed: Mutex<bool>,
 }
 
+/// A guided tool invocation that violated its contract; becomes a BTCC error.
+#[derive(Debug, thiserror::Error)]
+#[error("{code}: {message}")]
 pub(in crate::host) struct GuidedToolError {
     code: &'static str,
     message: String,
+    #[source]
+    source: Option<Box<dyn std::error::Error + Send + Sync>>,
 }
 impl GuidedToolError {
     fn new(code: &'static str, message: impl Into<String>) -> Self {
         Self {
             code,
             message: message.into(),
+            source: None,
         }
     }
+    /// Records the underlying error.
+    #[must_use]
+    fn with_source(mut self, source: impl std::error::Error + Send + Sync + 'static) -> Self {
+        self.source = Some(Box::new(source));
+        self
+    }
     fn contract(self) -> BtccError {
-        BtccError::relayed(self.code, self.message)
+        let (code, message) = (self.code, self.message.clone());
+        BtccError::relay(code, message, self)
     }
 }
 

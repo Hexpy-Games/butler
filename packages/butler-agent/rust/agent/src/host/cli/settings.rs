@@ -7,6 +7,7 @@ mod path;
 #[cfg(test)]
 mod tests;
 
+use crate::host::cli::error::CliError;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -84,38 +85,6 @@ impl Command {
     }
 }
 
-struct CliError {
-    code: &'static str,
-    message: String,
-    exit: u8,
-}
-
-impl CliError {
-    fn invalid(message: impl Into<String>) -> Self {
-        Self {
-            code: "invalid_arguments",
-            message: message.into(),
-            exit: 2,
-        }
-    }
-
-    fn health(message: impl Into<String>) -> Self {
-        Self {
-            code: "health_failed",
-            message: message.into(),
-            exit: 3,
-        }
-    }
-
-    fn failed(code: &'static str, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-            exit: 1,
-        }
-    }
-}
-
 pub(crate) fn recognizes(args: &[OsString]) -> bool {
     let values = positionals_without_common_options(args);
     Command::from_positionals(&values).is_some()
@@ -124,7 +93,7 @@ pub(crate) fn recognizes(args: &[OsString]) -> bool {
 pub(in crate::host) fn resolve_data_root_override(
     data: Option<PathBuf>,
     installation: &ResolvedInstallation,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf, crate::host::HostError> {
     path::resolve_data_root(
         &Options {
             data,
@@ -138,18 +107,20 @@ pub(in crate::host) fn validate_data_mutation_paths(
     data_root: &std::path::Path,
     installation: &ResolvedInstallation,
     requested: &[&str],
-) -> Result<(), String> {
+) -> Result<(), crate::host::HostError> {
     path::validate_data_mutation_paths(installation, data_root, requested)
         .map_err(|error| error.message)
+        .map_err(crate::host::HostError::from)
 }
 
 pub(in crate::host) fn validate_absolute_data_mutation_paths(
     data_root: &Path,
     installation: &ResolvedInstallation,
     requested: &[&Path],
-) -> Result<(), String> {
+) -> Result<(), crate::host::HostError> {
     path::validate_absolute_data_mutation_paths(installation, data_root, requested)
         .map_err(|error| error.message)
+        .map_err(crate::host::HostError::from)
 }
 
 pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
@@ -165,7 +136,7 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
             return report_error(
                 command.name(),
                 options.json,
-                &CliError::failed("native_settings_cli_failed", message),
+                &CliError::failed("native_settings_cli_failed", message.to_string()),
             );
         }
     };

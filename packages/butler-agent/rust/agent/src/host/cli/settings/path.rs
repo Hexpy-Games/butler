@@ -13,7 +13,7 @@ use crate::host::installation::realpath_or_nearest;
 pub(super) fn resolve_data_root(
     options: &Options,
     installation: &ResolvedInstallation,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf, crate::host::HostError> {
     let home = std::env::var_os("HOME")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from);
@@ -28,12 +28,13 @@ pub(super) fn resolve_data_root(
         .or_else(|| home.as_ref().map(|home| home.join(".butler")))
         .ok_or_else(|| "native_home_unavailable".to_owned())?;
     let requested = expand_tilde(requested, home.as_deref())?;
-    let resolved = realpath_or_nearest(&absolute_normalized(&requested)?)
-        .map_err(|_| "butler_data_unavailable".to_owned())?;
+    let resolved = realpath_or_nearest(&absolute_normalized(&requested)?).map_err(|source| {
+        crate::host::HostError::new("butler_data_unavailable").with_source(source)
+    })?;
     installation.validate_data_root(&absolute_normalized(&resolved)?)
 }
 
-fn expand_tilde(path: PathBuf, home: Option<&Path>) -> Result<PathBuf, String> {
+fn expand_tilde(path: PathBuf, home: Option<&Path>) -> Result<PathBuf, crate::host::HostError> {
     let Some(value) = path.to_str() else {
         return Ok(path);
     };
@@ -51,12 +52,14 @@ fn expand_tilde(path: PathBuf, home: Option<&Path>) -> Result<PathBuf, String> {
     })
 }
 
-fn absolute_normalized(path: &Path) -> Result<PathBuf, String> {
+fn absolute_normalized(path: &Path) -> Result<PathBuf, crate::host::HostError> {
     let absolute = if path.is_absolute() {
         path.to_path_buf()
     } else {
         std::env::current_dir()
-            .map_err(|_| "working directory unavailable".to_owned())?
+            .map_err(|source| {
+                crate::host::HostError::new("working directory unavailable").with_source(source)
+            })?
             .join(path)
     };
     let mut normalized = PathBuf::new();
@@ -79,10 +82,12 @@ pub(super) fn safe_data_file(
     data_root: &Path,
     requested: &Path,
 ) -> Result<PathBuf, CliError> {
-    let root = absolute_normalized(data_root)
-        .map_err(|message| CliError::failed("unsafe_path", message))?;
-    let path = absolute_normalized(requested)
-        .map_err(|message| CliError::failed("unsafe_path", message))?;
+    let root = absolute_normalized(data_root).map_err(|message| {
+        CliError::failed("unsafe_path", message.to_string()).with_source(message)
+    })?;
+    let path = absolute_normalized(requested).map_err(|message| {
+        CliError::failed("unsafe_path", message.to_string()).with_source(message)
+    })?;
     if path == root || !path.starts_with(&root) {
         return Err(CliError::failed(
             "unsafe_path",
@@ -92,41 +97,50 @@ pub(super) fn safe_data_file(
     let parent = path
         .parent()
         .ok_or_else(|| CliError::failed("unsafe_path", "path parent is unavailable"))?;
-    let parent_real = realpath_or_nearest(parent)
-        .map_err(|_| CliError::failed("unsafe_path", "path parent is unavailable"))?;
-    let target_real = realpath_or_nearest(&path)
-        .map_err(|_| CliError::failed("unsafe_path", "path target is unavailable"))?;
-    let parent_real = absolute_normalized(&parent_real)
-        .map_err(|message| CliError::failed("unsafe_path", message))?;
-    let target_real = absolute_normalized(&target_real)
-        .map_err(|message| CliError::failed("unsafe_path", message))?;
+    let parent_real = realpath_or_nearest(parent).map_err(|source| {
+        CliError::failed("unsafe_path", "path parent is unavailable").with_source(source)
+    })?;
+    let target_real = realpath_or_nearest(&path).map_err(|source| {
+        CliError::failed("unsafe_path", "path target is unavailable").with_source(source)
+    })?;
+    let parent_real = absolute_normalized(&parent_real).map_err(|message| {
+        CliError::failed("unsafe_path", message.to_string()).with_source(message)
+    })?;
+    let target_real = absolute_normalized(&target_real).map_err(|message| {
+        CliError::failed("unsafe_path", message.to_string()).with_source(message)
+    })?;
     if !parent_real.starts_with(&root) || !target_real.starts_with(&root) {
         return Err(CliError::failed("unsafe_path", "path aliases outside DATA"));
     }
     if let Ok(metadata) = fs::symlink_metadata(&path)
         && metadata.file_type().is_symlink()
     {
-        let link = fs::read_link(&path)
-            .map_err(|_| CliError::failed("unsafe_path", "path alias is unavailable"))?;
+        let link = fs::read_link(&path).map_err(|source| {
+            CliError::failed("unsafe_path", "path alias is unavailable").with_source(source)
+        })?;
         let target = if link.is_absolute() {
             link
         } else {
             parent.join(link)
         };
-        let target = realpath_or_nearest(
-            &absolute_normalized(&target)
-                .map_err(|message| CliError::failed("unsafe_path", message))?,
-        )
-        .map_err(|_| CliError::failed("unsafe_path", "path alias is unavailable"))?;
-        let target = absolute_normalized(&target)
-            .map_err(|message| CliError::failed("unsafe_path", message))?;
+        let target = realpath_or_nearest(&absolute_normalized(&target).map_err(|message| {
+            CliError::failed("unsafe_path", message.to_string()).with_source(message)
+        })?)
+        .map_err(|source| {
+            CliError::failed("unsafe_path", "path alias is unavailable").with_source(source)
+        })?;
+        let target = absolute_normalized(&target).map_err(|message| {
+            CliError::failed("unsafe_path", message.to_string()).with_source(message)
+        })?;
         if !target.starts_with(&root) {
             return Err(CliError::failed("unsafe_path", "path aliases outside DATA"));
         }
     }
     installation
         .validate_data_root(&target_real)
-        .map_err(|_| CliError::failed("unsafe_path", "path overlaps the installation"))?;
+        .map_err(|source| {
+            CliError::failed("unsafe_path", "path overlaps the installation").with_source(source)
+        })?;
     Ok(path)
 }
 
@@ -151,7 +165,9 @@ pub(super) fn validate_data_mutation_paths(
             installation,
             data_root,
             &absolute_normalized(data_root)
-                .map_err(|message| CliError::failed("unsafe_path", message))?
+                .map_err(|message| {
+                    CliError::failed("unsafe_path", message.to_string()).with_source(message)
+                })?
                 .join(relative),
         )?;
     }
@@ -174,13 +190,16 @@ fn validate_data_mutation_path(
     data_root: &Path,
     requested: &Path,
 ) -> Result<(), CliError> {
-    let root = absolute_normalized(data_root)
-        .map_err(|message| CliError::failed("unsafe_path", message))?;
-    let path = absolute_normalized(requested)
-        .map_err(|message| CliError::failed("unsafe_path", message))?;
-    let relative = path
-        .strip_prefix(&root)
-        .map_err(|_| CliError::failed("unsafe_path", "mutation paths must remain inside DATA"))?;
+    let root = absolute_normalized(data_root).map_err(|message| {
+        CliError::failed("unsafe_path", message.to_string()).with_source(message)
+    })?;
+    let path = absolute_normalized(requested).map_err(|message| {
+        CliError::failed("unsafe_path", message.to_string()).with_source(message)
+    })?;
+    let relative = path.strip_prefix(&root).map_err(|source| {
+        CliError::failed("unsafe_path", "mutation paths must remain inside DATA")
+            .with_source(source)
+    })?;
     if relative.as_os_str().is_empty() {
         return Err(CliError::failed(
             "unsafe_path",

@@ -146,7 +146,7 @@ pub(crate) async fn run_tick(
     now_ms: i64,
     day: &str,
     minute: u16,
-) -> Result<bool, String> {
+) -> Result<bool, crate::host::HostError> {
     if !should_run(data_root, day, minute) {
         return Ok(false);
     }
@@ -160,17 +160,17 @@ pub(crate) async fn run_tick(
                 record_telemetry: true,
             })
             .await
-            .map_err(|error| error.to_string())?
+            .map_err(crate::host::HostError::from_error)?
             .await
-            .map_err(|error| error.to_string())?
-            .map_err(|error| error.to_string())?;
+            .map_err(crate::host::HostError::from_error)?
+            .map_err(crate::host::HostError::from_error)?;
         let metrics = Arc::clone(metrics);
         let retained =
             tokio::task::spawn_blocking(move || metrics.retain(now_ms as f64, 90.0 * DAY_MS))
                 .await
-                .map_err(|error| error.to_string())?
-                .map_err(|error| error.to_string())?;
-        Ok::<_, String>((artifacts, retained))
+                .map_err(crate::host::HostError::from_error)?
+                .map_err(crate::host::HostError::from_error)?;
+        Ok::<_, crate::host::HostError>((artifacts, retained))
     }
     .await;
     let mut state = json!({
@@ -179,9 +179,9 @@ pub(crate) async fn run_tick(
         "status": if result.is_ok() { "ok" } else { "error" },
     });
     if let Err(error) = &result {
-        state["message"] = Value::String(error.chars().take(500).collect());
+        state["message"] = Value::String(error.message().chars().take(500).collect());
     }
-    write_state(&state_path, &state).map_err(|error| error.to_string())?;
+    write_state(&state_path, &state).map_err(crate::host::HostError::from_error)?;
     result.map(|(artifacts, retained)| {
         println!(
             "[context-maintenance] artifacts scanned={} deleted={} bytesDeleted={} remainingBytes={} metrics scanned={} kept={} deleted={} parseErrors={}",

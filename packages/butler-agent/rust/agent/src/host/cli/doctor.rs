@@ -56,7 +56,7 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
     };
     let data = match settings_cli::resolve_data_root_override(options.data.clone(), installation) {
         Ok(data) => data,
-        Err(error) => return report_error(options.json, "unsafe_path", &error, 1),
+        Err(error) => return report_error(options.json, "unsafe_path", error.message(), 1),
     };
     let mut checks = Vec::new();
     let requested = options.check.as_deref();

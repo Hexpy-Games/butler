@@ -11,10 +11,10 @@ use crate::{models, operations};
 
 use crate::host::service::instance as service_instance;
 
-pub(super) async fn text(data_root: &Path) -> Result<String, String> {
+pub(super) async fn text(data_root: &Path) -> Result<String, crate::host::HostError> {
     let models = models::open_status_models(data_root.to_path_buf())
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(crate::host::HostError::from_error)?;
     let now_ms = SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -79,7 +79,7 @@ fn uptime(data_root: &Path) -> String {
     }
 }
 
-fn instance_lock_is_held(data_root: &Path) -> Result<bool, String> {
+fn instance_lock_is_held(data_root: &Path) -> Result<bool, crate::host::HostError> {
     let path = data_root.join("state/butler-agent-native-service.lock");
     match fs::symlink_metadata(&path) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
@@ -92,10 +92,12 @@ fn instance_lock_is_held(data_root: &Path) -> Result<bool, String> {
     let file = fs::OpenOptions::new()
         .read(true)
         .open(&path)
-        .map_err(|_| "service_lock_unavailable".to_owned())?;
+        .map_err(|source| {
+            crate::host::HostError::new("service_lock_unavailable").with_source(source)
+        })?;
     match Flock::lock(file, FlockArg::LockSharedNonblock) {
         Ok(_) => Ok(false),
         Err((_, Errno::EAGAIN)) => Ok(true),
-        Err((_, error)) => Err(format!("service_lock_probe_failed: {error}")),
+        Err((_, error)) => Err(format!("service_lock_probe_failed: {error}").into()),
     }
 }

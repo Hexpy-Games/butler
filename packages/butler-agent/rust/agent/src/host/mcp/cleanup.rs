@@ -17,7 +17,7 @@ const LOCK_RELATIVE_PATH: &str = "state/locks/mcp-startup-cleanup.lock";
 pub(super) fn cleanup_old_tasks(
     data_root: &Path,
     installation: &ResolvedInstallation,
-) -> Result<usize, String> {
+) -> Result<usize, crate::host::HostError> {
     let tasks_root = data_root.join("tasks");
     validate_under_data(data_root, &tasks_root, installation)?;
     let lock_path = data_root.join(LOCK_RELATIVE_PATH);
@@ -29,7 +29,9 @@ pub(super) fn cleanup_old_tasks(
         .recursive(true)
         .mode(0o700)
         .create(lock_parent)
-        .map_err(|_| "native_mcp_cleanup_lock_unavailable".to_owned())?;
+        .map_err(|source| {
+            crate::host::HostError::new("native_mcp_cleanup_lock_unavailable").with_source(source)
+        })?;
     validate_under_data(data_root, lock_parent, installation)?;
     match fs::symlink_metadata(&lock_path) {
         Ok(metadata) if metadata.file_type().is_symlink() => {
@@ -46,9 +48,13 @@ pub(super) fn cleanup_old_tasks(
         .truncate(false)
         .mode(0o600)
         .open(&lock_path)
-        .map_err(|_| "native_mcp_cleanup_lock_unavailable".to_owned())?;
+        .map_err(|source| {
+            crate::host::HostError::new("native_mcp_cleanup_lock_unavailable").with_source(source)
+        })?;
     if fs::symlink_metadata(&lock_path)
-        .map_err(|_| "native_mcp_cleanup_lock_unavailable")?
+        .map_err(|source| {
+            crate::host::HostError::new("native_mcp_cleanup_lock_unavailable").with_source(source)
+        })?
         .file_type()
         .is_symlink()
     {
@@ -62,7 +68,8 @@ pub(super) fn cleanup_old_tasks(
         .unwrap_or_default()
         .as_secs_f64()
         * 1_000.0;
-    let plan = operations::cleanup_plan(data_root, now_ms).map_err(|error| error.to_string())?;
+    let plan =
+        operations::cleanup_plan(data_root, now_ms).map_err(crate::host::HostError::from_error)?;
     let mut deleted = 0;
     for directory in plan.directories {
         validate_under_data(data_root, &directory, installation)?;
@@ -70,9 +77,9 @@ pub(super) fn cleanup_old_tasks(
             Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
             Ok(_) => continue,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(error) => return Err(error.to_string()),
+            Err(error) => return Err(error.to_string().into()),
         }
-        fs::remove_dir_all(&directory).map_err(|error| error.to_string())?;
+        fs::remove_dir_all(&directory).map_err(crate::host::HostError::from_error)?;
         deleted += 1;
     }
     Ok(deleted)
@@ -82,13 +89,17 @@ fn validate_under_data(
     data_root: &Path,
     destination: &Path,
     installation: &ResolvedInstallation,
-) -> Result<(), String> {
+) -> Result<(), crate::host::HostError> {
     let data = installation
         .validate_data_root(data_root)
-        .map_err(|_| "native_path_configuration_invalid".to_owned())?;
+        .map_err(|source| {
+            crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
+        })?;
     let resolved = installation
         .validate_data_root(destination)
-        .map_err(|_| "native_path_configuration_invalid".to_owned())?;
+        .map_err(|source| {
+            crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
+        })?;
     if resolved.starts_with(&data) {
         Ok(())
     } else {

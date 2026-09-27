@@ -149,7 +149,7 @@ impl DailyCognitionJobs {
     pub(in crate::host) async fn session_sync(
         &self,
         cancellation: &CancellationToken,
-    ) -> Result<(), String> {
+    ) -> Result<(), crate::host::HostError> {
         if cancellation.is_cancelled() {
             return Err("memory_write_aborted".into());
         }
@@ -173,7 +173,7 @@ impl DailyCognitionJobs {
     pub(in crate::host) async fn consolidation_cycle(
         &self,
         cancellation: &CancellationToken,
-    ) -> Result<(), String> {
+    ) -> Result<(), crate::host::HostError> {
         if cancellation.is_cancelled() {
             return Err("memory_write_aborted".into());
         }
@@ -216,7 +216,7 @@ impl DailyCognitionJobs {
     async fn run_configured(
         &self,
         cancellation: &CancellationToken,
-    ) -> Result<ConfiguredCycleResult, String> {
+    ) -> Result<ConfiguredCycleResult, crate::host::HostError> {
         let config = ConfiguredCycleOptions::load(&self.data_root);
         if !config.enabled
             || !active_memory_descriptor_exists(&self.data_root, &self.paths)
@@ -252,5 +252,6 @@ impl DailyCognitionJobs {
             .run(&config, cancellation)
             .await
             .map_err(|error| error.code().to_owned())
+            .map_err(crate::host::HostError::from)
     }
 }

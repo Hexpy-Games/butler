@@ -17,8 +17,11 @@ pub(crate) struct NativeMcpClient {
     pub(super) registry_path_guard: Arc<RegistryPathGuard>,
 }
 
-pub(crate) type RegistryPathGuard =
-    dyn Fn(&Path, &Path) -> Result<(), String> + Send + Sync + 'static;
+/// Host check that a registry write stays inside DATA; the error explains why not.
+pub(crate) type RegistryPathGuard = dyn Fn(&Path, &Path) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+    + Send
+    + Sync
+    + 'static;
 
 /// A failed MCP registry read, server start or tool call. `code` and
 /// `message` are the tool-result wire fields, `attempted` says whether the

@@ -19,11 +19,11 @@ impl Settings {
     pub(super) fn read(
         data_root: &Path,
         installation: &ResolvedInstallation,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, crate::host::HostError> {
         let path = settings_path(data_root);
-        installation
-            .validate_data_root(&path)
-            .map_err(|_| "native_path_configuration_invalid".to_owned())?;
+        installation.validate_data_root(&path).map_err(|source| {
+            crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
+        })?;
         if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
             return Err("gateway_settings_path_ambiguous".into());
         }
@@ -48,7 +48,7 @@ impl Settings {
         installation: &ResolvedInstallation,
         enabled: Option<bool>,
         config_patch: Map<String, Value>,
-    ) -> Result<(), String> {
+    ) -> Result<(), crate::host::HostError> {
         let writes = crate::configuration::ConfigurationWrites::new();
         let _permit = writes.acquire().await;
         let current = Self::read(data_root, installation)?;
@@ -126,14 +126,14 @@ fn write_settings(
     data_root: &Path,
     installation: &ResolvedInstallation,
     value: &Value,
-) -> Result<(), String> {
+) -> Result<(), crate::host::HostError> {
     let path = settings_path(data_root);
     let parent = path
         .parent()
         .ok_or_else(|| "gateway_settings_path_invalid".to_owned())?;
-    installation
-        .validate_data_root(&path)
-        .map_err(|_| "native_path_configuration_invalid".to_owned())?;
+    installation.validate_data_root(&path).map_err(|source| {
+        crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
+    })?;
     let mut builder = fs::DirBuilder::new();
     builder.recursive(true).mode(0o700);
     builder
@@ -145,19 +145,22 @@ fn write_settings(
                 Err(error)
             }
         })
-        .map_err(|_| "gateway_settings_unavailable".to_owned())?;
+        .map_err(|source| {
+            crate::host::HostError::new("gateway_settings_unavailable").with_source(source)
+        })?;
     if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
         return Err("gateway_settings_path_ambiguous".into());
     }
-    installation
-        .validate_data_root(parent)
-        .map_err(|_| "native_path_configuration_invalid".to_owned())?;
+    installation.validate_data_root(parent).map_err(|source| {
+        crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
+    })?;
     if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
         return Err("gateway_settings_path_ambiguous".into());
     }
     crate::configuration::write_json_atomic(&path, value)
-        .map_err(|_| "gateway_settings_unavailable".to_owned())
-}
+        .map_err(|source| {
+            crate::host::HostError::new("gateway_settings_unavailable").with_source(source)
+        })}
 
 fn settings_path(data_root: &Path) -> PathBuf {
     data_root.join("gateways/app.json")

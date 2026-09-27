@@ -3,6 +3,7 @@
 //! The system clock and UUID generator retain no Turn/session state. Domain
 //! ports remain explicit; domains do not depend on this composition module.
 
+mod error;
 mod installation;
 #[cfg(unix)]
 mod mcp;
@@ -82,6 +83,7 @@ pub(crate) use crate::host::service::configuration::{
 pub(crate) use crate::host::service::progress_publisher::NativeProgressPublisher;
 pub(crate) use crate::host::time::prompt_clock::NativePromptClock;
 #[cfg(unix)]
+pub(crate) use error::HostError;
 pub(crate) use installation::ResolvedInstallation;
 pub(crate) use runtime::{NativeAgentRuntime, NativeRuntimePaths};
 

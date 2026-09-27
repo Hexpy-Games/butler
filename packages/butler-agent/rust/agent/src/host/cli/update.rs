@@ -50,7 +50,7 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
     let json_requested = args.iter().any(|arg| arg == "--json");
     let options = match parse(&args) {
         Ok(options) => options,
-        Err(error) => return failure(json_requested, "invalid_arguments", &error, 2),
+        Err(error) => return failure(json_requested, "invalid_arguments", error.message(), 2),
     };
     if options.positionals != ["update"] {
         return failure(
@@ -86,7 +86,14 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
     };
     let service = match open_app_update(&data, &installation) {
         Ok(service) => service,
-        Err(code) => return failure(options.json, &code, "App updates are unavailable", 1),
+        Err(code) => {
+            return failure(
+                options.json,
+                code.message(),
+                "App updates are unavailable",
+                1,
+            );
+        }
     };
     let request = UpdateRequest {
         component: Some("app".into()),
@@ -148,14 +155,15 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
 pub(in crate::host) fn open_app_update(
     data: &Path,
     installation: &ResolvedInstallation,
-) -> Result<AppUpdateService, String> {
+) -> Result<AppUpdateService, crate::host::HostError> {
     let data = installation.validate_data_root(data)?;
     let version = installation.app_version();
     AppUpdateService::new(data, installation.root().to_path_buf(), version)
         .map_err(|error| error.code().to_owned())
+        .map_err(crate::host::HostError::from)
 }
 
-fn parse(args: &[OsString]) -> Result<Options, String> {
+fn parse(args: &[OsString]) -> Result<Options, crate::host::HostError> {
     let mut options = Options::default();
     let mut index = 0;
     while index < args.len() {

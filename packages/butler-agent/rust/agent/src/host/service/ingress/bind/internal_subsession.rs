@@ -25,8 +25,9 @@ pub(super) async fn bind(
     let binding = bindings
         .get_by_session_id(session_id)
         .await
-        .map_err(|_| {
+        .map_err(|source| {
             NativeIngressError::new("session_binding_unavailable", "Session binding unavailable")
+                .with_source(source)
         })?
         .ok_or_else(|| invalid("Missing native subsession binding"))?;
     let expected_role = match role {

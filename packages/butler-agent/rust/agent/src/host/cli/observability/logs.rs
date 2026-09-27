@@ -23,7 +23,13 @@ pub(super) async fn run(
     let files = match select_files(&service, &data_root, &installation) {
         Ok(files) => files,
         Err(message) => {
-            return report_error("butler logs", options.json, "unsafe_path", &message, 1);
+            return report_error(
+                "butler logs",
+                options.json,
+                "unsafe_path",
+                message.message(),
+                1,
+            );
         }
     };
     let files: Vec<_> = files
@@ -65,7 +71,7 @@ fn select_files(
     service: &str,
     data_root: &Path,
     installation: &ResolvedInstallation,
-) -> Result<Vec<LogFile>, String> {
+) -> Result<Vec<LogFile>, crate::host::HostError> {
     let names = match service {
         "butler-main" | "butler-agent-native" | "butler-agent-service" => vec![
             "butler-agent-service.stdout.log".to_owned(),
@@ -145,7 +151,7 @@ async fn follow(
             _ = interval.tick() => {
                 for file in follower.paths() {
                     if let Err(message) = path::safe_data_file(&installation, &data_root, file) {
-                        return report_error("butler logs", false, "unsafe_path", &message, 1);
+                        return report_error("butler logs", false, "unsafe_path", message.message(), 1);
                     }
                 }
                 match follower.poll() {

@@ -106,7 +106,9 @@ impl NativeAppServer {
         let dependencies = AppApplicationDependencies {
             updates: Arc::new(
                 crate::host::cli::update::open_app_update(data_root, installation).map_err(
-                    |code| BtccError::relayed(code, "App update service is unavailable"),
+                    |code| {
+                        BtccError::relayed(code.to_string(), "App update service is unavailable")
+                    },
                 )?,
             ),
             skills: runtime.skills.clone(),

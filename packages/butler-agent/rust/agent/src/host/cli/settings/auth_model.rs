@@ -49,7 +49,7 @@ pub(super) async fn auth_login(
         Err(message) => report_error(
             command.name(),
             options.json,
-            &CliError::failed("auth_login_failed", message),
+            &CliError::failed("auth_login_failed", message.to_string()),
         ),
     }
 }

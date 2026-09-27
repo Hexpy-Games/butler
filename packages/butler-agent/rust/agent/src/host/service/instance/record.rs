@@ -7,7 +7,9 @@ use nix::fcntl::{Flock, FlockArg};
 
 use super::{INSTANCE_SCHEMA, InstanceRecord, open_lock};
 
-pub(super) fn read_record_at(path: &Path) -> Result<Option<InstanceRecord>, String> {
+pub(super) fn read_record_at(
+    path: &Path,
+) -> Result<Option<InstanceRecord>, crate::host::HostError> {
     if fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
         return Err("native_service_instance_ambiguous: invalid instance record".into());
     }
@@ -16,8 +18,10 @@ pub(super) fn read_record_at(path: &Path) -> Result<Option<InstanceRecord>, Stri
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(_) => return Err("native_service_instance_record_unreadable".into()),
     };
-    let record: InstanceRecord = serde_json::from_slice(&bytes)
-        .map_err(|_| "native_service_instance_ambiguous: invalid instance record".to_owned())?;
+    let record: InstanceRecord = serde_json::from_slice(&bytes).map_err(|source| {
+        crate::host::HostError::new("native_service_instance_ambiguous: invalid instance record")
+            .with_source(source)
+    })?;
     if record.schema != INSTANCE_SCHEMA
         || record.nonce.is_empty()
         || record.pid == 0
@@ -29,7 +33,10 @@ pub(super) fn read_record_at(path: &Path) -> Result<Option<InstanceRecord>, Stri
     Ok(Some(record))
 }
 
-pub(super) fn write_record(path: &Path, record: &InstanceRecord) -> Result<(), String> {
+pub(super) fn write_record(
+    path: &Path,
+    record: &InstanceRecord,
+) -> Result<(), crate::host::HostError> {
     let parent = path
         .parent()
         .ok_or_else(|| "native_service_instance_record_path_invalid".to_owned())?;
@@ -37,7 +44,10 @@ pub(super) fn write_record(path: &Path, record: &InstanceRecord) -> Result<(), S
         .recursive(true)
         .mode(0o700)
         .create(parent)
-        .map_err(|_| "native_service_instance_state_unavailable".to_owned())?;
+        .map_err(|source| {
+            crate::host::HostError::new("native_service_instance_state_unavailable")
+                .with_source(source)
+        })?;
     let temporary = path.with_extension(format!(
         "json.{}.{}.{}.tmp",
         record.pid,
@@ -49,28 +59,41 @@ pub(super) fn write_record(path: &Path, record: &InstanceRecord) -> Result<(), S
         .create_new(true)
         .mode(0o600)
         .open(&temporary)
-        .map_err(|_| "native_service_instance_state_unavailable".to_owned())?;
+        .map_err(|source| {
+            crate::host::HostError::new("native_service_instance_state_unavailable")
+                .with_source(source)
+        })?;
     let result = (|| {
-        serde_json::to_writer_pretty(&mut file, record)
-            .map_err(|_| "native_service_instance_state_unavailable".to_owned())?;
-        file.write_all(b"\n")
-            .map_err(|_| "native_service_instance_state_unavailable".to_owned())?;
-        file.sync_all()
-            .map_err(|_| "native_service_instance_state_unavailable".to_owned())?;
-        fs::rename(&temporary, path)
-            .map_err(|_| "native_service_instance_state_unavailable".to_owned())
+        serde_json::to_writer_pretty(&mut file, record).map_err(|source| {
+            crate::host::HostError::new("native_service_instance_state_unavailable")
+                .with_source(source)
+        })?;
+        file.write_all(b"\n").map_err(|source| {
+            crate::host::HostError::new("native_service_instance_state_unavailable")
+                .with_source(source)
+        })?;
+        file.sync_all().map_err(|source| {
+            crate::host::HostError::new("native_service_instance_state_unavailable")
+                .with_source(source)
+        })?;
+        fs::rename(&temporary, path).map_err(|source| {
+            crate::host::HostError::new("native_service_instance_state_unavailable")
+                .with_source(source)
+        })
     })();
     drop(file);
     if result.is_err() {
         let _ = fs::remove_file(temporary);
     }
-    result
-}
+    result}
 
-pub(super) fn acquire_record_update_lock(path: &Path) -> Result<Flock<File>, String> {
+pub(super) fn acquire_record_update_lock(
+    path: &Path,
+) -> Result<Flock<File>, crate::host::HostError> {
     let file = open_lock(path, true)?;
     Flock::lock(file, FlockArg::LockExclusive)
         .map_err(|(_, error)| format!("native_service_record_lock_failed: {error}"))
+        .map_err(crate::host::HostError::from)
 }
 
 pub(super) fn record_update_lock_path(data_root: &Path) -> PathBuf {

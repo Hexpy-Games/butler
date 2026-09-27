@@ -3,6 +3,7 @@
 mod commands;
 mod composition;
 
+use crate::host::cli::error::CliError;
 use std::{ffi::OsString, path::PathBuf, process::ExitCode};
 
 use serde_json::{Value, json};
@@ -69,30 +70,6 @@ impl Command {
     }
 }
 
-struct CliError {
-    code: &'static str,
-    message: String,
-    exit: u8,
-}
-
-impl CliError {
-    fn invalid(message: impl Into<String>) -> Self {
-        Self {
-            code: "invalid_arguments",
-            message: message.into(),
-            exit: 2,
-        }
-    }
-
-    fn failed(code: &'static str, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-            exit: 1,
-        }
-    }
-}
-
 pub(crate) fn recognizes(args: &[OsString]) -> bool {
     Command::parse(&positionals_without_common_options(args)).is_some()
 }
@@ -118,9 +95,9 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
         return report_error(
             command.name(),
             options.json,
-            &CliError {
-                code: "unknown_command",
-                message: if action == "migration" || action == "migrate" {
+            &CliError::failed(
+                "unknown_command",
+                if action == "migration" || action == "migrate" {
                     let nested = options
                         .positionals
                         .get(2)
@@ -129,8 +106,8 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
                 } else {
                     format!("unknown personalization command: {action}")
                 },
-                exit: 2,
-            },
+            )
+            .with_exit(2),
         );
     }
     if command == Command::MigrationPrompt {
@@ -178,7 +155,7 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
             return report_error(
                 command.name(),
                 options.json,
-                &CliError::failed("native_personalization_cli_failed", message),
+                &CliError::failed("native_personalization_cli_failed", message.to_string()),
             );
         }
     };

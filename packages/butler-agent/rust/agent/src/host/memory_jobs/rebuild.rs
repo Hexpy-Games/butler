@@ -40,7 +40,7 @@ pub(crate) async fn run(
     let requested_json = arguments.iter().any(|arg| arg == "--json");
     let options = match parse(&installation, arguments) {
         Ok(options) => options,
-        Err(message) => return failure(requested_json, "invalid_arguments", &message, 2),
+        Err(message) => return failure(requested_json, "invalid_arguments", message.message(), 2),
     };
     let paths = CognitionPathEnvironment {
         cognition_home: std::env::var("BUTLER_COGNITION_HOME").ok(),
@@ -58,7 +58,12 @@ pub(crate) async fn run(
             let signal_task = match signals(cancellation.clone()) {
                 Ok(value) => value,
                 Err(message) => {
-                    return failure(options.json, "native_signal_unavailable", &message, 1);
+                    return failure(
+                        options.json,
+                        "native_signal_unavailable",
+                        message.message(),
+                        1,
+                    );
                 }
             };
             let (major, minor, patch) = unicode_segmentation::UNICODE_VERSION;
@@ -98,7 +103,12 @@ pub(crate) async fn run(
             let signal_task = match signals(cancellation.clone()) {
                 Ok(value) => value,
                 Err(message) => {
-                    return failure(options.json, "native_signal_unavailable", &message, 1);
+                    return failure(
+                        options.json,
+                        "native_signal_unavailable",
+                        message.message(),
+                        1,
+                    );
                 }
             };
             let result = build::run(
@@ -125,7 +135,12 @@ pub(crate) async fn run(
             let signal_task = match signals(cancellation.clone()) {
                 Ok(value) => value,
                 Err(message) => {
-                    return failure(options.json, "native_signal_unavailable", &message, 1);
+                    return failure(
+                        options.json,
+                        "native_signal_unavailable",
+                        message.message(),
+                        1,
+                    );
                 }
             };
             let result =
@@ -162,7 +177,12 @@ pub(crate) async fn run(
             let signal_task = match signals(cancellation.clone()) {
                 Ok(value) => value,
                 Err(message) => {
-                    return failure(options.json, "native_signal_unavailable", &message, 1);
+                    return failure(
+                        options.json,
+                        "native_signal_unavailable",
+                        message.message(),
+                        1,
+                    );
                 }
             };
             let result =
@@ -196,7 +216,12 @@ pub(crate) async fn run(
             let signal_task = match signals(cancellation.clone()) {
                 Ok(value) => value,
                 Err(message) => {
-                    return failure(options.json, "native_signal_unavailable", &message, 1);
+                    return failure(
+                        options.json,
+                        "native_signal_unavailable",
+                        message.message(),
+                        1,
+                    );
                 }
             };
             let result = rollback::run(

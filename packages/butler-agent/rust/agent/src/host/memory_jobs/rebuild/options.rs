@@ -43,7 +43,7 @@ pub(super) struct Options {
 pub(super) fn parse(
     installation: &ResolvedInstallation,
     arguments: Vec<OsString>,
-) -> Result<Options, String> {
+) -> Result<Options, crate::host::HostError> {
     let mut data = None;
     let mut json = false;
     let mut generation = None;
@@ -127,7 +127,9 @@ pub(super) fn parse(
                 );
             }
             "--json" => json = true,
-            value if value.starts_with("--") => return Err(format!("unknown option: {value}")),
+            value if value.starts_with("--") => {
+                return Err(format!("unknown option: {value}").into());
+            }
             value => positional.push(value.to_owned()),
         }
     }

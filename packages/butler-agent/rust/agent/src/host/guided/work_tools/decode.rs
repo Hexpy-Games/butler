@@ -1,5 +1,38 @@
 //! Model snake_case arguments translated at the source Work tool boundary.
 
+/// Why a durable Work tool call's arguments were rejected. `Display` is the
+/// message returned to the model.
+#[derive(Debug, thiserror::Error)]
+pub(super) enum WorkArgumentError {
+    /// The tool name is not a durable Work tool.
+    #[error("Unsupported Work tool: {0}")]
+    UnsupportedTool(String),
+    /// A required field is missing or blank.
+    #[error("Work update requires {0}")]
+    Required(String),
+    /// A field must be an array.
+    #[error("Work update requires {0} to be an array")]
+    NotArray(String),
+    /// An array field must not be empty.
+    #[error("Work update requires at least one {0} entry")]
+    Empty(String),
+    /// A field must be an object.
+    #[error("Work update requires {0} to be an object")]
+    NotObject(String),
+    /// A field must be a boolean.
+    #[error("Work update requires {0} to be boolean")]
+    NotBoolean(String),
+    /// `execution_mode` is not one of the supported modes.
+    #[error("Work Plan requires execution_mode to be direct, steward or workers")]
+    ExecutionMode,
+    /// A disposition's `action_updates` is not an array.
+    #[error("Work disposition requires action_updates to be an array")]
+    DispositionUpdatesNotArray,
+    /// An enumerated value is not supported; the first field names the kind.
+    #[error("Unsupported Work {0}: {1}")]
+    Unsupported(&'static str, String),
+}
+
 use serde_json::{Map, Value, json};
 
 use crate::btcc::{
@@ -24,7 +57,7 @@ pub(super) fn command(
     mutation_call_id: &str,
     prior_tool_call_ids: &[String],
     expected_material_fingerprint: Option<&str>,
-) -> Result<Command, String> {
+) -> Result<Command, WorkArgumentError> {
     let id = mutation_call_id.to_owned();
     let backfill = (!prior_tool_call_ids.is_empty()).then(|| prior_tool_call_ids.to_vec());
     Ok(match name {
@@ -92,20 +125,20 @@ pub(super) fn command(
             expected_material_fingerprint: expected_material_fingerprint.map(str::to_owned),
             runtime_owned_open_generation: None,
         }),
-        _ => return Err(format!("Unsupported Work tool: {name}")),
+        _ => return Err(WorkArgumentError::UnsupportedTool(name.to_owned())),
     })
 }
 
 fn trim(value: &str) -> &str {
     crate::public_text::trim_js_whitespace(value)
 }
-fn required(value: Option<&Value>, field: &str) -> Result<String, String> {
+fn required(value: Option<&Value>, field: &str) -> Result<String, WorkArgumentError> {
     value
         .and_then(Value::as_str)
         .map(trim)
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
-        .ok_or_else(|| format!("Work update requires {field}"))
+        .ok_or_else(|| WorkArgumentError::Required(field.to_owned()))
 }
 fn optional(value: Option<&Value>) -> Option<String> {
     value
@@ -114,47 +147,50 @@ fn optional(value: Option<&Value>) -> Option<String> {
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
 }
-fn array<'a>(value: Option<&'a Value>, field: &str) -> Result<&'a [Value], String> {
+fn array<'a>(value: Option<&'a Value>, field: &str) -> Result<&'a [Value], WorkArgumentError> {
     match value {
         None => Ok(&[]),
         Some(Value::Array(values)) => Ok(values),
-        _ => Err(format!("Work update requires {field} to be an array")),
+        _ => Err(WorkArgumentError::NotArray(field.to_owned())),
     }
 }
-fn nonempty_array<'a>(value: Option<&'a Value>, field: &str) -> Result<&'a [Value], String> {
+fn nonempty_array<'a>(
+    value: Option<&'a Value>,
+    field: &str,
+) -> Result<&'a [Value], WorkArgumentError> {
     match value {
         Some(Value::Array(values)) if !values.is_empty() => Ok(values),
-        _ => Err(format!("Work update requires at least one {field} entry")),
+        _ => Err(WorkArgumentError::Empty(field.to_owned())),
     }
 }
-fn strings(value: Option<&Value>, field: &str) -> Result<Vec<String>, String> {
+fn strings(value: Option<&Value>, field: &str) -> Result<Vec<String>, WorkArgumentError> {
     array(value, field)?
         .iter()
         .enumerate()
         .map(|(index, item)| required(Some(item), &format!("{field}[{index}]")))
         .collect()
 }
-fn object<'a>(value: &'a Value, field: &str) -> Result<&'a Map<String, Value>, String> {
+fn object<'a>(value: &'a Value, field: &str) -> Result<&'a Map<String, Value>, WorkArgumentError> {
     value
         .as_object()
-        .ok_or_else(|| format!("Work update requires {field} to be an object"))
+        .ok_or_else(|| WorkArgumentError::NotObject(field.to_owned()))
 }
-fn boolean(value: Option<&Value>, field: &str) -> Result<bool, String> {
+fn boolean(value: Option<&Value>, field: &str) -> Result<bool, WorkArgumentError> {
     match value {
         None => Ok(false),
         Some(Value::Bool(value)) => Ok(*value),
-        _ => Err(format!("Work update requires {field} to be boolean")),
+        _ => Err(WorkArgumentError::NotBoolean(field.to_owned())),
     }
 }
-fn execution_mode(value: Option<&Value>) -> Result<ExecutionMode, String> {
+fn execution_mode(value: Option<&Value>) -> Result<ExecutionMode, WorkArgumentError> {
     match value.and_then(Value::as_str) {
         Some("direct") => Ok(ExecutionMode::Direct),
         Some("steward") => Ok(ExecutionMode::Steward),
         Some("workers") => Ok(ExecutionMode::Workers),
-        _ => Err("Work Plan requires execution_mode to be direct, steward or workers".into()),
+        _ => Err(WorkArgumentError::ExecutionMode),
     }
 }
-fn action(value: &Value, index: usize) -> Result<PlanAction, String> {
+fn action(value: &Value, index: usize) -> Result<PlanAction, WorkArgumentError> {
     let record = object(value, &format!("actions[{index}]"))?;
     let key = required(
         record.get("action_key"),
@@ -164,7 +200,7 @@ fn action(value: &Value, index: usize) -> Result<PlanAction, String> {
         .get("effect")
         .map(|effect| {
             let effect = object(effect, &format!("actions[{index}].effect"))?;
-            Ok::<_, String>(json!({
+            Ok::<_, WorkArgumentError>(json!({
                 "capability":required(effect.get("capability"), &format!("actions[{index}].effect.capability"))?,
                 "target":required(effect.get("target"), &format!("actions[{index}].effect.target"))?,
             }))
@@ -180,7 +216,7 @@ fn action(value: &Value, index: usize) -> Result<PlanAction, String> {
         effect,
     })
 }
-fn status(value: Option<&Value>, field: &str) -> Result<ActionStatus, String> {
+fn status(value: Option<&Value>, field: &str) -> Result<ActionStatus, WorkArgumentError> {
     let status = required(value, field)?;
     match status.as_str() {
         "pending" => Ok(ActionStatus::Pending),
@@ -188,10 +224,13 @@ fn status(value: Option<&Value>, field: &str) -> Result<ActionStatus, String> {
         "done" => Ok(ActionStatus::Done),
         "blocked" => Ok(ActionStatus::Blocked),
         "skipped" => Ok(ActionStatus::Skipped),
-        _ => Err(format!("Unsupported Work action status: {status}")),
+        _ => Err(WorkArgumentError::Unsupported(
+            "action status",
+            status.clone(),
+        )),
     }
 }
-fn action_updates(value: Option<&Value>) -> Result<Vec<ActionProgress>, String> {
+fn action_updates(value: Option<&Value>) -> Result<Vec<ActionProgress>, WorkArgumentError> {
     array(value, "action_updates")?
         .iter()
         .enumerate()
@@ -211,11 +250,13 @@ fn action_updates(value: Option<&Value>) -> Result<Vec<ActionProgress>, String> 
         })
         .collect()
 }
-fn disposition_updates(value: Option<&Value>) -> Result<Vec<DispositionActionUpdate>, String> {
+fn disposition_updates(
+    value: Option<&Value>,
+) -> Result<Vec<DispositionActionUpdate>, WorkArgumentError> {
     let values = match value {
         None => &[][..],
         Some(Value::Array(values)) => values.as_slice(),
-        _ => return Err("Work disposition requires action_updates to be an array".into()),
+        _ => return Err(WorkArgumentError::DispositionUpdatesNotArray),
     };
     values
         .iter()
@@ -231,8 +272,9 @@ fn disposition_updates(value: Option<&Value>) -> Result<Vec<DispositionActionUpd
                 "skipped" => ActionStatus::Skipped,
                 "blocked" => ActionStatus::Blocked,
                 _ => {
-                    return Err(format!(
-                        "Unsupported Work disposition action status: {text}"
+                    return Err(WorkArgumentError::Unsupported(
+                        "disposition action status",
+                        text.clone(),
                     ));
                 }
             };
@@ -247,40 +289,49 @@ fn disposition_updates(value: Option<&Value>) -> Result<Vec<DispositionActionUpd
         })
         .collect()
 }
-fn review_subject(value: Option<&Value>) -> Result<ReviewSubject, String> {
+fn review_subject(value: Option<&Value>) -> Result<ReviewSubject, WorkArgumentError> {
     let subject = required(value, "subject")?;
     match subject.as_str() {
         "plan" => Ok(ReviewSubject::Plan),
         "result" => Ok(ReviewSubject::Result),
         "completion" => Ok(ReviewSubject::Completion),
-        _ => Err(format!("Unsupported Work review subject: {subject}")),
+        _ => Err(WorkArgumentError::Unsupported(
+            "review subject",
+            subject.clone(),
+        )),
     }
 }
-fn review_verdict(value: Option<&Value>) -> Result<ReviewVerdict, String> {
+fn review_verdict(value: Option<&Value>) -> Result<ReviewVerdict, WorkArgumentError> {
     let verdict = required(value, "verdict")?;
     match verdict.as_str() {
         "accept" => Ok(ReviewVerdict::Accept),
         "revise" => Ok(ReviewVerdict::Revise),
         "partial" => Ok(ReviewVerdict::Partial),
-        _ => Err(format!("Unsupported Work review verdict: {verdict}")),
+        _ => Err(WorkArgumentError::Unsupported(
+            "review verdict",
+            verdict.clone(),
+        )),
     }
 }
-fn correction_scope(value: Option<&Value>) -> Result<Option<CorrectionScope>, String> {
+fn correction_scope(value: Option<&Value>) -> Result<Option<CorrectionScope>, WorkArgumentError> {
     let Some(value) = optional(value) else {
         return Ok(None);
     };
     match value.as_str() {
         "planning" => Ok(Some(CorrectionScope::Planning)),
         "execution" => Ok(Some(CorrectionScope::Execution)),
-        _ => Err(format!("Unsupported Work correction scope: {value}")),
+        _ => Err(WorkArgumentError::Unsupported(
+            "correction scope",
+            value.clone(),
+        )),
     }
 }
-fn disposition(value: Option<&Value>) -> Result<DispositionStatus, String> {
+fn disposition(value: Option<&Value>) -> Result<DispositionStatus, WorkArgumentError> {
     let value = required(value, "disposition")?;
     match value.as_str() {
         "completed" => Ok(DispositionStatus::Completed),
         "open" => Ok(DispositionStatus::Open),
         "blocked" => Ok(DispositionStatus::Blocked),
-        _ => Err(format!("Unsupported Work disposition: {value}")),
+        _ => Err(WorkArgumentError::Unsupported("disposition", value.clone())),
     }
 }

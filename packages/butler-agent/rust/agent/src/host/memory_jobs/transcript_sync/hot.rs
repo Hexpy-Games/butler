@@ -52,7 +52,7 @@ impl NativeLegacyHot {
         session_id: &str,
         topic: Option<&str>,
         cancellation: &CancellationToken,
-    ) -> Result<String, String> {
+    ) -> Result<String, crate::host::HostError> {
         let text = crate::cognition::legacy_hot_prefix(conversation);
         let text = trim_js_whitespace(&text);
         if text.is_empty() {
@@ -85,8 +85,12 @@ impl NativeLegacyHot {
             );
             tokio::time::timeout(Duration::from_secs(120), summary)
                 .await
-                .map_err(|_| "legacy_hot_summary_timeout".to_owned())?
-                .map_err(|_| "legacy_hot_summary_failed".to_owned())?
+                .map_err(|source| {
+                    crate::host::HostError::new("legacy_hot_summary_timeout").with_source(source)
+                })?
+                .map_err(|source| {
+                    crate::host::HostError::new("legacy_hot_summary_failed").with_source(source)
+                })?
                 .text
         };
         if trim_js_whitespace(&body).is_empty() {
@@ -153,16 +157,18 @@ impl NativeLegacyHot {
                 topic: topic.as_deref(),
                 entry: &entry,
             });
-            let release = lease
-                .release(result.is_ok())
-                .map_err(|failure| failure.code().to_owned());
+            let release = lease.release(result.is_ok()).map_err(|failure| {
+                crate::host::HostError::new(failure.code()).with_source(failure)
+            });
             match (result, release) {
                 (Err(code), _) | (Ok(()), Err(code)) => Err(code),
                 _ => Ok(entry),
             }
         })
         .await
-        .map_err(|_| "legacy_hot_write_failed".to_owned())?
+        .map_err(|source| {
+            crate::host::HostError::new("legacy_hot_write_failed").with_source(source)
+        })?
     }
 }
 
@@ -177,7 +183,7 @@ struct HotCommit<'a> {
     entry: &'a str,
 }
 
-fn commit(input: &HotCommit<'_>) -> Result<(), String> {
+fn commit(input: &HotCommit<'_>) -> Result<(), crate::host::HostError> {
     let HotCommit {
         data,
         target,
@@ -189,7 +195,9 @@ fn commit(input: &HotCommit<'_>) -> Result<(), String> {
         entry,
     } = *input;
     let parent = target.parent().ok_or("legacy_hot_write_failed")?;
-    fs::create_dir_all(parent).map_err(|_| "legacy_hot_write_failed")?;
+    fs::create_dir_all(parent).map_err(|source| {
+        crate::host::HostError::new("legacy_hot_write_failed").with_source(source)
+    })?;
     ensure_data_authority(data, &[target, temp]).map_err(|failure| failure.code().to_owned())?;
     let lock_path = target.with_extension("md.lock");
     ensure_data_authority(data, &[&lock_path]).map_err(|failure| failure.code().to_owned())?;
@@ -206,7 +214,9 @@ fn commit(input: &HotCommit<'_>) -> Result<(), String> {
         options
             .open(target)
             .and_then(|mut file| file.write_all(entry.as_bytes()))
-            .map_err(|_| "legacy_hot_write_failed".to_owned())?;
+            .map_err(|source| {
+                crate::host::HostError::new("legacy_hot_write_failed").with_source(source)
+            })?;
         return Ok(());
     }
     let source_id = {
@@ -242,7 +252,7 @@ fn commit(input: &HotCommit<'_>) -> Result<(), String> {
         block
     );
     let output = compact::compact(&appended, 20 * 1024);
-    let result: Result<(), String> = (|| {
+    let result: Result<(), crate::host::HostError> = (|| {
         let mut options = fs::OpenOptions::new();
         options.write(true).create_new(true);
         #[cfg(unix)]
@@ -250,17 +260,22 @@ fn commit(input: &HotCommit<'_>) -> Result<(), String> {
             use std::os::unix::fs::OpenOptionsExt;
             options.mode(0o600);
         }
-        let mut file = options
-            .open(temp)
-            .map_err(|_| "legacy_hot_write_failed".to_owned())?;
+        let mut file = options.open(temp).map_err(|source| {
+            crate::host::HostError::new("legacy_hot_write_failed").with_source(source)
+        })?;
         if let Ok(metadata) = fs::metadata(target) {
-            fs::set_permissions(temp, metadata.permissions())
-                .map_err(|_| "legacy_hot_write_failed")?;
+            fs::set_permissions(temp, metadata.permissions()).map_err(|source| {
+                crate::host::HostError::new("legacy_hot_write_failed").with_source(source)
+            })?;
         }
         file.write_all(output.as_bytes())
             .and_then(|()| file.sync_all())
-            .map_err(|_| "legacy_hot_write_failed".to_owned())?;
-        fs::rename(temp, target).map_err(|_| "legacy_hot_write_failed".to_owned())
+            .map_err(|source| {
+                crate::host::HostError::new("legacy_hot_write_failed").with_source(source)
+            })?;
+        fs::rename(temp, target).map_err(|source| {
+            crate::host::HostError::new("legacy_hot_write_failed").with_source(source)
+        })
     })();
     if result.is_err() {
         let _ = fs::remove_file(temp);
@@ -276,7 +291,7 @@ impl Drop for CacheLock {
     }
 }
 
-fn acquire_lock(path: &Path) -> Result<CacheLock, String> {
+fn acquire_lock(path: &Path) -> Result<CacheLock, crate::host::HostError> {
     if try_create_lock(path).is_ok() {
         return Ok(CacheLock(path.to_path_buf()));
     }
