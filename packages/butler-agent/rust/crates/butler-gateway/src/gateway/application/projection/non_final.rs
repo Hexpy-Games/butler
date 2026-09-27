@@ -378,9 +378,7 @@ fn project_runtime_event(input: RuntimeInput<'_>) -> Result<Option<&'static str>
             }))?,
             now,
         )?;
-        if let Some(delta) = stream_message::final_text_delta(&kind, object(event.get("payload"))) {
-            stream_message::append(db, subscribers, chat, turn, delta, now)?;
-        }
+        stream_message::project(&input, &kind, object(event.get("payload")))?;
         if let Some(row) = progress_row {
             append_progress(&ProgressAppend {
                 db,

@@ -9,6 +9,12 @@ pub(super) fn create(connection: &Connection) -> Result<(), AppStorageError> {
 }
 
 const SUPPORTING_SCHEMA: &str = r"
+CREATE TABLE IF NOT EXISTS turn_stream_drafts (
+  turn_id TEXT PRIMARY KEY REFERENCES turns(id) ON DELETE CASCADE,
+  stream_id TEXT NOT NULL,
+  discarded INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS session_queue_pauses (
   chat_id TEXT PRIMARY KEY REFERENCES chats(id) ON DELETE CASCADE,
   turn_id TEXT NOT NULL,

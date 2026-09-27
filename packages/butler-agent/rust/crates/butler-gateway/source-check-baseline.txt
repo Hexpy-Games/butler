@@ -17,7 +17,7 @@ src/gateway/application/projection.rs	project_final	143
 src/gateway/application/projection/final_candidate.rs	candidate	87
 src/gateway/application/projection/final_result.rs	apply	214
 src/gateway/application/projection/non_final.rs	apply	216
-src/gateway/application/projection/non_final.rs	project_runtime_event	94
+src/gateway/application/projection/non_final.rs	project_runtime_event	92
 src/gateway/application/projection/non_final/runtime_progress.rs	row_from_runtime_event	139
 src/gateway/application/projection/owner.rs	run	93
 src/gateway/application/projects/dashboard/board.rs	board_cards	95

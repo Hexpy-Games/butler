@@ -65,6 +65,18 @@ impl ResponseRecord {
             .map(|chunk| chunk.text.as_str())
             .collect()
     }
+
+    /// The answer text the recorded stream carries: its
+    /// `response.output_text.delta` deltas, concatenated as sent.
+    pub fn output_text(&self) -> String {
+        self.body()
+            .lines()
+            .filter_map(|line| line.strip_prefix("data: "))
+            .filter_map(|data| serde_json::from_str::<Value>(data).ok())
+            .filter(|event| event["type"] == "response.output_text.delta")
+            .filter_map(|event| event["delta"].as_str().map(str::to_owned))
+            .collect()
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
