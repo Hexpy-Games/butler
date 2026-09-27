@@ -38,6 +38,7 @@ async function renderMarkup(node: React.ReactNode): Promise<string> {
   const globals: Record<string, unknown> = {
     window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
     Element: dom.window.Element, HTMLElement: dom.window.HTMLElement, Node: dom.window.Node,
+    DocumentFragment: dom.window.DocumentFragment,
     Event: dom.window.Event, getComputedStyle: dom.window.getComputedStyle.bind(dom.window),
     requestAnimationFrame, cancelAnimationFrame, ResizeObserver, matchMedia,
     fetch: () => new Promise<Response>(() => undefined), IS_REACT_ACT_ENVIRONMENT: true,

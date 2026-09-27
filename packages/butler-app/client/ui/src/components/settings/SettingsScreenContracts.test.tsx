@@ -65,10 +65,10 @@ test("settings search has no visible heading but keeps its accessible name", () 
 
 test("appearance exposes exactly one theme control", async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: "http://localhost" });
-  const keys = ["window", "document", "navigator", "HTMLElement", "Node", "IS_REACT_ACT_ENVIRONMENT"];
+  const keys = ["window", "document", "navigator", "HTMLElement", "Node", "DocumentFragment", "IS_REACT_ACT_ENVIRONMENT"];
   const saved = keys.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
   Object.assign(globalThis, { window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
-    HTMLElement: dom.window.HTMLElement, Node: dom.window.Node, IS_REACT_ACT_ENVIRONMENT: true });
+    HTMLElement: dom.window.HTMLElement, Node: dom.window.Node, DocumentFragment: dom.window.DocumentFragment, IS_REACT_ACT_ENVIRONMENT: true });
   const { act } = await import("react");
   const { createRoot } = await import("react-dom/client");
   const before = useSettingsUIStore.getState().draft;

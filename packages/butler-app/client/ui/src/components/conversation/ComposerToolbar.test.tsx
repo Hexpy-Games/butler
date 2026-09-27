@@ -12,9 +12,9 @@ import { useButlerStore } from "@/app/store.ts";
 async function renderToolbarHtml(state: Partial<ReturnType<typeof useComposerStore.getState>>) {
   const before = useComposerStore.getState();
   const dom = new JSDOM('<div id="root"></div>');
-  const globals = { window: globalThis.window, document: globalThis.document, navigator: globalThis.navigator, HTMLElement: globalThis.HTMLElement };
+  const globals = { window: globalThis.window, document: globalThis.document, navigator: globalThis.navigator, HTMLElement: globalThis.HTMLElement, DocumentFragment: globalThis.DocumentFragment };
   Object.assign(globalThis, { window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
-    HTMLElement: dom.window.HTMLElement, IS_REACT_ACT_ENVIRONMENT: true });
+    HTMLElement: dom.window.HTMLElement, DocumentFragment: dom.window.DocumentFragment, IS_REACT_ACT_ENVIRONMENT: true });
   const container = dom.window.document.getElementById("root")!;
   const root = createRoot(container);
   try {
@@ -60,9 +60,9 @@ test("reconnection overrides send and stop with a disabled busy control, then re
   const before = useComposerStore.getState();
   const appBefore = useButlerStore.getState().liveConnectionLost;
   const dom = new JSDOM('<div id="root"></div>');
-  const globals = { window: globalThis.window, document: globalThis.document, navigator: globalThis.navigator, HTMLElement: globalThis.HTMLElement };
+  const globals = { window: globalThis.window, document: globalThis.document, navigator: globalThis.navigator, HTMLElement: globalThis.HTMLElement, DocumentFragment: globalThis.DocumentFragment };
   Object.assign(globalThis, { window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
-    HTMLElement: dom.window.HTMLElement, IS_REACT_ACT_ENVIRONMENT: true });
+    HTMLElement: dom.window.HTMLElement, DocumentFragment: dom.window.DocumentFragment, IS_REACT_ACT_ENVIRONMENT: true });
   const container = document.getElementById("root")!;
   const root = createRoot(container);
   try {

@@ -1,11 +1,17 @@
 /// <reference types="bun" />
 
-import { afterEach, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { WorkBlockView } from "@/app/types.ts";
 import { CollapsedTurnActivity } from "./WorkBlocks";
+import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
+
+// These expectations are the Korean copy; pin the locale instead of inheriting it.
+const previousLocale = getAppLocale();
+beforeAll(() => setAppCopyLanguage("ko-KR"));
+afterAll(() => setAppCopyLanguage(previousLocale));
 
 afterEach(() => {
   delete (globalThis as { window?: unknown }).window;

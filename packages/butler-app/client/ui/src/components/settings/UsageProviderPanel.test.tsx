@@ -1,7 +1,13 @@
-import { expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { UsageProviderPanel } from "./UsageProviderPanel";
 import type { UsageMonitorView } from "@/app/types.ts";
+import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
+
+// These expectations are the Korean copy; pin the locale instead of inheriting it.
+const previousLocale = getAppLocale();
+beforeAll(() => setAppCopyLanguage("ko-KR"));
+afterAll(() => setAppCopyLanguage(previousLocale));
 
 type Provider = UsageMonitorView["providerUsage"]["providers"][number];
 

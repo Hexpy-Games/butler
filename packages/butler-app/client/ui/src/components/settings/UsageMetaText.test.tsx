@@ -1,9 +1,9 @@
 /// <reference types="bun" />
 
-import { expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import { renderToStaticMarkup } from "react-dom/server";
-import { setAppCopyLanguage } from "@/app/copy.ts";
+import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
 import { UsageBucketPanel } from "./UsageBucketPanel";
 import { UsageProviderRow } from "./UsageProviderRow";
 import { UsageSectionPanel } from "./UsageSectionPanel";
@@ -16,6 +16,9 @@ function metaTexts(markup: string): string[] {
   const document = new JSDOM(markup).window.document;
   return Array.from(document.querySelectorAll("dl > div")).map((item) => item.textContent ?? "");
 }
+
+const previousLocale = getAppLocale();
+afterAll(() => setAppCopyLanguage(previousLocale));
 
 for (const language of ["en", "ko"] as const) {
   test(`usage metadata keeps a space between each label and value (${language})`, () => {

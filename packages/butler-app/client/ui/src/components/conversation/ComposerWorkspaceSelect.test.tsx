@@ -8,11 +8,12 @@ import { projectDraftId } from "@/app/utils.ts";
 
 test("both new conversation surfaces use the composer control style, default to local, and lock during send", async () => {
   const dom = new JSDOM('<div id="root"></div>');
-  const globals = ["window", "document", "navigator", "HTMLElement", "IS_REACT_ACT_ENVIRONMENT"] as const;
+  const globals = ["window", "document", "navigator", "HTMLElement", "DocumentFragment", "IS_REACT_ACT_ENVIRONMENT"] as const;
   const previous = globals.map((key) => Object.getOwnPropertyDescriptor(globalThis, key));
   const state = useComposerStore.getState();
   Object.assign(globalThis, { window: dom.window, document: dom.window.document,
-    navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, IS_REACT_ACT_ENVIRONMENT: true });
+    navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement,
+    DocumentFragment: dom.window.DocumentFragment, IS_REACT_ACT_ENVIRONMENT: true });
   const container = dom.window.document.querySelector("#root")!;
   const root = createRoot(container);
   try {

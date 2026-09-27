@@ -1,11 +1,17 @@
 /// <reference types="bun" />
 
-import { afterEach, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { WorkStatusView } from "@/app/types.ts";
 import { SpaceWorkStatusList } from "./SpaceWorkStatusList";
+import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
+
+// These expectations are the default (English) copy; pin the locale instead of inheriting it.
+const previousLocale = getAppLocale();
+beforeAll(() => setAppCopyLanguage("en-US"));
+afterAll(() => setAppCopyLanguage(previousLocale));
 
 let root: Root | null = null;
 

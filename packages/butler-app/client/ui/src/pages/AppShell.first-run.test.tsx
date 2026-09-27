@@ -1,6 +1,6 @@
 /// <reference types="bun" />
 
-import { afterEach, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, expect, mock, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -17,6 +17,11 @@ import type {
   SettingsView,
   SpaceView,
 } from "@/app/types.ts";
+import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
+
+// First-run language choices switch the app locale; hand it back unchanged.
+const initialAppLocale = getAppLocale();
+afterAll(() => setAppCopyLanguage(initialAppLocale));
 
 interface TestStoreState {
   navigation: { space: SpaceView };
@@ -70,6 +75,37 @@ const storeListeners = new Set<() => void>();
 const portalThemeCalls: Array<boolean | undefined> = [];
 let systemPrefersDarkForTest = false;
 let cachedStoreSnapshot: TestStoreState | null = null;
+
+// mock.module is process-wide in bun; put the real modules back for later test files.
+const mockedModuleSpecifiers = [
+  "@/components/layout/Chrome.tsx",
+  "@/components/layout/RightPanelOverlayTitlebar.tsx",
+  "@/components/layout/Sidebar.tsx",
+  "@/components/layout/Titlebar.tsx",
+  "@/components/conversation/Conversation.tsx",
+  "@/components/inspector/Inspector.tsx",
+  "@/components/management/ProjectDashboardView.tsx",
+  "@/components/management/AutomationsView.tsx",
+  "@/components/settings/SettingsView.tsx",
+  "@/components/command/CommandPalette.tsx",
+  "@/components/layout/ProjectRenameDialog.tsx",
+  "@/components/layout/SessionRenameDialog.tsx",
+  "@/components/common/AppToaster.tsx",
+  "@/hooks/useAppBootstrap.ts",
+  "@/hooks/useNativeAppearanceTheme.ts",
+  "@/hooks/useNativeShellPreferences.ts",
+  "@/hooks/usePortalThemeClasses.ts",
+  "@/hooks/useSystemThemePreference.ts",
+  "@/hooks/useNarrowRightPanelAutoCollapse.ts",
+  "@/hooks/usePanelResize.ts",
+  "@/app/store.ts",
+];
+const originalModules = await Promise.all(
+  mockedModuleSpecifiers.map(async (specifier) => [specifier, { ...(await import(specifier)) }] as const),
+);
+afterAll(() => {
+  for (const [specifier, original] of originalModules) mock.module(specifier, () => original);
+});
 
 mock.module("@/components/layout/Chrome.tsx", () => ({
   WindowChromeLayer: () => <div data-test-class="chrome-layer" />,

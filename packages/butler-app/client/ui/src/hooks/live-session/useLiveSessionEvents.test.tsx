@@ -1,6 +1,6 @@
 /// <reference types="bun" />
 
-import { afterEach, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, expect, mock, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -146,6 +146,20 @@ const storeState = {
     return true;
   },
 };
+
+// mock.module is process-wide in bun; put the real modules back for later test files.
+const mockedModuleSpecifiers = [
+  "@/app/api.ts",
+  "@/app/nativeNotifications.ts",
+  "@/app/sessionIds.ts",
+  "@/app/store.ts",
+];
+const originalModules = await Promise.all(
+  mockedModuleSpecifiers.map(async (specifier) => [specifier, { ...(await import(specifier)) }] as const),
+);
+afterAll(() => {
+  for (const [specifier, original] of originalModules) mock.module(specifier, () => original);
+});
 
 mock.module("@/app/api.ts", () => ({
   subscribeLiveEvents(

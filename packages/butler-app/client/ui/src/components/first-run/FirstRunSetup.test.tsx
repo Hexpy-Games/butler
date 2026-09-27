@@ -1,6 +1,6 @@
 /// <reference types="bun" />
 
-import { afterEach, expect, test } from "bun:test";
+import { afterAll, afterEach, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -18,6 +18,21 @@ import type {
   WorkerProfile,
 } from "@/app/types.ts";
 import { FirstRunSetup } from "./FirstRunSetup";
+import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
+
+import { useButlerStore } from "@/app/store.ts";
+import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
+
+// First-run applies the chosen language and saved settings to the app-wide
+// locale and stores; hand them back unchanged for later test files.
+const initialAppLocale = getAppLocale();
+const initialButlerState = useButlerStore.getState();
+const initialSettingsUIState = useSettingsUIStore.getState();
+afterAll(() => {
+  setAppCopyLanguage(initialAppLocale);
+  useButlerStore.setState(initialButlerState, true);
+  useSettingsUIStore.setState(initialSettingsUIState, true);
+});
 
 interface RenderedFirstRun {
   calls: string[];
@@ -378,7 +393,7 @@ test("first-run model setup waits for a newly added model before completion", as
   expect(selectedModelPatch?.worker_profiles).toEqual([
     {
       id: "default",
-      label: "Default",
+      label: "기본",
       enabled: true,
       job: { kind: "builtin", job: "coding" },
       model: "openai/gpt-5.5",
