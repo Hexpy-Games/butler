@@ -1,5 +1,6 @@
 //! Strict legacy transcript indexing. Embedding happens before the short write lease.
 
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use tokio_util::sync::CancellationToken;
@@ -159,31 +160,7 @@ impl LegacyIndexService {
             strict,
             ..
         } = input;
-        let memory_root = self.paths.memory_root(&self.data_root);
-        let db_root = memory_root.join("db");
-        let lock = self.paths.consolidation_lock(&self.data_root);
-        let temp = db_root.join(format!("vector-stats.json.tmp-{}", uuid::Uuid::new_v4()));
-        let graph = db_root.join("graph.sqlite");
-        let lance = db_root.join("butler.lance");
-        let provenance = db_root.join("session-provenance.jsonl");
-        let stats = db_root.join("vector-stats.json");
-        ensure_data_authority(
-            &self.data_root,
-            &[
-                &self.paths.cognition_root(&self.data_root),
-                &memory_root,
-                &db_root,
-                &lock,
-                &graph,
-                &graph.with_extension("sqlite-wal"),
-                &graph.with_extension("sqlite-shm"),
-                &lance,
-                &provenance,
-                &stats,
-                &temp,
-                &self.data_root.join("logs/memory.log"),
-            ],
-        )?;
+        let (memory_root, lock, temp) = self.session_paths()?;
         let lease = self
             .coordinator
             .acquire(
@@ -232,5 +209,34 @@ impl LegacyIndexService {
         })
         .await
         .map_err(|source| error(CognitionCode::LegacySessionReceiptFailed).with_source(source))?
+    }
+
+    /// The memory root, lock and stats temporary of a session write,
+    /// checked with every path the write touches to stay inside the data
+    /// root.
+    fn session_paths(&self) -> CognitionResult<(PathBuf, PathBuf, PathBuf)> {
+        let memory_root = self.paths.memory_root(&self.data_root);
+        let db_root = memory_root.join("db");
+        let lock = self.paths.consolidation_lock(&self.data_root);
+        let temp = db_root.join(format!("vector-stats.json.tmp-{}", uuid::Uuid::new_v4()));
+        let graph = db_root.join("graph.sqlite");
+        ensure_data_authority(
+            &self.data_root,
+            &[
+                &self.paths.cognition_root(&self.data_root),
+                &memory_root,
+                &db_root,
+                &lock,
+                &graph,
+                &graph.with_extension("sqlite-wal"),
+                &graph.with_extension("sqlite-shm"),
+                &db_root.join("butler.lance"),
+                &db_root.join("session-provenance.jsonl"),
+                &db_root.join("vector-stats.json"),
+                &temp,
+                &self.data_root.join("logs/memory.log"),
+            ],
+        )?;
+        Ok((memory_root, lock, temp))
     }
 }

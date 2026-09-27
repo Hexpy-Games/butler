@@ -344,8 +344,37 @@ pub(super) async fn project_next(input: &Input) -> CognitionResult<bool> {
     let Some(pending) = pending else {
         return Ok(false);
     };
+    let job_id = pending.job_id.clone();
+    let notice = pending_notice(input, &handle, pending)?;
+    let projected = input
+        .registration
+        .project_semantic_window(ProjectSemanticWindowInput {
+            data_root: input.data_root.clone(),
+            target: input
+                .target
+                .clone()
+                .unwrap_or(MemoryGenerationTarget::Active {
+                    expected_generation: handle.generation_id,
+                }),
+            job_id,
+            notice,
+            cancellation: Some(input.shutdown.child_token()),
+            deadline_at_epoch_ms: None,
+            wait_class: CognitionWaitClass::Background,
+        })
+        .await?;
+    Ok(projected.is_some())
+}
+
+/// The source notice of a pending semantic job, checked against the
+/// current canonical conversation or typed record.
+fn pending_notice(
+    input: &Input,
+    handle: &crate::cognition::MemoryGenerationHandle,
+    pending: crate::cognition::graph::PendingSemanticJob,
+) -> CognitionResult<ProjectionSourceNotice> {
     let notice = if let Some(turn_id) = pending.source_key.strip_prefix("conversation_turn:") {
-        let canonical = ConversationSourceReader::open(&canonical_path(&handle, &input.data_root))
+        let canonical = ConversationSourceReader::open(&canonical_path(handle, &input.data_root))
             .map_err(CognitionError::from)?;
         let outcome = canonical
             .read_turn_outcome(turn_id)
@@ -392,24 +421,7 @@ pub(super) async fn project_next(input: &Input) -> CognitionResult<bool> {
     } else {
         return Err(error(CognitionCode::MemoryProjectionSourceInvalid));
     };
-    let projected = input
-        .registration
-        .project_semantic_window(ProjectSemanticWindowInput {
-            data_root: input.data_root.clone(),
-            target: input
-                .target
-                .clone()
-                .unwrap_or(MemoryGenerationTarget::Active {
-                    expected_generation: handle.generation_id,
-                }),
-            job_id: pending.job_id,
-            notice,
-            cancellation: Some(input.shutdown.child_token()),
-            deadline_at_epoch_ms: None,
-            wait_class: CognitionWaitClass::Background,
-        })
-        .await?;
-    Ok(projected.is_some())
+    Ok(notice)
 }
 
 pub(super) fn resolve_input_generation(

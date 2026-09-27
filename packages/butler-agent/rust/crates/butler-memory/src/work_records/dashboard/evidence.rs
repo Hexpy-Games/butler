@@ -39,10 +39,74 @@ pub(super) struct Safety {
     pub guard: Option<&'static str>,
 }
 
+/// Safety of a direct worker task from its status and durable evidence.
 pub(super) fn direct(directory: &Path, status: &str, request: &str) -> Safety {
-    let facts = collect(directory);
-    let classification = classification(directory, request);
-    let evidence = if facts.environment_blocker {
+    let evidence = verdict(&collect(directory), classification(directory, request));
+    match status {
+        "APPROVED" | "RUNNING" => Safety {
+            mode: "executing",
+            safe: false,
+            completion: false,
+            guard: Some(
+                "Legacy state records approved or running work; current execution is unverified. Do not claim completion.",
+            ),
+        },
+        "RECOVERABLE" => Safety {
+            mode: "repairing",
+            safe: false,
+            completion: false,
+            guard: Some(
+                "Legacy state records an interrupted worker; no native execution owner can resume it. Do not claim completion.",
+            ),
+        },
+        "DONE" | "REVIEWED" if !evidence.reportable => Safety {
+            mode: "reviewing",
+            safe: false,
+            completion: false,
+            guard: Some(
+                evidence
+                    .guard
+                    .unwrap_or("Worker completion evidence is insufficient."),
+            ),
+        },
+        "DONE" | "REVIEWED" => Safety {
+            mode: "complete",
+            safe: true,
+            completion: evidence.complete,
+            guard: evidence.guard,
+        },
+        "KILLED" => Safety {
+            mode: "cancelled",
+            safe: false,
+            completion: false,
+            guard: Some("Worker was stopped before completion."),
+        },
+        "FAILED" => Safety {
+            mode: "failed",
+            safe: true,
+            completion: false,
+            guard: Some("Only a failure report is safe; do not claim completion."),
+        },
+        _ => Safety {
+            mode: "failed",
+            safe: false,
+            completion: false,
+            guard: Some("Worker state is unknown; inspect durable evidence before reporting."),
+        },
+    }
+}
+
+/// What a finished worker's evidence allows it to report.
+struct Verdict {
+    /// The outcome may be reported (a blocker or a completion).
+    reportable: bool,
+    /// Completion may be claimed.
+    complete: bool,
+    guard: Option<&'static str>,
+}
+
+fn verdict(facts: &Facts, classification: &str) -> Verdict {
+    let (reportable, complete, guard) = if facts.environment_blocker {
         (
             true,
             false,
@@ -75,57 +139,10 @@ pub(super) fn direct(directory: &Path, status: &str, request: &str) -> Safety {
     } else {
         (true, true, None)
     };
-    match status {
-        "APPROVED" | "RUNNING" => Safety {
-            mode: "executing",
-            safe: false,
-            completion: false,
-            guard: Some(
-                "Legacy state records approved or running work; current execution is unverified. Do not claim completion.",
-            ),
-        },
-        "RECOVERABLE" => Safety {
-            mode: "repairing",
-            safe: false,
-            completion: false,
-            guard: Some(
-                "Legacy state records an interrupted worker; no native execution owner can resume it. Do not claim completion.",
-            ),
-        },
-        "DONE" | "REVIEWED" if !evidence.0 => Safety {
-            mode: "reviewing",
-            safe: false,
-            completion: false,
-            guard: Some(
-                evidence
-                    .2
-                    .unwrap_or("Worker completion evidence is insufficient."),
-            ),
-        },
-        "DONE" | "REVIEWED" => Safety {
-            mode: "complete",
-            safe: true,
-            completion: evidence.1,
-            guard: evidence.2,
-        },
-        "KILLED" => Safety {
-            mode: "cancelled",
-            safe: false,
-            completion: false,
-            guard: Some("Worker was stopped before completion."),
-        },
-        "FAILED" => Safety {
-            mode: "failed",
-            safe: true,
-            completion: false,
-            guard: Some("Only a failure report is safe; do not claim completion."),
-        },
-        _ => Safety {
-            mode: "failed",
-            safe: false,
-            completion: false,
-            guard: Some("Worker state is unknown; inspect durable evidence before reporting."),
-        },
+    Verdict {
+        reportable,
+        complete,
+        guard,
     }
 }
 

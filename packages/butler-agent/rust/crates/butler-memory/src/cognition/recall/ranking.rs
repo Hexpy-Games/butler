@@ -37,6 +37,74 @@ pub(in crate::cognition) fn fuse_episode_candidates(
     }
 }
 
+/// What every episode of one recall is scored against.
+struct RankContext<'a> {
+    /// Sum of the weights of the channels that ran.
+    denominator: f64,
+    as_of_ms: f64,
+    time_basis: TimeBasis,
+    parse_date: &'a dyn Fn(&str) -> f64,
+}
+
+impl RankContext<'_> {
+    /// Scores one episode: fused channel ranks, then salience, recency and
+    /// support, with query relevance when known.
+    fn rank(&self, input: EpisodeRankInput) -> RankedEpisode {
+        let channels = [
+            (input.graph_rank, RecallResultChannel::Graph),
+            (input.vector_rank, RecallResultChannel::Vector),
+            (input.lexical_rank, RecallResultChannel::Lexical),
+            (input.context_rank, RecallResultChannel::Context),
+        ]
+        .into_iter()
+        .filter(|(rank, _)| rank.is_some())
+        .map(|(_, channel)| channel)
+        .collect();
+        let fused = (rrf(input.graph_rank)
+            + rrf(input.vector_rank)
+            + 0.5 * rrf(input.lexical_rank)
+            + 0.5 * rrf(input.context_rank))
+            / self.denominator;
+        let salience = match input.salience {
+            Some(Salience::High) => 1.0,
+            Some(Salience::Normal) => 0.5,
+            _ => 0.0,
+        };
+        let basis = match self.time_basis {
+            TimeBasis::Conversation => input.conversation_at.as_deref(),
+            TimeBasis::Event => input.event_at.as_deref(),
+        };
+        let age_days = match basis.filter(|value| !value.is_empty()) {
+            Some(value) => js_max(
+                0.0,
+                (self.as_of_ms - (self.parse_date)(value)) / 86_400_000.0,
+            ),
+            None => f64::INFINITY,
+        };
+        let recency = if age_days.is_finite() {
+            2.0f64.powf(-age_days / input.half_life_days.unwrap_or(30.0))
+        } else {
+            0.0
+        };
+        let support = js_min(
+            1.0,
+            input.support_count.unwrap_or(0.0).ln_1p() / 17.0f64.ln(),
+        );
+        let metadata = 0.5 * salience + 0.3 * recency + 0.2 * support;
+        let score = match input.query_relevance {
+            None => 0.8 * fused + 0.2 * metadata,
+            Some(relevance) => {
+                0.55 * js_min(1.0, js_max(0.0, relevance)) + 0.35 * fused + 0.1 * metadata
+            }
+        };
+        RankedEpisode {
+            input,
+            score,
+            channels,
+        }
+    }
+}
+
 pub(in crate::cognition) fn rank_episodes(
     values: Vec<EpisodeRankInput>,
     executed: ExecutedEpisodeChannels,
@@ -49,61 +117,15 @@ pub(in crate::cognition) fn rank_episodes(
         + (if executed.lexical { 0.5 / 61.0 } else { 0.0 })
         + (if executed.context { 0.5 / 61.0 } else { 0.0 });
     let denominator = if denominator == 0.0 { 1.0 } else { denominator };
-    let as_of_ms = parse_date(as_of);
+    let context = RankContext {
+        denominator,
+        as_of_ms: parse_date(as_of),
+        time_basis,
+        parse_date,
+    };
     let mut ranked: Vec<_> = values
         .into_iter()
-        .map(|input| {
-            let mut channels = Vec::with_capacity(4);
-            for (rank, channel) in [
-                (input.graph_rank, RecallResultChannel::Graph),
-                (input.vector_rank, RecallResultChannel::Vector),
-                (input.lexical_rank, RecallResultChannel::Lexical),
-                (input.context_rank, RecallResultChannel::Context),
-            ] {
-                if rank.is_some() {
-                    channels.push(channel);
-                }
-            }
-            let fused = (rrf(input.graph_rank)
-                + rrf(input.vector_rank)
-                + 0.5 * rrf(input.lexical_rank)
-                + 0.5 * rrf(input.context_rank))
-                / denominator;
-            let salience = match input.salience {
-                Some(Salience::High) => 1.0,
-                Some(Salience::Normal) => 0.5,
-                _ => 0.0,
-            };
-            let basis = match time_basis {
-                TimeBasis::Conversation => input.conversation_at.as_deref(),
-                TimeBasis::Event => input.event_at.as_deref(),
-            };
-            let age_days = match basis.filter(|value| !value.is_empty()) {
-                Some(value) => js_max(0.0, (as_of_ms - parse_date(value)) / 86_400_000.0),
-                None => f64::INFINITY,
-            };
-            let recency = if age_days.is_finite() {
-                2.0f64.powf(-age_days / input.half_life_days.unwrap_or(30.0))
-            } else {
-                0.0
-            };
-            let support = js_min(
-                1.0,
-                input.support_count.unwrap_or(0.0).ln_1p() / 17.0f64.ln(),
-            );
-            let metadata = 0.5 * salience + 0.3 * recency + 0.2 * support;
-            let score = match input.query_relevance {
-                None => 0.8 * fused + 0.2 * metadata,
-                Some(relevance) => {
-                    0.55 * js_min(1.0, js_max(0.0, relevance)) + 0.35 * fused + 0.1 * metadata
-                }
-            };
-            RankedEpisode {
-                input,
-                score,
-                channels,
-            }
-        })
+        .map(|input| context.rank(input))
         .collect();
     ranked.sort_by(|a, b| {
         descending_subtract(a.score, b.score)

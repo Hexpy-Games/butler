@@ -100,69 +100,31 @@ impl LegacyMetadataIntegrityService {
     }
 
     pub async fn check(&self) -> CognitionResult<LegacyMetadataIntegrityCounts> {
-        let (counts, _, _) = self.check_inner(false).await?;
-        Ok(counts)
+        Ok(self.check_inner(References::Counted).await?.counts)
     }
 
+    /// Removes the chunk links to missing box items and feedback, then
+    /// re-checks.
     pub async fn repair_links(
         &self,
         coordinator: Arc<CognitionWriteCoordinator>,
     ) -> CognitionResult<LegacyMetadataRepairReport> {
         let before = self.check_with_references().await?;
-        let planned_box_refs = before.missing_box_refs.len();
-        let planned_feedback_refs = before.missing_feedback_refs.len();
         let mut repaired_box_refs = 0;
         let mut repaired_feedback_refs = 0;
-        if (planned_box_refs > 0 || planned_feedback_refs > 0)
+        if (!before.missing_box_refs.is_empty() || !before.missing_feedback_refs.is_empty())
             && self
                 .path
                 .try_exists()
                 .map_err(|source| metadata_error().with_source(source))?
         {
-            let lock_path = self.paths.consolidation_lock(&self.data_root);
-            ensure_data_authority(
-                &self.data_root,
-                &[
-                    &self.path,
-                    &lock_path,
-                    &self.paths.memory_root(&self.data_root),
-                ],
-            )?;
-            let lease = coordinator
-                .acquire(
-                    CognitionWriteAcquire::immediate(lock_path.clone(), "memory-metadata-repair"),
-                    CognitionWaitClass::Interactive,
+            (repaired_box_refs, repaired_feedback_refs) = self
+                .remove_links(
+                    &coordinator,
+                    before.missing_box_refs,
+                    before.missing_feedback_refs,
                 )
-                .await
-                .map_err(CognitionError::from)?
-                .ok_or_else(|| {
-                    CognitionError::new(CognitionCode::MemoryWriteBusy, "memory_write_busy")
-                })?;
-            let data_root = self.data_root.clone();
-            let path = self.path.clone();
-            let descriptor = self
-                .paths
-                .memory_root(&self.data_root)
-                .join("active-generation.json");
-            let boxes = before.missing_box_refs;
-            let feedback = before.missing_feedback_refs;
-            let result = tokio::task::spawn_blocking(move || {
-                let result = (|| {
-                    lease.assert_for_path(&lock_path).map_err(|source| {
-                        CognitionError::new(CognitionCode::MemoryWriteBusy, "memory_write_busy")
-                            .with_source(source)
-                    })?;
-                    remove_missing_links(&data_root, &path, &descriptor, &boxes, &feedback)
-                })();
-                let released = lease.release(result.is_ok()).map_err(CognitionError::from);
-                match (result, released) {
-                    (Err(failure), _) | (Ok(_), Err(failure)) => Err(failure),
-                    (Ok(value), Ok(())) => Ok(value),
-                }
-            })
-            .await
-            .map_err(|source| metadata_error().with_source(source))?;
-            (repaired_box_refs, repaired_feedback_refs) = result?;
+                .await?;
         }
         let integrity = self.check_with_references().await?;
         Ok(LegacyMetadataRepairReport {
@@ -172,96 +134,92 @@ impl LegacyMetadataIntegrityService {
         })
     }
 
+    /// Removes the missing links under the consolidation lock; how many box
+    /// and feedback links were removed.
+    async fn remove_links(
+        &self,
+        coordinator: &CognitionWriteCoordinator,
+        boxes: Vec<MissingBoxRef>,
+        feedback: Vec<MissingFeedbackRef>,
+    ) -> CognitionResult<(usize, usize)> {
+        let lock_path = self.paths.consolidation_lock(&self.data_root);
+        ensure_data_authority(
+            &self.data_root,
+            &[
+                &self.path,
+                &lock_path,
+                &self.paths.memory_root(&self.data_root),
+            ],
+        )?;
+        let lease = coordinator
+            .acquire(
+                CognitionWriteAcquire::immediate(lock_path.clone(), "memory-metadata-repair"),
+                CognitionWaitClass::Interactive,
+            )
+            .await
+            .map_err(CognitionError::from)?
+            .ok_or_else(|| {
+                CognitionError::new(CognitionCode::MemoryWriteBusy, "memory_write_busy")
+            })?;
+        let data_root = self.data_root.clone();
+        let path = self.path.clone();
+        let descriptor = self
+            .paths
+            .memory_root(&self.data_root)
+            .join("active-generation.json");
+        tokio::task::spawn_blocking(move || {
+            let result = (|| {
+                lease.assert_for_path(&lock_path).map_err(|source| {
+                    CognitionError::new(CognitionCode::MemoryWriteBusy, "memory_write_busy")
+                        .with_source(source)
+                })?;
+                remove_missing_links(&data_root, &path, &descriptor, &boxes, &feedback)
+            })();
+            let released = lease.release(result.is_ok()).map_err(CognitionError::from);
+            match (result, released) {
+                (Err(failure), _) | (Ok(_), Err(failure)) => Err(failure),
+                (Ok(value), Ok(())) => Ok(value),
+            }
+        })
+        .await
+        .map_err(|source| metadata_error().with_source(source))?
+    }
+
     pub async fn check_with_references(&self) -> CognitionResult<LegacyMetadataIntegrityReport> {
-        let (counts, missing_box_refs, missing_feedback_refs) = self.check_inner(true).await?;
+        let integrity = self.check_inner(References::Listed).await?;
         Ok(LegacyMetadataIntegrityReport {
-            chunk_count: counts.chunk_count,
-            missing_box_refs,
-            missing_feedback_refs,
+            chunk_count: integrity.counts.chunk_count,
+            missing_box_refs: integrity.missing_box_refs,
+            missing_feedback_refs: integrity.missing_feedback_refs,
         })
     }
 
-    async fn check_inner(
-        &self,
-        include_references: bool,
-    ) -> CognitionResult<(
-        LegacyMetadataIntegrityCounts,
-        Vec<MissingBoxRef>,
-        Vec<MissingFeedbackRef>,
-    )> {
+    /// Streams every chunk's references and checks them against the box
+    /// store and the feedback buffer.
+    async fn check_inner(&self, references: References) -> CognitionResult<Integrity> {
         ensure_data_authority(&self.data_root, &[&self.path])?;
+        let mut integrity = Integrity {
+            references,
+            counts: LegacyMetadataIntegrityCounts::default(),
+            missing_box_refs: Vec::new(),
+            missing_feedback_refs: Vec::new(),
+        };
         if !self
             .path
             .try_exists()
             .map_err(|source| metadata_error().with_source(source))?
         {
-            return Ok((
-                LegacyMetadataIntegrityCounts::default(),
-                Vec::new(),
-                Vec::new(),
-            ));
+            return Ok(integrity);
         }
         let (sender, mut receiver) = mpsc::channel(1);
         let path = self.path.clone();
         let producer = tokio::task::spawn_blocking(move || stream_refs(&path, &sender));
-        let mut counts = LegacyMetadataIntegrityCounts::default();
-        let mut missing_box_refs = Vec::new();
-        let mut missing_feedback_refs = Vec::new();
         let mut outcome = Ok(());
         while let Some(batch) = receiver.recv().await {
-            let batch = match batch {
-                Ok(batch) => batch,
-                Err(error) => {
-                    outcome = Err(error);
-                    break;
-                }
+            outcome = match batch {
+                Ok(batch) => self.check_batch(&mut integrity, batch).await,
+                Err(error) => Err(error),
             };
-            counts.chunk_count += batch.len();
-            let requested = batch
-                .iter()
-                .flat_map(|chunk| chunk.feedback_ids.iter().cloned())
-                .collect::<HashSet<_>>();
-            let found = match self.feedback.matching_ids(requested).await {
-                Ok(found) => found,
-                Err(error) => {
-                    outcome = Err(error);
-                    break;
-                }
-            };
-            for chunk in batch {
-                for id in chunk.box_ids {
-                    match self.box_store.manifest_exists(&id).await {
-                        Ok(true) => {}
-                        Ok(false) => {
-                            counts.missing_box_refs_count += 1;
-                            if include_references {
-                                missing_box_refs.push(MissingBoxRef {
-                                    memory_chunk_id: chunk.memory_chunk_id.clone(),
-                                    box_item_id: id,
-                                });
-                            }
-                        }
-                        Err(error) => {
-                            outcome = Err(error);
-                            break;
-                        }
-                    }
-                }
-                if outcome.is_err() {
-                    break;
-                }
-                for id in chunk.feedback_ids {
-                    if !found.contains(&id) {
-                        counts.missing_feedback_refs_count += 1;
-                        if include_references {
-                            missing_feedback_refs.push(MissingFeedbackRef {
-                                memory_chunk_id: chunk.memory_chunk_id.clone(),
-                                feedback_id: id,
-                            });
-                        }
-                    }
-                }
-            }
             if outcome.is_err() {
                 break;
             }
@@ -272,7 +230,70 @@ impl LegacyMetadataIntegrityService {
             .map_err(|source| metadata_error().with_source(source))?;
         outcome?;
         producer_result?;
-        Ok((counts, missing_box_refs, missing_feedback_refs))
+        Ok(integrity)
+    }
+
+    async fn check_batch(
+        &self,
+        integrity: &mut Integrity,
+        batch: Vec<ChunkRefs>,
+    ) -> CognitionResult<()> {
+        integrity.counts.chunk_count += batch.len();
+        let requested = batch
+            .iter()
+            .flat_map(|chunk| chunk.feedback_ids.iter().cloned())
+            .collect::<HashSet<_>>();
+        let found = self.feedback.matching_ids(requested).await?;
+        for chunk in batch {
+            for id in chunk.box_ids {
+                if !self.box_store.manifest_exists(&id).await? {
+                    integrity.missing_box(&chunk.memory_chunk_id, id);
+                }
+            }
+            for id in chunk.feedback_ids {
+                if !found.contains(&id) {
+                    integrity.missing_feedback(&chunk.memory_chunk_id, id);
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Whether a check lists the missing references or only counts them.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum References {
+    Counted,
+    Listed,
+}
+
+/// What a metadata check found.
+struct Integrity {
+    references: References,
+    counts: LegacyMetadataIntegrityCounts,
+    missing_box_refs: Vec<MissingBoxRef>,
+    missing_feedback_refs: Vec<MissingFeedbackRef>,
+}
+
+impl Integrity {
+    fn missing_box(&mut self, memory_chunk_id: &str, box_item_id: String) {
+        self.counts.missing_box_refs_count += 1;
+        if self.references == References::Listed {
+            self.missing_box_refs.push(MissingBoxRef {
+                memory_chunk_id: memory_chunk_id.to_owned(),
+                box_item_id,
+            });
+        }
+    }
+
+    fn missing_feedback(&mut self, memory_chunk_id: &str, feedback_id: String) {
+        self.counts.missing_feedback_refs_count += 1;
+        if self.references == References::Listed {
+            self.missing_feedback_refs.push(MissingFeedbackRef {
+                memory_chunk_id: memory_chunk_id.to_owned(),
+                feedback_id,
+            });
+        }
     }
 }
 

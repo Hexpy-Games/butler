@@ -79,32 +79,7 @@ fn read_owned(
             }
             canonical_scanned += 1;
             sessions.insert(message.session_id.clone());
-            'parts: for part in &message.parts {
-                for scalar in &part.scalars {
-                    for (start, end) in source_spans(&scalar.text) {
-                        if windows.len() >= limit {
-                            stopped = true;
-                            break 'parts;
-                        }
-                        let window = make_window(SourceWindowInput {
-                            message_id: &message.id,
-                            timestamp: &message.created_at,
-                            part_id: &part.part_id,
-                            part_index: part.part_index,
-                            scalar_pointer: &scalar.pointer,
-                            source_hash: &scalar.source_hash,
-                            text: &scalar.text,
-                            byte_start: start,
-                            byte_end: end,
-                        });
-                        if seen.contains(&window.coverage_key) || span_registered(root, &window) {
-                            continue;
-                        }
-                        seen.insert(window.coverage_key.clone());
-                        windows.push(window);
-                    }
-                }
-            }
+            add_message_windows(root, message, &mut windows, &mut seen, limit);
             if windows.len() >= limit {
                 stopped = true;
                 break;
@@ -125,6 +100,41 @@ fn read_owned(
         stale_keys: incomplete.stale,
         persistent_offset: persistent.then_some(if reached_end { 0 } else { offset }),
     })
+}
+
+/// Adds the message's windows not yet seen or registered, up to `limit`.
+fn add_message_windows(
+    root: &Path,
+    message: &super::super::contracts::CanonicalProfileMessage,
+    windows: &mut Vec<SourceWindow>,
+    seen: &mut HashSet<String>,
+    limit: usize,
+) {
+    for part in &message.parts {
+        for scalar in &part.scalars {
+            for (start, end) in source_spans(&scalar.text) {
+                if windows.len() >= limit {
+                    return;
+                }
+                let window = make_window(SourceWindowInput {
+                    message_id: &message.id,
+                    timestamp: &message.created_at,
+                    part_id: &part.part_id,
+                    part_index: part.part_index,
+                    scalar_pointer: &scalar.pointer,
+                    source_hash: &scalar.source_hash,
+                    text: &scalar.text,
+                    byte_start: start,
+                    byte_end: end,
+                });
+                if seen.contains(&window.coverage_key) || span_registered(root, &window) {
+                    continue;
+                }
+                seen.insert(window.coverage_key.clone());
+                windows.push(window);
+            }
+        }
+    }
 }
 
 struct Incomplete {

@@ -260,9 +260,61 @@ fn add_record(raw: &[u8], fallback_iso: &str, now_epoch_ms: i64, counts: &mut Fe
     }
 }
 
+/// Parses one feedback block: a heading line with the id and status, `- key:
+/// value` fields, then the body text.
 fn parse_entry(block: &str, fallback_iso: &str) -> FeedbackEntry {
     let mut lines = block.split('\n');
-    let heading = lines.next().unwrap_or_default();
+    let (feedback_id, status) = parse_heading(lines.next().unwrap_or_default());
+    let (fields, text) = parse_fields(lines);
+    let get = |key: &str, default: &str| {
+        fields
+            .get(key)
+            .cloned()
+            .unwrap_or_else(|| default.to_owned())
+    };
+    let or_created = |key: &str| {
+        fields
+            .get(key)
+            .or_else(|| fields.get("created_at"))
+            .cloned()
+            .unwrap_or_else(|| fallback_iso.to_owned())
+    };
+    FeedbackEntry {
+        feedback_id,
+        status,
+        created_at: get("created_at", fallback_iso),
+        updated_at: or_created("updated_at"),
+        priority: match fields.get("priority").map(String::as_str) {
+            Some("critical") => FeedbackPriority::Critical,
+            Some("normal") => FeedbackPriority::Normal,
+            Some("low") => FeedbackPriority::Low,
+            _ => FeedbackPriority::High,
+        },
+        scope: get("scope", "global"),
+        category: get("category", "unrouted"),
+        target_ref: get("target_ref", "unknown"),
+        promotion_target: get("promotion_target", "discard"),
+        review_after: or_created("review_after"),
+        expires_at: fields
+            .get("expires_at")
+            .filter(|value| !value.is_empty() && value.as_str() != "null")
+            .cloned(),
+        supersedes: parse_list(fields.get("supersedes").map(String::as_str)),
+        conflicts_with: parse_list(fields.get("conflicts_with").map(String::as_str)),
+        privacy_class: match fields.get("privacy_class").map(String::as_str) {
+            Some("public") => FeedbackPrivacyClass::Public,
+            Some("sensitive") => FeedbackPrivacyClass::Sensitive,
+            Some("secret") => FeedbackPrivacyClass::Secret,
+            _ => FeedbackPrivacyClass::Private,
+        },
+        text,
+        extra_fields: fields,
+    }
+}
+
+/// The id (a fresh one unless it starts with `fb_`) and status of a
+/// heading line.
+fn parse_heading(heading: &str) -> (String, FeedbackStatus) {
     let mut heading = butler_core::public_text::trim_js_whitespace(heading)
         .split(butler_core::public_text::is_js_whitespace)
         .filter(|value| !value.is_empty());
@@ -279,7 +331,11 @@ fn parse_entry(block: &str, fallback_iso: &str) -> FeedbackEntry {
         "superseded" => FeedbackStatus::Superseded,
         _ => FeedbackStatus::NeedsClarification,
     };
+    (feedback_id, status)
+}
 
+/// The `- key: value` fields before the body, and the trimmed body text.
+fn parse_fields<'a>(lines: impl Iterator<Item = &'a str>) -> (IndexMap<String, String>, String) {
     let mut fields = IndexMap::<String, String>::new();
     let mut body = Vec::new();
     let mut in_body = false;
@@ -306,57 +362,8 @@ fn parse_entry(block: &str, fallback_iso: &str) -> FeedbackEntry {
             body.push(line);
         }
     }
-
-    let get = |key: &str, default: &str| {
-        fields
-            .get(key)
-            .cloned()
-            .unwrap_or_else(|| default.to_owned())
-    };
-    let created_at = get("created_at", fallback_iso);
-    let updated_at = fields
-        .get("updated_at")
-        .or_else(|| fields.get("created_at"))
-        .cloned()
-        .unwrap_or_else(|| fallback_iso.to_owned());
-    let priority = match fields.get("priority").map(String::as_str) {
-        Some("critical") => FeedbackPriority::Critical,
-        Some("normal") => FeedbackPriority::Normal,
-        Some("low") => FeedbackPriority::Low,
-        _ => FeedbackPriority::High,
-    };
-    let privacy_class = match fields.get("privacy_class").map(String::as_str) {
-        Some("public") => FeedbackPrivacyClass::Public,
-        Some("sensitive") => FeedbackPrivacyClass::Sensitive,
-        Some("secret") => FeedbackPrivacyClass::Secret,
-        _ => FeedbackPrivacyClass::Private,
-    };
-    let expires_at = fields
-        .get("expires_at")
-        .filter(|value| !value.is_empty() && value.as_str() != "null")
-        .cloned();
-    FeedbackEntry {
-        feedback_id,
-        status,
-        created_at: created_at.clone(),
-        updated_at,
-        priority,
-        scope: get("scope", "global"),
-        category: get("category", "unrouted"),
-        target_ref: get("target_ref", "unknown"),
-        promotion_target: get("promotion_target", "discard"),
-        review_after: fields
-            .get("review_after")
-            .or_else(|| fields.get("created_at"))
-            .cloned()
-            .unwrap_or_else(|| fallback_iso.to_owned()),
-        expires_at,
-        supersedes: parse_list(fields.get("supersedes").map(String::as_str)),
-        conflicts_with: parse_list(fields.get("conflicts_with").map(String::as_str)),
-        privacy_class,
-        text: butler_core::public_text::trim_js_whitespace(&body.join("\n")).to_owned(),
-        extra_fields: fields,
-    }
+    let text = butler_core::public_text::trim_js_whitespace(&body.join("\n")).to_owned();
+    (fields, text)
 }
 
 fn parse_list(value: Option<&str>) -> Vec<String> {
@@ -376,6 +383,8 @@ fn parse_list(value: Option<&str>) -> Vec<String> {
         .collect()
 }
 
+/// JavaScript's `String(value)` of a list item. Passthrough: items of
+/// any JSON type are stringified as the legacy reader did.
 fn js_string(value: &serde_json::Value) -> String {
     use serde_json::Value;
     match value {
