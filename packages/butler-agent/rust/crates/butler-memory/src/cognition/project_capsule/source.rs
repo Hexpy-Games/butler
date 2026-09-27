@@ -100,7 +100,7 @@ pub(super) fn prepare(
         graph_evidence: snapshot.graph.len(),
         promoted: 0,
     };
-    let body = render(project_id, &snapshot, &mut counts, super::now_epoch_ms())?;
+    let body = render(project_id, &snapshot, &mut counts, super::now_epoch_ms());
     Ok(PreparedCapsule {
         project_id: project_id.to_owned(),
         path: target,

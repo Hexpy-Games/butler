@@ -76,42 +76,14 @@ impl ProjectCapsuleService {
         let workspace_path = workspace_path.map(str::to_owned);
         let cancellation_for_prepare = cancellation.clone();
         let (prepared, project_lock) = tokio::task::spawn_blocking(move || {
-            let target = source::capsule_path(&paths.memory_root(&data_root), &project_id);
-            source::ensure_source_authority(&data_root, &paths, &target)?;
-            let project_lock = match write::acquire_project_lock(&data_root, &paths, &project_id) {
-                Ok(lock) => lock,
-                Err(failure) => {
-                    write::record_failure_best_effort(
-                        &data_root,
-                        &paths,
-                        &project_id,
-                        "lock",
-                        &failure.message(),
-                    );
-                    return Err(failure);
-                }
-            };
-            let prepared = match source::prepare(
+            lock_and_prepare(
                 &data_root,
                 &paths,
                 &project_id,
                 workspace_path.as_deref(),
                 &cancellation_for_prepare,
                 deadline_at_epoch_ms,
-            ) {
-                Ok(prepared) => prepared,
-                Err(failure) => {
-                    write::record_failure_best_effort(
-                        &data_root,
-                        &paths,
-                        &project_id,
-                        "refresh",
-                        &failure.message(),
-                    );
-                    return Err(failure);
-                }
-            };
-            Ok((prepared, project_lock))
+            )
         })
         .await
         .map_err(|source| error(CognitionCode::ProjectCapsuleWorkerFailed).with_source(source))??;
@@ -199,6 +171,36 @@ impl ProjectCapsuleService {
         }
         Ok(result)
     }
+}
+
+/// Takes the project's capsule lock and prepares the refresh; a failure is
+/// recorded against the project before it is returned.
+fn lock_and_prepare(
+    data_root: &std::path::Path,
+    paths: &CognitionPathEnvironment,
+    project_id: &str,
+    workspace_path: Option<&str>,
+    cancellation: &CancellationToken,
+    deadline_at_epoch_ms: i64,
+) -> CognitionResult<(types::PreparedCapsule, write::ProjectCapsuleLock)> {
+    let target = source::capsule_path(&paths.memory_root(data_root), project_id);
+    source::ensure_source_authority(data_root, paths, &target)?;
+    let recorded = |stage: &'static str, failure: CognitionError| {
+        write::record_failure_best_effort(data_root, paths, project_id, stage, &failure.message());
+        failure
+    };
+    let project_lock = write::acquire_project_lock(data_root, paths, project_id)
+        .map_err(|failure| recorded("lock", failure))?;
+    let prepared = source::prepare(
+        data_root,
+        paths,
+        project_id,
+        workspace_path,
+        cancellation,
+        deadline_at_epoch_ms,
+    )
+    .map_err(|failure| recorded("refresh", failure))?;
+    Ok((prepared, project_lock))
 }
 
 pub(crate) fn check_active(

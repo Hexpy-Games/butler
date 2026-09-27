@@ -94,22 +94,8 @@ impl VectorOptimizeService {
             .collect();
         check_entry(cancellation, deadline_at_epoch_ms)?;
         let lease = self
-            .coordinator
-            .acquire(
-                CognitionWriteAcquire {
-                    lock_path: lock_path.clone(),
-                    purpose: Some("memory-vector-optimize".into()),
-                    deadline_at_epoch_ms: Some(deadline_at_epoch_ms as f64),
-                    cancellation: Some(cancellation.clone()),
-                },
-                CognitionWaitClass::Background,
-            )
-            .await
-            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
-            .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
-        lease
-            .assert_for_path(&lock_path)
-            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
+            .acquire(lock_path, cancellation, deadline_at_epoch_ms)
+            .await?;
         let target = MemoryGenerationTarget::Active {
             expected_generation: generation.generation_id.clone(),
         };
@@ -121,24 +107,7 @@ impl VectorOptimizeService {
             .filter(|key| candidates.contains(key))
             .collect();
         ordered.sort();
-        let mut vectors_pruned = 0;
-        for batch in ordered.chunks(DELETE_BATCH) {
-            check_entry(cancellation, deadline_at_epoch_ms)?;
-            let predicate = format!(
-                "vector_key IN ({})",
-                batch
-                    .iter()
-                    .map(|key| format!("'{}'", key.replace('\'', "''")))
-                    .collect::<Vec<_>>()
-                    .join(",")
-            );
-            let deleted = table.delete(&predicate).await.map_err(|source| {
-                error(CognitionCode::VectorStoreUnavailable).with_source(source)
-            })?;
-            vectors_pruned += usize::try_from(deleted.num_deleted_rows).map_err(|source| {
-                error(CognitionCode::VectorStoreUnavailable).with_source(source)
-            })?;
-        }
+        let vectors_pruned = prune(&table, &ordered, cancellation, deadline_at_epoch_ms).await?;
         // A compaction failure is optional in the legacy path. Compact files
         // only: pruning old Lance versions would erase retained rollback data.
         let lancedb_compacted =
@@ -163,6 +132,63 @@ impl VectorOptimizeService {
             lancedb_compacted,
         })
     }
+}
+
+impl VectorOptimizeService {
+    /// The consolidation lease for the optimize run.
+    async fn acquire(
+        &self,
+        lock_path: PathBuf,
+        cancellation: &CancellationToken,
+        deadline_at_epoch_ms: i64,
+    ) -> CognitionResult<crate::coordination::CognitionWriteLease> {
+        let lease = self
+            .coordinator
+            .acquire(
+                CognitionWriteAcquire {
+                    lock_path: lock_path.clone(),
+                    purpose: Some("memory-vector-optimize".into()),
+                    deadline_at_epoch_ms: Some(deadline_at_epoch_ms as f64),
+                    cancellation: Some(cancellation.clone()),
+                },
+                CognitionWaitClass::Background,
+            )
+            .await
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
+            .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
+        lease
+            .assert_for_path(&lock_path)
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
+        Ok(lease)
+    }
+}
+
+/// Deletes the vectors in batches; the number of rows deleted.
+async fn prune(
+    table: &Table,
+    ordered: &[String],
+    cancellation: &CancellationToken,
+    deadline_at_epoch_ms: i64,
+) -> CognitionResult<usize> {
+    let mut vectors_pruned = 0;
+    for batch in ordered.chunks(DELETE_BATCH) {
+        check_entry(cancellation, deadline_at_epoch_ms)?;
+        let predicate = format!(
+            "vector_key IN ({})",
+            batch
+                .iter()
+                .map(|key| format!("'{}'", key.replace('\'', "''")))
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        let deleted = table
+            .delete(&predicate)
+            .await
+            .map_err(|source| error(CognitionCode::VectorStoreUnavailable).with_source(source))?;
+        vectors_pruned += usize::try_from(deleted.num_deleted_rows)
+            .map_err(|source| error(CognitionCode::VectorStoreUnavailable).with_source(source))?;
+    }
+    Ok(vectors_pruned)
 }
 
 struct LanceStore {

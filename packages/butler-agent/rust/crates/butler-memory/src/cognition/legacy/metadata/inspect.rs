@@ -96,9 +96,18 @@ pub(super) fn read_chunk_with_refs(
     let Some(mut chunk) = chunk else {
         return Ok(None);
     };
-    let id = memory_chunk_id;
+    attach_refs(&db, memory_chunk_id, &mut chunk)?;
+    Ok(Some(chunk))
+}
+
+/// Reads every reference table for the chunk.
+fn attach_refs(
+    db: &Connection,
+    id: &str,
+    chunk: &mut LegacyMemoryChunkWithRefs,
+) -> CognitionResult<()> {
     chunk.origins = refs(
-        &db,
+        db,
         "SELECT ref_type,ref_id FROM memory_chunk_origins WHERE memory_chunk_id=?1 ORDER BY ref_type,ref_id",
         id,
         |row| {
@@ -109,7 +118,7 @@ pub(super) fn read_chunk_with_refs(
         },
     )?;
     chunk.box_refs = refs(
-        &db,
+        db,
         "SELECT box_item_id,relation FROM memory_chunk_box_refs WHERE memory_chunk_id=?1 ORDER BY box_item_id,relation",
         id,
         |row| {
@@ -120,7 +129,7 @@ pub(super) fn read_chunk_with_refs(
         },
     )?;
     chunk.feedback_refs = refs(
-        &db,
+        db,
         "SELECT feedback_id,relation FROM memory_chunk_feedback_refs WHERE memory_chunk_id=?1 ORDER BY feedback_id,relation",
         id,
         |row| {
@@ -131,7 +140,7 @@ pub(super) fn read_chunk_with_refs(
         },
     )?;
     chunk.graph_refs = refs(
-        &db,
+        db,
         "SELECT graph_ref_type,graph_ref_id,relation FROM memory_chunk_graph_refs WHERE memory_chunk_id=?1 ORDER BY graph_ref_type,graph_ref_id,relation",
         id,
         |row| {
@@ -143,7 +152,7 @@ pub(super) fn read_chunk_with_refs(
         },
     )?;
     chunk.vector_refs = refs(
-        &db,
+        db,
         "SELECT vector_store,vector_table,vector_row_id,embedding_model,embedding_dimension,indexed_at FROM memory_chunk_vector_refs WHERE memory_chunk_id=?1 ORDER BY vector_store,vector_table,vector_row_id",
         id,
         |row| {
@@ -157,7 +166,7 @@ pub(super) fn read_chunk_with_refs(
             })
         },
     )?;
-    Ok(Some(chunk))
+    Ok(())
 }
 
 fn chunk_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LegacyMemoryChunkWithRefs> {
