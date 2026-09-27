@@ -46,5 +46,7 @@ if (import.meta.main) {
   const target = join(SITE_DIST, "ds");
   rmSync(target, { recursive: true, force: true });
   cpSync(DS_OUT, target, { recursive: true });
+  // The manual pages use the same bundled fonts: their OFL notices ship at the site root too.
+  cpSync(join(DS_OUT, "THIRD_PARTY_NOTICES.txt"), join(SITE_DIST, "THIRD_PARTY_NOTICES.txt"));
   console.log(`DS Viewer copied to dist/ds/ (base ${dsBase}).`);
 }
