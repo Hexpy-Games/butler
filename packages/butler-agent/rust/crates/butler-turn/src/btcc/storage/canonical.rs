@@ -3,8 +3,10 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::common::error;
 use super::operation_input::CanonicalDelivery;
 use super::{StorageError, StorageResult};
-use crate::btcc::StorageCode;
+use crate::btcc::{DeliveryOutbox, StorageCode};
 
+/// Inserts the turn's canonical assistant message from its immutable Outbox
+/// (idempotently) and marks the Outbox inserted; returns the message id.
 pub(super) fn insert(
     connection: &mut Connection,
     turn: &CanonicalDelivery,
@@ -16,6 +18,26 @@ pub(super) fn insert(
         )
     })?;
     let transaction = connection.transaction().map_err(StorageError::sqlite)?;
+    assert_outbox_unchanged(&transaction, turn, outbox)?;
+    insert_message(&transaction, turn, outbox)?;
+    record_delivery(&transaction, turn, outbox)?;
+    transaction
+        .execute(
+            "UPDATE btcc_delivery_outbox SET status = 'inserted' \
+         WHERE outbox_id = ?1 AND status = 'pending'",
+            [&outbox.outbox_id],
+        )
+        .map_err(StorageError::sqlite)?;
+    transaction.commit().map_err(StorageError::sqlite)?;
+    Ok(outbox.expected_message_id.clone())
+}
+
+/// The stored Outbox must still carry the delivery's payload, message id and content.
+fn assert_outbox_unchanged(
+    transaction: &Connection,
+    turn: &CanonicalDelivery,
+    outbox: &DeliveryOutbox,
+) -> StorageResult<()> {
     let stored = transaction
         .query_row(
             "SELECT payload_id, payload_sha256, expected_message_id, content, status \
@@ -45,6 +67,16 @@ pub(super) fn insert(
             "BTCC canonical delivery does not match its immutable Outbox",
         ));
     }
+    Ok(())
+}
+
+/// Inserts the assistant message unless the same message already exists;
+/// a different message under its id is a conflict.
+fn insert_message(
+    transaction: &Connection,
+    turn: &CanonicalDelivery,
+    outbox: &DeliveryOutbox,
+) -> StorageResult<()> {
     let existing = transaction
         .query_row(
             "SELECT content FROM btcc_messages WHERE message_id = ?1",
@@ -53,31 +85,38 @@ pub(super) fn insert(
         )
         .optional()
         .map_err(StorageError::sqlite)?;
-    if existing
-        .as_deref()
-        .is_some_and(|content| content != outbox.content)
-    {
-        return Err(error(
+    match existing {
+        Some(content) if content != outbox.content => Err(error(
             StorageCode::CanonicalMessageConflict,
             "BTCC canonical assistant message identity conflict",
-        ));
+        )),
+        Some(_) => Ok(()),
+        None => {
+            transaction
+                .execute(
+                    "INSERT INTO btcc_messages (message_id, session_id, turn_id, role, content, \
+                 idempotency_key, created_at) VALUES (?1, ?2, ?3, 'assistant', ?4, ?5, \
+                 strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+                    params![
+                        outbox.expected_message_id,
+                        turn.session_id,
+                        turn.turn_id,
+                        outbox.content,
+                        format!("delivery:{}", outbox.outbox_id)
+                    ],
+                )
+                .map_err(StorageError::sqlite)?;
+            Ok(())
+        }
     }
-    if existing.is_none() {
-        transaction
-            .execute(
-                "INSERT INTO btcc_messages (message_id, session_id, turn_id, role, content, \
-             idempotency_key, created_at) VALUES (?1, ?2, ?3, 'assistant', ?4, ?5, \
-             strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
-                params![
-                    outbox.expected_message_id,
-                    turn.session_id,
-                    turn.turn_id,
-                    outbox.content,
-                    format!("delivery:{}", outbox.outbox_id)
-                ],
-            )
-            .map_err(StorageError::sqlite)?;
-    }
+}
+
+/// Records the turn's canonical delivery; one already recorded must match.
+fn record_delivery(
+    transaction: &Connection,
+    turn: &CanonicalDelivery,
+    outbox: &DeliveryOutbox,
+) -> StorageResult<()> {
     transaction
         .execute(
             "INSERT OR IGNORE INTO btcc_canonical_deliveries (turn_id, outbox_id, \
@@ -98,13 +137,5 @@ pub(super) fn insert(
             "BTCC canonical delivery identity conflict",
         ));
     }
-    transaction
-        .execute(
-            "UPDATE btcc_delivery_outbox SET status = 'inserted' \
-         WHERE outbox_id = ?1 AND status = 'pending'",
-            [&outbox.outbox_id],
-        )
-        .map_err(StorageError::sqlite)?;
-    transaction.commit().map_err(StorageError::sqlite)?;
-    Ok(outbox.expected_message_id.clone())
+    Ok(())
 }

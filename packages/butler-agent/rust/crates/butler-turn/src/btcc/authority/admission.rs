@@ -6,6 +6,9 @@ use super::{identity, permission, projection};
 
 const ALLOW_TEXT: &str = "Continue the approved operation exactly once.";
 
+/// Admits an authority request for a reviewed operation: replays an existing
+/// request of the same identity, reports a standing permission, or inserts a
+/// new pending request in the first free generation slot.
 pub(super) fn admit(
     repository: &mut dyn AuthorityRepository,
     input: AuthorityAdmissionInput,
@@ -13,29 +16,96 @@ pub(super) fn admit(
     clock: &dyn Fn() -> String,
     uuid: &dyn Fn() -> String,
 ) -> AuthorityResult<AuthorityAdmissionResult> {
-    let mut generation = input.authority_generation;
-    let identity_sha = loop {
-        let sha = identity::identity(&input, generation, collation)?;
-        if let Some(existing) = repository.find_identity(&sha)? {
-            assert_not_closed(&existing)?;
-            return projection::admission(&existing, collation);
-        }
-        if repository.has_permission(&permission::for_admission(&input, collation)?.grant_ref)? {
-            return Ok(AuthorityAdmissionResult::Granted);
-        }
-        match repository.find_slot(&input, generation)? {
-            None => break sha,
-            Some(slot) if terminal(&slot) => {
-                generation += 1;
-            }
-            Some(_) => return Err(AuthorityError::policy("authority_slot_identity_mismatch")),
-        }
+    let (identity_sha, generation) = match free_slot(repository, &input, collation)? {
+        Slot::Settled(result) => return Ok(result),
+        Slot::Free {
+            identity_sha,
+            generation,
+        } => (identity_sha, generation),
     };
     let now = clock();
-    let request_id = format!("authority-{}", uuid());
+    let record = pending_record(
+        input,
+        PendingIdentity {
+            identity_sha: identity_sha.clone(),
+            generation,
+            request_id: format!("authority-{}", uuid()),
+            now,
+        },
+        collation,
+    )?;
+    repository.insert(&record)?;
+    let stored = repository
+        .find_identity(&identity_sha)?
+        .ok_or_else(|| AuthorityError::policy("authority_request_insert_conflict"))?;
+    if stored.identity_sha256 != identity_sha {
+        return Err(AuthorityError::policy("authority_request_insert_conflict"));
+    }
+    assert_not_closed(&stored)?;
+    projection::admission(&stored, collation)
+}
+
+/// The admission slot of a request.
+enum Slot {
+    /// An existing request or a standing permission already answers it.
+    Settled(AuthorityAdmissionResult),
+    /// No request holds this identity and generation yet.
+    Free { identity_sha: String, generation: i64 },
+}
+
+/// Walks generations past terminal requests to the first free slot.
+fn free_slot(
+    repository: &mut dyn AuthorityRepository,
+    input: &AuthorityAdmissionInput,
+    collation: &butler_core::locale::LocaleCollation,
+) -> AuthorityResult<Slot> {
+    let mut generation = input.authority_generation;
+    loop {
+        let sha = identity::identity(input, generation, collation)?;
+        if let Some(existing) = repository.find_identity(&sha)? {
+            assert_not_closed(&existing)?;
+            return projection::admission(&existing, collation).map(Slot::Settled);
+        }
+        if repository.has_permission(&permission::for_admission(input, collation)?.grant_ref)? {
+            return Ok(Slot::Settled(AuthorityAdmissionResult::Granted));
+        }
+        match repository.find_slot(input, generation)? {
+            None => {
+                return Ok(Slot::Free {
+                    identity_sha: sha,
+                    generation,
+                });
+            }
+            Some(slot) if terminal(&slot) => generation += 1,
+            Some(_) => return Err(AuthorityError::policy("authority_slot_identity_mismatch")),
+        }
+    }
+}
+
+/// The identity of a new request.
+struct PendingIdentity {
+    identity_sha: String,
+    generation: i64,
+    request_id: String,
+    now: String,
+}
+
+/// The pending, allow-once request record of a reviewed effect or command.
+fn pending_record(
+    input: AuthorityAdmissionInput,
+    pending: PendingIdentity,
+    collation: &butler_core::locale::LocaleCollation,
+) -> AuthorityResult<AuthorityRecord> {
+    let PendingIdentity {
+        identity_sha,
+        generation,
+        request_id,
+        now,
+    } = pending;
+    let digest = identity::digest(&format!("{request_id}\0{identity_sha}"));
     let request_ref = format!(
         "authority-ref-{}",
-        &identity::digest(&format!("{request_id}\0{identity_sha}"))[..32]
+        digest.get(..32).unwrap_or(digest.as_str())
     );
     let reviewed = input.category.as_deref() == Some("reviewed_effect");
     let category = if reviewed {
@@ -44,10 +114,10 @@ pub(super) fn admit(
         "command"
     };
     let required = |value: &str, label: &str| identity::required(value, label).map(str::to_owned);
-    let record = AuthorityRecord {
+    Ok(AuthorityRecord {
         request_id: request_id.clone(),
         request_ref,
-        identity_sha256: identity_sha.clone(),
+        identity_sha256: identity_sha,
         owner_session_id: required(&input.owner_session_id, "owner session")?,
         source_session_id: required(&input.source_session_id, "source session")?,
         source_turn_id: required(&input.source_turn_id, "source Turn")?,
@@ -100,17 +170,9 @@ pub(super) fn admit(
         closed_at: None,
         created_at: now.clone(),
         updated_at: now,
-    };
-    repository.insert(&record)?;
-    let stored = repository
-        .find_identity(&identity_sha)?
-        .ok_or_else(|| AuthorityError::policy("authority_request_insert_conflict"))?;
-    if stored.identity_sha256 != identity_sha {
-        return Err(AuthorityError::policy("authority_request_insert_conflict"));
-    }
-    assert_not_closed(&stored)?;
-    projection::admission(&stored, collation)
+    })
 }
+
 fn terminal(record: &AuthorityRecord) -> bool {
     record.close_reason.is_some()
         || matches!(record.decision.as_str(), "denied" | "modified")
