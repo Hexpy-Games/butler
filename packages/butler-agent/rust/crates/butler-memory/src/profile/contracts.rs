@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+
+use super::understanding::{
+    CandidateDraft, CandidateStatus, Confidence, Expiry, Layer, SourceType, Understanding,
+};
 
 mod extraction;
 
@@ -226,63 +229,36 @@ pub struct ReflectiveProfileSummary {
     pub raw_profile_included: bool,
 }
 
+/// A candidate to merge into the profile store.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ProfileCandidateInput {
     pub category: String,
-    pub payload: Value,
-    pub source_type: String,
-    pub confidence: String,
+    pub draft: CandidateDraft,
+    pub source_type: SourceType,
+    pub confidence: Confidence,
     pub sensitive_domain: bool,
     pub evidence_ref: Option<String>,
     pub evidence_observed_at: Option<String>,
-    pub expires_or_decay: Option<String>,
+    pub expires_or_decay: Option<Expiry>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+/// A profile candidate as stored, fields in the order the record serializes.
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub(crate) struct ProfileCandidateRecord {
     pub id: String,
-    pub payload: Value,
-}
-
-impl Serialize for ProfileCandidateRecord {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeMap;
-        let mut map = serializer.serialize_map(None)?;
-        map.serialize_entry("id", &self.id)?;
-        for key in [
-            "layer",
-            "category",
-            "facet",
-            "summary",
-            "applies_when",
-            "butler_should",
-            "butler_should_not",
-            "temporal_scope",
-            "decay_policy",
-            "contradiction_refs",
-            "sensitivity",
-            "evidence_refs",
-            "evidence_observed_at",
-            "evidence_count",
-            "source_type",
-            "confidence",
-            "sensitive_domain",
-            "status",
-            "created_at",
-            "updated_at",
-            "last_seen_at",
-            "expires_or_decay",
-            "promoted_at",
-        ] {
-            if let Some(value) = self.payload.get(key) {
-                map.serialize_entry(key, value)?;
-            }
-        }
-        map.end()
-    }
+    pub layer: Layer,
+    pub category: String,
+    #[serde(flatten)]
+    pub understanding: Understanding,
+    pub source_type: SourceType,
+    pub confidence: Confidence,
+    pub sensitive_domain: bool,
+    pub status: CandidateStatus,
+    pub created_at: String,
+    pub updated_at: String,
+    pub last_seen_at: String,
+    pub expires_or_decay: Option<Expiry>,
+    pub promoted_at: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]

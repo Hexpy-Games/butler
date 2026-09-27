@@ -13,6 +13,7 @@ use rusqlite::types::Value as SqlValue;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
+use super::super::understanding::{Confidence, Expiry, SourceType};
 use super::support::{Root, service_with_parts};
 use super::*;
 use butler_models::models::{
@@ -57,7 +58,10 @@ fn respond(prompt: &str) -> String {
         );
     };
     let reference = parsed["observations"][0]["ref"].clone();
-    let targets = parsed["correction_targets"].as_array().cloned().unwrap_or_default();
+    let targets = parsed["correction_targets"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
     let candidates = if let Some(target) = targets
         .iter()
         .find(|target| target["category"] == "communication")
@@ -236,13 +240,15 @@ async fn stored_profile_rows_prompts_and_manifests_keep_their_bytes() {
         &root.0,
         &ProfileCandidateInput {
             category: "affective_landscape".into(),
-            payload: json!({"summary":"Gets  frustrated by vague status","facet":"frustrations"}),
-            source_type: "inference".into(),
-            confidence: "low".into(),
+            draft: draft(
+                json!({"summary":"Gets  frustrated by vague status","facet":"frustrations"}),
+            ),
+            source_type: SourceType::Inference,
+            confidence: Confidence::Low,
             sensitive_domain: false,
             evidence_ref: Some(" legacy:1 ".into()),
             evidence_observed_at: Some("2023-01-01T00:00:00Z".into()),
-            expires_or_decay: Some("decay".into()),
+            expires_or_decay: Some(Expiry::Decay),
         },
         "2023-01-01T00:00:00.000Z",
     )
@@ -252,13 +258,13 @@ async fn stored_profile_rows_prompts_and_manifests_keep_their_bytes() {
         &root.0,
         &ProfileCandidateInput {
             category: "relationships".into(),
-            payload: json!({"summary":"Works with a design partner","facet":null,
+            draft: draft(json!({"summary":"Works with a design partner","facet":null,
                 "layer":"stable_disposition","applies_when":["planning"],
                 "butler_should":["Mention partner reviews"],"butler_should_not":[],
                 "contradiction_refs":[],"temporal_scope":"durable",
-                "decay_policy":"never_without_consent","sensitivity":"sensitive"}),
-            source_type: "user_confirmed".into(),
-            confidence: "medium".into(),
+                "decay_policy":"never_without_consent","sensitivity":"sensitive"})),
+            source_type: SourceType::UserConfirmed,
+            confidence: Confidence::Medium,
             sensitive_domain: true,
             evidence_ref: None,
             evidence_observed_at: None,
@@ -273,12 +279,14 @@ async fn stored_profile_rows_prompts_and_manifests_keep_their_bytes() {
         &root.0,
         &ProfileCandidateInput {
             category: "agency".into(),
-            payload: json!({"summary":"Ship the  Rust port","facet":"goals","layer":null,
+            draft: draft(
+                json!({"summary":"Ship the  Rust port","facet":"goals","layer":null,
                 "applies_when":["shipping"],"butler_should":[],"butler_should_not":["Nag"],
                 "contradiction_refs":[],"temporal_scope":null,"decay_policy":"days_7",
                 "sensitivity":"normal"}),
-            source_type: "inference".into(),
-            confidence: "high".into(),
+            ),
+            source_type: SourceType::Inference,
+            confidence: Confidence::High,
             sensitive_domain: false,
             evidence_ref: Some("legacy:y".into()),
             evidence_observed_at: Some("bad time".into()),
@@ -327,8 +335,8 @@ async fn stored_profile_rows_prompts_and_manifests_keep_their_bytes() {
         "projection": projection,
     });
     let text = butler_core::json::pretty(&pinned);
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("src/profile/tests/format-pin.json");
+    let path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/profile/tests/format-pin.json");
     if std::env::var_os("BUTLER_BLESS_FORMAT").is_some() {
         fs::write(&path, &text).unwrap();
         return;

@@ -14,6 +14,7 @@ mod presets;
 mod projection;
 mod service;
 mod storage;
+mod understanding;
 
 pub use contracts::{
     CanonicalProfileMessage, CanonicalProfilePart, CanonicalProfileScalar, CanonicalProfileScan,

@@ -3,7 +3,7 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
-use serde_json::{Value, json};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
@@ -113,7 +113,7 @@ pub(super) async fn run(
                 &root,
                 &ProfileCandidateInput {
                     category: candidate.category,
-                    payload: candidate.payload,
+                    draft: candidate.draft,
                     source_type: candidate.source_type,
                     confidence: candidate.confidence,
                     sensitive_domain: candidate.sensitive_domain,
@@ -131,11 +131,20 @@ pub(super) async fn run(
     }
     let mut candidate_ids = ids.iter().cloned().collect::<Vec<_>>();
     candidate_ids.sort_by(|left, right| left.encode_utf16().cmp(right.encode_utf16()));
-    let manifest = json!({"import_id":import_id,"source":source,"imported_at":imported_at,"text_sha256":hash,"input_chars":normalized.len_utf16(),"candidate_ids":candidate_ids,"raw_text_included":false});
+    let manifest = ImportManifest {
+        import_id: &import_id,
+        source: &source,
+        imported_at: &imported_at,
+        text_sha256: &hash,
+        input_chars: normalized.len_utf16(),
+        candidate_ids,
+        raw_text_included: false,
+    };
     runtime::blocking({
         let root = dependencies.root.clone();
         let hash = hash.clone();
-        move || write_manifest(&root, &hash, &manifest)
+        let manifest = write_manifest_text(&manifest);
+        move || write_manifest(&root, &hash, &manifest?)
     })
     .await?;
     let consolidation = runtime::with_gate(&dependencies, None, {
@@ -227,7 +236,29 @@ fn import_prompt(
         mode.as_str()
     ))
 }
-fn write_manifest(root: &Path, hash: &str, value: &Value) -> ProfileResult<()> {
+/// The manifest written for each third-party import; eligibility checks it
+/// before trusting an entry that cites the import.
+#[derive(Serialize)]
+struct ImportManifest<'a> {
+    import_id: &'a str,
+    source: &'a str,
+    imported_at: &'a str,
+    text_sha256: &'a str,
+    input_chars: usize,
+    candidate_ids: Vec<String>,
+    raw_text_included: bool,
+}
+
+fn write_manifest_text(manifest: &ImportManifest<'_>) -> ProfileResult<String> {
+    let mut bytes = serde_json::to_string_pretty(manifest).map_err(|source| {
+        ProfileError::new(ProfileCode::ProfileDataInvalid, "Profile data is invalid.")
+            .with_source(source)
+    })?;
+    bytes.push('\n');
+    Ok(bytes)
+}
+
+fn write_manifest(root: &Path, hash: &str, bytes: &str) -> ProfileResult<()> {
     let directory = root.join("personalization/profile-imports");
     create_private_directory(&directory).map_err(|source| {
         ProfileError::new(
@@ -236,11 +267,6 @@ fn write_manifest(root: &Path, hash: &str, value: &Value) -> ProfileResult<()> {
         )
         .with_source(source)
     })?;
-    let mut bytes = serde_json::to_string_pretty(value).map_err(|source| {
-        ProfileError::new(ProfileCode::ProfileDataInvalid, "Profile data is invalid.")
-            .with_source(source)
-    })?;
-    bytes.push('\n');
     let path = directory.join(format!("{hash}.json"));
     let mut file = private_manifest_file(&path).map_err(|source| {
         ProfileError::new(

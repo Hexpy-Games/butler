@@ -1,11 +1,13 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use serde::Deserialize;
 use serde_json::Value;
 
 use super::contracts::{
     PersonalizationProfile, PersonalizationProfileUpdate, ProfileError, ProfileResult,
 };
+use crate::lenient;
 use crate::profile::ProfileCode;
 
 const TEXT_LIMIT: usize = 256;
@@ -21,15 +23,33 @@ pub(super) fn read(data_root: &Path) -> PersonalizationProfile {
     let Ok(value) = serde_json::from_slice::<Value>(&bytes) else {
         return PersonalizationProfile::default();
     };
+    let stored: StoredProfile = lenient::view(&value);
+    let field = |value: Option<String>| {
+        value
+            .map(|value| bounded(&value, TEXT_LIMIT))
+            .unwrap_or_default()
+    };
     PersonalizationProfile {
-        butler_nickname: field(&value, "butler_nickname"),
-        principal_name: field(&value, "principal_name"),
-        preferred_address: field(&value, "preferred_address"),
-        updated_at: value
-            .get("updated_at")
-            .and_then(Value::as_str)
-            .map(str::to_owned),
+        butler_nickname: field(stored.butler_nickname),
+        principal_name: field(stored.principal_name),
+        preferred_address: field(stored.preferred_address),
+        updated_at: stored.updated_at,
     }
+}
+
+/// `personalization/profile.json` as stored; a field with the wrong type
+/// reads as absent.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct StoredProfile {
+    #[serde(deserialize_with = "lenient::option")]
+    butler_nickname: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    principal_name: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    preferred_address: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    updated_at: Option<String>,
 }
 
 pub(super) fn update(
@@ -157,13 +177,6 @@ pub(super) fn atomic_json<T: serde::Serialize>(
     result.map_err(|source| write_error().with_source(source))
 }
 
-fn field(value: &Value, key: &str) -> String {
-    value
-        .get(key)
-        .and_then(Value::as_str)
-        .map(|value| bounded(value, TEXT_LIMIT))
-        .unwrap_or_default()
-}
 fn write_error() -> ProfileError {
     ProfileError::new(
         ProfileCode::ProfileWriteFailed,

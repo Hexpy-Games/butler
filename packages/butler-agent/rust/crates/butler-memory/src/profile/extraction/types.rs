@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use serde_json::Value;
+use serde::Serialize;
 
 use butler_models::models::PromptUsageReport;
 
 use super::super::contracts::ProfileModelUsageSummary;
+use super::super::understanding::{CandidateDraft, Confidence, Expiry, SourceType};
 
 pub(super) const EXTRACTOR_VERSION: &str = "profile-scalar-v1";
 pub(super) const MAX_SCAN_MESSAGES: usize = 20_000;
@@ -38,15 +39,16 @@ pub(super) struct SourceRead {
     pub persistent_offset: Option<usize>,
 }
 
+/// A candidate the extractor returned, normalized and validated.
 #[derive(Clone, Debug)]
 pub(super) struct ExtractedCandidate {
-    pub payload: Value,
+    pub draft: CandidateDraft,
     pub category: String,
-    pub source_type: String,
-    pub confidence: String,
+    pub source_type: SourceType,
+    pub confidence: Confidence,
     pub sensitive_domain: bool,
     pub evidence_refs: Vec<String>,
-    pub expires_or_decay: Option<String>,
+    pub expires_or_decay: Option<Expiry>,
 }
 
 #[derive(Clone, Debug)]
@@ -58,9 +60,19 @@ pub(super) struct CorrectionTarget {
     pub revision: String,
 }
 
+/// A correction target as the extractor prompt shows it.
+#[derive(Clone, Debug, Serialize)]
+pub(super) struct PublicTarget {
+    pub target_ref: String,
+    pub instruction: String,
+    pub category: String,
+    pub facet: Option<String>,
+    pub applies_when: Vec<String>,
+}
+
 #[derive(Clone, Debug)]
 pub(super) struct CorrectionTargets {
-    pub public: Vec<Value>,
+    pub public: Vec<PublicTarget>,
     pub private: HashMap<String, CorrectionTarget>,
 }
 

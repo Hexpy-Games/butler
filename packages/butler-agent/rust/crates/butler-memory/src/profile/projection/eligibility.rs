@@ -1,14 +1,22 @@
+//! Which stable entries may shape the runtime projection: entries whose
+//! evidence still exists in the user's own messages (or a verified import),
+//! that have not decayed, and that no explicit correction replaced.
+
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
 use rusqlite::Connection;
+use serde::Deserialize;
 use serde_json::Value;
 
 use super::super::contracts::{
     CanonicalProfileSourceFactory, ProfileError, ProfileResult, ProfilingMode,
 };
 use super::super::storage::{self, StoredEntry};
+use super::super::understanding::{DecayPolicy, StoredUnderstanding, TemporalScope};
+use crate::lenient::{self, Arg};
+
 pub(super) fn eligible_sources(
     data_root: &Path,
     sources: &dyn CanonicalProfileSourceFactory,
@@ -86,32 +94,15 @@ pub(super) fn eligible_sources_in_db(
             if valid.is_empty() {
                 return None;
             }
-            if let Some(payload) = entry.payload.as_object_mut() {
-                payload.insert(
-                    "evidence_refs".into(),
-                    Value::Array(valid.iter().cloned().map(Value::String).collect()),
-                );
-                let observed = payload
-                    .get("evidence_observed_at")
-                    .and_then(Value::as_object);
-                payload.insert(
-                    "evidence_observed_at".into(),
-                    Value::Object(
-                        valid
-                            .iter()
-                            .map(|key| {
-                                (
-                                    key.clone(),
-                                    observed
-                                        .and_then(|values| values.get(key))
-                                        .cloned()
-                                        .unwrap_or(Value::Null),
-                                )
-                            })
-                            .collect(),
-                    ),
-                );
-            }
+            let understanding = &mut entry.understanding;
+            understanding.evidence_observed_at = valid
+                .iter()
+                .map(|key| {
+                    let time = understanding.evidence_observed_at.get(key).cloned();
+                    (key.clone(), time.unwrap_or(Arg::Null))
+                })
+                .collect();
+            understanding.evidence_refs = valid;
             Some(entry)
         })
         .collect::<Vec<_>>();
@@ -180,29 +171,27 @@ fn eligible_policy(
             if !category_allowed(&entry.category, mode) {
                 return false;
             }
-            if mode == ProfilingMode::Basic && bool_field(&entry.payload, "sensitive_domain") {
+            let understanding = &entry.understanding;
+            if mode == ProfilingMode::Basic && understanding.sensitive_domain.unwrap_or(false) {
                 return false;
             }
-            let observed = entry
-                .payload
-                .get("evidence_observed_at")
-                .and_then(Value::as_object)
-                .into_iter()
-                .flatten()
-                .filter_map(|(_, value)| value.as_str())
-                .filter_map(parse_time)
-                .collect::<Vec<_>>();
-            let Some(latest) = observed.into_iter().max() else {
-                return text(&entry.payload, "temporal_scope") == Some("durable")
+            let latest = understanding
+                .evidence_observed_at
+                .values()
+                .filter_map(Arg::valid)
+                .filter_map(|value| parse_time(value))
+                .max();
+            let Some(latest) = latest else {
+                return understanding.temporal_scope == Some(TemporalScope::Durable)
                     && matches!(
-                        text(&entry.payload, "decay_policy"),
-                        Some("reinforce_or_decay" | "never_without_consent")
+                        understanding.decay_policy,
+                        Some(DecayPolicy::ReinforceOrDecay | DecayPolicy::NeverWithoutConsent)
                     );
             };
             let age = now_ms.saturating_sub(latest);
-            match text(&entry.payload, "decay_policy") {
-                Some("days_7") => age <= 7 * 86_400_000,
-                Some("days_30") => age <= 30 * 86_400_000,
+            match understanding.decay_policy {
+                Some(DecayPolicy::Days7) => age <= 7 * 86_400_000,
+                Some(DecayPolicy::Days30) => age <= 30 * 86_400_000,
                 _ => true,
             }
         })
@@ -219,16 +208,16 @@ fn eligible_policy(
         ) {
             continue;
         }
-        for target in strings(&correction.payload, "contradiction_refs") {
+        for target in &correction.understanding.contradiction_refs {
             let Some(existing) = by_id.get(target.as_str()) else {
                 continue;
             };
             if existing.category == correction.category
-                && text(&existing.payload, "facet") == text(&correction.payload, "facet")
-                && normalized_conditions(&existing.payload)
-                    == normalized_conditions(&correction.payload)
+                && existing.understanding.facet_text() == correction.understanding.facet_text()
+                && normalized_conditions(&existing.understanding)
+                    == normalized_conditions(&correction.understanding)
             {
-                contradicted.insert(target);
+                contradicted.insert(target.clone());
             }
         }
     }
@@ -238,10 +227,11 @@ fn eligible_policy(
         .collect()
 }
 
-fn normalized_conditions(value: &Value) -> Vec<String> {
-    let mut values = strings(value, "applies_when")
-        .into_iter()
-        .map(|value| super::super::naming::collapse_js_whitespace(&value))
+fn normalized_conditions(understanding: &StoredUnderstanding) -> Vec<String> {
+    let mut values = understanding
+        .applies_when
+        .iter()
+        .map(|value| super::super::naming::collapse_js_whitespace(value))
         .filter(|value| !value.is_empty())
         .collect::<Vec<_>>();
     values.sort_by(|left, right| left.encode_utf16().cmp(right.encode_utf16()));
@@ -250,23 +240,7 @@ fn normalized_conditions(value: &Value) -> Vec<String> {
 }
 
 fn evidence_refs(entry: &StoredEntry) -> Vec<String> {
-    strings(&entry.payload, "evidence_refs")
-}
-fn strings(value: &Value, key: &str) -> Vec<String> {
-    value
-        .get(key)
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .map(str::to_owned)
-        .collect()
-}
-fn text<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
-    value.get(key).and_then(Value::as_str)
-}
-fn bool_field(value: &Value, key: &str) -> bool {
-    value.get(key).and_then(Value::as_bool).unwrap_or(false)
+    entry.understanding.evidence_refs.clone()
 }
 fn category_allowed(category: &str, mode: ProfilingMode) -> bool {
     mode == ProfilingMode::Deep
@@ -304,19 +278,30 @@ fn verified_import(root: &Path, reference: &str, id: &str) -> bool {
     let Ok(value) = serde_json::from_slice::<Value>(&bytes) else {
         return false;
     };
-    value.get("import_id").and_then(Value::as_str) == Some(reference)
-        && value.get("source").and_then(Value::as_str) == Some(source)
-        && value.get("text_sha256").and_then(Value::as_str) == Some(digest)
-        && value.get("raw_text_included").and_then(Value::as_bool) == Some(false)
-        && value
-            .get("candidate_ids")
-            .and_then(Value::as_array)
-            .is_some_and(|ids| {
-                ids.iter().any(|value| {
-                    value.as_str() == Some(id)
-                        || id
-                            .strip_prefix("sp_")
-                            .is_some_and(|tail| value.as_str() == Some(&format!("pc_{tail}")))
-                })
-            })
+    let manifest: ImportManifest = lenient::view(&value);
+    let candidate = id.strip_prefix("sp_").map(|tail| format!("pc_{tail}"));
+    manifest.import_id.as_deref() == Some(reference)
+        && manifest.source.as_deref() == Some(source)
+        && manifest.text_sha256.as_deref() == Some(digest)
+        && manifest.raw_text_included == Some(false)
+        && manifest
+            .candidate_ids
+            .iter()
+            .any(|value| value == id || candidate.as_ref() == Some(value))
+}
+
+/// The fields of a third-party import manifest that vouch for an entry.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct ImportManifest {
+    #[serde(deserialize_with = "lenient::option")]
+    import_id: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    source: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    text_sha256: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    raw_text_included: Option<bool>,
+    #[serde(deserialize_with = "lenient::string_list")]
+    candidate_ids: Vec<String>,
 }

@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use serde_json::json;
 
 use super::contracts::ProfileCandidateInput;
+use super::understanding::{CandidateDraft, Confidence, Expiry, SourceType};
 use super::*;
 
 mod extraction;
@@ -193,13 +194,13 @@ async fn generated_projection_requires_current_canonical_evidence_and_closes_rea
         &root.0,
         &ProfileCandidateInput {
             category: "communication".into(),
-            payload: json!({"summary":"Use concise answers","butler_should":["Be concise"]}),
-            source_type: "explicit".into(),
-            confidence: "high".into(),
+            draft: draft(json!({"summary":"Use concise answers","butler_should":["Be concise"]})),
+            source_type: SourceType::Explicit,
+            confidence: Confidence::High,
             sensitive_domain: false,
             evidence_ref: Some("e".into()),
             evidence_observed_at: Some("2023-11-14T22:13:20.000Z".into()),
-            expires_or_decay: Some("decay".into()),
+            expires_or_decay: Some(Expiry::Decay),
         },
         "2023-11-14T22:13:20.000Z",
     )
@@ -232,18 +233,18 @@ async fn candidate_duplicate_and_promoted_stable_merge_preserve_source_history()
         .unwrap();
     let candidate = |evidence: &str, instruction: &str| ProfileCandidateInput {
         category: "cares".into(),
-        payload: json!({
+        draft: draft(json!({
             "facet":"current_interests",
             "summary":"Rust migration",
             "butler_should":[instruction],
             "sensitivity":"restricted"
-        }),
-        source_type: "explicit".into(),
-        confidence: "medium".into(),
+        })),
+        source_type: SourceType::Explicit,
+        confidence: Confidence::Medium,
         sensitive_domain: true,
         evidence_ref: Some(evidence.into()),
         evidence_observed_at: Some("2023-11-14T22:13:20.000Z".into()),
-        expires_or_decay: Some("decay".into()),
+        expires_or_decay: Some(Expiry::Decay),
     };
     let first = candidates::upsert(
         &root.0,
@@ -312,8 +313,8 @@ async fn candidate_duplicate_and_promoted_stable_merge_preserve_source_history()
     .unwrap();
     let stable = storage::stable_entries(&root.0).unwrap();
     assert_eq!(stable.len(), 1);
-    assert_eq!(stable[0].payload["evidence_refs"], json!(["e1", "e2"]));
-    let instructions = stable[0].payload["butler_should"].as_array().unwrap();
+    assert_eq!(stable[0].understanding.evidence_refs, ["e1", "e2"]);
+    let instructions = &stable[0].understanding.butler_should;
     assert!(
         instructions
             .iter()
@@ -368,4 +369,8 @@ async fn dropped_caller_keeps_registered_blocking_operation_owned_until_close_dr
             .code(),
         "profile_closed"
     );
+}
+
+fn draft(value: serde_json::Value) -> CandidateDraft {
+    serde_json::from_value(value).unwrap()
 }

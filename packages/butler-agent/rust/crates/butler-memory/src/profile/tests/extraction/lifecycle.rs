@@ -272,13 +272,13 @@ async fn correction_target_revision_is_revalidated_after_provider() {
         &root.0,
         &ProfileCandidateInput {
             category: "communication".into(),
-            payload: serde_json::json!({"summary":"Old preference"}),
-            source_type: "explicit".into(),
-            confidence: "high".into(),
+            draft: super::super::draft(serde_json::json!({"summary":"Old preference"})),
+            source_type: crate::profile::understanding::SourceType::Explicit,
+            confidence: crate::profile::understanding::Confidence::High,
             sensitive_domain: false,
             evidence_ref: Some(evidence),
             evidence_observed_at: Some(target.created_at),
-            expires_or_decay: Some("decay".into()),
+            expires_or_decay: Some(crate::profile::understanding::Expiry::Decay),
         },
         "2023-11-14T22:13:20.000Z",
     )

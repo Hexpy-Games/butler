@@ -1,12 +1,16 @@
+//! Correction targets: the stable entries the extractor may correct, offered
+//! under opaque refs, with a revision that detects changes before commit.
+
 use std::collections::HashMap;
 use std::path::Path;
 
-use serde_json::{Value, json};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use super::super::contracts::{CanonicalProfileSourceFactory, ProfileResult, ProfilingMode};
 use super::super::{projection, storage};
-use super::types::{CorrectionTarget, CorrectionTargets};
+use super::types::{CorrectionTarget, CorrectionTargets, PublicTarget};
+use crate::lenient::Arg;
 
 pub(super) fn read(
     root: &Path,
@@ -24,25 +28,23 @@ pub(super) fn read(
             "{:x}",
             Sha256::digest(format!("{salt}\0{}", entry.id).as_bytes())
         );
-        let reference = format!("profile_target:{}:{index}", &digest[..16]);
-        let conditions = normalized_conditions(strings(&entry.payload, "applies_when"));
-        let facet = entry
-            .payload
-            .get("facet")
-            .and_then(Value::as_str)
-            .map(str::to_owned);
-        let instruction = strings(&entry.payload, "butler_should")
-            .into_iter()
-            .next()
-            .or_else(|| {
-                entry
-                    .payload
-                    .get("summary")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned)
-            })
+        let reference = format!("profile_target:{}:{index}", digest.get(..16).unwrap_or(""));
+        let understanding = &entry.understanding;
+        let conditions = normalized_conditions(understanding.applies_when.clone());
+        let facet = understanding.facet_text().map(str::to_owned);
+        let instruction = understanding
+            .butler_should
+            .first()
+            .cloned()
+            .or_else(|| understanding.summary.valid().cloned())
             .unwrap_or_default();
-        public.push(json!({"target_ref":reference,"instruction":instruction,"category":entry.category,"facet":facet,"applies_when":conditions}));
+        public.push(PublicTarget {
+            target_ref: reference.clone(),
+            instruction,
+            category: entry.category.clone(),
+            facet: facet.clone(),
+            applies_when: conditions.clone(),
+        });
         private.insert(
             reference,
             CorrectionTarget {
@@ -57,20 +59,42 @@ pub(super) fn read(
     Ok(CorrectionTargets { public, private })
 }
 
+/// The fields of a stable entry a correction depends on, hashed to notice
+/// a change between offering the target and committing the correction.
+#[derive(Serialize)]
+struct RevisionFields<'a> {
+    id: &'a str,
+    category: &'a str,
+    facet: &'a Arg<String>,
+    summary: &'a Arg<String>,
+    applies_when: Vec<String>,
+    butler_should: &'a [String],
+    butler_should_not: &'a [String],
+    evidence_refs: &'a [String],
+    evidence_observed_at: &'a crate::profile::understanding::ObservedTimes,
+    updated_at: &'a str,
+}
+
 pub(super) fn revision(entry: &storage::StoredEntry) -> String {
-    let object = json!({
-        "id":entry.id,
-        "category":entry.category,
-        "facet":entry.payload.get("facet").cloned().unwrap_or(Value::Null),
-        "summary":entry.payload.get("summary").cloned().unwrap_or(Value::String(String::new())),
-        "applies_when":normalized_conditions(strings(&entry.payload,"applies_when")),
-        "butler_should":entry.payload.get("butler_should").cloned().unwrap_or(Value::Array(Vec::new())),
-        "butler_should_not":entry.payload.get("butler_should_not").cloned().unwrap_or(Value::Array(Vec::new())),
-        "evidence_refs":entry.payload.get("evidence_refs").cloned().unwrap_or(Value::Array(Vec::new())),
-        "evidence_observed_at":entry.payload.get("evidence_observed_at").cloned().unwrap_or(Value::Object(Default::default())),
-        "updated_at":entry.updated_at,
-    });
-    format!("{:x}", Sha256::digest(object.to_string().as_bytes()))
+    let understanding = &entry.understanding;
+    let missing_summary = Arg::Valid(String::new());
+    let fields = RevisionFields {
+        id: &entry.id,
+        category: &entry.category,
+        facet: &understanding.facet,
+        summary: match understanding.summary {
+            Arg::Missing => &missing_summary,
+            _ => &understanding.summary,
+        },
+        applies_when: normalized_conditions(understanding.applies_when.clone()),
+        butler_should: &understanding.butler_should,
+        butler_should_not: &understanding.butler_should_not,
+        evidence_refs: &understanding.evidence_refs,
+        evidence_observed_at: &understanding.evidence_observed_at,
+        updated_at: &entry.updated_at,
+    };
+    let text = serde_json::to_string(&fields).unwrap_or_default();
+    format!("{:x}", Sha256::digest(text.as_bytes()))
 }
 
 pub(super) fn normalized_conditions(mut values: Vec<String>) -> Vec<String> {
@@ -82,15 +106,4 @@ pub(super) fn normalized_conditions(mut values: Vec<String>) -> Vec<String> {
     values.sort_by(|left, right| left.encode_utf16().cmp(right.encode_utf16()));
     values.dedup();
     values
-}
-
-fn strings(value: &Value, key: &str) -> Vec<String> {
-    value
-        .get(key)
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .map(str::to_owned)
-        .collect()
 }

@@ -150,6 +150,15 @@ pub(crate) fn view<T: serde::de::DeserializeOwned + Default>(value: &Value) -> T
     }
 }
 
+/// Reads the string items of an array, skipping items of other types; a
+/// value that is not an array reads as empty.
+pub(crate) fn string_list<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    strings(deserializer).map(Option::unwrap_or_default)
+}
+
 /// Reads the string items of an array, skipping items of other types;
 /// `None` when the value is not an array.
 pub(crate) fn strings<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>

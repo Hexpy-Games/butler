@@ -1,7 +1,7 @@
-use serde_json::Value;
+use serde::Serialize;
 
 use super::super::contracts::ProfilingMode;
-use super::types::{CorrectionTargets, MAX_OBSERVATIONS, PROMPT_BYTES, SourceWindow};
+use super::types::{CorrectionTargets, MAX_OBSERVATIONS, PROMPT_BYTES, PublicTarget, SourceWindow};
 use butler_core::segmentation::split_grapheme_utf8_spans;
 
 pub(super) struct PreparedBatch {
@@ -57,33 +57,49 @@ pub(super) fn prepare(
     }
 }
 
+/// The extractor request: the rules, the correction targets on offer and the
+/// observations to read.
+#[derive(Serialize)]
+struct ExtractorPrompt<'a> {
+    task: &'static str,
+    mode: &'static str,
+    rules: [&'static str; 2],
+    correction_targets: &'a [PublicTarget],
+    observations: Vec<Observation<'a>>,
+}
+
+#[derive(Serialize)]
+struct Observation<'a> {
+    #[serde(rename = "ref")]
+    reference: &'a str,
+    observed_at: &'a str,
+    text: &'a str,
+}
+
 pub(super) fn extractor_prompt(
     windows: &[SourceWindow],
     mode: ProfilingMode,
-    targets: &[Value],
+    targets: &[PublicTarget],
 ) -> String {
-    let observations = windows
-        .iter()
-        .take(MAX_OBSERVATIONS)
-        .map(|window| {
-            serde_json::json!({
-                "ref": window.evidence_ref,
-                "observed_at": window.timestamp,
-                "text": window.text.as_ref(),
-            })
-        })
-        .collect::<Vec<_>>();
-    serde_json::json!({
-        "task": "extract_profile_candidates",
-        "mode": mode.as_str(),
-        "rules": [
+    let prompt = ExtractorPrompt {
+        task: "extract_profile_candidates",
+        mode: mode.as_str(),
+        rules: [
             "Evidence refs must be non-empty and come only from delivered observations.",
-            "For an explicit correction, contradiction_refs may contain only a delivered correction target_ref and must preserve its category, facet, and applies_when exactly."
+            "For an explicit correction, contradiction_refs may contain only a delivered correction target_ref and must preserve its category, facet, and applies_when exactly.",
         ],
-        "correction_targets": targets,
-        "observations": observations,
-    })
-    .to_string()
+        correction_targets: targets,
+        observations: windows
+            .iter()
+            .take(MAX_OBSERVATIONS)
+            .map(|window| Observation {
+                reference: &window.evidence_ref,
+                observed_at: &window.timestamp,
+                text: window.text.as_ref(),
+            })
+            .collect(),
+    };
+    serde_json::to_string(&prompt).unwrap_or_default()
 }
 
 pub(super) fn instructions(mode: ProfilingMode) -> String {
@@ -125,7 +141,7 @@ pub(super) fn instructions(mode: ProfilingMode) -> String {
 fn split_window(
     window: &SourceWindow,
     mode: ProfilingMode,
-    targets: &[Value],
+    targets: &[PublicTarget],
 ) -> Option<Vec<SourceWindow>> {
     let spans =
         split_grapheme_utf8_spans(window.text.as_ref(), (window.text.len() / 2).max(1) as f64);

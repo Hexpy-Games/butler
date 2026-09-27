@@ -8,6 +8,7 @@ use super::contracts::{
     ClearProfilingResult, ProfileError, ProfileResult, ProfilingConsentSnapshot, ProfilingMode,
     RuntimeProfileProjection,
 };
+use super::understanding::StoredUnderstanding;
 use crate::profile::ProfileCode;
 
 pub(super) const CONSENT_VERSION: &str = "2026-05-16";
@@ -269,12 +270,13 @@ pub(super) fn read_projection(data_root: &Path) -> ProfileResult<Option<RuntimeP
         .transpose()
 }
 
+/// A stable profile entry as stored.
 #[derive(Clone)]
 pub(super) struct StoredEntry {
     pub id: String,
     pub category: String,
     pub source_type: String,
-    pub payload: Value,
+    pub understanding: StoredUnderstanding,
     pub updated_at: String,
 }
 
@@ -310,7 +312,7 @@ pub(super) fn stable_entries_in_db(db: &Connection) -> ProfileResult<Vec<StoredE
                 id,
                 category,
                 source_type,
-                payload: serde_json::from_str(&raw).map_err(json_error)?,
+                understanding: StoredUnderstanding::parse(&raw).map_err(json_error)?,
                 updated_at,
             })
         })
