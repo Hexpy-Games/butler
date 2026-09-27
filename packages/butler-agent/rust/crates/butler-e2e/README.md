@@ -33,7 +33,7 @@ The harness builds `butler-agent` itself (`cargo build -p butler-agent`) unless
 |----------|---------|
 | `BUTLER_E2E_TIER` | unset: scenarios skipped; `stub`, `live` (missing credentials fail), `all` (missing credentials: `SKIPPED (no credentials: …)`) |
 | `BUTLER_E2E_PROVIDER` | `openai-subscription` (default), `openai`, `opencode-go`, … |
-| `BUTLER_E2E_MODEL` / `BUTLER_E2E_MODEL_MATRIX` | `provider/model@effort`; defaults `openai/gpt-6-sol@low` and `openai/gpt-6-sol@low,openai/gpt-6-luna@max` |
+| `BUTLER_E2E_MODEL` / `BUTLER_E2E_MODEL_MATRIX` | `provider/model@effort`; defaults `openai/gpt-6-luna@max` (owner decision) and `openai/gpt-6-sol@low,openai/gpt-6-luna@max` |
 | `BUTLER_E2E_CODEX_PROFILE` | Butler OAuth test profile (default `~/.butler-e2e-auth/auth/openai-codex.json`, optional; needed only for LIVE-10) |
 | `BUTLER_E2E_CODEX_AUTH_JSON` / `CODEX_AUTH_JSON` | Codex CLI auth file (default `~/.codex/auth.json`), passed by path; never read by the harness |
 | `BUTLER_E2E_API_KEY_ENV` | name of the variable holding an API key (API-key providers) |

@@ -90,7 +90,7 @@ pub struct LiveProvider {
     pub base_url: Option<String>,
 }
 
-pub const DEFAULT_LIVE_MODEL: &str = "openai/gpt-6-sol@low";
+pub const DEFAULT_LIVE_MODEL: &str = "openai/gpt-6-luna@max";
 pub const DEFAULT_LIVE_MATRIX: &str = "openai/gpt-6-sol@low,openai/gpt-6-luna@max";
 
 impl LiveProvider {

@@ -26,7 +26,7 @@ on:
         default: "openai-subscription"
       model:
         description: "BUTLER_E2E_MODEL (provider/model@effort)"
-        default: "openai/gpt-6-sol@low"
+        default: "openai/gpt-6-luna@max"
       matrix:
         description: "BUTLER_E2E_MODEL_MATRIX for LIVE-07"
         default: "openai/gpt-6-sol@low,openai/gpt-6-luna@max"
@@ -160,7 +160,7 @@ jobs:
         working-directory: packages/butler-agent/rust
     env:
       BUTLER_E2E_PROVIDER: ${{ inputs.provider || 'openai-subscription' }}
-      BUTLER_E2E_MODEL: ${{ inputs.model || 'openai/gpt-6-sol@low' }}
+      BUTLER_E2E_MODEL: ${{ inputs.model || 'openai/gpt-6-luna@max' }}
       BUTLER_E2E_MODEL_MATRIX: ${{ inputs.matrix || 'openai/gpt-6-sol@low,openai/gpt-6-luna@max' }}
       BUTLER_E2E_LIVE_MAX_TURNS: "40"
     steps:
