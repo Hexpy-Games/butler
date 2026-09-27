@@ -2,6 +2,8 @@
 
 use std::borrow::Cow;
 
+/// A borrowed UTF-16 range of a string that may start or end inside a
+/// surrogate pair, keeping the cut halves as JavaScript `slice` does.
 #[derive(Clone, Copy, Debug)]
 pub struct Utf16Slice<'a> {
     body: &'a str,
@@ -60,10 +62,12 @@ impl<'a> Utf16Slice<'a> {
         output
     }
 
+    /// Length in UTF-16 units, including cut surrogate halves.
     pub fn len_utf16(&self) -> usize {
         self.units
     }
 
+    /// The UTF-16 code units of the range, in order.
     pub fn code_units(&self) -> impl Iterator<Item = u16> + '_ {
         self.leading_low
             .into_iter()

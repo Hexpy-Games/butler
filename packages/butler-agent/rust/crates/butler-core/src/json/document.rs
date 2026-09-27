@@ -14,6 +14,8 @@ pub use traverse::{
     bound_raw_string, raw_string_contains_any, raw_string_units, visit_raw_array, visit_raw_object,
 };
 
+/// Immutable, cheaply shared encoded JSON, e.g. a tool result body kept
+/// byte-exact (including escaped lone surrogates) between owners.
 #[derive(Clone, Debug)]
 pub struct JsonDocument(Arc<Box<RawValue>>);
 
@@ -32,6 +34,7 @@ impl JsonDocument {
         Self::from_encoded(super::stringify(value)?)
     }
 
+    /// The encoded JSON text.
     pub fn as_str(&self) -> &str {
         self.0.get()
     }

@@ -25,6 +25,8 @@ pub fn iso_from_system_time(time: std::time::SystemTime) -> String {
     format_iso_millis(millis.clamp(-TIME_CLIP, TIME_CLIP)).unwrap_or_default()
 }
 
+/// `Date.prototype.toISOString` of epoch milliseconds; `None` outside the
+/// ECMAScript time clip. Years outside 0..=9999 use the signed six-digit form.
 pub fn format_iso_millis(value: i64) -> Option<String> {
     if !(-TIME_CLIP..=TIME_CLIP).contains(&value) {
         return None;
@@ -60,6 +62,8 @@ pub fn format_date_value(value: f64) -> Option<String> {
     format_iso_millis(millis)
 }
 
+/// `Date.parse` of an ISO timestamp to epoch milliseconds; `None` for
+/// invalid dates, leap seconds and values outside the time clip.
 pub fn parse_iso_millis(value: &str) -> Option<i64> {
     if let Some(parsed) = parse_canonical(value) {
         return Some(parsed);
@@ -147,6 +151,7 @@ fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
     era * 146_097 + year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year - 719_468
 }
 
+/// The proleptic Gregorian `(year, month, day)` of days since the Unix epoch.
 pub fn civil_from_days(days: i64) -> (i64, i64, i64) {
     let shifted = days + 719_468;
     let era = shifted.div_euclid(146_097);

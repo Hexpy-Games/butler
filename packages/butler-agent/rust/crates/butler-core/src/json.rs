@@ -101,12 +101,17 @@ impl JsonError {
     }
 }
 
+/// How canonical JSON orders object keys.
 #[derive(Clone, Copy)]
 pub enum CanonicalKeyOrder {
+    /// By UTF-16 code units, as JavaScript's default string sort does.
     Utf16Lexical,
+    /// In ECMAScript property enumeration order (array indices first).
     JsPropertyEnumeration,
 }
 
+/// `JSON.stringify` of `value` with keys in `order`, for digests and
+/// comparisons that must not depend on insertion order.
 pub fn canonical_json(value: &Value, order: CanonicalKeyOrder) -> Result<String, JsonError> {
     encode(
         value,
@@ -118,6 +123,8 @@ pub fn canonical_json(value: &Value, order: CanonicalKeyOrder) -> Result<String,
     )
 }
 
+/// `JSON.stringify` of `value` in insertion order with JavaScript number
+/// formatting; the byte form stored and hashed across the runtime.
 pub fn stringify(value: &Value) -> Result<String, JsonError> {
     encode(value, JsonOrder::Insertion, None)
 }
@@ -149,6 +156,7 @@ pub fn stringify_with_string_projection(
     Ok(output)
 }
 
+/// [`stringify`] omitting the top-level member `field`.
 pub fn stringify_without(value: &Value, field: &str) -> Result<String, JsonError> {
     encode(value, JsonOrder::Insertion, Some(field))
 }
@@ -252,6 +260,7 @@ fn write_value(
     Ok(())
 }
 
+/// Appends `value` as a JSON string literal.
 pub fn write_string(value: &str, output: &mut String) -> Result<(), JsonError> {
     serde_json::to_writer(Utf8Output(output), value).map_err(JsonError::from)
 }

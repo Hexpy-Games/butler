@@ -42,6 +42,7 @@ pub enum ConfigError {
     WriteFailed(#[source] std::io::Error),
 }
 
+/// Serializes read/modify/write cycles of the configuration file within this process.
 pub struct ConfigurationWrites {
     gate: Arc<Mutex<()>>,
 }
@@ -86,6 +87,7 @@ impl Default for ConfigurationWrites {
 }
 
 impl ConfigurationWrites {
+    /// A gate with no write in progress.
     pub fn new() -> Self {
         Self {
             gate: Arc::new(Mutex::new(())),

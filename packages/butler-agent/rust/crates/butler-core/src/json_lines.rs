@@ -4,13 +4,17 @@ use std::{fs::File, io::BufRead, io::BufReader, path::Path};
 
 use serde_json::Value;
 
+/// Lines longer than this are skipped and counted rather than parsed.
 pub const MAX_JSON_LINE_BYTES: usize = 1024 * 1024;
 
+/// The outcome of a JSONL visit.
 #[derive(Default)]
 pub struct JsonLineVisit {
     pub(crate) oversize_lines: u64,
 }
 
+/// Visits each parseable JSON line of `path` (a trailing line without a
+/// newline included); unreadable files visit nothing and bad lines are skipped.
 pub fn visit_json_lines(path: &Path, mut visit: impl FnMut(&Value)) -> JsonLineVisit {
     let Ok(file) = File::open(path) else {
         return JsonLineVisit::default();

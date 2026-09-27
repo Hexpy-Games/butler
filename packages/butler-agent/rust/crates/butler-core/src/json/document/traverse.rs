@@ -9,6 +9,8 @@ use serde_json::value::RawValue;
 
 use crate::json::JsonError;
 
+/// Calls `field` with each member's key and encoded value of a JSON object,
+/// without decoding the values.
 pub fn visit_raw_object<'a>(
     encoded: &'a str,
     field: impl FnMut(&'a str, &'a str) -> Result<(), JsonError>,
@@ -34,6 +36,7 @@ pub fn visit_raw_object<'a>(
         .map_err(JsonError::from)
 }
 
+/// Calls `item` with each encoded element of a JSON array, without decoding it.
 pub fn visit_raw_array<'a>(
     encoded: &'a str,
     item: impl FnMut(&'a str) -> Result<(), JsonError>,
@@ -106,7 +109,8 @@ pub fn bound_raw_string(raw: &str, max_chars: usize) -> Result<String, JsonError
         );
         let tail = tail.make_contiguous();
         append_units(
-            tail.get(tail.len().saturating_sub(side)..).unwrap_or_default(),
+            tail.get(tail.len().saturating_sub(side)..)
+                .unwrap_or_default(),
             &mut output,
         );
     }
@@ -114,6 +118,8 @@ pub fn bound_raw_string(raw: &str, max_chars: usize) -> Result<String, JsonError
     Ok(output)
 }
 
+/// Whether an encoded JSON string contains any of `markers`, compared as
+/// UTF-16 units so escaped content matches.
 pub fn raw_string_contains_any(raw: &str, markers: &[&str]) -> bool {
     let patterns = markers
         .iter()

@@ -7,6 +7,8 @@ pub struct GraphemeByteSpan {
     pub oversized: bool,
 }
 
+/// Byte spans of at most `max_bytes` that never split a grapheme; a single
+/// grapheme larger than the budget becomes its own oversized span.
 pub fn split_grapheme_utf8_spans(text: &str, max_bytes: f64) -> Vec<GraphemeByteSpan> {
     let mut spans = Vec::new();
     let mut start = 0;
