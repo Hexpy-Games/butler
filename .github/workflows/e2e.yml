@@ -137,7 +137,8 @@ jobs:
           BUTLER_E2E_REPORT: ${{ runner.temp }}/e2e-report.txt
         run: |
           set -o pipefail
-          cargo test --locked -p butler-e2e 2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
+          # --no-fail-fast: one run reports every failing scenario binary.
+          cargo test --locked --no-fail-fast -p butler-e2e 2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
 
       - name: Summarize
         if: always()
