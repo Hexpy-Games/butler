@@ -83,6 +83,16 @@ impl AppSettingsMutation {
                 .await
                 .map_err(GatewayApplicationError::internal_from)?;
         }
+        // The Settings model is the default model: `butler model status` and
+        // every non-App reader of butler.config.json must agree with it.
+        if patch.contains_key("model")
+            && let Some(model) = projection.get("model").and_then(Value::as_str)
+        {
+            self.configuration
+                .set_default_model(model)
+                .await
+                .map_err(GatewayApplicationError::internal_from)?;
+        }
         if let (Some(key), Some(value)) = (environment_key, api_key) {
             self.configuration
                 .upsert_private_environment_value(key, value, &root)

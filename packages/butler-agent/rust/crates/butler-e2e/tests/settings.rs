@@ -69,7 +69,6 @@ async fn set_01_model_change_applies_to_next_turn() -> Result<(), HarnessError> 
 
 /// SET-01 (CLI part) — `butler model status` agrees with Settings.
 #[tokio::test]
-#[ignore = "product gap: SET-01-CLI — PATCH /settings stores the model in the App DB; `butler model status` reads system.defaultModel from butler.config.json and keeps reporting the old model"]
 async fn set_01_cli_model_status_agrees_with_settings() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("SET-01-CLI")?.start().await?;
