@@ -6,7 +6,8 @@ mod policy;
 mod selection;
 mod visibility;
 
-pub use catalog::{GuidedCatalogRead, GuidedCatalogSnapshot};
+pub use catalog::{GuidedCatalogRead, GuidedCatalogSnapshot, LedgerEffects};
+pub use policy::PolicyRole;
 pub use selection::{
     GuidedPhase, GuidedPhaseInput, GuidedPhaseSelection, SurfaceMode, select_phase,
 };

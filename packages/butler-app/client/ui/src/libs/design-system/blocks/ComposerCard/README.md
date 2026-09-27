@@ -34,6 +34,10 @@ and menu controls. Compose `ComposerCardTextarea`, `ComposerCardToolbar`,
 Set `ComposerSendButton busy` for temporary unavailability: it becomes a disabled
 non-submit control with the official DS `Spinner`. Supply a localized accessible
 label and title; keep it visible even in compact mode. Reduced motion stops rotation.
+Set `ComposerSendButton disabledReason` when sending is blocked for a reason
+the user can fix (an attached image the model does not accept, or whose image
+support is unknown): the button is an `aria-disabled` non-submit control whose tooltip names the reason in a few
+words. Capability feedback copy is terse and non-intrusive: the disabled state plus a few-word tooltip, and at most a brief transient toast for a refused drop or paste. No banners, inline paragraphs, persistent notices, or why/how explanations.
 
 For inline references, use `ComposerCardEditor` with `ComposerCardEditable`
 (a slot for the editor's contenteditable) and `ComposerCardPlaceholder`.

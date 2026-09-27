@@ -32,9 +32,12 @@ const COS_AL = Math.cos(AL);
 /** Signed distance to a circular sector (Inigo Quilez sdPie), axis along +y. */
 function sdPie(px: number, py: number, radius: number) {
   const ax = Math.abs(px);
-  const l = Math.hypot(ax, py) - radius;
+  // sqrt over Math.hypot: this runs per clip ray every morph frame, and hypot is much slower
+  const l = Math.sqrt(ax * ax + py * py) - radius;
   const d = clamp(ax * SIN_AL + py * COS_AL, 0, radius);
-  const m = Math.hypot(ax - SIN_AL * d, py - COS_AL * d);
+  const qx = ax - SIN_AL * d;
+  const qy = py - COS_AL * d;
+  const m = Math.sqrt(qx * qx + qy * qy);
   return Math.max(l, m * Math.sign(COS_AL * ax - SIN_AL * py));
 }
 

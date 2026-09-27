@@ -68,6 +68,17 @@ pub(crate) struct GuidedToolBinding {
     pub authority_source_call_id: Option<String>,
 }
 
+impl GuidedToolBinding {
+    /// Whether project ledger effects are enabled for this turn.
+    pub(crate) fn ledger_effects(&self) -> butler_turn::btcc::LedgerEffects {
+        if self.enable_project_ledger_effects {
+            butler_turn::btcc::LedgerEffects::Enabled
+        } else {
+            butler_turn::btcc::LedgerEffects::Disabled
+        }
+    }
+}
+
 #[derive(Default)]
 struct State {
     next_call_index: u64,

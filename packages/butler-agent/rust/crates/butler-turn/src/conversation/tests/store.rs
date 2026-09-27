@@ -80,7 +80,7 @@ async fn store_preserves_transactions_outcomes_and_summary_authority() {
             .read_messages_around(ReadAroundInput {
                 session_id: "cs_fixed".into(),
                 anchor_message_id: Some("cm_request".into()),
-                direction: Some("around".into()),
+                direction: Some(crate::conversation::AroundDirection::Around),
                 limit: Some(10.0),
                 include_compacted: false,
             })

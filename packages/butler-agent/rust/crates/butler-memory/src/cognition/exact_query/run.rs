@@ -244,7 +244,7 @@ fn scan(
                 &args.scope,
                 args.role,
                 args.time.as_ref().map(|(a, b)| (a.as_str(), b.as_str())),
-                args.latest,
+                page_order(args.latest),
                 last.map(|(a, b)| (a.as_str(), b.as_str())),
                 size,
             )
@@ -435,4 +435,14 @@ fn encode(value: &impl Serialize) -> CognitionResult<Value> {
 )]
 fn store_error(error: butler_turn::conversation::ConversationError) -> CognitionError {
     CognitionError::new(CognitionCode::Store, error.to_string())
+}
+
+/// The store page order of a query: newest first when it asks for the
+/// latest messages.
+fn page_order(latest: bool) -> butler_turn::conversation::PageOrder {
+    if latest {
+        butler_turn::conversation::PageOrder::Latest
+    } else {
+        butler_turn::conversation::PageOrder::Oldest
+    }
 }

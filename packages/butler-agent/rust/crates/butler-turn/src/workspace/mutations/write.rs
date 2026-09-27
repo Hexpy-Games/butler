@@ -8,7 +8,12 @@ pub(super) fn execute(
     path: GuardedPath,
     observer: &dyn CommitObserver,
 ) -> Result<CommittedFile, MutationFailure> {
-    let snapshot = io::observe(path, input.create_parents)?;
+    let parent = if input.create_parents {
+        io::Parent::CreateMissing
+    } else {
+        io::Parent::MustExist
+    };
+    let snapshot = io::observe(path, parent)?;
     if snapshot.exists && !input.overwrite {
         let mut failed = failure::new(Some(snapshot.path.public.clone()), "file_exists");
         failed.before_sha256 = snapshot.sha256;
@@ -24,7 +29,7 @@ pub(super) fn execute(
         snapshot,
         input.content.into_bytes(),
         input.expected_sha256.as_deref(),
-        true,
+        io::Replacement::RequiresExpectedDigest,
     )?;
     if input.create_parents {
         io::ensure_parent(&prepared, &input.context.root)?;

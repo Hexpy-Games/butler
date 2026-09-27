@@ -90,7 +90,9 @@ async fn ready(name: &str) -> Ready {
             &claim,
             &TurnTransition::Suspend {
                 reason: SuspensionReason::AuthorityPending,
-                authority_continuation: Some(json!({"requestRef":request_ref,"callId":"call-1"})),
+                authority_continuation: Some(Box::new(
+                    crate::btcc::AuthorityLoopContinuation::fixture(&request_ref, "call-1"),
+                )),
             },
         )
         .await
@@ -160,7 +162,7 @@ async fn modify_precedence_same_decision_replay_and_optional_execution_identity(
             .await
             .unwrap()
             .decision,
-        "allowed"
+        crate::btcc::RequestDecision::Allowed
     );
     assert_eq!(
         ready
@@ -245,7 +247,7 @@ async fn grant_precedence_revocation_and_operational_close_cas() {
     replay.allow_scope = Some("conversation".into());
     assert_eq!(
         ready.authority.decide(replay).await.unwrap().decision,
-        "allowed"
+        crate::btcc::RequestDecision::Allowed
     );
     ready.storage.close().await.unwrap();
 }
@@ -345,7 +347,7 @@ async fn terminal_slot_generation_and_close_decision_cas_preserve_source_order()
             .await
             .unwrap()
             .outcome,
-        "failed"
+        crate::btcc::RequestOutcome::Failed
     );
     ready.storage.close().await.unwrap();
 }

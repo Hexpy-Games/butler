@@ -190,7 +190,7 @@ async fn provider_context_and_replay_share_one_turn_owner() {
                 expected_revision: turn.revision,
                 execution_fence: turn.execution_fence,
                 claim_id: claim.claim_id.clone(),
-                route: route.clone(),
+                route: Some(serde_json::from_value(route.clone()).unwrap()),
             },
             event: ModelRouteEvent {
                 kind: ModelRouteEventKind::FallbackSelected,
@@ -208,10 +208,11 @@ async fn provider_context_and_replay_share_one_turn_owner() {
         .await
         .unwrap()
         .unwrap();
-    admitted.model_selection = json!({
+    admitted.model_selection = serde_json::from_value(json!({
         "provider":"openai", "model":"gpt-5.5", "reasoningEffort":"medium",
         "controls":{}, "controlsHash":"hash"
-    });
+    }))
+    .unwrap();
     admitted.context =
         butler_turn::btcc::agent_loop::test_data::turn(None, "safe_fallback").context;
     let journal = Arc::new(ToolJournalRepository::new(

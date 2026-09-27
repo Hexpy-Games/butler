@@ -222,6 +222,7 @@ fn json(value: &impl Serialize) -> Result<Value, BtccError> {
 }
 
 fn required<T: serde::de::DeserializeOwned>(
+    // Passthrough: parse boundary validating untyped JSON into typed values.
     fields: &Map<String, Value>,
     key: &str,
 ) -> Result<T, BtccError> {
@@ -230,6 +231,7 @@ fn required<T: serde::de::DeserializeOwned>(
 }
 
 fn optional<T: serde::de::DeserializeOwned>(
+    // Passthrough: parse boundary validating untyped JSON into typed values.
     fields: &Map<String, Value>,
     key: &str,
 ) -> Result<Option<T>, BtccError> {

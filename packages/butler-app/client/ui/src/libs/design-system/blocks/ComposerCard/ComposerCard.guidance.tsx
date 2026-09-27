@@ -37,7 +37,15 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A Textarea with a Send button loses the composer contract.", render: () => <Textarea aria-label="Message" rows={2} /> },
     },
   ],
-  content: ["Placeholder invites a request (Ask Butler anything / Ask for follow-up changes)."],
-  accessibility: ["The send button has an aria-label that matches its mode (Send, Stop, Reconnecting)."],
+  content: [
+    "Placeholder invites a request (Ask Butler anything / Ask for follow-up changes).",
+    "ComposerSendButton disabledReason blocks send and names why in a few words (Model doesn't accept images).",
+    "An unknown capability is treated as unavailable (the gateway refuses it), with its own few-word reason (Image support unknown for this model).",
+    "Capability feedback is terse and non-intrusive: the disabled state plus a few-word tooltip (disabledReason), at most a brief transient toast for a refused drop or paste; no banners, inline paragraphs, persistent notices, or why/how explanations.",
+  ],
+  accessibility: [
+    "The send button has an aria-label that matches its mode (Send, Stop, Reconnecting).",
+    "A disabledReason send button is aria-disabled and a plain button, so its tooltip opens and it cannot submit.",
+  ],
   tokens: ["--composer-glass-bg", "--composer-glass-filter", "--radius-composer", "--send-bg", "--send-fg"],
 };

@@ -132,10 +132,7 @@ async fn search(
         catalog
             .builtin_tools()
             .filter(|tool| {
-                !catalog.hidden_native_bridge_tool(
-                    tool.name,
-                    owner.binding.enable_project_ledger_effects,
-                )
+                !catalog.hidden_native_bridge_tool(tool.name, owner.binding.ledger_effects())
             })
             .map(|tool| projection(owner, tool)),
         &filtered,
@@ -197,7 +194,7 @@ async fn describe(
             continue;
         };
         let catalog = owner.catalog.snapshot();
-        if catalog.hidden_native_bridge_tool(name, owner.binding.enable_project_ledger_effects) {
+        if catalog.hidden_native_bridge_tool(name, owner.binding.ledger_effects()) {
             missing.push(json!({"id":id,"error":"unknown_tool_catalog_id"}));
             continue;
         }

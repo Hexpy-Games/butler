@@ -48,7 +48,7 @@ src/host/guided/activity.rs	new_group	99
 src/host/guided/activity/content.rs	content	160
 src/host/guided/activity/snapshot.rs	restore	97
 src/host/guided/catalog/tests.rs	image_tool_requires_current_full_access_image_admission	108
-src/host/guided/catalog/tests.rs	phase_selection_enforces_execution_policy_access_and_required_tools	141
+src/host/guided/catalog/tests.rs	phase_selection_enforces_execution_policy_access_and_required_tools	142
 src/host/guided/command.rs	GuidedCommand::execute_observation	196
 src/host/guided/command/artifacts.rs	declared	84
 src/host/guided/command/effect.rs	<CommandEffectAdapter as EffectAdapter>::dispatch	96
@@ -56,7 +56,7 @@ src/host/guided/command/evidence.rs	capability_receipts	85
 src/host/guided/command/output.rs	from_streams	175
 src/host/guided/command/output/assemble.rs	assemble	149
 src/host/guided/factory.rs	<GuidedTurnFactoryAdapter as GuidedTurnFactory>::bind_pre_model	231
-src/host/guided/factory/tests/journaled_factory.rs	factory_reads_physical_file_journals_result_and_continues_provider	405
+src/host/guided/factory/tests/journaled_factory.rs	factory_reads_physical_file_journals_result_and_continues_provider	411
 src/host/guided/file_effects/edit.rs	decode	115
 src/host/guided/file_effects/edit.rs	recover	149
 src/host/guided/file_effects/edit/legacy.rs	recover	90
@@ -72,8 +72,8 @@ src/host/guided/prompt/prior_tool/semantic.rs	facts	93
 src/host/guided/prompt/work_context.rs	render	267
 src/host/guided/scope_selected_work/tests.rs	store_for_scope_routes_local_worker_to_session_and_ledger_steward_to_project	118
 src/host/guided/tools.rs	GuidedTools::new	101
-src/host/guided/tools/discovery.rs	search	85
-src/host/guided/tools/discovery/invoke.rs	run	150
+src/host/guided/tools/discovery.rs	search	82
+src/host/guided/tools/discovery/invoke.rs	run	148
 src/host/guided/tools/discovery/invoke.rs	run_mcp	115
 src/host/guided/tools/dispatch.rs	execute	448
 src/host/guided/tools/effect.rs	execute	169
@@ -83,12 +83,11 @@ src/host/guided/tools/effect/topic_conversation.rs	TopicConversationEffect::requ
 src/host/guided/tools/execute.rs	execute	141
 src/host/guided/tools/image.rs	admitted_image	96
 src/host/guided/tools/image.rs	execute	105
-src/host/guided/tools/message.rs	result_message	113
 src/host/guided/tools/message/preview.rs	fit	85
 src/host/guided/tools/message/preview/tests.rs	structured_previews_drop_private_fields_and_bound_artifact_pages	83
 src/host/guided/tools/message/preview/work.rs	project_raw	99
 src/host/guided/tools/occurrence.rs	occurrence	100
-src/host/guided/work/tests.rs	real_sqlite_work_final_reconcile_persists_current_open_disposition	161
+src/host/guided/work/tests.rs	real_sqlite_work_final_reconcile_persists_current_open_disposition	167
 src/host/guided/work_streams/prompt.rs	render	92
 src/host/guided/work_streams/storage.rs	Store::update_todo	101
 src/host/installation.rs	ResolvedInstallation::payload_provenance	82
@@ -115,7 +114,7 @@ src/host/runtime/storage_bootstrap/tests.rs	fresh_root_bootstraps_real_receipt_a
 src/host/service/conversation_observer/tests.rs	canonical_completion_publishes_one_observation_and_one_queue_job_then_drains	98
 src/host/service/entrypoint.rs	serve	186
 src/host/service/ingress.rs	IngressDispatcher::poll	86
-src/host/service/ingress/action/tests.rs	app_final_projects_bounded_rich_result_then_source_ordered_cancellation	122
+src/host/service/ingress/action/tests.rs	app_final_projects_bounded_rich_result_then_source_ordered_cancellation	127
 src/host/service/ingress/bind.rs	bind_and_request	141
 src/host/service/ingress/bind.rs	control_request	89
 src/host/service/ingress/bind/internal_subsession.rs	bind	92

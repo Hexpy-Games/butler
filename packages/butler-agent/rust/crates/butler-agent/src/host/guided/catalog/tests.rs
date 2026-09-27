@@ -125,7 +125,8 @@ fn phase_selection_enforces_execution_policy_access_and_required_tools() {
         let turn: TurnRecord = serde_json::from_value(json!({
             "turnId":"turn", "sessionId":"session", "inboxId":"inbox", "triggerKey":"trigger",
             "originalMessageId":"message", "originalMessage":"Inspect and complete the request",
-            "modelSelection":{"controls":{"accessMode":admitted}},
+            "modelSelection":{"provider":"openai","model":"gpt","reasoningEffort":"medium",
+                "controls":{"accessMode":admitted},"controlsHash":"hash"},
             "context":{"userRef":"user"},
             "semanticState":"admitted", "revision":0, "executionFence":0
         }))
@@ -307,7 +308,8 @@ fn phase_turn(access_mode: &str, context_bits: &Value) -> TurnRecord {
         "triggerKey":"trigger",
         "originalMessageId":"message",
         "originalMessage":"Analyze the attached image.",
-        "modelSelection":{"controls":{"accessMode":access_mode}},
+        "modelSelection":{"provider":"openai","model":"gpt","reasoningEffort":"medium",
+            "controls":{"accessMode":access_mode},"controlsHash":"hash"},
         "context":context,
         "semanticState":"admitted",
         "revision":0,

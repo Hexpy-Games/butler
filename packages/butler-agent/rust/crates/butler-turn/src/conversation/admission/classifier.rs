@@ -24,6 +24,7 @@ pub(crate) struct ConversationAdmissionInput {
     pub text: Option<String>,
     pub source_gateway: Option<String>,
     pub source_ref: Option<String>,
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     pub payload: Option<Map<String, Value>>,
     pub visibility: Option<AdmissionEventVisibility>,
     pub known_tool_call_ids: HashSet<String>,
@@ -43,6 +44,7 @@ pub(super) enum AdmissionOperation {
         tool_call_id: String,
         parent_tool_call_id: Option<String>,
         provider_shape: ConversationProviderShape,
+        // Passthrough: tool arguments/results/schemas, shaped by each tool.
         content_json: Value,
         status: ConversationStatus,
     },
@@ -173,6 +175,7 @@ fn tool(
             tool_call_id: call.into(),
             parent_tool_call_id: (kind == ConversationPartKind::ToolResult).then(|| call.into()),
             provider_shape: ConversationProviderShape::Generic,
+            // Passthrough: tool arguments/results/schemas, shaped by each tool.
             content_json: Value::Object(safe_tool_content(input.payload.as_ref(), &input.kind)),
             status,
         }),

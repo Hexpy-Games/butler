@@ -53,6 +53,7 @@ pub(in crate::btcc::storage) fn project_external_legacy_work(
 pub(super) struct LegacyItem {
     pub id: String,
     pub status: String,
+    // Passthrough: legacy/historical records of unknown shape.
     pub content: Value,
 }
 

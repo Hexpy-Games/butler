@@ -30,7 +30,7 @@ impl SubsessionService {
             .filter(|relation| wanted.contains(&relation.task_id))
             .take(8)
         {
-            if relation.packet.get("child_role").and_then(Value::as_str) != Some("worker") {
+            if relation.packet.child_role != crate::btcc::ChildRole::Worker {
                 continue;
             }
             let projected = self.project_child(&relation).await?;
@@ -38,15 +38,11 @@ impl SubsessionService {
                 .get("status")
                 .and_then(Value::as_str)
                 .unwrap_or("waiting");
-            let phase = relation
-                .packet
-                .get("execution_mode")
-                .and_then(Value::as_str)
-                .unwrap_or("worker");
+            let phase = relation.packet.execution_mode.as_str();
             let summary = projected
                 .pointer("/result/summary")
                 .and_then(Value::as_str)
-                .or_else(|| relation.packet.get("objective").and_then(Value::as_str))
+                .or(Some(relation.packet.objective.as_str()))
                 .unwrap_or(&relation.safe_title);
             lines.push(format!(
                 "- {}: {status}; {phase}; {summary}",
@@ -104,11 +100,7 @@ impl SubsessionService {
             .result_for_relation(relation.relation_id.clone())
             .await
             .map_err(BtccError::from)?;
-        let role = relation
-            .packet
-            .get("child_role")
-            .and_then(Value::as_str)
-            .unwrap_or("worker");
+        let role = relation.packet.child_role.as_str();
         let status = match result
             .as_ref()
             .and_then(|value| value.get("status"))

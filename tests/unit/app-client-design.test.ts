@@ -1628,7 +1628,9 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(renderer).toContain("composerControlsForSubmit");
   expect(renderer).toContain("attachments,");
   expect(renderer).toContain("file_id: attachment.file_id");
-  expect(renderer).toContain('data-picker-filter="all-files"');
+  // Image-capable models keep the all-files picker; text-only or unknown-capability models filter images out.
+  expect(renderer).toContain("data-picker-filter={picker.filter}");
+  expect(renderer).toContain('if (!policy.accepts) return { filter: "non-image"');
   expect(renderer).not.toContain("accept={ATTACHMENT_ACCEPT}");
   expect(renderer).toContain('role="alert"');
   expect(renderer).not.toContain("formatPromptWithAttachments");
@@ -2731,8 +2733,8 @@ test("layout smoke captures real browser screenshots instead of placeholder imag
   expect(smoke).toContain("conversation-context-menu-liquid-glass-tokenized");
   expect(smoke).toContain("session-row-context-menu-liquid-glass-tokenized");
   expect(smoke).toContain("attachment-picker-visible");
-  expect(smoke).toContain("attachment-picker-all-files");
-  expect(smoke).toContain("png-attachment-chip");
+  expect(smoke).toContain("attachment-picker-non-image");
+  expect(smoke).toContain("image-unknown-capability-refused");
   expect(smoke).toContain("left-panel-resizes");
   expect(smoke).toContain("right-panel-resizes");
   expect(smoke).toContain("right-panel-toggle-open-ghostless");

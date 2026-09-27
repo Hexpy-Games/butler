@@ -97,7 +97,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 budget,
                 source_revision,
             } = self.preparation.prepare(&start).await?;
-            if phase.execution_policy.role == "steward"
+            if phase.execution_policy.role == butler_turn::btcc::PolicyRole::Steward
                 && phase.provider_tools.iter().any(|tool| {
                     tool.get("name").and_then(serde_json::Value::as_str)
                         == Some("delegate_to_worker")
@@ -113,7 +113,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 self.preparation.work.clone(),
                 work_scope.clone(),
                 policy.tracking_mode.clone(),
-                &policy.role,
+                policy.role.as_str(),
                 language.clone(),
                 start.turn.original_message.clone(),
             )?);

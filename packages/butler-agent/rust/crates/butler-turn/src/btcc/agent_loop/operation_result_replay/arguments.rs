@@ -9,6 +9,7 @@ const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
 pub(super) const MAX_EXACT_READ_BYTES: usize = 4096;
 
 pub(super) fn exact_read_arguments(
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     value: &Map<String, Value>,
 ) -> Result<ExactReadArguments, BtccError> {
     let source = match value.get("source") {
@@ -68,6 +69,7 @@ pub(super) fn exact_read_arguments(
     })
 }
 
+// Passthrough: tool arguments/results/schemas, shaped by each tool.
 fn nullable_safe_integer(value: Option<&Value>, code: BtccCode) -> Result<Option<f64>, BtccError> {
     match value {
         None | Some(Value::Null) => Ok(None),
@@ -75,6 +77,7 @@ fn nullable_safe_integer(value: Option<&Value>, code: BtccCode) -> Result<Option
     }
 }
 
+// Passthrough: tool arguments/results/schemas, shaped by each tool.
 pub(super) fn safe_integer(value: Option<&Value>, code: BtccCode) -> Result<usize, BtccError> {
     let number = value
         .ok_or_else(|| error(code))
@@ -83,6 +86,7 @@ pub(super) fn safe_integer(value: Option<&Value>, code: BtccCode) -> Result<usiz
         .map_err(|source| error(code).with_source(source))
 }
 
+// Passthrough: tool arguments/results/schemas, shaped by each tool.
 fn number(value: &Value, code: BtccCode) -> Result<f64, BtccError> {
     let number = value.as_f64().ok_or_else(|| error(code))?;
     if !number.is_finite() || number < 0.0 || number.fract() != 0.0 || number > MAX_SAFE_INTEGER {

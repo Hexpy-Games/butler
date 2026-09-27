@@ -4,7 +4,15 @@ use super::classifier::{Decision, Provenance, Role};
 use super::identity::redacted;
 use super::import::Outcome;
 
-pub(super) fn report(decisions: &[Decision], outcomes: &[Outcome], dry_run: bool) -> Value {
+/// Whether a recovery only plans or also applies.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Mode {
+    DryRun,
+    Apply,
+}
+
+pub(super) fn report(decisions: &[Decision], outcomes: &[Outcome], mode: Mode) -> Value {
+    let dry_run = mode == Mode::DryRun;
     let mappings = outcomes
         .iter()
         .filter_map(|outcome| outcome.mapping.as_ref())

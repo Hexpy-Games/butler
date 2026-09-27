@@ -11,6 +11,7 @@ struct AppendToolInput<'a> {
     tool_call_id: String,
     parent_tool_call_id: Option<String>,
     provider_shape: ConversationProviderShape,
+    // Passthrough: conversation part content keyed by part kind; tool/provider payloads.
     content_json: Value,
     status: ConversationStatus,
     event_kind: &'a str,

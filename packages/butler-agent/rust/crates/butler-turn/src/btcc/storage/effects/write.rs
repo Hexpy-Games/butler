@@ -9,6 +9,7 @@ use super::{receipt_json, row};
 fn sql(error: rusqlite::Error) -> EffectFailure {
     EffectFailure::storage("sqlite_error", error.to_string()).with_source(error)
 }
+// Passthrough: generic JSON canonicalization/hashing over arbitrary documents.
 fn json(value: &Value) -> EffectResult<String> {
     butler_core::json::stringify(value).map_err(|error| {
         EffectFailure::policy("effect_journal_json", error.to_string()).with_source(error)
@@ -208,14 +209,22 @@ pub(super) fn record_applied(
         Ok(None)
     }
 }
+/// Whether an effect error leaves the effect uncertain or failed.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum ErrorOutcome {
+    Uncertain,
+    Failed,
+}
+
 pub(super) fn record_error(
     db: &Connection,
     effect_id: &str,
     revision: i64,
     error: &EffectError,
-    failed: bool,
+    outcome: ErrorOutcome,
     clock: &dyn Fn() -> String,
 ) -> EffectResult<Option<EffectRecord>> {
+    let failed = outcome == ErrorOutcome::Failed;
     let status = if failed { "failed" } else { "uncertain" };
     let updated = db
         .execute(

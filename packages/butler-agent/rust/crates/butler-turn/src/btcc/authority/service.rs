@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use serde_json::Value;
-
 use super::contracts::{
     AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityDecisionInput,
     AuthorityDecisionResult, AuthorityError, AuthorityExecutionInput,
@@ -55,8 +53,11 @@ impl PrincipalAuthority {
         self.in_lane(move |repo| admission::admit(repo, input, &collation, &*clock, &*uuid))
             .await
     }
-    /// The owner's pending requests (public projection JSON).
-    pub async fn list(&self, owner_session_id: String) -> AuthorityResult<Vec<Value>> {
+    /// The owner's pending requests.
+    pub async fn list(
+        &self,
+        owner_session_id: String,
+    ) -> AuthorityResult<Vec<super::contracts::AuthorityRequestProjection>> {
         let collation = self.collation.clone();
         self.in_lane(move |repo| {
             repo.list_pending(&owner_session_id)?

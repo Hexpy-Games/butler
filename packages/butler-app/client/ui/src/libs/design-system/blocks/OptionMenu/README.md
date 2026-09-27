@@ -32,6 +32,12 @@ meaning of the following items.
 Use `descriptionPlacement="block"` when descriptions are explanatory sentence
 copy, such as permission help text. Keep the default inline placement for short
 metadata such as provider and context window.
+Pass `disabledReason` to disable an item the current context cannot use (for
+example "Attach image" with a text-only model, or one whose image support is
+unknown, which gets its own reason such as "Image support unknown for this
+model"). The item is `aria-disabled`
+rather than natively disabled, so hover and keyboard focus still open a tooltip
+with the reason; clicks do nothing.
 
 ## Who Can Use This Component
 
@@ -47,6 +53,10 @@ Explanatory descriptions should sit below the label so they do not stretch the
 popover horizontally.
 Center the icon vertically against the full label-and-description block, including
 two-line explanatory items. Keep text left-aligned without positional offsets.
+Capability feedback copy is terse and non-intrusive: the disabled state plus a
+few-word tooltip, and at most a brief transient toast for a refused drop or
+paste. No banners, inline paragraphs, persistent notices, or why/how
+explanations.
 
 ## Wrong Use Cases
 

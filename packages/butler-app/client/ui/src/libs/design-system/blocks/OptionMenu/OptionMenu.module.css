@@ -87,7 +87,7 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
-.item:hover,
+.item:hover:not([data-disabled="true"]),
 .item:focus-visible,
 .item[data-selected="true"] {
   background: var(--selection);
@@ -108,6 +108,11 @@
 
 .item[data-tone="muted"] {
   color: var(--text-secondary);
+}
+
+.item[data-disabled="true"] {
+  color: var(--interactive-disabled-fg);
+  cursor: var(--interactive-disabled-cursor);
 }
 
 .icon {

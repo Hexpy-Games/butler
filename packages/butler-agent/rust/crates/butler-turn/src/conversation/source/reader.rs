@@ -4,7 +4,8 @@ use std::time::Duration;
 mod public_memory;
 mod recall_pages;
 pub use public_memory::{
-    CanonicalMemoryReadBinding, PublicMemoryScope, PublicMemorySnapshot, PublicSessionRow,
+    Archived, CanonicalMemoryReadBinding, MessageOrigins, PageOrder, PublicMemoryScope,
+    PublicMemorySnapshot, PublicSessionRow,
 };
 pub use recall_pages::RecallOutcomeRow;
 

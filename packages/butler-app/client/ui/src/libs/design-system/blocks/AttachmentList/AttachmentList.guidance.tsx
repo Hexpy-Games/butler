@@ -28,7 +28,13 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "List rows for pending attachments take too much composer space.", render: () => <ListRow icon={<FileText size="md" />} title="project-notes.md" meta="4 KB" /> },
     },
   ],
-  content: ["windowDrag=\"no-drag\" keeps chips removable inside a drag region.", "Show the file name as uploaded and a human size (4 KB)."],
+  content: [
+    "windowDrag=\"no-drag\" keeps chips removable inside a drag region.",
+    "Show the file name as uploaded and a human size (4 KB).",
+    "blockedReason keeps a chip the current model cannot take, dims it, and puts a few-word reason in its tooltip; the chip stays removable.",
+    "An unknown capability is treated as unavailable (the gateway refuses it), with its own few-word reason (Image support unknown for this model).",
+    "Capability feedback is terse and non-intrusive: the disabled state plus a few-word tooltip (disabledReason), at most a brief transient toast for a refused drop or paste; no banners, inline paragraphs, persistent notices, or why/how explanations.",
+  ],
   accessibility: ["Remove buttons are labelled with the file name; image thumbnails need alt text."],
   tokens: ["--radius-pill", "--line", "--icon-size-sm"],
 };

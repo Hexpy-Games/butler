@@ -42,7 +42,16 @@ export const guidance: ShowcaseGuidance = {
       },
     },
   ],
-  content: ["permissionTone (full, ask, read) colors access-mode items and their icons.", "Title names the choice; descriptions explain consequences in one line."],
-  accessibility: ["Items are buttons; selected items expose aria-pressed; tones never carry meaning alone."],
+  content: [
+    "permissionTone (full, ask, read) colors access-mode items and their icons.",
+    "Title names the choice; descriptions explain consequences in one line.",
+    "disabledReason disables an unavailable item and names why in a tooltip of a few words (Model doesn't accept images).",
+    "An unknown capability is treated as unavailable (the gateway refuses it), with its own few-word reason (Image support unknown for this model).",
+    "Capability feedback is terse and non-intrusive: the disabled state plus a few-word tooltip (disabledReason), at most a brief transient toast for a refused drop or paste; no banners, inline paragraphs, persistent notices, or why/how explanations.",
+  ],
+  accessibility: [
+    "Items are buttons; selected items expose aria-pressed; tones never carry meaning alone.",
+    "A disabledReason item is aria-disabled, not disabled, so hover and keyboard focus still open its tooltip.",
+  ],
   tokens: ["--menu-item-height", "--menu-group-label-size", "--access-full", "--access-ask", "--access-read-icon"],
 };

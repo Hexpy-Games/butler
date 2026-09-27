@@ -67,23 +67,13 @@ impl RoutedRound<'_> {
         self.clear_recovery(&mut cursor.recovery, cursor.attempt, route.retry_ceiling)
             .await;
         let result = attach_surface(result, request.tool_surface_digest)?;
-        let value = serde_json::to_value(&result).map_err(|source| {
-            failure::durability(
-                "response_acceptance_write",
-                &BtccError::detected(
-                    BtccCode::ModelResponseInvalid,
-                    "cannot encode accepted response",
-                )
-                .with_source(source),
-            )
-        })?;
         self.hooks
             .accept(
                 &cursor.round_id,
                 route.active_cursor,
                 cursor.attempt,
                 &candidate.model_ref,
-                value,
+                result.clone(),
             )
             .await?;
         *self.view.accepted.lock() = Some(identity(request, &candidate.model_ref, &result));
@@ -126,11 +116,13 @@ impl RoutedRound<'_> {
         Ok(())
     }
 
+    // Passthrough: image admission and attachment documents owned by butler-runtime.
     pub(super) async fn fallback(
         &self,
         route: &mut RouteState,
         round: &str,
         key: &str,
+        // Passthrough: image admission and attachment documents owned by butler-runtime.
         image: Option<&Value>,
     ) -> Result<(), ModelRoundError> {
         if image.is_some() {
@@ -147,12 +139,7 @@ impl RoutedRound<'_> {
             .candidates
             .get(route.active_cursor as usize)
             .ok_or_else(gateway_failed)?;
-        let route_value = serde_json::to_value(&*route).map_err(|source| {
-            ModelRoundError::Integrity(
-                BtccError::detected(BtccCode::ModelRouteInvalid, "cannot encode model route")
-                    .with_source(source),
-            )
-        })?;
+
         self.hooks
             .event(
                 event(
@@ -162,7 +149,7 @@ impl RoutedRound<'_> {
                     None,
                     &candidate.model_ref,
                 ),
-                Some(route_value),
+                Some(route.clone()),
             )
             .await?;
         *self.view.active.lock() = candidate.model_ref.clone();

@@ -20,7 +20,7 @@ At compact widths, the title icon moves into the moment row beside the three-dot
 
 ## How to use this component
 
-Pass a `title`, optional `moment`, optional `titleIcon`, optional `description`, optional `fluidBackground`, optional `fluidPalette`, optional `fluidPaletteOptions`, optional `fluidTone`, optional `fluidVariant`, and `suggestions` with stable ids, `title`, `description`, prompt `text`, optional `meta`, and select handlers. The start surface intentionally uses ordinals instead of item icons or abstract card graphics.
+Pass a `title`, optional `moment`, optional `titleIcon`, optional `description`, optional `fluidBackground`, optional `fluidPalette`, optional `fluidPaletteOptions`, optional `fluidTone` (omit it to follow the nearest theme scope, live), optional `fluidVariant`, and `suggestions` with stable ids, `title`, `description`, prompt `text`, optional `meta`, and select handlers. The start surface intentionally uses ordinals instead of item icons or abstract card graphics.
 
 ## Who can use this component
 

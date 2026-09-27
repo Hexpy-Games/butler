@@ -78,7 +78,8 @@ export function OverviewPage({ entries, state, themes, onOpen, onChange }: {
   return (
     <Stack gap="2xl" data-ds-overview>
       <section className={styles.hero} data-ds-hero>
-        <div className={styles.heroFluid}><PromptFluidBackground tone={themes[0] === "dark" ? "dark" : "light"} /></div>
+        {/* No tone: the hero sits in the chrome theme, which side-by-side frames[0] is not. */}
+        <div className={styles.heroFluid}><PromptFluidBackground /></div>
         <div className={styles.heroGrid}>
           <Stack gap="lg">
             <Stack align="row"><Tag tone="accent" size="md">Butler Design System</Tag></Stack>

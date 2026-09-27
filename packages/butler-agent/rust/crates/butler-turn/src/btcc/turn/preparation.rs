@@ -63,6 +63,7 @@ pub struct ContextSection {
     pub region: Option<String>,
     pub projection_class: String,
     pub scope_kind: String,
+    // Passthrough: records owned by the context assembler, relayed.
     pub source: Option<Value>,
 }
 
@@ -75,6 +76,7 @@ pub struct ContextAssembly {
     pub working_context: Vec<ContextSection>,
     pub retrieved_context: Vec<ContextSection>,
     pub current_input: Vec<ContextSection>,
+    // Passthrough: records owned by the context assembler, relayed.
     pub references: Vec<Value>,
     pub live_config_hash: String,
 }
@@ -239,7 +241,7 @@ impl DefaultTurnPreparation {
         &self,
         request: TurnRequest,
         binding: StoredSessionBinding,
-        command: Value,
+        command: crate::btcc::TurnCommand,
         admission_kind: Admission,
     ) -> Result<PreparedExecution, BtccError> {
         let origin = origin::resolve(
@@ -296,6 +298,7 @@ fn error(code: BtccCode, message: impl Into<String>) -> BtccError {
     BtccError::detected(code, message)
 }
 
+// Passthrough: parse boundary validating untyped JSON into typed values.
 fn object(value: Option<&Value>) -> &Map<String, Value> {
     match value.and_then(Value::as_object) {
         Some(value) => value,
@@ -307,6 +310,7 @@ fn empty_object() -> &'static Map<String, Value> {
     EMPTY.get_or_init(Map::new)
 }
 
+// Passthrough: parse boundary validating untyped JSON into typed values.
 fn js_truthy(value: &Value) -> bool {
     match value {
         Value::Null => false,

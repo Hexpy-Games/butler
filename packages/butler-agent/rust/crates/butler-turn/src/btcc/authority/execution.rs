@@ -2,7 +2,7 @@ use serde_json::Value;
 
 use super::contracts::{
     AuthorityError, AuthorityExecutionInput, AuthorityOutcomeInput, AuthorityRepository,
-    AuthorityResult, AuthorityStoredExecution, OutcomeWrite,
+    AuthorityResult, AuthorityStoredExecution, OutcomeWrite, RequestDecision,
 };
 use super::{identity, receipt};
 
@@ -26,13 +26,13 @@ pub(super) fn execution(
                 .is_none_or(|id| &record.schedule_client_message_id == id)
         })
         .ok_or_else(|| AuthorityError::policy("authority_request_not_found"))?;
-    if !matches!(record.decision.as_str(), "allowed" | "denied" | "modified") {
+    if record.decision == RequestDecision::Pending {
         return Err(AuthorityError::policy("authority_request_not_allowed"));
     }
     if record.source_turn_id != input.turn_id {
         return Err(AuthorityError::policy("authority_schedule_turn_mismatch"));
     }
-    if record.decision == "modified"
+    if record.decision == RequestDecision::Modified
         && record
             .private_alternative_input
             .as_deref()

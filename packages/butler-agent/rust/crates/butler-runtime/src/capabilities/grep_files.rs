@@ -100,7 +100,7 @@ pub(super) async fn execute(
         .list_files(WorkspaceListInput {
             root: PathBuf::from(&workspace_root),
             requested_root: options.root.clone(),
-            relative_only: input.allowed_tools_and_effects.is_some(),
+            path_form: super::arguments::path_form(&input),
             protected_roots: input.protected_ledger_roots.to_vec(),
             include_globs: options.include.clone(),
             exclude_globs: options.exclude.clone(),

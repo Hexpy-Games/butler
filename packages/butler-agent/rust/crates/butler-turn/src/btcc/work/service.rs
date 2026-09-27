@@ -110,6 +110,7 @@ impl DurableWorkService {
     }
 }
 
+// Passthrough: generic JSON canonicalization/hashing over arbitrary documents.
 fn fingerprint(operation: &str, input: &Value) -> Result<String, BtccError> {
     let value = serde_json::json!({"operation": operation, "input": input});
     Ok(crate::btcc::identity::digest(
@@ -118,6 +119,7 @@ fn fingerprint(operation: &str, input: &Value) -> Result<String, BtccError> {
 }
 
 /// The serialized input as an object; typed inputs are structs.
+// Passthrough: generic JSON canonicalization/hashing over arbitrary documents.
 fn object_mut(value: &mut Value) -> Result<&mut serde_json::Map<String, Value>, BtccError> {
     value.as_object_mut().ok_or_else(|| {
         BtccError::detected(

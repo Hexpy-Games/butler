@@ -1,17 +1,19 @@
 use std::collections::HashMap;
 
 use butler_core::tool_protocol::ToolName;
-use serde_json::{Value, json};
+use serde_json::Value;
 
-use butler_turn::btcc::{BtccError, ToolJournalCloseoutRow};
+use butler_turn::btcc::{
+    BtccError, ChangedFileLine, ChangedFileSummary, ChangedLineKind, ToolJournalCloseoutRow,
+};
 
 use super::{invalid, safe_path};
 
 struct Detail {
     path: String,
-    lines: Vec<Value>,
-    additions: usize,
-    deletions: usize,
+    lines: Vec<ChangedFileLine>,
+    additions: u64,
+    deletions: u64,
     before: Option<String>,
     after: Option<String>,
 }
@@ -110,28 +112,49 @@ impl ChangedCollector {
         }
     }
 
-    pub(super) fn finish(mut self) -> Vec<Value> {
-        self.order.into_iter().filter_map(|path| {
-            let (first, last) = self.by_path.remove(&path)?;
-            if let (Some(before), Some(after)) = (first.before, last.after.as_ref()) {
-                butler_turn::workspace::net_changed_file_detail(&path, before.as_bytes(), after.as_bytes())
-                    .map(|detail| json!({
-                        "path": detail.path,
-                        "additions": detail.additions,
-                        "deletions": detail.deletions,
-                        "lines": detail.lines.into_iter().map(|line| {
-                            let mut value = json!({"type":line.kind,"content":line.content});
-                            if let Some(number) = line.old_line { value["old_line"] = json!(number); }
-                            if let Some(number) = line.new_line { value["new_line"] = json!(number); }
-                            value
-                        }).collect::<Vec<_>>()
-                    }))
-            } else {
-                Some(json!({"path":last.path,"additions":last.additions,
-                    "deletions":last.deletions,"lines":last.lines}))
-            }
-        }).collect()
+    pub(super) fn finish(mut self) -> Vec<ChangedFileSummary> {
+        self.order
+            .into_iter()
+            .filter_map(|path| {
+                let (first, last) = self.by_path.remove(&path)?;
+                if let (Some(before), Some(after)) = (first.before, last.after.as_ref()) {
+                    net_summary(&path, &before, after)
+                } else {
+                    Some(ChangedFileSummary {
+                        path: last.path,
+                        additions: last.additions,
+                        deletions: last.deletions,
+                        lines: last.lines,
+                    })
+                }
+            })
+            .collect()
     }
+}
+
+/// The net line diff between the first before and the last after text.
+fn net_summary(path: &str, before: &str, after: &str) -> Option<ChangedFileSummary> {
+    let detail =
+        butler_turn::workspace::net_changed_file_detail(path, before.as_bytes(), after.as_bytes())?;
+    Some(ChangedFileSummary {
+        path: detail.path,
+        additions: detail.additions as u64,
+        deletions: detail.deletions as u64,
+        lines: detail
+            .lines
+            .into_iter()
+            .map(|line| ChangedFileLine {
+                kind: if line.kind == "added" {
+                    ChangedLineKind::Added
+                } else {
+                    ChangedLineKind::Deleted
+                },
+                content: line.content,
+                old_line: line.old_line.map(|number| number as u64),
+                new_line: line.new_line.map(|number| number as u64),
+            })
+            .collect(),
+    })
 }
 
 fn copy_first(detail: &Detail) -> Detail {
@@ -172,9 +195,11 @@ fn safe_detail(value: &Value) -> Option<Detail> {
         let Some(content) = line.get("content").and_then(Value::as_str) else {
             continue;
         };
-        if !matches!(kind, "added" | "deleted") {
-            continue;
-        }
+        let kind = match kind {
+            "added" => ChangedLineKind::Added,
+            "deleted" => ChangedLineKind::Deleted,
+            _ => continue,
+        };
         let number = |name| -> Option<Option<u64>> {
             match line.get(name) {
                 None => Some(None),
@@ -192,19 +217,16 @@ fn safe_detail(value: &Value) -> Option<Detail> {
         let (Some(old), Some(new)) = (number("old_line"), number("new_line")) else {
             continue;
         };
-        let mut entry = json!({"type":kind,"content":content});
-        if let Some(old) = old {
-            entry["old_line"] = json!(old);
+        match kind {
+            ChangedLineKind::Added => additions += 1,
+            ChangedLineKind::Deleted => deletions += 1,
         }
-        if let Some(new) = new {
-            entry["new_line"] = json!(new);
-        }
-        if kind == "added" {
-            additions += 1;
-        } else {
-            deletions += 1;
-        }
-        lines.push(entry);
+        lines.push(ChangedFileLine {
+            kind,
+            content: content.to_owned(),
+            old_line: old,
+            new_line: new,
+        });
     }
     if additions == 0 && deletions == 0 {
         return None;

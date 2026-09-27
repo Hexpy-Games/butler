@@ -5,6 +5,7 @@ import { useButlerStore } from "@/app/store.ts";
 import { appShellTheme } from "@/app/utils.ts";
 import {
   IconButton,
+  ImageIcon,
   ListChecks,
   MessageSquarePlus,
   OptionMenu,
@@ -19,6 +20,7 @@ import {
 import { activeProjectId } from "./composerProjectContext";
 import { useComposerStore } from "./composerStore";
 import { ComposerProjectDocumentMenu } from "./ComposerProjectDocumentMenu";
+import { composerImagePolicy, imageRefusalLabel } from "./composerImagePolicy";
 
 export function ComposerAttachmentMenu() {
   useAppLocale();
@@ -34,6 +36,7 @@ export function ComposerAttachmentMenu() {
   const openAttachmentPicker = useComposerStore(
     (store) => store.openAttachmentPicker,
   );
+  const imagesBlockedBy = useComposerStore((store) => composerImagePolicy(store.activeModel).blockedBy);
   const [open, setOpen] = useState(false);
   const theme = appShellTheme(settings);
 
@@ -56,7 +59,7 @@ export function ComposerAttachmentMenu() {
           const menu = event.currentTarget as HTMLElement;
           menu
             .querySelector<HTMLButtonElement>(
-              '[data-slot="option-menu-item"]:not(:disabled)',
+              '[data-slot="option-menu-item"]:not(:disabled):not([aria-disabled="true"])',
             )
             ?.focus();
         }}
@@ -77,6 +80,15 @@ export function ComposerAttachmentMenu() {
               label={appCopy.composer.attachFile}
               onClick={() => {
                 openAttachmentPicker();
+                setOpen(false);
+              }}
+            />
+            <OptionMenuItem
+              icon={<ImageIcon size="md" />}
+              label={appCopy.composer.attachImage}
+              disabledReason={imagesBlockedBy ? imageRefusalLabel(imagesBlockedBy) : undefined}
+              onClick={() => {
+                openAttachmentPicker("images");
                 setOpen(false);
               }}
             />

@@ -19,6 +19,8 @@ export interface AttachmentListItem {
     src: string;
     alt?: string;
   };
+  /** Kept but not sendable; a short reason (a few words) shown in the name tooltip. */
+  blockedReason?: string;
 }
 
 export interface AttachmentListProps extends DsPrivateStyleProps, WindowDragProps {
@@ -51,7 +53,12 @@ export function AttachmentList({
       gap={variant === "chips" ? "none" : "xs"}
     >
       {items.map((item) => (
-        <div className={styles.item} data-slot="attachment-item" key={item.id}>
+        <div
+          className={styles.item}
+          data-blocked={item.blockedReason ? "true" : undefined}
+          data-slot="attachment-item"
+          key={item.id}
+        >
           {item.thumbnail ? (
             <span className={styles.thumbnail} data-slot="attachment-thumbnail">
               <img
@@ -69,8 +76,9 @@ export function AttachmentList({
             </span>
           )}
           {item.href ? (
-            <Tooltip label={item.name}>
+            <Tooltip label={item.blockedReason ?? item.name}>
               <a
+                aria-label={blockedLabel(item)}
                 className={styles.name}
                 data-slot="attachment-name"
                 href={item.href}
@@ -81,8 +89,8 @@ export function AttachmentList({
               </a>
             </Tooltip>
           ) : (
-            <Tooltip label={item.name}>
-              <span className={styles.name} data-slot="attachment-name">
+            <Tooltip label={item.blockedReason ?? item.name}>
+              <span aria-label={blockedLabel(item)} className={styles.name} data-slot="attachment-name">
                 {item.name}
               </span>
             </Tooltip>
@@ -107,4 +115,8 @@ export function AttachmentList({
       ))}
     </Stack>
   );
+}
+
+function blockedLabel(item: AttachmentListItem): string | undefined {
+  return item.blockedReason ? `${item.name}, ${item.blockedReason}` : undefined;
 }

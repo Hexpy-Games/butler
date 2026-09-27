@@ -77,12 +77,16 @@ impl TurnStore for Store {
                 .unwrap_or_default())
         })
     }
-    fn load_model_round_acceptance(&self, _: ModelRoundKey) -> PortFuture<'_, Option<Value>> {
+    fn load_model_round_acceptance(
+        &self,
+        _: ModelRoundKey,
+    ) -> PortFuture<'_, Option<crate::btcc::ModelRoundResult>> {
         Box::pin(async move {
             if let Some(error) = self.fail_read.lock().unwrap().take() {
                 return Err(error);
             }
-            Ok(self.accepted.lock().unwrap().pop_front().unwrap_or(None))
+            let accepted = self.accepted.lock().unwrap().pop_front().unwrap_or(None);
+            Ok(accepted.map(|value| serde_json::from_value(value).expect("fixture acceptance")))
         })
     }
     fn record_model_round_acceptance(
@@ -90,14 +94,17 @@ impl TurnStore for Store {
         write: ModelRoundAcceptanceWrite,
     ) -> PortFuture<'_, ()> {
         Box::pin(async move {
-            self.acceptances.lock().unwrap().push(write.result);
+            self.acceptances
+                .lock()
+                .unwrap()
+                .push(serde_json::to_value(&write.result).unwrap());
             Ok(())
         })
     }
     fn transition_continuation_budget(
         &self,
         _: ContinuationBudgetTransition,
-    ) -> PortFuture<'_, Value> {
+    ) -> PortFuture<'_, crate::btcc::TurnContinuationBudgetState> {
         panic!("not used by this test")
     }
 }
@@ -334,8 +341,8 @@ pub(super) fn turn(model_route: Value) -> TurnRecord {
         original_message_id: "message".into(),
         original_message: "hello".into(),
         wake_identity: None,
-        model_selection: json!({"provider":"openai","model":"a","reasoningEffort":"high","controls":{},"controlsHash":"hash"}),
-        model_route: Some(model_route),
+        model_selection: serde_json::from_value(json!({"provider":"openai","model":"a","reasoningEffort":"high","controls":{},"controlsHash":"hash"})).unwrap(),
+        model_route: Some(serde_json::from_value(model_route).expect("fixture route")),
         continuation_budget: None,
         context: json!({"userRef":"user","profileRefs":[],"recentFeedbackRefs":[],"mandatoryHotCacheRefs":[],"optionalHotCacheRefs":[],"baselineObservationScopeRefs":[]}),
         progress_destination: None,

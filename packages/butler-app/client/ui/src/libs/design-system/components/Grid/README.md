@@ -48,4 +48,4 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 layout, responsive, density
 
 ## Responsive columns
-`columns={{ base: "1", wide: "main-aside" }}` applies `base` always and `wide` from `@container page (min-width: 48rem)`, the page container that `PageContainer` (and `ManagementPage`) declares. Outside a PageContainer the grid stays on `base`. `main-aside` is `minmax(0, 2fr) minmax(0, 1fr)`; responsive tracks use `minmax(0, …)` so long text never widens a column. `auto-fit` and `auto-fill` clamp their 240px minimum to the container width.
+`columns={{ base: "1", wide: "main-aside" }}` applies `base` always and `wide` from `@container page (min-width: 48rem)`, the page container that `PageContainer` (and `ManagementPage`) declares. Outside a PageContainer the grid stays on `base`. `main-aside` is `minmax(0, 2fr) minmax(0, 1fr)`. Every preset's tracks use `minmax(0, …)` and every cell gets `min-width: 0`, so wide content (a truncated path, a scroller) never widens the grid past its container. `auto-fit` and `auto-fill` clamp their 240px minimum to the container width; `label-value` clamps its 7rem label to 40%.

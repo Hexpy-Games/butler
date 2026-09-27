@@ -633,6 +633,11 @@ export interface AppCopy {
     attachedFiles: string;
     removeFile: (fileName: string) => string;
     attachFile: string;
+    attachImage: string;
+    imagesUnsupported: string;
+    imageSupportUnknown: string;
+    imageTypeUnsupported: string;
+    imageTooLarge: string;
     featureDrawer: string;
     attachments: string;
     responseMode: string;

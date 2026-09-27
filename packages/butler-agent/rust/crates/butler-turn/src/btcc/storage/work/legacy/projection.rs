@@ -21,8 +21,11 @@ pub(in crate::btcc::storage) struct ProjectedCheckpoint {
     pub next: String,
 }
 
+// Passthrough: legacy/historical records of unknown shape.
 pub(super) fn project(
+    // Passthrough: legacy/historical records of unknown shape.
     goal: &Value,
+    // Passthrough: legacy/historical records of unknown shape.
     plan: &Value,
     works: &[LegacyItem],
     tasks: &[LegacyItem],
@@ -55,9 +58,12 @@ pub(super) fn project(
 
 /// Up to 16 distinct checks: the tasks' acceptance criteria, then the
 /// goal's acceptance intent.
+// Passthrough: legacy/historical records of unknown shape.
 fn project_checks(
+    // Passthrough: legacy/historical records of unknown shape.
     goal: &Value,
     tasks: &[LegacyItem],
+    // Passthrough: legacy/historical records of unknown shape.
     read: &mut impl FnMut(&str) -> StorageResult<Value>,
 ) -> StorageResult<Vec<String>> {
     let mut checks = Vec::new();
@@ -221,6 +227,7 @@ fn action_description(item: &LegacyItem, kind: LegacyItemKind, index: usize) -> 
     }
 }
 
+// Passthrough: legacy/historical records of unknown shape.
 fn field<'a>(value: &'a Value, name: &str) -> &'a Value {
     value
         .as_object()
@@ -228,6 +235,7 @@ fn field<'a>(value: &'a Value, name: &str) -> &'a Value {
         .unwrap_or(&Value::Null)
 }
 
+// Passthrough: legacy/historical records of unknown shape.
 fn concise(value: &Value, limit: usize) -> Option<String> {
     let source = value.as_str()?;
     let mut normalized = String::with_capacity(source.len());
@@ -264,10 +272,12 @@ fn js_whitespace(character: char) -> bool {
         '\u{205F}' | '\u{3000}' | '\u{FEFF}')
 }
 
+// Passthrough: legacy/historical records of unknown shape.
 fn reference(value: &Value) -> Option<String> {
     concise(field(value, "id"), 300)
 }
 
+// Passthrough: legacy/historical records of unknown shape.
 fn references(value: &Value) -> Vec<String> {
     value.as_array().map_or_else(Vec::new, |items| {
         items.iter().filter_map(reference).collect()

@@ -1,6 +1,6 @@
 use super::contracts::{
     AuthorityAction, AuthorityDecisionInput, AuthorityDecisionResult, AuthorityError,
-    AuthorityRecord, AuthorityRepository, AuthorityResult, DecisionWrite,
+    AuthorityRecord, AuthorityRepository, AuthorityResult, DecisionWrite, RequestDecision,
 };
 use super::{permission, projection};
 
@@ -33,12 +33,12 @@ pub(super) fn decide(
                 .is_none_or(|session| &record.source_session_id == session)
         })
         .ok_or_else(|| AuthorityError::policy("authority_request_not_found"))?;
-    if current.decision != "pending" {
+    if current.decision != RequestDecision::Pending {
         if same(&current, input, alternative.as_deref()) {
             return projection::decision(&current);
         }
         return Err(AuthorityError::policy(
-            if action == AuthorityAction::Modify && current.decision == "modified" {
+            if action == AuthorityAction::Modify && current.decision == RequestDecision::Modified {
                 "authority_modify_identity_mismatch"
             } else {
                 "authority_decision_conflict"

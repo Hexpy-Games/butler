@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::faults::{Fault, Transform};
-use butler_e2e::e2e::gateway::turn_state;
+use butler_e2e::e2e::gateway::{Gateway, turn_state};
 use butler_e2e::e2e::scenario::Setup;
 use serde_json::{Value, json};
 
@@ -86,27 +86,37 @@ async fn turn_05_broken_stream_never_delivers_partial_text() -> Result<(), Harne
                 started.elapsed()
             );
         }
-        let messages = s.gw.messages("general").await?;
-        let answers: Vec<&Value> = messages
-            .iter()
-            .filter(|message| {
-                message["role"] == "assistant" && message["turn_id"] == turn_id.as_str()
-            })
-            .collect();
-        if state == "delivered" {
-            // Retried after the injected failure: exactly one complete answer.
-            assert_eq!(answers.len(), 1, "{kind}: {answers:?}");
-        } else {
-            assert!(
-                answers
-                    .iter()
-                    .all(|message| message["status"] != "delivered"),
-                "{kind}: half answer persisted as final: {answers:?}"
-            );
-        }
+        assert_no_partial_answer(&s.gw, kind, &turn_id, &state).await?;
         assert!(s.gw.healthy().await);
         let bystander = s.gw.get(&format!("/messages?chat_id={other}")).await?;
         assert_eq!(bystander.status, 200);
     }
     s.finish().await
+}
+
+/// A turn that ended `state` after a `kind` fault persisted no half answer
+/// as final; a delivered (retried) turn has exactly one complete answer.
+async fn assert_no_partial_answer(
+    gw: &Gateway,
+    kind: &str,
+    turn_id: &str,
+    state: &str,
+) -> Result<(), HarnessError> {
+    let messages = gw.messages("general").await?;
+    let answers: Vec<&Value> = messages
+        .iter()
+        .filter(|message| message["role"] == "assistant" && message["turn_id"] == turn_id)
+        .collect();
+    if state == "delivered" {
+        // Retried after the injected failure: exactly one complete answer.
+        assert_eq!(answers.len(), 1, "{kind}: {answers:?}");
+    } else {
+        assert!(
+            answers
+                .iter()
+                .all(|message| message["status"] != "delivered"),
+            "{kind}: half answer persisted as final: {answers:?}"
+        );
+    }
+    Ok(())
 }

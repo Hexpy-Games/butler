@@ -1,8 +1,9 @@
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::common::error;
+use super::common::{error, parse_state};
 use super::hydration::hydrate_final_payload;
 use super::{StorageError, StorageResult};
+use crate::btcc::TurnSemanticState;
 use crate::btcc::identity::digest;
 use crate::btcc::turn::StopPersistenceOutcome;
 use crate::btcc::{AlreadyDeliveredOutcome, StorageCode};
@@ -79,24 +80,20 @@ fn persist_existing(
             params![request_id, turn_id, turn.revision],
         )
         .map_err(StorageError::sqlite)?;
-    match turn.semantic_state.as_str() {
-        "delivered" => delivered(connection, turn_id, request_id, turn),
-        "cancelled" => {
+    match parse_state(&turn.semantic_state)? {
+        TurnSemanticState::Delivered => delivered(connection, turn_id, request_id, turn),
+        TurnSemanticState::Cancelled => {
             close_stop(connection, request_id, "already_cancelled", turn.revision)?;
             if prior.as_deref().is_none_or(|status| status == "installed") {
                 close_authority(connection, &turn.session_id)?;
             }
             Ok(StopPersistenceOutcome::AlreadyCancelled)
         }
-        "delivery_committed" => {
+        TurnSemanticState::DeliveryCommitted => {
             close_stop(connection, request_id, "already_finalizing", turn.revision)?;
             Ok(StopPersistenceOutcome::AlreadyFinalizing)
         }
-        "admitted" => cancel(connection, turn_id, request_id, &turn),
-        value => Err(error(
-            StorageCode::InvalidTurnState,
-            format!("BTCC R3 Turn state is invalid: {value}"),
-        )),
+        TurnSemanticState::Admitted => cancel(connection, turn_id, request_id, &turn),
     }
 }
 

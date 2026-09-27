@@ -2,6 +2,7 @@ use serde_json::Value;
 
 use super::contracts::{EffectFailure, EffectResult, RecoveryEntry};
 
+// Passthrough: parse boundary validating untyped JSON into typed values.
 pub(crate) fn normalize_entries(value: &Value) -> EffectResult<Vec<RecoveryEntry>> {
     let rows = value
         .as_array()
@@ -69,6 +70,7 @@ pub(crate) fn normalize_entries(value: &Value) -> EffectResult<Vec<RecoveryEntry
 fn invalid(message: impl Into<String>) -> EffectFailure {
     EffectFailure::policy("effect_recovery_invalid", message)
 }
+// Passthrough: parse boundary validating untyped JSON into typed values.
 fn sha(value: Option<&Value>, index: usize, field: &str) -> EffectResult<String> {
     let text = value
         .and_then(Value::as_str)

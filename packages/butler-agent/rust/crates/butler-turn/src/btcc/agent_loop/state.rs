@@ -141,9 +141,11 @@ pub(super) fn identify_response(response: &mut super::contracts::ModelRoundResul
     message.continuation_item_id = Some(id);
 }
 
+// Passthrough: provider payload, opaque to BTCC.
 pub(super) fn assistant_message(
     content: String,
     tool_calls: Vec<ModelRoundToolCall>,
+    // Passthrough: provider payload, opaque to BTCC.
     provider_data: Option<Value>,
 ) -> ModelRoundMessage {
     ModelRoundMessage {

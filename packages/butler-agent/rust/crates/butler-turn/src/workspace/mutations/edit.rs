@@ -37,7 +37,8 @@ pub(super) fn execute(
 
 fn single(edit: GuardedEdit, observer: &dyn CommitObserver) -> Result<EditedFile, EditFailure> {
     let path = edit.path.public.clone();
-    let snapshot = io::observe(edit.path, false).map_err(|error| edit_failure(0, error))?;
+    let snapshot =
+        io::observe(edit.path, io::Parent::MustExist).map_err(|error| edit_failure(0, error))?;
     if !snapshot.exists {
         return Err(EditFailure::new(0, Some(path), "not_found"));
     }
@@ -46,8 +47,12 @@ fn single(edit: GuardedEdit, observer: &dyn CommitObserver) -> Result<EditedFile
         failure.bytes = Some(snapshot.bytes.len());
         failure
     })?;
-    io::prepare_guard(&snapshot, edit.input.expected_sha256.as_deref(), false)
-        .map_err(|error| edit_failure(0, error))?;
+    io::prepare_guard(
+        &snapshot,
+        edit.input.expected_sha256.as_deref(),
+        io::Replacement::Unguarded,
+    )
+    .map_err(|error| edit_failure(0, error))?;
     let location =
         locator::locate(text, &edit.input.old_text, edit.input.start_line).map_err(|failure| {
             EditFailure::from_data(EditFailureData {
@@ -72,7 +77,7 @@ fn single(edit: GuardedEdit, observer: &dyn CommitObserver) -> Result<EditedFile
         snapshot,
         after.into_bytes(),
         edit.input.expected_sha256.as_deref(),
-        false,
+        io::Replacement::Unguarded,
     )
     .map_err(|error| edit_failure(0, error))?;
     let committed = io::commit(prepared, observer).map_err(|error| edit_failure(0, error))?;

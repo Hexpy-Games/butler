@@ -15,10 +15,14 @@ export const RING_W = 74;
 export const HS_R = 288;
 /** Halftone cells live inside this disc (inside the ring). */
 export const DISC_R = 392;
-/** Granulation wave width: dots appear from the crossing outward. */
-export const WAVE = 0.6;
-/** The single spring that drives the morph (0 = logo, 1 = thinking form). */
-export const MORPH_SPRING = { k: 9, zeta: 0.95 } as const;
+/**
+ * The single spring that drives the whole morph (0 = logo, 1 = thinking form).
+ * Every channel (outline, dot field, riso colour, motion clock) reads this one
+ * progress, so idle -> thinking and back are one continuous transformation.
+ * Critically damped (no overshoot, monotonic from rest); omega = sqrt(6) gives
+ * ~0.7s to half and ~1.9s to 95%: a calm, unhurried morph.
+ */
+export const MORPH_SPRING = { k: 6, zeta: 1 } as const;
 
 export type SizeClass = 0 | 1 | 2;
 

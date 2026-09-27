@@ -1,4 +1,4 @@
-use serde_json::{Value, json};
+use serde_json::json;
 use tokio_util::sync::CancellationToken;
 
 use crate::btcc::{AgentLoop, StateExecutionClaim, TurnRecord};
@@ -46,7 +46,10 @@ pub(crate) fn tool(name: &str, concurrent: bool) -> ModelRoundTool {
     }
 }
 
-pub fn turn(authority: Option<Value>, empty: &str) -> TurnRecord {
+pub fn turn(
+    authority: Option<Box<crate::btcc::AuthorityLoopContinuation>>,
+    empty: &str,
+) -> TurnRecord {
     TurnRecord {
         turn_id: "turn-1".into(),
         session_id: "session-1".into(),
@@ -55,7 +58,7 @@ pub fn turn(authority: Option<Value>, empty: &str) -> TurnRecord {
         original_message_id: "message".into(),
         original_message: "hello".into(),
         wake_identity: None,
-        model_selection: json!({"provider":"openai","model":"model","reasoningEffort":"medium","controls":{},"controlsHash":"hash"}),
+        model_selection: serde_json::from_value(json!({"provider":"openai","model":"model","reasoningEffort":"medium","controls":{},"controlsHash":"hash"})).unwrap(),
         model_route: None,
         continuation_budget: None,
         context: json!({"userRef":"user-1","profileRefs":[],"recentFeedbackRefs":[],"mandatoryHotCacheRefs":[],"optionalHotCacheRefs":[],"baselineObservationScopeRefs":[],"emptyResponsePolicy": empty}),

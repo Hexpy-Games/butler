@@ -164,7 +164,9 @@ pub(super) async fn execute_concurrent<'a>(
 }
 
 fn validate_required(
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     schema: &Map<String, Value>,
+    // Passthrough: tool arguments/results/schemas, shaped by each tool.
     arguments: &Map<String, Value>,
 ) -> Option<ToolError> {
     let required = schema.get("required").and_then(Value::as_array)?;

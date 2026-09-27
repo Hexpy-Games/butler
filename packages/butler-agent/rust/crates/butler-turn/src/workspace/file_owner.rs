@@ -7,7 +7,7 @@ use tokio::sync::{Notify, Semaphore};
 use super::discovery::{WorkspaceListInput, WorkspaceListOutcome, list_blocking};
 use super::files::{ReadFileInput, WorkspaceFileRead, read_one_blocking};
 use super::grep::{GrepCandidate, GrepRead, read_candidate};
-use super::path_guard::{GuardInput, GuardResult, resolve_workspace_path_guard};
+use super::path_guard::{GuardInput, GuardResult, PathForm, resolve_workspace_path_guard};
 
 #[cfg(test)]
 mod tests;
@@ -122,14 +122,14 @@ impl WorkspaceFiles {
         &self,
         root: PathBuf,
         path: String,
-        relative_only: bool,
+        path_form: PathForm,
         protected_roots: Vec<PathBuf>,
     ) -> Result<std::io::Result<GuardResult>, FileOwnerError> {
         self.run(move || {
             resolve_workspace_path_guard(GuardInput {
                 root: &root,
                 requested: &path,
-                relative_only,
+                path_form,
                 allow_directories: false,
                 protected_roots: &protected_roots,
             })

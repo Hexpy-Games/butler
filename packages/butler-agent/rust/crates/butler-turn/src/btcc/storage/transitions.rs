@@ -2,8 +2,9 @@ use super::operation_input::TurnVersion;
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde_json::Value;
 
-use super::common::{canonical_json, error, route_text, state_text, stringify};
+use super::common::{canonical_json, error, route_text, state_text, stringify, stringify_record};
 use super::{StorageError, StorageResult};
+use crate::btcc::AuthorityLoopContinuation;
 use crate::btcc::StorageCode;
 use crate::btcc::identity::digest;
 use crate::btcc::turn::{
@@ -38,7 +39,7 @@ pub(super) fn commit(
             turn,
             next_revision,
             *reason,
-            authority_continuation.as_ref(),
+            authority_continuation.as_deref(),
         )?,
         TurnTransition::AcceptFinal {
             route,
@@ -124,7 +125,7 @@ fn suspend(
     turn: &TurnVersion,
     next_revision: u64,
     reason: SuspensionReason,
-    continuation: Option<&Value>,
+    continuation: Option<&AuthorityLoopContinuation>,
 ) -> StorageResult<()> {
     if turn.semantic_state != TurnSemanticState::Admitted {
         return Err(error(
@@ -135,7 +136,7 @@ fn suspend(
     if reason == SuspensionReason::AuthorityPending {
         park_authority_call(connection, turn, continuation)?;
     }
-    let continuation_json = continuation.map(stringify).transpose()?;
+    let continuation_json = continuation.map(stringify_record).transpose()?;
     let changed = connection
         .execute(
             "UPDATE btcc_turns SET suspension_reason = ?1, authority_continuation_json = ?2, \
@@ -172,7 +173,7 @@ fn suspend(
 fn park_authority_call(
     connection: &Connection,
     turn: &TurnVersion,
-    continuation: Option<&Value>,
+    continuation: Option<&AuthorityLoopContinuation>,
 ) -> StorageResult<()> {
     let continuation = continuation.ok_or_else(|| {
         error(
@@ -180,14 +181,8 @@ fn park_authority_call(
             "authority_continuation_missing",
         )
     })?;
-    let field = |name: &str, message: &str| {
-        continuation
-            .get(name)
-            .and_then(Value::as_str)
-            .ok_or_else(|| error(StorageCode::AuthorityContinuationInvalid, message))
-    };
-    let request_ref = field("requestRef", "authority requestRef missing")?;
-    let call_id = field("callId", "authority callId missing")?;
+    let request_ref = &continuation.request_ref;
+    let call_id = &continuation.call_id;
     let bound = connection
         .execute(
             "UPDATE btcc_authority_requests SET source_call_id = ?1 WHERE request_ref = ?2 \

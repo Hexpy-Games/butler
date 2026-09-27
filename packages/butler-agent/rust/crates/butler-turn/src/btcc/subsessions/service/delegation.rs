@@ -1,10 +1,11 @@
 //! Delegation identities and the reviewed-plan checks shared by steward and
 //! worker delegation.
 
-use serde_json::Value;
-
 use super::error;
-use crate::btcc::{BtccCode, BtccError, ExecutionMode, SubsessionCreate, WorkView};
+use crate::btcc::{
+    BtccCode, BtccError, DispatchIntent, ExecutionMode, SubsessionCreate, SubsessionPacket,
+    WorkView,
+};
 
 /// Digest namespaces and id prefixes of one delegation kind. The derived ids
 /// are persisted, so these strings are part of the storage format.
@@ -44,7 +45,7 @@ pub(super) const WORKER: DelegationNaming = DelegationNaming {
 /// The idempotent delegation id of a request identity.
 pub(super) fn delegation_id(
     naming: &DelegationNaming,
-    identity: &Value,
+    identity: &impl serde::Serialize,
 ) -> Result<String, BtccError> {
     let encoded = serde_json::to_string(identity)
         .map_err(|source| error(BtccCode::SubsessionIdentityInvalid).with_source(source))?;
@@ -120,8 +121,8 @@ impl DelegationIds {
         self,
         parent: Parent,
         safe_title: String,
-        packet: Value,
-        dispatch_intent: Value,
+        packet: SubsessionPacket,
+        dispatch_intent: DispatchIntent,
         created_at: String,
     ) -> SubsessionCreate {
         SubsessionCreate {
