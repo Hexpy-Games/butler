@@ -4,6 +4,7 @@ mod operations;
 mod progress;
 mod runtime_progress;
 mod runtime_values;
+mod stream_message;
 mod values;
 
 use operations::*;
@@ -350,6 +351,9 @@ fn project_runtime_event(input: RuntimeInput<'_>) -> Result<Option<&'static str>
             }))?,
             now,
         )?;
+        if let Some(delta) = stream_message::final_text_delta(&kind, object(event.get("payload"))) {
+            stream_message::append(db, subscribers, chat, turn, delta, now)?;
+        }
         if let Some(row) = progress_row {
             append_progress(&ProgressAppend {
                 db,

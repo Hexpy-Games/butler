@@ -72,9 +72,9 @@ pub use agent_loop::{
     OperationResultRuntimeFactory, OperationResultScope, PendingTool, ProductionAgentLoop,
     PromptImages, PromptPort, ProviderBodyAdmissionPort, ProviderIdentity, ProviderStreamObserver,
     RenderedGuidedPrompt, ReplayMode, RollingContextV1, RoundRequestOptions, SemanticTurn,
-    SteeringObservation, TextCallDisposition, ToolCallOrigin, ToolChoice, ToolExecutionError,
-    ToolOutcome, ToolPort, ToolResult, ToolSurface, TurnContextProjection, TurnSteeringPort,
-    UsageAttribution, VerifiedImagePayloadPort, WorkFinalState, WorkPort,
+    SteeringObservation, StreamRelay, TextCallDisposition, ToolCallOrigin, ToolChoice,
+    ToolExecutionError, ToolOutcome, ToolPort, ToolResult, ToolSurface, TurnContextProjection,
+    TurnSteeringPort, UsageAttribution, VerifiedImagePayloadPort, WorkFinalState, WorkPort,
     latest_work_anchor_indices,
 };
 pub use agent_loop::{

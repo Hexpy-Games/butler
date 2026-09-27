@@ -9,13 +9,19 @@ use serde_json::{Value, json};
 use crate::host::service::ingress::{IngressDelivery, IngressError};
 use butler_gateway::gateway::TranscriptWriter;
 
+use super::progress_publisher::ProgressPublisher;
+
 pub(in crate::host) struct AppDelivery {
     writer: Arc<TranscriptWriter>,
+    progress: Arc<ProgressPublisher>,
 }
 
 impl AppDelivery {
-    pub(in crate::host) fn new(writer: Arc<TranscriptWriter>) -> Self {
-        Self { writer }
+    pub(in crate::host) fn new(
+        writer: Arc<TranscriptWriter>,
+        progress: Arc<ProgressPublisher>,
+    ) -> Self {
+        Self { writer, progress }
     }
 }
 
@@ -26,6 +32,7 @@ impl IngressDelivery for AppDelivery {
         action: Value,
     ) -> Pin<Box<dyn Future<Output = Result<bool, IngressError>> + Send>> {
         let writer = self.writer.clone();
+        let progress = self.progress.clone();
         Box::pin(async move {
             if action["transport"] != "app" {
                 return Err(IngressError::new(
@@ -42,6 +49,10 @@ impl IngressDelivery for AppDelivery {
                         "Action identity unavailable",
                     )
                 })?;
+            // Committed progress (streamed text included) is transcribed before
+            // the action, so the App projects it while the turn is still open.
+            // Pending events that fail here are retried by maintenance.
+            let _ = progress.reconcile().await;
             // Source App adapter acknowledges locally. Projection consumes the
             // durable outbound/delivery pair; no HTTP send is hidden here.
             let delivery = json!({"ok": true, "transportMessageId": format!("app:{action_id}")});

@@ -286,6 +286,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 start.turn.turn_id.clone(),
                 activity,
             ));
+            let stream_relay = butler_turn::btcc::StreamRelay::new();
             let inputs = GuidedTurnInputs {
                 semantic,
                 dependencies: GuidedPolicyDependencies {
@@ -296,13 +297,14 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                     journal,
                     work,
                     verified_image_payload: Some(self.verified_image_payload.clone()),
-                    stream_observer: None,
+                    stream_observer: Some(stream_relay.observer()),
                     identity_observer: None,
                 },
                 authority_decision,
                 operation_results,
                 budget,
                 source_revision,
+                stream_relay: Some(stream_relay),
             };
             Ok(Box::new(BoundTurn {
                 inputs: Some(inputs),

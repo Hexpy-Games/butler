@@ -14,6 +14,8 @@ const PAGE_SIZE: usize = 32;
 pub(crate) struct ProgressPublisher {
     repository: StorageProgressPublication,
     writer: Arc<TranscriptWriter>,
+    /// One reconciliation pass at a time keeps the transcript in event order.
+    pass: tokio::sync::Mutex<()>,
 }
 
 pub(crate) struct ProgressPublicationSummary {
@@ -26,12 +28,17 @@ impl ProgressPublisher {
         repository: StorageProgressPublication,
         writer: Arc<TranscriptWriter>,
     ) -> Self {
-        Self { repository, writer }
+        Self {
+            repository,
+            writer,
+            pass: tokio::sync::Mutex::new(()),
+        }
     }
 
     /// Each page releases its hydrated events before the next SQLite read.
     /// Failures remain pending; the keyset lets later events proceed this pass.
     pub(crate) async fn reconcile(&self) -> Result<ProgressPublicationSummary, BtccError> {
+        let _pass = self.pass.lock().await;
         let mut summary = ProgressPublicationSummary {
             attempted: 0,
             published: 0,

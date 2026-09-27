@@ -165,7 +165,6 @@ async fn turn_01_reply_is_delivered_persisted_and_survives_restart() -> Result<(
 
 /// TURN-01 (streaming part) — the UI receives incremental text.
 #[tokio::test]
-#[ignore = "product gap: TURN-01-STREAM — the Rust runtime emits no model.stream.text_delta / message.final.delta events; the UI gets the answer only as one message.created"]
 async fn turn_01_reply_is_streamed_incrementally() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("TURN-01-STREAM")?
