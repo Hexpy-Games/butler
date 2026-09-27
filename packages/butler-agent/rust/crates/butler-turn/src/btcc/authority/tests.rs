@@ -181,7 +181,7 @@ async fn real_turn_work_journal_authority_resume_outcome_and_reopen() {
         })
         .await
         .unwrap();
-    assert_eq!(decided.decision, "allowed");
+    assert_eq!(decided.decision, crate::btcc::RequestDecision::Allowed);
     assert_eq!(
         authority
             .resume_source(request_ref.clone())
@@ -231,7 +231,7 @@ async fn real_turn_work_journal_authority_resume_outcome_and_reopen() {
         })
         .await
         .unwrap();
-    assert_eq!(persisted.outcome, "applied");
+    assert_eq!(persisted.outcome, crate::btcc::RequestOutcome::Applied);
     assert_eq!(persisted.outcome_receipt.unwrap()["dispatchAttempt"], 1);
     reopened.close().await.unwrap();
 }

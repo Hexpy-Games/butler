@@ -41,11 +41,15 @@ pub async fn guided_authority_loop_decision(
             "authority_source_call_mismatch",
         ));
     }
-    Ok(Some(match execution.decision.as_str() {
-        "modified" => GuidedAuthorityDecision::Modify(execution.alternative_input.ok_or(
-            GuidedPreparationError::Contract("authority_request_corrupt"),
-        )?),
-        "allowed" => GuidedAuthorityDecision::Allow,
-        _ => GuidedAuthorityDecision::Deny,
+    Ok(Some(match execution.decision {
+        crate::btcc::RequestDecision::Modified => {
+            GuidedAuthorityDecision::Modify(execution.alternative_input.ok_or(
+                GuidedPreparationError::Contract("authority_request_corrupt"),
+            )?)
+        }
+        crate::btcc::RequestDecision::Allowed => GuidedAuthorityDecision::Allow,
+        crate::btcc::RequestDecision::Denied | crate::btcc::RequestDecision::Pending => {
+            GuidedAuthorityDecision::Deny
+        }
     }))
 }

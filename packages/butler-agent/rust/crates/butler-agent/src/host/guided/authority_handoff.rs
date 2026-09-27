@@ -160,7 +160,7 @@ impl AppAuthorityHandoff for AuthorityHandoff {
             owner.enqueue(&decision.request_ref).await?;
             Ok(AppAuthorityDecision {
                 request_ref: decision.request_ref,
-                decision: decision.decision,
+                decision: decision.decision.as_str().into(),
                 admitted: true,
             })
         })

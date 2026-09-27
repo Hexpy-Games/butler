@@ -1,6 +1,6 @@
 use super::contracts::{
     AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityError, AuthorityRecord,
-    AuthorityRepository, AuthorityResult,
+    AuthorityRepository, AuthorityResult, RequestDecision, RequestOutcome,
 };
 use super::{identity, permission, projection};
 
@@ -142,12 +142,12 @@ fn pending_record(
             .unwrap_or_else(|| category.default_reason().into()),
         executable: executable?,
         command_count: 1,
-        decision: "pending".into(),
+        decision: RequestDecision::Pending,
         allow_scope: "once".into(),
         schedule_client_message_id: identity::client_message_id(&request_id),
         schedule_input_text: ALLOW_TEXT.into(),
         private_alternative_input: None,
-        outcome: "pending".into(),
+        outcome: RequestOutcome::Pending,
         outcome_receipt_json: None,
         close_reason: None,
         close_scope: None,
@@ -206,11 +206,14 @@ impl Category {
 
 fn terminal(record: &AuthorityRecord) -> bool {
     record.close_reason.is_some()
-        || matches!(record.decision.as_str(), "denied" | "modified")
-        || record.outcome != "pending"
+        || matches!(
+            record.decision,
+            RequestDecision::Denied | RequestDecision::Modified
+        )
+        || record.outcome != RequestOutcome::Pending
 }
 fn assert_not_closed(record: &AuthorityRecord) -> AuthorityResult<()> {
-    if record.decision == "pending" && record.close_reason.is_some() {
+    if record.decision == RequestDecision::Pending && record.close_reason.is_some() {
         Err(AuthorityError::policy(
             "authority_request_operationally_closed",
         ))

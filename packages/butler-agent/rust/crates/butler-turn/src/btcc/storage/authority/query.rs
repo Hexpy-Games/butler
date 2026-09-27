@@ -4,6 +4,7 @@ use crate::btcc::authority::contracts::{
     AuthorityAdmissionInput, AuthorityError, AuthorityRecord, AuthorityResult,
     AuthorityResumeSource, ConversationPermission,
 };
+use crate::btcc::authority::contracts::{RequestDecision, RequestOutcome};
 
 pub(super) const ROW: &str = "SELECT request_id, request_ref, identity_sha256, owner_session_id, \
     source_session_id, source_turn_id, source_call_id, source_work_id, workspace_path, \
@@ -52,12 +53,12 @@ fn hydrate(row: &Row<'_>) -> rusqlite::Result<AuthorityRecord> {
         reason: row.get(18)?,
         executable: row.get(19)?,
         command_count: row.get(20)?,
-        decision: row.get(21)?,
+        decision: stored_enum(row, 21, RequestDecision::parse)?,
         allow_scope: row.get(22)?,
         schedule_client_message_id: row.get(23)?,
         schedule_input_text: row.get(24)?,
         private_alternative_input: row.get(25)?,
-        outcome: row.get(26)?,
+        outcome: stored_enum(row, 26, RequestOutcome::parse)?,
         outcome_receipt_json: row.get(27)?,
         close_reason: row.get(28)?,
         close_scope: row.get(29)?,
@@ -253,4 +254,20 @@ pub(super) fn waiting_source_sessions(db: &Connection) -> AuthorityResult<Vec<St
         .map_err(sql)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(sql)
+}
+
+/// A CHECK-constrained text column decoded into its enum.
+fn stored_enum<T>(
+    row: &rusqlite::Row<'_>,
+    index: usize,
+    parse: fn(&str) -> Option<T>,
+) -> rusqlite::Result<T> {
+    let text: String = row.get(index)?;
+    parse(&text).ok_or_else(|| {
+        rusqlite::Error::FromSqlConversionFailure(
+            index,
+            rusqlite::types::Type::Text,
+            format!("unknown stored value: {text}").into(),
+        )
+    })
 }

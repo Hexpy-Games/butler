@@ -1,6 +1,6 @@
 use super::contracts::{
     AuthorityAdmissionResult, AuthorityDecisionResult, AuthorityError, AuthorityRecord,
-    AuthorityRequestProjection, AuthorityResult, AuthorityScopeProjection,
+    AuthorityRequestProjection, AuthorityResult, AuthorityScopeProjection, RequestDecision,
 };
 use super::permission;
 
@@ -11,8 +11,8 @@ pub(super) fn admission(
     record: &AuthorityRecord,
     collation: &butler_core::locale::LocaleCollation,
 ) -> AuthorityResult<AuthorityAdmissionResult> {
-    match record.decision.as_str() {
-        "allowed" => Ok(AuthorityAdmissionResult::Allowed {
+    match record.decision {
+        RequestDecision::Allowed => Ok(AuthorityAdmissionResult::Allowed {
             request_ref: record.request_ref.clone(),
             source_work_id: record.source_work_id.clone(),
             normalized_target: record.normalized_target.clone(),
@@ -20,7 +20,7 @@ pub(super) fn admission(
                 |source| AuthorityError::policy("authority_request_corrupt").with_source(source),
             )?,
         }),
-        "denied" => Ok(AuthorityAdmissionResult::Denied {
+        RequestDecision::Denied => Ok(AuthorityAdmissionResult::Denied {
             request_ref: record.request_ref.clone(),
             denial_text: if record.category == "reviewed_effect" {
                 EFFECT_DENIAL
@@ -28,10 +28,10 @@ pub(super) fn admission(
                 COMMAND_DENIAL
             },
         }),
-        "modified" => Ok(AuthorityAdmissionResult::Modified {
+        RequestDecision::Modified => Ok(AuthorityAdmissionResult::Modified {
             request_ref: record.request_ref.clone(),
         }),
-        _ => Ok(AuthorityAdmissionResult::Pending {
+        RequestDecision::Pending => Ok(AuthorityAdmissionResult::Pending {
             request_ref: record.request_ref.clone(),
             projection: request(record, collation)?,
         }),
@@ -61,7 +61,7 @@ pub(super) fn request(
     })
 }
 pub(super) fn decision(record: &AuthorityRecord) -> AuthorityResult<AuthorityDecisionResult> {
-    if record.decision == "pending" {
+    if record.decision == RequestDecision::Pending {
         return Err(AuthorityError::policy("authority_request_not_decided"));
     }
     Ok(AuthorityDecisionResult {
@@ -73,6 +73,6 @@ pub(super) fn decision(record: &AuthorityRecord) -> AuthorityResult<AuthorityDec
         schedule_input_text: record.schedule_input_text.clone(),
         model_ref: record.model_ref.clone(),
         reasoning_effort: record.reasoning_effort.clone(),
-        decision: record.decision.clone(),
+        decision: record.decision,
     })
 }
