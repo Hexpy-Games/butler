@@ -39,7 +39,8 @@ exclusive open-panel state.
   the bounded `--adaptive-drawer-width` (`min(88vw, 320px)`) over the scrim so
   the workspace stays visible beside the sidebar.
 - The window chrome toggle stays fixed while the workspace moves.
-- Panels animate with transform and honor reduced motion.
+- Panels animate with transform and honor reduced motion: drawers then fade in
+  place over the scrim and do not push the workspace.
 - The always-mounted scrim keeps a promoted compositor layer and animates only
   opacity, preventing repeated mobile panel toggles from flashing.
 - The workspace remains full width in compact and medium modes.
