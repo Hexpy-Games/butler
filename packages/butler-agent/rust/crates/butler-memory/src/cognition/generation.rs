@@ -1,7 +1,7 @@
 //! Immutable selection and fresh mutation authority for Cognition generations.
 
 mod authority;
-mod cache;
+pub(in crate::cognition) mod cache;
 mod cutover;
 mod initialize;
 mod manifest;
@@ -21,7 +21,8 @@ pub use crate::cognition::generation::embedding_binding::bind_native_embedding_i
 pub use authority::assert_mutation_authority;
 pub use cache::advance as advance_rebuild_cache;
 pub(in crate::cognition) use cache::{
-    physical_entries as physical_hot_cache_entries, read_hot_cache_health,
+    HotCacheEntryView, HotCacheHealth, physical_entries as physical_hot_cache_entries,
+    read_hot_cache_health,
 };
 pub use cutover::{
     CutoverStamp, RollbackOutcome, RollbackStep, activate as activate_memory_rebuild,

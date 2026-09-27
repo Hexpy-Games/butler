@@ -28,3 +28,35 @@ where
 {
     T::deserialize(deserializer).map(Some)
 }
+
+/// Reads an array of records: `None` when the value is not an array, and
+/// `Some(None)` for an item that is not a readable object.
+pub(crate) fn items<'de, D, T>(deserializer: D) -> Result<Option<Vec<Option<T>>>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: serde::de::DeserializeOwned,
+{
+    let Value::Array(items) = Value::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+    Ok(Some(
+        items
+            .into_iter()
+            .map(|item| {
+                item.is_object()
+                    .then(|| serde_json::from_value(item).ok())
+                    .flatten()
+            })
+            .collect(),
+    ))
+}
+
+/// Parses a stored JSON object into `T`; `None` for invalid JSON, a value
+/// that is not an object, or an object `T` cannot read.
+pub(crate) fn object<T: serde::de::DeserializeOwned>(raw: &str) -> Option<T> {
+    let value: Value = serde_json::from_str(raw).ok()?;
+    value
+        .is_object()
+        .then(|| serde_json::from_value(value).ok())
+        .flatten()
+}

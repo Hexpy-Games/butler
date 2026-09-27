@@ -1,13 +1,20 @@
 //! Candidate-generation cache claim, current evidence, and durable receipt transitions.
 
 use crate::cognition::CognitionCode;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::{Value, json};
+use serde::{Deserialize, de::IgnoredAny};
+use serde_json::json;
 
 use super::{
     GraphRepository, apply::context::resolve_quotes, db_error, plan::validate_quotes_for_apply,
+};
+use crate::cognition::generation::cache::receipt::{
+    CacheJobReceipt, EntryOutcome, ExclusionReason,
+};
+use crate::cognition::generation::cache::{
+    Authority, Salience, Scope, SourceBackedHotCacheEntry, SourceClass, SourceKind,
 };
 use crate::cognition::{
     CognitionError, CognitionResult,
@@ -34,10 +41,11 @@ pub(in crate::cognition) struct ClaimedCacheJob {
     pub attempt: i64,
 }
 
+/// One window summary ready to be written to the cache.
 #[derive(Clone, Debug)]
 pub(in crate::cognition) struct CacheWindow {
     pub entry_id: String,
-    pub entry: Value,
+    pub entry: SourceBackedHotCacheEntry,
 }
 
 impl GraphRepository {
@@ -103,6 +111,8 @@ impl GraphRepository {
         exists.ok_or_else(|| error(CognitionCode::MemorySourceChanged))
     }
 
+    /// One cache entry per completed window with a non-empty summary, built
+    /// from its stored input, output, and resolved plan.
     pub(in crate::cognition) fn cache_windows(
         &self,
         job: &ClaimedCacheJob,
@@ -123,129 +133,21 @@ impl GraphRepository {
         let mut query = connection.prepare("SELECT window_ref,input_json,output_json,normalized_plan_json FROM memory_projection_windows WHERE job_id=?1 AND state='complete' ORDER BY ordinal,window_ref").map_err(db_error)?;
         let stored = query
             .query_map([&job.job_id], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, Option<String>>(1)?,
-                    row.get::<_, Option<String>>(2)?,
-                    row.get::<_, Option<String>>(3)?,
-                ))
+                Ok(StoredWindow {
+                    window_ref: row.get(0)?,
+                    input_json: row.get(1)?,
+                    output_json: row.get(2)?,
+                    plan_json: row.get(3)?,
+                })
             })
             .map_err(db_error)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(db_error)?;
         let mut windows = Vec::new();
-        for (window_ref, input_json, output_json, plan_json) in stored {
-            let output: ExtractOutput = serde_json::from_str(
-                output_json
-                    .as_deref()
-                    .ok_or_else(|| error(CognitionCode::HotCacheEvidenceInvalid))?,
-            )
-            .map_err(|source| error(CognitionCode::HotCacheEvidenceInvalid).with_source(source))?;
-            let Some(summary) = output
-                .summary
-                .as_ref()
-                .filter(|value| !value.text.trim().is_empty())
-            else {
-                continue;
-            };
-            let input: ExtractInput = serde_json::from_str(
-                input_json
-                    .as_deref()
-                    .ok_or_else(|| error(CognitionCode::HotCacheEvidenceInvalid))?,
-            )
-            .map_err(|source| error(CognitionCode::HotCacheEvidenceInvalid).with_source(source))?;
-            let plan: Value = serde_json::from_str(
-                plan_json
-                    .as_deref()
-                    .ok_or_else(|| error(CognitionCode::HotCacheEvidenceInvalid))?,
-            )
-            .map_err(|source| error(CognitionCode::HotCacheEvidenceInvalid).with_source(source))?;
-            let refs = plan
-                .get("refs")
-                .and_then(Value::as_object)
-                .ok_or_else(|| error(CognitionCode::HotCacheEvidenceInvalid))?;
-            let validated =
-                validate_quotes_for_apply(&input, &summary.evidence).map_err(|source| {
-                    error(CognitionCode::HotCacheEvidenceInvalid).with_source(source)
-                })?;
-            let resolved = resolve_quotes(connection, &input, &validated).map_err(|source| {
-                error(CognitionCode::HotCacheEvidenceInvalid).with_source(source)
-            })?;
-            let mut source_refs = Vec::new();
-            let mut bases = Vec::new();
-            let mut classes = Vec::new();
-            let mut seen = HashSet::new();
-            for quote in resolved {
-                if !seen.insert(quote.source_id.clone()) {
-                    continue;
-                }
-                let row = connection.query_row("SELECT s.basis,s.role,s.source_kind,s.origin_kind FROM memory_source_leaves s JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision JOIN memory_projection_jobs j ON j.episode_id=s.episode_id AND j.revision=s.revision WHERE s.source_id=?1 AND j.generation=?2 LIMIT 1",
-                    params![quote.source_id,job.generation], |row| Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,String>(2)?,row.get::<_,String>(3)?)))
-                    .optional().map_err(db_error)?.ok_or_else(|| error(CognitionCode::HotCacheEvidenceInvalid))?;
-                bases.push(row.0);
-                classes.push(match row.2.as_str() {
-                    "task_report" => "task_report",
-                    "explicit_record" => "explicit",
-                    _ if row.1 == "user" && row.3 == "user_input" => "user",
-                    _ if row.1 == "assistant" && row.3 == "assistant_public" => "assistant",
-                    _ => "unknown",
-                });
-                source_refs.push(quote.source_id);
+        for window in stored {
+            if let Some(entry) = window_entry(connection, job, graph_revision, &window)? {
+                windows.push(entry);
             }
-            if source_refs.is_empty() {
-                return Err(error(CognitionCode::HotCacheEvidenceInvalid));
-            }
-            bases.sort();
-            bases.dedup();
-            let source_class = if classes.iter().all(|item| item == &classes[0]) {
-                classes[0]
-            } else {
-                "mixed"
-            };
-            let valid_until = output
-                .claims
-                .iter()
-                .filter_map(|claim| claim.valid_to.clone())
-                .min();
-            let salience = if output.claims.iter().any(|claim| claim.salience == "high") {
-                "high"
-            } else if output.claims.iter().any(|claim| claim.salience == "normal") {
-                "normal"
-            } else {
-                "unspecified"
-            };
-            let mut kinds = Vec::new();
-            for claim in &output.claims {
-                if !claim.claim_type.is_empty() && !kinds.contains(&claim.claim_type) {
-                    kinds.push(claim.claim_type.clone());
-                }
-            }
-            let body = summary.text.trim().to_owned();
-            let entry_id = projection_hash_for_graph(vec![
-                json!("hot-cache-window-summary"),
-                json!(job.generation),
-                json!(job.episode_id),
-                json!(window_ref),
-                json!(job.revision),
-                json!(body),
-            ])?;
-            let mut node_refs = refs
-                .values()
-                .filter_map(Value::as_str)
-                .map(str::to_owned)
-                .collect::<Vec<_>>();
-            node_refs.sort();
-            node_refs.dedup();
-            let scope = if job.project_id.is_some() {
-                "project"
-            } else {
-                "global"
-            };
-            let entry = json!({"entry_id":entry_id,"episode_id":job.episode_id,"window_ref":window_ref,"node_refs":node_refs,"source_revision":job.revision,
-                "source_time":job.source_time,"valid_until":valid_until,"kind":if kinds.is_empty(){"window_summary".to_owned()}else{kinds.join("+")},"summary":body,
-                "basis":bases,"salience":salience,"scope":scope,"project_id":job.project_id,"session_id":job.session_id,
-                "graph_revision":graph_revision,"source_kind":job.source_kind,"source_refs":source_refs,"authority":"model_interpretation","source_class":source_class});
-            windows.push(CacheWindow { entry_id, entry });
         }
         Ok(windows)
     }
@@ -253,17 +155,17 @@ impl GraphRepository {
     pub(in crate::cognition) fn complete_cache_job(
         &mut self,
         job: &ClaimedCacheJob,
-        receipt: &Value,
-        outcomes: &[(String, bool, Option<String>, Value)],
+        receipt: &CacheJobReceipt,
+        outcomes: &[EntryOutcome],
     ) -> CognitionResult<()> {
         self.assert_cache_job_current(job)?;
         let tx = self.connection_mut()?.transaction().map_err(db_error)?;
-        for (entry_id, admitted, reason, item) in outcomes {
+        for outcome in outcomes {
             tx.execute("INSERT INTO memory_hot_cache_outcomes(entry_id,generation,admitted,reason,receipt_json) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(entry_id) DO UPDATE SET generation=excluded.generation,admitted=excluded.admitted,reason=excluded.reason,receipt_json=excluded.receipt_json",
-                params![entry_id,job.generation,i64::from(*admitted),reason,item.to_string()]).map_err(db_error)?;
+                params![outcome.entry_id,job.generation,i64::from(outcome.admitted),outcome.reason.map(ExclusionReason::as_str),to_json(&outcome.receipt)?]).map_err(db_error)?;
         }
         if tx.execute("UPDATE memory_projection_jobs SET hot_cache_state=?1,hot_cache_receipt_json=?2,hot_cache_next_attempt_at=NULL,hot_cache_owner_pid=NULL,hot_cache_owner_nonce=NULL,hot_cache_started_at=NULL WHERE job_id=?3 AND hot_cache_owner_nonce=?4 AND json_extract(hot_cache_state,'$.state')='running'",
-            params![json!({"state":"complete","completed_units":1,"total_units":1}).to_string(),receipt.to_string(),job.job_id,job.owner_nonce]).map_err(db_error)? != 1 { return Err(error(CognitionCode::MemoryCacheJobChanged)); }
+            params![json!({"state":"complete","completed_units":1,"total_units":1}).to_string(),to_json(receipt)?,job.job_id,job.owner_nonce]).map_err(db_error)? != 1 { return Err(error(CognitionCode::MemoryCacheJobChanged)); }
         tx.commit().map_err(db_error)
     }
 
@@ -283,6 +185,191 @@ impl GraphRepository {
             params![if retry {json!({"state":"pending","blocked_by":code})} else {json!({"state":"failed","code":code,"retryable":false,"next_attempt_at":null})}.to_string(),json!({"outcome":"failed","code":code,"retry_at":retry_at}).to_string(),retry_at,job.job_id,job.owner_nonce]).map_err(db_error)?;
         Ok(())
     }
+}
+
+/// A completed projection window as stored.
+struct StoredWindow {
+    window_ref: String,
+    input_json: Option<String>,
+    output_json: Option<String>,
+    plan_json: Option<String>,
+}
+
+/// The stored plan's `refs`: local refs resolved to graph node ids.
+#[derive(Deserialize)]
+struct StoredPlan {
+    refs: HashMap<String, PlanRef>,
+}
+
+/// A plan ref is a node id; any other value is not a node.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum PlanRef {
+    Node(String),
+    Other(IgnoredAny),
+}
+
+/// Where a window summary's quoted sources came from.
+struct QuotedSources {
+    source_refs: Vec<String>,
+    bases: Vec<String>,
+    class: SourceClass,
+}
+
+/// The cache entry for one window, or `None` when it has no summary.
+fn window_entry(
+    connection: &Connection,
+    job: &ClaimedCacheJob,
+    graph_revision: i64,
+    window: &StoredWindow,
+) -> CognitionResult<Option<CacheWindow>> {
+    let output: ExtractOutput = parse_evidence(window.output_json.as_deref())?;
+    let Some(summary) = output
+        .summary
+        .as_ref()
+        .filter(|value| !value.text.trim().is_empty())
+    else {
+        return Ok(None);
+    };
+    let input: ExtractInput = parse_evidence(window.input_json.as_deref())?;
+    let plan: StoredPlan = parse_evidence(window.plan_json.as_deref())?;
+    let quoted = quoted_sources(connection, job, &input, &summary.evidence)?;
+    let body = summary.text.trim().to_owned();
+    let entry_id = projection_hash_for_graph(vec![
+        json!("hot-cache-window-summary"),
+        json!(job.generation),
+        json!(job.episode_id),
+        json!(window.window_ref),
+        json!(job.revision),
+        json!(body),
+    ])?;
+    let mut node_refs = plan
+        .refs
+        .into_values()
+        .filter_map(|reference| match reference {
+            PlanRef::Node(id) => Some(id),
+            PlanRef::Other(_) => None,
+        })
+        .collect::<Vec<_>>();
+    node_refs.sort();
+    node_refs.dedup();
+    let entry = SourceBackedHotCacheEntry {
+        entry_id: entry_id.clone(),
+        episode_id: job.episode_id.clone(),
+        window_ref: window.window_ref.clone(),
+        node_refs,
+        source_revision: job.revision.clone(),
+        source_time: job.source_time.clone(),
+        valid_until: output
+            .claims
+            .iter()
+            .filter_map(|claim| claim.valid_to.clone())
+            .min(),
+        kind: window_kind(&output),
+        summary: body,
+        basis: quoted.bases,
+        salience: window_salience(&output),
+        scope: if job.project_id.is_some() {
+            Scope::Project
+        } else {
+            Scope::Global
+        },
+        project_id: job.project_id.clone(),
+        session_id: job.session_id.clone(),
+        source_kind: Some(
+            SourceKind::parse(&job.source_kind)
+                .ok_or_else(|| error(CognitionCode::HotCacheEntryInvalid))?,
+        ),
+        graph_revision,
+        authority: Some(Authority::ModelInterpretation),
+        source_class: Some(quoted.class),
+        source_refs: quoted.source_refs,
+    };
+    Ok(Some(CacheWindow { entry_id, entry }))
+}
+
+fn parse_evidence<T: serde::de::DeserializeOwned>(json: Option<&str>) -> CognitionResult<T> {
+    serde_json::from_str(json.ok_or_else(|| error(CognitionCode::HotCacheEvidenceInvalid))?)
+        .map_err(|source| error(CognitionCode::HotCacheEvidenceInvalid).with_source(source))
+}
+
+/// Resolves the summary's quotes to distinct source leaves of this generation.
+fn quoted_sources(
+    connection: &Connection,
+    job: &ClaimedCacheJob,
+    input: &ExtractInput,
+    evidence: &[crate::cognition::extraction::QuoteRef],
+) -> CognitionResult<QuotedSources> {
+    let invalid = |source| error(CognitionCode::HotCacheEvidenceInvalid).with_source(source);
+    let validated = validate_quotes_for_apply(input, evidence).map_err(invalid)?;
+    let resolved = resolve_quotes(connection, input, &validated).map_err(invalid)?;
+    let mut source_refs = Vec::new();
+    let mut bases = Vec::new();
+    let mut classes = Vec::new();
+    let mut seen = HashSet::new();
+    for quote in resolved {
+        if !seen.insert(quote.source_id.clone()) {
+            continue;
+        }
+        let (basis, role, source_kind, origin_kind) = connection.query_row("SELECT s.basis,s.role,s.source_kind,s.origin_kind FROM memory_source_leaves s JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision JOIN memory_projection_jobs j ON j.episode_id=s.episode_id AND j.revision=s.revision WHERE s.source_id=?1 AND j.generation=?2 LIMIT 1",
+            params![quote.source_id,job.generation], |row| Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,String>(2)?,row.get::<_,String>(3)?)))
+            .optional().map_err(db_error)?.ok_or_else(|| error(CognitionCode::HotCacheEvidenceInvalid))?;
+        bases.push(basis);
+        classes.push(match source_kind.as_str() {
+            "task_report" => SourceClass::TaskReport,
+            "explicit_record" => SourceClass::Explicit,
+            _ if role == "user" && origin_kind == "user_input" => SourceClass::User,
+            _ if role == "assistant" && origin_kind == "assistant_public" => SourceClass::Assistant,
+            _ => SourceClass::Unknown,
+        });
+        source_refs.push(quote.source_id);
+    }
+    let Some(first) = classes.first().copied() else {
+        return Err(error(CognitionCode::HotCacheEvidenceInvalid));
+    };
+    bases.sort();
+    bases.dedup();
+    Ok(QuotedSources {
+        source_refs,
+        bases,
+        class: if classes.iter().all(|class| *class == first) {
+            first
+        } else {
+            SourceClass::Mixed
+        },
+    })
+}
+
+/// The distinct claim types joined with `+`, or `window_summary`.
+fn window_kind(output: &ExtractOutput) -> String {
+    let mut kinds: Vec<&str> = Vec::new();
+    for claim in &output.claims {
+        if !claim.claim_type.is_empty() && !kinds.contains(&claim.claim_type.as_str()) {
+            kinds.push(&claim.claim_type);
+        }
+    }
+    if kinds.is_empty() {
+        "window_summary".to_owned()
+    } else {
+        kinds.join("+")
+    }
+}
+
+/// The highest salience of any claim.
+fn window_salience(output: &ExtractOutput) -> Salience {
+    let any = |level: &str| output.claims.iter().any(|claim| claim.salience == level);
+    if any("high") {
+        Salience::High
+    } else if any("normal") {
+        Salience::Normal
+    } else {
+        Salience::Unspecified
+    }
+}
+
+fn to_json(value: &impl serde::Serialize) -> CognitionResult<String> {
+    serde_json::to_string(value)
+        .map_err(|source| error(CognitionCode::MemoryCacheOperationFailed).with_source(source))
 }
 
 fn recover(connection: &Connection) -> CognitionResult<()> {

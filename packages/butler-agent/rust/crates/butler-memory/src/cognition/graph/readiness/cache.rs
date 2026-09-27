@@ -5,8 +5,8 @@ use std::{
     path::Path,
 };
 
+use crate::cognition::generation::HotCacheEntryView;
 use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::Value;
 
 use super::{GraphRepository, db_error, hydrate, source};
 use crate::cognition::feedback::{FeedbackSourceRow, excluded_source_ids};
@@ -77,7 +77,7 @@ impl GraphRepository {
     pub(in crate::cognition) fn valid_rebuild_cache_entries(
         &self,
         generation: &str,
-        entries: &[Value],
+        entries: &[HotCacheEntryView],
         source_root: &Path,
         canonical: &ConversationSourceReader,
         as_of: &str,
@@ -95,7 +95,7 @@ impl GraphRepository {
             .unwrap_or(-1);
         let mut valid = HashSet::new();
         for entry in entries {
-            let Some(id) = entry.get("entry_id").and_then(Value::as_str) else {
+            let Some(id) = entry.entry_id.as_deref() else {
                 continue;
             };
             if entry_current(
@@ -118,38 +118,39 @@ impl GraphRepository {
 
 fn entry_current(
     db: &Connection,
-    entry: &Value,
+    entry: &HotCacheEntryView,
     generation: &str,
     source_root: &Path,
     canonical: &ConversationSourceReader,
     as_of: &str,
     graph_revision: i64,
 ) -> CognitionResult<bool> {
-    let Some(episode) = entry["episode_id"].as_str() else {
+    let Some(episode) = entry.episode_id.as_deref() else {
         return Ok(false);
     };
-    let Some(revision) = entry["source_revision"].as_str() else {
+    let Some(revision) = entry.source_revision.as_deref() else {
         return Ok(false);
     };
-    let Some(refs) = strings(&entry["source_refs"]) else {
+    let Some(refs) = entry.source_refs.clone() else {
         return Ok(false);
     };
     if refs.is_empty() || refs.iter().collect::<HashSet<_>>().len() != refs.len() {
         return Ok(false);
     }
-    let Some(stored_revision) = entry["graph_revision"].as_i64() else {
+    let Some(stored_revision) = entry.graph_revision else {
         return Ok(false);
     };
     if stored_revision < 0 || stored_revision > graph_revision {
         return Ok(false);
     }
-    if entry["authority"]
-        .as_str()
+    if entry
+        .authority
+        .as_deref()
         .is_some_and(|value| value != "model_interpretation")
     {
         return Ok(false);
     }
-    if let Some(until) = entry["valid_until"].as_str()
+    if let Some(until) = entry.valid_until.as_deref()
         && let (Some(expiry), Some(now)) = (
             butler_core::js_date::parse_date_millis(until, &|value| Some(value)),
             butler_core::js_date::parse_date_millis(as_of, &|value| Some(value)),
@@ -182,8 +183,8 @@ fn entry_current(
     };
     if current != revision
         || status != "active"
-        || entry["project_id"].as_str() != project.as_deref()
-        || entry["session_id"].as_str() != session.as_deref()
+        || entry.project_id.as_deref() != project.as_deref()
+        || entry.session_id.as_deref() != session.as_deref()
     {
         return Ok(false);
     }
@@ -206,7 +207,7 @@ fn entry_current(
         rows.push(row);
     }
     if rows.iter().any(|row| row.source_kind == "conversation") {
-        let Some(window_ref) = entry["window_ref"].as_str() else {
+        let Some(window_ref) = entry.window_ref.as_deref() else {
             return Ok(false);
         };
         let extraction_version = db
@@ -234,8 +235,9 @@ fn entry_current(
             return Ok(false);
         }
     }
-    if entry["source_class"]
-        .as_str()
+    if entry
+        .source_class
+        .as_deref()
         .is_some_and(|value| value != source_class(&rows))
     {
         return Ok(false);
@@ -335,16 +337,16 @@ fn canonical_conversation_source_current(
 
 fn superseded(
     db: &Connection,
-    entry: &Value,
+    entry: &HotCacheEntryView,
     rows: &[CognitionSourceRow],
     as_of: &str,
     source_root: &Path,
     canonical: &ConversationSourceReader,
 ) -> CognitionResult<bool> {
-    let Some(nodes) = strings(&entry["node_refs"]) else {
+    let Some(nodes) = &entry.node_refs else {
         return Ok(false);
     };
-    let episode = entry["episode_id"].as_str().unwrap_or("");
+    let episode = entry.episode_id.as_deref().unwrap_or("");
     let mut corrections = Vec::new();
     for node in nodes {
         for row in rows {
@@ -356,7 +358,7 @@ fn superseded(
                         node,
                         row.source_id,
                         as_of,
-                        entry["project_id"].as_str()
+                        entry.project_id.as_deref()
                     ],
                     |row| row.get::<_, String>(0),
                 )
@@ -401,12 +403,4 @@ fn superseded(
     Ok(corrections
         .iter()
         .any(|row| !excluded.contains(&row.source_id)))
-}
-
-fn strings(value: &Value) -> Option<Vec<String>> {
-    value
-        .as_array()?
-        .iter()
-        .map(|item| item.as_str().map(str::to_owned))
-        .collect()
 }

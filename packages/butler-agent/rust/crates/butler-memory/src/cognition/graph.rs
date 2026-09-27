@@ -38,7 +38,7 @@ use rusqlite::{Connection, OpenFlags};
 use super::{CognitionError, CognitionResult};
 
 use crate::cognition::CognitionCode;
-pub(in crate::cognition) use cache_quantum::ClaimedCacheJob;
+pub(in crate::cognition) use cache_quantum::{CacheWindow, ClaimedCacheJob};
 pub(in crate::cognition) use candidates::VectorHit;
 pub(in crate::cognition) use consolidate::GraphConsolidateMetrics;
 pub(in crate::cognition) use internal_supersession::InternalSupersessionInput;

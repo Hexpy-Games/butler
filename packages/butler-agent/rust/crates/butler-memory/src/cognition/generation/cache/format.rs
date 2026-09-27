@@ -1,5 +1,6 @@
 //! Pure formatting and compaction for structured generation hot-cache entries.
 
+use super::receipt::ExclusionReason;
 use crate::cognition::{CognitionCode, CognitionError};
 use butler_core::public_text::fixed_regex;
 use std::{collections::HashSet, sync::OnceLock};
@@ -15,24 +16,67 @@ const MAX_ENTRY_BODY_UTF16: usize = 8_000;
 const SEMANTIC_PREFIX: &str = "<!-- butler-semantic:";
 const STRUCTURED_PREFIX: &str = "<!-- butler-hot-cache-entry:v2\n";
 
-pub(in crate::cognition) fn physical_entries(body: &str) -> Vec<Value> {
+/// Every well-formed structured entry in a cache body, in file order.
+pub(in crate::cognition) fn physical_entries(body: &str) -> Vec<HotCacheEntryView> {
     scan_semantic_blocks(body)
         .into_iter()
         .filter_map(|block| {
-            let text = &body[block.start..block.end];
-            let start = text.find(STRUCTURED_PREFIX)? + STRUCTURED_PREFIX.len();
-            let end = text[start..].find("\n-->")? + start;
-            let value: Value = serde_json::from_str(&text[start..end]).ok()?;
+            let text = body.get(block.start..block.end)?;
             parse_structured_entry(text)?;
-            Some(value)
+            let value: Value = serde_json::from_str(structured_metadata(text)?).ok()?;
+            value
+                .is_object()
+                .then(|| HotCacheEntryView::deserialize(&value).ok())
+                .flatten()
         })
         .collect()
+}
+
+/// The JSON metadata of a structured entry block.
+fn structured_metadata(block: &str) -> Option<&str> {
+    let start = block.find(STRUCTURED_PREFIX)? + STRUCTURED_PREFIX.len();
+    let rest = block.get(start..)?;
+    rest.get(..rest.find("\n-->")?)
+}
+
+/// Lenient view of an entry's stored metadata, as every validator reads it:
+/// a field of the wrong type reads as absent.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub(in crate::cognition) struct HotCacheEntryView {
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    pub entry_id: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    pub episode_id: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    pub window_ref: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    pub node_refs: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    pub source_revision: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    pub valid_until: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    pub summary: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    pub scope: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    pub project_id: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    pub session_id: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    pub graph_revision: Option<i64>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    pub source_refs: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    pub authority: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    pub source_class: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct ExcludedEntry {
     pub(super) id: String,
-    pub(super) reason: &'static str,
+    pub(super) reason: ExclusionReason,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -51,11 +95,11 @@ pub(super) struct RenderedCache {
 /// graph evidence. The candidate must be present there to be admitted.
 pub(super) fn render(
     existing: &str,
-    new_entry: Option<&Value>,
+    new_entry: Option<&SourceBackedHotCacheEntry>,
     valid_entry_ids: &HashSet<String>,
     now_epoch_ms: i64,
 ) -> Result<RenderedCache, CognitionError> {
-    let candidate = new_entry.map(parse_candidate).transpose()?;
+    let candidate = new_entry.cloned().map(validate_candidate).transpose()?;
     let candidate_block = candidate.as_ref().map(render_entry_block).transpose()?;
     let candidate_id = candidate.as_ref().map(|entry| entry.entry_id.clone());
     let marker = candidate.as_ref().map(|entry| {
@@ -100,12 +144,12 @@ pub(super) fn render(
         if is_expired(entry.valid_until.as_deref(), now_epoch_ms) {
             excluded.push(ExcludedEntry {
                 id: entry.entry_id,
-                reason: "expired",
+                reason: ExclusionReason::Expired,
             });
         } else if !valid_entry_ids.contains(&entry.entry_id) {
             excluded.push(ExcludedEntry {
                 id: entry.entry_id,
-                reason: "invalidated",
+                reason: ExclusionReason::Invalidated,
             });
         } else {
             valid_blocks.push(ParsedBlock {
@@ -116,8 +160,10 @@ pub(super) fn render(
     }
 
     valid_blocks.sort_by(|left, right| {
-        salience_rank(&left.entry.salience)
-            .cmp(&salience_rank(&right.entry.salience))
+        left.entry
+            .salience
+            .rank()
+            .cmp(&right.entry.salience.rank())
             .then_with(|| {
                 right
                     .entry
@@ -150,12 +196,12 @@ pub(super) fn render(
         if single_bytes > DEFAULT_MAX_BYTES {
             excluded.push(ExcludedEntry {
                 id: block.entry.entry_id,
-                reason: "oversized",
+                reason: ExclusionReason::Oversized,
             });
         } else if serialize_blocks(&candidate_blocks).len() > DEFAULT_MAX_BYTES {
             excluded.push(ExcludedEntry {
                 id: block.entry.entry_id,
-                reason: "budget",
+                reason: ExclusionReason::Budget,
             });
         } else {
             admitted_ids.insert(block.entry.entry_id);
@@ -180,52 +226,90 @@ pub(super) fn render(
     })
 }
 
+/// One window summary as written into the cache file's entry metadata.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-struct SourceBackedHotCacheEntry {
-    entry_id: String,
-    episode_id: String,
-    window_ref: String,
-    node_refs: Vec<String>,
-    source_revision: String,
-    source_time: String,
+pub(in crate::cognition) struct SourceBackedHotCacheEntry {
+    pub entry_id: String,
+    pub episode_id: String,
+    pub window_ref: String,
+    pub node_refs: Vec<String>,
+    pub source_revision: String,
+    pub source_time: String,
     #[serde(default)]
-    valid_until: Option<String>,
-    kind: String,
-    summary: String,
-    basis: Vec<String>,
-    salience: Salience,
-    scope: Scope,
+    pub valid_until: Option<String>,
+    pub kind: String,
+    pub summary: String,
+    pub basis: Vec<String>,
+    pub salience: Salience,
+    pub scope: Scope,
     #[serde(default)]
-    project_id: Option<String>,
+    pub project_id: Option<String>,
     #[serde(default)]
-    session_id: Option<String>,
+    pub session_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    source_kind: Option<SourceKind>,
-    graph_revision: i64,
+    pub source_kind: Option<SourceKind>,
+    pub graph_revision: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    authority: Option<Authority>,
+    pub authority: Option<Authority>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    source_class: Option<SourceClass>,
-    source_refs: Vec<String>,
+    pub source_class: Option<SourceClass>,
+    pub source_refs: Vec<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+impl SourceBackedHotCacheEntry {
+    /// The validator view of this entry.
+    pub(in crate::cognition) fn view(&self) -> HotCacheEntryView {
+        HotCacheEntryView {
+            entry_id: Some(self.entry_id.clone()),
+            episode_id: Some(self.episode_id.clone()),
+            window_ref: Some(self.window_ref.clone()),
+            node_refs: Some(self.node_refs.clone()),
+            source_revision: Some(self.source_revision.clone()),
+            valid_until: self.valid_until.clone(),
+            summary: Some(self.summary.clone()),
+            scope: Some(self.scope.as_str().to_owned()),
+            project_id: self.project_id.clone(),
+            session_id: self.session_id.clone(),
+            graph_revision: Some(self.graph_revision),
+            source_refs: Some(self.source_refs.clone()),
+            authority: self
+                .authority
+                .as_ref()
+                .map(|_| "model_interpretation".to_owned()),
+            source_class: self.source_class.map(|class| class.as_str().to_owned()),
+        }
+    }
+}
+
+/// How prominently an entry is kept when the cache is over budget.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-enum Salience {
+pub(in crate::cognition) enum Salience {
     High,
     Normal,
     Unspecified,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+impl Salience {
+    fn rank(self) -> u8 {
+        match self {
+            Self::High => 0,
+            Self::Normal => 1,
+            Self::Unspecified => 2,
+        }
+    }
+}
+
+/// Whether an entry belongs to one project or every session.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-enum Scope {
+pub(in crate::cognition) enum Scope {
     Project,
     Global,
 }
 
 impl Scope {
-    fn as_str(&self) -> &'static str {
+    fn as_str(self) -> &'static str {
         match self {
             Self::Project => "project",
             Self::Global => "global",
@@ -233,29 +317,57 @@ impl Scope {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+/// The kind of source a summarized window came from.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-enum SourceKind {
+pub(in crate::cognition) enum SourceKind {
     Conversation,
     TaskReport,
     ExplicitRecord,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+impl SourceKind {
+    /// Parses a stored source kind.
+    pub(in crate::cognition) fn parse(value: &str) -> Option<Self> {
+        match value {
+            "conversation" => Some(Self::Conversation),
+            "task_report" => Some(Self::TaskReport),
+            "explicit_record" => Some(Self::ExplicitRecord),
+            _ => None,
+        }
+    }
+}
+
+/// Who wrote an entry's text; window summaries are model interpretations.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-enum Authority {
+pub(in crate::cognition) enum Authority {
     ModelInterpretation,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+/// The provenance of an entry's sources.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-enum SourceClass {
+pub(in crate::cognition) enum SourceClass {
     User,
     Assistant,
     TaskReport,
     Explicit,
     Mixed,
     Unknown,
+}
+
+impl SourceClass {
+    pub(in crate::cognition) fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Assistant => "assistant",
+            Self::TaskReport => "task_report",
+            Self::Explicit => "explicit",
+            Self::Mixed => "mixed",
+            Self::Unknown => "unknown",
+        }
+    }
 }
 
 struct ParsedBlock {
@@ -267,7 +379,7 @@ struct ParsedEntry {
     entry_id: String,
     source_time: String,
     valid_until: Option<String>,
-    salience: String,
+    salience: Salience,
 }
 
 struct SemanticBlock {
@@ -275,9 +387,9 @@ struct SemanticBlock {
     end: usize,
 }
 
-fn parse_candidate(value: &Value) -> Result<SourceBackedHotCacheEntry, CognitionError> {
-    let mut entry: SourceBackedHotCacheEntry = serde_json::from_value(value.clone())
-        .map_err(|source| invalid(CognitionCode::HotCacheEntryInvalid).with_source(source))?;
+fn validate_candidate(
+    mut entry: SourceBackedHotCacheEntry,
+) -> Result<SourceBackedHotCacheEntry, CognitionError> {
     if entry.entry_id.is_empty()
         || entry.episode_id.is_empty()
         || entry.source_revision.is_empty()
@@ -300,33 +412,35 @@ fn parse_candidate(value: &Value) -> Result<SourceBackedHotCacheEntry, Cognition
 }
 
 fn parse_structured_entry(block: &str) -> Option<ParsedEntry> {
-    let start = block.find(STRUCTURED_PREFIX)? + STRUCTURED_PREFIX.len();
-    let end = block[start..].find("\n-->")? + start;
-    let value: Value = serde_json::from_str(&block[start..end]).ok()?;
-    let entry_id = value.get("entry_id")?.as_str()?.to_owned();
-    let episode_id = value.get("episode_id")?.as_str()?;
-    let source_revision = value.get("source_revision")?.as_str()?;
-    let summary = value.get("summary")?.as_str()?;
-    let source_time = value.get("source_time")?.as_str()?;
-    if entry_id.is_empty()
-        || episode_id.is_empty()
-        || source_revision.is_empty()
-        || summary.is_empty()
+    #[derive(Deserialize)]
+    struct Required {
+        entry_id: String,
+        episode_id: String,
+        source_revision: String,
+        summary: String,
+        source_time: String,
+        #[serde(default, deserialize_with = "crate::lenient::option")]
+        valid_until: Option<String>,
+        #[serde(default, deserialize_with = "crate::lenient::option")]
+        salience: Option<Salience>,
+    }
+    let value: Value = serde_json::from_str(structured_metadata(block)?).ok()?;
+    if !value.is_object() {
+        return None;
+    }
+    let entry = Required::deserialize(&value).ok()?;
+    if entry.entry_id.is_empty()
+        || entry.episode_id.is_empty()
+        || entry.source_revision.is_empty()
+        || entry.summary.is_empty()
     {
         return None;
     }
     Some(ParsedEntry {
-        entry_id,
-        source_time: source_time.to_owned(),
-        valid_until: value
-            .get("valid_until")
-            .and_then(Value::as_str)
-            .map(str::to_owned),
-        salience: value
-            .get("salience")
-            .and_then(Value::as_str)
-            .unwrap_or("unspecified")
-            .to_owned(),
+        entry_id: entry.entry_id,
+        source_time: entry.source_time,
+        valid_until: entry.valid_until,
+        salience: entry.salience.unwrap_or(Salience::Unspecified),
     })
 }
 
@@ -407,14 +521,6 @@ fn is_expired(valid_until: Option<&str>, now_epoch_ms: i64) -> bool {
         .filter(|value| !value.is_empty())
         .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
         .is_some_and(|expiry| expiry.timestamp_millis() <= now_epoch_ms)
-}
-
-fn salience_rank(salience: &str) -> u8 {
-    match salience {
-        "high" => 0,
-        "normal" => 1,
-        _ => 2,
-    }
 }
 
 fn serialize_blocks(blocks: &[String]) -> String {

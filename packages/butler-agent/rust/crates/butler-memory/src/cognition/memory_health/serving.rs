@@ -281,10 +281,7 @@ fn unavailable(
 ) -> Value {
     let empty = json!({"complete":0,"pending":0,"failed":0,"not_configured":0});
     let cache = resolve_active_generation(data_root, paths).map_or_else(
-        |_| {
-            json!({"available":false,"reason":"generation_unavailable","total_entries":0,
-            "current_entries":0,"stale_entries":0,"expired_entries":0,"evicted_entries":0})
-        },
+        |_| crate::cognition::generation::HotCacheHealth::unavailable("generation_unavailable", 0),
         |handle| {
             let revision =
                 Connection::open_with_flags(&handle.graph_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
