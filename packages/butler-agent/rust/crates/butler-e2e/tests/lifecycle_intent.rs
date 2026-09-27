@@ -25,6 +25,13 @@ use serde_json::{Value, json};
 
 const INTENT_SCHEMA: &str = "butler.agent-stop-intent.v1";
 
+/// One scenario at a time. The sandboxes hard-link one agent binary, and macOS
+/// reports a process's executable path from its file's most recent lookup:
+/// while another sandbox runs the same file, the product's identity check can
+/// see that sandbox's path and refuse to signal (`lock owner does not match
+/// its record`). These scenarios run CLI and MCP controllers back to back.
+static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 fn intent_path(data: &Path) -> PathBuf {
     data.join("state/agent-stop-intent.json")
 }
@@ -110,6 +117,7 @@ impl RestartWatch {
 #[tokio::test]
 async fn svc_02_stop_is_announced_and_sticks() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    let _serial = SERIAL.lock().await;
     let mut s = Setup::new("SVC-02")?.start().await?;
     let data = s.sandbox.data.clone();
     let record = ready_record(&data, Duration::from_secs(30)).await;
@@ -165,6 +173,7 @@ async fn svc_02_stop_is_announced_and_sticks() -> Result<(), HarnessError> {
 #[tokio::test]
 async fn svc_03_restart_is_announced_until_the_new_instance_is_ready() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    let _serial = SERIAL.lock().await;
     let mut s = Setup::new("SVC-03")?.start().await?;
     let cleanup = StopOnDrop(s.agent.launch.clone());
     let data = s.sandbox.data.clone();
@@ -212,6 +221,7 @@ async fn svc_03_restart_is_announced_until_the_new_instance_is_ready() -> Result
 #[tokio::test]
 async fn svc_04_controls_report_success_without_the_app_token() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    let _serial = SERIAL.lock().await;
     let mut s = Setup::new("SVC-04")?.app_local_auth().start().await?;
     let cleanup = StopOnDrop(s.agent.launch.clone());
     let data = s.sandbox.data.clone();
@@ -265,6 +275,7 @@ async fn svc_04_controls_report_success_without_the_app_token() -> Result<(), Ha
 #[tokio::test]
 async fn svc_05_crash_leaves_no_intent() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    let _serial = SERIAL.lock().await;
     let setup = Setup::new("SVC-05")?;
     let data = setup.sandbox.data.clone();
     std::fs::create_dir_all(data.join("state"))?;
