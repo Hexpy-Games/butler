@@ -1,0 +1,161 @@
+/* 07 Focus ring hero: the tab-order field (key cap, controls, width
+   close-up, tokens) and the product grid. Canvas px (see ../shared/grid.ts). */
+
+.field {
+  display: grid;
+  align-content: center;
+  row-gap: var(--space-2xl);
+  padding: var(--space-2xl);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-popover);
+  background: var(--surface-raised);
+}
+
+.keyRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.stack {
+  display: inline-grid;
+}
+
+.stack[data-kind="count"] {
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+.layer {
+  display: inline-grid;
+  grid-area: 1 / 1;
+}
+
+/* The poster shows the first layer: the Tab key, 1/4. */
+.layer + .layer {
+  opacity: 0;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.probe {
+  position: relative;
+  display: inline-grid;
+}
+
+/* The poster's ring on the first control (the live ring token). */
+.posterRing {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-control);
+  box-shadow: var(--focus-ring);
+  pointer-events: none;
+}
+
+/* The close-up scene: the first control, its ring, the ring's width bracketed. */
+.closeUp {
+  display: grid;
+  place-items: center;
+}
+
+.closeButton {
+  display: inline-grid;
+}
+
+.closeRing {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-control);
+  box-shadow: var(--focus-ring);
+  pointer-events: none;
+}
+.bracket {
+  position: absolute;
+  top: calc(50% - var(--space-xs));
+  right: 100%;
+  inline-size: var(--focus-ring-width);
+  block-size: var(--space-sm);
+  border-block: 1px solid var(--accent);
+  opacity: 0;
+}
+
+.widthNote,
+.colorNote {
+  position: absolute;
+  right: calc(100% + var(--space-sm));
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  opacity: 0;
+  white-space: nowrap;
+}
+
+.widthNote {
+  top: calc(50% - var(--space-md));
+}
+
+.colorNote {
+  top: calc(50% + var(--space-xs));
+}
+
+.swatch {
+  inline-size: var(--space-sm);
+  block-size: var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--focus-ring-color);
+}
+
+.tokens {
+  display: grid;
+  row-gap: var(--space-sm);
+  color: var(--text-secondary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+.tokenRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.tokenValue {
+  color: var(--text-tertiary);
+}
+
+.buildRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.product {
+  grid-template-areas:
+    "button toggle"
+    "field field"
+    "tabs tabs";
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: space-between;
+  gap: var(--space-2xl) var(--grid-gutter);
+}
+
+[data-layout="tall"] .product {
+  grid-template-areas:
+    "button"
+    "field"
+    "toggle"
+    "tabs";
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  row-gap: var(--space-lg);
+}

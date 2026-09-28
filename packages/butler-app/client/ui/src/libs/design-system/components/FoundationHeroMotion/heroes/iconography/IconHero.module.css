@@ -1,0 +1,217 @@
+/* 06 Iconography hero: the keyline lab left of the poster, the size ladder
+   field and the product grid. Canvas px (see ../shared/grid.ts). */
+
+/* ---- The keyline lab ---- */
+
+.lab {
+  display: grid;
+  place-items: center;
+}
+
+.labStage {
+  display: grid;
+  grid-template-columns: auto auto;
+  column-gap: var(--space-3xl);
+  align-items: center;
+}
+
+.keyBox {
+  position: relative;
+  inline-size: calc(var(--icon-size-xl) * 8);
+  block-size: calc(var(--icon-size-xl) * 8);
+}
+
+.keySvg,
+.keyGlyph {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: visible;
+}
+
+.keyGrid,
+.keyLine {
+  fill: none;
+  stroke-dasharray: var(--dash) var(--dash);
+}
+
+.keyGrid {
+  stroke: color-mix(in srgb, var(--accent) 30%, transparent);
+  stroke-width: 0.04;
+}
+
+.keyLine {
+  stroke: var(--accent);
+  stroke-width: 0.08;
+}
+
+.keyGlyph {
+  display: grid;
+  place-items: center;
+  color: var(--text-primary);
+}
+
+/* Each stroke of the glyph draws along its length. */
+.keyGlyph path,
+.tone[data-tone="muted"] path {
+  stroke-dasharray: 80px 80px;
+}
+
+.keyNotes {
+  display: grid;
+  row-gap: var(--space-md);
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+/* ---- The field: the size ladder paired with type ---- */
+
+.field {
+  display: grid;
+  align-content: center;
+  row-gap: var(--space-md);
+  padding: var(--space-xl);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-popover);
+  background: var(--surface-raised);
+}
+
+.mode {
+  display: inline-grid;
+  margin-block-end: var(--space-sm);
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+.modeLayer {
+  grid-area: 1 / 1;
+}
+
+/* The poster names the primary tone. */
+.modeLayer:not(:nth-child(2)) {
+  opacity: 0;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 7.5em minmax(0, 1fr) 2em;
+  column-gap: var(--space-md);
+  align-items: center;
+  min-block-size: var(--control-height-md);
+}
+
+.token,
+.value {
+  color: var(--text-secondary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+}
+
+.value {
+  color: var(--text-tertiary);
+  text-align: end;
+}
+
+.pair {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.center {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: calc(var(--space-xs) * -1);
+  block-size: 1px;
+  background: color-mix(in srgb, var(--accent) 50%, transparent);
+  transform-origin: 0 50%;
+}
+
+.iconBox {
+  position: relative;
+  display: grid;
+  flex: none;
+  inline-size: var(--s);
+  block-size: var(--s);
+  outline: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.tone {
+  display: grid;
+  grid-area: 1 / 1;
+  place-items: center;
+}
+
+.tone[data-tone="muted"] {
+  color: var(--icon-muted);
+}
+
+.tone[data-tone="primary"] {
+  color: var(--text-primary);
+}
+
+.tone[data-tone="accent"] {
+  color: var(--accent);
+  opacity: 0;
+}
+
+.text {
+  display: block;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+/* ---- Components and poster ---- */
+
+.buildRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.muted {
+  display: inline-grid;
+  color: var(--icon-muted);
+}
+
+.menuRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-block-size: var(--control-height-md);
+  padding-inline: var(--space-sm);
+}
+
+.product {
+  grid-template-areas:
+    "actions empty"
+    "labels empty"
+    "menu empty";
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: space-between;
+  gap: var(--space-xl) var(--grid-gutter);
+}
+
+[data-layout="tall"] .product {
+  grid-template-areas:
+    "actions"
+    "labels"
+    "empty"
+    "menu";
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  row-gap: var(--space-lg);
+}
+
+[data-layout="tall"] .labStage {
+  grid-template-columns: auto;
+  row-gap: var(--space-2xl);
+  justify-items: center;
+}

@@ -46,6 +46,16 @@
   pointer-events: none;
 }
 
+/* A scene region: laid out over the canvas and centred, moved to its cell on
+   the camera's path while the hero plays; hidden in the poster. */
+.cell {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+}
+
 /* ---- Live control (a chapter may use it in its prelude) ---- */
 
 .control {
@@ -294,7 +304,8 @@
   white-space: nowrap;
 }
 
-.badge[data-side="r"] {
+.badge[data-side="r"],
+.badge[data-side="b"] {
   translate: 0 -50%;
 }
 
@@ -309,7 +320,8 @@
 }
 
 .note .step,
-.badge[data-side="r"] .step {
+.badge[data-side="r"] .step,
+.badge[data-side="b"] .step {
   justify-self: start;
 }
 

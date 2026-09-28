@@ -1,4 +1,4 @@
-import { fit, focus, type Key, type Track } from "../../heroTimeline";
+import type { Key, Track } from "../../heroTimeline";
 import { annotTracks } from "../shared/Annotations";
 import { TRANSITION } from "../shared/beats";
 import { openingItems } from "../shared/guides";
@@ -25,18 +25,19 @@ import { WIRE_ANNOTS } from "./SpacingScenes";
 const AT = { grid: 7.6, cell: 6.8, stairs: 11.6, wire: 16.4, boxes: 17.4, measure: 20.6, breathe: 24.6, end: 28.4 } as const;
 const BOXES = ["w-head", "w-card", "w-l1", "w-i1", "w-l2", "w-i2", "w-b1", "w-b2"];
 
-export function spacingPrelude(copy: SpacingCopy): Omit<Prelude, "render"> {
+export function spacingPrelude(copy: SpacingCopy): Pick<Prelude, "end" | "tracks"> {
   return {
     end: () => AT.end,
-    tracks: ({ g, close }: TimelineContext) => {
+    tracks: ({ g, close, view }: TimelineContext) => {
       const { canvas } = g;
-      const front = focus(canvas, g.boxes.intro!, 1);
-      const cell = focus(canvas, g.boxes.cell!, 2.2);
-      const field = focus(canvas, g.boxes.field!, fit(canvas, g.boxes.field!, 0.86, 2));
+      const front = view("intro", g.boxes.intro!, 1, 1);
+      // Pushed into the grid's middle cell, then pulled back to the whole field: one zoom about the field's centre.
+      const cell = view("field", { x: 0, y: 0, w: canvas.w / 2.2, h: canvas.h / 2.2 }, 1, 2.2);
+      const field = view("field", g.boxes.field!, 0.86, 2);
       // The wireframe with room for its values on both sides.
       const w = g.boxes.wire!;
-      const room = { ...w, x: w.x - 200, w: w.w + 400 };
-      const wire = focus(canvas, room, fit(canvas, room, 0.96, 2));
+      const room = g.layout === "wide" ? { ...w, x: w.x - 200, w: w.w + 400 } : w;
+      const wire = view("wire", room, 0.96, 2);
       const camera: Key[] = [
         { at: 0, ...front }, { at: AT.cell, ...front }, { at: AT.cell + TRANSITION, ...cell, ease: "standard" },
         { at: AT.stairs - 0.2, ...cell }, { at: AT.stairs + 3, ...field, ease: "standard" },

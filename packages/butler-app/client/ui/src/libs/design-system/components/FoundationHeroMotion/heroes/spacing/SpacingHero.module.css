@@ -50,10 +50,11 @@
     );
 }
 
+/* The cell the camera pushes into: the middle of the grid. */
 .cell {
   position: absolute;
-  top: 0;
-  left: 0;
+  top: calc(50% - var(--space-sm));
+  left: calc(50% - var(--space-sm));
   inline-size: var(--space-lg);
   block-size: var(--space-lg);
 }
@@ -101,12 +102,8 @@
 /* ---- The wireframe, left of the poster ---- */
 
 .wire {
-  position: absolute;
-  inset: 0;
   display: grid;
-  place-items: center end;
-  padding-inline-end: var(--grid-margin);
-  translate: -125% 0;
+  place-items: center;
 }
 
 .wireStage {
@@ -223,4 +220,8 @@
   grid-template-columns: minmax(0, 1fr);
   align-content: start;
   row-gap: var(--space-lg);
+}
+
+[data-layout="tall"] .wireStage {
+  inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
 }

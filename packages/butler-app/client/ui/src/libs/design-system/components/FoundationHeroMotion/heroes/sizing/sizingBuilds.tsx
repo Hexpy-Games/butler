@@ -28,15 +28,17 @@ export function sizingBuilds(copy: SizingCopy): BuildSpec[] {
       id: "controls",
       render: (
         <Topic id="t1" title={topics.controls}>
-          <div className={s.row}>
-            <Mark block n="in" sketch sweep><Input readOnly value={copy.query} /></Mark>
-            <Mark n="go" part sketch><Button text={<R name="go-t">{copy.find}</R>} /></Mark>
-          </div>
+          <Mark block n="ctlrow">
+            <div className={s.row}>
+              <Mark block n="in" sketch sweep><Input readOnly value={copy.query} /></Mark>
+              <Mark n="go" part sketch><Button text={<R name="go-t">{copy.find}</R>} /></Mark>
+            </div>
+          </Mark>
         </Topic>
       ),
       steps: [
         { text: ["t1-topic"] },
-        { parts: ["in"], annots: [{ kind: "size", target: "in", axis: "h", label: height }] },
+        { parts: ["in"], annots: [{ kind: "center", target: "ctlrow", axis: "h" }] },
         { parts: ["go"], text: ["go-t"], annots: [{ kind: "size", target: "go", axis: "h", label: height }] },
       ],
     },
@@ -45,12 +47,14 @@ export function sizingBuilds(copy: SizingCopy): BuildSpec[] {
       render: (
         <Topic id="t2" title={topics.titlebar}>
           <Mark block n="tb" sketch>
+            <div className={s.titlebarHost}>
             <TitlebarShell title={<R name="tb-title">{copy.title2}</R>} subtitle={<R name="tb-sub">{copy.subtitle}</R>}
               leading={<Mark n="tb-lead" part><Button aria-label={copy.title2} iconStart={<PanelLeft size="md" />} size="icon-sm" variant="ghost" /></Mark>}
               trailing={<span className={s.row}>
                 <Mark n="tb-new" part><Button aria-label={copy.newChat} iconStart={<Plus size="md" />} size="icon-sm" variant="ghost" /></Mark>
                 <Mark n="tb-set" part><Button aria-label={copy.settings} iconStart={<Settings size="md" />} size="icon-sm" variant="ghost" /></Mark>
               </span>} />
+            </div>
           </Mark>
         </Topic>
       ),
@@ -85,7 +89,7 @@ export function sizingBuilds(copy: SizingCopy): BuildSpec[] {
           <Mark block n="formrow">
             <div className={s.row}>
               <Mark n="sel" part sketch><SelectButton><R name="sel-t">{copy.auto}</R></SelectButton></Mark>
-              <Label><Mark n="sw" part sketch><Switch aria-label={copy.autoSend} checked onCheckedChange={() => undefined} /></Mark><R name="sw-t">{copy.autoSend}</R></Label>
+              <span className={s.nowrap}><Label><Mark n="sw" part sketch><Switch aria-label={copy.autoSend} checked onCheckedChange={() => undefined} /></Mark><R name="sw-t">{copy.autoSend}</R></Label></span>
             </div>
           </Mark>
         </Topic>

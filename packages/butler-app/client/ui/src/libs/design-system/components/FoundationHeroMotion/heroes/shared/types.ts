@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { Box, Key, Track } from "../../heroTimeline";
+import type { Box, Key, Pose, Track } from "../../heroTimeline";
 import type { HeroLayout } from "./grid";
 import type { SketchBox } from "./Sketch";
 
@@ -74,9 +74,14 @@ export interface BuildSpec {
   holdSketch?: boolean;
 }
 
-/** Beat marks of one compiled cycle. */
+/** Beat marks of one compiled cycle, and where the prelude's scenes sit. */
 export interface TimelineContext {
+  /** The geometry, with every box of a scene moved to its scene cell. */
   g: Geometry;
+  /** Centre of each prelude scene cell (world, canvas px). */
+  cells: Record<string, { x: number; y: number }>;
+  /** The camera on a prelude scene cell, centred on it (moves stay on one axis), zoomed to fit `content`. */
+  view: (cell: string, content: Box, fill?: number, cap?: number) => Pose;
   beats: number;
   close: number;
   /** The first build starts here (the prelude's camera leaves one transition before). */
@@ -86,13 +91,19 @@ export interface TimelineContext {
   loop: number;
 }
 
-/** A chapter's own opening scenes: its elements (world layer) and their motion up to `end`. */
+/**
+ * A chapter's own opening scenes. Each scene has a cell on the camera's path
+ * (`cells`, in order; "field" is the poster's token field, shown in its own
+ * cell before the builds); every other scene is a region, laid out
+ * canvas-sized and centred (`data-m` names measured boxes).
+ */
 export interface Prelude {
-  /** Elements over the world (absolute; the chapter's stylesheet places them, `data-m` names measured boxes); given the geometry once measured, for guides. */
-  render: ReactNode | ((g: Geometry | null) => ReactNode);
+  cells: string[];
+  /** The scene regions by cell name; given the geometry once measured, for guides. */
+  regions: Record<string, ReactNode | ((g: Geometry | null) => ReactNode)>;
   /** The beat the prelude's last scene ends and the camera leaves for the first build. */
   end: (g: Geometry) => number;
-  /** Tracks of the prelude's elements (and of the poster field's contents), and camera keys from 0 to `end` (its first key is also where the loop returns). */
+  /** Tracks of the prelude's elements (and of the field's contents), and camera keys from 0 to `end` (its first key is where the loop cuts back to). */
   tracks: (ctx: TimelineContext) => { tracks: Track[]; camera: Key[] };
 }
 
@@ -119,8 +130,9 @@ export interface ChapterSpec {
 export interface Geometry {
   layout: HeroLayout;
   canvas: { w: number; h: number };
-  /** Boxes of every `data-m` element, relative to the world. */
+  /** Boxes of every `data-m` element, relative to the world (as laid out), and the scene cell each belongs to. */
   boxes: Record<string, Box>;
+  boxCell: Record<string, string>;
   /** Marks inside each `data-mark-scope` element (prelude scenes, the field), relative to it. */
   scopes: Record<string, Marks>;
   /** Line height of every `data-roller` readout. */

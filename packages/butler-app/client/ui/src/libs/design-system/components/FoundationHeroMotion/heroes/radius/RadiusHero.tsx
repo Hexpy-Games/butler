@@ -14,7 +14,8 @@ function spec(copy: RadiusCopy): ChapterSpec {
     code: "radius",
     prelude: {
       ...radiusPrelude(copy),
-      render: (g) => <><Intro lead={copy.lead} title={copy.title} /><RadiusLab g={g} /></>,
+      cells: ["intro", "lab", "field"],
+      regions: { intro: <Intro lead={copy.lead} title={copy.title} />, lab: (g) => <RadiusLab g={g} /> },
     },
     field: (g) => <RadiusField copy={copy} g={g} />,
     fieldColumns: 5,

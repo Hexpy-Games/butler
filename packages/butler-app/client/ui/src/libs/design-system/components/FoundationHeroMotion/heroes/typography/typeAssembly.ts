@@ -1,4 +1,5 @@
 import type { Key, Pose, Track } from "../../heroTimeline";
+import { CELL } from "../shared/scene";
 import { line, OUT } from "./typeLine";
 import type { SpecimenMetrics } from "./specimenMetrics";
 import { cameras } from "./typeCamera";
@@ -29,12 +30,14 @@ function assembly(g: TypeGeometry): Track[] {
   const world: Key[] = [
     // Close in on the H2 row over one TRANSITION, then chase the row being built down the list (continuous,
     // settling on the last row while its digits roll), then out to the first build over one TRANSITION.
-    { at: 0, ...cam.rest }, { at: 18.2, ...cam.rest }, { at: 20.2, ...cam.rest }, { at: rowAt(1), ...cam.row("title"), ease: "standard" },
+    { at: 0, ...cam.open }, { at: 18.2, ...cam.open }, { at: 20.2, ...cam.open }, { at: rowAt(1), ...cam.row("title"), ease: "standard" },
     ...FLIGHTS.slice(1).map((flight, j): Key => ({ at: rowAt(j + 1) + 1, ...cam.row(flight), ease: j === 0 ? "accelerate" : j === FLIGHTS.length - 2 ? "decelerate" : "linear" })),
     { at: FIRST - TRANSITION, ...cam.row("metric") }, { at: FIRST, ...cam.stage[0]! },
     ...PANELS.slice(1).flatMap((_, j): Key[] => [{ at: buildAt(j + 1) - TRAVEL, ...cam.stage[j]! }, { at: buildAt(j + 1), ...cam.stage[j + 1]!, ease: "standard" }]),
     // The finale zooms out from the composer, flat, to the poster, which then holds still.
     { at: FINALE, ...cam.stage[3]! }, { at: FINALE + TRANSITION, ...cam.rest },
+    // The loop cuts back to the opening's cell once the product has receded (the camera never turns back).
+    { at: LOOP + TRANSITION - 0.01, ...cam.rest }, { at: LOOP + TRANSITION, ...cam.open },
   ];
   // Rungs only move (an opacity animation would flatten their 3D); their
   // parts fade on their own. For the finale they gather in from below-left.
@@ -43,9 +46,11 @@ function assembly(g: TypeGeometry): Track[] {
     const styled = rise + 1;
     const leave = LOOP + i * 0.18;
     const gather = FINALE + 0.3 + i * 0.2;
-    const hidden: Pose = { x: 0, y: 40, z: -180 };
+    const o = cam.start;
+    const hidden: Pose = { x: o.x, y: o.y + 40, z: -180 };
     // Off the canvas to the left while the components build; they gather back in for the finale.
-    const away: Pose = { x: -g.canvas.w, y: 120, z: 0 };
+    // Well off the camera's path (up and right of the poster), so no build frame shows them.
+    const away: Pose = { x: 3 * CELL * g.canvas.w, y: -3 * CELL * g.canvas.h, z: 0 };
     const fade = (from: number, to: number): Key[] => [
       { at: 0, o: 0 }, { at: from, o: 0 }, { at: to, o: 1, ease: "decelerate" }, { at: leave, o: 1 }, { at: leave + 1, o: 0, ease: "accelerate" },
     ];
@@ -57,8 +62,8 @@ function assembly(g: TypeGeometry): Track[] {
       {
         select: select(`rung-${name}`),
         keys: [
-          { at: 0, ...hidden }, { at: rise - 1.4, ...hidden }, { at: rise, x: 0, y: 0, z: 0, ease: "spring" },
-          { at: 45, x: 0, y: 0 }, { at: 45.1, ...away }, { at: gather, ...away }, { at: gather + TRANSITION, x: 0, y: 0 },
+          { at: 0, ...hidden }, { at: rise - 1.4, ...hidden }, { at: rise, x: o.x, y: o.y, z: 0, ease: "spring" },
+          { at: 45, x: o.x, y: o.y }, { at: 45.1, ...away }, { at: gather, ...away }, { at: gather + TRANSITION, x: 0, y: 0 },
           { at: leave + 1.2, z: 0 }, { at: BEATS, ...hidden },
         ],
       },
@@ -100,7 +105,7 @@ function assembly(g: TypeGeometry): Track[] {
       ...lines.flatMap((info, j) => line(info, starts[j]!, at + BUILD - TRAVEL - 0.4)),
     ];
   });
-  const tnumAt: Pose = { x: g.fly.metric.x - g.tnum.x, y: g.fly.metric.y + g.fly.metric.h + 4 - g.tnum.y };
+  const tnumAt: Pose = { x: g.fly.metric.x - g.tnum.x + cam.start.x, y: g.fly.metric.y + g.fly.metric.h + 4 - g.tnum.y + cam.start.y };
   return [
     { select: select("world"), keys: world },
     { select: select("cap-tnum"), keys: [{ at: 0, ...tnumAt, y: tnumAt.y! + 6, o: 0 }, { at: rowAt(6) + 1.6, o: 0 }, { at: rowAt(6) + 2.4, y: tnumAt.y, o: 1, ease: "decelerate" }, { at: FIRST - TRANSITION, o: 1 }, { at: FIRST - TRANSITION + 0.6, o: 0, ease: "accelerate" }] },

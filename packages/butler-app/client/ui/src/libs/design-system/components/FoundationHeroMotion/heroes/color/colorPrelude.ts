@@ -2,6 +2,7 @@ import { fit, focus, type Key, type Track } from "../../heroTimeline";
 import { TRANSITION } from "../shared/beats";
 import { introTracks } from "../shared/Intro";
 import { reveal, select } from "../shared/Reveal";
+import type { HeroLayout } from "../shared/grid";
 import type { Prelude, TimelineContext } from "../shared/types";
 import { SWATCH_COLUMNS, SWATCHES, type ColorCopy } from "./colorCopy";
 
@@ -27,27 +28,27 @@ const WIPE = 3;
 /** The quarter view: the field plane turned a quarter and tilted back. */
 const QUARTER = { rx: 55, rz: -45 } as const;
 
-export function colorPrelude(copy: ColorCopy, posterZoom: number): Prelude {
+export function colorPrelude(copy: ColorCopy, posterZoom: (layout: HeroLayout) => number): Pick<Prelude, "end" | "tracks"> {
   return {
-    render: null,
     end: () => AT.end,
-    tracks: ({ g, close }: TimelineContext) => {
+    tracks: ({ g, close, view }: TimelineContext) => {
       const { canvas } = g;
       const intro = g.boxes.intro!;
       const field = g.boxes.field!;
-      const front = focus(canvas, intro, 1);
+      const front = view("intro", intro, 1, 1);
       const quarter = focus(canvas, field, fit(canvas, field, 1.05, 2.2), QUARTER);
-      const flat = focus(canvas, field, fit(canvas, field, 0.86, 2));
+      const flat = view("field", field, 0.86, 2);
       const camera: Key[] = [
         { at: 0, ...front }, { at: AT.iso, ...front }, { at: AT.iso + TRANSITION, ...quarter, ease: "standard" },
         { at: AT.front, ...quarter }, { at: AT.front + TRANSITION, ...flat, ease: "standard" }, { at: AT.end, ...flat },
       ];
       // A fast ripple along the diagonals, each sticker overlapping the next.
-      const land = (k: number) => AT.land + (Math.floor(k / SWATCH_COLUMNS) + (k % SWATCH_COLUMNS)) * 0.14 + (k % SWATCH_COLUMNS) * 0.02;
+      const columns = g.layout === "tall" ? SWATCH_COLUMNS - 1 : SWATCH_COLUMNS;
+      const land = (k: number) => AT.land + (Math.floor(k / columns) + (k % columns)) * 0.14 + (k % columns) * 0.02;
       // The window over the other theme is several frames wide; key its edge where it crosses the visible frame, so the
       // line crosses the frame in time: open left to right, then its trailing edge crosses again (the page's theme returns).
       const zoom = flat.s ?? 1;
-      const span = field.w + 3 * canvas.w * (g.layout === "wide" ? posterZoom : 1);
+      const span = field.w + 3 * canvas.w * posterZoom(g.layout);
       const [enter, leave] = [0.5 - canvas.w / zoom / 2 / span - 0.01, 0.5 + canvas.w / zoom / 2 / span + 0.01];
       const wipe = (sign: number): Key[] => [
         { at: 0, xp: -sign * 100 }, { at: AT.wipe - 0.01, xp: -sign * 100 }, { at: AT.wipe, xp: sign * (enter - 1) * 100 }, { at: AT.wipe + WIPE, xp: sign * (leave - 1) * 100, ease: "standard" },
@@ -64,6 +65,7 @@ export function colorPrelude(copy: ColorCopy, posterZoom: number): Prelude {
             { select: select(`st-${k}`), keys: [{ at: 0, x: 170, y: -170, o: 0 }, { at, x: 170, y: -170, o: 0 }, { at: at + 0.1, o: 1 }, { at: at + 0.55, x: 0, y: 0, ease: "decelerate" }, { at: close - 0.01 }, { at: close, x: 170, y: -170, o: 0 }] },
             { select: select(`st-${k}-r`), keys: [{ at: 0, ry: -80 }, { at: at + 0.4, ry: -80 }, { at: at + 1, ry: 0, ease: "decelerate" }, { at: close - 0.01 }, { at: close, ry: -80 }] },
             { select: select(`st-${k}-c`), keys: [{ at: 0, o: 1 }, { at: at + 0.4, o: 1 }, { at: at + 1, o: 0, ease: "decelerate" }, { at: close - 0.01 }, { at: close, o: 1 }] },
+            { select: select(`st-${k}-f`), keys: [{ at: 0, o: 0 }, { at: at + 1, o: 0 }, { at: at + 1.01, o: 1 }, { at: close - 0.01 }, { at: close, o: 0 }] },
           ];
         }),
         ...SWATCHES.flatMap((token, k) => reveal(`sn-${k}`, AT.names + k * 0.1, token, close)),

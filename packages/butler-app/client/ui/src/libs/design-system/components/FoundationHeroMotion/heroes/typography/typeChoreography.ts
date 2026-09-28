@@ -2,6 +2,7 @@ import type { Key, Pose, Track } from "../../heroTimeline";
 import { HOLD, TRANSITION } from "../shared/beats";
 import { specimenLayout, type SpecimenMetrics } from "./specimenMetrics";
 import { col, onBaseline, SPECIMEN } from "./typeGrid";
+import { startOffset } from "./typeCamera";
 import { OUTLINE_EM } from "./TypeSpecimen";
 
 /**
@@ -76,10 +77,12 @@ export function specimenTracks(g: TypeGeometry, m: SpecimenMetrics): Track[] {
   const group = 24 + rest.height + 28 + (tall ? 24 + g.control.h : 0);
   const top = onBaseline((canvas.h - group) / 2 + 24, layout);
   const left = col(layout, 1).x;
-  const place = (x: number, y: number, visual: number): Pose => ({ x: (x - specimen.x) / q, y: (y - specimen.y) / q, s: visual / q });
+  // The opening plays in its own cell (see typeCamera.ts): its elements take the cell's offset.
+  const o = startOffset(g);
+  const place = (x: number, y: number, visual: number): Pose => ({ x: (x + o.x - specimen.x) / q, y: (y + o.y - specimen.y) / q, s: visual / q });
   const big = place(left, top, 1);
   const title = place(g.fly.title.x, g.fly.title.y, g.fly.title.h / rest.height);
-  const control = tall ? { x: left, y: onBaseline(top + rest.height + 52, layout) } : { x: col(layout, 9).x, y: onBaseline(top + rest.height / 2 - g.control.h / 2, layout) };
+  const control = tall ? { x: left + o.x, y: onBaseline(top + rest.height + 52, layout) + o.y } : { x: col(layout, 9).x + o.x, y: onBaseline(top + rest.height / 2 - g.control.h / 2, layout) + o.y };
   const shiftG = (weight: 300 | 800 | 620) => at(weight).originG - rest.originG;
   const band = (width: (w: 300 | 800 | 620) => number, x: (w: 300 | 800 | 620) => number) =>
     byWeight((w) => ({ x: x(w), sx: Math.max(0.05, Math.abs(width(w))) / Math.max(1, Math.abs(width(620))) }));
@@ -137,10 +140,11 @@ export function specimenTracks(g: TypeGeometry, m: SpecimenMetrics): Track[] {
       select: select("specimen"),
       keys: [
         { at: 0, ...big }, { at: 18.2, ...big }, { at: 19.9, ...title, ease: "emphasized" },
-        { at: FINALE, x: 0, y: 0, s: 1 }, { at: LOOP, x: 0, y: 0, s: 1 }, { at: LOOP + TRANSITION, ...big, ease: "emphasized" },
+        { at: FINALE, x: 0, y: 0, s: 1 }, { at: LOOP + TRANSITION - 0.01, x: 0, y: 0, s: 1 }, { at: LOOP + TRANSITION, ...big },
       ],
     },
     // Opacity on the specimen's slot, so the flight above stays one continuous move.
-    { select: select("slot"), keys: [{ at: 0, o: 1 }, { at: 19.4, o: 1 }, { at: 20, o: 0, ease: "accelerate" }, { at: FINALE + 2, o: 0 }, { at: FINALE + 3.4, o: 1, ease: "decelerate" }] },
+    // The specimen fades with the product at the loop and grows back in the opening's cell after the cut.
+    { select: select("slot"), keys: [{ at: 0, o: 1 }, { at: 19.4, o: 1 }, { at: 20, o: 0, ease: "accelerate" }, { at: FINALE + 2, o: 0 }, { at: FINALE + 3.4, o: 1, ease: "decelerate" }, { at: LOOP, o: 1 }, { at: LOOP + 1, o: 0, ease: "accelerate" }, { at: LOOP + TRANSITION + 0.1, o: 0 }, { at: LOOP + TRANSITION + 1.2, o: 1, ease: "decelerate" }] },
   ];
 }

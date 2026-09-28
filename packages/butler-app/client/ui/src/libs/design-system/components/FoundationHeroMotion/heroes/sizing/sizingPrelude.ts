@@ -1,4 +1,4 @@
-import { fit, focus, type Key, type Track } from "../../heroTimeline";
+import type { Key, Track } from "../../heroTimeline";
 import { annotTracks } from "../shared/Annotations";
 import { TRANSITION } from "../shared/beats";
 import { openingItems } from "../shared/guides";
@@ -23,16 +23,15 @@ import { FRAME, HIT, TOUCH } from "./SizingScenes";
 const AT = { rails: 9.4, snap: 10.8, hit: 14.4, touch: 17, frame: 19.8, boxes: 21.4, measure: 23.6, end: 26.6 } as const;
 const FRAME_BOXES = ["f-title", "f-r0", "f-r1", "f-r2", "f-r3", "f-content"];
 
-export function sizingPrelude(copy: SizingCopy): Omit<Prelude, "render"> {
+export function sizingPrelude(copy: SizingCopy): Pick<Prelude, "end" | "tracks"> {
   return {
     end: () => AT.end,
-    tracks: ({ g, close }: TimelineContext) => {
-      const { canvas } = g;
-      const front = focus(canvas, g.boxes.intro!, 1);
-      const field = focus(canvas, g.boxes.field!, fit(canvas, g.boxes.field!, 0.9, 2.2));
+    tracks: ({ g, close, view }: TimelineContext) => {
+      const front = view("intro", g.boxes.intro!, 1, 1);
+      const field = view("field", g.boxes.field!, 0.9, 2.2);
       const f = g.boxes.frame!;
-      const room = { ...f, x: f.x - 160, y: f.y - 40, w: f.w + 160, h: f.h + 60 };
-      const frame = focus(canvas, room, fit(canvas, room, 0.94, 2));
+      const room = g.layout === "wide" ? { ...f, x: f.x - 160, y: f.y - 40, w: f.w + 160, h: f.h + 60 } : f;
+      const frame = view("frame", room, 0.94, 2);
       const camera: Key[] = [
         { at: 0, ...front }, { at: 6.8, ...front }, { at: 6.8 + TRANSITION, ...field, ease: "standard" },
         { at: AT.frame, ...field }, { at: AT.frame + TRANSITION, ...frame, ease: "standard" }, { at: AT.end, ...frame },

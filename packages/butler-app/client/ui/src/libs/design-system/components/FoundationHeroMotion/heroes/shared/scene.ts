@@ -2,51 +2,55 @@ import { fit, focus, type Box, type Pose } from "../../heroTimeline";
 import { GRID, type HeroLayout } from "./grid";
 
 /** Badge gutter beside a component while it builds (badge column plus a grid gutter), in canvas px. */
-export const BADGE_GUTTER: Record<HeroLayout, number> = { wide: 300, tall: 170 };
+export const BADGE_GUTTER: Record<HeroLayout, number> = { wide: 300, tall: 0 };
 
 /** Width of one badge character (canvas px at poster scale), to size the gutter before badges are drawn. */
 export const BADGE_CHAR = 6.6;
 
-/** How far out a badge stands from the component's edge: three grid gutters (two on the narrow tall canvas). */
-export const badgeReach = (layout: HeroLayout) => GRID[layout].gutter * (layout === "tall" ? 2 : 3);
+/** Vertical pitch between stacked badges (canvas px). */
+export const BADGE_PITCH = 28;
 
-/**
- * Empty areas around the poster where components are built, one grid cell
- * (canvas-sized) each, walking round the poster so that the last stage is
- * next to the poster: the last component is built in place. The chapter's
- * prelude sits above the poster and the token field waits on the side the
- * walk does not use, so the field's side mirrors the walk.
- */
-const CELLS: Array<[number, number]> = [[-1, 1], [0, 1], [1, 1], [1, 0]];
+/** How far out a badge stands from the component's edge: three grid gutters (below the component on the tall canvas). */
+export const badgeReach = (layout: HeroLayout) => GRID[layout].gutter * (layout === "tall" ? 1.5 : 3);
 
-/**
- * Spacing of the stage cells (in canvas sizes) and where the token field
- * waits (in canvas widths off its own side) while the components build. The
- * tall canvas frames its builds wider than itself (the badge gutter), so it
- * spaces more.
- */
-export const CELL: Record<HeroLayout, number> = { wide: 1.25, tall: 2.2 };
-export const FIELD_AWAY: Record<HeroLayout, number> = { wide: 1.3, tall: 2.4 };
-
-export function stageCenters(layout: HeroLayout, canvas: { w: number; h: number }, count: number, mirror = false): Array<{ x: number; y: number }> {
-  const step = CELL[layout];
-  return CELLS.slice(Math.max(0, CELLS.length - count)).map(([cx, cy]) => ({ x: canvas.w * (0.5 + step * (mirror ? -cx : cx)), y: canvas.h * (0.5 + step * cy) }));
-}
+/** Distance between neighbouring scene cells, in canvas sizes. */
+export const CELL = 1.25;
 
 export const REST: Pose = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, s: 1 };
 
 /**
- * Where each build stands and how the camera frames it: every component but
- * the last is offset (`shift`) to an empty stage, framed with its badge
- * gutter as large as the frame allows, and flies back for the finale.
+ * The camera's path: every scene of a chapter (its prelude scenes, then one
+ * per build) sits in its own canvas-sized cell, and consecutive cells are one
+ * step apart, either right or down, alternating, so every camera move runs
+ * along one axis and never turns back. The path ends on the last build's
+ * frame inside the poster (that component is built in place), so the finale
+ * only zooms out.
  */
-export function buildStages(layout: HeroLayout, canvas: { w: number; h: number }, frames: Box[], mirror = false) {
+export function scenePath(count: number, end: { x: number; y: number }, canvas: { w: number; h: number }): Array<{ x: number; y: number }> {
+  const cells = [{ x: 0, y: 0 }];
+  for (let k = 1; k < count; k += 1) {
+    const last = cells[0]!;
+    // Walking back from the end: a step right into the last scene, a step down before it, and so on.
+    cells.unshift(k % 2 === 1 ? { x: last.x - 1, y: last.y } : { x: last.x, y: last.y - 1 });
+  }
+  return cells.map((cell) => ({ x: end.x + cell.x * CELL * canvas.w, y: end.y + cell.y * CELL * canvas.h }));
+}
+
+/** Where the token field waits while the components build: well off the path (up and right of the poster). */
+export function fieldAway(canvas: { w: number; h: number }): { x: number; y: number } {
+  return { x: 2.5 * CELL * canvas.w, y: -2.5 * CELL * canvas.h };
+}
+
+/** The camera on a scene cell: centred on the cell (so moves between cells stay on one axis), zoomed to fit `content`. */
+export function viewCell(canvas: { w: number; h: number }, center: { x: number; y: number }, content: Box, fill = 0.86, cap = 2): Pose {
+  const zoom = fit(canvas, content, fill, cap);
+  return focus(canvas, { x: center.x - 1, y: center.y - 1, w: 2, h: 2 }, zoom);
+}
+
+/** Camera poses of the builds: each frame (component and badge gutter) centred on its cell, as large as the frame allows. */
+export function buildViews(layout: HeroLayout, canvas: { w: number; h: number }, frames: Box[], centers: Array<{ x: number; y: number }>) {
   const tall = layout === "tall";
-  const centers = stageCenters(layout, canvas, frames.length - 1, mirror);
-  const shift = frames.map((box, k) => (k === frames.length - 1 ? { x: 0, y: 0 } : { x: centers[k]!.x - (box.x + box.w / 2), y: centers[k]!.y - (box.y + box.h / 2) }));
-  const stage = frames.map((box, k) => {
-    const moved = { ...box, x: box.x + shift[k]!.x, y: box.y + shift[k]!.y };
-    return focus(canvas, moved, fit(canvas, moved, tall ? 0.94 : 0.8, tall ? 1.6 : 2));
-  });
+  const shift = frames.map((box, k) => ({ x: centers[k]!.x - (box.x + box.w / 2), y: centers[k]!.y - (box.y + box.h / 2) }));
+  const stage = frames.map((box, k) => viewCell(canvas, centers[k]!, box, tall ? 0.94 : 0.8, tall ? 2.4 : 2));
   return { shift, stage };
 }

@@ -80,11 +80,15 @@ export function ChapterHero({ spec, lang }: { spec: ChapterSpec; lang: Foundatio
     blockSize: `${CANVAS[layout].h}px`,
   } as CSSProperties;
   return (
-    <div className={c.board} data-field={spec.fieldRight ? "right" : "left"} data-hero-scope={scope} data-layout={layout} data-ready={css ? "" : undefined} inert lang={lang} ref={root} style={style}>
+    <div className={c.board} data-field={spec.fieldRight ? "right" : "left"} data-hero-scope={scope} data-layout={layout} data-marks={compiled?.marks.join(" ")} data-ready={css ? "" : undefined} inert lang={lang} ref={root} style={style}>
       {css ? <style>{css}</style> : null}
       <div className={c.camera}>
         <div className={c.world} data-t="world">
-          <div className={c.prelude} data-t="prelude">{typeof spec.prelude.render === "function" ? spec.prelude.render(g) : spec.prelude.render}</div>
+          <div className={c.prelude} data-t="prelude">
+            {Object.entries(spec.prelude.regions).map(([name, region]) => (
+              <div className={c.cell} data-cell={name} key={name}>{typeof region === "function" ? region(g) : region}</div>
+            ))}
+          </div>
           <div className={c.poster}>
             <div className={c.field} data-t="field-mover">{typeof spec.field === "function" ? spec.field(g) : spec.field}</div>
             <div className={`${c.product} ${spec.product}`} data-t="product">

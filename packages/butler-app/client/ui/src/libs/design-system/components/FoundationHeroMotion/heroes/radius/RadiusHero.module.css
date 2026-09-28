@@ -5,11 +5,8 @@
 /* ---- The lab ---- */
 
 .lab {
-  position: absolute;
-  inset: 0;
   display: grid;
   place-items: center;
-  translate: -125% 0;
 }
 
 .labStage {
@@ -220,4 +217,10 @@
   grid-template-columns: minmax(0, 1fr);
   align-content: start;
   row-gap: var(--space-lg);
+}
+
+[data-layout="tall"] .labStage {
+  grid-template-columns: auto;
+  row-gap: var(--space-3xl);
+  justify-items: center;
 }

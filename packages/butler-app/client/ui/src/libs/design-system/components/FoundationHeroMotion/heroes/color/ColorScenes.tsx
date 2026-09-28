@@ -25,13 +25,15 @@ function useOtherTheme(): "light" | "dark" {
 /**
  * A sticker: a disc in two halves. It comes down with its right half curled
  * up (turned about the centre line, shaded at the fold) and presses flat from
- * the left edge to the right (`st-<k>`, `st-<k>-r`, `st-<k>-c`).
+ * the left edge to the right (`st-<k>`, `st-<k>-r`, `st-<k>-c`); once flat, one
+ * whole disc takes over (`st-<k>-f`, the poster's sticker, no seam).
  */
 function Sticker({ k, token }: { k: number; token: string }) {
   return (
     <span className={s.sticker} data-t={`st-${k}`} style={{ "--c": `var(${token})` } as CSSProperties}>
       <span className={s.half} data-half="l"><span className={s.disc} /></span>
       <span className={s.half} data-half="r" data-t={`st-${k}-r`}><span className={s.disc} /><span className={s.curl} data-t={`st-${k}-c`} /></span>
+      <span className={s.flat} data-t={`st-${k}-f`} />
     </span>
   );
 }

@@ -2,14 +2,14 @@
    chapter's intent line by line on the right (below it when tall). */
 
 .intro {
-  position: absolute;
-  inset: 0;
+  box-sizing: border-box;
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   column-gap: var(--grid-gutter);
   align-items: center;
+  inline-size: 100%;
+  block-size: 100%;
   padding: var(--grid-margin);
-  translate: 0 -125%;
 }
 
 .introTitle {

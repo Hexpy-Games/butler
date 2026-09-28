@@ -69,11 +69,14 @@ export function SizingField({ g, copy }: { g: Geometry | null; copy: SizingCopy 
   );
 }
 
+const SIDEBAR_WIDTH = valueLabel("--sidebar-width", true);
+
 /** Guides of the app frame: the titlebar, a sidebar row and the sidebar's width. */
 export const FRAME: Annot[] = [
   { kind: "size", target: "f-title", axis: "h", label: valueLabel("--titlebar-height", true) },
   { kind: "size", target: "f-r0", axis: "h", label: valueLabel("--sidebar-row-height", true) },
-  { kind: "size", target: "f-side", axis: "w", label: valueLabel("--sidebar-width", true) },
+  // The sidebar's width is its token only where the frame has room for it (the wide canvas).
+  { kind: "size", target: "f-side", axis: "w", label: (m, marks, layout) => (layout === "wide" && typeof SIDEBAR_WIDTH === "function" ? SIDEBAR_WIDTH(m, marks, layout) : []) },
 ];
 
 /** A box of the frame, drawn in through a window (`fb-<n>`). */

@@ -1,4 +1,4 @@
-import { fit, focus, type Key, type Track } from "../../heroTimeline";
+import type { Key, Track } from "../../heroTimeline";
 import { annotTracks } from "../shared/Annotations";
 import { TRANSITION } from "../shared/beats";
 import { openingItems } from "../shared/guides";
@@ -25,16 +25,15 @@ import { NEST, NEST_ANNOTS, SHADOW_ANNOTS } from "./RadiusScenes";
 const AT = { lab: 6.8, morph: 10.6, nest: 17.2, field: 20.4, tiles: 22.8, levels: 24.6, lift: 25.8, end: 30.4 } as const;
 const MORPH_STEP = 1.4;
 
-export function radiusPrelude(copy: RadiusCopy): Omit<Prelude, "render"> {
+export function radiusPrelude(copy: RadiusCopy): Pick<Prelude, "end" | "tracks"> {
   return {
     end: () => AT.end,
-    tracks: ({ g, close }: TimelineContext) => {
-      const { canvas } = g;
-      const front = focus(canvas, g.boxes.intro!, 1);
+    tracks: ({ g, close, view }: TimelineContext) => {
+      const front = view("intro", g.boxes.intro!, 1, 1);
       const labBox = g.boxes.lab!;
-      const room = { ...labBox, x: labBox.x - 120, w: labBox.w + 160 };
-      const lab = focus(canvas, room, fit(canvas, room, 0.92, 2));
-      const field = focus(canvas, g.boxes.field!, fit(canvas, g.boxes.field!, 0.88, 2.2));
+      const room = g.layout === "wide" ? { ...labBox, x: labBox.x - 120, w: labBox.w + 160 } : labBox;
+      const lab = view("lab", room, 0.92, 2);
+      const field = view("field", g.boxes.field!, 0.88, 2.2);
       const camera: Key[] = [
         { at: 0, ...front }, { at: AT.lab, ...front }, { at: AT.lab + TRANSITION, ...lab, ease: "standard" },
         { at: AT.field, ...lab }, { at: AT.field + TRANSITION, ...field, ease: "standard" }, { at: AT.end, ...field },

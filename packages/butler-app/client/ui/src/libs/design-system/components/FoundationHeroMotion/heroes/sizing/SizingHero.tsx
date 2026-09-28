@@ -14,7 +14,8 @@ function spec(copy: SizingCopy): ChapterSpec {
     code: "sizing",
     prelude: {
       ...sizingPrelude(copy),
-      render: (g) => <><Intro lead={copy.lead} title={copy.title} /><SizingFrame g={g} /></>,
+      cells: ["intro", "field", "frame"],
+      regions: { intro: <Intro lead={copy.lead} title={copy.title} />, frame: (g) => <SizingFrame g={g} /> },
     },
     field: (g) => <SizingField copy={copy} g={g} />,
     fieldColumns: 5,

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { FoundationHeroLang } from "../../FoundationHeroMotion";
 import { ChapterHero } from "../shared/ChapterHero";
+import { posterZoom } from "../shared/timeline";
 import { Intro } from "../shared/Intro";
 import type { ChapterSpec } from "../shared/types";
 import { colorBuilds } from "./colorBuilds";
@@ -15,7 +16,7 @@ const POSTER_ZOOM = 1.2;
 function spec(copy: ColorCopy): ChapterSpec {
   return {
     code: "color",
-    prelude: { ...colorPrelude(copy, POSTER_ZOOM), render: <Intro lead={copy.lead} title={copy.title} /> },
+    prelude: { ...colorPrelude(copy, (layout) => posterZoom({ posterZoom: POSTER_ZOOM } as ChapterSpec, layout)), cells: ["intro", "field"], regions: { intro: <Intro lead={copy.lead} title={copy.title} /> } },
     field: <ColorField />,
     fieldColumns: 6,
     posterZoom: POSTER_ZOOM,

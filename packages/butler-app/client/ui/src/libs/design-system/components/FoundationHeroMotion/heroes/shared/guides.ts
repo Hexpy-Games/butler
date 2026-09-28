@@ -45,10 +45,11 @@ const PITCH = 28;
 
 /**
  * Guides and gutter badges of one build, step by step: each badge stands far
- * out in the gutter (`far` past the panel edge), badges never overlap, and a
- * leader runs from each badge to its guide. Returns items per step.
+ * out in the gutter (`far` past the panel edge: left, right, or below it on
+ * the narrow tall canvas), badges never overlap, and a leader runs from each
+ * badge to its guide. Returns items per step.
  */
-export function buildItems(steps: Annot[][], marks: Marks, prefix: string, panel: Box, side: "l" | "r", far: number, layout: HeroLayout): AnnotItem[][] {
+export function buildItems(steps: Annot[][], marks: Marks, prefix: string, panel: Box, side: "l" | "r" | "b", far: number, layout: HeroLayout): AnnotItem[][] {
   const items = steps.map((annots, j) => annots.flatMap((annot, k): Array<AnnotItem & { text?: string[] }> => {
     const text = labelOf(annot, marks, layout);
     const drawn = text?.length === 0 ? null : shape(annot, marks);
@@ -56,16 +57,28 @@ export function buildItems(steps: Annot[][], marks: Marks, prefix: string, panel
   }));
   const labelled = items.flat().filter((item) => item.text).sort((a, b) => a.anchor.y - b.anchor.y);
   let last = Number.NEGATIVE_INFINITY;
-  for (const item of labelled) {
-    const y = Math.max(item.anchor.y, last + PITCH);
+  labelled.forEach((item, n) => {
+    const { anchor } = item;
+    if (side === "b") {
+      // Below the component, one badge per row; the leader climbs the component's left edge (each on its own line) and turns in.
+      const y = panel.h + far + n * PITCH;
+      const x0 = -8 - n * 3;
+      const d = `M-4 ${round(y)}H${round(x0)}V${round(anchor.y)}H${round(anchor.x)}`;
+      item.badge = { x: 0, y, side, text: item.text!, leader: { d, len: Math.ceil(Math.abs(x0 + 4) + Math.abs(y - anchor.y) + Math.abs(anchor.x - x0)) } };
+      return;
+    }
+    const y = Math.max(anchor.y, last + PITCH);
     last = y;
     const x = side === "l" ? -far : panel.w + far;
-    const knee = side === "l" ? Math.min(-10, item.anchor.x - 8) : Math.max(panel.w + 10, item.anchor.x + 8);
+    const knee = side === "l" ? Math.min(-10, anchor.x - 8) : Math.max(panel.w + 10, anchor.x + 8);
     const start = side === "l" ? x + 6 : x - 6;
-    const d = `M${round(start)} ${round(y)}H${round(knee)}L${round(item.anchor.x)} ${round(item.anchor.y)}`;
-    const len = Math.ceil(Math.abs(knee - start) + Math.hypot(item.anchor.x - knee, item.anchor.y - y));
-    // The tall canvas keeps badges to the token name (its gutter is narrow).
-    item.badge = { x, y, side, text: layout === "tall" ? item.text!.slice(0, 1) : item.text!, leader: { d, len } };
-  }
+    const d = `M${round(start)} ${round(y)}H${round(knee)}L${round(anchor.x)} ${round(anchor.y)}`;
+    const len = Math.ceil(Math.abs(knee - start) + Math.hypot(anchor.x - knee, anchor.y - y));
+    item.badge = { x, y, side, text: item.text!, leader: { d, len } };
+  });
   return items.map((list) => list.map(({ text: _text, ...item }) => item));
 }
+
+/** How many badges a build's items carry. */
+export const badgeCount = (items: AnnotItem[][]) => items.flat().filter((item) => item.badge).length;
+export { PITCH as BADGE_ROW };

@@ -53,7 +53,11 @@
 }
 
 /* The rail: the height band between two edges drawn across; its controls sit on it. */
+/* Each rail shows the pointer heights: on phones controls otherwise grow to
+   the touch target (the touch scene shows that growth on the hit areas). */
 .band {
+  --control-hit-target: 0px;
+
   position: relative;
   display: flex;
   align-items: center;
@@ -102,12 +106,8 @@
 /* ---- The app frame, left of the poster ---- */
 
 .frameRegion {
-  position: absolute;
-  inset: 0;
   display: grid;
-  place-items: center end;
-  padding-inline-end: var(--grid-margin);
-  translate: -125% 0;
+  place-items: center;
 }
 
 .frame {
@@ -169,6 +169,23 @@
   gap: var(--space-sm);
 }
 
+/* The titlebar is absolute in the app's window: here it sits in a window-top of its own height. */
+.titlebarHost {
+  position: relative;
+  box-sizing: border-box;
+  overflow: hidden;
+  inline-size: 100%;
+  block-size: var(--titlebar-safe-area-top);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+  background: var(--color-surface-base);
+}
+
+.nowrap {
+  display: inline-flex;
+  white-space: nowrap;
+}
+
 .sidebarStrip {
   display: grid;
   row-gap: var(--sidebar-row-spacing, var(--space-xs));
@@ -195,4 +212,12 @@
   grid-template-columns: minmax(0, 1fr);
   align-content: start;
   row-gap: var(--space-lg);
+}
+
+[data-layout="tall"] .frame {
+  inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
+}
+
+[data-layout="tall"] .frameBody {
+  grid-template-columns: 60% minmax(0, 1fr);
 }

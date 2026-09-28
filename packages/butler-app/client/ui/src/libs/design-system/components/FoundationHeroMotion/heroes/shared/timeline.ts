@@ -1,33 +1,13 @@
-import type { Box, Key, Track } from "../../heroTimeline";
+import type { Box, Key, Pose, Track } from "../../heroTimeline";
 import { annotTracks } from "./Annotations";
 import { HOLD, SETTLE, STEP, TRANSITION } from "./beats";
-import type { HeroLayout } from "./grid";
-import { buildItems, type AnnotItem } from "./guides";
 import { reveal, revealBeats, select, sweep } from "./Reveal";
-import { BADGE_CHAR, BADGE_GUTTER, badgeReach, buildStages, FIELD_AWAY, REST } from "./scene";
+import { buildFrames, posterZoom } from "./frames";
+import { buildViews, fieldAway, REST, scenePath, viewCell } from "./scene";
 import { sketchTracks } from "./Sketch";
-import type { BuildSpec, ChapterSpec, Geometry, TimelineContext } from "./types";
+import type { ChapterSpec, Geometry, TimelineContext } from "./types";
 
-/** The poster's zoom: the wide canvas only (the tall one is full at its own size). */
-export function posterZoom(spec: ChapterSpec, layout: HeroLayout): number {
-  return layout === "wide" ? spec.posterZoom ?? 1 : 1;
-}
-
-/** Everything a build is laid out from: its gutter-framed box and its badge items per step. */
-export function buildFrames(spec: ChapterSpec, g: Geometry): Array<{ build: BuildSpec; frame: Box; items: AnnotItem[][] }> {
-  const pz = posterZoom(spec, g.layout);
-  return spec.builds.map((build) => {
-    const panel = g.panels[build.id]!;
-    const side = build.side ?? "l";
-    const own = { x: 0, y: 0, w: panel.w / pz, h: panel.h / pz };
-    const items = buildItems(build.steps.map((step) => step.annots ?? []), g.marks[build.id] ?? {}, `${build.id}-`, own, side, badgeReach(g.layout) / pz, g.layout);
-    // The gutter holds the widest badge (estimated from its longest step) at its reach, in canvas px.
-    const widest = Math.max(0, ...items.flat().map((item) => (item.badge ? Math.max(...item.badge.text.map((text) => [...text].length)) : 0)));
-    const gutter = widest ? Math.max(BADGE_GUTTER[g.layout], (badgeReach(g.layout) / pz + widest * BADGE_CHAR + 24) * pz) : 0;
-    const frame = side === "l" ? { ...panel, x: panel.x - gutter, w: panel.w + gutter } : { ...panel, w: panel.w + gutter };
-    return { build, frame, items };
-  });
-}
+export { buildFrames, posterZoom };
 
 /** The cycle's beat marks. */
 export function schedule(spec: ChapterSpec, g: Geometry) {
@@ -63,17 +43,38 @@ function part(name: string, at: number, close: number, g: Pick<Geometry, "sweeps
   return [{ select: select(`p-${name}`), keys: [{ at: 0, s: 0.9, o: 0 }, { at, s: 0.9, o: 0 }, { at: at + 0.8, s: 1, o: 1, ease: "spring" }, { at: close - 0.01 }, { at: close, s: 0.9, o: 0 }] }];
 }
 
+const center = (box: Box) => ({ x: box.x + box.w / 2, y: box.y + box.h / 2 });
+
 /** Every track of one chapter's cycle, for compileTimeline. */
-export function chapterTracks(spec: ChapterSpec, g: Geometry): { beats: number; tracks: Track[] } {
-  const t = schedule(spec, g);
+export function chapterTracks(spec: ChapterSpec, g0: Geometry): { beats: number; tracks: Track[]; marks: number[] } {
+  const t = schedule(spec, g0);
   const { close } = t;
-  const { canvas } = g;
-  const pz = posterZoom(spec, g.layout);
-  const frames = buildFrames(spec, g);
-  // The field waits off the side it sits on; the stages walk round the other side.
-  const { shift, stage } = buildStages(g.layout, canvas, frames.map((entry) => entry.frame), Boolean(spec.fieldRight));
+  const { canvas } = g0;
+  const pz = posterZoom(spec, g0.layout);
+  const frames = buildFrames(spec, g0);
+  // The camera's path: the prelude's scenes, then one cell per build, ending on the last build in place.
+  const names = spec.prelude.cells;
+  const path = scenePath(names.length + frames.length, center(frames.at(-1)!.frame), canvas);
+  const cells = Object.fromEntries(names.map((name, k) => [name, path[k]!])) as Record<string, { x: number; y: number }>;
+  const canvasCenter = { x: canvas.w / 2, y: canvas.h / 2 };
+  // Regions are laid out over the canvas; the field is laid out in the poster.
+  const offset = (cell: string) => {
+    const to = cells[cell];
+    if (!to) return { x: 0, y: 0 };
+    const from = cell === "field" ? center(g0.field) : canvasCenter;
+    return { x: to.x - from.x, y: to.y - from.y };
+  };
+  const g: Geometry = {
+    ...g0,
+    boxes: Object.fromEntries(Object.entries(g0.boxes).map(([name, box]) => {
+      const move = g0.boxCell[name] ? offset(g0.boxCell[name]!) : { x: 0, y: 0 };
+      return [name, { ...box, x: box.x + move.x, y: box.y + move.y }];
+    })),
+  };
+  const { shift, stage } = buildViews(g.layout, canvas, frames.map((entry) => entry.frame), path.slice(names.length));
   const buildAt = (k: number) => t.builds[spec.builds[k]!.id]!.at;
-  const ctx: TimelineContext = { g, beats: t.beats, close, first: t.first, builds: t.builds, finale: t.finale, loop: t.loop };
+  const view = (cell: string, content: Box, fill?: number, cap?: number): Pose => viewCell(canvas, cells[cell] ?? center(content), content, fill, cap);
+  const ctx: TimelineContext = { g, cells, view, beats: t.beats, close, first: t.first, builds: t.builds, finale: t.finale, loop: t.loop };
   const prelude = spec.prelude.tracks(ctx);
   const start = prelude.camera[0] ?? { at: 0, ...REST };
   const world: Key[] = [
@@ -81,15 +82,21 @@ export function chapterTracks(spec: ChapterSpec, g: Geometry): { beats: number; 
     { at: t.first, ...stage[0]!, ease: "standard" },
     ...spec.builds.slice(1).flatMap((_, j): Key[] => [{ at: buildAt(j + 1) - TRANSITION, ...stage[j]! }, { at: buildAt(j + 1), ...stage[j + 1]!, ease: "standard" }]),
     { at: t.finale, ...stage.at(-1)! }, { at: t.finale + TRANSITION, ...REST, ease: "standard" },
-    { at: t.loop, ...REST }, { ...start, at: t.loop + TRANSITION, ease: "standard" },
+    // The loop cuts back to the opening once the poster has faded (the camera never turns back).
+    { at: t.loop + TRANSITION - 0.01, ...REST }, { ...start, at: t.loop + TRANSITION },
   ];
-  // The field waits away while the components build, and gathers back for the finale.
-  const away = { x: ((spec.fieldRight ? 1 : -1) * FIELD_AWAY[g.layout] * canvas.w) / pz, y: 0 };
+  // Scene regions stand in their cells while the hero plays.
+  const regionTracks: Track[] = names.filter((name) => name !== "field").map((name) => ({ select: `[data-cell="${name}"]`, keys: [{ at: 0, ...offset(name), o: 1 }] }));
+  // The field shows in its scene cell, waits away while the components build, and gathers onto the poster for the finale.
+  const scene = { x: offset("field").x / pz, y: offset("field").y / pz };
+  const awayFrom = fieldAway(canvas);
+  const away = { x: (awayFrom.x - center(g0.field).x + canvasCenter.x) / pz, y: (awayFrom.y - center(g0.field).y + canvasCenter.y) / pz };
   const fieldTracks: Track[] = [{
     select: select("field-mover"),
     keys: [
-      { at: 0, x: 0, y: 0 }, { at: t.first + 0.5, x: 0, y: 0 }, { at: t.first + 0.51, ...away }, { at: t.finale + 0.3, ...away },
-      { at: t.finale + 0.3 + TRANSITION, x: 0, y: 0, ease: "standard" }, { at: t.loop, x: 0, y: 0, o: 1 }, { at: t.loop + TRANSITION / 2, o: 0, ease: "accelerate" }, { at: close - 0.01 }, { at: close, o: 1 },
+      { at: 0, ...scene, o: 1 }, { at: t.first + 0.5, ...scene }, { at: t.first + 0.51, ...away }, { at: t.finale + 0.3, ...away },
+      { at: t.finale + 0.3 + TRANSITION, x: 0, y: 0, ease: "standard" }, { at: t.loop, x: 0, y: 0, o: 1 }, { at: t.loop + TRANSITION / 2, o: 0, ease: "accelerate" },
+      { at: t.loop + TRANSITION, x: 0, y: 0, o: 0 }, { at: t.loop + TRANSITION + 0.01, ...scene }, { at: close - 0.01 }, { at: close, o: 1 },
     ],
   }];
   const buildTracks = frames.flatMap(({ build, items }, k): Track[] => {
@@ -117,6 +124,8 @@ export function chapterTracks(spec: ChapterSpec, g: Geometry): { beats: number; 
   });
   return {
     beats: t.beats,
-    tracks: [{ select: select("world"), keys: world }, ...prelude.tracks, ...fieldTracks, ...buildTracks, ...(spec.extra?.(ctx) ?? [])],
+    // Beat marks of the scenes (first build, each build done, finale), for reviewing frames.
+    marks: [...spec.builds.map((build) => Math.round(t.builds[build.id]!.done * 10) / 10), Math.round((t.finale + TRANSITION + 2) * 10) / 10],
+    tracks: [{ select: select("world"), keys: world }, ...regionTracks, ...prelude.tracks, ...fieldTracks, ...buildTracks, ...(spec.extra?.(ctx) ?? [])],
   };
 }

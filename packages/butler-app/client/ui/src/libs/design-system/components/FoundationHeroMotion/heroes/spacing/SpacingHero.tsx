@@ -14,7 +14,8 @@ function spec(copy: SpacingCopy): ChapterSpec {
     code: "spacing",
     prelude: {
       ...spacingPrelude(copy),
-      render: (g) => <><Intro lead={copy.lead} title={copy.title} /><SpacingWire copy={copy} g={g} /></>,
+      cells: ["intro", "field", "wire"],
+      regions: { intro: <Intro lead={copy.lead} title={copy.title} />, wire: (g) => <SpacingWire copy={copy} g={g} /> },
     },
     field: <SpacingField />,
     fieldColumns: 4,

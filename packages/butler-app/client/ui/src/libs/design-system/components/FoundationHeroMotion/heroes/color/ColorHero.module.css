@@ -12,7 +12,7 @@
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--swatch-columns, 5), minmax(0, 1fr));
   gap: var(--space-lg) var(--space-xs);
   align-content: space-evenly;
 }
@@ -65,6 +65,15 @@
 
 .half[data-half="r"] .disc {
   left: -100%;
+}
+
+.flat {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--c);
 }
 
 .curl {
@@ -163,6 +172,10 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-content: space-between;
   gap: var(--space-xl) var(--grid-gutter);
+}
+
+[data-layout="tall"] .grid {
+  --swatch-columns: 4;
 }
 
 [data-layout="tall"] .product {
