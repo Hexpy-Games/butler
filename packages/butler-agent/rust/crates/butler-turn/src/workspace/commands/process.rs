@@ -4,6 +4,7 @@ use std::pin::Pin;
 use std::process::ExitStatus;
 use std::time::Duration;
 
+use butler_platform::process_control::{self, SignalError};
 use tokio::fs::File;
 use tokio::io::AsyncWrite;
 use tokio::process::{Child, Command};
@@ -11,17 +12,10 @@ use tokio::process::{Child, Command};
 use super::CommandError;
 use crate::workspace::CommandCode;
 
+pub(crate) use butler_platform::process_control::GroupSignal;
+
 pub(super) const TERMINATION_GRACE: Duration = Duration::from_millis(500);
 pub(super) const FORCE_SETTLEMENT_GRACE: Duration = Duration::from_millis(500);
-
-/// The signal sent to a command's process group.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum GroupSignal {
-    /// SIGTERM: ask the group to exit within the termination grace.
-    Terminate,
-    /// SIGKILL: stop the group unconditionally.
-    Kill,
-}
 
 pub(crate) type ProcessFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 pub(crate) type CaptureSink = Box<dyn AsyncWrite + Send + Unpin>;
@@ -61,120 +55,56 @@ pub(crate) struct SystemProcesses;
 
 impl ProcessHost for SystemProcesses {}
 
-#[cfg(unix)]
+/// Signals the process group led by `pid`. A host that does not contain
+/// process trees has no group to signal.
 pub(super) fn signal_pid(pid: u32, signal: GroupSignal) -> Result<(), CommandError> {
-    use nix::errno::Errno;
-    use nix::sys::signal::{Signal, killpg};
-    use nix::unistd::Pid;
-
-    let group = i32::try_from(pid).map_err(|source| {
-        CommandError::new(
+    match process_control::signal_group(pid, signal) {
+        Ok(()) | Err(SignalError::Unsupported) => Ok(()),
+        Err(SignalError::OutOfRange(source)) => Err(CommandError::new(
             CommandCode::CommandTerminationFailed,
             "The child process ID is outside the supported signal range",
         )
-        .with_source(source)
-    })?;
-    let signal = match signal {
-        GroupSignal::Kill => Signal::SIGKILL,
-        GroupSignal::Terminate => Signal::SIGTERM,
-    };
-    match killpg(Pid::from_raw(group), signal) {
-        Ok(()) | Err(Errno::ESRCH) => Ok(()),
-        // Darwin reports EPERM for a group whose remaining members are all
-        // zombies awaiting their parent; there is nothing left to signal.
-        Err(Errno::EPERM) if group_has_only_zombies(pid) => Ok(()),
-        Err(error) => Err(CommandError::new(
+        .with_source(source)),
+        Err(SignalError::Delivery { signal, detail }) => Err(CommandError::new(
             CommandCode::CommandTerminationFailed,
-            format!("Failed to deliver {signal:?} while terminating the command: {error}",),
+            format!("Failed to deliver {signal} while terminating the command: {detail}"),
         )),
     }
 }
 
-/// Darwin keeps zombies out of `proc_pidinfo` (it fails with ESRCH) while
-/// `kill(pid, 0)` and the group listing still see them, so a listed member is
-/// a zombie exactly when it exists but has no BSD process info.
-#[cfg(target_os = "macos")]
-fn group_has_only_zombies(group: u32) -> bool {
-    use libproc::bsd_info::BSDInfo;
-    use libproc::proc_pid::pidinfo;
-    use libproc::processes::{ProcFilter, pids_by_type};
-    use nix::errno::Errno;
-    use nix::sys::signal::kill;
-    use nix::unistd::Pid;
-
-    // An empty group lists as 0 bytes, which libproc reads as failure when
-    // errno still holds the EPERM from `killpg`; clear it first.
-    Errno::clear();
-    let Ok(members) = pids_by_type(ProcFilter::ByProgramGroup { pgrpid: group }) else {
-        return false;
-    };
-    members.into_iter().filter(|pid| *pid != 0).all(|pid| {
-        let Ok(pid) = i32::try_from(pid) else {
-            return false;
-        };
-        match pidinfo::<BSDInfo>(pid, 0) {
-            // libproc (pinned) reports `..., errno = <n>, message = ...`.
-            Err(message) if message.contains(&format!(", errno = {}, ", Errno::ESRCH as i32)) => {
-                matches!(kill(Pid::from_raw(pid), None), Ok(()) | Err(Errno::ESRCH))
-            }
-            _ => false,
-        }
-    })
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-fn group_has_only_zombies(_group: u32) -> bool {
-    false
-}
-
-#[cfg(not(unix))]
-pub(super) fn signal_pid(_pid: u32, _signal: GroupSignal) -> Result<(), CommandError> {
-    Ok(())
-}
-
+/// Signals the command's process tree; a host that does not contain process
+/// trees stops the direct child instead.
 pub(super) fn signal_command(
     host: &dyn ProcessHost,
     child: &mut Child,
     pid: u32,
     signal: GroupSignal,
 ) -> Result<(), CommandError> {
-    #[cfg(unix)]
-    {
-        let _ = child;
-        host.signal_group(pid, signal)
+    if process_control::CONTAINS_PROCESS_TREES {
+        return host.signal_group(pid, signal);
     }
-    #[cfg(not(unix))]
-    {
-        let _ = (host, pid, signal);
-        match child.start_kill() {
-            Ok(()) => Ok(()),
-            Err(error)
-                if matches!(
-                    error.kind(),
-                    std::io::ErrorKind::NotFound | std::io::ErrorKind::InvalidInput
-                ) =>
-            {
-                Ok(())
-            }
-            Err(error) => Err(CommandError::io(error)),
+    match child.start_kill() {
+        Ok(()) => Ok(()),
+        Err(error)
+            if matches!(
+                error.kind(),
+                std::io::ErrorKind::NotFound | std::io::ErrorKind::InvalidInput
+            ) =>
+        {
+            Ok(())
         }
+        Err(error) => Err(CommandError::io(error)),
     }
 }
 
-#[cfg(unix)]
+/// The name of the signal that terminated the command, if one did.
 pub(super) fn signal_name(status: ExitStatus) -> Option<String> {
-    use std::os::unix::process::ExitStatusExt;
-    status.signal().map(|number| match number {
+    process_control::terminating_signal(status).map(|number| match number {
         2 => "SIGINT".to_owned(),
         9 => "SIGKILL".to_owned(),
         15 => "SIGTERM".to_owned(),
         _ => format!("SIG{number}"),
     })
-}
-
-#[cfg(not(unix))]
-pub(super) fn signal_name(_status: &ExitStatus) -> Option<String> {
-    None
 }
 
 pub(super) async fn terminate_and_reap(

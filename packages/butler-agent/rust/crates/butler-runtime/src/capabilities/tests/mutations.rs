@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use butler_platform::secure_fs;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -55,15 +56,8 @@ async fn registry_creates_overwrites_and_edits_workspace_files() {
         std::fs::read(fixture.root.join("sample.txt")).unwrap(),
         "\u{feff}one\r\nsecond\r\n".as_bytes()
     );
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(
-            fixture.root.join("sample.txt"),
-            std::fs::Permissions::from_mode(0o640),
-        )
-        .unwrap();
-    }
+    // A non-default mode must survive the atomic replacement.
+    secure_fs::restrict_file(&fixture.root.join("sample.txt")).unwrap();
     let overwrite = json!({"arguments":{"path":"sample.txt","content":"complete\n",
         "overwrite":true,"expected_sha256":edited["after_sha256"]}});
     let overwritten = rust(&fixture, "write_file", &overwrite, None, None).await;
@@ -72,16 +66,9 @@ async fn registry_creates_overwrites_and_edits_workspace_files() {
         std::fs::read(fixture.root.join("sample.txt")).unwrap(),
         b"complete\n"
     );
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mode = std::fs::metadata(fixture.root.join("sample.txt"))
-            .unwrap()
-            .permissions()
-            .mode()
-            & 0o777;
-        assert_eq!(mode, 0o640);
-    }
+    assert!(secure_fs::is_owner_only(
+        &std::fs::metadata(fixture.root.join("sample.txt")).unwrap()
+    ));
     fixture.capabilities.mutations.close().await;
 }
 

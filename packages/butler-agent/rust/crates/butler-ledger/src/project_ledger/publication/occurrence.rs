@@ -5,6 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use butler_platform::secure_fs;
 use rusqlite::{Connection, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -375,23 +376,13 @@ fn open_shard(
     {
         return Err(ProjectWorkPublicationError::Uncertain { source: None });
     }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700))
-            .map_err(|source| io().with_source(source))?;
-    }
+    secure_fs::restrict_directory(&directory).map_err(|source| io().with_source(source))?;
     let shard = directory.join(format!("mutation-lock-{shard:02}.sqlite3"));
     if is_symlink(&shard)? {
         return Err(ProjectWorkPublicationError::Uncertain { source: None });
     }
     let connection = Connection::open(&shard).map_err(|source| io().with_source(source))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&shard, fs::Permissions::from_mode(0o600))
-            .map_err(|source| io().with_source(source))?;
-    }
+    secure_fs::restrict_file(&shard).map_err(|source| io().with_source(source))?;
     connection
         .busy_timeout(Duration::from_millis(250))
         .map_err(|source| io().with_source(source))?;

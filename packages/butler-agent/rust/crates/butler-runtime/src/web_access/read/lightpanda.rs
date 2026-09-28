@@ -113,20 +113,7 @@ fn resolve_binary(access: &WebAccess) -> Result<Option<PathBuf>, WebAccessError>
 }
 
 fn executable_path(path: &Path) -> bool {
-    fs::metadata(path).is_ok_and(|metadata| {
-        if !metadata.is_file() {
-            return false;
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            metadata.permissions().mode() & 0o111 != 0
-        }
-        #[cfg(not(unix))]
-        {
-            true
-        }
-    })
+    fs::metadata(path).is_ok_and(|metadata| butler_platform::launcher::is_executable(&metadata))
 }
 
 async fn run_dump(

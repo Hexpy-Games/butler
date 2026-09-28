@@ -211,10 +211,7 @@ fn sensitive(path: &Path) -> bool {
     if path == Path::new("/") {
         return true;
     }
-    if std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .is_some_and(|home| path == Path::new(&home))
-    {
+    if butler_platform::user_dirs::home_dir().is_some_and(|home| path == home) {
         return true;
     }
     ["/System", "/etc", "/private/etc", "/bin", "/sbin"]
@@ -222,19 +219,10 @@ fn sensitive(path: &Path) -> bool {
         .any(|root| path.starts_with(root))
 }
 
-#[cfg(unix)]
 fn identity(metadata: &fs::Metadata) -> FolderIdentity {
-    use std::os::unix::fs::MetadataExt;
+    let identity = butler_platform::secure_fs::identity(metadata);
     FolderIdentity {
-        device: metadata.dev(),
-        inode: metadata.ino(),
-    }
-}
-#[cfg(windows)]
-fn identity(metadata: &fs::Metadata) -> FolderIdentity {
-    use std::os::windows::fs::MetadataExt;
-    FolderIdentity {
-        device: metadata.volume_serial_number().unwrap_or(0) as u64,
-        inode: metadata.file_index().unwrap_or(0),
+        device: identity.device,
+        inode: identity.inode,
     }
 }

@@ -88,12 +88,8 @@ fn file_state(path: &std::path::Path) -> Result<Option<FileState>, GatewayApplic
     if !metadata.is_file() {
         return Ok(None);
     }
-    #[cfg(unix)]
-    use std::os::unix::fs::MetadataExt;
-    #[cfg(unix)]
-    let (device, inode) = (metadata.dev(), metadata.ino());
-    #[cfg(not(unix))]
-    let (device, inode) = (0, 0);
+    let identity = butler_platform::secure_fs::identity(&metadata);
+    let (device, inode) = (identity.device, identity.inode);
     let modified_at_ms = metadata
         .modified()
         .ok()

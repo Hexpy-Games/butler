@@ -1,14 +1,12 @@
 use super::*;
 use std::process::Command;
 
-#[cfg(unix)]
 #[tokio::test]
 async fn batch_directory_alias_groups_one_target_like_source() {
-    use std::os::unix::fs::symlink;
     let fixture = Fixture::new();
     std::fs::create_dir(fixture.root.join("real")).unwrap();
     fixture.write("real/target.txt", b"first");
-    symlink(fixture.root.join("real"), fixture.root.join("alias")).unwrap();
+    secure_fs::symlink(&fixture.root.join("real"), &fixture.root.join("alias")).unwrap();
     let expected_sha256 = sha(b"first");
     let call = json!({"arguments":{"edits":[
         {"path":"real/target.txt","old_text":"first","new_text":"second","expected_sha256":expected_sha256},
@@ -61,7 +59,6 @@ async fn explicit_installation_root_rejects_mutation() {
     fixture.capabilities.mutations.close().await;
 }
 
-#[cfg(unix)]
 #[tokio::test]
 async fn canonical_installation_alias_is_read_only() {
     let fixture = Fixture::new();
@@ -70,7 +67,7 @@ async fn canonical_installation_alias_is_read_only() {
     std::fs::create_dir_all(&installation).unwrap();
     std::fs::create_dir_all(&workspace).unwrap();
     std::fs::write(installation.join("resource.txt"), "immutable").unwrap();
-    std::os::unix::fs::symlink(&installation, workspace.join("alias")).unwrap();
+    secure_fs::symlink(&installation, &workspace.join("alias")).unwrap();
     let call =
         json!({"arguments":{"path":"alias/resource.txt","content":"changed","overwrite":true}});
     let result = fixture

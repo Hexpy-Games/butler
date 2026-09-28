@@ -1,15 +1,12 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use butler_platform::process_control::{Liveness, liveness};
+
 use super::{CommandStep, Commands, Fixture, GuidedAccess, ScriptedProcesses};
 
-#[cfg(unix)]
 #[tokio::test]
 async fn guided_normal_close_kills_owned_background_descendant() {
-    use nix::errno::Errno;
-    use nix::sys::signal::kill;
-    use nix::unistd::Pid;
-
     let fixture = Fixture::new();
     let owner = Commands::new();
     let pid_path = fixture.0.join("child.pid");
@@ -21,13 +18,13 @@ async fn guided_normal_close_kills_owned_background_descendant() {
         .unwrap()
         .unwrap();
     assert_eq!(output.summary.exit_code, Some(0));
-    let pid: i32 = std::fs::read_to_string(&pid_path)
+    let pid: u32 = std::fs::read_to_string(&pid_path)
         .unwrap()
         .trim()
         .parse()
         .unwrap();
     butler_test_support::eventually("the owned descendant to exit", || {
-        kill(Pid::from_raw(pid), None) == Err(Errno::ESRCH)
+        liveness(pid) == Liveness::Gone
     })
     .await;
     owner.close().await;
@@ -159,7 +156,8 @@ async fn structured_undefined_environment_entry_removes_inherited_value() {
     owner.close().await;
 }
 
-#[cfg(target_os = "macos")]
+/// A read-only command cannot write: the host sandbox stops the write, or a
+/// host without a sandbox refuses the command.
 #[tokio::test]
 async fn guided_read_only_uses_actual_sandbox_boundary() {
     let fixture = Fixture::new();
@@ -167,8 +165,10 @@ async fn guided_read_only_uses_actual_sandbox_boundary() {
     let target = fixture.0.join("must-not-write");
     let mut input = fixture.guided(&format!("printf x > '{}'", target.display()));
     input.access = GuidedAccess::ReadOnlyObservation;
-    let output = owner.submit_guided(input).unwrap().await.unwrap().unwrap();
-    assert_ne!(output.summary.exit_code, Some(0));
+    match owner.submit_guided(input).unwrap().await.unwrap() {
+        Ok(output) => assert_ne!(output.summary.exit_code, Some(0)),
+        Err(error) => assert_eq!(error.code(), "command_observation_isolation_unavailable"),
+    }
     assert!(!target.exists());
     owner.close().await;
 }
@@ -229,13 +229,8 @@ async fn structured_forced_public_settlement_precedes_owned_reap() {
     assert_close_waits_for_reap(&owner, release).await;
 }
 
-#[cfg(unix)]
 #[tokio::test]
 async fn partial_pipeline_spawn_failure_reaps_term_ignoring_descendant() {
-    use nix::errno::Errno;
-    use nix::sys::signal::kill;
-    use nix::unistd::Pid;
-
     let fixture = Fixture::new();
     let gate = Arc::new(tokio::sync::Notify::new());
     let owner = Commands::with_host(Arc::new(ScriptedProcesses {
@@ -266,7 +261,7 @@ async fn partial_pipeline_spawn_failure_reaps_term_ignoring_descendant() {
     butler_test_support::eventually("the TERM-ignoring descendant", || {
         pid = std::fs::read_to_string(&pid_path)
             .ok()
-            .and_then(|pid| pid.trim().parse::<i32>().ok());
+            .and_then(|pid| pid.trim().parse::<u32>().ok());
         pid.is_some()
     })
     .await;
@@ -278,7 +273,7 @@ async fn partial_pipeline_spawn_failure_reaps_term_ignoring_descendant() {
         .unwrap();
     assert_eq!(result.error.unwrap().code(), "command_spawn_failed");
     butler_test_support::eventually("the descendant to be reaped", || {
-        kill(Pid::from_raw(pid), None) == Err(Errno::ESRCH)
+        liveness(pid) == Liveness::Gone
     })
     .await;
     owner.close().await;

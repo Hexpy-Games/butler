@@ -7,6 +7,7 @@ use std::{
     path::Path,
 };
 
+use butler_platform::secure_fs;
 use serde_json::{Map, Value};
 
 use crate::models::ModelCatalogError;
@@ -51,11 +52,7 @@ pub(super) fn write(
     ));
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    secure_fs::owner_only(&mut options);
     let mut file = options.open(&temp).map_err(write_failed)?;
     if let Err(error) = file.write_all(&bytes).and_then(|()| file.sync_all()) {
         drop(file);
@@ -63,13 +60,9 @@ pub(super) fn write(
         return Err(write_failed(error));
     }
     drop(file);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if let Err(error) = fs::set_permissions(&temp, fs::Permissions::from_mode(0o600)) {
-            let _ = fs::remove_file(&temp);
-            return Err(write_failed(error));
-        }
+    if let Err(error) = secure_fs::restrict_file(&temp) {
+        let _ = fs::remove_file(&temp);
+        return Err(write_failed(error));
     }
     if let Err(error) = fs::rename(&temp, path) {
         let _ = fs::remove_file(&temp);

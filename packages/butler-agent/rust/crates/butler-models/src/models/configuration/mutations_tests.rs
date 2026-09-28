@@ -264,14 +264,9 @@ async fn custom_model_credentials_are_endpoint_scoped_private_and_clearable() {
     let secret_path = fixture.0.join("auth/custom-model-credentials.json");
     let secrets: Value = serde_json::from_slice(&fs::read(&secret_path).unwrap()).unwrap();
     assert_eq!(secrets["local/org-model.gguf"], "private-key");
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        assert_eq!(
-            fs::metadata(&secret_path).unwrap().permissions().mode() & 0o777,
-            0o600
-        );
-    }
+    assert!(butler_platform::secure_fs::is_owner_only(
+        &fs::metadata(&secret_path).unwrap()
+    ));
 
     let reuse = LocalModelMutation {
         api_key: None,

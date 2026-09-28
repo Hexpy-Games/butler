@@ -8,6 +8,15 @@
 )]
 pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
     Some(match domain {
+        // butler-platform: the only OS-specific code. Independent facades; each
+        // keeps its per-OS implementations as private children.
+        "command_sandbox"
+        | "instance"
+        | "launcher"
+        | "process_control"
+        | "secure_fs"
+        | "service_registration"
+        | "user_dirs" => &[],
         // butler-core: leaf codecs and mirrors; JSON sanitizes public text.
         "configuration" | "js_date" | "json_lines" | "locale" | "public_text" | "segmentation"
         | "tool_protocol" => &[],

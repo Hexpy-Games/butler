@@ -153,11 +153,8 @@ async fn auto_reader_keeps_lightweight_after_missing_lightpanda() {
     let _ = fs::remove_dir_all(root);
 }
 
-#[cfg(unix)]
 #[tokio::test]
 async fn lightpanda_fallback_runs_and_reaps_configured_child() {
-    use std::os::unix::fs::PermissionsExt;
-
     let challenge =
         "<html><body>enable javascript please".to_owned() + &"<script>void 0;</script>".repeat(10);
     let (endpoint, server, _) = serve(vec![("text/html", challenge.into_bytes())]).await;
@@ -175,9 +172,7 @@ async fn lightpanda_fallback_runs_and_reaps_configured_child() {
         ),
     )
     .unwrap();
-    let mut permissions = fs::metadata(&binary).unwrap().permissions();
-    permissions.set_mode(0o700);
-    fs::set_permissions(&binary, permissions).unwrap();
+    butler_platform::launcher::mark_executable(&binary).unwrap();
     let access = {
         super::configure_lightpanda(&root, &binary);
         super::access_with_pages(root.clone(), "http://127.0.0.1:9/search", &endpoint)

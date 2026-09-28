@@ -1,6 +1,6 @@
 //! Forward recovery and identity-safe cleanup for durable relocation records.
 
-use std::process::{Command, Stdio};
+use butler_platform::process_control::{Liveness, liveness};
 
 use super::super::{
     AppApplication, AppRelocationCanonicalUpdate, AppRelocationWorkspacePlan, app_error,
@@ -144,22 +144,11 @@ async fn cleanup_plan(app: &AppApplication, row: Row) -> Result<(), GatewayAppli
     Ok(())
 }
 
+/// Whether the relocation owner may still run: a process this user can
+/// signal, or one this host cannot probe. Pid 0 addresses the caller's own
+/// process group, which is alive.
 fn process_is_alive(pid: u32) -> bool {
-    #[cfg(unix)]
-    {
-        Command::new("/bin/kill")
-            .arg("-0")
-            .arg(pid.to_string())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map_or(true, |status| status.success())
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = pid;
-        true
-    }
+    pid == 0 || matches!(liveness(pid), Liveness::Running | Liveness::Unknown)
 }
 
 fn public(code: &str, message: &str) -> GatewayApplicationError {

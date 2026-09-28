@@ -1,0 +1,41 @@
+# Lines of OS-specific code outside crates/butler-platform, ratcheted by tools/source-check.
+# Move them behind butler-platform and regenerate: cargo run -p butler-source-check -- --bless .
+# Entries may only shrink or disappear; new entries need review.
+Cargo.toml	2
+src/cognition.rs	2
+src/cognition/box_store/index_io.rs	9
+src/cognition/box_store/manifest.rs	5
+src/cognition/box_store/tests.rs	2
+src/cognition/briefing/generation/write.rs	7
+src/cognition/completion/observation.rs	7
+src/cognition/completion/queue.rs	9
+src/cognition/consolidation/checkpoint.rs	8
+src/cognition/continuity_recovery/hot_cache.rs	9
+src/cognition/continuity_recovery/manifest.rs	7
+src/cognition/feedback_buffer/operator.rs	7
+src/cognition/feedback_buffer/quality_operator.rs	8
+src/cognition/feedback_buffer/resolve.rs	4
+src/cognition/generation/embedding_binding.rs	3
+src/cognition/generation/initialize/durable.rs	7
+src/cognition/generation/qualification/io.rs	3
+src/cognition/generation/qualification_service.rs	3
+src/cognition/generation/qualification_witness.rs	1
+src/cognition/generation/rebuild/typed_snapshot.rs	12
+src/cognition/graph/cache_quantum.rs	2
+src/cognition/graph/vector_quantum.rs	2
+src/cognition/hot_cache/import.rs	6
+src/cognition/hot_cache/receipts.rs	6
+src/cognition/knowhow_store/entries.rs	8
+src/cognition/knowhow_store/index.rs	9
+src/cognition/legacy/memory_import.rs	4
+src/cognition/legacy/session_sync.rs	6
+src/cognition/migration/plan.rs	9
+src/cognition/project_capsule/tests.rs	2
+src/cognition/project_capsule/write.rs	11
+src/cognition/sources/typed/write.rs	6
+src/coordination/fence.rs	4
+src/profile/extraction/import.rs	8
+src/profile/naming.rs	7
+src/profile/service/personalization.rs	6
+src/profile/storage.rs	3
+src/profile/tests/extraction/import.rs	4

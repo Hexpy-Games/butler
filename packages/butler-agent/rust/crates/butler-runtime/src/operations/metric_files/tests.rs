@@ -1,6 +1,7 @@
 use super::*;
 
 use crate::context::PruneToolOutputResult;
+use butler_platform::secure_fs;
 use std::collections::HashSet;
 use std::io::{BufRead, BufReader};
 use std::sync::{
@@ -48,11 +49,7 @@ fn retention_drops_bad_and_old_rows_and_marks_kept_rows_private() {
         ),
     )
     .unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
-    }
+    secure_fs::restrict_file(&path).unwrap();
 
     let result = files.retain(1_000.0, 100.0).unwrap();
     assert_eq!(
@@ -78,14 +75,7 @@ fn retention_drops_bad_and_old_rows_and_marks_kept_rows_private() {
         .lines()
         .map(|line| serde_json::from_str(&line.unwrap()).unwrap())
         .collect();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        assert_eq!(
-            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
-            0o600
-        );
-    }
+    assert!(secure_fs::is_owner_only(&fs::metadata(&path).unwrap()));
     assert_eq!(rows.len(), 3);
     assert_eq!(rows[0]["kind"], "boundary");
     assert_eq!(rows[0]["rawTextStored"], false);

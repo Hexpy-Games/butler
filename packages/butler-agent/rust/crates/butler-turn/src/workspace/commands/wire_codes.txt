@@ -6,10 +6,12 @@ command_environment_failed
 command_invalid
 command_io_failed
 command_json_failed
+command_observation_isolation_unavailable
 command_output_overflow
 command_owner_closed
 command_owner_exhausted
 command_plan_empty
+command_platform_unavailable
 command_settlement_lost
 command_spawn_failed
 command_stream_failed

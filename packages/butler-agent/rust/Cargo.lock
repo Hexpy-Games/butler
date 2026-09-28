@@ -733,6 +733,7 @@ name = "butler-core"
 version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
+ "butler-platform",
  "butler-test-support",
  "chrono",
  "icu_collator",
@@ -777,6 +778,7 @@ dependencies = [
  "butler-core",
  "butler-memory",
  "butler-models",
+ "butler-platform",
  "butler-runtime",
  "butler-test-support",
  "butler-turn",
@@ -787,7 +789,6 @@ dependencies = [
  "http",
  "http-body-util",
  "indexmap 2.14.2",
- "nix",
  "notify",
  "parking_lot",
  "regex",
@@ -811,14 +812,13 @@ version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
  "butler-core",
+ "butler-platform",
  "butler-test-support",
  "butler-turn",
  "chrono",
- "nix",
  "parking_lot",
  "regex",
  "rusqlite",
- "rustix 1.1.5",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -870,6 +870,7 @@ version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
  "butler-core",
+ "butler-platform",
  "butler-test-support",
  "butler-turn",
  "bytes",
@@ -894,12 +895,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "butler-platform"
+version = "0.0.0"
+dependencies = [
+ "libproc",
+ "nix",
+ "rustix 1.1.5",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "butler-runtime"
 version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
  "butler-core",
  "butler-models",
+ "butler-platform",
  "butler-runtime",
  "butler-test-support",
  "butler-turn",
@@ -917,7 +930,6 @@ dependencies = [
  "regress",
  "reqwest 0.12.28",
  "rusqlite",
- "rustix 1.1.5",
  "ryu-js",
  "serde",
  "serde_json",
@@ -956,12 +968,11 @@ version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
  "butler-core",
+ "butler-platform",
  "butler-test-support",
  "chrono",
  "futures-util",
  "indexmap 2.14.2",
- "libproc",
- "nix",
  "parking_lot",
  "regex",
  "regress",

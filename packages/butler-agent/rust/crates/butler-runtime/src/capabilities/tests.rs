@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use super::{Capabilities, CapabilityInvocation};
+use butler_platform::secure_fs;
 use butler_turn::workspace::{WorkspaceFiles, WorkspaceReference};
 
 struct Fixture {
@@ -22,11 +23,7 @@ impl Fixture {
     fn new() -> Self {
         let root = std::env::temp_dir().join(format!("butler-k1a-{}", Uuid::new_v4()));
         std::fs::create_dir(&root).unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
-        }
+        secure_fs::restrict_directory(&root).unwrap();
         let files = Arc::new(WorkspaceFiles::new(2));
         let capabilities = Capabilities::new(
             Arc::clone(&files),
@@ -227,10 +224,8 @@ async fn cursor_decoder_accepts_integral_json_number_spellings() {
     fixture.files.close().await;
 }
 
-#[cfg(unix)]
 #[tokio::test]
 async fn protected_ledger_symlink_alias_is_rejected_before_file_read() {
-    use std::os::unix::fs::symlink;
     let fixture = Fixture::new();
     std::fs::create_dir(fixture.root.join(".project-ledger")).unwrap();
     std::fs::write(
@@ -238,7 +233,11 @@ async fn protected_ledger_symlink_alias_is_rejected_before_file_read() {
         b"protected",
     )
     .unwrap();
-    symlink(".project-ledger/secret.txt", fixture.root.join("alias.txt")).unwrap();
+    secure_fs::symlink(
+        std::path::Path::new(".project-ledger/secret.txt"),
+        &fixture.root.join("alias.txt"),
+    )
+    .unwrap();
     let call = json!({ "arguments": { "requests": [{ "path": "alias.txt" }] } });
     let rust = fixture.invoke(&call, None).await;
     assert_eq!(rust["ok"], false);

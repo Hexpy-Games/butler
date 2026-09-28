@@ -8,7 +8,6 @@ use std::{
     collections::VecDeque,
     fs::{self, File},
     io::{self, BufRead, BufReader, Read, Seek, SeekFrom},
-    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     sync::OnceLock,
 };
@@ -205,7 +204,8 @@ fn line_text(bytes: &[u8]) -> String {
 }
 
 fn file_identity(metadata: &fs::Metadata) -> (u64, u64) {
-    (metadata.dev(), metadata.ino())
+    let identity = butler_platform::secure_fs::identity(metadata);
+    (identity.device, identity.inode)
 }
 
 pub fn redact_log_line(line: &str) -> String {

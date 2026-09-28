@@ -1,10 +1,10 @@
 //! Source foreground-executor readiness publication owned by the live service.
 
-use std::fs::{self, DirBuilder, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
+use butler_platform::secure_fs;
 use serde_json::{Value, json};
 
 const SCHEMA: &str = "butler.app-foreground-executor-readiness.v1";
@@ -19,10 +19,7 @@ impl ServiceReadiness {
     /// Publish only after the native queue consumer and BTCC are initialized.
     pub fn publish(data_root: &Path, now_iso: &str, now_ms: i64) -> io::Result<Self> {
         let directory = data_root.join("state/app-foreground");
-        DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(&directory)?;
+        secure_fs::create_private_dir_all(&directory)?;
         let pid = std::process::id();
         let path = directory.join("executor-ready.json");
         let temporary = directory.join(format!("executor-ready.json.{pid}.{now_ms}.tmp"));
@@ -30,12 +27,9 @@ impl ServiceReadiness {
             "schema": SCHEMA, "pid": pid, "readyAt": now_iso, "rawTextIncluded": false,
         });
         let result = (|| {
-            let mut file = OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .mode(0o600)
-                .open(&temporary)?;
+            let mut options = OpenOptions::new();
+            options.write(true).create(true).truncate(true);
+            let mut file = secure_fs::owner_only(&mut options).open(&temporary)?;
             serde_json::to_writer_pretty(&mut file, &record)?;
             file.write_all(b"\n")?;
             drop(file);
