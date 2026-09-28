@@ -1,46 +1,27 @@
-import { useMemo } from "react";
+import { useCallback } from "react";
 import type { FoundationHeroLang } from "../../FoundationHeroMotion";
-import { SceneHero } from "../scene/SceneHero";
-import type { SceneSpec } from "../scene/types";
+import type { HeroLayout } from "../shared/grid";
 import { Intro } from "../shared/Intro";
-import { ICON_COPY, type IconCopy } from "./iconCopy";
-import { GlyphScene, GrowScene, PlaceScene, TitleWord } from "./IconScenes";
-import { EmptyTile, KeyTile, LadderTile, SideTile } from "./iconTiles";
-import { ICON_END, iconTracks } from "./iconTracks";
-
-function spec(copy: IconCopy): SceneSpec {
-  return {
-    code: "icon",
-    scenes: ["intro", "glyph", "grow", "place"],
-    regions: {
-      intro: <Intro lead={copy.lead} title={copy.title} titleNode={<TitleWord title={copy.title} />} />,
-      glyph: <GlyphScene copy={copy} />,
-      grow: <GrowScene copy={copy} />,
-      place: <PlaceScene copy={copy} />,
-    },
-    tiles: {
-      key: <KeyTile copy={copy} />,
-      ladder: <LadderTile copy={copy} />,
-      side: <SideTile copy={copy} />,
-      empty: <EmptyTile copy={copy} />,
-    },
-    poster: {
-      wide: { columns: "1fr 1fr 0.9fr", rows: "2fr 1fr", areas: ["key ladder side", "key ladder empty"] },
-      tall: { columns: "1fr", rows: "auto", areas: ["key", "ladder", "side"] },
-    },
-    posterZoom: { wide: 0.9, tall: 0.9 },
-    end: () => ICON_END,
-    tracks: iconTracks(copy),
-  };
-}
+import { ICON_COPY } from "./iconCopy";
+import { GlyphScene, GridScene, GrowScene, PlaceScene, TitleWord } from "./IconScenes";
+import { IconStage } from "./IconStage";
 
 /**
  * 06 Iconography, "the icon follows the text": the title's o strokes on as
  * a glyph; the gear on its 24px keyline grid; one label steps caption to h2
- * and its icon swaps named size in lockstep on one centre line; icons in
- * place in a sidebar and a toolbar, and one tone pass down the rows.
+ * and its icon swaps named size in lockstep on one centre line; the app's
+ * sidebar, its icons popping in and a click on Settings; then the camera
+ * lands close on that gear at the centre of the whole icon set, which draws
+ * one diagonal at a time while the camera pulls out to the full frame.
  */
 export function IconHero({ lang }: { lang: FoundationHeroLang }) {
-  const chapter = useMemo(() => spec(ICON_COPY[lang]), [lang]);
-  return <SceneHero lang={lang} spec={chapter} />;
+  const copy = ICON_COPY[lang];
+  const regions = useCallback((layout: HeroLayout) => ({
+    intro: <Intro lead={copy.lead} title={copy.title} titleNode={<TitleWord title={copy.title} />} />,
+    glyph: <GlyphScene copy={copy} />,
+    grow: <GrowScene copy={copy} />,
+    place: <PlaceScene copy={copy} />,
+    grid: <GridScene layout={layout} />,
+  }), [copy]);
+  return <IconStage copy={copy} lang={lang} regions={regions} />;
 }

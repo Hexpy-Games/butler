@@ -1,4 +1,4 @@
-/* 06 Iconography hero (v3 scenes). Canvas px (../shared/grid.ts). */
+/* 06 Iconography hero. Canvas px (../shared/grid.ts). */
 
 /* ---- Title: the o is a glyph's circle on its keyline ---- */
 
@@ -75,12 +75,21 @@
   block-size: calc(var(--icon-size-xl) * 8);
 }
 
+/* Phone: the box takes the portrait width; its notes above and below it, each at its own edge. */
 [data-layout="tall"] .keyline {
   grid-template-areas:
-    "top ."
-    "box right"
-    "bottom .";
+    "top top"
+    "box box"
+    "right bottom";
   grid-template-columns: auto auto;
+}
+
+[data-layout="tall"] .keyNote[data-side="right"] {
+  justify-self: start;
+}
+
+[data-layout="tall"] .keyNote[data-side="bottom"] {
+  justify-self: end;
 }
 
 .keySvg,
@@ -124,10 +133,23 @@
   stroke-dasharray: 80px 80px;
 }
 
-/* ---- Grows with text ---- */
+/* Scene regions (centred in their cells). */
+.glyphStage,
+.placeStage {
+  display: grid;
+}
+
+/* ---- Grows with text: the row beside its readouts (below them on the phone) ---- */
 
 .growStage {
   display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  column-gap: calc(var(--space-4xl) * 2);
+}
+
+[data-layout="tall"] .growStage {
+  grid-template-columns: auto;
   justify-items: center;
   row-gap: var(--space-3xl);
 }
@@ -137,19 +159,17 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  min-inline-size: calc(var(--space-4xl) * 7);
   block-size: calc(var(--space-4xl) * 1.5);
 }
 
-/* The centre line both share; it never moves. */
-.growLine,
-.centreLine {
+/* The centre line icon and word share; it never moves and ends short of the readouts. */
+.growLine {
   position: absolute;
   top: 50%;
   right: calc(-1 * var(--space-xl));
   left: calc(-1 * var(--space-xl));
   block-size: 1px;
-  background: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .layers {
@@ -165,8 +185,26 @@
 
 .growRead {
   display: grid;
-  justify-items: center;
+  justify-items: start;
   row-gap: var(--space-xs);
+}
+
+[data-layout="tall"] .growRead {
+  justify-items: center;
+}
+
+.cuts {
+  display: inline-grid;
+  justify-items: start;
+}
+
+[data-layout="tall"] .cuts {
+  justify-items: center;
+}
+
+.cutLayer {
+  grid-area: 1 / 1;
+  white-space: nowrap;
 }
 
 .readRole {
@@ -190,110 +228,91 @@
   line-height: var(--line-height-none);
 }
 
-/* ---- The ladder ---- */
+/* ---- In place: the app's sidebar, its size tag with a leader to the icon column ---- */
 
-.ladder {
+.sideScene {
+  --side-top: var(--space-md);
+
+  position: relative;
   display: grid;
-  row-gap: var(--space-lg);
+  grid-template-columns: auto auto;
+  align-items: start;
 }
 
-.ladderRow {
-  position: relative;
+[data-layout="tall"] .sideScene {
+  grid-template-columns: auto;
+}
+
+/* The window's sidebar surface (AdaptiveShell), its corner on the radius scale. */
+.sideFrame {
+  display: flex;
+  box-sizing: border-box;
+  inline-size: var(--sidebar-width);
+  block-size: calc(var(--space-4xl) * 9.5);
+}
+
+/* Phone rows follow the touch density (taller): the frame keeps every row clear of the footer. */
+[data-layout="tall"] .sideFrame {
+  block-size: calc(var(--space-4xl) * 13.5);
+  padding-block-start: var(--side-top);
+  border-radius: var(--radius-composer);
+  background: var(--sidebar-bg);
+}
+
+/* The tag sits level with the first icon; its leader runs into the sidebar's inset, short of the icon. */
+.sideTag {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-xl);
+  margin-block-start: calc(var(--side-top) + var(--control-height-md) / 2);
+  translate: 0 -50%;
 }
 
-.pair {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-sm);
-  color: var(--text-primary);
-}
-
-.ladderName {
-  color: var(--text-tertiary);
+.sideTagText {
+  color: var(--accent);
   font: var(--font-code);
   font-size: var(--typo-caption-size);
   white-space: nowrap;
 }
 
-/* ---- In place: a sidebar block and a toolbar ---- */
-
-.sideBlock {
-  position: relative;
-  display: grid;
-  row-gap: var(--space-md);
-  inline-size: calc(var(--space-4xl) * 6);
-}
-
-.toolbar {
-  display: flex;
-  gap: var(--space-xs);
-}
-
-.rows {
-  display: grid;
-  row-gap: var(--sidebar-row-spacing, var(--space-xs));
-}
-
-.rowWrap {
-  position: relative;
-  display: grid;
-}
-
-.hover {
-  position: absolute;
-  inset: 0;
-  border-radius: var(--radius-control);
-  background: var(
-    --hover-bg,
-    color-mix(in srgb, var(--text-primary) 7%, transparent)
+.sideLeader {
+  inline-size: calc(
+    var(--space-xl) + var(--sidebar-padding-inline) + var(--space-sm) -
+      var(--space-xs)
   );
-  opacity: 0;
+  block-size: 1px;
+  margin-inline: var(--space-sm)
+    calc(
+      -1 * (var(--sidebar-padding-inline) + var(--space-sm) - var(--space-xs))
+    );
+  background: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+/* Phone: the tag above the sidebar, over the icon column; its leader drops to the first icon. */
+[data-layout="tall"] .sideTag {
+  flex-direction: column;
+  align-items: start;
+  margin-block: 0 calc(-1 * (var(--side-top) - var(--space-xs)));
+  padding-inline-start: calc(var(--sidebar-padding-inline) + var(--space-sm));
+  translate: none;
+}
+
+[data-layout="tall"] .sideLeader {
+  inline-size: 1px;
+  block-size: calc(var(--space-md) + var(--side-top) - var(--space-xs));
+  margin: var(--space-xs) 0 0 calc(var(--icon-size-md) / 2);
+}
+
+.swap {
+  display: grid;
+}
+
+.swapLayer {
+  display: grid;
+  grid-area: 1 / 1;
 }
 
 .pop {
   display: inline-grid;
-}
-
-.toned {
-  display: inline-grid;
-}
-
-.tone {
-  display: inline-grid;
-  grid-area: 1 / 1;
-  place-items: center;
-}
-
-.tone[data-tone="muted"] {
-  color: var(--icon-muted);
-}
-
-.tone[data-tone="primary"] {
-  color: var(--text-primary);
-  opacity: 0;
-}
-
-.tone[data-tone="accent"] {
-  color: var(--accent);
-  opacity: 0;
-}
-
-.sideTag {
-  position: absolute;
-  top: 50%;
-  left: calc(100% + var(--space-xl));
-  color: var(--accent);
-  font: var(--font-code);
-  font-size: var(--typo-caption-size);
-  white-space: nowrap;
-}
-
-[data-layout="tall"] .sideTag {
-  position: static;
 }
 
 .cursor {
@@ -309,24 +328,35 @@
   opacity: 0;
 }
 
-.placeStage {
-  padding-inline-end: calc(var(--space-4xl) * 5);
+/* ---- The finale and poster: the icon set filling the frame ---- */
+
+/* The grid is the poster: shown at rest (the other scenes only while the hero plays). */
+.posterCell[data-cell] {
+  opacity: 1;
 }
 
-[data-layout="tall"] .placeStage {
-  padding-inline-end: 0;
-}
-
-/* ---- Finale tiles ---- */
-
-.keyTile,
-.ladderTile,
-.sideTile,
-.emptyTile {
+.iconGrid {
   display: grid;
+  box-sizing: border-box;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--rows), minmax(0, 1fr));
   place-items: center;
+  inline-size: var(--canvas-w);
+  block-size: var(--canvas-h);
+  padding: var(--grid-margin);
+  color: var(--text-secondary);
 }
 
-.sideTile .sideTag {
-  display: none;
+.gridCell {
+  display: inline-grid;
+}
+
+/* The gear carried in from the sidebar, open there: the primary tone. */
+.gridCell[data-centre] {
+  color: var(--text-primary);
+}
+
+/* Once each stroke has a unit length (iconParts.tsx), its dash spans it exactly. */
+.iconGrid[data-drawn] [data-d] :is(path, circle, ellipse) {
+  stroke-dasharray: 100 100;
 }
