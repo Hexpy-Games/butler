@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 mod arguments;
 mod list_files;
+mod list_skills;
 mod mutations;
 mod registry_read;
 mod source_gaps;

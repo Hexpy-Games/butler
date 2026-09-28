@@ -50,6 +50,9 @@ pub(super) async fn execute(
     if call.name == ToolName::ReadProjectSource {
         return super::project_source::execute(owner, call).await;
     }
+    if super::wallpaper::supports(&call.name) {
+        return super::wallpaper::execute(owner, call, invocation.cancellation).await;
+    }
     if mcp::supports(&call.name) {
         return Box::pin(mcp::execute(owner, invocation, call)).await;
     }
@@ -92,12 +95,7 @@ pub(super) async fn execute(
                         .map(str::to_owned),
                     model_ref: owner.binding.model_ref.clone(),
                     reasoning_effort: owner.binding.reasoning_effort.clone(),
-                    access_mode: match owner.binding.access_mode {
-                        butler_turn::btcc::AccessMode::FullAccess => "full_access",
-                        butler_turn::btcc::AccessMode::AskFirst => "ask_first",
-                        butler_turn::btcc::AccessMode::ReadOnly => "read_only",
-                    }
-                    .into(),
+                    access_mode: access_mode(owner),
                 },
                 &reviewed,
             )
@@ -210,12 +208,7 @@ pub(super) async fn execute(
                         .get("profile_id")
                         .and_then(Value::as_str)
                         .map(str::to_owned),
-                    access_mode: match owner.binding.access_mode {
-                        butler_turn::btcc::AccessMode::FullAccess => "full_access",
-                        butler_turn::btcc::AccessMode::AskFirst => "ask_first",
-                        butler_turn::btcc::AccessMode::ReadOnly => "read_only",
-                    }
-                    .into(),
+                    access_mode: access_mode(owner),
                 },
                 &reviewed,
             )
@@ -279,12 +272,7 @@ pub(super) async fn execute(
                 } else {
                     butler_turn::workspace::SessionRole::Steward
                 },
-                access_mode: match owner.binding.access_mode {
-                    butler_turn::btcc::AccessMode::FullAccess => "full_access",
-                    butler_turn::btcc::AccessMode::AskFirst => "ask_first",
-                    butler_turn::btcc::AccessMode::ReadOnly => "read_only",
-                }
-                .into(),
+                access_mode: access_mode(owner),
             })
             .await
             .map_err(ToolExecutionError::Integrity)?;
@@ -464,6 +452,16 @@ pub(super) async fn execute(
             "code":"tool_error", "message":format!("{} could not complete: {}",call.name,error.code())
         }})
     }))
+}
+
+/// The Turn's access mode as delegation requests name it.
+fn access_mode(owner: &GuidedTools) -> String {
+    match owner.binding.access_mode {
+        butler_turn::btcc::AccessMode::FullAccess => "full_access",
+        butler_turn::btcc::AccessMode::AskFirst => "ask_first",
+        butler_turn::btcc::AccessMode::ReadOnly => "read_only",
+    }
+    .into()
 }
 
 fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError> {

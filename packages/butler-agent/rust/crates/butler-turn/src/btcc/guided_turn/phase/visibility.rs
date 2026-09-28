@@ -51,10 +51,18 @@ const NON_FULL: &[&str] = &[
     "recall_memory",
     "query_memory",
     "list_automations",
+    "list_wallpapers",
+    "set_wallpaper",
+    "save_wallpaper_module",
     "read_mcp_resource",
     "list_skills",
     "transform_public_data_table",
 ];
+/// Non-full tools that change something: offered when asking first, never to
+/// a read-only turn. `set_wallpaper` is a reversible preference write the
+/// user undoes from the App, and `save_wallpaper_module` writes only the
+/// user's wallpaper module folder, so neither needs approval.
+const ASK_FIRST_WRITES: &[&str] = &["run_command", "set_wallpaper", "save_wallpaper_module"];
 const STEWARD_PARENT: &[&str] = &["delegate_to_steward", "steer_steward", "cancel_steward"];
 const WORKER_DELEGATION: &[&str] = &["delegate_to_worker", "steer_worker", "wait_for_worker"];
 /// The tools a guided turn is authorized to call on the legacy surface, from
@@ -195,7 +203,8 @@ fn authorized_profiles(
 }
 
 /// Full access adds effect-free tools, commands, file writes and MCP calls;
-/// other modes keep only the non-full allowlist (commands only when asking first).
+/// other modes keep only the non-full allowlist (its writes only when asking
+/// first).
 fn apply_access_mode(
     names: &mut HashSet<String>,
     catalog: &GuidedCatalogSnapshot,
@@ -231,7 +240,8 @@ fn apply_access_mode(
     }
     names.retain(|name| {
         NON_FULL.contains(&name.as_str())
-            && (name != ToolName::RunCommand || policy.access_mode == AccessMode::AskFirst)
+            && (!ASK_FIRST_WRITES.contains(&name.as_str())
+                || policy.access_mode == AccessMode::AskFirst)
     });
     names.remove("call_mcp_tool");
 }

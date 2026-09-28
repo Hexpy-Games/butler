@@ -264,3 +264,38 @@ async fn falls_back_to_legacy_session_only_when_runtime_has_no_projection() {
     owner.close().await;
     let _ = std::fs::remove_dir_all(root);
 }
+
+#[test]
+fn bundled_core_skills_load_without_validation_issues() {
+    let core =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../resources/skills");
+    let skills = catalog::load(&core).unwrap();
+    let names: Vec<_> = skills.iter().map(|skill| skill.name.as_str()).collect();
+    assert!(names.contains(&"wallpaper-authoring"), "{names:?}");
+    // The authoring skill writes through its dedicated tool, never files.
+    let authoring = skills
+        .iter()
+        .find(|skill| skill.name == "wallpaper-authoring")
+        .unwrap();
+    for tool in ["list_wallpapers", "save_wallpaper_module", "set_wallpaper"] {
+        assert!(
+            authoring.allowed_tools.iter().any(|name| name == tool),
+            "{tool}"
+        );
+    }
+    for tool in ["write_file", "edit_file"] {
+        assert!(
+            !authoring.allowed_tools.iter().any(|name| name == tool),
+            "{tool}"
+        );
+    }
+    let issues = validate(&skills);
+    assert!(
+        issues.is_empty(),
+        "{:?}",
+        issues
+            .iter()
+            .map(|issue| &issue.message)
+            .collect::<Vec<_>>()
+    );
+}
