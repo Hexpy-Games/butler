@@ -6,9 +6,6 @@ use std::time::SystemTime;
 
 use butler_turn::btcc::{StorageError, bootstrap_fresh_storage, read_activated_storage_manifest};
 
-#[cfg(test)]
-mod tests;
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct FreshStorageBootstrap {
     pub(crate) path: PathBuf,

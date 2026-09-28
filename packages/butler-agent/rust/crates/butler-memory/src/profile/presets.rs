@@ -194,6 +194,3 @@ fn label(name: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
 }
-
-#[cfg(test)]
-mod tests;

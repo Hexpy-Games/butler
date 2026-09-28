@@ -110,8 +110,7 @@ Paragraph the directive applies to.
 
 `disable-next-line` targets the next non-blank line. Inside a list use
 `disable-line`: a comment on its own line splits an MDX list. Disable one
-phrase with `banned-phrase/<id>`. Current uses: one, the verbatim safety
-notice in `getting-started/first-run.mdx`.
+phrase with `banned-phrase/<id>`. Current uses: none.
 
 ## Quick checks
 

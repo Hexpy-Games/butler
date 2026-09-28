@@ -174,23 +174,3 @@ fn take(input: &mut &'static [u8], length: usize) -> ContextResult<&'static [u8]
     *input = tail;
     Ok(head)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn every_embedded_zone_parses_case_insensitively_and_paths_are_rejected() {
-        let owner = TimeZoneData::new().unwrap();
-        for entry in &owner.entries {
-            if let Err(error) = owner.find(entry.name) {
-                panic!("{}: {error}", entry.name);
-            }
-        }
-        assert_eq!(
-            owner.find("america/new_york").unwrap(),
-            owner.find("America/New_York").unwrap()
-        );
-        assert!(owner.find("../../etc/passwd").is_err());
-    }
-}

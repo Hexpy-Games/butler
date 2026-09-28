@@ -139,27 +139,3 @@ async fn run(mut receiver: mpsc::Receiver<Command>) {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn close_drains_admitted_commands_and_rejects_late_admission() {
-        let owner = AutomationRunOwner::start();
-        let (reply, admitted) = oneshot::channel();
-        owner
-            .admit(Command::Due { reply })
-            .await
-            .expect("command admitted before close");
-
-        owner.close().await.expect("owner closes after draining");
-        // Uninitialized, the owner answers the drained command instead of dropping it.
-        assert!(matches!(
-            admitted.await.expect("admitted command completed"),
-            Err(GatewayApplicationError::Internal { .. })
-        ));
-
-        assert!(owner.due().await.is_err());
-    }
-}

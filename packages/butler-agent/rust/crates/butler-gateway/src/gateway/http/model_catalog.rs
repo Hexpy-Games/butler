@@ -261,6 +261,9 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    /// Security boundary: custom local endpoints allow empty keys but reject
+    /// header injection (CR/LF variants).
+    // test-category: security
     #[test]
     fn local_custom_requests_allow_empty_keys_but_reject_header_injection() {
         let discovery = json!({

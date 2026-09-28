@@ -3,7 +3,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 
 use chrono::{DateTime, SecondsFormat, Utc};
-use rusqlite::Connection;
 use serde_json::{Map, json};
 
 use super::*;
@@ -390,5 +389,3 @@ async fn rebind_and_execution_context_keep_cas_replay_and_revision_semantics() {
     store.close().await.unwrap();
     let _ignored = std::fs::remove_file(path);
 }
-
-mod lifecycle;

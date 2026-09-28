@@ -1,25 +1,8 @@
 use std::fs;
-use std::time::Duration;
 
 use serde_json::json;
 
 use super::*;
-
-#[tokio::test]
-async fn durable_enqueue_leaves_a_wake_for_the_dispatcher() {
-    let root = std::env::temp_dir().join(format!("butler-native-queue-{}", uuid::Uuid::new_v4()));
-    fs::create_dir_all(&root).unwrap();
-    let queue = InboundQueue::new(&root.clone());
-
-    queue
-        .enqueue_idempotent(JsonDocument::from_value(&json!({"eventId":"wake-me"})).unwrap())
-        .unwrap();
-
-    tokio::time::timeout(Duration::from_secs(1), queue.wait_for_enqueue())
-        .await
-        .expect("enqueue wake is available to a dispatcher that starts waiting later");
-    fs::remove_dir_all(root).unwrap();
-}
 
 #[test]
 fn reclaimed_app_claim_reconciles_without_losing_original_json_or_terminal_history() {

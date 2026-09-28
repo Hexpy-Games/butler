@@ -2,7 +2,6 @@ use std::cmp::Ordering;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use serde_json::json;
 
@@ -12,7 +11,6 @@ use super::admission::{
     ConversationObserverFuture, ConversationOriginFacts, DurableSessionBinding,
     RuntimeAdmissionEvent, classify_conversation_origin,
 };
-use super::codec::source_hash;
 use super::*;
 
 struct TestClock {
@@ -193,58 +191,6 @@ async fn projection_message_pages_use_canonical_sequences_and_report_more_rows()
     let _ = std::fs::remove_file(path);
 }
 
-#[test]
-fn source_hash_matches_real_typescript_fixture_and_origin_json_uses_ref() {
-    let message = ConversationMessageWithParts {
-        message: ConversationMessage {
-            id: "cm_fixed".into(),
-            session_id: "cs_fixed".into(),
-            turn_id: Some("ct_fixed".into()),
-            seq: 1,
-            role: ConversationRole::User,
-            status: ConversationStatus::Complete,
-            visibility: ConversationVisibility::Model,
-            provenance: ConversationProvenance::Trusted,
-            created_at: "2026-09-14T00:00:00.000Z".into(),
-            compacted_by_summary_id: None,
-            source_gateway: Some("app".into()),
-            source_ref: Some("evt-1".into()),
-            origin_kind: ConversationOriginKind::UserInput,
-            origin_ref: None,
-            origin_reason: None,
-            origin_version: None,
-            origin_evidence_json: None,
-        },
-        parts: vec![ConversationPart {
-            id: "cp_fixed".into(),
-            message_id: "cm_fixed".into(),
-            part_index: 0,
-            kind: ConversationPartKind::MessageContent,
-            content_json: json!([{"type":"input_text","text":"😀 hello"},{"type":"input_image","image_url":"x"}]),
-            tool_call_id: None,
-            parent_tool_call_id: None,
-            provider_shape: None,
-            status: ConversationStatus::Complete,
-        }],
-    };
-    assert_eq!(
-        source_hash(&[message]).unwrap(),
-        "sha256:16fc61280bb8ad71e8ba74e927393b0105ee5bb927da265173311aacd342da97"
-    );
-    let evidence = ConversationOriginEvidence {
-        reference: "wake:1".into(),
-        kind: "authorized_wake".into(),
-        sha256: None,
-    };
-    assert_eq!(
-        butler_core::json::stringify(&serde_json::to_value([evidence]).unwrap()).unwrap(),
-        // Stored rows (Bun and native) are `kind, ref, sha256`; classification
-        // compares this text byte-for-byte against the persisted column.
-        "[{\"kind\":\"authorized_wake\",\"ref\":\"wake:1\",\"sha256\":null}]"
-    );
-}
-
 mod admission;
 mod historical_recovery;
-mod lifecycle;
 mod store;

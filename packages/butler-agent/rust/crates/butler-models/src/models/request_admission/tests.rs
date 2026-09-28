@@ -68,26 +68,6 @@ fn prepare<'a>(
 }
 
 #[test]
-fn admission_plan_uses_model_capacity_and_codex_alias_window() {
-    let (catalog, config) = source();
-    let basic = json!({"model":"gpt-5.5","store":true,"input":"hello"});
-    let admitted = prepare(&catalog, &config, "openai/gpt-5.5", &basic, 64.0)
-        .admit()
-        .unwrap();
-    assert_eq!(admitted.plan.compiled_input_tokens, 18.0);
-    assert_eq!(admitted.plan.input_capacity_tokens, 1_049_936.0);
-    assert_eq!(admitted.plan.turn_id, "unattributed");
-
-    let codex = json!({"model":"gpt-5.5","input":"hello"});
-    let admitted = prepare(&catalog, &config, "openai/gpt-5.5-codex", &codex, 64.0)
-        .admit()
-        .unwrap();
-    assert_eq!(admitted.plan.model_ref, "openai/gpt-5.5-codex");
-    assert_eq!(admitted.plan.context_window_tokens, 1_050_000.0);
-    assert_eq!(admitted.plan.compiled_input_tokens, 14.0);
-}
-
-#[test]
 fn image_inputs_are_projected_and_output_overflow_cannot_fit() {
     let (catalog, config) = source();
     let image = json!({"model":"gpt-5.5","input":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"}]});

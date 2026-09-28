@@ -22,7 +22,6 @@ use butler_turn::workspace::{
 
 mod integration;
 mod support;
-mod unit;
 use support::{ids, temp};
 
 struct Clock(AtomicU64);

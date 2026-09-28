@@ -162,7 +162,8 @@ const firstRun = {
     keySaved: "Saved",
     keyFailedShort: "Key didn't work",
     getKey: "Get a key",
-    keyStored: "Your key is saved in this Mac's Keychain.",
+    // Keys are a local file today; only claim Keychain storage once #217 lands.
+    keyStored: "Your key stays on this computer.",
     finishing: "Starting as soon as Butler is ready",
     finishFailed: "Couldn't finish connecting. Try again.",
     localTitle: "Models on this computer",

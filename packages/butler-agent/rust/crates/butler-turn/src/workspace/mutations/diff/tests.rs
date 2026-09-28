@@ -35,8 +35,52 @@ fn assert_lines(actual: &[ChangedLine], expected: &[ChangedLine]) {
     }
 }
 
+/// Pure-logic table: line diffs keep the source text and CRLF projection,
+/// follow the deletion tie for repeated lines, keep lone CRs, replace invalid
+/// UTF-8 like `Buffer.toString`, tell a created empty file from an unchanged
+/// one, never truncate a large disjoint middle, and match the source oracle's
+/// digest over every small repeated-line pair.
+// test-category: pure-logic
 #[test]
-fn preserves_source_text_and_line_projection() {
+fn line_diff_edge_cases() {
+    // (before, after, changed lines)
+    for (before, after, expected) in [
+        (
+            &b"same\r\nold\r\nkeep\r\n"[..],
+            &b"same\r\nnew\r\nkeep\r\n"[..],
+            [
+                line("deleted", Some(2), None, "old"),
+                line("added", None, Some(2), "new"),
+            ],
+        ),
+        (
+            &b"a\nb"[..],
+            &b"b\na"[..],
+            [
+                line("deleted", Some(1), None, "a"),
+                line("added", None, Some(2), "a"),
+            ],
+        ),
+        (
+            &b"a\rb"[..],
+            &b"a\rc"[..],
+            [
+                line("deleted", Some(1), None, "a\rb"),
+                line("added", None, Some(1), "a\rc"),
+            ],
+        ),
+        (
+            &b"a\r"[..],
+            &b"b\r"[..],
+            [
+                line("deleted", Some(1), None, "a\r"),
+                line("added", None, Some(1), "b\r"),
+            ],
+        ),
+    ] {
+        assert_lines(&detail(before, after, false).lines, &expected);
+    }
+
     let value = detail(
         b"same\r\nold\r\nkeep\r\n",
         b"same\r\nnew\r\nkeep\r\n",
@@ -46,45 +90,7 @@ fn preserves_source_text_and_line_projection() {
     assert_eq!(value.after_text, "same\r\nnew\r\nkeep\r\n");
     assert_eq!(value.additions, 1);
     assert_eq!(value.deletions, 1);
-    assert_lines(
-        &value.lines,
-        &[
-            line("deleted", Some(2), None, "old"),
-            line("added", None, Some(2), "new"),
-        ],
-    );
-}
 
-#[test]
-fn follows_deletion_tie_for_repeated_lines() {
-    let value = detail(b"a\nb", b"b\na", false);
-    assert_lines(
-        &value.lines,
-        &[
-            line("deleted", Some(1), None, "a"),
-            line("added", None, Some(2), "a"),
-        ],
-    );
-}
-
-#[test]
-fn keeps_lone_cr_and_replaces_invalid_utf8_like_buffer_to_string() {
-    let value = detail("a\rb".as_bytes(), "a\rc".as_bytes(), false);
-    assert_lines(
-        &value.lines,
-        &[
-            line("deleted", Some(1), None, "a\rb"),
-            line("added", None, Some(1), "a\rc"),
-        ],
-    );
-    let lone_cr = detail(b"a\r", b"b\r", false);
-    assert_lines(
-        &lone_cr.lines,
-        &[
-            line("deleted", Some(1), None, "a\r"),
-            line("added", None, Some(1), "b\r"),
-        ],
-    );
     assert!(
         changed_file(
             "synthetic.txt",
@@ -97,20 +103,14 @@ fn keeps_lone_cr_and_replaces_invalid_utf8_like_buffer_to_string() {
     let replacement = detail(&[0xe1, 0x80, b'A'], &[0xe1, 0x80, b'B'], false);
     assert_eq!(replacement.before_text, "�A");
     assert_eq!(replacement.after_text, "�B");
-}
 
-#[test]
-fn distinguishes_created_empty_file_and_unchanged_existing_file() {
     assert!(changed_file("synthetic.txt", b"same\n", b"same\n", FileOrigin::Existing).is_none());
     let value = detail(b"", b"", true);
     assert_eq!(value.additions, 0);
     assert_eq!(value.deletions, 0);
     assert!(value.file_created);
     assert!(value.lines.is_empty());
-}
 
-#[test]
-fn handles_large_disjoint_middle_without_truncation() {
     let before = (0..256)
         .map(|index| format!("old-{index}"))
         .collect::<Vec<_>>()
@@ -127,10 +127,7 @@ fn handles_large_disjoint_middle_without_truncation() {
     assert_eq!(value.lines[0].old_line, Some(1));
     assert_eq!(value.lines[256].kind, "added");
     assert_eq!(value.lines[256].new_line, Some(1));
-}
 
-#[test]
-fn source_repeated_line_oracle_matches_exhaustive_digest() {
     let values = source_values();
     let mut hash = Sha256::new();
     let mut checked = 0;

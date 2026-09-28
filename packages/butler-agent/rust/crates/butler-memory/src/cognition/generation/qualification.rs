@@ -131,4 +131,4 @@ pub(super) fn invalid(code: CognitionCode) -> CognitionError {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

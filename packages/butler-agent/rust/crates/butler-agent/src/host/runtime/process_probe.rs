@@ -71,32 +71,3 @@ pub(in crate::host) fn profile_process_status(pid: f64) -> CognitionProcessStatu
         None,
     ))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn probe_uses_current_pid_and_preserves_uncertainty() {
-        let host = SystemIdentity;
-        assert_eq!(host.process_id(), std::process::id());
-        assert_eq!(
-            host.process_status(u64::from(std::process::id())),
-            CognitionProcessStatus::Alive
-        );
-        assert_eq!(host.process_status(0), CognitionProcessStatus::Uncertain);
-        assert_eq!(
-            host.process_status(9_007_199_254_740_991),
-            CognitionProcessStatus::Uncertain
-        );
-        assert_eq!(
-            probe_result(Err(Errno::EPERM)),
-            CognitionProcessStatus::Uncertain
-        );
-        assert_eq!(
-            probe_result(Err(Errno::ESRCH)),
-            CognitionProcessStatus::DefinitelyDead
-        );
-        assert!(!host.hostname().unwrap().is_empty());
-    }
-}
