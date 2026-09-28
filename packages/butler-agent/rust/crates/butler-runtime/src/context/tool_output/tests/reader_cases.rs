@@ -169,8 +169,7 @@ async fn early_return_retained_original_reopen_utf16_and_explicit_prune() {
     );
 }
 
-#[tokio::test]
-async fn reader_enforces_scan_limit_and_realpath_boundary() {
+pub(crate) async fn reader_enforces_scan_limit_and_realpath_boundary() {
     use butler_platform::secure_fs::symlink;
     let fixture = Fixture::new();
     let retained = fixture

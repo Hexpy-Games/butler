@@ -456,9 +456,7 @@ fn app_error(error: AppStorageError) -> GatewayApplicationError {
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
-pub(crate) use test_support::{
-    seed_test_assistant_attachment, seed_test_authority_queue, seed_test_transcript_messages,
-};
+pub(crate) use test_support::seed_test_assistant_attachment;
 
 mod snapshot_input;
 #[cfg(test)]

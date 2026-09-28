@@ -9,7 +9,18 @@ struct Golden {
     columns: std::collections::BTreeMap<String, Vec<String>>,
 }
 
+/// Format pin: the memory graph database schema. A fresh database matches the
+/// source `ensureSchema` surface and is idempotent, a legacy graph requires
+/// its explicit migration, and historical canonical source ids become
+/// nullable without rewriting data.
+// test-category: format-pin
 #[test]
+fn memory_graph_schema_is_pinned() {
+    schema_matches_actual_bun_ensure_schema_surface_and_is_idempotent();
+    legacy_graph_requires_the_existing_explicit_migration();
+    historical_canonical_source_ids_become_nullable_without_data_rewrite();
+}
+
 fn schema_matches_actual_bun_ensure_schema_surface_and_is_idempotent() {
     let golden: Golden =
         serde_json::from_str(include_str!("tests/fixtures/bun-ensure-schema.json")).unwrap();
@@ -36,7 +47,6 @@ fn schema_matches_actual_bun_ensure_schema_surface_and_is_idempotent() {
     }
 }
 
-#[test]
 fn legacy_graph_requires_the_existing_explicit_migration() {
     let mut connection = Connection::open_in_memory().unwrap();
     connection
@@ -46,7 +56,6 @@ fn legacy_graph_requires_the_existing_explicit_migration() {
     assert_eq!(error.code(), "memory_schema_migration_required");
 }
 
-#[test]
 fn historical_canonical_source_ids_become_nullable_without_data_rewrite() {
     let mut connection = Connection::open_in_memory().unwrap();
     ensure(&mut connection, "2026-09-14T00:00:00.000Z").unwrap();

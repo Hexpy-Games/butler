@@ -310,11 +310,49 @@ impl From<crate::conversation::ConversationError> for BtccError {
 #[cfg(test)]
 mod tests {
     use super::BtccCode;
+    use crate::btcc::storage::StorageCode;
+    use crate::conversation::ConversationCode;
+    use crate::workspace::{CommandCode, WorkspaceCode};
 
+    fn spelled<T: Copy>(all: &[T], as_str: fn(T) -> &'static str) -> Vec<&'static str> {
+        all.iter().map(|code| as_str(*code)).collect()
+    }
+
+    /// Format pin: every wire code table of the turn engine (BTCC, its store,
+    /// Conversation, workspace and commands) keeps its pinned spelling and
+    /// order; journals, receipts and the App read these strings.
+    // test-category: format-pin
     #[test]
     fn wire_codes_are_stable() {
-        let codes: Vec<&str> = BtccCode::ALL.iter().map(|code| code.as_str()).collect();
-        let expected: Vec<&str> = include_str!("wire_codes.txt").lines().collect();
-        assert_eq!(codes, expected);
+        for (domain, codes, pinned) in [
+            (
+                "btcc",
+                spelled(BtccCode::ALL, BtccCode::as_str),
+                include_str!("wire_codes.txt"),
+            ),
+            (
+                "btcc storage",
+                spelled(StorageCode::ALL, StorageCode::as_str),
+                include_str!("storage/wire_codes.txt"),
+            ),
+            (
+                "conversation",
+                spelled(ConversationCode::ALL, ConversationCode::as_str),
+                include_str!("../conversation/wire_codes.txt"),
+            ),
+            (
+                "workspace",
+                spelled(WorkspaceCode::ALL, WorkspaceCode::as_str),
+                include_str!("../workspace/wire_codes.txt"),
+            ),
+            (
+                "commands",
+                spelled(CommandCode::ALL, CommandCode::as_str),
+                include_str!("../workspace/commands/wire_codes.txt"),
+            ),
+        ] {
+            let expected: Vec<&str> = pinned.lines().collect();
+            assert_eq!(codes, expected, "{domain}");
+        }
     }
 }

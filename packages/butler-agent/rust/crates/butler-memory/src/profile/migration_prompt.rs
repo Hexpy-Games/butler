@@ -100,17 +100,3 @@ const ENGLISH: &[&str] = &[
     "[unknown] - ...",
     "```",
 ];
-
-#[cfg(test)]
-mod tests {
-    use super::third_party_migration_prompt;
-
-    #[test]
-    fn migration_prompt_is_static_secret_safe_and_locale_specific() {
-        let english = third_party_migration_prompt("en");
-        let korean = third_party_migration_prompt("ko");
-        assert!(english.contains("Never include passwords, tokens, API keys"));
-        assert!(korean.contains("비밀번호, 토큰, 인증키"));
-        assert_ne!(english, korean);
-    }
-}

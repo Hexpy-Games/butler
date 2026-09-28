@@ -189,14 +189,86 @@ impl Eq for AppStorageError {}
 #[cfg(test)]
 mod tests {
     use super::AppStorageCode;
+    use crate::gateway::image_files::{ImageErrorCode, image_error};
+    use crate::gateway::inbound_queue::InboundQueueCode;
+    use crate::gateway::{GatewayApplicationError, TranscriptCode};
 
+    fn spelled<T: Copy>(all: &[T], as_str: fn(T) -> &'static str) -> Vec<&'static str> {
+        all.iter().map(|code| as_str(*code)).collect()
+    }
+
+    /// Format pin: every wire code table of the gateway (App storage, the
+    /// inbound queue and the transcript) keeps its pinned spelling and order,
+    /// and image refusals keep the codes and HTTP statuses the App matches.
+    // test-category: format-pin
     #[test]
     fn wire_codes_are_stable() {
-        let codes: Vec<&str> = AppStorageCode::ALL
-            .iter()
-            .map(|code| code.as_str())
-            .collect();
-        let expected: Vec<&str> = include_str!("wire_codes.txt").lines().collect();
-        assert_eq!(codes, expected);
+        for (domain, codes, pinned) in [
+            (
+                "app storage",
+                spelled(AppStorageCode::ALL, AppStorageCode::as_str),
+                include_str!("wire_codes.txt"),
+            ),
+            (
+                "inbound queue",
+                spelled(InboundQueueCode::ALL, InboundQueueCode::as_str),
+                include_str!("../../inbound_queue/wire_codes.txt"),
+            ),
+            (
+                "transcript",
+                spelled(TranscriptCode::ALL, TranscriptCode::as_str),
+                include_str!("../../transcript/wire_codes.txt"),
+            ),
+        ] {
+            let expected: Vec<&str> = pinned.lines().collect();
+            assert_eq!(codes, expected, "{domain}");
+        }
+
+        for (code, wire, status) in [
+            (
+                ImageErrorCode::ModelUnsupported,
+                "image_model_unsupported",
+                409,
+            ),
+            (
+                ImageErrorCode::CapabilityUnknown,
+                "image_capability_unknown",
+                409,
+            ),
+            (
+                ImageErrorCode::CarrierUnavailable,
+                "image_carrier_unavailable",
+                409,
+            ),
+            (
+                ImageErrorCode::RouteIncompatible,
+                "image_route_incompatible",
+                409,
+            ),
+            (
+                ImageErrorCode::CarrierUnverified,
+                "image_carrier_unverified",
+                409,
+            ),
+            (ImageErrorCode::PayloadInvalid, "image_payload_invalid", 413),
+            (
+                ImageErrorCode::ManifestInvalid,
+                "image_manifest_invalid",
+                422,
+            ),
+            (ImageErrorCode::SourceTampered, "image_source_tampered", 409),
+        ] {
+            assert_eq!(ImageErrorCode::from_wire(wire), Some(code));
+            let GatewayApplicationError::Public {
+                status: actual,
+                code: actual_code,
+                ..
+            } = image_error(code)
+            else {
+                panic!("{wire} is not public");
+            };
+            assert_eq!((actual_code.as_str(), actual), (wire, status));
+        }
+        assert_eq!(ImageErrorCode::from_wire("image_limit_exceeded"), None);
     }
 }

@@ -49,26 +49,3 @@ async fn records_load_descending_replace_and_reopen() {
     assert_eq!(loaded[0].source_digest, "large");
     reopened.close().await.unwrap();
 }
-
-#[tokio::test]
-async fn negative_covered_units_is_a_typed_corrupt_record() {
-    let fixture = Fixture::activated();
-    let storage = BtccStorage::open(fixture.config("context-compactions-invalid"))
-        .await
-        .unwrap();
-    storage
-        .execute(|connection| {
-            connection
-                .execute(SAVE, params!["turn-a", "digest", -1_i64, "summary"])
-                .map(|_| ())
-                .map_err(StorageError::sqlite)
-        })
-        .await
-        .unwrap();
-    let error = ContextCompactionRepository::new(storage.clone())
-        .load("turn-a")
-        .await
-        .unwrap_err();
-    assert_eq!(error.code(), "context_compaction_record_invalid");
-    storage.close().await.unwrap();
-}

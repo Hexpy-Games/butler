@@ -19,12 +19,21 @@ use butler_platform::secure_fs::{OWNER_ONLY, is_owner_only};
 
 use super::scratch;
 
-/// Security: secrets written to the fallback file round-trip, replace and
-/// delete one key at a time, and the file and the folders it creates are
-/// only the owner's; a damaged file is an error, never an empty store.
-/// Also pins the mode and backend names callers report.
+/// Security: a credential store keeps, replaces and deletes one key at a
+/// time and never prints a secret. The owner-only fallback file (every host)
+/// and the folders it creates are only the owner's, and a damaged file is an
+/// error, never an empty store. With `BUTLER_PLATFORM_SYSTEM_SECRETS=1` the
+/// host's system store is checked too (see the module documentation); CI
+/// leaves it unset. Also pins the mode and backend names callers report.
 // test-category: security
 #[test]
+fn secret_stores_keep_replace_and_delete_one_key() {
+    file_store_keeps_owner_only_secrets_per_key();
+    if std::env::var_os("BUTLER_PLATFORM_SYSTEM_SECRETS").is_some_and(|value| value == "1") {
+        system_store_keeps_and_deletes_a_secret();
+    }
+}
+
 fn file_store_keeps_owner_only_secrets_per_key() {
     for (setting, mode) in [
         (None, SecretStoreMode::System),
@@ -84,15 +93,7 @@ fn file_store_keeps_owner_only_secrets_per_key() {
     fs::remove_dir_all(folder).unwrap();
 }
 
-/// Security: this host's credential store keeps, replaces and deletes a
-/// secret. Runs only with `BUTLER_PLATFORM_SYSTEM_SECRETS=1` (see the module
-/// documentation); CI leaves it unset.
-// test-category: security
-#[test]
-fn system_store_keeps_and_deletes_a_secret_when_enabled() {
-    if std::env::var_os("BUTLER_PLATFORM_SYSTEM_SECRETS").is_none_or(|value| value != "1") {
-        return;
-    }
+fn system_store_keeps_and_deletes_a_secret() {
     let store = SecretStore::system().unwrap();
     let expected = if cfg!(target_os = "macos") {
         SecretBackend::Keychain

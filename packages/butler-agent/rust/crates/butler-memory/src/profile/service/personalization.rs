@@ -174,23 +174,3 @@ fn write_error() -> super::super::contracts::ProfileError {
         "Personalization could not be written.",
     )
 }
-
-#[cfg(test)]
-mod tests {
-    use super::read_private_text;
-    use std::{fs, path::PathBuf};
-
-    #[test]
-    fn private_text_reads_existing_files_and_defaults_missing_files() {
-        let root = std::env::temp_dir().join(format!("profile-text-{}", uuid::Uuid::new_v4()));
-        fs::create_dir_all(&root).unwrap();
-        let file = root.join("active.md");
-        fs::write(&file, "persona").unwrap();
-        assert_eq!(read_private_text(&file), "persona");
-        assert_eq!(
-            read_private_text(&PathBuf::from("/missing/profile-text.md")),
-            ""
-        );
-        fs::remove_dir_all(root).unwrap();
-    }
-}

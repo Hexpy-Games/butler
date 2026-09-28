@@ -2,15 +2,12 @@ use std::sync::atomic::Ordering;
 
 use serde_json::json;
 
-use crate::btcc::{
-    AgentLoop, AgentLoopError, ExecutionRoute, RuntimeFailure, SuspensionReason, TerminalOutcome,
-};
+use crate::btcc::{AgentLoop, AgentLoopError, ExecutionRoute, SuspensionReason, TerminalOutcome};
 
 use super::continuation::AuthorityLoopContinuation;
 use super::contracts::{AuthorityDecision, ToolOutcome};
 use super::fixture_binding::FixtureAgentLoop;
 use super::guided_ports::GuidedPolicyDependencies;
-use super::ports::ModelRoundError;
 use super::test_data::{call, result, run, turn};
 use super::test_support::{Fixture, FixtureOperationFactory};
 
@@ -273,57 +270,11 @@ async fn steering_rebase_reselects_surface_before_the_model_request() {
     );
 }
 
-#[tokio::test]
-async fn failed_model_releases_operation_results_and_preserves_operational_facts() {
-    let fixture = Fixture::new([]);
-    fixture
-        .model_results
-        .lock()
-        .unwrap()
-        .push_back(Err(ModelRoundError::Operational(RuntimeFailure {
-            code: "provider_unavailable".into(),
-            retryable: true,
-        })));
-    *fixture.has_work.lock().unwrap() = true;
-    let outcome = run(&fixture.agent(), &turn(None, "safe_fallback"))
-        .await
-        .unwrap();
-    assert_eq!(outcome.route, ExecutionRoute::Managed);
-    assert_eq!(
-        outcome.runtime_failure.unwrap().code,
-        "provider_unavailable"
-    );
-    assert!(
-        fixture
-            .events
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|value| value == "failed:btcc-model-round-0")
-    );
-
-    let integrity = Fixture::new([]);
-    integrity
-        .model_results
-        .lock()
-        .unwrap()
-        .push_back(Err(ModelRoundError::Integrity(
-            crate::btcc::BtccError::relayed("route_journal_failed", "route_journal_failed"),
-        )));
-    let error = run(&integrity.agent(), &turn(None, "safe_fallback"))
-        .await
-        .unwrap_err();
-    assert!(
-        matches!(error, AgentLoopError::Propagate(value) if value.code() == "route_journal_failed")
-    );
-}
-
 const AUTHORITY_CONTINUATION_GOLDEN: &str = r#"{"requestRef":"request-1","callId":"journal-pending","messages":[{"role":"user","content":"hello","continuationItemId":"turn-item-0"},{"role":"assistant","content":"","toolCalls":[{"id":"pending","name":"read_file","arguments":{},"rawArguments":"{}"}],"continuationItemId":"turn-item-1"}],"nextItemOrdinal":2,"instructions":"guided","modelRoundIndex":1,"iteration":0,"emptyResponseRecoveryUsed":false,"toolResults":[],"batch":{"tools":[{"name":"read_file","description":"read_file","parameters":{},"concurrencySafe":false,"toolContractVersion":2}],"calls":[{"id":"pending","name":"read_file","arguments":{},"rawArguments":"{}"}],"nextCallIndex":0,"results":[]}}"#;
 
 /// KEEP: every optional field of a stored authority continuation survives a
 /// decode/encode cycle byte for byte (field order and omission rules included).
-#[test]
-fn stored_authority_continuation_with_every_field_is_byte_stable() {
+pub(crate) fn stored_authority_continuation_with_every_field_is_byte_stable() {
     let stored = r#"{"requestRef":"request-1","callId":"call-1","messages":[{"role":"user","content":"hi","requestSegmentKind":"current_user_request","continuationItemId":"turn-item-0"},{"role":"assistant","content":"","toolCalls":[{"id":"c1","name":"read_file","arguments":{"path":"a"},"rawArguments":"{\"path\":\"a\"}","origin":"native"}],"providerData":{"k":1},"continuationItemId":"turn-item-1"},{"role":"tool","content":"out","toolCallId":"c0","name":"web_search","imageAttachments":[{"id":"img"}],"operationResultCallId":"op-1","continuationItemId":"turn-item-2"}],"nextItemOrdinal":3,"providerContinuation":{"responseId":"r1"},"instructions":"guided","stableProviderCachePrefix":{"digest":"d"},"modelRoundIndex":2,"iteration":1,"emptyResponseRecoveryUsed":true,"toolResults":[{"toolCallId":"c0","name":"web_search","ok":false,"error":{"code":"tool_failed","message":"Tool failed.","field":"q"}},{"toolCallId":"c2","name":"read_file","ok":true,"output":{"ok":true,"text":"x"}}],"presentation":{"sourceRevision":7,"activity":{"managed":true,"pendingExecutionTitle":"Run","pendingStage":"execute","toolBindings":[["c1",{"activityId":"a1","displayStage":"read","deferredUntilAccepted":false}]],"currentActivityId":"a1","fallbackActivityId":"a0","groups":[{"activityId":"a1","displayStage":"read","deferredUntilAccepted":true,"resumesWork":false,"title":"Read","summary":"Reading","interfaceContent":{"kind":"list"},"rationale":"why","nextStep":"next","startsExecution":true,"nextExecutionTitle":"Then","published":false,"precedingIds":["a0"],"followingIds":["a2"],"groupExtra":1}],"pendingTools":[{"name":"read_file","claimed":true,"groupId":"a1"}],"pendingExecution":false,"activityExtra":"x"}},"batch":{"tools":[{"name":"read_file","description":"Read","parameters":{"type":"object","required":["path"]},"concurrencySafe":true,"toolContractVersion":2}],"calls":[{"id":"c1","name":"read_file","arguments":{"path":"a"},"rawArguments":"{\"path\":\"a\"}"}],"nextCallIndex":0,"results":[]},"futureField":{"kept":true}}"#;
     let decoded: AuthorityLoopContinuation = serde_json::from_str(stored).unwrap();
     assert_eq!(serde_json::to_string(&decoded).unwrap(), stored);

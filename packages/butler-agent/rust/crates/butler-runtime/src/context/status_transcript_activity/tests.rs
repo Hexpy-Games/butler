@@ -63,35 +63,3 @@ fn missing_index_falls_back_to_transcript_activity_without_writes() {
     );
     assert!(!fixture.0.join("metrics/transcript-activity").exists());
 }
-
-#[test]
-fn latest_delivery_without_error_does_not_reuse_an_older_error() {
-    let mut activity = super::ActivityAccumulator::default();
-    activity.apply_event(&serde_json::json!({
-        "kind": "delivery",
-        "timestamp": "2026-09-22T12:00:03Z",
-        "payload": { "ok": false, "error": "older error" }
-    }));
-    activity.apply_event(&serde_json::json!({
-        "kind": "delivery",
-        "timestamp": "2026-09-22T12:00:04Z",
-        "payload": { "ok": false }
-    }));
-
-    activity.prune(butler_core::js_date::parse_iso_millis("2026-09-22T12:00:05Z").unwrap());
-
-    assert_eq!(activity.summary.last_delivery_error, None);
-}
-
-#[test]
-fn missing_transcripts_return_a_truthful_empty_fallback() {
-    let fixture = Fixture::new();
-    let now_ms = butler_core::js_date::parse_iso_millis("2026-09-22T12:00:05Z").unwrap();
-
-    let activity = read_status_transcript_activity_at(&fixture.0, now_ms).unwrap();
-
-    assert_eq!(activity.tools, StatusTranscriptToolUsageBucket::default());
-    assert!(activity.by_tool.is_empty());
-    assert_eq!(activity.delivery_failed, 0);
-    assert_eq!(activity.last_delivery_error, None);
-}

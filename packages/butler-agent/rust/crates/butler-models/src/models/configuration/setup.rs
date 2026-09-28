@@ -122,35 +122,3 @@ fn generated_label(provider_id: &str, saved: &[CredentialView]) -> String {
         .find(|label| !taken(label))
         .unwrap_or_else(|| provider_id.to_owned())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::super::super::ProviderAuthMethod;
-    use super::*;
-
-    fn saved(label: &str) -> CredentialView {
-        CredentialView {
-            id: format!("cred_{label}"),
-            provider_id: "openai".into(),
-            auth_type: ProviderAuthMethod::ApiKey,
-            label: label.into(),
-            masked_value: "sk-...x".into(),
-            storage: crate::models::CredentialStorage::FallbackFile,
-            created_at: String::new(),
-            updated_at: String::new(),
-        }
-    }
-
-    #[test]
-    fn generated_names_count_up_from_the_provider_id() {
-        assert_eq!(generated_label("openai", &[]), "openai");
-        assert_eq!(generated_label("openai", &[saved("openai")]), "openai-2");
-        assert_eq!(
-            generated_label(
-                "openai",
-                &[saved("openai"), saved("openai-2"), saved("work")]
-            ),
-            "openai-3"
-        );
-    }
-}

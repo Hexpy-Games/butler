@@ -126,4 +126,4 @@ pub(crate) fn task_id_from_memory_record_id(record_id: &str) -> Option<String> {
 #[cfg(test)]
 mod format_pin;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

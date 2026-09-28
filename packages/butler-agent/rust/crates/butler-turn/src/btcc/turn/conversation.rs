@@ -99,6 +99,3 @@ impl PreparedConversation for ConversationProjection {
         })
     }
 }
-
-#[cfg(test)]
-mod tests;

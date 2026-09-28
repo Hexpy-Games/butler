@@ -172,6 +172,9 @@ mod tests {
 
     use super::hash_tree;
 
+    /// Format pin: the install tree digest equals the standalone packager's
+    /// encoding (another program writes it).
+    // test-category: format-pin
     #[test]
     fn tree_digest_matches_standalone_packager_encoding() {
         let temporary = TempDirectory::new();
