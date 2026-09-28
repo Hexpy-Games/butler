@@ -30,14 +30,34 @@ pub(crate) struct AppServiceConfiguration {
     credential_errors: Vec<LocalCredentialError>,
 }
 
-/// The typed part of `gateways/app.json` `config`.
-#[derive(Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
+/// The typed part of `gateways/app.json` `config`. Each field is read on
+/// its own, so one malformed field does not discard the others.
+#[derive(Default)]
 struct TypedGatewaySettings {
-    /// Extra Host names (`name` or `name:port`) the gateway answers besides
-    /// loopback. A list that is not all strings is ignored as a whole.
-    #[serde(default)]
+    /// `allowedHosts`: extra Host names (`name` or `name:port`) the gateway
+    /// answers besides loopback. A list that is not all strings is ignored
+    /// as a whole.
     allowed_hosts: Vec<String>,
+    /// `remoteAccessEnabled`: also listen on the LAN (Settings → Security).
+    remote_access_enabled: bool,
+}
+
+impl TypedGatewaySettings {
+    fn read(config: Option<&Value>) -> Self {
+        let Some(config) = config else {
+            return Self::default();
+        };
+        Self {
+            allowed_hosts: config
+                .get("allowedHosts")
+                .and_then(|value| Vec::<String>::deserialize(value).ok())
+                .unwrap_or_default(),
+            remote_access_enabled: config
+                .get("remoteAccessEnabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        }
+    }
 }
 
 /// Facts captured by the process that cannot safely change with an App-only
@@ -45,18 +65,17 @@ struct TypedGatewaySettings {
 pub(crate) struct AppCapturedDependencies {
     db_path: PathBuf,
     folder_selection_secret: Option<String>,
-    local_auth_required: bool,
-    local_auth_token: Option<String>,
+    /// The process's token: every gateway it starts shares it, so a rotated
+    /// connection code (which rewrites the token file too) still matches.
+    local_auth: LocalAuthConfig,
 }
 
 impl AppCapturedDependencies {
     pub(crate) fn capture(configuration: &AppServiceConfiguration) -> Self {
-        let local_auth = &configuration.gateway.local_auth;
         Self {
             db_path: configuration.db_path.clone(),
             folder_selection_secret: configuration.folder_selection_secret.clone(),
-            local_auth_required: local_auth.required,
-            local_auth_token: local_auth.token().map(str::to_owned),
+            local_auth: configuration.gateway.local_auth.clone(),
         }
     }
 
@@ -64,8 +83,13 @@ impl AppCapturedDependencies {
         let local_auth = &configuration.gateway.local_auth;
         self.db_path == configuration.db_path
             && self.folder_selection_secret == configuration.folder_selection_secret
-            && self.local_auth_required == local_auth.required
-            && self.local_auth_token.as_deref() == local_auth.token()
+            && self.local_auth.required == local_auth.required
+            && self.local_auth.token() == local_auth.token()
+    }
+
+    /// The token the process's gateways use.
+    pub(crate) fn local_auth(&self) -> LocalAuthConfig {
+        self.local_auth.clone()
     }
 }
 
@@ -130,7 +154,10 @@ impl AppServiceConfiguration {
             db_configured,
             enabled,
             folder_selection_secret: folder_secret,
-            gateway: gateway_config(LocalAuthConfig::required(token), allowed_hosts(config)),
+            gateway: gateway_config(
+                LocalAuthConfig::required(token),
+                TypedGatewaySettings::read(config),
+            ),
             credential_errors,
         }
     }
@@ -141,11 +168,23 @@ impl AppServiceConfiguration {
         &self.credential_errors
     }
 
+    /// `config.allowedHosts`: extra host names (tunnels, reverse proxies).
+    pub(crate) fn allowed_hosts(&self) -> &[String] {
+        &self.gateway.allowed_hosts
+    }
+
+    /// `config.remoteAccessEnabled`: also listen on the LAN.
+    pub(crate) fn remote_access_enabled(&self) -> bool {
+        self.gateway.remote_access_enabled
+    }
+
     pub(crate) fn gateway_config(&self) -> GatewayConfig {
         GatewayConfig {
             local_auth: self.gateway.local_auth.clone(),
             dev_cors_origin: self.gateway.dev_cors_origin.clone(),
             allowed_hosts: self.gateway.allowed_hosts.clone(),
+            remote_access_enabled: self.gateway.remote_access_enabled,
+            security_store: self.gateway.security_store.clone(),
             signed_url_ttl: self.gateway.signed_url_ttl,
             message_rate_limit_max: self.gateway.message_rate_limit_max,
             message_rate_limit_window: self.gateway.message_rate_limit_window,
@@ -196,7 +235,7 @@ fn argv_port() -> Option<f64> {
         .filter(|value| value.is_finite())
 }
 
-fn gateway_config(local_auth: LocalAuthConfig, allowed_hosts: Vec<String>) -> GatewayConfig {
+fn gateway_config(local_auth: LocalAuthConfig, settings: TypedGatewaySettings) -> GatewayConfig {
     let max = env::var("BUTLER_APP_SERVER_MESSAGE_RATE_LIMIT_MAX")
         .map(|value| number_from_string(&value))
         .unwrap_or(60.0);
@@ -206,7 +245,14 @@ fn gateway_config(local_auth: LocalAuthConfig, allowed_hosts: Vec<String>) -> Ga
     GatewayConfig {
         local_auth,
         dev_cors_origin: env::var("BUTLER_APP_DEV_ORIGIN").ok(),
-        allowed_hosts,
+        allowed_hosts: settings
+            .allowed_hosts
+            .into_iter()
+            .map(|name| trim_js_whitespace(&name).to_owned())
+            .filter(|name| !name.is_empty())
+            .collect(),
+        remote_access_enabled: settings.remote_access_enabled,
+        security_store: None,
         signed_url_ttl: signed_url_ttl(),
         message_rate_limit_max: if max.is_finite() && max > 0.0 {
             butler_core::json::saturating_u64(max.ceil())
@@ -233,18 +279,4 @@ fn signed_url_ttl() -> Duration {
             butler_core::json::saturating_u64(seconds.floor()).min(MAX_SIGNED_URL_TTL_SECONDS)
         });
     Duration::from_secs(seconds)
-}
-
-/// `gateways/app.json` `config.allowedHosts`, trimmed, blank names dropped.
-fn allowed_hosts(config: Option<&Value>) -> Vec<String> {
-    let settings = config
-        .and_then(|value| TypedGatewaySettings::deserialize(value).ok())
-        .unwrap_or_default();
-    settings
-        .allowed_hosts
-        .iter()
-        .map(|name| trim_js_whitespace(name))
-        .filter(|name| !name.is_empty())
-        .map(str::to_owned)
-        .collect()
 }

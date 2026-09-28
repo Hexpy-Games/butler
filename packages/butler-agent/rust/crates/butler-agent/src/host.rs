@@ -27,7 +27,7 @@ pub(crate) use crate::host::app::runtime_ports::{
     AppSettingsFactsAdapter, AppSettingsMutation,
 };
 #[cfg(unix)]
-pub(crate) use crate::host::app::server::AppServer;
+pub(crate) use crate::host::app::server::{AppServer, AppServerOwners};
 pub(crate) use crate::host::app::subsessions::AppSubsessions;
 pub(crate) use crate::host::guided::activity::GuidedActivity;
 pub(crate) use crate::host::guided::authority_handoff::AuthorityHandoff;

@@ -117,6 +117,8 @@ pub(super) fn local_view(
             "port":app.port,
             "serverUrl":format!("http://{}:{}", app.host, app.port),
             "dbConfigured":app.db_configured,
+            "remoteAccessEnabled":app.remote_access_enabled(),
+            "allowedHosts":app.allowed_hosts(),
         },
         "nextActions":next_actions,
     })

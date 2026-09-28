@@ -43,11 +43,7 @@ pub(super) fn render(action: Action, value: &Value) -> String {
         );
     }
     if matches!(action, Action::Configure) {
-        return format!(
-            "App gateway configured.\nurl: {}\ndb configured: {}",
-            value["config"]["serverUrl"].as_str().unwrap_or("unknown"),
-            value["config"]["dbConfigured"].as_bool().unwrap_or(false),
-        );
+        return render_configure(value);
     }
     if matches!(action, Action::Test) {
         return format!(
@@ -149,9 +145,36 @@ pub(super) fn render(action: Action, value: &Value) -> String {
             "stored: {}",
             value["settingsStored"].as_bool().unwrap_or(false)
         ));
+        lines.push(format!("allowed hosts: {}", allowed_hosts(value)));
         lines.push("secrets: redacted".into());
     }
     lines.join("\n")
+}
+
+fn render_configure(value: &Value) -> String {
+    let mut text = format!(
+        "App gateway configured.\nurl: {}\ndb configured: {}\nallowed hosts: {}",
+        value["config"]["serverUrl"].as_str().unwrap_or("unknown"),
+        value["config"]["dbConfigured"].as_bool().unwrap_or(false),
+        allowed_hosts(value),
+    );
+    if value["allowedHostsApplied"] == false && value["running"] == true {
+        text.push_str("\nRestart the gateway to apply: butler gateway restart app");
+    }
+    text
+}
+
+/// `config.allowedHosts`, comma-separated, or `none`.
+fn allowed_hosts(value: &Value) -> String {
+    let hosts: Vec<&str> = value["config"]["allowedHosts"]
+        .as_array()
+        .map(|hosts| hosts.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    if hosts.is_empty() {
+        "none".to_owned()
+    } else {
+        hosts.join(", ")
+    }
 }
 
 pub(super) fn error(command: &str, json_output: bool, message: &str) -> ExitCode {

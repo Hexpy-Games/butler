@@ -24,10 +24,13 @@ const MAX_BUFFERED_EVENTS: usize = 128;
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(15);
 const HEARTBEAT: &str = "event: heartbeat\ndata: null\n\n";
 
+/// A live event stream from `cursor`. It ends when any of `closers` fires
+/// (server shutdown, a rotated token, remote access turned off), after the
+/// events already queued for it, such as the rotation notice.
 pub(super) async fn create_live_stream(
     application: Arc<dyn GatewayApplication>,
     cursor: f64,
-    shutdown: CancellationToken,
+    closers: Vec<CancellationToken>,
 ) -> Result<LiveEventStream, GatewayApplicationError> {
     let state = Arc::new(Mutex::new(LiveState::new(cursor)));
     let callback_state = state.clone();
@@ -77,7 +80,11 @@ pub(super) async fn create_live_stream(
         state,
         _subscription: subscription,
         heartbeat: heartbeat_interval(),
-        shutdown: Box::pin(shutdown.cancelled_owned()),
+        closers: closers
+            .into_iter()
+            .map(|closer| Box::pin(closer.cancelled_owned()))
+            .collect(),
+        closing: false,
     })
 }
 
@@ -184,15 +191,26 @@ pub(super) struct LiveEventStream {
     state: Arc<Mutex<LiveState>>,
     _subscription: Box<dyn EventSubscription>,
     heartbeat: Interval,
-    shutdown: Pin<Box<WaitForCancellationFutureOwned>>,
+    closers: Vec<Pin<Box<WaitForCancellationFutureOwned>>>,
+    /// A closer fired: deliver what is queued, then end.
+    closing: bool,
 }
 
 impl Stream for LiveEventStream {
     type Item = Result<Bytes, Infallible>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.shutdown.as_mut().poll(cx).is_ready() {
-            return Poll::Ready(None);
+        if !self.closing
+            && self
+                .closers
+                .iter_mut()
+                .any(|closer| closer.as_mut().poll(cx).is_ready())
+        {
+            self.closing = true;
+        }
+        if self.closing {
+            let chunk = self.state.lock().output.pop_front();
+            return Poll::Ready(chunk.map(Ok));
         }
         let chunk = {
             let mut state = self.state.lock();

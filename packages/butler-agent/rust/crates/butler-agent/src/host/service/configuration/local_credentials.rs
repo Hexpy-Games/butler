@@ -158,6 +158,54 @@ pub(crate) fn data_folder_token(data_root: &Path) -> Option<String> {
     usable_token(&fs::read(data_root.join(LOCAL_AUTH_FILE)).ok()?)
 }
 
+/// The file the gateway token is loaded from: `BUTLER_APP_LOCAL_AUTH_FILE`
+/// when set (the App names the data folder's file there), else the data
+/// folder's own file.
+pub(crate) fn token_file(data_root: &Path) -> PathBuf {
+    env_value("BUTLER_APP_LOCAL_AUTH_FILE")
+        .map_or_else(|| data_root.join(LOCAL_AUTH_FILE), PathBuf::from)
+}
+
+/// When the token in `path` was created, as the file records it.
+pub(crate) fn token_created_at(path: &Path) -> Result<Option<String>, LocalCredentialError> {
+    let bytes = fs::read(path).map_err(|source| LocalCredentialError::Read {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    Ok(serde_json::from_slice::<StoredToken>(&bytes)
+        .ok()
+        .and_then(|stored| stored.created_at))
+}
+
+/// A token [`rotate_token`] wrote.
+pub(crate) struct RotatedToken {
+    pub(crate) token: String,
+    pub(crate) created_at: String,
+}
+
+/// Replaces the token file at `path` with a new token: a private temporary
+/// file renamed over it, so readers see the old file or the new one, never
+/// a partial one.
+pub(crate) fn rotate_token(path: &Path) -> Result<RotatedToken, LocalCredentialError> {
+    let file = NewTokenFile::generate();
+    let contents = serde_json::to_vec_pretty(&file).map_err(LocalCredentialError::Encode)?;
+    let write_error = |source| LocalCredentialError::Write {
+        path: path.to_path_buf(),
+        source,
+    };
+    let parent = path.parent().unwrap_or(Path::new("."));
+    let temporary = parent.join(format!(".credential-{}.tmp", uuid::Uuid::new_v4()));
+    let result = write_private(&temporary, &contents).and_then(|()| fs::rename(&temporary, path));
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result.map_err(write_error)?;
+    Ok(RotatedToken {
+        token: file.token,
+        created_at: file.created_at,
+    })
+}
+
 /// The token file's fields the agent reads; the App writes more.
 #[derive(Deserialize)]
 struct StoredToken {
@@ -165,17 +213,36 @@ struct StoredToken {
     schema: Option<String>,
     #[serde(default)]
     token: Option<String>,
+    #[serde(default)]
+    created_at: Option<String>,
 }
 
 /// The App's token file format, so either side can create it.
 #[derive(Serialize)]
-struct NewTokenFile<'a> {
-    schema: &'a str,
-    product: &'a str,
-    purpose: &'a str,
-    token: &'a str,
+struct NewTokenFile {
+    schema: &'static str,
+    product: &'static str,
+    purpose: &'static str,
+    token: String,
     created_at: String,
     raw_text_included: bool,
+}
+
+impl NewTokenFile {
+    /// A new random token (256 bits, base64url), created now.
+    fn generate() -> Self {
+        let mut bytes = [0_u8; 32];
+        bytes[..16].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
+        bytes[16..].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
+        Self {
+            schema: TOKEN_SCHEMA,
+            product: "butler-app",
+            purpose: "bundled-agent-local-auth",
+            token: base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes),
+            created_at: butler_core::js_date::iso_from_system_time(std::time::SystemTime::now()),
+            raw_text_included: false,
+        }
+    }
 }
 
 /// An override file is used as given: any non-blank `token`.
@@ -208,19 +275,7 @@ fn usable_secret(bytes: &[u8]) -> Option<String> {
 }
 
 fn new_token_file() -> Result<Vec<u8>, LocalCredentialError> {
-    let mut bytes = [0_u8; 32];
-    bytes[..16].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
-    bytes[16..].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
-    let token = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
-    let file = NewTokenFile {
-        schema: TOKEN_SCHEMA,
-        product: "butler-app",
-        purpose: "bundled-agent-local-auth",
-        token: &token,
-        created_at: butler_core::js_date::iso_from_system_time(std::time::SystemTime::now()),
-        raw_text_included: false,
-    };
-    serde_json::to_vec_pretty(&file).map_err(LocalCredentialError::Encode)
+    serde_json::to_vec_pretty(&NewTokenFile::generate()).map_err(LocalCredentialError::Encode)
 }
 
 fn new_secret_file() -> Result<Vec<u8>, LocalCredentialError> {

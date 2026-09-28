@@ -2,18 +2,21 @@ mod authority;
 mod automations;
 mod dashboard;
 mod error;
+mod listeners;
 mod mcp_servers;
 mod message_files;
 mod model_catalog;
 mod monitors;
 mod new_chat_briefing;
 mod operation_output;
+mod params;
 mod personalization;
 mod project_session_mutations;
 mod projects;
 mod read_routes;
 mod retry;
 mod security;
+mod security_settings;
 mod session_branches;
 mod session_controls;
 mod session_queue;
@@ -29,24 +32,22 @@ mod transcript_export;
 mod updates;
 
 use axum::http::HeaderValue;
-use std::{
-    collections::HashMap, error::Error as StdError, net::SocketAddr, path::PathBuf, sync::Arc,
-};
+use std::{error::Error as StdError, net::SocketAddr, path::PathBuf, sync::Arc};
 
 use axum::{
-    Router,
     body::{Body, Bytes, to_bytes},
-    extract::{DefaultBodyLimit, Query, State},
+    extract::{ConnectInfo, State},
     http::{Method, Request, StatusCode, Uri, header},
     response::Response,
-    routing::any,
 };
 use http_body_util::LengthLimitError;
 use serde_json::Value;
+use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
 use super::{
-    EventReplayView, GatewayApplication, GatewayConfig, HealthView, SendMessageCommand,
+    EventReplayView, GatewayApplication, GatewayConfig, GatewayExposure, GatewaySecurityStore,
+    HealthView, SendMessageCommand,
     live::create_live_stream,
     message_validation::{MessageRequestError, validate_message_request},
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
@@ -54,6 +55,7 @@ use super::{
 };
 pub(super) use error::HttpError;
 use error::{error_response, json};
+use params::{cursor_param, limit_param, query};
 use read_routes::{
     get_artifacts, get_events, get_live_events, get_messages, get_session_queue, get_turns,
 };
@@ -61,44 +63,65 @@ use read_routes::{
 const DEFAULT_PAGE_LIMIT: usize = 200;
 const MAX_REQUEST_BODY_SIZE: usize = 128 * 1024 * 1024;
 
-pub(super) fn router(
+/// Serves `listener` (loopback) until `shutdown`, and binds the LAN
+/// listeners too when remote access is enabled.
+pub(super) fn serve(
+    listener: TcpListener,
     application: Arc<dyn GatewayApplication>,
     config: GatewayConfig,
     shutdown: CancellationToken,
     local_addr: SocketAddr,
-) -> Router {
-    let limiter = FixedWindowRateLimiter::new(
-        config.message_rate_limit_max,
-        config.message_rate_limit_window,
-    );
-    Router::new()
-        .fallback(any(dispatch))
-        .with_state(Arc::new(HttpState {
-            application,
-            security: security::GatewaySecurity::new(
-                config.local_auth,
-                local_addr,
-                &config.allowed_hosts,
-                config.dev_cors_origin.as_deref(),
-                config.signed_url_ttl,
-            ),
-            session_cursor_secret: uuid::Uuid::new_v4().to_string(),
-            limiter,
-            shutdown,
-            uploads: tokio::sync::Semaphore::new(2),
-            static_ui_root: config.static_ui_root,
-        }))
-        .layer(DefaultBodyLimit::max(MAX_REQUEST_BODY_SIZE))
+) -> JoinHandle<std::io::Result<()>> {
+    let exposure = GatewayExposure {
+        remote_access_enabled: config.remote_access_enabled,
+        allowed_hosts: config.allowed_hosts.clone(),
+    };
+    let state = Arc::new(HttpState {
+        application,
+        security: security::GatewaySecurity::new(
+            config.local_auth,
+            local_addr,
+            &config.allowed_hosts,
+            config.dev_cors_origin,
+            config.signed_url_ttl,
+            shutdown.clone(),
+        ),
+        remote: listeners::RemoteAccess::new(local_addr, config.allowed_hosts),
+        security_store: config.security_store,
+        session_cursor_secret: uuid::Uuid::new_v4().to_string(),
+        limiter: FixedWindowRateLimiter::new(
+            config.message_rate_limit_max,
+            config.message_rate_limit_window,
+        ),
+        shutdown: shutdown.clone(),
+        uploads: tokio::sync::Semaphore::new(2),
+        static_ui_root: config.static_ui_root,
+    });
+    let task = listeners::spawn(listener, state.clone(), shutdown);
+    if exposure.remote_access_enabled {
+        state.remote.apply(&state, exposure);
+    }
+    task
 }
 
 struct HttpState {
     application: Arc<dyn GatewayApplication>,
     security: security::GatewaySecurity,
+    remote: listeners::RemoteAccess,
+    security_store: Option<Arc<dyn GatewaySecurityStore>>,
     session_cursor_secret: String,
     limiter: FixedWindowRateLimiter,
     shutdown: CancellationToken,
     uploads: tokio::sync::Semaphore,
     static_ui_root: Option<PathBuf>,
+}
+
+/// Who sent an authorized request (a request extension for the routes).
+#[derive(Clone, Copy, Debug)]
+struct Client {
+    access: security::Access,
+    /// From this computer (see [`security::is_local_client`]).
+    local: bool,
 }
 
 /// Host and Origin admission, CORS preflight before auth, then the
@@ -125,7 +148,7 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
 
 async fn authorized_route(
     state: Arc<HttpState>,
-    request: Request<Body>,
+    mut request: Request<Body>,
     origin: &security::RequestOrigin,
 ) -> Result<Response, HttpError> {
     let access = match state.security.authorize(&request, origin)? {
@@ -138,8 +161,39 @@ async fn authorized_route(
             .security
             .mint_connection_code(access, request.headers());
     }
-    let response = route(state.clone(), request).await?;
+    let peer = request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|info| info.0);
+    let local = security::is_local_client(peer, request.headers(), origin);
+    let client = Client { access, local };
+    request.extensions_mut().insert(client);
+    let response = route_for_client(state.clone(), request, client).await?;
     Ok(state.security.sign_urls(access, response).await)
+}
+
+/// The routes whose answer depends on who asks (Settings → Security, the
+/// settings view, live streams), then every other route.
+async fn route_for_client(
+    state: Arc<HttpState>,
+    request: Request<Body>,
+    client: Client,
+) -> Result<Response, HttpError> {
+    let uri = request.uri().clone();
+    if uri.path() == "/security" || uri.path().starts_with("/security/") {
+        return security_settings::route(state, request).await;
+    }
+    match (request.method(), uri.path()) {
+        (&Method::GET, "/settings") => settings::get(state, Some(client)).await,
+        (&Method::GET, "/events/live") => {
+            let scope = request
+                .extensions()
+                .get::<listeners::ListenerScope>()
+                .cloned();
+            get_live_events(state, &uri, scope).await
+        }
+        _ => route(state, request).await,
+    }
 }
 
 async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response, HttpError> {
@@ -298,7 +352,6 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
                 },
             )
         }
-        (Method::GET, "/settings") => settings::get(state).await,
         (Method::PATCH, "/settings") => settings::patch(state, request).await,
         (Method::GET, "/skills") => skills::get(state).await,
         (Method::POST, "/skills/import") => skills::import(state, request).await,
@@ -323,7 +376,6 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
         (Method::POST, "/session-queue") => session_queue::create(state, request).await,
         (Method::GET, "/turns") => get_turns(state, &uri).await,
         (Method::GET, "/events") => get_events(state, &uri).await,
-        (Method::GET, "/events/live") => get_live_events(state, &uri).await,
         _ if method == Method::GET => {
             static_ui::serve(state.static_ui_root.as_deref(), uri.path(), accepts_html).await
         }
@@ -380,66 +432,6 @@ async fn post_message(
             data: result,
         },
     )
-}
-
-fn query(uri: &Uri) -> HashMap<String, String> {
-    Query::<Vec<(String, String)>>::try_from_uri(uri)
-        .map(|query| {
-            query
-                .0
-                .into_iter()
-                .fold(HashMap::new(), |mut values, (key, value)| {
-                    values.entry(key).or_insert(value);
-                    values
-                })
-        })
-        .unwrap_or_default()
-}
-
-fn cursor_param(value: Option<&String>) -> f64 {
-    value
-        .and_then(|value| javascript_number(value))
-        .filter(|value| value.is_finite())
-        .unwrap_or(0.0)
-}
-
-fn limit_param(value: Option<&String>) -> usize {
-    value
-        .and_then(|value| javascript_number(value))
-        .filter(|value| value.is_finite())
-        .map_or(DEFAULT_PAGE_LIMIT, |value| {
-            butler_core::json::saturating_usize(value.floor().clamp(1.0, DEFAULT_PAGE_LIMIT as f64))
-        })
-}
-
-fn javascript_number(value: &str) -> Option<f64> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return Some(0.0);
-    }
-    let integer = if let Some(digits) = trimmed
-        .strip_prefix("0x")
-        .or_else(|| trimmed.strip_prefix("0X"))
-    {
-        u64::from_str_radix(digits, 16).ok()
-    } else if let Some(digits) = trimmed
-        .strip_prefix("0b")
-        .or_else(|| trimmed.strip_prefix("0B"))
-    {
-        u64::from_str_radix(digits, 2).ok()
-    } else if let Some(digits) = trimmed
-        .strip_prefix("0o")
-        .or_else(|| trimmed.strip_prefix("0O"))
-    {
-        u64::from_str_radix(digits, 8).ok()
-    } else {
-        return trimmed.parse::<f64>().ok().or_else(|| {
-            matches!(trimmed, "Infinity" | "+Infinity")
-                .then_some(f64::INFINITY)
-                .or_else(|| (trimmed == "-Infinity").then_some(f64::NEG_INFINITY))
-        });
-    };
-    integer.map(|number| number as f64)
 }
 
 fn declared_body_too_large(request: &Request<Body>) -> bool {

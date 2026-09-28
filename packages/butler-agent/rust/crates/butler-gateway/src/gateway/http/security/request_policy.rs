@@ -30,7 +30,12 @@ pub(in crate::gateway::http) enum RequestOrigin {
     /// navigation or `GET`.
     Absent,
     /// An allowlisted browser origin, echoed in CORS response headers.
-    Allowed(HeaderValue),
+    Allowed {
+        value: HeaderValue,
+        /// A page served on this computer (loopback, the App renderer, the
+        /// dev renderer), not one on a LAN or configured name.
+        local: bool,
+    },
 }
 
 impl RequestOrigin {
@@ -38,40 +43,55 @@ impl RequestOrigin {
     pub(in crate::gateway::http) fn allowed(&self) -> Option<&HeaderValue> {
         match self {
             Self::Absent => None,
-            Self::Allowed(origin) => Some(origin),
+            Self::Allowed { value, .. } => Some(value),
         }
+    }
+
+    /// No Origin, or one of this computer's pages.
+    pub(in crate::gateway::http) fn is_local(&self) -> bool {
+        matches!(self, Self::Absent | Self::Allowed { local: true, .. })
     }
 }
 
 /// The Host names and browser origins this gateway answers.
 pub(in crate::gateway::http) struct RequestPolicy {
     hosts: HashSet<String>,
-    origins: HashSet<String>,
+    /// Origins of pages on this computer.
+    local_origins: HashSet<String>,
+    /// Origins of LAN names and configured names.
+    remote_origins: HashSet<String>,
 }
 
 impl RequestPolicy {
     /// Loopback names and the literal bound address (with the bound port),
     /// the App origin, the dev renderer origins (comma-separated, only when
-    /// configured) and the operator's extra host names.
+    /// configured), the operator's extra host names and, while remote access
+    /// is on, the LAN authorities (`ip:port`, `<name>.local:port`).
     pub(in crate::gateway::http) fn new(
         local_addr: SocketAddr,
         allowed_hosts: &[String],
         dev_origins: Option<&str>,
+        lan_authorities: &[String],
     ) -> Self {
         let port = local_addr.port();
         let mut policy = Self {
             hosts: HashSet::new(),
-            origins: HashSet::from([APP_ORIGIN.to_owned()]),
+            local_origins: HashSet::from([APP_ORIGIN.to_owned()]),
+            remote_origins: HashSet::new(),
         };
         for name in LOOPBACK_NAMES {
-            policy.allow_plain_http(&format!("{name}:{port}"));
+            policy.allow_plain_http(&format!("{name}:{port}"), true);
         }
-        policy.allow_plain_http(&local_addr.to_string());
+        let bound_loopback = local_addr.ip().to_canonical().is_loopback();
+        policy.allow_plain_http(&local_addr.to_string(), bound_loopback);
+        for authority in lan_authorities {
+            policy.allow_plain_http(authority, false);
+        }
         for entry in allowed_hosts {
             policy.allow_configured_host(entry, port);
         }
         let dev_origins = dev_origins.unwrap_or_default().split(',').map(str::trim);
-        policy.origins.extend(
+        policy.local_origins.extend(
             dev_origins
                 .filter(|origin| !origin.is_empty() && *origin != "null")
                 .map(str::to_owned),
@@ -79,9 +99,14 @@ impl RequestPolicy {
         policy
     }
 
-    fn allow_plain_http(&mut self, authority: &str) {
+    fn allow_plain_http(&mut self, authority: &str, local: bool) {
         let authority = authority.to_ascii_lowercase();
-        self.origins.insert(format!("http://{authority}"));
+        let origins = if local {
+            &mut self.local_origins
+        } else {
+            &mut self.remote_origins
+        };
+        origins.insert(format!("http://{authority}"));
         self.hosts.insert(authority);
     }
 
@@ -99,8 +124,8 @@ impl RequestPolicy {
             vec![format!("{entry}:{port}"), entry]
         };
         for authority in authorities {
-            self.origins.insert(format!("http://{authority}"));
-            self.origins.insert(format!("https://{authority}"));
+            self.remote_origins.insert(format!("http://{authority}"));
+            self.remote_origins.insert(format!("https://{authority}"));
             self.hosts.insert(authority);
         }
     }
@@ -129,22 +154,34 @@ impl RequestPolicy {
         headers: &HeaderMap,
     ) -> Result<RequestOrigin, HttpError> {
         let mut values = headers.get_all(header::ORIGIN).iter();
+        let local = |origin: &HeaderValue| {
+            let value = origin.to_str().ok()?;
+            if self.local_origins.contains(value) {
+                Some(true)
+            } else {
+                self.remote_origins.contains(value).then_some(false)
+            }
+        };
         match (values.next(), values.next()) {
             (None, _) => Ok(RequestOrigin::Absent),
-            (Some(origin), None)
-                if origin
-                    .to_str()
-                    .is_ok_and(|value| self.origins.contains(value)) =>
-            {
-                Ok(RequestOrigin::Allowed(origin.clone()))
-            }
-            _ => Err(HttpError::public(
-                403,
-                "origin_not_allowed",
-                "Requests from this origin are not allowed.",
-            )),
+            (Some(origin), None) => match local(origin) {
+                Some(local) => Ok(RequestOrigin::Allowed {
+                    value: origin.clone(),
+                    local,
+                }),
+                None => Err(origin_not_allowed()),
+            },
+            _ => Err(origin_not_allowed()),
         }
     }
+}
+
+fn origin_not_allowed() -> HttpError {
+    HttpError::public(
+        403,
+        "origin_not_allowed",
+        "Requests from this origin are not allowed.",
+    )
 }
 
 /// A request that sends a body must send JSON, except to the multipart
@@ -239,6 +276,7 @@ mod tests {
             "127.0.0.1:18765".parse().unwrap(),
             &["butler.lan".to_owned(), "box.local:443".to_owned()],
             Some("http://127.0.0.1:5173"),
+            &["192.0.2.8:18765".to_owned(), "mac.local:18765".to_owned()],
         )
     }
 
@@ -253,6 +291,9 @@ mod tests {
             ("butler.lan", true),
             ("butler.lan:18765", true),
             ("box.local:443", true),
+            ("192.0.2.8:18765", true),
+            ("mac.local:18765", true),
+            ("192.0.2.9:18765", false),
             ("localhost", false),
             ("localhost:5173", false),
             ("box.local", false),
@@ -296,22 +337,29 @@ mod tests {
     #[test]
     fn origin_allowlist_compares_raw_strings() {
         let policy = policy();
+        // Origin, allowed, a page on this computer.
         let cases = [
-            ("app://butler", true),
-            ("http://127.0.0.1:18765", true),
-            ("http://localhost:18765", true),
-            ("http://127.0.0.1:5173", true),
-            ("https://butler.lan", true),
-            ("http://butler.lan:18765", true),
-            ("null", false),
-            ("app://butler/", false),
-            ("APP://BUTLER", false),
-            ("http://localhost:3000", false),
-            ("https://attacker.example", false),
+            ("app://butler", true, true),
+            ("http://127.0.0.1:18765", true, true),
+            ("http://localhost:18765", true, true),
+            ("http://127.0.0.1:5173", true, true),
+            ("https://butler.lan", true, false),
+            ("http://butler.lan:18765", true, false),
+            ("http://192.0.2.8:18765", true, false),
+            ("http://mac.local:18765", true, false),
+            ("https://192.0.2.8:18765", false, false),
+            ("null", false, false),
+            ("app://butler/", false, false),
+            ("APP://BUTLER", false, false),
+            ("http://localhost:3000", false, false),
+            ("https://attacker.example", false, false),
         ];
-        for (origin, allowed) in cases {
+        for (origin, allowed, local) in cases {
             let result = policy.classify_origin(&headers(&[("origin", origin)]));
             assert_eq!(result.is_ok(), allowed, "Origin {origin}");
+            if let Ok(class) = result {
+                assert_eq!(class.is_local(), local, "Origin {origin}");
+            }
         }
         assert!(matches!(
             policy.classify_origin(&HeaderMap::new()),

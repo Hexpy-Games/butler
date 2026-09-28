@@ -7,6 +7,7 @@ use serde_json::{Map, Value, json};
 use crate::host::ResolvedInstallation;
 use crate::host::service::configuration::AppServiceConfiguration;
 
+mod allowed_hosts;
 mod arguments;
 mod control;
 mod logs;
@@ -26,7 +27,7 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
         Err(message) => return output::error("butler gateway", json_requested, message.message()),
     };
     if options.help {
-        let usage = "gateway app|list|status [app]|inspect app|enable app|disable app|configure app [--host HOST] [--port PORT] [--db PATH]|test app|start app|stop app|restart app|run app|logs app [--lines N] [--follow] [--json] [--data PATH]";
+        let usage = "gateway app|list|status [app]|inspect app|enable app|disable app|configure app [--host HOST] [--port PORT] [--db PATH] [--allowed-host NAME]... [--remove-allowed-host NAME]...|test app|start app|stop app|restart app|run app|logs app [--lines N] [--follow] [--json] [--data PATH]\n\nFor a tunnel or reverse proxy you run yourself, register its public host name with --allowed-host (for example `butler gateway configure app --allowed-host butler.example.com`). The gateway then accepts that name as Host and its http/https origins, so a proxy may pass the browser's Host and Origin through, or rewrite Host to 127.0.0.1:<port> and keep Origin. X-Forwarded-* and similar headers are never trusted for Host or client address; they only mark a request as forwarded, which Settings → Security refuses. Remote clients still need the connection code (token), and securing the tunnel is up to you. `butler gateway inspect app` lists the names.";
         if options.json {
             println!(
                 "{}",
@@ -109,26 +110,7 @@ async fn execute(
                 .await?;
             status_value(action, &settings, &app, installation, data_root).await
         }
-        Action::Configure => {
-            if options.host.is_none() && options.port.is_none() && options.db_path.is_none() {
-                return Err("gateway configure app requires --host, --port, or --db".into());
-            }
-            let mut patch = Map::new();
-            if let Some(host) = &options.host {
-                patch.insert("host".into(), Value::String(host.clone()));
-            }
-            if let Some(port) = options.port {
-                patch.insert("port".into(), json!(port));
-            }
-            if let Some(db_path) = &options.db_path {
-                patch.insert("dbPath".into(), Value::String(db_path.clone()));
-            }
-            settings
-                .patch(data_root, installation, Some(true), patch)
-                .await?;
-            let refreshed = AppServiceConfiguration::capture(data_root);
-            status_value(action, &settings, &refreshed, installation, data_root).await
-        }
+        Action::Configure => configure(installation, data_root, options, &mut settings).await,
         Action::List | Action::Status | Action::Inspect | Action::Test => {
             let view = status_value(action, &settings, &app, installation, data_root).await?;
             if matches!(action, Action::List) {
@@ -221,6 +203,71 @@ async fn execute(
         // Logs are handled before gateway settings are opened.
         Action::Logs => Err("gateway logs are not read through settings".into()),
     }
+}
+
+/// `gateway configure app`: the listener (`--host`, `--port`, `--db`, which
+/// need a restart) and the allowed host names (applied live when the
+/// service runs).
+async fn configure(
+    installation: &ResolvedInstallation,
+    data_root: &std::path::Path,
+    options: &Options,
+    settings: &mut settings::Settings,
+) -> Result<Value, crate::host::HostError> {
+    let hosts_changed = !options.allowed_hosts.is_empty() || !options.removed_hosts.is_empty();
+    let mut patch = Map::new();
+    if let Some(host) = &options.host {
+        patch.insert("host".into(), Value::String(host.clone()));
+    }
+    if let Some(port) = options.port {
+        patch.insert("port".into(), json!(port));
+    }
+    if let Some(db_path) = &options.db_path {
+        patch.insert("dbPath".into(), Value::String(db_path.clone()));
+    }
+    if patch.is_empty() && !hosts_changed {
+        return Err("gateway configure app requires --host, --port, --db, --allowed-host or --remove-allowed-host".into());
+    }
+    let mut applied_live = None;
+    if hosts_changed {
+        let current = AppServiceConfiguration::capture(data_root);
+        let hosts = allowed_hosts::updated(
+            current.allowed_hosts(),
+            &options.allowed_hosts,
+            &options.removed_hosts,
+        )?;
+        applied_live = Some(allowed_hosts::store(data_root, installation, hosts).await?);
+    }
+    if !patch.is_empty() {
+        settings
+            .patch(data_root, installation, Some(true), patch)
+            .await?;
+    }
+    let refreshed = AppServiceConfiguration::capture(data_root);
+    let mut view = status_value(
+        Action::Configure,
+        settings,
+        &refreshed,
+        installation,
+        data_root,
+    )
+    .await?;
+    if let Some(applied) = applied_live {
+        view["allowedHostsApplied"] = Value::Bool(applied);
+    }
+    Ok(view)
+}
+
+/// Merges `patch` into `gateways/app.json` `config`, atomically and keeping
+/// every other field; a missing file is created. Settings → Security saves
+/// through here too.
+pub(crate) async fn patch_app_config(
+    data_root: &std::path::Path,
+    installation: &ResolvedInstallation,
+    patch: Map<String, Value>,
+) -> Result<(), crate::host::HostError> {
+    let mut settings = settings::Settings::read(data_root, installation)?;
+    settings.patch(data_root, installation, None, patch).await
 }
 
 async fn status_value(

@@ -10,7 +10,8 @@ use tokio::net::TcpListener;
 
 use butler_gateway::gateway::{
     AppApplication, AppApplicationConfig, AppApplicationDependencies, AppIdentityClock,
-    AppMessageFiles, GatewayApplicationError, GatewayServer, InboundQueue, serve_gateway,
+    AppMessageFiles, GatewayApplicationError, GatewayConfig, GatewayServer, InboundQueue,
+    LocalAuthConfig, serve_gateway,
 };
 use butler_runtime::operations::ServiceReadiness;
 use butler_turn::btcc::BtccError;
@@ -19,6 +20,7 @@ use crate::host::app::dashboard::AppDashboardLedger;
 use crate::host::app::dashboard_briefing::AppDashboardBriefing;
 use crate::host::app::plan_decision::AppPlanDecisionLedger;
 use crate::host::app::runtime_ports::AppRuntimeInfo;
+use crate::host::app::security_store::AppSecurityStore;
 use crate::host::service::configuration::AppServiceConfiguration;
 use crate::host::{
     AgentRuntime, AppAdmission, AppApprovalClaimsAdapter, AppAssets, AppBranchConversations,
@@ -37,6 +39,15 @@ pub(crate) struct AppServer {
     artifacts: Arc<AppMessageFiles>,
 }
 
+/// What the process owns and hands every App server it starts.
+pub(crate) struct AppServerOwners {
+    pub(crate) queue: Arc<InboundQueue>,
+    pub(crate) receipt: Arc<ServiceReadiness>,
+    /// The process's token, shared with its other gateway clients, so a
+    /// rotated connection code reaches all of them.
+    pub(crate) local_auth: LocalAuthConfig,
+}
+
 impl AppServer {
     pub(crate) fn local_addr(&self) -> SocketAddr {
         self.address
@@ -47,8 +58,7 @@ impl AppServer {
         data_root: &std::path::Path,
         installation: &ResolvedInstallation,
         app_config: &AppServiceConfiguration,
-        queue: Arc<InboundQueue>,
-        receipt: Arc<ServiceReadiness>,
+        owners: AppServerOwners,
     ) -> Result<Self, BtccError> {
         let artifacts = Arc::new(AppMessageFiles::new(data_root, Arc::new(SystemIdentity)));
         let result = Self::open_with_artifacts(
@@ -56,8 +66,7 @@ impl AppServer {
             data_root,
             installation,
             app_config,
-            queue,
-            receipt,
+            owners,
             artifacts.clone(),
         )
         .await;
@@ -72,8 +81,7 @@ impl AppServer {
         data_root: &std::path::Path,
         installation: &ResolvedInstallation,
         app_config: &AppServiceConfiguration,
-        queue: Arc<InboundQueue>,
-        receipt: Arc<ServiceReadiness>,
+        owners: AppServerOwners,
         artifacts: Arc<AppMessageFiles>,
     ) -> Result<Self, BtccError> {
         let listener_ready = Arc::new(AtomicBool::new(false));
@@ -106,7 +114,7 @@ impl AppServer {
             ),
             skills: runtime.skills.clone(),
             mcp_client: runtime.mcp_client.clone(),
-            native_ingress: Arc::new(AppIngress::new(queue.clone())),
+            native_ingress: Arc::new(AppIngress::new(owners.queue.clone())),
             native_assets: Arc::new(AppAssets::new(
                 runtime.conversations.clone(),
                 runtime.image_files.clone(),
@@ -114,7 +122,7 @@ impl AppServer {
                 runtime.mcp_client.clone(),
                 data_root,
             )),
-            executor_readiness: Arc::new(AppReadiness::new(receipt, listener_ready.clone())),
+            executor_readiness: Arc::new(AppReadiness::new(owners.receipt, listener_ready.clone())),
             admission: Arc::new(AppAdmission::new(
                 runtime.project_ledger.clone(),
                 runtime.image_files.clone(),
@@ -159,7 +167,7 @@ impl AppServer {
             queue_owner_liveness: Arc::new(AppQueueOwnerLivenessAdapter),
             authority_handoff: Arc::new(AuthorityHandoff::new(
                 runtime.authority.clone(),
-                queue,
+                owners.queue,
                 Arc::new(|| {
                     butler_models::models::ModelConfigurationClock::now_iso(&SystemIdentity)
                 }),
@@ -214,8 +222,7 @@ impl AppServer {
                 ));
             }
         };
-        let mut gateway_config = app_config.gateway_config();
-        gateway_config.static_ui_root = Some(installation.resources().join("app-client/dist"));
+        let gateway_config = gateway_config(app_config, data_root, installation, owners.local_auth);
         let server = match serve_gateway(listener, application.clone(), gateway_config) {
             Ok(server) => server,
             Err(error) => {
@@ -270,6 +277,24 @@ impl Drop for AppServer {
     fn drop(&mut self) {
         self.listener_ready.store(false, Ordering::Release);
     }
+}
+
+/// The listener configuration: the captured settings with the process's
+/// token, the bundled UI and the Settings → Security store.
+fn gateway_config(
+    app_config: &AppServiceConfiguration,
+    data_root: &std::path::Path,
+    installation: &ResolvedInstallation,
+    local_auth: LocalAuthConfig,
+) -> GatewayConfig {
+    let mut config = app_config.gateway_config();
+    config.local_auth = local_auth;
+    config.static_ui_root = Some(installation.resources().join("app-client/dist"));
+    config.security_store = Some(Arc::new(AppSecurityStore::new(
+        data_root.to_path_buf(),
+        installation.clone(),
+    )));
+    config
 }
 
 fn app_error(error: GatewayApplicationError) -> BtccError {
