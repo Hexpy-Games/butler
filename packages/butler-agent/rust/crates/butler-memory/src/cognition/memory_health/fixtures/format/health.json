@@ -1,0 +1,296 @@
+{
+  "without_serving": {
+    "dimensions": {
+      "hot_cache_files_count": 2,
+      "rule_files_count": 1,
+      "queue_backlog_count": 2,
+      "dead_letter_count": 1,
+      "transcript_files_count": 1,
+      "task_memory_entries_count": 0,
+      "project_capsules_count": 1,
+      "missing_project_capsules_count": 1,
+      "vector_rows_count": 3.0,
+      "memory_chunks_count": 0,
+      "graph_entities_count": 0,
+      "graph_edges_count": 0,
+      "graph_mentions_count": 0,
+      "ingestion_lag_ms": 0,
+      "stale": false,
+      "maintenance_failed_phases_count": 1,
+      "serving_available": false,
+      "eligible_sources_count": null,
+      "registered_sources_count": null,
+      "unknown_origin_excluded_count": null,
+      "source_coverage_percent": null,
+      "oldest_pending_age_ms": null,
+      "source_resolution_failures_count": null,
+      "embedding_version_mismatch_count": null,
+      "cache_stale_entries_count": 0,
+      "cache_evicted_entries_count": 0,
+      "profile_processed_windows_count": null,
+      "profile_pending_windows_count": null,
+      "maintenance_last_run_at": "<time>",
+      "maintenance_failed_phases": [
+        "box_index"
+      ],
+      "writer_gate_status": "initialization_available",
+      "writer_gate_reason": null
+    },
+    "summary": {
+      "serving": {
+        "available": false,
+        "reason": "generation_unavailable",
+        "generation_id": null,
+        "graph_revision": null,
+        "sources": {
+          "unit": "scalar_source",
+          "eligible": null,
+          "known_eligible": 0,
+          "registered": null,
+          "registered_current": null,
+          "unknown_origin_excluded": null,
+          "inventory_complete": false,
+          "inventory_reason": "canonical_inventory_unavailable",
+          "coverage_percent": null,
+          "known_coverage_percent": null,
+          "coverage_reason": "inventory_incomplete"
+        },
+        "stages": {
+          "semantic_graph": {
+            "complete": 0,
+            "pending": 0,
+            "failed": 0,
+            "not_configured": 0
+          },
+          "episode_vectors": {
+            "complete": 0,
+            "pending": 0,
+            "failed": 0,
+            "not_configured": 0
+          },
+          "node_vectors": {
+            "complete": 0,
+            "pending": 0,
+            "failed": 0,
+            "not_configured": 0
+          },
+          "hot_cache": {
+            "complete": 0,
+            "pending": 0,
+            "failed": 0,
+            "not_configured": 0
+          }
+        },
+        "stage_units": {
+          "semantic_graph": "window_leaf",
+          "episode_vectors": "vector_unit",
+          "node_vectors": "vector_unit",
+          "hot_cache": "projection_job"
+        },
+        "oldest_pending_age_ms": null,
+        "source_resolution_failures": null,
+        "historical_source_resolution_failures": null,
+        "embedding_version_mismatch": null,
+        "historical_embedding_version_mismatch": null,
+        "pending_quality_operations": null,
+        "cache": {
+          "available": false,
+          "reason": "generation_unavailable",
+          "total_entries": 0,
+          "current_entries": 0,
+          "stale_entries": 0,
+          "expired_entries": 0,
+          "evicted_entries": 0
+        },
+        "profile": null
+      },
+      "writerGate": {
+        "state": "initialization_available",
+        "pid": null,
+        "owner": null,
+        "last_observed_owner": null,
+        "coordinator_path": "<root>/cognition/consolidation/locks/consolidation.lock.coord.sqlite",
+        "reason": null
+      },
+      "hotCacheFiles": 2,
+      "ruleFiles": 1,
+      "queueBacklog": 2,
+      "deadLetterCount": 1,
+      "transcriptFiles": 1,
+      "taskMemoryEntries": 0,
+      "projectCapsules": 1,
+      "missingProjectCapsules": 1,
+      "newestProjectCapsuleAt": "<time>",
+      "projectRefreshFailureCount": 1,
+      "latestProjectRefreshFailureAt": "<time>",
+      "vectorRowCount": 3.0,
+      "memoryChunkCount": 0,
+      "graphEntityCount": 0,
+      "graphEdgeCount": 0,
+      "graphMentionCount": 0,
+      "ingestionLagMs": 0,
+      "newestHotCacheAt": "<time>",
+      "maintenanceStatus": "failed",
+      "maintenanceLastRunAt": "<time>",
+      "maintenanceFailedPhases": [
+        "box_index"
+      ],
+      "stale": false,
+      "diagnostics": [
+        "2 memory sync request(s) are queued",
+        "1 memory sync request(s) are in dead-letter",
+        "1 registered project capsule(s) are missing",
+        "1 project capsule refresh failure(s) recorded",
+        "graph memory has no indexed associations yet",
+        "memory maintenance failed"
+      ]
+    }
+  },
+  "with_serving": {
+    "dimensions": {
+      "hot_cache_files_count": 2,
+      "rule_files_count": 1,
+      "queue_backlog_count": 2,
+      "dead_letter_count": 1,
+      "transcript_files_count": 1,
+      "task_memory_entries_count": 0,
+      "project_capsules_count": 1,
+      "missing_project_capsules_count": 1,
+      "vector_rows_count": 3.0,
+      "memory_chunks_count": 0,
+      "graph_entities_count": 0,
+      "graph_edges_count": 0,
+      "graph_mentions_count": 0,
+      "ingestion_lag_ms": 0,
+      "stale": false,
+      "maintenance_failed_phases_count": 1,
+      "serving_available": true,
+      "eligible_sources_count": null,
+      "registered_sources_count": 1,
+      "unknown_origin_excluded_count": null,
+      "source_coverage_percent": null,
+      "oldest_pending_age_ms": 0,
+      "source_resolution_failures_count": 1,
+      "embedding_version_mismatch_count": 0,
+      "cache_stale_entries_count": 0,
+      "cache_evicted_entries_count": 0,
+      "profile_processed_windows_count": null,
+      "profile_pending_windows_count": null,
+      "maintenance_last_run_at": "<time>",
+      "maintenance_failed_phases": [
+        "box_index"
+      ],
+      "writer_gate_status": "initialization_available",
+      "writer_gate_reason": null
+    },
+    "summary": {
+      "serving": {
+        "available": true,
+        "reason": null,
+        "generation_id": "11111111-1111-1111-1111-111111111111",
+        "graph_revision": 3,
+        "sources": {
+          "unit": "scalar_source",
+          "eligible": null,
+          "known_eligible": 0,
+          "registered": 1,
+          "registered_current": 1,
+          "unknown_origin_excluded": null,
+          "inventory_complete": false,
+          "inventory_reason": "canonical_inventory_unavailable",
+          "coverage_percent": null,
+          "known_coverage_percent": null,
+          "coverage_reason": "inventory_incomplete"
+        },
+        "stages": {
+          "semantic_graph": {
+            "complete": 0,
+            "pending": 0,
+            "failed": 1,
+            "not_configured": 0
+          },
+          "episode_vectors": {
+            "complete": 0,
+            "pending": 0,
+            "failed": 0,
+            "not_configured": 0
+          },
+          "node_vectors": {
+            "complete": 0,
+            "pending": 0,
+            "failed": 0,
+            "not_configured": 0
+          },
+          "hot_cache": {
+            "complete": 0,
+            "pending": 1,
+            "failed": 0,
+            "not_configured": 0
+          }
+        },
+        "stage_units": {
+          "semantic_graph": "window_leaf",
+          "episode_vectors": "vector_unit",
+          "node_vectors": "vector_unit",
+          "hot_cache": "projection_job"
+        },
+        "oldest_pending_age_ms": 0,
+        "source_resolution_failures": 1,
+        "historical_source_resolution_failures": 0,
+        "embedding_version_mismatch": 0,
+        "historical_embedding_version_mismatch": 0,
+        "pending_quality_operations": 0,
+        "cache": {
+          "available": true,
+          "reason": null,
+          "total_entries": 0,
+          "current_entries": 0,
+          "stale_entries": 0,
+          "expired_entries": 0,
+          "evicted_entries": 0
+        },
+        "profile": null
+      },
+      "writerGate": {
+        "state": "initialization_available",
+        "pid": null,
+        "owner": null,
+        "last_observed_owner": null,
+        "coordinator_path": "<root>/cognition/consolidation/locks/consolidation.lock.coord.sqlite",
+        "reason": null
+      },
+      "hotCacheFiles": 2,
+      "ruleFiles": 1,
+      "queueBacklog": 2,
+      "deadLetterCount": 1,
+      "transcriptFiles": 1,
+      "taskMemoryEntries": 0,
+      "projectCapsules": 1,
+      "missingProjectCapsules": 1,
+      "newestProjectCapsuleAt": "<time>",
+      "projectRefreshFailureCount": 1,
+      "latestProjectRefreshFailureAt": "<time>",
+      "vectorRowCount": 3.0,
+      "memoryChunkCount": 0,
+      "graphEntityCount": 0,
+      "graphEdgeCount": 0,
+      "graphMentionCount": 0,
+      "ingestionLagMs": 0,
+      "newestHotCacheAt": "<time>",
+      "maintenanceStatus": "failed",
+      "maintenanceLastRunAt": "<time>",
+      "maintenanceFailedPhases": [
+        "box_index"
+      ],
+      "stale": false,
+      "diagnostics": [
+        "2 memory sync request(s) are queued",
+        "1 memory sync request(s) are in dead-letter",
+        "1 registered project capsule(s) are missing",
+        "1 project capsule refresh failure(s) recorded",
+        "graph memory has no indexed associations yet",
+        "memory maintenance failed"
+      ]
+    }
+  }
+}

@@ -1,5 +1,6 @@
 //! Rehydrate only explicitly pinned candidate IDs for operator input repair.
 
+use super::AliasSources;
 use crate::cognition::CognitionCode;
 use std::{
     collections::{HashMap, HashSet},
@@ -42,7 +43,13 @@ pub(in crate::cognition::graph) fn load(
         for id in ids.iter().take(32) {
             let mut group = Vec::new();
             let mut visiting = HashSet::new();
-            if !append(&mut context, id, &mut visiting, &mut group, true)? {
+            if !append(
+                &mut context,
+                id,
+                &mut visiting,
+                &mut group,
+                AliasSources::Conversation,
+            )? {
                 continue;
             }
             let bytes =

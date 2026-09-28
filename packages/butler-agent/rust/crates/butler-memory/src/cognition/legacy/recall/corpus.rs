@@ -1,3 +1,5 @@
+//! The legacy recall corpus: hot-cache blocks, memory files and graph mentions.
+
 mod graph;
 
 use std::{

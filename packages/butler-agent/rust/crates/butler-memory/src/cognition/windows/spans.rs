@@ -1,3 +1,5 @@
+//! Grapheme-aligned byte spans of historical source text.
+
 use butler_core::segmentation::grapheme_segments;
 
 use super::ByteSpan;
@@ -13,10 +15,11 @@ pub(crate) fn split_historical_source_spans(text: &str, max_bytes: f64) -> Vec<B
     let boundaries = grapheme_byte_boundaries(text);
     let mut spans = Vec::new();
     let mut start = 0;
-    for index in 1..boundaries.len() {
-        let end = boundaries[index];
+    for pair in boundaries.windows(2) {
+        let [prior, end] = *pair else {
+            continue;
+        };
         if (end - start) as f64 > max_bytes {
-            let prior = boundaries[index - 1];
             if prior > start {
                 spans.push(ByteSpan { start, end: prior });
             }

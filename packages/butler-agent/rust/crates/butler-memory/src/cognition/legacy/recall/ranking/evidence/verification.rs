@@ -1,3 +1,5 @@
+//! Checking recalled items against the evidence the recall policy requires.
+
 use super::ActivePolicy;
 use crate::cognition::legacy::recall::types::{
     LegacyRecallEvidencePolicy, LegacyRecallEvidenceRequirement, LegacyRecallItem,
@@ -9,39 +11,34 @@ pub(in crate::cognition::legacy::recall::ranking) struct Verification {
     pub(in crate::cognition::legacy::recall::ranking) diagnostics: Vec<String>,
 }
 
+/// Keeps the items that carry the evidence the policy requires; no items
+/// (with the reason in the diagnostics) when the evidence is missing, weak,
+/// contradicted or ambiguous.
 pub(in crate::cognition::legacy::recall::ranking) fn verify_evidence(
     items: Vec<LegacyRecallItem>,
     policy: Option<&LegacyRecallEvidencePolicy>,
 ) -> Verification {
     let active = ActivePolicy::from(policy);
-    let mut diagnostics = Vec::new();
     if active
         .evidence_required
         .contains(&LegacyRecallEvidenceRequirement::ExactQuote)
     {
-        return Verification {
-            items: Vec::new(),
-            diagnostics: vec!["evidence=exact_quote_requires_query_memory".to_owned()],
-        };
+        return rejected(vec![
+            "evidence=exact_quote_requires_query_memory".to_owned(),
+        ]);
     }
+    let required = active
+        .evidence_required
+        .iter()
+        .filter(|requirement| **requirement != LegacyRecallEvidenceRequirement::ExactQuote)
+        .copied()
+        .collect::<Vec<_>>();
     if items.is_empty() {
-        for requirement in active
-            .evidence_required
-            .iter()
-            .filter(|requirement| **requirement != LegacyRecallEvidenceRequirement::ExactQuote)
-        {
-            diagnostics.push(format!(
-                "evidence_missing={}",
-                requirement_name(*requirement)
-            ));
-        }
+        let mut diagnostics = missing_diagnostics(&required);
         if diagnostics.is_empty() {
             diagnostics.push("evidence=none".to_owned());
         }
-        return Verification {
-            items: Vec::new(),
-            diagnostics,
-        };
+        return rejected(diagnostics);
     }
     let usable = items
         .into_iter()
@@ -55,15 +52,10 @@ pub(in crate::cognition::legacy::recall::ranking) fn verify_evidence(
         })
         .collect::<Vec<_>>();
     if usable.is_empty() {
-        return Verification {
-            items: Vec::new(),
-            diagnostics: vec!["evidence=weak_or_contradicted".to_owned()],
-        };
+        return rejected(vec!["evidence=weak_or_contradicted".to_owned()]);
     }
-    let missing = active
-        .evidence_required
+    let missing = required
         .iter()
-        .filter(|requirement| **requirement != LegacyRecallEvidenceRequirement::ExactQuote)
         .filter(|requirement| {
             !usable
                 .iter()
@@ -71,50 +63,45 @@ pub(in crate::cognition::legacy::recall::ranking) fn verify_evidence(
         })
         .copied()
         .collect::<Vec<_>>();
-    for requirement in &missing {
-        diagnostics.push(format!(
-            "evidence_missing={}",
-            requirement_name(*requirement)
-        ));
-    }
     if !missing.is_empty() {
-        return Verification {
-            items: Vec::new(),
-            diagnostics,
-        };
+        return rejected(missing_diagnostics(&missing));
     }
-    let non_exact = active
-        .evidence_required
-        .iter()
-        .filter(|requirement| **requirement != LegacyRecallEvidenceRequirement::ExactQuote)
-        .copied()
-        .collect::<Vec<_>>();
-    let scoped = if non_exact.is_empty() {
+    let scoped = if required.is_empty() {
         usable
     } else {
         usable
             .into_iter()
             .filter(|item| {
-                non_exact
+                required
                     .iter()
                     .any(|requirement| item_satisfies_requirement(item, *requirement))
             })
             .collect::<Vec<_>>()
     };
-    if active.require_specific_memory && scoped.len() > 1 {
-        let margin = super::super::js_max(0.0, active.tie_margin);
-        if scoped[0].confidence - scoped[1].confidence <= margin {
-            return Verification {
-                items: Vec::new(),
-                diagnostics: vec!["evidence=ambiguous_tie".to_owned()],
-            };
-        }
+    if active.require_specific_memory
+        && let [first, second, ..] = scoped.as_slice()
+        && first.confidence - second.confidence <= super::super::js_max(0.0, active.tie_margin)
+    {
+        return rejected(vec!["evidence=ambiguous_tie".to_owned()]);
     }
-    diagnostics.push("evidence=verified".to_owned());
     Verification {
         items: scoped,
+        diagnostics: vec!["evidence=verified".to_owned()],
+    }
+}
+
+fn rejected(diagnostics: Vec<String>) -> Verification {
+    Verification {
+        items: Vec::new(),
         diagnostics,
     }
+}
+
+fn missing_diagnostics(requirements: &[LegacyRecallEvidenceRequirement]) -> Vec<String> {
+    requirements
+        .iter()
+        .map(|requirement| format!("evidence_missing={}", requirement_name(*requirement)))
+        .collect()
 }
 
 fn item_satisfies_requirement(

@@ -16,6 +16,19 @@ use crate::cognition::{
 };
 use butler_turn::conversation::{ConversationMessageWithParts, ConversationSourceReader};
 
+/// The episode a job projects: its id, current revision, and project.
+struct JobEpisode {
+    episode_id: String,
+    revision: String,
+    project_id: Option<String>,
+}
+
+/// Canonical messages read so far, shared by every unit of one input.
+type MessageCache = HashMap<String, ConversationMessageWithParts>;
+
+/// Builds the pinned input for one window: its eligible source units, the
+/// prior public conversation and the previous window's last unit as context,
+/// and adjacent parts, within the input budget.
 pub(super) fn build(
     connection: &Connection,
     canonical: &ConversationSourceReader,
@@ -24,40 +37,17 @@ pub(super) fn build(
     window_ref: &str,
     source_refs: &[String],
 ) -> CognitionResult<ExtractInput> {
-    let chunk = connection
-        .query_row(
-            "SELECT c.memory_chunk_id,c.current_revision,c.project_id FROM memory_chunks c \
-         JOIN memory_projection_jobs j ON j.episode_id=c.memory_chunk_id WHERE j.job_id=?1",
-            [job_id],
-            |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, Option<String>>(2)?,
-                ))
-            },
-        )
-        .optional()
-        .map_err(db_error)?
-        .ok_or_else(source_changed)?;
-
-    let mut messages = HashMap::<String, ConversationMessageWithParts>::new();
+    let episode = job_episode(connection, job_id)?;
+    let mut messages = MessageCache::new();
     let mut rows = Vec::with_capacity(source_refs.len());
     let mut units = Vec::with_capacity(source_refs.len());
     for source_ref in source_refs {
         let row = source_row(connection, source_ref)?.ok_or_else(source_changed)?;
-        if row.revision != chunk.1 {
+        if row.revision != episode.revision {
             return Err(source_changed());
         }
         let text = hydrate_row(canonical, source_root, &row, &mut messages)?;
-        let eligible = match row.role.as_str() {
-            "user" => row.origin_kind == "user_input",
-            "assistant" => row.origin_kind == "assistant_public",
-            "task" => row.source_kind == "task_report",
-            "explicit" => row.source_kind == "explicit_record",
-            _ => false,
-        };
-        if !eligible {
+        if !eligible_source(&row) {
             return Err(CognitionError::new(
                 CognitionCode::MemorySourceIneligible,
                 "memory_source_ineligible",
@@ -72,42 +62,21 @@ pub(super) fn build(
         });
         rows.push(row);
     }
-    let mut context_units = if let Some(session) = rows
-        .first()
-        .and_then(|row| row.conversation_session_id.as_deref())
-    {
-        read_prior_public_context(canonical, session, &rows)?
-            .into_iter()
-            .map(|unit| ProjectionContextUnit {
-                ref_id: unit.ref_id,
-                text: unit.text,
-                observed_at: unit.observed_at,
-                basis: unit.basis,
-                source_span: None,
-            })
-            .collect::<Vec<_>>()
-    } else {
-        Vec::new()
-    };
-    if let Some(previous_json) = connection.query_row(
-        "SELECT source_refs_json FROM memory_projection_windows WHERE job_id=?1 AND state!='replaced' \
-         AND ordinal<(SELECT ordinal FROM memory_projection_windows WHERE window_ref=?2) \
-         ORDER BY ordinal DESC LIMIT 1", params![job_id,window_ref], |row| row.get::<_,String>(0),
-    ).optional().map_err(db_error)? {
-        let previous: Vec<String> = serde_json::from_str(&previous_json).map_err(json_error)?;
-        if let Some(last) = previous.last() {
-            let row = source_row(connection, last)?.ok_or_else(source_changed)?;
-            let text = hydrate_row(canonical, source_root, &row, &mut messages)?;
-            context_units.push(ProjectionContextUnit { ref_id: row.source_id.clone(), text,
-                observed_at: row.observed_at, basis: row.basis, source_span: None });
-        }
+    let mut context_units = prior_context(canonical, &rows)?;
+    if let Some(unit) = previous_window_tail(
+        (connection, canonical, source_root),
+        job_id,
+        window_ref,
+        &mut messages,
+    )? {
+        context_units.push(unit);
     }
     let mut input = ExtractInput {
         schema: "butler.memory-extract-input.v2".into(),
-        episode_ref: chunk.0,
-        revision: chunk.1,
+        episode_ref: episode.episode_id,
+        revision: episode.revision,
         window_ref: window_ref.into(),
-        bound_project_id: chunk.2,
+        bound_project_id: episode.project_id,
         source_units: units,
         context_expansion: None,
         context_units,
@@ -116,6 +85,94 @@ pub(super) fn build(
     adjacent::attach(&mut input, &rows, &messages, source_root, 0)?;
     enforce_budget(&mut input)?;
     Ok(input)
+}
+
+fn job_episode(connection: &Connection, job_id: &str) -> CognitionResult<JobEpisode> {
+    connection
+        .query_row(
+            "SELECT c.memory_chunk_id,c.current_revision,c.project_id FROM memory_chunks c \
+         JOIN memory_projection_jobs j ON j.episode_id=c.memory_chunk_id WHERE j.job_id=?1",
+            [job_id],
+            |row| {
+                Ok(JobEpisode {
+                    episode_id: row.get(0)?,
+                    revision: row.get(1)?,
+                    project_id: row.get(2)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(db_error)?
+        .ok_or_else(source_changed)
+}
+
+/// Only public conversation turns and reviewed typed records are projected.
+fn eligible_source(row: &CognitionSourceRow) -> bool {
+    match row.role.as_str() {
+        "user" => row.origin_kind == "user_input",
+        "assistant" => row.origin_kind == "assistant_public",
+        "task" => row.source_kind == "task_report",
+        "explicit" => row.source_kind == "explicit_record",
+        _ => false,
+    }
+}
+
+/// The public conversation before the window's first unit.
+fn prior_context(
+    canonical: &ConversationSourceReader,
+    rows: &[CognitionSourceRow],
+) -> CognitionResult<Vec<ProjectionContextUnit>> {
+    let Some(session) = rows
+        .first()
+        .and_then(|row| row.conversation_session_id.as_deref())
+    else {
+        return Ok(Vec::new());
+    };
+    Ok(read_prior_public_context(canonical, session, rows)?
+        .into_iter()
+        .map(|unit| ProjectionContextUnit {
+            ref_id: unit.ref_id,
+            text: unit.text,
+            observed_at: unit.observed_at,
+            basis: unit.basis,
+            source_span: None,
+        })
+        .collect())
+}
+
+/// The last source unit of the job's previous window, as context.
+fn previous_window_tail(
+    (connection, canonical, source_root): (&Connection, &ConversationSourceReader, &Path),
+    job_id: &str,
+    window_ref: &str,
+    messages: &mut MessageCache,
+) -> CognitionResult<Option<ProjectionContextUnit>> {
+    let Some(previous_json) = connection
+        .query_row(
+            "SELECT source_refs_json FROM memory_projection_windows WHERE job_id=?1 AND state!='replaced' \
+             AND ordinal<(SELECT ordinal FROM memory_projection_windows WHERE window_ref=?2) \
+             ORDER BY ordinal DESC LIMIT 1",
+            params![job_id, window_ref],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(db_error)?
+    else {
+        return Ok(None);
+    };
+    let previous: Vec<String> = serde_json::from_str(&previous_json).map_err(json_error)?;
+    let Some(last) = previous.last() else {
+        return Ok(None);
+    };
+    let row = source_row(connection, last)?.ok_or_else(source_changed)?;
+    let text = hydrate_row(canonical, source_root, &row, messages)?;
+    Ok(Some(ProjectionContextUnit {
+        ref_id: row.source_id.clone(),
+        text,
+        observed_at: row.observed_at,
+        basis: row.basis,
+        source_span: None,
+    }))
 }
 
 pub(super) fn expand(

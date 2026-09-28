@@ -1,3 +1,5 @@
+//! Memory evidence files that mention a project.
+
 use std::{
     fs,
     path::{Path, PathBuf},

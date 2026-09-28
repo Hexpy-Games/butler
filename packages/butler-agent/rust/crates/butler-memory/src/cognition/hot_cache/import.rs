@@ -22,6 +22,8 @@ use super::{LegacyIndexService, legacy_graph};
 const HOT_CACHE_LOCK_STALE_AFTER: Duration = Duration::from_secs(10 * 60);
 
 impl LegacyIndexService {
+    /// Adds an imported memory summary to the hot cache as a semantic
+    /// block; the legacy index line for it.
     pub async fn write_legacy_import_summary(
         data_root: &Path,
         paths: &CognitionPathEnvironment,
@@ -41,47 +43,13 @@ impl LegacyIndexService {
             return Err(error(CognitionCode::HotCacheSecretRejected));
         }
         let data_root = data_root.to_owned();
-        let memory_root = paths.memory_root(&data_root);
-        let cache = memory_root.join("hot/cache.md");
-        let destination_lock = cache.with_extension("md.lock");
-        let coordination_lock = paths.consolidation_lock(&data_root);
-        let source_id = format!(
-            "save_{}",
-            &format!(
-                "{:x}",
-                Sha256::digest(format!("{project}\0{chunk_id}\0{body}").as_bytes())
-            )[..32]
-        );
-        let created_at = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        let marker = format!("<!-- butler-semantic:{source_id}:start -->");
-        let block = format!(
-            "{marker}\n## [{created_at}] global | {chunk_id}\n- source_id: {source_id}\n- scope: global\n\n{body}\n<!-- butler-semantic:{source_id}:end -->"
-        );
+        let (marker, block) = semantic_block(&body, project, chunk_id);
         let entry_time = DateTime::<Local>::from(SystemTime::now())
             .format("%H:%M")
             .to_string();
         let index_text = format!("\n## [{entry_time}] {project} | {chunk_id}\n{body}\n");
-        let temp = cache.with_file_name(format!(
-            ".{}.{}.tmp",
-            cache
-                .file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or("cache.md"),
-            uuid::Uuid::new_v4()
-        ));
-        let audit = cache.with_file_name("cache.md.audit.md");
-        ensure_data_authority(
-            &data_root,
-            &[
-                &paths.cognition_root(&data_root),
-                &memory_root,
-                &coordination_lock,
-                &cache,
-                &destination_lock,
-                &temp,
-                &audit,
-            ],
-        )?;
+        let files = CacheFiles::new(&data_root, paths)?;
+        let coordination_lock = paths.consolidation_lock(&data_root);
         let lease = coordinator
             .acquire(
                 CognitionWriteAcquire::immediate(
@@ -100,10 +68,10 @@ impl LegacyIndexService {
                     .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
                 write_cache_entry(
                     &data_root,
-                    &cache,
-                    &destination_lock,
-                    &temp,
-                    &audit,
+                    &files.cache,
+                    &files.destination_lock,
+                    &files.temp,
+                    &files.audit,
                     &block,
                     &marker,
                 )
@@ -121,6 +89,64 @@ impl LegacyIndexService {
     }
 }
 
+/// The start marker and the whole semantic block of an imported summary.
+fn semantic_block(body: &str, project: &str, chunk_id: &str) -> (String, String) {
+    let digest = format!(
+        "{:x}",
+        Sha256::digest(format!("{project}\0{chunk_id}\0{body}").as_bytes())
+    );
+    let source_id = format!("save_{}", digest.get(..32).unwrap_or(&digest));
+    let created_at = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let marker = format!("<!-- butler-semantic:{source_id}:start -->");
+    let block = format!(
+        "{marker}\n## [{created_at}] global | {chunk_id}\n- source_id: {source_id}\n- scope: global\n\n{body}\n<!-- butler-semantic:{source_id}:end -->"
+    );
+    (marker, block)
+}
+
+/// The hot cache and the files written beside it, checked to stay inside
+/// the data root.
+struct CacheFiles {
+    cache: PathBuf,
+    destination_lock: PathBuf,
+    temp: PathBuf,
+    audit: PathBuf,
+}
+
+impl CacheFiles {
+    fn new(data_root: &Path, paths: &CognitionPathEnvironment) -> CognitionResult<Self> {
+        let memory_root = paths.memory_root(data_root);
+        let cache = memory_root.join("hot/cache.md");
+        let files = Self {
+            destination_lock: cache.with_extension("md.lock"),
+            temp: cache.with_file_name(format!(
+                ".{}.{}.tmp",
+                cache
+                    .file_name()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or("cache.md"),
+                uuid::Uuid::new_v4()
+            )),
+            audit: cache.with_file_name("cache.md.audit.md"),
+            cache,
+        };
+        ensure_data_authority(
+            data_root,
+            &[
+                &paths.cognition_root(data_root),
+                &memory_root,
+                &paths.consolidation_lock(data_root),
+                &files.cache,
+                &files.destination_lock,
+                &files.temp,
+                &files.audit,
+            ],
+        )?;
+        Ok(files)
+    }
+}
+
+/// Extracts the legacy graph from an imported transcript chunk; the entities saved.
 pub fn extract_legacy_import_transcript(
     data_root: &Path,
     paths: &CognitionPathEnvironment,

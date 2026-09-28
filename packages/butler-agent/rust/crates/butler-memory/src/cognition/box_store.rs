@@ -23,6 +23,7 @@ use super::mutable_paths;
 pub(crate) use index::BoxIndexReport;
 pub(crate) use retention::BoxRetentionReport;
 
+/// The Cognition Box: stored items with manifests, their index and retention.
 pub struct BoxStoreService {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
@@ -30,6 +31,7 @@ pub struct BoxStoreService {
 }
 
 impl BoxStoreService {
+    /// A box store over `data_root`.
     pub fn new(
         data_root: PathBuf,
         paths: CognitionPathEnvironment,
@@ -42,11 +44,13 @@ impl BoxStoreService {
         }
     }
 
+    /// Rebuilds the item index from the manifests.
     pub async fn rebuild_index(&self) -> CognitionResult<BoxIndexReport> {
         self.with_lease("box_index", |root| index::rebuild_index(&root))
             .await
     }
 
+    /// Applies retention at `now_epoch_ms`.
     pub async fn retention(&self, now_epoch_ms: i64) -> CognitionResult<BoxRetentionReport> {
         self.with_lease("box_retention", move |root| {
             retention::prune_expired(&root, now_epoch_ms)
@@ -54,6 +58,7 @@ impl BoxStoreService {
         .await
     }
 
+    /// Items in the index.
     pub async fn count_indexed(&self) -> CognitionResult<usize> {
         self.with_lease("box_index_read", |root| index::count_indexed(&root))
             .await

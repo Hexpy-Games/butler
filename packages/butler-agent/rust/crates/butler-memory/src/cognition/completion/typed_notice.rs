@@ -6,16 +6,25 @@ use sha2::{Digest, Sha256};
 use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult};
 
+/// A typed memory source published for projection.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TypedMemorySourceNotice {
+    /// A reviewed task report.
     TaskReport {
+        /// Task report record id.
         record_id: String,
+        /// Record revision.
         revision: String,
+        /// Operation that wrote it.
         operation_id: String,
     },
+    /// An explicit rule.
     ExplicitRule {
+        /// Rule record id.
         record_id: String,
+        /// Record revision.
         revision: String,
+        /// Operation that wrote it.
         operation_id: String,
     },
 }

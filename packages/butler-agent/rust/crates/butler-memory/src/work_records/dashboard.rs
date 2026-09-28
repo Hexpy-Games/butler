@@ -1,4 +1,9 @@
 //! Original TaskStore Work Dashboard, distinct from Project Ledger and BTCC Work.
+//!
+//! [`project`] groups the newest task summaries (`tasks`) into active,
+//! recoverable, failed and report-ready work, and lists pending delivery
+//! notifications (`notifications`); `evidence` decides whether a task may
+//! claim completion.
 
 mod evidence;
 mod notifications;
@@ -6,14 +11,85 @@ mod tasks;
 
 use std::path::Path;
 
-use serde_json::{Value, json};
+use serde::Serialize;
+use serde_json::Value;
 
 use crate::work_records::WorkRecordReadError;
 use butler_core::locale::LocaleCollation;
+use notifications::DeliveryItem;
+use tasks::TaskSummary;
+
+/// How much of each task the dashboard shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DashboardDetail {
+    /// Numbered labels without internal ids.
+    Public,
+    /// Internal task and notification ids as labels.
+    Debug,
+}
+
+/// The dashboard document.
+#[derive(Serialize)]
+struct Dashboard<'a> {
+    counts: Counts,
+    active: Vec<WorkItem<'a>>,
+    recoverable: Vec<WorkItem<'a>>,
+    failed: Vec<WorkItem<'a>>,
+    #[serde(rename = "reportReady")]
+    report_ready: Vec<WorkItem<'a>>,
+    delivery: Vec<DeliveryItem<'a>>,
+    debug: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Counts {
+    active: usize,
+    recoverable: usize,
+    failed: usize,
+    report_ready: usize,
+    pending_delivery: usize,
+    failed_delivery: usize,
+}
+
+/// One task row of a dashboard group.
+#[derive(Serialize)]
+struct WorkItem<'a> {
+    label: String,
+    status: &'static str,
+    task_type: &'static str,
+    work_mode: &'static str,
+    safe_to_report: bool,
+    completion_claim_allowed: bool,
+    guard_reason: Option<&'static str>,
+    summary: &'a str,
+    next_step: &'static str,
+    actions: Vec<WorkAction<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    raw_id: Option<&'a str>,
+}
+
+/// A (legacy, mostly disabled) action on a task row.
+#[derive(Serialize)]
+struct WorkAction<'a> {
+    action: &'static str,
+    label: &'static str,
+    enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    task_id: Option<&'a str>,
+}
+
+/// A dashboard group: its first `limit` rows and its total size.
+struct Group<'a> {
+    items: Vec<WorkItem<'a>>,
+    count: usize,
+}
 
 pub(super) fn project(
     tasks_root: &Path,
-    debug: bool,
+    detail: DashboardDetail,
     limit: Option<f64>,
     collation: &LocaleCollation,
 ) -> Result<Value, WorkRecordReadError> {
@@ -26,51 +102,54 @@ pub(super) fn project(
     let data = tasks_root.parent().ok_or(WorkRecordReadError::Malformed)?;
     let notifications =
         notifications::pending(&data.join("runtime/task-notifications"), collation)?;
-    let active = selected(&tasks.items, limit, debug, |task| {
-        text(task, "status") == "RUNNING"
+    let group =
+        |predicate: fn(&TaskSummary) -> bool| selected(&tasks.items, limit, detail, predicate);
+    let active = group(|task| {
+        task.status == "RUNNING"
             || matches!(
-                text(task, "planned_status"),
-                "PLANNED_RUNNING" | "REPAIRING" | "REVIEWING"
+                task.planned_status,
+                Some("PLANNED_RUNNING" | "REPAIRING" | "REVIEWING")
             )
     });
-    let recoverable = selected(&tasks.items, limit, debug, |task| {
-        boolean(task, "can_resume")
-    });
-    let failed = selected(&tasks.items, limit, debug, |task| {
-        text(task, "status") == "FAILED"
+    let recoverable = group(|task| task.can_resume);
+    let failed = group(|task| {
+        task.status == "FAILED"
             || matches!(
-                text(task, "planned_status"),
-                "REVIEW_FAILED" | "REVIEW_INCONCLUSIVE"
+                task.planned_status,
+                Some("REVIEW_FAILED" | "REVIEW_INCONCLUSIVE")
             )
     });
-    let report_ready = selected(&tasks.items, limit, debug, |task| {
-        boolean(task, "public_report_ready")
-    });
-    let delivery = notifications
-        .iter()
-        .take(limit)
-        .enumerate()
-        .map(|(index, item)| notifications::item(item, index, debug))
-        .collect::<Vec<_>>();
-    let pending_count = notifications
-        .iter()
-        .filter(|item| text(item, "status") == "pending")
-        .count();
-    let failed_count = notifications
-        .iter()
-        .filter(|item| text(item, "status") == "failed")
-        .count();
-    let counts = json!({
-        "active":if active.1==0 { tasks.health_running } else { active.1 },
-        "recoverable":if recoverable.1==0 { tasks.health_recoverable } else { recoverable.1 },
-        "failed":if failed.1==0 { tasks.health_failed } else { failed.1 },
-        "reportReady":report_ready.1,
-        "pendingDelivery":pending_count,"failedDelivery":failed_count,
-    });
-    Ok(
-        json!({"counts":counts,"active":active.0,"recoverable":recoverable.0,
-        "failed":failed.0,"reportReady":report_ready.0,"delivery":delivery,"debug":debug}),
-    )
+    let report_ready = group(|task| task.public_report_ready);
+    let debug = detail == DashboardDetail::Debug;
+    let counted = |status: &str| {
+        notifications
+            .iter()
+            .filter(|item| item.status.as_deref() == Some(status))
+            .count()
+    };
+    let nonzero = |group: usize, health: usize| if group == 0 { health } else { group };
+    let dashboard = Dashboard {
+        counts: Counts {
+            active: nonzero(active.count, tasks.health_running),
+            recoverable: nonzero(recoverable.count, tasks.health_recoverable),
+            failed: nonzero(failed.count, tasks.health_failed),
+            report_ready: report_ready.count,
+            pending_delivery: counted("pending"),
+            failed_delivery: counted("failed"),
+        },
+        active: active.items,
+        recoverable: recoverable.items,
+        failed: failed.items,
+        report_ready: report_ready.items,
+        delivery: notifications
+            .iter()
+            .take(limit)
+            .enumerate()
+            .map(|(index, item)| notifications::item(item, index, debug))
+            .collect(),
+        debug,
+    };
+    Ok(serde_json::to_value(dashboard)?)
 }
 
 pub(super) fn cli_summaries(
@@ -78,43 +157,48 @@ pub(super) fn cli_summaries(
     status: Option<&str>,
     collation: &LocaleCollation,
 ) -> Result<Vec<Value>, WorkRecordReadError> {
-    tasks::cli_summaries(tasks_root, status, collation)
+    tasks::cli_summaries(tasks_root, status, collation)?
+        .iter()
+        .map(|summary| Ok(serde_json::to_value(summary)?))
+        .collect()
 }
 
 pub(super) fn cli_summary_by_id(
     tasks_root: &Path,
     id: &str,
 ) -> Result<Option<Value>, WorkRecordReadError> {
-    tasks::cli_summary_by_id(tasks_root, id)
+    tasks::cli_summary_by_id(tasks_root, id)?
+        .map(|summary| Ok(serde_json::to_value(summary)?))
+        .transpose()
 }
 
 fn selected(
-    source: &[Value],
+    source: &[TaskSummary],
     limit: usize,
-    debug: bool,
-    predicate: impl Fn(&Value) -> bool,
-) -> (Vec<Value>, usize) {
+    detail: DashboardDetail,
+    predicate: fn(&TaskSummary) -> bool,
+) -> Group<'_> {
     let group: Vec<_> = source.iter().filter(|item| predicate(item)).collect();
-    let count = group.len();
-    let items = group
-        .into_iter()
-        .take(limit)
-        .enumerate()
-        .map(|(index, item)| item_projection(item, index, debug))
-        .collect();
-    (items, count)
+    Group {
+        count: group.len(),
+        items: group
+            .into_iter()
+            .take(limit)
+            .enumerate()
+            .map(|(index, item)| item_projection(item, index, detail))
+            .collect(),
+    }
 }
 
-fn item_projection(task: &Value, index: usize, debug: bool) -> Value {
-    let id = text(task, "task_id");
-    let status = text(task, "status");
-    let observed = boolean(task, "has_result") || boolean(task, "has_observed_result");
-    let mut actions = Vec::with_capacity(3);
-    for (action, label, enabled, reason) in [
+fn item_projection(task: &TaskSummary, index: usize, detail: DashboardDetail) -> WorkItem<'_> {
+    let debug = detail == DashboardDetail::Debug;
+    let id = task.task_id.as_str();
+    let observed = task.has_result || task.has_observed_result;
+    let actions = [
         (
             "view_result",
             "View result",
-            observed || status == "FAILED",
+            observed || task.status == "FAILED",
             "No result evidence is available yet.",
         ),
         (
@@ -129,38 +213,31 @@ fn item_projection(task: &Value, index: usize, debug: bool) -> Value {
             false,
             "No native execution owner is available to cancel legacy tasks.",
         ),
-    ] {
-        let mut item = json!({"action":action,"label":label,"enabled":enabled});
-        if !enabled
-            || (action == "view_result"
-                && !boolean(task, "has_result")
-                && !boolean(task, "has_observed_result"))
-        {
-            item["reason"] = reason.into();
-        }
-        if debug {
-            item["task_id"] = id.into();
-        }
-        actions.push(item);
+    ]
+    .into_iter()
+    .map(|(action, label, enabled, reason)| WorkAction {
+        action,
+        label,
+        enabled,
+        reason: (!enabled || (action == "view_result" && !observed)).then_some(reason),
+        task_id: debug.then_some(id),
+    })
+    .collect();
+    WorkItem {
+        label: if debug {
+            id.to_owned()
+        } else {
+            format!("Work {}", index + 1)
+        },
+        status: task.planned_status.unwrap_or(task.status),
+        task_type: task.task_type,
+        work_mode: task.work_mode,
+        safe_to_report: task.safe_to_report,
+        completion_claim_allowed: task.completion_claim_allowed,
+        guard_reason: task.guard_reason,
+        summary: &task.user_summary,
+        next_step: task.next_step,
+        actions,
+        raw_id: debug.then_some(id),
     }
-    let mut item = json!({
-        "label":if debug { id.to_owned() } else { format!("Work {}",index+1) },
-        "status":task.get("planned_status").and_then(Value::as_str).unwrap_or(status),
-        "task_type":task.get("task_type"),"work_mode":task.get("work_mode"),
-        "safe_to_report":task.get("safe_to_report"),
-        "completion_claim_allowed":task.get("completion_claim_allowed"),
-        "guard_reason":task.get("guard_reason"),"summary":task.get("user_summary"),
-        "next_step":task.get("next_step"),"actions":actions,
-    });
-    if debug {
-        item["raw_id"] = id.into();
-    }
-    item
-}
-
-fn text<'a>(value: &'a Value, key: &str) -> &'a str {
-    value.get(key).and_then(Value::as_str).unwrap_or("")
-}
-fn boolean(value: &Value, key: &str) -> bool {
-    value.get(key) == Some(&Value::Bool(true))
 }

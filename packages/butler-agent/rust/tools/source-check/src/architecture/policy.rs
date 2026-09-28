@@ -26,10 +26,18 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // butler-ledger: SQLite ownership stays behind BTCC's Project Work port.
         "project_ledger" => &[],
         // butler-memory: Cognition coordinates writers, reads the profile and
-        // records completed work.
-        "cognition" => &["work_records", "coordination", "profile"],
-        "profile" => &["coordination"],
-        "coordination" | "work_records" => &[],
+        // records completed work. `lenient` (stored-JSON readers) and `js_json`
+        // (JSON.stringify of typed records) are leaf helpers.
+        "cognition" => &[
+            "work_records",
+            "coordination",
+            "profile",
+            "lenient",
+            "js_json",
+        ],
+        "profile" => &["coordination", "lenient"],
+        "work_records" => &["lenient", "js_json"],
+        "coordination" | "lenient" | "js_json" => &[],
         // butler-gateway and the host binary are single-domain crates.
         "gateway" | "host" => &[],
         // butler-e2e: dev-only harness around the built binary; one domain.

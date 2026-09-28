@@ -11,7 +11,7 @@ async fn consolidation_hydrates_legacy_rows_and_expires_after_promotion_pass() {
         .set_profiling_mode(ProfilingMode::Basic)
         .await
         .unwrap();
-    let db = storage::open(&root.0, true).unwrap();
+    let db = storage::open(&root.0, storage::Access::Write).unwrap();
     insert(
         &db,
         "bad",
@@ -70,7 +70,7 @@ async fn consolidation_hydrates_legacy_rows_and_expires_after_promotion_pass() {
     drop(db);
 
     let result = service.consolidate_profile_candidates().await.unwrap();
-    let db = storage::open(&root.0, false).unwrap();
+    let db = storage::open(&root.0, storage::Access::Read).unwrap();
     let rows = db
         .prepare(
             "SELECT id,category,payload_json,source_type,confidence,sensitive_domain,created_at,updated_at,last_seen_at,expires_or_decay,status,promoted_at FROM profile_candidates ORDER BY id",

@@ -1,13 +1,17 @@
+//! The consolidation maintenance status, read from the run-summary logs.
+
 use std::{
     fs::File,
     io::{BufRead, BufReader},
     path::Path,
 };
 
+use serde::Deserialize;
 use serde_json::Value;
 
 use super::{MaintenanceStatus, error};
 use crate::cognition::{CognitionCode, CognitionResult};
+use crate::lenient::{self, Obj};
 use butler_core::js_date;
 
 const STALE_AFTER_MS: i64 = 7 * 24 * 60 * 60 * 1_000;
@@ -29,7 +33,55 @@ pub(super) struct MaintenanceState {
     pub diagnostics: Vec<String>,
 }
 
+/// The maintenance status from the latest two run summaries.
 pub(super) fn read(root: &Path, now: i64) -> CognitionResult<MaintenanceState> {
+    let latest_two = latest_summaries(root)?;
+    let Some(latest) = latest_two.last() else {
+        return Ok(MaintenanceState {
+            status: MaintenanceStatus::Missing,
+            last_run_at: None,
+            failed_phases: Vec::new(),
+            diagnostics: vec!["memory maintenance has not run".into()],
+        });
+    };
+    let previous = latest_two.iter().rev().nth(1);
+    let last_run_at = Some(latest.timestamp.clone());
+    let failed =
+        |line: &SummaryLine| matches!(line.status.as_deref(), Some("error" | "aborted_budget"));
+    let (status, failed_phases, diagnostic) = if failed(latest) {
+        (
+            MaintenanceStatus::Failed,
+            latest.failed_phases.clone(),
+            Some("memory maintenance failed"),
+        )
+    } else if latest
+        .timestamp_ms
+        .is_some_and(|last_run| now.saturating_sub(last_run) > STALE_AFTER_MS)
+    {
+        (
+            MaintenanceStatus::Stale,
+            Vec::new(),
+            Some("memory maintenance is stale"),
+        )
+    } else if latest.status.as_deref() == Some("ok") && previous.is_some_and(failed) {
+        (
+            MaintenanceStatus::Repaired,
+            Vec::new(),
+            Some("memory maintenance recovered after a previous failure"),
+        )
+    } else {
+        (MaintenanceStatus::Ok, Vec::new(), None)
+    };
+    Ok(MaintenanceState {
+        status,
+        last_run_at,
+        failed_phases,
+        diagnostics: diagnostic.into_iter().map(str::to_owned).collect(),
+    })
+}
+
+/// The two latest `summary` lines of both run-summary logs, oldest first.
+fn latest_summaries(root: &Path) -> CognitionResult<Vec<SummaryLine>> {
     let mut latest_two = Vec::with_capacity(2);
     let mut sequence = 0_u64;
     for path in [
@@ -48,88 +100,57 @@ pub(super) fn read(root: &Path, now: i64) -> CognitionResult<MaintenanceState> {
                 Ok(_) => {}
                 Err(_) => return Err(error(CognitionCode::MemoryHealthReadFailed)),
             }
-            if line.iter().all(u8::is_ascii_whitespace) {
+            let Some(record) = summary_line(&line, sequence) else {
                 continue;
-            }
-            let Ok(value) = serde_json::from_slice::<Value>(&line) else {
-                continue;
-            };
-            if value.get("phase").and_then(Value::as_str) != Some("summary") {
-                continue;
-            }
-            let Some(timestamp) = value.get("ts").and_then(Value::as_str) else {
-                continue;
-            };
-            let failed_phases = value
-                .pointer("/metrics/failed_phases")
-                .and_then(Value::as_array)
-                .map(|values| {
-                    values
-                        .iter()
-                        .filter_map(Value::as_str)
-                        .map(str::to_owned)
-                        .collect()
-                })
-                .unwrap_or_default();
-            let record = SummaryLine {
-                sequence,
-                timestamp: timestamp.to_owned(),
-                timestamp_ms: js_date::parse_date_millis(timestamp, &Some),
-                status: value
-                    .get("status")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-                failed_phases,
             };
             sequence = sequence.saturating_add(1);
             retain_latest_two(&mut latest_two, record);
         }
     }
-    let Some(latest) = latest_two.last() else {
-        return Ok(MaintenanceState {
-            status: MaintenanceStatus::Missing,
-            last_run_at: None,
-            failed_phases: Vec::new(),
-            diagnostics: vec!["memory maintenance has not run".into()],
-        });
-    };
-    let previous = latest_two.iter().rev().nth(1);
-    let last_run_at = Some(latest.timestamp.clone());
-    if matches!(latest.status.as_deref(), Some("error" | "aborted_budget")) {
-        return Ok(MaintenanceState {
-            status: MaintenanceStatus::Failed,
-            last_run_at,
-            failed_phases: latest.failed_phases.clone(),
-            diagnostics: vec!["memory maintenance failed".into()],
-        });
+    Ok(latest_two)
+}
+
+/// A run-summary log line; a field with the wrong type reads as absent.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct RawSummary {
+    #[serde(deserialize_with = "lenient::option")]
+    phase: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    ts: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    status: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    metrics: Option<Obj<RawMetrics>>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct RawMetrics {
+    #[serde(deserialize_with = "lenient::string_list")]
+    failed_phases: Vec<String>,
+}
+
+/// The line when it is a `summary` with a timestamp.
+fn summary_line(line: &[u8], sequence: u64) -> Option<SummaryLine> {
+    if line.iter().all(u8::is_ascii_whitespace) {
+        return None;
     }
-    if latest
-        .timestamp_ms
-        .is_some_and(|last_run| now.saturating_sub(last_run) > STALE_AFTER_MS)
-    {
-        return Ok(MaintenanceState {
-            status: MaintenanceStatus::Stale,
-            last_run_at,
-            failed_phases: Vec::new(),
-            diagnostics: vec!["memory maintenance is stale".into()],
-        });
+    let value = serde_json::from_slice::<Value>(line).ok()?;
+    let raw: RawSummary = lenient::view(&value);
+    if raw.phase.as_deref() != Some("summary") {
+        return None;
     }
-    if latest.status.as_deref() == Some("ok")
-        && previous
-            .is_some_and(|line| matches!(line.status.as_deref(), Some("error" | "aborted_budget")))
-    {
-        return Ok(MaintenanceState {
-            status: MaintenanceStatus::Repaired,
-            last_run_at,
-            failed_phases: Vec::new(),
-            diagnostics: vec!["memory maintenance recovered after a previous failure".into()],
-        });
-    }
-    Ok(MaintenanceState {
-        status: MaintenanceStatus::Ok,
-        last_run_at,
-        failed_phases: Vec::new(),
-        diagnostics: Vec::new(),
+    let timestamp = raw.ts?;
+    Some(SummaryLine {
+        sequence,
+        timestamp_ms: js_date::parse_date_millis(&timestamp, &Some),
+        timestamp,
+        status: raw.status,
+        failed_phases: raw
+            .metrics
+            .map(|metrics| metrics.0.failed_phases)
+            .unwrap_or_default(),
     })
 }
 

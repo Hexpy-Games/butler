@@ -1,0 +1,290 @@
+[
+  {
+    "moment": "9:00 AM",
+    "title": "Good morning",
+    "description": "A useful start",
+    "suggestions": [
+      {
+        "id": "card-0",
+        "title": "Title 0",
+        "description": "Why",
+        "text": "Start 0"
+      },
+      {
+        "id": "card-1",
+        "title": "Title 1",
+        "description": "Why",
+        "text": "Start 1"
+      },
+      {
+        "id": "card-2",
+        "title": "Title 2",
+        "description": "Why",
+        "text": "Start 2"
+      },
+      {
+        "id": "card-3",
+        "title": "Title 3",
+        "description": "Why",
+        "text": "Start 3"
+      },
+      {
+        "id": "card-4",
+        "title": "Title 4",
+        "description": "Why",
+        "text": "Start 4"
+      }
+    ],
+    "source": {
+      "scope": "general",
+      "content_origin": "generated",
+      "consolidation_run_id": "cr_pin",
+      "generated_at": "2026-09-23T00:00:00.000Z",
+      "locale": "en",
+      "persona_applied": true,
+      "profile_projection_applied": true
+    },
+    "raw_text_included": false
+  },
+  {
+    "moment": "9:00 AM",
+    "title": "Good night",
+    "description": "A useful start",
+    "suggestions": [
+      {
+        "id": "card-0",
+        "title": "Title 0",
+        "description": "Why",
+        "text": "Start 0"
+      },
+      {
+        "id": "card-1",
+        "title": "Title 1",
+        "description": "Why",
+        "text": "Start 1"
+      },
+      {
+        "id": "card-2",
+        "title": "Title 2",
+        "description": "Why",
+        "text": "Start 2"
+      },
+      {
+        "id": "card-3",
+        "title": "Title 3",
+        "description": "Why",
+        "text": "Start 3"
+      },
+      {
+        "id": "card-4",
+        "title": "Title 4",
+        "description": "Why",
+        "text": "Start 4"
+      }
+    ],
+    "source": {
+      "scope": "general",
+      "content_origin": "generated",
+      "consolidation_run_id": "cr_pin",
+      "generated_at": "2026-09-23T00:00:00.000Z",
+      "locale": "en",
+      "persona_applied": true,
+      "profile_projection_applied": true
+    },
+    "raw_text_included": false
+  },
+  {
+    "moment": "Early start",
+    "title": "Open today",
+    "description": "A useful start",
+    "suggestions": [
+      {
+        "id": "card-0",
+        "title": "Title 0",
+        "description": "Why",
+        "text": "Start 0"
+      },
+      {
+        "id": "card-1",
+        "title": "Title 1",
+        "description": "Why",
+        "text": "Start 1"
+      },
+      {
+        "id": "card-2",
+        "title": "Title 2",
+        "description": "Why",
+        "text": "Start 2"
+      },
+      {
+        "id": "card-3",
+        "title": "Title 3",
+        "description": "Why",
+        "text": "Start 3"
+      },
+      {
+        "id": null,
+        "title": null,
+        "description": null,
+        "text": null
+      }
+    ],
+    "source": {
+      "scope": "project",
+      "content_origin": "generated",
+      "consolidation_run_id": "cr_pin",
+      "generated_at": "2026-09-23T00:00:00.000Z",
+      "locale": "en",
+      "persona_applied": true,
+      "profile_projection_applied": false,
+      "project_id": "project-1",
+      "project_name": "Project One"
+    },
+    "raw_text_included": false
+  },
+  {
+    "moment": "Early start",
+    "title": "Open today",
+    "description": "A useful start",
+    "suggestions": [
+      {
+        "id": "card-0",
+        "title": "Title 0",
+        "description": "Why",
+        "text": "Start 0"
+      },
+      {
+        "id": "card-1",
+        "title": "Title 1",
+        "description": "Why",
+        "text": "Start 1"
+      },
+      {
+        "id": "card-2",
+        "title": "Title 2",
+        "description": "Why",
+        "text": "Start 2"
+      },
+      {
+        "id": "card-3",
+        "title": "Title 3",
+        "description": "Why",
+        "text": "Start 3"
+      },
+      {
+        "id": null,
+        "title": null,
+        "description": null,
+        "text": null
+      }
+    ],
+    "source": {
+      "scope": "project",
+      "content_origin": "generated",
+      "consolidation_run_id": "cr_pin",
+      "generated_at": "2026-09-23T00:00:00.000Z",
+      "locale": "en",
+      "persona_applied": true,
+      "profile_projection_applied": false,
+      "project_id": "project-1",
+      "project_name": "Project One"
+    },
+    "raw_text_included": false
+  },
+  {
+    "moment": "",
+    "title": "Open today",
+    "description": "A useful start",
+    "suggestions": [
+      {
+        "id": "card-0",
+        "title": "Title 0",
+        "description": "Why",
+        "text": "Start 0"
+      },
+      {
+        "id": "card-1",
+        "title": "Title 1",
+        "description": "Why",
+        "text": "Start 1"
+      },
+      {
+        "id": "card-2",
+        "title": "Title 2",
+        "description": "Why",
+        "text": "Start 2"
+      },
+      {
+        "id": "card-3",
+        "title": "Title 3",
+        "description": "Why",
+        "text": "Start 3"
+      },
+      {
+        "id": "card-4",
+        "title": "Title 4",
+        "description": "Why",
+        "text": "Start 4"
+      }
+    ],
+    "source": {
+      "scope": "project",
+      "content_origin": "generated",
+      "consolidation_run_id": "cr_pin",
+      "generated_at": "2026-09-23T00:00:00.000Z",
+      "locale": "en",
+      "persona_applied": true,
+      "profile_projection_applied": true,
+      "project_id": "project-2"
+    },
+    "raw_text_included": false
+  },
+  {
+    "moment": "",
+    "title": "Open today",
+    "description": "A useful start",
+    "suggestions": [
+      {
+        "id": "card-0",
+        "title": "Title 0",
+        "description": "Why",
+        "text": "Start 0"
+      },
+      {
+        "id": "card-1",
+        "title": "Title 1",
+        "description": "Why",
+        "text": "Start 1"
+      },
+      {
+        "id": "card-2",
+        "title": "Title 2",
+        "description": "Why",
+        "text": "Start 2"
+      },
+      {
+        "id": "card-3",
+        "title": "Title 3",
+        "description": "Why",
+        "text": "Start 3"
+      },
+      {
+        "id": "card-4",
+        "title": "Title 4",
+        "description": "Why",
+        "text": "Start 4"
+      }
+    ],
+    "source": {
+      "scope": "project",
+      "content_origin": "generated",
+      "consolidation_run_id": "cr_pin",
+      "generated_at": "2026-09-23T00:00:00.000Z",
+      "locale": "en",
+      "persona_applied": true,
+      "profile_projection_applied": true,
+      "project_id": "project-2"
+    },
+    "raw_text_included": false
+  }
+]

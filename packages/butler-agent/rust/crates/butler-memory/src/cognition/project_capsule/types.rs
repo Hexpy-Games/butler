@@ -1,3 +1,5 @@
+//! Project capsule snapshots, source counts and maintenance results.
+
 use std::path::PathBuf;
 
 use serde::Serialize;

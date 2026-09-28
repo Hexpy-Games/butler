@@ -1,3 +1,5 @@
+//! Alias and lexical channels, and semantic seed selection by reciprocal-rank fusion.
+
 use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -91,62 +93,37 @@ pub(in crate::cognition) fn rank_lexical(
         .collect()
 }
 
+/// How semantic seeds are chosen from the ranked channels.
+#[derive(Clone, Copy)]
+pub(in crate::cognition) struct SeedOptions {
+    /// Seeds kept before any time filter.
+    pub max_seeds: usize,
+    /// A time window applies, so at most eight seeds are used.
+    pub time_bounded: bool,
+    /// Only the context lane was admitted.
+    pub context_only: bool,
+    /// The lexical lane stopped early.
+    pub lexical_partial: bool,
+}
+
+/// Fuses the ranked channels into seeds by weighted reciprocal rank (the
+/// context lane alone when no other lane was admitted).
 pub(in crate::cognition) fn select_semantic_seeds(
     channels: impl IntoIterator<Item = RankedCandidate>,
-    lexical_partial: bool,
-    max_seeds: usize,
-    has_time: bool,
-    admitted_noncontext: bool,
+    options: SeedOptions,
 ) -> SemanticSelection {
-    let mut by_node = HashMap::<String, HashMap<Channel, RankedCandidate>>::new();
-    let context_only = !admitted_noncontext;
-    for candidate in channels {
-        if candidate.channel == Channel::Context
-            && !context_only
-            && !by_node.contains_key(&candidate.node_id)
-        {
-            continue;
-        }
-        let entry = by_node.entry(candidate.node_id.clone()).or_default();
-        let prior = entry.get(&candidate.channel);
-        if prior.is_none_or(|prior| {
-            candidate.rank < prior.rank
-                || candidate.rank == prior.rank && candidate.score > prior.score
-        }) {
-            entry.insert(candidate.channel, candidate);
-        }
-    }
-    let mut ranked = by_node
-        .iter()
-        .map(|(node_id, channels)| {
-            let rank = |channel: Channel| channels.get(&channel).map(|c| c.rank as f64);
-            let score = if context_only {
-                1.0 / (60.0 + rank(Channel::Context).unwrap_or(1.0))
-            } else {
-                rank(Channel::Alias).map_or(0.0, |r| 3.0 / (60.0 + r))
-                    + rank(Channel::Lexical).map_or(0.0, |r| 1.0 / (60.0 + r))
-                    + rank(Channel::Vector).map_or(0.0, |r| 2.0 / (60.0 + r))
-            };
-            (
-                node_id.clone(),
-                score,
-                rank(Channel::Context).unwrap_or(f64::INFINITY),
-            )
-        })
-        .collect::<Vec<_>>();
-    ranked.sort_by(|a, b| {
-        b.1.total_cmp(&a.1)
-            .then_with(|| a.2.total_cmp(&b.2))
-            .then_with(|| a.0.as_bytes().cmp(b.0.as_bytes()))
-    });
-    let all_seeds = ranked
+    let by_node = best_per_channel(channels, options);
+    let all_seeds = fused_order(&by_node, options)
         .into_iter()
-        .take(max_seeds)
-        .map(|row| row.0)
+        .take(options.max_seeds)
         .collect::<Vec<_>>();
     let seeds = all_seeds
         .iter()
-        .take(if has_time { 8 } else { max_seeds })
+        .take(if options.time_bounded {
+            8
+        } else {
+            options.max_seeds
+        })
         .cloned()
         .collect();
     SemanticSelection {
@@ -176,10 +153,69 @@ pub(in crate::cognition) fn select_semantic_seeds(
                 )
             })
             .collect(),
-        coverage_codes: if lexical_partial {
+        coverage_codes: if options.lexical_partial {
             vec!["lexical_partial".into()]
         } else {
             Vec::new()
         },
     }
+}
+
+/// Each node's best candidate per channel. Unless only the context lane was
+/// admitted, context candidates only join nodes another lane found.
+fn best_per_channel(
+    channels: impl IntoIterator<Item = RankedCandidate>,
+    options: SeedOptions,
+) -> HashMap<String, HashMap<Channel, RankedCandidate>> {
+    let context_only = options.context_only;
+    let mut by_node = HashMap::<String, HashMap<Channel, RankedCandidate>>::new();
+    for candidate in channels {
+        if candidate.channel == Channel::Context
+            && !context_only
+            && !by_node.contains_key(&candidate.node_id)
+        {
+            continue;
+        }
+        let entry = by_node.entry(candidate.node_id.clone()).or_default();
+        let prior = entry.get(&candidate.channel);
+        if prior.is_none_or(|prior| {
+            candidate.rank < prior.rank
+                || candidate.rank == prior.rank && candidate.score > prior.score
+        }) {
+            entry.insert(candidate.channel, candidate);
+        }
+    }
+    by_node
+}
+
+/// Node ids by fused score, then context rank, then id.
+fn fused_order(
+    by_node: &HashMap<String, HashMap<Channel, RankedCandidate>>,
+    options: SeedOptions,
+) -> Vec<String> {
+    let context_only = options.context_only;
+    let mut ranked = by_node
+        .iter()
+        .map(|(node_id, channels)| {
+            let rank = |channel: Channel| channels.get(&channel).map(|c| c.rank as f64);
+            let score = if context_only {
+                1.0 / (60.0 + rank(Channel::Context).unwrap_or(1.0))
+            } else {
+                rank(Channel::Alias).map_or(0.0, |r| 3.0 / (60.0 + r))
+                    + rank(Channel::Lexical).map_or(0.0, |r| 1.0 / (60.0 + r))
+                    + rank(Channel::Vector).map_or(0.0, |r| 2.0 / (60.0 + r))
+            };
+            (
+                node_id.clone(),
+                score,
+                rank(Channel::Context).unwrap_or(f64::INFINITY),
+            )
+        })
+        .collect::<Vec<_>>();
+    ranked.sort_by(|a, b| {
+        b.1.total_cmp(&a.1)
+            .then_with(|| a.2.total_cmp(&b.2))
+            .then_with(|| a.0.as_bytes().cmp(b.0.as_bytes()))
+    });
+    ranked.into_iter().map(|row| row.0).collect()
 }

@@ -1,3 +1,5 @@
+//! The owner that runs prompt reads on the blocking pool and drains them on close.
+
 use parking_lot::Mutex;
 use std::sync::Arc;
 

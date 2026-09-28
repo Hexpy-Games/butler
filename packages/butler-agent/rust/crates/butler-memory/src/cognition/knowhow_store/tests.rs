@@ -19,7 +19,7 @@ use super::{FeedbackResolveFuture, FeedbackResolvePort, KnowHowService};
 
 const NOW: &str = "2026-09-23T00:00:00.000Z";
 
-struct TestHost;
+pub(super) struct TestHost;
 
 impl CognitionCoordinationHost for TestHost {
     fn process_id(&self) -> u32 {
@@ -88,7 +88,7 @@ fn temp_root() -> PathBuf {
     ))
 }
 
-fn entry(id: &str, updated_at: &str) -> Value {
+pub(super) fn entry(id: &str, updated_at: &str) -> Value {
     json!({
         "schema": "butler.cognition.knowhow.v1",
         "knowhow_id": id,
@@ -133,7 +133,7 @@ fn entry(id: &str, updated_at: &str) -> Value {
     })
 }
 
-fn write_entry(root: &Path, value: &Value) {
+pub(super) fn write_entry(root: &Path, value: &Value) {
     let directory = root.join("cognition/know-how/entries");
     fs::create_dir_all(&directory).expect("create entries directory");
     let id = value["knowhow_id"].as_str().expect("entry id");

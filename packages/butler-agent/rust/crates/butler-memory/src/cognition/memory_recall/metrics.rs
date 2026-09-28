@@ -27,47 +27,84 @@ pub(super) struct Candidate {
     pub c_score: f64,
 }
 
+/// An operational recall metric. Every identifier is hashed; no text is recorded.
 pub enum RecallMetric {
+    /// How long a recall stage took.
     Stage {
+        /// Stage name.
         name: &'static str,
+        /// Hash of the recall operation.
         native_operation_sha256: String,
+        /// Duration in milliseconds.
         duration_ms: f64,
     },
+    /// The rank of one candidate episode across the recall channels.
     CandidateRanking {
+        /// Hash of the recall operation.
         native_operation_sha256: String,
+        /// Hash of the recall cue.
         cue_sha256: String,
+        /// Hash of the memory generation.
         generation_sha256: String,
+        /// Hash of the episode.
         episode_sha256: String,
+        /// Rank after fusion.
         candidate_rank: usize,
+        /// Fused score.
         candidate_score: f64,
+        /// Graph channel rank.
         g_rank: f64,
+        /// Graph channel score.
         g_score: f64,
+        /// Vector channel rank.
         v_rank: f64,
+        /// Vector nearest-neighbour distance, when the episode was a vector hit.
         v_ann_distance: Option<f64>,
+        /// Lexical channel rank.
         l_rank: f64,
+        /// Lexical channel score.
         l_score: f64,
+        /// Context channel rank.
         c_rank: f64,
+        /// Context channel score.
         c_score: f64,
+        /// The graph channel ran.
         graph_executed: bool,
+        /// The vector channel ran.
         vector_executed: bool,
+        /// The lexical channel ran.
         lexical_executed: bool,
+        /// The context channel ran.
         context_executed: bool,
     },
+    /// Where a returned episode ranked before and after selection.
     ReturnedRanking {
+        /// Hash of the recall operation.
         native_operation_sha256: String,
+        /// Hash of the recall cue.
         cue_sha256: String,
+        /// Hash of the memory generation.
         generation_sha256: String,
+        /// Hash of the episode.
         episode_sha256: String,
+        /// Rank after fusion.
         candidate_rank: usize,
+        /// Rank in the returned results.
         returned_rank: usize,
+        /// The graph channel ran.
         graph_executed: bool,
+        /// The vector channel ran.
         vector_executed: bool,
+        /// The lexical channel ran.
         lexical_executed: bool,
+        /// The context channel ran.
         context_executed: bool,
     },
 }
 
+/// Receives recall metrics.
 pub trait RecallMetricSink: Send + Sync {
+    /// Records one metric.
     fn record(&self, metric: RecallMetric);
 }
 

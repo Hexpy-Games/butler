@@ -1,12 +1,13 @@
 //! Durable semantic-window claim and replay authority.
 
+use crate::cognition::graph::StageWrite;
 use std::collections::HashSet;
 
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
-use serde_json::{Value, json};
 
 use super::{db_error, jobs};
 use crate::cognition::CognitionCode;
+use crate::cognition::extraction::ExtractInput;
 use crate::cognition::{CognitionError, CognitionResult};
 use crate::coordination::CognitionProcessStatus;
 
@@ -16,6 +17,9 @@ pub(in crate::cognition) enum PreviousWindowState {
     Planned,
 }
 
+/// A window this process now runs. A window claimed again after an
+/// interruption carries what the earlier attempt saved, as stored JSON text
+/// (checked to be JSON; its caller decodes the typed record).
 pub(in crate::cognition) struct ClaimedProjectionWindow {
     pub job_id: String,
     pub window_ref: String,
@@ -23,10 +27,13 @@ pub(in crate::cognition) struct ClaimedProjectionWindow {
     pub model: String,
     pub reasoning_effort: String,
     pub previous_state: PreviousWindowState,
-    pub output: Option<Value>,
-    pub plan: Option<Value>,
+    /// Saved `ExtractOutput` JSON.
+    pub output: Option<String>,
+    /// Saved `NormalizedPlan` JSON.
+    pub plan: Option<String>,
     pub owner_nonce: String,
-    pub pinned_input: Option<Value>,
+    /// Pinned `ExtractInput` JSON.
+    pub pinned_input: Option<String>,
 }
 
 struct InterruptedProjectionWindow {
@@ -77,11 +84,14 @@ pub(super) fn claim(
         return Err(changed());
     }
     let attempt = row.attempt_count + 1;
-    let running = json!({"state":"running","attempt":attempt-row.recovery_base_attempt_count,
-        "owner_pid":input.owner_pid,"started_at":input.now});
+    let running = StageWrite::Running {
+        attempt: attempt - row.recovery_base_attempt_count,
+        owner_pid: input.owner_pid,
+        started_at: input.now.to_owned(),
+    };
     tx.execute(
         "UPDATE memory_projection_jobs SET semantic_graph_state=?1 WHERE job_id=?2",
-        params![stringify(&running)?, row.job_id],
+        params![running.json()?, row.job_id],
     )
     .map_err(db_error)?;
     tx.commit().map_err(db_error)?;
@@ -96,25 +106,23 @@ pub(super) fn claim(
         } else {
             PreviousWindowState::Pending
         },
-        output: parse_optional(row.output_json.as_deref())?,
-        plan: parse_optional(row.plan_json.as_deref())?,
+        output: checked_json(row.output_json)?,
+        plan: checked_json(row.plan_json)?,
         owner_nonce: input.owner_nonce.to_owned(),
-        pinned_input: parse_optional(row.input_json.as_deref())?,
+        pinned_input: checked_json(row.input_json)?,
     }))
 }
 
+/// Pins the window's extractor input once (later pins keep the first).
 pub(super) fn pin_input(
     connection: &Connection,
     window_ref: &str,
     owner_nonce: &str,
-    input: &Value,
+    input: &ExtractInput,
     migration_note: Option<&str>,
 ) -> CognitionResult<()> {
-    let json = stringify(input)?;
-    let sha = crate::cognition::sources::projection_hash_for_graph(vec![
-        Value::String("extract-input".into()),
-        Value::String(json.clone()),
-    ])?;
+    let json = crate::js_json::stringify(input).map_err(json_error)?;
+    let sha = crate::cognition::sources::projection_hash_for_graph(&("extract-input", &json))?;
     let changed_rows = connection
         .execute(
             "UPDATE memory_projection_windows SET \
@@ -281,11 +289,12 @@ fn provider_attempt_count(
 fn parse<T: serde::de::DeserializeOwned>(value: &str) -> CognitionResult<T> {
     serde_json::from_str(value).map_err(json_error)
 }
-fn parse_optional(value: Option<&str>) -> CognitionResult<Option<Value>> {
-    value.map(parse).transpose()
-}
-fn stringify(value: &Value) -> CognitionResult<String> {
-    butler_core::json::stringify(value).map_err(json_error)
+/// Stored JSON text, rejected here when it is not JSON at all.
+fn checked_json(value: Option<String>) -> CognitionResult<Option<String>> {
+    if let Some(text) = &value {
+        parse::<serde::de::IgnoredAny>(text)?;
+    }
+    Ok(value)
 }
 fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
     CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string()).with_source(error)

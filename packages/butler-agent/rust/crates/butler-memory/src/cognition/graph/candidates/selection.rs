@@ -9,7 +9,8 @@ use unicode_normalization::UnicodeNormalization;
 
 use super::{CognitionResult, ExtractInput, db_error, json_error};
 use crate::cognition::recall::{
-    Channel, RankedCandidate, SemanticSelection, rank_aliases, rank_lexical, select_semantic_seeds,
+    Channel, RankedCandidate, SeedOptions, SemanticSelection, rank_aliases, rank_lexical,
+    select_semantic_seeds,
 };
 use crate::cognition::{CognitionCode, lexical};
 use butler_turn::conversation::ConversationSourceReader;
@@ -45,7 +46,15 @@ pub(super) fn select(
     channels.extend(vectors(db, project, as_of, vector)?);
     let context = context(db, canonical, input, project, as_of)?;
     channels.extend(context);
-    Ok(select_semantic_seeds(channels, partial, 32, false, true))
+    Ok(select_semantic_seeds(
+        channels,
+        SeedOptions {
+            max_seeds: 32,
+            time_bounded: false,
+            context_only: false,
+            lexical_partial: partial,
+        },
+    ))
 }
 
 fn alias(
@@ -129,6 +138,28 @@ fn lexical(
         let surface = row.get::<_, String>(2).map_err(db_error)?;
         documents.push((id, lexical::folded_grams(&surface)));
     }
+    let df = if super::current_millis() < deadline {
+        document_frequencies(db, project, as_of, &query_grams, &documents)?
+    } else {
+        HashMap::new()
+    };
+    if query_grams.iter().any(|gram| !df.contains_key(gram)) {
+        return Ok((Vec::new(), true));
+    }
+    Ok((
+        rank_lexical(&query_grams, documents, corpus_size, &df),
+        partial,
+    ))
+}
+
+/// How many eligible alias documents contain each query or document gram.
+fn document_frequencies(
+    db: &Connection,
+    project: Option<&str>,
+    as_of: &str,
+    query_grams: &[String],
+    documents: &[(String, Vec<String>)],
+) -> CognitionResult<HashMap<String, usize>> {
     let mut all_grams = Vec::new();
     let mut seen = HashSet::new();
     for gram in query_grams
@@ -140,37 +171,29 @@ fn lexical(
         }
     }
     let mut df = HashMap::new();
-    if super::current_millis() < deadline {
-        let df_sql = format!(
-            "WITH eligible AS MATERIALIZED (SELECT DISTINCT a.node_id,a.source_id FROM memory_aliases a \
-            JOIN memory_nodes e ON e.id=a.node_id JOIN memory_chunk_sources s ON s.source_id=a.source_id \
-            JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision \
-            LEFT JOIN memory_claims mc ON mc.node_id=e.id WHERE {ELIGIBLE}) \
-            SELECT p.gram,COUNT(*) FROM memory_alias_postings p JOIN eligible d ON d.node_id=p.node_id AND d.source_id=p.source_id \
-            WHERE p.gram IN (SELECT value FROM json_each(?3)) GROUP BY p.gram"
-        );
-        for gram in &all_grams {
-            df.insert(gram.clone(), 0usize);
-        }
-        let encoded = serde_json::to_string(&all_grams).map_err(json_error)?;
-        let mut statement = db.prepare(&df_sql).map_err(db_error)?;
-        for row in statement
-            .query_map(params![project, as_of, encoded], |r| {
-                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
-            })
-            .map_err(db_error)?
-        {
-            let (gram, count) = row.map_err(db_error)?;
-            df.insert(gram, usize::try_from(count).unwrap_or_default());
-        }
+    let df_sql = format!(
+        "WITH eligible AS MATERIALIZED (SELECT DISTINCT a.node_id,a.source_id FROM memory_aliases a \
+        JOIN memory_nodes e ON e.id=a.node_id JOIN memory_chunk_sources s ON s.source_id=a.source_id \
+        JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision \
+        LEFT JOIN memory_claims mc ON mc.node_id=e.id WHERE {ELIGIBLE}) \
+        SELECT p.gram,COUNT(*) FROM memory_alias_postings p JOIN eligible d ON d.node_id=p.node_id AND d.source_id=p.source_id \
+        WHERE p.gram IN (SELECT value FROM json_each(?3)) GROUP BY p.gram"
+    );
+    for gram in &all_grams {
+        df.insert(gram.clone(), 0usize);
     }
-    if query_grams.iter().any(|gram| !df.contains_key(gram)) {
-        return Ok((Vec::new(), true));
+    let encoded = serde_json::to_string(&all_grams).map_err(json_error)?;
+    let mut statement = db.prepare(&df_sql).map_err(db_error)?;
+    for row in statement
+        .query_map(params![project, as_of, encoded], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+        })
+        .map_err(db_error)?
+    {
+        let (gram, count) = row.map_err(db_error)?;
+        df.insert(gram, usize::try_from(count).unwrap_or_default());
     }
-    Ok((
-        rank_lexical(&query_grams, documents, corpus_size, &df),
-        partial,
-    ))
+    Ok(df)
 }
 
 fn vectors(
