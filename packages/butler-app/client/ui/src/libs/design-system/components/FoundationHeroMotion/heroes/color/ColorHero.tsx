@@ -31,8 +31,8 @@ function spec(copy: ColorCopy): ChapterSpec {
 
 /**
  * 01 Color. The owner's storyboard: "Color" and the color intent; the camera
- * glides on to the page, where role stickers land diagonal by diagonal and
- * take their token names; a line wipes the field into the
+ * glides on to the page and turns to a quarter view where role stickers land diagonal by diagonal and
+ * take their token names; back to the front, a line wipes the field into the
  * dark theme; components are built topic by topic (contrast, action,
  * status, states), outlined first, then filled one color at a time with a
  * badge saying what each color is for; the finale sets the swatch field

@@ -1,4 +1,4 @@
-import type { Key, Track } from "../../heroTimeline";
+import { fit, focus, type Key, type Track } from "../../heroTimeline";
 import { TRANSITION } from "../shared/beats";
 import { INTRO, introTracks } from "../shared/Intro";
 import { reveal, select } from "../shared/Reveal";
@@ -7,28 +7,31 @@ import type { Prelude, TimelineContext } from "../shared/types";
 import { SWATCH_COLUMNS, SWATCHES, type ColorCopy } from "./colorCopy";
 
 /**
- * 01 Color prelude, beat marks:
+ * 01 Color prelude (the owner's storyboard), beat marks:
  *
- *   0–7.4     Intro      "Color" large on the left; strategy, tone and
- *                        manner, intent reveal line by line on the right
- *   6.8–10.8  Glide      the text pushes up and out; the camera glides on to
- *                        the empty page, flat (the shared intro exit)
- *   10.6–15   Stickers   the role stickers come straight down, curled on one
- *                        side, and press flat edge to edge, in a ripple that
- *                        travels the diagonals from the top left
- *   14.8–17.8 Names      grey token names attach under each sticker in turn
- *   18.4–21.4 Wipe       a line sweeps the whole frame into the other theme
- *   23–26     Back       and sweeps once more, back to the page's theme
- *   26–27.4   Hold       then the components build, topic by topic
+ *   0–7.4     Intro        "Color" large on the left; strategy, tone and
+ *                          manner, intent reveal line by line on the right
+ *   6.8–10.8  Glide        the text pushes up and out; the camera glides on
+ *                          to the empty page, flat (the shared intro exit)
+ *   10.8–14.8 Quarter view the camera turns into an isometric quarter view
+ *                          of the page
+ *   13.2–17.6 Stickers     as the turn settles, the role stickers come down, curled on
+ *                          one side, and press flat edge to edge, in a ripple
+ *                          that visibly travels the diagonals from the top left
+ *   17.4–20.4 Names        grey token names attach under each sticker in turn
+ *   20.6–24.6 Front        the camera returns to a flat front view
+ *   24.8–27.8 Wipe         a line sweeps the whole frame into the other theme
+ *   29.4–32.4 Back         and sweeps once more, back to the page's theme
+ *   32.4–33.8 Hold         then the components build, topic by topic
  */
-const AT = { glide: INTRO.exit, land: 10.6, names: 14.8, wipe: 18.4, back: 23, end: 27.4 } as const;
-/** Beats between one diagonal of stickers and the next (the ripple travels the grid over ~3 beats), and a sticker's curl-and-press. */
+const AT = { glide: INTRO.exit, iso: INTRO.exit + TRANSITION, land: 13.2, names: 17.4, front: 20.6, wipe: 24.8, back: 29.4, end: 33.8 } as const;
+/** Beats between one diagonal of stickers and the next (the ripple travels the grid over ~2.8 beats), and a sticker's curl-and-press. */
 const RIPPLE = 0.4;
 const PRESS = 1.6;
 /** Beats the wipe line takes to cross the frame. */
 const WIPE = 3;
-/** How far above its place a sticker starts (poster px): it comes straight down onto the page. */
-const DROP = 120;
+/** The quarter view: the field plane turned a quarter and tilted back. */
+const QUARTER = { rx: 55, rz: -45 } as const;
 
 export function colorPrelude(copy: ColorCopy, posterZoom: (layout: HeroLayout) => number): Pick<Prelude, "end" | "tracks"> {
   return {
@@ -39,7 +42,13 @@ export function colorPrelude(copy: ColorCopy, posterZoom: (layout: HeroLayout) =
       const field = g.boxes.field!;
       const front = view("intro", intro, 1, 1);
       const flat = view("field", field, g.layout === "tall" ? 0.94 : 0.86, 2);
-      const camera: Key[] = [{ at: 0, ...front }, { at: AT.glide, ...front }, { at: AT.glide + TRANSITION, ...flat, ease: "standard" }, { at: AT.end, ...flat }];
+      // The whole grid, names included, sits inside the frame.
+      const quarter = focus(canvas, field, fit(canvas, field, g.layout === "tall" ? 0.55 : 0.78, 2.2), QUARTER);
+      const camera: Key[] = [
+        { at: 0, ...front }, { at: AT.glide, ...front }, { at: AT.iso, ...flat, ease: "standard" },
+        { at: AT.iso + TRANSITION, ...quarter, ease: "standard" },
+        { at: AT.front, ...quarter }, { at: AT.front + TRANSITION, ...flat, ease: "standard" }, { at: AT.end, ...flat },
+      ];
       // A cascading ripple along the diagonals ("촤르르륵"), each sticker overlapping the next.
       const columns = g.layout === "tall" ? 2 : SWATCH_COLUMNS;
       const land = (k: number) => AT.land + (Math.floor(k / columns) + (k % columns)) * RIPPLE + (k % columns) * 0.05;
@@ -58,9 +67,9 @@ export function colorPrelude(copy: ColorCopy, posterZoom: (layout: HeroLayout) =
         ...introTracks(copy.title, copy.lead, close),
         ...SWATCHES.flatMap((_, k): Track[] => {
           const at = land(k);
-          // Straight down onto the page, curled; then pressed flat left to right.
+          // Down from above the page (plane x = -y is screen up in the quarter view), curled; then pressed flat left to right.
           return [
-            { select: select(`st-${k}`), keys: [{ at: 0, y: -DROP, o: 0 }, { at, y: -DROP, o: 0 }, { at: at + 0.15, o: 1 }, { at: at + PRESS * 0.55, y: 0, ease: "decelerate" }, { at: close - 0.01 }, { at: close, y: -DROP, o: 0 }] },
+            { select: select(`st-${k}`), keys: [{ at: 0, x: 170, y: -170, o: 0 }, { at, x: 170, y: -170, o: 0 }, { at: at + 0.15, o: 1 }, { at: at + PRESS * 0.55, x: 0, y: 0, ease: "decelerate" }, { at: close - 0.01 }, { at: close, x: 170, y: -170, o: 0 }] },
             { select: select(`st-${k}-r`), keys: [{ at: 0, ry: -80 }, { at: at + PRESS * 0.4, ry: -80 }, { at: at + PRESS, ry: 0, ease: "decelerate" }, { at: close - 0.01 }, { at: close, ry: -80 }] },
             { select: select(`st-${k}-c`), keys: [{ at: 0, o: 1 }, { at: at + PRESS * 0.4, o: 1 }, { at: at + PRESS, o: 0, ease: "decelerate" }, { at: close - 0.01 }, { at: close, o: 1 }] },
             { select: select(`st-${k}-f`), keys: [{ at: 0, o: 0 }, { at: at + PRESS, o: 0 }, { at: at + PRESS + 0.01, o: 1 }, { at: close - 0.01 }, { at: close, o: 0 }] },
