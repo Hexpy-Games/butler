@@ -2,1036 +2,771 @@
 
 import { afterAll, afterEach, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
-import React, { act } from "react";
+import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { EMPTY_MODEL_CATALOG, EMPTY_SETTINGS } from "@/app/constants.ts";
 import { FIRST_RUN_TEST_MODEL } from "@/app/fixtures.ts";
-import {
-  createInitialFirstRunState,
-  type FirstRunState,
-} from "@/app/firstRunSetup.ts";
-import type {
-  AppModelSummary,
-  ModelCatalogView,
-  ProviderAuthMethod,
-  SettingsView,
-  WorkerProfile,
-} from "@/app/types.ts";
-import { FirstRunSetup } from "./FirstRunSetup";
+import { FIRST_RUN_CONSENT_VERSION } from "@/app/onboarding.ts";
+import type { AppModelSummary, ModelCatalogView, SettingsView, TimelineEvent } from "@/app/types.ts";
 import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
-
 import { useButlerStore } from "@/app/store.ts";
-import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
+import { FirstRunSetup, type FirstRunMode, type FirstRunResult } from "./FirstRunSetup";
+import { KEY_VERIFY_DEBOUNCE_MS } from "./useKeyVerification";
 
-// First-run applies the chosen language and saved settings to the app-wide
-// locale and stores; hand them back unchanged for later test files.
+// First run switches the app locale and saves settings into the app store;
+// hand both back unchanged for later test files.
 const initialAppLocale = getAppLocale();
 const initialButlerState = useButlerStore.getState();
-const initialSettingsUIState = useSettingsUIStore.getState();
 afterAll(() => {
   setAppCopyLanguage(initialAppLocale);
   useButlerStore.setState(initialButlerState, true);
-  useSettingsUIStore.setState(initialSettingsUIState, true);
 });
 
-interface RenderedFirstRun {
-  calls: string[];
+type ReactActGlobal = typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
+type Envelope = { ok: true; data: unknown } | { ok: false; error: { schema: string; code: string; status?: number } };
+
+interface HarnessOptions {
+  mode?: FirstRunMode;
+  language?: string;
+  online?: boolean;
+  /** Local preparation result (`POST /setup/start`); a promise holds it. */
+  setup?: Array<{ phase: string; error_code?: string } | Promise<{ phase: string }>>;
+  /** Agent readiness answers, in order; the last one repeats. Omit for a pre-#230 bridge. */
+  readiness?: unknown[];
+  /** `POST /setup/readiness/retry` answer. */
+  retryReadiness?: unknown;
+  localServers?: unknown[];
+  verify?: (apiKey: string) => Envelope;
+  /** `verified` of a successful key check (false: the service has no model list). */
+  verified?: boolean;
+  /** `created` of `POST /credentials` (false: the same key was already saved). */
+  created?: boolean;
+  /** Failure envelope of `POST /credentials` (after a passed check). */
+  saveError?: { code: string; status: number };
+  /** No desktop preparation (the app served by the agent in a browser). */
+  noDesktopSetup?: boolean;
+  /** Status `POST /setup/oauth/{flow_id}/cancel` answers (`completed` once the code exchange finished). */
+  cancelStatus?: string;
+  /** ChatGPT sign-in: the agent's #279 routes, or the desktop helper for an older agent. */
+  oauth?: { backend?: "agent" | "desktop"; start: Record<string, unknown>; statuses?: Array<Record<string, unknown>> };
+  settings?: Partial<SettingsView>;
+  /** The catalog the workspace already loaded (Run setup again). */
+  storeCatalog?: ModelCatalogView;
+  /** Hosted registrations that fail before one succeeds. */
+  failRegistrations?: number;
+  discovered?: AppModelSummary[];
+}
+
+interface Harness {
   container: HTMLElement;
-  completedStates: FirstRunState[];
-  copiedDiagnostics: string[];
   root: Root;
-  hostedModelRequests: unknown[];
-  settingsPatches: unknown[];
-  setupModes: string[];
+  calls: Array<{ method: string; input?: unknown }>;
+  results: FirstRunResult[];
+  clipboard: string[];
+  opened: string[];
+  emit: (event: { type: string; payload?: unknown }) => void;
+  window: JSDOM["window"];
 }
 
-type ReactActGlobal = typeof globalThis & {
-  IS_REACT_ACT_ENVIRONMENT?: boolean;
+const mountedRoots = new Set<Root>();
+
+afterEach(async () => {
+  // A failed test never reaches its own unmount; stale roots would react to later locale changes.
+  for (const root of mountedRoots) await act(async () => root.unmount());
+  mountedRoots.clear();
+  for (const key of ["window", "document", "navigator", "HTMLElement", "Node", "DocumentFragment"]) {
+    delete (globalThis as Record<string, unknown>)[key];
+  }
+});
+
+const sonnet: AppModelSummary = {
+  ...FIRST_RUN_TEST_MODEL, provider_id: "anthropic", provider_label: "Anthropic", model_id: "claude-sonnet-5",
+  model_ref: "anthropic/claude-sonnet-5", display_name: "Claude Sonnet 5", default_reasoning_effort: "xhigh", context_window_tokens: 200_000,
 };
-
-afterEach(() => {
-  delete (globalThis as { window?: unknown }).window;
-  delete (globalThis as { document?: unknown }).document;
-  delete (globalThis as { navigator?: unknown }).navigator;
-  delete (globalThis as { HTMLElement?: unknown }).HTMLElement;
-  delete (globalThis as { Node?: unknown }).Node;
-  delete (globalThis as { DocumentFragment?: unknown }).DocumentFragment;
-});
-
-test("first-run setup renders the minimal Electron setup order", async () => {
-  const rendered = await renderFirstRun(createInitialFirstRunState("ko"));
-
-  expect(rendered.container.textContent).toContain("언어 선택");
-  expect(rendered.container.textContent).toContain("Butler");
-  expect(
-    rendered.container.querySelector('[data-test-class~="wallpaper"]'),
-  ).not.toBeNull();
-  expect(
-    rendered.container.querySelector('[data-test-class="setup-wizard-drag-lane"]'),
-  ).not.toBeNull();
-  expect(
-    rendered.container.querySelector('[data-test-class="setup-wizard-drag-lane"]')
-      ?.className,
-  ).toContain("drag-region");
-  expect(rendered.container.querySelector('[data-slot="tinted-glass"]')).not.toBeNull();
-  expect(rendered.container.querySelector("ol button")).toBeNull();
-  expect(rendered.container.querySelector('[aria-current="step"]')?.textContent)
-    .toContain("언어");
-  expect(rendered.container.textContent).not.toContain("gateway");
-  expect(rendered.container.textContent).not.toContain("persona");
-
-  await clickButton(rendered.container, "계속");
-  expect(rendered.calls).not.toContain("updateSettings");
-  expect(rendered.container.textContent).toContain("안전고지");
-  expect(rendered.container.querySelector('[aria-current="step"]')?.textContent)
-    .toContain("안전고지");
-
-  await clickButton(rendered.container, "동의");
-  expect(rendered.container.textContent).toContain("Butler Agent를 준비합니다");
-  expect(rendered.container.textContent).toContain("준비 완료");
-  expect(rendered.container.textContent).not.toContain("기존 Agent 연결");
-  expect(rendered.calls).toContain("startSetup");
-  expect(rendered.setupModes).toEqual(["check"]);
-
-  await waitForText(rendered.container, "모델 설정");
-  expect(rendered.container.textContent).toContain(
-    "기본 모델과 연결 방식을 설정하세요.",
-  );
-  expect(rendered.container.querySelector("select")).toBeNull();
-  await waitForText(rendered.container, "API 키");
-  expect(buttonByLabel(rendered.container, "저장하고 시작")).toBeUndefined();
-  expect(
-    rendered.container.querySelector('[data-test-class="settings-model-route-nav"]'),
-  ).toBeNull();
-  expect(
-    rendered.container.querySelector(
-      '[data-test-class="model-add-provider-select"]',
-    ),
-  ).not.toBeNull();
-  expect(
-    rendered.container.querySelector(
-      '[data-test-class="hosted-auth-method-select"]',
-    ),
-  ).not.toBeNull();
-  await addHostedModelAndFinish(rendered);
-
-  await act(async () => rendered.root.unmount());
-});
-
-test("first-run model setup supports OpenAI OAuth registration", async () => {
-  const rendered = await renderFirstRun(
-    {
-      ...createInitialFirstRunState("ko"),
-      step: "model",
-      language_confirmed: true,
-      safety_accepted: true,
-      install_status: "ready",
-    },
-    {
-      modelCatalog: firstRunModelCatalog(["codex_oauth", "api_key"]),
-    },
-  );
-
-  await waitForText(rendered.container, "OAuth");
-  await clickButton(rendered.container, "추가");
-  expect(rendered.calls).toContain("startOpenAIOAuthLogin");
-  expect(rendered.hostedModelRequests[0]).toMatchObject({
-    provider_id: "openai",
-    auth_type: "codex_oauth",
-  });
-  await waitForCompletion(rendered);
-
-  await act(async () => rendered.root.unmount());
-});
-
-test("first-run OAuth setup starts immediately without paste-url recovery copy", async () => {
-  const rendered = await renderFirstRun(
-    {
-      ...createInitialFirstRunState("ko"),
-      step: "model",
-      language_confirmed: true,
-      safety_accepted: true,
-      install_status: "ready",
-    },
-    {
-      modelCatalog: firstRunModelCatalog(["codex_oauth", "api_key"]),
-      oauthLoginResult: {
-        status: "pending",
-        auth_url: "https://auth.openai.com/oauth/authorize?state=test",
-        redirect_uri: "http://localhost:1455/auth/callback",
-      },
-    },
-  );
-
-  await waitForText(rendered.container, "OAuth");
-  await waitForText(rendered.container, "OAuth 링크");
-  await waitForText(rendered.container, "인증 완료 확인");
-  expect(rendered.calls).toContain("startOpenAIOAuthLogin");
-  expect(buttonByLabel(rendered.container, "다시 인증")).not.toBeUndefined();
-  expect(rendered.container.textContent).not.toContain("결과 URL 붙여넣기");
-  expect(rendered.container.textContent).not.toContain("붙여넣은 URL로 완료");
-  expect(rendered.calls).not.toContain("registerHostedModel");
-
-  await act(async () => rendered.root.unmount());
-});
-
-test("first-run OAuth setup auto-completes when browser auth finishes", async () => {
-  const pendingOAuth = {
-    status: "pending",
-    auth_url: "https://auth.openai.com/oauth/authorize?state=test",
-    redirect_uri: "http://localhost:1455/auth/callback",
-  };
-  const rendered = await renderFirstRun(
-    {
-      ...createInitialFirstRunState("ko"),
-      step: "model",
-      language_confirmed: true,
-      safety_accepted: true,
-      install_status: "ready",
-    },
-    {
-      modelCatalog: firstRunModelCatalog(["codex_oauth", "api_key"]),
-      oauthLoginResult: pendingOAuth,
-      oauthStatusResults: [pendingOAuth, pendingOAuth, { status: "completed" }],
-    },
-  );
-
-  await waitForText(rendered.container, "OAuth 링크");
-  await waitForCompletion(rendered);
-  expect(rendered.calls).toContain("getOpenAIOAuthLoginStatus");
-  expect(rendered.hostedModelRequests[0]).toMatchObject({
-    provider_id: "openai",
-    auth_type: "codex_oauth",
-  });
-
-  await act(async () => rendered.root.unmount());
-});
-
-test("first-run OAuth setup disables add while auto registration is running", async () => {
-  const registerStarted = deferred<void>();
-  const rendered = await renderFirstRun(
-    {
-      ...createInitialFirstRunState("ko"),
-      step: "model",
-      language_confirmed: true,
-      safety_accepted: true,
-      install_status: "ready",
-    },
-    {
-      holdHostedRegister: registerStarted.promise,
-      modelCatalog: firstRunModelCatalog(["codex_oauth", "api_key"]),
-      oauthLoginResult: {
-        status: "pending",
-        auth_url: "https://auth.openai.com/oauth/authorize?state=test",
-        redirect_uri: "http://localhost:1455/auth/callback",
-      },
-      oauthStatusResults: [{ status: "completed" }],
-    },
-  );
-
-  await waitForCall(rendered, "registerHostedModel");
-  const savingButton = buttonByLabel(rendered.container, "저장 중") ??
-    buttonByLabel(rendered.container, "추가");
-  expect(savingButton?.disabled).toBe(true);
-  registerStarted.resolve();
-  await waitForCompletion(rendered);
-
-  await act(async () => rendered.root.unmount());
-});
-
-test("first-run OAuth setup disables add while the auth URL is starting", async () => {
-  const oauthStarted = deferred<void>();
-  const rendered = await renderFirstRun(
-    {
-      ...createInitialFirstRunState("ko"),
-      step: "model",
-      language_confirmed: true,
-      safety_accepted: true,
-      install_status: "ready",
-    },
-    {
-      holdOAuthLogin: oauthStarted.promise,
-      modelCatalog: firstRunModelCatalog(["codex_oauth", "api_key"]),
-      oauthLoginResult: {
-        status: "pending",
-        auth_url: "https://auth.openai.com/oauth/authorize?state=test",
-        redirect_uri: "http://localhost:1455/auth/callback",
-      },
-    },
-  );
-
-  await waitForCall(rendered, "startOpenAIOAuthLogin");
-  expect(buttonByLabel(rendered.container, "추가")?.disabled).toBe(true);
-  oauthStarted.resolve();
-  await waitForText(rendered.container, "OAuth 링크");
-  expect(buttonByLabel(rendered.container, "추가")?.disabled).toBe(false);
-
-  await act(async () => rendered.root.unmount());
-});
-
-test("first-run setup does not expose existing-Agent connection after failure", async () => {
-  const rendered = await renderFirstRun({
-    ...createInitialFirstRunState("ko"),
-    step: "install",
-    language_confirmed: true,
-    safety_accepted: true,
-    install_status: "failed",
-  });
-
-  expect(rendered.container.textContent).not.toContain("기존 Agent 연결");
-  expect(rendered.container.textContent).not.toContain("고급");
-  expect(rendered.container.textContent).not.toContain("gateway");
-  expect(rendered.setupModes).toEqual([]);
-
-  await act(async () => rendered.root.unmount());
-});
-
-test("first-run setup keeps waiting for bundled Agent without alternate connection path", async () => {
-  const bundled = deferred<void>();
-  const rendered = await renderFirstRun(
-    {
-      ...createInitialFirstRunState("ko"),
-      step: "install",
-      language_confirmed: true,
-      safety_accepted: true,
-      install_status: "checking",
-    },
-    {
-      holdBundledAgent: bundled.promise,
-    },
-  );
-
-  await waitForText(rendered.container, "Butler Agent를 준비합니다");
-  expect(rendered.container.textContent).not.toContain("고급");
-  expect(rendered.container.textContent).not.toContain("기존 Agent 연결");
-  expect(rendered.container.textContent).not.toContain("모델 설정");
-
-  bundled.resolve();
-  await waitForText(rendered.container, "모델 설정");
-  await addHostedModelAndFinish(rendered);
-  expect(rendered.setupModes).toEqual(["check"]);
-  expect(rendered.completedStates[0]?.connection_mode).toBe("bundled-agent");
-
-  await act(async () => rendered.root.unmount());
-});
-
-test("first-run setup resumes install from persisted idle state without blank body", async () => {
-  const bundled = deferred<void>();
-  const rendered = await renderFirstRun(
-    {
-      ...createInitialFirstRunState("ko"),
-      step: "install",
-      language_confirmed: true,
-      safety_accepted: true,
-      install_status: "idle",
-    },
-    {
-      holdBundledAgent: bundled.promise,
-    },
-  );
-
-  await waitForText(rendered.container, "상태 확인 중");
-  bundled.resolve();
-  await waitForText(rendered.container, "모델 설정");
-  expect(rendered.calls.filter((call) => call === "startSetup")).toHaveLength(1);
-  expect(rendered.setupModes).toEqual(["check"]);
-
-  await act(async () => rendered.root.unmount());
-});
-
-test("first-run model setup surfaces catalog load failure and retries", async () => {
-  const rendered = await renderFirstRun(
-    {
-      ...createInitialFirstRunState("ko"),
-      step: "model",
-      language_confirmed: true,
-      safety_accepted: true,
-      install_status: "ready",
-    },
-    { failModelCatalogOnce: true },
-  );
-
-  await waitForText(rendered.container, "모델 목록을 불러오지 못했습니다.");
-  expect(buttonByLabel(rendered.container, "저장하고 시작")).toBeUndefined();
-  await clickButton(rendered.container, "다시 불러오기");
-  await addHostedModelAndFinish(rendered);
-
-  expect(rendered.completedStates[0]?.status).toBe("complete");
-
-  await act(async () => rendered.root.unmount());
-});
-
-test("first-run model setup waits for a newly added model before completion", async () => {
-  const rendered = await renderFirstRun(
-    {
-      ...createInitialFirstRunState("ko"),
-      step: "model",
-      language_confirmed: true,
-      safety_accepted: true,
-      install_status: "ready",
-    },
-    { settings: { ...EMPTY_SETTINGS, model: "missing/model" } },
-  );
-
-  await waitForText(rendered.container, "API 키");
-  expect(buttonByLabel(rendered.container, "저장하고 시작")).toBeUndefined();
-  await addHostedModelAndFinish(rendered);
-  expect(rendered.settingsPatches.some((patch) =>
-    hasSettingsPatchFields(
-      patch,
-      {
-        language: "ko",
-        model: "openai/gpt-5.5",
-        reasoning_effort: "xhigh",
-        context_window_tokens: 258_000,
-      },
-    ),
-  )).toBe(true);
-  const selectedModelPatch = rendered.settingsPatches.find((patch) =>
-    hasSettingsPatchFields(patch, { model: "openai/gpt-5.5" }),
-  ) as { worker_profiles?: WorkerProfile[] } | undefined;
-  expect(selectedModelPatch?.worker_profiles).toEqual([
-    {
-      id: "default",
-      label: "기본",
-      enabled: true,
-      job: { kind: "builtin", job: "coding" },
-      model: "openai/gpt-5.5",
-      reasoning_effort: "xhigh",
-    },
-  ]);
-  expect(
-    Object.prototype.hasOwnProperty.call(
-      selectedModelPatch ?? {},
-      "worker_model_rules",
-    ),
-  ).toBe(false);
-  expect(
-    Object.prototype.hasOwnProperty.call(
-      selectedModelPatch ?? {},
-      "max_simultaneous_workers",
-    ),
-  ).toBe(false);
-  expect(rendered.completedStates[0]?.status).toBe("complete");
-
-  await act(async () => rendered.root.unmount());
-});
-
-test("first-run model setup keeps pre-existing custom worker profile fields", async () => {
-  const rendered = await renderFirstRun(
-    {
-      ...createInitialFirstRunState("ko"),
-      step: "model",
-      language_confirmed: true,
-      safety_accepted: true,
-      install_status: "ready",
-    },
-    {
-      settings: {
-        ...EMPTY_SETTINGS,
-        model: "missing/model",
-        worker_profiles: [
-          {
-            id: "w1",
-            label: "Docs writer",
-            enabled: false,
-            job: { kind: "custom", text: "Write release notes" },
-            domain: "writing",
-            prompt: "Keep it terse.",
-            model: "old/model",
-            reasoning_effort: "low",
-          },
-        ],
-      },
-    },
-  );
-
-  await addHostedModelAndFinish(rendered);
-  const selectedModelPatch = rendered.settingsPatches.find((patch) =>
-    hasSettingsPatchFields(patch, { model: "openai/gpt-5.5" }),
-  ) as { worker_profiles?: WorkerProfile[] } | undefined;
-  expect(selectedModelPatch?.worker_profiles).toEqual([
-    {
-      id: "w1",
-      label: "Docs writer",
-      enabled: false,
-      job: { kind: "custom", text: "Write release notes" },
-      domain: "writing",
-      prompt: "Keep it terse.",
-      model: "openai/gpt-5.5",
-      reasoning_effort: "xhigh",
-    },
-  ]);
-
-  await act(async () => rendered.root.unmount());
-});
-
-test("first-run model setup recovers when default was saved before completion", async () => {
-  const rendered = await renderFirstRun(
-    {
-      ...createInitialFirstRunState("ko"),
-      step: "model",
-      language_confirmed: true,
-      safety_accepted: true,
-      install_status: "ready",
-    },
-    {
-      modelCatalog: firstRunRegisteredModelCatalog(),
-      settings: { ...EMPTY_SETTINGS, model: "openai/gpt-5.5" },
-    },
-  );
-
-  await waitForText(rendered.container, "모델 추가");
-  await waitForCompletion(rendered);
-  expect(rendered.calls).not.toContain("registerHostedModel");
-  expect(rendered.settingsPatches.some((patch) =>
-    hasSettingsPatchFields(patch, { language: "ko" }),
-  )).toBe(true);
-  expect(rendered.completedStates[0]?.status).toBe("complete");
-
-  await act(async () => rendered.root.unmount());
-});
-
-test("first-run model setup blocks completion when selected language cannot be saved", async () => {
-  const rendered = await renderFirstRun(
-    {
-      ...createInitialFirstRunState("ko"),
-      step: "model",
-      language_confirmed: true,
-      safety_accepted: true,
-      install_status: "ready",
-    },
-    {
-      failLanguageSaveOnce: true,
-      modelCatalog: firstRunRegisteredModelCatalog(),
-      settings: { ...EMPTY_SETTINGS, model: "openai/gpt-5.5" },
-    },
-  );
-
-  await waitForText(rendered.container, "모델 설정을 저장하지 못했습니다.");
-  expect(rendered.completedStates).toHaveLength(0);
-  await clickButton(rendered.container, "다시 불러오기");
-  await waitForCompletion(rendered);
-  expect(rendered.settingsPatches.filter((patch) =>
-    hasSettingsPatchFields(patch, { language: "ko" }),
-  )).toHaveLength(2);
-
-  await act(async () => rendered.root.unmount());
-});
-
-test("first-run model setup retries default-save failure after adding a model", async () => {
-  const rendered = await renderFirstRun(
-    {
-      ...createInitialFirstRunState("ko"),
-      step: "model",
-      language_confirmed: true,
-      safety_accepted: true,
-      install_status: "ready",
-    },
-    {
-      failDefaultSaveOnce: true,
-      settings: { ...EMPTY_SETTINGS, model: "missing/model" },
-    },
-  );
-
-  await waitForText(rendered.container, "API 키");
-  await clickButton(rendered.container, "추가");
-  await waitForText(rendered.container, "모델 설정을 저장하지 못했습니다.");
-  expect(rendered.calls).toContain("registerHostedModel");
-  expect(buttonByLabel(rendered.container, "저장하고 시작")).toBeUndefined();
-  await clickButton(rendered.container, "다시 불러오기");
-  await waitForCompletion(rendered);
-  expect(
-    rendered.settingsPatches.filter(
-      (patch) =>
-        typeof patch === "object" &&
-        patch !== null &&
-        "model" in patch,
-    ),
-  ).toHaveLength(2);
-  expect(rendered.completedStates[0]?.status).toBe("complete");
-
-  await act(async () => rendered.root.unmount());
-});
-
-test("first-run model setup explains an unavailable default model without a futile retry", async () => {
-  const rendered = await renderFirstRun(
-    {
-      ...createInitialFirstRunState("ko"),
-      step: "model",
-      language_confirmed: true,
-      safety_accepted: true,
-      install_status: "ready",
-    },
-    {
-      rejectDefaultModelUnavailable: true,
-      settings: { ...EMPTY_SETTINGS, model: "missing/model" },
-    },
-  );
-
-  await waitForText(rendered.container, "API 키");
-  await clickButton(rendered.container, "추가");
-  await waitForText(
-    rendered.container,
-    "지금은 이 모델을 사용할 수 없습니다. 아래에서 다른 모델을 선택해 주세요.",
-  );
-  // Localized and actionable: no raw gateway text, no retry of the same model.
-  expect(rendered.container.textContent).not.toContain("settings_model_unavailable");
-  expect(rendered.container.textContent).not.toContain("not an available model");
-  expect(rendered.container.textContent).not.toContain("모델 설정을 저장하지 못했습니다.");
-  expect(buttonByLabel(rendered.container, "다시 불러오기")).toBeUndefined();
-  expect(buttonByLabel(rendered.container, "저장하고 시작")).toBeUndefined();
-  expect(rendered.completedStates).toHaveLength(0);
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  });
-  expect(
-    rendered.settingsPatches.filter(
-      (patch) => typeof patch === "object" && patch !== null && "model" in patch,
-    ),
-  ).toHaveLength(1);
-
-  await act(async () => rendered.root.unmount());
-});
-
-test("first-run setup shows concise retry after install readiness failure", async () => {
-  const rendered = await renderFirstRun(
-    {
-      ...createInitialFirstRunState("en"),
-      step: "install",
-      language_confirmed: true,
-      safety_accepted: true,
-      install_status: "checking",
-    },
-    { failHealthOnce: true },
-  );
-
-  await waitForText(rendered.container, "Butler Agent is not ready.");
-  expect(rendered.container.textContent).toContain("Retry");
-  expect(rendered.container.textContent).toContain("Repair");
-  expect(rendered.container.textContent).toContain("Copy diagnostics");
-  expect(rendered.container.textContent).toContain("Quit");
-  expect(rendered.container.textContent).not.toContain("stack");
-  expect(rendered.container.textContent).not.toContain("runtime path");
-
-  await clickButton(rendered.container, "Copy diagnostics");
-  expect(rendered.calls).toContain("exportSetupDiagnostics");
-  expect(rendered.copiedDiagnostics).toHaveLength(1);
-  expect(rendered.copiedDiagnostics[0]).toContain("[redacted-path]");
-  expect(rendered.copiedDiagnostics[0]).not.toContain("/Users/example/.butler");
-  expect(rendered.container.textContent).toContain("Diagnostics copied.");
-
-  await clickButton(rendered.container, "Quit");
-  expect(rendered.calls).toContain("quitApp");
-
-  await clickButton(rendered.container, "Retry");
-  await waitForText(rendered.container, "Model setup");
-  expect(rendered.calls.filter((call) => call === "startSetup")).toHaveLength(2);
-
-  await act(async () => rendered.root.unmount());
-});
-
-test("first-run setup offers explicit bundled runtime repair", async () => {
-  const rendered = await renderFirstRun(
-    {
-      ...createInitialFirstRunState("en"),
-      step: "install",
-      language_confirmed: true,
-      safety_accepted: true,
-      install_status: "checking",
-    },
-    { failHealthOnce: true },
-  );
-
-  await waitForText(rendered.container, "Butler Agent is not ready.");
-  await clickButton(rendered.container, "Repair");
-  await waitForText(rendered.container, "Model setup");
-  expect(rendered.setupModes).toEqual(["check", "repair"]);
-
-  await act(async () => rendered.root.unmount());
-});
-
-test("first-run setup does not persist raw bridge errors", async () => {
-  const rendered = await renderFirstRun(
-    {
-      ...createInitialFirstRunState("en"),
-      step: "install",
-      language_confirmed: true,
-      safety_accepted: true,
-      install_status: "checking",
-    },
-    { rejectSetupOnce: true },
-  );
-
-  await waitForText(rendered.container, "Butler Agent is not ready.");
-  const storedState = rendered.container.ownerDocument.defaultView?.localStorage
-    .getItem("butler:first-run-setup:v1") ?? "";
-  expect(rendered.container.textContent).not.toContain("/Users/example/.butler");
-  expect(storedState).not.toContain("/Users/example/.butler");
-  expect(storedState).toContain("setup_failed");
-
-  await act(async () => rendered.root.unmount());
-});
-
-async function renderFirstRun(
-  initialState: FirstRunState,
-  options: {
-    failHealthOnce?: boolean;
-    failDefaultSaveOnce?: boolean;
-    rejectDefaultModelUnavailable?: boolean;
-    failLanguageSaveOnce?: boolean;
-    failModelCatalogOnce?: boolean;
-    holdBundledAgent?: Promise<void>;
-    holdHostedRegister?: Promise<void>;
-    holdOAuthLogin?: Promise<void>;
-    modelCatalog?: ModelCatalogView;
-    oauthLoginResult?: unknown;
-    oauthStatusResults?: unknown[];
-    rejectSetupOnce?: boolean;
-    settings?: SettingsView;
-  } = {},
-): Promise<RenderedFirstRun> {
-  const dom = new JSDOM(
-    "<!doctype html><html><body><div id=\"root\"></div></body></html>",
-    { url: "http://127.0.0.1:5173" },
-  );
-  Object.assign(globalThis, {
-    window: dom.window,
-    document: dom.window.document,
-    navigator: dom.window.navigator,
-    HTMLElement: dom.window.HTMLElement,
-    Node: dom.window.Node,
-    DocumentFragment: dom.window.DocumentFragment,
-  });
-  Object.defineProperty(dom.window.HTMLCanvasElement.prototype, "getContext", {
-    configurable: true,
-    value: () => null,
-  });
-  (globalThis as ReactActGlobal).IS_REACT_ACT_ENVIRONMENT = true;
-
-  const calls: string[] = [];
-  const copiedDiagnostics: string[] = [];
-  const completedStates: FirstRunState[] = [];
-  const hostedModelRequests: unknown[] = [];
-  const settingsPatches: unknown[] = [];
-  const setupModes: string[] = [];
-  Object.defineProperty(dom.window.navigator, "clipboard", {
-    configurable: true,
-    value: {
-      writeText: async (value: string) => {
-        copiedDiagnostics.push(value);
-      },
-    },
-  });
-  let setupFailures = options.failHealthOnce ? 1 : 0;
-  let modelCatalogFailures = options.failModelCatalogOnce ? 1 : 0;
-  let defaultSaveFailures = options.failDefaultSaveOnce ? 1 : 0;
-  let languageSaveFailures = options.failLanguageSaveOnce ? 1 : 0;
-  let setupRejections = options.rejectSetupOnce ? 1 : 0;
-  const oauthStatusResults = [...(options.oauthStatusResults ?? [])];
-  Object.assign(dom.window, {
-    butlerApp: {
-      startSetup: async (request?: { mode?: string }) => {
-        calls.push("startSetup");
-        setupModes.push(request?.mode ?? "bundled-agent");
-        if (options.holdBundledAgent) {
-          await options.holdBundledAgent;
-        }
-        if (setupRejections > 0) {
-          setupRejections -= 1;
-          throw new Error("Failed at /Users/example/.butler/private.env");
-        }
-        if (setupFailures > 0) {
-          setupFailures -= 1;
-          return {
-            diagnostics_available: true,
-            error_code: "setup_failed",
-            phase: "failed",
-            status_label: "Butler Agent is not ready.",
-          };
-        }
-        return {
-          diagnostics_available: true,
-          phase: "ready",
-          status_label: "준비 완료",
-        };
-      },
-      exportSetupDiagnostics: async () => {
-        calls.push("exportSetupDiagnostics");
-        return {
-          generated_at: "2026-06-12T00:00:00.000Z",
-          phase: "failed",
-          checks: [],
-          errors: [
-            {
-              code: "setup_failed",
-              message: "Butler Agent is not ready.",
-              details: {
-                runtime_home: "[redacted-path]",
-              },
-            },
-          ],
-        };
-      },
-      quitApp: async () => {
-        calls.push("quitApp");
-        return { quitting: true };
-      },
-      getModelCatalog: async () => {
-        calls.push("getModelCatalog");
-        if (modelCatalogFailures > 0) {
-          modelCatalogFailures -= 1;
-          throw new Error("model catalog failed");
-        }
-        return options.modelCatalog ?? firstRunModelCatalog();
-      },
-      getSettings: async () => {
-        calls.push("getSettings");
-        return options.settings ?? EMPTY_SETTINGS;
-      },
-      startOpenAIOAuthLogin: async () => {
-        calls.push("startOpenAIOAuthLogin");
-        if (options.holdOAuthLogin) {
-          await options.holdOAuthLogin;
-        }
-        return options.oauthLoginResult ?? { status: "completed" };
-      },
-      restartOpenAIOAuthLogin: async () => {
-        calls.push("restartOpenAIOAuthLogin");
-        return options.oauthLoginResult ?? { status: "pending" };
-      },
-      getOpenAIOAuthLoginStatus: async () => {
-        calls.push("getOpenAIOAuthLoginStatus");
-        if (oauthStatusResults.length > 0) {
-          return oauthStatusResults.shift();
-        }
-        return options.oauthLoginResult ?? { status: "completed" };
-      },
-      submitOpenAIOAuthCallback: async () => {
-        calls.push("submitOpenAIOAuthCallback");
-        return { status: "completed" };
-      },
-      registerHostedModel: async (request?: unknown) => {
-        calls.push("registerHostedModel");
-        hostedModelRequests.push(request);
-        if (options.holdHostedRegister) {
-          await options.holdHostedRegister;
-        }
-        const authType = isHostedModelRequest(request) && request.auth_type === "codex_oauth"
-          ? "codex_oauth"
-          : "api_key";
-        const catalog = firstRunRegisteredModelCatalog(authType);
-        return {
-          model: catalog.registered_models?.[0],
-          catalog,
-        };
-      },
-      updateSettings: async (patch?: unknown) => {
-        calls.push("updateSettings");
-        settingsPatches.push(patch);
-        if (
-          languageSaveFailures > 0 &&
-          hasSettingsPatchFields(patch, { language: "ko" }) &&
-          !hasSettingsPatchFields(patch, { model: "openai/gpt-5.5" })
-        ) {
-          languageSaveFailures -= 1;
-          throw new Error("language save failed");
-        }
-        if (
-          options.rejectDefaultModelUnavailable &&
-          typeof patch === "object" &&
-          patch !== null &&
-          "model" in patch
-        ) {
-          // Same envelope the Electron preload returns for a gateway 400.
-          return {
-            ok: false,
-            error: {
-              schema: "butler.app.bridge-error.v1",
-              code: "settings_model_unavailable",
-              status: 400,
-            },
-          };
-        }
-        if (
-          defaultSaveFailures > 0 &&
-          typeof patch === "object" &&
-          patch !== null &&
-          "model" in patch
-        ) {
-          defaultSaveFailures -= 1;
-          throw new Error("default model save failed");
-        }
-        return {};
-      },
-    },
-  });
-
-  const container = dom.window.document.getElementById("root");
-  if (!container) throw new Error("Missing test root");
-  const root = createRoot(container);
-  await act(async () => {
-    root.render(
-      <FirstRunSetup
-        initialState={initialState}
-        onComplete={(_mode, state) => completedStates.push(state)}
-      />,
-    );
-  });
-  return {
-    calls,
-    completedStates,
-    copiedDiagnostics,
-    container,
-    hostedModelRequests,
-    root,
-    settingsPatches,
-    setupModes,
-  };
-}
-
-function deferred<T = void>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  const promise = new Promise<T>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
-  return { promise, resolve };
-}
-
-async function clickButton(container: HTMLElement, label: string): Promise<void> {
-  const button = buttonByLabel(container, label);
-  if (!button) throw new Error(`Missing button: ${label}`);
-  const win = container.ownerDocument.defaultView;
-  if (!win) throw new Error("Missing DOM window");
-  await act(async () => {
-    button.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
-  });
-}
-
-async function addHostedModelAndFinish(
-  rendered: RenderedFirstRun,
-): Promise<void> {
-  await waitForText(rendered.container, "API 키");
-  await clickButton(rendered.container, "추가");
-  expect(rendered.calls).toContain("registerHostedModel");
-  await waitForCompletion(rendered);
-  expect(rendered.completedStates[0]?.status).toBe("complete");
-}
-
-async function waitForCompletion(rendered: RenderedFirstRun): Promise<void> {
-  const deadline = Date.now() + 5000;
-  while (rendered.completedStates.length === 0) {
-    if (Date.now() > deadline) {
-      throw new Error("Timed out waiting for first-run completion");
-    }
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    });
-  }
-}
-
-async function waitForCall(
-  rendered: RenderedFirstRun,
-  call: string,
-): Promise<void> {
-  const deadline = Date.now() + 1200;
-  while (!rendered.calls.includes(call)) {
-    if (Date.now() > deadline) {
-      throw new Error(`Timed out waiting for call: ${call}`);
-    }
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    });
-  }
-}
-
-function buttonByLabel(
-  container: HTMLElement,
-  label: string,
-): HTMLButtonElement | undefined {
-  return Array.from(container.querySelectorAll("button")).find(
-    (candidate) => candidate.textContent?.trim() === label,
-  );
-}
-
-function isHostedModelRequest(
-  value: unknown,
-): value is { auth_type?: ProviderAuthMethod } {
-  return Boolean(value && typeof value === "object" && "auth_type" in value);
-}
-
-function hasSettingsPatchFields(
-  value: unknown,
-  expected: Record<string, unknown>,
-): boolean {
-  if (!value || typeof value !== "object") return false;
-  const patch = value as Record<string, unknown>;
-  return Object.entries(expected).every(([key, field]) => patch[key] === field);
-}
-
-function firstRunModelCatalog(
-  authMethods: ProviderAuthMethod[] = ["api_key", "codex_oauth"],
-): ModelCatalogView {
-  const defaultModel = FIRST_RUN_TEST_MODEL;
+const opus: AppModelSummary = { ...sonnet, model_id: "claude-opus-5-5", model_ref: "anthropic/claude-opus-5-5", display_name: "Claude Opus 5.5" };
+const sol: AppModelSummary = { ...FIRST_RUN_TEST_MODEL, model_id: "gpt-6-sol", model_ref: "openai/gpt-6-sol", display_name: "GPT-6 Sol" };
+const astra: AppModelSummary = { ...FIRST_RUN_TEST_MODEL, model_id: "gpt-6-astra", model_ref: "openai/gpt-6-astra", display_name: "GPT-6 Astra" };
+
+function catalog(registered: AppModelSummary[] = []): ModelCatalogView {
   return {
     ...EMPTY_MODEL_CATALOG,
     providers: [
-      {
-        provider_id: "openai",
-        provider_label: "OpenAI",
-        latest_model_ref: defaultModel.model_ref,
-        auth_methods: authMethods,
-        models: [defaultModel],
-      },
+      { provider_id: "openai", provider_label: "OpenAI", latest_model_ref: astra.model_ref, models: [astra, sol],
+        presets: { routine: { model: "openai/gpt-6-sol", effort: "medium" } } },
+      { provider_id: "anthropic", provider_label: "Anthropic", latest_model_ref: opus.model_ref, models: [opus, sonnet],
+        presets: { routine: { model: "anthropic/claude-sonnet-5", effort: "medium" } } },
     ],
-    models: [defaultModel],
-    provider_credentials: [
-      {
-        id: "cred-existing",
-        provider_id: "openai",
-        label: "Existing key",
-        masked_value: "sk-...",
-        auth_type: "api_key",
-        created_at: "2026-06-13T00:00:00.000Z",
-        updated_at: "2026-06-13T00:00:00.000Z",
-      },
-    ],
-    registered_models: [],
+    registered_models: registered,
   };
 }
 
-function firstRunRegisteredModelCatalog(
-  authType: ProviderAuthMethod = "api_key",
-): ModelCatalogView {
-  const defaultModel: AppModelSummary = {
-    ...FIRST_RUN_TEST_MODEL,
-    registered: true,
-    auth_type: authType,
-    ...(authType === "api_key"
-      ? {
-          credential_id: "cred-test",
-          credential_label: "Test key",
-          credential_masked_value: "sk-...",
-        }
-      : {}),
+async function renderFirstRun(options: HarnessOptions = {}): Promise<Harness> {
+  const dom = new JSDOM("<!doctype html><html><body><div id=\"root\"></div></body></html>", { url: "http://127.0.0.1:5173" });
+  Object.defineProperty(dom.window.navigator, "languages", { configurable: true, value: [options.language ?? "ko-KR"] });
+  Object.defineProperty(dom.window.navigator, "onLine", { configurable: true, get: () => options.online ?? true });
+  Object.assign(globalThis, {
+    window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
+    HTMLElement: dom.window.HTMLElement, Node: dom.window.Node, DocumentFragment: dom.window.DocumentFragment,
+  });
+  Object.defineProperty(dom.window.HTMLCanvasElement.prototype, "getContext", { configurable: true, value: () => null });
+  (globalThis as ReactActGlobal).IS_REACT_ACT_ENVIRONMENT = true;
+  useButlerStore.setState({
+    settings: { ...EMPTY_SETTINGS, onboarding: {}, ...options.settings },
+    modelCatalog: options.storeCatalog ?? EMPTY_MODEL_CATALOG,
+  });
+
+  const calls: Harness["calls"] = [];
+  const results: FirstRunResult[] = [];
+  const clipboard: string[] = [];
+  const opened: string[] = [];
+  Object.assign(dom.window, { open: (url: string) => void opened.push(url) });
+  const listeners = new Set<(event: TimelineEvent) => void>();
+  const setup = [...(options.setup ?? [{ phase: "ready" }])];
+  const readiness = [...(options.readiness ?? [])];
+  const statuses = [...(options.oauth?.statuses ?? [])];
+  const nextStatus = () => (statuses.length > 1 ? statuses.shift() : statuses[0] ?? options.oauth?.start);
+  const record = (method: string, input?: unknown) => calls.push({ method, input });
+  Object.defineProperty(dom.window.navigator, "clipboard", {
+    configurable: true, value: { writeText: async (value: string) => void clipboard.push(value) },
+  });
+  const bridge: Record<string, unknown> = {
+    startSetup: async (input: unknown) => {
+      record("startSetup", input);
+      const next = setup.length > 1 ? setup.shift()! : setup[0]!;
+      return { diagnostics_available: true, ...(await next) };
+    },
+    exportSetupDiagnostics: async () => ({
+      generated_at: "t", phase: "failed", checks: [{ id: "agent_service", status: "failed" }], errors: [{ code: "agent_service_failed" }],
+    }),
+    subscribeLiveEvents: (_input: unknown, handlers: { onEvent?: (event: TimelineEvent) => void }) => {
+      record("subscribeLiveEvents");
+      const listener = (event: TimelineEvent) => handlers.onEvent?.(event);
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    getLocalModelServers: async () => {
+      record("getLocalModelServers");
+      return { servers: options.localServers ?? [] };
+    },
+    verifySetupCredential: async (input: { api_key: string }) => {
+      record("verifySetupCredential", input);
+      return options.verify?.(input.api_key) ?? { ok: true, data: { valid: true, verified: options.verified ?? true, models: ["claude-sonnet-5"] } };
+    },
+    saveCredential: async (input: { provider_id: string }) => {
+      record("saveCredential", input);
+      if (options.saveError) return { ok: false, error: { schema: "butler.app.bridge-error.v1", ...options.saveError } };
+      const credential = { id: "cred-new", label: input.provider_id, provider_id: input.provider_id, auth_type: "api_key", masked_value: "sk-...al" };
+      return { ok: true, data: { credential, created: options.created ?? true } };
+    },
+    // Desktop sign-in helper (fallback).
+    startOpenAIOAuthLogin: async () => {
+      record("startOpenAIOAuthLogin");
+      return options.oauth?.start ?? { status: "completed" };
+    },
+    getOpenAIOAuthLoginStatus: async () => nextStatus(),
+    cancelOpenAIOAuthLogin: async (input: unknown) => {
+      record("cancelOpenAIOAuthLogin", input);
+      return { status: "cancelled" };
+    },
+    getModelCatalog: async () => catalog(),
+    discoverLocalModels: async (input: unknown) => {
+      record("discoverLocalModels", input);
+      return { server_url: "http://127.0.0.1:8080/v1", platform: "custom", models: options.discovered ?? [] };
+    },
+    getSettings: async () => ({ ...EMPTY_SETTINGS, onboarding: {}, ...options.settings }),
+    registerHostedModel: async (input: { model_id: string }) => {
+      record("registerHostedModel", input);
+      const attempts = calls.filter((call) => call.method === "registerHostedModel").length;
+      if (attempts <= (options.failRegistrations ?? 0)) throw new Error("registration failed");
+      const model = [astra, sol, opus, sonnet].find((entry) => entry.model_id === input.model_id)!;
+      return { model: { ...model, registered: true }, catalog: catalog([model]) };
+    },
+    registerLocalModel: async (input: { model_id: string }) => {
+      record("registerLocalModel", input);
+      const model = { ...FIRST_RUN_TEST_MODEL, provider_id: "local", model_id: input.model_id, model_ref: `local/${input.model_id}`, default_reasoning_effort: "medium" as const };
+      return { model, catalog: catalog([model]) };
+    },
+    updateSettings: async (patch: unknown) => {
+      record("updateSettings", patch);
+      return { ok: true, data: {} };
+    },
+    quitApp: async () => record("quitApp"),
   };
+  if (options.readiness) {
+    bridge.getSetupReadiness = async () => {
+      record("getSetupReadiness");
+      return { ok: true, data: readiness.length > 1 ? readiness.shift() : readiness[0] };
+    };
+    bridge.retrySetupReadiness = async () => {
+      record("retrySetupReadiness");
+      // The agent now reports the new run.
+      const view = options.retryReadiness ?? { status: "preparing", steps: [] };
+      readiness.splice(0, readiness.length, view);
+      return { ok: true, data: view };
+    };
+  }
+  if ((options.oauth?.backend ?? "agent") === "agent") {
+    // #279 agent routes.
+    bridge.startSetupOAuth = async (input: unknown) => {
+      record("startSetupOAuth", input);
+      return { ok: true, data: options.oauth?.start ?? { flow_id: "oauth_1", status: "profile_exists" } };
+    };
+    bridge.getSetupOAuthFlow = async (input: unknown) => {
+      record("getSetupOAuthFlow", input);
+      return { ok: true, data: nextStatus() };
+    };
+    bridge.cancelSetupOAuth = async (input: { flowId: string }) => {
+      record("cancelSetupOAuth", input);
+      return { ok: true, data: { flow_id: input.flowId, status: options.cancelStatus ?? "cancelled" } };
+    };
+  }
+  if (options.noDesktopSetup) delete bridge.startSetup;
+  Object.assign(dom.window, { butlerApp: bridge });
+
+  const container = dom.window.document.getElementById("root")!;
+  const root = createRoot(container);
+  mountedRoots.add(root);
+  await act(async () => {
+    root.render(<FirstRunSetup mode={options.mode ?? "first-run"} onComplete={(result) => results.push(result)} />);
+  });
   return {
-    ...firstRunModelCatalog(),
-    registered_models: [defaultModel],
+    container, root, calls, results, clipboard, opened, window: dom.window,
+    emit: (event) => {
+      for (const listener of listeners) listener(event as TimelineEvent);
+    },
   };
 }
 
-async function waitForText(
-  container: HTMLElement,
-  text: string,
-): Promise<void> {
-  const deadline = Date.now() + 1200;
-  while (!container.textContent?.includes(text)) {
-    if (Date.now() > deadline) {
-      throw new Error(`Timed out waiting for text: ${text}`);
-    }
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    });
+async function settle(ms = 30): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  });
+}
+
+async function waitFor(check: () => boolean, label: string, timeout = 4000): Promise<void> {
+  const deadline = Date.now() + timeout;
+  while (!check()) {
+    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${label}`);
+    await settle(25);
   }
 }
+
+function buttonByText(container: HTMLElement, text: string): HTMLButtonElement | undefined {
+  return Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.trim() === text);
+}
+
+async function click(harness: Harness, target: string | Element): Promise<void> {
+  const element = typeof target === "string" ? buttonByText(harness.container, target) : target;
+  if (!element) throw new Error(`Missing button: ${String(target)}`);
+  await act(async () => {
+    element.dispatchEvent(new harness.window.MouseEvent("click", { bubbles: true }));
+  });
+}
+
+async function type(harness: Harness, input: HTMLInputElement, value: string): Promise<void> {
+  const setter = Object.getOwnPropertyDescriptor(harness.window.HTMLInputElement.prototype, "value")!.set!;
+  await act(async () => {
+    setter.call(input, value);
+    input.dispatchEvent(new harness.window.Event("input", { bubbles: true }));
+  });
+}
+
+async function unmount(harness: Harness): Promise<void> {
+  mountedRoots.delete(harness.root);
+  await act(async () => harness.root.unmount());
+}
+
+function text(harness: Harness): string {
+  return harness.container.textContent ?? "";
+}
+
+function methods(harness: Harness, method: string) {
+  return harness.calls.filter((call) => call.method === method);
+}
+
+async function agree(harness: Harness): Promise<void> {
+  await waitFor(() => !buttonByText(harness.container, "동의하고 계속")?.disabled, "agree enabled");
+  await click(harness, "동의하고 계속");
+}
+
+function card(harness: Harness, cardId: string): HTMLButtonElement {
+  const element = harness.container.querySelector<HTMLButtonElement>(`[data-card-id="${cardId}"]`);
+  if (!element) throw new Error(`Missing card ${cardId}`);
+  return element;
+}
+
+test("welcome shows three consent lines and one button while Butler prepares in the background", async () => {
+  let release!: (value: { phase: string }) => void;
+  const harness = await renderFirstRun({ setup: [new Promise((resolve) => { release = resolve; })] });
+  expect(text(harness)).toContain("반갑습니다");
+  expect(harness.container.querySelectorAll('[role="listitem"]')).toHaveLength(3);
+  expect(text(harness)).toContain("바꾸기 전에 먼저 묻습니다");
+  expect(text(harness)).not.toMatch(/OAuth|credential|provider|endpoint|자동화/u);
+  expect(harness.container.querySelector('[data-test-class="first-run-prep"]')?.textContent).toContain("Butler 준비 중");
+  expect(harness.container.querySelector("ol")).toBeNull();
+  expect(methods(harness, "startSetup")).toHaveLength(1);
+  await act(async () => release({ phase: "ready" }));
+  await waitFor(() => text(harness).includes("준비됨"), "ready line");
+  await unmount(harness);
+});
+
+test("a failed preparation shows a plain reason inline, blocks consent and retries", async () => {
+  const harness = await renderFirstRun({ setup: [{ phase: "failed", error_code: "agent_service_failed" }, { phase: "ready" }] });
+  await waitFor(() => Boolean(harness.container.querySelector('[data-test-class="first-run-prep-failed"]')), "failure notice");
+  expect(text(harness)).toContain("Butler를 시작하지 못했습니다.");
+  expect(text(harness)).toContain("백그라운드 서비스가 멈췄습니다.");
+  expect(buttonByText(harness.container, "동의하고 계속")?.disabled).toBe(true);
+  expect(buttonByText(harness.container, "동의하고 계속")?.getAttribute("title")).toBe("Butler를 시작해야 계속할 수 있습니다");
+  await click(harness, "다시 시도");
+  await waitFor(() => text(harness).includes("준비됨"), "ready after retry");
+  expect(methods(harness, "startSetup").map((call) => (call.input as { mode: string }).mode)).toEqual(["check", "check"]);
+  expect(buttonByText(harness.container, "동의하고 계속")?.disabled).toBe(false);
+  await unmount(harness);
+});
+
+test("agent readiness shows step progress and follows setup.readiness_changed", async () => {
+  const preparing = {
+    status: "preparing",
+    steps: [{ id: "data_folder", status: "done" }, { id: "model_config", status: "running" }, { id: "agent_runtime", status: "pending" }],
+  };
+  const harness = await renderFirstRun({ readiness: [preparing] });
+  await waitFor(() => text(harness).includes("1/3"), "progress");
+  expect(methods(harness, "subscribeLiveEvents").length).toBeGreaterThan(0);
+  await act(async () => harness.emit({ type: "setup.readiness_changed", payload: { status: "ready", steps: [] } }));
+  await waitFor(() => text(harness).includes("준비됨"), "ready from event");
+  await unmount(harness);
+});
+
+test("an agent-side failure shows its plain reason; Try again re-runs the agent's preparation only", async () => {
+  const failed = {
+    status: "failed",
+    steps: [
+      { id: "data_folder", status: "failed", error: { code: "data_folder_unwritable", detail: "probe write failed: permission denied" } },
+      { id: "model_config", status: "pending" },
+      { id: "agent_runtime", status: "pending" },
+    ],
+  };
+  const harness = await renderFirstRun({ readiness: [failed], retryReadiness: { status: "preparing", steps: [] } });
+  await waitFor(() => Boolean(harness.container.querySelector('[data-test-class="first-run-prep-failed"]')), "failure notice");
+  expect(text(harness)).toContain("데이터 폴더(~/.butler)에 쓸 수 없습니다.");
+  expect(text(harness)).not.toContain("permission denied");
+  await click(harness, "다시 시도");
+  await waitFor(() => methods(harness, "retrySetupReadiness").length === 1, "retry route");
+  expect(methods(harness, "startSetup")).toHaveLength(1);
+  await act(async () => harness.emit({ type: "setup.readiness_changed", payload: { status: "ready", steps: [] } }));
+  await waitFor(() => text(harness).includes("준비됨"), "ready after retry");
+  await unmount(harness);
+});
+
+test("Pick an AI: three well-known cards on top, the rest behind a toggle in an equal-size grid", async () => {
+  const harness = await renderFirstRun();
+  await agree(harness);
+  await waitFor(() => text(harness).includes("어떤 AI와 일할까요?"), "connect title");
+  const top = Array.from(harness.container.querySelectorAll('[data-test-class="first-run-top-cards"] [data-card-id]'));
+  expect(top.map((element) => element.getAttribute("data-card-id"))).toEqual(["chatgpt", "claude", "gemini"]);
+  expect(card(harness, "chatgpt").textContent).toContain("키 필요 없음");
+  const toggle = buttonByText(harness.container, "다른 서비스 8개")!;
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  await click(harness, toggle);
+  const grid = harness.container.querySelector('[data-test-class="first-run-more-providers"]')!;
+  expect(grid.getAttribute("data-slot")).toBe("choice-tile-grid");
+  const tiles = Array.from(grid.querySelectorAll(":scope > li > button"));
+  expect(tiles.map((element) => element.getAttribute("data-card-id"))).toEqual(
+    ["local", "openai", "grok", "qwen", "kimi", "zaiCoding", "zaiApi", "opencodeGo", "other"],
+  );
+  expect(tiles[0]!.getAttribute("data-placeholder")).toBe("true");
+  for (const tile of tiles) expect(tile.querySelector('[data-slot="choice-tile-title"]')?.getAttribute("data-line-clamp")).toBe("2");
+  expect(tiles.at(-1)!.textContent).toContain("기타 (OpenAI 호환)");
+  await unmount(harness);
+});
+
+test("This computer joins the top cards when a local server answers, and its models start Butler", async () => {
+  const harness = await renderFirstRun({
+    localServers: [{ id: "ollama", label: "Ollama", base_url: "http://127.0.0.1:11434", reachable: true,
+      models: [{ id: "qwen3:8b", size_bytes: 5_200_000_000 }, { id: "gemma3:12b", size_bytes: 8_100_000_000 }] }],
+  });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="local"]')), "local card");
+  expect(card(harness, "local").textContent).toContain("무료 · 비공개");
+  expect(card(harness, "local").textContent).toContain("모델 2개 · Ollama");
+  await click(harness, card(harness, "local"));
+  const radios = Array.from(harness.container.querySelectorAll('[role="radio"]'));
+  expect(radios.map((radio) => radio.getAttribute("aria-checked"))).toEqual(["true", "false"]);
+  expect(radios[0]!.textContent).toContain("5.2 GB");
+  await click(harness, radios[1]!);
+  await click(harness, "이 모델로 시작");
+  await waitFor(() => harness.results.length === 1, "completion");
+  expect(methods(harness, "registerLocalModel")[0]!.input).toMatchObject({
+    platform: "ollama", server_url: "http://127.0.0.1:11434", model_id: "gemma3:12b", provider_id: "local",
+  });
+  const patch = methods(harness, "updateSettings").at(-1)!.input as Record<string, unknown>;
+  expect(patch).toMatchObject({ model: "local/gemma3:12b", language: "ko" });
+  expect(patch.onboarding).toMatchObject({ consent_version: FIRST_RUN_CONSENT_VERSION });
+  expect(harness.results[0]).toEqual({ cardId: "local" });
+  await unmount(harness);
+});
+
+test("an API key is checked once after the paste debounce, saved, and connects the routine preset", async () => {
+  const harness = await renderFirstRun();
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="claude"]')), "claude card");
+  await click(harness, card(harness, "claude"));
+  expect(text(harness)).toContain("Claude 연결");
+  expect(harness.container.querySelector('a[href="https://console.anthropic.com/settings/keys"]')?.textContent).toContain("키 발급받기");
+  expect(harness.container.querySelectorAll("input")).toHaveLength(1);
+  const input = harness.container.querySelector<HTMLInputElement>("#first-run-api-key")!;
+  await type(harness, input, "sk-ant");
+  await type(harness, input, "sk-ant-api03-first");
+  await type(harness, input, "sk-ant-api03-final");
+  await settle(KEY_VERIFY_DEBOUNCE_MS / 2);
+  expect(methods(harness, "verifySetupCredential")).toHaveLength(0);
+  await waitFor(() => harness.results.length === 1, "completion");
+  expect(methods(harness, "verifySetupCredential").map((call) => call.input)).toEqual([
+    { provider_id: "anthropic", api_key: "sk-ant-api03-final" },
+  ]);
+  expect(methods(harness, "saveCredential")[0]!.input).toEqual({ provider_id: "anthropic", api_key: "sk-ant-api03-final" });
+  expect(methods(harness, "registerHostedModel")[0]!.input).toEqual({
+    provider_id: "anthropic", model_id: "claude-sonnet-5", auth_type: "api_key", credential_id: "cred-new",
+  });
+  const patch = methods(harness, "updateSettings").at(-1)!.input as SettingsView;
+  expect(patch).toMatchObject({ model: "anthropic/claude-sonnet-5", reasoning_effort: "medium" });
+  expect(patch.worker_profiles.every((profile) => profile.reasoning_effort === "medium")).toBe(true);
+  expect(typeof patch.onboarding?.completed_at).toBe("string");
+  expect(harness.results[0]).toEqual({ cardId: "claude" });
+  await unmount(harness);
+});
+
+test("a key the service cannot check is saved; a key saved before is reused (created: false)", async () => {
+  const harness = await renderFirstRun({ verified: false, created: false });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="claude"]')), "claude card");
+  await click(harness, card(harness, "claude"));
+  await type(harness, harness.container.querySelector<HTMLInputElement>("#first-run-api-key")!, "sk-ant-api03-again");
+  await waitFor(() => text(harness).includes("저장했습니다"), "saved line");
+  await waitFor(() => harness.results.length === 1, "completion");
+  expect(methods(harness, "registerHostedModel")[0]!.input).toMatchObject({ credential_id: "cred-new", auth_type: "api_key" });
+  await unmount(harness);
+});
+
+test("every #279 key error code maps to a plain message inline and keeps the pasted key", async () => {
+  const codes: Record<string, [string, number]> = {
+    "bad-key-000": ["invalid_key", 422], "no-access-00": ["no_access", 422], "offline-0000": ["network", 502],
+    "too-many-000": ["rate_limited", 429], "down-000000": ["provider_unavailable", 502],
+    "unsupported-0": ["unsupported_provider", 400], "malformed-00": ["invalid_request", 400],
+  };
+  const harness = await renderFirstRun({
+    verify: (key) => ({ ok: false, error: { schema: "butler.app.bridge-error.v1", code: codes[key]![0], status: codes[key]![1] } }),
+  });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="claude"]')), "claude card");
+  await click(harness, card(harness, "claude"));
+  const input = harness.container.querySelector<HTMLInputElement>("#first-run-api-key")!;
+  const expected = [
+    ["bad-key-000", "이 키로 연결할 수 없습니다."],
+    ["no-access-00", "이 키로는 모델을 쓸 수 없습니다."],
+    ["offline-0000", "서비스에 연결할 수 없습니다."],
+    ["too-many-000", "요청이 너무 많습니다."],
+    ["down-000000", "서비스가 응답하지 않습니다."],
+    ["unsupported-0", "이 서비스의 키는 아직 확인할 수 없습니다."],
+    ["malformed-00", "키를 확인하지 못했습니다."],
+  ];
+  const retryable = new Set(["offline-0000", "too-many-000", "down-000000"]);
+  for (const [key, message] of expected) {
+    await type(harness, input, key!);
+    await waitFor(() => text(harness).includes(message!), message!);
+    expect(input.value).toBe(key!);
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(Boolean(buttonByText(harness.container, "다시 시도"))).toBe(retryable.has(key!));
+  }
+  // Try again checks the same key without a new paste.
+  const before = methods(harness, "verifySetupCredential").length;
+  await type(harness, input, "offline-0000");
+  await waitFor(() => Boolean(buttonByText(harness.container, "다시 시도")), "retry link");
+  const afterPaste = methods(harness, "verifySetupCredential").length;
+  await click(harness, "다시 시도");
+  await waitFor(() => methods(harness, "verifySetupCredential").length === afterPaste + 1, "retried check");
+  expect(afterPaste).toBe(before + 1);
+  expect(methods(harness, "saveCredential")).toHaveLength(0);
+  await unmount(harness);
+});
+
+test("ChatGPT sign-in runs on the agent: the app opens the browser, cancels by flow id, and can try again", async () => {
+  const pending = { flow_id: "oauth_1", status: "pending", auth_url: "https://auth.openai.com/oauth/authorize?state=x" };
+  const harness = await renderFirstRun({ oauth: { start: pending, statuses: [pending] } });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="chatgpt"]')), "chatgpt card");
+  await click(harness, card(harness, "chatgpt"));
+  await waitFor(() => text(harness).includes("브라우저에서 로그인하세요"), "waiting");
+  expect(methods(harness, "startSetupOAuth")).toHaveLength(1);
+  expect(methods(harness, "startOpenAIOAuthLogin")).toHaveLength(0);
+  expect(harness.opened).toEqual([pending.auth_url]);
+  await waitFor(() => methods(harness, "getSetupOAuthFlow").length > 0, "status poll", 3000);
+  expect(methods(harness, "getSetupOAuthFlow")[0]!.input).toEqual({ flowId: "oauth_1" });
+  expect(harness.opened).toHaveLength(1);
+  await click(harness, "브라우저가 열리지 않았나요? 링크 복사");
+  expect(harness.clipboard).toEqual([pending.auth_url]);
+  await click(harness, "취소");
+  await waitFor(() => text(harness).includes("로그인이 취소되었습니다"), "cancelled");
+  expect(methods(harness, "cancelSetupOAuth")[0]!.input).toEqual({ flowId: "oauth_1" });
+  await click(harness, "다시 시도");
+  await waitFor(() => methods(harness, "startSetupOAuth").length === 2, "restart");
+  await unmount(harness);
+});
+
+test("an agent without the sign-in routes falls back to the desktop helper", async () => {
+  const pending = { status: "pending", flow_id: "desktop-1", auth_url: "https://auth.openai.com/oauth/authorize?state=y" };
+  const harness = await renderFirstRun({ oauth: { backend: "desktop", start: pending, statuses: [pending] } });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="chatgpt"]')), "chatgpt card");
+  await click(harness, card(harness, "chatgpt"));
+  await waitFor(() => text(harness).includes("브라우저에서 로그인하세요"), "waiting");
+  expect(methods(harness, "startOpenAIOAuthLogin")).toHaveLength(1);
+  // The desktop helper opens the browser itself.
+  expect(harness.opened).toEqual([]);
+  await click(harness, "취소");
+  await waitFor(() => text(harness).includes("로그인이 취소되었습니다"), "cancelled");
+  expect(methods(harness, "cancelOpenAIOAuthLogin")[0]!.input).toEqual({ flowId: "desktop-1" });
+  await unmount(harness);
+});
+
+test("a finished sign-in registers ChatGPT with its routine preset", async () => {
+  const pending = { flow_id: "oauth_2", status: "pending", auth_url: "https://auth.openai.com/x" };
+  const harness = await renderFirstRun({ oauth: { start: pending, statuses: [pending, { flow_id: "oauth_2", status: "completed", label: "me@example.com" }] } });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="chatgpt"]')), "chatgpt card");
+  await click(harness, card(harness, "chatgpt"));
+  await waitFor(() => harness.results.length === 1, "completion", 5000);
+  expect(methods(harness, "registerHostedModel")[0]!.input).toEqual({ provider_id: "openai", model_id: "gpt-6-sol", auth_type: "codex_oauth" });
+  expect(methods(harness, "updateSettings").at(-1)!.input).toMatchObject({ model: "openai/gpt-6-sol", reasoning_effort: "medium" });
+  await unmount(harness);
+});
+
+test("finishing waits for readiness: nothing is registered until Butler is ready", async () => {
+  const preparing = { status: "preparing", steps: [{ id: "a", status: "done" }, { id: "b", status: "running" }] };
+  const harness = await renderFirstRun({ readiness: [preparing] });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="claude"]')), "claude card");
+  expect(text(harness)).toContain("Butler 준비가 끝나면 바로 연결합니다");
+  await click(harness, card(harness, "claude"));
+  await type(harness, harness.container.querySelector<HTMLInputElement>("#first-run-api-key")!, "sk-ant-api03-valid");
+  await waitFor(() => Boolean(harness.container.querySelector('[data-test-class="first-run-finishing"]')), "finishing view");
+  expect(text(harness)).toContain("Butler 준비가 끝나면 바로 시작합니다");
+  await settle(200);
+  expect(methods(harness, "registerHostedModel")).toHaveLength(0);
+  await act(async () => harness.emit({ type: "setup.readiness_changed", payload: { status: "ready", steps: [] } }));
+  await waitFor(() => harness.results.length === 1, "completion after ready");
+  expect(methods(harness, "registerHostedModel")).toHaveLength(1);
+  await unmount(harness);
+});
+
+test("offline: a notice, and only models on this computer can be picked", async () => {
+  const harness = await renderFirstRun({
+    online: false,
+    localServers: [{ id: "lm_studio", label: "LM Studio", base_url: "http://127.0.0.1:1234", reachable: true, models: [{ id: "llama-3.2-3b" }] }],
+  });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="local"]')), "local card");
+  expect(text(harness)).toContain("인터넷에 연결되어 있지 않습니다.");
+  for (const id of ["chatgpt", "claude", "gemini"]) {
+    expect(card(harness, id).getAttribute("aria-disabled")).toBe("true");
+    expect(card(harness, id).textContent).toContain("오프라인에서는 쓸 수 없습니다");
+  }
+  await click(harness, card(harness, "claude"));
+  expect(text(harness)).not.toContain("Claude 연결");
+  expect(card(harness, "local").getAttribute("aria-disabled")).toBeNull();
+  await unmount(harness);
+});
+
+test("no local server: This computer waits in the grid and Check again probes again", async () => {
+  const harness = await renderFirstRun();
+  await agree(harness);
+  await waitFor(() => methods(harness, "getLocalModelServers").length > 0, "first probe");
+  await click(harness, "다른 서비스 8개");
+  const before = methods(harness, "getLocalModelServers").length;
+  await click(harness, card(harness, "local"));
+  await waitFor(() => methods(harness, "getLocalModelServers").length > before, "rescan");
+  expect(harness.container.querySelector('[data-test-class="first-run-top-cards"] [data-card-id="local"]')).toBeNull();
+  await unmount(harness);
+});
+
+test("a newer consent version shows only the welcome and records consent", async () => {
+  const harness = await renderFirstRun({ mode: "consent", settings: { language: "ko", onboarding: { consent_version: 0, completed_at: "2026-06-01" } } });
+  await agree(harness);
+  await waitFor(() => harness.results.length === 1, "consent saved");
+  expect(harness.results[0]).toBeNull();
+  expect(text(harness)).not.toContain("어떤 AI와 일할까요?");
+  const patch = methods(harness, "updateSettings").at(-1)!.input as SettingsView;
+  expect(patch.onboarding).toMatchObject({ consent_version: FIRST_RUN_CONSENT_VERSION, completed_at: "2026-06-01" });
+  expect(typeof patch.onboarding?.accepted_at).toBe("string");
+  await unmount(harness);
+});
+
+test("the language picker switches the copy without a language screen", async () => {
+  const harness = await renderFirstRun({ language: "en-US" });
+  expect(text(harness)).toContain("Welcome to Butler");
+  const select = harness.container.querySelector<HTMLSelectElement>("#first-run-language")!;
+  expect(select.value).toBe("en");
+  await act(async () => {
+    select.value = "ko";
+    select.dispatchEvent(new harness.window.Event("change", { bubbles: true }));
+  });
+  expect(text(harness)).toContain("반갑습니다");
+  await unmount(harness);
+});
+
+test("a failed registration shows a plain retry and succeeds on the next try", async () => {
+  const harness = await renderFirstRun({ failRegistrations: 1 });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="claude"]')), "claude card");
+  await click(harness, card(harness, "claude"));
+  await type(harness, harness.container.querySelector<HTMLInputElement>("#first-run-api-key")!, "sk-ant-api03-valid");
+  await waitFor(() => text(harness).includes("연결을 마치지 못했습니다."), "finish failure");
+  expect(harness.results).toEqual([]);
+  await click(harness, "다시 시도");
+  await waitFor(() => harness.results.length === 1, "completion after retry");
+  expect(methods(harness, "registerHostedModel")).toHaveLength(2);
+  expect(methods(harness, "saveCredential")).toHaveLength(1);
+  await unmount(harness);
+});
+
+test("Other (OpenAI-compatible) finds the server's models and starts with the picked one", async () => {
+  const served: AppModelSummary = {
+    ...FIRST_RUN_TEST_MODEL, provider_id: "local", model_id: "mistral-small", model_ref: "local/mistral-small", context_window_tokens: 32_000,
+  };
+  const harness = await renderFirstRun({ discovered: [served] });
+  await agree(harness);
+  await waitFor(() => Boolean(buttonByText(harness.container, "다른 서비스 8개")), "more toggle");
+  await click(harness, "다른 서비스 8개");
+  await click(harness, card(harness, "other"));
+  expect(text(harness)).toContain("OpenAI 호환 서버");
+  await type(harness, harness.container.querySelector<HTMLInputElement>("#first-run-server-url")!, "http://127.0.0.1:8080/v1");
+  await type(harness, harness.container.querySelector<HTMLInputElement>("#first-run-server-key")!, "local-secret");
+  await click(harness, "연결");
+  await waitFor(() => text(harness).includes("mistral-small"), "discovered model");
+  expect(methods(harness, "discoverLocalModels")[0]!.input).toMatchObject({
+    platform: "custom", server_url: "http://127.0.0.1:8080/v1", api_key: "local-secret",
+  });
+  await click(harness, "이 모델로 시작");
+  await waitFor(() => harness.results.length === 1, "completion");
+  expect(methods(harness, "registerLocalModel")[0]!.input).toMatchObject({
+    platform: "custom", model_id: "mistral-small", context_window_tokens: 32_000, api_key: "local-secret",
+  });
+  expect(harness.results[0]).toEqual({ cardId: "other" });
+  await unmount(harness);
+});
+
+test("Run setup again marks the connected AI as current and can be cancelled from the welcome", async () => {
+  const connected: AppModelSummary = { ...sonnet, registered: true, auth_type: "api_key" };
+  const harness = await renderFirstRun({
+    mode: "rerun",
+    settings: { language: "ko", model: connected.model_ref, onboarding: { consent_version: FIRST_RUN_CONSENT_VERSION, completed_at: "c" } },
+    storeCatalog: catalog([connected]),
+  });
+  expect(buttonByText(harness.container, "취소")).toBeDefined();
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="claude"]')), "claude card");
+  const current = card(harness, "claude");
+  expect(current.getAttribute("data-selected")).toBe("true");
+  expect(current.getAttribute("aria-current")).toBe("true");
+  expect(current.textContent).toContain("사용 중");
+  expect(card(harness, "chatgpt").getAttribute("data-selected")).toBeNull();
+  expect(card(harness, "chatgpt").getAttribute("aria-current")).toBeNull();
+  await unmount(harness);
+});
+
+test("a current AI behind \"more\" opens the grid with its tile marked", async () => {
+  const connected: AppModelSummary = { ...sol, registered: true, auth_type: "api_key" };
+  const harness = await renderFirstRun({
+    mode: "rerun",
+    settings: { language: "ko", model: connected.model_ref },
+    storeCatalog: catalog([connected]),
+  });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-test-class="first-run-more-providers"]')), "open grid");
+  expect(card(harness, "openai").getAttribute("data-selected")).toBe("true");
+  expect(card(harness, "openai").getAttribute("aria-current")).toBe("true");
+  expect(card(harness, "chatgpt").getAttribute("data-selected")).toBeNull();
+  await unmount(harness);
+});
+
+test("a first run marks no card as current", async () => {
+  const harness = await renderFirstRun({ settings: { model: sonnet.model_ref }, storeCatalog: catalog([{ ...sonnet, registered: true }]) });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="claude"]')), "claude card");
+  expect(harness.container.querySelector('[aria-current="true"]')).toBeNull();
+  await unmount(harness);
+});
+
+test("a cancel that lands after the code exchange answers completed and continues as signed in", async () => {
+  const pending = { flow_id: "oauth_3", status: "pending", auth_url: "https://auth.openai.com/z" };
+  const harness = await renderFirstRun({ oauth: { start: pending, statuses: [pending] }, cancelStatus: "completed" });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="chatgpt"]')), "chatgpt card");
+  await click(harness, card(harness, "chatgpt"));
+  await waitFor(() => text(harness).includes("브라우저에서 로그인하세요"), "waiting");
+  await click(harness, "취소");
+  await waitFor(() => harness.results.length === 1, "completion after late cancel");
+  expect(methods(harness, "registerHostedModel")[0]!.input).toMatchObject({ provider_id: "openai", auth_type: "codex_oauth" });
+  expect(text(harness)).not.toContain("로그인이 취소되었습니다");
+  await unmount(harness);
+});
+
+test("a key that passed the check but could not be saved says so and keeps the key", async () => {
+  const harness = await renderFirstRun({ saveError: { code: "internal_error", status: 500 } });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="claude"]')), "claude card");
+  await click(harness, card(harness, "claude"));
+  const input = harness.container.querySelector<HTMLInputElement>("#first-run-api-key")!;
+  await type(harness, input, "sk-ant-api03-savefail");
+  await waitFor(() => text(harness).includes("키를 저장하지 못했습니다."), "save failure");
+  expect(input.value).toBe("sk-ant-api03-savefail");
+  expect(Boolean(buttonByText(harness.container, "다시 시도"))).toBe(true);
+  expect(harness.results).toEqual([]);
+  await unmount(harness);
+});
+
+test("Run setup again with the same AI keeps the existing model defaults", async () => {
+  const connected: AppModelSummary = { ...opus, registered: true, auth_type: "api_key" };
+  const harness = await renderFirstRun({
+    mode: "rerun",
+    settings: { language: "ko", model: connected.model_ref, reasoning_effort: "high", onboarding: { consent_version: FIRST_RUN_CONSENT_VERSION, completed_at: "c" } },
+    storeCatalog: catalog([connected]),
+  });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="claude"]')), "claude card");
+  await click(harness, card(harness, "claude"));
+  await type(harness, harness.container.querySelector<HTMLInputElement>("#first-run-api-key")!, "sk-ant-api03-rotated");
+  await waitFor(() => harness.results.length === 1, "completion");
+  // The new key goes to the model already in use; the chat default, effort and Workers stay.
+  expect(methods(harness, "registerHostedModel")[0]!.input).toMatchObject({ model_id: "claude-opus-5-5", credential_id: "cred-new" });
+  const patch = methods(harness, "updateSettings").at(-1)!.input as Record<string, unknown>;
+  expect(patch).not.toHaveProperty("model");
+  expect(patch).not.toHaveProperty("reasoning_effort");
+  expect(patch).not.toHaveProperty("worker_profiles");
+  expect(patch.onboarding).toMatchObject({ consent_version: FIRST_RUN_CONSENT_VERSION });
+  await unmount(harness);
+});
+
+test("Run setup again with a new AI applies that service's routine preset", async () => {
+  const connected: AppModelSummary = { ...opus, registered: true, auth_type: "api_key" };
+  const harness = await renderFirstRun({
+    mode: "rerun",
+    settings: { language: "ko", model: connected.model_ref, onboarding: { consent_version: FIRST_RUN_CONSENT_VERSION, completed_at: "c" } },
+    storeCatalog: catalog([connected]),
+    oauth: { start: { flow_id: "oauth_4", status: "profile_exists" } },
+  });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="chatgpt"]')), "chatgpt card");
+  await click(harness, card(harness, "chatgpt"));
+  await waitFor(() => harness.results.length === 1, "completion");
+  expect(methods(harness, "updateSettings").at(-1)!.input).toMatchObject({ model: "openai/gpt-6-sol", reasoning_effort: "medium" });
+  await unmount(harness);
+});
+
+test("without a desktop preparation route (the app in a browser), the agent's readiness alone decides", async () => {
+  const harness = await renderFirstRun({ noDesktopSetup: true, readiness: [{ status: "ready", steps: [] }] });
+  await waitFor(() => text(harness).includes("준비됨"), "ready");
+  expect(harness.container.querySelector('[data-test-class="first-run-prep-failed"]')).toBeNull();
+  expect(methods(harness, "getSetupReadiness").length).toBeGreaterThan(0);
+  await unmount(harness);
+});

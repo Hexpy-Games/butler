@@ -8,6 +8,10 @@
 )]
 pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
     Some(match domain {
+        // butler-platform: the only OS-specific code. Independent facades; each
+        // keeps its per-OS implementations as private children.
+        "command_sandbox" | "instance" | "launcher" | "process_control" | "secure_fs"
+        | "user_dirs" => &[],
         // butler-core: leaf codecs and mirrors; JSON sanitizes public text.
         "configuration" | "js_date" | "json_lines" | "locale" | "public_text" | "segmentation"
         | "tool_protocol" => &[],
@@ -26,10 +30,18 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // butler-ledger: SQLite ownership stays behind BTCC's Project Work port.
         "project_ledger" => &[],
         // butler-memory: Cognition coordinates writers, reads the profile and
-        // records completed work.
-        "cognition" => &["work_records", "coordination", "profile"],
-        "profile" => &["coordination"],
-        "coordination" | "work_records" => &[],
+        // records completed work. `lenient` (stored-JSON readers) and `js_json`
+        // (JSON.stringify of typed records) are leaf helpers.
+        "cognition" => &[
+            "work_records",
+            "coordination",
+            "profile",
+            "lenient",
+            "js_json",
+        ],
+        "profile" => &["coordination", "lenient"],
+        "work_records" => &["lenient", "js_json"],
+        "coordination" | "lenient" | "js_json" => &[],
         // butler-gateway and the host binary are single-domain crates.
         "gateway" | "host" => &[],
         // butler-e2e: dev-only harness around the built binary; one domain.

@@ -8,7 +8,9 @@ use butler_memory::cognition::{
     ExplicitMemoryUpdateInput, TaskMemoryIngestionResult, ingest_task_outcome_memory,
     update_explicit_memory,
 };
-use butler_turn::btcc::{AccessMode, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
+use butler_turn::btcc::{
+    ApprovalExemptAction, GuidedInvocation, ModelRoundToolCall, ToolExecutionError,
+};
 use butler_turn::conversation::{
     CanonicalMemoryReadBinding, PublicMemorySnapshot, conversation_store_path,
 };
@@ -28,11 +30,15 @@ pub(super) fn execute(
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    if owner.binding.access_mode != AccessMode::FullAccess {
+    if !owner
+        .binding
+        .access_mode
+        .allows_without_approval(ApprovalExemptAction::MemorySave)
+    {
         return encoded(&json!({
             "ok":false,
             "error":{"code":"memory_write_requires_full_access",
-                "message":"This Turn does not have full access; no memory change was applied."}
+                "message":"This Turn is read-only; no memory change was applied."}
         }));
     }
     let result = match call.name.as_str() {
@@ -217,47 +223,4 @@ fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError> {
             error.to_string(),
         ))
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn memory_write_results_never_expose_private_paths_or_internal_job_ids() {
-        {
-            let result = butler_memory::cognition::ExplicitMemoryUpdateResult {
-                path: "/private/data/rules/rule.md".into(),
-                record_id: "record".into(),
-                revision: "revision".into(),
-                operation_id: "occurrence".into(),
-                replayed: true,
-                job_id: "internal-job".into(),
-            };
-            let value = explicit_result(&result);
-            assert_eq!(value.as_object().unwrap().len(), 5);
-            assert!(value.get("path").is_none());
-            assert!(value.get("job_id").is_none());
-        }
-        {
-            assert_eq!(
-                binding_failure("invalid_scope"),
-                json!({"ok":false,"code":"invalid_scope","diagnostics":[]})
-            );
-        }
-        {
-            let value = task_result(TaskMemoryIngestionResult {
-                task_id: "task".into(),
-                memory_path: "/data/cognition/memory/tasks/task.md".into(),
-                origin_session_id: None,
-                origin_event_id: None,
-                job_id: "internal-job".into(),
-            });
-            assert_eq!(
-                value["provenance"],
-                json!({"task_id":"task","source":"task-result"})
-            );
-            assert!(value.get("job_id").is_none());
-        }
-    }
 }

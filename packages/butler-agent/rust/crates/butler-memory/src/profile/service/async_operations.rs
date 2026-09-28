@@ -1,3 +1,5 @@
+//! Tracking the async profile operations a close must wait for.
+
 use std::future::Future;
 
 use tokio::sync::oneshot;

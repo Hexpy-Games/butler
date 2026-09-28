@@ -67,6 +67,12 @@ pub enum MessageFileKind {
     Generic,
 }
 
+/// A message send addressed to one chat.
+pub struct SendMessageCommand {
+    pub request: MessageSendRequest,
+    pub chat_id: String,
+}
+
 #[derive(Clone, Debug)]
 pub struct MessageSendRequest {
     pub expected_project_id: Option<String>,
@@ -303,6 +309,11 @@ pub struct QueuedMessageRecord {
 pub struct SessionQueueView {
     pub session_id: String,
     pub queued_messages: Vec<QueuedMessageRecord>,
+    /// The user stopped a turn and the queue waits: its messages run again,
+    /// in order, after the next user input to the session (a send, a queue
+    /// add or a retry).
+    #[serde(default)]
+    pub paused: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

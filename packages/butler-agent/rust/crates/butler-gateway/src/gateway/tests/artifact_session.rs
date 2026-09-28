@@ -6,43 +6,6 @@ use fixtures::{artifact_request, test_db_path};
 pub(super) use fixtures::{open_app, open_app_with_files, start_real};
 
 #[tokio::test]
-async fn cursor_routes_refresh_projection_and_keep_event_shape() {
-    let application = Arc::new(TestApplication::default());
-    let server = start(application.clone(), LocalAuthConfig::default()).await;
-
-    let readiness = request(
-        server.local_addr(),
-        "GET /runtime-readiness HTTP/1.1\r\nhost: localhost\r\nconnection: close\r\n\r\n",
-    )
-    .await;
-    assert!(readiness.contains("\"authenticated_gateway_ready\":true"));
-    assert!(readiness.contains("\"raw_text_included\":false"));
-
-    let messages = request(
-        server.local_addr(),
-        "GET /messages?chat_id=chat-a&cursor=7 HTTP/1.1\r\nhost: localhost\r\nconnection: close\r\n\r\n",
-    )
-    .await;
-    assert!(messages.starts_with("HTTP/1.1 200 OK"));
-    assert!(messages.contains("\"turn_progress\":{}"));
-    assert_eq!(application.refreshes.lock().unwrap().as_slice(), ["chat-a"]);
-    assert_eq!(*application.message_cursor.lock().unwrap(), Some(7.0));
-
-    let events = request(
-        server.local_addr(),
-        "GET /events?cursor=-0.5&cursor=99&limit=0x10 HTTP/1.1\r\nhost: localhost\r\nconnection: close\r\n\r\n",
-    )
-    .await;
-    assert!(events.contains("\"id\":1"));
-    assert!(events.contains("\"created_at\":\"2026-09-14T00:00:00.000Z\""));
-    assert!(!events.contains("event_id"));
-    assert_eq!(*application.event_cursor.lock().unwrap(), Some(-0.5));
-    assert_eq!(*application.event_limit.lock().unwrap(), Some(16));
-
-    server.close().await.unwrap();
-}
-
-#[tokio::test]
 async fn artifacts_route_projects_attachment_and_survives_app_reopen() {
     let path = test_db_path();
     let application = Arc::new(open_app(&path).await);

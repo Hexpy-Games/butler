@@ -28,13 +28,19 @@ pub(super) const ROUTES: &[Entry] = &[
     route!(
         "stop",
         "butler stop [--data PATH]",
-        "Stop the owned native service.",
+        "Stop the native service; schedules stop until it starts again.",
         "core"
     ),
     route!(
         "restart",
         "butler restart [--data PATH]",
-        "Restart the owned native service.",
+        "Restart the native service; reports success once the new one is ready.",
+        "core"
+    ),
+    route!(
+        "open",
+        "butler open [--no-browser] [--json] [--data PATH]",
+        "Open the running Butler in the local browser with a one-time link.",
         "core"
     ),
     route!(

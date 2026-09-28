@@ -3,6 +3,7 @@
 //! Gateway and host composition may run or stop a Turn. Durable state, model
 //! execution, delivery, and supervision remain private children of this module.
 
+mod access;
 pub mod agent_loop;
 mod authority;
 mod continuation_budget;
@@ -23,6 +24,7 @@ mod work;
 
 use std::sync::Arc;
 
+pub use access::{ApprovalExemptAction, stored_binding_access_mode};
 pub use contracts::{
     AcceptedWorkResult, AcceptedWorkStatus, AccessMode, AdmissionKind, AlreadyDeliveredOutcome,
     ArtifactKind, AttachmentKind, AttachmentRef, ChangedFileLine, ChangedFileSummary,
@@ -72,9 +74,9 @@ pub use agent_loop::{
     OperationResultRuntimeFactory, OperationResultScope, PendingTool, ProductionAgentLoop,
     PromptImages, PromptPort, ProviderBodyAdmissionPort, ProviderIdentity, ProviderStreamObserver,
     RenderedGuidedPrompt, ReplayMode, RollingContextV1, RoundRequestOptions, SemanticTurn,
-    SteeringObservation, TextCallDisposition, ToolCallOrigin, ToolChoice, ToolExecutionError,
-    ToolOutcome, ToolPort, ToolResult, ToolSurface, TurnContextProjection, TurnSteeringPort,
-    UsageAttribution, VerifiedImagePayloadPort, WorkFinalState, WorkPort,
+    SteeringObservation, StreamRelay, TextCallDisposition, ToolCallOrigin, ToolChoice,
+    ToolExecutionError, ToolOutcome, ToolPort, ToolResult, ToolSurface, TurnContextProjection,
+    TurnSteeringPort, UsageAttribution, VerifiedImagePayloadPort, WorkFinalState, WorkPort,
     latest_work_anchor_indices,
 };
 pub use agent_loop::{

@@ -14,12 +14,18 @@ export type { SetupWizardStep } from "./SetupWizardProgress";
 /** The first-run backdrop stays bloom, whatever the user's wallpaper. */
 const SETUP_WALLPAPER: WallpaperSource = { kind: "live", module: "butler.bloom" };
 
+/** `wizard`: title, stepper and a glass body. `focus`: one centered column on the backdrop. */
+export type SetupWizardVariant = "wizard" | "focus";
+
 interface SetupWizardShellProps
   extends Omit<DsBaseProps<HTMLAttributes<HTMLElement>>, "title"> {
-  activeIndex: number;
   children: ReactNode;
-  steps: SetupWizardStep[];
+  /** Visible product title (wizard); the region's accessible name in both variants. */
   title: ReactNode;
+  variant?: SetupWizardVariant;
+  /** Wizard steps; the stepper shows only when steps are given. */
+  steps?: SetupWizardStep[];
+  activeIndex?: number;
   progressLabel?: string;
   windowControls?: ReactNode;
   /** Resolved appearance theme for the wallpaper backdrop. */
@@ -30,15 +36,17 @@ interface SetupWizardShellProps
 
 interface SetupWizardContentProps {
   children: ReactNode;
+  /** Wizard: `default` 52ch, `wide` the full body. Focus: `default` 420px, `wide` 520px. */
   width?: "default" | "wide";
 }
 
 export function SetupWizardShell({
-  activeIndex,
+  activeIndex = 0,
   children,
   progressLabel,
   steps,
   title,
+  variant = "wizard",
   windowControls,
   tone = "light",
   embedded = false,
@@ -47,7 +55,13 @@ export function SetupWizardShell({
   const regionLabel = typeof title === "string" ? title : undefined;
 
   return (
-    <main className={styles.screen} data-tone={tone} data-embedded={embedded ? "true" : undefined} {...props}>
+    <main
+      className={styles.screen}
+      data-embedded={embedded ? "true" : undefined}
+      data-tone={tone}
+      data-variant={variant}
+      {...props}
+    >
       <Wallpaper source={SETUP_WALLPAPER} tone={tone} />
       <div
         aria-hidden="true"
@@ -59,36 +73,56 @@ export function SetupWizardShell({
           {windowControls}
         </div>
       ) : null}
-      <PageContainer
-        as="section"
-        width="narrow"
-        gutter="none"
-        className={dsClass(styles.shell)}
-        aria-label={regionLabel}
-      >
-        <Stack className={dsClass(`${styles.header} drag-region`)} gap="sm">
-          <p className={styles.productTitle}>{title}</p>
-          <SetupWizardProgress
-            activeIndex={activeIndex}
-            ariaLabel={progressLabel}
-            steps={steps}
-          />
-        </Stack>
-        <TintedGlass
-          as="section"
-          className={dsClass(styles.body)}
-          padding="none"
-          radius="panel"
+      {variant === "focus" ? (
+        <ScrollArea
+          className={dsClass(styles.focusScroll)}
+          contentClassName={dsClass(styles.focusScrollContent)}
+          dataTestClass="setup-wizard-scroll"
         >
-          <ScrollArea
-            className={dsClass(styles.scrollArea)}
-            contentClassName={dsClass(styles.scrollContent)}
-            dataTestClass="setup-wizard-scroll"
+          <PageContainer
+            as="section"
+            width="narrow"
+            gutter="none"
+            className={dsClass(styles.focusColumn)}
+            aria-label={regionLabel}
           >
             {children}
-          </ScrollArea>
-        </TintedGlass>
-      </PageContainer>
+          </PageContainer>
+        </ScrollArea>
+      ) : (
+        <PageContainer
+          as="section"
+          width="narrow"
+          gutter="none"
+          className={dsClass(styles.shell)}
+          aria-label={regionLabel}
+        >
+          <Stack className={dsClass(`${styles.header} drag-region`)} gap="sm">
+            <p className={styles.productTitle}>{title}</p>
+            {steps ? (
+              <SetupWizardProgress
+                activeIndex={activeIndex}
+                ariaLabel={progressLabel}
+                steps={steps}
+              />
+            ) : null}
+          </Stack>
+          <TintedGlass
+            as="section"
+            className={dsClass(styles.body)}
+            padding="none"
+            radius="panel"
+          >
+            <ScrollArea
+              className={dsClass(styles.scrollArea)}
+              contentClassName={dsClass(styles.scrollContent)}
+              dataTestClass="setup-wizard-scroll"
+            >
+              {children}
+            </ScrollArea>
+          </TintedGlass>
+        </PageContainer>
+      )}
     </main>
   );
 }

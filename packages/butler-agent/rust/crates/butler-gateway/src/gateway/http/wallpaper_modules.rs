@@ -33,7 +33,7 @@ use super::{
     wallpapers::{envelope, read_upload, rejected, route_not_found},
 };
 use crate::gateway::{
-    AppWallpaperModuleShader, AppWallpaperModuleStatusReport, auth, wallpaper_modules::import,
+    AppWallpaperModuleShader, AppWallpaperModuleStatusReport, wallpaper_modules::import,
     wallpapers::AppWallpaperModuleSaveRequest,
 };
 
@@ -50,8 +50,6 @@ pub(super) async fn route(
     state: Arc<HttpState>,
     request: Request<Body>,
 ) -> Result<Response, HttpError> {
-    // Module ids contain dots, which the router's auth takes for static files.
-    auth::enforce(request.headers(), &state.auth)?;
     let method = request.method().clone();
     let path = request.uri().path().to_owned();
     if path == SAVE_PATH {

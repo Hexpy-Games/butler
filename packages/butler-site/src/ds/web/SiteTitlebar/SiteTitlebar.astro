@@ -1,0 +1,43 @@
+---
+import type { Locale } from "../../../site/sections";
+import { Button } from "../../components/Button";
+import { GitHub, PanelLeft, Search } from "../../components/Icons";
+import { Kbd } from "../../components/Kbd";
+import Brand from "../Brand/Brand.astro";
+import LanguageSwitch from "../LanguageSwitch/LanguageSwitch.astro";
+import ThemeToggle from "../ThemeToggle/ThemeToggle.astro";
+import styles from "./SiteTitlebar.module.css";
+
+interface Props {
+  homeHref: string;
+  repositoryUrl: string;
+  locale: Locale;
+  alternates: Partial<Record<Locale, string | null>>;
+}
+
+const { homeHref, repositoryUrl, locale, alternates } = Astro.props;
+---
+<header class={styles.titlebar} data-pagefind-ignore data-titlebar>
+  <div class={styles.compact}>
+    <Button aria-controls="site-nav" aria-expanded="false" aria-label="메뉴" data-drawer-open size="icon" variant="ghost">
+      <PanelLeft />
+    </Button>
+    <Brand href={homeHref} product="사용 설명서" />
+  </div>
+  <button aria-haspopup="dialog" class={styles.search} data-search-open type="button">
+    <Search size="sm" />
+    <span class={styles.searchLabel}>검색</span>
+    <span data-mod-key><Kbd keys={["⌘", "K"]} label="Command K" size="sm" /></span>
+  </button>
+  <span class={styles.spacer}></span>
+  <div class={styles.actions}>
+    <LanguageSwitch alternates={alternates} locale={locale} />
+    <ThemeToggle />
+    <Button aria-label="GitHub 저장소" href={repositoryUrl} rel="noopener" size="icon-sm" target="_blank" title="GitHub" variant="ghost">
+      <GitHub />
+    </Button>
+  </div>
+  <span class={styles.searchIcon}>
+    <Button aria-haspopup="dialog" aria-label="검색" data-search-open size="icon" variant="ghost"><Search /></Button>
+  </span>
+</header>

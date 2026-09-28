@@ -5,11 +5,12 @@ import {
   applyTimelineEvents,
   applyTimelineEventsToViewState,
   activeTurnProgressSnapshot,
+  canRetryWithCurrentControls,
   clientTurnIdFromMessageId,
   firstCancellableWorker,
   groupWorkerActivities,
   hasFollowableWorkerActivity,
-  isRuntimeFaultRetryableMessage,
+  isRetryableFailureMessage,
   mergeMessages,
   mergeTurnProgressFromSummary,
   mergeTurnProgressSnapshotMap,
@@ -162,6 +163,74 @@ test("message merging preserves unchanged row references", () => {
 
   expect(merged).toBe(current);
   expect(merged[1]).toBe(cachedMessage);
+});
+
+test("a snapshot taken mid-stream never rolls back the final streamed message", () => {
+  const streamed: MessageRecord = {
+    id: "message-stream-turn-a",
+    chat_id: "general",
+    turn_id: "turn-a",
+    role: "assistant",
+    text: "Queued reply number 2: streamed in",
+    status: "streaming",
+    cursor: 2,
+    created_at: "2026-09-27T17:31:57.472Z",
+    updated_at: "2026-09-27T17:31:58.101Z",
+  };
+  const final: MessageRecord = {
+    ...streamed,
+    text: "Queued reply number 2: streamed in pieces as well.",
+    status: "delivered",
+    updated_at: "2026-09-27T17:31:58.166Z",
+  };
+  const current = mergeMessages([], [final]);
+
+  // A session-view refresh requested while streaming resolves after the final event.
+  const merged = mergeMessages(current, [streamed]);
+
+  expect(merged).toBe(current);
+  expect(merged[0]?.text).toBe(final.text);
+  expect(merged[0]?.status).toBe("delivered");
+});
+
+test("a streaming copy with the same timestamp never replaces a settled message", () => {
+  const final: MessageRecord = {
+    id: "message-stream-turn-b",
+    chat_id: "general",
+    turn_id: "turn-b",
+    role: "assistant",
+    text: "Complete answer.",
+    status: "delivered",
+    cursor: 2,
+    updated_at: "2026-09-27T17:31:58.166Z",
+  };
+  const merged = mergeMessages([final], [{ ...final, text: "Complete", status: "streaming" }]);
+
+  expect(merged[0]).toBe(final);
+});
+
+test("newer streamed text and the final message still replace older rows", () => {
+  const first: MessageRecord = {
+    id: "message-stream-turn-c",
+    chat_id: "general",
+    turn_id: "turn-c",
+    role: "assistant",
+    text: "Part",
+    status: "streaming",
+    cursor: 2,
+    updated_at: "2026-09-27T17:31:58.100Z",
+  };
+  const grown = { ...first, text: "Part two", updated_at: "2026-09-27T17:31:58.150Z" };
+  const settled = { ...grown, text: "Part two.", status: "delivered", updated_at: "2026-09-27T17:31:58.150Z" };
+
+  const afterGrow = mergeMessages([first], [grown]);
+  expect(afterGrow[0]?.text).toBe("Part two");
+  const afterSettle = mergeMessages(afterGrow, [settled]);
+  expect(afterSettle[0]?.text).toBe("Part two.");
+  expect(afterSettle[0]?.status).toBe("delivered");
+  // Records without timestamps (optimistic/local) keep last-writer-wins.
+  const local = mergeMessages([{ ...first, updated_at: undefined }], [{ ...first, text: "Local", updated_at: undefined }]);
+  expect(local[0]?.text).toBe("Local");
 });
 
 test("markdown image sources resolve to attached app-server image files", () => {
@@ -3335,26 +3404,47 @@ test("work blocks ignore opening decisions and acknowledged receipt rows", () =>
   expect(JSON.stringify(blocks)).not.toContain("app-client readmodel");
 });
 
-test("retry eligibility requires runtime fault message code", () => {
+test("retry eligibility requires a runtime fault or crash interruption code", () => {
   expect(
-    isRuntimeFaultRetryableMessage({
+    isRetryableFailureMessage({
       retryable: true,
       safe_error_code: "runtime_fault",
     }),
   ).toBe(true);
   expect(
-    isRuntimeFaultRetryableMessage({
+    isRetryableFailureMessage({
+      retryable: true,
+      safe_error_code: "turn_interrupted",
+    }),
+  ).toBe(true);
+  expect(
+    isRetryableFailureMessage({
       retryable: true,
       safe_error_code: "tool_invalid_arguments",
     }),
   ).toBe(false);
-  expect(isRuntimeFaultRetryableMessage({ retryable: true })).toBe(false);
+  expect(isRetryableFailureMessage({ retryable: true })).toBe(false);
   expect(
-    isRuntimeFaultRetryableMessage({
+    isRetryableFailureMessage({
       retryable: false,
       safe_error_code: "runtime_fault",
     }),
   ).toBe(false);
+});
+
+test("retry with current settings is offered only for a runtime fault", () => {
+  const cases: Array<[boolean, string | undefined, boolean]> = [
+    [true, "runtime_fault", true],
+    [true, "turn_interrupted", false],
+    [true, "tool_invalid_arguments", false],
+    [true, undefined, false],
+    [false, "runtime_fault", false],
+  ];
+  for (const [retryable, code, expected] of cases) {
+    expect(
+      canRetryWithCurrentControls({ retryable, safe_error_code: code }),
+    ).toBe(expected);
+  }
 });
 
 test("production work block projection keeps mixed tool row decisions out of block semantics", () => {

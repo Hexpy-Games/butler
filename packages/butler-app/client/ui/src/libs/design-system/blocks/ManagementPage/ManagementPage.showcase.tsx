@@ -17,12 +17,12 @@ export const meta: ShowcaseMeta = {
 
 const labels = {
   "en-US": {
-    title: "Automations", meta: "3 prompts scheduled", action: "New", main: "Scheduled prompts", aside: "Recent runs",
+    title: "Schedules", meta: "3 prompts scheduled", action: "New", main: "Scheduled prompts", aside: "Recent runs",
     project: "Butler", description: "Desktop client and gateway. Wallpaper upgrade in progress.",
     calm: "Calm treatment: the veil lowers the wallpaper's contrast.", none: "No treatment: the wallpaper as is.",
   },
   "ko-KR": {
-    title: "자동화", meta: "예약된 프롬프트 3개", action: "새로 만들기", main: "예약된 프롬프트", aside: "최근 실행",
+    title: "예약 작업", meta: "예약된 프롬프트 3개", action: "새로 만들기", main: "예약된 프롬프트", aside: "최근 실행",
     project: "Butler", description: "데스크톱 클라이언트와 게이트웨이. 월페이퍼 업그레이드 진행 중.",
     calm: "차분한 처리: 베일이 월페이퍼 대비를 낮춥니다.", none: "처리 없음: 월페이퍼 그대로.",
   },

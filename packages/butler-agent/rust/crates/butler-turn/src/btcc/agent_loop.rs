@@ -14,6 +14,7 @@ pub mod operation_result_replay;
 mod ports;
 mod progress;
 mod state;
+mod stream_relay;
 mod tool_batch;
 mod turn_binding;
 
@@ -25,6 +26,7 @@ pub use contracts::{
     AdmittedModelSelection, ButlerContext, EmptyResponsePolicy, ExecutionPolicy, SemanticTurn,
     TrackingMode,
 };
+pub use stream_relay::StreamRelay;
 pub use turn_binding::{BoundGuidedTurn, GuidedTurnFactory, GuidedTurnInputs, GuidedTurnStart};
 
 #[cfg(test)]
@@ -40,7 +42,7 @@ mod test_execution;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use std::sync::Arc;
 use std::{future::Future, pin::Pin};
@@ -159,7 +161,7 @@ impl AgentLoop for ProductionAgentLoop {
                 })
                 .await
                 .map_err(AgentLoopError::Propagate)?;
-            run(driver::Invocation {
+            let looped = run(driver::Invocation {
                 turn,
                 #[cfg(any(test, feature = "test-support"))]
                 claim,
@@ -174,8 +176,20 @@ impl AgentLoop for ProductionAgentLoop {
                 operation_results: inputs.operation_results.as_deref(),
                 budget: inputs.budget,
                 observer: observer.as_deref(),
-            })
-            .await
+            });
+            let Some(relay) = inputs.stream_relay else {
+                return looped.await;
+            };
+            let done = CancellationToken::new();
+            let (result, ()) = tokio::join!(
+                async {
+                    let result = looped.await;
+                    done.cancel();
+                    result
+                },
+                relay.publish(owner.progress(), done.clone())
+            );
+            result
         })
     }
 }

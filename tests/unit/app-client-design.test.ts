@@ -642,7 +642,7 @@ test("electron shell injects a minimal preload-only app API contract", () => {
   expect(electronMain).toContain("BUTLER_APP_UI_URL");
   expect(electronMain).toContain("rendererUrl");
   expect(electronMain).toContain("defaultRendererUrl");
-  expect(electronMain).toContain("resolveStaticRendererUrl");
+  expect(electronMain).toContain("resolveStaticRendererDist");
   expect(electronMain).toContain('join(process.resourcesPath, "app-client")');
   expect(electronMain).toContain("serverHealthUrl");
   expect(electronMain).toContain('new URL("/health", serverUrl).toString()');
@@ -660,6 +660,9 @@ test("electron shell injects a minimal preload-only app API contract", () => {
   expect(electronMain).toContain("function appLocalAuthHeaders");
   expect(electronMain).toContain("normalizeLocalHttpUrl");
   expect(supervisor).toContain("BUTLER_APP_DEV_ORIGIN");
+  expect(electronMain).toContain(
+    "getDevOrigin: () => (explicitUiUrl ? rendererOrigin : null)",
+  );
   expect(electronMain).toContain("await win.loadURL(rendererUrl)");
   expect(electronMain).toContain("handleFatalStartupError");
   expect(electronMain).toContain(".catch(handleFatalStartupError)");
@@ -1261,6 +1264,9 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   const messageMedia = read(
     "packages/butler-app/client/ui/src/components/conversation/messageMedia.ts",
   );
+  const messageInlineImage = read(
+    "packages/butler-app/client/ui/src/components/conversation/MessageInlineImage.tsx",
+  );
   const autoScroll = read(
     "packages/butler-app/client/ui/src/components/conversation/hooks/useConversationAutoScroll.ts",
   );
@@ -1435,7 +1441,6 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(renderer).toContain("ConversationShell");
   expect(renderer).toContain('message.role === "assistant"');
   expect(renderer).toContain('message.status === "failed"');
-  expect(renderer).toContain("isRuntimeFaultRetryableMessage(message)");
   expect(renderer).toContain("onRetryTurn(turnId)");
   expect(renderer).not.toContain("eventPollingRef");
   expect(renderer).toContain("function collapseAssistantAttempts");
@@ -1447,18 +1452,21 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(renderer).toContain("cancelActiveTurn");
   expect(renderer).toContain("Export app-visible transcript");
   expect(renderer).toContain("attachments={message.attachments}");
-  expect(messageMarkdown).toContain("resolveMarkdownImageSource");
-  expect(messageMarkdown).toContain('data-test-class="markdown-inline-image"');
-  expect(messageMarkdown).toContain('decoding="async"');
-  expect(messageMarkdown).toContain('loading="lazy"');
-  expect(messageMedia).toContain("MESSAGE_FILE_URL_PATTERN");
+  expect(messageMarkdown).toContain("<MessageInlineImage");
+  expect(messageInlineImage).toContain("markdownImageFile");
+  expect(messageInlineImage).toContain('data-test-class="markdown-inline-image"');
+  expect(messageInlineImage).toContain('decoding="async"');
+  expect(messageInlineImage).toContain('loading="lazy"');
+  expect(messageMedia).toContain("messageFilePath(source)");
   expect(messageMedia).toContain('attachment.kind === "image"');
   expect(messageMedia).toContain("normalizedFileName(attachment.safe_name)");
   expect(markdownContentStyles).toContain(".markdown img");
   expect(markdownContentStyles).toContain("max-width: 30%");
   expect(markdownContentStyles).toContain("height: auto");
   expect(renderer).toContain("<PromptSuggestionList");
-  expect(renderer).toContain("onSelect: () => onSend(suggestion.text)");
+  // Templates fill the composer; ready-to-send suggestions send right away.
+  expect(renderer).toContain("? fillComposerWithTemplate(suggestion.text)");
+  expect(renderer).toContain(": onSend(suggestion.text)");
   expect(emptyState).toContain('from "@/assets/butler-mark.png"');
   expect(emptyState).toContain('from "@/assets/butler-mark-white.png"');
   expect(emptyState).toContain(
@@ -2106,7 +2114,7 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(renderer).toContain("descriptions.contextLimitClamped");
   expect(renderer).toContain("<SettingsShell");
   expect(renderer).toContain("title={sections.workerProfiles}");
-  expect(renderer).toContain("draft.worker_profiles");
+  expect(renderer).toMatch(/draft\??\.worker_profiles/u);
   expect(renderer).toContain("appCopy.settings.localModels");
   expect(renderer).toContain("/model-catalog/local/discover");
   expect(renderer).toContain("api<LocalModelRegistrationResult>(");
@@ -2215,7 +2223,7 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(renderer).toContain("prompt_body");
   expect(renderer).toContain("copy.queued");
   expect(appCopySource()).toContain(
-    'title: "자동화"',
+    'title: "예약 작업"',
   );
   expect(read("packages/butler-app/client/ui/src/app/utils.ts")).toContain(
     "return { title: appCopy.automations.title }",
@@ -2542,6 +2550,7 @@ test("app client enforces tokenized styling and modular store architecture", () 
   expect(designLint).toContain("isSourceColorTokenName");
   expect(designLint).toContain("inCssVariableDefinition");
   expect(designLint).toContain("stripCssCommentsFromLine");
+  expect(designLint).toContain("inFontFace");
   expect(cssGlobalLint).toContain(":global selector in component CSS module");
   expect(cssGlobalLint).not.toContain("top-level :global");
   for (const file of listUiSourceFiles(

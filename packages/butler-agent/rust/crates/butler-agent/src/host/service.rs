@@ -1,3 +1,5 @@
+#[cfg(unix)]
+pub(super) mod cli_launcher;
 pub(super) mod configuration;
 pub(super) mod conversation_observer;
 pub(super) mod delivery;

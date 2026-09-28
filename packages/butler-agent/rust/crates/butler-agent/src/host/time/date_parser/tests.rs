@@ -1,6 +1,17 @@
 use super::DateParser;
 
+/// Pure-logic table: local time zones. Local times resolve through DST gaps
+/// and overlaps like JavaScript, maintenance uses the process-local day, the
+/// prompt clock formats local time with zone names, and unknown zones are
+/// rejected.
+// test-category: pure-logic
 #[test]
+fn local_time_zones_resolve_like_javascript() {
+    local_times_resolve_through_dst_gaps_and_overlaps_like_javascript();
+    maintenance_uses_process_local_day_and_rejects_unknown_zones();
+    crate::host::time::prompt_clock::tests::prompt_clock_formats_local_time_with_zone_names_and_rejects_unknown_zones();
+}
+
 fn local_times_resolve_through_dst_gaps_and_overlaps_like_javascript() {
     // Gaps move forward, overlaps take the earlier offset, explicit offsets win.
     for (zone, text, expected) in [
@@ -35,7 +46,6 @@ fn local_times_resolve_through_dst_gaps_and_overlaps_like_javascript() {
     }
 }
 
-#[test]
 fn maintenance_uses_process_local_day_and_rejects_unknown_zones() {
     {
         assert!(DateParser::new("bad-zone").is_err());

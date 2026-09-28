@@ -24,6 +24,9 @@ impl AppApplication {
             wallpapers: self.wallpapers.clone(),
             settings_update_lock: self.settings_update_lock.clone(),
             plan_decision_locks: self.plan_decision_locks.clone(),
+            // Only the dispatching application relays readiness events.
+            setup_readiness: super::setup::ReadinessRelay::default(),
+            quota_events: self.quota_events.clone(),
         }
     }
 }

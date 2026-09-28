@@ -1,0 +1,28 @@
+/* Monochrome logos paint with currentColor; color logos keep their own fills. */
+.logo {
+  display: inline-flex;
+  flex: none;
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.logo[data-size="sm"] {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+}
+
+.logo[data-size="lg"] {
+  width: var(--icon-size-lg);
+  height: var(--icon-size-lg);
+}
+
+/* The 24x24 viewBox scales uniformly into the square box. */
+.logo > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}

@@ -108,14 +108,13 @@ fn payload_body(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::btcc::{ChangedFileLine, ChangedFileSummary, ChangedLineKind, TurnSemanticState};
 
     /// KEEP: the digested final payload body (and so the payload reference
     /// and outbox id) with changed files is byte-stable.
-    #[test]
-    fn payload_body_with_changed_files_is_byte_stable() {
+    pub(crate) fn payload_body_with_changed_files_is_byte_stable() {
         let turn =
             super::super::test_support::record("turn-1", "session-1", TurnSemanticState::Admitted);
         let mut result = super::super::test_support::agent_result();

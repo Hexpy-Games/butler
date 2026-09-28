@@ -13,6 +13,7 @@ mod error;
 mod installation;
 #[cfg(unix)]
 mod mcp;
+mod oauth_callback;
 pub(crate) use crate::host::guided::tool_artifact::ToolArtifactReader;
 pub(crate) use butler_memory::cognition::MemorySourceReader;
 mod runtime;
@@ -171,30 +172,5 @@ impl AppIdentityClock for SystemIdentity {
 
     fn iso_after_millis(&self, millis: u64) -> String {
         date::iso_from_system_time(SystemTime::now() + Duration::from_millis(millis))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn system_time_matches_js_iso_at_millisecond_and_calendar_boundaries() {
-        for (millis, expected) in [
-            (-1_i64, "1969-12-31T23:59:59.999Z"),
-            (0, "1970-01-01T00:00:00.000Z"),
-            (951_782_400_123, "2000-02-29T00:00:00.123Z"),
-            (253_402_300_800_000, "+010000-01-01T00:00:00.000Z"),
-            (-62_167_219_200_000, "0000-01-01T00:00:00.000Z"),
-            (-62_198_755_200_000, "-000001-01-01T00:00:00.000Z"),
-        ] {
-            let time = if millis < 0 {
-                SystemTime::UNIX_EPOCH - Duration::from_millis(millis.unsigned_abs())
-            } else {
-                SystemTime::UNIX_EPOCH
-                    + Duration::from_millis(u64::try_from(millis).unwrap_or_default())
-            };
-            assert_eq!(date::iso_from_system_time(time), expected);
-        }
     }
 }

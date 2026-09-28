@@ -1,12 +1,14 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { memo } from "react";
+import { memo, useCallback } from "react";
 import type { MessageRecord } from "@/app/types.ts";
 import { appCopy } from "@/app/copy.ts";
 import { visibleSystemMessageText } from "@/app/system-event-message.ts";
+import { refreshSessionFileUrls } from "@/app/messageFileRefresh.ts";
 import { Stack, Tag } from "@/butler-ds";
 import {
+  canRetryWithCurrentControls,
   isAssistantFailureNoticeMessage,
-  isRuntimeFaultRetryableMessage,
+  isRetryableFailureMessage,
 } from "@/app/utils.ts";
 import { AssistantResponseFooter } from "./AssistantResponseFooter";
 import { BranchMessageActions } from "./BranchMessageActions";
@@ -43,6 +45,8 @@ function MessageContentComponent({
 }: MessageContentProps) {
   useAppLocale();
   const artifacts = message.artifacts ?? [];
+  const { chat_id: sessionId = "", cursor } = message;
+  const refreshFileUrls = useCallback(() => refreshSessionFileUrls(sessionId, { cursor }), [cursor, sessionId]);
   const failureNotice = isAssistantFailureNoticeMessage(message);
   return (
     <>
@@ -63,7 +67,9 @@ function MessageContentComponent({
                 <AssistantFailureNotice message={message} />
               ) : (
                 <MessageMarkdown
+                  artifacts={message.artifacts}
                   attachments={message.attachments}
+                  refreshFileUrls={refreshFileUrls}
                   streaming={message.status === "streaming"}
                   text={message.text}
                 />
@@ -74,7 +80,9 @@ function MessageContentComponent({
             <AssistantFailureNotice message={message} />
           ) : (
             <MessageMarkdown
+              artifacts={message.artifacts}
               attachments={message.attachments}
+              refreshFileUrls={refreshFileUrls}
               streaming={message.status === "streaming"}
               text={message.text}
             />
@@ -122,9 +130,12 @@ function MessageContentComponent({
       )}
       {message.role !== "assistant" &&
         message.status === "failed" &&
-        isRuntimeFaultRetryableMessage(message) &&
+        isRetryableFailureMessage(message) &&
         message.turn_id && (
-          <MessageRetryActionsContainer turnId={message.turn_id} />
+          <MessageRetryActionsContainer
+            turnId={message.turn_id}
+            withCurrentControls={canRetryWithCurrentControls(message)}
+          />
         )}
     </>
   );

@@ -40,7 +40,51 @@ pub(super) fn load(
     } else {
         scope::placeholders(raw_ids.len())
     };
-    let sql = format!(
+    let sql = episodes_sql(
+        episode_ids.len(),
+        (&source.sql, &claim.sql),
+        &raw_placeholders,
+    );
+    let mut args = episode_ids
+        .iter()
+        .cloned()
+        .map(Value::Text)
+        .collect::<Vec<_>>();
+    args.extend(source.args);
+    args.extend(claim.args);
+    args.extend(raw_ids.into_iter().map(Value::Text));
+    let mut statement = db.prepare(&sql).map_err(db_error)?;
+    statement
+        .query_map(params_from_iter(args), episode_row)
+        .map_err(db_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(db_error)
+}
+
+fn episode_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RecallEpisodeRow> {
+    Ok(RecallEpisodeRow {
+        episode_id: row.get(0)?,
+        revision: row.get(1)?,
+        has_claims: row.get::<_, i64>(2)? != 0,
+        conversation_at: row.get(3)?,
+        session_id: row.get(4)?,
+        turn_id: row.get(5)?,
+        event_at: row.get(6)?,
+        salience: row.get(7)?,
+        explicit_priority: row.get::<_, i64>(8)? != 0,
+        half_life_days: row.get::<_, i64>(9)? as f64,
+        support_count: row.get::<_, i64>(10)? as f64,
+    })
+}
+
+/// Episodes with their newest eligible source time and claim summary:
+/// episodes with no claims, with eligible claims, or raw-matched.
+fn episodes_sql(
+    episodes: usize,
+    (source_sql, claim_sql): (&str, &str),
+    raw_placeholders: &str,
+) -> String {
+    format!(
         r"
       WITH eligible_sources AS (
         SELECT s.* FROM memory_chunk_sources s
@@ -83,36 +127,8 @@ pub(super) fn load(
       WHERE COALESCE(claim_counts.total,0)=0 OR claim_summary.total>0 OR c.memory_chunk_id IN ({raw_placeholders})
       ORDER BY c.memory_chunk_id
     ",
-        scope::placeholders(episode_ids.len()),
-        source.sql,
-        claim.sql
-    );
-    let mut args = episode_ids
-        .iter()
-        .cloned()
-        .map(Value::Text)
-        .collect::<Vec<_>>();
-    args.extend(source.args);
-    args.extend(claim.args);
-    args.extend(raw_ids.into_iter().map(Value::Text));
-    let mut statement = db.prepare(&sql).map_err(db_error)?;
-    statement
-        .query_map(params_from_iter(args), |row| {
-            Ok(RecallEpisodeRow {
-                episode_id: row.get(0)?,
-                revision: row.get(1)?,
-                has_claims: row.get::<_, i64>(2)? != 0,
-                conversation_at: row.get(3)?,
-                session_id: row.get(4)?,
-                turn_id: row.get(5)?,
-                event_at: row.get(6)?,
-                salience: row.get(7)?,
-                explicit_priority: row.get::<_, i64>(8)? != 0,
-                half_life_days: row.get::<_, i64>(9)? as f64,
-                support_count: row.get::<_, i64>(10)? as f64,
-            })
-        })
-        .map_err(db_error)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(db_error)
+        scope::placeholders(episodes),
+        source_sql,
+        claim_sql
+    )
 }

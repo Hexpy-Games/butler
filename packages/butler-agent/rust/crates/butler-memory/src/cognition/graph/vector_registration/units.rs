@@ -1,14 +1,16 @@
+//! Registering vector units for episodes and nodes, superseding obsolete ones.
+
 mod nodes;
 
+use crate::cognition::graph::StageWrite;
 use std::collections::HashSet;
 
 use rusqlite::{Connection, Transaction, params};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use super::{
     CognitionError, CognitionResult, EPISODE_CHUNK_BYTES, EpisodeProjectionSource,
     OVERSIZED_GRAPHEME, VectorRegistrationStage, db_error, digest, json_array, json_error,
-    stringify,
 };
 use butler_core::segmentation::grapheme_segments;
 
@@ -51,6 +53,8 @@ pub(super) fn refresh(
     result.map_err(|error| (stage, error))
 }
 
+/// Registers the vector units of an episode's sources, split into chunks;
+/// every unit id they need.
 fn register_episodes(
     tx: &Transaction<'_>,
     job_id: &str,
@@ -67,15 +71,15 @@ fn register_episodes(
                 let mut byte_start = source.byte_start;
                 for text in chunks {
                     let byte_end = byte_start + i64::try_from(text.len()).unwrap_or(i64::MAX);
-                    let chunk_revision = digest(vec![
-                        json!("episode-vector-chunk"),
-                        json!(episode_id),
-                        json!(revision),
-                        json!(source.source_id),
-                        json!(byte_start),
-                        json!(byte_end),
-                        json!(text),
-                    ])?;
+                    let chunk_revision = digest(&(
+                        "episode-vector-chunk",
+                        &episode_id,
+                        &revision,
+                        &source.source_id,
+                        &byte_start,
+                        &byte_end,
+                        &text,
+                    ))?;
                     let unit_id = vector_unit_id(job_id, "episode", episode_id, &chunk_revision)?;
                     desired.insert(unit_id.clone());
                     tx.execute(
@@ -99,38 +103,58 @@ fn register_episodes(
                 }
             }
             Err(()) => {
-                let chunk_revision = digest(vec![
-                    json!("episode-vector-oversized"),
-                    json!(episode_id),
-                    json!(revision),
-                    json!(source.source_id),
-                    json!(source.byte_start),
-                ])?;
-                let unit_id = vector_unit_id(job_id, "episode", episode_id, &chunk_revision)?;
-                desired.insert(unit_id.clone());
-                let byte_end =
-                    source.byte_start + i64::try_from(source.text.len()).unwrap_or(i64::MAX);
-                tx.execute(
-                        "INSERT OR IGNORE INTO memory_vector_units                      (unit_id,job_id,record_kind,owner_id,owner_revision,project_id,origin_kind,projection_text,state,error_code,source_ids_json,source_byte_start,source_byte_end,source_role)                      VALUES(?1,?2,'episode',?3,?4,?5,?6,'','failed',?7,?8,?9,?10,?11)",
-                    params![
-                        unit_id,
-                        job_id,
-                        episode_id,
-                        chunk_revision,
-                        project_id,
-                        origin_kind,
-                        OVERSIZED_GRAPHEME,
-                        json_array(std::slice::from_ref(&source.source_id))?,
-                        source.byte_start,
-                        byte_end,
-                        source.role,
-                    ],
-                )
-                .map_err(db_error)?;
+                desired.insert(register_oversized(
+                    tx,
+                    job_id,
+                    episode_id,
+                    revision,
+                    project_id,
+                    origin_kind,
+                    source,
+                )?);
             }
         }
     }
     Ok(desired)
+}
+
+/// Registers a source too large to embed as one failed unit; its id.
+fn register_oversized(
+    tx: &Transaction<'_>,
+    job_id: &str,
+    episode_id: &str,
+    revision: &str,
+    project_id: Option<&str>,
+    origin_kind: &str,
+    source: &EpisodeProjectionSource,
+) -> CognitionResult<String> {
+    let chunk_revision = digest(&(
+        "episode-vector-oversized",
+        &episode_id,
+        &revision,
+        &source.source_id,
+        &source.byte_start,
+    ))?;
+    let unit_id = vector_unit_id(job_id, "episode", episode_id, &chunk_revision)?;
+    let byte_end = source.byte_start + i64::try_from(source.text.len()).unwrap_or(i64::MAX);
+    tx.execute(
+                "INSERT OR IGNORE INTO memory_vector_units                      (unit_id,job_id,record_kind,owner_id,owner_revision,project_id,origin_kind,projection_text,state,error_code,source_ids_json,source_byte_start,source_byte_end,source_role)                      VALUES(?1,?2,'episode',?3,?4,?5,?6,'','failed',?7,?8,?9,?10,?11)",
+            params![
+                unit_id,
+                job_id,
+                episode_id,
+                chunk_revision,
+                project_id,
+                origin_kind,
+                OVERSIZED_GRAPHEME,
+                json_array(std::slice::from_ref(&source.source_id))?,
+                source.byte_start,
+                byte_end,
+                source.role,
+            ],
+        )
+        .map_err(db_error)?;
+    Ok(unit_id)
 }
 
 fn vector_unit_id(
@@ -139,13 +163,7 @@ fn vector_unit_id(
     owner_id: &str,
     chunk_revision: &str,
 ) -> CognitionResult<String> {
-    digest(vec![
-        json!("vector-unit"),
-        json!(job_id),
-        json!(kind),
-        json!(owner_id),
-        json!(chunk_revision),
-    ])
+    digest(&("vector-unit", &job_id, &kind, &owner_id, &chunk_revision))
 }
 
 fn supersede_obsolete(
@@ -202,25 +220,20 @@ fn refresh_stage_states(tx: &Transaction<'_>, job_id: &str, now: &str) -> Cognit
                 },
             )
             .map_err(db_error)?;
-        let pending = total - complete - failed;
         let state = if total == 0
             && stage == VectorRegistrationStage::Node
             && semantic.get("state").and_then(Value::as_str) != Some("complete")
         {
-            json!({"state":"pending","blocked_by":"semantic_graph"})
-        } else if failed > 0 || (complete > 0 && pending > 0) {
-            json!({"state":"partial","completed_units":complete,"total_units":total,"pending_units":pending,"failed_units":failed})
-        } else if complete == total {
-            json!({"state":"complete","completed_units":complete,"total_units":total})
+            StageWrite::blocked("semantic_graph")
         } else {
-            json!({"state":"pending","blocked_by":null})
+            StageWrite::vector_progress(complete, total, failed)
         };
         tx.execute(
             &format!(
                 "UPDATE memory_projection_jobs SET {}=?1,last_served_at=?2 WHERE job_id=?3",
                 stage.column()
             ),
-            params![stringify(&state)?, now, job_id],
+            params![state.json()?, now, job_id],
         )
         .map_err(db_error)?;
     }

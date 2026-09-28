@@ -1,0 +1,570 @@
+{
+  "prompts": [
+    "{\"speaker\":\"user\",\"observed_at\":\"2026-02-01T00:00:00.000Z\",\"parts\":[{\"id\":0,\"text\":\"Alice likes Atlas. \"},{\"id\":1,\"text\":\"The Atlas deadline moved from 2026 to 2027.\"}],\"context\":[{\"text\":\"Earlier we planned Atlas.\",\"basis\":\"user_statement\"}]}",
+    "{\"targets\":[{\"target\":\"n0\",\"meaning\":{\"name\":\"Alice\"},\"evidence\":[\"n0u0\"],\"candidates\":[{\"ref\":\"n0c0\",\"type\":\"entity\",\"label\":\"Alice\",\"evidence\":[\"n0c0h\"]}]},{\"target\":\"f5\",\"meaning\":{\"kind\":\"change\",\"subject\":1,\"field\":\"deadline\",\"old\":\"2026\",\"new\":\"2027\",\"evidence\":[1]},\"evidence\":[\"f5u1\"],\"candidates\":[{\"ref\":\"f5c0\",\"type\":\"memory_atom\",\"label\":\"Atlas deadline 2026 is firm\",\"evidence\":[\"f5c0h\"],\"spans\":[{\"ref\":\"f5c0p0\",\"before\":\"Atlas deadline \",\"value\":\"2026\",\"after\":\" is firm\"}]}]}],\"evidence\":[{\"ref\":\"n0u0\",\"text\":\"Alice likes Atlas. \",\"role\":\"current\"},{\"ref\":\"n0c0h\",\"text\":\"Alice said hi. \",\"role\":\"user_statement\"},{\"ref\":\"f5u1\",\"text\":\"The Atlas deadline moved from 2026 to 2027.\",\"role\":\"current\"},{\"ref\":\"f5c0h\",\"text\":\"The deadline 2026 is firm.\",\"role\":\"user_statement\"}]}",
+    "{\"input\":{\"targets\":[{\"target\":\"n0\",\"meaning\":{\"name\":\"Alice\"},\"evidence\":[\"n0u0\"],\"candidates\":[{\"ref\":\"n0c0\",\"type\":\"entity\",\"label\":\"Alice\",\"evidence\":[\"n0c0h\"]}]},{\"target\":\"f5\",\"meaning\":{\"kind\":\"change\",\"subject\":1,\"field\":\"deadline\",\"old\":\"2026\",\"new\":\"2027\",\"evidence\":[1]},\"evidence\":[\"f5u1\"],\"candidates\":[{\"ref\":\"f5c0\",\"type\":\"memory_atom\",\"label\":\"Atlas deadline 2026 is firm\",\"evidence\":[\"f5c0h\"],\"spans\":[{\"ref\":\"f5c0p0\",\"before\":\"Atlas deadline \",\"value\":\"2026\",\"after\":\" is firm\"}]}]}],\"evidence\":[{\"ref\":\"n0u0\",\"text\":\"Alice likes Atlas. \",\"role\":\"current\"},{\"ref\":\"n0c0h\",\"text\":\"Alice said hi. \",\"role\":\"user_statement\"},{\"ref\":\"f5u1\",\"text\":\"The Atlas deadline moved from 2026 to 2027.\",\"role\":\"current\"},{\"ref\":\"f5c0h\",\"text\":\"The deadline 2026 is firm.\",\"role\":\"user_statement\"}]},\"correction\":{\"error\":\"memory_extract_invalid_binding\",\"instruction\":\"Return a corrected complete response. For a selected candidate, put only current target evidence in current_support and exactly one selected-candidate historical evidence ID in selected_historical_support. For candidate=null, both arrays are empty. Do not invent IDs.\"}}"
+  ],
+  "stage_keys": [
+    "meaning:f443d79c556868cc5545bd5330680b5e534801f0fd0c5261a369105a22f25cd0",
+    "binding0:664ac919551d61ade6376929f3aef508c9c54dd28834ab559cab9b9700bbbaff",
+    "binding0:cb80710d7d8ce4e69777efdf4907ffa8605592215e2b0c0dbf4113686bcc16b5:repair:1"
+  ],
+  "saved": {
+    "binding0:664ac919551d61ade6376929f3aef508c9c54dd28834ab559cab9b9700bbbaff": {
+      "request_hash": "664ac919551d61ade6376929f3aef508c9c54dd28834ab559cab9b9700bbbaff",
+      "raw": "{\"decisions\":[]}",
+      "evidence": {
+        "reported_model": "provider/reported",
+        "usage": {
+          "prompt_tokens": 100.0,
+          "cached_tokens": 20.0,
+          "output_tokens": 30.0,
+          "total_tokens": 130.0
+        },
+        "duration_ms": 0,
+        "request_wire": {
+          "profile": "memory-binding0.v4",
+          "input_json_sha256": "5a6b7164d48f774526b68883ade164f54fe5bc48c759dcfa0ea2da9cde84c13f",
+          "input_json_utf8_bytes": 793,
+          "instructions_sha256": "c3a9968dfdf6d594c5233346348a156a1bb65974cb0616fd4281cd90f0d9104d",
+          "output_schema_sha256": "2258794f243227ef401eae02f8c625fa585efe5e41723cb75b4b42aba4405fd1"
+        }
+      }
+    },
+    "binding0:cb80710d7d8ce4e69777efdf4907ffa8605592215e2b0c0dbf4113686bcc16b5:repair:1": {
+      "request_hash": "cb80710d7d8ce4e69777efdf4907ffa8605592215e2b0c0dbf4113686bcc16b5",
+      "raw": "{\"decisions\":[{\"target\":\"n0\",\"candidate\":\"n0c0\",\"span\":null,\"current_support\":[\"n0u0\"],\"selected_historical_support\":[\"n0c0h\"]},{\"target\":\"f5\",\"candidate\":\"f5c0\",\"span\":\"f5c0p0\",\"current_support\":[\"f5u1\"],\"selected_historical_support\":[\"f5c0h\"]}]}",
+      "evidence": {
+        "reported_model": "provider/reported",
+        "usage": {
+          "prompt_tokens": 100.0,
+          "cached_tokens": 20.0,
+          "output_tokens": 30.0,
+          "total_tokens": 130.0
+        },
+        "duration_ms": 0,
+        "request_wire": {
+          "profile": "memory-binding0.v4",
+          "input_json_sha256": "6b9c47cfdbad510e73a379a8e905a5e24870318c285f0ceccc36dcd529334783",
+          "input_json_utf8_bytes": 1143,
+          "instructions_sha256": "c3a9968dfdf6d594c5233346348a156a1bb65974cb0616fd4281cd90f0d9104d",
+          "output_schema_sha256": "3e31730f93ec923d8700041ca35dc6910407b1e427ce0265a8ecca3e73e61aa7"
+        }
+      }
+    },
+    "meaning:f443d79c556868cc5545bd5330680b5e534801f0fd0c5261a369105a22f25cd0": {
+      "request_hash": "f443d79c556868cc5545bd5330680b5e534801f0fd0c5261a369105a22f25cd0",
+      "raw": "{\"status\":\"processed\",\"entities\":[{\"name\":\"Alice\",\"evidence\":[0]},{\"name\":\"Atlas\",\"evidence\":[0,1]}],\"items\":[{\"kind\":\"preference\",\"subject\":0,\"text\":\"Alice prefers mornings\",\"evidence\":[0]},{\"kind\":\"relation\",\"from\":0,\"predicate\":\"likes\",\"to\":1,\"evidence\":[0]},{\"kind\":\"not_relation\",\"from\":1,\"predicate\":\"depends_on\",\"to\":0,\"evidence\":[1]},{\"kind\":\"requires\",\"subject\":0,\"action\":\"ship Atlas\",\"condition\":{\"all\":[{\"subject\":1,\"state\":\"ready\"},{\"not\":{\"subject\":null,\"state\":\"a holiday\"}},{\"any\":[{\"subject\":0,\"state\":\"awake\"}]}]},\"evidence\":[0,1]},{\"kind\":\"question\",\"subject\":null,\"text\":\"Is Atlas late?\",\"evidence\":[1]},{\"kind\":\"change\",\"subject\":1,\"field\":\"deadline\",\"old\":\"2026\",\"new\":\"2027\",\"evidence\":[1]}],\"attributes\":[{\"kind\":\"alias\",\"entity\":0,\"name\":\"Al\",\"evidence\":[0]},{\"kind\":\"importance\",\"item\":3,\"value\":\"high\"},{\"kind\":\"validity\",\"item\":0,\"from\":\"2026-01-01\",\"to\":null}]}",
+      "evidence": {
+        "reported_model": "provider/reported",
+        "usage": {
+          "prompt_tokens": 100.0,
+          "cached_tokens": 20.0,
+          "output_tokens": 30.0,
+          "total_tokens": 130.0
+        },
+        "duration_ms": 0,
+        "request_wire": {
+          "profile": "memory-meaning.v4",
+          "input_json_sha256": "34655f3b10781218b748b9ef4b8d55dcb492078a5e8462046b5c51d2d79af485",
+          "input_json_utf8_bytes": 243,
+          "instructions_sha256": "91144b2a0ecaf8839e6859fdb230d71c244ccead471067f6055082615e46e1f5",
+          "output_schema_sha256": "d965b047647a949f9461af93c97f9137c8adc36456f0339545496b966a229613"
+        }
+      }
+    }
+  },
+  "evidence": {
+    "reported_model": "provider/reported",
+    "usage": {
+      "prompt_tokens": 300.0,
+      "cached_tokens": 60.0,
+      "output_tokens": 90.0,
+      "total_tokens": 390.0
+    },
+    "duration_ms": 0,
+    "request_wire": {
+      "profile": "memory-meaning.v4",
+      "input_json_sha256": "34655f3b10781218b748b9ef4b8d55dcb492078a5e8462046b5c51d2d79af485",
+      "input_json_utf8_bytes": 243,
+      "instructions_sha256": "91144b2a0ecaf8839e6859fdb230d71c244ccead471067f6055082615e46e1f5",
+      "output_schema_sha256": "d965b047647a949f9461af93c97f9137c8adc36456f0339545496b966a229613"
+    },
+    "stages": [
+      {
+        "stage": "meaning",
+        "repair": 0,
+        "reused": false,
+        "request_hash": "f443d79c556868cc5545bd5330680b5e534801f0fd0c5261a369105a22f25cd0",
+        "provider": {
+          "reported_model": "provider/reported",
+          "usage": {
+            "prompt_tokens": 100.0,
+            "cached_tokens": 20.0,
+            "output_tokens": 30.0,
+            "total_tokens": 130.0
+          },
+          "duration_ms": 0,
+          "request_wire": {
+            "profile": "memory-meaning.v4",
+            "input_json_sha256": "34655f3b10781218b748b9ef4b8d55dcb492078a5e8462046b5c51d2d79af485",
+            "input_json_utf8_bytes": 243,
+            "instructions_sha256": "91144b2a0ecaf8839e6859fdb230d71c244ccead471067f6055082615e46e1f5",
+            "output_schema_sha256": "d965b047647a949f9461af93c97f9137c8adc36456f0339545496b966a229613"
+          }
+        }
+      },
+      {
+        "stage": "binding0",
+        "repair": 0,
+        "reused": false,
+        "request_hash": "664ac919551d61ade6376929f3aef508c9c54dd28834ab559cab9b9700bbbaff",
+        "provider": {
+          "reported_model": "provider/reported",
+          "usage": {
+            "prompt_tokens": 100.0,
+            "cached_tokens": 20.0,
+            "output_tokens": 30.0,
+            "total_tokens": 130.0
+          },
+          "duration_ms": 0,
+          "request_wire": {
+            "profile": "memory-binding0.v4",
+            "input_json_sha256": "5a6b7164d48f774526b68883ade164f54fe5bc48c759dcfa0ea2da9cde84c13f",
+            "input_json_utf8_bytes": 793,
+            "instructions_sha256": "c3a9968dfdf6d594c5233346348a156a1bb65974cb0616fd4281cd90f0d9104d",
+            "output_schema_sha256": "2258794f243227ef401eae02f8c625fa585efe5e41723cb75b4b42aba4405fd1"
+          }
+        }
+      },
+      {
+        "stage": "binding0",
+        "repair": 1,
+        "reused": false,
+        "request_hash": "cb80710d7d8ce4e69777efdf4907ffa8605592215e2b0c0dbf4113686bcc16b5",
+        "provider": {
+          "reported_model": "provider/reported",
+          "usage": {
+            "prompt_tokens": 100.0,
+            "cached_tokens": 20.0,
+            "output_tokens": 30.0,
+            "total_tokens": 130.0
+          },
+          "duration_ms": 0,
+          "request_wire": {
+            "profile": "memory-binding0.v4",
+            "input_json_sha256": "6b9c47cfdbad510e73a379a8e905a5e24870318c285f0ceccc36dcd529334783",
+            "input_json_utf8_bytes": 1143,
+            "instructions_sha256": "c3a9968dfdf6d594c5233346348a156a1bb65974cb0616fd4281cd90f0d9104d",
+            "output_schema_sha256": "3e31730f93ec923d8700041ca35dc6910407b1e427ce0265a8ecca3e73e61aa7"
+          }
+        }
+      }
+    ],
+    "warnings": []
+  },
+  "output": {
+    "schema": "butler.memory-extract-output.v3",
+    "window_ref": "window-1",
+    "disposition": "processed",
+    "covered_unit_refs": [
+      "unit-1"
+    ],
+    "nodes": [
+      {
+        "local_ref": "n0",
+        "type": "entity",
+        "label": "Alice",
+        "resolution": {
+          "kind": "reuse",
+          "node_ref": "node-alice",
+          "reason": "named_context",
+          "evidence": [
+            {
+              "unit_ref": "unit-1",
+              "quote": "Alice likes Atlas. ",
+              "occurrence": 0
+            },
+            {
+              "unit_ref": "src-1",
+              "quote": "Alice said hi. ",
+              "occurrence": 0
+            }
+          ]
+        },
+        "aliases": [
+          {
+            "text": "Al",
+            "evidence": [
+              {
+                "unit_ref": "unit-1",
+                "quote": "Alice likes Atlas. ",
+                "occurrence": 0
+              }
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "unit_ref": "unit-1",
+            "quote": "Alice likes Atlas. ",
+            "occurrence": 0
+          }
+        ]
+      },
+      {
+        "local_ref": "n1",
+        "type": "entity",
+        "label": "Atlas",
+        "resolution": {
+          "kind": "create",
+          "provisional": true,
+          "identity_scope": "user"
+        },
+        "aliases": [],
+        "evidence": [
+          {
+            "unit_ref": "unit-1",
+            "quote": "Alice likes Atlas. ",
+            "occurrence": 0
+          },
+          {
+            "unit_ref": "unit-1",
+            "quote": "The Atlas deadline moved from 2026 to 2027.",
+            "occurrence": 0
+          }
+        ]
+      }
+    ],
+    "claims": [
+      {
+        "local_ref": "f0",
+        "type": "preference",
+        "resolution": {
+          "kind": "create",
+          "provisional": true,
+          "identity_scope": "user"
+        },
+        "statement": "Alice prefers mornings",
+        "subject_ref": "n0",
+        "object_ref": null,
+        "speech_act": "assertion",
+        "basis": "user_statement",
+        "polarity": "positive",
+        "condition": null,
+        "valid_from": "2026-01-01",
+        "valid_to": null,
+        "salience": "normal",
+        "evidence": [
+          {
+            "unit_ref": "unit-1",
+            "quote": "Alice likes Atlas. ",
+            "occurrence": 0
+          }
+        ]
+      },
+      {
+        "local_ref": "f1",
+        "type": "memory_atom",
+        "resolution": {
+          "kind": "create",
+          "provisional": true,
+          "identity_scope": "user"
+        },
+        "statement": "Alice likes Atlas. ",
+        "subject_ref": "n0",
+        "object_ref": "n1",
+        "speech_act": "assertion",
+        "basis": "user_statement",
+        "polarity": "positive",
+        "condition": null,
+        "valid_from": null,
+        "valid_to": null,
+        "salience": "normal",
+        "evidence": [
+          {
+            "unit_ref": "unit-1",
+            "quote": "Alice likes Atlas. ",
+            "occurrence": 0
+          }
+        ]
+      },
+      {
+        "local_ref": "f2",
+        "type": "memory_atom",
+        "resolution": {
+          "kind": "create",
+          "provisional": true,
+          "identity_scope": "user"
+        },
+        "statement": "The Atlas deadline moved from 2026 to 2027.",
+        "subject_ref": "n1",
+        "object_ref": "n0",
+        "speech_act": "assertion",
+        "basis": "user_statement",
+        "polarity": "negative",
+        "condition": null,
+        "valid_from": null,
+        "valid_to": null,
+        "salience": "normal",
+        "evidence": [
+          {
+            "unit_ref": "unit-1",
+            "quote": "The Atlas deadline moved from 2026 to 2027.",
+            "occurrence": 0
+          }
+        ]
+      },
+      {
+        "local_ref": "f3",
+        "type": "constraint",
+        "resolution": {
+          "kind": "create",
+          "provisional": true,
+          "identity_scope": "user"
+        },
+        "statement": "Alice likes Atlas.  The Atlas deadline moved from 2026 to 2027.",
+        "subject_ref": "n0",
+        "object_ref": null,
+        "speech_act": "assertion",
+        "basis": "user_statement",
+        "polarity": "positive",
+        "condition": null,
+        "requirement": {
+          "action": "ship Atlas",
+          "condition": {
+            "all": [
+              {
+                "subject": "n1",
+                "state": "ready"
+              },
+              {
+                "not": {
+                  "subject": null,
+                  "state": "a holiday"
+                }
+              },
+              {
+                "any": [
+                  {
+                    "subject": "n0",
+                    "state": "awake"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "valid_from": null,
+        "valid_to": null,
+        "salience": "high",
+        "evidence": [
+          {
+            "unit_ref": "unit-1",
+            "quote": "Alice likes Atlas. ",
+            "occurrence": 0
+          },
+          {
+            "unit_ref": "unit-1",
+            "quote": "The Atlas deadline moved from 2026 to 2027.",
+            "occurrence": 0
+          }
+        ]
+      },
+      {
+        "local_ref": "f4",
+        "type": "memory_atom",
+        "resolution": {
+          "kind": "create",
+          "provisional": true,
+          "identity_scope": "user"
+        },
+        "statement": "Is Atlas late?",
+        "subject_ref": null,
+        "object_ref": null,
+        "speech_act": "question",
+        "basis": "user_statement",
+        "polarity": "positive",
+        "condition": null,
+        "valid_from": null,
+        "valid_to": null,
+        "salience": "normal",
+        "evidence": [
+          {
+            "unit_ref": "unit-1",
+            "quote": "The Atlas deadline moved from 2026 to 2027.",
+            "occurrence": 0
+          }
+        ]
+      },
+      {
+        "local_ref": "f5",
+        "type": "memory_atom",
+        "resolution": {
+          "kind": "create",
+          "provisional": true,
+          "identity_scope": "user"
+        },
+        "statement": "Atlas deadline 2027 is firm",
+        "subject_ref": null,
+        "object_ref": null,
+        "speech_act": "assertion",
+        "basis": "user_statement",
+        "polarity": "positive",
+        "condition": null,
+        "valid_from": null,
+        "valid_to": null,
+        "salience": "normal",
+        "evidence": [
+          {
+            "unit_ref": "unit-1",
+            "quote": "The Atlas deadline moved from 2026 to 2027.",
+            "occurrence": 0
+          },
+          {
+            "unit_ref": "src-2",
+            "quote": "The deadline 2026 is firm.",
+            "occurrence": 0
+          }
+        ]
+      }
+    ],
+    "relations": [
+      {
+        "from_ref": "n0",
+        "to_ref": "n1",
+        "relation": "likes",
+        "claim_ref": "f1",
+        "evidence": [
+          {
+            "unit_ref": "unit-1",
+            "quote": "Alice likes Atlas. ",
+            "occurrence": 0
+          }
+        ]
+      },
+      {
+        "from_ref": "n1",
+        "to_ref": "n0",
+        "relation": "depends_on",
+        "claim_ref": "f2",
+        "evidence": [
+          {
+            "unit_ref": "unit-1",
+            "quote": "The Atlas deadline moved from 2026 to 2027.",
+            "occurrence": 0
+          }
+        ]
+      }
+    ],
+    "corrections": [
+      {
+        "previous_claim_ref": "claim-deadline",
+        "replacement_claim_ref": "f5",
+        "relation": "supersedes",
+        "effective_at": null,
+        "evidence": [
+          {
+            "unit_ref": "unit-1",
+            "quote": "The Atlas deadline moved from 2026 to 2027.",
+            "occurrence": 0
+          },
+          {
+            "unit_ref": "src-2",
+            "quote": "The deadline 2026 is firm.",
+            "occurrence": 0
+          }
+        ]
+      }
+    ],
+    "summary": {
+      "text": "[model_interpretation/user_statement/assertion] Alice prefers mornings\n[model_interpretation/user_statement/assertion] Alice likes Atlas. \n[model_interpretation/user_statement/assertion] The Atlas deadline moved from 2026 to 2027.\n[model_interpretation/user_statement/assertion] Alice likes Atlas.  The Atlas deadline moved from 2026 to 2027.\n[model_interpretation/user_statement/question] Is Atlas late?\n[model_interpretation/user_statement/assertion] Atlas deadline 2027 is firm",
+      "evidence": [
+        {
+          "unit_ref": "unit-1",
+          "quote": "Alice likes Atlas. ",
+          "occurrence": 0
+        },
+        {
+          "unit_ref": "unit-1",
+          "quote": "The Atlas deadline moved from 2026 to 2027.",
+          "occurrence": 0
+        },
+        {
+          "unit_ref": "src-2",
+          "quote": "The deadline 2026 is firm.",
+          "occurrence": 0
+        }
+      ]
+    }
+  },
+  "pinned_input": {
+    "schema": "butler.memory-extract-input.v2",
+    "episode_ref": "episode",
+    "revision": "revision-1",
+    "window_ref": "window-1",
+    "bound_project_id": null,
+    "source_units": [
+      {
+        "ref": "unit-1",
+        "text": "Alice likes Atlas. The Atlas deadline moved from 2026 to 2027.",
+        "role": "user",
+        "observed_at": "2026-02-01T00:00:00.000Z",
+        "origin_kind": "user_input"
+      }
+    ],
+    "context_units": [
+      {
+        "ref": "ctx-1",
+        "text": "Earlier we planned Atlas.",
+        "observed_at": "2026-01-31T00:00:00.000Z",
+        "basis": "user_statement"
+      }
+    ],
+    "candidates": [
+      {
+        "ref": "node-alice",
+        "type": "entity",
+        "label": "Alice",
+        "aliases": [
+          "Al"
+        ],
+        "scope": "user",
+        "project_id": null,
+        "claim": null,
+        "evidence": [
+          {
+            "ref": "src-1",
+            "text": "Alice said hi. Then left.",
+            "observed_at": "2026-01-01T00:00:00.000Z",
+            "basis": "user_statement"
+          }
+        ]
+      },
+      {
+        "ref": "claim-deadline",
+        "type": "memory_atom",
+        "label": "deadline 2026",
+        "aliases": [],
+        "scope": "user",
+        "project_id": null,
+        "claim": {
+          "statement": "Atlas deadline 2026 is firm",
+          "subject_ref": null,
+          "object_ref": null,
+          "relation": null,
+          "polarity": "positive",
+          "condition": null
+        },
+        "evidence": [
+          {
+            "ref": "src-2",
+            "text": "The deadline 2026 is firm.",
+            "observed_at": "2026-01-02T00:00:00.000Z",
+            "basis": "user_statement"
+          }
+        ]
+      }
+    ]
+  }
+}

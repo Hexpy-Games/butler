@@ -1,0 +1,9 @@
+/*
+ * Numbered procedure: wraps an MDX ordered list. Steps keep the docs default
+ * plain "1." markers and item layout (DocContent) and only widen the gap
+ * between steps; no circled or badge numerals (lint: circled-number,
+ * custom-counter). The gap applies to either list type (lint: list-spacing).
+ */
+.steps > :where(ul, ol) > :where(li + li) {
+  margin-top: var(--space-sm);
+}

@@ -1,3 +1,5 @@
+//! Writing project capsules under a per-project lock, with failure records.
+
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
@@ -246,25 +248,14 @@ fn stale_lock(path: &Path) -> bool {
     !process_alive(record.pid)
 }
 
-#[cfg(unix)]
+/// Whether the lock holder may still run: only a process known to be gone is
+/// dead, and an id that names no single process proves nothing.
 fn process_alive(pid: u32) -> bool {
-    use nix::{errno::Errno, sys::signal::kill, unistd::Pid};
-    let Ok(pid) = i32::try_from(pid) else {
-        return true;
-    };
-    if pid <= 0 {
+    use butler_platform::process_control::{Liveness, liveness};
+    if pid == 0 || i32::try_from(pid).is_err() {
         return true;
     }
-    match kill(Pid::from_raw(pid), None) {
-        Err(Errno::ESRCH) => false,
-        // EPERM and any other failure mean the process may exist.
-        _ => true,
-    }
-}
-
-#[cfg(not(unix))]
-fn process_alive(_pid: u32) -> bool {
-    true
+    liveness(pid) != Liveness::Gone
 }
 
 fn unique_sidecar(path: &Path, suffix: &str) -> PathBuf {
@@ -278,30 +269,16 @@ fn unique_sidecar(path: &Path, suffix: &str) -> PathBuf {
 }
 
 fn create_private_dir(path: &Path) -> CognitionResult<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        let mut builder = fs::DirBuilder::new();
-        builder.recursive(true).mode(0o700);
-        builder
-            .create(path)
-            .map_err(|source| error(CognitionCode::ProjectCapsuleWriteFailed).with_source(source))
-    }
-    #[cfg(not(unix))]
-    {
-        fs::create_dir_all(path)
-            .map_err(|source| error("project_capsule_write_failed").with_source(source))
-    }
+    let mut builder = fs::DirBuilder::new();
+    butler_platform::secure_fs::owner_only_dirs(builder.recursive(true));
+    builder
+        .create(path)
+        .map_err(|source| error(CognitionCode::ProjectCapsuleWriteFailed).with_source(source))
 }
 
-#[cfg(unix)]
 fn set_private_mode(options: &mut OpenOptions) {
-    use std::os::unix::fs::OpenOptionsExt;
-    options.mode(0o600);
+    butler_platform::secure_fs::owner_only(options);
 }
-
-#[cfg(not(unix))]
-fn set_private_mode(_options: &mut OpenOptions) {}
 
 fn compact(message: &str, limit: usize) -> String {
     let normalized = message

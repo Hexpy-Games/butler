@@ -1,11 +1,17 @@
+//! Operator quality exclusions of memory sources, recorded beside the
+//! feedback buffer and replayed idempotently by operation id.
+
+use crate::lenient::JsonField;
+use crate::lenient::set_field;
 use std::{
-    fs::{self, OpenOptions},
+    fs,
     io::Write,
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use crate::cognition::CognitionCode;
+use serde::Serialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -17,6 +23,7 @@ use crate::cognition::{
 use super::{FeedbackBufferService, operator::read_entries};
 
 impl FeedbackBufferService {
+    /// Records an operator exclusion of a memory source from every user session.
     pub async fn operator_quality_exclusion(
         &self,
         feedback_id: &str,
@@ -65,51 +72,82 @@ struct ExclusionOperation<'a> {
     publisher: &'a CompletionPublisher,
 }
 
+/// Records (or replays) an operator exclusion of a memory source and
+/// publishes it for the projection; the stored operation with `replayed`.
 fn record_exclusion(input: ExclusionOperation<'_>) -> CognitionResult<Value> {
-    let ExclusionOperation {
-        data_root,
-        paths,
-        feedback_path,
-        feedback_id,
-        operation_id,
-        source_ref,
-        scope,
-        publisher,
-    } = input;
-    let operation_path = feedback_path
+    let operation_path = input
+        .feedback_path
         .parent()
         .ok_or_else(|| error(CognitionCode::MemoryQualityOperationWriteFailed))?
         .join("quality-operations.jsonl");
     let operations = read_operations(&operation_path)?;
     let prior = operations
         .iter()
-        .find(|operation| operation["operation_id"] == operation_id)
+        .find(|operation| operation["operation_id"] == input.operation_id)
         .cloned();
-    let owners = read_entries(feedback_path)?;
-    let owner = owners.iter().find(|entry| entry.feedback_id == feedback_id);
+    let owners = read_entries(input.feedback_path)?;
+    let owner = owners
+        .iter()
+        .find(|entry| entry.feedback_id == input.feedback_id);
     if owner.is_none() && prior.is_none() {
         return Err(error(CognitionCode::MemoryFeedbackEntryNotFound));
     }
+    let expected = expected_operation(input, prior.as_ref(), owner)?;
+    if expected.field("feedback_owner_revision").as_str().is_none() {
+        return Err(error(CognitionCode::MemoryQualityTargetChanged));
+    }
+    let (operation, replayed) = if let Some(prior) = prior {
+        if !same_operation(&prior, &expected) {
+            return Err(error(CognitionCode::MemoryQualityOperationConflict));
+        }
+        (prior, true)
+    } else {
+        let mut operation = expected;
+        set_field(&mut operation, "status", json!("pending"));
+        set_field(&mut operation, "created_at", json!(now_iso()));
+        append_operation(&operation_path, &operations, &operation)?;
+        input.publisher.publish_feedback_quality_exclusion(
+            input.feedback_id,
+            input.operation_id,
+            operation
+                .field("source_revision")
+                .as_str()
+                .unwrap_or_default(),
+        )?;
+        (operation, false)
+    };
+    let mut result = operation
+        .as_object()
+        .cloned()
+        .ok_or_else(|| error(CognitionCode::MemoryQualityOperationInvalid))?;
+    result.insert("replayed".into(), json!(replayed));
+    Ok(Value::Object(result))
+}
 
-    let memory_root = paths.memory_root(data_root);
+/// The operation this request describes: the source it resolves to now,
+/// and the feedback owner revision of the prior operation or the owner.
+fn expected_operation(
+    input: ExclusionOperation<'_>,
+    prior: Option<&Value>,
+    owner: Option<&super::FeedbackEntry>,
+) -> CognitionResult<Value> {
+    let memory_root = input.paths.memory_root(input.data_root);
     let active_descriptor_path = memory_root.join("active-generation.json");
     let quality_guard = [memory_root.as_path(), active_descriptor_path.as_path()];
-    mutable_paths::ensure_data_authority(data_root, &quality_guard)?;
-    let resolved = MemorySourceReference::new(data_root.to_owned(), paths.clone()).resolve(
-        source_ref,
-        |candidate: &MemorySourceCandidate| {
+    mutable_paths::ensure_data_authority(input.data_root, &quality_guard)?;
+    let resolved = MemorySourceReference::new(input.data_root.to_owned(), input.paths.clone())
+        .resolve(input.source_ref, |candidate: &MemorySourceCandidate| {
             candidate.source_kind == "task_report"
                 || candidate.source_kind == "explicit_record"
                 || matches!(
                     candidate.origin_kind.as_str(),
                     "user_input" | "assistant_public"
                 )
-        },
-    )?;
-    let expected = json!({
+        })?;
+    Ok(json!({
         "schema": "butler.memory-source-quality-operation.v1",
-        "feedback_id": feedback_id,
-        "operation_id": operation_id,
+        "feedback_id": input.feedback_id,
+        "operation_id": input.operation_id,
         "intent": "exclude",
         "actor": "operator",
         "source_ref": resolved.source_id.clone(),
@@ -119,41 +157,10 @@ fn record_exclusion(input: ExclusionOperation<'_>) -> CognitionResult<Value> {
         "episode_id": resolved.episode_id.clone(),
         "target_revision": resolved.revision.clone(),
         "feedback_owner_revision": prior
-            .as_ref()
             .and_then(|operation| operation["feedback_owner_revision"].as_str().map(str::to_owned))
             .or_else(|| owner.map(owner_revision)),
-        "scope": scope,
-    });
-    if expected["feedback_owner_revision"].as_str().is_none() {
-        return Err(error(CognitionCode::MemoryQualityTargetChanged));
-    }
-    let mut replayed = false;
-    let operation = if let Some(prior) = prior {
-        if !same_operation(&prior, &expected) {
-            return Err(error(CognitionCode::MemoryQualityOperationConflict));
-        }
-        replayed = true;
-        prior
-    } else {
-        let mut operation = expected;
-        operation["status"] = json!("pending");
-        operation["created_at"] = json!(now_iso());
-        append_operation(&operation_path, &operations, &operation)?;
-        operation
-    };
-    if !replayed {
-        publisher.publish_feedback_quality_exclusion(
-            feedback_id,
-            operation_id,
-            operation["source_revision"].as_str().unwrap_or_default(),
-        )?;
-    }
-    let mut result = operation
-        .as_object()
-        .cloned()
-        .ok_or_else(|| error(CognitionCode::MemoryQualityOperationInvalid))?;
-    result.insert("replayed".into(), json!(replayed));
-    Ok(Value::Object(result))
+        "scope": input.scope,
+    }))
 }
 
 fn read_operations(path: &Path) -> CognitionResult<Vec<Value>> {
@@ -166,59 +173,44 @@ fn read_operations(path: &Path) -> CognitionResult<Vec<Value>> {
         .lines()
         .filter_map(|line| {
             let value: Value = serde_json::from_str(line).ok()?;
-            (value["schema"] == "butler.memory-source-quality-operation.v1").then_some(value)
+            (value.field("schema") == "butler.memory-source-quality-operation.v1").then_some(value)
         })
         .collect())
 }
 
-fn append_operation(path: &Path, previous: &[Value], operation: &Value) -> CognitionResult<()> {
+/// Rewrites the operation log with `operation` appended. Passthrough: the
+/// stored operations are written back as they were read.
+fn append_operation(
+    path: &Path,
+    previous: &[Value],
+    operation: &impl Serialize,
+) -> CognitionResult<()> {
     let parent = path
         .parent()
         .ok_or_else(|| error(CognitionCode::MemoryQualityOperationWriteFailed))?;
     create_private_dir(parent)?;
-    let temporary = parent.join(format!(
-        "quality-operations.jsonl.tmp-{}",
-        uuid::Uuid::new_v4()
-    ));
-    let result = (|| {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut file = options.open(&temporary).map_err(|source| {
-            error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-        })?;
-        for value in previous.iter().chain(std::iter::once(operation)) {
-            serde_json::to_writer(&mut file, value).map_err(|source| {
-                error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-            })?;
-            file.write_all(b"\n").map_err(|source| {
-                error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-            })?;
-        }
-        file.sync_all().map_err(|source| {
-            error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-        })?;
-        fs::rename(&temporary, path).map_err(|source| {
-            error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-        })?;
-        #[cfg(unix)]
-        fs::File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|source| {
-                error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-            })?;
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(temporary);
-    }
-    result
+    let operation = serde_json::to_value(operation).map_err(|source| {
+        error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
+    })?;
+    let failed = |source: std::io::Error| {
+        error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
+    };
+    butler_platform::secure_fs::replace_private(
+        path,
+        |file| {
+            for value in previous.iter().chain(std::iter::once(&operation)) {
+                serde_json::to_writer(&mut *file, value).map_err(|source| {
+                    error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
+                })?;
+                file.write_all(b"\n").map_err(failed)?;
+            }
+            Ok(())
+        },
+        failed,
+    )
 }
 
+/// Whether a stored operation describes the same exclusion.
 fn same_operation(prior: &Value, expected: &Value) -> bool {
     [
         "feedback_id",
@@ -253,26 +245,17 @@ fn owner_revision(entry: &super::FeedbackEntry) -> String {
 }
 
 fn create_private_dir(path: &Path) -> CognitionResult<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        match fs::symlink_metadata(path) {
-            Ok(metadata) if metadata.file_type().is_dir() => return Ok(()),
-            Ok(_) => return Err(error(CognitionCode::MemoryQualityOperationPathUnsafe)),
-            Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(_) => return Err(error(CognitionCode::MemoryQualityOperationWriteFailed)),
-        }
-        let mut builder = fs::DirBuilder::new();
-        builder.recursive(true).mode(0o700);
-        builder.create(path).map_err(|source| {
-            error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-        })
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_dir() => return Ok(()),
+        Ok(_) => return Err(error(CognitionCode::MemoryQualityOperationPathUnsafe)),
+        Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return Err(error(CognitionCode::MemoryQualityOperationWriteFailed)),
     }
-    #[cfg(not(unix))]
-    {
-        fs::create_dir_all(path)
-            .map_err(|source| error("memory_quality_operation_write_failed").with_source(source))
-    }
+    let mut builder = fs::DirBuilder::new();
+    butler_platform::secure_fs::owner_only_dirs(builder.recursive(true));
+    builder.create(path).map_err(|source| {
+        error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
+    })
 }
 
 fn now_iso() -> String {

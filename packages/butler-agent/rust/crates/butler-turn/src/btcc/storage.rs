@@ -108,10 +108,6 @@ pub struct BtccStorage {
 
 struct StorageInner {
     lane: AsyncMutex<LaneState>,
-    #[cfg(any(test, feature = "test-support"))]
-    owner_id: String,
-    #[cfg(any(test, feature = "test-support"))]
-    owner_generation: u64,
 }
 
 struct LaneState {
@@ -163,8 +159,6 @@ impl BtccStorage {
                 return Err(error);
             }
         };
-        // The owner identity is only retained for test assertions.
-        #[cfg(not(test))]
         let _ = owner;
         Ok(Self {
             inner: Arc::new(StorageInner {
@@ -174,22 +168,8 @@ impl BtccStorage {
                     close_result: None,
                     close_waiters: Vec::new(),
                 }),
-                #[cfg(any(test, feature = "test-support"))]
-                owner_id: owner.0,
-                #[cfg(any(test, feature = "test-support"))]
-                owner_generation: owner.1,
             }),
         })
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub(crate) fn owner_id(&self) -> &str {
-        &self.inner.owner_id
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub(crate) fn owner_generation(&self) -> u64 {
-        self.inner.owner_generation
     }
 
     pub(super) async fn execute<T, F>(&self, operation: F) -> StorageResult<T>
@@ -484,7 +464,7 @@ mod progress_tests;
 #[cfg(test)]
 mod readiness_tests;
 #[cfg(test)]
-mod repository_tests;
+pub(crate) mod repository_tests;
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) mod testing;
 #[cfg(any(test, feature = "test-support"))]

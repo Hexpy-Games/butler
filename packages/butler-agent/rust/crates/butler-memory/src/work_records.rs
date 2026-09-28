@@ -8,6 +8,7 @@ mod memory_projection;
 mod memory_report;
 mod read;
 
+pub use dashboard::DashboardDetail;
 pub(crate) use memory_projection::TaskMemoryProjection;
 pub(crate) use memory_report::PlannedTaskMemoryReport;
 pub use read::{ReadAvailability, WorkRecordReadError};
@@ -17,27 +18,32 @@ use std::path::{Path, PathBuf};
 use butler_core::locale::LocaleCollation;
 use serde_json::Value;
 
+/// Reads the durable records of tasks and their reviews.
 #[derive(Clone)]
 pub struct WorkRecordReader {
     tasks: PathBuf,
 }
 
 impl WorkRecordReader {
+    /// A reader over the Butler data directory.
     pub fn new(butler_data: &Path) -> Self {
         Self {
             tasks: butler_data.join("tasks"),
         }
     }
 
+    /// The Work Dashboard over the newest tasks (`limit` rows per group,
+    /// 10 by default).
     pub fn dashboard(
         &self,
-        debug: bool,
+        detail: DashboardDetail,
         limit: Option<f64>,
         collation: &LocaleCollation,
     ) -> Result<Value, WorkRecordReadError> {
-        dashboard::project(&self.tasks, debug, limit, collation)
+        dashboard::project(&self.tasks, detail, limit, collation)
     }
 
+    /// Summaries of every task, for the CLI.
     pub fn cli_task_summaries(
         &self,
         status: Option<&str>,
@@ -46,6 +52,7 @@ impl WorkRecordReader {
         dashboard::cli_summaries(&self.tasks, status, collation)
     }
 
+    /// The summary of one task, for the CLI.
     pub fn cli_task_summary(&self, task_id: &str) -> Result<Option<Value>, WorkRecordReadError> {
         if !self
             .task_ids()?
@@ -117,4 +124,6 @@ pub(crate) fn task_id_from_memory_record_id(record_id: &str) -> Option<String> {
 }
 
 #[cfg(test)]
-mod tests;
+mod format_pin;
+#[cfg(test)]
+pub(crate) mod tests;

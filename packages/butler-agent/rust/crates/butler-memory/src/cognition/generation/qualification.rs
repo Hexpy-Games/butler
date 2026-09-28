@@ -1,3 +1,5 @@
+//! Qualification of a rebuild candidate: acceptance evidence recorded before cutover.
+
 mod case;
 mod io;
 mod performance;
@@ -129,4 +131,4 @@ pub(super) fn invalid(code: CognitionCode) -> CognitionError {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

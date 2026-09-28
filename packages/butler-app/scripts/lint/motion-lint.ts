@@ -258,6 +258,7 @@ export const CANVAS_MOTION_ENGINES: readonly CanvasMotionEngine[] = [
     justification: "Riso halftone thinking mark: a spring-driven morph and an orbiting-light simulation drawn per frame on a canvas.",
     constants: {
       MORPH_SPRING: "Spring stiffness/damping of the single logo-to-moon morph (k 6, critically damped: ~1.9s to 95%, monotonic, no overshoot); one progress drives every channel, a physical morph, not a UI transition (starts at zero velocity, so no first-frame jump).",
+      MOTION_FULL_SPEED_AT: "Morph progress (not a time) at which the simulation clock reaches full speed, so the thinking loop runs at its intended rate while the calm morph finishes.",
       RISO_MOTION: "Ripple, ink-sweep and light-orbit rates of the simulation clock while working (the look of the mark, not UI timing).",
       FRAME_INTERVAL_MS: "Caps canvas drawing at 60fps on high-refresh displays; a performance budget, not a duration.",
       MAX_STEP_S: "Clamps the simulation step after a stalled frame so the spring stays stable.",

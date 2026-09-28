@@ -15,8 +15,7 @@ use butler_turn::btcc::{AccessMode, ReasoningEffort};
 
 use super::persistence::write_json;
 use model::{
-    available as available_models, normalize as normalize_controls, parse_reasoning,
-    resolve_primary, selectable,
+    available as available_models, normalize as normalize_controls, parse_reasoning, selectable,
 };
 
 pub(super) struct GlobalSettings {
@@ -65,30 +64,22 @@ pub(super) fn global_settings(
             now,
         )?;
     }
-    let requested = stored
-        .get("model")
-        .and_then(Value::as_str)
-        .or(facts.config_default_model.as_deref())
-        .unwrap_or("openai/gpt-5.5");
-    let metadata = resolve_primary(requested, facts);
-    let requested_reasoning = stored
-        .get("reasoning_effort")
-        .and_then(Value::as_str)
-        .and_then(parse_reasoning);
-    let reasoning = requested_reasoning
-        .filter(|value| metadata.reasoning_efforts.contains(value))
-        .unwrap_or_else(|| metadata.default_reasoning_effort.clone());
+    let routine = super::default_model::uses_routine_preset(db)?;
+    let (metadata, reasoning) = super::default_model::resolve(&stored, facts, routine);
     if worker_profiles::canonicalize(&mut stored, facts, &metadata.model_ref, &reasoning) {
         write_json(db, SETTINGS_KEY, &Value::Object(stored.clone()), now)?;
     }
     Ok(GlobalSettings {
         model: metadata.model_ref.clone(),
         reasoning,
-        access: stored
+        access: match stored
             .get("access_mode")
             .and_then(Value::as_str)
             .and_then(parse_access)
-            .unwrap_or(AccessMode::FullAccess),
+        {
+            Some(access) => access,
+            None => super::default_access_mode(db)?,
+        },
         plan_mode: stored
             .get("plan_mode_default")
             .and_then(Value::as_bool)

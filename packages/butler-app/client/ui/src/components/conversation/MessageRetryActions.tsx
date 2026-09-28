@@ -5,6 +5,8 @@ import { Button, Stack } from "@/butler-ds";
 interface MessageRetryActionsProps {
   turnId: string;
   retryingTurnId?: string | null;
+  /** Offers "Retry with current settings" next to Retry. */
+  withCurrentControls: boolean;
   onRetryTurn: (turnId: string) => void;
   onRetryTurnWithCurrentControls: (turnId: string) => void;
 }
@@ -12,6 +14,7 @@ interface MessageRetryActionsProps {
 export function MessageRetryActions({
   turnId,
   retryingTurnId,
+  withCurrentControls,
   onRetryTurn,
   onRetryTurnWithCurrentControls,
 }: MessageRetryActionsProps) {
@@ -30,16 +33,18 @@ export function MessageRetryActions({
           ? appCopy.conversation.failure.retrying
           : appCopy.conversation.failure.retry}
       </Button>
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() => onRetryTurnWithCurrentControls(turnId)}
-        disabled={retrying}
-      >
-        {retrying
-          ? appCopy.conversation.failure.retrying
-          : appCopy.conversation.failure.retryCurrent}
-      </Button>
+      {withCurrentControls ? (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => onRetryTurnWithCurrentControls(turnId)}
+          disabled={retrying}
+        >
+          {retrying
+            ? appCopy.conversation.failure.retrying
+            : appCopy.conversation.failure.retryCurrent}
+        </Button>
+      ) : null}
     </Stack>
   );
 }

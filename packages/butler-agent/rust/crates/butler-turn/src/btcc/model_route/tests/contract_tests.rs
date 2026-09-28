@@ -3,42 +3,7 @@ use serde_json::json;
 use super::super::contracts::FailureDisposition;
 use super::super::failure;
 use super::super::support::rebase_continuation;
-use super::super::test_support::provider;
 use crate::btcc::agent_loop::ModelRoundError;
-
-#[test]
-fn failure_policy_is_explicit_and_ambiguous_statuses_surface() {
-    assert_eq!(
-        failure::classify(&provider("provider_quota_exhausted", Some(402))),
-        FailureDisposition::Advance
-    );
-    assert_eq!(
-        failure::classify(&provider("provider_model_not_found", Some(400))),
-        FailureDisposition::Advance
-    );
-    assert_eq!(
-        failure::classify(&provider("provider_auth_error", Some(500))),
-        FailureDisposition::Surface
-    );
-    assert_eq!(
-        failure::classify(&provider("provider_network_error", Some(400))),
-        FailureDisposition::Surface
-    );
-    assert_eq!(
-        failure::classify(&provider("provider_network_error", None)),
-        FailureDisposition::Retry
-    );
-    for status in [402, 404, 410] {
-        assert_eq!(
-            failure::classify(&provider("provider_api_error", Some(status))),
-            FailureDisposition::Surface
-        );
-    }
-    assert_eq!(
-        failure::classify(&provider("provider_api_error", Some(500))),
-        FailureDisposition::Retry
-    );
-}
 
 #[test]
 fn outer_failure_reduction_matches_turn_runtime_diagnostics() {

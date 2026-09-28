@@ -115,7 +115,7 @@ pub(super) fn envelope(record: &AutomationRecord, run_at: &str) -> Value {
         "transport": "automation",
         "accountId": "local",
         "peer": {"kind":"dm","id":record.session_id},
-        "sender": {"id":"butler-automation","displayName":"Butler Automation"},
+        "sender": {"id":"butler-automation","displayName":"Butler Schedule"},
         "message": {"id":id,"text":record.prompt,"timestamp":run_at},
         "routingHints": {"sessionId":record.session_id},
         "raw": {"automationId":record.id,"runNumber":run_number},

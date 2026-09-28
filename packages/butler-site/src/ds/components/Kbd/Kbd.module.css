@@ -1,0 +1,32 @@
+/* Forked from the app DS Kbd.module.css. */
+.kbd {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-xs);
+  font: inherit;
+  vertical-align: baseline;
+}
+
+.key {
+  display: inline-grid;
+  min-width: var(--control-height-xs);
+  height: var(--control-height-xs);
+  place-items: center;
+  padding: 0 var(--space-xs);
+  border: var(--border-hairline) solid var(--line-strong);
+  border-bottom-width: var(--border-width-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--typo-caption-size);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-none);
+}
+
+.kbd[data-size="sm"] .key {
+  min-width: var(--icon-size-lg);
+  height: var(--icon-size-lg);
+  font-size: var(--typo-caption-size);
+}

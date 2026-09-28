@@ -32,6 +32,7 @@ import {
   writeCachedSettings,
 } from "./settingsCache.ts";
 import { browserRandomId } from "./id.ts";
+import type { AgentNotice } from "./agentRuntime.ts";
 import {
   type OptimisticSessionStart,
   findSessionSummary,
@@ -47,6 +48,12 @@ import {
   freshAppUiPanelState,
   type AppUiStateSnapshot,
 } from "./appUiStateCache.ts";
+import {
+  learnProjectWorkspaceKinds,
+  readCachedProjectWorkspaceKinds,
+  writeCachedProjectWorkspaceKinds,
+  type ProjectWorkspaceKinds,
+} from "./projectWorkspaceKinds.ts";
 import {
   DEFAULT_LEFT_PANEL_WIDTH,
   DEFAULT_RIGHT_PANEL_WIDTH,
@@ -137,6 +144,8 @@ interface ButlerStore {
   messages: MessageRecord[];
   sessionView: SessionView | null;
   sessionViews: Record<string, SessionView>;
+  /** Git or plain folder, per project, learned from its session views. */
+  projectWorkspaceKinds: ProjectWorkspaceKinds;
   observerSessionId: string | null;
   observerTargetTurnId: string | null;
   observerHistory: Array<{ sessionId: string; targetTurnId: string | null }>;
@@ -163,6 +172,8 @@ interface ButlerStore {
   projectCreateDialogOpen: boolean;
   commandOpen: boolean;
   liveConnectionLost: boolean;
+  /** Set while the Agent is intentionally stopped, restarting externally, or that restart failed. */
+  agentNotice: AgentNotice | null;
   renameProject: ProjectSummary | null;
   renameSession: SessionSummary | null;
   setLeftOpen: (value: Updater<boolean>) => void;
@@ -902,7 +913,8 @@ setAppCopyLanguage(initialSettings.language);
 
 export const useButlerStore = create<ButlerStore>((set, get) => ({
   leftOpen: false,
-  rightOpen: true,
+  // New users start without the inspector; a saved UI state restores it.
+  rightOpen: false,
   rightTab: "summary",
   selectedArtifactId: null,
   selectedArtifact: null,
@@ -919,6 +931,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   messages: [],
   sessionView: null,
   sessionViews: {},
+  projectWorkspaceKinds: readCachedProjectWorkspaceKinds(),
   observerSessionId: null,
   observerTargetTurnId: null,
   observerHistory: [],
@@ -942,6 +955,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   projectCreateDialogOpen: false,
   commandOpen: false,
   liveConnectionLost: false,
+  agentNotice: null,
   renameProject: null,
   renameSession: null,
 
@@ -2418,6 +2432,23 @@ useButlerStore.subscribe((state, previousState) => {
   }
 });
 
+useButlerStore.subscribe((state, previousState) => {
+  if (state.sessionViews === previousState.sessionViews) return;
+  const changedViews = Object.entries(state.sessionViews)
+    .filter(([id, view]) => previousState.sessionViews[id] !== view)
+    .map(([, view]) => view);
+  const projectWorkspaceKinds = learnProjectWorkspaceKinds(
+    state.projectWorkspaceKinds,
+    changedViews,
+  );
+  if (projectWorkspaceKinds === state.projectWorkspaceKinds) return;
+  writeCachedProjectWorkspaceKinds(projectWorkspaceKinds);
+  useButlerStore.setState({ projectWorkspaceKinds });
+});
+
+export const selectIsGitProject =
+  (projectId: string | undefined) => (state: ButlerStore) =>
+    Boolean(projectId) && state.projectWorkspaceKinds[projectId!] === "git";
 export const selectActiveChat = (state: ButlerStore) =>
   activeChatFromNavigation(state.navigation, state.activeChatId);
 export const selectActiveSessionView = (state: ButlerStore) =>

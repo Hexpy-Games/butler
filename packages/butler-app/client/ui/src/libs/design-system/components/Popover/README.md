@@ -21,6 +21,10 @@ import { Popover } from "@/butler-ds";
 
 Prefer token-backed spacing and responsive composition. Check its showcase and usage guidance in the DS Viewer before using it in a domain flow.
 
+## Width
+`PopoverContent width="narrow"` sets `min(280px, 100vw - 32px)` for compact
+readouts (the composer context and usage popover). The default is 18rem.
+
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
 

@@ -1,3 +1,5 @@
+//! Resolving plan quotes that point into the context units of an extraction input.
+
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::source_changed;

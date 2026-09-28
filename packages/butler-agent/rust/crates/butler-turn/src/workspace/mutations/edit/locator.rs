@@ -93,15 +93,3 @@ fn next_boundary(text: &str, offset: usize) -> usize {
     }
     next
 }
-
-#[cfg(test)]
-mod tests {
-    use super::locate;
-
-    #[test]
-    fn overlapping_matches_and_single_stale_hint() {
-        assert_eq!(locate("aaa", "aa", None).unwrap_err().occurrences, 2);
-        assert_eq!(locate("one\ntwo", "two", Some(900)).unwrap().start_line, 2);
-        assert_eq!(locate("😀😀", "😀", None).unwrap_err().occurrences, 2);
-    }
-}

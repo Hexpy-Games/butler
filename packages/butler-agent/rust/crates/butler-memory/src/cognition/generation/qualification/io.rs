@@ -1,3 +1,5 @@
+//! Qualification file IO: stable file identities and the capture store.
+
 use std::{
     collections::BTreeMap,
     fs::{self, File},
@@ -140,7 +142,7 @@ impl CaptureStore {
             if count == 0 {
                 break;
             }
-            hasher.update(&buffer[..count]);
+            hasher.update(buffer.get(..count).unwrap_or_default());
         }
         let actual_sha256 = format!("{:x}", hasher.finalize());
         let after = stable_identity(&file, path)?;
@@ -212,7 +214,7 @@ pub(in crate::cognition::generation) fn assert_evidence_current(
             if count == 0 {
                 break;
             }
-            hasher.update(&buffer[..count]);
+            hasher.update(buffer.get(..count).unwrap_or_default());
         }
         let actual_sha256 = format!("{:x}", hasher.finalize());
         let after = stable_identity(&file, &path)?;
@@ -284,30 +286,26 @@ fn stable_identity(file: &File, path: &Path) -> CognitionResult<String> {
     Ok(handle_identity)
 }
 
-#[cfg(unix)]
+/// `device:inode:length:mtime s:ns:ctime s:ns`. A host without file ids or a
+/// time leaves those fields empty, so the identity rests on what it has.
 fn metadata_identity(metadata: &fs::Metadata) -> String {
-    use std::os::unix::fs::MetadataExt;
+    let identity = butler_platform::secure_fs::identity(metadata);
+    let id = identity.id.map_or_else(
+        || ":".to_owned(),
+        |id| format!("{}:{}", id.device, id.inode),
+    );
+    let time = |time: Option<butler_platform::secure_fs::FileTime>| {
+        time.map_or_else(
+            || ":".to_owned(),
+            |time| format!("{}:{}", time.seconds, time.nanoseconds),
+        )
+    };
     format!(
-        "{}:{}:{}:{}:{}:{}:{}",
-        metadata.dev(),
-        metadata.ino(),
+        "{id}:{}:{}:{}",
         metadata.len(),
-        metadata.mtime(),
-        metadata.mtime_nsec(),
-        metadata.ctime(),
-        metadata.ctime_nsec()
+        time(identity.modified),
+        time(identity.changed)
     )
-}
-
-#[cfg(not(unix))]
-fn metadata_identity(metadata: &fs::Metadata) -> String {
-    let modified = metadata
-        .modified()
-        .ok()
-        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|time| format!("{}:{}", time.as_secs(), time.subsec_nanos()))
-        .unwrap_or_default();
-    format!("{}:{modified}", metadata.len())
 }
 
 pub(super) fn safe_ref(value: &str) -> bool {
@@ -357,7 +355,7 @@ impl<R> HashingReader<R> {
 impl<R: Read> Read for HashingReader<R> {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
         let count = self.inner.read(buffer)?;
-        self.hasher.update(&buffer[..count]);
+        self.hasher.update(buffer.get(..count).unwrap_or_default());
         Ok(count)
     }
 }

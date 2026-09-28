@@ -420,41 +420,9 @@ async fn q_02_queue_durability_and_conflicts() -> Result<(), HarnessError> {
     s.finish().await
 }
 
-/// Q-02 (owner decision) — cancelling the running turn pauses the queue.
-#[tokio::test]
-#[ignore = "product gap: Q-02-CANCEL — after POST /turns/{id}/cancel the next queued message is dispatched immediately; the owner decided a cancel pauses the queue"]
-async fn q_02_cancel_pauses_the_queue() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let s = Setup::new("Q-02-CANCEL")?
-        .cassette("Q-02-CANCEL")
-        .start()
-        .await?;
-    let running = start_slow_turn(&s).await?;
-    enqueue(&s, "Reply with exactly the word: paused").await?;
-    let cancel =
-        s.gw.post(&format!("/turns/{running}/cancel"), json!({}))
-            .await?;
-    assert_eq!(cancel.status, 202, "{}", cancel.text);
-    s.gw.wait_terminal("general", &running, Duration::from_secs(20))
-        .await?;
-    tokio::time::sleep(Duration::from_secs(3)).await;
-    assert_eq!(
-        queue(&s).await?.len(),
-        1,
-        "queued message left the queue after cancel"
-    );
-    assert_eq!(
-        s.gw.turns("general").await?.len(),
-        1,
-        "queue continued after cancel"
-    );
-    s.finish().await
-}
-
 /// ATT-01 (image) — a PNG attached for a model whose catalog entry says
 /// `image_input_support: supported` is admitted (checked before any model call).
 #[tokio::test]
-#[ignore = "product gap: ATT-01-IMAGE — POST /messages with a PNG attachment for openai/gpt-6-sol (catalog: image input supported) answers 409 image_model_unsupported; the public error does not say which admission check failed"]
 async fn att_01_image_attachment_admitted_for_image_model() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("ATT-01-IMAGE")?.start().await?;

@@ -1,7 +1,6 @@
 mod authority;
 mod automations;
 mod dashboard;
-mod dev_cors;
 mod error;
 mod mcp_servers;
 mod message_files;
@@ -14,11 +13,13 @@ mod project_session_mutations;
 mod projects;
 mod read_routes;
 mod retry;
+mod security;
 mod session_branches;
 mod session_controls;
 mod session_queue;
 mod sessions;
 mod settings;
+mod setup;
 mod shell;
 mod skills;
 mod space_mutations;
@@ -31,7 +32,9 @@ mod wallpaper_modules;
 mod wallpapers;
 
 use axum::http::HeaderValue;
-use std::{collections::HashMap, error::Error as StdError, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap, error::Error as StdError, net::SocketAddr, path::PathBuf, sync::Arc,
+};
 
 use axum::{
     Router,
@@ -47,7 +50,6 @@ use tokio_util::sync::CancellationToken;
 
 use super::{
     EventReplayView, GatewayApplication, GatewayConfig, HealthView, SendMessageCommand,
-    auth::{self, LocalAuthConfig},
     live::create_live_stream,
     message_validation::{MessageRequestError, validate_message_request},
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
@@ -66,6 +68,7 @@ pub(super) fn router(
     application: Arc<dyn GatewayApplication>,
     config: GatewayConfig,
     shutdown: CancellationToken,
+    local_addr: SocketAddr,
 ) -> Router {
     let limiter = FixedWindowRateLimiter::new(
         config.message_rate_limit_max,
@@ -75,8 +78,13 @@ pub(super) fn router(
         .fallback(any(dispatch))
         .with_state(Arc::new(HttpState {
             application,
-            auth: config.local_auth,
-            dev_cors: dev_cors::DevCorsPolicy::new(config.dev_cors_origin.as_deref()),
+            security: security::GatewaySecurity::new(
+                config.local_auth,
+                local_addr,
+                &config.allowed_hosts,
+                config.dev_cors_origin.as_deref(),
+                config.signed_url_ttl,
+            ),
             session_cursor_secret: uuid::Uuid::new_v4().to_string(),
             limiter,
             shutdown,
@@ -88,8 +96,7 @@ pub(super) fn router(
 
 struct HttpState {
     application: Arc<dyn GatewayApplication>,
-    auth: LocalAuthConfig,
-    dev_cors: dev_cors::DevCorsPolicy,
+    security: security::GatewaySecurity,
     session_cursor_secret: String,
     limiter: FixedWindowRateLimiter,
     shutdown: CancellationToken,
@@ -97,30 +104,48 @@ struct HttpState {
     static_ui_root: Option<PathBuf>,
 }
 
+/// Host and Origin admission, CORS preflight before auth, then the
+/// authorized route; every answer to an admitted origin carries CORS headers.
 async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -> Response {
-    let origin = state.dev_cors.allowed_origin(request.headers());
-    if request.method() == Method::OPTIONS
-        && let Some(origin) = origin.as_ref()
-    {
-        return dev_cors::preflight(origin);
-    }
-    if declared_body_too_large(&request) {
-        let mut response = payload_too_large_response();
-        dev_cors::apply(&mut response, origin.as_ref());
-        return response;
-    }
-    let mut response = match route(state, request).await {
-        Ok(response) => response,
-        Err(error) => error_response(&error),
+    let origin = match state.security.admit(request.headers()) {
+        Ok(origin) => origin,
+        Err(error) => return error_response(&error),
     };
-    dev_cors::apply(&mut response, origin.as_ref());
+    if request.method() == Method::OPTIONS && origin.allowed().is_some() {
+        return security::preflight(&origin);
+    }
+    let mut response = if declared_body_too_large(&request) {
+        payload_too_large_response()
+    } else {
+        match authorized_route(state, request, &origin).await {
+            Ok(response) => response,
+            Err(error) => error_response(&error),
+        }
+    };
+    security::apply_cors(&mut response, &origin);
     response
 }
 
-async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response, HttpError> {
-    if !static_ui::is_public_static_request(request.method(), request.uri().path()) {
-        auth::enforce(request.headers(), &state.auth)?;
+async fn authorized_route(
+    state: Arc<HttpState>,
+    request: Request<Body>,
+    origin: &security::RequestOrigin,
+) -> Result<Response, HttpError> {
+    let access = match state.security.authorize(&request, origin)? {
+        security::Admission::Respond(response) => return Ok(response),
+        security::Admission::Granted(access) => access,
+    };
+    security::require_json_body(request.method(), request.uri().path(), request.headers())?;
+    if request.method() == Method::POST && request.uri().path() == security::CONNECTION_CODES_PATH {
+        return state
+            .security
+            .mint_connection_code(access, request.headers());
     }
+    let response = route(state.clone(), request).await?;
+    Ok(state.security.sign_urls(access, response).await)
+}
+
+async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response, HttpError> {
     let method = request.method().clone();
     let uri = request.uri().clone();
     let accepts_html = static_ui::accepts_html(request.headers());
@@ -230,37 +255,15 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
         }
         return Err(HttpError::public(404, "not_found", "Route not found."));
     }
-    if method == Method::POST
-        && let Some(turn_id) = uri
-            .path()
-            .strip_prefix("/turns/")
-            .and_then(|value| value.strip_suffix("/cancel"))
-            .filter(|value| !value.is_empty() && !value.contains('/'))
-    {
-        let result = state
-            .application
-            .cancel_turn(subsessions::decode_component(turn_id)?)
-            .await?;
-        return json(
-            StatusCode::ACCEPTED,
-            ApiEnvelope {
-                protocol_version: APP_PROTOCOL_VERSION,
-                data: result,
-            },
-        );
+    if let Some(response) = retry::cancel(&state, &method, &uri).await? {
+        return Ok(response);
+    }
+    if setup::handles(uri.path()) {
+        return setup::route(state, request, &uri).await;
     }
     match (method.clone(), uri.path()) {
-        (Method::GET, "/health") => json(
-            StatusCode::OK,
-            ApiEnvelope {
-                protocol_version: APP_PROTOCOL_VERSION,
-                data: HealthView {
-                    ok: true,
-                    service: "butler-app-server".to_owned(),
-                    protocol_version: APP_PROTOCOL_VERSION.to_owned(),
-                },
-            },
-        ),
+        (Method::GET, "/health") => health(),
+        (Method::GET, "/provider-quota") => monitors::provider_quota(state, &uri).await,
         (Method::GET, "/runtime-readiness") => {
             let mut readiness = state.application.runtime_readiness()?;
             readiness.authenticated_gateway_ready = true;
@@ -304,6 +307,20 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
         }
         _ => Err(HttpError::public(404, "not_found", "Route not found.")),
     }
+}
+
+fn health() -> Result<Response, HttpError> {
+    json(
+        StatusCode::OK,
+        ApiEnvelope {
+            protocol_version: APP_PROTOCOL_VERSION,
+            data: HealthView {
+                ok: true,
+                service: "butler-app-server".to_owned(),
+                protocol_version: APP_PROTOCOL_VERSION.to_owned(),
+            },
+        },
+    )
 }
 
 async fn post_message(

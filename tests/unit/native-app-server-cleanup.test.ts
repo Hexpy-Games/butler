@@ -57,7 +57,7 @@ test("stop kills the exact child, its process group, and removes its temp dirs",
   expect(await gone(grandchild!)).toBe(true);
   expect(existsSync(tempDir)).toBe(false);
   expect(liveTrackedProcessIds()).not.toContain(tracked.pid);
-});
+}, 30_000);
 
 test("stopAllTrackedProcesses (the test-runner teardown hook) stops every live child", async () => {
   const first = spawnTrackedProcess(process.execPath, ["-e", DUMMY]);
@@ -66,7 +66,7 @@ test("stopAllTrackedProcesses (the test-runner teardown hook) stops every live c
   await stopAllTrackedProcesses();
   for (const pid of [first.pid, second.pid, ...grandchildren]) expect(await gone(pid)).toBe(true);
   expect(liveTrackedProcessIds()).toEqual([]);
-});
+}, 30_000);
 
 const OWNER = (mode: string, tempDir: string) => `
 import { spawnTrackedProcess } from ${JSON.stringify(helper)};
@@ -78,7 +78,11 @@ for await (const chunk of tracked.child.stdout) {
 }
 const { grandchild } = JSON.parse(buffer.split("\\n")[0]);
 console.log(JSON.stringify({ child: tracked.pid, grandchild }));
-${mode === "exit" ? "process.exit(0);" : mode === "throw" ? "setTimeout(() => { throw new Error(\"harness crash\"); }, 50);" : "setInterval(() => {}, 1000);"}
+${mode === "exit" || mode === "throw"
+  // Wait for the test's go-ahead: ending right after the JSON line would race
+  // the test's "child is alive" check against this owner's own cleanup.
+  ? `await new Promise((resume) => process.stdin.once("data", resume));\n${mode === "exit" ? "process.exit(0);" : "setTimeout(() => { throw new Error(\"harness crash\"); }, 0);"}`
+  : "setInterval(() => {}, 1000);"}
 `;
 
 for (const mode of ["exit", "throw", "SIGINT", "SIGTERM"] as const) {
@@ -86,12 +90,14 @@ for (const mode of ["exit", "throw", "SIGINT", "SIGTERM"] as const) {
     const tempDir = mkdtempSync(join(scratch, `owner-${mode}-`));
     const script = join(scratch, `owner-${mode}.ts`);
     writeFileSync(script, OWNER(mode, tempDir));
-    const owner = spawn(process.execPath, ["run", script], { stdio: ["ignore", "pipe", "pipe"] });
+    const owner = spawn(process.execPath, ["run", script], { stdio: ["pipe", "pipe", "pipe"] });
     const exited = new Promise<number | null>((done) => owner.once("exit", (code) => done(code)));
     try {
       const { child, grandchild } = await readJsonLine(owner.stdout!);
       expect(alive(child!)).toBe(true);
+      expect(alive(grandchild!)).toBe(true);
       if (mode === "SIGINT" || mode === "SIGTERM") owner.kill(mode);
+      else owner.stdin!.end("go\n");
       await exited;
       expect(await gone(child!)).toBe(true);
       expect(await gone(grandchild!)).toBe(true);

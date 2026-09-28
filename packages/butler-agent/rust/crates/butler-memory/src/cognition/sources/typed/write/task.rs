@@ -12,6 +12,7 @@ use crate::{
     work_records::WorkRecordReader,
 };
 
+/// Writes a reviewed task's outcome as task memory and publishes it.
 pub fn ingest_task_outcome_memory(
     data_root: &Path,
     environment: &CognitionPathEnvironment,
@@ -38,11 +39,6 @@ pub fn ingest_task_outcome_memory(
         ],
     )?;
 
-    let task_summary = projection
-        .origin_task_summary
-        .as_deref()
-        .or(projection.request.as_deref())
-        .unwrap_or("(unknown)");
     let origin_session_id = projection
         .origin_session_id
         .clone()
@@ -51,34 +47,12 @@ pub fn ingest_task_outcome_memory(
         .origin_event_id
         .clone()
         .or(projection.plan_origin_event_id.clone());
-    let mut lines = vec![
-        format!("# Task Memory: {task_id}"),
-        String::new(),
-        "## Provenance".into(),
-        format!("- task_id: {task_id}"),
-        "- source: task-result".into(),
-    ];
-    if let Some(value) = origin_session_id
-        .as_deref()
-        .filter(|value| !value.is_empty())
-    {
-        lines.push(format!("- origin_session_id: {value}"));
-    }
-    if let Some(value) = origin_event_id.as_deref().filter(|value| !value.is_empty()) {
-        lines.push(format!("- origin_event_id: {value}"));
-    }
-    lines.extend([
-        String::new(),
-        "## Request".into(),
-        task_summary.into(),
-        String::new(),
-        "## Outcome".into(),
-        projection.report.text.clone(),
-    ]);
-    // The source writer applies filter(Boolean) to the section entries.
-    lines.retain(|line| !line.is_empty());
-    let body = lines.join("\n");
-    let body = format!("{}\n", butler_core::public_text::trim_js_whitespace(&body));
+    let body = task_memory(
+        task_id,
+        &projection,
+        origin_session_id.as_deref(),
+        origin_event_id.as_deref(),
+    );
     std::fs::create_dir_all(&task_memory_root).map_err(io_error)?;
     write_atomic(&memory_path, body.as_bytes())?;
 
@@ -107,6 +81,45 @@ pub fn ingest_task_outcome_memory(
         origin_event_id,
         job_id,
     })
+}
+
+/// The task memory markdown: provenance, request and outcome.
+fn task_memory(
+    task_id: &str,
+    projection: &crate::work_records::TaskMemoryProjection,
+    origin_session_id: Option<&str>,
+    origin_event_id: Option<&str>,
+) -> String {
+    let task_summary = projection
+        .origin_task_summary
+        .as_deref()
+        .or(projection.request.as_deref())
+        .unwrap_or("(unknown)");
+    let mut lines = vec![
+        format!("# Task Memory: {task_id}"),
+        String::new(),
+        "## Provenance".into(),
+        format!("- task_id: {task_id}"),
+        "- source: task-result".into(),
+    ];
+    if let Some(value) = origin_session_id.filter(|value| !value.is_empty()) {
+        lines.push(format!("- origin_session_id: {value}"));
+    }
+    if let Some(value) = origin_event_id.filter(|value| !value.is_empty()) {
+        lines.push(format!("- origin_event_id: {value}"));
+    }
+    lines.extend([
+        String::new(),
+        "## Request".into(),
+        task_summary.into(),
+        String::new(),
+        "## Outcome".into(),
+        projection.report.text.clone(),
+    ]);
+    // The source writer applies filter(Boolean) to the section entries.
+    lines.retain(|line| !line.is_empty());
+    let body = lines.join("\n");
+    format!("{}\n", butler_core::public_text::trim_js_whitespace(&body))
 }
 
 fn slug(value: &str) -> String {

@@ -1,5 +1,6 @@
 //! Generation build cursors and the typed source registration adapter.
 
+use crate::lenient::JsonField;
 use rusqlite::OptionalExtension;
 
 use super::{
@@ -37,10 +38,10 @@ impl GraphRepository {
         else {
             return Ok(None);
         };
-        if value["snapshot_id"] != snapshot_id {
+        if value.field("snapshot_id") != snapshot_id {
             return Ok(None);
         }
-        Ok(value["source_key"].as_str().map(str::to_owned))
+        Ok(value.field("source_key").as_str().map(str::to_owned))
     }
 
     pub(in crate::cognition) fn register_typed(

@@ -58,7 +58,7 @@ struct CloseState {
     result: Option<Result<(), GatewayApplicationError>>,
 }
 enum Command {
-    Initialize(AppApplication),
+    Initialize(Box<AppApplication>),
     Wake(Option<String>),
     Drain {
         chat_id: String,
@@ -93,7 +93,7 @@ impl QueueDispatcher {
     ) -> Result<(), GatewayApplicationError> {
         self.inner
             .sender
-            .send(Command::Initialize(app))
+            .send(Command::Initialize(Box::new(app)))
             .await
             .map_err(GatewayApplicationError::internal_from)
     }
@@ -166,7 +166,7 @@ async fn run(
             () = cancellation.cancelled() => return Ok(()),
             command = receiver.recv() => match command {
                 Some(Command::Initialize(app)) => {
-                    let app = application.insert(app);
+                    let app = application.insert(*app);
                     if !cycle(&cancellation, app, None).await { return Ok(()); }
                     deadline = next_deadline(app).await.ok().flatten();
                 }
@@ -269,6 +269,7 @@ async fn drain_chat(app: &AppApplication, chat_id: &str) -> Result<(), GatewayAp
                         claim_owner: owner,
                         lease_expires_at: lease,
                     },
+                    queue::ClaimOrder::Fifo,
                     &now,
                     &subscribers,
                 )
@@ -308,7 +309,7 @@ struct QueuedRow {
     control_resolution_json: String,
 }
 fn queued_rows(db: &mut Connection, chat: &str) -> Result<Vec<QueuedRow>, AppStorageError> {
-    let mut statement = db.prepare("SELECT id,text,control_resolution_json FROM session_queued_messages WHERE chat_id=?1 AND state='queued' ORDER BY rowid ASC LIMIT ?2")
+    let mut statement = db.prepare("SELECT id,text,control_resolution_json FROM session_queued_messages WHERE chat_id=?1 AND state='queued' AND NOT EXISTS (SELECT 1 FROM session_queue_pauses p WHERE p.chat_id=?1) ORDER BY rowid ASC LIMIT ?2")
         .map_err(AppStorageError::sqlite)?;
     statement
         .query_map(params![chat, FIFO_WINDOW], |row| {
@@ -323,7 +324,7 @@ fn queued_rows(db: &mut Connection, chat: &str) -> Result<Vec<QueuedRow>, AppSto
         .map_err(AppStorageError::sqlite)
 }
 fn queued_chats(db: &mut Connection) -> Result<Vec<String>, AppStorageError> {
-    let mut statement = db.prepare("SELECT chat_id FROM session_queued_messages WHERE state='queued' GROUP BY chat_id ORDER BY MIN(rowid)")
+    let mut statement = db.prepare("SELECT chat_id FROM session_queued_messages q WHERE state='queued' AND NOT EXISTS (SELECT 1 FROM session_queue_pauses p WHERE p.chat_id=q.chat_id) GROUP BY chat_id ORDER BY MIN(rowid)")
         .map_err(AppStorageError::sqlite)?;
     statement
         .query_map([], |row| row.get(0))

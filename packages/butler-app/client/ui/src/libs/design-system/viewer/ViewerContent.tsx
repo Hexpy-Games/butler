@@ -1,5 +1,6 @@
 import type { ShowcaseEntry } from "../showcase/collectShowcaseEntries";
 import { DecisionGuidePage } from "./pages/DecisionGuidePage";
+import { FoundationChapterPage } from "./pages/FoundationChapterPage";
 import { FoundationsPage } from "./pages/FoundationsPage";
 import { GalleryPage } from "./pages/GalleryPage";
 import { IconsPage } from "./pages/IconsPage";
@@ -9,13 +10,14 @@ import { NotFoundPage } from "./pages/NotFoundPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { PatternPage, PatternsPage } from "./pages/PatternsPage";
 import { RecipesPage } from "./pages/RecipesPage";
-import { TokenCategoryPage } from "./pages/TokenCategoryPage";
 import type { ResolvedTheme } from "./useViewerTheme";
 import type { ViewerPage } from "./viewerNavigation";
 import type { ViewerState } from "./viewerState";
 
-export function ViewerContent({ page, entries, state, themes, onOpen, onChange }: {
+export function ViewerContent({ page, anchor, entries, state, themes, onOpen, onChange }: {
   page: ViewerPage;
+  /** In-page anchor of the latest navigation (token deep links open the token table). */
+  anchor?: string;
   entries: ShowcaseEntry[];
   state: ViewerState;
   themes: ResolvedTheme[];
@@ -32,10 +34,10 @@ export function ViewerContent({ page, entries, state, themes, onOpen, onChange }
       return <RecipesPage locale={locale} />;
     case "foundations":
       return <FoundationsPage onOpen={onOpen} />;
-    case "tokens":
-      return <TokenCategoryPage category={page.category} onOpen={onOpen} />;
+    case "foundation":
+      return <FoundationChapterPage anchor={anchor} chapter={page.chapter} locale={state.locale} onOpen={onOpen} />;
     case "motion":
-      return <MotionPage entries={entries} locale={locale} onChange={onChange} onOpen={onOpen} state={state} />;
+      return <MotionPage anchor={anchor} entries={entries} locale={locale} onChange={onChange} onOpen={onOpen} state={state} />;
     case "gallery":
       return <GalleryPage entries={entries} locale={state.locale} onOpen={onOpen} section={page.section} />;
     case "patterns":

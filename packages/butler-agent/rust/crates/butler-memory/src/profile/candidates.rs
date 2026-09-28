@@ -1,14 +1,18 @@
+//! Profile candidates: merging extracted observations into stored
+//! candidates, promoting ready candidates into the stable profile, and
+//! expiring stale weak ones.
+
 mod policy;
 mod store;
 use std::path::Path;
-
-use serde_json::Value;
 
 use super::contracts::{
     CanonicalProfileSourceFactory, ProfileCandidateInput, ProfileCandidateRecord,
     ProfileConsolidationResult, ProfileResult, ProfilingMode,
 };
+use super::understanding::{CandidateStatus, ObservedTimes, Sensitivity, Understanding};
 use super::{projection, storage};
+use crate::lenient::Arg;
 use policy::*;
 use store::*;
 
@@ -21,212 +25,163 @@ pub(super) fn upsert(
     if !category_allowed(&input.category, consent.mode) {
         return Ok(None);
     }
-    let db = storage::open(data_root, true)?;
+    let db = storage::open(data_root, storage::Access::Write)?;
     upsert_in_db(&db, input, now)
 }
 
+/// Merges `input` into its stored candidate (keyed by category, facet and
+/// summary); a candidate that is already promoted also refreshes its stable
+/// entry.
 pub(super) fn upsert_in_db(
     db: &rusqlite::Connection,
     input: &ProfileCandidateInput,
     now: &str,
 ) -> ProfileResult<Option<ProfileCandidateRecord>> {
-    let summary = normalize_text(
-        input
-            .payload
-            .get("summary")
-            .and_then(Value::as_str)
-            .unwrap_or(""),
-        320,
-    );
+    let summary = normalize_text(&input.draft.summary, 320);
     if summary.is_empty() {
         return Ok(None);
     }
-    let facet = input.payload.get("facet").and_then(Value::as_str);
-    let id = identifier("pc_", &input.category, facet, &summary);
-    let existing = read_candidate(db, &id)?;
-    let mut payload = input.payload.as_object().cloned().unwrap_or_default();
-    let previous = existing
-        .as_ref()
-        .and_then(|record| record.payload.as_object());
-    payload.insert("id".into(), Value::String(id.clone()));
-    payload.insert("category".into(), Value::String(input.category.clone()));
-    payload.insert("summary".into(), Value::String(summary));
-    let evidence = input
+    let id = identifier(
+        "pc_",
+        &input.category,
+        input.draft.facet.as_deref(),
+        &summary,
+    );
+    let previous = read_candidate(db, &id)?;
+    let candidate = merged(input, previous.as_ref(), id, summary, now);
+    write_candidate(db, &candidate)?;
+    if candidate.status == CandidateStatus::Promoted {
+        write_stable(db, &StableWrite::of(&candidate, now))?;
+    }
+    Ok(Some(candidate))
+}
+
+/// The evidence of a candidate after one more observation.
+struct Evidence {
+    refs: Vec<String>,
+    count: u64,
+    observed: ObservedTimes,
+    /// The observation was already recorded.
+    duplicate: bool,
+    /// When the new observation was made, when known.
+    observed_at: Option<String>,
+}
+
+fn evidence(input: &ProfileCandidateInput, previous: Option<&Understanding>) -> Evidence {
+    let reference = input
         .evidence_ref
         .as_deref()
         .map(|value| normalize_text(value, 160))
         .filter(|value| !value.is_empty());
     let mut refs = previous
-        .and_then(|value| value.get("evidence_refs"))
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .map(str::to_owned)
-        .collect::<Vec<_>>();
-    let duplicate_evidence = evidence
+        .map(|value| value.evidence_refs.clone())
+        .unwrap_or_default();
+    let duplicate = reference
         .as_ref()
         .is_some_and(|reference| refs.contains(reference));
-    if let Some(reference) = &evidence {
+    if let Some(reference) = &reference {
         refs.push(reference.clone());
     }
-    refs = unique(refs);
-    payload.insert(
-        "evidence_refs".into(),
-        Value::Array(refs.iter().cloned().map(Value::String).collect()),
-    );
-    let evidence_count = (refs.len() as u64).max(
+    let refs = unique(refs);
+    let count = (refs.len() as u64).max(
         previous
-            .and_then(|value| value.get("evidence_count"))
-            .and_then(Value::as_u64)
+            .and_then(|value| value.evidence_count.as_u64())
             .unwrap_or(0),
     );
-    payload.insert("evidence_count".into(), Value::from(evidence_count));
     let mut observed = previous
-        .and_then(|value| value.get("evidence_observed_at"))
-        .and_then(Value::as_object)
-        .cloned()
+        .map(|value| value.evidence_observed_at.clone())
         .unwrap_or_default();
     let observed_at = input
         .evidence_observed_at
         .as_deref()
         .and_then(normalize_observed_at);
-    if let Some(reference) = evidence {
-        observed.entry(reference).or_insert_with(|| {
-            observed_at
-                .clone()
-                .map(Value::String)
-                .unwrap_or(Value::Null)
-        });
+    if let Some(reference) = reference {
+        observed
+            .entry(reference)
+            .or_insert_with(|| observed_at.clone().map_or(Arg::Null, Arg::Valid));
     }
-    payload.insert("evidence_observed_at".into(), Value::Object(observed));
-    let source_type = stronger(
-        previous
-            .and_then(|value| value.get("source_type"))
-            .and_then(Value::as_str),
-        &input.source_type,
-        &[
-            "inference",
-            "repeated_observation",
-            "explicit",
-            "user_confirmed",
-        ],
-    );
-    let confidence = stronger(
-        previous
-            .and_then(|value| value.get("confidence"))
-            .and_then(Value::as_str),
-        &input.confidence,
-        &["low", "medium", "high"],
-    );
-    let created = previous
-        .and_then(|value| value.get("created_at"))
-        .and_then(Value::as_str)
-        .unwrap_or(now);
-    let status = previous
-        .and_then(|value| value.get("status"))
-        .and_then(Value::as_str)
-        .filter(|value| *value == "promoted")
-        .unwrap_or("candidate");
-    let expires = input
-        .expires_or_decay
-        .as_deref()
-        .filter(|value| matches!(*value, "expires" | "decay"))
-        .or_else(|| {
-            previous
-                .and_then(|value| value.get("expires_or_decay"))
-                .and_then(Value::as_str)
-        });
-    let declared_sensitive = input.sensitive_domain
-        || previous
-            .and_then(|value| value.get("sensitive_domain"))
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
+    Evidence {
+        refs,
+        count,
+        observed,
+        duplicate,
+        observed_at,
+    }
+}
+
+/// The stored candidate after merging `input` into `previous`: evidence
+/// accumulates, source and confidence only grow, and a duplicate
+/// observation keeps the stored times.
+fn merged(
+    input: &ProfileCandidateInput,
+    previous: Option<&ProfileCandidateRecord>,
+    id: String,
+    summary: String,
+    now: &str,
+) -> ProfileCandidateRecord {
+    let evidence = evidence(input, previous.map(|value| &value.understanding));
+    let facet = input.draft.facet.as_deref();
+    let declared_sensitive =
+        input.sensitive_domain || previous.is_some_and(|value| value.sensitive_domain);
     let sensitive = normalize_sensitive(&input.category, facet, declared_sensitive);
-    merge_understanding(&mut payload, previous, &input.category, sensitive);
-    let updated = if duplicate_evidence {
+    let shape = merge_understanding(&input.draft, previous, &input.category, &summary, sensitive);
+    let stored = |field: fn(&ProfileCandidateRecord) -> &String| {
         previous
-            .and_then(|value| value.get("updated_at"))
-            .and_then(Value::as_str)
-            .unwrap_or(now)
-    } else {
-        now
-    };
-    let last_seen = if duplicate_evidence {
-        previous
-            .and_then(|value| value.get("last_seen_at"))
-            .and_then(Value::as_str)
-            .unwrap_or(now)
+            .map_or(now, |value| field(value).as_str())
             .to_owned()
+    };
+    let (updated_at, last_seen_at) = if evidence.duplicate {
+        (
+            stored(|value| &value.updated_at),
+            stored(|value| &value.last_seen_at),
+        )
     } else {
-        later_observed(
-            previous
-                .and_then(|value| value.get("last_seen_at"))
-                .and_then(Value::as_str),
-            observed_at.as_deref().unwrap_or(now),
+        (
+            now.to_owned(),
+            later_observed(
+                previous.map(|value| value.last_seen_at.as_str()),
+                evidence.observed_at.as_deref().unwrap_or(now),
+            ),
         )
     };
-    for (key, value) in [
-        ("source_type", source_type),
-        ("confidence", confidence),
-        ("status", status),
-        ("created_at", created),
-        ("updated_at", updated),
-        ("last_seen_at", last_seen.as_str()),
-    ] {
-        payload.insert(key.into(), Value::String(value.into()));
-    }
-    payload.insert("sensitive_domain".into(), Value::Bool(sensitive));
-    payload.insert(
-        "expires_or_decay".into(),
-        expires
-            .map(|value| Value::String(value.to_owned()))
-            .unwrap_or(Value::Null),
-    );
-    payload.entry("promoted_at").or_insert(Value::Null);
-    write_candidate(
-        db,
-        &id,
-        &input.category,
-        source_type,
-        confidence,
-        sensitive,
-        created,
-        updated,
-        &last_seen,
-        expires,
-        status,
-        &Value::Object(payload.clone()),
-    )?;
-    if status == "promoted" {
-        let stable_id = identifier(
-            "sp_",
-            &input.category,
-            facet,
-            payload.get("summary").and_then(Value::as_str).unwrap_or(""),
-        );
-        let mut stable = Value::Object(payload.clone());
-        if let Some(object) = stable.as_object_mut() {
-            object.insert("id".into(), Value::String(stable_id.clone()));
-            for key in ["status", "promoted_at", "last_seen_at", "expires_or_decay"] {
-                object.shift_remove(key);
-            }
-        }
-        write_stable(
-            db,
-            &stable_id,
-            &input.category,
-            confidence,
-            source_type,
-            now,
-            now,
-            &stable,
-        )?;
-    }
-    Ok(Some(ProfileCandidateRecord {
+    ProfileCandidateRecord {
+        layer: shape.layer,
+        category: input.category.clone(),
+        understanding: Understanding {
+            facet: input.draft.facet.clone(),
+            summary,
+            applies_when: shape.applies_when,
+            butler_should: shape.butler_should,
+            butler_should_not: shape.butler_should_not,
+            temporal_scope: shape.temporal_scope,
+            decay_policy: shape.decay_policy,
+            contradiction_refs: shape.contradiction_refs,
+            sensitivity: shape.sensitivity,
+            evidence_refs: evidence.refs,
+            evidence_observed_at: evidence.observed,
+            evidence_count: evidence.count.into(),
+        },
+        source_type: previous.map_or(input.source_type, |value| {
+            value.source_type.max(input.source_type)
+        }),
+        confidence: previous.map_or(input.confidence, |value| {
+            value.confidence.max(input.confidence)
+        }),
+        sensitive_domain: sensitive,
+        status: if previous.is_some_and(|value| value.status == CandidateStatus::Promoted) {
+            CandidateStatus::Promoted
+        } else {
+            CandidateStatus::Candidate
+        },
+        created_at: stored(|value| &value.created_at),
+        updated_at,
+        last_seen_at,
+        expires_or_decay: input
+            .expires_or_decay
+            .or(previous.and_then(|value| value.expires_or_decay)),
+        promoted_at: None,
         id,
-        payload: Value::Object(payload),
-    }))
+    }
 }
 
 pub(super) fn consolidate(
@@ -250,72 +205,87 @@ pub(super) fn consolidate(
             raw_text_included: false,
         });
     }
-    let db = storage::open(data_root, true)?;
+    let db = storage::open(data_root, storage::Access::Write)?;
     let candidates = pending_rows(&db)?
         .into_iter()
         .filter_map(hydrate)
         .collect::<Vec<_>>();
     let candidate_count = candidates.len();
-    let mut promoted = 0;
-    let mut skipped = 0;
-    for mut candidate in candidates {
-        let category = text(&candidate.payload, "category")
-            .unwrap_or("")
-            .to_owned();
-        let facet = text(&candidate.payload, "facet");
-        let declared_sensitive = candidate
-            .payload
-            .get("sensitive_domain")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        let sensitive = normalize_sensitive(&category, facet, declared_sensitive);
-        if sensitive != declared_sensitive {
-            if let Some(payload) = candidate.payload.as_object_mut() {
-                payload.insert("sensitive_domain".into(), Value::Bool(sensitive));
-                if !sensitive {
-                    payload.insert("sensitivity".into(), Value::String("normal".into()));
-                }
-            }
-            write_record(&db, &candidate)?;
-        }
-        if !category_allowed(&category, mode) || (mode == ProfilingMode::Basic && sensitive) {
-            skipped += 1;
-            continue;
-        }
-        let source = text(&candidate.payload, "source_type").unwrap_or("");
-        let confidence = text(&candidate.payload, "confidence").unwrap_or("");
-        if ready(&candidate.payload, &category, source, confidence) {
-            let stable_id = identifier(
-                "sp_",
-                &category,
-                text(&candidate.payload, "facet"),
-                text(&candidate.payload, "summary").unwrap_or(""),
-            );
-            let mut stable = candidate.payload.clone();
-            if let Some(object) = stable.as_object_mut() {
-                object.insert("id".into(), Value::String(stable_id.clone()));
-                for key in ["status", "promoted_at", "last_seen_at", "expires_or_decay"] {
-                    object.shift_remove(key);
-                }
-            }
-            write_stable(
-                &db, &stable_id, &category, confidence, source, now, now, &stable,
-            )?;
-            if let Some(value) = candidate.payload.as_object_mut() {
-                value.insert("status".into(), Value::String("promoted".into()));
-                value.insert("promoted_at".into(), Value::String(now.into()));
-                value.insert("updated_at".into(), Value::String(now.into()));
-            }
-            write_record(&db, &candidate)?;
-            promoted += 1;
-        } else {
-            skipped += 1;
-        }
-    }
+    let promotion = promote_ready(&db, candidates, mode, now)?;
     let rejected = expire_old_candidates(&db, now, now_ms)?;
     drop(db);
-    let stable = storage::stable_entries(data_root)?;
-    let stable_count = stable.len();
+    let stable_count = storage::stable_entries(data_root)?.len();
+    let projection_written = refresh_projection(data_root, sources, mode, now, now_ms)?;
+    Ok(ProfileConsolidationResult {
+        profiling_enabled: true,
+        mode,
+        candidate_count,
+        promoted_count: promotion.promoted,
+        skipped_count: promotion.skipped,
+        rejected_count: rejected,
+        stable_entry_count: stable_count,
+        projection_written,
+        raw_text_included: false,
+    })
+}
+
+struct Promotion {
+    promoted: usize,
+    skipped: usize,
+}
+
+/// Re-checks each pending candidate's sensitivity and promotes the ones
+/// that are allowed in `mode` and have enough evidence.
+fn promote_ready(
+    db: &rusqlite::Connection,
+    candidates: Vec<ProfileCandidateRecord>,
+    mode: ProfilingMode,
+    now: &str,
+) -> ProfileResult<Promotion> {
+    let mut promotion = Promotion {
+        promoted: 0,
+        skipped: 0,
+    };
+    for mut candidate in candidates {
+        let declared_sensitive = candidate.sensitive_domain;
+        let sensitive = normalize_sensitive(
+            &candidate.category,
+            candidate.understanding.facet.as_deref(),
+            declared_sensitive,
+        );
+        if sensitive != declared_sensitive {
+            candidate.sensitive_domain = sensitive;
+            if !sensitive {
+                candidate.understanding.sensitivity = Sensitivity::Normal;
+            }
+            write_candidate(db, &candidate)?;
+        }
+        if !category_allowed(&candidate.category, mode)
+            || (mode == ProfilingMode::Basic && sensitive)
+            || !ready(&candidate)
+        {
+            promotion.skipped += 1;
+            continue;
+        }
+        write_stable(db, &StableWrite::of(&candidate, now))?;
+        candidate.status = CandidateStatus::Promoted;
+        candidate.promoted_at = Some(now.into());
+        candidate.updated_at = now.into();
+        write_candidate(db, &candidate)?;
+        promotion.promoted += 1;
+    }
+    Ok(promotion)
+}
+
+/// Rebuilds the runtime projection from the eligible stable entries, or
+/// removes it when nothing would be projected; `true` when one was written.
+fn refresh_projection(
+    data_root: &Path,
+    sources: &dyn CanonicalProfileSourceFactory,
+    mode: ProfilingMode,
+    now: &str,
+    now_ms: i64,
+) -> ProfileResult<bool> {
     let generated =
         projection::build_current(data_root, sources, mode, now_ms, now_ms as f64, now.into())?;
     let written = generated.as_ref().filter(|value| {
@@ -328,17 +298,7 @@ pub(super) fn consolidate(
     } else {
         storage::delete_projection(data_root)?;
     }
-    Ok(ProfileConsolidationResult {
-        profiling_enabled: true,
-        mode,
-        candidate_count,
-        promoted_count: promoted,
-        skipped_count: skipped,
-        rejected_count: rejected,
-        stable_entry_count: stable_count,
-        projection_written: written.is_some(),
-        raw_text_included: false,
-    })
+    Ok(written.is_some())
 }
 
 fn expire_old_candidates(
@@ -349,42 +309,15 @@ fn expire_old_candidates(
     let cutoff = now_ms - 90 * 86_400_000;
     let mut expired = 0;
     for mut candidate in decay_rows(db)?.into_iter().filter_map(hydrate) {
-        let updated = text(&candidate.payload, "updated_at").unwrap_or("");
-        if parse_time(updated).is_some_and(|value| value >= cutoff) {
+        if parse_time(&candidate.updated_at).is_some_and(|value| value >= cutoff) {
             continue;
         }
-        if let Some(payload) = candidate.payload.as_object_mut() {
-            payload.insert("status".into(), Value::String("expired".into()));
-            payload.insert("updated_at".into(), Value::String(now.into()));
-        }
-        write_record(db, &candidate)?;
+        candidate.status = CandidateStatus::Expired;
+        candidate.updated_at = now.into();
+        write_candidate(db, &candidate)?;
         expired += 1;
     }
     Ok(expired)
-}
-
-fn write_record(
-    db: &rusqlite::Connection,
-    candidate: &ProfileCandidateRecord,
-) -> ProfileResult<()> {
-    let payload = &candidate.payload;
-    write_candidate(
-        db,
-        &candidate.id,
-        text(payload, "category").unwrap_or(""),
-        text(payload, "source_type").unwrap_or("inference"),
-        text(payload, "confidence").unwrap_or("low"),
-        payload
-            .get("sensitive_domain")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
-        text(payload, "created_at").unwrap_or(""),
-        text(payload, "updated_at").unwrap_or(""),
-        text(payload, "last_seen_at").unwrap_or(""),
-        text(payload, "expires_or_decay"),
-        text(payload, "status").unwrap_or("candidate"),
-        &payload.clone(),
-    )
 }
 
 fn later_observed(left: Option<&str>, right: &str) -> String {

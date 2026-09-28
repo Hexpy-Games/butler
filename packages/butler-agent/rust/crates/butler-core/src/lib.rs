@@ -17,7 +17,7 @@
 /// Each variant maps one-to-one to the snake_case string that is persisted in
 /// journals and receipts and sent over IPC, the gateway and tool results. The
 /// strings are the wire contract: `as_str` is the only way a code reaches the
-/// wire, and every domain pins its table with a `wire_codes_are_stable` test.
+/// wire, and each crate pins all of its tables in one `wire_codes_are_stable` test.
 #[macro_export]
 macro_rules! wire_codes {
     (

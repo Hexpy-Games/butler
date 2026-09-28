@@ -12,11 +12,11 @@ export const meta: ShowcaseMeta = {
 
 const labels = {
   "en-US": {
-    project: "butler", newChat: "New chat", automations: "Automations", scheduled: "3 scheduled", newAutomation: "New automation",
+    project: "butler", newChat: "New chat", automations: "Schedules", scheduled: "3 scheduled", newAutomation: "New schedule",
     dashboard: "Project dashboard", description: "Work history and project context", chats: "12 project chats",
   },
   "ko-KR": {
-    project: "butler", newChat: "새 채팅", automations: "자동화", scheduled: "예약 3개", newAutomation: "새 자동화",
+    project: "butler", newChat: "새 채팅", automations: "예약 작업", scheduled: "예약 3개", newAutomation: "새 예약 작업",
     dashboard: "프로젝트 대시보드", description: "작업 기록과 프로젝트 맥락", chats: "프로젝트 채팅 12개",
   },
 } as const;

@@ -46,7 +46,15 @@ fn dashboard(
         ));
     }
     let mut data = reader
-        .dashboard(options.debug, None, collation)
+        .dashboard(
+            if options.debug {
+                butler_memory::work_records::DashboardDetail::Debug
+            } else {
+                butler_memory::work_records::DashboardDetail::Public
+            },
+            None,
+            collation,
+        )
         .map_err(read_failure)?;
     sanitize_dashboard_for_cli(&mut data);
     let human = render_dashboard(&data);

@@ -1,14 +1,17 @@
+//! Binds the observed native embedding identity to a generation that has none.
+
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
     path::Path,
 };
 
-use serde_json::Value;
-
 use super::{
     MemoryGenerationHandle, MemoryGenerationTarget,
     authority::assert_mutation_authority,
+    manifest::{
+        EmbeddingSlot, GenerationFormat, GenerationManifest, GenerationState, InitializationOrigin,
+    },
     read::{error, resolve_generation},
     types::{GenerationEmbedding, validate_native_embedding_identity},
 };
@@ -21,6 +24,7 @@ use crate::{
     coordination::CognitionWriteLease,
 };
 
+/// Binds a native embedding identity to a generation that has none yet.
 pub fn bind_native_embedding_identity(
     data_root: &Path,
     environment: &CognitionPathEnvironment,
@@ -43,15 +47,14 @@ pub fn bind_native_embedding_identity(
 
     let manifest_path = current.root.join("manifest.json");
     assert_write_authority(data_root, environment, &current, &manifest_path, &lock_path)?;
-    let mut manifest = read_manifest_value(&manifest_path)?;
+    let mut manifest =
+        GenerationManifest::read(&manifest_path, CognitionCode::MemoryGenerationUnavailable)?;
     if !is_eligible_empty_target(&manifest, target, &current.generation_id) {
         return Err(error(CognitionCode::MemoryGenerationChanged));
     }
 
     let embedding = GenerationEmbedding::Native(observed.clone());
-    manifest["embedding"] = serde_json::to_value(&embedding).map_err(|source| {
-        error(CognitionCode::MemoryEmbeddingMetadataInvalid).with_source(source)
-    })?;
+    manifest.embedding = Some(EmbeddingSlot::Bound(Box::new(embedding.clone())));
     write_manifest_atomically(
         data_root,
         environment,
@@ -64,59 +67,41 @@ pub fn bind_native_embedding_identity(
     Ok(embedding)
 }
 
+/// Only a v2 generation that has never had an embedding may be bound: the
+/// empty-root active generation or a rebuild candidate on its snapshot.
 fn is_eligible_empty_target(
-    manifest: &Value,
+    manifest: &GenerationManifest,
     target: &MemoryGenerationTarget,
     generation_id: &str,
 ) -> bool {
-    let is_null_embedding = manifest.get("embedding").is_some_and(Value::is_null);
-    let common = manifest.get("schema").and_then(Value::as_str)
-        == Some("butler.memory-generation.v2")
-        && manifest.get("format").and_then(Value::as_str) == Some("v2")
-        && manifest.get("generation_id").and_then(Value::as_str) == Some(generation_id)
-        && is_null_embedding;
-    if !common {
+    if !manifest.is_for(generation_id)
+        || manifest.format != Some(GenerationFormat::V2)
+        || !manifest.embedding_unbound()
+    {
         return false;
     }
-
     match target {
         MemoryGenerationTarget::Active {
             expected_generation,
         } => {
             expected_generation == generation_id
-                && manifest.get("state").and_then(Value::as_str) == Some("active")
-                && manifest
-                    .get("initialization_origin")
-                    .and_then(Value::as_str)
-                    == Some("empty")
+                && manifest.state == Some(GenerationState::Active)
+                && manifest.initialization_origin == Some(InitializationOrigin::Empty)
         }
         MemoryGenerationTarget::Rebuild {
             generation_id: target_generation,
             canonical_snapshot_id,
         } => {
             target_generation == generation_id
-                && manifest.get("state").and_then(Value::as_str) == Some("building")
+                && manifest.state == Some(GenerationState::Building)
+                && manifest.initialization_origin == Some(InitializationOrigin::Rebuild)
+                && manifest.canonical_snapshot_id.as_deref() == Some(canonical_snapshot_id)
                 && manifest
-                    .get("initialization_origin")
-                    .and_then(Value::as_str)
-                    == Some("rebuild")
-                && manifest
-                    .get("canonical_snapshot_id")
-                    .and_then(Value::as_str)
-                    == Some(canonical_snapshot_id)
-                && manifest
-                    .get("canonical_snapshot_path")
-                    .and_then(Value::as_str)
+                    .canonical_snapshot_path
+                    .as_deref()
                     .is_some_and(|path| !path.is_empty())
         }
     }
-}
-
-fn read_manifest_value(path: &Path) -> Result<Value, CognitionError> {
-    let bytes = fs::read(path)
-        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
-    serde_json::from_slice(&bytes)
-        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))
 }
 
 fn assert_write_authority(
@@ -144,8 +129,11 @@ fn write_manifest_atomically(
     manifest_path: &Path,
     lock_path: &Path,
     lease: &CognitionWriteLease,
-    manifest: &Value,
+    manifest: &GenerationManifest,
 ) -> Result<(), CognitionError> {
+    let text = serde_json::to_string(manifest).map_err(|source| {
+        error(CognitionCode::MemoryEmbeddingMetadataInvalid).with_source(source)
+    })?;
     let parent = manifest_path
         .parent()
         .ok_or_else(|| error(CognitionCode::MemoryGenerationUnavailable))?;
@@ -162,14 +150,9 @@ fn write_manifest_atomically(
     let result = (|| {
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options.open(&temporary).map_err(write_error)?;
-        file.write_all(manifest.to_string().as_bytes())
-            .map_err(write_error)?;
+        file.write_all(text.as_bytes()).map_err(write_error)?;
         file.write_all(b"\n").map_err(write_error)?;
         file.sync_all().map_err(write_error)?;
         drop(file);

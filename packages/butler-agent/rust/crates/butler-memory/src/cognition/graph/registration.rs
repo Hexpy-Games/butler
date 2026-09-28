@@ -1,7 +1,9 @@
+//! Registering conversation sources, episodes and projection jobs in the graph.
+
+use crate::cognition::graph::StageWrite;
 use std::collections::HashMap;
 
 use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::{Value, json};
 
 use super::{db_error, index, invalidation, jobs};
 use crate::cognition::CognitionCode;
@@ -28,6 +30,8 @@ pub(in crate::cognition) struct GraphRegistration {
     pub job_id: String,
 }
 
+/// Registers one conversation source revision: its chunk, sources, job and
+/// windows, and invalidates identity decisions resting on replaced sources.
 pub(super) fn register(
     connection: &mut Connection,
     input: RegistrationInput<'_>,
@@ -64,33 +68,7 @@ pub(super) fn register(
     )
     .map_err(db_error)?;
 
-    let mut messages = HashMap::<String, ConversationMessageWithParts>::new();
-    let mut registered = Vec::new();
-    for row in &input.plan.rows {
-        let replacements = replacement_source_refs(&tx, &row.source_id)?;
-        if !replacements.is_empty() {
-            registered.extend(replacements);
-            continue;
-        }
-        insert_source(&tx, row)?;
-        let message_id = row
-            .conversation_message_id
-            .as_deref()
-            .ok_or_else(source_changed)?;
-        let message = match messages.entry(message_id.to_owned()) {
-            std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
-            std::collections::hash_map::Entry::Vacant(entry) => entry.insert(
-                input
-                    .canonical
-                    .read_message(message_id)
-                    .map_err(CognitionError::from)?
-                    .ok_or_else(source_changed)?,
-            ),
-        };
-        let hydrated = hydrate_conversation_source(message, row, f64::INFINITY)?;
-        index::index_source(&tx, &row.source_id, hydrated.text)?;
-        registered.push(row.source_id.clone());
-    }
+    let registered = register_sources(&tx, &input)?;
     insert_job(&tx, &input, &completion_ids, registered.len(), &now)?;
     if !existing_job {
         insert_windows(&tx, input.plan, &registered)?;
@@ -116,6 +94,42 @@ pub(super) fn register(
     Ok(GraphRegistration {
         job_id: input.plan.job_id.clone(),
     })
+}
+
+/// Registers and indexes each planned source, or reuses the split sources
+/// that already replace it. Returns the registered source ids.
+fn register_sources(
+    tx: &Connection,
+    input: &RegistrationInput<'_>,
+) -> CognitionResult<Vec<String>> {
+    let mut messages = HashMap::<String, ConversationMessageWithParts>::new();
+    let mut registered = Vec::new();
+    for row in &input.plan.rows {
+        let replacements = replacement_source_refs(tx, &row.source_id)?;
+        if !replacements.is_empty() {
+            registered.extend(replacements);
+            continue;
+        }
+        insert_source(tx, row)?;
+        let message_id = row
+            .conversation_message_id
+            .as_deref()
+            .ok_or_else(source_changed)?;
+        let message = match messages.entry(message_id.to_owned()) {
+            std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+            std::collections::hash_map::Entry::Vacant(entry) => entry.insert(
+                input
+                    .canonical
+                    .read_message(message_id)
+                    .map_err(CognitionError::from)?
+                    .ok_or_else(source_changed)?,
+            ),
+        };
+        let hydrated = hydrate_conversation_source(message, row, f64::INFINITY)?;
+        index::index_source(tx, &row.source_id, hydrated.text)?;
+        registered.push(row.source_id.clone());
+    }
+    Ok(registered)
 }
 
 fn prior_source_ids(
@@ -198,14 +212,13 @@ fn insert_job(
     source_count: usize,
     now: &str,
 ) -> CognitionResult<()> {
-    let complete =
-        json!({"state":"complete","completed_units":source_count,"total_units":source_count});
-    let pending = json!({"state":"pending","blocked_by":null});
+    let complete = StageWrite::complete(i64::try_from(source_count).unwrap_or(i64::MAX));
+    let pending = StageWrite::pending();
     connection.execute(
         "INSERT INTO memory_projection_jobs(job_id,episode_id,revision,extraction_version,generation,extraction_model,reasoning_effort,observed_completion_job_ids,source_state,semantic_graph_state,episode_vectors_state,node_vectors_state,hot_cache_state,created_at) \
          VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?10,?10,?10,?11) \
          ON CONFLICT(episode_id,revision,extraction_version) DO UPDATE SET observed_completion_job_ids=excluded.observed_completion_job_ids",
-        params![input.plan.job_id,input.plan.episode_id,input.plan.revision,input.plan.extraction_version,input.generation_id,input.extraction_model,input.reasoning_effort,butler_core::json::stringify(&serde_json::to_value(completion_ids).map_err(json_error)?).map_err(json_error)?,butler_core::json::stringify(&complete).map_err(json_error)?,butler_core::json::stringify(&pending).map_err(json_error)?,now],
+        params![input.plan.job_id,input.plan.episode_id,input.plan.revision,input.plan.extraction_version,input.generation_id,input.extraction_model,input.reasoning_effort,butler_core::json::stringify(&serde_json::to_value(completion_ids).map_err(json_error)?).map_err(json_error)?,complete.json()?,pending.json()?,now],
     ).map_err(db_error)?;
     Ok(())
 }
@@ -230,11 +243,11 @@ fn insert_windows(
         .collect::<CognitionResult<Vec<_>>>()?;
     for (ordinal, source_id) in windows.into_iter().enumerate() {
         let refs = vec![source_id.clone()];
-        let window = crate::cognition::sources::projection_hash_for_graph(vec![
-            Value::String("memory-window".into()),
-            Value::String(plan.revision.clone()),
-            Value::String(source_id.clone()),
-        ])?;
+        let window = crate::cognition::sources::projection_hash_for_graph(&(
+            "memory-window",
+            &plan.revision,
+            &source_id,
+        ))?;
         connection.execute(
             "INSERT INTO memory_projection_windows(window_ref,job_id,ordinal,source_refs_json,state,error_code) VALUES(?1,?2,?3,?4,?5,?6)",
             params![window,plan.job_id,i64::try_from(ordinal).unwrap_or(i64::MAX),serde_json::to_string(&refs).map_err(json_error)?,"pending",Option::<&str>::None],
@@ -260,11 +273,13 @@ fn replacement_source_refs(
     source_id: &str,
 ) -> CognitionResult<Vec<String>> {
     let leaves = expand(connection, source_id)?;
-    Ok(if leaves.len() == 1 && leaves[0] == source_id {
-        Vec::new()
-    } else {
-        leaves
-    })
+    Ok(
+        if matches!(leaves.as_slice(), [only] if only == source_id) {
+            Vec::new()
+        } else {
+            leaves
+        },
+    )
 }
 
 fn expand(connection: &Connection, source_id: &str) -> CognitionResult<Vec<String>> {

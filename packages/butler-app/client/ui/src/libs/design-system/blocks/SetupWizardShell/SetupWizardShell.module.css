@@ -107,6 +107,52 @@
   padding-left: var(--space-xl);
 }
 
+/* Focus variant: one column on the backdrop; the whole window scrolls. */
+.screen[data-variant="focus"] {
+  display: block;
+  height: var(--adaptive-viewport-block-size);
+  padding: 0;
+}
+
+.screen[data-variant="focus"][data-embedded="true"] {
+  height: auto;
+}
+
+.focusScroll {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+}
+
+/* Top-aligned so moving between screens never shifts the column; the top
+   inset grows with tall windows. */
+.focusScrollContent {
+  display: grid;
+  box-sizing: border-box;
+  min-height: 100%;
+  align-content: start;
+  justify-items: center;
+  padding-top: max(calc(var(--titlebar-height) + var(--space-md)), 10vh);
+  padding-bottom: var(--space-3xl);
+  padding-inline: var(--space-2xl);
+}
+
+.focusColumn {
+  display: grid;
+  width: 100%;
+  justify-items: center;
+  row-gap: var(--space-lg);
+}
+
+.screen[data-variant="focus"] .content {
+  width: 100%;
+  max-width: 420px;
+}
+
+.screen[data-variant="focus"] .content[data-width="wide"] {
+  max-width: 520px;
+}
+
 @media (width <= 560px) {
   .screen {
     padding: var(--space-lg);
@@ -118,6 +164,10 @@
 
   .productTitle {
     font-size: var(--typo-new-chat-title-size-sm);
+  }
+
+  .focusScrollContent {
+    padding-inline: var(--space-lg);
   }
 
   .body {

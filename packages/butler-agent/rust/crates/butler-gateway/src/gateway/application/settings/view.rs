@@ -5,14 +5,37 @@ use serde_json::{Map, Value, json};
 
 use super::{
     AppSettingsFacts, EventSubscribers, SETTINGS_KEY, global_settings, model,
-    persistence::read_json, wallpaper,
+    onboarding::{KEY, view as onboarding_view},
+    persistence::read_json,
+    wallpaper,
 };
 mod normalize;
 use crate::gateway::application::storage::AppStorageError;
+use crate::gateway::ui_language::UiLanguage;
 use normalize::{
-    access, enum_value, integer, language, main_colors, main_preset, main_theme, multiline,
-    native_value, notifications, object, timezone, ui_defaults, workspace_label,
+    enum_value, integer, language, main_colors, main_preset, main_theme, multiline, native_value,
+    notifications, object, timezone, ui_defaults, workspace_label,
 };
+
+/// The language the App shows (`language` of the settings view): Settings,
+/// else `user.language` of butler.config.json, else English.
+pub(in crate::gateway::application) fn ui_language(
+    db: &Connection,
+    facts: &AppSettingsFacts,
+) -> Result<UiLanguage, AppStorageError> {
+    let stored = read_json(db, SETTINGS_KEY)?
+        .and_then(|value| value.as_object().cloned())
+        .unwrap_or_default();
+    let native = facts
+        .native_settings
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    Ok(language(
+        stored.get("language"),
+        native_value(&native, "config_user").get("language"),
+    ))
+}
 
 pub(super) fn read(
     db: &Connection,
@@ -103,15 +126,12 @@ pub(super) fn read(
         .min(max_context)
         .max(1_000);
     let defaults = ui_defaults();
+    // The defaults hold every fixed value (gateway_profile, profile_label).
     let mut output = defaults.as_object().cloned().unwrap_or_default();
-    output.insert(
-        "bridge_mode".into(),
-        native
-            .get("bridge_mode")
-            .cloned()
-            .unwrap_or_else(|| json!("local")),
-    );
-    output.insert("gateway_profile".into(), json!("electron"));
+    if let Some(mode) = native.get("bridge_mode") {
+        output.insert("bridge_mode".into(), mode.clone());
+    }
+    output.insert(KEY.into(), onboarding_view(&stored));
     output.insert(
         "server_url".into(),
         stored
@@ -126,10 +146,7 @@ pub(super) fn read(
     );
     output.insert(
         "language".into(),
-        json!(language(
-            stored.get("language"),
-            config_user.get("language")
-        )),
+        json!(language(stored.get("language"), config_user.get("language")).as_str()),
     );
     output.insert(
         "timezone".into(),
@@ -197,7 +214,7 @@ pub(super) fn read(
     );
     output.insert(
         "access_mode".into(),
-        json!(access(stored.get("access_mode"))),
+        json!(super::access_mode_name(&controls.access)),
     );
     output.insert(
         "plan_mode_default".into(),
@@ -274,7 +291,6 @@ pub(super) fn read(
         "model_fallback".into(),
         json!({"enabled":model_fallback.enabled,"models":model_fallback.models}),
     );
-    output.insert("profile_label".into(), json!("Local Butler"));
     Ok(Value::Object(output))
 }
 

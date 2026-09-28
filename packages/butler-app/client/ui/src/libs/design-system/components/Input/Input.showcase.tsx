@@ -13,13 +13,14 @@ export const meta: ShowcaseMeta = {
 const labels = {
   "en-US": {
     serverId: "Server ID", serverName: "Display name", placeholder: "Placeholder only", apiKey: "API key",
-    apiKeyHint: "Stored in the system keychain; only the last four characters are shown.",
+    // Keys are a local file today; only claim Keychain storage once #217 lands.
+    apiKeyHint: "Stays on this computer; only the last four characters are shown.",
     modelId: "Model ID", context: "Context window", oauth: "Sign-in link", invalid: "Must be a number", maxWorkers: "Max simultaneous Workers",
     values: { id: "github", name: "GitHub", key: "sk-…4f2a", model: "qwen2.5-coder:14b", context: "32768" },
   },
   "ko-KR": {
     serverId: "서버 ID", serverName: "표시 이름", placeholder: "플레이스홀더만", apiKey: "API 키",
-    apiKeyHint: "시스템 키체인에 저장되며 마지막 네 글자만 보입니다.",
+    apiKeyHint: "이 컴퓨터에만 저장되며 마지막 네 글자만 보입니다.",
     modelId: "모델 ID", context: "컨텍스트 창", oauth: "로그인 링크", invalid: "숫자를 입력하세요", maxWorkers: "최대 동시 Worker 수",
     values: { id: "github", name: "깃허브", key: "sk-…4f2a", model: "qwen2.5-coder:14b", context: "32768" },
   },

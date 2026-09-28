@@ -23,7 +23,7 @@ const REQUIRES_STATE_MATRIX = [
   "components/CopyButton", "components/IconButton", "components/Input", "components/NativeSelect", "components/PillButton",
   "components/SegmentedControl", "components/Select", "components/Slider", "components/Switch", "components/Tabs",
   "components/Textarea", "blocks/ComposerControl", "blocks/DisclosureRow", "blocks/NavRow", "blocks/OptionMenu",
-  "blocks/SplitButton",
+  "blocks/SplitButton", "blocks/ChoiceCard",
 ];
 
 function folderIds(): string[] {
@@ -56,6 +56,10 @@ function renderer() {
   const { renderToStaticMarkup } = requireFromUi("react-dom/server") as { renderToStaticMarkup: (node: unknown) => string };
   return (render: () => unknown) => renderToStaticMarkup(createElement(render));
 }
+
+// Catalog-wide tests import and render every DS item in one test (~1 s idle),
+// which crosses the 5 s default on a loaded machine.
+const CATALOG_TIMEOUT_MS = 30_000;
 
 describe("design-system showcase coverage", () => {
   test("every component and block folder has a showcase and a README (no gaps)", () => {
@@ -109,7 +113,7 @@ describe("design-system showcase coverage", () => {
       }
     }
     expect({ empty, korean }).toEqual({ empty: [], korean: [] });
-  });
+  }, CATALOG_TIMEOUT_MS);
 
   test("every item has complete usage guidance that points at real exports and tokens", async () => {
     const render = renderer();
@@ -149,7 +153,7 @@ describe("design-system showcase coverage", () => {
       }
     }
     expect(problems).toEqual([]);
-  });
+  }, CATALOG_TIMEOUT_MS);
 
   test("every exported component is shown in a story, a recipe or a do/don't, or named as internal", async () => {
     const unreferenced: string[] = [];
@@ -167,7 +171,7 @@ describe("design-system showcase coverage", () => {
       }
     }
     expect(unreferenced).toEqual([]);
-  });
+  }, CATALOG_TIMEOUT_MS);
 
   test("interactive items ship a states matrix whose cells render", async () => {
     const render = renderer();
@@ -184,5 +188,5 @@ describe("design-system showcase coverage", () => {
         }
       }
     }
-  });
+  }, CATALOG_TIMEOUT_MS);
 });

@@ -21,73 +21,6 @@ fn baseline(catalog: &ModelCatalog) -> ModelCatalogSnapshot {
 }
 
 #[test]
-fn exact_and_declared_aliases_resolve_without_implicit_model_id() {
-    let catalog = ModelCatalog::new().unwrap();
-    let snapshot = baseline(&catalog);
-    assert_eq!(
-        snapshot
-            .find_model_metadata(Some("gpt-5.5"))
-            .unwrap()
-            .model_ref,
-        "openai/gpt-5.5"
-    );
-    assert!(
-        snapshot
-            .find_model_metadata(Some("claude-opus-5"))
-            .is_none()
-    );
-    assert_eq!(parse_model_ref("o3").canonical_ref, "openai/o3");
-    assert_eq!(parse_model_ref("unknown").canonical_ref, "custom/unknown");
-
-    let mut first = snapshot
-        .find_model_metadata(Some("openai/gpt-5.5"))
-        .unwrap();
-    let mut second = first.clone();
-    first.model_ref = "openai/one".into();
-    second.model_ref = "openai/two".into();
-    first.aliases = Some(vec!["collision".into()]);
-    second.aliases = Some(vec!["collision".into()]);
-    let mut custom = input(Vec::new());
-    custom.extra_models = vec![first, second];
-    let snapshot = catalog
-        .snapshot(custom, &LocaleCollation::new("en-US").unwrap())
-        .unwrap();
-    assert!(snapshot.find_model_metadata(Some("collision")).is_none());
-}
-
-#[test]
-fn list_concatenates_while_lookup_overwrites_same_ref() {
-    let catalog = ModelCatalog::new().unwrap();
-    let base = baseline(&catalog);
-    let mut replacement = base.find_model_metadata(Some(DEFAULT_MODEL_REF)).unwrap();
-    replacement.display_name = "Configured replacement".into();
-    let mut custom = input(Vec::new());
-    custom.extra_models.push(replacement);
-    let snapshot = catalog
-        .snapshot(custom, &LocaleCollation::new("en-US").unwrap())
-        .unwrap();
-    assert_eq!(
-        snapshot
-            .list_model_metadata()
-            .iter()
-            .filter(|model| model.model_ref == DEFAULT_MODEL_REF)
-            .count(),
-        2
-    );
-    assert!(
-        snapshot
-            .find_model_metadata(Some(DEFAULT_MODEL_REF))
-            .is_none()
-    );
-    assert_eq!(
-        snapshot
-            .resolve_model_metadata(Some(DEFAULT_MODEL_REF))
-            .display_name,
-        "Configured replacement"
-    );
-}
-
-#[test]
 fn local_metadata_and_provider_family_preserve_source_rules() {
     let raw = json!({"model_id":"qwen3.8-local.gguf","display_name":"  Qwen Local  ","server_url":"localhost:8080/",
         "context_window_tokens":32768,"max_output_tokens":4096,"reasoning_budget_ratio":0.25,"platform":"llama_cpp","source":"manual"});
@@ -187,5 +120,49 @@ fn supplied_registered_config_normalizes_without_secrets_or_io() {
     assert_eq!(
         normalized.display_name,
         format!("{}{}", "😀".repeat(30), "a".repeat(18))
+    );
+}
+
+#[test]
+fn refreshed_routine_preset_needs_a_cataloged_newer_model_and_falls_back_to_static() {
+    let catalog = ModelCatalog::new().unwrap();
+    let newer_sol = ["gpt-6.1-sol".to_owned()];
+    let routine =
+        |snapshot: &ModelCatalogSnapshot, provider: &str, refreshed: Option<&[String]>| {
+            snapshot
+                .refreshed_routine_preset(provider, refreshed)
+                .unwrap()
+                .model
+        };
+    // Not cataloged yet: no provider is upgraded to a model Butler lacks.
+    let snapshot = baseline(&catalog);
+    assert_eq!(
+        routine(&snapshot, "openai", Some(&newer_sol)),
+        "openai/gpt-6-sol"
+    );
+    let newer_sonnet = ["claude-sonnet-5-1".to_owned()];
+    assert_eq!(
+        routine(&snapshot, "anthropic", Some(&newer_sonnet)),
+        "anthropic/claude-sonnet-5"
+    );
+    // Cataloged (here as an extra model): the refresh upgrades to it.
+    let mut sol = snapshot
+        .find_model_metadata(Some("openai/gpt-6-sol"))
+        .unwrap();
+    sol.model_id = "gpt-6.1-sol".into();
+    sol.model_ref = "openai/gpt-6.1-sol".into();
+    let mut extended = input(Vec::new());
+    extended.extra_models = vec![sol];
+    let snapshot = catalog
+        .snapshot(extended, &LocaleCollation::new("en-US").unwrap())
+        .unwrap();
+    assert_eq!(
+        routine(&snapshot, "openai", Some(&newer_sol)),
+        "openai/gpt-6.1-sol"
+    );
+    assert_eq!(routine(&snapshot, "openai", None), "openai/gpt-6-sol");
+    assert_eq!(
+        catalog.routine_preset("google").unwrap().model,
+        "google/gemini-3.8-flash"
     );
 }

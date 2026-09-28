@@ -388,6 +388,9 @@ async fn real_store_read_compile_and_recent_use_one_bounded_owner() {
     let _ = std::fs::remove_dir_all(root);
 }
 
+/// Pure-logic table: context budget precedence, numeric strings, model
+/// metadata and thresholds match the source rules.
+// test-category: pure-logic
 #[tokio::test]
 async fn budget_precedence_numeric_strings_metadata_and_thresholds_match_source() {
     let root = temp("budget");

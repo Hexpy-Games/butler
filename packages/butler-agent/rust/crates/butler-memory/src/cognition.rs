@@ -8,6 +8,7 @@ mod box_store;
 mod briefing;
 mod completion;
 mod configured_cycle;
+mod configured_projects;
 mod consolidation;
 mod continuity_recovery;
 mod embedding;
@@ -26,7 +27,6 @@ mod knowhow_store;
 mod lance_store;
 mod legacy;
 mod lexical;
-#[cfg(unix)]
 mod mcp_graph;
 mod memory_health;
 mod memory_recall;
@@ -63,7 +63,10 @@ pub use briefing::{
     BriefingInputFuture, BriefingInputSnapshot, BriefingInputSource, BriefingPersona,
     BriefingProjectSignal, BriefingSettings,
 };
-pub use briefing::{latest_completed_briefing_run_id, read_new_chat_briefing};
+pub use briefing::{
+    BriefingScope, BriefingSource, BriefingSuggestion, BriefingTitleVariants, NewChatBriefing,
+    latest_completed_briefing_run_id, read_new_chat_briefing,
+};
 pub use completion::{
     CompletionNotice, CompletionPublisher, MemorySyncConsumer, MemorySyncPoll,
     TypedMemorySourceNotice,
@@ -72,6 +75,7 @@ pub use configured_cycle::{
     ConfiguredCycleOptions, ConfiguredCycleResult, ConfiguredCycleService, ConfiguredPhase,
     ConfiguredPhaseExecutor, ConfiguredPhaseFuture,
 };
+pub(crate) use configured_projects::{registered_project_names, registered_projects};
 pub use consolidation::{
     CycleEventSink, CycleService, CycleStatus, Phase, PhaseError, PhaseExecutor, RunCycle,
 };
@@ -88,22 +92,29 @@ pub use exact_query::ExactMemoryQuery;
 pub use extraction::{CandidateSearchInput, CognitionVectorSearch, VectorSearchFuture};
 pub use feedback_buffer::{FeedbackBufferService, FeedbackTarget};
 pub use generation::{
-    BuildInventory, CandidateInputRepairRequest, CutoverStamp, GenerationEmbedding,
-    MemoryGenerationHandle, MemoryGenerationTarget, activate_memory_rebuild,
-    active_memory_descriptor_exists, advance_rebuild_cache, assert_mutation_authority,
-    assert_rebuild_sources_registered, bind_native_embedding_identity, compute_rebuild_readiness,
-    initialize_empty_memory_generation, inspect_memory_rebuild, prepare_memory_rebuild,
-    read_build_inventory, rebuild_typed_cursor, reconcile_rebuild_vector_representatives,
-    record_rebuild_readiness, refresh_memory_rebuild_snapshot, repair_memory_candidate_inputs,
-    resolve_active_generation, resolve_generation, retry_failed_memory_generation,
-    rollback_memory_rebuild, set_extractor_memory_generation, validate_memory_rebuild,
+    AcceptanceBinding, ActiveDescriptor, BuildInventory, CandidateInputRepairRequest,
+    CanonicalSnapshot, CutoverStamp, EmbeddingSlot, GenerationEmbedding, GenerationFormat,
+    GenerationManifest, GenerationReadiness, GenerationState, InitializationOrigin,
+    MemoryGenerationHandle, MemoryGenerationTarget, ProjectionMode, RebuildInspection,
+    RetriedGeneration, RollbackOutcome, RollbackStep, SemanticCounts, StageCounts, VectorCounts,
+    activate_memory_rebuild, active_memory_descriptor_exists, advance_rebuild_cache,
+    assert_mutation_authority, assert_rebuild_sources_registered, bind_native_embedding_identity,
+    compute_rebuild_readiness, initialize_empty_memory_generation, inspect_memory_rebuild,
+    prepare_memory_rebuild, read_build_inventory, rebuild_typed_cursor,
+    reconcile_rebuild_vector_representatives, record_rebuild_readiness,
+    refresh_memory_rebuild_snapshot, repair_memory_candidate_inputs, resolve_active_generation,
+    resolve_generation, retry_failed_memory_generation, rollback_memory_rebuild,
+    set_extractor_memory_generation, validate_memory_rebuild,
 };
 pub use generation_vectors::GenerationVectorAdapter;
-pub use graph::{GraphProgress, ProjectionModelPolicyInput};
+pub use graph::{
+    CandidateInputRepairResult, GraphProgress, JobOutcome, ProjectionModelPolicy,
+    ProjectionModelPolicyInput, ProjectionModelSlot, RepairMode, RepairReceipt, RetryFailedCounts,
+    StageState, StageStatus,
+};
 pub use graph_consolidation::GraphConsolidationService;
 pub use hot_cache::{LegacyIndexService, extract_legacy_import_transcript};
 pub use knowhow_store::{FeedbackResolvePort, KnowHowService};
-#[cfg(unix)]
 pub use mcp_graph::read_mcp_legacy_graph;
 pub use memory_health::{MemoryHealthReport, MemoryHealthService};
 pub use memory_recall::{MemoryRecall, RecallVectorFuture, RecallVectorPort};

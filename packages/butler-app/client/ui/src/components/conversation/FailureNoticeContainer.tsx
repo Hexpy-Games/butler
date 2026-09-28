@@ -25,7 +25,13 @@ export const AssistantFailureNotice = memo(function AssistantFailureNotice({
 });
 
 export const MessageRetryActionsContainer = memo(
-  function MessageRetryActionsContainer({ turnId }: { turnId: string }) {
+  function MessageRetryActionsContainer({
+    turnId,
+    withCurrentControls,
+  }: {
+    turnId: string;
+    withCurrentControls: boolean;
+  }) {
     const retryingTurnId = useButlerStore((state) => state.retryingTurnId);
     const retryTurn = useButlerStore((state) => state.retryTurn);
     const retryTurnWithCurrentControls = useButlerStore(
@@ -35,6 +41,7 @@ export const MessageRetryActionsContainer = memo(
       <MessageRetryActions
         turnId={turnId}
         retryingTurnId={retryingTurnId}
+        withCurrentControls={withCurrentControls}
         onRetryTurn={retryTurn}
         onRetryTurnWithCurrentControls={retryTurnWithCurrentControls}
       />

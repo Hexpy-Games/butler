@@ -9,6 +9,7 @@ import {
   ipcMain,
   nativeImage,
   nativeTheme,
+  protocol,
   shell,
 } from "electron";
 import { spawn, spawnSync } from "node:child_process";
@@ -107,6 +108,23 @@ import {
   readCacheBudgetArtifact,
 } from "./cache-budget-runtime.mjs";
 import { createSessionFolderLauncher } from "./session-folder-launch.mjs";
+import {
+  APP_RENDERER_ORIGIN,
+  APP_RENDERER_SCHEME,
+  APP_RENDERER_SCHEME_PRIVILEGES,
+  createAppRendererProtocolHandler,
+  findRendererDistRoot,
+  isAppRendererDocumentUrl,
+  rendererOriginForUrl,
+  selectRendererUrl,
+} from "./app-renderer-protocol.mjs";
+import {
+  READ_RENDERER_STORAGE_SCRIPT,
+  RENDERER_STORAGE_BLANK_PAGE_URL,
+  RENDERER_STORAGE_MIGRATION_MARKER,
+  migrateRendererStorageOrigin,
+  writeRendererStorageScript,
+} from "./app-renderer-storage-migration.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../../..");
@@ -188,10 +206,15 @@ let serverUrl = normalizeLocalHttpUrl(
   "Butler app server URL",
 );
 const explicitUiUrl = process.env.BUTLER_APP_UI_URL;
+// Production serves the built UI on app://butler; dev keeps the Vite URL.
+const staticRendererDistRoot = explicitUiUrl ? null : resolveStaticRendererDist();
 let rendererUrl = explicitUiUrl
   ? normalizeLocalHttpUrl(explicitUiUrl, "Butler app UI URL")
   : defaultRendererUrl();
-let rendererOrigin = new URL(rendererUrl).origin;
+let rendererOrigin = rendererOriginForUrl(rendererUrl);
+let appRendererProtocolReady = null;
+// Must run before the app is ready.
+protocol.registerSchemesAsPrivileged([APP_RENDERER_SCHEME_PRIVILEGES]);
 let serverHealthUrl = new URL("/health", serverUrl).toString();
 const isMac = process.platform === "darwin";
 const isLinux = process.platform === "linux";
@@ -277,6 +300,9 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
   startupTimeoutMs: 120_000,
   onUnexpectedExit: () => { void recoverUnexpectedForegroundExit(); },
   onGatewayStarting: prepareAppForegroundGatewayLaunch,
+  onIntentionalExit: handleIntentionalAgentExit,
+  onExternalAttach: handleExternalAgentAttach,
+  onRestartReconnectFailed: handleAgentRestartReconnectFailed,
 });
 const sessionFolderLauncher = createSessionFolderLauncher({
   platform: process.platform,
@@ -289,6 +315,7 @@ const appAgentNativeServiceBridge = shouldUseAppAgentNativeServiceBridge()
       systemdUnit: appAgentSystemdUnit(),
       getPort: () => port,
       getAppVersion: () => appInfoView().version,
+      getDevOrigin: () => (explicitUiUrl ? rendererOrigin : null),
       resourcesPath: process.resourcesPath,
       execPath: process.execPath,
       menuBarHelper: appManagedMenuBarHelperRegistration(),
@@ -546,6 +573,93 @@ async function recoverUnexpectedForegroundExit() {
   }
 }
 
+// `butler stop` / `butler restart` (CLI or MCP) leave an intent that the
+// supervisor reads when the Agent exits; these keep App state in step with it.
+function handleIntentionalAgentExit({ reason, respawnBy }) {
+  if (usesAppForegroundLifecycle && !isQuitting && foregroundInstance) {
+    advanceForegroundInstance(
+      reason === "stop" ? ["stopping", "stopped"] : ["degraded", "recovering"],
+    );
+    if (reason === "stop") {
+      writeAppForegroundLastExit(butlerDataRoot, {
+        generation: foregroundInstance.generation,
+        exitReason: "agent_stop_requested",
+        graceful: true,
+      });
+    }
+  }
+  publishAgentState();
+  // `respawn_by: app`: the supervisor is starting the replacement now; join
+  // it so the foreground record reaches ready (no crash budget is spent).
+  if (reason === "restart" && respawnBy === "app") void finishAgentRespawn();
+}
+
+async function finishAgentRespawn() {
+  try {
+    await ensureServer();
+  } catch (error) {
+    console.error(error);
+    if (usesAppForegroundLifecycle && !isQuitting) advanceForegroundInstance(["failed"]);
+  } finally {
+    publishAgentState();
+  }
+}
+
+function handleExternalAgentAttach({ pid, port: attachedPort }) {
+  if (usesAppForegroundLifecycle && !isQuitting) {
+    const launch = createAppForegroundLaunch({
+      appVersion: appInfoView().version,
+      bundledAgentVersion: null,
+      port: attachedPort,
+    });
+    foregroundInstance = transitionAppForeground(
+      transitionAppForeground(launch.record, "starting"),
+      "ready",
+      { patch: { agent_host_pid: pid, containment_kind: "external" } },
+    );
+    writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+    clearAppForegroundStartupFailure(butlerDataRoot);
+  }
+  publishAgentState();
+}
+
+function handleAgentRestartReconnectFailed() {
+  if (usesAppForegroundLifecycle && !isQuitting) advanceForegroundInstance(["failed"]);
+  publishAgentState();
+}
+
+function advanceForegroundInstance(states) {
+  if (!foregroundInstance) return;
+  for (const state of states) {
+    try {
+      foregroundInstance = transitionAppForeground(foregroundInstance, state);
+    } catch {
+      // Skip a step the current state does not allow; every step stays validated.
+    }
+  }
+  writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+}
+
+function publishAgentState() {
+  const state = bundledAgentSupervisor.agentState();
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send("butler:agent-state", state);
+  }
+  scheduleTrayMenuRefresh();
+}
+
+async function startAgentFromApp() {
+  try {
+    if (!shouldUseAppAgentNativeServiceBridge()) {
+      await bundledAgentSupervisor.resume();
+    }
+    await ensureServer();
+  } finally {
+    publishAgentState();
+  }
+  return bundledAgentSupervisor.agentState();
+}
+
 async function waitForNativeServiceGatewayReady({
   attempts = nativeServiceGatewayReadyPollAttempts,
   delayMs = nativeServiceGatewayReadyPollDelayMs,
@@ -748,6 +862,19 @@ async function submitOpenAIOAuthCallback(input = {}) {
   return await waitForOAuthCompletion();
 }
 
+// Cancel for the desktop sign-in helper. First run uses the agent's flow
+// (`POST /setup/oauth/start`, `GET /setup/oauth/{flow_id}`,
+// `POST /setup/oauth/{flow_id}/cancel`, #279) and falls back to this helper
+// only when the agent lacks those routes. Killing the helper closes its
+// localhost callback listener and drops the PKCE state.
+function cancelOpenAIOAuthLoginFlow(input = {}) {
+  const flowId = safeString(input?.flowId);
+  if (flowId && openAIOAuthLoginSession?.id !== flowId) {
+    return { flow_id: flowId, status: "cancelled" };
+  }
+  return cancelOpenAIOAuthLogin();
+}
+
 function cancelOpenAIOAuthLogin() {
   if (
     openAIOAuthLoginSession?.child &&
@@ -885,6 +1012,7 @@ function stateFromAuthUrl(value) {
 function oauthLoginSessionView(session) {
   if (!session) return { status: "idle" };
   return {
+    flow_id: session.id,
     status: session.status,
     ...(session.authUrl ? { auth_url: session.authUrl } : {}),
     ...(session.redirectUri ? { redirect_uri: session.redirectUri } : {}),
@@ -908,12 +1036,13 @@ function readLatestAppManagedRuntimeFailure() {
 }
 
 function defaultRendererUrl() {
-  return resolveStaticRendererUrl() ?? serverUrl;
+  // Without a built UI, the gateway serves it on its own origin.
+  return selectRendererUrl({ staticDistRoot: staticRendererDistRoot, serverUrl });
 }
 
-function resolveStaticRendererUrl() {
+function resolveStaticRendererDist() {
   const explicitRendererDist = process.env.BUTLER_APP_RENDERER_DIST;
-  const candidates = [
+  return findRendererDistRoot([
     explicitRendererDist,
     process.resourcesPath ? join(process.resourcesPath, "app-client") : null,
     process.resourcesPath ? join(process.resourcesPath, "dist") : null,
@@ -930,13 +1059,58 @@ function resolveStaticRendererUrl() {
       : null,
     resolve(__dirname, "..", "ui", "dist"),
     resolve(repoRoot, "packages", "butler-app", "client", "ui", "dist"),
-  ];
-  for (const candidate of candidates) {
-    if (!candidate) continue;
-    const indexPath = resolve(candidate, "index.html");
-    if (existsSync(indexPath)) return pathToFileURL(indexPath).toString();
+  ]);
+}
+
+function prepareAppRendererProtocol() {
+  if (!staticRendererDistRoot || !isAppRendererDocumentUrl(rendererUrl)) {
+    return Promise.resolve();
   }
-  return null;
+  if (!appRendererProtocolReady) {
+    protocol.handle(
+      APP_RENDERER_SCHEME,
+      createAppRendererProtocolHandler({ distRoot: staticRendererDistRoot }),
+    );
+    appRendererProtocolReady = migrateRendererStorageToAppOrigin();
+  }
+  return appRendererProtocolReady;
+}
+
+async function migrateRendererStorageToAppOrigin() {
+  const result = await migrateRendererStorageOrigin({
+    markerPath: join(app.getPath("userData"), RENDERER_STORAGE_MIGRATION_MARKER),
+    readLegacyEntries: () => runRendererStorageScript(
+      `${pathToFileURL(__dirname).toString()}/`,
+      READ_RENDERER_STORAGE_SCRIPT,
+    ),
+    writeEntries: (entries) => runRendererStorageScript(
+      `${APP_RENDERER_ORIGIN}/`,
+      writeRendererStorageScript(entries),
+    ),
+  });
+  if (result.status === "failed") {
+    console.warn(`Renderer storage migration failed: ${result.code}`);
+  }
+}
+
+// Runs a script in a hidden blank page on the base URL's origin.
+async function runRendererStorageScript(originBaseUrl, script) {
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  const timer = setTimeout(() => {
+    if (!win.isDestroyed()) win.destroy();
+  }, 10_000);
+  try {
+    await win.loadURL(RENDERER_STORAGE_BLANK_PAGE_URL, {
+      baseURLForDataURL: originBaseUrl,
+    });
+    return await win.webContents.executeJavaScript(script);
+  } finally {
+    clearTimeout(timer);
+    if (!win.isDestroyed()) win.destroy();
+  }
 }
 
 async function installDevtools() {
@@ -1381,7 +1555,13 @@ async function trayAgentServiceStatus() {
 
 async function runTrayAgentServiceAction(action) {
   if (usesAppForegroundLifecycle) {
-    if (action === "restart") await bundledAgentSupervisor.restart();
+    if (action === "restart") {
+      try {
+        await bundledAgentSupervisor.restart();
+      } finally {
+        publishAgentState();
+      }
+    }
     await refreshTrayMenu();
     return;
   }
@@ -1419,7 +1599,7 @@ async function confirmStopButlerAgentFromTray() {
     checkboxChecked: false,
     message: "Stop Butler Agent?",
     detail:
-      "Stopping Butler Agent will stop automations and any background sessions currently running.",
+      "Stopping Butler Agent will stop schedules and any background sessions currently running.",
   });
   if (result.response !== 0) return false;
   if (result.checkboxChecked === true) {
@@ -1945,6 +2125,7 @@ async function createWindow() {
     event.preventDefault();
     openExternalUrl(url);
   });
+  await prepareAppRendererProtocol();
   await win.loadURL(rendererUrl);
   if (usesAppForegroundLifecycle && app.isPackaged) {
     const migration = await ensureLegacyAppServiceMigration();
@@ -2072,6 +2253,10 @@ ipcMain.handle("butler:ensure-server", async () => {
 });
 
 ipcMain.handle("butler:get-server-url", () => serverUrl);
+
+ipcMain.handle("butler:agent-state", () => bundledAgentSupervisor.agentState());
+
+ipcMain.handle("butler:agent-start", async () => await startAgentFromApp());
 
 ipcMain.handle("butler:first-run-setup-cancel", () =>
   firstRunSetupBridge.cancel(),
@@ -2207,6 +2392,10 @@ ipcMain.handle("butler:restart-openai-oauth-login", async () =>
 
 ipcMain.handle("butler:get-openai-oauth-login-status", async () =>
   await openAIOAuthLoginStatus(),
+);
+
+ipcMain.handle("butler:cancel-openai-oauth-login", (_event, input) =>
+  cancelOpenAIOAuthLoginFlow(input ?? {}),
 );
 
 ipcMain.handle("butler:submit-openai-oauth-callback", async (_event, input) =>
@@ -2449,7 +2638,9 @@ app.on("before-quit", (event) => {
   }).then((stopped) => {
     if (stopped === undefined && !isQuitting) return;
     finalQuitAllowed = true;
-    app.quit();
+    // Quit on a later tick: Electron drops an app.quit() made in the same
+    // tick as the before-quit it cancelled (the stopped-Agent path is sync).
+    setImmediate(() => app.quit());
   }).catch((error) => {
     isQuitting = false;
     console.error(error);
@@ -2458,6 +2649,13 @@ app.on("before-quit", (event) => {
 
 async function confirmForegroundQuitIfNeeded() {
   if (!usesAppForegroundLifecycle || !foregroundInstance) return true;
+  // After an honored `butler stop` no Agent runs, so no work can be lost and
+  // the unreadable active-work state must not ask for confirmation.
+  if (bundledAgentSupervisor.agentState().state === "stopped") {
+    preconfirmedE2eQuit = false;
+    foregroundQuitSnapshot = null;
+    return true;
+  }
   const snapshot = await readForegroundActiveWorkSnapshot();
   const preconfirmed = preconfirmedE2eQuit;
   preconfirmedE2eQuit = false;
@@ -2564,11 +2762,14 @@ async function stopServerProcess({
         );
       }
     }
-    foregroundInstance = transitionAppForeground(foregroundInstance, "stopping");
-    writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+    // An external `butler stop` may already have left the instance stopped.
+    if (foregroundInstance.state !== "stopped") {
+      foregroundInstance = transitionAppForeground(foregroundInstance, "stopping");
+      writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+    }
   }
   const stopResult = await bundledAgentSupervisor.stop({ wait: true });
-  if (usesAppForegroundLifecycle && foregroundInstance) {
+  if (usesAppForegroundLifecycle && foregroundInstance?.state === "stopping") {
     foregroundInstance = transitionAppForeground(foregroundInstance, "stopped", {
       patch: { clean_exit: true },
     });
@@ -2770,7 +2971,7 @@ function updateManagedServerPort(nextPort) {
   if (!explicitUiUrl) {
     rendererUrl = defaultRendererUrl();
   }
-  rendererOrigin = new URL(rendererUrl).origin;
+  rendererOrigin = rendererOriginForUrl(rendererUrl);
   serverHealthUrl = new URL("/health", serverUrl).toString();
   syncPreloadServerEnvironment();
 }
@@ -2805,12 +3006,10 @@ async function findAvailablePort(startPort) {
 }
 
 function isAppNavigationUrl(value) {
+  // Relative links must not replace the app document with a bundle file.
+  if (isAppRendererDocumentUrl(rendererUrl)) return isAppRendererDocumentUrl(value);
   try {
     const url = new URL(value);
-    const renderer = new URL(rendererUrl);
-    if (renderer.protocol === "file:") {
-      return url.protocol === "file:" && url.pathname === renderer.pathname;
-    }
     return (
       url.origin === rendererOrigin || url.origin === new URL(serverUrl).origin
     );

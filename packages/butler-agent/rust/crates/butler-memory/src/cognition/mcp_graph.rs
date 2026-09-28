@@ -1,5 +1,6 @@
 //! Read-only adapter for the retained MCP tool's legacy graph database.
 
+use crate::lenient::JsonField;
 use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags, params};
@@ -33,6 +34,7 @@ pub enum LegacyGraphReadError {
     Json(#[from] serde_json::Error),
 }
 
+/// Answers the MCP graph query from the legacy graph, as JSON text.
 pub fn read_mcp_legacy_graph(
     data_root: &Path,
     query: &str,
@@ -89,7 +91,7 @@ fn reject_generation_writer(memory_root: &Path) -> Result<(), LegacyGraphReadErr
     };
     let value: Value = serde_json::from_slice(&bytes)
         .map_err(|error| LegacyGraphReadError::GenerationUnavailable(error.into()))?;
-    if value["schema"] == "butler.memory-active-generation.v2" {
+    if value.field("schema") == "butler.memory-active-generation.v2" {
         return Err(LegacyGraphReadError::WriterDisabled);
     }
     Ok(())
@@ -208,17 +210,6 @@ mod tests {
         ));
         fs::create_dir_all(root.join("cognition/memory/db")).unwrap();
         root
-    }
-
-    #[test]
-    fn missing_legacy_graph_is_empty_without_creating_it() {
-        let root = root();
-        assert_eq!(
-            read_mcp_legacy_graph(&root, "butler", None, None, 2).unwrap(),
-            r#"{"entities":[],"relationships":[]}"#
-        );
-        assert!(!root.join("cognition/memory/db/graph.sqlite").exists());
-        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

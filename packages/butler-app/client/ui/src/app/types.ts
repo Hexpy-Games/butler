@@ -84,6 +84,8 @@ export interface AppModelSummary {
   model_ref: string;
   display_name: string;
   status: "latest" | "recommended" | "available" | "deprecated";
+  /** #278: the model's place in its provider's lineup. */
+  tier?: "flagship" | "balanced" | "efficient";
   context_window_tokens?: number;
   max_output_tokens?: number;
   default_reasoning_effort: ReasoningEffort;
@@ -148,6 +150,8 @@ export interface ModelCatalogView {
     auth_methods?: ProviderAuthMethod[];
     default_api_base_url?: string;
     models: AppModelSummary[];
+    /** #230: the per-provider default first-run setup picks (model ref or id, effort). */
+    presets?: { routine?: { model: string; effort: ReasoningEffort } };
   }>;
   models: AppModelSummary[];
   registered_models?: AppModelSummary[];
@@ -550,6 +554,14 @@ export interface SettingsView {
   web_search: WebSearchSettingsView;
   model_fallback: ModelFallbackSettingsView;
   profile_label: string;
+  /** #230: onboarding state kept by the agent; absent on agents before #230. */
+  onboarding?: OnboardingSettingsView;
+}
+
+export interface OnboardingSettingsView {
+  consent_version?: number | null;
+  accepted_at?: string | null;
+  completed_at?: string | null;
 }
 
 export interface ModelFallbackSettingsView {
@@ -759,6 +771,8 @@ export interface MessageFileRef {
   size_bytes: number;
   sha256: string;
   url: string;
+  /** Short-lived `url` with `?expires=..&signature=..` for token-less loads. */
+  signed_url?: string;
   created_at: string;
 }
 
@@ -841,6 +855,8 @@ export interface QueuedMessageRecord {
 export interface SessionQueueView {
   session_id: string;
   queued_messages: QueuedMessageRecord[];
+  /** Stopped turn: queued messages wait for the next user input. */
+  paused?: boolean;
 }
 
 export interface ContextUsageCategory {
@@ -1229,6 +1245,8 @@ export interface UsageTokenBucketView {
   cachedTokens: number;
   uncachedTokens: number;
   outputTokens: number;
+  /** Present only when the provider reports reasoning tokens. */
+  reasoningTokens?: number;
   totalTokens: number;
   missingTotalTokenCount: number;
 }
@@ -1281,9 +1299,12 @@ export interface UsageMonitorView {
     }>;
   };
   cost: {
-    available: false;
-    estimatedUsd: null;
+    /** False until the gateway prices usage from its rate table. */
+    available: boolean;
+    estimatedUsd: number | null;
     reason: string;
+    /** Rate table date; present when the cost is an estimate. */
+    asOf?: string | null;
   };
   privacy: {
     rawTextStored: false;
@@ -1338,6 +1359,8 @@ export interface NewChatBriefingSuggestion {
   title: string;
   description: string;
   text: string;
+  /** A template the user finishes: it fills the composer instead of sending. */
+  template?: boolean;
 }
 
 export interface NewChatBriefingView {
@@ -1413,6 +1436,8 @@ export interface SessionArtifactSummary {
   kind: string;
   safe_path_label?: string;
   url?: string;
+  /** Short-lived `url` with `?expires=..&signature=..` for token-less loads. */
+  signed_url?: string;
   size_bytes?: number;
   created_at: string;
   open_action?: "route" | "unsupported" | string;
@@ -1590,6 +1615,8 @@ export interface AutomationSummary {
   target_label: string;
   state: string;
   interval_label: string;
+  /** The access the schedule's runs get; it never changes the target conversation's mode. */
+  access_mode: AccessMode;
 }
 
 export interface AutomationRunSummary {

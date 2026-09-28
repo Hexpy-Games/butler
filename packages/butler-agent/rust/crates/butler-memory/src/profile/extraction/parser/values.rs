@@ -1,3 +1,5 @@
+//! Allowed profile categories and facets.
+
 pub(super) fn valid_category(value: &str) -> Option<&str> {
     matches!(
         value,

@@ -577,6 +577,33 @@ const butlerApp = Object.freeze({
     ipcRenderer.invoke("butler:first-run-setup-cancel", request ?? {}),
   exportSetupDiagnostics: () =>
     ipcRenderer.invoke("butler:first-run-setup-diagnostics"),
+  // #230 first-run routes served by the agent (#279). Envelopes keep the
+  // public error code (invalid_key, no_access, network, ...) across contextBridge.
+  getSetupReadiness: () => requestBridgeResult("/setup/readiness"),
+  retrySetupReadiness: () => requestBridgeResult("/setup/readiness/retry", {
+    method: "POST",
+    body: JSON.stringify({}),
+  }),
+  startSetupOAuth: (request) => requestBridgeResult("/setup/oauth/start", {
+    method: "POST",
+    body: JSON.stringify(request ?? {}),
+  }),
+  getSetupOAuthFlow: ({ flowId } = {}) =>
+    requestBridgeResult(`/setup/oauth/${encodeURIComponent(flowId ?? "")}`),
+  getLocalModelServers: () => requestJson("/setup/local-model-servers"),
+  verifySetupCredential: (request) => requestBridgeResult("/setup/credentials/verify", {
+    method: "POST",
+    body: JSON.stringify(request ?? {}),
+  }),
+  saveCredential: (request) => requestBridgeResult("/credentials", {
+    method: "POST",
+    body: JSON.stringify(request ?? {}),
+  }),
+  cancelSetupOAuth: ({ flowId } = {}) =>
+    requestBridgeResult(`/setup/oauth/${encodeURIComponent(flowId ?? "")}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
   getAgentServiceStatus: () => ipcRenderer.invoke("butler:agent-service-status"),
   installAgentService: (request = {}) =>
     ipcRenderer.invoke("butler:agent-service-install", request ?? {}),
@@ -924,6 +951,14 @@ const butlerApp = Object.freeze({
     ipcRenderer.invoke("butler:set-native-shell-preferences", {
       trayEnabled,
     }),
+  getAgentState: () => ipcRenderer.invoke("butler:agent-state"),
+  startAgent: () => ipcRenderer.invoke("butler:agent-start"),
+  onAgentState: (handler) => {
+    if (typeof handler !== "function") return () => {};
+    const listener = (_event, state) => handler(state);
+    ipcRenderer.on("butler:agent-state", listener);
+    return () => ipcRenderer.removeListener("butler:agent-state", listener);
+  },
   onNativeNavigation: (handler) => {
     if (typeof handler !== "function") return () => {};
     const listener = (_event, request) => handler(request);
@@ -1023,6 +1058,9 @@ const butlerApp = Object.freeze({
     ipcRenderer.invoke("butler:restart-openai-oauth-login"),
   getOpenAIOAuthLoginStatus: () =>
     ipcRenderer.invoke("butler:get-openai-oauth-login-status"),
+  // Fallback for agents without the #279 sign-in routes.
+  cancelOpenAIOAuthLogin: ({ flowId } = {}) =>
+    ipcRenderer.invoke("butler:cancel-openai-oauth-login", { flowId }),
   submitOpenAIOAuthCallback: (request = {}) =>
     ipcRenderer.invoke("butler:submit-openai-oauth-callback", request ?? {}),
   deleteHostedModel: ({ modelRef } = {}) => requestJson(`/model-catalog/registered-models/${encodeURIComponent(modelRef ?? "")}`, {
@@ -1123,17 +1161,21 @@ const butlerApp = Object.freeze({
     return requestJson(query ? `/automations?${query}` : "/automations");
   },
   getAutomation: ({ automationId }) => requestJson(`/automations/${encodeURIComponent(automationId)}`),
-  createAutomation: ({ title, promptBody, targetSessionId, intervalSeconds }) => requestJson("/automations", {
+  // Schedule saves return the bridge envelope so a refused save keeps its
+  // code and status (the form shows 400s inline). An omitted accessMode lets
+  // the gateway use the target conversation's current mode.
+  createAutomation: ({ title, promptBody, targetSessionId, intervalSeconds, accessMode }) => requestBridgeResult("/automations", {
     method: "POST",
     body: JSON.stringify({
       title,
       prompt_body: promptBody,
       target_session_id: targetSessionId,
       interval_seconds: intervalSeconds,
+      access_mode: accessMode,
     }),
   }),
-  updateAutomation: ({ automationId, title, promptBody, targetSessionId, intervalSeconds, state }) =>
-    requestJson(`/automations/${encodeURIComponent(automationId)}`, {
+  updateAutomation: ({ automationId, title, promptBody, targetSessionId, intervalSeconds, state, accessMode }) =>
+    requestBridgeResult(`/automations/${encodeURIComponent(automationId)}`, {
       method: "PATCH",
       body: JSON.stringify({
         title,
@@ -1141,6 +1183,7 @@ const butlerApp = Object.freeze({
         target_session_id: targetSessionId,
         interval_seconds: intervalSeconds,
         state,
+        access_mode: accessMode,
       }),
     }),
   deleteAutomation: ({ automationId }) => requestJson(`/automations/${encodeURIComponent(automationId)}`, {

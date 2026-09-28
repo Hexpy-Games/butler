@@ -1,3 +1,5 @@
+//! Failures of the memory writer gate.
+
 use std::sync::Arc;
 
 /// Failures of the shared Cognition memory write gate.
@@ -12,24 +14,33 @@ pub enum CoordinationError {
     /// SQLite reported the coordinator database busy: another writer holds it.
     #[error("{source}")]
     Busy {
+        /// The SQLite error.
         #[source]
         source: Arc<rusqlite::Error>,
     },
     /// A legacy writer may still be live, so the gate cannot bind its fence.
     #[error("{reason}")]
-    LegacyBlocked { reason: &'static str },
+    LegacyBlocked {
+        /// Why the fence cannot be bound.
+        reason: &'static str,
+    },
     /// The coordinator database or fence failed a consistency check.
     #[error("{detail}")]
-    GateInvalid { detail: &'static str },
+    GateInvalid {
+        /// What was inconsistent.
+        detail: &'static str,
+    },
     /// Reading or writing the coordinator database, fence or host identity failed.
     #[error("{source}")]
     GateIo {
+        /// The cause.
         #[source]
         source: Arc<dyn std::error::Error + Send + Sync>,
     },
 }
 
 impl CoordinationError {
+    /// The stable code of the failure.
     pub fn code(&self) -> &'static str {
         match self {
             Self::Aborted => "memory_write_aborted",
@@ -56,6 +67,7 @@ impl CoordinationError {
     }
 }
 
+/// Result of a coordination operation.
 pub type CoordinationResult<T> = Result<T, CoordinationError>;
 
 pub(super) fn invalid(detail: &'static str) -> CoordinationError {
@@ -77,9 +89,40 @@ mod wire_tests {
     use std::sync::Arc;
 
     use super::CoordinationError;
+    use crate::cognition::{BriefingGenerationCode, CognitionCode};
+    use crate::profile::ProfileCode;
 
+    fn spelled<T: Copy>(all: &[T], as_str: fn(T) -> &'static str) -> Vec<&'static str> {
+        all.iter().map(|code| as_str(*code)).collect()
+    }
+
+    /// Format pin: every wire code table of memory (Cognition, the new-chat
+    /// briefing and the profile) keeps its pinned spelling and order, and each
+    /// write-coordination failure maps to its public code.
+    // test-category: format-pin
     #[test]
     fn wire_codes_are_stable() {
+        for (domain, codes, pinned) in [
+            (
+                "cognition",
+                spelled(CognitionCode::ALL, CognitionCode::as_str),
+                include_str!("../cognition/wire_codes.txt"),
+            ),
+            (
+                "briefing generation",
+                spelled(BriefingGenerationCode::ALL, BriefingGenerationCode::as_str),
+                include_str!("../cognition/briefing/generation/wire_codes.txt"),
+            ),
+            (
+                "profile",
+                spelled(ProfileCode::ALL, ProfileCode::as_str),
+                include_str!("../profile/wire_codes.txt"),
+            ),
+        ] {
+            let expected: Vec<&str> = pinned.lines().collect();
+            assert_eq!(codes, expected, "{domain}");
+        }
+
         let busy = rusqlite::Error::SqliteFailure(
             rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
             None,

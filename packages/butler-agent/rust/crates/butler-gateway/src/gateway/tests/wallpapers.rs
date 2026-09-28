@@ -1,6 +1,7 @@
 use std::{net::SocketAddr, path::PathBuf, sync::atomic::AtomicU64};
 
 use image::{ExtendedColorType, ImageEncoder, Rgba, RgbaImage, codecs::png::PngEncoder};
+use serde_json::json;
 use tokio::net::TcpListener;
 
 use super::artifact_session::open_app_with_files;
@@ -38,7 +39,8 @@ async fn call(
     body: &[u8],
 ) -> Reply {
     let mut request = format!(
-        "{request_line} HTTP/1.1\r\nhost: localhost\r\nconnection: close\r\ncontent-length: {}\r\n",
+        "{request_line} HTTP/1.1\r\nhost: localhost:{}\r\nconnection: close\r\ncontent-length: {}\r\n",
+        address.port(),
         body.len()
     );
     for (name, value) in headers {

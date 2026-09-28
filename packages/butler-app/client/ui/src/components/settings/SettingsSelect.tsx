@@ -16,6 +16,8 @@ interface SettingsOption {
   value: string;
   label: string;
   description?: string;
+  /** Decorative glyph before the label (a service logo). */
+  icon?: ReactNode;
 }
 
 export function SettingsSelect({
@@ -61,7 +63,7 @@ export function SettingsSelect({
       data-multiline={selectedHasDescription ? "true" : undefined}
       disabled={inactive}
     >
-      <SelectValue>
+      <SelectValue icon={selectedOption?.icon}>
         {selectedOption && (
           <span data-slot="select-value-stack">
             <span data-slot="select-value-label">{selectedOption.label}</span>
@@ -84,6 +86,7 @@ export function SettingsSelect({
             <SelectItem
               key={option.value}
               value={option.value}
+              icon={option.icon}
               textValue={
                 option.description
                   ? `${option.label} - ${option.description}`

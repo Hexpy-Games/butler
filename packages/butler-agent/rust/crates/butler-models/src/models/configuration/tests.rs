@@ -20,11 +20,9 @@ impl Fixture {
         let root =
             std::env::temp_dir().join(format!("butler-native-config-{}", uuid::Uuid::new_v4()));
         fs::create_dir(&root).unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
-        }
+        butler_platform::secure_fs::restrict_directory(&root)
+            .transpose()
+            .unwrap();
         Self(root)
     }
     fn write(&self, path: &str, value: &Value) {
@@ -150,23 +148,7 @@ async fn codex_probe_override_does_not_change_public_registered_endpoint() {
     );
 }
 
-#[tokio::test]
-async fn absent_invalid_and_utf8_file_behavior_does_not_modify_source() {
-    let fixture = Fixture::new();
-    let owner = fixture.owner(ModelConfigurationEnvironment::default());
-    assert!(owner.read().await.unwrap().local.is_empty());
-    let path = fixture.0.join("butler.config.json");
-    for bytes in [b"{broken".as_slice(), b"null", b"[]", b"\xef\xbb\xbf{}"] {
-        fs::write(&path, bytes).unwrap();
-        assert_eq!(owner.read().await.unwrap().config, json!({}));
-        assert_eq!(fs::read(&path).unwrap(), bytes);
-    }
-    fs::write(&path, b"{\"value\":\"\xff\"}").unwrap();
-    assert_eq!(owner.read().await.unwrap().config["value"], "\u{fffd}");
-}
-
-#[test]
-fn retry_environment_keeps_source_number_and_clamp_rules() {
+pub(crate) fn retry_environment_keeps_source_number_and_clamp_rules() {
     use super::admission::retry_attempts;
     for (input, expected) in [
         (None, 3.0),

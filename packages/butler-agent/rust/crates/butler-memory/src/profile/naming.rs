@@ -1,11 +1,15 @@
+//! The names Butler and the user go by, and private JSON writes.
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use serde::Deserialize;
 use serde_json::Value;
 
 use super::contracts::{
     PersonalizationProfile, PersonalizationProfileUpdate, ProfileError, ProfileResult,
 };
+use crate::lenient;
 use crate::profile::ProfileCode;
 
 const TEXT_LIMIT: usize = 256;
@@ -21,15 +25,33 @@ pub(super) fn read(data_root: &Path) -> PersonalizationProfile {
     let Ok(value) = serde_json::from_slice::<Value>(&bytes) else {
         return PersonalizationProfile::default();
     };
+    let stored: StoredProfile = lenient::view(&value);
+    let field = |value: Option<String>| {
+        value
+            .map(|value| bounded(&value, TEXT_LIMIT))
+            .unwrap_or_default()
+    };
     PersonalizationProfile {
-        butler_nickname: field(&value, "butler_nickname"),
-        principal_name: field(&value, "principal_name"),
-        preferred_address: field(&value, "preferred_address"),
-        updated_at: value
-            .get("updated_at")
-            .and_then(Value::as_str)
-            .map(str::to_owned),
+        butler_nickname: field(stored.butler_nickname),
+        principal_name: field(stored.principal_name),
+        preferred_address: field(stored.preferred_address),
+        updated_at: stored.updated_at,
     }
+}
+
+/// `personalization/profile.json` as stored; a field with the wrong type
+/// reads as absent.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct StoredProfile {
+    #[serde(deserialize_with = "lenient::option")]
+    butler_nickname: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    principal_name: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    preferred_address: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    updated_at: Option<String>,
 }
 
 pub(super) fn update(
@@ -120,11 +142,7 @@ pub(super) fn atomic_json<T: serde::Serialize>(
 ) -> ProfileResult<()> {
     let parent = path.parent().ok_or_else(write_error)?;
     fs::create_dir_all(parent).map_err(|source| write_error().with_source(source))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
-    }
+    let _ = butler_platform::secure_fs::restrict_directory(parent);
     let temporary = PathBuf::from(format!("{}.{}.{}.tmp", path.display(), pid, now_ms));
     let mut bytes = serde_json::to_vec_pretty(value).map_err(|source| {
         ProfileError::new(
@@ -135,20 +153,13 @@ pub(super) fn atomic_json<T: serde::Serialize>(
     })?;
     bytes.push(b'\n');
     let result = (|| {
-        #[cfg(unix)]
-        {
-            use std::io::Write;
-            use std::os::unix::fs::OpenOptionsExt;
-            let mut file = fs::OpenOptions::new()
-                .create(true)
-                .truncate(true)
-                .write(true)
-                .mode(0o600)
-                .open(&temporary)?;
-            file.write_all(&bytes)?;
-        }
-        #[cfg(not(unix))]
-        fs::write(&temporary, &bytes)?;
+        use std::io::Write;
+        let mut options = fs::OpenOptions::new();
+        options.create(true).truncate(true).write(true);
+        let _ = butler_platform::secure_fs::owner_only(&mut options);
+        let mut file = options.open(&temporary)?;
+        file.write_all(&bytes)?;
+        drop(file);
         fs::rename(&temporary, path)
     })();
     if result.is_err() {
@@ -157,13 +168,6 @@ pub(super) fn atomic_json<T: serde::Serialize>(
     result.map_err(|source| write_error().with_source(source))
 }
 
-fn field(value: &Value, key: &str) -> String {
-    value
-        .get(key)
-        .and_then(Value::as_str)
-        .map(|value| bounded(value, TEXT_LIMIT))
-        .unwrap_or_default()
-}
 fn write_error() -> ProfileError {
     ProfileError::new(
         ProfileCode::ProfileWriteFailed,

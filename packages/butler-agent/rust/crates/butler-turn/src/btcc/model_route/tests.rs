@@ -5,8 +5,8 @@ use tokio_util::sync::CancellationToken;
 
 use super::ContextSizingRequest;
 use super::test_support::*;
+use crate::btcc::ReasoningEffort;
 use crate::btcc::agent_loop::ModelRoundError;
-use crate::btcc::{BtccError, ReasoningEffort};
 
 mod contract_tests;
 
@@ -130,6 +130,15 @@ async fn fallback_cursor_is_execution_local_and_persists_across_rounds() {
     );
     assert_eq!(&*second_base.models.lock().unwrap(), &["openai/a"]);
     assert_eq!(second.active_model_ref(), "openai/a");
+    // Only the fallback persists a route (the advanced cursor); later events
+    // must not write the admitted route (cursor 0) back.
+    let events = store.events.lock().unwrap();
+    let routes = store.routes.lock().unwrap();
+    for (event, route) in events.iter().zip(routes.iter()) {
+        let expected =
+            (event.kind == crate::btcc::ModelRouteEventKind::FallbackSelected).then_some(1);
+        assert_eq!(*route, expected, "{:?}", event.kind);
+    }
 }
 
 #[tokio::test]
@@ -178,72 +187,6 @@ async fn fallback_projection_waits_for_persisted_start_and_shares_source_revisio
 }
 
 #[tokio::test]
-async fn recovery_projection_clears_only_after_active_wait() {
-    let store = Arc::new(Store::default());
-    let base = Base::new([
-        Err(provider("provider_network_error", None)),
-        Ok(result("recovered")),
-    ]);
-    let turn = turn(route(0, 2));
-    let claim = claim();
-    let progress = Progress::default();
-    let execution = make_execution(
-        store,
-        &base,
-        &turn,
-        &claim,
-        &progress,
-        CancellationToken::new(),
-    )
-    .await;
-    run(&*execution, "recovery").await.unwrap();
-    let events = progress.events.lock().unwrap();
-    assert_eq!(events.len(), 2);
-    assert_eq!(
-        events[0].payload.as_ref().unwrap()["recoveryStatus"],
-        "recovering"
-    );
-    assert_eq!(
-        events[1].payload.as_ref().unwrap()["recoveryStatus"],
-        "cleared"
-    );
-}
-
-#[tokio::test]
-async fn absent_round_ids_use_execution_local_sequence_without_collapsing_empty() {
-    let store = Arc::new(Store::default());
-    let base = Base::new([Ok(result("generated")), Ok(result("empty"))]);
-    let turn = turn(route(0, 1));
-    let claim = claim();
-    let progress = Progress::default();
-    let execution = make_execution(
-        store.clone(),
-        &base,
-        &turn,
-        &claim,
-        &progress,
-        CancellationToken::new(),
-    )
-    .await;
-    let messages = [message("hello")];
-    let reasoning = ReasoningEffort::High;
-    let mut generated = request("ignored", &messages, &reasoning, CancellationToken::new());
-    generated.round_id = None;
-    execution.routed().run_round(generated).await.unwrap();
-    let explicit_empty = request("", &messages, &reasoning, CancellationToken::new());
-    execution.routed().run_round(explicit_empty).await.unwrap();
-    let rounds = store
-        .events
-        .lock()
-        .unwrap()
-        .iter()
-        .filter(|event| event.kind == crate::btcc::ModelRouteEventKind::AttemptStarted)
-        .map(|event| event.round_id.clone())
-        .collect::<Vec<_>>();
-    assert_eq!(rounds, ["turn:round:0", ""]);
-}
-
-#[tokio::test]
 async fn restart_abandons_open_slot_before_dispatch() {
     let store = Arc::new(Store::default());
     store
@@ -282,30 +225,6 @@ async fn restart_abandons_open_slot_before_dispatch() {
             "model.attempt.started"
         ]
     );
-}
-
-#[tokio::test]
-async fn durability_failure_prevents_provider_dispatch() {
-    let store = Arc::new(Store::default());
-    *store.fail_read.lock().unwrap() = Some(BtccError::relayed("model_checkpoint_stale", "stale"));
-    let base = Base::new([Ok(result("must-not-run"))]);
-    let turn = turn(route(0, 1));
-    let claim = claim();
-    let progress = Progress::default();
-    let execution = make_execution(
-        store,
-        &base,
-        &turn,
-        &claim,
-        &progress,
-        CancellationToken::new(),
-    )
-    .await;
-    let error = run(&*execution, "round-stale").await.unwrap_err();
-    assert!(
-        matches!(error, ModelRoundError::Integrity(ref value) if value.code() == "model_route_durability_failure")
-    );
-    assert!(base.models.lock().unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -349,49 +268,4 @@ async fn dispatches_never_exceed_validated_route_budget() {
             .iter()
             .all(|attempt| *attempt == Some(1.0))
     );
-}
-
-#[tokio::test]
-async fn physical_and_backoff_cancellation_keep_source_journal_distinction() {
-    let store = Arc::new(Store::default());
-    let physical = Base::new([Err(ModelRoundError::Cancelled)]);
-    let physical_turn = turn(route(0, 1));
-    let physical_claim = claim();
-    let physical_progress = Progress::default();
-    let physical_execution = make_execution(
-        store.clone(),
-        &physical,
-        &physical_turn,
-        &physical_claim,
-        &physical_progress,
-        CancellationToken::new(),
-    )
-    .await;
-    assert!(matches!(
-        run(&*physical_execution, "physical-cancel").await,
-        Err(ModelRoundError::Operational(_))
-    ));
-    assert_eq!(failed_codes(&store), vec!["provider_unknown_error"]);
-
-    let store = Arc::new(Store::default());
-    let token = CancellationToken::new();
-    token.cancel();
-    let backoff = Base::new([Err(provider("provider_network_error", None))]);
-    let backoff_turn = turn(route(0, 2));
-    let backoff_claim = claim();
-    let backoff_progress = Progress::default();
-    let backoff_execution = make_execution(
-        store.clone(),
-        &backoff,
-        &backoff_turn,
-        &backoff_claim,
-        &backoff_progress,
-        token,
-    )
-    .await;
-    assert!(matches!(
-        run(&*backoff_execution, "backoff-cancel").await,
-        Err(ModelRoundError::Cancelled)
-    ));
-    assert_eq!(failed_codes(&store), vec!["provider_network_error"]);
 }

@@ -3,6 +3,7 @@ import { invalidateProjectDashboard } from "./projectDashboardInvalidation.ts";
 import { useProjectDashboardState } from "@/app/projectDashboardState.ts";
 import { useEffect, useRef } from "react";
 import { createLiveEventConnection } from "./liveEventConnection.ts";
+import { subscribeAgentRuntimeState } from "@/app/agentRuntime.ts";
 import { showDesktopNotification } from "@/app/nativeNotifications.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { SettingsView, TimelineEvent } from "@/app/types.ts";
@@ -156,6 +157,9 @@ export function useLiveSessionEvents(): void {
         navigationReconciliation.requestRefresh();
         reconciliation.requestRefresh();
       },
+      subscribeResume: (resume) => subscribeAgentRuntimeState((state) => {
+        if (state === "running") resume();
+      }),
     });
     return () => {
       cancelled = true;

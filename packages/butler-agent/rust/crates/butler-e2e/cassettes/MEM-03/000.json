@@ -1,0 +1,139 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/codex/responses",
+    "key": {
+      "path": "/codex/responses",
+      "model": "gpt-6-luna",
+      "effort": "medium",
+      "user_request": "Analyze the following conversation and summarize it in the format below. Omit any sections that don't apply. **Task**: Work performed, decisions made, completed/incomplete items (dev/file/search etc.) **Learning**: New concepts learned, important insights **Chat**: Core of casual conversation, exchange of opinions **Preference**: User preferences/tastes/tendencies newly revealed in this conversation (exclude recurring ones) Each section in 1-2 lines max. Omit the section entirely if empty. Conversation: user: When should I prune the fig tree? butler: Prune figs in late winter, before new growth starts. user: And the lemon tree? butler: Lemons need only light pruning after harvest. user: mock placeholder",
+      "round": []
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": [],
+    "chunks": [
+      {
+        "delay_ms": 0,
+        "text": "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_044e317e5fa31ada016ab90a0bd92c87d0add9bd7ee463b7e6\",\"object\":\"response\",\"created_at\":1790511627,\"status\":\"in_progress\",\"access_programs\":{\"cyber\":\"daybreak_blue\"},\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":\"{{REDACTED_ECHO}}\",\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-6-luna\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":\"d04fff90-ea22-47d5-97b8-800731419124\",\"prompt_cache_retention\":\"24h\",\"reasoning\":{\"context\":\"all_turns\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":\"{{ACCOUNT}}\",\"service_tier\":\"auto\",\"store\":false,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[],\"top_logprobs\":0,\"top_p\":0.98,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_044e317e5fa31ada016ab90a0bd92c87d0add9bd7ee463b7e6\",\"object\":\"response\",\"created_at\":1790511627,\"status\":\"in_progress\",\"access_programs\":{\"cyber\":\"daybreak_blue\"},\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":\"{{REDACTED_ECHO}}\",\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-6-luna\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":\"d04fff90-ea22-47d5-97b8-800731419124\",\"prompt_cache_retention\":\"24h\",\"reasoning\":{\"context\":\"all_turns\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":\"{{ACCOUNT}}\",\"service_tier\":\"auto\",\"store\":false,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[],\"top_logprobs\":0,\"top_p\":0.98,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n"
+      },
+      {
+        "delay_ms": 582,
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"phase\":\"final_answer\",\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "event: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"**\",\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"obfuscation\":\"DqMzrJfKkAiZPV\",\"output_index\":0,\"sequence_number\":4}\n\n"
+      },
+      {
+        "delay_ms": 55,
+        "text": "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Learning\",\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"obfuscation\":\"SV23SzKf\",\"output_index\":0,\"sequence_number\":5}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"**\",\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"obfuscation\":\"DHOHqqPrvOijri\",\"output_index\":0,\"sequence_number\":6}\n\n"
+      },
+      {
+        "delay_ms": 66,
+        "text": "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\":\",\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"obfuscation\":\"9S89h4S0semmE3K\",\"output_index\":0,\"sequence_number\":7}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Pr\",\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"obfuscation\":\"gMR6hBESVqWEn\",\"output_index\":0,\"sequence_number\":8}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"une\",\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"obfuscation\":\"Kap1ZdDU47mtP\",\"output_index\":0,\"sequence_number\":9}\n\n"
+      },
+      {
+        "delay_ms": 57,
+        "text": "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" fig\",\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"obfuscation\":\"F8xWjrn99CrS\",\"output_index\":0,\"sequence_number\":10}\n\n"
+      },
+      {
+        "delay_ms": 72,
+        "text": "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" trees\",\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"obfuscation\":\"dZorKL1RBk\",\"output_index\":0,\"sequence_number\":11}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" in\",\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"obfuscation\":\"ZaXIwENalLUlz\",\"output_index\":0,\"sequence_number\":12}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" late\",\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"obfuscation\":\"W31KU7T0HqL\",\"output_index\":0,\"sequence_number\":13}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" winter\",\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"obfuscation\":\"ijUfFjy6v\",\"output_index\":0,\"sequence_number\":14}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" before\",\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"obfuscation\":\"x6UaU3tYw\",\"output_index\":0,\"sequence_number\":15}\n\n"
+      },
+      {
+        "delay_ms": 50,
+        "text": "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" new\",\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"obfuscation\":\"GZmt7k2J09EL\",\"output_index\":0,\"sequence_number\":16}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" growth\",\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"obfuscation\":\"GSijRZdwE\",\"output_index\":0,\"sequence_number\":17}\n\n"
+      },
+      {
+        "delay_ms": 110,
+        "text": "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\";\",\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"obfuscation\":\"CqsaPo1Yxsg6ctH\",\"output_index\":0,\"sequence_number\":18}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" lightly\",\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"obfuscation\":\"dzJ6esZs\",\"output_index\":0,\"sequence_number\":19}\n\n"
+      },
+      {
+        "delay_ms": 29,
+        "text": "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" prune\",\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"obfuscation\":\"KH3NUN1UOG\",\"output_index\":0,\"sequence_number\":20}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" lemon\",\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"obfuscation\":\"cTojzx5tYN\",\"output_index\":0,\"sequence_number\":21}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" trees\",\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"obfuscation\":\"9OEqm91XQn\",\"output_index\":0,\"sequence_number\":22}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" after\",\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"obfuscation\":\"nULP6aYcff\",\"output_index\":0,\"sequence_number\":23}\n\n"
+      },
+      {
+        "delay_ms": 35,
+        "text": "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" harvest\",\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"obfuscation\":\"VRb3Ckoq\",\"output_index\":0,\"sequence_number\":24}\n\n"
+      },
+      {
+        "delay_ms": 10,
+        "text": "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"obfuscation\":\"7GdZG74ruku6xXy\",\"output_index\":0,\"sequence_number\":25}\n\n"
+      },
+      {
+        "delay_ms": 145,
+        "text": "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":26,\"text\":\"**Learning**: Prune fig trees in late winter before new growth; lightly prune lemon trees after harvest.\"}\n\n"
+      },
+      {
+        "delay_ms": 6,
+        "text": "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"**Learning**: Prune fig trees in late winter before new growth; lightly prune lemon trees after harvest.\"},\"sequence_number\":27}\n\n"
+      },
+      {
+        "delay_ms": 0,
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"**Learning**: Prune fig trees in late winter before new growth; lightly prune lemon trees after harvest.\"}],\"phase\":\"final_answer\",\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":28}\n\n"
+      },
+      {
+        "delay_ms": 6,
+        "text": "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_044e317e5fa31ada016ab90a0bd92c87d0add9bd7ee463b7e6\",\"object\":\"response\",\"created_at\":1790511627,\"status\":\"completed\",\"access_programs\":{\"cyber\":\"daybreak_blue\"},\"background\":false,\"completed_at\":1790511629,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":\"{{REDACTED_ECHO}}\",\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-6-luna\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":\"d04fff90-ea22-47d5-97b8-800731419124\",\"prompt_cache_retention\":\"24h\",\"reasoning\":{\"context\":\"all_turns\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":\"{{ACCOUNT}}\",\"service_tier\":\"default\",\"store\":false,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[],\"top_logprobs\":0,\"top_p\":0.98,\"truncation\":\"disabled\",\"usage\":{\"attribution\":{\"items\":{\"msg_044e317e5fa31ada016ab90a0be27487d0a4ae750600c6680a\":{\"cache_write_tokens\":0,\"cached_tokens\":0,\"content\":[{\"cache_write_tokens\":0,\"cached_tokens\":0,\"input_tokens\":157,\"output_tokens\":0}],\"input_tokens\":157,\"output_tokens\":0},\"msg_044e317e5fa31ada016ab90a0cda0087d09e038d6f0f804b66\":{\"cache_write_tokens\":0,\"cached_tokens\":0,\"content\":[{\"cache_write_tokens\":0,\"cached_tokens\":0,\"input_tokens\":2,\"output_tokens\":26}],\"input_tokens\":2,\"output_tokens\":26}},\"request_fields\":{\"instructions\":{\"cache_write_tokens\":0,\"cached_tokens\":0,\"input_tokens\":14,\"output_tokens\":0}}},\"input_tokens\":173,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":26,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":199},\"user\":null,\"metadata\":{}},\"sequence_number\":29}\n\n"
+      }
+    ]
+  }
+}

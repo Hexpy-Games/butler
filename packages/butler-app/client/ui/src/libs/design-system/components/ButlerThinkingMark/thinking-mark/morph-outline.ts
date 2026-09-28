@@ -49,5 +49,10 @@ export function traceOutline(g: number, br: number, out: Float32Array) {
 export function clipMargin(g: number, pitch: number) {
   return g >= CLIP_RELEASE ? Number.POSITIVE_INFINITY : 3 * pitch * g;
 }
-/** Progress past which the dots all sit well inside the clip (margin 2.7 cells > dot reach). */
-const CLIP_RELEASE = 0.9;
+/**
+ * Progress past which the clip trims nothing: from ~0.45 on, every dot edge (with the riso
+ * misregistration) already lies within the margin (checked in the morph tests), so releasing
+ * here is pixel-identical and skips the per-frame outline trace and mask composite for the
+ * rest of the morph. 0.6 keeps a >= 1.5x margin at every size class.
+ */
+export const CLIP_RELEASE = 0.6;

@@ -13,15 +13,16 @@ use crate::btcc::agent_loop::{
 };
 use crate::btcc::{
     AgentLoopProgress, AttemptHistory, BtccError, ContinuationBudgetTransition,
-    ModelRoundAcceptanceWrite, ModelRoundKey, ModelRouteEvent, ModelRouteEventKind,
-    ModelRouteEventWrite, PortFuture, ReasoningEffort, RouteEventStatus, StateExecutionClaim,
-    StopPersistenceOutcome, TransitionCommitError, TurnRecord, TurnSemanticState, TurnStore,
-    TurnTransition,
+    ModelRoundAcceptanceWrite, ModelRoundKey, ModelRouteEvent, ModelRouteEventWrite, PortFuture,
+    ReasoningEffort, RouteEventStatus, StateExecutionClaim, StopPersistenceOutcome,
+    TransitionCommitError, TurnRecord, TurnSemanticState, TurnStore, TurnTransition,
 };
 
 #[derive(Default)]
 pub(super) struct Store {
     pub(super) events: Mutex<Vec<ModelRouteEvent>>,
+    /// The route each event write persists (`None`: route left as stored).
+    pub(super) routes: Mutex<Vec<Option<u32>>>,
     pub(super) histories: Mutex<VecDeque<AttemptHistory>>,
     pub(super) accepted: Mutex<VecDeque<Option<Value>>>,
     acceptances: Mutex<Vec<Value>>,
@@ -61,6 +62,10 @@ impl TurnStore for Store {
     ) -> PortFuture<'_, RouteEventStatus> {
         Box::pin(async move {
             self.events.lock().unwrap().push(write.event);
+            self.routes
+                .lock()
+                .unwrap()
+                .push(write.binding.route.map(|route| route.active_cursor));
             Ok(RouteEventStatus::Recorded)
         })
     }
@@ -310,16 +315,6 @@ pub(super) fn provider(code: &str, status: Option<u16>) -> ModelRoundError {
 }
 pub(super) fn route(cursor: u32, retries: u32) -> Value {
     json!({"schemaVersion":"butler.model-route.v1","routeDigest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","candidates":[{"modelRef":"openai/a","reasoningEffort":"high"},{"modelRef":"openai/b","reasoningEffort":"medium"}],"retryCeiling":retries,"catalogGeneration":"test","activeCursor":cursor,"consumedAttempts":[]})
-}
-pub(super) fn failed_codes(store: &Store) -> Vec<String> {
-    store
-        .events
-        .lock()
-        .unwrap()
-        .iter()
-        .filter(|v| v.kind == ModelRouteEventKind::AttemptFailed)
-        .map(|v| v.failure.as_ref().unwrap().error_code.clone())
-        .collect()
 }
 pub(super) fn claim() -> StateExecutionClaim {
     StateExecutionClaim {

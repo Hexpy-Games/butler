@@ -26,7 +26,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "conversation-input", kind: "form", fields: ["follow-up-behavior", "multiline-send"] },
     { id: "notifications", kind: "form", fields: ["desktop-notifications", "notify-assistant-messages", "notify-task-completions"] },
     { id: "notification-permission", kind: "status", fields: ["notification-permission"] },
-    { id: "app-behavior", kind: "form", fields: ["desktop-tray"] },
+    { id: "app-behavior", kind: "form", fields: ["desktop-tray", "rerun-setup"] },
     { id: "search-provider", kind: "form", fields: ["search-provider", "search-api-key"] },
     { id: "search-behavior", kind: "form", fields: ["search-reader", "search-planning", "search-depth"] },
   ],
@@ -41,11 +41,14 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "learning", kind: "form", fields: ["profiling-mode", "profiling-model", "profiling-reasoning"] },
     { id: "import", kind: "form", fields: ["profile-migration", "profile-migration-prompt", "profile-migration-dump"] },
   ],
+  // Memory cleanup and worker profiles show when the Advanced disclosure is open.
   models: [
     { id: "butler-model", kind: "form", fields: ["primary-model", "reasoning", "context-limit", "local-reasoning-budget"] },
-    { id: "fallback-consolidation", kind: "form", fields: ["backup-models-enabled", "backup-models", "consolidation-model", "consolidation-reasoning"] },
+    { id: "backup-models", kind: "form", fields: ["backup-models-summary", "backup-models-enabled", "backup-models"] },
     { id: "permissions", kind: "form", fields: ["access-mode", "plan-mode-default"] },
-    { id: "worker-profiles", kind: "list", fields: WORKER_PROFILE_FIELDS },
+    { id: "advanced-models", kind: "form", fields: [] },
+    { id: "memory-cleanup", kind: "form", fields: ["consolidation-model", "consolidation-reasoning"], optional: true },
+    { id: "worker-profiles", kind: "list", fields: WORKER_PROFILE_FIELDS, optional: true },
   ],
   mcp: [
     { id: "mcp-servers", kind: "list", fields: [] },

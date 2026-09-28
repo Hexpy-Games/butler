@@ -140,7 +140,7 @@ describe("motion lint rules", () => {
   test("the thinking-mark engine allowlists only its simulation constants, each with a reason", () => {
     const mark = CANVAS_MOTION_ENGINES.find((engine) => engine.prefix.endsWith("ButlerThinkingMark/"));
     expect(mark).toBeDefined();
-    expect(Object.keys(mark!.constants).sort()).toEqual(["FRAME_INTERVAL_MS", "MAX_STEP_S", "MORPH_SPRING", "RISO_MOTION", "SPRING_SUBSTEP_S"]);
+    expect(Object.keys(mark!.constants).sort()).toEqual(["FRAME_INTERVAL_MS", "MAX_STEP_S", "MORPH_SPRING", "MOTION_FULL_SPEED_AT", "RISO_MOTION", "SPRING_SUBSTEP_S"]);
     for (const reason of Object.values(mark!.constants)) expect(reason.length).toBeGreaterThan(20);
   });
 

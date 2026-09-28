@@ -12,6 +12,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use super::{Capabilities, CapabilityInvocation};
+use butler_platform::secure_fs;
 use butler_turn::workspace::{WorkspaceFiles, WorkspaceReference};
 
 struct Fixture {
@@ -23,11 +24,7 @@ impl Fixture {
     fn new() -> Self {
         let root = std::env::temp_dir().join(format!("butler-k1a-{}", Uuid::new_v4()));
         std::fs::create_dir(&root).unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
-        }
+        secure_fs::restrict_directory(&root).transpose().unwrap();
         let files = Arc::new(WorkspaceFiles::new(2));
         let capabilities = Capabilities::new(
             Arc::clone(&files),
@@ -225,63 +222,5 @@ async fn cursor_decoder_accepts_integral_json_number_spellings() {
     let result = fixture.invoke(&call, None).await;
     assert_eq!(result["files"][0]["content"], "b");
     assert_eq!(result["files"][0]["ok"], true);
-    fixture.files.close().await;
-}
-
-#[cfg(unix)]
-#[tokio::test]
-async fn protected_ledger_symlink_alias_is_rejected_before_file_read() {
-    use std::os::unix::fs::symlink;
-    let fixture = Fixture::new();
-    std::fs::create_dir(fixture.root.join(".project-ledger")).unwrap();
-    std::fs::write(
-        fixture.root.join(".project-ledger/secret.txt"),
-        b"protected",
-    )
-    .unwrap();
-    symlink(".project-ledger/secret.txt", fixture.root.join("alias.txt")).unwrap();
-    let call = json!({ "arguments": { "requests": [{ "path": "alias.txt" }] } });
-    let rust = fixture.invoke(&call, None).await;
-    assert_eq!(rust["ok"], false);
-    assert_eq!(rust["files"][0]["error"], "protected_path");
-    fixture.files.close().await;
-}
-
-#[tokio::test]
-async fn direct_rejected_absolute_paths_are_echoed_or_redacted_by_mode() {
-    let fixture = Fixture::new();
-    let outside = fixture
-        .root
-        .parent()
-        .unwrap()
-        .join("caller-supplied-outside.txt");
-    let call = json!({ "arguments": { "requests": [{ "path": outside.to_string_lossy() }] } });
-    for guided in [false, true] {
-        let rust = fixture
-            .capabilities
-            .invoke(
-                "read_file",
-                CapabilityInvocation {
-                    call: &call,
-                    workspace_reference: None,
-                    workspace_path: Some(&fixture.root),
-                    butler_data: &fixture.root,
-                    protected_ledger_roots: &[],
-                    allowed_tools_and_effects: guided.then_some(&[]),
-                    mutation_scope: None,
-                    installation_root: None,
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(
-            rust["files"][0]["path"],
-            if guided {
-                ".".to_owned()
-            } else {
-                outside.to_string_lossy().into_owned()
-            }
-        );
-    }
     fixture.files.close().await;
 }

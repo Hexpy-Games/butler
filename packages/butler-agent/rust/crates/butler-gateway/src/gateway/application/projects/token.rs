@@ -2,11 +2,10 @@
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
-use subtle::ConstantTimeEq;
 
 use super::error;
 use crate::gateway::GatewayApplicationError;
+use crate::gateway::crypto::{constant_time_eq, hmac_sha256_base64};
 
 pub(super) fn selected_path(
     token: &str,
@@ -27,10 +26,8 @@ pub(super) fn selected_path(
     if payload.is_empty() || signature.is_empty() {
         return Err(invalid());
     }
-    let expected = URL_SAFE_NO_PAD.encode(hmac_sha256(secret.as_bytes(), payload.as_bytes()));
-    if expected.len() != signature.len()
-        || !bool::from(expected.as_bytes().ct_eq(signature.as_bytes()))
-    {
+    let expected = hmac_sha256_base64(secret.as_bytes(), payload.as_bytes());
+    if !constant_time_eq(expected.as_bytes(), signature.as_bytes()) {
         return Err(invalid());
     }
     let decoded = URL_SAFE_NO_PAD
@@ -55,22 +52,6 @@ pub(super) fn selected_path(
         .filter(|value| !butler_core::public_text::trim_js_whitespace(value).is_empty())
         .ok_or_else(invalid)?;
     Ok(path.to_owned())
-}
-
-fn hmac_sha256(secret: &[u8], payload: &[u8]) -> [u8; 32] {
-    let mut key = [0u8; 64];
-    if secret.len() > key.len() {
-        key[..32].copy_from_slice(&Sha256::digest(secret));
-    } else {
-        key[..secret.len()].copy_from_slice(secret);
-    }
-    let mut inner = Sha256::new();
-    let mut outer = Sha256::new();
-    inner.update(key.map(|byte| byte ^ 0x36));
-    inner.update(payload);
-    outer.update(key.map(|byte| byte ^ 0x5c));
-    outer.update(inner.finalize());
-    outer.finalize().into()
 }
 
 fn current_ms() -> f64 {

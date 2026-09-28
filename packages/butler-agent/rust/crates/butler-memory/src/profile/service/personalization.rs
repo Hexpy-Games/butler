@@ -1,3 +1,5 @@
+//! Persona and end-of-life documents and persona presets.
+
 use std::{fs, path::Path};
 
 use super::ProfileService;
@@ -11,6 +13,7 @@ pub struct PersonalizationDocuments {
 }
 
 impl ProfileService {
+    /// The persona and end-of-life documents.
     pub async fn read_personalization_documents(
         &self,
     ) -> super::super::contracts::ProfileResult<PersonalizationDocuments> {
@@ -24,6 +27,7 @@ impl ProfileService {
         .await
     }
 
+    /// Writes the persona and end-of-life documents.
     pub async fn update_personalization_documents(
         &self,
         persona: Option<String>,
@@ -57,6 +61,7 @@ impl ProfileService {
         .await
     }
 
+    /// The persona presets in `locale`.
     pub async fn read_persona_presets(
         &self,
         locale: &str,
@@ -107,11 +112,7 @@ fn write_private_text(
 ) -> super::super::contracts::ProfileResult<()> {
     let parent = path.parent().ok_or_else(write_error)?;
     fs::create_dir_all(parent).map_err(|source| write_error().with_source(source))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
-    }
+    let _ = butler_platform::secure_fs::restrict_directory(parent);
     backup_private_text(data_root, path, prefix, text, now)?;
     fs::write(path, text.as_bytes()).map_err(|source| write_error().with_source(source))
 }
@@ -135,11 +136,7 @@ fn backup_private_text(
     }
     let directory = data_root.join("personalization/backups");
     fs::create_dir_all(&directory).map_err(|source| write_error().with_source(source))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(&directory, fs::Permissions::from_mode(0o700));
-    }
+    let _ = butler_platform::secure_fs::restrict_directory(&directory);
     let stamp = now.replace([':', '.'], "-");
     let target = directory.join(format!("{prefix}-{stamp}.md"));
     fs::copy(source, target).map_err(|source| write_error().with_source(source))?;
@@ -176,24 +173,4 @@ fn write_error() -> super::super::contracts::ProfileError {
         ProfileCode::PersonalizationWriteFailed,
         "Personalization could not be written.",
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::read_private_text;
-    use std::{fs, path::PathBuf};
-
-    #[test]
-    fn private_text_reads_existing_files_and_defaults_missing_files() {
-        let root = std::env::temp_dir().join(format!("profile-text-{}", uuid::Uuid::new_v4()));
-        fs::create_dir_all(&root).unwrap();
-        let file = root.join("active.md");
-        fs::write(&file, "persona").unwrap();
-        assert_eq!(read_private_text(&file), "persona");
-        assert_eq!(
-            read_private_text(&PathBuf::from("/missing/profile-text.md")),
-            ""
-        );
-        fs::remove_dir_all(root).unwrap();
-    }
 }

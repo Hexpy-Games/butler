@@ -18,6 +18,13 @@ system instead of product CSS modules.
 ## How to use this component
 Pass a title, ordered steps, active index, and setup content.
 
+`variant="focus"` drops the visible title, the stepper and the glass body.
+A narrow `PageContainer` holds one centered column on the backdrop
+(`SetupWizardContent` 420px, `width="wide"` 520px). The column is
+top-aligned below the titlebar, so moving between screens never shifts it,
+and it scrolls with the window. The first run (welcome, then "Pick an AI")
+uses it. `title` still names the region for assistive tech.
+
 ## Who can use this component
 Any setup workflow that follows a short linear sequence.
 

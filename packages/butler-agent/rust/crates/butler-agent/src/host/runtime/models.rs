@@ -13,7 +13,7 @@ use butler_models::models::{
     ModelCatalog, ModelConfiguration, ModelConfigurationEnvironment, ModelProvider,
     ProviderObservation, ProviderObservationSink, provider_http_client,
 };
-use butler_runtime::operations::PromptUsageMetrics;
+use butler_runtime::operations::{PromptUsageMetrics, ProviderQuotaStore};
 use butler_turn::btcc::BtccError;
 
 use crate::host::SystemIdentity;
@@ -22,6 +22,8 @@ pub(crate) struct ProcessModels {
     pub catalog: Arc<ModelCatalog>,
     pub configuration: Arc<ModelConfiguration>,
     pub provider: Arc<ModelProvider>,
+    /// Latest subscription quota per provider, fed by the provider client.
+    pub quota: Arc<ProviderQuotaStore>,
 }
 
 impl ProcessModels {
@@ -78,6 +80,10 @@ impl ProcessModels {
                     .with_source(error)
             })?,
         );
+        let quota = Arc::new(ProviderQuotaStore::open(
+            &data_root,
+            Arc::new(SystemIdentity),
+        ));
         let provider = ModelProvider::new(
             client,
             configuration.clone(),
@@ -85,7 +91,8 @@ impl ProcessModels {
             catalog.clone(),
             Arc::new(SystemIdentity),
             Arc::new(PromptUsageMetrics::new(data_root, Arc::new(SystemIdentity))),
-        );
+        )
+        .with_quota_sink(quota.clone());
         let provider = Arc::new(match visual_capability {
             Some(capability) => provider.with_visual_capability(capability),
             None => provider,
@@ -94,6 +101,7 @@ impl ProcessModels {
             catalog,
             configuration,
             provider,
+            quota,
         })
     }
 }

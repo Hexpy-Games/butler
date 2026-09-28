@@ -85,9 +85,17 @@ function stripCssCommentsFromLine(line: string, state: { inBlockComment: boolean
 function lintCss(path: string, source: string): Finding[] {
   const findings: Finding[] = [];
   let inCssVariableDefinition = false;
+  // @font-face descriptors declare a bundled face (fonts/fonts.css); they
+  // style nothing, so the typography rule does not apply inside them.
+  let inFontFace = false;
   const commentState = { inBlockComment: false };
   source.split("\n").forEach((line, index) => {
     const lintLine = stripCssCommentsFromLine(line, commentState);
+    if (/^\s*@font-face\b/u.test(lintLine)) inFontFace = true;
+    if (inFontFace) {
+      if (lintLine.includes("}")) inFontFace = false;
+      return;
+    }
     if (isCssVariableDefinition(lintLine)) {
       const variableName = cssVariableName(lintLine);
       if (

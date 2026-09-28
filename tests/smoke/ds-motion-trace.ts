@@ -11,9 +11,14 @@
  *   (seeked on the real CSS animation or transition) must be <= 30%.
  * - Thinking mark: working marks run without long tasks and stop drawing when
  *   offscreen or under reduced motion.
- * - Optional `--video`: Playwright recordings of each motion in light and dark.
+ * - Foundations chapter heroes (FoundationHeroMotion): each hero runs only
+ *   CSS animations of transform/opacity, holds the frame rate with no long
+ *   task and a small main-thread cost per frame, pauses offscreen and in a
+ *   hidden tab, and has no animation under reduced motion.
+ * - Optional `--video`: Playwright recordings of each motion in light and dark
+ *   (with `--only=heroes`: one loop of every chapter hero instead).
  *
- * Usage: bun run tests/smoke/ds-motion-trace.ts [--video] [--out=DIR] [--only=overlays] [--report-only]
+ * Usage: bun run tests/smoke/ds-motion-trace.ts [--video] [--out=DIR] [--only=overlays|heroes] [--report-only]
  * Needs a built UI (`npm --prefix packages/butler-app/client/ui run build`).
  */
 import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -28,6 +33,7 @@ const outArg = Bun.argv.find((arg) => arg.startsWith("--out="));
 const outDir = resolve(outArg ? outArg.slice("--out=".length) : join(root, ".tmp", "ds-motion"));
 const recordVideo = Bun.argv.includes("--video");
 const onlyOverlays = Bun.argv.includes("--only=overlays");
+const onlyHeroes = Bun.argv.includes("--only=heroes");
 /** Report numbers without asserting (used to measure an older build). */
 const reportOnly = Bun.argv.includes("--report-only");
 const FIRST_FRAME_MAX = 0.3;
@@ -392,7 +398,26 @@ async function measureThinkingMark(page: Page, serverUrl: string, ids: Map<strin
     } as typeof draw;
     (window as unknown as { __markDraws: () => number }).__markDraws = () =>
       [...document.querySelectorAll<HTMLCanvasElement>("[data-ds-thinking-mark-demo] canvas")].reduce((sum, canvas) => sum + (counts.get(canvas) ?? 0), 0);
+    (window as unknown as { __perMarkDraws: () => number[] }).__perMarkDraws = () =>
+      [...document.querySelectorAll<HTMLCanvasElement>("[data-ds-thinking-mark-demo] canvas")].map((canvas) => counts.get(canvas) ?? 0);
   });
+  // Page frame rate and the slowest mark's own frame rate while every mark works.
+  const markFps = async (ms: number) => {
+    const before = await page.evaluate(() => (window as unknown as { __perMarkDraws: () => number[] }).__perMarkDraws());
+    const pageFps = await page.evaluate((span) => new Promise<number>((done) => {
+      let frames = 0;
+      const start = performance.now();
+      const step = () => {
+        frames += 1;
+        if (performance.now() - start < span) requestAnimationFrame(step);
+        else done((frames * 1000) / (performance.now() - start));
+      };
+      requestAnimationFrame(step);
+    }), ms);
+    const after = await page.evaluate(() => (window as unknown as { __perMarkDraws: () => number[] }).__perMarkDraws());
+    const perMark = after.map((count, index) => ((count - (before[index] ?? 0)) * 1000) / ms);
+    return { pageFps: Math.round(pageFps), slowestMarkFps: Math.round(Math.min(...perMark)), marks: perMark.length };
+  };
   const draws = () => page.evaluate(() => (window as unknown as { __markDraws: () => number }).__markDraws());
   const drawsOver = async (ms: number) => {
     const before = await draws();
@@ -408,6 +433,7 @@ async function measureThinkingMark(page: Page, serverUrl: string, ids: Map<strin
     return {};
   });
   const working = windowStats(events, thread, markTs(events, "mark-start"), markTs(events, "mark-end"));
+  const fps = await markFps(1_000);
   const visibleDrawsPerSecond = await drawsOver(1_000);
   await page.evaluate(() => {
     const demo = document.querySelector("[data-ds-thinking-mark-demo]")!;
@@ -439,11 +465,165 @@ async function measureThinkingMark(page: Page, serverUrl: string, ids: Map<strin
   await page.evaluate(() => { delete document.body.dataset.motion; });
   assert(working.longTasks === 0, `thinking mark produced ${working.longTasks} task(s) over ${LONG_TASK_MS}ms (max ${working.maxTaskMs}ms)`);
   assert(visibleDrawsPerSecond > 60, `working marks did not animate: ${visibleDrawsPerSecond} draws/s`);
+  // Each working mark draws at (about) the 60fps cap and the page keeps its frame rate.
+  assert(fps.pageFps >= 50, `thinking marks dropped the page to ${fps.pageFps}fps`);
+  assert(fps.slowestMarkFps >= 45, `a working thinking mark drew at only ${fps.slowestMarkFps}fps`);
   assert(offscreen, "the thinking-mark demo did not scroll offscreen");
   assert(offscreenDrawsPerSecond === 0, `offscreen marks kept drawing: ${offscreenDrawsPerSecond} draws/s`);
   assert(reducedDrawsPerSecond === 0, `reduced-motion marks kept drawing: ${reducedDrawsPerSecond} draws/s`);
   assert(breathe === "on", `reduced-motion working marks should breathe in CSS, got ${breathe}`);
-  return { workingMarksOnPage: markCount, working, stillControl: still, visibleDrawsPerSecond, offscreenDrawsPerSecond, reducedDrawsPerSecond, reducedBreathe: breathe };
+  return { workingMarksOnPage: markCount, working, stillControl: still, fps, visibleDrawsPerSecond, offscreenDrawsPerSecond, reducedDrawsPerSecond, reducedBreathe: breathe };
+}
+
+/** Chapter heroes by viewer page; Motion lives on its own page. */
+const HERO_PAGES: Array<[string, string]> = [
+  ["color", "foundations/color"], ["typography", "foundations/typography"], ["spacing", "foundations/spacing"],
+  ["sizing", "foundations/sizing"], ["radius", "foundations/radius"], ["iconography", "foundations/iconography"],
+  ["focus", "foundations/focus"], ["motion", "motion"], ["z-index", "foundations/z-index"], ["layout", "foundations/layout"],
+];
+/** What one hero video records: a full loop at the default beat (--motion-deliberate 320ms), capped at 13s except the three-scene Typography loop. */
+const HERO_VIDEO_MS: Record<string, number> = {
+  color: 13_000, typography: 19_400, spacing: 13_000, sizing: 9_800, radius: 11_700,
+  iconography: 13_000, focus: 10_400, motion: 13_000, "z-index": 9_800, layout: 10_400,
+};
+/** Main-thread budget per frame for a playing hero, over a still (reduced-motion) control. */
+const HERO_FRAME_BUDGET_MS = 0.5;
+
+async function openHero(page: Page, serverUrl: string, pageId: string, theme: string) {
+  await page.goto(viewerUrl(serverUrl, { page: pageId, theme }), { waitUntil: "load" });
+  const hero = page.locator('[data-slot="foundation-hero"]').first();
+  await hero.waitFor({ state: "visible" });
+  await page.waitForTimeout(400);
+  return hero;
+}
+
+type HeroAnimations = { state: string | null; count: number; running: number; cssOnly: boolean; properties: string[] };
+
+function heroAnimations(hero: ReturnType<Page["locator"]>): Promise<HeroAnimations> {
+  return hero.evaluate((node) => {
+    const list = node.getAnimations({ subtree: true });
+    const properties = new Set<string>();
+    for (const animation of list) {
+      for (const frame of (animation.effect as KeyframeEffect).getKeyframes()) {
+        for (const key of Object.keys(frame)) if (!["offset", "computedOffset", "easing", "composite"].includes(key)) properties.add(key);
+      }
+    }
+    return {
+      state: node.getAttribute("data-hero-state"),
+      count: list.length,
+      running: list.filter((animation) => animation.playState === "running").length,
+      cssOnly: list.every((animation) => animation instanceof CSSAnimation),
+      properties: [...properties].sort(),
+    };
+  });
+}
+
+async function frameRate(page: Page, ms: number): Promise<number> {
+  return page.evaluate((span) => new Promise<number>((done) => {
+    let frames = 0;
+    const start = performance.now();
+    const step = () => {
+      frames += 1;
+      if (performance.now() - start < span) requestAnimationFrame(step);
+      else done((frames * 1000) / (performance.now() - start));
+    };
+    requestAnimationFrame(step);
+  }), ms);
+}
+
+/**
+ * Every Foundations chapter hero: compositor-friendly CSS only, no long task,
+ * frame rate held, main-thread cost per frame over a still control, paused
+ * offscreen and in a hidden tab, still under reduced motion.
+ */
+async function measureHeroes(page: Page, serverUrl: string) {
+  const browser = page.context().browser()!;
+  const results: Record<string, unknown> = {};
+  for (const [variant, pageId] of HERO_PAGES) {
+    const hero = await openHero(page, serverUrl, pageId, "light");
+    const playingAnimations = await heroAnimations(hero);
+    const sample = async (label: string) => {
+      const { events, thread } = await traced(browser, page, async () => {
+        await markNow(page, `${label}-start`);
+        await page.waitForTimeout(2_000);
+        await markNow(page, `${label}-end`);
+        return {};
+      });
+      return windowStats(events, thread, markTs(events, `${label}-start`), markTs(events, `${label}-end`));
+    };
+    // Two windows, the quieter one judged: a one-off task (GC, a font slice
+    // landing) is not the hero's per-frame cost.
+    const windows = [await sample(`${variant}-playing-a`), await sample(`${variant}-playing-b`)];
+    const playing = windows.reduce((best, stats) => (stats.mainThreadBusyPct < best.mainThreadBusyPct ? stats : best));
+    const fps = Math.round(await frameRate(page, 1_000));
+    await page.evaluate(() => {
+      const node = document.querySelector('[data-slot="foundation-hero"]')!;
+      let scroller: HTMLElement | null = node.parentElement;
+      while (scroller && scroller.scrollHeight <= scroller.clientHeight) scroller = scroller.parentElement;
+      (scroller ?? document.scrollingElement!).scrollTop = 1e6;
+    });
+    await page.waitForTimeout(300);
+    const offscreen = await heroAnimations(hero);
+    await hero.evaluate((node) => node.scrollIntoView({ block: "start" }));
+    await page.waitForTimeout(300);
+    const hidden = await hero.evaluate(async (node) => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+      document.dispatchEvent(new Event("visibilitychange"));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const state = node.getAttribute("data-hero-state");
+      delete (document as unknown as { visibilityState?: string }).visibilityState;
+      document.dispatchEvent(new Event("visibilitychange"));
+      return state;
+    });
+    await page.evaluate(() => { document.body.dataset.motion = "reduced"; });
+    await page.waitForTimeout(300);
+    const reduced = await heroAnimations(hero);
+    const still = await sample(`${variant}-still`);
+    await page.evaluate(() => { delete document.body.dataset.motion; });
+    const frameCostMs = Math.max(0, Math.round(((playing.mainThreadBusyPct - still.mainThreadBusyPct) / 100) * (1000 / Math.max(fps, 1)) * 100) / 100);
+    results[variant] = {
+      animations: playingAnimations.count, properties: playingAnimations.properties, fps, frameCostMs,
+      playing, still, offscreen: offscreen.state, hidden, reduced: { state: reduced.state, animations: reduced.count },
+    };
+    if (reportOnly) continue;
+    assert(playingAnimations.state === "playing" && playingAnimations.running > 0, `${variant} hero is not playing: ${JSON.stringify(playingAnimations)}`);
+    assert(playingAnimations.cssOnly, `${variant} hero runs a non-CSS animation`);
+    assert(playingAnimations.properties.every((property) => property === "transform" || property === "opacity"),
+      `${variant} hero animates ${playingAnimations.properties.join(", ")}; only transform and opacity`);
+    assert(windows.every((stats) => stats.longTasks === 0), `${variant} hero produced ${playing.longTasks} task(s) over ${LONG_TASK_MS}ms (max ${playing.maxTaskMs}ms)`);
+    // The Motion page runs its own demos; the hero adds no layout beyond the still control.
+    // (Frame counts of two 2s windows differ by a frame or two.)
+    assert(playing.layouts <= still.layouts * 1.05 + 2, `${variant} hero laid out ${playing.layouts} time(s) while playing (${still.layouts} still)`);
+    assert(fps >= 50, `${variant} hero dropped the page to ${fps}fps`);
+    assert(frameCostMs <= HERO_FRAME_BUDGET_MS, `${variant} hero costs ${frameCostMs}ms of main thread per frame (max ${HERO_FRAME_BUDGET_MS}ms)`);
+    assert(offscreen.state === "paused" && offscreen.running === 0, `${variant} hero kept running offscreen: ${JSON.stringify(offscreen)}`);
+    assert(hidden === "paused", `${variant} hero kept playing in a hidden tab (${hidden})`);
+    assert(reduced.state === "still" && reduced.count === 0, `${variant} hero animates under reduced motion: ${JSON.stringify(reduced)}`);
+  }
+  return results;
+}
+
+async function recordHeroVideos(browser: Browser, serverUrl: string): Promise<string[]> {
+  const written: string[] = [];
+  const staging = join(tempDir, "hero-video");
+  for (const theme of ["light", "dark"]) {
+    for (const [variant, pageId] of HERO_PAGES) {
+      const context = await newContext(browser, staging);
+      const page = await context.newPage();
+      const hero = await openHero(page, serverUrl, pageId, theme);
+      const box = await hero.boundingBox();
+      await page.waitForTimeout(HERO_VIDEO_MS[variant] ?? 10_000);
+      const video = page.video();
+      await context.close();
+      const source = await video?.path();
+      if (!source) continue;
+      const target = join(outDir, `hero-${variant}-${theme}.webm`);
+      renameSync(source, target);
+      if (box) writeFileSync(`${target}.box.json`, JSON.stringify(box));
+      written.push(target);
+    }
+  }
+  return written;
 }
 
 async function newContext(browser: Browser, video: string | null): Promise<BrowserContext> {
@@ -453,6 +633,7 @@ async function newContext(browser: Browser, video: string | null): Promise<Brows
     ...(video ? { recordVideo: { dir: video, size: viewport } } : {}),
   });
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await server.signIn(context);
   return context;
 }
 
@@ -580,6 +761,10 @@ async function measure(browser: Browser, serverUrl: string, ids: Map<string, str
   const page = await context.newPage();
   const results: Record<string, unknown> = {};
   try {
+    if (onlyHeroes) {
+      results.heroes = await measureHeroes(page, serverUrl);
+      return results;
+    }
     results.overlayEnter = await measureOverlayEnters(page, serverUrl, ids);
     if (onlyOverlays) return results;
     results.thinkingMark = await measureThinkingMark(page, serverUrl, ids);
@@ -630,6 +815,7 @@ async function measure(browser: Browser, serverUrl: string, ids: Map<string, str
     assert(fade.settledChunkSpans === 0, "settled streamed text should render without chunk spans");
     results.m6 = await measureNumberAndMeter(page, serverUrl, ids);
     results.sendFlight = await measureSendFlight(page, serverUrl, ids);
+    results.heroes = await measureHeroes(page, serverUrl);
   } finally {
     await context.close();
   }
@@ -642,6 +828,7 @@ const server = await createNativeAppServer({ uiRoot });
 const browser = await chromium.launch({ headless: true });
 try {
   const lookup = await browser.newPage();
+  await server.signIn(lookup);
   const ids = await itemIds(lookup, server.url);
   await lookup.close();
   const results = await measure(browser, server.url, ids);
@@ -649,7 +836,7 @@ try {
   writeFileSync(summaryPath, `${JSON.stringify(results, null, 2)}\n`);
   console.log(JSON.stringify(results, null, 2));
   if (recordVideo) {
-    const videos = await recordVideos(browser, server.url, ids);
+    const videos = onlyHeroes ? await recordHeroVideos(browser, server.url) : await recordVideos(browser, server.url, ids);
     console.log(`Recorded ${videos.length} video(s) in ${outDir}`);
   }
 } finally {

@@ -10,9 +10,9 @@ import butlerMarkLightSrc from "@/assets/butler-mark.png";
 import { activeChatWallpaper } from "./mainScreenTheme";
 import { activeProjectId } from "./composerProjectContext";
 import {
+  fillComposerWithTemplate,
   generalFallbackSuggestions,
   projectFallbackSuggestions,
-  skillFallbackSuggestions,
 } from "./emptyStateSuggestions";
 
 interface EmptyStateProps {
@@ -38,10 +38,9 @@ export function EmptyState({
   const settings = useButlerStore((state) => state.settings);
   const navigation = useButlerStore((state) => state.navigation);
   const activeChatId = useButlerStore((state) => state.activeChatId);
-  const isSkillChat = activeChat.title.includes("스킬");
   const projectId = activeProjectId(navigation, activeChatId);
-  const isProjectNewChat = Boolean(projectId) && !isSkillChat;
-  const isGeneralNewChat = !projectId && !activeChat.project && !isSkillChat;
+  const isProjectNewChat = Boolean(projectId);
+  const isGeneralNewChat = !projectId && !activeChat.project;
   const [briefing, setBriefing] = useState<NewChatBriefingView | null>(null);
 
   useEffect(() => {
@@ -67,12 +66,9 @@ export function EmptyState({
     };
   }, [isGeneralNewChat, isProjectNewChat, projectId, settings.language]);
 
-  const suggestions = isSkillChat
-    ? skillFallbackSuggestions(activeChat.project)
-    : isProjectNewChat
-      ? (briefing?.suggestions ??
-        projectFallbackSuggestions(activeChat.project))
-      : (briefing?.suggestions ?? generalFallbackSuggestions());
+  const suggestions = isProjectNewChat
+    ? (briefing?.suggestions ?? projectFallbackSuggestions(activeChat.project))
+    : (briefing?.suggestions ?? generalFallbackSuggestions());
   const description = briefing?.description;
   const titleIconSrc =
     markTheme === "dark" ? butlerMarkDarkSrc : butlerMarkLightSrc;
@@ -93,10 +89,13 @@ export function EmptyState({
       wallpaperTone={markTheme}
       moment={momentLabel}
       titleIcon={<img alt="" draggable={false} src={titleIconSrc} />}
-      suggestions={suggestions.map((suggestion) => ({
+      suggestions={suggestions.map(({ template, ...suggestion }) => ({
         ...suggestion,
         disabled: isSending,
-        onSelect: () => onSend(suggestion.text),
+        onSelect: () =>
+          template
+            ? fillComposerWithTemplate(suggestion.text)
+            : onSend(suggestion.text),
       }))}
     />
   );

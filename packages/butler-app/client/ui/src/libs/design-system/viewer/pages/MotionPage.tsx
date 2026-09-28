@@ -8,7 +8,8 @@ import { Typo } from "../../components/Typo";
 import type { ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import type { ShowcaseEntry } from "../../showcase/collectShowcaseEntries";
 import { tokenCatalog } from "../foundations/catalog";
-import { PageHeader } from "../parts";
+import { ChapterLayout, chapterSections, GuideSection } from "../foundations/Chapter";
+import { chapterById } from "../foundations/chapters";
 import { StoryCanvas } from "../StoryFrame";
 import type { ViewerState } from "../viewerState";
 import styles from "../DesignSystemViewer.module.css";
@@ -68,8 +69,9 @@ function ComponentStoryCard({ id, title, story, locale }: { id: string; title: s
   );
 }
 
-export function MotionPage({ entries, locale, state, onChange }: {
+export function MotionPage({ entries, locale, state, anchor, onChange, onOpen }: {
   entries: ShowcaseEntry[];
+  anchor?: string;
   locale: AppLocale;
   state: ViewerState;
   onChange: (patch: Partial<ViewerState>) => void;
@@ -79,56 +81,57 @@ export function MotionPage({ entries, locale, state, onChange }: {
   const [easingsRun, replayEasings] = useReplay();
   const [shiftRun, replayShift] = useReplay();
   const group = (name: string) => tokenCatalog.filter((token) => token.category === "motion" && token.group === name);
+  const chapter = chapterById("motion")!;
+  const s = chapterSections(chapter, [["durations", "Durations"], ["easings", "Easings"], ["distances", "Distances and scales"], ["loops", "Loops"], ["components", "DS motion components"]]);
   return (
-    <Stack gap="2xl" data-ds-motion-page>
-      <PageHeader eyebrow="Foundations · Motion" title="Linear-crisp motion"
-        lead="Short, decelerating entrances; faster exits; no bounce except the Switch thumb and the drag lift. Motion lives in DS components and tokens; product code never declares transitions. Reduced motion keeps the fades and drops the travel.">
-        <Stack align="row" cross="center" gap="sm" wrap>
-          <SegmentedControl ariaLabel="Reduced motion" options={[{ value: "full", label: "Full motion" }, { value: "reduced", label: "Reduced motion" }]}
+    <div data-ds-motion-page>
+      <ChapterLayout anchor={anchor} chapter={chapter} onOpen={onOpen} sections={s.list}
+        lead="Short, decelerating entrances; faster exits; no bounce except the Switch thumb and the drag lift. Motion lives in DS components and tokens; product code never declares transitions. Reduced motion keeps the fades and drops the travel."
+        headerExtra={(
+          <SegmentedControl ariaLabel="Reduced motion" size="sm" options={[{ value: "full", label: "Full motion" }, { value: "reduced", label: "Reduced motion" }]}
             value={state.motion} onValueChange={(motion) => onChange({ motion: motion as ViewerState["motion"] })} />
-          <Typo.Caption tone="secondary">Reduced scopes the token overrides to this page (data-motion); the OS setting also switches CSS loops off.</Typo.Caption>
-        </Stack>
-      </PageHeader>
-      <Section title="Durations" titleAs="h2" description="Each dot travels the same track with the standard easing; exits run about 0.7×."
-        actions={<Button size="sm" variant="outline" text="Replay" data-ds-motion="durations" onClick={replayDurations} />}>
-        <div className={styles.cardGrid} data-ds-motion-group="durations">
-          {group("Durations").map((token) => <Track key={token.name} name={token.name} duration={`var(${token.name})`} easing="var(--motion-ease-standard)" run={durationsRun} />)}
-        </div>
-      </Section>
-      <Section title="Easings" titleAs="h2" description="Played at three times --motion-deliberate so the curve is visible."
-        actions={<Button size="sm" variant="outline" text="Replay" data-ds-motion="easings" onClick={replayEasings} />}>
-        <div className={styles.cardGrid} data-ds-motion-group="easings">
-          {group("Easings").map((token) => <Track key={token.name} name={token.name} duration="calc(var(--motion-deliberate) * 3)" easing={`var(${token.name})`} run={easingsRun} />)}
-        </div>
-      </Section>
-      <Section title="Distances and scales" titleAs="h2" description="Travel and scale are tokens, so reduced motion zeroes them globally."
-        actions={<Button size="sm" variant="outline" text="Replay" data-ds-motion="distances" onClick={replayShift} />}>
-        <Stack align="row" gap="xl" wrap data-ds-motion-group="distances">
-          {group("Distances and scales").map((token) => (
-            <Stack gap="xs" cross="center" key={token.name} data-ds-motion-token={token.name}>
-              <span className={styles.motionBox} data-ds-motion-demo data-ds-motion-run={shiftRun} key={shiftRun} style={{ [token.name.includes("distance") ? "--sample" : "--sample-scale"]: `var(${token.name})` } as CSSProperties} />
-              <Typo.Code>{token.name}</Typo.Code>
-            </Stack>
-          ))}
-        </Stack>
-      </Section>
-      <Section title="Loops" titleAs="h2" description="Spinner, pulse and shimmer loop on their own durations; reduced motion stops them.">
-        <Stack align="row" cross="center" gap="xl" wrap>
-          {group("Loops").map((token) => <Typo.Code key={token.name}>{`${token.name}: ${token.light}`}</Typo.Code>)}
-          <Spinner size={24} label="Loading" />
-        </Stack>
-      </Section>
-      <Section title="DS motion components" titleAs="h2" description="Live stories from each component's showcase, with their own replay controls.">
-        <div className={styles.gallery}>
-          {COMPONENT_STORIES.map(([id, storyName, title]) => {
-            const story = entries.find((entry) => entry.id === id)?.stories.find((item) => item.name === storyName);
-            return story ? (
-              <ComponentStoryCard key={`${id}#${storyName}`} id={id} title={title} story={story} locale={locale} />
-            ) : null;
-          })}
-        </div>
-      </Section>
-    </Stack>
+        )}>
+        <GuideSection spec={s.at("durations")} lead="Each dot travels the same track with the standard easing; exits run about 0.7×."
+          actions={<Button size="sm" variant="outline" text="Replay" data-ds-motion="durations" onClick={replayDurations} />}>
+          <div className={styles.cardGrid} data-ds-motion-group="durations">
+            {group("Durations").map((token) => <Track key={token.name} name={token.name} duration={`var(${token.name})`} easing="var(--motion-ease-standard)" run={durationsRun} />)}
+          </div>
+        </GuideSection>
+        <GuideSection spec={s.at("easings")} lead="Played at three times --motion-deliberate so the curve is visible."
+          actions={<Button size="sm" variant="outline" text="Replay" data-ds-motion="easings" onClick={replayEasings} />}>
+          <div className={styles.cardGrid} data-ds-motion-group="easings">
+            {group("Easings").map((token) => <Track key={token.name} name={token.name} duration="calc(var(--motion-deliberate) * 3)" easing={`var(${token.name})`} run={easingsRun} />)}
+          </div>
+        </GuideSection>
+        <GuideSection spec={s.at("distances")} lead="Travel and scale are tokens, so reduced motion zeroes them globally."
+          actions={<Button size="sm" variant="outline" text="Replay" data-ds-motion="distances" onClick={replayShift} />}>
+          <Stack align="row" gap="xl" wrap data-ds-motion-group="distances">
+            {group("Distances and scales").map((token) => (
+              <Stack gap="xs" cross="center" key={token.name} data-ds-motion-token={token.name}>
+                <span className={styles.motionBox} data-ds-motion-demo data-ds-motion-run={shiftRun} key={shiftRun} style={{ [token.name.includes("distance") ? "--sample" : "--sample-scale"]: `var(${token.name})` } as CSSProperties} />
+                <Typo.Code>{token.name}</Typo.Code>
+              </Stack>
+            ))}
+          </Stack>
+        </GuideSection>
+        <GuideSection spec={s.at("loops")} lead="Spinner, pulse and shimmer loop on their own durations; reduced motion stops them.">
+          <Stack align="row" cross="center" gap="xl" wrap>
+            {group("Loops").map((token) => <Typo.Code key={token.name}>{`${token.name}: ${token.light}`}</Typo.Code>)}
+            <Spinner size={24} label="Loading" />
+          </Stack>
+        </GuideSection>
+        <GuideSection spec={s.at("components")} lead="Live stories from each component's showcase, with their own replay controls.">
+          <div className={styles.gallery}>
+            {COMPONENT_STORIES.map(([id, storyName, title]) => {
+              const story = entries.find((entry) => entry.id === id)?.stories.find((item) => item.name === storyName);
+              return story ? (
+                <ComponentStoryCard key={`${id}#${storyName}`} id={id} title={title} story={story} locale={locale} />
+              ) : null;
+            })}
+          </div>
+        </GuideSection>
+      </ChapterLayout>
+    </div>
   );
 }
 

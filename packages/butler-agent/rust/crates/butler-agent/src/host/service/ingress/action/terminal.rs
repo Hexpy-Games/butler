@@ -113,6 +113,22 @@ pub(super) fn cancelled(turn_id: &str) -> Terminal<'_> {
     }
 }
 
+/// A turn a crashed process was running: failed, and a retry may resume it.
+pub(super) fn crash_interrupted(turn_id: &str) -> Terminal<'_> {
+    Terminal {
+        text: "Butler stopped before finishing this reply. Retry to continue.",
+        canonical: None,
+        turn_id,
+        kind: "turn_failed",
+        safe_error: Some("turn_interrupted"),
+        suspension: None,
+        model: None,
+        artifacts: &[],
+        changed_files: &[],
+        plan: None,
+    }
+}
+
 pub(super) fn action(
     item: &ClaimedInboundEvent,
     envelope: &Envelope,

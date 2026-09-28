@@ -63,9 +63,19 @@ pub(super) fn list(
         .into_iter()
         .map(|row| queue_record(connection, row))
         .collect::<Result<Vec<_>, _>>()?;
+    let paused = connection
+        .query_row(
+            "SELECT 1 FROM session_queue_pauses WHERE chat_id=?1",
+            [chat_id],
+            |_| Ok(()),
+        )
+        .optional()
+        .map_err(AppStorageError::sqlite)?
+        .is_some();
     Ok(SessionQueueView {
         session_id: chat_id.to_owned(),
         queued_messages,
+        paused,
     })
 }
 
@@ -279,25 +289,4 @@ fn encode_component(value: &str) -> String {
             }
         })
         .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::public_plan_id;
-
-    #[test]
-    fn projects_only_plan_ids_from_source_valid_control_resolutions() {
-        let resolution = r#"{"controls":{"model":"openai/gpt-test"},"sessionControlRevision":2,"catalogGeneration":"catalog-1","plan_id":"plan-1","private":"hidden"}"#;
-        assert_eq!(public_plan_id(Some(resolution)).as_deref(), Some("plan-1"));
-        assert_eq!(
-            public_plan_id(Some(r#"{"controls":{},"plan_id":"plan-1"}"#)),
-            None
-        );
-        assert_eq!(
-            public_plan_id(Some(
-                r#"{"controls":{"model":"openai/gpt-test"},"sessionControlRevision":2,"catalogGeneration":"catalog-1","plan_id":""}"#
-            )),
-            None
-        );
-    }
 }

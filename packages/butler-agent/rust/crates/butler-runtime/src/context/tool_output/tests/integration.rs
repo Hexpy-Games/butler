@@ -1,6 +1,5 @@
 use super::*;
 
-#[cfg(unix)]
 #[tokio::test]
 async fn real_k2_structured_and_guided_outputs_feed_persisted_context_artifacts() {
     use butler_turn::workspace::{
@@ -78,8 +77,8 @@ async fn real_k2_structured_and_guided_outputs_feed_persisted_context_artifacts(
     assert_eq!(reopened.stdout.unwrap().text.utf8_lossy(), "structured");
 
     let mut host_environment = HashMap::from([("PATH".into(), "/usr/bin:/bin".into())]);
-    if let Ok(home) = std::env::var("HOME") {
-        host_environment.insert("HOME".into(), home);
+    if let Some(home) = butler_platform::user_dirs::home_dir() {
+        host_environment.insert("HOME".into(), home.to_string_lossy().into_owned());
     }
     let guided = commands
         .submit_guided(GuidedCommandInput {

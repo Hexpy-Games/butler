@@ -32,7 +32,7 @@ use super::{
     read_body_with_limit,
 };
 use crate::gateway::{
-    AppWallpaperRejection, AppWallpaperSetRequest, AppWallpaperVariant, auth,
+    AppWallpaperRejection, AppWallpaperSetRequest, AppWallpaperVariant,
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
 };
 
@@ -59,8 +59,6 @@ pub(super) async fn route(
     state: Arc<HttpState>,
     request: Request<Body>,
 ) -> Result<Response, HttpError> {
-    // Paths with a file extension skip the router's auth as static assets.
-    auth::enforce(request.headers(), &state.auth)?;
     let method = request.method().clone();
     let path = request.uri().path().to_owned();
     if super::wallpaper_modules::handles(&path) {

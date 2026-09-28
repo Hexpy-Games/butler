@@ -136,11 +136,11 @@ async fn rec_02_crash_during_streaming_recovers_without_duplicates() -> Result<(
 
 /// REC-02 (owner decision) — a crash-interrupted turn is not auto-resumed.
 #[tokio::test]
-#[ignore = "product gap: REC-02-AUTORESUME — after SIGKILL mid-stream the restarted service re-runs the interrupted turn to delivered; the owner decided such turns end failed with retry available"]
 async fn rec_02_crash_interrupted_turn_is_failed_not_resumed() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("REC-02-OWNER")?
         .cassette("REC-02")
+        .replay_only()
         .start()
         .await?;
     let exchange = s.provider()?.exchange_for("one to twelve", 0)?;
@@ -158,18 +158,57 @@ async fn rec_02_crash_interrupted_turn_is_failed_not_resumed() -> Result<(), Har
         "crash-interrupted turn: {turn}"
     );
     assert_eq!(turn["retryable"], true, "{turn}");
+    assert_retry_current_refused(&s, &turn_id).await?;
     s.finish().await
+}
+
+/// `POST /turns/{id}/retry-current` starts a fresh turn, which could run the
+/// interrupted turn's completed tool effects again, so it is refused for a
+/// crash-interrupted turn (only `/retry`, which resumes, is offered).
+async fn assert_retry_current_refused(s: &Scenario, turn_id: &str) -> Result<(), HarnessError> {
+    let reply =
+        s.gw.post(&format!("/turns/{turn_id}/retry-current"), json!({}))
+            .await?;
+    assert_eq!(reply.status, 409, "retry-current accepted: {}", reply.text);
+    assert_eq!(
+        reply.error_code(),
+        Some("turn_not_retryable"),
+        "{}",
+        reply.text
+    );
+    let turn = s.gw.turn("general", turn_id).await?.unwrap_or_default();
+    assert_eq!(
+        turn_state(&turn),
+        "failed",
+        "retry-current changed the turn: {turn}"
+    );
+    Ok(())
 }
 
 const REC03: &str = "Use the run_command tool to run exactly `echo {marker} >> log.txt` in your workspace, then reply done.";
 
-/// Starts REC-03, crashes right after the command ran, restarts under
-/// supervision for a while. Returns the scenario, turn id and marker.
-async fn crash_after_effect(id: &str) -> Result<(Scenario, String, String), HarnessError> {
+/// Where [`crash_after_effect`] kills the service.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CrashPoint {
+    /// As soon as the command's effect is visible in the workspace: the
+    /// effect has run and its result may not be journaled yet.
+    EffectVisible,
+    /// Once the model round after the command is requested: the command's
+    /// result is journaled, so record and replay crash at the same point.
+    ResultJournaled,
+}
+
+/// Starts REC-03 from `cassette`, crashes at `point` after the command ran
+/// and restarts. Returns the scenario, turn id and marker.
+async fn crash_after_effect(
+    id: &str,
+    cassette: &str,
+    point: CrashPoint,
+) -> Result<(Scenario, String, String), HarnessError> {
     let marker = nonce();
     let prompt = REC03.replace("{marker}", &marker);
     let mut s = Setup::new(id)?
-        .cassette("REC-03")
+        .cassette(cassette)
         .placeholder("NONCE", &marker)
         .start()
         .await?;
@@ -187,29 +226,55 @@ async fn crash_after_effect(id: &str) -> Result<(Scenario, String, String), Harn
         .contains(&marker)
     {
         assert!(Instant::now() < deadline, "command never ran");
-        tokio::time::sleep(Duration::from_millis(20)).await;
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    if point == CrashPoint::ResultJournaled {
+        let requested = s.provider()?.served();
+        let settle = Instant::now() + Duration::from_secs(20);
+        while s.provider()?.served() == requested {
+            assert!(
+                Instant::now() < settle,
+                "the model round after the command was never requested"
+            );
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
     }
     s.crash_and_restart().await?;
     Ok((s, turn_id, marker))
 }
 
-/// REC-03 — Crash during a tool side effect: the effect happens at most once
-/// and the service comes back.
+/// How often the REC-03 command's effect happened.
+fn effect_count(s: &Scenario, marker: &str) -> Result<usize, HarnessError> {
+    Ok(fs::read_to_string(s.sandbox.data.join("log.txt"))?
+        .lines()
+        .filter(|line| line.contains(marker))
+        .count())
+}
+
+/// REC-03 — Crash during a tool side effect, killed as soon as the effect is
+/// visible (its result may not be journaled yet): the effect happens at most
+/// once, the service comes back, and the turn ends failed with retry
+/// available instead of being resumed.
 #[tokio::test]
 async fn rec_03_crash_after_tool_effect_never_duplicates_it() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (mut s, turn_id, marker) = crash_after_effect("REC-03").await?;
-    let log = s.sandbox.data.join("log.txt");
-    let until = Instant::now() + Duration::from_secs(if s.recording() { 60 } else { 20 });
+    let (mut s, turn_id, marker) =
+        crash_after_effect("REC-03", "REC-03", CrashPoint::EffectVisible).await?;
+    let turn = settled(&mut s, &turn_id).await?;
+    assert_eq!(
+        turn_state(&turn),
+        "failed",
+        "crash-interrupted turn not ended failed: {turn}"
+    );
+    assert_eq!(turn["retryable"], true, "{turn}");
+    // Keep supervising for a while: nothing may run the effect again.
+    let until = Instant::now() + Duration::from_secs(if s.recording() { 60 } else { 10 });
     while Instant::now() < until {
         s.supervise().await?;
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
     s.supervise().await?;
-    let count = fs::read_to_string(&log)?
-        .lines()
-        .filter(|line| line.contains(&marker))
-        .count();
+    let count = effect_count(&s, &marker)?;
     assert_eq!(count, 1, "tool effect executed {count} times");
     assert!(s.gw.healthy().await);
     let turn = s.gw.turn("general", &turn_id).await?.unwrap_or_default();
@@ -222,26 +287,25 @@ async fn rec_03_crash_after_tool_effect_never_duplicates_it() -> Result<(), Harn
 }
 
 /// REC-03 (owner decision) — the interrupted turn ends failed with retry
-/// available; retrying does not run the effect again.
+/// available; retrying resumes it to delivered without running the effect
+/// again. It crashes once the command's result is journaled; its recording
+/// (gpt-6-luna) holds the model rounds the retry resumes with.
 #[tokio::test]
-#[ignore = "product gap: REC-03-STUCK — after SIGKILL following a run_command effect, the restarted service resumes the turn, fails with bounded_continuation_item_identity_invalid, exits for process replacement, and the App turn stays `thinking` indefinitely"]
 async fn rec_03_crash_after_tool_effect_ends_failed_retryable() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (mut s, turn_id, marker) = crash_after_effect("REC-03-OWNER").await?;
+    let (mut s, turn_id, marker) =
+        crash_after_effect("REC-03-OWNER", "REC-03-OWNER", CrashPoint::ResultJournaled).await?;
     let turn = settled(&mut s, &turn_id).await?;
     assert_eq!(turn_state(&turn), "failed", "{turn}");
     assert_eq!(turn["retryable"], true, "{turn}");
+    assert_retry_current_refused(&s, &turn_id).await?;
     let retry =
         s.gw.post(&format!("/turns/{turn_id}/retry"), json!({}))
             .await?;
     assert_eq!(retry.status, 202, "{}", retry.text);
-    let _ = settled(&mut s, &turn_id).await;
-    let log = fs::read_to_string(s.sandbox.data.join("log.txt"))?;
-    assert_eq!(
-        log.lines().filter(|line| line.contains(&marker)).count(),
-        1,
-        "effect repeated on retry"
-    );
+    let retried = settled(&mut s, &turn_id).await?;
+    assert_eq!(turn_state(&retried), "delivered", "retry: {retried}");
+    assert_eq!(effect_count(&s, &marker)?, 1, "effect repeated on retry");
     s.finish().await
 }
 

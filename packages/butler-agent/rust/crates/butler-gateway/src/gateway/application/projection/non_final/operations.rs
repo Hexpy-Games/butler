@@ -10,6 +10,7 @@ use super::{
     token,
 };
 use crate::gateway::application::projection::staging;
+use crate::gateway::application::retry::INTERRUPTED_TURN_CODE;
 use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::{
     events::{self, EventSubscribers},
@@ -17,9 +18,6 @@ use crate::gateway::application::{
     service,
     storage::AppStorageError,
 };
-
-#[cfg(test)]
-mod tests;
 
 #[derive(Clone, Copy)]
 pub(super) struct FailedProjection<'a> {
@@ -43,7 +41,10 @@ pub(super) fn project_failed(
         retryable: requested_retryable,
     } = failed;
     let code = error_token(metadata.get("safeErrorCode"));
-    let retryable = code == "runtime_fault" && requested_retryable;
+    // A turn interrupted by a crash is failed but always retryable: the retry
+    // resumes it from its durable state.
+    let retryable =
+        (code == "runtime_fault" && requested_retryable) || code == INTERRUPTED_TURN_CODE;
     let label = if code == "internal_recovery_required" {
         "Butler could not complete this turn.".into()
     } else {
@@ -95,6 +96,7 @@ pub(super) fn project_cancelled(
     _event_id: &str,
 ) -> Result<(), AppStorageError> {
     db.execute("UPDATE app_turn_cancel_outbox SET state='completed',accepted_at=COALESCE(accepted_at,?1),completed_at=?1,safe_error_code=NULL WHERE turn_id=?2 AND state IN ('pending','accepted')",params![now,turn]).map_err(AppStorageError::sqlite)?;
+    super::stream_message::stop(db, subscribers, chat, turn, now)?;
     db.execute("UPDATE turns SET state='cancelled',safe_status_label='Cancelled',safe_error_code='turn_cancelled',retryable=0,cancellable=0,updated_at=?1 WHERE id=?2 AND state<>'cancelled'",params![now,turn]).map_err(AppStorageError::sqlite)?;
     events::append(
         db,

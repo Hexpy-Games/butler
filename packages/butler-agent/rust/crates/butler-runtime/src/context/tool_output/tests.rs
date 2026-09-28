@@ -50,7 +50,6 @@ impl ModelConfigurationClock for FixedIdentity {
 struct Fixture {
     root: PathBuf,
     service: ToolOutput,
-    owner: Arc<ContextBudgetOwner>,
 }
 
 impl Fixture {
@@ -83,15 +82,11 @@ impl Fixture {
         ));
         let service = ToolOutput::new(
             root.clone(),
-            Arc::clone(&owner),
+            owner,
             Arc::new(FixedIdentity),
             Arc::new(TestPruneMetrics(root.clone())),
         );
-        Self {
-            root,
-            service,
-            owner,
-        }
+        Self { root, service }
     }
     fn budget(&self, stdout: &str, retain_original: bool) -> BudgetToolOutputInput {
         BudgetToolOutputInput {
@@ -116,7 +111,5 @@ impl Drop for Fixture {
     }
 }
 
-mod budget_cases;
 mod integration;
-mod lifecycle;
-mod reader_cases;
+pub(crate) mod reader_cases;

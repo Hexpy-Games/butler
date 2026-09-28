@@ -1,6 +1,9 @@
+//! Continuity recovery manifests: planned, approved, applied and rolled-back recoveries.
+
 use std::{collections::BTreeMap, fs, io::Write, path::Path};
 
 use crate::cognition::CognitionCode;
+use crate::lenient::JsonField;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -76,7 +79,7 @@ pub(super) fn read(
         Ok(value) => value,
         Err(_) => return Ok(None),
     };
-    if value["schema_version"] != SCHEMA || value["manifest_id"] != manifest_id {
+    if value.field("schema_version") != SCHEMA || value.field("manifest_id") != manifest_id {
         return Ok(None);
     }
     serde_json::from_value(value).map(Some).map_err(|source| {
@@ -140,49 +143,22 @@ pub(super) fn write(
     let parent = path
         .parent()
         .ok_or_else(|| error(CognitionCode::ContinuityRecoveryManifestPathInvalid))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(parent)
-            .map_err(io_error)?;
-    }
-    #[cfg(not(unix))]
-    fs::create_dir_all(parent).map_err(io_error)?;
+    butler_platform::secure_fs::create_private_dir_all(parent).map_err(io_error)?;
     ensure_data_authority(data_root, &[parent, &path])?;
-    let filename = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or_else(|| error(CognitionCode::ContinuityRecoveryManifestPathInvalid))?;
-    let temp = parent.join(format!(".{filename}.{}.tmp", uuid::Uuid::new_v4()));
-    let mut created_temp = false;
-    let result = (|| {
-        let mut options = fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut file = options.open(&temp).map_err(io_error)?;
-        created_temp = true;
-        serde_json::to_writer_pretty(&mut file, manifest).map_err(|failure| {
-            CognitionError::new(
-                CognitionCode::ContinuityRecoveryManifestWriteFailed,
-                failure.to_string(),
-            )
-            .with_source(failure)
-        })?;
-        file.write_all(b"\n").map_err(io_error)?;
-        file.sync_all().map_err(io_error)?;
-        fs::rename(&temp, &path).map_err(io_error)
-    })();
-    if created_temp {
-        let _ = fs::remove_file(temp);
-    }
-    result
+    butler_platform::secure_fs::replace_private(
+        &path,
+        |file| {
+            serde_json::to_writer_pretty(&mut *file, manifest).map_err(|failure| {
+                CognitionError::new(
+                    CognitionCode::ContinuityRecoveryManifestWriteFailed,
+                    failure.to_string(),
+                )
+                .with_source(failure)
+            })?;
+            file.write_all(b"\n").map_err(io_error)
+        },
+        io_error,
+    )
 }
 
 pub(super) fn manifest_path(

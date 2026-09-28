@@ -1,3 +1,5 @@
+//! Consolidation cycle results: phase outcomes, merged model usage and the run summary.
+
 use std::path::Path;
 
 use serde_json::{Map, Value};
@@ -168,6 +170,3 @@ fn round_cost(value: f64) -> f64 {
         value
     }
 }
-
-#[cfg(test)]
-mod tests;

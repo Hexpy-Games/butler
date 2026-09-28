@@ -10,7 +10,8 @@
 //!    (`response.instructions`, `response.tools`) are replaced by
 //!    `{{REDACTED_ECHO}}` / `[]`: they repeat the prompt (~18 KB) and carry
 //!    nothing the product reads back.
-//! 4. Response headers are reduced to an allowlist.
+//! 4. Response headers are reduced to an allowlist plus the numeric
+//!    subscription-quota headers the product parses (`keep_header`).
 
 use std::sync::OnceLock;
 
@@ -18,6 +19,23 @@ use regex::Regex;
 use serde_json::Value;
 
 pub const HEADER_ALLOWLIST: &[&str] = &["content-type", "retry-after"];
+
+/// Quota headers kept when their value is a plain number: Codex usage
+/// windows and Anthropic unified rate-limit windows.
+pub const QUOTA_HEADER_PREFIXES: &[&str] = &[
+    "x-codex-primary-",
+    "x-codex-secondary-",
+    "anthropic-ratelimit-unified-",
+];
+
+/// Whether a response header is kept in the cassette.
+pub fn keep_header(name: &str, value: &str) -> bool {
+    HEADER_ALLOWLIST.contains(&name)
+        || (QUOTA_HEADER_PREFIXES
+            .iter()
+            .any(|prefix| name.starts_with(prefix))
+            && value.trim().parse::<f64>().is_ok_and(f64::is_finite))
+}
 
 /// Scenario placeholders: `(NAME, value)`; `{{NAME}}` in cassettes.
 #[derive(Clone, Debug, Default)]
@@ -111,17 +129,9 @@ pub fn scrub(text: &str) -> String {
 }
 
 fn host_name() -> Option<String> {
-    #[cfg(unix)]
-    {
-        nix::unistd::gethostname()
-            .ok()
-            .and_then(|name| name.into_string().ok())
-            .filter(|name| name.len() >= 4)
-    }
-    #[cfg(not(unix))]
-    {
-        None
-    }
+    butler_platform::instance::host_name()
+        .ok()
+        .filter(|name| name.len() >= 4)
 }
 
 /// Findings of the lint on one text (empty when clean).

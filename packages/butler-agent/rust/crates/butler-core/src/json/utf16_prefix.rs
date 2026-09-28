@@ -109,6 +109,3 @@ impl<'a> Utf16Prefix<'a> {
         Ok(output)
     }
 }
-
-#[cfg(test)]
-mod tests;

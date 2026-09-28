@@ -1,36 +1,98 @@
+/** Provider cards on the first-run "Pick an AI" screen. */
+export type FirstRunProviderCardId =
+  | "chatgpt" | "claude" | "gemini" | "local" | "openai" | "grok" | "qwen"
+  | "kimi" | "zaiCoding" | "zaiApi" | "opencodeGo" | "other";
+
 interface FirstRunCopy {
-product: string;
-steps: string[];
-languageTitle: string;
-continue: string;
-back: string;
-safetyTitle: string;
-safetyBody: string;
-safetyItems: string[];
-accept: string;
-installTitle: string;
-installReady: string;
-installChecking: string;
-installFailed: string;
-retry: string;
-repair: string;
-diagnostics: string;
-diagnosticsCopied: string;
-diagnosticsUnavailable: string;
-quit: string;
-modelTitle: string;
-modelBody: string;
-modelSelectLabel: string;
-modelLoading: string;
-modelLoadFailed: string;
-modelRetry: string;
-modelSave: string;
-modelSaving: string;
-modelSaved: string;
-modelSaveFailed: string;
-modelUnavailable: string;
+  product: string;
+  welcomeTitle: string;
+  welcomeLede: string;
+  consent: Array<{ title: string; body: string }>;
+  agree: string;
+  agreeBlocked: string;
+  prepWorking: string;
+  prepReady: string;
+  prepFailed: string;
+  /** Plain failure reasons keyed by readiness error code; `default` covers the rest. */
+  prepReasons: Record<string, string>;
+  /** Preparation step names keyed by step id (bug-report info). */
+  prepSteps: Record<string, string>;
+  retry: string;
+  moreActions: string;
+  repair: string;
+  copyReport: string;
+  reportCopied: string;
+  reportUnavailable: string;
+  quit: string;
+  languageLabel: string;
+  learnMore: string;
+  cancel: string;
+  connectTitle: string;
+  connectLede: string;
+  prepWaitConnect: string;
+  providerNames: Record<FirstRunProviderCardId, string>;
+  providerDescriptions: Record<FirstRunProviderCardId, string>;
+  tagNoKey: string;
+  tagLocal: string;
+  /** Tag on the connected AI when setup runs again. */
+  tagCurrent: string;
+  localModelCount: (count: number) => string;
+  moreProviders: (count: number) => string;
+  showLess: string;
+  localOff: string;
+  localMissing: string;
+  rescan: string;
+  checking: string;
+  connecting: string;
+  offline: string;
+  offlineShort: string;
+  offlineTile: string;
+  noModels: string;
+  noUsable: string;
+  back: string;
+  backToList: string;
+  signInTitle: string;
+  signInBody: string;
+  signInCopyLink: string;
+  linkCopied: string;
+  signInCancelled: string;
+  signInCancelledBody: string;
+  signInFailed: string;
+  chooseOther: string;
+  keyTitle: (name: string) => string;
+  keyLabel: string;
+  keyHint: string;
+  keyValid: string;
+  /** Key check failures by #279 error code group. */
+  keyErrors: Record<"invalid" | "noaccess" | "network" | "ratelimited" | "unavailable" | "unsupported" | "badrequest" | "savefailed", string>;
+  /** Saved, but the service has no model list to check it against. */
+  keySaved: string;
+  keyFailedShort: string;
+  getKey: string;
+  keyStored: string;
+  finishing: string;
+  finishFailed: string;
+  localTitle: string;
+  localBody: string;
+  localStart: string;
+  localNote: string;
+  customTitle: string;
+  customUrl: string;
+  customKey: string;
+  customConnect: string;
+  connectedToast: (name: string) => string;
+  rerunTitle: string;
+  rerunDescription: string;
+  rerunAction: string;
 }
-export interface NewChatBriefingSuggestion { id: string; title: string; description: string; text: string; }
+export interface NewChatBriefingSuggestion {
+  id: string;
+  title: string;
+  description: string;
+  text: string;
+  /** A template the user finishes: it fills the composer instead of sending. */
+  template?: boolean;
+}
 
 export interface BriefingFallbackCopy { title: string; description: string; suggestions: NewChatBriefingSuggestion[]; }
 
@@ -267,7 +329,7 @@ export interface AppCopy {
     skills: string;
   };
   progress: { operations: Record<string, string>; fallback: string; storageRecovery: string; reconnecting: string; stopping: string; };
-  briefing: { general: BriefingFallbackCopy; onboarding: BriefingFallbackCopy; projectSuggestions: (name: string) => NewChatBriefingSuggestion[]; skillSuggestions: (name: string) => NewChatBriefingSuggestion[]; onboardingMoment: string; projectMoment: string; projectTitle: (name: string) => string; projectDescription: (name: string) => string; };
+  briefing: { general: BriefingFallbackCopy; onboarding: BriefingFallbackCopy; projectSuggestions: (name: string) => NewChatBriefingSuggestion[]; onboardingMoment: string; projectMoment: string; projectTitle: (name: string) => string; projectDescription: (name: string) => string; };
   interfaceTemplates: {
     relativeAge: (seconds: number) => string;
     workedFor: (duration: string) => string;
@@ -683,6 +745,19 @@ export interface AppCopy {
     deleteFailedMessage: string;
     queuedPosition: (position: number, total: number) => string;
     contextDetails: string;
+    usage: {
+      details: string;
+      input: string;
+      cached: string;
+      output: string;
+      reasoning: string;
+      cost: string;
+      estimate: string;
+      left: (percent: string) => string;
+      unavailable: string;
+      loading: string;
+      updated: (time: string) => string;
+    };
     approval: {
       title: string;
       titleEffect: string;
@@ -731,6 +806,17 @@ export interface AppCopy {
     placeholders: {
       title: string;
       prompt: string;
+    };
+    /** One line under the access selector while Ask first is selected. */
+    accessHint: string;
+    saveFailed: string;
+    /** Inline messages for a save the gateway refused (400). */
+    errors: {
+      title: string;
+      prompt: string;
+      interval: string;
+      accessMode: string;
+      invalid: string;
     };
     runs: {
       empty: string;
@@ -798,8 +884,8 @@ export interface AppCopy {
     searchEmpty: (query: string) => string;
     groups: {
       preferences: string;
-      modelsAndExtensions: string;
       appAndSystem: string;
+      advanced: string;
     };
     sections: {
       general: string;
@@ -851,8 +937,10 @@ export interface AppCopy {
     };
     sectionState: { loading: string; error: string; retry: string; empty: string };
     updateComponents: { app: string; service: string };
-    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "fallbackConsolidation" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview", string>;
-    pageSectionDescriptions: Record<"notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning" | "fallbackConsolidation", string>;
+    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview", string>;
+    pageSectionDescriptions: Record<"notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning", string>;
+    /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
+    modelsAdvanced: { title: string; contents: string };
     panels: {
       butlerModel: string;
       workerProfiles: string;
@@ -887,6 +975,12 @@ export interface AppCopy {
       empty: string;
       noCandidates: string;
       limitReached: string;
+      /** One-line summary on the Models page. */
+      summaryDescription: string;
+      off: string;
+      edit: string;
+      editLabel: string;
+      done: string;
     };
     workerProfilesPanel: {
       add: string;
@@ -1367,6 +1461,11 @@ export interface AppCopy {
     attachmentSizeLimit: (names: string, limit: string) => string;
     reconnecting: string;
     reconnectingShort: string;
+    agentStopped: string;
+    agentRestarting: string;
+    agentRestartFailed: string;
+    agentStart: string;
+    agentStartFailed: string;
     dashboardLoading: string;
     dashboardFailed: string;
     dashboardRetry: string;

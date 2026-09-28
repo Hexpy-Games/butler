@@ -331,6 +331,75 @@ fn wallpaper_tools_are_executable_and_follow_the_access_mode() {
     }
 }
 
+/// Security boundary (#236): ask-first analyzes an admitted attached image
+/// without asking, on both surfaces.
+#[test]
+fn ask_first_admits_the_attached_image_tool() {
+    let catalog = catalog();
+    let catalog = catalog.snapshot();
+    for flag in ["on", "off"] {
+        let mut turn = phase_turn("ask_first", &image_context());
+        turn.context["executionPolicy"]["requiredNativeTools"] = json!(["analyze_attached_image"]);
+        let selection = select_phase(GuidedPhaseInput {
+            turn: &turn,
+            catalog,
+            phase_surface_flag: flag,
+            operation_replay_flag: "off",
+            default_workspace: "/tmp",
+        })
+        .unwrap();
+        let name = "analyze_attached_image".to_owned();
+        assert!(selection.authorized_names.contains(&name), "{flag}");
+        assert!(
+            has_provider_tool(&selection.provider_tools, &name),
+            "{flag}"
+        );
+    }
+}
+
+/// Security boundary (#236): on the production (legacy) surface, ask-first
+/// authorizes the required tools of its approval-free actions (onboarding,
+/// memory save) and MCP calls, which ask at dispatch; it never authorizes a
+/// required tool outside those actions. Read-only authorizes none of them.
+#[test]
+fn ask_first_authorizes_approval_free_actions_and_approval_gated_mcp() {
+    let catalog = catalog();
+    let catalog = catalog.snapshot();
+    let approval_free = [
+        "update_onboarding_profile",
+        "summarize_user_profile",
+        "update_explicit_memory",
+        "ingest_task_memory",
+    ];
+    // (access, authorized approval-free tools, call_mcp_tool, create_automation)
+    let cases = [
+        ("full_access", true, true, true),
+        ("ask_first", true, true, false),
+        ("read_only", false, false, false),
+    ];
+    for (access, exempt, mcp, automation) in cases {
+        let mut turn = phase_turn(access, &json!({}));
+        turn.context["executionPolicy"]["requiredNativeTools"] =
+            json!([approval_free.as_slice(), &["create_automation"]].concat());
+        let selection = select_phase(GuidedPhaseInput {
+            turn: &turn,
+            catalog,
+            phase_surface_flag: "off",
+            operation_replay_flag: "off",
+            default_workspace: "/tmp",
+        })
+        .unwrap();
+        let authorized = |name: &str| selection.authorized_names.iter().any(|tool| tool == name);
+        let offered = |name: &str| has_provider_tool(&selection.provider_tools, name);
+        for name in approval_free {
+            assert_eq!(authorized(name), exempt, "{access} {name}");
+            assert_eq!(offered(name), exempt, "{access} {name}");
+        }
+        assert_eq!(authorized("call_mcp_tool"), mcp, "{access}");
+        assert_eq!(authorized("create_automation"), automation, "{access}");
+    }
+}
+
 fn has_provider_tool(tools: &[Value], expected: &str) -> bool {
     tools
         .iter()

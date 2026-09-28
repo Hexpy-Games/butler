@@ -88,12 +88,11 @@ fn file_state(path: &std::path::Path) -> Result<Option<FileState>, GatewayApplic
     if !metadata.is_file() {
         return Ok(None);
     }
-    #[cfg(unix)]
-    use std::os::unix::fs::MetadataExt;
-    #[cfg(unix)]
-    let (device, inode) = (metadata.dev(), metadata.ino());
-    #[cfg(not(unix))]
-    let (device, inode) = (0, 0);
+    // Hosts without file ids record 0/0; the checkpoint then rests on the
+    // path, size and boundary anchor alone, as before.
+    let (device, inode) = butler_platform::secure_fs::identity(&metadata)
+        .id
+        .map_or((0, 0), |id| (id.device, id.inode));
     let modified_at_ms = metadata
         .modified()
         .ok()

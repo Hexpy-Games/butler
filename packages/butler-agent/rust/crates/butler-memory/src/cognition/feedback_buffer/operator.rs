@@ -2,7 +2,7 @@
 
 use crate::cognition::CognitionCode;
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, File},
     io::Write,
     path::{Path, PathBuf},
 };
@@ -20,6 +20,7 @@ use super::{
 };
 
 impl FeedbackBufferService {
+    /// Every feedback entry, for the operator.
     pub async fn operator_entries(&self) -> CognitionResult<Vec<Value>> {
         let data_root = self.data_root.clone();
         let path = feedback_path(self);
@@ -33,6 +34,7 @@ impl FeedbackBufferService {
         })?
     }
 
+    /// The entry with `id`, when it exists.
     pub async fn operator_read(&self, id: &str) -> CognitionResult<Option<Value>> {
         let data_root = self.data_root.clone();
         let path = feedback_path(self);
@@ -52,6 +54,7 @@ impl FeedbackBufferService {
         })?
     }
 
+    /// Adds a feedback entry; the stored entry.
     pub async fn operator_add(
         &self,
         text: String,
@@ -88,6 +91,7 @@ impl FeedbackBufferService {
         .await
     }
 
+    /// Sets the status of the entry with `id`; the updated entry.
     pub async fn operator_resolve(&self, id: &str, status: &str) -> CognitionResult<Value> {
         let next_status = match status {
             "applied" => FeedbackStatus::Applied,
@@ -113,6 +117,7 @@ impl FeedbackBufferService {
         .await
     }
 
+    /// Removes resolved entries; how many were removed and kept.
     pub async fn operator_clear_resolved(&self) -> CognitionResult<(usize, usize)> {
         self.mutate("feedback_clear", move |path| {
             let entries = read_entries(&path)?;
@@ -204,7 +209,11 @@ pub(super) fn read_entries(path: &Path) -> CognitionResult<Vec<FeedbackEntry>> {
                 record.clear();
             }
             started = true;
-            append_line(&mut record, &line.bytes[3..], line.terminated);
+            append_line(
+                &mut record,
+                line.bytes.get(3..).unwrap_or_default(),
+                line.terminated,
+            );
         } else {
             started = true;
             append_line(&mut record, &line.bytes, line.terminated);
@@ -229,59 +238,30 @@ fn write_entries(path: &Path, entries: &[FeedbackEntry]) -> CognitionResult<()> 
         .parent()
         .ok_or_else(|| operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed))?;
     create_private_dir(parent)?;
-    let temporary = parent.join(format!("feedback.md.tmp-{}", uuid::Uuid::new_v4()));
-    let result = (|| {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut output = options.open(&temporary).map_err(|source| {
-            operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
-        })?;
-        for (index, entry) in entries.iter().enumerate() {
-            if index > 0 {
-                output.write_all(b"\n").map_err(|source| {
-                    operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed)
-                        .with_source(source)
-                })?;
+    butler_platform::secure_fs::replace_private(
+        path,
+        |output| {
+            for (index, entry) in entries.iter().enumerate() {
+                if index > 0 {
+                    output.write_all(b"\n")?;
+                }
+                let formatted = format_entry(entry);
+                let formatted = formatted.strip_suffix('\n').unwrap_or(&formatted);
+                output.write_all(formatted.as_bytes())?;
             }
-            let formatted = format_entry(entry);
-            let formatted = formatted.strip_suffix('\n').unwrap_or(&formatted);
-            output.write_all(formatted.as_bytes()).map_err(|source| {
-                operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
-            })?;
-        }
-        output.sync_all().map_err(|source| {
-            operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
-        })?;
-        fs::rename(&temporary, path).map_err(|source| {
-            operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
-        })?;
-        #[cfg(unix)]
-        File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|source| {
-                operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
-            })?;
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(temporary);
-    }
-    result
+            Ok(())
+        },
+        std::convert::identity,
+    )
+    .map_err(|source| {
+        operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
+    })
 }
 
 fn create_private_dir(path: &Path) -> CognitionResult<()> {
     let mut builder = fs::DirBuilder::new();
     builder.recursive(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        builder.mode(0o700);
-    }
+    butler_platform::secure_fs::owner_only_dirs(&mut builder);
     builder
         .create(path)
         .or_else(|error| {
