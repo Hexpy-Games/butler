@@ -42,12 +42,13 @@
 }
 
 /* A tile: a slot of the poster's grid. It draws nothing itself (no panel,
-   fill or border): the real component stands on the page, centred in its
-   slot and zoomed to fill it (SceneHero.tsx). */
+   fill or border): the real component stands on the page, on its column's
+   left edge (so titles in a column share one inset), centred in the slot's
+   height and zoomed to fit inside it (SceneHero.tsx). */
 .tile {
   position: relative;
   display: grid;
-  place-items: center;
+  place-items: center start;
   box-sizing: border-box;
   min-width: 0;
   min-height: 0;

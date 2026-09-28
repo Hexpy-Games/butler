@@ -24,11 +24,14 @@
 }
 
 /* Feature heroes: the full width of their column at 16:9 (up to 36rem
-   tall), portrait under a 45rem column so phones get a tall stage. */
+   tall), portrait under a 45rem column so phones get a tall stage. They sit
+   straight on the page, with no frame or fill of their own: the motion
+   graphic's components are the only surfaces. */
 .stage[data-feature] {
   aspect-ratio: 16 / 9;
   max-block-size: 36rem;
-  border-radius: var(--radius-composer);
+  border-radius: 0;
+  background: transparent;
 }
 
 @container (width < 45rem) {

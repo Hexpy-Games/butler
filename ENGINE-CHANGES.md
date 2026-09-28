@@ -23,6 +23,9 @@ Base: origin/ui/foundations-heroes-v2 @ aff9fc37b. Paths are under
 - `shared/ChapterHero.module.css`: the `.tile` rule and `--natural-w` are removed.
 - `scene/SceneHero.module.css`: `.tile` no longer draws a border, fill, radius or padding,
   and no longer sets `overflow: hidden`.
+- `scene/SceneHero.module.css`: tile content is set to `place-items: center start`, so the titles in a column share one inset.
+- `FoundationHeroMotion.module.css`: a feature stage no longer has a frame. It sets `background: transparent` and `border-radius: 0`,
+  so the hero sits straight on the page. Small, non-feature stages keep their card.
 - `scene/SceneHero.tsx`: each tile's child is zoomed from its real size (overflow included)
   to fill 94% of its slot, zooming down as well as up, so nothing clips.
 
