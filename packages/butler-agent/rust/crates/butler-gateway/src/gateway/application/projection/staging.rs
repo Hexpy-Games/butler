@@ -40,14 +40,29 @@ pub(super) fn stage(
             "Staged outbound was not found.",
         )
     })?;
-    if stored.0 != chat_id || serde_json::to_string(&stored.1).ok().as_deref() != Some(&event_json)
-    {
+    if stored.0 != chat_id || !same_action(&stored.1, event) {
         return Err(AppStorageError::new(
             AppStorageCode::AppStagedOutboundIdentityConflict,
             "Transport staged outbound identity conflict",
         ));
     }
     Ok(())
+}
+
+/// Whether a staged outbound and a newly read one carry the same action. A
+/// runtime that sends an action again (the progress and final it re-delivers
+/// after a restart, a delivery retry) writes a new transcript record: a new
+/// event id and timestamp, and its own delivery bookkeeping in the record's
+/// `metadata`. Only the action itself (kind, session, transport and payload)
+/// must match. Comparing the whole record turned an action re-sent while its
+/// first record was still staged (its delivery was read under a claim the
+/// restarted App had already recovered) into an identity conflict the
+/// projection retried forever, so the chat's turns never settled.
+fn same_action(stored: &TranscriptEvent, event: &TranscriptEvent) -> bool {
+    stored.kind == event.kind
+        && stored.session_id == event.session_id
+        && stored.transport == event.transport
+        && stored.payload == event.payload
 }
 
 pub(super) fn load(
@@ -201,3 +216,6 @@ pub(super) fn claim_id_from_event(event: &TranscriptEvent) -> Option<String> {
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
 }
+
+#[cfg(test)]
+mod tests;
