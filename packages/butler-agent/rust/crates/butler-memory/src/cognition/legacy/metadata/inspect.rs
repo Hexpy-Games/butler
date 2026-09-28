@@ -1,3 +1,5 @@
+//! Reading one legacy memory chunk with the references that point at it.
+
 use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
@@ -65,6 +67,8 @@ pub struct LegacyMemoryVectorRef {
     pub indexed_at: String,
 }
 
+/// A legacy memory chunk with every reference that points at it; `None`
+/// when the metadata database or the chunk does not exist.
 pub(super) fn read_chunk_with_refs(
     data_root: &Path,
     path: &Path,
@@ -85,95 +89,73 @@ pub(super) fn read_chunk_with_refs(
         .query_row(
             "SELECT memory_chunk_id,schema_version,status,scope,project_id,summary,text_ref,text_hash,privacy_class,freshness_class,source,created_at,updated_at,consolidated_at,consolidation_run_id,superseded_by FROM memory_chunks WHERE memory_chunk_id=?1",
             [memory_chunk_id],
-            |row| {
-                Ok(LegacyMemoryChunkWithRefs {
-                    memory_chunk_id: row.get(0)?,
-                    schema_version: row.get(1)?,
-                    status: row.get(2)?,
-                    scope: row.get(3)?,
-                    project_id: row.get(4)?,
-                    summary: row.get(5)?,
-                    text_ref: row.get(6)?,
-                    text_hash: row.get(7)?,
-                    privacy_class: row.get(8)?,
-                    freshness_class: row.get(9)?,
-                    source: row.get(10)?,
-                    created_at: row.get(11)?,
-                    updated_at: row.get(12)?,
-                    consolidated_at: row.get(13)?,
-                    consolidation_run_id: row.get(14)?,
-                    superseded_by: row.get(15)?,
-                    origins: Vec::new(),
-                    box_refs: Vec::new(),
-                    feedback_refs: Vec::new(),
-                    graph_refs: Vec::new(),
-                    vector_refs: Vec::new(),
-                })
-            },
+            chunk_row,
         )
         .optional()
         .map_err(|source| metadata_error().with_source(source))?;
     let Some(mut chunk) = chunk else {
         return Ok(None);
     };
-    let mut statement = db
-        .prepare("SELECT ref_type,ref_id FROM memory_chunk_origins WHERE memory_chunk_id=?1 ORDER BY ref_type,ref_id")
-        .map_err(|source| metadata_error().with_source(source))?;
-    chunk.origins = statement
-        .query_map([memory_chunk_id], |row| {
+    attach_refs(&db, memory_chunk_id, &mut chunk)?;
+    Ok(Some(chunk))
+}
+
+/// Reads every reference table for the chunk.
+fn attach_refs(
+    db: &Connection,
+    id: &str,
+    chunk: &mut LegacyMemoryChunkWithRefs,
+) -> CognitionResult<()> {
+    chunk.origins = refs(
+        db,
+        "SELECT ref_type,ref_id FROM memory_chunk_origins WHERE memory_chunk_id=?1 ORDER BY ref_type,ref_id",
+        id,
+        |row| {
             Ok(LegacyMemoryOriginRef {
                 ref_type: row.get(0)?,
                 ref_id: row.get(1)?,
             })
-        })
-        .map_err(|source| metadata_error().with_source(source))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|source| metadata_error().with_source(source))?;
-    let mut statement = db
-        .prepare("SELECT box_item_id,relation FROM memory_chunk_box_refs WHERE memory_chunk_id=?1 ORDER BY box_item_id,relation")
-        .map_err(|source| metadata_error().with_source(source))?;
-    chunk.box_refs = statement
-        .query_map([memory_chunk_id], |row| {
+        },
+    )?;
+    chunk.box_refs = refs(
+        db,
+        "SELECT box_item_id,relation FROM memory_chunk_box_refs WHERE memory_chunk_id=?1 ORDER BY box_item_id,relation",
+        id,
+        |row| {
             Ok(LegacyMemoryBoxRef {
                 box_item_id: row.get(0)?,
                 relation: row.get(1)?,
             })
-        })
-        .map_err(|source| metadata_error().with_source(source))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|source| metadata_error().with_source(source))?;
-    let mut statement = db
-        .prepare("SELECT feedback_id,relation FROM memory_chunk_feedback_refs WHERE memory_chunk_id=?1 ORDER BY feedback_id,relation")
-        .map_err(|source| metadata_error().with_source(source))?;
-    chunk.feedback_refs = statement
-        .query_map([memory_chunk_id], |row| {
+        },
+    )?;
+    chunk.feedback_refs = refs(
+        db,
+        "SELECT feedback_id,relation FROM memory_chunk_feedback_refs WHERE memory_chunk_id=?1 ORDER BY feedback_id,relation",
+        id,
+        |row| {
             Ok(LegacyMemoryFeedbackRef {
                 feedback_id: row.get(0)?,
                 relation: row.get(1)?,
             })
-        })
-        .map_err(|source| metadata_error().with_source(source))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|source| metadata_error().with_source(source))?;
-    let mut statement = db
-        .prepare("SELECT graph_ref_type,graph_ref_id,relation FROM memory_chunk_graph_refs WHERE memory_chunk_id=?1 ORDER BY graph_ref_type,graph_ref_id,relation")
-        .map_err(|source| metadata_error().with_source(source))?;
-    chunk.graph_refs = statement
-        .query_map([memory_chunk_id], |row| {
+        },
+    )?;
+    chunk.graph_refs = refs(
+        db,
+        "SELECT graph_ref_type,graph_ref_id,relation FROM memory_chunk_graph_refs WHERE memory_chunk_id=?1 ORDER BY graph_ref_type,graph_ref_id,relation",
+        id,
+        |row| {
             Ok(LegacyMemoryGraphRef {
                 graph_ref_type: row.get(0)?,
                 graph_ref_id: row.get(1)?,
                 relation: row.get(2)?,
             })
-        })
-        .map_err(|source| metadata_error().with_source(source))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|source| metadata_error().with_source(source))?;
-    let mut statement = db
-        .prepare("SELECT vector_store,vector_table,vector_row_id,embedding_model,embedding_dimension,indexed_at FROM memory_chunk_vector_refs WHERE memory_chunk_id=?1 ORDER BY vector_store,vector_table,vector_row_id")
-        .map_err(|source| metadata_error().with_source(source))?;
-    chunk.vector_refs = statement
-        .query_map([memory_chunk_id], |row| {
+        },
+    )?;
+    chunk.vector_refs = refs(
+        db,
+        "SELECT vector_store,vector_table,vector_row_id,embedding_model,embedding_dimension,indexed_at FROM memory_chunk_vector_refs WHERE memory_chunk_id=?1 ORDER BY vector_store,vector_table,vector_row_id",
+        id,
+        |row| {
             Ok(LegacyMemoryVectorRef {
                 vector_store: row.get(0)?,
                 vector_table: row.get(1)?,
@@ -182,9 +164,50 @@ pub(super) fn read_chunk_with_refs(
                 embedding_dimension: row.get(4)?,
                 indexed_at: row.get(5)?,
             })
-        })
+        },
+    )?;
+    Ok(())
+}
+
+fn chunk_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LegacyMemoryChunkWithRefs> {
+    Ok(LegacyMemoryChunkWithRefs {
+        memory_chunk_id: row.get(0)?,
+        schema_version: row.get(1)?,
+        status: row.get(2)?,
+        scope: row.get(3)?,
+        project_id: row.get(4)?,
+        summary: row.get(5)?,
+        text_ref: row.get(6)?,
+        text_hash: row.get(7)?,
+        privacy_class: row.get(8)?,
+        freshness_class: row.get(9)?,
+        source: row.get(10)?,
+        created_at: row.get(11)?,
+        updated_at: row.get(12)?,
+        consolidated_at: row.get(13)?,
+        consolidation_run_id: row.get(14)?,
+        superseded_by: row.get(15)?,
+        origins: Vec::new(),
+        box_refs: Vec::new(),
+        feedback_refs: Vec::new(),
+        graph_refs: Vec::new(),
+        vector_refs: Vec::new(),
+    })
+}
+
+/// The rows of one reference table for the chunk.
+fn refs<T>(
+    db: &Connection,
+    sql: &str,
+    memory_chunk_id: &str,
+    read: impl FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<T>,
+) -> CognitionResult<Vec<T>> {
+    let mut statement = db
+        .prepare(sql)
+        .map_err(|source| metadata_error().with_source(source))?;
+    statement
+        .query_map([memory_chunk_id], read)
         .map_err(|source| metadata_error().with_source(source))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|source| metadata_error().with_source(source))?;
-    Ok(Some(chunk))
+        .map_err(|source| metadata_error().with_source(source))
 }

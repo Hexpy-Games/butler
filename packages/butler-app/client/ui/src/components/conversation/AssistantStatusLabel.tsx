@@ -10,11 +10,14 @@ export type AssistantStatusVisualState =
 export function AssistantStatusLabel({
   children,
   label,
+  markKey,
   markTheme,
   state,
 }: {
   children: ReactNode;
   label: string;
+  /** Same key across remounts of one turn's status keeps the mark's morph going. */
+  markKey?: string;
   markTheme: "dark" | "light";
   state: AssistantStatusVisualState;
 }) {
@@ -24,6 +27,7 @@ export function AssistantStatusLabel({
       mark={
         <span data-test-class={`assistant-status-mark-${state}`}>
           <ButlerThinkingMark
+            morphKey={markKey}
             state={state === "active" ? "working" : "idle"}
             theme={markTheme}
           />

@@ -1,5 +1,9 @@
+//! The profile service: consent, personalization, onboarding, candidate
+//! capture and consolidation behind one admission-controlled handle.
+
 mod async_operations;
 mod extraction;
+mod onboarding_update;
 mod personalization;
 mod prompt_port;
 use parking_lot::Mutex;
@@ -21,6 +25,7 @@ use butler_models::models::ProviderPromptPort;
 
 const LOCAL_OPERATION_LIMIT: usize = 4;
 
+/// The user profile: names, onboarding, profiling consent, candidate capture and consolidation.
 pub struct ProfileService {
     data_root: PathBuf,
     cognition_root: PathBuf,
@@ -43,7 +48,10 @@ struct Lifecycle {
 }
 
 impl ProfileService {
-    pub async fn read_coverage_health(&self) -> ProfileResult<serde_json::Value> {
+    /// How much of the conversation the profile extractor has covered.
+    pub async fn read_coverage_health(
+        &self,
+    ) -> ProfileResult<super::coverage_health::ProfileCoverageHealth> {
         let root = self.data_root.clone();
         let sources = self.canonical_sources.clone();
         self.run(move || Ok(super::coverage_health::read(&root, sources.as_ref())))
@@ -54,6 +62,7 @@ impl ProfileService {
         clippy::too_many_arguments,
         reason = "constructs the profile service from its required runtime collaborators"
     )]
+    /// A profile service over `data_root`.
     pub fn new(
         data_root: PathBuf,
         cognition_root: PathBuf,
@@ -82,6 +91,7 @@ impl ProfileService {
         }
     }
 
+    /// Stops admitting operations and waits for running ones.
     pub async fn close(&self) {
         {
             let mut lifecycle = self.lifecycle.lock();
@@ -94,11 +104,13 @@ impl ProfileService {
         self.operations.wait().await;
     }
 
+    /// The names Butler and the user go by.
     pub async fn read_personalization_profile(&self) -> ProfileResult<PersonalizationProfile> {
         let root = self.data_root.clone();
         self.run(move || Ok(naming::read(&root))).await
     }
 
+    /// Changes the names.
     pub async fn update_personalization_profile(
         &self,
         input: PersonalizationProfileUpdate,
@@ -135,138 +147,35 @@ impl ProfileService {
             .await
     }
 
+    /// Records first-chat onboarding answers, applies the persona and consent, and consolidates
+    /// when there is something to learn.
     pub async fn update_first_chat_onboarding(
         &self,
         input: FirstChatOnboardingUpdate,
     ) -> ProfileResult<FirstChatOnboardingUpdateResult> {
         let guard = self.configuration_writes.acquire_owned().await;
-        let root = self.data_root.clone();
-        let host = self.host.clone();
-        let presets = self.presets.clone();
-        let coordinator = self.coordinator.clone();
-        let sources = self.canonical_sources.clone();
-        let lock = self.lock_path();
+        let write = onboarding_update::OnboardingWrite {
+            root: self.data_root.clone(),
+            host: self.host.clone(),
+            presets: self.presets.clone(),
+            coordinator: self.coordinator.clone(),
+            sources: self.canonical_sources.clone(),
+            lock: self.lock_path(),
+        };
         self.run(move || {
             let _guard = guard;
-            let now = host.now_iso();
-            let now_ms = host.now_epoch_millis();
-            let mut state = onboarding::read(&root, &now);
-            let mut updated = Vec::new();
-            let profile_input = PersonalizationProfileUpdate {
-                butler_nickname: input.butler_nickname.clone(),
-                principal_name: input.principal_name.clone(),
-                preferred_address: input.preferred_address.clone(),
-            };
-            for (name, value) in [
-                ("principal_name", &input.principal_name),
-                ("preferred_address", &input.preferred_address),
-                ("butler_nickname", &input.butler_nickname),
-            ] {
-                if value.is_some() {
-                    updated.push(name.into());
-                }
-            }
-            let profile = if updated.is_empty() {
-                naming::read(&root)
-            } else {
-                naming::update(&root, &profile_input, &now, host.process_id(), now_ms)?
-            };
-            let locale = if input.locale.as_deref() == Some("ko") {
-                PersonaLocale::Ko
-            } else {
-                PersonaLocale::En
-            };
-            let selected = onboarding::resolve_persona_selection(
-                &presets,
-                locale,
-                input.persona_preset.as_deref(),
-                input.persona_custom.as_deref(),
-            );
-            updated.extend(onboarding::apply_update_fields(
-                &mut state,
-                &input,
-                selected.as_deref(),
-            ));
-            let applied = onboarding::apply_persona(
-                &root,
-                &presets,
-                &state,
-                &profile,
-                selected.as_deref(),
-                locale,
-            )?;
-            if input.complete {
-                state.status = "complete".into();
-                state.completed_at = Some(host.now_iso());
-            }
-            state.updated_at = host.now_iso();
-            state = onboarding::write(&root, &state, host.process_id(), host.now_epoch_millis())?;
-            let mode = input
-                .profiling_mode
-                .unwrap_or_else(|| storage::read_consent(&root).mode);
-            let consent = storage::write_consent(&root, mode, None, None, &host.now_iso())?;
-            let has_observation = !profile.principal_name.is_empty()
-                || !profile.preferred_address.is_empty()
-                || state
-                    .fields
-                    .interests
-                    .as_deref()
-                    .is_some_and(|value| !value.is_empty())
-                || state
-                    .fields
-                    .work
-                    .as_deref()
-                    .is_some_and(|value| !value.is_empty())
-                || state
-                    .fields
-                    .service_preference
-                    .as_deref()
-                    .is_some_and(|value| !value.is_empty());
-            if consent.mode != ProfilingMode::Off && has_observation {
-                let consolidate_now = host.now_iso();
-                let consolidate_ms = host.now_epoch_millis();
-                with_lease(&coordinator, lock, "consolidation", || {
-                    candidates::consolidate(
-                        &root,
-                        sources.as_ref(),
-                        consent.mode,
-                        &consolidate_now,
-                        consolidate_ms,
-                    )
-                })?;
-            }
-            updated.sort_by(|a, b| a.encode_utf16().cmp(b.encode_utf16()));
-            updated.dedup();
-            Ok(FirstChatOnboardingUpdateResult {
-                ok: true,
-                status: state.status.clone(),
-                updated_fields: updated,
-                skipped_fields: state.skipped_fields.clone(),
-                profile: OnboardingProfileResult {
-                    has_principal_name: !profile.principal_name.is_empty(),
-                    has_preferred_address: !profile.preferred_address.is_empty(),
-                    has_butler_nickname: !profile.butler_nickname.is_empty(),
-                },
-                persona: OnboardingPersonaResult {
-                    preset: selected.or_else(|| state.fields.persona_preset.clone()),
-                    applied,
-                },
-                profiling: OnboardingProfilingResult {
-                    mode: consent.mode,
-                    captured_candidate_count: 0,
-                    raw_text_included: false,
-                },
-                storage_label: onboarding::STORAGE_LABEL.into(),
-            })
+            write.apply(&input)
         })
         .await
     }
 
+    /// The profiling consent in effect.
     pub async fn read_profiling_consent(&self) -> ProfileResult<ProfilingConsentSnapshot> {
         let root = self.data_root.clone();
         self.run(move || Ok(storage::read_consent(&root))).await
     }
 
+    /// Sets the profiling mode.
     pub async fn set_profiling_mode(
         &self,
         mode: ProfilingMode,
@@ -277,16 +186,19 @@ impl ProfileService {
             .await
     }
 
+    /// Removes every candidate, stable entry and projection.
     pub async fn clear_profiling_data(&self) -> ProfileResult<ClearProfilingResult> {
         let root = self.data_root.clone();
         self.run(move || storage::clear(&root)).await
     }
 
+    /// The profile extractor model.
     pub async fn read_extractor_model(&self) -> ProfileResult<ProfilingExtractorModelSnapshot> {
         let root = self.data_root.clone();
         self.run(move || Ok(extractor_config::read(&root))).await
     }
 
+    /// Sets (or clears) the extractor model.
     pub async fn set_extractor_model(
         &self,
         model: Option<String>,
@@ -306,6 +218,7 @@ impl ProfileService {
         .await
     }
 
+    /// Sets the extractor reasoning effort.
     pub async fn set_extractor_reasoning_effort(
         &self,
         effort: Option<String>,
@@ -325,6 +238,7 @@ impl ProfileService {
         .await
     }
 
+    /// The runtime projection for prompts, when profiling is on.
     pub async fn read_runtime_profile_projection(
         &self,
     ) -> ProfileResult<Option<RuntimeProfileProjection>> {
@@ -341,6 +255,7 @@ impl ProfileService {
         }
     }
 
+    /// Butler's current understanding of the user, in `locale`.
     pub async fn reflective_summary(
         &self,
         locale: &str,
@@ -351,6 +266,7 @@ impl ProfileService {
             .await
     }
 
+    /// Promotes ready candidates and refreshes the runtime projection.
     pub async fn consolidate_profile_candidates(
         &self,
     ) -> ProfileResult<ProfileConsolidationResult> {

@@ -38,6 +38,54 @@ struct Frontier {
     identity_loaded: bool,
 }
 
+impl Frontier {
+    fn new(node: String, depth: usize, path: PathState) -> Self {
+        Self {
+            node,
+            depth,
+            path,
+            adjacency: None,
+            cursor: 0,
+            offset: 0,
+            more: true,
+            identity_loaded: false,
+        }
+    }
+
+    /// Whether the next adjacency page must be loaded first.
+    fn needs_page(&self) -> bool {
+        self.adjacency
+            .as_ref()
+            .is_none_or(|items| self.cursor >= items.len() && self.more)
+    }
+}
+
+/// One seed's breadth-first walk: its queue, the nodes it reached, and its
+/// best path to each.
+struct Lane {
+    queue: VecDeque<Frontier>,
+    seen: HashSet<String>,
+    paths: IndexMap<String, PathState>,
+}
+
+/// What following the next adjacent edge did.
+enum Visit {
+    /// The frontier has no edges left and is dropped.
+    Exhausted,
+    Followed,
+    /// The edge budget ran out; the round stops.
+    EdgeLimit,
+}
+
+/// The expansion adopted so far: each node's best path, the edges, and
+/// the coverage codes of any limit that was hit.
+#[derive(Default)]
+struct Expansion {
+    paths: IndexMap<String, PathState>,
+    edges: IndexMap<String, RecallEdge>,
+    codes: HashSet<String>,
+}
+
 type IdentityMembersLoader<'a, E> = dyn FnMut(&str, usize) -> Result<IdentityMembers, E> + 'a;
 
 /// Callbacks run synchronously on the future pinned graph read owner. Errors
@@ -49,189 +97,215 @@ pub(in crate::cognition) fn expand_graph<E>(
     mut now_millis: impl FnMut() -> i64,
     mut load_identity_members: Option<&mut IdentityMembersLoader<'_, E>>,
 ) -> Result<GraphExpansion, E> {
-    let mut adopted_paths = IndexMap::<String, PathState>::new();
-    let mut queues = Vec::with_capacity(seeds.len());
-    let mut local_seen = Vec::with_capacity(seeds.len());
-    let mut local_paths = Vec::with_capacity(seeds.len());
-    for (seed_index, seed) in seeds.iter().enumerate() {
-        let path = PathState {
-            steps: Arc::new(Vec::new()),
-            edge_ids: Arc::new(Vec::new()),
-            seed_index,
-        };
-        adopted_paths.insert(seed.clone(), path.clone());
-        queues.push(VecDeque::from([Frontier {
-            node: seed.clone(),
-            depth: 0,
-            path: path.clone(),
-            adjacency: None,
-            cursor: 0,
-            offset: 0,
-            more: true,
-            identity_loaded: false,
-        }]));
-        local_seen.push(HashSet::from([seed.clone()]));
-        local_paths.push(IndexMap::from([(seed.clone(), path)]));
-    }
-    let mut adopted = IndexMap::<String, RecallEdge>::new();
-    let mut codes = HashSet::<String>::new();
-    while queues.iter().any(|queue| !queue.is_empty()) {
+    let mut expansion = Expansion::default();
+    let mut lanes = seeds
+        .iter()
+        .enumerate()
+        .map(|(seed_index, seed)| {
+            let path = PathState {
+                steps: Arc::new(Vec::new()),
+                edge_ids: Arc::new(Vec::new()),
+                seed_index,
+            };
+            expansion.paths.insert(seed.clone(), path.clone());
+            Lane {
+                queue: VecDeque::from([Frontier::new(seed.clone(), 0, path.clone())]),
+                seen: HashSet::from([seed.clone()]),
+                paths: IndexMap::from([(seed.clone(), path)]),
+            }
+        })
+        .collect::<Vec<_>>();
+    while lanes.iter().any(|lane| !lane.queue.is_empty()) {
         let mut progressed = false;
-        for seed_index in 0..queues.len() {
+        for lane in &mut lanes {
             if now_millis() >= deadline_at {
-                codes.insert("graph_deadline".into());
+                expansion.codes.insert("graph_deadline".into());
                 break;
             }
-            let queue = &mut queues[seed_index];
-            let Some(mut frontier) = queue.pop_front() else {
+            let Some(mut frontier) = lane.queue.pop_front() else {
                 continue;
             };
             if !frontier.identity_loaded
                 && let Some(load) = load_identity_members.as_deref_mut()
             {
                 frontier.identity_loaded = true;
-                let remaining = MAX_NODES.saturating_sub(adopted_paths.len());
-                let identity = load(&frontier.node, remaining)?;
-                if identity.partial {
-                    codes.insert("identity_partial".into());
-                }
-                for member in identity.members {
-                    if adopted_paths.contains_key(&member) {
-                        continue;
-                    }
-                    if adopted_paths.len() >= MAX_NODES {
-                        codes.insert("graph_node_limit".into());
-                        break;
-                    }
-                    adopted_paths.insert(member.clone(), frontier.path.clone());
-                    local_paths[seed_index].insert(member.clone(), frontier.path.clone());
-                    local_seen[seed_index].insert(member.clone());
-                    queue.push_back(Frontier {
-                        node: member,
-                        depth: frontier.depth,
-                        path: frontier.path.clone(),
-                        adjacency: None,
-                        cursor: 0,
-                        offset: 0,
-                        more: true,
-                        identity_loaded: false,
-                    });
-                }
+                expansion.adopt_identity(lane, &frontier, load)?;
             }
-            if frontier.adjacency.is_none()
-                || frontier
-                    .adjacency
-                    .as_ref()
-                    .is_some_and(|items| frontier.cursor >= items.len() && frontier.more)
-            {
-                let page_size = 256.min((MAX_EDGES - adopted.len()).max(1));
-                let page = load_adjacency(&frontier.node, page_size, frontier.offset)?;
-                frontier.offset += page.edges.len();
-                frontier.adjacency = Some(sort_adjacency(&frontier.node, page.edges));
-                frontier.cursor = 0;
-                frontier.more = page.truncated;
+            if frontier.needs_page() {
+                expansion.load_page(&mut frontier, &mut load_adjacency)?;
             }
-            let adjacent = frontier
-                .adjacency
-                .as_ref()
-                .and_then(|items| items.get(frontier.cursor));
-            frontier.cursor += 1;
-            let Some(adjacent) = adjacent else {
-                progressed = true;
-                continue;
-            };
             progressed = true;
-            let existing = adopted_paths.get(&adjacent.neighbor).cloned();
-            let edge_known = adopted.contains_key(&adjacent.edge.edge_id);
-            let mut edge_limit = false;
-            if frontier.depth >= MAX_DEPTH && existing.is_none() {
-                if !edge_known {
-                    codes.insert("graph_depth_limit".into());
+            match expansion.follow_next(lane, &mut frontier) {
+                Visit::Exhausted => {}
+                Visit::Followed => lane.queue.push_front(frontier),
+                Visit::EdgeLimit => {
+                    lane.queue.push_front(frontier);
+                    break;
                 }
-            } else if existing.is_none() && adopted_paths.len() >= MAX_NODES {
-                codes.insert("graph_node_limit".into());
-            } else {
-                if !edge_known {
-                    if adopted.len() >= MAX_EDGES {
-                        codes.insert("graph_edge_limit".into());
-                        edge_limit = true;
-                    } else {
-                        adopted.insert(adjacent.edge.edge_id.clone(), adjacent.edge.clone());
-                    }
-                }
-                if !edge_limit && frontier.depth < MAX_DEPTH {
-                    let mut steps = frontier.path.steps.as_ref().clone();
-                    steps.push(RecallAssociationStep {
-                        from: adjacent.edge.source_node_id.clone(),
-                        relation: adjacent.edge.relation.clone(),
-                        to: adjacent.edge.target_node_id.clone(),
-                        traversed_reverse: adjacent.reverse,
-                    });
-                    let mut edge_ids = frontier.path.edge_ids.as_ref().clone();
-                    edge_ids.push(adjacent.edge.edge_id.clone());
-                    let candidate = PathState {
-                        steps: Arc::new(steps),
-                        edge_ids: Arc::new(edge_ids),
-                        seed_index: frontier.path.seed_index,
-                    };
-                    if existing
-                        .as_ref()
-                        .is_none_or(|prior| compare_paths(&candidate, prior).is_lt())
-                    {
-                        adopted_paths.insert(adjacent.neighbor.clone(), candidate.clone());
-                    }
-                    if local_paths[seed_index]
-                        .get(&adjacent.neighbor)
-                        .is_none_or(|prior| compare_paths(&candidate, prior).is_lt())
-                    {
-                        local_paths[seed_index]
-                            .insert(adjacent.neighbor.clone(), candidate.clone());
-                        if let Some(queued) =
-                            queue.iter_mut().find(|item| item.node == adjacent.neighbor)
-                            && queued.adjacency.is_none()
-                        {
-                            queued.path = candidate.clone();
-                        }
-                    }
-                    if local_seen[seed_index].insert(adjacent.neighbor.clone()) {
-                        queue.push_back(Frontier {
-                            node: adjacent.neighbor.clone(),
-                            depth: frontier.depth + 1,
-                            path: candidate,
-                            adjacency: None,
-                            cursor: 0,
-                            offset: 0,
-                            more: true,
-                            identity_loaded: false,
-                        });
-                    }
-                }
-            }
-            queue.push_front(frontier);
-            if edge_limit {
-                break;
             }
         }
-        if codes.contains("graph_deadline") || codes.contains("graph_edge_limit") || !progressed {
+        if expansion.codes.contains("graph_deadline")
+            || expansion.codes.contains("graph_edge_limit")
+            || !progressed
+        {
             break;
         }
     }
-    let nodes = adopted_paths.keys().cloned().collect::<Vec<_>>();
-    let edges = adopted.into_values().collect::<Vec<_>>();
-    let relevance = ppr::personalized_page_rank(&nodes, seeds, &edges);
-    let paths = adopted_paths
-        .into_iter()
-        .map(|(node, path)| (node, path.steps.as_ref().clone()))
-        .collect();
-    let mut coverage_codes = codes.into_iter().collect::<Vec<_>>();
-    coverage_codes.sort();
-    Ok(GraphExpansion {
-        relevance,
-        paths,
-        #[cfg(test)]
-        edges,
-        coverage_codes,
-    })
+    Ok(expansion.finish(seeds))
+}
+
+impl Expansion {
+    /// Adopts the frontier node's identity members at its own depth and path.
+    fn adopt_identity<E>(
+        &mut self,
+        lane: &mut Lane,
+        frontier: &Frontier,
+        load: &mut IdentityMembersLoader<'_, E>,
+    ) -> Result<(), E> {
+        let remaining = MAX_NODES.saturating_sub(self.paths.len());
+        let identity = load(&frontier.node, remaining)?;
+        if identity.partial {
+            self.codes.insert("identity_partial".into());
+        }
+        for member in identity.members {
+            if self.paths.contains_key(&member) {
+                continue;
+            }
+            if self.paths.len() >= MAX_NODES {
+                self.codes.insert("graph_node_limit".into());
+                break;
+            }
+            self.paths.insert(member.clone(), frontier.path.clone());
+            lane.paths.insert(member.clone(), frontier.path.clone());
+            lane.seen.insert(member.clone());
+            lane.queue
+                .push_back(Frontier::new(member, frontier.depth, frontier.path.clone()));
+        }
+        Ok(())
+    }
+
+    /// Loads the frontier's next adjacency page, bounded by the edge budget.
+    fn load_page<E>(
+        &self,
+        frontier: &mut Frontier,
+        load_adjacency: &mut impl FnMut(&str, usize, usize) -> Result<EligibleAdjacency, E>,
+    ) -> Result<(), E> {
+        let page_size = 256.min(MAX_EDGES.saturating_sub(self.edges.len()).max(1));
+        let page = load_adjacency(&frontier.node, page_size, frontier.offset)?;
+        frontier.offset += page.edges.len();
+        frontier.adjacency = Some(sort_adjacency(&frontier.node, page.edges));
+        frontier.cursor = 0;
+        frontier.more = page.truncated;
+        Ok(())
+    }
+
+    /// Follows the frontier's next adjacent edge within the depth, node and
+    /// edge limits.
+    fn follow_next(&mut self, lane: &mut Lane, frontier: &mut Frontier) -> Visit {
+        let index = frontier.cursor;
+        frontier.cursor += 1;
+        let frontier = &*frontier;
+        let Some(adjacent) = frontier
+            .adjacency
+            .as_ref()
+            .and_then(|items| items.get(index))
+        else {
+            return Visit::Exhausted;
+        };
+        let existing = self.paths.get(&adjacent.neighbor).cloned();
+        let edge_known = self.edges.contains_key(&adjacent.edge.edge_id);
+        if frontier.depth >= MAX_DEPTH && existing.is_none() {
+            if !edge_known {
+                self.codes.insert("graph_depth_limit".into());
+            }
+            return Visit::Followed;
+        }
+        if existing.is_none() && self.paths.len() >= MAX_NODES {
+            self.codes.insert("graph_node_limit".into());
+            return Visit::Followed;
+        }
+        if !edge_known {
+            if self.edges.len() >= MAX_EDGES {
+                self.codes.insert("graph_edge_limit".into());
+                return Visit::EdgeLimit;
+            }
+            self.edges
+                .insert(adjacent.edge.edge_id.clone(), adjacent.edge.clone());
+        }
+        if frontier.depth < MAX_DEPTH {
+            self.extend_path(lane, frontier, adjacent, existing.as_ref());
+        }
+        Visit::Followed
+    }
+
+    /// Offers the path through `adjacent` as the neighbor's best path,
+    /// globally and for this seed, and queues the neighbor once per seed.
+    fn extend_path(
+        &mut self,
+        lane: &mut Lane,
+        frontier: &Frontier,
+        adjacent: &Adjacent,
+        existing: Option<&PathState>,
+    ) {
+        let mut steps = frontier.path.steps.as_ref().clone();
+        steps.push(RecallAssociationStep {
+            from: adjacent.edge.source_node_id.clone(),
+            relation: adjacent.edge.relation.clone(),
+            to: adjacent.edge.target_node_id.clone(),
+            traversed_reverse: adjacent.reverse,
+        });
+        let mut edge_ids = frontier.path.edge_ids.as_ref().clone();
+        edge_ids.push(adjacent.edge.edge_id.clone());
+        let candidate = PathState {
+            steps: Arc::new(steps),
+            edge_ids: Arc::new(edge_ids),
+            seed_index: frontier.path.seed_index,
+        };
+        let shorter = |prior: &PathState| compare_paths(&candidate, prior).is_lt();
+        if existing.is_none_or(shorter) {
+            self.paths
+                .insert(adjacent.neighbor.clone(), candidate.clone());
+        }
+        if lane.paths.get(&adjacent.neighbor).is_none_or(shorter) {
+            lane.paths
+                .insert(adjacent.neighbor.clone(), candidate.clone());
+            if let Some(queued) = lane
+                .queue
+                .iter_mut()
+                .find(|item| item.node == adjacent.neighbor)
+                && queued.adjacency.is_none()
+            {
+                queued.path = candidate.clone();
+            }
+        }
+        if lane.seen.insert(adjacent.neighbor.clone()) {
+            lane.queue.push_back(Frontier::new(
+                adjacent.neighbor.clone(),
+                frontier.depth + 1,
+                candidate,
+            ));
+        }
+    }
+
+    fn finish(self, seeds: &[String]) -> GraphExpansion {
+        let nodes = self.paths.keys().cloned().collect::<Vec<_>>();
+        let edges = self.edges.into_values().collect::<Vec<_>>();
+        let relevance = ppr::personalized_page_rank(&nodes, seeds, &edges);
+        let paths = self
+            .paths
+            .into_iter()
+            .map(|(node, path)| (node, path.steps.as_ref().clone()))
+            .collect();
+        let mut coverage_codes = self.codes.into_iter().collect::<Vec<_>>();
+        coverage_codes.sort();
+        GraphExpansion {
+            relevance,
+            paths,
+            #[cfg(test)]
+            edges,
+            coverage_codes,
+        }
+    }
 }
 
 fn compare_paths(a: &PathState, b: &PathState) -> std::cmp::Ordering {

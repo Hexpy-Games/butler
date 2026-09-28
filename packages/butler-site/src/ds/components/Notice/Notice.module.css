@@ -1,0 +1,73 @@
+/* Forked from the app DS Notice.module.css; rich message content is a web addition. */
+.notice {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid;
+  border-radius: var(--radius-control);
+}
+
+.tone-info {
+  border-color: var(--color-info-border);
+  background: var(--color-info-bg);
+  color: var(--color-info-text);
+}
+
+.tone-warning {
+  border-color: var(--color-warning-border);
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+}
+
+.tone-error {
+  border-color: var(--color-danger-border);
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+.tone-success {
+  border-color: var(--color-success-border);
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+/* The icon centers on the first text line. */
+.icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  height: calc(var(--typo-body-size) * var(--typo-body-line-height));
+  align-items: center;
+}
+
+.message {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+/* Rich content keeps the tone color and reads as one block. The reset has
+   zero specificity so nested-list spacing from the page still applies. */
+:where(.body) :where(p, ul, ol) {
+  margin: 0;
+}
+
+.body :where(p, ul, ol) + :where(p, ul, ol) {
+  margin-top: var(--space-xs);
+}
+
+.body :where(a) {
+  color: inherit;
+  text-underline-offset: 2px;
+}
+
+.body :where(code) {
+  font: var(--typo-code-font);
+}
+
+.action {
+  flex-shrink: 0;
+}

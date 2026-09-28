@@ -85,6 +85,11 @@
   z-index: 30;
 }
 
+/* An opened drawer takes focus itself (its rows draw their own rings). */
+.sidebar:focus {
+  outline: none;
+}
+
 /* Docked sidebar keeps its full width while its track collapses and slides
    on the compositor; the workspace is FLIP-translated in step. */
 .root[data-panel-layout="docked"] .sidebar {
@@ -439,7 +444,30 @@
       visibility 0s var(--motion-ease-linear) var(--motion-exit-fast);
   }
 
-  .root[data-panel-layout="drawer"] .sidebar {
-    transition: none;
+  /* Reduced motion: drawers fade in place over the scrim; nothing slides or
+     pushes the workspace. */
+  .root[data-panel-layout="drawer"] .sidebar,
+  .root[data-panel-layout="drawer"] .inspector {
+    opacity: 0;
+    transform: none;
+    transition:
+      opacity var(--motion-exit-fast) var(--motion-ease-standard),
+      visibility 0s var(--motion-ease-linear) var(--motion-exit-fast);
+  }
+
+  .root[data-panel-layout="drawer"] .sidebar[data-open="true"],
+  .root[data-panel-layout="drawer"] .inspector[data-open="true"] {
+    opacity: 1;
+    transition:
+      opacity var(--motion-fast) var(--motion-ease-standard),
+      visibility 0s var(--motion-ease-linear);
+  }
+
+  .root[data-panel-layout="drawer"][data-left-open="true"] .workspace {
+    transform: none;
+  }
+
+  .root[data-panel-layout="drawer"] .scrim {
+    transition: opacity var(--motion-fast) var(--motion-ease-standard);
   }
 }

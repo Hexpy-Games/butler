@@ -14,8 +14,8 @@ export const meta: ShowcaseMeta = {
 };
 
 const labels = {
-  "en-US": { title: "Automations", meta: "3 prompts scheduled", action: "New", main: "Scheduled prompts", aside: "Recent runs" },
-  "ko-KR": { title: "자동화", meta: "예약된 프롬프트 3개", action: "새로 만들기", main: "예약된 프롬프트", aside: "최근 실행" },
+  "en-US": { title: "Schedules", meta: "3 prompts scheduled", action: "New", main: "Scheduled prompts", aside: "Recent runs" },
+  "ko-KR": { title: "예약 작업", meta: "예약된 프롬프트 3개", action: "새로 만들기", main: "예약된 프롬프트", aside: "최근 실행" },
 } as const;
 
 function text({ locale }: ShowcaseRenderContext) {

@@ -18,6 +18,7 @@ single morph in reverse; it settles on exactly the idle logo and stops drawing.
 | `theme` | `dark` (white ink), `light` (near-black ink); omit to follow the nearest `.theme-dark` / `.theme-light` scope |
 | `themeColors` | Overrides the key ink per theme |
 | `reducedMotion` | Forces reduced motion on or off; default is the OS setting and the DS `data-motion="reduced"` scope |
+| `morphKey` | Marks with the same key share one morph: a remount mid-work (pending -> current status) continues instead of restarting from the logo |
 
 ## How to use this component
 
@@ -34,9 +35,12 @@ import { ButlerThinkingMark } from "@/butler-ds";
   the moon's disc SDF, so the lobes pull in while the waist rounds out), the dot
   field (fused fill -> screened dots; each cell keeps its dot, radii change
   continuously, nothing cross-fades), the riso inks and their misregistration,
-  and the motion clock (speed = progress, so the thinking motion runs from the
-  first frame and is at full speed exactly as the morph lands). The dots are
-  clipped to the traced morph outline, so rest is the exact logo edge.
+  and the motion clock. The motion clock runs from the first frame and eases
+  (smoothstep, no jolt) to full speed by 30% of the morph (`MOTION_FULL_SPEED_AT`,
+  ~0.45s in); from there the thinking loop runs at exactly its intended rate
+  while the calm morph finishes, so the loop never crawls. The dots are
+  clipped to the traced morph outline, so rest is the exact logo edge; the clip
+  is released at 60% of the morph, past the point where it trims nothing.
 - The spring starts at zero velocity, so the first frame carries almost none of
   the change; the motion clock stops as the logo returns. The spring and the
   simulation rates are intrinsic to the engine and allowlisted in
@@ -47,9 +51,14 @@ import { ButlerThinkingMark } from "@/butler-ds";
   Spinner's reduced pulse (`calc(--pulse-duration * 2)`, `--spinner-easing`,
   alternate, to opacity 0.45) and settles back from its current opacity over
   `--motion-slow` on `--motion-ease-standard`.
-- The frame loop runs at most 60fps, only while the mark moves, and pauses
-  when the mark is offscreen (IntersectionObserver), the tab is hidden, or it
-  has settled, and never runs under reduced motion. Canvas is capped at DPR 2; per-frame drawing allocates nothing.
+- One shared requestAnimationFrame drives every moving mark on the page (N
+  marks, one frame callback). Each mark draws at most 60fps, only while it
+  moves, and pauses when offscreen (IntersectionObserver), the tab is hidden,
+  or it has settled, and never runs under reduced motion. Canvas is capped at
+  DPR 2 and sized on resize only; per-frame drawing allocates nothing.
+- If the product must remount a working mark (a different parent for pending
+  and current status), give both the same `morphKey`; a shared simulation
+  advances once per frame however many marks show it.
 
 ## Done state
 Butler finishing a turn is not a task completing: the mark settles back to the

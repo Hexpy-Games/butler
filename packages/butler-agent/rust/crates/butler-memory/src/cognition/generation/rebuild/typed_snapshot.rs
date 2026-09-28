@@ -1,3 +1,5 @@
+//! Snapshotting the typed memory source tree for a rebuild, refusing links out of it.
+
 use std::{
     fs::{self, File, Metadata, OpenOptions},
     io,

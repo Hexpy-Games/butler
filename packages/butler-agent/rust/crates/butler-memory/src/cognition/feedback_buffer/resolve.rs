@@ -111,7 +111,11 @@ fn rewrite_resolved(path: &Path, id: &str, now_ms: i64) -> CognitionResult<()> {
                     record.clear();
                 }
                 started = true;
-                append_line(&mut record, &line.bytes[3..], line.terminated);
+                append_line(
+                    &mut record,
+                    line.bytes.get(3..).unwrap_or_default(),
+                    line.terminated,
+                );
             } else {
                 started = true;
                 append_line(&mut record, &line.bytes, line.terminated);

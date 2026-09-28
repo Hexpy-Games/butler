@@ -1,0 +1,28 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/codex/responses",
+    "key": {
+      "path": "/codex/responses",
+      "model": "gpt-6-luna",
+      "effort": "xhigh",
+      "user_request": "{\"description\":\"\",\"facts\":[{\"sourceId\":\"work:{{ECHO_1}}\",\"title\":\"Create one project work item titled “Build three raised garden beds,” record a brief review that the plan is sound, and mark the item completed.\",\"status\":\"blocked\",\"reportedAt\":\"{{TIME}}\",\"objective\":\"Create one project work item titled “Build three raised garden beds,” record a brief review that the plan is sound, and mark the item completed.\",\"summary\":\"The project work item could not be created: the Project Ledger rejected publication twice, and a search confirmed no matching record exists.\"},{\"sourceId\":\"plan:{{PLAN_ECHO_1}}\",\"title\":\"Guided Work Plan 1\",\"kind\":\"plan\",\"status\":\"active\",\"parentId\":\"{{ECHO_1}}\",\"reportedAt\":\"{{TIME}}\",\"metadataOnly\":true},{\"sourceId\":\"message:{{MSG_ECHO_1}}\",\"relation\":\"project_conversation_report_only\",\"reportedAt\":\"{{TIME}}\",\"excerpt\":\"The work item was **not created or completed**. The plan was reviewed as sound, but both attempts to publish the item failed. A project search found no matching item, so the “Plan is sound” review was not recorded on a project item. **Remaining:** create “Build three raised garden beds,” add the short review, and mark it completed once Project Ledger publication is working. No files were created or edited.\",\"excerptTruncated\":false}],\"sources\":[{\"sourceId\":\"work:{{ECHO_1}}\",\"kind\":\"work\",\"id\":\"{{ECHO_1}}\",\"revision\":\"{{DIGEST}}\",\"title\":\"Create one project work item titled “Build three raised garden beds,” record a brief review that the plan is sound, and mark the item completed.\"},{\"sourceId\":\"plan:{{PLAN_ECHO_1}}\",\"kind\":\"plan\",\"id\":\"{{PLAN_ECHO_1}}\",\"revision\":\"{{DIGEST}}\",\"title\":\"Guided Work Plan 1\"},{\"sourceId\":\"message:{{MSG_ECHO_1}}\",\"kind\":\"message\",\"id\":\"{{MSG_ECHO_1}}\",\"revision\":\"{{DIGEST}}\",\"title\":\"Plan\",\"sessionId\":\"project-{{UUID}}\"}],\"candidates\":[],\"coverage\":{\"totalWorks\":1,\"includedWorks\":1,\"includedDocuments\":1,\"includedReports\":1,\"excludedUnits\":0}}",
+      "round": []
+    }
+  },
+  "response": {
+    "status": 400,
+    "headers": [
+      [
+        "content-type",
+        "application/json"
+      ]
+    ],
+    "chunks": [
+      {
+        "delay_ms": 0,
+        "text": "{\"detail\":\"Unsupported parameter: max_output_tokens\"}"
+      }
+    ]
+  }
+}

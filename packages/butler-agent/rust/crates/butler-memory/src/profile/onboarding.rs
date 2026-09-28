@@ -1,9 +1,13 @@
+//! First-chat onboarding: the stored onboarding state, the fields a user
+//! fills in during the first chat, and applying the chosen persona.
+
 mod prompt;
 pub(super) use prompt::render;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
+use serde::Deserialize;
 use serde_json::{Map, Value};
 
 use super::contracts::{
@@ -12,6 +16,7 @@ use super::contracts::{
 };
 use super::naming;
 use super::presets::{PersonaLocale, PersonaPresets, safe_persona_preset_name};
+use crate::lenient::{self, Obj};
 use crate::profile::ProfileCode;
 
 pub(super) const STORAGE_LABEL: &str = "personalization/onboarding.json";
@@ -23,7 +28,7 @@ pub(super) fn read(data_root: &Path, now: &str) -> FirstChatOnboardingState {
     let Ok(value) = serde_json::from_slice::<Value>(&bytes) else {
         return default_state(now);
     };
-    normalize_state(&value, now)
+    normalize_state(lenient::view(&value), now)
 }
 
 pub(super) fn write(
@@ -33,7 +38,7 @@ pub(super) fn write(
     now_ms: i64,
 ) -> ProfileResult<FirstChatOnboardingState> {
     let value = serde_json::to_value(state).map_err(|source| error().with_source(source))?;
-    let normalized = normalize_state(&value, &state.updated_at);
+    let normalized = normalize_state(lenient::view(&value), &state.updated_at);
     naming::atomic_json(&data_root.join(STORAGE_LABEL), &normalized, pid, now_ms)?;
     Ok(normalized)
 }
@@ -209,53 +214,82 @@ pub(super) fn apply_persona(
     Ok(true)
 }
 
-fn normalize_state(value: &Value, now: &str) -> FirstChatOnboardingState {
-    let raw = value.as_object();
-    let fields = raw
-        .and_then(|map| map.get("fields"))
-        .and_then(Value::as_object);
+/// The onboarding file as stored; a field with the wrong type reads as
+/// absent.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct StoredOnboarding {
+    #[serde(deserialize_with = "lenient::option")]
+    status: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    fields: Option<Obj<StoredFields>>,
+    #[serde(deserialize_with = "lenient::string_list")]
+    skipped_fields: Vec<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    created_at: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    updated_at: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    completed_at: Option<String>,
+}
+
+/// The stored onboarding answers.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct StoredFields {
+    #[serde(deserialize_with = "lenient::option")]
+    interests: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    work: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    service_preference: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    persona_custom: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    persona_preset: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    profiling_mode: Option<String>,
+}
+
+fn normalize_state(stored: StoredOnboarding, now: &str) -> FirstChatOnboardingState {
     FirstChatOnboardingState {
         schema: "butler.first_chat_onboarding.v1".into(),
-        status: if raw
-            .and_then(|map| map.get("status"))
-            .and_then(Value::as_str)
-            == Some("complete")
-        {
+        status: if stored.status.as_deref() == Some("complete") {
             "complete".into()
         } else {
             "pending".into()
         },
         gateway: "any".into(),
-        fields: normalize_fields(fields),
-        skipped_fields: string_array(raw.and_then(|map| map.get("skipped_fields"))),
-        created_at: string(raw, "created_at").unwrap_or(now).into(),
-        updated_at: string(raw, "updated_at").unwrap_or(now).into(),
-        completed_at: string(raw, "completed_at").map(str::to_owned),
+        fields: normalize_fields(stored.fields.map(|fields| fields.0).unwrap_or_default()),
+        skipped_fields: stored
+            .skipped_fields
+            .iter()
+            .map(|value| butler_core::public_text::trim_js_whitespace(value))
+            .filter(|value| !value.is_empty())
+            .take(12)
+            .map(str::to_owned)
+            .collect(),
+        created_at: stored.created_at.unwrap_or_else(|| now.into()),
+        updated_at: stored.updated_at.unwrap_or_else(|| now.into()),
+        completed_at: stored.completed_at,
     }
 }
 
-fn normalize_fields(raw: Option<&Map<String, Value>>) -> FirstChatOnboardingFields {
-    let text = |key, limit| {
-        raw.and_then(|map| map.get(key))
-            .and_then(Value::as_str)
-            .map(|value| naming::bounded(value, limit))
-    };
+fn normalize_fields(stored: StoredFields) -> FirstChatOnboardingFields {
+    let text = |value: Option<String>, limit| value.map(|value| naming::bounded(&value, limit));
     FirstChatOnboardingFields {
-        interests: text("interests", 1_000),
-        work: text("work", 1_000),
-        service_preference: text("service_preference", 1_000),
-        persona_custom: text("persona_custom", 1_000),
-        persona_preset: text("persona_preset", 256).and_then(|value| {
+        interests: text(stored.interests, 1_000),
+        work: text(stored.work, 1_000),
+        service_preference: text(stored.service_preference, 1_000),
+        persona_custom: text(stored.persona_custom, 1_000),
+        persona_preset: text(stored.persona_preset, 256).and_then(|value| {
             if custom(&value) {
                 Some("custom".into())
             } else {
                 safe_persona_preset_name(&value).map(str::to_owned)
             }
         }),
-        profiling_mode: raw
-            .and_then(|map| map.get("profiling_mode"))
-            .and_then(Value::as_str)
-            .map(ProfilingMode::parse),
+        profiling_mode: stored.profiling_mode.as_deref().map(ProfilingMode::parse),
     }
 }
 
@@ -270,21 +304,6 @@ fn default_state(now: &str) -> FirstChatOnboardingState {
         updated_at: now.into(),
         completed_at: None,
     }
-}
-fn string<'a>(raw: Option<&'a Map<String, Value>>, key: &str) -> Option<&'a str> {
-    raw.and_then(|m| m.get(key)).and_then(Value::as_str)
-}
-fn string_array(value: Option<&Value>) -> Vec<String> {
-    value
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .map(butler_core::public_text::trim_js_whitespace)
-        .filter(|v| !v.is_empty())
-        .take(12)
-        .map(str::to_owned)
-        .collect()
 }
 fn custom(value: &str) -> bool {
     matches!(
@@ -321,6 +340,8 @@ fn locale_str(value: PersonaLocale) -> &'static str {
         PersonaLocale::Ko => "ko",
     }
 }
+/// Passthrough: `butler.config.json` is edited in place, so keys owned by
+/// other components survive.
 fn object<'a>(root: &'a mut Value, key: &str) -> &'a mut Map<String, Value> {
     butler_core::json::object_field_mut(butler_core::json::object_mut(root), key)
 }

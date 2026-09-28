@@ -41,6 +41,6 @@ pub(super) async fn run(
     signal_task.abort();
     let _ = signal_task.await;
     result.map(|outcome| {
-        json!({"operation":"retry-failed","generationId":outcome["generationId"],"retried":outcome["retried"]})
+        json!({"operation":"retry-failed","generationId":outcome.generation_id,"retried":outcome.retried})
     })
 }

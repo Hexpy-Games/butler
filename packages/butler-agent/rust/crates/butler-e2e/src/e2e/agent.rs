@@ -22,8 +22,19 @@ pub struct Launch {
     pub tmp: PathBuf,
     pub logs: PathBuf,
     pub port: u16,
+    /// The gateway token; empty until read from the data folder when the
+    /// agent owns it (see [`Launch::use_data_folder_token`]).
     pub token: String,
     pub env: Vec<(String, String)>,
+}
+
+/// Where the agent keeps its gateway token when no override names a file.
+pub const DATA_FOLDER_TOKEN_FILE: &str = "app/runtime/auth/local-agent-auth.json";
+
+/// The field of the token file the harness reads.
+#[derive(serde::Deserialize)]
+struct TokenFile {
+    token: String,
 }
 
 impl Launch {
@@ -63,6 +74,23 @@ impl Launch {
 
     pub fn remove_env(&mut self, key: &str) {
         self.env.retain(|(existing, _)| existing != key);
+    }
+
+    /// Starts the agent as the CLI does: no token variables, so the agent
+    /// reads (or creates) the token in its data folder, and the harness
+    /// reads it from there.
+    pub fn use_data_folder_token(&mut self) {
+        self.remove_env("BUTLER_APP_LOCAL_AUTH_REQUIRED");
+        self.remove_env("BUTLER_APP_LOCAL_AUTH_FILE");
+        self.token.clear();
+    }
+
+    /// The token the agent keeps in its data folder, once it exists.
+    pub fn data_folder_token(&self) -> Option<String> {
+        let bytes = fs::read(self.data.join(DATA_FOLDER_TOKEN_FILE)).ok()?;
+        serde_json::from_slice::<TokenFile>(&bytes)
+            .ok()
+            .map(|file| file.token)
     }
 
     /// A command for the agent binary with the scenario's isolated environment.
@@ -123,13 +151,18 @@ impl Agent {
             .stderr(stderr)
             .spawn()?;
         self.child = Some(child);
-        let gateway = Gateway::new(
-            format!("http://127.0.0.1:{}", self.launch.port),
-            self.launch.token.clone(),
-        );
         let deadline = Instant::now() + Duration::from_secs(90);
         loop {
-            if gateway.healthy().await {
+            if self.launch.token.is_empty()
+                && let Some(token) = self.launch.data_folder_token()
+            {
+                self.launch.token = token;
+            }
+            let gateway = Gateway::new(
+                format!("http://127.0.0.1:{}", self.launch.port),
+                self.launch.token.clone(),
+            );
+            if !self.launch.token.is_empty() && gateway.healthy().await {
                 return Ok(gateway);
             }
             if let Some(status) = self
@@ -254,7 +287,48 @@ impl Agent {
         })
     }
 
-    /// Runs `butler-agent <args>` (the `butler` CLI) against the same data dir.
+    /// Like [`Agent::cli`], without blocking the test's runtime: use it for
+    /// commands that call the model provider (memory ingest, consolidation,
+    /// automation runs). The record/replay provider is served on the test's
+    /// runtime, so a blocking wait would starve it until the command's own
+    /// provider timeout.
+    pub async fn cli_async(&self, args: &[&str]) -> Result<CliOutput, HarnessError> {
+        self.cli_async_input(args, None).await
+    }
+
+    /// [`Agent::cli_async`] with `input` written to the command's stdin.
+    pub async fn cli_async_input(
+        &self,
+        args: &[&str],
+        input: Option<&str>,
+    ) -> Result<CliOutput, HarnessError> {
+        use tokio::io::AsyncWriteExt;
+        let mut command = tokio::process::Command::from(self.launch.command());
+        command
+            .args(args)
+            .stdin(if input.is_some() {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+        let mut child = command.spawn()?;
+        if let (Some(input), Some(mut stdin)) = (input, child.stdin.take()) {
+            stdin.write_all(input.as_bytes()).await?;
+        }
+        let output = child.wait_with_output().await?;
+        Ok(CliOutput {
+            code: output.status.code(),
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        })
+    }
+
+    /// Runs `butler-agent <args>` (the `butler` CLI) against the same data
+    /// dir, blocking the calling thread. Only for commands that never reach
+    /// the model provider; otherwise use [`Agent::cli_async`].
     pub fn cli(&self, args: &[&str]) -> Result<CliOutput, HarnessError> {
         let output = self
             .launch

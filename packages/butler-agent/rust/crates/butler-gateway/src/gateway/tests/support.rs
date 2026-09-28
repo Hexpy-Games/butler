@@ -4,17 +4,14 @@ use std::{
 };
 
 use serde_json::{Map, Value, json};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream},
-};
+use tokio::net::TcpListener;
 
 use super::*;
 
 mod dashboard;
 mod http;
 mod session_controls;
-pub(super) use http::authorized_json;
+pub(super) use http::{authorized_json, request};
 
 pub(super) async fn start(
     application: Arc<TestApplication>,
@@ -36,14 +33,6 @@ pub(super) async fn start_with_config(
 ) -> GatewayServer {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     serve_gateway(listener, application, config).unwrap()
-}
-
-pub(super) async fn request(address: std::net::SocketAddr, request: &str) -> String {
-    let mut stream = TcpStream::connect(address).await.unwrap();
-    stream.write_all(request.as_bytes()).await.unwrap();
-    let mut response = Vec::new();
-    stream.read_to_end(&mut response).await.unwrap();
-    String::from_utf8(response).unwrap()
 }
 
 type EventListener = Arc<dyn Fn(AppEventEnvelope) + Send + Sync>;

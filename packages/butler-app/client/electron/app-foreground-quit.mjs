@@ -1,5 +1,5 @@
 export const APP_FOREGROUND_QUIT_COPY =
-  "Butler를 종료하면 실행 중인 작업과 자동화가 중지됩니다.";
+  "Butler를 종료하면 실행 중인 작업과 예약 작업이 중지됩니다.";
 
 const terminalTurnStates = new Set([
   "completed",

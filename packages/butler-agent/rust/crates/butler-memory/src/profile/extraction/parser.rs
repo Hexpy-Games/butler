@@ -1,13 +1,76 @@
+//! Extractor responses: the strict parser used for transcript capture
+//! (every candidate must validate) and the forgiving one used for
+//! third-party imports (invalid candidates are dropped).
+
 use std::collections::{HashMap, HashSet};
 
+use serde::Deserialize;
 use serde_json::{Map, Value};
 
 use super::super::contracts::{ProfileError, ProfileResult, ProfilingMode};
+use super::super::understanding::{
+    CandidateDraft, Confidence, DecayPolicy, Expiry, Layer, Sensitivity, SourceType, TemporalScope,
+};
 use super::types::{CorrectionTarget, ExtractedCandidate};
+use crate::lenient::{self, Arg};
 use crate::profile::ProfileCode;
 use values::{valid_category, valid_facet};
 
 mod values;
+
+/// A candidate as the model returned it; a field with the wrong type reads
+/// as absent.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct RawCandidate {
+    #[serde(deserialize_with = "lenient::option")]
+    category: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    summary: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    facet: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    layer: Option<Layer>,
+    #[serde(deserialize_with = "lenient::string_list")]
+    applies_when: Vec<String>,
+    #[serde(deserialize_with = "lenient::string_list")]
+    butler_should: Vec<String>,
+    #[serde(deserialize_with = "lenient::string_list")]
+    butler_should_not: Vec<String>,
+    contradiction_refs: Arg<Vec<Arg<String>>>,
+    #[serde(deserialize_with = "lenient::option")]
+    temporal_scope: Option<TemporalScope>,
+    #[serde(deserialize_with = "lenient::option")]
+    decay_policy: Option<DecayPolicy>,
+    #[serde(deserialize_with = "lenient::option")]
+    sensitivity: Option<Sensitivity>,
+    evidence_refs: Arg<Vec<Arg<String>>>,
+    #[serde(deserialize_with = "lenient::option")]
+    sensitive_domain: Option<bool>,
+    #[serde(deserialize_with = "lenient::option")]
+    source_type: Option<SourceType>,
+    #[serde(deserialize_with = "lenient::option")]
+    confidence: Option<Confidence>,
+    #[serde(deserialize_with = "lenient::option")]
+    expires_or_decay: Option<Expiry>,
+}
+
+impl RawCandidate {
+    /// The string items of `contradiction_refs`.
+    fn contradiction_texts(&self) -> impl Iterator<Item = &str> {
+        valid_items(&self.contradiction_refs)
+    }
+}
+
+/// The string items of an array field.
+fn valid_items(field: &Arg<Vec<Arg<String>>>) -> impl Iterator<Item = &str> {
+    field
+        .valid()
+        .into_iter()
+        .flatten()
+        .filter_map(Arg::valid)
+        .map(String::as_str)
+}
 
 pub(super) fn strict(
     raw: &str,
@@ -20,86 +83,83 @@ pub(super) fn strict(
         .get("candidates")
         .and_then(Value::as_array)
         .ok_or_else(|| validation("profile extractor response missing candidates"))?;
-    let mut output = Vec::new();
-    for item in items {
-        let object = item
-            .as_object()
-            .ok_or_else(|| validation("profile extractor candidate has invalid shape"))?;
-        let raw_refs = object
-            .get("evidence_refs")
-            .and_then(Value::as_array)
-            .filter(|value| !value.is_empty())
-            .ok_or_else(|| validation("profile extractor candidate has invalid evidence refs"))?;
-        if raw_refs.iter().any(|value| {
-            value
-                .as_str()
-                .map(butler_core::public_text::trim_js_whitespace)
-                .is_none_or(|value| !allowed.contains(value))
-        }) {
-            return Err(validation(
-                "profile extractor candidate has invalid evidence refs",
-            ));
-        }
-        let mut candidate = normalize(object, allowed, mode)
-            .ok_or_else(|| validation("profile extractor candidate failed validation"))?;
-        if candidate.evidence_refs.is_empty() {
-            return Err(validation("profile extractor candidate failed validation"));
-        }
-        if object
-            .get("contradiction_refs")
-            .is_some_and(|value| !value.is_array())
-        {
-            return Err(validation(
-                "profile extractor correction refs have invalid shape",
-            ));
-        }
-        let raw_corrections = object
-            .get("contradiction_refs")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        if raw_corrections.iter().any(|value| {
-            value
-                .as_str()
-                .map(butler_core::public_text::trim_js_whitespace)
-                .is_none_or(str::is_empty)
-        }) {
-            return Err(validation(
-                "profile extractor correction refs have invalid shape",
-            ));
-        }
-        let requested = unique(
-            raw_corrections
-                .iter()
-                .filter_map(Value::as_str)
-                .map(|value| butler_core::public_text::trim_js_whitespace(value).to_owned())
-                .collect(),
-            usize::MAX,
-        );
-        let mut resolved = Vec::new();
-        for reference in requested {
-            let target = targets.get(&reference).ok_or_else(|| {
-                validation("profile extractor correction target failed validation")
-            })?;
-            let facet = candidate.payload.get("facet").and_then(Value::as_str);
-            let conditions = strings(&candidate.payload, "applies_when", 6);
-            if candidate.source_type != "explicit"
-                || candidate.category != target.category
-                || facet != target.facet.as_deref()
-                || normalized_conditions(conditions) != target.applies_when
-            {
-                return Err(validation(
-                    "profile extractor correction target failed validation",
-                ));
+    items
+        .iter()
+        .map(|item| {
+            if !item.is_object() {
+                return Err(validation("profile extractor candidate has invalid shape"));
             }
-            resolved.push(Value::String(target.stable_id.clone()));
-        }
-        resolved.truncate(6);
-        butler_core::json::object_mut(&mut candidate.payload)
-            .insert("contradiction_refs".into(), Value::Array(resolved));
-        output.push(candidate);
+            strict_candidate(&lenient::view(item), allowed, mode, targets)
+        })
+        .collect()
+}
+
+fn strict_candidate(
+    raw: &RawCandidate,
+    allowed: &HashSet<String>,
+    mode: ProfilingMode,
+    targets: &HashMap<String, CorrectionTarget>,
+) -> ProfileResult<ExtractedCandidate> {
+    let invalid_refs = || validation("profile extractor candidate has invalid evidence refs");
+    let raw_refs = raw
+        .evidence_refs
+        .valid()
+        .filter(|refs| !refs.is_empty())
+        .ok_or_else(invalid_refs)?;
+    if raw_refs.iter().any(|value| {
+        value
+            .valid()
+            .map(|value| butler_core::public_text::trim_js_whitespace(value))
+            .is_none_or(|value| !allowed.contains(value))
+    }) {
+        return Err(invalid_refs());
     }
-    Ok(output)
+    let mut candidate = normalize(raw, allowed, mode)
+        .filter(|candidate| !candidate.evidence_refs.is_empty())
+        .ok_or_else(|| validation("profile extractor candidate failed validation"))?;
+    let invalid_corrections = || validation("profile extractor correction refs have invalid shape");
+    if matches!(raw.contradiction_refs, Arg::Null | Arg::Invalid(_)) {
+        return Err(invalid_corrections());
+    }
+    let raw_corrections = raw
+        .contradiction_refs
+        .valid()
+        .map_or(&[][..], Vec::as_slice);
+    if raw_corrections.iter().any(|value| {
+        value
+            .valid()
+            .map(|value| butler_core::public_text::trim_js_whitespace(value))
+            .is_none_or(str::is_empty)
+    }) {
+        return Err(invalid_corrections());
+    }
+    let requested = unique(
+        raw.contradiction_texts()
+            .map(|value| butler_core::public_text::trim_js_whitespace(value).to_owned())
+            .collect(),
+        usize::MAX,
+    );
+    let mut resolved = Vec::new();
+    for reference in requested {
+        let target = targets
+            .get(&reference)
+            .filter(|target| corrects(&candidate, target))
+            .ok_or_else(|| validation("profile extractor correction target failed validation"))?;
+        resolved.push(target.stable_id.clone());
+    }
+    resolved.truncate(6);
+    candidate.draft.contradiction_refs = resolved;
+    Ok(candidate)
+}
+
+/// Whether an explicit candidate keeps the target's category, facet and
+/// conditions, as a correction must.
+fn corrects(candidate: &ExtractedCandidate, target: &CorrectionTarget) -> bool {
+    let conditions = unique(candidate.draft.applies_when.clone(), 6);
+    candidate.source_type == SourceType::Explicit
+        && candidate.category == target.category
+        && candidate.draft.facet == target.facet
+        && normalized_conditions(conditions) == target.applies_when
 }
 
 pub(super) fn forgiving(
@@ -113,128 +173,65 @@ pub(super) fn forgiving(
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .filter_map(Value::as_object)
-        .filter_map(|item| normalize(item, allowed, mode))
+        .filter(|item| item.is_object())
+        .filter_map(|item| normalize(&lenient::view(item), allowed, mode))
         .take(40)
         .collect()
 }
 
 fn normalize(
-    object: &Map<String, Value>,
+    raw: &RawCandidate,
     allowed: &HashSet<String>,
     mode: ProfilingMode,
 ) -> Option<ExtractedCandidate> {
-    let category = valid_category(object.get("category")?.as_str()?)?;
+    let category = valid_category(raw.category.as_deref()?)?;
     if mode == ProfilingMode::Off
         || mode == ProfilingMode::Basic
             && !matches!(category, "communication" | "epistemic_style" | "boundaries")
     {
         return None;
     }
-    let summary = normalize_text(object.get("summary")?.as_str()?, 320);
+    let summary = normalize_text(raw.summary.as_deref()?, 320);
     if summary.is_empty() {
         return None;
     }
-    let facet = valid_facet(object.get("facet").and_then(Value::as_str));
-    let declared = object.get("sensitive_domain").and_then(Value::as_bool) == Some(true);
-    let sensitive = normalize_sensitive(category, facet, declared);
+    let facet = valid_facet(raw.facet.as_deref());
+    let sensitive = normalize_sensitive(category, facet, raw.sensitive_domain == Some(true));
     let evidence_refs = unique(
-        object
-            .get("evidence_refs")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
+        valid_items(&raw.evidence_refs)
             .map(butler_core::public_text::trim_js_whitespace)
             .filter(|value| allowed.contains(*value))
             .map(str::to_owned)
             .collect(),
         12,
     );
-    let source = match object.get("source_type").and_then(Value::as_str) {
-        Some("explicit") => "explicit",
-        Some("repeated_observation") => "repeated_observation",
-        Some("user_confirmed") => "user_confirmed",
-        _ => "inference",
+    let draft = CandidateDraft {
+        summary,
+        facet: facet.map(str::to_owned),
+        layer: raw.layer,
+        applies_when: bounded(raw.applies_when.iter().map(String::as_str)),
+        butler_should: bounded(raw.butler_should.iter().map(String::as_str)),
+        butler_should_not: bounded(raw.butler_should_not.iter().map(String::as_str)),
+        contradiction_refs: bounded(raw.contradiction_texts()),
+        temporal_scope: raw.temporal_scope,
+        decay_policy: raw.decay_policy,
+        sensitivity: if sensitive {
+            raw.sensitivity
+        } else {
+            Some(Sensitivity::Normal)
+        },
     };
-    let confidence = match object.get("confidence").and_then(Value::as_str) {
-        Some("medium") => "medium",
-        Some("high") => "high",
-        _ => "low",
-    };
-    let mut payload = Map::new();
-    payload.insert("summary".into(), Value::String(summary));
-    payload.insert(
-        "facet".into(),
-        facet
-            .map(|value| Value::String(value.into()))
-            .unwrap_or(Value::Null),
-    );
-    payload.insert(
-        "layer".into(),
-        valid(
-            object,
-            "layer",
-            &[
-                "stable_disposition",
-                "contextual_adaptation",
-                "current_attention",
-                "narrative_meaning",
-            ],
-        ),
-    );
-    for key in ["applies_when", "butler_should", "butler_should_not"] {
-        payload.insert(key.into(), Value::Array(strings_value(object.get(key), 6)));
-    }
-    payload.insert(
-        "contradiction_refs".into(),
-        Value::Array(strings_value(object.get("contradiction_refs"), 6)),
-    );
-    payload.insert(
-        "temporal_scope".into(),
-        valid(
-            object,
-            "temporal_scope",
-            &["transient", "active", "durable"],
-        ),
-    );
-    payload.insert(
-        "decay_policy".into(),
-        valid(
-            object,
-            "decay_policy",
-            &[
-                "days_7",
-                "days_30",
-                "reinforce_or_decay",
-                "never_without_consent",
-            ],
-        ),
-    );
-    let sensitivity = if sensitive {
-        valid(
-            object,
-            "sensitivity",
-            &["normal", "sensitive", "restricted"],
-        )
-    } else {
-        Value::String("normal".into())
-    };
-    payload.insert("sensitivity".into(), sensitivity);
     Some(ExtractedCandidate {
-        payload: Value::Object(payload),
+        draft,
         category: category.into(),
-        source_type: source.into(),
-        confidence: confidence.into(),
+        source_type: raw.source_type.unwrap_or(SourceType::Inference),
+        confidence: raw.confidence.unwrap_or(Confidence::Low),
         sensitive_domain: sensitive,
         evidence_refs,
-        expires_or_decay: Some(
-            match object.get("expires_or_decay").and_then(Value::as_str) {
-                Some("expires") => "expires",
-                _ => "decay",
-            }
-            .into(),
-        ),
+        expires_or_decay: Some(match raw.expires_or_decay {
+            Some(Expiry::Expires) => Expiry::Expires,
+            _ => Expiry::Decay,
+        }),
     })
 }
 
@@ -309,32 +306,15 @@ fn normalize_sensitive(category: &str, facet: Option<&str>, declared: bool) -> b
 fn normalize_text(value: &str, limit: usize) -> String {
     super::super::naming::bounded(&super::super::naming::collapse_js_whitespace(value), limit)
 }
-fn strings(value: &Value, key: &str, limit: usize) -> Vec<String> {
-    value
-        .get(key)
-        .map(|value| {
-            strings_value(Some(value), limit)
-                .into_iter()
-                .filter_map(|value| value.as_str().map(str::to_owned))
-                .collect()
-        })
-        .unwrap_or_default()
-}
-fn strings_value(value: Option<&Value>, limit: usize) -> Vec<Value> {
+/// At most six normalized, non-empty, unique items.
+fn bounded<'a>(values: impl Iterator<Item = &'a str>) -> Vec<String> {
     unique(
-        value
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
+        values
             .map(|value| normalize_text(value, 240))
             .filter(|value| !value.is_empty())
             .collect(),
-        limit,
+        6,
     )
-    .into_iter()
-    .map(Value::String)
-    .collect()
 }
 fn unique(values: Vec<String>, limit: usize) -> Vec<String> {
     let mut seen = HashSet::new();
@@ -343,14 +323,6 @@ fn unique(values: Vec<String>, limit: usize) -> Vec<String> {
         .filter(|value| seen.insert(value.clone()))
         .take(limit)
         .collect()
-}
-fn valid(object: &Map<String, Value>, key: &str, allowed: &[&str]) -> Value {
-    object
-        .get(key)
-        .and_then(Value::as_str)
-        .filter(|value| allowed.contains(value))
-        .map(|value| Value::String(value.into()))
-        .unwrap_or(Value::Null)
 }
 fn normalized_conditions(mut value: Vec<String>) -> Vec<String> {
     value = value

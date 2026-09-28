@@ -69,7 +69,7 @@ export function snapshotForAppUiState(
     cached_at: new Date().toISOString(),
     active_session_id: normalizeString(input.active_session_id, "draft:chat"),
     left_open: input.left_open ?? true,
-    right_open: input.right_open ?? true,
+    right_open: input.right_open ?? false,
     right_tab: normalizeString(input.right_tab, "summary"),
     left_panel_width: clampPanelWidth(
       Number(input.left_panel_width ?? DEFAULT_LEFT_PANEL_WIDTH),

@@ -1,12 +1,16 @@
-use super::*;
+//! Plan validation, final graph apply and vector registration of a window.
 
+use super::*;
+use crate::cognition::extraction::RunEvidence;
+
+/// Normalizes and saves the window's plan. A fresh run (`evidence` present)
+/// first saves its output and evidence as the attempt result.
 pub(super) async fn validate_and_save(
     operation: &Operation,
     claim: &ClaimedProjectionWindow,
     input: &ExtractInput,
     output: &ExtractOutput,
-    // Present when the attempt result must be saved with its evidence.
-    evidence: Option<serde_json::Value>,
+    evidence: Option<RunEvidence>,
 ) -> CognitionResult<NormalizedPlan> {
     let job = claim.job_id.clone();
     let window = claim.window_ref.clone();
@@ -21,27 +25,21 @@ pub(super) async fn validate_and_save(
                 state
                     .graph
                     .pin_binding_candidates(&window, &nonce, &input)?;
-                state.graph.save_attempt_result(
-                    &window,
-                    &nonce,
-                    &serde_json::to_value(&output).map_err(json_error)?,
-                    evidence,
-                    &clock(),
-                )?;
+                state
+                    .graph
+                    .save_attempt_result(&window, &nonce, &output, evidence, &clock())?;
             }
             let plan = state.graph.normalize_plan(&input, &output)?;
-            state.graph.save_validated_plan(
-                &job,
-                &window,
-                &nonce,
-                &serde_json::to_value(&output).map_err(json_error)?,
-                &serde_json::to_value(&plan).map_err(json_error)?,
-            )?;
+            state
+                .graph
+                .save_validated_plan(&job, &window, &nonce, &output, &plan)?;
             Ok(plan)
         })
         .await
 }
 
+/// Applies the plan to the graph, then registers the episode's vector
+/// units (a registration failure is recorded, not returned).
 pub(super) async fn finish(
     operation: Operation,
     claim: Arc<ClaimedProjectionWindow>,
@@ -78,64 +76,8 @@ pub(super) async fn finish(
         })
         .await?;
     let job = claim.job_id.clone();
-    let sources = operation
-        .read({
-            let job = job.clone();
-            move |state| {
-                state.graph.read_episode_projection(
-                    &state.canonical,
-                    &state.handle.source_root,
-                    &job,
-                )
-            }
-        })
-        .await;
-    match sources {
-        Ok(sources) => {
-            let registered = operation
-                .write({
-                    let job = job.clone();
-                    let clock = operation.clock.clone();
-                    move |state| {
-                        assert_current(state, &clock())?;
-                        state.graph.register_vector_units(&job, &sources, &clock())
-                    }
-                })
-                .await;
-            match registered {
-                Ok(None) => {}
-                Ok(Some(failure)) => {
-                    mark_registration_error(
-                        &operation,
-                        &job,
-                        failure.error,
-                        failure.stage,
-                        settlement_deadline,
-                    )
-                    .await;
-                }
-                Err(error) => {
-                    mark_registration_error(
-                        &operation,
-                        &job,
-                        error,
-                        VectorRegistrationStage::Episode,
-                        settlement_deadline,
-                    )
-                    .await;
-                }
-            }
-        }
-        Err(error) => {
-            mark_registration_error(
-                &operation,
-                &job,
-                error,
-                VectorRegistrationStage::Episode,
-                settlement_deadline,
-            )
-            .await;
-        }
+    if let Err((error, stage)) = register_vectors(&operation, &job).await {
+        mark_registration_error(&operation, &job, error, stage, settlement_deadline).await;
     }
     operation
         .read(move |state| state.graph.progress(&job))
@@ -166,4 +108,40 @@ async fn mark_registration_error(
                 .mark_vector_registration_failure(&job, error.code(), stage)
         })
         .await;
+}
+
+/// Registers the vector units of the job's episode; the error and the stage
+/// it failed at otherwise.
+async fn register_vectors(
+    operation: &Operation,
+    job: &str,
+) -> Result<(), (CognitionError, VectorRegistrationStage)> {
+    let sources = operation
+        .read({
+            let job = job.to_owned();
+            move |state| {
+                state.graph.read_episode_projection(
+                    &state.canonical,
+                    &state.handle.source_root,
+                    &job,
+                )
+            }
+        })
+        .await
+        .map_err(|error| (error, VectorRegistrationStage::Episode))?;
+    let registered = operation
+        .write({
+            let job = job.to_owned();
+            let clock = operation.clock.clone();
+            move |state| {
+                assert_current(state, &clock())?;
+                state.graph.register_vector_units(&job, &sources, &clock())
+            }
+        })
+        .await
+        .map_err(|error| (error, VectorRegistrationStage::Episode))?;
+    match registered {
+        None => Ok(()),
+        Some(failure) => Err((failure.error, failure.stage)),
+    }
 }

@@ -1,0 +1,14 @@
+---
+// The manual moved from /docs/ to /help/; every old page URL forwards to its new one.
+import RedirectPage from "../../site/RedirectPage.astro";
+import { publishedEntries } from "../../site/docs";
+import { docHref, docSlug } from "../../site/nav";
+
+export async function getStaticPaths() {
+  const entries = await publishedEntries("ko");
+  return entries.map((entry) => ({ params: { slug: docSlug(entry.id) } }));
+}
+
+const { slug } = Astro.params;
+---
+<RedirectPage to={docHref(import.meta.env.BASE_URL, "ko", slug ?? "")} />

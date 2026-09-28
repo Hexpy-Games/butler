@@ -5,6 +5,7 @@ import type { IconSize } from "../Icons";
 import type { ButlerMarkTheme, ButlerMarkThemeColors } from "./butlerMarkTheme";
 import styles from "./ButlerThinkingMark.module.css";
 import { startMarkLoop, type MarkLoop } from "./markLoop";
+import { holdMorph } from "./morphContinuity";
 import type { MorphSim } from "./thinking-mark/motion";
 
 export type ButlerThinkingMarkState = "idle" | "working";
@@ -20,6 +21,12 @@ export interface ButlerThinkingMarkProps {
   themeColors?: ButlerMarkThemeColors;
   /** Forces reduced motion on or off; defaults to the OS setting and the DS reduced-motion scope. */
   reducedMotion?: boolean;
+  /**
+   * Marks that stand for the same ongoing work share a key: when the product
+   * remounts the mark mid-work (pending -> current status), the new mark
+   * continues the morph instead of restarting it from the logo.
+   */
+  morphKey?: string;
   "data-test-class"?: string;
 }
 
@@ -42,6 +49,7 @@ export function ButlerThinkingMark({
   theme,
   themeColors,
   reducedMotion,
+  morphKey,
   "data-test-class": dataTestClass,
 }: ButlerThinkingMarkProps) {
   const systemReduced = useSystemReducedMotion();
@@ -50,7 +58,7 @@ export function ButlerThinkingMark({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef<ButlerThinkingMarkState>(state);
   const reducedRef = useRef(reduced);
-  // The simulation outlives theme changes so a re-theme never restarts the morph.
+  // The simulation outlives theme changes (and, with a morphKey, remounts) so neither restarts the morph.
   const simRef = useRef<MorphSim | null>(null);
   const loopRef = useRef<MarkLoop | null>(null);
   const [breathe, setBreathe] = useState<"on" | "settle" | undefined>(breathing ? "on" : undefined);
@@ -76,6 +84,7 @@ export function ButlerThinkingMark({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
+    const release = holdMorph(morphKey, simRef);
     const loop = startMarkLoop(canvas, {
       theme,
       themeColors,
@@ -87,8 +96,9 @@ export function ButlerThinkingMark({
     return () => {
       loopRef.current = null;
       loop?.dispose();
+      release();
     };
-  }, [theme, themeColors?.dark, themeColors?.light]);
+  }, [theme, themeColors?.dark, themeColors?.light, morphKey]);
 
   return (
     <AspectFrame size={size} aria-hidden="true" data-mark-state={state} data-test-class={dataTestClass}>
