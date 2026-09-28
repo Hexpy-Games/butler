@@ -15,30 +15,41 @@ const view = (overrides: Partial<SecurityView> = {}): SecurityView => ({
   remote_access_enabled: false,
   bind_addresses: ["127.0.0.1:18765"],
   lan_urls: [],
+  allowed_hosts: ["butler.example.com"],
   connection_code: { masked: "abcd…wxyz", created_at: "2026-09-28T01:00:00Z" },
   ...overrides,
 });
 
 const ok = (data: unknown) => ({ ok: true, data });
-const forbidden = { ok: false, error: { schema: "butler.app.bridge-error.v1", code: "security_loopback_only", status: 403 } };
+const failure = (code: string, status: number) => ({ ok: false, error: { schema: "butler.app.bridge-error.v1", code, status } });
+const forbidden = failure("loopback_required", 403);
 const FULL_CODE = "c".repeat(43);
 
 type Call = [method: string, input?: unknown];
 
 /** A desktop bridge double for the security routes; `server` holds the gateway state. */
-function securityBridge(server: { view: SecurityView; forbid?: Set<string>; fail?: Set<string> }) {
+function securityBridge(server: {
+  view: SecurityView;
+  forbid?: Set<string>;
+  fail?: Set<string>;
+  failWith?: ReturnType<typeof failure>;
+}) {
   const calls: Call[] = [];
-  const reply = (method: string, data: () => unknown) => async (input?: unknown) => {
+  const reply = (method: string, data: (input?: unknown) => unknown) => async (input?: unknown) => {
     calls.push(input === undefined ? [method] : [method, input]);
     if (server.forbid?.has(method)) return forbidden;
-    if (server.fail?.has(method)) return { ok: false, error: { schema: "butler.app.bridge-error.v1", code: "request_failed", status: 500 } };
-    return ok(data());
+    if (server.fail?.has(method)) return server.failWith ?? failure("request_failed", 500);
+    return ok(data(input));
   };
   return {
     calls,
     bridge: {
       getSecurity: reply("getSecurity", () => server.view),
-      updateSettings: reply("updateSettings", () => ({})),
+      updateSettings: reply("updateSettings", (input) => {
+        const hosts = (input as { security?: { allowed_hosts?: string[] } }).security?.allowed_hosts;
+        if (hosts) server.view = { ...server.view, allowed_hosts: hosts };
+        return {};
+      }),
       revealConnectionCode: reply("revealConnectionCode", () => ({ code: FULL_CODE })),
       rotateConnectionCode: reply("rotateConnectionCode", () => {
         server.view = view({ connection_code: { masked: "efgh…stuv", created_at: "2026-09-29T01:00:00Z" } });
@@ -100,15 +111,30 @@ async function mount(bridge: Record<string, unknown>) {
     await settle();
   };
   const codeInput = () => document.querySelector<HTMLInputElement>('[data-setting-id="connection-code"] input');
-  return { document, clipboard, button, click, settle, codeInput };
+  const type = async (input: HTMLInputElement | null, value: string) => {
+    expect(input).toBeTruthy();
+    const setValue = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      setValue.call(input, value);
+      input!.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    });
+  };
+  const pressEnter = async (input: HTMLInputElement | null) => {
+    await act(async () => {
+      input!.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    await settle();
+  };
+  const sectionIds = () => Array.from(document.querySelectorAll("[data-settings-section-id]"))
+    .map((section) => section.getAttribute("data-settings-section-id"));
+  return { document, clipboard, button, click, settle, codeInput, type, pressEnter, sectionIds };
 }
 
 test("security shows the masked code with its created date and no LAN URLs while off", async () => {
   const { calls, bridge } = securityBridge({ view: view() });
-  const { document, codeInput, button } = await mount(bridge);
+  const { document, codeInput, button, sectionIds } = await mount(bridge);
   expect(calls).toEqual([["getSecurity"]]);
-  expect(Array.from(document.querySelectorAll("[data-settings-section-id]"))
-    .map((section) => section.getAttribute("data-settings-section-id"))).toEqual(["remote-access", "connection-code"]);
+  expect(sectionIds()).toEqual(["remote-access", "connection-code", "security-advanced"]);
   expect(document.querySelector('[role="switch"]')?.getAttribute("aria-checked")).toBe("false");
   expect(document.querySelector('[data-setting-id="lan-urls"]')).toBeNull();
   expect(codeInput()?.value).toBe("abcd…wxyz");
@@ -193,6 +219,109 @@ test("a 403 from the loopback-only rule shows a host-only line instead of the co
   expect(document.querySelector('[data-slot="settings-section-error"]')).toBeNull();
   expect(document.querySelector('[role="switch"]')).toBeNull();
   expect(document.querySelector('[data-settings-section-id="connection-code"]')).toBeNull();
+  expect(document.querySelector('[data-settings-section-id="security-advanced"]')).toBeNull();
+});
+
+test("a 403 without the loopback_required code is a load error, not the host-only line", async () => {
+  const server = { view: view(), fail: new Set(["getSecurity"]), failWith: failure("host_not_allowed", 403) };
+  const { bridge } = securityBridge(server);
+  const { document } = await mount(bridge);
+  expect(document.querySelector('[data-slot="settings-section-error"]')).not.toBeNull();
+  expect(document.querySelector('[data-slot="settings-section-empty"]')).toBeNull();
+});
+
+test("without a connection code the page omits its section; an unknown created date is left out", async () => {
+  const { bridge } = securityBridge({ view: view({ connection_code: null }) });
+  const { sectionIds } = await mount(bridge);
+  expect(sectionIds()).toEqual(["remote-access", "security-advanced"]);
+  await cleanup?.();
+  cleanup = null;
+
+  const undated = securityBridge({ view: view({ connection_code: { masked: "abcd…wxyz", created_at: null } }) });
+  const { document, codeInput } = await mount(undated.bridge);
+  expect(codeInput()?.value).toBe("abcd…wxyz");
+  expect(document.querySelector('[data-setting-id="connection-code"]')?.textContent).not.toContain(copy.security.createdAt(""));
+});
+
+test("allowed hosts sit in a collapsed Advanced disclosure", async () => {
+  const { bridge } = securityBridge({ view: view() });
+  const { document, click, sectionIds } = await mount(bridge);
+  const advanced = document.querySelector('[data-settings-section-id="security-advanced"]');
+  expect(advanced?.querySelector('[data-slot="form-section-header"] h3')?.textContent).toBe(copy.security.advanced);
+  const toggle = advanced?.querySelector<HTMLButtonElement>("[aria-expanded]");
+  expect(toggle?.getAttribute("aria-expanded")).toBe("false");
+  expect(toggle?.textContent).toContain(copy.security.advancedContents);
+  expect(document.querySelector('[data-setting-id="allowed-hosts"]')).toBeNull();
+
+  await click(toggle);
+  expect(toggle?.getAttribute("aria-expanded")).toBe("true");
+  expect(sectionIds()).toEqual(["remote-access", "connection-code", "security-advanced", "allowed-hosts"]);
+  const hosts = Array.from(document.querySelectorAll('[data-setting-id="allowed-hosts"] code')).map((node) => node.textContent);
+  expect(hosts).toEqual(["butler.example.com"]);
+});
+
+test("adding a host saves the whole list through PATCH /settings", async () => {
+  const { calls, bridge } = securityBridge({ view: view() });
+  const { document, click, button, type, pressEnter } = await mount(bridge);
+  await click(document.querySelector('[data-settings-section-id="security-advanced"] [aria-expanded]'));
+  const hostInput = () => document.querySelector<HTMLInputElement>('[data-setting-id="allowed-hosts"] input');
+  expect(button(copy.security.addHost)?.disabled).toBe(true);
+
+  await type(hostInput(), " Tunnel.Example.com ");
+  await click(button(copy.security.addHost));
+  expect(calls.slice(-2)).toEqual([
+    ["updateSettings", { security: { allowed_hosts: ["butler.example.com", "tunnel.example.com"] } }],
+    ["getSecurity"],
+  ]);
+  expect(Array.from(document.querySelectorAll('[data-setting-id="allowed-hosts"] code')).map((node) => node.textContent))
+    .toEqual(["butler.example.com", "tunnel.example.com"]);
+  expect(hostInput()?.value).toBe("");
+
+  await type(hostInput(), "192.0.2.8:8443");
+  await pressEnter(hostInput());
+  expect(calls.at(-2)).toEqual(
+    ["updateSettings", { security: { allowed_hosts: ["butler.example.com", "tunnel.example.com", "192.0.2.8:8443"] } }],
+  );
+
+  // A name already on the list sends nothing.
+  const sent = calls.length;
+  await type(hostInput(), "BUTLER.example.com");
+  await pressEnter(hostInput());
+  expect(calls).toHaveLength(sent);
+  expect(hostInput()?.value).toBe("");
+});
+
+test("an invalid host is refused in place and sends nothing", async () => {
+  const { calls, bridge } = securityBridge({ view: view() });
+  const { document, click, button, type } = await mount(bridge);
+  await click(document.querySelector('[data-settings-section-id="security-advanced"] [aria-expanded]'));
+  const hostInput = () => document.querySelector<HTMLInputElement>('[data-setting-id="allowed-hosts"] input');
+  const error = () => document.querySelector('[data-setting-id="allowed-hosts"] [data-slot="field-error"]');
+
+  for (const value of ["two words", "https://butler.example.com"]) {
+    await type(hostInput(), value);
+    await click(button(copy.security.addHost));
+    expect(error()?.textContent).toBe(copy.security.invalidHost);
+    expect(hostInput()?.getAttribute("aria-invalid")).toBe("true");
+  }
+  expect(calls.map(([method]) => method)).not.toContain("updateSettings");
+
+  await type(hostInput(), "butler.example.info");
+  expect(error()).toBeNull();
+  expect(hostInput()?.getAttribute("aria-invalid")).toBeNull();
+});
+
+test("removing a host saves the list without it", async () => {
+  const { calls, bridge } = securityBridge({ view: view() });
+  const { document, click } = await mount(bridge);
+  await click(document.querySelector('[data-settings-section-id="security-advanced"] [aria-expanded]'));
+  await click(document.querySelector(`button[aria-label="${copy.security.removeHost("butler.example.com")}"]`));
+  expect(calls.slice(-2)).toEqual([
+    ["updateSettings", { security: { allowed_hosts: [] } }],
+    ["getSecurity"],
+  ]);
+  expect(document.querySelector('[data-setting-id="allowed-hosts"] code')).toBeNull();
+  expect(document.querySelector('[data-setting-id="allowed-hosts"]')?.textContent).toContain(copy.security.noHosts);
 });
 
 test("a 403 on an action switches the page to the host-only line", async () => {

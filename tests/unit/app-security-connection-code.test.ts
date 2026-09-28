@@ -56,6 +56,44 @@ test("main re-reads the rotated connection code from the data-folder token file"
   }
 });
 
+test("a health probe refused after a rotation re-reads the token file instead of failing startup", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-security-probe-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    prepareAppLocalAuth({ butlerData, generateToken: () => "a".repeat(43) });
+    // The gateway accepts only its current code, as after a CLI rotation.
+    let gatewayToken = "a".repeat(43);
+    const probed: string[] = [];
+    const supervisor = createBundledAgentSupervisor({
+      butlerData,
+      explicitServerUrl: "http://127.0.0.1:18765/",
+      resolveGateway: () => ({ command: "/bin/false", args: [], env: {} }),
+      spawnProcess: () => { throw new Error("not spawned in this test"); },
+      healthCheck: (localAuth) => {
+        probed.push(localAuth?.token?.[0] ?? "");
+        return localAuth?.token === gatewayToken;
+      },
+      isPortAvailable: () => true,
+      findAvailablePort: (port: number) => port,
+      updatePort: () => undefined,
+      getPort: () => 18765,
+      getServerUrl: () => "http://127.0.0.1:18765/",
+      getRendererOrigin: () => "app://butler",
+      sleepMs: async () => undefined,
+      startupAttempts: 2,
+    });
+    await supervisor.ensureReady();
+
+    gatewayToken = "b".repeat(43);
+    writeRotatedToken(butlerData, gatewayToken);
+    await supervisor.ensureReady();
+    expect(supervisor.authHeaders()).toEqual({ authorization: `Bearer ${"b".repeat(43)}` });
+    expect(probed).toEqual(["a", "a", "b"]);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("main exposes the token re-read to the preload", () => {
   const main = readFileSync(join(electronDir, "main.mjs"), "utf8");
   expect(main).toMatch(/ipcMain\.handle\("butler:reload-local-auth",[^;]*bundledAgentSupervisor\.reloadLocalAuth\(\)/su);
@@ -108,7 +146,7 @@ function runPreload(responses: Record<string, { status: number; body: unknown }>
 }
 
 const envelope = (data: unknown) => ({ protocol_version: "butler.app.v1", data });
-const forbidden = { status: 403, body: { error: { code: "security_loopback_only", message: "Loopback only." } } };
+const forbidden = { status: 403, body: { error: { code: "loopback_required", message: "Security settings are only available on this computer." } } };
 
 test("preload re-reads the token in main when the live stream reports a rotated code", () => {
   const run = runPreload({
@@ -135,7 +173,7 @@ test("preload re-reads the token when the live stream is rejected with 401", () 
 
 test("preload security routes return envelopes and rotation re-reads the token", () => {
   const view = { remote_access_enabled: false, bind_addresses: ["127.0.0.1:18765"], lan_urls: [],
-    connection_code: { masked: "abcd…wxyz", created_at: "2026-09-28T00:00:00Z" } };
+    allowed_hosts: ["butler.example.com"], connection_code: { masked: "abcd…wxyz", created_at: "2026-09-28T00:00:00Z" } };
   const run = runPreload({
     "/security": { status: 200, body: envelope(view) },
     "/security/connection-code/reveal": { status: 200, body: envelope({ code: "c".repeat(43) }) },
@@ -168,7 +206,7 @@ test("preload keeps the 403 status of the loopback-only rule and skips the re-re
     results.push(await bridge.getSecurity());
     results.push(await bridge.rotateConnectionCode());
   `);
-  const failure = { ok: false, error: { schema: "butler.app.bridge-error.v1", code: "security_loopback_only", status: 403 } };
+  const failure = { ok: false, error: { schema: "butler.app.bridge-error.v1", code: "loopback_required", status: 403 } };
   expect(run.results).toEqual([failure, failure]);
   expect(run.invokes).not.toContain("butler:reload-local-auth");
 });

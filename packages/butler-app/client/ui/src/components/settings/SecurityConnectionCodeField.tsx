@@ -12,7 +12,7 @@ export function SecurityConnectionCodeField({
   onCopy,
   onRotate,
 }: {
-  code: SecurityView["connection_code"];
+  code: NonNullable<SecurityView["connection_code"]>;
   revealed: string | null;
   disabled: boolean;
   onReveal: () => void;
@@ -27,7 +27,7 @@ export function SecurityConnectionCodeField({
       id={inputId}
       settingId="connection-code"
       label={copy.code}
-      description={copy.createdAt(formatCreatedAt(code.created_at))}
+      description={code.created_at ? copy.createdAt(formatCreatedAt(code.created_at)) : undefined}
       descriptionId={descriptionId}
       control={(
         <Stack gap="sm">

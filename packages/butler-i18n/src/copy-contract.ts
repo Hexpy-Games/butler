@@ -883,7 +883,7 @@ export interface AppCopy {
     };
     sectionState: { loading: string; error: string; retry: string; empty: string };
     updateComponents: { app: string; service: string };
-    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "connectionCode", string>;
+    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "connectionCode" | "allowedHosts", string>;
     pageSectionDescriptions: Record<"notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     modelsAdvanced: { title: string; contents: string };
@@ -1173,6 +1173,16 @@ export interface AppCopy {
       hostOnly: string;
       revealFailed: string;
       rotateFailed: string;
+      /** The Advanced section header and the disclosure row that reveals allowed hosts. */
+      advanced: string;
+      advancedContents: string;
+      hosts: string;
+      hostsDescription: string;
+      noHosts: string;
+      hostPlaceholder: string;
+      addHost: string;
+      removeHost: (host: string) => string;
+      invalidHost: string;
     };
     workStatus: {
       title: string;

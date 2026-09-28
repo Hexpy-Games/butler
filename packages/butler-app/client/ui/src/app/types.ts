@@ -550,16 +550,23 @@ export interface SettingsView {
   security?: SecuritySettingsView;
 }
 
+/** The `security` object of GET/PATCH /settings; sent to local clients only. */
 export interface SecuritySettingsView {
   remote_access_enabled: boolean;
+  allowed_hosts: string[];
 }
 
-/** GET /security: loopback clients only (403 otherwise). */
+/** GET /security: local clients only (403 `loopback_required` otherwise). */
 export interface SecurityView {
   remote_access_enabled: boolean;
+  /** Every listen address, loopback first. */
   bind_addresses: string[];
+  /** Empty while remote access is off. */
   lan_urls: string[];
-  connection_code: { masked: string; created_at: string };
+  /** Extra host names the gateway answers (tunnels, reverse proxies). */
+  allowed_hosts: string[];
+  /** Null when local auth is off; `created_at` null when the token file has none. */
+  connection_code: { masked: string; created_at: string | null } | null;
 }
 
 export interface ModelFallbackSettingsView {

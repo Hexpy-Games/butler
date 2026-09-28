@@ -862,7 +862,12 @@ export function createBundledAgentSupervisor({
   }
 
   async function checkGatewayReadiness() {
-    const health = await runBoundedProbe(() => healthCheck(localAuth));
+    let health = await runBoundedProbe(() => healthCheck(localAuth));
+    // A connection code rotated elsewhere (CLI, browser) leaves this token
+    // stale; the data-folder token file holds the new one.
+    if (!health.value && reloadLocalAuth()) {
+      health = await runBoundedProbe(() => healthCheck(localAuth));
+    }
     const healthy = health.value;
     if (!healthy) {
       return { healthy: false, ready: false, timedOut: health.timedOut };

@@ -82,6 +82,14 @@ test("model settings stay on the Models page and old links still resolve", () =>
     ["memory-cleanup", true],
     ["worker-profiles", true],
   ]);
+  // Security: host-only sections are absent for other computers, and allowed
+  // hosts sit in the page's collapsed Advanced disclosure.
+  expect(settingsPageSchema.security.map((section) => [section.id, section.optional === true])).toEqual([
+    ["remote-access", false],
+    ["connection-code", true],
+    ["security-advanced", true],
+    ["allowed-hosts", true],
+  ]);
   expect(Object.keys(settingsPageSchema)).not.toContain("helpers");
 });
 
