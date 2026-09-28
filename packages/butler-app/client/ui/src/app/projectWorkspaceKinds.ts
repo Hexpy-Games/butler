@@ -1,4 +1,4 @@
-import type { SessionView } from "./types.ts";
+import type { ProjectGitState, SessionView } from "./types.ts";
 
 /** Whether a project folder is a Git repository, as its sessions last reported. */
 export type ProjectWorkspaceKind = "git" | "folder";
@@ -8,10 +8,31 @@ const CACHE_SCHEMA = "butler.project-workspace-kinds.v1";
 const CACHE_KEY = "butler:project-workspace-kinds:v1";
 const EMPTY: ProjectWorkspaceKinds = Object.freeze({});
 
+/** `git.is_repo` of a listed project or a dashboard; `undefined` from an agent that sends no `git`. */
+export function reportedGitRepo(
+  project: { git?: ProjectGitState | null } | null | undefined,
+): boolean | undefined {
+  const isRepo = project?.git?.is_repo;
+  return typeof isRepo === "boolean" ? isRepo : undefined;
+}
+
 /**
- * Projects have no workspace kind until one of their sessions reports it, so
- * the kind is learned from loaded session views. Unknown or unavailable
- * workspaces keep the last definite answer. Returns `known` when unchanged.
+ * Whether a project is a Git repository: the agent's own answer (dashboard,
+ * then project list) when it gives one, else what the project's sessions
+ * last reported.
+ */
+export function resolveGitProject(sources: {
+  dashboard?: boolean;
+  listed?: boolean;
+  learned?: ProjectWorkspaceKind;
+}): boolean {
+  return sources.dashboard ?? sources.listed ?? sources.learned === "git";
+}
+
+/**
+ * The fallback for agents that send no project `git`: the kind is learned
+ * from loaded session views. Unknown or unavailable workspaces keep the last
+ * definite answer. Returns `known` when unchanged.
  */
 export function learnProjectWorkspaceKinds(
   known: ProjectWorkspaceKinds,

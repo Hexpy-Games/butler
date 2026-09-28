@@ -4,7 +4,7 @@ import { afterEach, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { useButlerStore } from "@/app/store.ts";
+import { selectIsGitProject, useButlerStore } from "@/app/store.ts";
 import type { NavigationView, ProjectDashboardView, ProjectSummary } from "@/app/types.ts";
 import { useProjectDashboard } from "./useProjectDashboard.ts";
 
@@ -125,6 +125,25 @@ test("dashboard loading and request failure never become an empty success; retry
   expect(current.status).toBe("missing");
   await act(async () => pending[3]!.resolve(dashboard([])));
   expect(current.dashboard).toBeNull();
+});
+
+test("a loaded dashboard's git.is_repo decides whether new chats in the project offer a worktree", async () => {
+  const dom = new JSDOM('<div id="root"></div>', { url: "http://localhost" });
+  Object.assign(globalThis, { window: dom.window, document: dom.window.document,
+    navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, Node: dom.window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true });
+  const loaded = dashboard([]);
+  loaded.project = { ...loaded.project, git: { is_repo: true, branch: "main", dirty: false, ahead: null, behind: null } };
+  dom.window.butlerApp = { getProjectDashboard: async () => loaded };
+  useButlerStore.setState({ view: { kind: "project-dashboard", projectId: "project-live" }, navigation: navigation(),
+    projectWorkspaceKinds: {}, projectDashboardGit: {} });
+  expect(selectIsGitProject("project-live")(useButlerStore.getState())).toBe(false);
+  function StateHarness() { useProjectDashboard({}); return null; }
+  root = createRoot(dom.window.document.getElementById("root")!);
+  await act(async () => root?.render(<StateHarness />));
+  expect(useButlerStore.getState().projectDashboardGit).toEqual({ "project-live": true });
+  expect(selectIsGitProject("project-live")(useButlerStore.getState())).toBe(true);
+  useButlerStore.setState({ projectDashboardGit: initialStoreState.projectDashboardGit });
 });
 
 function Harness({

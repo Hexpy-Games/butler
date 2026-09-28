@@ -51,6 +51,8 @@ import {
 import {
   learnProjectWorkspaceKinds,
   readCachedProjectWorkspaceKinds,
+  reportedGitRepo,
+  resolveGitProject,
   writeCachedProjectWorkspaceKinds,
   type ProjectWorkspaceKinds,
 } from "./projectWorkspaceKinds.ts";
@@ -144,8 +146,10 @@ interface ButlerStore {
   messages: MessageRecord[];
   sessionView: SessionView | null;
   sessionViews: Record<string, SessionView>;
-  /** Git or plain folder, per project, learned from its session views. */
+  /** Git or plain folder, per project, learned from its session views (fallback for older agents). */
   projectWorkspaceKinds: ProjectWorkspaceKinds;
+  /** `git.is_repo`, per project, from the last project dashboard loaded. */
+  projectDashboardGit: Readonly<Record<string, boolean>>;
   observerSessionId: string | null;
   observerTargetTurnId: string | null;
   observerHistory: Array<{ sessionId: string; targetTurnId: string | null }>;
@@ -200,6 +204,7 @@ interface ButlerStore {
   setMessages: (messages: Updater<MessageRecord[]>) => void;
   setMessageListView: (view: MessageListView) => void;
   setSessionView: (view: SessionView) => void;
+  setProjectDashboardGit: (projectId: string, git: ProjectSummary["git"]) => void;
   openSessionObserver: (sessionId: string, targetTurnId?: string) => void;
   goBackSessionObserver: () => void;
   closeSessionObserver: () => void;
@@ -932,6 +937,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   sessionView: null,
   sessionViews: {},
   projectWorkspaceKinds: readCachedProjectWorkspaceKinds(),
+  projectDashboardGit: {},
   observerSessionId: null,
   observerTargetTurnId: null,
   observerHistory: [],
@@ -1106,6 +1112,11 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   setMessageListView: (view) =>
     set((state) => applyMessageListView(state, view)),
   setSessionView: (view) => set((state) => applySessionView(state, view)),
+  setProjectDashboardGit: (projectId, git) => {
+    const isRepo = reportedGitRepo({ git });
+    if (isRepo === undefined || get().projectDashboardGit[projectId] === isRepo) return;
+    set((state) => ({ projectDashboardGit: { ...state.projectDashboardGit, [projectId]: isRepo } }));
+  },
   openSessionObserver: (sessionId, targetTurnId) => {
     set((state) => ({
       observerSessionId: sessionId,
@@ -2448,7 +2459,11 @@ useButlerStore.subscribe((state, previousState) => {
 
 export const selectIsGitProject =
   (projectId: string | undefined) => (state: ButlerStore) =>
-    Boolean(projectId) && state.projectWorkspaceKinds[projectId!] === "git";
+    Boolean(projectId) && resolveGitProject({
+      dashboard: state.projectDashboardGit[projectId!],
+      listed: reportedGitRepo(state.navigation.projects.find((project) => project.id === projectId)),
+      learned: state.projectWorkspaceKinds[projectId!],
+    });
 export const selectActiveChat = (state: ButlerStore) =>
   activeChatFromNavigation(state.navigation, state.activeChatId);
 export const selectActiveSessionView = (state: ButlerStore) =>

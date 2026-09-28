@@ -59,6 +59,38 @@ test("Git projects use the composer control style, default to local, and lock du
   });
 });
 
+function listProjects(projects: Array<{ id: string; is_repo?: boolean }>) {
+  useButlerStore.getState().setNavigation({
+    ...useButlerStore.getState().navigation,
+    projects: projects.map(({ id, is_repo }) => ({
+      id, display_name: id, last_activity_at: "2026-09-28T00:00:00Z", pinned: false, archived: false,
+      ...(is_repo === undefined ? {} : { git: { is_repo, branch: is_repo ? "main" : null } }),
+    })),
+  });
+}
+
+test("git.is_repo from the project list shows or hides the picker, whatever sessions reported", async () => {
+  await withRoot(async (container, render) => {
+    useButlerStore.setState({ projectWorkspaceKinds: { "listed-repo": "folder", "listed-plain": "git" } });
+    listProjects([{ id: "listed-repo", is_repo: true }, { id: "listed-plain", is_repo: false }]);
+    await render(projectDraftId("listed-repo"));
+    expect(container.querySelector('[role="combobox"]')?.textContent).toBe("Local");
+    for (const draftId of [projectDraftId("listed-plain"), "dashboard:listed-plain"]) {
+      await render(draftId);
+      expect(container.querySelector('[role="combobox"]'), draftId).toBeNull();
+    }
+  });
+});
+
+test("an older agent without git falls back to the kind learned from sessions", async () => {
+  await withRoot(async (container, render) => {
+    useButlerStore.setState({ projectWorkspaceKinds: { "old-repo": "git" } });
+    listProjects([{ id: "old-repo" }]);
+    await render("dashboard:old-repo");
+    expect(container.querySelector('[role="combobox"]')).not.toBeNull();
+  });
+});
+
 test("the picker stays hidden outside Git projects", async () => {
   await withRoot(async (container, render) => {
     useButlerStore.setState({ projectWorkspaceKinds: { "folder-project": "folder" } });

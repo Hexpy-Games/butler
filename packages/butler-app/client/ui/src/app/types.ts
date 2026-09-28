@@ -711,6 +711,18 @@ export interface CreateSessionResult {
   session: SessionSummary;
 }
 
+/**
+ * A project folder's Git state; what the agent could not read is null. The
+ * project list fills only `is_repo` and `branch`; the dashboard fills all.
+ */
+export interface ProjectGitState {
+  is_repo: boolean;
+  branch: string | null;
+  dirty?: boolean | null;
+  ahead?: number | null;
+  behind?: number | null;
+}
+
 export interface ProjectSummary {
   id: string;
   display_name: string;
@@ -718,6 +730,8 @@ export interface ProjectSummary {
   pinned: boolean;
   archived: boolean;
   sessions?: SessionSummary[];
+  /** Absent from agents that predate project Git state. */
+  git?: ProjectGitState | null;
 }
 
 export type { SpaceCommand, SpaceNode, SpaceGroup, SpaceView, SpaceMutationResult } from "../../../shared/app-contracts.ts";

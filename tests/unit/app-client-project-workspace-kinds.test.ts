@@ -2,10 +2,12 @@ import { afterEach, expect, test } from "bun:test";
 import {
   learnProjectWorkspaceKinds,
   readCachedProjectWorkspaceKinds,
+  reportedGitRepo,
+  resolveGitProject,
   writeCachedProjectWorkspaceKinds,
 } from "../../packages/butler-app/client/ui/src/app/projectWorkspaceKinds.ts";
 import { selectIsGitProject, useButlerStore } from "../../packages/butler-app/client/ui/src/app/store.ts";
-import type { SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
+import type { ProjectSummary, SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 
 const initialState = useButlerStore.getState();
 const savedStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
@@ -86,4 +88,63 @@ test("loading a project session view marks its project as Git for new chats", ()
   expect(JSON.parse([...storage.values()][0] ?? "{}")).toMatchObject({
     kinds: { "git-project": "git" },
   });
+});
+
+function listedProject(id: string, git?: ProjectSummary["git"]): ProjectSummary {
+  return {
+    id,
+    display_name: id,
+    last_activity_at: "2026-09-28T00:00:00Z",
+    pinned: false,
+    archived: false,
+    ...(git === undefined ? {} : { git }),
+  };
+}
+
+function listProjects(...projects: ProjectSummary[]) {
+  useButlerStore.getState().setNavigation({ ...useButlerStore.getState().navigation, projects });
+}
+
+test("git.is_repo on the project list decides over what sessions reported", () => {
+  installStorage();
+  useButlerStore.setState({ projectWorkspaceKinds: { repo: "folder", plain: "git" } });
+  listProjects(
+    listedProject("repo", { is_repo: true, branch: "main", dirty: null, ahead: null, behind: null }),
+    listedProject("plain", { is_repo: false, branch: null, dirty: null, ahead: null, behind: null }),
+  );
+  expect(selectIsGitProject("repo")(useButlerStore.getState())).toBe(true);
+  expect(selectIsGitProject("plain")(useButlerStore.getState())).toBe(false);
+});
+
+test("an older agent sends no git, so the learned session kind still decides", () => {
+  installStorage();
+  useButlerStore.setState({ projectWorkspaceKinds: { "old-repo": "git", "old-plain": "folder" } });
+  listProjects(listedProject("old-repo"), listedProject("old-plain", null));
+  expect(selectIsGitProject("old-repo")(useButlerStore.getState())).toBe(true);
+  expect(selectIsGitProject("old-plain")(useButlerStore.getState())).toBe(false);
+  expect(selectIsGitProject("unlisted")(useButlerStore.getState())).toBe(false);
+});
+
+test("git.is_repo on the project dashboard decides over the list and the learned kind", () => {
+  installStorage();
+  useButlerStore.setState({ projectWorkspaceKinds: { repo: "folder" } });
+  listProjects(listedProject("repo", { is_repo: false, branch: null }));
+  useButlerStore.getState().setProjectDashboardGit("repo", { is_repo: true, branch: "main", dirty: true, ahead: 1, behind: 0 });
+  expect(selectIsGitProject("repo")(useButlerStore.getState())).toBe(true);
+  // A dashboard from an older agent has no git and changes nothing.
+  const before = useButlerStore.getState().projectDashboardGit;
+  useButlerStore.getState().setProjectDashboardGit("other", undefined);
+  useButlerStore.getState().setProjectDashboardGit("repo", { is_repo: true, branch: "dev" });
+  expect(useButlerStore.getState().projectDashboardGit).toBe(before);
+});
+
+test("project Git sources resolve in order: dashboard, list, then learned sessions", () => {
+  expect(reportedGitRepo(undefined)).toBeUndefined();
+  expect(reportedGitRepo({ git: null })).toBeUndefined();
+  expect(reportedGitRepo({ git: { is_repo: false, branch: null } })).toBe(false);
+  expect(resolveGitProject({ dashboard: false, listed: true, learned: "git" })).toBe(false);
+  expect(resolveGitProject({ listed: false, learned: "git" })).toBe(false);
+  expect(resolveGitProject({ learned: "git" })).toBe(true);
+  expect(resolveGitProject({ learned: "folder" })).toBe(false);
+  expect(resolveGitProject({})).toBe(false);
 });
