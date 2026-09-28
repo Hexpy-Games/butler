@@ -42,12 +42,15 @@ pub(super) fn recover(connection: &Connection) -> CognitionResult<()> {
     Ok(())
 }
 
+/// Whether the job owner may still run; a host that cannot tell keeps it.
+/// Ids that name no single process are not owners.
 pub(super) fn pid_alive(pid: i64) -> bool {
-    let Ok(pid) = i32::try_from(pid) else {
+    use butler_platform::process_control::{Liveness, liveness};
+    let Ok(pid) = u32::try_from(pid) else {
         return false;
     };
-    match nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid), None) {
-        Ok(()) | Err(nix::errno::Errno::EPERM) => true,
-        Err(_) => false,
-    }
+    matches!(
+        liveness(pid),
+        Liveness::Running | Liveness::OtherOwner | Liveness::Unknown
+    )
 }

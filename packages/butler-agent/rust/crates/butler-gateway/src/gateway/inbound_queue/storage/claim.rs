@@ -174,21 +174,17 @@ pub(in crate::gateway::inbound_queue) fn recover_stale(
     Ok(recovered)
 }
 
-#[cfg(unix)]
+/// Whether the claim's owner process is known to be gone.
 fn owner_dead(owner: &str) -> bool {
-    use nix::{errno::Errno, sys::signal::kill, unistd::Pid};
+    use butler_platform::process_control::{Liveness, liveness};
     let Some(pid) = owner
         .split(':')
         .next()
         .and_then(|value| value.parse::<i32>().ok())
+        .and_then(|pid| u32::try_from(pid).ok())
         .filter(|pid| *pid > 0)
     else {
         return false;
     };
-    matches!(kill(Pid::from_raw(pid), None), Err(Errno::ESRCH))
-}
-
-#[cfg(not(unix))]
-fn owner_dead(_: &str) -> bool {
-    false
+    liveness(pid) == Liveness::Gone
 }

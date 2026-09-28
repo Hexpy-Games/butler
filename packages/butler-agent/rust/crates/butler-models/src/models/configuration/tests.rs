@@ -20,11 +20,9 @@ impl Fixture {
         let root =
             std::env::temp_dir().join(format!("butler-native-config-{}", uuid::Uuid::new_v4()));
         fs::create_dir(&root).unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
-        }
+        butler_platform::secure_fs::restrict_directory(&root)
+            .transpose()
+            .unwrap();
         Self(root)
     }
     fn write(&self, path: &str, value: &Value) {

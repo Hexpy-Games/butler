@@ -105,11 +105,7 @@ impl LegacySessionOffsets {
         let result: CognitionResult<()> = (|| {
             let mut options = fs::OpenOptions::new();
             options.write(true).create_new(true);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt;
-                options.mode(0o600);
-            }
+            butler_platform::secure_fs::owner_only(&mut options);
             let mut file = options.open(&temp).map_err(|source| {
                 failure(CognitionCode::LegacySessionOffsetWriteFailed).with_source(source)
             })?;
@@ -229,11 +225,7 @@ pub fn append_legacy_session_diagnostic(
     .map_err(|source| failure(CognitionCode::LegacyDiagnosticFailed).with_source(source))?;
     let mut options = fs::OpenOptions::new();
     options.append(true).create(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    butler_platform::secure_fs::owner_only(&mut options);
     let mut file = options
         .open(path)
         .map_err(|source| failure(CognitionCode::LegacyDiagnosticFailed).with_source(source))?;

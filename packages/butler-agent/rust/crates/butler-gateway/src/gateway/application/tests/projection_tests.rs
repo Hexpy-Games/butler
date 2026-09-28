@@ -92,8 +92,9 @@ async fn transcript_watcher_projects_delivered_turn_without_foreground_refresh()
 
 #[tokio::test]
 async fn recovered_delivered_final_requires_unchanged_original_claim() {
-    use std::os::unix::fs::MetadataExt;
-
+    let inode = |path: &std::path::Path| {
+        butler_platform::secure_fs::identity(&std::fs::metadata(path).unwrap()).id
+    };
     for case in ["recovered", "edited", "new_claim", "cancelled"] {
         let root = projection_root(case);
         std::fs::create_dir_all(root.join("transcripts")).unwrap();
@@ -127,7 +128,7 @@ async fn recovered_delivered_final_requires_unchanged_original_claim() {
         app.refresh_message_projection("general".into())
             .await
             .unwrap();
-        let original_inode = std::fs::metadata(&transcript).unwrap().ino();
+        let original_inode = inode(&transcript);
         app.storage
             .execute(|db| {
                 db.execute(
@@ -179,10 +180,7 @@ async fn recovered_delivered_final_requires_unchanged_original_claim() {
             "{delivery}"
         )
         .unwrap();
-        assert_eq!(
-            std::fs::metadata(&transcript).unwrap().ino(),
-            original_inode
-        );
+        assert_eq!(inode(&transcript), original_inode);
         tokio::time::timeout(
             std::time::Duration::from_secs(3),
             app.refresh_message_projection("general".into()),

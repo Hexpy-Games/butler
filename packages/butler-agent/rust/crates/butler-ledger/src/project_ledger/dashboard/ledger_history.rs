@@ -2,6 +2,7 @@ use std::fs::{self, File, Metadata};
 use std::io::Read;
 use std::path::Path;
 
+use butler_platform::secure_fs;
 use serde_json::Value;
 
 use crate::project_ledger::ProjectLedgerReadError;
@@ -163,17 +164,10 @@ fn event(value: &Value, inode: u64, offset: usize) -> Option<DashboardLedgerEven
     })
 }
 
+/// The inode number; 0 on hosts without file ids, where event ids and
+/// revisions then rely on offsets, sizes and times alone.
 fn path_identity(metadata: &Metadata) -> u64 {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        metadata.ino()
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = metadata;
-        0
-    }
+    secure_fs::identity(metadata).id.map_or(0, |id| id.inode)
 }
 
 fn file_revision(metadata: &Metadata) -> String {
@@ -191,21 +185,11 @@ fn file_revision(metadata: &Metadata) -> String {
     )
 }
 
-/// The inode change time in epoch milliseconds.
-#[cfg(unix)]
+/// The status change time in epoch milliseconds, or `null`.
 fn change_time(metadata: &Metadata) -> String {
-    use std::os::unix::fs::MetadataExt;
-    number_string(metadata.ctime() as f64 * 1000.0 + metadata.ctime_nsec() as f64 / 1_000_000.0)
-}
-
-/// The creation time in epoch milliseconds, or `null`.
-#[cfg(not(unix))]
-fn change_time(metadata: &Metadata) -> String {
-    metadata
-        .created()
-        .ok()
-        .and_then(epoch_millis)
-        .map(number_string)
+    secure_fs::identity(metadata)
+        .changed
+        .map(|changed| number_string(changed.millis()))
         .unwrap_or_else(|| "null".into())
 }
 

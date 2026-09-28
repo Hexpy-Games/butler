@@ -257,13 +257,12 @@ async fn retention_prevalidates_every_path_before_deleting_any_file_in_an_item()
     assert_eq!(unchanged["status"], "indexed");
     fs::remove_dir_all(root).unwrap();
 
-    #[cfg(unix)]
     {
         let data = temp_root("butler-box-root-escape");
         let outside = temp_root("butler-box-root-outside");
         fs::create_dir_all(&data).unwrap();
         fs::create_dir_all(&outside).unwrap();
-        std::os::unix::fs::symlink(&outside, data.join("cognition")).unwrap();
+        butler_platform::secure_fs::symlink(&outside, &data.join("cognition")).unwrap();
         let error = service(&data)
             .manifest_exists("box_missing")
             .await

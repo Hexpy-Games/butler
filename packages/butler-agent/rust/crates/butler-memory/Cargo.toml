@@ -8,6 +8,7 @@ publish.workspace = true
 
 [dependencies]
 butler-core = { path = "../butler-core" }
+butler-platform = { path = "../butler-platform" }
 butler-turn = { path = "../butler-turn" }
 butler-models = { path = "../butler-models" }
 butler-runtime = { path = "../butler-runtime" }
@@ -34,9 +35,6 @@ thiserror.workspace = true
 unicode-normalization.workspace = true
 unicode-segmentation.workspace = true
 url.workspace = true
-
-[target.'cfg(unix)'.dependencies]
-nix.workspace = true
 
 [dev-dependencies]
 butler-runtime = { path = "../butler-runtime", features = ["test-support"] }
