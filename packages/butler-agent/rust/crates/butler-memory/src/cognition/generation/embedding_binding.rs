@@ -150,11 +150,7 @@ fn write_manifest_atomically(
     let result = (|| {
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options.open(&temporary).map_err(write_error)?;
         file.write_all(text.as_bytes()).map_err(write_error)?;
         file.write_all(b"\n").map_err(write_error)?;

@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use super::{Capabilities, CapabilityInvocation};
+use butler_platform::secure_fs;
 use butler_turn::workspace::{WorkspaceFiles, WorkspaceReference};
 
 struct Fixture {
@@ -22,11 +23,7 @@ impl Fixture {
     fn new() -> Self {
         let root = std::env::temp_dir().join(format!("butler-k1a-{}", Uuid::new_v4()));
         std::fs::create_dir(&root).unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
-        }
+        secure_fs::restrict_directory(&root).transpose().unwrap();
         let files = Arc::new(WorkspaceFiles::new(2));
         let capabilities = Capabilities::new(
             Arc::clone(&files),

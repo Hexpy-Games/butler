@@ -133,25 +133,7 @@ impl McpClient {
 }
 
 fn default_stdio_environment(environment: &HashMap<String, String>) -> Vec<(String, String)> {
-    #[cfg(windows)]
-    const ALLOWED: &[&str] = &[
-        "APPDATA",
-        "HOMEDRIVE",
-        "HOMEPATH",
-        "LOCALAPPDATA",
-        "PATH",
-        "PROCESSOR_ARCHITECTURE",
-        "SYSTEMDRIVE",
-        "SYSTEMROOT",
-        "TEMP",
-        "USERNAME",
-        "USERPROFILE",
-        "PROGRAMFILES",
-    ];
-    #[cfg(not(windows))]
-    const ALLOWED: &[&str] = &["HOME", "LOGNAME", "PATH", "SHELL", "TERM", "USER"];
-
-    ALLOWED
+    butler_platform::process_control::BASELINE_ENVIRONMENT
         .iter()
         .filter_map(|key| {
             environment

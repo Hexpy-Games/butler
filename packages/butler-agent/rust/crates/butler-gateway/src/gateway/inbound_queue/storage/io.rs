@@ -6,6 +6,8 @@ use std::{
     path::Path,
 };
 
+use butler_platform::secure_fs;
+
 use super::super::{InboundQueueError, QueueResult, QueuedInboundEvent};
 use crate::gateway::InboundQueueCode;
 
@@ -39,12 +41,9 @@ pub(super) fn atomic_write(path: &Path, record: &QueuedInboundEvent) -> QueueRes
     ));
     let result = (|| {
         let file = File::create_new(&temp).map_err(io_error)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            file.set_permissions(fs::Permissions::from_mode(0o600))
-                .map_err(io_error)?;
-        }
+        secure_fs::restrict_open_file(&file)
+            .transpose()
+            .map_err(io_error)?;
         let mut writer = BufWriter::new(file);
         serde_json::to_writer_pretty(&mut writer, record).map_err(|error| {
             InboundQueueError::new(
@@ -82,19 +81,7 @@ pub(super) fn file_names(path: &Path) -> QueueResult<Vec<String>> {
 }
 
 pub(super) fn ensure_dir(path: &Path) -> QueueResult<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(path)
-            .map_err(io_error)
-    }
-    #[cfg(not(unix))]
-    {
-        fs::create_dir_all(path).map_err(io_error)
-    }
+    secure_fs::create_private_dir_all(path).map_err(io_error)
 }
 
 pub(super) fn io_error(error: std::io::Error) -> InboundQueueError {

@@ -1,13 +1,11 @@
 use super::*;
 
-#[cfg(unix)]
 #[tokio::test]
 async fn batch_directory_alias_groups_one_target_like_source() {
-    use std::os::unix::fs::symlink;
     let fixture = Fixture::new();
     std::fs::create_dir(fixture.root.join("real")).unwrap();
     fixture.write("real/target.txt", b"first");
-    symlink(fixture.root.join("real"), fixture.root.join("alias")).unwrap();
+    secure_fs::symlink(&fixture.root.join("real"), &fixture.root.join("alias")).unwrap();
     let expected_sha256 = sha(b"first");
     let call = json!({"arguments":{"edits":[
         {"path":"real/target.txt","old_text":"first","new_text":"second","expected_sha256":expected_sha256},
@@ -44,7 +42,6 @@ async fn path_guards_reject_hostile_targets() {
     protected_ledger_and_sensitive_paths_are_not_mutated().await;
     crate::capabilities::tests::source_gaps::containment_and_unicode_sensitive_paths_are_rejected()
         .await;
-    #[cfg(unix)]
     crate::context::reader_enforces_scan_limit_and_realpath_boundary().await;
 }
 

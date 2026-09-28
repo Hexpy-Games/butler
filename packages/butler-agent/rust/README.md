@@ -74,4 +74,10 @@ Module-file lookup follows the [Rust Reference](https://doc.rust-lang.org/refere
 Update `tools/source-check/src/architecture/policy.rs` only after reviewing a domain or dependency
 change. A passing checker does not establish runtime composition or performance acceptance.
 
+Operating-system specific code belongs in `crates/butler-platform` only. Elsewhere the checker
+flags `cfg(unix)`, `cfg(windows)`, `cfg(target_os)` and `cfg!` conditions, `std::os::*`, `nix`,
+`libc`, `libproc` and `rustix` paths, octal permission literals, `HOME`/`USERPROFILE` reads and
+OS-specific dependency tables in package manifests, tests included. Existing lines are ratcheted
+per package in `os-specific-baseline.txt`; the counts may only shrink, and `--bless` records them.
+
 The parser source notice is retained in [agent/THIRD_PARTY_NOTICES.md](agent/THIRD_PARTY_NOTICES.md). Final binary packaging must carry these notices; the current library checks do not prove distribution closure.

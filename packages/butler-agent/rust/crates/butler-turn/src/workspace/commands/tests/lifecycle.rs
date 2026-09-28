@@ -1,6 +1,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use butler_platform::command_sandbox;
+use butler_platform::process_control::{Liveness, liveness};
+
 use super::{CommandStep, Commands, Fixture, GuidedAccess, ScriptedProcesses};
 
 #[tokio::test]
@@ -93,7 +96,8 @@ async fn structured_undefined_environment_entry_removes_inherited_value() {
     owner.close().await;
 }
 
-#[cfg(target_os = "macos")]
+/// A read-only command cannot write. A host with a sandbox must run it
+/// there, where the write fails; a host without one must refuse it.
 #[tokio::test]
 async fn guided_read_only_uses_actual_sandbox_boundary() {
     let fixture = Fixture::new();
@@ -101,8 +105,14 @@ async fn guided_read_only_uses_actual_sandbox_boundary() {
     let target = fixture.0.join("must-not-write");
     let mut input = fixture.guided(&format!("printf x > '{}'", target.display()));
     input.access = GuidedAccess::ReadOnlyObservation;
-    let output = owner.submit_guided(input).unwrap().await.unwrap().unwrap();
-    assert_ne!(output.summary.exit_code, Some(0));
+    let result = owner.submit_guided(input).unwrap().await.unwrap();
+    if command_sandbox::READ_ONLY_SANDBOX {
+        let output = result.expect("a host with a sandbox runs read-only commands");
+        assert_ne!(output.summary.exit_code, Some(0));
+    } else {
+        let error = result.expect_err("a host without a sandbox refuses read-only commands");
+        assert_eq!(error.code(), "command_observation_isolation_unavailable");
+    }
     assert!(!target.exists());
     owner.close().await;
 }
@@ -123,62 +133,6 @@ async fn guided_forced_public_settlement_precedes_owned_reap() {
     assert!(output.summary.timed_out);
     assert_eq!(owner.active_count(), 1);
     assert_close_waits_for_reap(&owner, release).await;
-}
-
-#[cfg(unix)]
-#[tokio::test]
-async fn partial_pipeline_spawn_failure_reaps_term_ignoring_descendant() {
-    use nix::errno::Errno;
-    use nix::sys::signal::kill;
-    use nix::unistd::Pid;
-
-    let fixture = Fixture::new();
-    let gate = Arc::new(tokio::sync::Notify::new());
-    let owner = Commands::with_host(Arc::new(ScriptedProcesses {
-        before_second_spawn: Some(gate.clone()),
-        ..ScriptedProcesses::default()
-    }));
-    let pid_path = fixture.0.join("partial-child.pid");
-    // The descendant reports its pid only after it ignores SIGTERM; the file
-    // appears atomically so the test never reads a partial write.
-    let first = format!(
-        "sh -c 'trap \"\" TERM; echo $$ > \"$0.tmp\"; mv \"$0.tmp\" \"$0\"; exec sleep 10' '{}' & \
-         trap 'exit 0' TERM; wait",
-        pid_path.display()
-    );
-    let mut input = fixture.structured(vec![
-        CommandStep {
-            executable: "/bin/sh".into(),
-            arguments: vec!["-c".into(), first],
-        },
-        CommandStep {
-            executable: "/definitely/missing/butler-command".into(),
-            arguments: vec![],
-        },
-    ]);
-    input.timeout_ms = Some(60_000.0);
-    let receiver = owner.submit_structured(input).unwrap();
-    let mut pid = None;
-    butler_test_support::eventually("the TERM-ignoring descendant", || {
-        pid = std::fs::read_to_string(&pid_path)
-            .ok()
-            .and_then(|pid| pid.trim().parse::<i32>().ok());
-        pid.is_some()
-    })
-    .await;
-    let pid = pid.unwrap();
-    gate.notify_one();
-    let result = tokio::time::timeout(Duration::from_secs(10), receiver)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(result.error.unwrap().code(), "command_spawn_failed");
-    butler_test_support::eventually("the descendant to be reaped", || {
-        kill(Pid::from_raw(pid), None) == Err(Errno::ESRCH)
-    })
-    .await;
-    owner.close().await;
-    assert_eq!(owner.active_count(), 0);
 }
 
 /// The public result is already settled; closing the owner must still wait
@@ -217,4 +171,55 @@ async fn structured_forced_public_settlement_precedes_owned_reap() {
     assert!(output.timed_out);
     assert_eq!(owner.active_count(), 1);
     assert_close_waits_for_reap(&owner, release).await;
+}
+
+#[tokio::test]
+async fn partial_pipeline_spawn_failure_reaps_term_ignoring_descendant() {
+    let fixture = Fixture::new();
+    let gate = Arc::new(tokio::sync::Notify::new());
+    let owner = Commands::with_host(Arc::new(ScriptedProcesses {
+        before_second_spawn: Some(gate.clone()),
+        ..ScriptedProcesses::default()
+    }));
+    let pid_path = fixture.0.join("partial-child.pid");
+    // The descendant reports its pid only after it ignores SIGTERM; the file
+    // appears atomically so the test never reads a partial write.
+    let first = format!(
+        "sh -c 'trap \"\" TERM; echo $$ > \"$0.tmp\"; mv \"$0.tmp\" \"$0\"; exec sleep 10' '{}' & \
+         trap 'exit 0' TERM; wait",
+        pid_path.display()
+    );
+    let mut input = fixture.structured(vec![
+        CommandStep {
+            executable: "/bin/sh".into(),
+            arguments: vec!["-c".into(), first],
+        },
+        CommandStep {
+            executable: "/definitely/missing/butler-command".into(),
+            arguments: vec![],
+        },
+    ]);
+    input.timeout_ms = Some(60_000.0);
+    let receiver = owner.submit_structured(input).unwrap();
+    let mut pid = None;
+    butler_test_support::eventually("the TERM-ignoring descendant", || {
+        pid = std::fs::read_to_string(&pid_path)
+            .ok()
+            .and_then(|pid| pid.trim().parse::<u32>().ok());
+        pid.is_some()
+    })
+    .await;
+    let pid = pid.unwrap();
+    gate.notify_one();
+    let result = tokio::time::timeout(Duration::from_secs(10), receiver)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(result.error.unwrap().code(), "command_spawn_failed");
+    butler_test_support::eventually("the descendant to be reaped", || {
+        liveness(pid) == Liveness::Gone
+    })
+    .await;
+    owner.close().await;
+    assert_eq!(owner.active_count(), 0);
 }

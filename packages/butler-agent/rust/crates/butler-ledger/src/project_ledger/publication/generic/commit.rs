@@ -1,6 +1,8 @@
 use std::fs;
 use std::path::Path;
 
+use butler_platform::secure_fs::{self, ExchangeError};
+
 use super::contracts::LedgerEffectError;
 
 pub(super) fn copy_root(source: &Path, target: &Path) -> Result<(), LedgerEffectError> {
@@ -21,30 +23,13 @@ pub(super) fn copy_root(source: &Path, target: &Path) -> Result<(), LedgerEffect
 }
 
 pub(super) fn exchange(candidate: &Path, canonical: &Path) -> Result<(), LedgerEffectError> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        let left = fs::metadata(candidate).map_err(LedgerEffectError::uncertain)?;
-        let right = fs::metadata(canonical).map_err(LedgerEffectError::uncertain)?;
-        if left.dev() != right.dev() {
-            return Err(LedgerEffectError::Uncertain { source: None });
+    secure_fs::exchange_directories(candidate, canonical).map_err(|error| match error {
+        ExchangeError::Io(error) => LedgerEffectError::uncertain(error),
+        ExchangeError::CrossDevice => LedgerEffectError::Uncertain { source: None },
+        ExchangeError::Unsupported => {
+            LedgerEffectError::Owner("project_ledger_atomic_exchange_unsupported")
         }
-        rustix::fs::renameat_with(
-            rustix::fs::CWD,
-            candidate,
-            rustix::fs::CWD,
-            canonical,
-            rustix::fs::RenameFlags::EXCHANGE,
-        )
-        .map_err(LedgerEffectError::uncertain)
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = (candidate, canonical);
-        Err(LedgerEffectError::Owner(
-            "project_ledger_atomic_exchange_unsupported",
-        ))
-    }
+    })
 }
 
 pub(super) fn remove_directory(path: &Path) -> Result<(), LedgerEffectError> {

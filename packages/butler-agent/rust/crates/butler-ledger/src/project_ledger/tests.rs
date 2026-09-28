@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use butler_platform::secure_fs::symlink;
 use serde_json::Value;
 
 use super::{PlanRecordRead, ProjectLedger, ProjectLedgerReadError};
@@ -74,23 +75,19 @@ async fn initialized_candidate_preference_and_path_escape() {
             .id,
         "PLAN-1"
     );
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::symlink;
-        fs::create_dir_all(fixture.data.join("outside")).unwrap();
-        symlink(
-            fixture.data.join("outside"),
-            fixture.data.join("project-ledger/projects/escape"),
-        )
-        .unwrap();
-        fs::write(fixture.workspace.join("project.json"), r#"{"id":"escape"}"#).unwrap();
-        assert_eq!(
-            native.show_plan_record(fixture.input("PLAN-1")).await,
-            Err(ProjectLedgerReadError::resolution(
-                "active_project_ledger_path_escape"
-            ))
-        );
-    }
+    fs::create_dir_all(fixture.data.join("outside")).unwrap();
+    symlink(
+        &fixture.data.join("outside"),
+        &fixture.data.join("project-ledger/projects/escape"),
+    )
+    .unwrap();
+    fs::write(fixture.workspace.join("project.json"), r#"{"id":"escape"}"#).unwrap();
+    assert_eq!(
+        native.show_plan_record(fixture.input("PLAN-1")).await,
+        Err(ProjectLedgerReadError::resolution(
+            "active_project_ledger_path_escape"
+        ))
+    );
     native.close().await;
 }
 

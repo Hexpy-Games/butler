@@ -393,16 +393,15 @@ fn recover(connection: &Connection) -> CognitionResult<()> {
     }
     Ok(())
 }
+/// Whether the job owner may still run; a host that cannot tell keeps it.
 fn pid_alive(pid: i64) -> bool {
-    let Ok(raw) = i32::try_from(pid) else {
+    use butler_platform::process_control::{Liveness, liveness};
+    let Ok(pid) = u32::try_from(pid) else {
         return false;
     };
-    if raw <= 0 {
-        return false;
-    }
     matches!(
-        nix::sys::signal::kill(nix::unistd::Pid::from_raw(raw), None),
-        Ok(()) | Err(nix::errno::Errno::EPERM)
+        liveness(pid),
+        Liveness::Running | Liveness::OtherOwner | Liveness::Unknown
     )
 }
 fn error(code: CognitionCode) -> CognitionError {

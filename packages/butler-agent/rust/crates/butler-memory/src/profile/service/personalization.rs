@@ -112,11 +112,7 @@ fn write_private_text(
 ) -> super::super::contracts::ProfileResult<()> {
     let parent = path.parent().ok_or_else(write_error)?;
     fs::create_dir_all(parent).map_err(|source| write_error().with_source(source))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
-    }
+    let _ = butler_platform::secure_fs::restrict_directory(parent);
     backup_private_text(data_root, path, prefix, text, now)?;
     fs::write(path, text.as_bytes()).map_err(|source| write_error().with_source(source))
 }
@@ -140,11 +136,7 @@ fn backup_private_text(
     }
     let directory = data_root.join("personalization/backups");
     fs::create_dir_all(&directory).map_err(|source| write_error().with_source(source))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(&directory, fs::Permissions::from_mode(0o700));
-    }
+    let _ = butler_platform::secure_fs::restrict_directory(&directory);
     let stamp = now.replace([':', '.'], "-");
     let target = directory.join(format!("{prefix}-{stamp}.md"));
     fs::copy(source, target).map_err(|source| write_error().with_source(source))?;

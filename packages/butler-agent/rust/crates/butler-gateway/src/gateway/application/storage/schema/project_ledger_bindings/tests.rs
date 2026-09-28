@@ -68,15 +68,14 @@ impl Drop for Fixture {
 /// Security boundary: symlink aliases of a project root share one physical
 /// identity, and roots outside are rejected.
 // test-category: security
-#[cfg(unix)]
 #[test]
 fn symlink_aliases_share_one_physical_identity_and_outside_roots_are_rejected() {
-    use std::os::unix::fs::symlink;
+    use butler_platform::secure_fs::symlink;
     let fixture = Fixture::new();
     let original = fixture.ledger("original");
     symlink(
         &original,
-        fixture.data.join("project-ledger/projects/alias"),
+        &fixture.data.join("project-ledger/projects/alias"),
     )
     .unwrap();
     let workspace = fixture.project("a", "alias", None);
@@ -87,7 +86,7 @@ fn symlink_aliases_share_one_physical_identity_and_outside_roots_are_rejected() 
     std::fs::write(outside.join("ledger.jsonl"), "").unwrap();
     symlink(
         &outside,
-        fixture.data.join("project-ledger/projects/escape"),
+        &fixture.data.join("project-ledger/projects/escape"),
     )
     .unwrap();
     fixture.project("b", "escape", None);
