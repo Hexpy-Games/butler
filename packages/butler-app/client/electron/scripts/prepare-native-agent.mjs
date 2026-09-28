@@ -29,6 +29,14 @@ const ORT_TARGETS = {
   "linux/x64": "linux-x64",
   "linux/arm64": "linux-arm64",
 };
+// The glibc-family libraries every supported distribution ships. Anything
+// else (an ORT shared library above all) would be missing from the package.
+const LINUX_SYSTEM_LIBRARIES = new Set([
+  "libc.so.6", "libm.so.6", "libdl.so.2", "libpthread.so.0", "librt.so.1",
+  "libgcc_s.so.1", "libstdc++.so.6", "ld-linux-x86-64.so.2", "ld-linux-aarch64.so.1",
+]);
+const LINUX_ELF_MACHINES = { x64: "Advanced Micro Devices X86-64", arm64: "AArch64" };
+
 const ortTarget = ORT_TARGETS[`${requestedPlatform}/${requestedArch}`];
 if (!ortTarget) {
   throw new Error(
@@ -170,14 +178,6 @@ function verifyMacDependencyClosure(binary) {
     throw new Error(`Native Butler Agent has unpackaged runtime dependencies: ${unsupported.join(", ")}`);
   }
 }
-
-// The glibc-family libraries every supported distribution ships. Anything
-// else (an ORT shared library above all) would be missing from the package.
-const LINUX_SYSTEM_LIBRARIES = new Set([
-  "libc.so.6", "libm.so.6", "libdl.so.2", "libpthread.so.0", "librt.so.1",
-  "libgcc_s.so.1", "libstdc++.so.6", "ld-linux-x86-64.so.2", "ld-linux-aarch64.so.1",
-]);
-const LINUX_ELF_MACHINES = { x64: "Advanced Micro Devices X86-64", arm64: "AArch64" };
 
 /**
  * Refuses a Linux agent built for another architecture or needing a shared
