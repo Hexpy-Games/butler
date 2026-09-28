@@ -1,0 +1,218 @@
+/* 08 Motion hero: the curves and durations field, the reduced-motion scene
+   and the product grid. Canvas px (see ../shared/grid.ts). */
+
+/* ---- Plots ---- */
+
+.plotBox {
+  position: relative;
+  display: block;
+  inline-size: var(--plot);
+  block-size: var(--plot);
+}
+
+.plotSvg {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: visible;
+}
+
+.axis {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 1.5;
+}
+
+.curve {
+  fill: none;
+  stroke: var(--accent);
+  stroke-dasharray: 220px 220px;
+  stroke-width: 2.5;
+}
+
+/* The dot runs the curve: its box moves in time along x, the dot on the easing along y. */
+.dotX {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  inline-size: 0;
+  block-size: 0;
+  opacity: 0;
+}
+
+.dot {
+  position: absolute;
+  top: calc(var(--space-xs) * -1);
+  left: calc(var(--space-xs) * -1);
+  inline-size: var(--space-sm);
+  block-size: var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  box-shadow: 0 0 0 var(--space-xs)
+    color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+/* ---- The field ---- */
+
+.field {
+  display: grid;
+  align-content: center;
+  row-gap: var(--space-2xl);
+  padding: var(--space-xl);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-popover);
+  background: var(--surface-raised);
+}
+
+.caption,
+.plotName,
+.barName,
+.barValue {
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+}
+
+.plots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-lg) var(--space-md);
+}
+
+.plotCell {
+  display: grid;
+  justify-items: center;
+  row-gap: var(--space-sm);
+  min-width: 0;
+}
+
+.bars {
+  display: grid;
+  row-gap: var(--space-sm);
+}
+
+.barRow {
+  display: grid;
+  grid-template-columns: 9em minmax(0, 1fr) auto;
+  column-gap: var(--space-md);
+  align-items: center;
+}
+
+.barPair {
+  display: grid;
+  row-gap: 2px;
+}
+
+.bar {
+  display: block;
+  max-inline-size: 100%;
+  block-size: var(--space-sm);
+  background: var(--accent);
+  transform-origin: 0 50%;
+}
+
+.bar[data-kind="exit"] {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* ---- Reduced motion scene ---- */
+
+.reduce {
+  display: grid;
+  justify-items: center;
+  row-gap: var(--space-xl);
+  inline-size: calc(var(--col) * 5);
+}
+
+.modeStack {
+  display: inline-grid;
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+.modeLayer {
+  grid-area: 1 / 1;
+}
+
+.modeLayer + .modeLayer {
+  opacity: 0;
+}
+
+.toastSlot {
+  display: grid;
+  inline-size: 100%;
+}
+
+.toastMove {
+  display: grid;
+}
+
+/* ---- Components and poster ---- */
+
+/* The component with its curve beside it (below it when the column is narrow). */
+.stageRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md) var(--space-xl);
+}
+
+.stageRow > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mover {
+  display: grid;
+  min-inline-size: min(100%, calc(var(--control-height-md) * 8));
+}
+
+.menuRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-block-size: var(--control-height-md);
+  padding-inline: var(--space-sm);
+}
+
+.product {
+  grid-template-areas:
+    "menu dialog"
+    "toast dialog"
+    "press dialog";
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  align-content: space-between;
+  gap: var(--space-xl) var(--grid-gutter);
+}
+
+[data-layout="tall"] .plots {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Tall: each duration's name over its bars and value. */
+[data-layout="tall"] .barRow {
+  grid-template-columns: minmax(0, 1fr) auto;
+  row-gap: var(--space-xs);
+}
+
+[data-layout="tall"] .barName {
+  grid-column: 1 / -1;
+}
+
+[data-layout="tall"] .reduce {
+  inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
+}
+
+[data-layout="tall"] .product {
+  grid-template-areas:
+    "menu"
+    "dialog"
+    "toast"
+    "press";
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  row-gap: var(--space-lg);
+}

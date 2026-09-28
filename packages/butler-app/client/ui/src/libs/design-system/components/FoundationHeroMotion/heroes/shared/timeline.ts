@@ -3,7 +3,7 @@ import { annotTracks } from "./Annotations";
 import { HOLD, SETTLE, STEP, TRANSITION } from "./beats";
 import { reveal, revealBeats, select, sweep } from "./Reveal";
 import { buildFrames, posterZoom } from "./frames";
-import { buildViews, fieldAway, REST, scenePath, viewCell } from "./scene";
+import { buildViews, CELL, columnViews, fieldAway, REST, scenePath, viewCell } from "./scene";
 import { sketchTracks } from "./Sketch";
 import type { ChapterSpec, Geometry, TimelineContext } from "./types";
 
@@ -52,11 +52,19 @@ export function chapterTracks(spec: ChapterSpec, g0: Geometry): { beats: number;
   const { canvas } = g0;
   const pz = posterZoom(spec, g0.layout);
   const frames = buildFrames(spec, g0);
-  // The camera's path: the prelude's scenes, then one cell per build, ending on the last build in place.
+  // The camera's path. Wide: the prelude's scenes, then one cell per build, ending on the last build in
+  // place. Tall: the builds stand in the poster's column and the camera steps down it; the prelude's last
+  // scene sits right above the first build (the field in its own poster place when it is that scene).
   const names = spec.prelude.cells;
-  const path = scenePath(names.length + frames.length, center(frames.at(-1)!.frame), canvas);
-  const cells = Object.fromEntries(names.map((name, k) => [name, path[k]!])) as Record<string, { x: number; y: number }>;
+  const tall = g0.layout === "tall";
   const canvasCenter = { x: canvas.w / 2, y: canvas.h / 2 };
+  const column = columnViews(canvas, frames.map((entry) => entry.frame));
+  const lastIsField = names.at(-1) === "field";
+  const preludeEnd = lastIsField ? center(g0.field) : { x: column.centers[0]!.x, y: column.centers[0]!.y - CELL * canvas.h };
+  const path = tall
+    ? [...scenePath(names.length, preludeEnd, canvas), ...column.centers]
+    : scenePath(names.length + frames.length, center(frames.at(-1)!.frame), canvas);
+  const cells = Object.fromEntries(names.map((name, k) => [name, path[k]!])) as Record<string, { x: number; y: number }>;
   // Regions are laid out over the canvas; the field is laid out in the poster.
   const offset = (cell: string) => {
     const to = cells[cell];
@@ -71,7 +79,7 @@ export function chapterTracks(spec: ChapterSpec, g0: Geometry): { beats: number;
       return [name, { ...box, x: box.x + move.x, y: box.y + move.y }];
     })),
   };
-  const { shift, stage } = buildViews(g.layout, canvas, frames.map((entry) => entry.frame), path.slice(names.length));
+  const { shift, stage } = tall ? column : buildViews(g.layout, canvas, frames.map((entry) => entry.frame), path.slice(names.length));
   const buildAt = (k: number) => t.builds[spec.builds[k]!.id]!.at;
   const view = (cell: string, content: Box, fill?: number, cap?: number): Pose => viewCell(canvas, cells[cell] ?? center(content), content, fill, cap);
   const ctx: TimelineContext = { g, cells, view, beats: t.beats, close, first: t.first, builds: t.builds, finale: t.finale, loop: t.loop };
@@ -91,7 +99,15 @@ export function chapterTracks(spec: ChapterSpec, g0: Geometry): { beats: number;
   const scene = { x: offset("field").x / pz, y: offset("field").y / pz };
   const awayFrom = fieldAway(canvas);
   const away = { x: (awayFrom.x - center(g0.field).x + canvasCenter.x) / pz, y: (awayFrom.y - center(g0.field).y + canvasCenter.y) / pz };
-  const fieldTracks: Track[] = [{
+  // On the tall canvas the field comes home once the camera has left its scene (it stands above the builds).
+  const home = t.first - TRANSITION - 0.3;
+  const fieldTracks: Track[] = tall ? [{
+    select: select("field-mover"),
+    keys: [
+      { at: 0, ...scene, o: 1 }, { at: home - 0.01, ...scene }, { at: home, x: 0, y: 0 }, { at: t.loop, x: 0, y: 0, o: 1 },
+      { at: t.loop + TRANSITION / 2, o: 0, ease: "accelerate" }, { at: t.loop + TRANSITION, x: 0, y: 0, o: 0 }, { at: t.loop + TRANSITION + 0.01, ...scene }, { at: close - 0.01 }, { at: close, o: 1 },
+    ],
+  }] : [{
     select: select("field-mover"),
     keys: [
       { at: 0, ...scene, o: 1 }, { at: t.first + 0.5, ...scene }, { at: t.first + 0.51, ...away }, { at: t.finale + 0.3, ...away },

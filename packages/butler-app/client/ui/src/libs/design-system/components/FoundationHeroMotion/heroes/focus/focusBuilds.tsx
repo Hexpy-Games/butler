@@ -1,5 +1,5 @@
 import { Button } from "../../../Button";
-import { Command, FileText, Blocks } from "../../../Icons";
+import { Command, FileText } from "../../../Icons";
 import { Input } from "../../../Input";
 import { Label } from "../../../Label";
 import { Switch } from "../../../Switch";
@@ -49,14 +49,13 @@ export function focusBuilds(copy: FocusCopy): BuildSpec[] {
               <TabsList aria-label={copy.summary}>
                 <TabsTrigger value="summary"><Command size="md" /><R name="tb-0">{copy.summary}</R></TabsTrigger>
                 <TabsTrigger value="files"><FileText size="md" /><R name="tb-1">{copy.files}</R></TabsTrigger>
-                <TabsTrigger value="workers"><Blocks size="md" /><R name="tb-2">{copy.workers}</R></TabsTrigger>
               </TabsList>
             </Tabs>
           </Mark>
         </Topic>
       ),
       marks: { active: '[data-state="active"]' },
-      steps: [{ text: ["t4-topic"] }, { text: ["tb-0", "tb-1", "tb-2"] }, { annots: [ring("active")] }],
+      steps: [{ text: ["t4-topic"] }, { text: ["tb-0", "tb-1"] }, { annots: [ring("active")] }],
     },
   ];
 }

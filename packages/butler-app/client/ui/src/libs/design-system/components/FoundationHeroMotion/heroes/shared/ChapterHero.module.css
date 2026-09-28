@@ -360,8 +360,11 @@
   grid-row: 1;
 }
 
+/* Tall: the field over the product column, each its own height (the poster
+   runs past the canvas; the finale frames its top). */
 .board[data-layout="tall"] .poster {
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-content: start;
   grid-template-columns: minmax(0, 1fr);
   row-gap: var(--space-2xl);
 }
@@ -373,6 +376,12 @@
 
 .board[data-layout="tall"] .product {
   grid-row: 2;
+}
+
+/* Tall rows take their content's height (the poster may run past the canvas). */
+.board[data-layout="tall"] .field,
+.board[data-layout="tall"] .product {
+  min-height: auto;
 }
 
 .field {

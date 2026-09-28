@@ -12,7 +12,7 @@ export const FOCUS_COPY = {
     ] as IntroLead,
     topics: { button: "Button", field: "Field", toggle: "Switch", tabs: "Tabs" },
     continue: "Continue", name: "Butler", sidebar: "Sidebar", week: "Week", month: "Month",
-    summary: "Summary", files: "Files", workers: "Workers", email: "you@example.com",
+    summary: "Summary", files: "Files", email: "you@example.com",
   },
   ko: {
     title: "Focus ring",
@@ -23,7 +23,7 @@ export const FOCUS_COPY = {
     ] as IntroLead,
     topics: { button: "버튼", field: "입력", toggle: "스위치", tabs: "탭" },
     continue: "계속", name: "Butler", sidebar: "사이드바", week: "주", month: "월",
-    summary: "요약", files: "파일", workers: "작업자", email: "you@example.com",
+    summary: "요약", files: "파일", email: "you@example.com",
   },
 } satisfies Record<FoundationHeroLang, unknown>;
 

@@ -7,7 +7,7 @@ import { FocusHero } from "./heroes/focus/FocusHero";
 import { IconHero as IconographyHero } from "./heroes/iconography/IconHero";
 import { LayersHero } from "./heroes/LayersHero";
 import { LayoutHero } from "./heroes/LayoutHero";
-import { MotionHero } from "./heroes/MotionHero";
+import { MotionHero } from "./heroes/motion/MotionHero";
 import { RadiusHero } from "./heroes/radius/RadiusHero";
 import { SizingHero } from "./heroes/sizing/SizingHero";
 import { SpacingHero } from "./heroes/spacing/SpacingHero";

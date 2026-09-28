@@ -26,12 +26,13 @@ export const REST: Pose = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, s: 1 };
  * frame inside the poster (that component is built in place), so the finale
  * only zooms out.
  */
-export function scenePath(count: number, end: { x: number; y: number }, canvas: { w: number; h: number }): Array<{ x: number; y: number }> {
+export function scenePath(count: number, end: { x: number; y: number }, canvas: { w: number; h: number }, into: "right" | "down" = "right"): Array<{ x: number; y: number }> {
   const cells = [{ x: 0, y: 0 }];
   for (let k = 1; k < count; k += 1) {
     const last = cells[0]!;
-    // Walking back from the end: a step right into the last scene, a step down before it, and so on.
-    cells.unshift(k % 2 === 1 ? { x: last.x - 1, y: last.y } : { x: last.x, y: last.y - 1 });
+    // Walking back from the end: a step `into` the last scene, the other axis before it, and so on.
+    const right = (k % 2 === 1) === (into === "right");
+    cells.unshift(right ? { x: last.x - 1, y: last.y } : { x: last.x, y: last.y - 1 });
   }
   return cells.map((cell) => ({ x: end.x + cell.x * CELL * canvas.w, y: end.y + cell.y * CELL * canvas.h }));
 }
@@ -45,6 +46,28 @@ export function fieldAway(canvas: { w: number; h: number }): { x: number; y: num
 export function viewCell(canvas: { w: number; h: number }, center: { x: number; y: number }, content: Box, fill = 0.86, cap = 2): Pose {
   const zoom = fit(canvas, content, fill, cap);
   return focus(canvas, { x: center.x - 1, y: center.y - 1, w: 2, h: 2 }, zoom);
+}
+
+/**
+ * On the tall canvas the components are built where they stand in the
+ * poster's column, one under the other: the camera steps down the column,
+ * each frame as wide as the canvas allows and resting on the bottom of the
+ * component being built (and its badges), so the ones built before fill the
+ * frame above it. No component moves.
+ */
+export function columnViews(canvas: { w: number; h: number }, frames: Box[]) {
+  // One zoom and one centre line for the whole column (the canvas's middle), so every step is straight down.
+  const left = Math.min(...frames.map((box) => box.x));
+  const right = Math.max(...frames.map((box) => box.x + box.w));
+  const half = Math.max(canvas.w / 2 - left, right - canvas.w / 2);
+  const zoom = fit(canvas, { x: 0, y: 0, w: half * 2, h: 1 }, 0.96, 2.4);
+  const view = canvas.h / zoom;
+  const centers = frames.map((box) => {
+    const bottom = box.y + box.h + 16 / zoom;
+    return { x: canvas.w / 2, y: box.h + 32 / zoom > view ? box.y + box.h / 2 : bottom - view / 2 };
+  });
+  const stage = centers.map((c) => focus(canvas, { x: c.x - 1, y: c.y - 1, w: 2, h: 2 }, zoom));
+  return { shift: frames.map(() => ({ x: 0, y: 0 })), stage, centers };
 }
 
 /** Camera poses of the builds: each frame (component and badge gutter) centred on its cell, as large as the frame allows. */
