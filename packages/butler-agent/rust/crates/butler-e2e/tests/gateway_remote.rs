@@ -1,9 +1,9 @@
 //! SEC. Settings → Security (#229): access from other computers. Remote
 //! access binds the gateway's port on the LAN addresses (and unbinds it)
-//! without a restart, host names for a tunnel the user runs are registered
-//! with `butler gateway configure app --allowed-host`, and only a client on
-//! this computer may read or change any of it. The connection code is in
-//! `gateway_rotation.rs`.
+//! without a restart, and only the App or the CLI on this computer may
+//! read or change it: a loopback client that also sends the local admin
+//! credential. Tunnel host names are in `gateway_tunnel.rs`, the connection
+//! code in `gateway_rotation.rs`.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -14,59 +14,37 @@
 use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::HarnessError;
-use butler_e2e::e2e::gateway::{Gateway, Reply};
+use butler_e2e::e2e::agent::ADMIN_HEADER;
+use butler_e2e::e2e::gateway::Gateway;
 use butler_e2e::e2e::scenario::{Scenario, Setup};
+use butler_e2e::e2e::security::{AdminClient, security_calls};
 use reqwest::Method;
 use serde_json::{Value, json};
 
-/// A name for a tunnel the user runs (never resolved).
-const TUNNEL_HOST: &str = "butler.example.info";
-
-/// The Settings → Security view.
-async fn security(gw: &Gateway) -> Result<Value, HarnessError> {
-    let reply = gw.get("/security").await?;
-    assert_eq!(reply.status, 200, "{}", reply.text);
-    Ok(reply.data().clone())
+fn admin(s: &Scenario) -> AdminClient {
+    let secret = s
+        .agent
+        .launch
+        .admin_credential()
+        .expect("the agent created the admin credential");
+    AdminClient::new(s.gw.clone(), secret)
 }
 
-async fn set_remote(gw: &Gateway, enabled: bool) -> Result<Value, HarnessError> {
-    let reply = gw
-        .patch(
-            "/settings",
-            json!({"security": {"remote_access_enabled": enabled}}),
-        )
-        .await?;
-    assert_eq!(reply.status, 200, "{}", reply.text);
-    assert_eq!(reply.data()["security"]["remote_access_enabled"], enabled);
-    security(gw).await
-}
-
-/// The security routes, each with a way to change something.
-fn security_calls() -> [(Method, &'static str, Option<String>); 4] {
-    [
-        (Method::GET, "/security", None),
-        (Method::POST, "/security/connection-code/reveal", None),
-        (Method::POST, "/security/connection-code/rotate", None),
-        (
-            Method::PATCH,
-            "/settings",
-            Some(json!({"security": {"remote_access_enabled": true}}).to_string()),
-        ),
-    ]
-}
-
-/// Every security call through `gw` with `headers` is refused as remote.
-async fn assert_refused_as_remote(
+/// Every security call through `gw` with `headers` gets 403 `code`, and
+/// `GET /settings` carries no `security`.
+async fn assert_refused(
     gw: &Gateway,
     headers: &[(&str, &str)],
+    code: &str,
     label: &str,
 ) -> Result<(), HarnessError> {
     for (method, path, body) in security_calls() {
+        let body = body.map(|body| body.to_string());
         let reply = gw
             .send_with(method.clone(), path, body, Some(&gw.token), headers)
             .await?;
         assert_eq!(reply.status, 403, "{label} {method} {path}: {}", reply.text);
-        assert_eq!(reply.error_code(), Some("loopback_required"), "{label}");
+        assert_eq!(reply.error_code(), Some(code), "{label} {method} {path}");
     }
     let settings = gw
         .send_with(Method::GET, "/settings", None, Some(&gw.token), headers)
@@ -102,16 +80,18 @@ async fn wait_unbound(address: &str) {
 /// SEC-09 — "Allow access from other computers": off by default (loopback
 /// only); on binds every LAN address on the same port and answers its LAN
 /// names, without a restart; off unbinds them. A remote client, even with
-/// the token, cannot read the connection code, rotate it or change the
-/// exposure: neither from a LAN address nor through a local proxy. The
-/// setting survives a restart.
+/// the token and the admin credential, cannot read the connection code,
+/// rotate it or change the exposure: neither from a LAN address nor through
+/// a local proxy that marks the request as forwarded. The setting survives
+/// a restart.
 #[tokio::test]
 async fn sec_09_lan_access_binds_and_unbinds_without_restart() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("SEC-09")?.data_folder_token().start().await?;
+    let app = admin(&s);
     let port = s.agent.launch.port;
     let loopback = format!("127.0.0.1:{port}");
-    let view = security(&s.gw).await?;
+    let view = app.view().await?;
     assert_eq!(view["remote_access_enabled"], false, "{view}");
     assert_eq!(view["bind_addresses"], json!([loopback]), "{view}");
     assert_eq!(view["lan_urls"], json!([]), "{view}");
@@ -119,24 +99,25 @@ async fn sec_09_lan_access_binds_and_unbinds_without_restart() -> Result<(), Har
     let masked = format!("{}…{}", &token[..4], &token[token.len() - 4..]);
     assert_eq!(view["connection_code"]["masked"], masked, "{view}");
     assert!(view["connection_code"]["created_at"].is_string(), "{view}");
-    let settings = s.gw.settings().await?;
+    let settings = app.send(Method::GET, "/settings", None, &[]).await?;
     assert_eq!(
-        settings["security"],
+        settings.data()["security"],
         json!({"remote_access_enabled": false, "allowed_hosts": []})
     );
 
-    // A local proxy forwarding a remote browser is not a local client.
+    // A local proxy that forwards a remote browser is not a local client,
+    // whatever credentials it passes along.
     for header in [
         ("x-forwarded-for", "203.0.113.9"),
         ("forwarded", "for=203.0.113.9"),
         ("cf-connecting-ip", "203.0.113.9"),
     ] {
-        assert_refused_as_remote(&s.gw, &[header], header.0).await?;
+        let headers = [header, (ADMIN_HEADER, app.admin.as_str())];
+        assert_refused(&s.gw, &headers, "loopback_required", header.0).await?;
     }
-    assert_eq!(security(&s.gw).await?["remote_access_enabled"], false);
+    assert_eq!(app.view().await?["remote_access_enabled"], false);
 
-    let view = set_remote(&s.gw, true).await?;
-    assert_eq!(view["remote_access_enabled"], true, "{view}");
+    let view = app.set_remote(true).await?;
     assert_eq!(view["bind_addresses"][0], loopback, "{view}");
     let stored: Value =
         serde_json::from_slice(&std::fs::read(s.sandbox.data.join("gateways/app.json"))?)?;
@@ -153,10 +134,10 @@ async fn sec_09_lan_access_binds_and_unbinds_without_restart() -> Result<(), Har
                 "{address} not in {view}"
             );
         }
-        assert_lan_client(&s, &lan[0], urls).await?;
+        assert_lan_client(&app, &lan[0], urls).await?;
     }
 
-    let view = set_remote(&s.gw, false).await?;
+    let view = app.set_remote(false).await?;
     assert_eq!(view["bind_addresses"], json!([loopback]), "{view}");
     assert_eq!(view["lan_urls"], json!([]), "{view}");
     for address in &lan {
@@ -164,31 +145,30 @@ async fn sec_09_lan_access_binds_and_unbinds_without_restart() -> Result<(), Har
     }
 
     // The next start binds as the saved setting says.
-    set_remote(&s.gw, true).await?;
+    app.set_remote(true).await?;
     s.restart().await?;
-    let view = security(&s.gw).await?;
+    let app = AdminClient::new(s.gw.clone(), app.admin);
+    let view = app.view().await?;
     assert_eq!(view["remote_access_enabled"], true, "{view}");
     if let Some(address) = lan_listeners(&view).first() {
-        let health = lan_gateway(&s, address).get("/health").await?;
+        let lan = Gateway::new(format!("http://{address}"), s.gw.token.clone());
+        let health = lan.get("/health").await?;
         assert_eq!(health.status, 200, "after restart: {}", health.text);
     }
-    set_remote(&s.gw, false).await?;
+    app.set_remote(false).await?;
     s.finish().await
-}
-
-fn lan_gateway(s: &Scenario, address: &str) -> Gateway {
-    Gateway::new(format!("http://{address}"), s.gw.token.clone())
 }
 
 /// A client on the LAN (this machine, through its LAN address, so the peer
 /// is not loopback): it reaches the gateway with the token, and its page's
-/// origin may change settings, but Settings → Security refuses it.
+/// origin may change settings, but Settings → Security refuses it even
+/// with the admin credential.
 async fn assert_lan_client(
-    s: &Scenario,
+    app: &AdminClient,
     address: &str,
     urls: &[Value],
 ) -> Result<(), HarnessError> {
-    let remote = lan_gateway(s, address);
+    let remote = Gateway::new(format!("http://{address}"), app.gw.token.clone());
     assert_eq!(remote.get("/health").await?.status, 200, "{address}");
     let anonymous = remote
         .send_with(Method::GET, "/settings", None, None, &[])
@@ -209,7 +189,8 @@ async fn assert_lan_client(
         )
         .await?;
     assert_eq!(changed.status, 200, "LAN page PATCH: {}", changed.text);
-    assert_refused_as_remote(&remote, &[], "LAN peer").await?;
+    let with_admin = [(ADMIN_HEADER, app.admin.as_str())];
+    assert_refused(&remote, &with_admin, "loopback_required", "LAN peer").await?;
     let named = urls
         .iter()
         .filter_map(Value::as_str)
@@ -240,183 +221,75 @@ async fn assert_lan_client(
     Ok(())
 }
 
-/// Sends what a tunnel's local proxy forwards: Host rewritten to the
-/// loopback address, the browser's Origin, the token.
-async fn through_tunnel(
-    s: &Scenario,
-    method: Method,
-    path: &str,
-    origin: &str,
-    body: Option<Value>,
-) -> Result<Reply, HarnessError> {
-    let host = format!("127.0.0.1:{}", s.agent.launch.port);
-    s.gw.send_with(
-        method,
-        path,
-        body.map(|body| body.to_string()),
-        Some(&s.gw.token),
-        &[
-            ("host", &host),
-            ("origin", origin),
-            ("x-forwarded-for", "203.0.113.9"),
-        ],
-    )
-    .await
+/// A plain TCP forwarder on this computer (as `ssh -L`, `socat` or a
+/// container port mapping would be): it adds no header, and the gateway
+/// sees a loopback peer.
+async fn tcp_forwarder(target: u16) -> Result<u16, HarnessError> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let port = listener.local_addr()?.port();
+    tokio::spawn(async move {
+        while let Ok((mut inbound, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                if let Ok(mut outbound) =
+                    tokio::net::TcpStream::connect(("127.0.0.1", target)).await
+                {
+                    let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await;
+                }
+            });
+        }
+    });
+    Ok(port)
 }
 
-/// SEC-11 — a tunnel the user built (`name` → proxy that rewrites Host to
-/// 127.0.0.1 and passes Origin through): its browser origin is refused until
-/// the name is registered with `butler gateway configure app
-/// --allowed-host`, which the running gateway applies without a restart and
-/// which keeps the rest of `gateways/app.json`. Unregistered names stay
-/// refused, removing the name refuses it again, and the tunnel never
-/// reaches Settings → Security.
+/// SEC-12 — a header-less forwarder to 127.0.0.1 passes every network
+/// check a local client passes (loopback peer, loopback Host, no Origin,
+/// no proxy header), yet with the gateway token alone it cannot read or
+/// change Settings → Security: that needs the local admin credential,
+/// which only the App and the CLI read from the data folder.
 #[tokio::test]
-async fn sec_11_tunnel_host_is_registered_with_the_cli() -> Result<(), HarnessError> {
+async fn sec_12_header_less_forwarder_needs_the_admin_credential() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let settings_file = |s: &Scenario| s.sandbox.data.join("gateways/app.json");
-    let s = Setup::new("SEC-11")?.data_folder_token().start().await?;
-    assert!(!settings_file(&s).exists(), "fixture has gateways/app.json");
-    let origin = format!("https://{TUNNEL_HOST}");
-    let refused = through_tunnel(&s, Method::GET, "/settings", &origin, None).await?;
-    assert_eq!(refused.status, 403, "{}", refused.text);
-    assert_eq!(refused.error_code(), Some("origin_not_allowed"));
-
-    // Without a settings file, the CLI creates a minimal valid one.
-    let created = s.agent.cli(&[
-        "gateway",
-        "configure",
-        "app",
-        "--allowed-host",
-        "first.example.info",
-        "--json",
-    ])?;
-    assert_eq!(created.code, Some(0), "{created:?}");
-    let mut stored: Value = serde_json::from_slice(&std::fs::read(settings_file(&s))?)?;
-    assert_eq!(stored["id"], "app", "{stored}");
-    assert_eq!(
-        stored["config"]["allowedHosts"],
-        json!(["first.example.info"]),
-        "{stored}"
-    );
-    stored["note"] = json!("keep");
-    stored["config"]["custom"] = json!("keep");
-    std::fs::write(settings_file(&s), stored.to_string())?;
-    let removed_first = s.agent.cli(&[
-        "gateway",
-        "configure",
-        "app",
-        "--remove-allowed-host",
-        "FIRST.example.info",
-        "--json",
-    ])?;
-    assert_eq!(removed_first.code, Some(0), "{removed_first:?}");
-
-    let added = s.agent.cli(&[
-        "gateway",
-        "configure",
-        "app",
-        "--allowed-host",
-        TUNNEL_HOST,
-        "--json",
-    ])?;
-    assert_eq!(added.code, Some(0), "{added:?}");
-    let added = added.json()?;
-    assert_eq!(
-        added["data"]["config"]["allowedHosts"],
-        json!([TUNNEL_HOST]),
-        "{added}"
-    );
-    assert_eq!(added["data"]["allowedHostsApplied"], true, "{added}");
-    let stored: Value = serde_json::from_slice(&std::fs::read(settings_file(&s))?)?;
-    assert_eq!(stored["note"], "keep", "{stored}");
-    assert_eq!(stored["config"]["custom"], "keep", "{stored}");
-    assert_eq!(
-        stored["config"]["allowedHosts"],
-        json!([TUNNEL_HOST]),
-        "{stored}"
-    );
-    assert_eq!(
-        security(&s.gw).await?["allowed_hosts"],
-        json!([TUNNEL_HOST])
-    );
-
-    let read = through_tunnel(&s, Method::GET, "/settings", &origin, None).await?;
-    assert_eq!(read.status, 200, "{}", read.text);
-    let write = through_tunnel(
-        &s,
-        Method::PATCH,
-        "/settings",
-        &origin,
-        Some(json!({"language": "ko"})),
-    )
-    .await?;
-    assert_eq!(write.status, 200, "{}", write.text);
-    for (method, path, body) in security_calls() {
-        let body = body.map(|body| serde_json::from_str(&body).unwrap());
-        let reply = through_tunnel(&s, method.clone(), path, &origin, body).await?;
-        assert_eq!(
-            reply.error_code(),
-            Some("loopback_required"),
-            "{method} {path}"
-        );
-    }
-    let passthrough =
-        s.gw.send_with(
+    let s = Setup::new("SEC-12")?.data_folder_token().start().await?;
+    let app = admin(&s);
+    let port = s.agent.launch.port;
+    let forwarded = tcp_forwarder(port).await?;
+    let through = Gateway::new(format!("http://127.0.0.1:{forwarded}"), s.gw.token.clone());
+    let host = format!("127.0.0.1:{port}");
+    let health = through
+        .send_with(
             Method::GET,
             "/health",
             None,
-            Some(&s.gw.token),
-            &[("host", TUNNEL_HOST)],
+            Some(&through.token),
+            &[("host", &host)],
         )
         .await?;
-    assert_eq!(passthrough.status, 200, "{}", passthrough.text);
-    let other = through_tunnel(
-        &s,
-        Method::GET,
-        "/settings",
-        "https://other.example.info",
-        None,
+    assert_eq!(health.status, 200, "forwarder: {}", health.text);
+    assert_refused(
+        &through,
+        &[("host", &host)],
+        "admin_credential_required",
+        "forwarder",
     )
     .await?;
+    let wrong = [
+        ("host", host.as_str()),
+        (ADMIN_HEADER, "not-the-admin-credential"),
+    ];
+    assert_refused(&through, &wrong, "admin_credential_required", "wrong admin").await?;
     assert_eq!(
-        other.error_code(),
-        Some("origin_not_allowed"),
-        "{}",
-        other.text
+        app.view().await?["remote_access_enabled"],
+        false,
+        "state changed"
     );
-    let other_host =
-        s.gw.send_with(
-            Method::GET,
-            "/health",
-            None,
-            Some(&s.gw.token),
-            &[("host", "other.example.info")],
-        )
-        .await?;
-    assert_eq!(other_host.error_code(), Some("host_not_allowed"));
-
-    let removed = s.agent.cli(&[
-        "gateway",
-        "configure",
-        "app",
-        "--remove-allowed-host",
-        TUNNEL_HOST,
-        "--json",
-    ])?;
-    assert_eq!(removed.code, Some(0), "{removed:?}");
-    assert_eq!(removed.json()?["data"]["config"]["allowedHosts"], json!([]));
-    let refused = through_tunnel(&s, Method::GET, "/settings", &origin, None).await?;
-    assert_eq!(refused.error_code(), Some("origin_not_allowed"));
-
-    let invalid = s.agent.cli(&[
-        "gateway",
-        "configure",
-        "app",
-        "--allowed-host",
-        "https://x.example/",
-        "--json",
-    ])?;
-    assert_ne!(invalid.code, Some(0), "{invalid:?}");
+    assert_eq!(
+        app.view().await?["connection_code"]["masked"],
+        format!(
+            "{}…{}",
+            &s.gw.token[..4],
+            &s.gw.token[s.gw.token.len() - 4..]
+        ),
+        "the code rotated"
+    );
     s.finish().await
 }

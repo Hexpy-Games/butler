@@ -20,6 +20,12 @@ pub struct GatewayConfig {
     /// Settings → Security: also listen on the machine's LAN addresses (same
     /// port) and answer their Host names.
     pub remote_access_enabled: bool,
+    /// The local admin credential: Settings → Security answers only a
+    /// loopback client that also sends it in [`ADMIN_CREDENTIAL_HEADER`].
+    /// Without one, Settings → Security refuses everyone.
+    ///
+    /// [`ADMIN_CREDENTIAL_HEADER`]: super::ADMIN_CREDENTIAL_HEADER
+    pub admin_credential: Option<String>,
     /// The host side of Settings → Security. Without one, exposure changes
     /// live in memory only and the connection code cannot rotate.
     pub security_store: Option<Arc<dyn GatewaySecurityStore>>,
@@ -37,6 +43,7 @@ impl Default for GatewayConfig {
             dev_cors_origin: None,
             allowed_hosts: Vec::new(),
             remote_access_enabled: false,
+            admin_credential: None,
             security_store: None,
             signed_url_ttl: std::time::Duration::from_secs(600),
             message_rate_limit_max: 60,

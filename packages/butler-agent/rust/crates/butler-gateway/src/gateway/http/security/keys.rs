@@ -4,11 +4,15 @@
 //! live streams opened under the old token.
 
 use std::sync::Arc;
+use std::time::SystemTime;
 
+use axum::body::Bytes;
+use axum::response::Response;
 use tokio_util::sync::CancellationToken;
 
 use super::browser_session::BrowserSessions;
 use super::signed_urls::ResourceSigner;
+use super::unix_seconds;
 use crate::gateway::crypto::{constant_time_eq, hmac_sha256, hmac_sha256_base64};
 
 /// The key for signed URLs and session cookies, derived from the local
@@ -60,5 +64,38 @@ impl Keyed {
             token,
             streams: shutdown.child_token(),
         }
+    }
+}
+
+/// The key set a request was authorized under. The request keeps it for
+/// its whole life: a rotation during the request cannot hand it the new
+/// signer or the new token's stream closer.
+#[derive(Clone)]
+pub(in crate::gateway::http) struct KeySet(pub(super) Arc<Keyed>);
+
+impl KeySet {
+    /// Adds `signed_url`s to an authenticated JSON response.
+    pub(in crate::gateway::http) async fn sign_urls(&self, response: Response) -> Response {
+        match &self.0.signer {
+            Some(signer) => {
+                signer
+                    .decorate_response(response, unix_seconds(SystemTime::now()))
+                    .await
+            }
+            None => response,
+        }
+    }
+
+    /// Adds `signed_url`s to live-event chunks (the stream is authenticated).
+    pub(in crate::gateway::http) fn live_chunk_signer(
+        &self,
+    ) -> Option<impl Fn(Bytes) -> Bytes + Send + 'static> {
+        let signer = self.0.signer.clone()?;
+        Some(move |chunk| signer.decorate_event_chunk(chunk, unix_seconds(SystemTime::now())))
+    }
+
+    /// Fires when this key set's token rotates (or the gateway stops).
+    pub(in crate::gateway::http) fn live_streams(&self) -> CancellationToken {
+        self.0.streams.clone()
     }
 }

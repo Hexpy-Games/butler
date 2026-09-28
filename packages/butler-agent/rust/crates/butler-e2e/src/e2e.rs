@@ -15,6 +15,7 @@ pub mod provider;
 pub mod sandbox;
 pub mod sanitize;
 pub mod scenario;
+pub mod security;
 pub mod stop_intent;
 
 use sha2::{Digest, Sha256};

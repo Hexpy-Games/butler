@@ -5,14 +5,15 @@
 //! The list is written to `gateways/app.json` `config.allowedHosts`
 //! (atomically, keeping every other field). When the service is running,
 //! the change is also sent to its gateway (`PATCH /settings {security}`
-//! from this computer), which applies it without a restart.
+//! from this computer, with the local admin credential), which applies it
+//! without a restart.
 
 use std::path::Path;
 use std::time::Duration;
 
 use serde_json::{Map, Value, json};
 
-use butler_gateway::gateway::{MAX_ALLOWED_HOSTS, normalize_allowed_host};
+use butler_gateway::gateway::{ADMIN_CREDENTIAL_HEADER, MAX_ALLOWED_HOSTS, normalize_allowed_host};
 
 use crate::host::ResolvedInstallation;
 use crate::host::service::configuration::AppServiceConfiguration;
@@ -72,7 +73,10 @@ pub(super) async fn store(
 
 async fn apply_live(endpoint: &str, data_root: &Path, hosts: Vec<String>) -> bool {
     let app = AppServiceConfiguration::capture(data_root);
-    let Some(token) = app.gateway_config().local_auth.token() else {
+    let (Some(token), Some(admin)) = (
+        app.gateway_config().local_auth.token(),
+        app.admin_credential(),
+    ) else {
         return false;
     };
     let Ok(client) = reqwest::Client::builder()
@@ -85,6 +89,7 @@ async fn apply_live(endpoint: &str, data_root: &Path, hosts: Vec<String>) -> boo
     client
         .patch(format!("{endpoint}/settings"))
         .bearer_auth(token)
+        .header(ADMIN_CREDENTIAL_HEADER, admin)
         .json(&json!({"security": {"allowed_hosts": hosts}}))
         .send()
         .await

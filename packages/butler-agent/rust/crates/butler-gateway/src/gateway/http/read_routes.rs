@@ -110,17 +110,18 @@ pub(super) async fn get_events(state: Arc<HttpState>, uri: &Uri) -> Result<Respo
 }
 
 /// `GET /events/live`: the stream closes with the listener it came through
-/// and when the token it was opened with rotates.
+/// and when the token it was authorized with (`keys`) rotates.
 pub(super) async fn get_live_events(
     state: Arc<HttpState>,
     uri: &Uri,
     scope: Option<super::listeners::ListenerScope>,
+    keys: &super::security::KeySet,
 ) -> Result<Response, HttpError> {
     let cursor = cursor_param(query(uri).get("cursor"));
-    let mut closers = vec![state.security.live_streams()];
+    let mut closers = vec![keys.live_streams()];
     closers.extend(scope.map(|scope| scope.closed));
     let stream = create_live_stream(state.application.clone(), cursor, closers).await?;
-    let body = match state.security.live_chunk_signer() {
+    let body = match keys.live_chunk_signer() {
         Some(sign) => Body::from_stream(stream.map(move |chunk| chunk.map(&sign))),
         None => Body::from_stream(stream),
     };

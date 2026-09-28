@@ -5,10 +5,12 @@
 //! message file.
 //!
 //! The Host/Origin policy and the token can change while the gateway runs
-//! (Settings → Security): each request reads the current ones.
+//! (Settings → Security): each request reads the current ones once, and
+//! keeps the key set it was authorized under ([`KeySet`]).
 
 mod browser_session;
 mod client_place;
+mod connect;
 mod connect_page;
 mod cors;
 mod fetch_metadata;
@@ -21,26 +23,28 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use axum::body::{Body, Bytes};
+use axum::body::Body;
 use axum::http::{HeaderMap, HeaderValue, Method, Request, StatusCode, Uri, header};
 use axum::response::Response;
 use parking_lot::RwLock;
 use tokio_util::sync::CancellationToken;
 
 pub(super) use client_place::is_local_client;
+pub(super) use connect::{CONNECT_PATH, MAX_FORM_BYTES as MAX_CONNECT_FORM_BYTES};
 pub(super) use cors::{apply as apply_cors, preflight};
+pub(super) use keys::KeySet;
 pub(super) use request_policy::{RequestOrigin, require_json_body};
 
 use super::{HttpError, error::json, static_ui};
+use crate::gateway::ADMIN_CREDENTIAL_HEADER;
 use crate::gateway::auth::{self, LocalAuthConfig};
+use crate::gateway::crypto::constant_time_eq;
 use crate::gateway::protocol::{APP_PROTOCOL_VERSION, ApiEnvelope};
 use connect_page::ConnectPage;
 use fetch_metadata::{SessionRefusal, SessionRequest};
 use keys::{Keyed, SigningKey};
 use request_policy::RequestPolicy;
 
-/// `GET /connect?code=..`: redeems a connection code (no credential needed).
-const CONNECT_PATH: &str = "/connect";
 /// `POST /connection-codes`: mints a one-time browser link (bearer only).
 pub(super) const CONNECTION_CODES_PATH: &str = "/connection-codes";
 
@@ -61,7 +65,7 @@ pub(super) enum Access {
 
 impl Access {
     /// Responses to these requests get `signed_url`s.
-    fn receives_signed_urls(self) -> bool {
+    pub(super) fn receives_signed_urls(self) -> bool {
         matches!(
             self,
             Self::AuthDisabled | Self::Bearer | Self::BrowserSession
@@ -69,10 +73,16 @@ impl Access {
     }
 }
 
+/// A granted request: its credential and the key set it was checked with.
+pub(super) struct Grant {
+    pub(super) access: Access,
+    pub(super) keys: KeySet,
+}
+
 /// The outcome of [`GatewaySecurity::authorize`].
 pub(super) enum Admission {
-    /// Route the request with this access.
-    Granted(Access),
+    /// Route the request with this grant.
+    Granted(Grant),
     /// Answer without routing (connection page, code redemption).
     Respond(Response),
 }
@@ -117,6 +127,8 @@ impl From<Denial> for HttpError {
 /// Host/Origin policy, credentials and signing for one gateway.
 pub(super) struct GatewaySecurity {
     auth: LocalAuthConfig,
+    /// The local admin credential Settings → Security requires.
+    admin: Option<Arc<str>>,
     local_addr: SocketAddr,
     dev_origins: Option<String>,
     ttl_seconds: u64,
@@ -125,20 +137,37 @@ pub(super) struct GatewaySecurity {
     keyed: RwLock<Arc<Keyed>>,
 }
 
+/// What [`GatewaySecurity::new`] is built from.
+pub(super) struct SecurityConfig {
+    pub(super) auth: LocalAuthConfig,
+    pub(super) admin: Option<String>,
+    pub(super) local_addr: SocketAddr,
+    pub(super) allowed_hosts: Vec<String>,
+    pub(super) dev_origins: Option<String>,
+    pub(super) signed_url_ttl: Duration,
+    pub(super) shutdown: CancellationToken,
+}
+
 impl GatewaySecurity {
-    pub(super) fn new(
-        auth: LocalAuthConfig,
-        local_addr: SocketAddr,
-        allowed_hosts: &[String],
-        dev_origins: Option<String>,
-        signed_url_ttl: Duration,
-        shutdown: CancellationToken,
-    ) -> Self {
+    pub(super) fn new(config: SecurityConfig) -> Self {
+        let SecurityConfig {
+            auth,
+            admin,
+            local_addr,
+            allowed_hosts,
+            dev_origins,
+            signed_url_ttl,
+            shutdown,
+        } = config;
         let ttl_seconds = signed_url_ttl.as_secs().max(1);
         let keyed = Keyed::derive(auth.token(), local_addr.port(), ttl_seconds, &shutdown);
-        let policy = RequestPolicy::new(local_addr, allowed_hosts, dev_origins.as_deref(), &[]);
+        let policy = RequestPolicy::new(local_addr, &allowed_hosts, dev_origins.as_deref(), &[]);
         Self {
             auth,
+            admin: admin
+                .map(|secret| secret.trim().to_owned())
+                .filter(|secret| !secret.is_empty())
+                .map(Arc::from),
             local_addr,
             dev_origins,
             ttl_seconds,
@@ -164,6 +193,21 @@ impl GatewaySecurity {
             lan_authorities,
         );
         *self.policy.write() = Arc::new(policy);
+    }
+
+    /// Whether the request carries the local admin credential (none
+    /// configured: never).
+    pub(super) fn is_admin(&self, headers: &HeaderMap) -> bool {
+        let Some(admin) = self.admin.as_deref() else {
+            return false;
+        };
+        let mut values = headers.get_all(ADMIN_CREDENTIAL_HEADER).iter();
+        match (values.next(), values.next()) {
+            (Some(value), None) => {
+                constant_time_eq(value.as_bytes().trim_ascii(), admin.as_bytes())
+            }
+            _ => false,
+        }
     }
 
     /// The current token (the connection code), when there is one.
@@ -197,11 +241,6 @@ impl GatewaySecurity {
         keyed.sessions.as_ref()?.issue(SystemTime::now())
     }
 
-    /// Closes live streams opened under the current token when it rotates.
-    pub(super) fn live_streams(&self) -> CancellationToken {
-        self.keyed.read().streams.clone()
-    }
-
     /// Decides the request's credential, or answers it directly.
     pub(super) fn authorize(
         &self,
@@ -212,10 +251,16 @@ impl GatewaySecurity {
         let now = SystemTime::now();
         let keyed = self.keyed.read().clone();
         if *method == Method::GET && uri.path() == CONNECT_PATH {
-            return Ok(Admission::Respond(connect(&keyed, uri, now)));
+            return Ok(Admission::Respond(connect::from_query(&keyed, uri, now)));
         }
+        let grant = |access| {
+            Admission::Granted(Grant {
+                access,
+                keys: KeySet(keyed.clone()),
+            })
+        };
         if static_ui::is_public_asset(method, uri.path()) {
-            return Ok(Admission::Granted(Access::PublicAsset));
+            return Ok(grant(Access::PublicAsset));
         }
         let request = CredentialRequest {
             method,
@@ -225,7 +270,7 @@ impl GatewaySecurity {
             now,
         };
         match self.credential(&keyed, &request) {
-            Ok(access) => Ok(Admission::Granted(access)),
+            Ok(access) => Ok(grant(access)),
             // A navigation without a usable session (none, or one another
             // local page's link carried) gets the connection-code screen.
             Err(Denial::Missing | Denial::ForeignSite)
@@ -235,6 +280,13 @@ impl GatewaySecurity {
             }
             Err(denial) => Err(denial.into()),
         }
+    }
+
+    /// `POST /connect` (the connection page's form): a one-time code or
+    /// the connection code for a session cookie.
+    pub(super) fn connect_form(&self, body: &[u8]) -> Response {
+        let keyed = self.keyed.read().clone();
+        connect::from_form(&keyed, body, SystemTime::now())
     }
 
     fn credential(&self, keyed: &Keyed, request: &CredentialRequest<'_>) -> Result<Access, Denial> {
@@ -289,18 +341,17 @@ impl GatewaySecurity {
     /// `POST /connection-codes`: a one-time link for `butler open`.
     pub(super) fn mint_connection_code(
         &self,
-        access: Access,
+        grant: &Grant,
         headers: &HeaderMap,
     ) -> Result<Response, HttpError> {
-        if !matches!(access, Access::Bearer | Access::AuthDisabled) {
+        if !matches!(grant.access, Access::Bearer | Access::AuthDisabled) {
             return Err(HttpError::public(
                 403,
                 "bearer_token_required",
                 "Connection codes are issued to the local token only.",
             ));
         }
-        let keyed = self.keyed.read().clone();
-        let sessions = keyed.sessions.as_ref().ok_or(Denial::Unconfigured)?;
+        let sessions = grant.keys.0.sessions.as_ref().ok_or(Denial::Unconfigured)?;
         let authority = headers
             .get(header::HOST)
             .and_then(|value| value.to_str().ok())
@@ -313,25 +364,6 @@ impl GatewaySecurity {
             },
         )
     }
-
-    /// Adds `signed_url`s to an authenticated JSON response.
-    pub(super) async fn sign_urls(&self, access: Access, response: Response) -> Response {
-        let signer = self.keyed.read().signer.clone();
-        match signer {
-            Some(signer) if access.receives_signed_urls() => {
-                signer
-                    .decorate_response(response, unix_seconds(SystemTime::now()))
-                    .await
-            }
-            _ => response,
-        }
-    }
-
-    /// Adds `signed_url`s to live-event chunks (the stream is authenticated).
-    pub(super) fn live_chunk_signer(&self) -> Option<impl Fn(Bytes) -> Bytes + Send + 'static> {
-        let signer = self.keyed.read().signer.clone()?;
-        Some(move |chunk| signer.decorate_event_chunk(chunk, unix_seconds(SystemTime::now())))
-    }
 }
 
 /// The request facts a credential is judged on.
@@ -342,36 +374,6 @@ struct CredentialRequest<'a> {
     headers: &'a HeaderMap,
     origin: &'a RequestOrigin,
     now: SystemTime,
-}
-
-/// `GET /connect[?code=..]`: the code page, or a session cookie and a
-/// redirect to the App.
-fn connect(keyed: &Keyed, uri: &Uri, now: SystemTime) -> Response {
-    let code = url::form_urlencoded::parse(uri.query().unwrap_or_default().as_bytes())
-        .find(|(name, _)| name == "code")
-        .map(|(_, value)| value.into_owned())
-        .filter(|value| !value.trim().is_empty());
-    let Some(code) = code else {
-        return ConnectPage::Ask.response();
-    };
-    let Some(cookie) = keyed
-        .sessions
-        .as_ref()
-        .and_then(|sessions| sessions.redeem(&code, now))
-    else {
-        return ConnectPage::Rejected.response();
-    };
-    let mut response = Response::new(Body::empty());
-    *response.status_mut() = StatusCode::SEE_OTHER;
-    let headers = response.headers_mut();
-    headers.insert(header::SET_COOKIE, cookie);
-    headers.insert(header::LOCATION, HeaderValue::from_static("/"));
-    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-    headers.insert(
-        header::REFERRER_POLICY,
-        HeaderValue::from_static("no-referrer"),
-    );
-    response
 }
 
 fn unix_seconds(time: SystemTime) -> u64 {

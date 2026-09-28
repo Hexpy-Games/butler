@@ -78,7 +78,7 @@ pub(super) async fn create_live_stream(
 
     Ok(LiveEventStream {
         state,
-        _subscription: subscription,
+        subscription: Some(subscription),
         heartbeat: heartbeat_interval(),
         closers: closers
             .into_iter()
@@ -94,6 +94,8 @@ fn state_lock(state: &Arc<Mutex<LiveState>>) -> parking_lot::MutexGuard<'_, Live
 
 struct LiveState {
     cursor: f64,
+    /// The stream is closing: events that arrive now are not queued.
+    closed: bool,
     replaying: bool,
     replay_overflowed: bool,
     replay_queue: BTreeMap<u64, AppEventEnvelope>,
@@ -105,6 +107,7 @@ impl LiveState {
     fn new(cursor: f64) -> Self {
         Self {
             cursor,
+            closed: false,
             replaying: true,
             replay_overflowed: false,
             replay_queue: BTreeMap::new(),
@@ -114,7 +117,7 @@ impl LiveState {
     }
 
     fn receive(&mut self, event: AppEventEnvelope, high_water: u64) -> Option<Waker> {
-        if event.id as f64 <= self.cursor {
+        if self.closed || event.id as f64 <= self.cursor {
             return None;
         }
         if self.replaying {
@@ -189,7 +192,8 @@ impl LiveState {
 
 pub(super) struct LiveEventStream {
     state: Arc<Mutex<LiveState>>,
-    _subscription: Box<dyn EventSubscription>,
+    /// Dropped (unregistered) when the stream starts closing.
+    subscription: Option<Box<dyn EventSubscription>>,
     heartbeat: Interval,
     closers: Vec<Pin<Box<WaitForCancellationFutureOwned>>>,
     /// A closer fired: deliver what is queued, then end.
@@ -206,7 +210,10 @@ impl Stream for LiveEventStream {
                 .iter_mut()
                 .any(|closer| closer.as_mut().poll(cx).is_ready())
         {
+            // Only what is queued now is still delivered.
             self.closing = true;
+            self.state.lock().closed = true;
+            self.subscription = None;
         }
         if self.closing {
             let chunk = self.state.lock().output.pop_front();

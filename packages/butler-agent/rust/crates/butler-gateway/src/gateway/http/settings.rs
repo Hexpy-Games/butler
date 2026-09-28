@@ -13,7 +13,7 @@ pub(super) async fn get(
     client: Option<Client>,
 ) -> Result<Response, HttpError> {
     let mut settings = state.application.read_settings().await?;
-    security_settings::add_to_settings(&state, client, &mut settings);
+    security_settings::add_to_settings(&state, client.as_ref(), &mut settings);
     json(
         StatusCode::OK,
         ApiEnvelope {
@@ -23,14 +23,15 @@ pub(super) async fn get(
     )
 }
 
-/// `PATCH /settings`. A `security` object is taken out first: only a local
-/// client may send one (else nothing changes), and it applies after the
-/// other fields, to the listeners and the gateway settings file.
+/// `PATCH /settings`. A `security` object is taken out and validated first:
+/// only a local admin client may send one, and a refused or invalid one
+/// changes nothing. It applies after the other fields, to the listeners and
+/// the gateway settings file.
 pub(super) async fn patch(
     state: Arc<HttpState>,
     request: axum::http::Request<Body>,
 ) -> Result<Response, HttpError> {
-    let client = request.extensions().get::<Client>().copied();
+    let client = request.extensions().get::<Client>().cloned();
     let bytes = read_body_with_limit(request.into_body(), 1024 * 1024).await?;
     let mut input: Value = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
     let security = match input
@@ -38,7 +39,7 @@ pub(super) async fn patch(
         .and_then(|input| input.remove("security"))
     {
         Some(value) => {
-            security_settings::local_client(client)?;
+            security_settings::local_client(client.as_ref())?;
             Some(security_settings::parse_patch(value)?)
         }
         None => None,
@@ -53,7 +54,7 @@ pub(super) async fn patch(
     if let Some(patch) = security {
         security_settings::apply(&state, patch).await?;
     }
-    security_settings::add_to_settings(&state, client, &mut settings);
+    security_settings::add_to_settings(&state, client.as_ref(), &mut settings);
     json(
         StatusCode::OK,
         ApiEnvelope {

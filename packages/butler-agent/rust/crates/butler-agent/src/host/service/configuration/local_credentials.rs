@@ -120,6 +120,8 @@ pub(crate) struct LocalCredentials {
     pub(crate) token: Result<String, LocalCredentialError>,
     /// The project-folder selection secret.
     pub(crate) folder_secret: Result<String, LocalCredentialError>,
+    /// The local admin credential Settings → Security requires.
+    pub(crate) admin: Result<String, LocalCredentialError>,
 }
 
 impl LocalCredentials {
@@ -147,6 +149,7 @@ impl LocalCredentials {
         Self {
             token,
             folder_secret,
+            admin: super::local_admin::load(data_root, files),
         }
     }
 }
@@ -284,7 +287,7 @@ fn new_secret_file() -> Result<Vec<u8>, LocalCredentialError> {
 
 /// The usable value at `path`; when it is missing or unusable and `files`
 /// allows, the file is created with `create`.
-fn load_file(
+pub(super) fn load_file(
     path: &Path,
     files: CredentialFiles,
     usable: fn(&[u8]) -> Option<String>,

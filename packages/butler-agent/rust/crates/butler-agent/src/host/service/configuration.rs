@@ -1,6 +1,7 @@
 //! Source native-Butler startup facts and the one default-session binding.
 
 mod app;
+mod local_admin;
 pub(crate) mod local_credentials;
 mod session;
 

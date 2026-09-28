@@ -1,5 +1,6 @@
 //! The connection-code screen a browser sees without a session: one field
-//! for the code `butler open` prints, and no username/password prompt (no
+//! for the connection code from Settings → Security (or a one-time code
+//! `butler open` prints), and no username/password prompt (no
 //! `WWW-Authenticate` challenge).
 
 use axum::body::Body;
@@ -23,7 +24,7 @@ h1 { font-size: 20px; margin: 0 0 8px; }
 p { margin: 0 0 16px; color: var(--muted); }
 code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--fg); }
 label { display: block; font-weight: 600; margin-bottom: 6px; }
-input { box-sizing: border-box; width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--fg); font: 16px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.08em; text-transform: uppercase; }
+input { box-sizing: border-box; width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--fg); font: 16px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.02em; }
 button { margin-top: 12px; width: 100%; padding: 10px 12px; border: 0; border-radius: 8px; background: var(--accent); color: var(--accent-fg); font: inherit; font-weight: 600; cursor: pointer; }
 .error { color: var(--error); }
 </style>
@@ -31,12 +32,12 @@ button { margin-top: 12px; width: 100%; padding: 10px 12px; border: 0; border-ra
 <body>
 <main>
 <h1>Connect to Butler</h1>
-<p>Run <code>butler open</code> in a terminal on this computer, or enter the connection code it shows.</p>
+<p>Enter the connection code. Copy it from Settings → Security in the Butler app.</p>
 "#;
 
-const PAGE_FORM: &str = r#"<form method="get" action="/connect">
+const PAGE_FORM: &str = r#"<form method="post" action="/connect">
 <label for="code">Connection code</label>
-<input id="code" name="code" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" required autofocus>
+<input id="code" name="code" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" required autofocus>
 <button type="submit">Connect</button>
 </form>
 </main>
@@ -44,7 +45,7 @@ const PAGE_FORM: &str = r#"<form method="get" action="/connect">
 </html>
 "#;
 
-const REJECTED: &str = "<p class=\"error\" role=\"alert\">That code is not valid or has expired. Run <code>butler open</code> for a new one.</p>\n";
+const REJECTED: &str = "<p class=\"error\" role=\"alert\">That code is not valid.</p>\n";
 
 /// Why the page is shown.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

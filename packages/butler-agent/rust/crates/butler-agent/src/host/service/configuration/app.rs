@@ -141,6 +141,7 @@ impl AppServiceConfiguration {
         let LocalCredentials {
             token,
             folder_secret,
+            admin,
         } = LocalCredentials::load(data_root, files);
         let mut credential_errors = Vec::new();
         let token = token.map_err(|error| credential_errors.push(error)).ok();
@@ -157,6 +158,7 @@ impl AppServiceConfiguration {
             gateway: gateway_config(
                 LocalAuthConfig::required(token),
                 TypedGatewaySettings::read(config),
+                admin.ok(),
             ),
             credential_errors,
         }
@@ -173,6 +175,12 @@ impl AppServiceConfiguration {
         &self.gateway.allowed_hosts
     }
 
+    /// The local admin credential (`app/runtime/auth/local-admin.json`),
+    /// when it exists; Settings → Security requires it.
+    pub(crate) fn admin_credential(&self) -> Option<&str> {
+        self.gateway.admin_credential.as_deref()
+    }
+
     /// `config.remoteAccessEnabled`: also listen on the LAN.
     pub(crate) fn remote_access_enabled(&self) -> bool {
         self.gateway.remote_access_enabled
@@ -184,6 +192,7 @@ impl AppServiceConfiguration {
             dev_cors_origin: self.gateway.dev_cors_origin.clone(),
             allowed_hosts: self.gateway.allowed_hosts.clone(),
             remote_access_enabled: self.gateway.remote_access_enabled,
+            admin_credential: self.gateway.admin_credential.clone(),
             security_store: self.gateway.security_store.clone(),
             signed_url_ttl: self.gateway.signed_url_ttl,
             message_rate_limit_max: self.gateway.message_rate_limit_max,
@@ -235,7 +244,11 @@ fn argv_port() -> Option<f64> {
         .filter(|value| value.is_finite())
 }
 
-fn gateway_config(local_auth: LocalAuthConfig, settings: TypedGatewaySettings) -> GatewayConfig {
+fn gateway_config(
+    local_auth: LocalAuthConfig,
+    settings: TypedGatewaySettings,
+    admin_credential: Option<String>,
+) -> GatewayConfig {
     let max = env::var("BUTLER_APP_SERVER_MESSAGE_RATE_LIMIT_MAX")
         .map(|value| number_from_string(&value))
         .unwrap_or(60.0);
@@ -252,6 +265,7 @@ fn gateway_config(local_auth: LocalAuthConfig, settings: TypedGatewaySettings) -
             .filter(|name| !name.is_empty())
             .collect(),
         remote_access_enabled: settings.remote_access_enabled,
+        admin_credential,
         security_store: None,
         signed_url_ttl: signed_url_ttl(),
         message_rate_limit_max: if max.is_finite() && max > 0.0 {

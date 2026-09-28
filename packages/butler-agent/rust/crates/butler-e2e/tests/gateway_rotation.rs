@@ -1,8 +1,10 @@
 //! SEC. Settings → Security (#229): the connection code (the gateway token)
-//! can be shown and rotated from this computer. Rotation replaces the
-//! data-folder token file, and at once the old code, its signed URLs,
-//! browser sessions and live streams stop working, while the CLI and a
-//! restarted agent use the new code.
+//! can be shown and rotated by the App or the CLI on this computer, and a
+//! browser on another computer signs in with it on the connection page.
+//! Rotation replaces the data-folder token file, and at once the old code,
+//! its signed URLs, browser sessions and live streams stop working, while
+//! the CLI and a restarted agent use the new code. The admin credential
+//! stays.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -13,12 +15,14 @@
 use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::HarnessError;
+use butler_e2e::e2e::agent::ADMIN_HEADER;
 use butler_e2e::e2e::events::LiveEvents;
 use butler_e2e::e2e::gateway::Gateway;
 use butler_e2e::e2e::media;
 use butler_e2e::e2e::scenario::{Scenario, Setup};
+use butler_e2e::e2e::security::AdminClient;
 use reqwest::Method;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 const ROTATED: &str = "security.connection_code_rotated";
 
@@ -42,6 +46,21 @@ async fn session_cookie(s: &Scenario, browser: &reqwest::Client) -> Result<Strin
     let redeemed = browser.get(&link).send().await?;
     assert_eq!(redeemed.status().as_u16(), 303);
     Ok(cookie_pair(redeemed.headers()))
+}
+
+/// Types `code` into the connection page's form, as a browser on another
+/// computer does; the reply.
+async fn connect_form(
+    gw: &Gateway,
+    browser: &reqwest::Client,
+    code: &str,
+) -> Result<reqwest::Response, HarnessError> {
+    Ok(browser
+        .post(url(gw, "/connect"))
+        .header("origin", gw.base.as_str())
+        .form(&[("code", code)])
+        .send()
+        .await?)
 }
 
 fn cookie_pair(headers: &reqwest::header::HeaderMap) -> String {
@@ -73,18 +92,21 @@ async fn status(gw: &Gateway, path: &str, token: &str) -> Result<u16, HarnessErr
 
 /// SEC-10 — rotating the connection code: the reply carries the new code,
 /// the token file holds it, the old code gets 401, its signed file URL,
-/// browser session and live stream stop working (the stream first gets
+/// browser sessions (from `butler open` and from the code typed on the
+/// connection page) and live stream stop working (the stream first gets
 /// `security.connection_code_rotated`), and `butler open` and a restarted
-/// agent use the new code. A browser session that rotates gets a cookie
-/// under the new code.
+/// agent use the new code. The admin credential does not change. A browser
+/// session that rotates gets a cookie under the new code.
 #[tokio::test]
 async fn sec_10_rotation_revokes_the_old_code_everywhere() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("SEC-10")?.data_folder_token().start().await?;
+    let admin = s.agent.launch.admin_credential().unwrap();
+    let app = AdminClient::new(s.gw.clone(), admin.clone());
     let old = s.gw.token.clone();
-    let revealed =
-        s.gw.post("/security/connection-code/reveal", json!({}))
-            .await?;
+    let revealed = app
+        .send(Method::POST, "/security/connection-code/reveal", None, &[])
+        .await?;
     assert_eq!(revealed.status, 200, "{}", revealed.text);
     assert_eq!(revealed.data()["code"], old.as_str());
 
@@ -113,20 +135,23 @@ async fn sec_10_rotation_revokes_the_old_code_everywhere() -> Result<(), Harness
     );
     let cookie = session_cookie(&s, &browser).await?;
     assert_eq!(page_read(&s.gw, &browser, &cookie).await?, 200);
+    let typed = connect_code_signs_in(&s.gw, &browser, &old).await?;
     let stream = LiveEvents::subscribe(&s.gw, 0).await?;
     tokio::time::sleep(Duration::from_millis(300)).await;
 
-    let rotated =
-        s.gw.post("/security/connection-code/rotate", json!({}))
-            .await?;
-    assert_eq!(rotated.status, 200, "{}", rotated.text);
-    let new = rotated.data()["code"].as_str().unwrap().to_owned();
+    let rotated = app.rotate().await?;
+    let new = rotated["code"].as_str().unwrap().to_owned();
     assert_ne!(new, old);
     assert!(new.len() >= 32, "short code");
-    assert!(rotated.data()["created_at"].is_string(), "{}", rotated.text);
+    assert!(rotated["created_at"].is_string(), "{rotated}");
     assert_eq!(
         s.agent.launch.data_folder_token().as_deref(),
         Some(new.as_str())
+    );
+    assert_eq!(
+        s.agent.launch.admin_credential(),
+        Some(admin.clone()),
+        "admin rotated"
     );
 
     let notice = stream
@@ -142,7 +167,7 @@ async fn sec_10_rotation_revokes_the_old_code_everywhere() -> Result<(), Harness
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
 
-    for path in ["/settings", "/events/live", "/security"] {
+    for path in ["/settings", "/events/live"] {
         assert_eq!(status(&s.gw, path, &old).await?, 401, "old code on {path}");
     }
     assert_eq!(status(&s.gw, "/settings", &new).await?, 200);
@@ -161,21 +186,24 @@ async fn sec_10_rotation_revokes_the_old_code_everywhere() -> Result<(), Harness
         401,
         "old session"
     );
+    assert_eq!(
+        page_read(&s.gw, &browser, &typed).await?,
+        401,
+        "old typed session"
+    );
+    let stale = connect_form(&s.gw, &browser, &old).await?;
+    assert_eq!(stale.status().as_u16(), 401, "old code signed in");
 
     s.gw = Gateway::new(s.gw.base.clone(), new.clone());
     s.agent.launch.token = new.clone();
-    let view = s.gw.get("/security").await?;
+    let app = AdminClient::new(s.gw.clone(), admin);
+    let view = app.view().await?;
     let masked = format!("{}…{}", &new[..4], &new[new.len() - 4..]);
-    assert_eq!(
-        view.data()["connection_code"]["masked"],
-        masked,
-        "{}",
-        view.text
-    );
+    assert_eq!(view["connection_code"]["masked"], masked, "{view}");
     let open = s.agent.cli(&["open", "--no-browser", "--json"])?;
     assert_eq!(open.code, Some(0), "butler open after rotation: {open:?}");
 
-    let current = rotate_as_browser_page(&s, &browser).await?;
+    let current = rotate_as_browser_page(&s, &app, &browser).await?;
     assert_eq!(s.agent.launch.data_folder_token(), Some(current.clone()));
     s.agent.launch.token = current.clone();
     s.restart().await?;
@@ -192,11 +220,38 @@ async fn sec_10_rotation_revokes_the_old_code_everywhere() -> Result<(), Harness
     s.finish().await
 }
 
-/// The Butler page in a local browser rotates with its session cookie and
-/// keeps working with the cookie the reply sets; the old cookie does not.
-/// Returns the new code.
+/// The connection page (for a browser on another computer) asks for the
+/// code from Settings → Security; the code typed there signs in, a wrong
+/// one does not. Returns the session cookie.
+async fn connect_code_signs_in(
+    gw: &Gateway,
+    browser: &reqwest::Client,
+    code: &str,
+) -> Result<String, HarnessError> {
+    let page = browser
+        .get(url(gw, "/connect"))
+        .send()
+        .await?
+        .text()
+        .await?;
+    assert!(page.contains("Settings → Security"), "{page}");
+    assert!(page.contains(r#"method="post""#), "{page}");
+    let wrong = connect_form(gw, browser, "not-the-code").await?;
+    assert_eq!(wrong.status().as_u16(), 401);
+    assert!(wrong.headers().get("set-cookie").is_none());
+    let signed_in = connect_form(gw, browser, code).await?;
+    assert_eq!(signed_in.status().as_u16(), 303);
+    let cookie = cookie_pair(signed_in.headers());
+    assert_eq!(page_read(gw, browser, &cookie).await?, 200);
+    Ok(cookie)
+}
+
+/// The Butler page in the App rotates with its session cookie (and the
+/// admin credential the App adds) and keeps working with the cookie the
+/// reply sets; the old cookie does not. Returns the new code.
 async fn rotate_as_browser_page(
     s: &Scenario,
+    app: &AdminClient,
     browser: &reqwest::Client,
 ) -> Result<String, HarnessError> {
     let cookie = session_cookie(s, browser).await?;
@@ -206,6 +261,7 @@ async fn rotate_as_browser_page(
         .header("cookie", &cookie)
         .header("sec-fetch-site", "same-origin")
         .header("origin", own_origin)
+        .header(ADMIN_HEADER, app.admin.as_str())
         .send()
         .await?;
     assert_eq!(rotated.status().as_u16(), 200);

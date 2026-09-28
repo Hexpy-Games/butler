@@ -14,6 +14,10 @@ use super::ApplicationFuture;
 
 /// Most extra host names one gateway answers.
 pub const MAX_ALLOWED_HOSTS: usize = 32;
+/// The request header that carries the local admin credential (the secret
+/// in `app/runtime/auth/local-admin.json`), which Settings → Security
+/// requires besides a loopback client.
+pub const ADMIN_CREDENTIAL_HEADER: &str = "x-butler-admin";
 /// Longest host name (RFC 1035), plus room for `:port`.
 const MAX_HOST_LENGTH: usize = 253 + 6;
 

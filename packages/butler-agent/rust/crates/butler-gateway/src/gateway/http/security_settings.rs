@@ -1,5 +1,8 @@
-//! Settings → Security routes (#229), answered only to clients on this
-//! computer (see [`super::security::is_local_client`]):
+//! Settings → Security routes (#229), answered only to a client on this
+//! computer (see [`super::security::is_local_client`]) that also sends the
+//! local admin credential in `X-Butler-Admin` (the secret in
+//! `app/runtime/auth/local-admin.json`, which only the App and the CLI
+//! read): a loopback connection alone may be a forwarder.
 //!
 //! - `GET /security`: exposure, listen addresses, LAN URLs, allowed hosts
 //!   and the masked connection code.
@@ -77,7 +80,7 @@ pub(super) async fn route(
     state: Arc<HttpState>,
     request: Request<Body>,
 ) -> Result<Response, HttpError> {
-    let client = local_client(request.extensions().get::<Client>().copied())?;
+    let client = local_client(request.extensions().get::<Client>())?.clone();
     match (request.method().clone(), request.uri().path()) {
         (Method::GET, "/security") => ok(view(&state).await?),
         (Method::POST, "/security/connection-code/reveal") => {
@@ -91,15 +94,23 @@ pub(super) async fn route(
     }
 }
 
-/// The client, when it is on this computer; `403 loopback_required` else.
-pub(super) fn local_client(client: Option<Client>) -> Result<Client, HttpError> {
-    client.filter(|client| client.local).ok_or_else(|| {
-        HttpError::public(
+/// The client, when it is on this computer and sent the local admin
+/// credential; `403 loopback_required` or `403 admin_credential_required`
+/// else.
+pub(super) fn local_client(client: Option<&Client>) -> Result<&Client, HttpError> {
+    match client {
+        Some(client) if client.local && client.admin => Ok(client),
+        Some(client) if client.local => Err(HttpError::public(
+            403,
+            "admin_credential_required",
+            "Security settings need the Butler app on this computer.",
+        )),
+        _ => Err(HttpError::public(
             403,
             "loopback_required",
             "Security settings are only available on this computer.",
-        )
-    })
+        )),
+    }
 }
 
 async fn view(state: &HttpState) -> Result<SecurityView, HttpError> {
@@ -177,8 +188,15 @@ async fn rotate(state: &Arc<HttpState>, client: Client) -> Result<Response, Http
 }
 
 /// Parses the `security` object of `PATCH /settings`.
+/// Parses the `security` object of `PATCH /settings`, normalizing the
+/// host names, before anything else in the request is applied.
 pub(super) fn parse_patch(value: Value) -> Result<SecurityPatch, HttpError> {
-    serde_json::from_value(value).map_err(|_| invalid_security("Unsupported security settings."))
+    let mut patch: SecurityPatch = serde_json::from_value(value)
+        .map_err(|_| invalid_security("Unsupported security settings."))?;
+    if let Some(hosts) = patch.allowed_hosts.take() {
+        patch.allowed_hosts = Some(normalized_hosts(&hosts)?);
+    }
+    Ok(patch)
 }
 
 /// Persists the patched exposure, then binds or unbinds and answers the
@@ -190,7 +208,7 @@ pub(super) async fn apply(state: &Arc<HttpState>, patch: SecurityPatch) -> Resul
         exposure.remote_access_enabled = enabled;
     }
     if let Some(hosts) = patch.allowed_hosts {
-        exposure.allowed_hosts = normalized_hosts(&hosts)?;
+        exposure.allowed_hosts = hosts;
     }
     if let Some(store) = &state.security_store {
         store.save_exposure(exposure.clone()).await?;
@@ -199,9 +217,9 @@ pub(super) async fn apply(state: &Arc<HttpState>, patch: SecurityPatch) -> Resul
     Ok(())
 }
 
-/// Adds `security` to a settings view for a local client.
-pub(super) fn add_to_settings(state: &HttpState, client: Option<Client>, settings: &mut Value) {
-    let (Some(object), true) = (settings.as_object_mut(), client.is_some_and(|c| c.local)) else {
+/// Adds `security` to a settings view for a local admin client.
+pub(super) fn add_to_settings(state: &HttpState, client: Option<&Client>, settings: &mut Value) {
+    let (Some(object), true) = (settings.as_object_mut(), local_client(client).is_ok()) else {
         return;
     };
     let exposure = state.remote.snapshot().exposure;

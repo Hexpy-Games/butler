@@ -78,14 +78,15 @@ pub(super) fn serve(
     };
     let state = Arc::new(HttpState {
         application,
-        security: security::GatewaySecurity::new(
-            config.local_auth,
+        security: security::GatewaySecurity::new(security::SecurityConfig {
+            auth: config.local_auth,
+            admin: config.admin_credential,
             local_addr,
-            &config.allowed_hosts,
-            config.dev_cors_origin,
-            config.signed_url_ttl,
-            shutdown.clone(),
-        ),
+            allowed_hosts: config.allowed_hosts.clone(),
+            dev_origins: config.dev_cors_origin,
+            signed_url_ttl: config.signed_url_ttl,
+            shutdown: shutdown.clone(),
+        }),
         remote: listeners::RemoteAccess::new(local_addr, config.allowed_hosts),
         security_store: config.security_store,
         session_cursor_secret: uuid::Uuid::new_v4().to_string(),
@@ -117,11 +118,15 @@ struct HttpState {
 }
 
 /// Who sent an authorized request (a request extension for the routes).
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone)]
 struct Client {
     access: security::Access,
     /// From this computer (see [`security::is_local_client`]).
     local: bool,
+    /// Sent the local admin credential (`X-Butler-Admin`).
+    admin: bool,
+    /// The key set the request was authorized under.
+    keys: security::KeySet,
 }
 
 /// Host and Origin admission, CORS preflight before auth, then the
@@ -151,25 +156,40 @@ async fn authorized_route(
     mut request: Request<Body>,
     origin: &security::RequestOrigin,
 ) -> Result<Response, HttpError> {
-    let access = match state.security.authorize(&request, origin)? {
+    if request.method() == Method::POST && request.uri().path() == security::CONNECT_PATH {
+        let body =
+            read_body_with_limit(request.into_body(), security::MAX_CONNECT_FORM_BYTES).await?;
+        return Ok(state.security.connect_form(&body));
+    }
+    let grant = match state.security.authorize(&request, origin)? {
         security::Admission::Respond(response) => return Ok(response),
-        security::Admission::Granted(access) => access,
+        security::Admission::Granted(grant) => grant,
     };
     security::require_json_body(request.method(), request.uri().path(), request.headers())?;
     if request.method() == Method::POST && request.uri().path() == security::CONNECTION_CODES_PATH {
         return state
             .security
-            .mint_connection_code(access, request.headers());
+            .mint_connection_code(&grant, request.headers());
     }
     let peer = request
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
         .map(|info| info.0);
-    let local = security::is_local_client(peer, request.headers(), origin);
-    let client = Client { access, local };
-    request.extensions_mut().insert(client);
-    let response = route_for_client(state.clone(), request, client).await?;
-    Ok(state.security.sign_urls(access, response).await)
+    let client = Client {
+        access: grant.access,
+        local: security::is_local_client(peer, request.headers(), origin),
+        admin: state.security.is_admin(request.headers()),
+        keys: grant.keys,
+    };
+    request.extensions_mut().insert(client.clone());
+    let signs = client.access.receives_signed_urls();
+    let keys = client.keys.clone();
+    let response = route_for_client(state, request, client).await?;
+    Ok(if signs {
+        keys.sign_urls(response).await
+    } else {
+        response
+    })
 }
 
 /// The routes whose answer depends on who asks (Settings → Security, the
@@ -190,7 +210,7 @@ async fn route_for_client(
                 .extensions()
                 .get::<listeners::ListenerScope>()
                 .cloned();
-            get_live_events(state, &uri, scope).await
+            get_live_events(state, &uri, scope, &client.keys).await
         }
         _ => route(state, request).await,
     }

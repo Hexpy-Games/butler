@@ -3,16 +3,15 @@
 
 use std::net::IpAddr;
 
-/// Whether `ip` is on a private network: RFC 1918, shared address space
-/// (100.64.0.0/10, which VPN overlays such as Tailscale use), IPv4
-/// link-local, or an IPv6 unique local address. Loopback and public
-/// addresses are not, nor IPv6 link-local ones (they need a zone to bind).
+/// Whether `ip` is on a private network: RFC 1918, IPv4 link-local, or an
+/// IPv6 unique local address. Loopback and public addresses are not, nor
+/// IPv6 link-local ones (they need a zone to bind), nor the shared address
+/// space 100.64.0.0/10 (carrier-grade NAT, and VPN overlays such as
+/// Tailscale): expose a tailnet by forwarding to loopback (`tailscale
+/// serve`) and registering its name as an allowed host.
 pub(super) fn is_lan_address(ip: IpAddr) -> bool {
     match ip.to_canonical() {
-        IpAddr::V4(ip) => {
-            let [first, second, ..] = ip.octets();
-            ip.is_private() || ip.is_link_local() || (first == 100 && second & 0xc0 == 64)
-        }
+        IpAddr::V4(ip) => ip.is_private() || ip.is_link_local(),
         IpAddr::V6(ip) => ip.segments()[0] & 0xfe00 == 0xfc00,
     }
 }
@@ -90,7 +89,7 @@ mod tests {
             ("192.168.0.20", true),
             ("10.0.0.2", true),
             ("172.16.4.2", true),
-            ("100.101.102.103", true),
+            ("100.101.102.103", false),
             ("169.254.10.1", true),
             ("fd12:3456::1", true),
             ("::ffff:10.1.2.3", true),
