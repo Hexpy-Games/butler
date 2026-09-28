@@ -48,6 +48,7 @@ import {
   freshAppUiPanelState,
   type AppUiStateSnapshot,
 } from "./appUiStateCache.ts";
+import { normalizeApprovalSummary } from "./approvalRequest.ts";
 import {
   learnProjectWorkspaceKinds,
   readCachedProjectWorkspaceKinds,
@@ -744,6 +745,7 @@ function normalizeAuthorityApprovalCard(
   ) {
     return null;
   }
+  const approval = normalizeApprovalSummary(record.approval);
   return {
     requestRef: record.request_ref,
     category: record.category,
@@ -753,6 +755,7 @@ function normalizeAuthorityApprovalCard(
     ...(record.scope && typeof record.scope === "object" && "title" in record.scope && "description" in record.scope &&
       typeof record.scope.title === "string" && typeof record.scope.description === "string"
       ? { scope: { title: record.scope.title, description: record.scope.description } } : {}),
+    ...(approval ? { approval } : {}),
     ...(typeof record.source_turn_id === "string" ? { sourceTurnId: record.source_turn_id } : {}),
     ...(typeof record.source_call_id === "string" ? { sourceCallId: record.source_call_id } : {}),
     ...(typeof record.source_session_id === "string" ? { sourceSessionId: record.source_session_id } : {}),

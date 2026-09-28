@@ -12,7 +12,9 @@ export interface ComposerDecisionPanelProps extends Omit<DsBaseProps<HTMLAttribu
   /** What is being decided; clamps to two lines and opens the source. */
   title: string;
   onOpen: () => void;
-  /** Trailing subject-row content (a pending count, a compose-later button). */
+  /** Short lines under the title (examples, a "+N more" line); each is one truncated line. */
+  details?: readonly string[];
+  /** Trailing subject-row content (a status Tag, a pending count, a compose-later button). */
   aside?: ReactNode;
   /** A failed decision, announced as an alert between the subject and the actions. */
   error?: string;
@@ -20,19 +22,25 @@ export interface ComposerDecisionPanelProps extends Omit<DsBaseProps<HTMLAttribu
   actions: ReactNode;
 }
 
-/** A pending decision shown in place of the composer input: subject row, optional error, actions. */
-export function ComposerDecisionPanel({ icon, title, onOpen, aside, error, actions, className, ...props }: ComposerDecisionPanelProps) {
+/** A pending decision shown in place of the composer input: subject row, optional details and error, actions. */
+export function ComposerDecisionPanel({ icon, title, onOpen, details, aside, error, actions, className, ...props }: ComposerDecisionPanelProps) {
+  const hasDetails = Boolean(details?.length);
   return (
     <div className={dsClass(styles.surface, className)} {...props}>
-      <div className={styles.subject} data-slot="composer-decision-subject">
+      <div className={styles.subject} data-slot="composer-decision-subject" data-has-details={hasDetails ? "true" : undefined}>
         {icon}
         <Stack.Item grow minWidth="0">
           <Clickable variant="text" onClick={onOpen} title={title}>
             <Typo.Label weight="medium" tone="primary" lineClamp={2} wrap="anywhere">{title}</Typo.Label>
           </Clickable>
         </Stack.Item>
-        {aside}
+        {aside ? <div className={styles.aside} data-slot="composer-decision-aside">{aside}</div> : null}
       </div>
+      {hasDetails ? (
+        <div className={styles.details} data-slot="composer-decision-details">
+          {details!.map((line, index) => <Typo.Caption key={`${index}:${line}`} as="p" tone="secondary" truncate>{line}</Typo.Caption>)}
+        </div>
+      ) : null}
       {error ? (
         <div className={styles.error}>
           <Typo.Caption as="p" tone="secondary" role="alert">{error}</Typo.Caption>

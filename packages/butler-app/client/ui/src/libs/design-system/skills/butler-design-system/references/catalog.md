@@ -1437,12 +1437,12 @@ The composer toolbar control: icon, label and optional detail on a pill, or a Se
 
 `import { ComposerDecisionPanel } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/ComposerDecisionPanel`
 
-The composer's decision state: what is being decided, an optional failure, and the decision buttons in the composer radius.
+The composer's decision state: what is being decided, optional detail lines, an optional failure, and the decision buttons in the composer radius.
 
 - Use for: A plan waiting for acceptance or an authority request that replaces the composer input
 - Not for: A notice inside the conversation → `Notice`
 - Not for: A modal confirmation → `Dialog`
-- Tokens: `--adaptive-composer-radius`, `--space-md`, `--space-lg`, `--text-secondary`
+- Tokens: `--adaptive-composer-radius`, `--space-xs`, `--space-sm`, `--space-md`, `--space-lg`, `--icon-size-lg`, `--text-secondary`
 
 ### ContextDonutButton
 

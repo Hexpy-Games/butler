@@ -337,6 +337,29 @@ export const enUsCopy: AppCopy = {
     contextMetric: (kind, value) => ({ full: `${value}% full`, used: `${value} used`, budget: `${value} budget`, available: `${value} available before compaction pressure`, compact: `auto compact at ${value}` })[kind],
     activityHistory: (live, label, count) => `${live ? "Current" : "Activity"} · ${label} · ${count} ${count === 1 ? "record" : "records"}`,
     pendingApprovals: count => `${count} pending ${count === 1 ? "approval" : "approvals"}`, allowedCount: count => `${count} allowed`, revoke: title => `${title} — Revoke`,
+    approvalRequest: {
+      editFiles: (count, folder) => {
+        const files = count > 0 ? `${count} ${count === 1 ? "file" : "files"}` : "files";
+        return folder ? `Edit ${files} in ${folder}?` : `Edit ${files}?`;
+      },
+      runCommand: folder => folder ? `Run a command in ${folder}?` : "Run a command?",
+      networkCommand: folder => folder ? `Run a command that uses the internet in ${folder}?` : "Run a command that uses the internet?",
+      useConnector: (tool, server) => tool && server ? `Use ${tool} from ${server}?` : tool ? `Use ${tool}?` : "Use a connected tool?",
+      manageSchedule: "Change a schedule?",
+      updateProject: "Update the project records?",
+      startConversation: "Start a new conversation?",
+      restartService: "Restart Butler?",
+      createWorktree: "Create a worktree for this conversation?",
+      generic: "Allow this action?",
+      more: count => `+${count} more`,
+      risk: { low: "Low risk", medium: "Medium risk", high: "High risk" },
+      covers: {
+        editFiles: folder => folder ? `File edits in ${folder}` : "File edits",
+        command: folder => folder ? `This command in ${folder}` : "This command",
+        other: "This same action",
+      },
+      homeFolders: { Desktop: "your Desktop folder", Documents: "your Documents folder", Downloads: "your Downloads folder" },
+    },
     skillTitle: name => `What skill shall we build with ${name}?`, reportPreparing: title => `Preparing report for ${title}`,
     progressDetails: (title, activity, progress) => `${title}, ${activity}${progress ? `, progress ${progress}` : ""}, view progress details`,
     viewActivity: title => `${title}, view activity`, more: (title, count) => `${title} and ${count} more`, deleteItem: title => `Delete "${title}"?`,

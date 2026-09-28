@@ -43,6 +43,31 @@ export interface BriefingFallbackCopy { title: string; description: string; sugg
 
 type CountFormatter = (count: number) => string;
 
+/**
+ * An approval request as one plain question, per `approval.action_kind`
+ * (#235). `folder` is a display name; `null` when the request has none.
+ */
+export interface ApprovalRequestCopy {
+  editFiles: (count: number, folder: string | null) => string;
+  runCommand: (folder: string | null) => string;
+  networkCommand: (folder: string | null) => string;
+  useConnector: (tool: string | null, server: string | null) => string;
+  manageSchedule: string;
+  updateProject: string;
+  startConversation: string;
+  restartService: string;
+  createWorktree: string;
+  /** Any kind this App does not know yet. */
+  generic: string;
+  /** The line after the examples. */
+  more: CountFormatter;
+  risk: { low: string; medium: string; high: string };
+  /** What "Always allow in this conversation" covers. */
+  covers: { editFiles: (folder: string | null) => string; command: (folder: string | null) => string; other: string };
+  /** Home folders people know by name. */
+  homeFolders: { Desktop: string; Documents: string; Downloads: string };
+}
+
 export type AppLocale = "en-US" | "ko-KR";
 
 interface ConversationWorkCopy {
@@ -281,6 +306,7 @@ export interface AppCopy {
     contextMetric: (kind: "full" | "used" | "budget" | "available" | "compact", value: string | number) => string;
     activityHistory: (live: boolean, label: string, count: number) => string;
     pendingApprovals: (count: number) => string;
+    approvalRequest: ApprovalRequestCopy;
     allowedCount: (count: number) => string;
     revoke: (title: string) => string;
     skillTitle: (name: string) => string;
