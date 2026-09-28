@@ -15,7 +15,7 @@
 
 /* A control drawn with its focus ring at rest (the poster, the close-up). */
 .ringOn > *,
-.ringTab [role="tab"][data-state="active"] {
+.ringItem [role="radio"][data-state="on"] {
   box-shadow: var(--focus-ring);
 }
 
@@ -27,7 +27,7 @@
 
 .ringOn,
 .ringOutline,
-.ringTab {
+.ringItem {
   display: inline-grid;
 }
 
@@ -46,8 +46,13 @@
 
 .word {
   display: inline-block;
-  padding: 0.04em 0.1em 0.2em;
+  padding-inline: 0.1em;
   border-radius: calc(var(--radius-control) * 4 * var(--title-fit, 1));
+}
+
+/* The reveal window is the word's line box: it makes room for the descender, so the "g" is never cut. */
+.word [data-rv] {
+  padding-block: 0.04em 0.2em;
 }
 
 /* ---- Keys ---- */
@@ -81,8 +86,9 @@
   gap: var(--space-xl);
 }
 
+/* Tall: the row stands as a column, so the portrait frame fills. */
 [data-layout="tall"] .row {
-  max-inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
+  flex-direction: column;
 }
 
 /* ---- Close-up ---- */
@@ -147,11 +153,15 @@
   row-gap: var(--space-sm);
 }
 
+/* The app window. It contains the shell's fixed layers (the chrome, the
+   floating toggle), as the viewport would. */
 .window {
-  --adaptive-viewport-block-size: 540px;
+  --adaptive-viewport-block-size: 500px;
+
+  contain: layout;
 
   inline-size: 920px;
-  block-size: 540px;
+  block-size: 500px;
 }
 
 /* The poster's window fills its tile. */
@@ -175,6 +185,9 @@
 
 .window[data-shell="compact"] {
   --adaptive-viewport-block-size: 540px;
+
+  /* Room for the toggle's ring inside the window (the compact app sits it on the edge). */
+  --chrome-toggle-inset: var(--space-sm);
 
   inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
   block-size: 540px;
@@ -224,12 +237,12 @@
 }
 
 .sendSwap,
-.stackedTabs {
+.stacked {
   display: inline-grid;
 }
 
 .sendSwap > *,
-.stackedTabs > * {
+.stacked > * {
   display: grid;
   grid-area: 1 / 1;
 }
@@ -287,15 +300,15 @@
   stroke-width: var(--focus-ring-width);
 }
 
-/* ---- Tabs are one stop ---- */
+/* ---- A group is one stop ---- */
 
-.tabsStage {
+.groupStage {
   display: grid;
   justify-items: center;
   row-gap: var(--space-2xl);
 }
 
-.tabsFrame {
+.groupFrame {
   position: relative;
   display: grid;
   justify-items: center;
@@ -305,10 +318,9 @@
 /* ---- Tiles ---- */
 
 .rowTile {
-  display: grid;
-  grid-template-columns: auto auto;
-  place-items: center;
-  gap: var(--space-xl);
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
 }
 
 .tabsTile {

@@ -3,7 +3,6 @@ import { Input } from "../../../Input";
 import { Kbd } from "../../../Kbd";
 import { SegmentedControl } from "../../../SegmentedControl";
 import { Switch } from "../../../Switch";
-import { Tabs, TabsList, TabsTrigger } from "../../../Tabs";
 import type { Box as Rect } from "../../heroTimeline";
 import { Mark } from "../shared/Mark";
 import { Reveal as R } from "../shared/Reveal";
@@ -39,7 +38,7 @@ function Keys({ prefix, keys }: { prefix: string; keys: KeyId[] }) {
 /** The ring: one overlay, sized and rounded per stop (the control's own corner). */
 const Ring = ({ name }: { name: string }) => <span className={s.ring} data-t={name} />;
 
-const SEGMENT = { "c3": '[role="radio"][data-state="on"]' };
+const SEGMENT = { c3: '[role="radio"][data-state="on"]' };
 
 /** Scene 2: one ring: Tab walks a short row of real controls; the ring takes each one's corner. */
 export function RowScene({ copy }: { copy: FocusCopy }) {
@@ -78,8 +77,9 @@ function jump(from: Rect | undefined, to: Rect | undefined, tall: boolean): stri
   const y1 = from.y + from.h / 2;
   const y2 = to.y + Math.min(to.h / 2, 18);
   if (tall) {
-    const x = to.x - 6;
-    return `M${from.x + from.w / 2} ${from.y + from.h + 4}V${from.y + from.h + 12}H${x}V${y2}H${to.x}`;
+    // Out of the toggle's left edge, down the window's inner margin, into the field.
+    const x = Math.min(from.x, to.x) - 10;
+    return `M${from.x - 4} ${y1}H${x}V${y2}H${to.x}`;
   }
   const x = to.x - 14;
   return `M${from.x + from.w + 4} ${y1}H${x}V${y2}H${to.x}`;
@@ -122,33 +122,29 @@ export function RouteScene({ copy, g }: { copy: FocusCopy; g: SceneGeometry | nu
   );
 }
 
-const TAB_IDS = ["summary", "files", "activity"] as const;
+const RANGE = ["day", "week", "month"] as const;
 
-/** Line tabs with one value selected (the hero cuts between them as arrows move the selection). */
-function LineTabs({ copy, value, named }: { copy: FocusCopy; value: string; named?: boolean }) {
-  const labels = [copy.summary, copy.filesTab, copy.activity];
-  const list = (
-    <TabsList aria-label={copy.summary} variant="line">
-      {TAB_IDS.map((id, k) => <TabsTrigger key={id} value={id}>{labels[k]}</TabsTrigger>)}
-    </TabsList>
-  );
-  const names = Object.fromEntries(TAB_IDS.map((id, k) => [`t${k}`, `[role="tab"]:nth-of-type(${k + 1})`]));
-  return <Tabs value={value}>{named ? <Named names={names}>{list}</Named> : list}</Tabs>;
+/** The range picker (a roving radio group) with one value selected: the hero cuts between them as arrows move the selection. */
+export function Range({ copy, value, named = false }: { copy: FocusCopy; value: string; named?: boolean }) {
+  const labels = { day: copy.day, week: copy.week, month: copy.month };
+  const control = <SegmentedControl ariaLabel={copy.range} onValueChange={() => undefined} value={value} options={RANGE.map((id) => ({ value: id, label: labels[id] }))} />;
+  if (!named) return control;
+  return <Named names={Object.fromEntries(RANGE.map((id, k) => [`g${k}`, `[role="radio"]:nth-of-type(${k + 1})`]))}>{control}</Named>;
 }
 
-/** Scene 5: a tab list is one Tab stop; arrows change the tab; Tab leaves to the panel's first control. */
-export function TabsScene({ copy }: { copy: FocusCopy }) {
+/** Scene 5: a group is one Tab stop; arrows move inside it (the selection follows); Tab leaves to the next control. */
+export function GroupScene({ copy }: { copy: FocusCopy }) {
   return (
-    <div className={s.tabsStage} data-m="tabs">
-      <div className={s.tabsFrame} data-mark-scope="tabs">
-        <span className={s.stackedTabs}>
-          {TAB_IDS.map((id, k) => <span data-t={`lt-${k}`} key={id}><LineTabs copy={copy} named={k === 0} value={id} /></span>)}
+    <div className={s.groupStage} data-m="group">
+      <div className={s.groupFrame} data-mark-scope="group">
+        <span className={s.stacked}>
+          {RANGE.map((id, k) => <span data-t={`gv-${k}`} key={id}><Range copy={copy} named={k === 0} value={id} /></span>)}
         </span>
-        <Mark n="open"><Button text={copy.open} variant="outline" /></Mark>
-        <Ring name="tr2" />
+        <Mark n="apply"><Button text={copy.apply} /></Mark>
+        <Ring name="gr" />
       </div>
       <span className={s.caption}><R name="rv">{copy.roving}</R></span>
-      <Keys keys={["tab", "right"]} prefix="tk" />
+      <Keys keys={["tab", "right"]} prefix="gk" />
     </div>
   );
 }

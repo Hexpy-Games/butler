@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
-import { AdaptiveShell, AdaptiveShellSidebar, AdaptiveShellWorkspace } from "../../../../blocks/AdaptiveShell";
+import { AdaptiveShell, AdaptiveShellChrome, AdaptiveShellSidebar, AdaptiveShellWorkspace } from "../../../../blocks/AdaptiveShell";
+import { ChromeFloatingToggleLayer } from "../../../../blocks/ChromeFrame";
 import {
   ComposerCard, ComposerCardExpandedBody, ComposerCardExpandedControls, ComposerCardToolbar, ComposerCardToolbarSpacer, ComposerSendButton,
   ComposerCardEditable, ComposerCardEditor, ComposerCardPlaceholder,
@@ -11,21 +12,15 @@ import { NavSectionHeading } from "../../../../blocks/NavSection";
 import { SidebarBrand, SidebarNav, SidebarShell } from "../../../../blocks/SidebarShell";
 import { TitlebarShell } from "../../../../blocks/TitlebarShell";
 import { IconButton } from "../../../IconButton";
-import { Activity, AiChip, Clock3, ListFilter, MessageSquare, PanelLeft, PencilLine, Plus, Search, Settings, ShieldQuestion } from "../../../Icons";
+import { AiChip, MessageSquare, PanelLeft, PencilLine, Plus, Search, Settings, ShieldQuestion } from "../../../Icons";
 import { Stack } from "../../../Stack";
-import { Tabs, TabsList, TabsTrigger } from "../../../Tabs";
 import { Typo } from "../../../Typo";
 import { Mark } from "../shared/Mark";
 import { Reveal as R } from "../shared/Reveal";
 import type { FocusCopy } from "./focusCopy";
 import s from "./FocusHero.module.css";
 
-/**
- * Names elements inside a DS component as marks (`data-a`) without wrapping
- * them (a wrapper would change a stretched tab list): `names` maps a mark to
- * a selector inside the children. Set before the hero measures (child layout
- * effects run first).
- */
+/** Names elements inside a DS component as marks (`data-a`) without wrapping them: `names` maps a mark to a selector inside the children. */
 export function Named({ names, children }: { names: Record<string, string>; children: ReactNode }) {
   const ref = useRef<HTMLSpanElement>(null);
   useLayoutEffect(() => {
@@ -34,28 +29,7 @@ export function Named({ names, children }: { names: Record<string, string>; chil
   return <span className={s.named} ref={ref}>{children}</span>;
 }
 
-const TAB_NAMES = { "tab-all": '[role="tab"][data-state="active"]' };
-
-/** The sidebar's view tabs (the app's own), one instance per selected view: the hero cuts between them as arrows move the selection. */
-function ViewTabs({ copy, live }: { copy: FocusCopy; live: boolean }) {
-  const views = [["all", copy.all, <ListFilter key="i" />], ["recent", copy.recent, <Clock3 key="i" />], ["running", copy.running, <Activity key="i" />]] as const;
-  const one = (value: string) => (
-    <Tabs value={value}>
-      <TabsList aria-label={copy.views} stretch>
-        {views.map(([id, label, icon]) => <TabsTrigger key={id} value={id}>{icon}{label}</TabsTrigger>)}
-      </TabsList>
-    </Tabs>
-  );
-  if (!live) return one("all");
-  return (
-    <span className={s.stackedTabs}>
-      <span data-t="vt-all"><Named names={TAB_NAMES}>{one("all")}</Named></span>
-      <span data-t="vt-recent"><Named names={{ "tab-recent": '[role="tab"][data-state="active"]' }}>{one("recent")}</Named></span>
-    </span>
-  );
-}
-
-/** The app's sidebar: brand, New chat and Search, favourites, the view tabs, the open conversation, Settings. */
+/** The app's sidebar: brand, New chat, Search, recents, Settings (view tabs left out: the DS draws no focus on an active tab). */
 function Sidebar({ copy, live }: { copy: FocusCopy; live: boolean }) {
   const mark = (n: string, row: ReactNode) => (live ? <Mark block n={n}>{row}</Mark> : row);
   return (
@@ -70,10 +44,12 @@ function Sidebar({ copy, live }: { copy: FocusCopy; live: boolean }) {
           </SidebarNav>
         </Stack>
       }
-      stickyHeader={<Stack gap="sm"><ViewTabs copy={copy} live={live} /><NavSectionHeading title={copy.recent} /></Stack>}
       titlebar={<SidebarBrand><Typo.AppTitle>{copy.app}</Typo.AppTitle></SidebarBrand>}
     >
-      {mark("chat", <NavRow active icon={<MessageSquare />} label={copy.chat} meta={copy.chatMeta} />)}
+      <Stack gap="sm">
+        <NavSectionHeading title={copy.recent} />
+        {mark("chat", <NavRow active icon={<MessageSquare />} label={copy.chat} />)}
+      </Stack>
     </SidebarShell>
   );
 }
@@ -129,11 +105,11 @@ export function Composer({ copy, live = false }: { copy: FocusCopy; live?: boole
   );
 }
 
-/** The workspace: the conversation's titlebar, the exchange, the composer at the foot. */
-function Workspace({ copy, live, leading }: { copy: FocusCopy; live: boolean; leading?: ReactNode }) {
+/** The workspace: the conversation's titlebar (collapsed: room for the floating sidebar toggle), the exchange, the composer at the foot. */
+function Workspace({ copy, live, collapsed = false }: { copy: FocusCopy; live: boolean; collapsed?: boolean }) {
   return (
     <>
-      <TitlebarShell dataTestClass="custom-titlebar" leading={leading} title={copy.chat} />
+      <TitlebarShell collapsed={collapsed} dataTestClass="custom-titlebar" title={copy.chat} />
       <div className={s.conversation}>
         <Turn copy={copy} />
         <div className={s.composerSlot}><Composer copy={copy} live={live} /></div>
@@ -154,14 +130,25 @@ export function WideShell({ copy, live = false }: { copy: FocusCopy; live?: bool
   );
 }
 
-/** The compact app screen (tall): the sidebar folded into its drawer, the titlebar's toggle leading. */
+/**
+ * The compact app screen (tall): the sidebar folded into its drawer, its
+ * toggle on the app's floating chrome layer (kept inside this window: the
+ * window contains fixed layers).
+ */
 export function CompactShell({ copy, live = false }: { copy: FocusCopy; live?: boolean }) {
-  const toggle = <IconButton label={copy.app}><PanelLeft size="md" /></IconButton>;
+  const toggle = (
+    <ChromeFloatingToggleLayer>
+      <IconButton label={copy.app}><PanelLeft size="md" /></IconButton>
+    </ChromeFloatingToggleLayer>
+  );
   return (
     <div className={s.window} data-shell="compact">
-      <AdaptiveShell chromeEnvironment="electron" leftOpen={false} platform="darwin" rightOpen={false}>
-        <AdaptiveShellWorkspace><Workspace copy={copy} leading={live ? <Mark n="toggle">{toggle}</Mark> : toggle} live={live} /></AdaptiveShellWorkspace>
+      <AdaptiveShell leftOpen={false} rightOpen={false}>
+        <AdaptiveShellChrome>{live ? <Named names={TOGGLE}>{toggle}</Named> : toggle}</AdaptiveShellChrome>
+        <AdaptiveShellWorkspace><Workspace collapsed copy={copy} live={live} /></AdaptiveShellWorkspace>
       </AdaptiveShell>
     </div>
   );
 }
+
+const TOGGLE = { toggle: "button" };

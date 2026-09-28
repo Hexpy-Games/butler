@@ -1,9 +1,8 @@
 import { Button } from "../../../Button";
 import { Input } from "../../../Input";
-import { SegmentedControl } from "../../../SegmentedControl";
 import { Switch } from "../../../Switch";
-import { Tabs, TabsList, TabsTrigger } from "../../../Tabs";
 import type { FocusCopy } from "./focusCopy";
+import { Range } from "./FocusScenes";
 import { CompactShell, WideShell } from "./FocusShell";
 import s from "./FocusHero.module.css";
 
@@ -17,19 +16,11 @@ export function ShellTile({ copy }: { copy: FocusCopy }) {
   );
 }
 
-/** Finale: Tabs as one stop, the ring on the active tab. */
-export function TabsTile({ copy }: { copy: FocusCopy }) {
+/** Finale: the range picker is one stop; the ring on its selected item. */
+export function GroupTile({ copy }: { copy: FocusCopy }) {
   return (
     <div className={s.tabsTile}>
-      <span className={s.ringTab}>
-        <Tabs value="summary">
-          <TabsList aria-label={copy.summary} variant="line">
-            <TabsTrigger value="summary">{copy.summary}</TabsTrigger>
-            <TabsTrigger value="files">{copy.filesTab}</TabsTrigger>
-            <TabsTrigger value="activity">{copy.activity}</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </span>
+      <span className={s.ringItem}><Range copy={copy} value="week" /></span>
       <span className={s.caption}>{copy.roving}</span>
     </div>
   );
@@ -42,7 +33,6 @@ export function RowTile({ copy }: { copy: FocusCopy }) {
       <Button text={copy.continue} />
       <Input aria-label={copy.name} readOnly value={copy.name} />
       <span className={s.ringOn}><Switch aria-label={copy.autoSave} checked onCheckedChange={() => undefined} /></span>
-      <SegmentedControl ariaLabel={copy.week} onValueChange={() => undefined} value="week" options={[{ value: "week", label: copy.week }, { value: "month", label: copy.month }]} />
     </div>
   );
 }
