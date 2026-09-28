@@ -1,5 +1,6 @@
 import { CANVAS, type HeroLayout } from "./grid";
-import { measureMarks, measureSketch, relBox } from "./measure";
+import { measureMarks, measureSketch, relBox, roundedWithin } from "./measure";
+import { contentBox } from "./pack";
 import { posterZoom } from "./timeline";
 import type { ChapterSpec, Geometry } from "./types";
 
@@ -34,13 +35,19 @@ export function measureChapter(root: HTMLElement, layout: HeroLayout, spec: Chap
   const local = ratio * posterZoom(spec, layout);
   const panels: Geometry["panels"] = {};
   const sketches: Geometry["sketches"] = {};
+  const cores: Geometry["cores"] = {};
   const marks: Geometry["marks"] = {};
   const panelOrder: Geometry["panelOrder"] = {};
   for (const build of spec.builds) {
     const panel = root.querySelector<HTMLElement>(`[data-panel="${build.id}"]`);
     if (!panel) return null;
     panels[build.id] = relBox(panel.getBoundingClientRect(), origin, ratio);
-    sketches[build.id] = measureSketch(panel, local);
+    // The component as drawn (not its stretched cell or tile): the blueprint's first box and what badges stand around.
+    const surface = panel.querySelector<HTMLElement>(`[data-t="surface-${build.id}"]`) ?? panel;
+    const core = contentBox(surface, panel.getBoundingClientRect(), local);
+    cores[build.id] = core;
+    const radius = Number.parseFloat(getComputedStyle(roundedWithin(surface.firstElementChild as HTMLElement ?? surface)).borderTopLeftRadius) || 0;
+    sketches[build.id] = [{ ...core, r: Math.min(radius, core.h / 2) }, ...measureSketch(panel, local).slice(1)];
     marks[build.id] = measureMarks(panel, local, root, undefined, build.marks);
     panelOrder[build.id] = order(panel);
   }
@@ -59,6 +66,7 @@ export function measureChapter(root: HTMLElement, layout: HeroLayout, spec: Chap
     lines: Object.fromEntries([...root.querySelectorAll<HTMLElement>("[data-roller]")].map((node) => [node.dataset.roller!, lineOf(node)])),
     field: relBox(field.getBoundingClientRect(), origin, ratio),
     panels,
+    cores,
     sketches,
     marks,
     panelOrder,

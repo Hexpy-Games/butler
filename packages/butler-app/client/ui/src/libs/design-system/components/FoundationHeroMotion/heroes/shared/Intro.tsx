@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from "react";
 import type { Key, Track } from "../../heroTimeline";
 import { Reveal as R, reveal, select } from "./Reveal";
 import s from "./Intro.module.css";
@@ -13,9 +14,25 @@ export type IntroLead = Array<[key: string, text: string]>;
  * (`data-m="intro"` for the camera).
  */
 export function Intro({ title, lead }: { title: string; lead: IntroLead }) {
+  // The title fits its column: never over the intent beside it, however long the word.
+  const titleRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const node = titleRef.current;
+    if (!node) return undefined;
+    const fit = () => {
+      node.style.removeProperty("--title-fit");
+      const ratio = node.clientWidth / Math.max(1, node.scrollWidth);
+      if (ratio < 1) node.style.setProperty("--title-fit", String(Math.floor(ratio * 1000) / 1000));
+    };
+    fit();
+    // Again when the column changes (the wide and tall canvases).
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(fit) : null;
+    observer?.observe(node.parentElement ?? node);
+    return () => observer?.disconnect();
+  }, [title]);
   return (
     <div className={s.intro} data-m="intro">
-      <div className={s.introTitle} data-t="i-title"><R name="i-t">{title}</R></div>
+      <div className={s.introTitle} data-t="i-title" ref={titleRef}><R name="i-t">{title}</R></div>
       <div className={s.introLead}>
         {lead.map(([key, text], n) => (
           <p className={s.leadLine} data-t={`i-p${n}`} key={key}>

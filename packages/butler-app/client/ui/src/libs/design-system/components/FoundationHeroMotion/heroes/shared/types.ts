@@ -143,11 +143,12 @@ export interface Geometry {
   boxCell: Record<string, string>;
   /** Marks inside each `data-mark-scope` element (prelude scenes, the field), relative to it. */
   scopes: Record<string, Marks>;
-  /** Line height of every `data-roller` readout. */
-  lines: Record<string, number>;
+  /** Line height of every `data-roller` readout. */ lines: Record<string, number>;
   field: Box;
+  /** Each panel (its tile when packed), and the component drawn in it (relative to it, poster px = canvas px / posterZoom). */
   panels: Record<string, Box>;
-  /** Blueprint boxes and marks of each panel, relative to it, in poster px (canvas px / posterZoom). */
+  cores: Record<string, Box>;
+  /** Blueprint boxes (the component first) and marks of each panel, relative to it, in poster px. */
   sketches: Record<string, SketchBox[]>;
   marks: Record<string, Marks>;
   /** Reveal and part names of each panel, in reading order. */

@@ -3,6 +3,7 @@ import { annotTracks } from "./Annotations";
 import { HOLD, SETTLE, STEP, TRANSITION } from "./beats";
 import { reveal, revealBeats, select, sweep } from "./Reveal";
 import { buildFrames, posterZoom } from "./frames";
+import { gatherFlights, gatherKeys, tileTracks } from "./gather";
 import { buildViews, CELL, columnViews, fieldAway, finalePose, REST, scenePath, viewCell } from "./scene";
 import { sketchTracks } from "./Sketch";
 import type { ChapterSpec, Geometry, TimelineContext } from "./types";
@@ -102,7 +103,8 @@ export function chapterTracks(spec: ChapterSpec, g0: Geometry): { beats: number;
     select: `[data-cell="${name}"]`,
     keys: [{ at: 0, ...offset(name), o: 1 }, { at: leave + 0.2 }, { at: leave + 1, o: 0, ease: "accelerate" }, { at: t.loop + TRANSITION }, { at: t.loop + TRANSITION + 0.01, o: 1 }, { at: close }],
   }));
-  // The field shows in its scene cell, waits away while the components build, and gathers onto the poster for the finale.
+  // The field shows in its scene cell, waits away during the builds, and gathers with the components (gather.ts).
+  const flights = gatherFlights(g0, ["field", ...spec.builds.map((build) => build.id)], spec.builds.at(-1)!.id, t.finale);
   const scene = { x: offset("field").x / pz, y: offset("field").y / pz };
   const awayFrom = fieldAway(canvas);
   const away = { x: (awayFrom.x - center(g0.field).x + canvasCenter.x) / pz, y: (awayFrom.y - center(g0.field).y + canvasCenter.y) / pz };
@@ -121,20 +123,19 @@ export function chapterTracks(spec: ChapterSpec, g0: Geometry): { beats: number;
   }] : [{
     select: select("field-mover"),
     keys: [
-      { at: 0, ...scene, o: 1 }, { at: t.first + 0.5, ...scene }, { at: t.first + 0.51, ...away }, { at: t.finale + 0.3, ...away },
-      { at: t.finale + 0.3 + TRANSITION, x: 0, y: 0, ease: "standard" }, { at: t.loop, x: 0, y: 0, o: 1 }, { at: t.loop + TRANSITION / 2, o: 0, ease: "accelerate" },
+      { at: 0, ...scene, o: 1 }, { at: t.first + 0.5, ...scene }, { at: t.first + 0.51, ...away }, ...gatherKeys(flights.field!, away, t.finale, pz),
+      { at: t.loop, x: 0, y: 0, o: 1 }, { at: t.loop + TRANSITION / 2, o: 0, ease: "accelerate" },
       { at: t.loop + TRANSITION, x: 0, y: 0, o: 0 }, { at: t.loop + TRANSITION + 0.01, ...scene }, { at: close - 0.01 }, { at: close, o: 1 },
     ],
   }];
   const buildTracks = frames.flatMap(({ build, items }, k): Track[] => {
     const b = t.builds[build.id]!;
-    const home = t.finale + 0.3 * k;
     const own = { x: shift[k]!.x / pz, y: shift[k]!.y / pz };
     const scheduled = new Set(build.steps.flatMap((step) => [...(step.text ?? []), ...(step.parts ?? [])]));
     const loose = (g.panelOrder[build.id] ?? []).filter((entry) => !scheduled.has(entry.name));
     const fill = b.at + 0.6;
     return [
-      ...(own.x || own.y ? [{ select: select(`panel-${build.id}`), keys: [{ at: 0, ...own }, { at: home, ...own }, { at: home + TRANSITION, x: 0, y: 0, ease: "standard" }, { at: t.loop + TRANSITION, x: 0, y: 0 }, { at: t.beats, ...own }] } as Track] : []),
+      ...(own.x || own.y ? [{ select: select(`panel-${build.id}`), keys: [{ at: 0, ...own }, ...gatherKeys(flights[build.id]!, own, t.finale, pz), { at: t.loop + TRANSITION, x: 0, y: 0 }, { at: t.beats, ...own }] } as Track] : []),
       { select: select(`surface-${build.id}`), keys: [{ at: 0, s: 0.98, o: 0 }, { at: fill, s: 0.98, o: 0 }, { at: fill + 1, s: 1, o: 1, ease: "decelerate" }, { at: t.loop + 0.3 * k, o: 1 }, { at: t.loop + TRANSITION / 2 + 0.3 * k, o: 0, ease: "accelerate" }] },
       // The blueprint draws during the travel in and holds until the colors and content are in.
       ...sketchTracks(build.id, g.sketches[build.id] ?? [], b.at - TRANSITION + 0.8, build.holdSketch ? b.done - 0.6 : b.at + 1.6, close),
@@ -151,9 +152,9 @@ export function chapterTracks(spec: ChapterSpec, g0: Geometry): { beats: number;
   });
   return {
     beats: t.beats,
-    // Beat marks of the scenes (first build, each build done, finale), for reviewing frames.
     still: rest,
+    // Beat marks (each build done, the finale), for reviewing frames.
     marks: [...spec.builds.map((build) => Math.round(t.builds[build.id]!.done * 10) / 10), Math.round((t.finale + TRANSITION + 2) * 10) / 10],
-    tracks: [{ select: select("world"), keys: world }, ...regionTracks, ...prelude.tracks, ...fieldTracks, ...buildTracks, ...(spec.extra?.(ctx) ?? [])],
+    tracks: [{ select: select("world"), keys: world }, ...regionTracks, ...prelude.tracks, ...fieldTracks, ...buildTracks, ...(tall ? [] : tileTracks(flights, t.loop)), ...(spec.extra?.(ctx) ?? [])],
   };
 }

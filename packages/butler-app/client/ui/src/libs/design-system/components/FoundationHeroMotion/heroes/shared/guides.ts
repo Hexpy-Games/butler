@@ -79,6 +79,60 @@ export function buildItems(steps: Annot[][], marks: Marks, prefix: string, panel
   return items.map((list) => list.map(({ text: _text, ...item }) => item));
 }
 
+/** Poster px between a component's edge and a badge beside it, and between stacked badges. */
+const NEAR = 14;
+const ROW = 22;
+/** Width of one badge character, in poster px. */
+const CHAR = 6.6;
+
+type Side = "l" | "r" | "t" | "d";
+const badgeWidth = (text: string[]) => Math.max(...text.map((step) => [...step].length)) * CHAR + 16;
+
+/**
+ * Guides and badges of one build on the wide canvas: each badge stands in the
+ * nearest free space beside the component (`core`, panel-relative) — off the
+ * edge nearest its guide, level with it — joined by one short straight
+ * leader; badges on one side step apart so none overlap. Returns items per
+ * step and the box they cover with the component (panel-relative).
+ */
+export function nearItems(steps: Annot[][], marks: Marks, prefix: string, core: Box, layout: HeroLayout): { items: AnnotItem[][]; box: Box } {
+  const items = steps.map((annots, j) => annots.flatMap((annot, k): Array<AnnotItem & { text?: string[] }> => {
+    const text = labelOf(annot, marks, layout);
+    const drawn = text?.length === 0 ? null : shape(annot, marks);
+    return drawn ? [{ id: `${prefix}${j}-${k}`, guides: drawn.guides, anchor: drawn.anchor, text }] : [];
+  }));
+  const placed = items.flat().filter((item) => item.text).map((item) => {
+    const { x, y } = item.anchor;
+    const reach: Record<Side, number> = { l: x - core.x, r: core.x + core.w - x, t: (y - core.y) * 1.6, d: (core.y + core.h - y) * 1.6 };
+    const side = (Object.keys(reach) as Side[]).reduce((best, key) => (reach[key] < reach[best] ? key : best), "l");
+    const at = side === "l" ? { x: core.x - NEAR, y } : side === "r" ? { x: core.x + core.w + NEAR, y } : side === "t" ? { x, y: core.y - NEAR } : { x, y: core.y + core.h + NEAR };
+    return { item, side, at, w: badgeWidth(item.text!) };
+  });
+  // Badges on one side keep apart: stepped down (left, right) or across (above, below).
+  for (const side of ["l", "r", "t", "d"] as Side[]) {
+    const own = placed.filter((entry) => entry.side === side).sort((a, b) => (side === "l" || side === "r" ? a.at.y - b.at.y : a.at.x - b.at.x));
+    own.forEach((entry, n) => {
+      const prev = own[n - 1];
+      if (!prev) return;
+      if (side === "l" || side === "r") entry.at.y = Math.max(entry.at.y, prev.at.y + ROW);
+      else entry.at.x = Math.max(entry.at.x, prev.at.x + (prev.w + entry.w) / 2 + 8);
+    });
+  }
+  let box = { ...core };
+  for (const { item, side, at, w } of placed) {
+    const { x, y } = item.anchor;
+    const from = side === "l" ? { x: at.x + 4, y: at.y } : side === "r" ? { x: at.x - 4, y: at.y } : side === "t" ? { x: at.x, y: at.y + 4 } : { x: at.x, y: at.y - 4 };
+    const d = `M${round(from.x)} ${round(from.y)}L${round(x)} ${round(y)}`;
+    item.badge = { x: at.x, y: at.y, side, text: item.text!, leader: { d, len: Math.ceil(Math.hypot(x - from.x, y - from.y)) } };
+    const own = side === "l" ? { x: at.x - w, y: at.y - ROW / 2, w, h: ROW } : side === "r" ? { x: at.x, y: at.y - ROW / 2, w, h: ROW }
+      : side === "t" ? { x: at.x - w / 2, y: at.y - ROW, w, h: ROW } : { x: at.x - w / 2, y: at.y, w, h: ROW };
+    const x0 = Math.min(box.x, own.x);
+    const y0 = Math.min(box.y, own.y);
+    box = { x: x0, y: y0, w: Math.max(box.x + box.w, own.x + own.w) - x0, h: Math.max(box.y + box.h, own.y + own.h) - y0 };
+  }
+  return { items: items.map((list) => list.map(({ text: _text, ...item }) => item)), box };
+}
+
 /** How many badges a build's items carry. */
 export const badgeCount = (items: AnnotItem[][]) => items.flat().filter((item) => item.badge).length;
 export { PITCH as BADGE_ROW };

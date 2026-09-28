@@ -14,8 +14,11 @@
 
 .introTitle {
   grid-column: 1 / span 6;
+  min-width: 0;
+  overflow: hidden;
   color: var(--text-primary);
-  font-size: calc(var(--typo-h1-size) * 4);
+  font-size: calc(var(--typo-h1-size) * 4 * var(--title-fit, 1));
+  white-space: nowrap;
   font-weight: var(--font-weight-strong);
   letter-spacing: -0.02em;
   line-height: var(--line-height-none);
@@ -62,7 +65,7 @@
 
 [data-layout="tall"] .introTitle {
   align-self: start;
-  font-size: calc(var(--typo-h1-size) * 2.6);
+  font-size: calc(var(--typo-h1-size) * 2.6 * var(--title-fit, 1));
 }
 
 [data-layout="tall"] .introLead {

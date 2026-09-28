@@ -13,16 +13,19 @@ import { SWATCH_COLUMNS, SWATCHES, type ColorCopy } from "./colorCopy";
  *                          manner, intent reveal line by line on the right
  *   6.8–10.8  Quarter view the text pushes up and out; the camera glides into
  *                          an isometric quarter view of the empty page
- *   10.6–12.4 Stickers     the role stickers come down from above, curled on
- *                          one side, and press flat edge to edge, in a fast
- *                          ripple along the diagonals from the top left
- *   12.2–15.4 Names        grey token names attach under each sticker in turn
- *   15.6–19.6 Front        the camera returns to a flat front view
- *   19.8–23.3 Wipe         a line sweeps the whole frame into the other theme
- *   24.4–27.9 Back         and sweeps once more, back to the page's theme
- *   27.9–28.8 Hold         then the components build, topic by topic
+ *   10.6–15   Stickers     the role stickers come down from above, curled on
+ *                          one side, and press flat edge to edge, in a ripple
+ *                          that visibly travels the diagonals from the top left
+ *   14.8–17.8 Names        grey token names attach under each sticker in turn
+ *   18–22     Front        the camera returns to a flat front view
+ *   22.2–25.7 Wipe         a line sweeps the whole frame into the other theme
+ *   26.8–30.3 Back         and sweeps once more, back to the page's theme
+ *   30.3–31.2 Hold         then the components build, topic by topic
  */
-const AT = { iso: 6.8, land: 10.6, names: 12.2, front: 15.6, wipe: 19.8, back: 24.4, end: 28.8 } as const;
+const AT = { iso: 6.8, land: 10.6, names: 14.8, front: 18, wipe: 22.2, back: 26.8, end: 31.2 } as const;
+/** Beats between one diagonal of stickers and the next (the ripple travels the grid over ~2.8 beats), and a sticker's curl-and-press. */
+const RIPPLE = 0.4;
+const PRESS = 1.6;
 /** Beats the wipe line takes to cross the frame. */
 const WIPE = 3;
 /** The quarter view: the field plane turned a quarter and tilted back. */
@@ -43,9 +46,9 @@ export function colorPrelude(copy: ColorCopy, posterZoom: (layout: HeroLayout) =
         { at: 0, ...front }, { at: AT.iso, ...front }, { at: AT.iso + TRANSITION, ...quarter, ease: "standard" },
         { at: AT.front, ...quarter }, { at: AT.front + TRANSITION, ...flat, ease: "standard" }, { at: AT.end, ...flat },
       ];
-      // A fast ripple along the diagonals, each sticker overlapping the next.
+      // A cascading ripple along the diagonals ("촤르르륵"), each sticker overlapping the next.
       const columns = g.layout === "tall" ? SWATCH_COLUMNS - 1 : SWATCH_COLUMNS;
-      const land = (k: number) => AT.land + (Math.floor(k / columns) + (k % columns)) * 0.14 + (k % columns) * 0.02;
+      const land = (k: number) => AT.land + (Math.floor(k / columns) + (k % columns)) * RIPPLE + (k % columns) * 0.05;
       // The window over the other theme is several frames wide; key its edge where it crosses the visible frame, so the
       // line crosses the frame in time: open left to right, then its trailing edge crosses again (the page's theme returns).
       const zoom = flat.s ?? 1;
@@ -63,10 +66,10 @@ export function colorPrelude(copy: ColorCopy, posterZoom: (layout: HeroLayout) =
           const at = land(k);
           // Down from above the page (plane x = -y is screen up in the quarter view), curled; then pressed flat left to right.
           return [
-            { select: select(`st-${k}`), keys: [{ at: 0, x: 170, y: -170, o: 0 }, { at, x: 170, y: -170, o: 0 }, { at: at + 0.1, o: 1 }, { at: at + 0.55, x: 0, y: 0, ease: "decelerate" }, { at: close - 0.01 }, { at: close, x: 170, y: -170, o: 0 }] },
-            { select: select(`st-${k}-r`), keys: [{ at: 0, ry: -80 }, { at: at + 0.4, ry: -80 }, { at: at + 1, ry: 0, ease: "decelerate" }, { at: close - 0.01 }, { at: close, ry: -80 }] },
-            { select: select(`st-${k}-c`), keys: [{ at: 0, o: 1 }, { at: at + 0.4, o: 1 }, { at: at + 1, o: 0, ease: "decelerate" }, { at: close - 0.01 }, { at: close, o: 1 }] },
-            { select: select(`st-${k}-f`), keys: [{ at: 0, o: 0 }, { at: at + 1, o: 0 }, { at: at + 1.01, o: 1 }, { at: close - 0.01 }, { at: close, o: 0 }] },
+            { select: select(`st-${k}`), keys: [{ at: 0, x: 170, y: -170, o: 0 }, { at, x: 170, y: -170, o: 0 }, { at: at + 0.15, o: 1 }, { at: at + PRESS * 0.55, x: 0, y: 0, ease: "decelerate" }, { at: close - 0.01 }, { at: close, x: 170, y: -170, o: 0 }] },
+            { select: select(`st-${k}-r`), keys: [{ at: 0, ry: -80 }, { at: at + PRESS * 0.4, ry: -80 }, { at: at + PRESS, ry: 0, ease: "decelerate" }, { at: close - 0.01 }, { at: close, ry: -80 }] },
+            { select: select(`st-${k}-c`), keys: [{ at: 0, o: 1 }, { at: at + PRESS * 0.4, o: 1 }, { at: at + PRESS, o: 0, ease: "decelerate" }, { at: close - 0.01 }, { at: close, o: 1 }] },
+            { select: select(`st-${k}-f`), keys: [{ at: 0, o: 0 }, { at: at + PRESS, o: 0 }, { at: at + PRESS + 0.01, o: 1 }, { at: close - 0.01 }, { at: close, o: 0 }] },
           ];
         }),
         ...SWATCHES.flatMap((token, k) => reveal(`sn-${k}`, AT.names + k * 0.1, token, close)),

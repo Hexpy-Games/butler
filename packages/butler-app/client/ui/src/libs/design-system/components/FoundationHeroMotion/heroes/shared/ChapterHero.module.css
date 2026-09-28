@@ -309,6 +309,15 @@
   translate: 0 -50%;
 }
 
+/* Above or below the component, centred on its guide. */
+.badge[data-side="t"] {
+  translate: -50% -100%;
+}
+
+.badge[data-side="d"] {
+  translate: -50% 0;
+}
+
 .steps {
   display: inline-grid;
 }
@@ -323,6 +332,11 @@
 .badge[data-side="r"] .step,
 .badge[data-side="b"] .step {
   justify-self: start;
+}
+
+.badge[data-side="t"] .step,
+.badge[data-side="d"] .step {
+  justify-self: center;
 }
 
 .step[data-last] {
@@ -406,6 +420,41 @@
 .surface {
   display: grid;
   min-width: 0;
+}
+
+/* ---- Packed poster (wide): a bento of tiles filling the frame (pack.ts) ---- */
+
+/* Each item stands on its tile, centred at its natural width; the tiles fill
+   the frame edge to edge with one gap, so the finale has no holes. */
+.poster[data-packed] {
+  display: block;
+}
+
+.poster[data-packed] > .product {
+  display: contents;
+}
+
+.poster[data-packed] > .field,
+.poster[data-packed] .panel {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+}
+
+.poster[data-packed] > .field > :not(.tile),
+.poster[data-packed] .panel > .surface {
+  position: relative;
+  inline-size: var(--natural-w);
+  max-inline-size: 100%;
+}
+
+.tile {
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-composer);
+  background: color-mix(in srgb, var(--surface-raised) 60%, transparent);
 }
 
 .topic {

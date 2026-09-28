@@ -13,7 +13,7 @@ export type Place = "above" | "below" | "left" | "right";
 export interface Note { x: number; y: number; place: Place; text: string[] }
 
 /** A badge far out in the gutter, joined to its guide by a leader (builds). */
-export interface Badge { x: number; y: number; side: "l" | "r" | "b"; text: string[]; leader: { d: string; len: number } }
+export interface Badge { x: number; y: number; side: "l" | "r" | "b" | "t" | "d"; text: string[]; leader: { d: string; len: number } }
 
 export interface AnnotItem {
   id: string;

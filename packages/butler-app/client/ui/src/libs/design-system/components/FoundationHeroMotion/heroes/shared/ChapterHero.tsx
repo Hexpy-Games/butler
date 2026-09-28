@@ -4,6 +4,7 @@ import { compileTimeline } from "../../heroTimeline";
 import { Annotations } from "./Annotations";
 import { CANVAS, col, gridVars, type HeroLayout } from "./grid";
 import { measureChapter } from "./measureChapter";
+import { measureNatural, packPoster, type Pack } from "./pack";
 import { Sketch } from "./Sketch";
 import { buildFrames, chapterTracks, posterZoom } from "./timeline";
 import type { ChapterSpec, Geometry } from "./types";
@@ -53,19 +54,48 @@ function useGeometry(root: RefObject<HTMLElement | null>, layout: HeroLayout, sp
 }
 
 /**
+ * The finale's packing on the wide canvas: measured once the chapter has laid
+ * the poster out naturally, then the poster is drawn packed (see pack.ts).
+ */
+function usePack(root: RefObject<HTMLElement | null>, layout: HeroLayout, spec: ChapterSpec, lang: FoundationHeroLang, ready: boolean) {
+  const [pack, setPack] = useState<Pack | null>(null);
+  useLayoutEffect(() => setPack(null), [lang, layout, ready, spec]);
+  useLayoutEffect(() => {
+    if (layout !== "wide" || pack || !ready || !root.current) return;
+    const items = measureNatural(root.current, spec);
+    if (items) setPack(packPoster(items));
+  }, [pack, ready, root, layout, spec]);
+  return pack;
+}
+
+/** A packed item's place: its tile, and its content held at its natural width (poster px at the packed zoom). */
+function tileStyle(pack: Pack | null, id: string, zoom: number, natural: number): CSSProperties | undefined {
+  const tile = pack?.tiles[id];
+  const own = pack?.natural[id];
+  if (!tile || !own) return undefined;
+  const px = (value: number) => `${value / zoom}px`;
+  return { left: px(tile.x), top: px(tile.y), inlineSize: px(tile.w), blockSize: px(tile.h), "--natural-w": `${own.w / natural}px` } as CSSProperties;
+}
+
+/**
  * A Foundations chapter hero on the shared engine: the chapter's own prelude
  * (its scenes, camera and token field), then real DS components built one at
  * a time under badges naming their tokens, and a finale that zooms out to the
  * poster (the reduced-motion still), the token field beside the product.
  * See types.ts for the contract.
  */
-export function ChapterHero({ spec, lang }: { spec: ChapterSpec; lang: FoundationHeroLang }) {
+export function ChapterHero({ spec: base, lang }: { spec: ChapterSpec; lang: FoundationHeroLang }) {
   const root = useRef<HTMLDivElement>(null);
   const scope = `ch${useId().replace(/[^a-z0-9]/giu, "")}`;
   const frame = useFrame(root, true);
   const ready = useFontsReady();
-  const g = useGeometry(root, frame.layout, spec, lang, ready);
+  const pack = usePack(root, frame.layout, base, lang, ready);
+  // Packed, the poster is drawn at its natural zoom times the packing's scale.
+  const spec = useMemo(() => (pack ? { ...base, posterZoom: posterZoom(base, "wide") * pack.scale } : base), [base, pack]);
+  const g = useGeometry(root, frame.layout, spec, lang, ready && (frame.layout === "tall" || Boolean(pack)));
   const compiled = useMemo(() => (g ? chapterTracks(spec, g) : null), [g, spec]);
+  const zoom = posterZoom(spec, frame.layout);
+  const natural = posterZoom(base, frame.layout);
   const css = useMemo(() => (compiled ? compileTimeline(scope, compiled.beats, compiled.tracks) : ""), [compiled, scope]);
   const { layout } = frame;
   const frames = g ? buildFrames(spec, g) : [];
@@ -73,7 +103,7 @@ export function ChapterHero({ spec, lang }: { spec: ChapterSpec; lang: Foundatio
   const style = {
     ...gridVars(layout, spec.fieldColumns ?? 4),
     "--fit": frame.fit,
-    "--poster-zoom": posterZoom(spec, layout),
+    "--poster-zoom": zoom,
     "--canvas-w": `${CANVAS[layout].w}px`,
     "--canvas-h": `${CANVAS[layout].h}px`,
     "--col": `${col(layout, 1).w}px`,
@@ -92,13 +122,17 @@ export function ChapterHero({ spec, lang }: { spec: ChapterSpec; lang: Foundatio
             ))}
             {layout === "tall" && spec.fieldScene ? <div className={c.cell} data-cell="field">{typeof spec.fieldScene === "function" ? spec.fieldScene(g) : spec.fieldScene}</div> : null}
           </div>
-          <div className={c.poster}>
-            <div className={c.field} data-t="field-mover">{typeof spec.field === "function" ? spec.field(g) : spec.field}</div>
+          <div className={c.poster} data-packed={pack ? "" : undefined}>
+            <div className={c.field} data-t="field-mover" style={tileStyle(pack, "field", zoom, natural)}>
+              {pack ? <span className={c.tile} data-t="tile-field" /> : null}
+              {typeof spec.field === "function" ? spec.field(g) : spec.field}
+            </div>
             <div className={`${c.product} ${spec.product}`} data-t="product">
               {spec.builds.map((build) => {
                 const entry = frames.find((item) => item.build.id === build.id);
                 return (
-                  <div className={c.panel} data-panel={build.id} data-t={`panel-${build.id}`} key={build.id} style={{ gridArea: build.id }}>
+                  <div className={c.panel} data-panel={build.id} data-t={`panel-${build.id}`} key={build.id} style={{ gridArea: build.id, ...tileStyle(pack, build.id, zoom, natural) }}>
+                    {pack ? <span className={c.tile} data-t={`tile-${build.id}`} /> : null}
                     <div className={c.surface} data-t={`surface-${build.id}`}>{build.render}</div>
                     {g ? <Sketch boxes={g.sketches[build.id] ?? []} id={build.id} /> : null}
                     {entry ? <Annotations items={entry.items.flat()} /> : null}
