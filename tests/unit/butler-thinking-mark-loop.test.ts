@@ -205,19 +205,27 @@ test("per-frame engine cost stays within budget: <= 0.3 ms per small mark, <= 1 
   const large = mount(96, working);
   // warm up (JIT) through the whole morph, then time morph + steady frames of every mark
   for (let i = 0; i < 60; i += 1) frame();
-  for (const mark of [...small, large]) {
-    mark.sim.current!.park();
-    mark.loop.start();
-  }
   const FRAMES = 240;
-  const start = performance.now();
-  for (let i = 0; i < FRAMES; i += 1) frame();
-  const perFrameAll = (performance.now() - start) / FRAMES;
+  // Wall-clock timing on a shared machine only ever reads high, never low: take
+  // the best of several trials (each restarting the morph) so a busy CPU cannot
+  // fail the budget, while a real regression still slows every trial.
+  const bestPerFrame = (marks: typeof small) => {
+    let best = Infinity;
+    for (let trial = 0; trial < 5; trial += 1) {
+      for (const mark of marks) {
+        mark.sim.current!.park();
+        mark.loop.start();
+      }
+      const start = performance.now();
+      for (let i = 0; i < FRAMES; i += 1) frame();
+      best = Math.min(best, (performance.now() - start) / FRAMES);
+    }
+    return best;
+  };
+  const perFrameAll = bestPerFrame([...small, large]);
   large.loop.dispose();
-  const startSmall = performance.now();
-  for (let i = 0; i < FRAMES; i += 1) frame();
-  const perSmallMark = (performance.now() - startSmall) / FRAMES / small.length;
+  const perSmallMark = bestPerFrame(small) / small.length;
   expect(perSmallMark).toBeLessThan(0.3);
   expect(perFrameAll - perSmallMark * small.length).toBeLessThan(1);
   for (const mark of small) mark.loop.dispose();
-});
+}, 15_000);

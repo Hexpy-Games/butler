@@ -204,11 +204,30 @@ async function heroState(page: Page): Promise<HeroState> {
   });
 }
 
-function assertHero(state: HeroState, label: string): void {
-  assert(state.chrome && state.tone === state.chrome, `${label}: hero fluid tone ${state.tone} != chrome theme ${state.chrome}`);
-  if (state.luminance === null) return;
+function heroProblem(state: HeroState, label: string): string | null {
+  if (!state.chrome || state.tone !== state.chrome) return `${label}: hero fluid tone ${state.tone} != chrome theme ${state.chrome}`;
+  if (state.luminance === null) return null;
   const ok = state.chrome === "dark" ? state.luminance < 0.35 : state.luminance > 0.65;
-  assert(ok, `${label}: hero fluid luminance ${state.luminance.toFixed(2)} does not match the ${state.chrome} theme`);
+  return ok ? null : `${label}: hero fluid luminance ${state.luminance.toFixed(2)} does not match the ${state.chrome} theme`;
+}
+
+/**
+ * The fluid paints on its own frame loop, so the canvas can lag the tone
+ * attribute by a few frames (many more on a loaded machine): poll until it
+ * matches instead of sampling once after a fixed sleep.
+ */
+async function assertHero(page: Page, label: string, timeoutMs = 10_000): Promise<void> {
+  const started = Date.now();
+  let state = await heroState(page);
+  // A blank buffer means "not painted yet" until the grace period ends; after
+  // that it means WebGL is unavailable and only the tone is checked.
+  while ((heroProblem(state, label) || (state.luminance === null && Date.now() - started < 2_000)) &&
+    Date.now() - started < timeoutMs) {
+    await page.waitForTimeout(100);
+    state = await heroState(page);
+  }
+  const problem = heroProblem(state, label);
+  assert(!problem, problem ?? "");
 }
 
 async function assertHeroTheme(browser: Awaited<ReturnType<typeof chromium.launch>>, baseUrl: string): Promise<void> {
@@ -218,15 +237,13 @@ async function assertHeroTheme(browser: Awaited<ReturnType<typeof chromium.launc
       const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, colorScheme });
       await page.goto(viewerUrl(baseUrl, { page: "overview", motion: "reduced", ...(theme === "system" ? {} : { theme }) }), { waitUntil: "networkidle" });
       await page.locator("[data-ds-hero] canvas").waitFor({ state: "attached" });
-      await page.waitForTimeout(150);
-      assertHero(await heroState(page), label);
+      await assertHero(page, label);
       if (theme === "light" || theme === "dark") {
         // The hero's own toggle flips the chrome; the fluid follows without a reload.
         const next = theme === "light" ? "Dark" : "Light";
         await page.getByRole("radiogroup", { name: "Hero theme" }).getByRole("radio", { name: next }).click();
         await page.waitForFunction((tone) => document.querySelector("[data-ds-hero] canvas")?.getAttribute("data-tone") === tone, next.toLowerCase());
-        await page.waitForTimeout(150);
-        assertHero(await heroState(page), `${label} -> ${next}`);
+        await assertHero(page, `${label} -> ${next}`);
       }
       await page.close();
     }

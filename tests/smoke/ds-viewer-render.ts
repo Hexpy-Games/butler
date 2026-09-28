@@ -170,6 +170,18 @@ async function viewerItems(page: Page, serverUrl: string): Promise<Map<string, s
   return items;
 }
 
+const STEP_TIMEOUT_MS = 15_000;
+
+async function captureComponent(page: Page, url: string, componentName: string, outputPath: string): Promise<void> {
+  await page.goto(url, { waitUntil: "networkidle", timeout: STEP_TIMEOUT_MS });
+  const component = page.locator(
+    `[data-ds-detail="${componentName.replace(/"/gu, '\\"')}"] [data-ds-examples]`,
+  );
+  await component.waitFor({ state: "visible", timeout: STEP_TIMEOUT_MS });
+  await component.scrollIntoViewIfNeeded({ timeout: STEP_TIMEOUT_MS });
+  await component.screenshot({ path: outputPath, animations: "disabled", timeout: STEP_TIMEOUT_MS });
+}
+
 async function renderViewport(
   browser: Awaited<ReturnType<typeof chromium.launch>>,
   serverUrl: string,
@@ -179,10 +191,11 @@ async function renderViewport(
   useViewportSubdir: boolean,
   { locale, fullPage }: Pick<RenderOptions, "locale" | "fullPage">,
 ): Promise<string[]> {
-  const page = await browser.newPage({
+  const newPage = () => browser.newPage({
     viewport: viewportPresets[viewportName],
     deviceScaleFactor: 1,
   });
+  let page = await newPage();
   const outputDir = useViewportSubdir
     ? join(outputRoot, viewportName)
     : outputRoot;
@@ -234,19 +247,23 @@ async function renderViewport(
       if (!componentName || !id) continue;
 
       for (const theme of themes) {
-        // One deep link and one screenshot per item and theme.
-        await page.goto(viewerUrl(serverUrl, { page: id, theme }), { waitUntil: "networkidle" });
-        const component = page.locator(
-          `[data-ds-detail="${componentName.replace(/"/gu, '\\"')}"] [data-ds-examples]`,
-        );
-        await component.waitFor({ state: "visible" });
-        await component.scrollIntoViewIfNeeded();
         const suffix = themes.length > 1 ? `-${theme}` : "";
         const outputPath = join(outputDir, `${safeFileName(componentName)}${suffix}.png`);
-        await component.screenshot({
-          path: outputPath,
-          animations: "disabled",
-        });
+        // One deep link and one screenshot per item and theme. The whole catalog
+        // reuses one tab; a rare stall there (seen ~1 in 6 full runs, on a
+        // different item each time) is retried once in a fresh tab. An item that
+        // stalls twice is a real failure.
+        for (let attempt = 1; ; attempt += 1) {
+          try {
+            await captureComponent(page, viewerUrl(serverUrl, { page: id, theme }), componentName, outputPath);
+            break;
+          } catch (error) {
+            if (attempt > 1 || !(error instanceof Error && error.name === "TimeoutError")) throw error;
+            console.error(`ds-viewer-render: ${componentName} (${theme}) timed out; retrying in a fresh tab`);
+            await page.close();
+            page = await newPage();
+          }
+        }
         writtenPaths.push(outputPath);
       }
     }

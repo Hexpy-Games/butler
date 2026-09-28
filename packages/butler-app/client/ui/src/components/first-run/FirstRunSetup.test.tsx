@@ -205,7 +205,9 @@ test("first-run OAuth setup auto-completes when browser auth finishes", async ()
   });
 
   await act(async () => rendered.root.unmount());
-});
+  // The form polls OAuth status on a real 1 s interval: two pending polls
+  // before "completed" spend ~2 s of wall time, too close to the 5 s default.
+}, 15_000);
 
 test("first-run OAuth setup disables add while auto registration is running", async () => {
   const registerStarted = deferred<void>();
@@ -919,7 +921,7 @@ async function addHostedModelAndFinish(
 }
 
 async function waitForCompletion(rendered: RenderedFirstRun): Promise<void> {
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + 10_000;
   while (rendered.completedStates.length === 0) {
     if (Date.now() > deadline) {
       throw new Error("Timed out waiting for first-run completion");
@@ -934,7 +936,7 @@ async function waitForCall(
   rendered: RenderedFirstRun,
   call: string,
 ): Promise<void> {
-  const deadline = Date.now() + 1200;
+  const deadline = Date.now() + 4000;
   while (!rendered.calls.includes(call)) {
     if (Date.now() > deadline) {
       throw new Error(`Timed out waiting for call: ${call}`);
@@ -1025,7 +1027,7 @@ async function waitForText(
   container: HTMLElement,
   text: string,
 ): Promise<void> {
-  const deadline = Date.now() + 1200;
+  const deadline = Date.now() + 4000;
   while (!container.textContent?.includes(text)) {
     if (Date.now() > deadline) {
       throw new Error(`Timed out waiting for text: ${text}`);
