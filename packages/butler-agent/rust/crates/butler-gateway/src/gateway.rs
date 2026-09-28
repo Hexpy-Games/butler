@@ -96,6 +96,11 @@ mod error;
 pub use error::GatewayApplicationError;
 pub use session_references::resolve_session_references;
 pub use transcript::{TranscriptCode, TranscriptWriter};
+pub use wallpapers::{
+    AppWallpaperAsset, AppWallpaperChange, AppWallpaperFile, AppWallpaperModuleShader,
+    AppWallpaperModuleStatusReport, AppWallpaperRejection, AppWallpaperScope,
+    AppWallpaperSetRequest, AppWallpaperVariant, GatewayWallpapers,
+};
 
 pub type ApplicationFuture<T> =
     Pin<Box<dyn Future<Output = Result<T, GatewayApplicationError>> + Send + 'static>>;
@@ -180,7 +185,13 @@ pub trait GatewaySessionControls: Send + Sync {
 /// Every method is required. Composition cannot replace absent persistence or
 /// BTCC readiness with process-liveness guesses or an optional callback.
 pub trait GatewayApplication:
-    GatewayMutationCommands + GatewayProjectDashboard + GatewaySessionControls + Send + Sync + 'static
+    GatewayMutationCommands
+    + GatewayProjectDashboard
+    + GatewaySessionControls
+    + GatewayWallpapers
+    + Send
+    + Sync
+    + 'static
 {
     fn check_app_update(
         &self,
@@ -484,3 +495,6 @@ mod inbound_queue;
 mod message_file_store;
 #[cfg(test)]
 mod tests;
+mod wallpaper_modules;
+mod wallpaper_store;
+mod wallpapers;

@@ -19,6 +19,7 @@ const UPDATE_KEYS: &[&str] = &[
     "main_screen_theme",
     "main_screen_theme_preset",
     "main_screen_theme_custom_colors",
+    "wallpaper",
     "translucent_sidebar",
     "diagnostics_enabled",
     "desktop_notifications",

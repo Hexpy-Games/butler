@@ -14,6 +14,7 @@ mod http_limits;
 mod session_queue;
 mod support;
 mod transcript_export;
+mod wallpapers;
 
 #[tokio::test]
 async fn new_chat_briefing_route_is_authenticated_and_enveloped() {

@@ -14,6 +14,7 @@ use super::*;
 mod dashboard;
 mod http;
 mod session_controls;
+mod wallpapers;
 pub(super) use http::authorized_json;
 
 pub(super) async fn start(

@@ -27,6 +27,8 @@ mod subsession_result;
 mod subsessions;
 mod transcript_export;
 mod updates;
+mod wallpaper_modules;
+mod wallpapers;
 
 use axum::http::HeaderValue;
 use std::{collections::HashMap, error::Error as StdError, path::PathBuf, sync::Arc};
@@ -196,14 +198,11 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
     {
         return updates::route(state, request).await;
     }
-    if (method == Method::POST && uri.path() == "/message-files")
-        || (method == Method::GET
-            && uri
-                .path()
-                .strip_prefix("/message-files/")
-                .is_some_and(|id| !id.is_empty() && !id.contains('/')))
-    {
+    if message_files::handles(&method, uri.path()) {
         return message_files::route(state, request).await;
+    }
+    if wallpapers::handles(uri.path()) {
+        return wallpapers::route(state, request).await;
     }
     if (method == Method::PATCH || method == Method::DELETE)
         && uri

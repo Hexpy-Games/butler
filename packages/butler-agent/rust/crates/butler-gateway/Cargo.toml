@@ -22,6 +22,7 @@ futures-core.workspace = true
 futures-util.workspace = true
 http-body-util.workspace = true
 http.workspace = true
+image.workspace = true
 indexmap.workspace = true
 notify.workspace = true
 parking_lot.workspace = true
@@ -36,6 +37,7 @@ tz-rs.workspace = true
 thiserror.workspace = true
 unicode-normalization.workspace = true
 url.workspace = true
+zip.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 nix.workspace = true

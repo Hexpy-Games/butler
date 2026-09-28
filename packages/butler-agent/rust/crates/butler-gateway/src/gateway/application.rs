@@ -50,6 +50,7 @@ mod storage;
 mod transcript_export;
 mod turn_cancellation;
 mod updates;
+mod wallpapers;
 
 use serde_json::Value;
 use std::{path::PathBuf, sync::Arc};
@@ -58,6 +59,7 @@ use super::{
     AppEventEnvelope, ApplicationFuture, EventSubscription, GatewayApplication,
     GatewayApplicationError, MessageContent, MessageSendResult, RuntimeReadinessView,
     SendMessageCommand, SessionQueueUpdateRequest, SessionQueueView,
+    wallpaper_store::AppWallpaperFiles,
 };
 use admission_identity::stringify;
 pub(crate) use automations::*;
@@ -160,6 +162,7 @@ pub struct AppApplication {
     project_dashboard_briefing: projects::ProjectDashboardBriefingOwner,
     queue_owner: String,
     butler_data: PathBuf,
+    wallpapers: AppWallpaperFiles,
     settings_update_lock: Arc<tokio::sync::Mutex<()>>,
     plan_decision_locks: PlanDecisionLocks,
 }
@@ -169,11 +172,10 @@ impl AppApplication {
         config: AppApplicationConfig,
         dependencies: AppApplicationDependencies,
     ) -> Result<Self, GatewayApplicationError> {
-        let initialized_at = dependencies.identity_clock.now_iso();
         let storage = AppStorage::open(
             config.database_path,
             Some(config.butler_data.clone()),
-            initialized_at,
+            dependencies.identity_clock.now_iso(),
         )
         .await
         .map_err(app_error)?;
@@ -254,6 +256,7 @@ impl AppApplication {
             transcript_exports: TranscriptExportOwner::new(),
             project_dashboard_briefing: projects::ProjectDashboardBriefingOwner::new(),
             queue_owner,
+            wallpapers: AppWallpaperFiles::new(&config.butler_data),
             butler_data: config.butler_data,
             settings_update_lock: Arc::new(tokio::sync::Mutex::new(())),
             plan_decision_locks: PlanDecisionLocks::default(),
@@ -281,6 +284,7 @@ impl AppApplication {
         self.automation_runs.initialize(self.clone_handle()).await?;
         automation_scheduler.initialize(self.clone_handle())?;
         self.recover_turn_cancellations().await?;
+        self.watch_wallpaper_modules();
         // Failed authority retries remain durable for the next startup.
         let _ = self.dependencies.authority_handoff.retry_decided().await;
         Ok(())
@@ -309,6 +313,7 @@ impl AppApplication {
         self.project_creation.close().await;
         self.session_branches.close().await;
         self.space_mutations.close().await;
+        self.wallpapers.close().await;
         let projection = self.projection.close().await;
         let retention = match &self.retention {
             Some(retention) => retention.close().await,

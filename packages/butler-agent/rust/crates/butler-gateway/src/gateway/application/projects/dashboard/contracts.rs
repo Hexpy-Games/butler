@@ -283,6 +283,8 @@ pub struct AppProjectDashboardPreferencesUpdate {
     pub expected_revision: u64,
     pub description: Option<String>,
     pub pinned_source_refs: Option<Vec<AppProjectDashboardPinRef>>,
+    /// `"inherit"` or a wallpaper source, validated by the application.
+    pub wallpaper: Option<Value>,
 }
 
 #[derive(Clone, Debug)]

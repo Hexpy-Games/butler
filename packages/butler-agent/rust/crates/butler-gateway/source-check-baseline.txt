@@ -29,7 +29,6 @@ src/gateway/application/projects/dashboard/history.rs	get	106
 src/gateway/application/projects/dashboard/history.rs	read_ledger_events	113
 src/gateway/application/projects/dashboard/materials.rs	get	264
 src/gateway/application/projects/dashboard/overview.rs	facts	99
-src/gateway/application/projects/dashboard/preferences.rs	update	136
 src/gateway/application/projects/dashboard/source.rs	get	153
 src/gateway/application/projects/dashboard/statistics.rs	get	84
 src/gateway/application/projects/dashboard/statistics/app.rs	read_turns	120
@@ -49,7 +48,7 @@ src/gateway/application/session_views.rs	AppApplication::session_view_owned	132
 src/gateway/application/sessions/tests.rs	local_and_project_session_rows_follow_app_source	118
 src/gateway/application/settings/update/patch/project.rs	project	223
 src/gateway/application/settings/update/patch/sanitize.rs	sanitize	223
-src/gateway/application/settings/view.rs	read	272
+src/gateway/application/settings/view.rs	read	263
 src/gateway/application/shell.rs	command_palette	169
 src/gateway/application/snapshot_input.rs	claimed_snapshot	120
 src/gateway/application/space/commands.rs	execute	125
@@ -63,9 +62,9 @@ src/gateway/application/tests/projection_tests.rs	retention_owner_snapshots_term
 src/gateway/application/tests/retry.rs	retry_reuses_the_same_turn_attempt_controls_and_user_message	121
 src/gateway/application/tests/session_views.rs	session_view_projects_progress_for_active_and_terminal_latest_turn	137
 src/gateway/application/turn_cancellation.rs	AppApplication::cancel_turn_owned	87
-src/gateway/http.rs	route	191
+src/gateway/http.rs	route	188
 src/gateway/http/automations.rs	route	101
-src/gateway/http/dashboard.rs	route	244
+src/gateway/http/dashboard.rs	route	214
 src/gateway/http/message_files/mime.rs	inferred_content_type	84
 src/gateway/http/model_catalog.rs	route	96
 src/gateway/http/monitors.rs	route	139

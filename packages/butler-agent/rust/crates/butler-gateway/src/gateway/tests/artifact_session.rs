@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 mod fixtures;
 use fixtures::{artifact_request, test_db_path};
-pub(super) use fixtures::{open_app, start_real};
+pub(super) use fixtures::{open_app, open_app_with_files, start_real};
 
 #[tokio::test]
 async fn cursor_routes_refresh_projection_and_keep_event_shape() {

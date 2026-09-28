@@ -786,6 +786,7 @@ dependencies = [
  "futures-util",
  "http",
  "http-body-util",
+ "image",
  "indexmap 2.14.2",
  "nix",
  "notify",
@@ -803,6 +804,7 @@ dependencies = [
  "unicode-normalization",
  "url",
  "uuid",
+ "zip",
 ]
 
 [[package]]

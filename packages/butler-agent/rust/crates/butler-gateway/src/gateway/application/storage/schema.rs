@@ -5,6 +5,7 @@ mod migration;
 mod project_ledger_bindings;
 mod space;
 mod supporting;
+mod wallpapers;
 
 use std::path::Path;
 
@@ -38,6 +39,7 @@ pub(super) fn migrate(
     migration::create_post_backfill_indexes(connection)?;
     project_ledger_bindings::initialize(connection, butler_data)?;
     space::migrate(connection)?;
+    wallpapers::create(connection)?;
     Ok(())
 }
 
