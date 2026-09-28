@@ -188,7 +188,7 @@
   gap: var(--space-xl) var(--grid-gutter);
 }
 
-[data-layout="tall"] .plots {
+[data-layout="tall"] [data-cell] .plots {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
@@ -251,4 +251,29 @@
   grid-template-columns: minmax(0, 1fr);
   align-content: start;
   row-gap: var(--space-lg);
+}
+
+/* The tall field scene (a prelude region) takes the portrait column's width;
+   the poster keeps three plots a row, a compact summary beside the components. */
+[data-layout="tall"] [data-cell] > .field {
+  box-sizing: border-box;
+  inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
+}
+
+[data-layout="tall"] [data-t="field-mover"] .field {
+  row-gap: var(--space-lg);
+  padding: var(--space-md) var(--space-sm);
+}
+
+[data-layout="tall"] [data-t="field-mover"] .plots {
+  gap: var(--space-sm);
+}
+
+[data-layout="tall"] [data-t="field-mover"] .plotBox {
+  inline-size: var(--space-4xl);
+  block-size: var(--space-4xl);
+}
+
+[data-layout="tall"] [data-t="field-mover"] .plotName {
+  font-size: var(--font-size-1);
 }

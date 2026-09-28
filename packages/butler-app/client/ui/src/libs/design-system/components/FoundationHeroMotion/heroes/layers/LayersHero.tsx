@@ -18,6 +18,7 @@ function spec(copy: LayersCopy): ChapterSpec {
       regions: { intro: <Intro lead={copy.lead} title={copy.title} />, screen: <LayersScreen copy={copy} /> },
     },
     field: <LayersField />,
+    fieldScene: <LayersField />,
     fieldColumns: 4,
     posterZoom: 1.2,
     product: s.product!,

@@ -224,11 +224,11 @@
 
 /* Tall: each size's token and value over its icon and word, so the ladder
    fills the portrait frame and the words keep their full width. */
-[data-layout="tall"] .field {
+[data-layout="tall"] [data-cell] .field {
   row-gap: var(--space-lg);
 }
 
-[data-layout="tall"] .row {
+[data-layout="tall"] [data-cell] .row {
   grid-template-areas:
     "token value"
     "pair pair";
@@ -236,14 +236,26 @@
   row-gap: var(--space-xs);
 }
 
-[data-layout="tall"] .token {
+[data-layout="tall"] [data-cell] .token {
   grid-area: token;
 }
 
-[data-layout="tall"] .value {
+[data-layout="tall"] [data-cell] .value {
   grid-area: value;
 }
 
-[data-layout="tall"] .pair {
+[data-layout="tall"] [data-cell] .pair {
   grid-area: pair;
+}
+
+/* Tall poster: a compact summary (each size's token, icon and value), so
+   the field and the components fit the portrait frame together. */
+[data-layout="tall"] [data-t="field-mover"] .text {
+  display: none;
+}
+
+/* The tall field scene (a prelude region) takes the portrait column's width. */
+[data-layout="tall"] [data-cell] > .field {
+  box-sizing: border-box;
+  inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
 }

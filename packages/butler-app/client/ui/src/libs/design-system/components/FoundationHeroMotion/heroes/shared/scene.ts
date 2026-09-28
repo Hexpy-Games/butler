@@ -70,6 +70,19 @@ export function columnViews(canvas: { w: number; h: number }, frames: Box[]) {
   return { shift: frames.map(() => ({ x: 0, y: 0 })), stage, centers };
 }
 
+/**
+ * The finale's pose: the poster at rest on the wide canvas; on the tall
+ * canvas the whole poster (token field and every component) fitted into the
+ * portrait frame, so nothing is cropped.
+ */
+export function finalePose(layout: HeroLayout, canvas: { w: number; h: number }, boxes: Box[]): Pose {
+  if (layout === "wide") return REST;
+  const x = Math.min(...boxes.map((box) => box.x));
+  const y = Math.min(...boxes.map((box) => box.y));
+  const all = { x, y, w: Math.max(...boxes.map((box) => box.x + box.w)) - x, h: Math.max(...boxes.map((box) => box.y + box.h)) - y };
+  return focus(canvas, all, fit(canvas, all, 0.94, 1.4));
+}
+
 /** Camera poses of the builds: each frame (component and badge gutter) centred on its cell, as large as the frame allows. */
 export function buildViews(layout: HeroLayout, canvas: { w: number; h: number }, frames: Box[], centers: Array<{ x: number; y: number }>) {
   const tall = layout === "tall";

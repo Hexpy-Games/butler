@@ -69,6 +69,7 @@ export function ChapterHero({ spec, lang }: { spec: ChapterSpec; lang: Foundatio
   const css = useMemo(() => (compiled ? compileTimeline(scope, compiled.beats, compiled.tracks) : ""), [compiled, scope]);
   const { layout } = frame;
   const frames = g ? buildFrames(spec, g) : [];
+  const still = compiled?.still;
   const style = {
     ...gridVars(layout, spec.fieldColumns ?? 4),
     "--fit": frame.fit,
@@ -83,11 +84,13 @@ export function ChapterHero({ spec, lang }: { spec: ChapterSpec; lang: Foundatio
     <div className={c.board} data-field={spec.fieldRight ? "right" : "left"} data-hero-scope={scope} data-layout={layout} data-marks={compiled?.marks.join(" ")} data-ready={css ? "" : undefined} inert lang={lang} ref={root} style={style}>
       {css ? <style>{css}</style> : null}
       <div className={c.camera}>
-        <div className={c.world} data-t="world">
+        {/* The still poster (reduced motion) rests on the finale's framing. */}
+        <div className={c.world} data-t="world" style={still ? { transform: `translate(${still.x ?? 0}px, ${still.y ?? 0}px) scale(${still.s ?? 1})` } : undefined}>
           <div className={c.prelude} data-t="prelude">
             {Object.entries(spec.prelude.regions).map(([name, region]) => (
               <div className={c.cell} data-cell={name} key={name}>{typeof region === "function" ? region(g) : region}</div>
             ))}
+            {layout === "tall" && spec.fieldScene ? <div className={c.cell} data-cell="field">{typeof spec.fieldScene === "function" ? spec.fieldScene(g) : spec.fieldScene}</div> : null}
           </div>
           <div className={c.poster}>
             <div className={c.field} data-t="field-mover">{typeof spec.field === "function" ? spec.field(g) : spec.field}</div>

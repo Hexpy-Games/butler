@@ -18,6 +18,7 @@ function spec(copy: RadiusCopy): ChapterSpec {
       regions: { intro: <Intro lead={copy.lead} title={copy.title} />, lab: (g) => <RadiusLab g={g} /> },
     },
     field: (g) => <RadiusField copy={copy} g={g} />,
+    fieldScene: (g) => <RadiusField copy={copy} g={g} />,
     fieldColumns: 5,
     posterZoom: 1.2,
     product: s.product!,

@@ -8,6 +8,7 @@ import { Reveal } from "./typography/Reveal";
 import { RoleLadder } from "./typography/RoleLadder";
 import { measureSpecimen, POSTER_WEIGHT, specimenLayout, type SpecimenMetrics } from "./typography/specimenMetrics";
 import { typeTracks } from "./typography/typeAssembly";
+import { posterFit } from "./typography/typeCamera";
 import { AXIS, BEATS, select } from "./typography/typeChoreography";
 import { TYPE_COPY } from "./typography/typeCopy";
 import { CANVAS, col, columnWidth, gridVars, SPECIMEN, type TypeLayout } from "./typography/typeGrid";
@@ -84,6 +85,7 @@ export function TypographyHero({ lang }: { lang: FoundationHeroLang }) {
   const measure = useTypeMeasure(root, frame.layout, lang, Boolean(metrics));
   const css = useMemo(() => (measure && metrics ? compileTimeline(scope, BEATS, typeTracks(measure.geometry, metrics)) : ""), [measure, metrics, scope]);
   const { layout } = frame;
+  const rest = measure && layout === "tall" ? posterFit(measure.geometry) : undefined;
   const size = SPECIMEN[layout].size;
   const box = metrics ? specimenLayout(metrics, size, POSTER_WEIGHT) : null;
   const q = box ? POSTER_EM[layout] / box.height : 1;
@@ -101,7 +103,8 @@ export function TypographyHero({ lang }: { lang: FoundationHeroLang }) {
     <div className={t.board} data-hero-scope={scope} data-layout={layout} data-ready={css ? "" : undefined} inert lang={lang} ref={root} style={style}>
       {css ? <style>{css}</style> : null}
       <div className={t.camera}>
-        <div className={t.world} data-t="world">
+        {/* The still poster (reduced motion) rests on the finale's framing (the whole poster on the tall canvas). */}
+        <div className={t.world} data-t="world" style={rest ? { transform: `translate(${rest.x ?? 0}px, ${rest.y ?? 0}px) scale(${rest.s ?? 1})` } : undefined}>
           <div className={t.poster}>
             <div className={t.tokens}>
               <div className={t.specimenRow} data-t="specimen-row">

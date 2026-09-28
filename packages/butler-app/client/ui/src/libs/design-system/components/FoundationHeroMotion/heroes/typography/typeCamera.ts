@@ -16,6 +16,13 @@ function frameBox(g: TypeGeometry, panel: Panel): Box {
   return grow({ x: box.x, y: top, w: box.w, h: Math.max(...lines.map((line) => line.y + line.h)) + 32 - top });
 }
 
+/** The tall poster, from the canvas top to its lowest component, fitted into the frame. */
+export function posterFit(g: TypeGeometry): Pose {
+  const bottom = Math.max(g.ladder.y + g.ladder.h, ...Object.values(g.panels).map((box) => box.y + box.h)) + 16;
+  const all = { x: 0, y: 0, w: g.canvas.w, h: bottom };
+  return focus(g.canvas, all, Math.min(1, fit(g.canvas, all, 0.97, 1)));
+}
+
 const center = (box: Box) => ({ x: box.x + box.w / 2, y: box.y + box.h / 2 });
 
 /** The list close-up's framing of one row (the list's type filling the frame). */
@@ -60,7 +67,7 @@ export function cameras(g: TypeGeometry) {
   const stage = PANELS.map((panel) => {
     const box = frameBox(g, panel);
     const moved = { ...box, x: box.x + shift[panel].x, y: box.y + shift[panel].y };
-    return focus(canvas, moved, fit(canvas, moved, tall ? 1 : 0.8, cap));
+    return focus(canvas, moved, fit(canvas, moved, tall ? 0.9 : 0.8, cap));
   });
   // Close enough that the list's type fills the frame; cropping at the edges is fine.
   const close = Math.min(2.4, (canvas.w * 1.1) / g.ladder.w);
@@ -68,8 +75,8 @@ export function cameras(g: TypeGeometry) {
     shift,
     stage,
     start,
-    /** The poster, at rest. */
-    rest: { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, s: 1 } as Pose,
+    /** The poster, at rest; on the tall canvas the whole poster fitted into the portrait frame (nothing cropped). */
+    rest: tall ? posterFit(g) : ({ x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, s: 1 } as Pose),
     /** The opening, flat, in its cell. */
     open: focus(canvas, moved({ x: 0, y: 0, w: canvas.w, h: canvas.h }), 1),
     /**

@@ -25,6 +25,9 @@ export function measureChapter(root: HTMLElement, layout: HeroLayout, spec: Chap
   const field = root.querySelector<HTMLElement>('[data-t="field-mover"]');
   if (!world || !field || world.offsetWidth === 0) return null;
   const canvas = CANVAS[layout];
+  // With a tall field scene, the scene (a prelude region) is what the prelude measures; the poster field only shows.
+  const scene = layout === "tall" && Boolean(spec.fieldScene);
+  const nodes = (selector: string) => [...root.querySelectorAll<HTMLElement>(selector)].filter((node) => !(scene && node.closest('[data-t="field-mover"]')));
   const origin = world.getBoundingClientRect();
   const ratio = origin.width / canvas.w;
   // Overlays inside the poster are positioned in its own (zoomed) px.
@@ -44,13 +47,13 @@ export function measureChapter(root: HTMLElement, layout: HeroLayout, spec: Chap
   return {
     layout,
     canvas,
-    boxes: Object.fromEntries([...root.querySelectorAll<HTMLElement>("[data-m]")].map((node) => [node.dataset.m!, relBox(node.getBoundingClientRect(), origin, ratio)])),
-    boxCell: Object.fromEntries([...root.querySelectorAll<HTMLElement>("[data-m]")].flatMap((node) => {
+    boxes: Object.fromEntries(nodes("[data-m]").map((node) => [node.dataset.m!, relBox(node.getBoundingClientRect(), origin, ratio)])),
+    boxCell: Object.fromEntries(nodes("[data-m]").flatMap((node) => {
       const cell = node.closest<HTMLElement>("[data-cell]")?.dataset.cell ?? (node.closest('[data-t="field-mover"]') ? "field" : undefined);
       return cell ? [[node.dataset.m!, cell]] : [];
     })),
     // A scope inside the poster (the field) is measured in the poster's own px, like the panels.
-    scopes: Object.fromEntries([...root.querySelectorAll<HTMLElement>("[data-mark-scope]")].map((node) => [
+    scopes: Object.fromEntries(nodes("[data-mark-scope]").map((node) => [
       node.dataset.markScope!, measureMarks(node, node.closest('[data-t="field-mover"]') ? local : ratio, root),
     ])),
     lines: Object.fromEntries([...root.querySelectorAll<HTMLElement>("[data-roller]")].map((node) => [node.dataset.roller!, lineOf(node)])),

@@ -113,6 +113,12 @@ export interface ChapterSpec {
   prelude: Prelude;
   /** The chapter's token field in the poster (a swatch grid, a scale…), beside the product; given the geometry once measured, for guides. */
   field: ReactNode | ((g: Geometry | null) => ReactNode);
+  /**
+   * The field's prelude scene on the tall canvas, when it differs from the
+   * poster's compact field (rows stacked to fill the portrait frame): shown in
+   * the field's cell, then condensing into the poster field as the builds begin.
+   */
+  fieldScene?: ReactNode | ((g: Geometry | null) => ReactNode);
   /** The field sits right of the product (wide canvas). */
   fieldRight?: boolean;
   /** Columns of the field on the wide canvas (default 4). */

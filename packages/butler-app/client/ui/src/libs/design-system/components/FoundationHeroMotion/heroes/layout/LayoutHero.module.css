@@ -509,7 +509,14 @@
   inline-size: calc(var(--space-4xl) * 3);
 }
 
-[data-layout="tall"] .page {
+[data-layout="tall"] [data-cell] .page {
   inline-size: calc(var(--space-4xl) * 9);
   block-size: calc(var(--space-4xl) * 9);
+}
+
+/* Tall poster: a smaller page frame over the legend, so the field and the
+   screens fit the portrait frame together. */
+[data-layout="tall"] [data-t="field-mover"] .page {
+  inline-size: calc(var(--space-4xl) * 7);
+  block-size: calc(var(--space-4xl) * 4);
 }

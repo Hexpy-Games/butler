@@ -18,6 +18,7 @@ function spec(copy: LayoutCopy): ChapterSpec {
       regions: { intro: <Intro lead={copy.lead} title={copy.title} />, resize: <LayoutResize copy={copy} /> },
     },
     field: <LayoutField />,
+    fieldScene: <LayoutField />,
     fieldColumns: 4,
     // Whole screens: the poster is laid out smaller so the shells fit beside the field (and down the portrait column).
     posterZoom: 0.75,

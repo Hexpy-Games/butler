@@ -15,5 +15,5 @@ export type TypeLayout = HeroLayout;
 /** Specimen type size (px) and the columns it spans in Act I. */
 export const SPECIMEN: Record<TypeLayout, { size: number; span: number }> = {
   wide: { size: 300, span: 8 },
-  tall: { size: 150, span: 4 },
+  tall: { size: 170, span: 4 },
 };

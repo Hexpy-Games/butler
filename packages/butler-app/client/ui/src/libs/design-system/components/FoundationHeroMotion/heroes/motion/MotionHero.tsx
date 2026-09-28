@@ -18,6 +18,7 @@ function spec(copy: MotionCopy): ChapterSpec {
       regions: { intro: <Intro lead={copy.lead} title={copy.title} />, reduce: <ReduceDemo copy={copy} /> },
     },
     field: <MotionField />,
+    fieldScene: <MotionField />,
     fieldColumns: 5,
     posterZoom: 1.2,
     product: s.product!,

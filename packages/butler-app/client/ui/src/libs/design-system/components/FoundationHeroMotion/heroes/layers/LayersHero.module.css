@@ -339,7 +339,7 @@
   gap: var(--space-xl) var(--grid-gutter);
 }
 
-[data-layout="tall"] .sheets {
+[data-layout="tall"] [data-cell] .sheets {
   --step-x: var(--space-md);
   --step-y: calc(var(--space-4xl) * 1.5);
   --sheet-w: calc(var(--space-4xl) * 4.5);
@@ -366,4 +366,31 @@
   grid-template-columns: minmax(0, 1fr);
   align-content: start;
   row-gap: var(--space-lg);
+}
+
+/* Tall poster: the z tokens as a compact grid of chips (value and name),
+   so the field and the components fit the portrait frame together. */
+[data-layout="tall"] [data-t="field-mover"] .sheets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+  inline-size: auto;
+  block-size: auto;
+}
+
+[data-layout="tall"] [data-t="field-mover"] .sheet {
+  position: static;
+  inline-size: auto;
+  block-size: auto;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  box-shadow: none;
+}
+
+[data-layout="tall"] [data-t="field-mover"] .sheetNum {
+  font-size: var(--typo-h5-size);
+}
+
+[data-layout="tall"] [data-t="field-mover"] .sheetName {
+  white-space: nowrap;
 }

@@ -18,6 +18,7 @@ function spec(copy: SpacingCopy): ChapterSpec {
       regions: { intro: <Intro lead={copy.lead} title={copy.title} />, wire: (g) => <SpacingWire copy={copy} g={g} /> },
     },
     field: <SpacingField />,
+    fieldScene: <SpacingField />,
     fieldColumns: 4,
     posterZoom: 1.2,
     product: s.product!,

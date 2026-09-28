@@ -129,7 +129,8 @@ export function specimenTracks(g: TypeGeometry, m: SpecimenMetrics): Track[] {
     { select: select("fill-g"), keys: fillKeys(shiftG, 0.5) },
     {
       select: select("control"),
-      keys: [{ at: 0, ...control, x: control.x + 16, o: 0 }, { at: BACK[0], o: 0 }, { at: BACK[1], x: control.x, o: 1, ease: "decelerate" }, { at: AWAY[0], o: 1 }, { at: AWAY[1], o: 0, ease: "accelerate" }],
+      // On the tall canvas the control stands under the specimen from the start, so the portrait frame is full.
+      keys: [{ at: 0, ...control, x: control.x + 16, o: 0 }, { at: tall ? 0.6 : BACK[0], o: 0 }, { at: tall ? 1.6 : BACK[1], x: control.x, o: 1, ease: "decelerate" }, { at: AWAY[0], o: 1 }, { at: AWAY[1], o: 0, ease: "accelerate" }],
     },
     { select: select("thumb"), keys: byWeight((w) => ({ x: ((w - AXIS.min) / (AXIS.max - AXIS.min)) * g.controlTrack })) },
     { select: select("read-100"), keys: byWeight((w) => ({ y: (6 - Math.round(w / 100)) * g.readoutLine })) },

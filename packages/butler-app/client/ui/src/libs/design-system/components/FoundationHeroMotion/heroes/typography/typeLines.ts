@@ -48,7 +48,7 @@ export const LINES: LineSpec[] = [
 ];
 
 /** Width of the badge gutter left of a component while it builds (badge column plus a grid gutter), in canvas px. */
-export const BADGE_GUTTER = { wide: 320, tall: 150 } as const;
+export const BADGE_GUTTER = { wide: 320, tall: 215 } as const;
 
 /**
  * Non-text parts of each component (controls, icons, a second card) and the

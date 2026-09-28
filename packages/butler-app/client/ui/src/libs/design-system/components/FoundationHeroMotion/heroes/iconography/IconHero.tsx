@@ -18,6 +18,7 @@ function spec(copy: IconCopy): ChapterSpec {
       regions: { intro: <Intro lead={copy.lead} title={copy.title} />, lab: <IconLab copy={copy} /> },
     },
     field: <IconField copy={copy} />,
+    fieldScene: <IconField copy={copy} />,
     fieldColumns: 5,
     posterZoom: 1.2,
     product: s.product!,
