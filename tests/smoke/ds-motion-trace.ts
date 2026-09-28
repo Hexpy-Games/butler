@@ -633,6 +633,7 @@ async function newContext(browser: Browser, video: string | null): Promise<Brows
     ...(video ? { recordVideo: { dir: video, size: viewport } } : {}),
   });
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await server.signIn(context);
   return context;
 }
 
@@ -827,6 +828,7 @@ const server = await createNativeAppServer({ uiRoot });
 const browser = await chromium.launch({ headless: true });
 try {
   const lookup = await browser.newPage();
+  await server.signIn(lookup);
   const ids = await itemIds(lookup, server.url);
   await lookup.close();
   const results = await measure(browser, server.url, ids);

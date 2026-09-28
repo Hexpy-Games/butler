@@ -1,24 +1,45 @@
-import { expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "fs";
-import { homedir, tmpdir } from "os";
+import { tmpdir } from "os";
 import { basename, join } from "path";
 import { spawnSync } from "child_process";
 
 const root = process.cwd();
 const cliPath = join(root, "packages", "project-ledger", "bin", "project-ledger");
-const butlerData = join(homedir(), ".butler");
+// The Butler checkout hosts a fixture ledger in a temporary data home. The test
+// must never read or rewrite the operator's live ~/.butler ledger.
+const butlerData = mkdtempSync(join(tmpdir(), "project-ledger-butler-dogfood-"));
 const butlerLedgerRoot = join(butlerData, "project-ledger", "projects", "butler");
+afterAll(() => rmSync(butlerData, { recursive: true, force: true }));
 
-function runLedgerJson(args: string[]): any {
+function runLedgerJson(args: string[], input?: string): any {
   const result = spawnSync(process.execPath, [cliPath, ...args, "--project", root, "--json"], {
     encoding: "utf8",
     env: { ...process.env, BUTLER_DATA: butlerData },
+    input,
     maxBuffer: 20 * 1024 * 1024,
   });
   expect(result.stderr).toBe("");
   expect(result.status).toBe(0);
   return JSON.parse(result.stdout);
 }
+
+beforeAll(() => {
+  runLedgerJson(["init", "--id", "butler", "--name", "Butler"]);
+  runLedgerJson(
+    ["record", "create", "--kind", "spec", "--id", "SPEC-BUTLER-DOGFOOD", "--title", "Butler dogfood fixture", "--from", "-"],
+    "# Butler dogfood fixture\n\nFixture work for the bounded-view round trip.\n",
+  );
+  for (let index = 1; index <= 6; index += 1) {
+    runLedgerJson([
+      "work", "create",
+      "--id", `W-BUTLER-DOGFOOD-${index}`,
+      "--title", `Butler dogfood work ${index}`,
+      "--spec", "SPEC-BUTLER-DOGFOOD",
+      "--acceptance", `Fixture work ${index} renders into the bounded views`,
+    ]);
+  }
+}, 30_000);
 
 function tempProject(): string {
   return mkdtempSync(join(tmpdir(), "project-ledger-sandy-dogfood-"));
@@ -237,4 +258,4 @@ test("Sandy-shaped closeout uses valid CLI lifecycle transitions and sequential 
   } finally {
     rmSync(project, { recursive: true, force: true });
   }
-});
+}, 30_000);

@@ -199,6 +199,7 @@ const server = await createNativeAppServer({ uiRoot });
 const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await server.signIn(page);
   await checkWorkActivity(page, server.url);
   await checkInlineDisclosure(page, server.url);
   await checkCurrentStatusLine(page, server.url);

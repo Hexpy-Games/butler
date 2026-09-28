@@ -151,6 +151,13 @@ impl LocalCredentials {
     }
 }
 
+/// The token in the data folder's own token file, when it is usable, whatever
+/// `BUTLER_APP_LOCAL_AUTH_FILE` names: the token of an agent started without
+/// that override. Only read, never created.
+pub(crate) fn data_folder_token(data_root: &Path) -> Option<String> {
+    usable_token(&fs::read(data_root.join(LOCAL_AUTH_FILE)).ok()?)
+}
+
 /// The token file's fields the agent reads; the App writes more.
 #[derive(Deserialize)]
 struct StoredToken {

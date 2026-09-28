@@ -224,11 +224,52 @@ function electronLaunchCommand(): ElectronLaunch {
   };
 }
 
-async function waitForHttp(url: string, timeoutMs = 15_000): Promise<void> {
+/**
+ * The gateway's local bearer token: the agent keeps it in the data folder
+ * (`BUTLER_APP_LOCAL_AUTH_FILE` overrides), and Electron reads the same file.
+ */
+function localAuthHeaders(): Record<string, string> {
+  const file =
+    process.env.BUTLER_APP_LOCAL_AUTH_FILE?.trim() ||
+    resolve(dataRoot, "app/runtime/auth/local-agent-auth.json");
+  try {
+    const token = (JSON.parse(readFileSync(file, "utf8")) as { token?: unknown }).token;
+    return typeof token === "string" && token ? { authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * The renderer runs on the Vite origin, so the gateway must list it in
+ * `BUTLER_APP_DEV_ORIGIN` (set when the gateway starts); otherwise every
+ * renderer request is refused with 403 origin_not_allowed.
+ */
+async function assertGatewayAllowsDevOrigin(): Promise<void> {
+  const devOrigin = new URL(uiUrl).origin;
+  const response = await fetch(new URL("/health", serverUrl), {
+    headers: { ...localAuthHeaders(), origin: devOrigin },
+  });
+  if (response.ok) return;
+  const body = await response.text().catch(() => "");
+  if (response.status === 403 && body.includes("origin_not_allowed")) {
+    throw new Error(
+      `The gateway at ${serverUrl} does not allow the dev renderer origin ${devOrigin}.\n` +
+        `Start the gateway with BUTLER_APP_DEV_ORIGIN=${devOrigin} (comma-separate several origins).`,
+    );
+  }
+  throw new Error(`Gateway check with origin ${devOrigin} failed: HTTP ${response.status}`);
+}
+
+async function waitForHttp(
+  url: string,
+  timeoutMs = 15_000,
+  headers: () => Record<string, string> = () => ({}),
+): Promise<void> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { headers: headers() });
       if (response.ok) return;
     } catch {
       // Retry until the dev server is ready.
@@ -267,7 +308,8 @@ const vite = spawnManaged("npm", [
 
 try {
   await waitForHttp(uiUrl);
-  await waitForHttp(new URL("/health", serverUrl).toString());
+  await waitForHttp(new URL("/health", serverUrl).toString(), 15_000, localAuthHeaders);
+  await assertGatewayAllowsDevOrigin();
   const electronLaunch = electronLaunchCommand();
   const electron = spawnManaged(electronLaunch.command, electronLaunch.args, {
     ...process.env,

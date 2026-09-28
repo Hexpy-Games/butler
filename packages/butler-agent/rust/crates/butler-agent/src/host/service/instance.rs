@@ -22,6 +22,8 @@ mod gateway_state;
 mod probe;
 mod record;
 mod restart;
+mod stop_intent;
+mod stopping;
 pub(crate) use gateway_state::mark_gateway_state;
 pub(crate) use probe::instance_lock_is_held_read_only;
 use record::{
@@ -29,6 +31,11 @@ use record::{
     write_record,
 };
 pub(crate) use restart::RestartIdentity;
+pub(crate) use stop_intent::{
+    StopIntent, StopReason, StopRequest, StopRequester, clear_stop_intent, stop_announced_for,
+    withdraw_stop_intent, write_stop_intent,
+};
+pub(crate) use stopping::{StoppingFrom, mark_stopping, revert_stopping};
 
 #[derive(Clone, Deserialize, Serialize)]
 pub(crate) struct InstanceRecord {
@@ -46,6 +53,12 @@ pub(crate) struct InstanceRecord {
     pub(crate) control_endpoint: Option<String>,
     #[serde(default)]
     pub(crate) control_token: Option<String>,
+    /// The Butler App supervises this instance through its foreground lease.
+    /// On a restart the App, not the controller, starts the replacement, with
+    /// the App's environment (gateway port, local auth, folder-selection
+    /// secret, lease). Absent in records written before this field existed.
+    #[serde(default)]
+    pub(crate) app_supervised: bool,
 }
 
 pub(crate) struct InstanceGuard {
@@ -77,10 +90,13 @@ impl AdmissionLock {
 }
 
 impl InstanceGuard {
+    /// Takes the DATA lock and publishes a `starting` record for this process;
+    /// `app_supervised` says whether the App holds its foreground lease.
     pub(crate) fn acquire(
         data_root: &Path,
         executable: &Path,
         installation: &ResolvedInstallation,
+        app_supervised: bool,
     ) -> Result<Self, crate::host::HostError> {
         validate_write_destinations(data_root, installation)?;
         let lock_path = instance_lock_path(data_root);
@@ -127,6 +143,7 @@ impl InstanceGuard {
             ready_at: None,
             control_endpoint: None,
             control_token: None,
+            app_supervised,
         };
         let record_update_lock_path = record_update_lock_path(data_root);
         let _record_update_lock = acquire_record_update_lock(&record_update_lock_path)?;
@@ -166,6 +183,11 @@ impl InstanceGuard {
         if current.state != "starting" {
             return Err("native_service_instance_ambiguous: invalid startup transition".into());
         }
+        // A new instance reaching ready ends any earlier stop or restart intent.
+        clear_stop_intent(data_root).map_err(|source| {
+            crate::host::HostError::new("native_service_instance_state_unavailable")
+                .with_source(source)
+        })?;
         current.state = "ready".into();
         current.app_enabled = app_enabled;
         current.app_endpoint = app_endpoint;
@@ -203,6 +225,11 @@ impl InstanceGuard {
 
     pub(crate) fn nonce(&self) -> &str {
         &self.record.nonce
+    }
+
+    /// Whether the App supervises this instance through its foreground lease.
+    pub(crate) fn app_supervised(&self) -> bool {
+        self.record.app_supervised
     }
 
     pub(crate) fn restart_identity(&self) -> RestartIdentity {
@@ -257,6 +284,12 @@ pub(crate) fn instance_is_locked(data_root: &Path) -> Result<bool, crate::host::
     }
 }
 
+/// Whether the process `record` names has ended: no process has its PID, or
+/// the one that has it started at another time (the PID was reused).
+pub(crate) fn record_process_gone(record: &InstanceRecord) -> Result<bool, crate::host::HostError> {
+    Ok(process_start_identity(record.pid)?.is_none_or(|start| start != record.process_start))
+}
+
 /// Returns true only when the current process still matches the persisted OS identity.
 pub(crate) fn process_matches(record: &InstanceRecord) -> Result<bool, crate::host::HostError> {
     if record.schema != INSTANCE_SCHEMA || record.pid == 0 || record.executable.is_empty() {
@@ -269,30 +302,6 @@ pub(crate) fn process_matches(record: &InstanceRecord) -> Result<bool, crate::ho
         return Ok(false);
     };
     Ok(start == record.process_start && executable_matches(&record.executable, &executable))
-}
-
-pub(crate) fn mark_stopping(
-    data_root: &Path,
-    nonce: &str,
-    installation: &ResolvedInstallation,
-) -> Result<(), crate::host::HostError> {
-    validate_write_destinations(data_root, installation)?;
-    let path = instance_record_path(data_root);
-    let _record_update_lock = acquire_record_update_lock(&record_update_lock_path(data_root))?;
-    let mut record = read_record_at(&path)?.ok_or_else(|| {
-        "native_service_instance_ambiguous: instance record is missing".to_owned()
-    })?;
-    if record.nonce != nonce {
-        return Err("native_service_instance_changed".into());
-    }
-    if record.state == "stopping" {
-        return Ok(());
-    }
-    if !matches!(record.state.as_str(), "starting" | "ready") {
-        return Err("native_service_instance_ambiguous: invalid stop transition".into());
-    }
-    record.state = "stopping".into();
-    write_record(&path, &record)
 }
 
 pub(crate) fn validate_write_destinations(

@@ -2,12 +2,12 @@ use std::collections::HashSet;
 
 use serde_json::{Map, Value};
 
-use super::{AdmissionModelCatalogSnapshot, AdmissionModelMetadata, js_truthy, object};
+use super::{AdmissionModelCatalogSnapshot, AdmissionModelMetadata, js_truthy};
 use crate::btcc::BtccCode;
 use crate::btcc::identity::digest;
 use crate::btcc::{
     AdmittedModelSelection, BtccError, CommandModelSelection, ReasoningEffort, RouteCandidate,
-    RouteIdentity, RouteState, VerifiedExecutionControls,
+    RouteIdentity, RouteState, VerifiedExecutionControls, stored_binding_access_mode,
 };
 use crate::workspace::StoredSessionBinding;
 use butler_core::json::stringify;
@@ -84,7 +84,10 @@ pub(super) fn admit(
             controls.catalog_generation.clone().into(),
         );
     } else {
-        admitted_controls.insert("accessMode".into(), binding_access_mode(binding).into());
+        admitted_controls.insert(
+            "accessMode".into(),
+            serde_json::to_value(stored_binding_access_mode(binding)).map_err(json_error)?,
+        );
         let plan = binding
             .metadata
             .as_ref()
@@ -250,20 +253,6 @@ fn reasoning(value: &str) -> Result<ReasoningEffort, BtccError> {
             BtccCode::AdmittedReasoningInvalid,
             format!("BTCC admitted reasoning effort is invalid: {value}"),
         )),
-    }
-}
-fn binding_access_mode(binding: &StoredSessionBinding) -> &'static str {
-    let metadata = binding.metadata.as_ref();
-    let runtime = object(metadata.and_then(|v| v.get("runtimePolicy")));
-    match runtime
-        .get("accessMode")
-        .filter(|value| !value.is_null())
-        .or_else(|| metadata.and_then(|v| v.get("accessMode")))
-        .and_then(Value::as_str)
-    {
-        Some("full_access") => "full_access",
-        Some("ask_first") => "ask_first",
-        _ => "read_only",
     }
 }
 fn required_text<'a>(value: &'a str, label: &str) -> Result<&'a str, BtccError> {

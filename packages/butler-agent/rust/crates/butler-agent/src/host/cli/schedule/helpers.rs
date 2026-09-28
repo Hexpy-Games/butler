@@ -35,11 +35,11 @@ pub(super) fn valid_id(id: &str) -> bool {
 
 pub(super) fn command_name(values: &[String]) -> &'static str {
     match values.get(1).map(String::as_str) {
-        Some("list") => "butler automation list",
-        Some("show") => "butler automation show",
-        Some("run") => "butler automation run",
-        Some("delete") => "butler automation delete",
-        _ => "butler automation",
+        Some("list") => "butler schedule list",
+        Some("show") => "butler schedule show",
+        Some("run") => "butler schedule run",
+        Some("delete") => "butler schedule delete",
+        _ => "butler schedule",
     }
 }
 

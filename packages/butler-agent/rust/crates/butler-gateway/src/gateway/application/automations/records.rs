@@ -1,9 +1,10 @@
+use butler_turn::btcc::AccessMode;
 use rusqlite::{Connection, OptionalExtension, Row};
 
 use super::contracts::{AutomationRunSummary, AutomationSummary};
 use crate::gateway::application::storage::{AppStorageCode, AppStorageError};
 
-const COLUMNS: &str = "a.id,a.title,a.prompt_body,a.target_kind,a.target_session_id,a.interval_seconds,a.state,a.next_run_at,a.last_run_at,a.last_run_state,a.last_safe_error_code,a.run_count,a.consecutive_failure_count,a.created_at,a.updated_at,COALESCE(c.title,'Unavailable session')";
+const COLUMNS: &str = "a.id,a.title,a.prompt_body,a.target_kind,a.target_session_id,a.interval_seconds,a.state,a.next_run_at,a.last_run_at,a.last_run_state,a.last_safe_error_code,a.run_count,a.consecutive_failure_count,a.created_at,a.updated_at,COALESCE(c.title,'Unavailable session'),a.access_mode";
 
 #[derive(Clone)]
 pub(super) struct AutomationRow {
@@ -23,6 +24,7 @@ pub(super) struct AutomationRow {
     pub created: String,
     pub updated: String,
     pub target_label: String,
+    pub access: AccessMode,
 }
 
 pub(super) struct QueuedRunRow {
@@ -138,6 +140,7 @@ pub(super) fn summary(value: AutomationRow) -> AutomationSummary {
         target_label: value.target_label,
         interval_seconds: value.interval,
         interval_label: interval_label(value.interval),
+        access_mode: value.access,
         next_run_at: value.next,
         last_run_at: value.last,
         last_run_state: value.last_state,
@@ -150,7 +153,7 @@ pub(super) fn summary(value: AutomationRow) -> AutomationSummary {
 }
 
 pub(super) fn not_found() -> AppStorageError {
-    AppStorageError::new(AppStorageCode::AutomationNotFound, "Automation not found.")
+    AppStorageError::new(AppStorageCode::AutomationNotFound, "Schedule not found.")
 }
 
 fn row(item: &Row<'_>) -> rusqlite::Result<AutomationRow> {
@@ -174,6 +177,14 @@ fn row_at(item: &Row<'_>, at: usize) -> rusqlite::Result<AutomationRow> {
         created: item.get(at + 13)?,
         updated: item.get(at + 14)?,
         target_label: item.get(at + 15)?,
+        access: access_at(item, at + 16)?,
+    })
+}
+/// The stored access mode in column `at`; migration fills every row.
+fn access_at(item: &Row<'_>, at: usize) -> rusqlite::Result<AccessMode> {
+    let stored: String = item.get(at)?;
+    serde_json::from_value(serde_json::Value::String(stored)).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(at, rusqlite::types::Type::Text, Box::new(error))
     })
 }
 fn run_row(item: &Row<'_>) -> rusqlite::Result<AutomationRunSummary> {

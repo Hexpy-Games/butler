@@ -68,17 +68,30 @@ function sectionHeaders(markup: string): Header[] {
   }));
 }
 
+/** The settings pages of one locale, as SettingsView lists them. */
+function settingsPages(locale: "en-US" | "ko-KR") {
+  return createSettingsSections(getAppCopy(locale).settings, true);
+}
+
+// One test per page and locale: each renders a single page, so a slow
+// machine cannot push a whole-catalog loop past the per-test timeout.
+const pageIds = settingsPages("en-US").map((page) => page.id);
+
+test("every locale lists the same settings pages", () => {
+  expect(pageIds.length).toBeGreaterThan(10);
+  expect(settingsPages("ko-KR").map((page) => page.id)).toEqual(pageIds);
+});
+
 /**
  * Every settings page, as SettingsView composes it (the page title and
  * description in the header, the page content in the shell), in both app
  * locales: no section header may repeat the page title or description.
  */
 for (const [locale, language] of [["en-US", "en"], ["ko-KR", "ko"]] as const) {
-  test(`no settings section header repeats its page title or description (${locale})`, async () => {
-    setAppCopyLanguage(language);
-    const sections = createSettingsSections(getAppCopy(locale).settings, true);
-    expect(sections.length).toBeGreaterThan(10);
-    for (const page of sections) {
+  for (const pageId of pageIds) {
+    test(`${pageId}: no section header repeats the page title or description (${locale})`, async () => {
+      setAppCopyLanguage(language);
+      const page = settingsPages(locale).find((item) => item.id === pageId)!;
       const detail = <SettingsDetailContent activeSection={page.id} developerModeEnabled />;
       const composed = await renderMarkup(
         <SettingsShell sidebar={null} pageTitle={page.label} pageDescription={page.description} detail={detail} />,
@@ -98,8 +111,8 @@ for (const [locale, language] of [["en-US", "en"], ["ko-KR", "ko"]] as const) {
           ).toBe(false);
         }
       }
-    }
-  });
+    });
+  }
 }
 
 test("single-list pages render one section without a title that restates the page", async () => {
@@ -117,38 +130,42 @@ test("single-list pages render one section without a title that restates the pag
  * sections in order (optional ones may be absent), every settings field sits
  * inside a section, and every field renders in the one section declaring it.
  */
-for (const [locale, language] of [["en-US", "en"], ["ko-KR", "ko"]] as const) {
-  test(`settings pages match settingsPageSchema (${locale})`, async () => {
-    setAppCopyLanguage(language);
-    const declared = new Map<string, string>();
-    for (const [page, sections] of Object.entries(settingsPageSchema)) {
-      for (const section of sections) {
-        for (const field of section.fields) {
-          const key = `${page}:${field}`;
-          expect(declared.has(key), `${key} declared twice`).toBe(false);
-          declared.set(key, section.id);
-        }
+test("settingsPageSchema declares every settings field once", () => {
+  const seen = new Set<string>();
+  for (const [page, sections] of Object.entries(settingsPageSchema)) {
+    for (const section of sections) {
+      for (const field of section.fields) {
+        const key = `${page}:${field}`;
+        expect(seen.has(key), `${key} declared twice`).toBe(false);
+        seen.add(key);
       }
     }
-    for (const page of createSettingsSections(getAppCopy(locale).settings, true)) {
-      const schema = settingsPageSchema[page.id];
-      const markup = await renderMarkup(<SettingsDetailContent activeSection={page.id} developerModeEnabled />);
+  }
+});
+
+for (const [locale, language] of [["en-US", "en"], ["ko-KR", "ko"]] as const) {
+  for (const pageId of pageIds) {
+    test(`${pageId}: page matches settingsPageSchema (${locale})`, async () => {
+      setAppCopyLanguage(language);
+      const schema = settingsPageSchema[pageId];
+      const declared = new Map(schema.flatMap((section) => section.fields.map((field) => [field, section.id] as const)));
+      const markup = await renderMarkup(<SettingsDetailContent activeSection={pageId} developerModeEnabled />);
       const document = new JSDOM(markup).window.document;
       const rendered = Array.from(document.querySelectorAll("[data-settings-section-id]"))
         .map((section) => section.getAttribute("data-settings-section-id"));
-      expect(rendered, page.id).toEqual(schema.map((section) => section.id).filter((id) => rendered.includes(id)));
-      expect(rendered, page.id).toEqual(expect.arrayContaining(schema.filter((section) => !section.optional).map((section) => section.id)));
+      expect(rendered, pageId).toEqual(schema.map((section) => section.id).filter((id) => rendered.includes(id)));
+      expect(rendered, pageId).toEqual(expect.arrayContaining(schema.filter((section) => !section.optional).map((section) => section.id)));
       for (const section of document.querySelectorAll("[data-settings-section-id]")) {
         const declaredKind = schema.find((item) => item.id === section.getAttribute("data-settings-section-id"))?.kind;
-        expect(section.getAttribute("data-kind"), `${page.id} kind`).toBe(declaredKind ?? "missing");
+        expect(section.getAttribute("data-kind"), `${pageId} kind`).toBe(declaredKind ?? "missing");
       }
       for (const field of document.querySelectorAll("[data-settings-field], [data-setting-id]")) {
         const owner = field.closest("[data-settings-section-id]");
-        expect(owner, `${page.id}: a settings field outside a section`).not.toBeNull();
+        expect(owner, `${pageId}: a settings field outside a section`).not.toBeNull();
         const settingId = field.getAttribute("data-setting-id");
-        expect(settingId, `${page.id}: a settings field without a setting id`).toBeTruthy();
-        expect(declared.get(`${page.id}:${settingId}`), `${page.id}:${settingId}`).toBe(owner?.getAttribute("data-settings-section-id") ?? "none");
+        expect(settingId, `${pageId}: a settings field without a setting id`).toBeTruthy();
+        expect(declared.get(settingId!), `${pageId}:${settingId}`).toBe(owner?.getAttribute("data-settings-section-id") ?? "none");
       }
-    }
-  });
+    });
+  }
 }

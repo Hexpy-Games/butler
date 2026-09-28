@@ -87,6 +87,7 @@ async function assertInspectorContentStartsAtTop(page: Page): Promise<void> {
 const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await server.signIn(page);
   await openApp(page);
   await assertMediumDrawerKeepsWorkspaceVisible(page);
   await assertInspectorContentStartsAtTop(page);

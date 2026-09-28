@@ -3,6 +3,8 @@
 mod image_admission;
 mod internal_subsession;
 mod policy;
+#[cfg(test)]
+mod tests;
 
 use std::path::Path;
 
