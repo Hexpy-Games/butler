@@ -295,6 +295,7 @@ export const enUsCopy: AppCopy = {
     fileTitle: (action, target) => `${action}: ${target}`, conceptionSummary: text => text ? `Confirmed the request goal and scope: ${text}` : "Confirmed the request goal and scope.", workInProgress: text => `Working on ${text}.`, toolsSummary: text => text ? `Checking the required information with ${text}.` : "Working with the required tools.",
   },
   serverErrors: {
+    credential_in_use_by_default: "The default model uses this key. Change the default model first.", credential_in_use: "Models use this key. Delete them with the key.", credential_not_found: "This key was already deleted. Refresh the list.",
     space_changed: "The list changed. Refresh it and try again.", space_invalid_group: "Select two different conversations.", space_invalid_scope: "Group conversations within the same project.", space_invalid_pin: "Pin a conversation or project.", space_undo_expired: "Other changes prevent undoing this action.", space_invalid_title: "Enter a group name between 1 and 120 characters.",
     branch_source_required: "A source conversation is required.", branch_source_invalid: "Select a response from this conversation.", branch_source_unavailable: "No completed response is available to branch.", branch_cancelled: "Conversation creation was cancelled.", branch_identity_conflict: "The creation request changed.", branch_request_invalid: "Check the new conversation title and source.",
     session_relocating: "The conversation is moving. Try again shortly.", relocation_identity_conflict: "The move request changed.", relocation_aborted: "The move did not finish. Check its status.", session_context_changed: "The conversation environment changed; the move could not finish.", session_not_movable: "This conversation cannot be moved.", space_invalid_target: "Select a different destination.", project_unavailable: "Select an available project.", same_session_context: "Use list organization to move within the same project.", model_not_configured: "Configure a model first.", session_context_conflict: "The move environment needs attention. Existing work is preserved.", relocation_preparation_missing: "Move preparation information is unavailable.", session_busy: "Wait for active work and queued messages to finish.",
@@ -1069,7 +1070,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     },
     sectionAliases: {
       general: ["basics", "general settings", "conversation"],
-      models: ["model settings", "workers", "backup models"],
+      models: ["model settings", "workers", "backup models", "api keys"],
       appearance: ["theme", "display", "design"],
       server: ["connection", "project folder"],
       updates: ["upgrade", "new version"],
@@ -1107,6 +1108,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       import: "Import",
       butlerModel: "Butler model",
       backupModels: "Backup models",
+      savedKeys: "API keys",
       memoryCleanup: "Memory cleanup",
       permissions: "Permissions",
       workerProfiles: "Worker profiles",
@@ -1662,6 +1664,32 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
         delete: "Failed to delete model",
         oauthLogin: "Could not start OAuth login.",
       },
+    },
+    savedKeys: {
+      empty: "No saved API keys.",
+      usedBy: (count) => count === 0 ? "Not in use" : count === 1 ? "1 model" : `${count} models`,
+      // Keys are a local file until the build is signed (#243); say Keychain only when the agent reports it.
+      storage: {
+        local: "Stored only on this computer",
+        keychain: "Stored in Keychain",
+        secretService: "Stored in the system keyring",
+        credentialManager: "Stored in Credential Manager",
+      },
+      replace: "Replace",
+      replaceLabel: (name) => `Replace ${name} key`,
+      newKey: "New key",
+      save: "Save",
+      cancel: "Cancel",
+      checking: "Checking",
+      replacedStatus: (name) => `${name} key replaced.`,
+      delete: "Delete",
+      deleteLabel: (name) => `Delete ${name} key`,
+      deleteDefaultHint: "Change the default model first",
+      deleteConfirm: (name) => `Delete the ${name} key?`,
+      deleteConfirmModels: (name, count) =>
+        `Delete the ${name} key? ${count === 1 ? "1 model uses" : `${count} models use`} it and will be removed.`,
+      deletedStatus: (name) => `${name} key deleted.`,
+      errors: { delete: "Failed to delete key" },
     },
   },
   titlebar: {

@@ -26,7 +26,11 @@ pub(super) const SAFE_CONFIG_PATHS: &[&str] = &[
     "webSearch.planning.defaultDepth",
     "metrics.enabled",
     "metrics.retentionDays",
+    "secrets.store",
 ];
+
+/// Paths that name where secrets are kept, not a secret (#217).
+const NOT_SECRET_PATHS: &[&str] = &["secrets", "secrets.store", "store"];
 
 const WEB_SEARCH_PROVIDERS: &[&str] = &[
     "duckduckgo-html",
@@ -55,6 +59,9 @@ pub(super) struct Validation {
 
 pub(super) fn is_secret_path(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();
+    if NOT_SECRET_PATHS.contains(&lower.as_str()) {
+        return false;
+    }
     [
         "token",
         "secret",
@@ -264,6 +271,16 @@ fn validate_remaining(config: &Value, mut result: Validation) -> Validation {
         .is_some_and(|value| !value.is_boolean())
     {
         result.errors.push("metrics.enabled must be boolean".into());
+    }
+    if config.pointer("/secrets/store").is_some_and(|value| {
+        value
+            .as_str()
+            .and_then(butler_models::models::SecretStoreMode::parse)
+            .is_none()
+    }) {
+        result
+            .errors
+            .push("secrets.store must be system or file".into());
     }
     result
 }

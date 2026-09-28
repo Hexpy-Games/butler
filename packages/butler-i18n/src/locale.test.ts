@@ -112,11 +112,16 @@ test("scheduled-run feature uses one term: 예약 작업 (never 자동화) and S
   }
 });
 
-test("API key copy claims only local storage until the Keychain migration lands (#217)", () => {
+test("API key copy claims Keychain storage only where the agent reports it (#217)", () => {
+  // Unsigned builds keep keys in a local file (#243), so first run says only "this computer".
   expect(getAppCopy("en-US").firstRun.keyStored).toBe("Your key stays on this computer.");
   expect(getAppCopy("ko-KR").firstRun.keyStored).toBe("키는 이 컴퓨터에만 저장됩니다.");
+  expect(getAppCopy("en-US").settings.savedKeys.storage.local).toBe("Stored only on this computer");
+  expect(getAppCopy("ko-KR").settings.savedKeys.storage.local).toBe("이 컴퓨터에만 저장");
   for (const locale of ["en-US", "ko-KR"] as const) {
-    const claims = strings(getAppCopy(locale)).filter((text) => /keychain|키체인|secure storage|encrypt|암호화/iu.test(text));
+    const copy = getAppCopy(locale);
+    const reported = new Set(Object.values(copy.settings.savedKeys.storage));
+    const claims = strings(copy).filter((text) => !reported.has(text) && /keychain|키체인|secure storage|encrypt|암호화/iu.test(text));
     expect(claims, locale).toEqual([]);
   }
 });

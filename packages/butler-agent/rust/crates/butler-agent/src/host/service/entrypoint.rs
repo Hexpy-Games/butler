@@ -10,7 +10,7 @@ use butler_runtime::operations::ServiceReadiness;
 use butler_turn::btcc::BtccError;
 
 use crate::host::app::gateway_lifecycle::{
-    ActiveAppEndpoint, AppGatewayLifecycle, GatewayControlServer,
+    ActiveAppEndpoint, AppGatewayLifecycle, GatewayControlServer, local_auth_unconfigured,
 };
 use crate::host::service::foreground_lease::ForegroundLease;
 use crate::host::service::ingress::IngressDispatcher;
@@ -211,6 +211,29 @@ fn report_credential_errors(config: &ServiceConfiguration, logs: ServiceLogMode)
     }
 }
 
+/// Starts the App gateway and logs its outcome: `ready` only when it serves
+/// clients. Without its token it stays up refusing every client
+/// (`local_auth_unconfigured`), which is logged as a problem, not as ready.
+async fn start_app_gateway(
+    gateway: &AppGatewayLifecycle,
+    config: &ServiceConfiguration,
+    endpoint: &ActiveAppEndpoint,
+    logs: ServiceLogMode,
+) {
+    if let Err(error) = gateway.start_initial(&config.app).await {
+        logs.write(&format!("[native-app] unavailable code={}", error.code()));
+    } else if let Some(active) = endpoint.snapshot() {
+        if local_auth_unconfigured(&active.local_auth) {
+            logs.problem(&format!(
+                "[native-app] refusing clients address={} code=local_auth_unconfigured",
+                active.base_url
+            ));
+        } else {
+            logs.write(&format!("[native-app] ready address={}", active.base_url));
+        }
+    }
+}
+
 /// Self-repair of the user's `butler` command; never blocks the service.
 fn repair_cli_launcher(config: &ServiceConfiguration, logs: ServiceLogMode) {
     use crate::host::service::cli_launcher::{LauncherRepair, repair};
@@ -304,11 +327,7 @@ async fn serve(
         app_endpoint.clone(),
         instance.nonce().to_owned(),
     ));
-    if let Err(error) = gateway.start_initial(&config.app).await {
-        logs.write(&format!("[native-app] unavailable code={}", error.code()));
-    } else if let Some(active) = app_endpoint.snapshot() {
-        logs.write(&format!("[native-app] ready address={}", active.base_url));
-    }
+    start_app_gateway(&gateway, config, &app_endpoint, logs).await;
     let control = match GatewayControlServer::bind(
         config.data_root.clone(),
         config.installation.clone(),

@@ -49,7 +49,7 @@ fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
         wire_model: "gpt-5.5".into(),
         endpoint: Url::parse("https://api.openai.com/v1/responses").unwrap(),
         api_shape: None,
-        auth: ProviderAuth::ApiKey("test-only".into()),
+        auth: ProviderAuth::ApiKey(String::from("test-only").into()),
         policy: ProviderRoundPolicy {
             total: Duration::from_secs(1),
             idle: None,
@@ -200,7 +200,7 @@ pub(super) fn carrier_config(
         wire_model: wire_model.into(),
         endpoint: Url::parse("https://provider.invalid/v1").unwrap(),
         api_shape: None,
-        auth: ProviderAuth::ApiKey("test-only".into()),
+        auth: ProviderAuth::ApiKey(String::from("test-only").into()),
         policy: ProviderRoundPolicy {
             total: Duration::from_secs(1),
             idle: None,

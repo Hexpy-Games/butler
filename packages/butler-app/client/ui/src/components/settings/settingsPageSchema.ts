@@ -45,6 +45,8 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   models: [
     { id: "butler-model", kind: "form", fields: ["primary-model", "reasoning", "context-limit", "local-reasoning-budget"] },
     { id: "backup-models", kind: "form", fields: ["backup-models-summary", "backup-models-enabled", "backup-models"] },
+    // Hidden only for an agent without the #217 key routes.
+    { id: "saved-keys", kind: "list", fields: [] },
     { id: "permissions", kind: "form", fields: ["access-mode", "plan-mode-default"] },
     { id: "advanced-models", kind: "form", fields: [] },
     { id: "memory-cleanup", kind: "form", fields: ["consolidation-model", "consolidation-reasoning"], optional: true },

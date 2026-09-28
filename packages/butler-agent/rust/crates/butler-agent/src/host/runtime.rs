@@ -85,7 +85,7 @@ impl AgentRuntime {
             &collation,
             mcp_client.clone(),
         )?;
-        let models = process_services.models;
+        let models = self::models::with_moved_credentials(process_services.models).await;
         let web_access = process_services.web_access;
         let prompt_clock = Arc::new(SystemPromptClock::new().map_err(setup)?);
         let date_parser = Arc::new(super::DateParser::from_process().map_err(setup)?);

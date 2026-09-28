@@ -141,7 +141,7 @@ async fn physical_config_resolves_all_provider_ids_and_registered_credentials() 
         .unwrap();
     assert_eq!(local.metadata.provider_id, "local");
     match local.auth {
-        ProviderAuth::ApiKey(value) => assert_eq!(value, "local-secret"),
+        ProviderAuth::ApiKey(value) => assert_eq!(value.as_str(), "local-secret"),
         _ => panic!("expected local API key"),
     }
     assert_eq!(
@@ -182,7 +182,7 @@ async fn registered_openai_key_overrides_environment_and_sizing_rereads_files() 
         .await
         .unwrap();
     match config.auth {
-        ProviderAuth::ApiKey(value) => assert_eq!(value, "registered-secret"),
+        ProviderAuth::ApiKey(value) => assert_eq!(value.as_str(), "registered-secret"),
         _ => panic!("expected api key"),
     }
     assert_eq!(

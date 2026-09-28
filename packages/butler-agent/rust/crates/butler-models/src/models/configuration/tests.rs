@@ -80,10 +80,15 @@ async fn actual_config_reads_preserve_first_records_defaults_and_secret_boundari
         read.catalog.view().provider_credentials[0].masked_value,
         "abc...z"
     );
-    assert_eq!(read.credential_secret("key-one", "openai"), None);
+    assert!(read.credential("key-one", "openai").is_none());
+    let record = read.credential("key-one", "anthropic").unwrap();
     assert_eq!(
-        read.credential_secret("key-one", "anthropic"),
-        Some("abcdefz")
+        owner
+            .credential_secret(&fixture.0, record)
+            .await
+            .unwrap()
+            .expose(),
+        "abcdefz"
     );
     let registered = &read.catalog.view().registered_models[0];
     assert_eq!(

@@ -295,6 +295,7 @@ export const koKrCopy: AppCopy = {
     fileTitle: (action, target) => `${action}: ${target}`, conceptionSummary: text => text ? `요청의 목표와 범위를 확인했습니다: ${text}` : "요청의 목표와 범위를 확인했습니다.", workInProgress: text => `${text} 작업을 진행하고 있습니다.`, toolsSummary: text => text ? `${text} 도구로 필요한 정보를 확인하고 있습니다.` : "필요한 도구로 작업을 진행하고 있습니다.",
   },
   serverErrors: {
+    credential_in_use_by_default: "기본 모델이 이 키를 씁니다. 기본 모델을 먼저 바꾸세요.", credential_in_use: "이 키를 쓰는 모델이 있습니다. 키와 함께 삭제하세요.", credential_not_found: "이미 삭제된 키입니다. 목록을 새로 고치세요.",
     space_changed: "목록이 변경되었습니다. 최신 목록에서 다시 시도해 주세요.", space_invalid_group: "서로 다른 두 대화를 선택해 주세요.", space_invalid_scope: "같은 프로젝트의 대화끼리 묶을 수 있습니다.", space_invalid_pin: "대화 또는 프로젝트를 즐겨찾기에 추가해 주세요.", space_undo_expired: "다른 변경이 있어 되돌릴 수 없습니다.", space_invalid_title: "그룹 이름은 1~120자로 입력해 주세요.",
     branch_source_required: "출처 대화가 필요합니다.", branch_source_invalid: "이 대화의 답변을 선택해 주세요.", branch_source_unavailable: "분리할 완료된 답변이 없습니다.", branch_cancelled: "새 대화 만들기가 취소되었습니다.", branch_identity_conflict: "같은 생성 요청의 내용이 변경되었습니다.", branch_request_invalid: "새 대화의 제목과 출처를 확인해 주세요.",
     session_relocating: "대화를 이동하고 있습니다. 잠시 후 다시 시도해 주세요.", relocation_identity_conflict: "이동 요청의 내용이 달라졌습니다.", relocation_aborted: "이동이 완료되지 않았습니다. 이동 상태를 확인해 주세요.", session_context_changed: "대화의 실행 환경이 변경되어 이동하지 못했습니다.", session_not_movable: "이 대화는 이동할 수 없습니다.", space_invalid_target: "다른 이동 위치를 선택해 주세요.", project_unavailable: "사용 가능한 프로젝트를 선택해 주세요.", same_session_context: "같은 프로젝트 안에서는 목록 이동을 사용해 주세요.", model_not_configured: "먼저 사용할 모델을 설정해 주세요.", session_context_conflict: "대화 이동의 실행 환경을 확인해야 합니다. 기존 작업은 보존되어 있습니다.", relocation_preparation_missing: "이동 준비 정보를 확인할 수 없습니다.", session_busy: "진행 중인 작업과 대기 메시지가 끝난 뒤 다시 시도해 주세요.",
@@ -1078,7 +1079,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     },
     sectionAliases: {
       general: ["기본", "일반 설정", "대화"],
-      models: ["모델 설정", "Worker", "예비 모델"],
+      models: ["모델 설정", "Worker", "예비 모델", "API 키"],
       appearance: ["테마", "화면 설정", "디자인"],
       server: ["연결", "프로젝트 폴더"],
       updates: ["업그레이드", "새 버전"],
@@ -1116,6 +1117,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       import: "가져오기",
       butlerModel: "버틀러 모델",
       backupModels: "예비 모델",
+      savedKeys: "API 키",
       memoryCleanup: "기억 정리",
       permissions: "권한",
       workerProfiles: "Worker 프로필",
@@ -1670,6 +1672,32 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
         delete: "모델 삭제 실패",
         oauthLogin: "OAuth 로그인을 시작할 수 없습니다.",
       },
+    },
+    savedKeys: {
+      empty: "저장된 API 키가 없습니다.",
+      usedBy: (count) => count === 0 ? "사용 안 함" : `모델 ${count}개`,
+      // Keys are a local file until the build is signed (#243); say Keychain only when the agent reports it.
+      storage: {
+        local: "이 컴퓨터에만 저장",
+        keychain: "키체인에 저장",
+        secretService: "시스템 키링에 저장",
+        credentialManager: "자격 증명 관리자에 저장",
+      },
+      replace: "교체",
+      replaceLabel: (name) => `${name} 키 교체`,
+      newKey: "새 키",
+      save: "저장",
+      cancel: "취소",
+      checking: "확인 중",
+      replacedStatus: (name) => `${name} 키를 교체했습니다.`,
+      delete: "삭제",
+      deleteLabel: (name) => `${name} 키 삭제`,
+      deleteDefaultHint: "기본 모델을 먼저 바꾸세요",
+      deleteConfirm: (name) => `${name} 키를 삭제할까요?`,
+      deleteConfirmModels: (name, count) =>
+        `${name} 키를 삭제할까요? 이 키를 쓰는 모델 ${count}개도 함께 삭제됩니다.`,
+      deletedStatus: (name) => `${name} 키를 삭제했습니다.`,
+      errors: { delete: "키 삭제 실패" },
     },
   },
   titlebar: {

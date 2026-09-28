@@ -96,24 +96,11 @@ pub(super) fn apply(
     let claim_id = token(metadata.get("appQueueClaimId"));
     let tx = db.transaction().map_err(AppStorageError::sqlite)?;
     if staging::projected(&tx, action_id)? {
-        staging::delete(&tx, action_id)?;
-        checkpoint::save(&tx, cursor, now)?;
-        tx.commit().map_err(AppStorageError::sqlite)?;
-        return Ok(ProjectionOutcome {
-            handled: true,
-            wake_queue: false,
-            terminal_turn: None,
-        });
+        return skip(tx, action_id, cursor, now);
     }
     let claim_status = current_claim_status(&tx, chat_id, &turn_id, claim_id.as_deref(), outbound)?;
     if claim_status == QueuedTurnClaimStatus::Stale {
-        checkpoint::save(&tx, cursor, now)?;
-        tx.commit().map_err(AppStorageError::sqlite)?;
-        return Ok(ProjectionOutcome {
-            handled: true,
-            wake_queue: false,
-            terminal_turn: None,
-        });
+        return skip(tx, action_id, cursor, now);
     }
     if claim_status == QueuedTurnClaimStatus::Terminal {
         finish(&tx, action_id, outbound, chat_id, cursor, now)?;
@@ -125,23 +112,12 @@ pub(super) fn apply(
         });
     }
     if claim_status == QueuedTurnClaimStatus::Current {
-        let Some(claim) = claim_id.as_deref() else {
-            checkpoint::save(&tx, cursor, now)?;
-            tx.commit().map_err(AppStorageError::sqlite)?;
-            return Ok(ProjectionOutcome {
-                handled: true,
-                wake_queue: false,
-                terminal_turn: None,
-            });
+        let fenced = match claim_id.as_deref() {
+            Some(claim) => queue::fence(&tx, chat_id, &turn_id, claim)?,
+            None => false,
         };
-        if !queue::fence(&tx, chat_id, &turn_id, claim)? {
-            checkpoint::save(&tx, cursor, now)?;
-            tx.commit().map_err(AppStorageError::sqlite)?;
-            return Ok(ProjectionOutcome {
-                handled: true,
-                wake_queue: false,
-                terminal_turn: None,
-            });
+        if !fenced {
+            return skip(tx, action_id, cursor, now);
         }
     }
     if kind == "turn_suspended" {
@@ -181,13 +157,7 @@ pub(super) fn apply(
         });
     }
     if kind == "turn_failed" && btcc_retains_authority(&tx, &turn_id)? {
-        checkpoint::save(&tx, cursor, now)?;
-        tx.commit().map_err(AppStorageError::sqlite)?;
-        return Ok(ProjectionOutcome {
-            handled: true,
-            wake_queue: false,
-            terminal_turn: None,
-        });
+        return skip(tx, action_id, cursor, now);
     }
     let terminal = if is_runtime_event {
         project_runtime_event(RuntimeInput {
@@ -430,6 +400,29 @@ fn project_runtime_fault(
             message_id: format!("message-{}", input.generated_id),
         },
     )
+}
+
+/// Skips a delivery this projection does not apply (already projected, a
+/// stale claim, a failed fence, a failure BTCC still owns) and retires its
+/// staged outbound with it. The runtime writes every send of an action as a
+/// new outbound record followed by its delivery, so no later delivery reads
+/// this row: a later send stages its own record. A row left behind would
+/// only turn such a send, when its payload differs (a claim it gained), into
+/// an identity conflict that fails every later projection of the chat.
+fn skip(
+    tx: rusqlite::Transaction<'_>,
+    action: &str,
+    cursor: &checkpoint::Checkpoint,
+    now: &str,
+) -> Result<ProjectionOutcome, AppStorageError> {
+    staging::delete(&tx, action)?;
+    checkpoint::save(&tx, cursor, now)?;
+    tx.commit().map_err(AppStorageError::sqlite)?;
+    Ok(ProjectionOutcome {
+        handled: true,
+        wake_queue: false,
+        terminal_turn: None,
+    })
 }
 
 pub(super) fn finish(

@@ -11,7 +11,9 @@ use serde_json::Value;
 use tokio::{sync::watch, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
-use butler_models::models::{CredentialView, DetectedLocalServer};
+use butler_models::models::{
+    CredentialList, CredentialView, DeletedCredential, DetectedLocalServer,
+};
 
 use super::{AppIdentityClock, AppStorage, EventSubscribers, events};
 use crate::gateway::ApplicationFuture;
@@ -91,6 +93,24 @@ pub struct SavedCredentialView {
     pub created: bool,
 }
 
+/// Body of `PATCH /credentials/{name}` (#217).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AppCredentialReplaceInput {
+    pub api_key: String,
+    /// Check the new key with the provider first (as
+    /// `POST /setup/credentials/verify` does); a rejected key changes
+    /// nothing.
+    #[serde(default)]
+    pub verify: bool,
+}
+
+/// `PATCH /credentials/{name}`: the key after the replacement, masked.
+#[derive(Clone, Serialize)]
+pub struct ReplacedCredentialView {
+    pub credential: CredentialView,
+}
+
 /// Body of `POST /setup/oauth/start`.
 #[derive(Default, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -153,6 +173,20 @@ pub trait AppSetupPort: Send + Sync + 'static {
         &self,
         input: AppProviderKeyInput,
     ) -> ApplicationFuture<SavedCredentialView>;
+    /// The saved keys (masked, with their store and the models using them)
+    /// and where new keys go.
+    fn list_credentials(&self) -> ApplicationFuture<CredentialList>;
+    /// Replaces the key of the saved credential `name` (its id, or its
+    /// label when exactly one key has it).
+    fn replace_credential(
+        &self,
+        name: String,
+        input: AppCredentialReplaceInput,
+    ) -> ApplicationFuture<ReplacedCredentialView>;
+    /// Deletes the saved credential `name` and its key. A key the default
+    /// model uses is refused; one other models use is refused unless
+    /// `force`, which unregisters those models.
+    fn delete_credential(&self, name: String, force: bool) -> ApplicationFuture<DeletedCredential>;
     fn start_oauth(&self, input: AppOauthStartInput) -> ApplicationFuture<OauthFlowView>;
     fn oauth_flow(&self, flow_id: String) -> ApplicationFuture<OauthFlowView>;
     /// Closes the flow's callback listener and drops its PKCE state.
@@ -251,6 +285,19 @@ pub(crate) fn test_setup_port() -> Arc<dyn AppSetupPort> {
             &self,
             _: AppProviderKeyInput,
         ) -> ApplicationFuture<SavedCredentialView> {
+            unsupported()
+        }
+        fn list_credentials(&self) -> ApplicationFuture<CredentialList> {
+            unsupported()
+        }
+        fn replace_credential(
+            &self,
+            _: String,
+            _: AppCredentialReplaceInput,
+        ) -> ApplicationFuture<ReplacedCredentialView> {
+            unsupported()
+        }
+        fn delete_credential(&self, _: String, _: bool) -> ApplicationFuture<DeletedCredential> {
             unsupported()
         }
         fn start_oauth(&self, _: AppOauthStartInput) -> ApplicationFuture<OauthFlowView> {

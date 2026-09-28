@@ -6,8 +6,12 @@ use std::path::Path;
 use serde_json::Value;
 
 use super::super::{CredentialView, ModelCatalogError};
+use super::credential_admin::CredentialDraft;
+use super::credentials::{CredentialRecord, SecretHome};
 use super::key_check::{ProviderKeyCheckError, provider_key};
-use super::{ModelConfiguration, auth, credentials, read_object_sync};
+use super::mutations::catalog_error;
+use super::secret_store;
+use super::{ModelConfiguration, auth};
 
 /// A key saved by first-run setup.
 pub struct SavedProviderKey {
@@ -43,36 +47,40 @@ impl ModelConfiguration {
     ) -> Result<SavedProviderKey, ProviderKeySaveError> {
         let (provider, key) = provider_key(provider_id, api_key)?;
         let _write = self.configuration_writes.acquire().await;
-        let path = root.join("auth/model-provider-credentials.json");
-        let saved = credentials::read(
-            &read_object_sync(&path),
-            &self.registration_catalog,
-            self.clock.as_ref(),
-        );
-        if let Some(existing) = saved
-            .iter()
-            .find(|record| record.provider_id == provider && record.secret == key)
-        {
+        let (_lock, mut file) = self
+            .open_credentials(root)
+            .await
+            .map_err(|error| save_error(catalog_error(error)))?;
+        let saved = file.records(&self.registration_catalog, self.clock.as_ref());
+        // Compared by fingerprint (or, before its move, the plain-text key):
+        // no store is read, so no store can ask the user for access.
+        let fingerprint = secret_store::fingerprint(root, &provider, key);
+        let existing = saved.iter().find(|record| {
+            record.provider_id == provider
+                && match &record.home {
+                    SecretHome::Plaintext(secret) => secret.expose() == key,
+                    SecretHome::Store(_) => {
+                        fingerprint.is_some() && record.fingerprint == fingerprint
+                    }
+                }
+        });
+        if let Some(existing) = existing {
             return Ok(SavedProviderKey {
                 credential: existing.view(),
                 created: false,
             });
         }
-        let views = saved.iter().map(credentials::CredentialRecord::view);
-        let label = generated_label(&provider, &views.collect::<Vec<_>>());
-        let credential = credentials::upsert(
-            &path,
-            &provider,
-            key,
-            Some(&label),
-            None,
-            &self.registration_catalog,
-            self.clock.as_ref(),
-        )
-        .map_err(|error| match error {
-            ModelCatalogError::Storage { .. } => ProviderKeySaveError::Storage(error),
-            other => ProviderKeySaveError::Rejected(other),
-        })?;
+        let views: Vec<CredentialView> = saved.iter().map(CredentialRecord::view).collect();
+        let draft = CredentialDraft {
+            id: format!("cred_{}", uuid::Uuid::new_v4()),
+            label: generated_label(&provider, &views),
+            provider_id: provider,
+            created_at: self.clock.now_iso(),
+        };
+        let credential = self
+            .write_credential(root, &mut file, draft, key, None)
+            .await
+            .map_err(|error| save_error(catalog_error(error)))?;
         Ok(SavedProviderKey {
             credential,
             created: true,
@@ -100,6 +108,14 @@ impl ModelConfiguration {
                 .unwrap_or("OpenAI account")
                 .to_owned(),
         )
+    }
+}
+
+/// A storage failure is `Storage`; a refusal says why.
+fn save_error(error: ModelCatalogError) -> ProviderKeySaveError {
+    match error {
+        ModelCatalogError::Storage { .. } => ProviderKeySaveError::Storage(error),
+        other => ProviderKeySaveError::Rejected(other),
     }
 }
 
