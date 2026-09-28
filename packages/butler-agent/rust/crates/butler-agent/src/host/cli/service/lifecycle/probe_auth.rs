@@ -1,28 +1,17 @@
 //! Bearer tokens the CLI may present to the service's App gateway readiness
-//! probe. The service may have been started by the App with the App's token,
-//! which this CLI process does not have in its environment; the App keeps that
-//! token in DATA, so any controller of the same DATA can authenticate.
+//! probe. The gateway always requires the data folder's token (or the file
+//! `BUTLER_APP_LOCAL_AUTH_FILE` names for the process that started it), so any
+//! controller of the same DATA can authenticate, including next to an Agent
+//! the App started.
 
 use std::net::IpAddr;
-use std::path::Path;
-
-use serde::Deserialize;
 
 use crate::host::ServiceConfiguration;
+use crate::host::service::configuration::data_folder_token;
 
-/// Schema of the App's local-auth file.
-const APP_LOCAL_AUTH_SCHEMA: &str = "butler.app-local-agent-auth.v1";
-/// The App's local-auth file, relative to DATA.
-const APP_LOCAL_AUTH_FILE: &str = "app/runtime/auth/local-agent-auth.json";
-
-#[derive(Deserialize)]
-struct AppLocalAuthFile {
-    schema: String,
-    token: String,
-}
-
-/// Candidate tokens in order: this CLI's configured App token, then the App's
-/// token file in DATA. Duplicates are dropped.
+/// Candidate tokens in order: the token this CLI resolved for DATA (its
+/// `BUTLER_APP_LOCAL_AUTH_FILE`, else the data folder's), then the data
+/// folder's own token when an override named another. Duplicates are dropped.
 pub(super) fn probe_tokens(config: &ServiceConfiguration) -> Vec<String> {
     let mut tokens = Vec::new();
     let configured = config.app.gateway_config().local_auth;
@@ -31,21 +20,12 @@ pub(super) fn probe_tokens(config: &ServiceConfiguration) -> Vec<String> {
     {
         tokens.push(token.to_owned());
     }
-    if let Some(token) = app_local_auth_token(&config.data_root)
+    if let Some(token) = data_folder_token(&config.data_root)
         && !tokens.contains(&token)
     {
         tokens.push(token);
     }
     tokens
-}
-
-/// The App's token when its file is present and well formed; any other state
-/// means the App has not provisioned a token for this DATA.
-fn app_local_auth_token(data_root: &Path) -> Option<String> {
-    let bytes = std::fs::read(data_root.join(APP_LOCAL_AUTH_FILE)).ok()?;
-    let file: AppLocalAuthFile = serde_json::from_slice(&bytes).ok()?;
-    let token = file.token.trim();
-    (file.schema == APP_LOCAL_AUTH_SCHEMA && !token.is_empty()).then(|| token.to_owned())
 }
 
 /// Tokens are only ever sent to a loopback App gateway.

@@ -10,7 +10,8 @@ use serde::Deserialize;
 
 use super::probe_auth::{is_loopback_endpoint, probe_tokens};
 use super::{
-    APP_RESPAWN_TIMEOUT, INSTANCE_PUBLISH_TIMEOUT, POLL_INTERVAL, START_TIMEOUT, active_service,
+    APP_RESPAWN_TIMEOUT, INSTANCE_PUBLISH_TIMEOUT, LOCK_WITHOUT_RECORD, POLL_INTERVAL,
+    START_TIMEOUT, active_service,
 };
 use crate::host::ServiceConfiguration;
 use crate::host::service::instance::{InstanceRecord, instance_is_locked, read_record};
@@ -44,13 +45,7 @@ pub(super) async fn wait_until_ready(
         }
         let active = match active_service(&config.data_root) {
             Ok(active) => active,
-            Err(error)
-                if child.is_some()
-                    && error.message()
-                        == "native_service_instance_ambiguous: DATA lock has no record" =>
-            {
-                None
-            }
+            Err(error) if child.is_some() && error.message() == LOCK_WITHOUT_RECORD => None,
             Err(error) => return Err(error),
         };
         if let Some(record) = active {
@@ -103,9 +98,7 @@ pub(super) async fn wait_until_registered(
             Ok(Some(record)) if record.pid == child.id() => return Ok(record),
             Ok(Some(_)) => return Err("native_service_start_identity_changed".into()),
             Ok(None) => {}
-            Err(error)
-                if error.message()
-                    == "native_service_instance_ambiguous: DATA lock has no record" => {}
+            Err(error) if error.message() == LOCK_WITHOUT_RECORD => {}
             Err(error) => return Err(error),
         }
         if Instant::now() >= deadline {
@@ -127,9 +120,7 @@ pub(super) async fn wait_for_app_respawn(
         match active_service(data_root) {
             Ok(Some(record)) if record.nonce != previous_nonce => return Ok(record),
             Ok(_) => {}
-            Err(error)
-                if error.message()
-                    == "native_service_instance_ambiguous: DATA lock has no record" => {}
+            Err(error) if error.message() == LOCK_WITHOUT_RECORD => {}
             Err(error) => return Err(error),
         }
         if Instant::now() >= deadline {

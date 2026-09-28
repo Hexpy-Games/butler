@@ -82,19 +82,11 @@ pub(super) async fn stop_service_admitted(
         return Err("native_service_instance_changed".into());
     }
     let previous = mark_stopping(data_root, &record.nonce, installation)?;
-    let current =
-        active_service(data_root)?.ok_or_else(|| "native_service_instance_changed".to_owned())?;
-    if !same_instance(&current, &record, expected) {
-        return Err("native_service_instance_changed".into());
-    }
-    if !instance_is_locked(data_root)? || !process_matches(&current)? {
-        return Err("native_service_instance_ambiguous: refusing signal".into());
-    }
-    if let Err(error) = signal_intended_stop(data_root, &current, request) {
+    if let Err(error) = deliver_stop(data_root, &record, expected, request) {
         return Err(revert_undelivered_stop(
             data_root,
             installation,
-            &current,
+            &record,
             previous,
             error,
         ));
@@ -119,6 +111,26 @@ fn same_instance(
         && expected.is_none_or(|identity| identity.matches(current))
 }
 
+/// Re-verifies the instance [`mark_stopping`] marked (its record, the DATA
+/// lock and its OS identity) and signals it. An error means nothing was
+/// delivered.
+fn deliver_stop(
+    data_root: &Path,
+    record: &InstanceRecord,
+    expected: Option<&RestartIdentity>,
+    request: StopRequest,
+) -> Result<(), crate::host::HostError> {
+    let current =
+        active_service(data_root)?.ok_or_else(|| "native_service_instance_changed".to_owned())?;
+    if !same_instance(&current, record, expected) {
+        return Err("native_service_instance_changed".into());
+    }
+    if !instance_is_locked(data_root)? || !process_matches(&current)? {
+        return Err("native_service_instance_ambiguous: refusing signal".into());
+    }
+    signal_intended_stop(data_root, &current, request)
+}
+
 /// Announces the stop to supervisors, then sends SIGTERM. The intent is
 /// written before the signal so it is on disk when the process exits; a
 /// signal that could not be delivered withdraws it again.
@@ -141,15 +153,16 @@ fn signal_intended_stop(
 }
 
 /// The instance keeps running after an undelivered stop, so its record goes
-/// back to the state [`mark_stopping`] replaced; `stop` is the error returned.
+/// back to the state [`mark_stopping`] replaced (a record that changed since
+/// is left alone); `stop` is the error returned.
 fn revert_undelivered_stop(
     data_root: &Path,
     installation: &ResolvedInstallation,
-    current: &InstanceRecord,
+    record: &InstanceRecord,
     previous: StoppingFrom,
     stop: crate::host::HostError,
 ) -> crate::host::HostError {
-    match revert_stopping(data_root, &current.nonce, previous, installation) {
+    match revert_stopping(data_root, &record.nonce, previous, installation) {
         Ok(()) => stop,
         Err(revert) => crate::host::HostError::new(stop.message().to_owned())
             .with_source(UndeliveredStopRevertFailed { revert, stop }),

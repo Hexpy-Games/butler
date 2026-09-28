@@ -12,7 +12,8 @@ use serde_json::{Value, json};
 use super::Action;
 use crate::host::service::instance::{
     AdmissionLock, InstanceRecord, StopReason, StopRequest, StopRequester, instance_is_locked,
-    process_matches, read_record, refuse_live_legacy_process, validate_write_destinations,
+    process_matches, read_record, record_process_gone, refuse_live_legacy_process,
+    validate_write_destinations,
 };
 use crate::host::{ResolvedInstallation, ServiceConfiguration};
 
@@ -32,6 +33,9 @@ const APP_RESPAWN_TIMEOUT: Duration = Duration::from_secs(30);
 const STOP_TIMEOUT: Duration = Duration::from_secs(8);
 const FORCE_STOP_TIMEOUT: Duration = Duration::from_secs(3);
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
+/// [`active_service`] while an instance holds the DATA lock but has not
+/// published its record yet: a starting instance, so waiters keep waiting.
+const LOCK_WITHOUT_RECORD: &str = "native_service_instance_ambiguous: DATA lock has no record";
 /// The line `butler stop` adds after a stop, worded like the App's quit dialog:
 /// schedules run inside the service.
 const SCHEDULES_STOPPED_NOTICE: &str =
@@ -273,17 +277,20 @@ fn active_service(data_root: &Path) -> Result<Option<InstanceRecord>, crate::hos
             }
         }
         (true, Some(record)) => {
-            if !matches!(record.state.as_str(), "starting" | "ready" | "stopping")
-                || !process_matches(&record)?
+            if matches!(record.state.as_str(), "starting" | "ready" | "stopping")
+                && process_matches(&record)?
             {
-                return Err(
-                    "native_service_instance_ambiguous: lock owner does not match its record"
-                        .into(),
-                );
+                return Ok(Some(record));
             }
-            Ok(Some(record))
+            if record_process_gone(&record)? {
+                // Left by an instance that did not remove it (a crash, a
+                // forced stop): the lock owner is a new instance that has
+                // taken the lock and not yet replaced the record.
+                return Err(LOCK_WITHOUT_RECORD.into());
+            }
+            Err("native_service_instance_ambiguous: lock owner does not match its record".into())
         }
-        (true, None) => Err("native_service_instance_ambiguous: DATA lock has no record".into()),
+        (true, None) => Err(LOCK_WITHOUT_RECORD.into()),
     }
 }
 

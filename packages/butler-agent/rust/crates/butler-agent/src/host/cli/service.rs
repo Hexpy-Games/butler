@@ -142,7 +142,7 @@ pub(crate) async fn run_native_service_cli(
                         "{}",
                         json!({"ok":true,"command":"service run","data":{"sessionId":session}})
                     );
-                } else if !options.quiet {
+                } else if let Some(session) = session.filter(|_| !options.quiet) {
                     println!("{session}");
                 }
                 ExitCode::SUCCESS

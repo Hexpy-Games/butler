@@ -1,9 +1,11 @@
-//! L. Intentional stop signal (#223, SVC-02..SVC-06): `butler stop`,
+//! L. Intentional stop signal (#223, SVC-02..SVC-07): `butler stop`,
 //! `butler restart` and MCP `restart_butler` announce the exit in
 //! `D/state/agent-stop-intent.json` before they signal the service, so the
 //! App's supervisor can tell it from a crash; the App starts the replacement
 //! of an instance it supervises; the next instance removes the announcement
-//! when it is ready.
+//! when it is ready. Every intentional stop exits 0 and a crash does not:
+//! launchd (`KeepAlive: {SuccessfulExit: false}`) and systemd
+//! (`Restart=on-failure`) restart only an Agent that exits non-zero.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -11,45 +13,28 @@
     reason = "test assertions"
 )]
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::sync::mpsc;
+use std::os::unix::process::ExitStatusExt;
+use std::path::Path;
 use std::time::{Duration, Instant};
 
-use butler_e2e::e2e::agent::Launch;
 use butler_e2e::e2e::gateway::Gateway;
 use butler_e2e::e2e::scenario::{Scenario, Setup};
+use butler_e2e::e2e::stop_intent::{
+    RestartWatch, StopOnDrop, instance_record, intent_path, mcp_tool_call, read_intent,
+};
 use butler_e2e::e2e::{HarnessError, harness_error};
 use serde_json::{Value, json};
 
 const INTENT_SCHEMA: &str = "butler.agent-stop-intent.v1";
 
-/// One scenario at a time. The sandboxes hard-link one agent binary, and macOS
-/// reports a process's executable path from its file's most recent lookup:
-/// while another sandbox runs the same file, the product's identity check can
-/// see that sandbox's path and refuse to signal (`lock owner does not match
-/// its record`). These scenarios run CLI and MCP controllers back to back.
+/// One scenario at a time: they run CLI and MCP controllers back to back and
+/// log restart timings, which concurrent agents would skew. (Sandboxes once
+/// shared one hard-linked binary, which macOS reports under whichever name was
+/// looked up last; each sandbox now has its own copy, and the product's
+/// identity check compares files, not names.)
 static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-
-fn intent_path(data: &Path) -> PathBuf {
-    data.join("state/agent-stop-intent.json")
-}
-
-fn read_json(path: &Path) -> Option<Value> {
-    std::fs::read(path)
-        .ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-}
-
-fn read_intent(data: &Path) -> Option<Value> {
-    read_json(&intent_path(data))
-}
-
-fn instance_record(data: &Path) -> Option<Value> {
-    read_json(&data.join("state/butler-agent-native-service.json"))
-}
 
 /// The ready instance record, once the service has marked itself ready (its
 /// gateway answers a little earlier).
@@ -95,26 +80,44 @@ fn assert_intent(intent: &Value, reason: &str, requested_by: &str, record: &Valu
     );
 }
 
-/// What a watcher of `D/state` sees while a restart runs.
-#[derive(Default)]
-struct RestartWatch {
-    intent: Option<(Value, Duration)>,
-    ready: Option<Duration>,
+/// Asserts that the agent process `pid` the harness started exited with
+/// status 0, as every intentional stop must.
+fn assert_exited_cleanly(s: &Scenario, pid: u32) {
+    let status = s
+        .agent
+        .exit_status(pid)
+        .unwrap_or_else(|| panic!("agent {pid} was not reaped"));
+    assert_eq!(
+        status.code(),
+        Some(0),
+        "intentional stop of agent {pid} exited with {status}"
+    );
 }
 
-impl RestartWatch {
-    fn observe(&mut self, data: &Path, old_nonce: &Value, started: Instant) {
-        if self.intent.is_none()
-            && let Some(intent) = read_intent(data)
+/// Waits (bounded) for the harness's agent process to exit and collects it.
+async fn wait_exited(s: &mut Scenario) {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while s.agent.is_running() {
+        assert!(Instant::now() < deadline, "the agent did not exit");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    s.agent.reap();
+}
+
+/// The instance record of the process `pid` while it is still starting.
+async fn starting_record(data: &Path, pid: u32) -> Value {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        if let Some(record) = instance_record(data)
+            .filter(|record| record["pid"] == pid && record["state"] == "starting")
         {
-            self.intent = Some((intent, started.elapsed()));
+            return record;
         }
-        if self.ready.is_none()
-            && instance_record(data)
-                .is_some_and(|record| record["state"] == "ready" && &record["nonce"] != old_nonce)
-        {
-            self.ready = Some(started.elapsed());
-        }
+        assert!(
+            Instant::now() < deadline,
+            "agent {pid} was never seen starting"
+        );
+        tokio::time::sleep(Duration::from_millis(5)).await;
     }
 }
 
@@ -128,7 +131,8 @@ async fn svc_02_stop_is_announced_and_sticks() -> Result<(), HarnessError> {
     let mut s = Setup::new("SVC-02")?.start().await?;
     let data = s.sandbox.data.clone();
     let record = ready_record(&data, Duration::from_secs(30)).await;
-    assert_eq!(record["pid"], s.agent.pid().unwrap());
+    let pid = s.agent.pid().unwrap();
+    assert_eq!(record["pid"], pid);
 
     let stopped = s.agent.cli_reaping(&["stop"]).await?;
     assert_eq!(stopped.code, Some(0), "{stopped:?}");
@@ -148,12 +152,8 @@ async fn svc_02_stop_is_announced_and_sticks() -> Result<(), HarnessError> {
     let mode = std::fs::metadata(intent_path(&data))?.permissions().mode();
     assert_eq!(mode & 0o777, 0o600);
 
-    let deadline = Instant::now() + Duration::from_secs(30);
-    while s.agent.is_running() {
-        assert!(Instant::now() < deadline, "stop did not end the service");
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
-    s.agent.reap();
+    wait_exited(&mut s).await;
+    assert_exited_cleanly(&s, pid);
     // Stays stopped: the service does not come back by itself.
     tokio::time::sleep(Duration::from_secs(3)).await;
     assert!(!s.gw.healthy().await);
@@ -187,6 +187,7 @@ async fn svc_03_restart_is_announced_until_the_new_instance_is_ready() -> Result
     let before = ready_record(&data, Duration::from_secs(30)).await;
     // Started without the App's foreground lease: the controller restarts it.
     assert_eq!(before["app_supervised"], false, "{before}");
+    let old_pid = s.agent.pid().unwrap();
 
     let started = Instant::now();
     let mut watch = RestartWatch::default();
@@ -211,6 +212,7 @@ async fn svc_03_restart_is_announced_until_the_new_instance_is_ready() -> Result
     assert_ne!(after["pid"], before["pid"]);
     assert_eq!(restart["data"]["pid"], after["pid"]);
     assert!(read_intent(&data).is_none(), "intent survived the restart");
+    assert_exited_cleanly(&s, old_pid);
     assert!(reachable(&s.gw, Duration::from_secs(30)).await);
     // Written to the process stderr directly, not through the captured
     // `eprintln!`, so the timing shows in the log of a passing run too.
@@ -263,6 +265,7 @@ async fn svc_04_restart_keeps_the_app_supervised_instance() -> Result<(), Harnes
     let second = ready_record(&data, Duration::from_secs(30)).await;
     assert_ne!(second["nonce"], first["nonce"]);
     assert_app_instance(&second, &s);
+    assert_exited_cleanly(&s, pid_of(&first));
     let text = reply["result"]["content"][0]["text"].as_str().unwrap_or("");
     assert!(
         text.contains(&format!("restarted (pid={})", second["pid"])),
@@ -288,10 +291,18 @@ async fn svc_04_restart_keeps_the_app_supervised_instance() -> Result<(), Harnes
     let third = ready_record(&data, Duration::from_secs(30)).await;
     assert_ne!(third["nonce"], second["nonce"]);
     assert_app_instance(&third, &s);
+    assert_exited_cleanly(&s, pid_of(&second));
     assert_eq!(restart["data"]["pid"], third["pid"], "{restart}");
     assert!(reachable(&s.gw, Duration::from_secs(30)).await);
     drop(cleanup);
     s.finish().await
+}
+
+fn pid_of(record: &Value) -> u32 {
+    record["pid"]
+        .as_u64()
+        .and_then(|pid| u32::try_from(pid).ok())
+        .unwrap_or_else(|| panic!("no pid in {record}"))
 }
 
 /// Asserts that `record` is the instance the App started (the harness's
@@ -373,6 +384,8 @@ async fn svc_06_undeliverable_stop_leaves_the_service_ready() -> Result<(), Harn
     assert_eq!(stopped.code, Some(0), "{stopped:?}");
     let intent = read_intent(&data).expect("stop wrote no intent");
     assert_intent(&intent, "stop", "cli", &record);
+    wait_exited(&mut s).await;
+    assert_exited_cleanly(&s, pid_of(&record));
     s.finish().await
 }
 
@@ -394,95 +407,71 @@ async fn svc_05_crash_leaves_no_intent() -> Result<(), HarnessError> {
     ready_record(&data, Duration::from_secs(30)).await;
     assert!(read_intent(&data).is_none(), "stale intent survived ready");
 
+    let pid = s.agent.pid().unwrap();
     s.agent.kill9()?;
     assert!(read_intent(&data).is_none(), "a crash left an intent");
+    // A crash is not a successful exit: launchd and systemd restart it.
+    let status = s
+        .agent
+        .exit_status(pid)
+        .expect("the killed agent was reaped");
+    assert!(!status.success(), "a crash exited {status}");
+    assert_eq!(status.signal(), Some(9), "{status}");
     s.gw = s.agent.start_again().await?;
     ready_record(&data, Duration::from_secs(30)).await;
     assert!(read_intent(&data).is_none());
     s.finish().await
 }
 
-/// Stops whatever service instance owns the data dir when dropped, so a
-/// failed assertion does not leave the detached service a restart started.
-/// Dropped explicitly before `Scenario::finish` removes the data dir.
-struct StopOnDrop(Launch);
+/// SVC-07 — a stop that arrives while the service is still starting ends it
+/// with status 0 and it stays stopped: `butler stop` (announced) and a plain
+/// SIGTERM (launchd or systemd stopping it) alike. A later start is clean.
+#[tokio::test]
+async fn svc_07_stop_during_startup_exits_zero() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let _serial = SERIAL.lock().await;
+    let mut s = Setup::new("SVC-07")?.start().await?;
+    let data = s.sandbox.data.clone();
+    ready_record(&data, Duration::from_secs(30)).await;
+    let stopped = s.agent.cli_reaping(&["stop", "--json"]).await?;
+    assert_eq!(stopped.code, Some(0), "{stopped:?}");
+    wait_exited(&mut s).await;
 
-impl Drop for StopOnDrop {
-    fn drop(&mut self) {
-        let mut command = self.0.command();
-        let _ = command
-            .args(["stop", "--json"])
-            .stdin(Stdio::null())
-            .output();
-    }
-}
+    // `butler stop` while the instance is starting.
+    let pid = s.agent.start_process()?;
+    let starting = starting_record(&data, pid).await;
+    let stopped = s.agent.cli_reaping(&["stop", "--json"]).await?;
+    assert_eq!(stopped.code, Some(0), "{stopped:?}");
+    assert_eq!(stopped.json()?["data"]["pid"], pid, "{stopped:?}");
+    let intent = read_intent(&data).expect("stop wrote no intent");
+    assert_intent(&intent, "stop", "cli", &starting);
+    wait_exited(&mut s).await;
+    assert_exited_cleanly(&s, pid);
+    assert!(
+        instance_record(&data).is_none(),
+        "a stopped startup left its record"
+    );
+    assert!(!s.gw.healthy().await, "the stopped startup still serves");
 
-/// Calls one tool of `butler mcp serve` over stdio as an MCP client does and
-/// returns the JSON-RPC reply.
-fn mcp_tool_call(mut command: Command, log: &Path, tool: &str) -> Result<Value, HarnessError> {
-    let mut child = command
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(std::fs::File::create(log)?)
-        .spawn()?;
-    let mut stdin = child
-        .stdin
-        .take()
-        .ok_or_else(|| harness_error("no MCP stdin"))?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| harness_error("no MCP stdout"))?;
-    let (lines, replies) = mpsc::channel();
-    std::thread::spawn(move || {
-        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-            if lines.send(line).is_err() {
-                break;
-            }
-        }
-    });
-    let initialize = json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
-        "protocolVersion": "2025-06-18", "capabilities": {},
-        "clientInfo": {"name": "butler-e2e", "version": "0"}}});
-    writeln!(stdin, "{initialize}")?;
-    mcp_reply(&replies, 1, Duration::from_secs(30))?;
-    writeln!(
-        stdin,
-        "{}",
-        json!({"jsonrpc": "2.0", "method": "notifications/initialized"})
-    )?;
-    let call = json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
-        "params": {"name": tool, "arguments": {}}});
-    writeln!(stdin, "{call}")?;
-    let reply = mcp_reply(&replies, 2, Duration::from_secs(150));
-    drop(stdin);
-    let deadline = Instant::now() + Duration::from_secs(10);
-    while child.try_wait()?.is_none() && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(50));
-    }
-    if child.try_wait()?.is_none() {
-        child.kill()?;
-        child.wait()?;
-    }
-    reply
-}
+    // SIGTERM while the instance is starting, without an announcement.
+    let pid = s.agent.start_process()?;
+    starting_record(&data, pid).await;
+    let target = nix::unistd::Pid::from_raw(i32::try_from(pid).unwrap());
+    nix::sys::signal::kill(target, nix::sys::signal::Signal::SIGTERM)
+        .map_err(|error| harness_error(error.to_string()))?;
+    wait_exited(&mut s).await;
+    assert_exited_cleanly(&s, pid);
+    assert!(
+        instance_record(&data).is_none(),
+        "{:?}",
+        instance_record(&data)
+    );
 
-fn mcp_reply(
-    replies: &mpsc::Receiver<String>,
-    id: u64,
-    within: Duration,
-) -> Result<Value, HarnessError> {
-    let deadline = Instant::now() + within;
-    loop {
-        let left = deadline.saturating_duration_since(Instant::now());
-        let line = replies
-            .recv_timeout(left)
-            .map_err(|_| harness_error(format!("no MCP reply {id} within {within:?}")))?;
-        let Ok(message) = serde_json::from_str::<Value>(&line) else {
-            continue;
-        };
-        if message["id"] == id {
-            return Ok(message);
-        }
-    }
+    s.gw = s.agent.start_again().await?;
+    ready_record(&data, Duration::from_secs(30)).await;
+    assert!(
+        read_intent(&data).is_none(),
+        "intent survived a new ready instance"
+    );
+    s.finish().await
 }

@@ -4,7 +4,7 @@
 
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
 
 use super::gateway::Gateway;
@@ -12,6 +12,7 @@ use super::sandbox::Sandbox;
 use super::{HarnessError, harness_error};
 
 mod app_supervisor;
+mod process;
 
 /// Environment and layout needed to (re)start the agent.
 #[derive(Clone)]
@@ -164,6 +165,8 @@ pub struct Agent {
     starts: u32,
     /// The instance-record nonce of the running child, once it is published.
     instance_nonce: Option<String>,
+    /// PID and exit status of every child the harness reaped, oldest first.
+    exits: Vec<(u32, ExitStatus)>,
 }
 
 impl Agent {
@@ -173,12 +176,14 @@ impl Agent {
             child: None,
             starts: 0,
             instance_nonce: None,
+            exits: Vec::new(),
         };
         let gateway = agent.spawn().await?;
         Ok((agent, gateway))
     }
 
-    async fn spawn(&mut self) -> Result<Gateway, HarnessError> {
+    /// Starts the service process and returns its log file.
+    fn launch_child(&mut self) -> Result<PathBuf, HarnessError> {
         self.starts += 1;
         self.instance_nonce = None;
         let log = self.launch.logs.join(format!("agent-{}.log", self.starts));
@@ -191,6 +196,11 @@ impl Agent {
             .stderr(stderr)
             .spawn()?;
         self.child = Some(child);
+        Ok(log)
+    }
+
+    async fn spawn(&mut self) -> Result<Gateway, HarnessError> {
+        let log = self.launch_child()?;
         let deadline = Instant::now() + Duration::from_secs(90);
         loop {
             if self.launch.token.is_empty()
@@ -235,39 +245,6 @@ impl Agent {
         self.child.as_ref().map(Child::id)
     }
 
-    /// SIGKILL: no drain, no shutdown hooks.
-    pub fn kill9(&mut self) -> Result<(), HarnessError> {
-        if let Some(mut child) = self.child.take() {
-            child.kill()?;
-            child.wait()?;
-        }
-        Ok(())
-    }
-
-    /// SIGTERM and wait for exit (bounded).
-    pub async fn terminate(&mut self) -> Result<(), HarnessError> {
-        let Some(mut child) = self.child.take() else {
-            return Ok(());
-        };
-        #[cfg(unix)]
-        {
-            let pid = nix::unistd::Pid::from_raw(i32::try_from(child.id()).unwrap_or(i32::MAX));
-            let _ = nix::sys::signal::kill(pid, nix::sys::signal::Signal::SIGTERM);
-        }
-        let deadline = Instant::now() + Duration::from_secs(30);
-        loop {
-            if child.try_wait()?.is_some() {
-                return Ok(());
-            }
-            if Instant::now() > deadline {
-                child.kill()?;
-                child.wait()?;
-                return Err(harness_error("agent did not exit within 30s of SIGTERM"));
-            }
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-    }
-
     pub async fn restart(&mut self) -> Result<Gateway, HarnessError> {
         self.terminate().await?;
         self.spawn().await
@@ -279,13 +256,6 @@ impl Agent {
             return Err(harness_error("start_again while the agent is running"));
         }
         self.spawn().await
-    }
-
-    /// Collects an exited process so the agent can be started again.
-    pub fn reap(&mut self) {
-        if let Some(mut child) = self.child.take() {
-            let _ = child.wait();
-        }
     }
 
     pub fn is_running(&mut self) -> bool {
@@ -340,10 +310,11 @@ impl Agent {
         loop {
             observe();
             if let Some(child) = self.child.as_mut()
-                && matches!(child.try_wait(), Ok(Some(_)))
+                && let Ok(Some(status)) = child.try_wait()
             {
                 let pid = child.id();
                 self.child = None;
+                self.exits.push((pid, status));
                 if self.app_restart_requested(pid) {
                     self.spawn().await?;
                 }

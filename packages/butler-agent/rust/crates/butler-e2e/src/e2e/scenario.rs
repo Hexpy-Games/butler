@@ -40,6 +40,18 @@ enum Source {
     Live(LiveProvider),
 }
 
+/// How the harness starts the agent and where its gateway token lives.
+#[derive(Clone, Copy)]
+enum LaunchMode {
+    /// The harness's token file, named by the local-auth variables.
+    Harness,
+    /// As the Butler App starts and supervises it ([`Setup::app_supervisor`]).
+    AppSupervisor,
+    /// As `butler start` does: the token in the data folder
+    /// ([`Setup::data_folder_token`]).
+    DataFolderToken,
+}
+
 pub struct Setup {
     pub id: String,
     pub sandbox: Sandbox,
@@ -50,8 +62,7 @@ pub struct Setup {
     model: Option<ModelChoice>,
     stub_credential: bool,
     record_into: Option<std::path::PathBuf>,
-    app_supervisor: bool,
-    data_folder_token: bool,
+    launch_mode: LaunchMode,
     replay_only: bool,
     extends: Option<String>,
 }
@@ -83,8 +94,7 @@ impl Setup {
             model: None,
             stub_credential: true,
             record_into: None,
-            app_supervisor: false,
-            data_folder_token: false,
+            launch_mode: LaunchMode::Harness,
             replay_only: false,
             extends: None,
         })
@@ -127,7 +137,7 @@ impl Setup {
     /// Starts the agent without token variables, as `butler start` does:
     /// the agent owns the token in its data folder.
     pub fn data_folder_token(mut self) -> Self {
-        self.data_folder_token = true;
+        self.launch_mode = LaunchMode::DataFolderToken;
         self
     }
 
@@ -158,7 +168,7 @@ impl Setup {
     /// forced on, and a restart the intent hands to the App carried out by
     /// the harness ([`Launch::use_app_supervisor`]).
     pub fn app_supervisor(mut self) -> Self {
-        self.app_supervisor = true;
+        self.launch_mode = LaunchMode::AppSupervisor;
         self
     }
 
@@ -178,17 +188,15 @@ impl Setup {
             model,
             stub_credential,
             record_into,
-            app_supervisor,
-            data_folder_token,
+            launch_mode,
             replay_only,
             extends,
         } = self;
         let mut launch = Launch::new(&sandbox)?;
-        if app_supervisor {
-            launch.use_app_supervisor()?;
-        }
-        if data_folder_token {
-            launch.use_data_folder_token();
+        match launch_mode {
+            LaunchMode::Harness => {}
+            LaunchMode::AppSupervisor => launch.use_app_supervisor()?,
+            LaunchMode::DataFolderToken => launch.use_data_folder_token(),
         }
         let default_model = ModelChoice {
             model: "openai/gpt-6-sol".into(),
@@ -326,11 +334,19 @@ impl Scenario {
     /// Acts as the App's process supervisor: when the agent has exited on its
     /// own (the service exits after an interrupted turn so the supervisor can
     /// replace the process), start it again. Returns true when it restarted.
+    /// That exit must be non-zero: launchd and systemd restart only an Agent
+    /// that exits non-zero.
     pub async fn supervise(&mut self) -> Result<bool, HarnessError> {
         if self.agent.is_running() {
             return Ok(false);
         }
-        self.agent.reap();
+        if let Some(status) = self.agent.reap()
+            && status.success()
+        {
+            return Err(harness_error(format!(
+                "the agent exited on its own with {status}; an exit that needs a replacement must be non-zero"
+            )));
+        }
         self.gw = self.agent.start_again().await?;
         Ok(true)
     }

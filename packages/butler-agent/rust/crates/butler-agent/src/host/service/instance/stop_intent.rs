@@ -195,6 +195,16 @@ pub(crate) fn withdraw_stop_intent(
     Ok(())
 }
 
+/// Whether the intent on disk announces a stop of the instance `nonce` running
+/// as `pid`: a stopping service ends by itself before the controller's force
+/// kill only for a stop that was announced for it.
+pub(crate) fn stop_announced_for(data_root: &Path, pid: u32, nonce: &str) -> bool {
+    fs::read(stop_intent_path(data_root))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<StopIntent>(&bytes).ok())
+        .is_some_and(|intent| intent.pid == pid && intent.instance_id == nonce)
+}
+
 fn write_new_file(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let mut file = OpenOptions::new()
         .write(true)

@@ -32,8 +32,8 @@ use record::{
 };
 pub(crate) use restart::RestartIdentity;
 pub(crate) use stop_intent::{
-    StopIntent, StopReason, StopRequest, StopRequester, clear_stop_intent, withdraw_stop_intent,
-    write_stop_intent,
+    StopIntent, StopReason, StopRequest, StopRequester, clear_stop_intent, stop_announced_for,
+    withdraw_stop_intent, write_stop_intent,
 };
 pub(crate) use stopping::{StoppingFrom, mark_stopping, revert_stopping};
 
@@ -282,6 +282,12 @@ pub(crate) fn instance_is_locked(data_root: &Path) -> Result<bool, crate::host::
         Err((_, Errno::EAGAIN)) => Ok(true),
         Err((_, error)) => Err(format!("service_lock_probe_failed: {error}").into()),
     }
+}
+
+/// Whether the process `record` names has ended: no process has its PID, or
+/// the one that has it started at another time (the PID was reused).
+pub(crate) fn record_process_gone(record: &InstanceRecord) -> Result<bool, crate::host::HostError> {
+    Ok(process_start_identity(record.pid)?.is_none_or(|start| start != record.process_start))
 }
 
 /// Returns true only when the current process still matches the persisted OS identity.
