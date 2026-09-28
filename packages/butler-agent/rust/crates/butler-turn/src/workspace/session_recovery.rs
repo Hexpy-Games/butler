@@ -2,6 +2,7 @@
 
 mod authority;
 mod git;
+mod git_status;
 pub(in crate::workspace) mod path;
 #[cfg(test)]
 mod tests;
@@ -16,6 +17,7 @@ pub use authority::SessionWorkspaceAuthority;
 use authority::resolve_authority;
 pub use git::ProjectWorkspaceInspection;
 use git::{inspect_project_workspace, validate_linked_worktree};
+pub use git_status::ProjectGitStatus;
 
 /// Whether a session worktree is still valid.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -139,6 +141,23 @@ impl SessionWorkspaceRecovery {
         abort: CancellationToken,
     ) -> WorkspaceResult<ProjectWorkspaceInspection> {
         inspect_project_workspace(
+            &self.commands,
+            &self.files,
+            &self.host_environment,
+            workspace_path,
+            abort,
+        )
+        .await
+    }
+
+    /// The Git status of the repository a project folder is in (`None`:
+    /// not a repository, or Git is unavailable). `abort` bounds its time.
+    pub async fn project_git_status(
+        &self,
+        workspace_path: &str,
+        abort: CancellationToken,
+    ) -> WorkspaceResult<Option<ProjectGitStatus>> {
+        git_status::project_git_status(
             &self.commands,
             &self.files,
             &self.host_environment,

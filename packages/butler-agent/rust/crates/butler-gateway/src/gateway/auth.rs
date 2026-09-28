@@ -3,16 +3,21 @@
 use std::sync::Arc;
 
 use axum::http::{HeaderMap, header};
+use parking_lot::RwLock;
 
 use super::crypto::constant_time_eq;
 
 /// Local auth for the App gateway: whether a token is required and the
 /// token every client (App, CLI, browser link) presents.
+///
+/// Clones share the token: when Settings → Security rotates the connection
+/// code, every holder in the process (the gateway, its health checks and
+/// the internal clients that call it) sees the new token at once.
 #[derive(Clone, Default)]
 pub struct LocalAuthConfig {
     /// Requests without a valid credential are refused.
     pub required: bool,
-    token: Option<Arc<str>>,
+    token: Option<Arc<RwLock<Arc<str>>>>,
 }
 
 impl LocalAuthConfig {
@@ -22,14 +27,26 @@ impl LocalAuthConfig {
             required: true,
             token: token.and_then(|value| {
                 let token = butler_core::public_text::trim_js_whitespace(&value);
-                (!token.is_empty()).then(|| Arc::from(token))
+                (!token.is_empty()).then(|| Arc::new(RwLock::new(Arc::from(token))))
             }),
         }
     }
 
     /// The configured token, when there is one.
-    pub fn token(&self) -> Option<&str> {
-        self.token.as_deref()
+    pub fn token(&self) -> Option<Arc<str>> {
+        self.token.as_ref().map(|token| token.read().clone())
+    }
+
+    /// Replaces the token for every clone; `false` when none is configured
+    /// (a blank token cannot be rotated into place).
+    pub(crate) fn replace_token(&self, token: &str) -> bool {
+        match &self.token {
+            Some(current) if !token.is_empty() => {
+                *current.write() = Arc::from(token);
+                true
+            }
+            _ => false,
+        }
     }
 }
 

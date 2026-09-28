@@ -16,6 +16,7 @@ pub(super) struct ProjectRow {
     id: String,
     pub(super) display_name: String,
     pub(super) status: String,
+    pub(super) workspace_path: String,
     workspace_label: String,
     safe_path_label: String,
     ledger_project_id: Option<String>,
@@ -32,6 +33,7 @@ fn decode(row: &Row<'_>) -> rusqlite::Result<ProjectRow> {
         id: row.get(0)?,
         display_name: row.get(1)?,
         status: row.get(2)?,
+        workspace_path: row.get(3)?,
         workspace_label: row.get(4)?,
         safe_path_label: row.get(5)?,
         ledger_project_id: row.get(6)?,
@@ -270,6 +272,7 @@ pub(super) fn summary(
         safe_path_label: row.safe_path_label,
         wallpaper,
         sessions,
+        git: None,
     }
 }
 

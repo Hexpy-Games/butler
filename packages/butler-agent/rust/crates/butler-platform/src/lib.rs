@@ -20,6 +20,7 @@
 //!   no-follow opens, directory exchange and file identity.
 //! - [`user_dirs`]: the user's home and the system's own folders.
 //! - [`launcher`]: runnable programs and the release platform tag.
+//! - [`network`]: the machine's own interface addresses.
 //!
 //! macOS and Linux implement the behavior Butler shipped with. Windows
 //! compiles; a capability it does not have yet has a flag (such as
@@ -34,6 +35,7 @@
 pub mod command_sandbox;
 pub mod instance;
 pub mod launcher;
+pub mod network;
 pub mod process_control;
 pub mod secure_fs;
 pub mod user_dirs;

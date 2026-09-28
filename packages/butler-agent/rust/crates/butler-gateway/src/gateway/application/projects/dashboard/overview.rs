@@ -54,7 +54,10 @@ pub(super) async fn get(
         .unwrap_or_default();
     let dashboard_pins = pins(&project).map_err(app_error)?;
     let briefing = super::briefing::read(application, &project.id).await?;
-    let summary = project_summary(&project, sessions);
+    let summary = super::super::AppProjectSummary {
+        git: Some(super::super::git::detail(application, &project.workspace_path).await),
+        ..project_summary(&project, sessions)
+    };
     let wallpaper = summary.wallpaper.clone();
     let view = json!({
         "project": summary,

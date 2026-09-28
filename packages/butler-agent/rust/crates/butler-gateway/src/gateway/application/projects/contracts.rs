@@ -33,6 +33,27 @@ pub struct AppProjectSummary {
     pub wallpaper: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sessions: Option<Vec<AppSessionSummary>>,
+    /// The project folder's Git state: in the project list (`is_repo` and
+    /// `branch` only) and the project dashboard (all of it).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub git: Option<AppProjectGit>,
+}
+
+/// A project folder's Git state; what is not known is `null`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct AppProjectGit {
+    /// The folder is in a Git repository.
+    pub is_repo: bool,
+    /// The checked-out branch; `null` for a detached HEAD or no repository.
+    pub branch: Option<String>,
+    /// Uncommitted changes or untracked files (dashboard only).
+    pub dirty: Option<bool>,
+    /// Commits not yet on the upstream branch (dashboard only; `null`
+    /// without an upstream).
+    pub ahead: Option<u32>,
+    /// Upstream commits not yet on the branch (dashboard only; `null`
+    /// without an upstream).
+    pub behind: Option<u32>,
 }
 
 #[derive(Clone, Debug, Serialize)]
