@@ -4,6 +4,7 @@
 use std::process::{ExitStatus, Stdio};
 use std::time::{Duration, SystemTime};
 
+use butler_platform::process_control;
 use tokio::io::AsyncWriteExt;
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 use tokio::sync::{mpsc, oneshot};
@@ -65,14 +66,15 @@ async fn execute(
         };
         return result(started, Captured::default(), None, stop, None);
     }
-    #[cfg(windows)]
-    return failed(
-        started,
-        CommandError::new(
-            "command_platform_unavailable",
-            "Native structured command containment is unavailable on this host",
-        ),
-    );
+    if !process_control::CONTAINS_PROCESS_TREES {
+        return failed(
+            started,
+            CommandError::new(
+                CommandCode::CommandPlatformUnavailable,
+                "Native structured command containment is unavailable on this host",
+            ),
+        );
+    }
     let dialect = if input.legacy.is_some() {
         Dialect::Legacy
     } else {
@@ -197,11 +199,7 @@ fn step_command(
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
     }
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        command.as_std_mut().process_group(0);
-    }
+    process_control::isolate_group(command.as_std_mut());
     command
 }
 

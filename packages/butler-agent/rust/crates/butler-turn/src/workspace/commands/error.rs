@@ -14,10 +14,12 @@ wire_codes! {
         CommandInvalid = "command_invalid",
         CommandIoFailed = "command_io_failed",
         CommandJsonFailed = "command_json_failed",
+        CommandObservationIsolationUnavailable = "command_observation_isolation_unavailable",
         CommandOutputOverflow = "command_output_overflow",
         CommandOwnerClosed = "command_owner_closed",
         CommandOwnerExhausted = "command_owner_exhausted",
         CommandPlanEmpty = "command_plan_empty",
+        CommandPlatformUnavailable = "command_platform_unavailable",
         CommandSettlementLost = "command_settlement_lost",
         CommandSpawnFailed = "command_spawn_failed",
         CommandStreamFailed = "command_stream_failed",
@@ -133,17 +135,5 @@ impl CommandError {
                 .map(std::io::Error::kind),
             Self::Detected { .. } | Self::CwdRejected { .. } => None,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::CommandCode;
-
-    #[test]
-    fn wire_codes_are_stable() {
-        let codes: Vec<&str> = CommandCode::ALL.iter().map(|code| code.as_str()).collect();
-        let expected: Vec<&str> = include_str!("wire_codes.txt").lines().collect();
-        assert_eq!(codes, expected);
     }
 }

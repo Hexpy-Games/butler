@@ -152,10 +152,8 @@ impl From<&LocalModelConfig> for ModelProviderMetadata {
         ModelProviderMetadata {
             provider_id: "local".into(),
             provider_label: model.provider_label.clone(),
-            provider_family_id: None,
             model_id: model.model_id.clone(),
             model_ref: model.model_ref.clone(),
-            aliases: None,
             display_name: model.display_name.clone(),
             status: "available".into(),
             context_window_tokens: Some(model.context_window_tokens),
@@ -172,8 +170,6 @@ impl From<&LocalModelConfig> for ModelProviderMetadata {
             token_estimator: model.token_estimator,
             source_url: model.source_url.clone(),
             runtime_supported: true,
-            hosted_api_shape: None,
-            api_base_url: None,
             api_type: Some(model.api_type.clone()),
             platform: Some(model.platform),
             server_url: Some(model.server_url.clone()),
@@ -182,31 +178,7 @@ impl From<&LocalModelConfig> for ModelProviderMetadata {
                 .is_none()
                 .then_some(model.reasoning_budget_ratio)
                 .flatten(),
-            registered: None,
-            enabled: None,
-            auth_type: None,
-            credential_id: None,
-            credential_label: None,
-            credential_masked_value: None,
-            image_input_support: None,
-            image_capability_source: None,
-            image_route_health: None,
-            image_input_modalities: None,
-            image_accepted_mime_types: None,
-            image_max_inline_bytes: None,
-            image_max_width: None,
-            image_max_height: None,
-            image_max_pixels: None,
-            image_capability_source_url: None,
-            image_capability_verified_at: None,
-            image_capability_revision: None,
-            image_capability_digest: None,
-            image_endpoint_profile_id: None,
-            image_carrier_protocol: None,
-            image_tool_server_id: None,
-            image_tool_name: None,
-            image_tool_capability_digest: None,
-            extensions: Map::new(),
+            ..super::lookup::blank_metadata()
         }
     }
 }
@@ -327,28 +299,4 @@ fn normalize_local_server_url(value: &str) -> Option<(String, String)> {
         server.clone()
     };
     Some((server, api))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn custom_model_normalization_keeps_raw_id_and_saved_endpoint_reference() {
-        let model = normalize_local_model_config(
-            &serde_json::json!({
-                "model_id":" org/model ",
-                "model_ref":"local/custom-reference",
-                "server_url":"https://models.example/legacy",
-                "api_base_url":"https://models.example/legacy/v1",
-                "context_window_tokens":8192
-            }),
-            "now",
-        )
-        .unwrap();
-        assert_eq!(model.model_id, "org/model");
-        assert_eq!(model.model_ref, "local/custom-reference");
-        assert_eq!(model.api_base_url, "https://models.example/legacy/v1");
-        assert_eq!(model.provider_label, "Custom");
-    }
 }

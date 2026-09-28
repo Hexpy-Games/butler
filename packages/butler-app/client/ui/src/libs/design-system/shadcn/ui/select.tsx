@@ -34,9 +34,23 @@ function SelectGroup({
 }
 
 function SelectValue({
+  icon,
+  children,
   ...props
-}: DsBaseProps<React.ComponentPropsWithoutRef<typeof SelectPrimitive.Value>>) {
-  return <SelectPrimitive.Value data-slot="select-value" {...props} />;
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof SelectPrimitive.Value>> & {
+  /** Decorative glyph before the value (a ProviderLogo); needs `children` as the value text. */
+  icon?: React.ReactNode;
+}) {
+  return (
+    <SelectPrimitive.Value data-slot="select-value" {...props}>
+      {icon && children != null ? (
+        <span className={styles.valueWithIcon}>
+          <span aria-hidden="true" className={styles.valueIcon} data-slot="select-value-icon">{icon}</span>
+          {children}
+        </span>
+      ) : children}
+    </SelectPrimitive.Value>
+  );
 }
 
 function SelectTrigger({
@@ -153,11 +167,16 @@ function SelectLabel({
 function SelectItem({
   className,
   children,
+  icon,
   ...props
-}: DsBaseProps<React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>> & {
+  /** Decorative glyph before the option text (a ProviderLogo); kept out of the item text. */
+  icon?: React.ReactNode;
+}) {
   return (
     <SelectPrimitive.Item
       data-slot="select-item"
+      data-has-icon={icon ? "true" : undefined}
       className={cn(styles.item, className)}
       {...props}
     >
@@ -166,6 +185,7 @@ function SelectItem({
           <CheckIcon />
         </SelectPrimitive.ItemIndicator>
       </span>
+      {icon ? <span aria-hidden="true" className={styles.itemIcon} data-slot="select-item-icon">{icon}</span> : null}
       <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
     </SelectPrimitive.Item>
   );

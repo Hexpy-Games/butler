@@ -243,11 +243,7 @@ fn write_atomic(data_root: &Path, path: &Path, temp: &Path, body: &str) -> Cogni
     let result = (|| {
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options
             .open(temp)
             .map_err(|source| error(CognitionCode::HotCacheWriteFailed).with_source(source))?;
@@ -299,11 +295,7 @@ fn acquire_cache_lock(path: &Path) -> CognitionResult<CacheLock> {
 fn create_private_lock(path: &Path) -> std::io::Result<()> {
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    butler_platform::secure_fs::owner_only(&mut options);
     let mut file = options.open(path)?;
     writeln!(file, "{}", std::process::id())
 }

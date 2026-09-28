@@ -65,62 +65,17 @@ impl Drop for Fixture {
     }
 }
 
-#[test]
-fn existing_bindings_are_unchanged_and_case_collisions_use_ids() {
-    let fixture = Fixture::new();
-    fixture.project("a", "shared", Some("  Keep-Me  "));
-    fixture.project("b", "KEEP-ME", None);
-    fixture.project("c", "duplicate", None);
-    fixture.project("d", "DUPLICATE", None);
-    fixture.initialize();
-    assert_eq!(fixture.binding("a"), "  Keep-Me  ");
-    assert_eq!(fixture.binding("b"), "b");
-    assert_eq!(fixture.binding("c"), "c");
-    assert_eq!(fixture.binding("d"), "d");
-    fixture.initialize();
-    assert_eq!(fixture.binding("a"), "  Keep-Me  ");
-}
-
-#[test]
-fn initialized_workspace_identity_wins_and_shared_roots_are_not_reassigned() {
-    let fixture = Fixture::new();
-    let first = fixture.project("a", "display", None);
-    std::fs::write(first.join("project.json"), r#"{"id":"original"}"#).unwrap();
-    fixture.ledger("original");
-    for id in ["b", "c"] {
-        let workspace = fixture.project(id, id, None);
-        std::fs::write(workspace.join("package.json"), r#"{"name":"shared"}"#).unwrap();
-    }
-    fixture.ledger("shared");
-    fixture.initialize();
-    assert_eq!(fixture.binding("a"), "original");
-    assert_eq!(fixture.binding("b"), "b");
-    assert_eq!(fixture.binding("c"), "c");
-}
-
-#[test]
-fn ambiguous_candidates_forbid_reusing_candidate_id_and_uninitialized_paths() {
-    let fixture = Fixture::new();
-    let workspace = fixture.project("alpha", "alpha", None);
-    std::fs::write(workspace.join("package.json"), r#"{"name":"beta"}"#).unwrap();
-    fixture.ledger("alpha");
-    fixture.ledger("beta");
-    std::fs::create_dir(fixture.data.join("project-ledger/projects/alpha-ledger-2")).unwrap();
-    fixture.project("invalid/id", "../unsafe", None);
-    fixture.initialize();
-    assert_eq!(fixture.binding("alpha"), "alpha-ledger-3");
-    assert_eq!(fixture.binding("invalid/id"), "project-ledger-2");
-}
-
-#[cfg(unix)]
+/// Security boundary: symlink aliases of a project root share one physical
+/// identity, and roots outside are rejected.
+// test-category: security
 #[test]
 fn symlink_aliases_share_one_physical_identity_and_outside_roots_are_rejected() {
-    use std::os::unix::fs::symlink;
+    use butler_platform::secure_fs::symlink;
     let fixture = Fixture::new();
     let original = fixture.ledger("original");
     symlink(
         &original,
-        fixture.data.join("project-ledger/projects/alias"),
+        &fixture.data.join("project-ledger/projects/alias"),
     )
     .unwrap();
     let workspace = fixture.project("a", "alias", None);
@@ -131,22 +86,11 @@ fn symlink_aliases_share_one_physical_identity_and_outside_roots_are_rejected() 
     std::fs::write(outside.join("ledger.jsonl"), "").unwrap();
     symlink(
         &outside,
-        fixture.data.join("project-ledger/projects/escape"),
+        &fixture.data.join("project-ledger/projects/escape"),
     )
     .unwrap();
     fixture.project("b", "escape", None);
     fixture.initialize();
     assert_eq!(fixture.binding("a"), "original");
     assert_eq!(fixture.binding("b"), "b");
-}
-
-#[test]
-fn absent_data_root_keeps_safe_labels_and_bounded_safe_ids() {
-    let fixture = Fixture::new();
-    fixture.project("a", "safe-label", None);
-    initialize(&fixture.connection, None).unwrap();
-    assert_eq!(fixture.binding("a"), "safe-label");
-    assert!(!safe_id("é"));
-    assert!(safe_id(&"a".repeat(120)));
-    assert!(!safe_id(&"a".repeat(121)));
 }

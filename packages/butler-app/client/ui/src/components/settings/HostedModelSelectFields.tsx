@@ -3,6 +3,7 @@ import { appCopy } from "@/app/copy.ts";
 import { SettingsSelect } from "./SettingsFormComponents";
 import { modelOptionLabel } from "./modelManagementUtils";
 import type { AppModelSummary, ModelCatalogView } from "@/app/types.ts";
+import { ProviderMark } from "./ProviderMark";
 
 interface HostedModelSelectFieldsProps {
   modelOptions: AppModelSummary[];
@@ -37,6 +38,7 @@ export function HostedModelSelectFields({
           options={providers.map((provider) => ({
             value: provider.provider_id,
             label: provider.provider_label,
+            icon: <ProviderMark providerId={provider.provider_id} />,
           }))}
         />
       )}

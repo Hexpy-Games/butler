@@ -1,9 +1,9 @@
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
-use nix::fcntl::{Flock, FlockArg};
+use butler_platform::instance::InstanceLock;
+use butler_platform::secure_fs;
 
 use super::{INSTANCE_SCHEMA, InstanceRecord, open_lock};
 
@@ -40,29 +40,21 @@ pub(super) fn write_record(
     let parent = path
         .parent()
         .ok_or_else(|| "native_service_instance_record_path_invalid".to_owned())?;
-    fs::DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
-        .create(parent)
-        .map_err(|source| {
-            crate::host::HostError::new("native_service_instance_state_unavailable")
-                .with_source(source)
-        })?;
+    secure_fs::create_private_dir_all(parent).map_err(|source| {
+        crate::host::HostError::new("native_service_instance_state_unavailable").with_source(source)
+    })?;
     let temporary = path.with_extension(format!(
         "json.{}.{}.{}.tmp",
         record.pid,
         record.nonce,
         uuid::Uuid::new_v4()
     ));
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(&temporary)
-        .map_err(|source| {
-            crate::host::HostError::new("native_service_instance_state_unavailable")
-                .with_source(source)
-        })?;
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    let _ = secure_fs::owner_only(&mut options);
+    let mut file = options.open(&temporary).map_err(|source| {
+        crate::host::HostError::new("native_service_instance_state_unavailable").with_source(source)
+    })?;
     let result = (|| {
         serde_json::to_writer_pretty(&mut file, record).map_err(|source| {
             crate::host::HostError::new("native_service_instance_state_unavailable")
@@ -88,12 +80,14 @@ pub(super) fn write_record(
     result
 }
 
+/// Waits for the lock that serializes record updates; held while the value
+/// lives.
 pub(super) fn acquire_record_update_lock(
     path: &Path,
-) -> Result<Flock<File>, crate::host::HostError> {
+) -> Result<InstanceLock, crate::host::HostError> {
     let file = open_lock(path, true)?;
-    Flock::lock(file, FlockArg::LockExclusive)
-        .map_err(|(_, error)| format!("native_service_record_lock_failed: {error}"))
+    InstanceLock::exclusive(file)
+        .map_err(|error| format!("native_service_record_lock_failed: {error}"))
         .map_err(crate::host::HostError::from)
 }
 

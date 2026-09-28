@@ -2,6 +2,7 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use butler_platform::secure_fs::{self, FileMode, Writability};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -13,7 +14,8 @@ pub(super) struct Snapshot {
     pub exists: bool,
     pub bytes: Vec<u8>,
     pub sha256: Option<String>,
-    pub mode: Option<u32>,
+    /// The file's permission mode, on hosts that have them.
+    pub mode: Option<FileMode>,
 }
 
 pub(super) struct Prepared {
@@ -65,13 +67,7 @@ pub(super) fn observe(path: GuardedPath, parent: Parent) -> Result<Snapshot, Mut
     }
     let bytes =
         fs::read(&path.absolute).map_err(|error| failure::io(Some(path.public.clone()), &error))?;
-    #[cfg(unix)]
-    let mode = {
-        use std::os::unix::fs::PermissionsExt;
-        Some(metadata.permissions().mode())
-    };
-    #[cfg(not(unix))]
-    let mode = None;
+    let mode = secure_fs::file_mode(&metadata);
     Ok(Snapshot {
         sha256: Some(sha256(&bytes)),
         path,
@@ -191,32 +187,19 @@ fn check_parent(path: &GuardedPath) -> Result<(), MutationFailure> {
     Ok(())
 }
 
-#[cfg(unix)]
 fn check_writable_parent(parent: &Path, public: &str) -> Result<(), MutationFailure> {
-    use nix::unistd::{AccessFlags, access};
-    match access(parent, AccessFlags::W_OK) {
-        Ok(()) => Ok(()),
-        Err(nix::errno::Errno::ENOENT) => Err(failure::new(
+    match secure_fs::directory_writability(parent) {
+        Writability::Writable => Ok(()),
+        Writability::Missing => Err(failure::new(
             Some(public.to_owned()),
             "parent_directory_missing",
         )),
-        Err(nix::errno::Errno::EACCES | nix::errno::Errno::EPERM) => Err(failure::new(
+        Writability::Denied => Err(failure::new(
             Some(public.to_owned()),
             "parent_directory_unwritable",
         )),
-        Err(_) => Err(failure::new(Some(public.to_owned()), "io_error")),
+        Writability::Unknown => Err(failure::new(Some(public.to_owned()), "io_error")),
     }
-}
-
-#[cfg(not(unix))]
-fn check_writable_parent(parent: &Path, public: &str) -> Result<(), MutationFailure> {
-    if fs::metadata(parent).is_ok_and(|metadata| metadata.permissions().readonly()) {
-        return Err(failure::new(
-            Some(public.to_owned()),
-            "parent_directory_unwritable",
-        ));
-    }
-    Ok(())
 }
 
 pub(super) fn ensure_existing_parent(path: &GuardedPath) -> Result<(), MutationFailure> {
@@ -319,10 +302,8 @@ fn atomic_replace(
 ) -> std::io::Result<bool> {
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
-    #[cfg(unix)]
     if let Some(mode) = prepared.before.mode {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(mode);
+        secure_fs::creation_mode(&mut options, mode);
     }
     let mut file = options.open(temporary)?;
     file.write_all(&prepared.data)?;

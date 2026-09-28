@@ -1,56 +1,41 @@
-import type { FirstRunState } from "@/app/firstRunSetup.ts";
 import { SetupWizardShell } from "@/butler-ds";
-import { FirstRunStepContent } from "./FirstRunStepContent";
-import { useFirstRunSetupController } from "./useFirstRunSetupController";
-import { WindowControls } from "@/components/layout/WindowControls";
+import { useAppLocale } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { resolveAppearanceTheme } from "@/app/utils.ts";
+import { WindowControls } from "@/components/layout/WindowControls";
 import { useSystemThemePreference } from "@/hooks/useSystemThemePreference.ts";
+import { FirstRunConnect } from "./FirstRunConnect";
+import { FirstRunWelcome } from "./FirstRunWelcome";
+import { useFirstRunFlow, type FirstRunMode, type FirstRunResult } from "./useFirstRunFlow";
+
+export type { FirstRunMode, FirstRunResult };
 
 interface FirstRunSetupProps {
-  initialState: FirstRunState;
-  onComplete: (mode: "workspace" | "model-settings", state: FirstRunState) => void;
+  mode: FirstRunMode;
+  onComplete: (result: FirstRunResult) => void;
+  /** Rerun from Settings: leave without changes. */
+  onCancel?: () => void;
 }
 
-export function FirstRunSetup({
-  initialState,
-  onComplete,
-}: FirstRunSetupProps) {
-  const setup = useFirstRunSetupController(initialState, onComplete);
+/**
+ * First run: a welcome with consent, then "Pick an AI". The agent prepares in
+ * the background; a newer consent version shows the welcome alone.
+ */
+export function FirstRunSetup({ mode, onComplete, onCancel }: FirstRunSetupProps) {
+  useAppLocale();
+  const flow = useFirstRunFlow({ mode, onComplete, onCancel });
   const appearance = useButlerStore((state) => state.settings.appearance_theme);
   const tone = resolveAppearanceTheme(appearance, useSystemThemePreference());
-
   return (
     <SetupWizardShell
-      activeIndex={setup.stepIndex}
+      data-first-run-screen={flow.screen}
       data-test-class="first-run-setup"
-      progressLabel="First-run setup steps"
-      steps={setup.copy.steps.map((label) => ({ id: label, label }))}
-      title={setup.copy.product}
+      title={flow.copy.product}
       tone={tone}
+      variant="focus"
       windowControls={<WindowControls />}
     >
-      <FirstRunStepContent
-        copy={setup.copy}
-        diagnosticsStatus={setup.diagnosticsStatus}
-        error={setup.error}
-        language={setup.language}
-        modelLoadFailed={setup.modelLoadFailed}
-        modelSaveStatus={setup.modelSaveStatus}
-        modelSettingsReady={setup.modelSettingsReady}
-        status={setup.status}
-        step={setup.step}
-        onAcceptSafety={setup.onAcceptSafety}
-        onBackToLanguage={setup.onBackToLanguage}
-        onCopyDiagnostics={setup.onCopyDiagnostics}
-        onLanguageChange={setup.onLanguageChange}
-        onLanguageContinue={setup.onLanguageContinue}
-        onQuit={setup.onQuit}
-        onRepairInstall={setup.onRepairInstall}
-        onRetryInstall={setup.onRetryInstall}
-        onRetryModelLoad={setup.onRetryModelLoad}
-        onRetryModelSave={setup.onRetryModelSave}
-      />
+      {flow.screen === "welcome" ? <FirstRunWelcome flow={flow} /> : <FirstRunConnect flow={flow} />}
     </SetupWizardShell>
   );
 }

@@ -7,7 +7,7 @@ mod reader;
 mod wire;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use parking_lot::Mutex;
 use std::path::PathBuf;

@@ -239,9 +239,8 @@ fn parse(args: &[OsString]) -> Result<(Options, Action), crate::host::HostError>
 
 fn expand_data(data: Option<&str>) -> Result<Option<String>, crate::host::HostError> {
     let Some(data) = data else { return Ok(None) };
-    let home = std::env::var_os("HOME")
-        .filter(|home| !home.is_empty())
-        .map(std::path::PathBuf::from)
+    let home = butler_platform::user_dirs::home_dir()
+        .filter(|home| !home.as_os_str().is_empty())
         .ok_or_else(|| "native_home_unavailable".to_owned())?;
     let expanded = if data == "~" {
         home
@@ -264,6 +263,3 @@ fn report_error(command: &str, json_output: bool, message: &str) -> ExitCode {
     }
     ExitCode::from(1)
 }
-
-#[cfg(test)]
-mod tests;

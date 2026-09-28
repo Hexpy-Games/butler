@@ -21,7 +21,17 @@ impl Drop for TemporaryRoot {
     }
 }
 
+/// Security boundary: the installation stays immutable. Data and workspace
+/// cannot overlap it, and service state and log files symlinked into it are
+/// rejected before any write.
+// test-category: security
 #[test]
+fn installation_rejects_overlap_and_symlinked_writes() {
+    crate::host::installation::tests::data_and_workspace_cannot_overlap_the_installation();
+    service_log_file_rejects_a_symlink_into_installation();
+    crate::host::service::instance::tests::state_and_log_symlinks_into_installation_are_rejected_before_writes();
+}
+
 fn service_log_file_rejects_a_symlink_into_installation() {
     let root = TemporaryRoot::new();
     let installation_root = root.0.join("installation");
@@ -35,7 +45,7 @@ fn service_log_file_rejects_a_symlink_into_installation() {
     let logs = data_root.join("logs");
     std::fs::create_dir_all(&logs).expect("DATA logs directory is created");
     let target = logs.join("butler-agent-service.stdout.log");
-    std::os::unix::fs::symlink(&installed_log, &target).expect("log symlink is created");
+    butler_platform::secure_fs::symlink(&installed_log, &target).expect("log symlink is created");
     let installation = ResolvedInstallation::desktop(&executable, &installation_root, &resources)
         .expect("installation paths are valid");
 

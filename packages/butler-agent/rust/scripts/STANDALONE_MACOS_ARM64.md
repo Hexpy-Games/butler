@@ -14,6 +14,12 @@ python3 packages/butler-agent/rust/scripts/release-standalone-macos-arm64.py \
   gate --payload "$BUTLER_NATIVE_AGENT_PAYLOAD"
 ```
 
+Set `BUTLER_NATIVE_AGENT_EXECUTABLE` to an existing executable `butler-agent`
+to skip the static ONNX Runtime preparation and Cargo build and lay out the
+payload from that binary instead (useful for App smoke runs against a shared
+prebuilt agent). The producer prints the binary it used and its sha256 either
+way. Leave it unset for release payloads.
+
 The root release scripts default `BUTLER_NATIVE_AGENT_PAYLOAD` to
 `packages/butler-app/client/electron/.native-agent-payload/bundled-agent` and
 `BUTLER_AGENT_ARCHIVE` to

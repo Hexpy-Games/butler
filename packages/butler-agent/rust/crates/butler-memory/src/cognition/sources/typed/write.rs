@@ -282,40 +282,14 @@ fn validate_record_id(value: &str) -> CognitionResult<()> {
 }
 
 fn write_atomic(path: &Path, bytes: &[u8]) -> CognitionResult<()> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| error(CognitionCode::MemoryDataPathUnsafe))?;
-    let file_name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or_else(|| error(CognitionCode::MemoryDataPathUnsafe))?;
-    let temporary = parent.join(format!(
-        ".{file_name}.{}.{}.tmp",
-        std::process::id(),
-        uuid::Uuid::new_v4()
-    ));
-    let result = (|| {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut file = options.open(&temporary).map_err(io_error)?;
-        file.write_all(bytes).map_err(io_error)?;
-        file.sync_all().map_err(io_error)?;
-        drop(file);
-        fs::rename(&temporary, path).map_err(io_error)?;
-        File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(io_error)?;
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&temporary);
+    if path.parent().is_none() || path.file_name().is_none() {
+        return Err(error(CognitionCode::MemoryDataPathUnsafe));
     }
-    result
+    butler_platform::secure_fs::replace_private(
+        path,
+        |file| file.write_all(bytes).map_err(io_error),
+        io_error,
+    )
 }
 
 fn append_durable(path: &Path, bytes: &[u8]) -> CognitionResult<()> {
@@ -325,11 +299,7 @@ fn append_durable(path: &Path, bytes: &[u8]) -> CognitionResult<()> {
     let existed = path.exists();
     let mut options = OpenOptions::new();
     options.create(true).append(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    butler_platform::secure_fs::owner_only(&mut options);
     options
         .open(path)
         .and_then(|mut file| {

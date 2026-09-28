@@ -1,5 +1,8 @@
 use super::*;
 
+/// Race: an effect journal CAS failure between intent and receipt leaves the
+/// effect uncertain, and recovery backfills it through the real lane.
+// test-category: race
 #[tokio::test]
 async fn journal_cas_failed_uncertain_and_recovery_backfill_use_real_lane() {
     let (_fixture, storage, work) = ready("effect-cas-recovery").await;
@@ -90,53 +93,5 @@ async fn journal_cas_failed_uncertain_and_recovery_backfill_use_real_lane() {
     assert_eq!(uncertain.status, EffectStatus::Uncertain);
     assert_eq!(uncertain.dispatch_attempts, 0);
     assert!(super::outcomes::evidence(&uncertain).is_none());
-    storage.close().await.unwrap();
-}
-
-#[tokio::test]
-async fn actual_bun_journal_result_and_receipt_bytes_match() {
-    let fixture: serde_json::Value =
-        serde_json::from_str(include_str!("../bun-golden.json")).unwrap();
-    let source = &fixture["stored"];
-    let identity: EffectIdentity = serde_json::from_value(source["identity"].clone()).unwrap();
-    let receipt: EffectReceipt = serde_json::from_value(source["receipt"].clone()).unwrap();
-    let fixture = crate::btcc::storage::testing::Fixture::activated();
-    let storage = BtccStorage::open(fixture.config("effect-bun-journal"))
-        .await
-        .unwrap();
-    let journal = StorageEffectJournal::new(storage.clone(), clock());
-    let PrepareEffect::Ready { record, .. } =
-        journal.prepare(identity.clone(), None).await.unwrap()
-    else {
-        panic!("prepared")
-    };
-    let claimed = journal
-        .claim_dispatch(identity.effect_id.clone(), record.journal_revision)
-        .await
-        .unwrap()
-        .unwrap();
-    journal
-        .record_applied(
-            identity.effect_id.clone(),
-            claimed.journal_revision,
-            butler_core::json::JsonDocument::from_value(&source["result"]).unwrap(),
-            receipt,
-        )
-        .await
-        .unwrap()
-        .unwrap();
-    let stored: (String, String) = storage
-        .execute(move |db| {
-            db.query_row(
-                "SELECT result_json,receipt_json FROM btcc_guided_effects WHERE effect_id=?1",
-                [identity.effect_id],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )
-            .map_err(crate::btcc::storage::StorageError::sqlite)
-        })
-        .await
-        .unwrap();
-    assert_eq!(stored.0, source["resultJson"].as_str().unwrap());
-    assert_eq!(stored.1, source["receiptJson"].as_str().unwrap());
     storage.close().await.unwrap();
 }

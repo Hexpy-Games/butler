@@ -143,7 +143,7 @@ fn canonical(path: &Path) -> Result<PathBuf, String> {
 
 /// `crates/<name>/..` and `tools/<name>/..` belong to that package; anything
 /// else to the workspace root.
-fn split_package(relative: &Path) -> (PathBuf, String) {
+pub(crate) fn split_package(relative: &Path) -> (PathBuf, String) {
     let parts: Vec<_> = relative
         .components()
         .filter_map(|component| match component {
@@ -236,7 +236,8 @@ fn write_baseline(path: &Path, entries: &Entries) -> Result<(), String> {
     fs::write(path, contents).map_err(|error| format!("cannot write {}: {error}", path.display()))
 }
 
-fn display(package: &Path) -> String {
+/// `package` as a prefix of its files: `crates/<name>/`, or empty for the root.
+pub(crate) fn display(package: &Path) -> String {
     let package = package.to_string_lossy().replace('\\', "/");
     if package.is_empty() {
         package
@@ -245,7 +246,8 @@ fn display(package: &Path) -> String {
     }
 }
 
-fn display_package(package: &Path) -> String {
+/// `package` as a name: `crates/<name>`, or `.` for the root.
+pub(crate) fn display_package(package: &Path) -> String {
     let package = package.to_string_lossy().replace('\\', "/");
     if package.is_empty() {
         ".".to_owned()

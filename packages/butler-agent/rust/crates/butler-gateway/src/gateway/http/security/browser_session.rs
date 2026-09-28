@@ -96,6 +96,12 @@ impl BrowserSessions {
         if expiry <= now {
             return None;
         }
+        self.issue(now)
+    }
+
+    /// The `Set-Cookie` value for a new session (a redeemed code, or the
+    /// session that rotated the connection code and needs the new key).
+    pub(in crate::gateway::http) fn issue(&self, now: SystemTime) -> Option<HeaderValue> {
         let expires = unix_seconds(now).saturating_add(SESSION_TTL_SECONDS);
         let nonce = base64_url(&random_bytes()[..16]);
         let signature = self.key.mac(&session_message(expires, &nonce));

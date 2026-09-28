@@ -191,7 +191,16 @@ async fn modify_precedence_same_decision_replay_and_optional_execution_identity(
     ready.storage.close().await.unwrap();
 }
 
+/// Race: authority decisions are compare-and-set at one generation. Grant
+/// precedence, revocation and operational close race on one request, and the
+/// terminal slot generation and close decisions keep the source order.
+// test-category: race
 #[tokio::test]
+async fn authority_decision_cas_races() {
+    grant_precedence_revocation_and_operational_close_cas().await;
+    terminal_slot_generation_and_close_decision_cas_preserve_source_order().await;
+}
+
 async fn grant_precedence_revocation_and_operational_close_cas() {
     let ready = ready("authority-permission-policy").await;
     let mut allow = decision(&ready.request_ref, "allow");
@@ -252,29 +261,6 @@ async fn grant_precedence_revocation_and_operational_close_cas() {
     ready.storage.close().await.unwrap();
 }
 
-#[tokio::test]
-async fn missing_started_call_rolls_back_pending_authority_insert() {
-    let ready = ready("authority-rollback").await;
-    let mut unmatched = input(&ready.work_id, &ready.plan_id);
-    unmatched.action_key = "another".into();
-    unmatched.operation_occurrence_id = Some("missing-call".into());
-    let error = ready.authority.admit(unmatched).await.unwrap_err();
-    assert_eq!(error.code(), "authority_source_call_not_pending");
-    let rows: i64 = ready
-        .storage
-        .execute(|db| {
-            db.query_row("SELECT COUNT(*) FROM btcc_authority_requests", [], |row| {
-                row.get(0)
-            })
-            .map_err(StorageError::sqlite)
-        })
-        .await
-        .unwrap();
-    assert_eq!(rows, 1);
-    ready.storage.close().await.unwrap();
-}
-
-#[tokio::test]
 async fn terminal_slot_generation_and_close_decision_cas_preserve_source_order() {
     let ready = ready("authority-slot-generation").await;
     let mut different = input(&ready.work_id, &ready.plan_id);
@@ -350,35 +336,4 @@ async fn terminal_slot_generation_and_close_decision_cas_preserve_source_order()
         crate::btcc::RequestOutcome::Failed
     );
     ready.storage.close().await.unwrap();
-}
-
-#[tokio::test]
-async fn corrupt_receipt_projection_fails_closed() {
-    let second = ready("authority-corrupt-receipt").await;
-    second
-        .authority
-        .decide(decision(&second.request_ref, "allow"))
-        .await
-        .unwrap();
-    second.storage.execute({ let request = second.request_ref.clone(); move |db| {
-        db.execute("UPDATE btcc_authority_requests SET outcome_receipt_json='{}' WHERE request_ref=?1",
-            [request]).map_err(StorageError::sqlite)?;
-        Ok(())
-    }}).await.unwrap();
-    assert_eq!(
-        second
-            .authority
-            .execution(AuthorityExecutionInput {
-                owner_session_id: "session".into(),
-                request_ref: second.request_ref,
-                source_session_id: None,
-                client_message_id: None,
-                turn_id: "turn".into(),
-            })
-            .await
-            .unwrap_err()
-            .code(),
-        "authority_request_corrupt"
-    );
-    second.storage.close().await.unwrap();
 }

@@ -4,6 +4,15 @@ impl GatewayApplication for AppApplication {
     fn get_usage_monitor(&self, query: AppUsageMonitorQuery) -> ApplicationFuture<Value> {
         self.dependencies.monitoring.usage_monitor(query)
     }
+    fn get_provider_quota(
+        &self,
+        provider_id: String,
+        refresh: bool,
+    ) -> ApplicationFuture<butler_runtime::operations::ProviderQuotaView> {
+        self.dependencies
+            .monitoring
+            .provider_quota(provider_id, refresh)
+    }
     fn work_status(&self) -> ApplicationFuture<Vec<AppBoundWorkStatusFact>> {
         self.dependencies.monitoring.work_status()
     }
@@ -216,6 +225,9 @@ impl GatewayApplication for AppApplication {
     fn runtime_readiness(&self) -> Result<RuntimeReadinessView, GatewayApplicationError> {
         self.dependencies.executor_readiness.readiness()
     }
+    fn setup(&self) -> Result<Arc<dyn super::AppSetupPort>, GatewayApplicationError> {
+        Ok(self.dependencies.setup.clone())
+    }
     fn read_settings(&self) -> ApplicationFuture<serde_json::Value> {
         let this = self.clone_handle();
         Box::pin(async move { this.worker_profile_settings().await })
@@ -405,7 +417,7 @@ impl GatewayApplication for AppApplication {
     }
     fn context_details(&self, session_id: String) -> ApplicationFuture<Value> {
         let this = self.clone_handle();
-        Box::pin(async move { this.context_details_owned(session_id).await })
+        Box::pin(async move { Ok(this.context_details_owned(session_id).await?.view) })
     }
     fn cancel_subsession(
         &self,
@@ -424,6 +436,23 @@ impl GatewayApplication for AppApplication {
         self.dependencies
             .subsessions
             .resume(parent_session_id, relation_id)
+    }
+    fn publish_gateway_event(
+        &self,
+        event_type: &'static str,
+        payload: serde_json::Map<String, Value>,
+    ) -> ApplicationFuture<()> {
+        let storage = self.storage.clone();
+        let subscribers = self.subscribers.clone();
+        let now = self.dependencies.identity_clock.now_iso();
+        Box::pin(async move {
+            storage
+                .execute(move |db| {
+                    events::append(db, &subscribers, event_type, None, payload, &now).map(drop)
+                })
+                .await
+                .map_err(app_error)
+        })
     }
     fn latest_event_cursor(&self) -> ApplicationFuture<u64> {
         let storage = self.storage.clone();

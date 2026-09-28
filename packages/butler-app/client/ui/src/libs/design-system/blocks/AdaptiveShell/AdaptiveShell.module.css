@@ -13,6 +13,10 @@
       var(--space-md)
   );
 
+  /* The workspace's leading corners sit on the window edge, so they follow
+     the window radius (PromptSuggestionList's backdrop reads it too). */
+  --workspace-left-radius: var(--app-window-radius, 18px);
+
   position: relative;
   display: grid;
   width: 100%;
@@ -25,6 +29,21 @@
   border-radius: var(--app-window-radius, 18px);
   background: var(--sidebar-bg);
   color: var(--text-primary);
+}
+
+/* The window corner radius belongs to Electron's frameless window only. In a
+   browser tab the shell fills the viewport edge to edge, so square corners
+   leave no exposed page background. */
+.root:not([data-chrome-environment="electron"]) {
+  --app-window-radius: 0px;
+}
+
+/* A docked sidebar puts the workspace's leading corners inside the window,
+   where they keep the panel radius on every platform. */
+.root:not(
+    [data-chrome-environment="electron"]
+  )[data-panel-layout="docked"][data-left-track="true"] {
+  --workspace-left-radius: 18px;
 }
 
 .root[data-chrome-environment="browser"] {
@@ -147,8 +166,7 @@
   grid-template-rows: var(--titlebar-safe-area-top) minmax(0, 1fr);
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: var(--app-window-radius, 18px) 0 0
-    var(--app-window-radius, 18px);
+  border-radius: var(--workspace-left-radius) 0 0 var(--workspace-left-radius);
   background: var(--workspace-bg);
   transition:
     background var(--motion-base) var(--motion-ease-standard),

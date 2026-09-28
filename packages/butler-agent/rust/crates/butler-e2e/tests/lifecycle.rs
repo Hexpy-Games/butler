@@ -1,4 +1,5 @@
-//! J/L. Restart handoff and service lifecycle (SCENARIOS.md REC-04, SVC-01).
+//! J/L. Restart handoff and service lifecycle (SCENARIOS.md REC-04, SVC-01,
+//! SVC-08).
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -11,6 +12,7 @@ use std::time::{Duration, Instant};
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::gateway::{Gateway, TERMINAL, turn_state};
 use butler_e2e::e2e::scenario::{Scenario, Setup};
+use butler_e2e::e2e::stop_intent::{instance_record, read_intent};
 
 async fn reachable(gw: &Gateway, within: Duration) -> bool {
     let deadline = Instant::now() + within;
@@ -238,4 +240,44 @@ fn run_bounded(s: &Scenario, limit: Duration) -> Result<(Option<i32>, String), H
         std::thread::sleep(Duration::from_millis(100));
     };
     Ok((code, std::fs::read_to_string(&log).unwrap_or_default()))
+}
+
+/// SVC-08 — the App releasing its foreground lease (closing the agent's
+/// stdin, as when the App quits) is a requested stop: the agent exits 0
+/// without an announcement, removes its record and stays stopped.
+#[tokio::test]
+async fn svc_08_released_foreground_lease_stops_cleanly() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("SVC-08")?.app_supervisor().start().await?;
+    let data = s.sandbox.data.clone();
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let record = loop {
+        if let Some(record) = instance_record(&data).filter(|record| record["state"] == "ready") {
+            break record;
+        }
+        assert!(Instant::now() < deadline, "no ready instance record");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    };
+    assert_eq!(record["app_supervised"], true, "{record}");
+    let pid = s.agent.pid().expect("the App's child runs");
+    assert_eq!(record["pid"], pid, "{record}");
+
+    assert!(s.agent.release_foreground_lease(), "no leased agent runs");
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while s.agent.is_running() {
+        assert!(Instant::now() < deadline, "the agent did not exit");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let status = s.agent.reap().expect("the exited agent is reaped");
+    assert_eq!(status.code(), Some(0), "a released lease exited {status}");
+    assert!(
+        read_intent(&data).is_none(),
+        "a lease release was announced"
+    );
+    assert!(
+        instance_record(&data).is_none(),
+        "the stopped agent left its record"
+    );
+    assert!(!s.gw.healthy().await, "the stopped agent still serves");
+    s.finish().await
 }

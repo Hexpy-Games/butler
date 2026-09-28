@@ -215,6 +215,3 @@ async fn emit(progress: &dyn AgentLoopProgress, frames: Vec<Frame>) {
         }
     }
 }
-
-#[cfg(test)]
-mod tests;

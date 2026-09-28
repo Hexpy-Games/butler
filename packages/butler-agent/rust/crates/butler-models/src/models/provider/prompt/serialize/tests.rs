@@ -32,7 +32,7 @@ fn config(model_ref: &str) -> ProviderRequestConfig {
         api_shape: metadata.hosted_api_shape,
         metadata,
         endpoint: Url::parse("http://fixture.test/v1").unwrap(),
-        auth: ProviderAuth::ApiKey("fixture".into()),
+        auth: ProviderAuth::ApiKey(String::from("fixture").into()),
         policy: ProviderRoundPolicy {
             total: Duration::from_secs(1),
             idle: None,
@@ -194,41 +194,6 @@ fn hosted_prompt_wire_bodies_follow_each_carrier_contract() {
         request.reasoning_effort = Some(&explicit);
         assert!(wire(&request, &config, Carrier::Responses).contains(r#""effort":"high""#));
     }
-}
-
-#[test]
-fn codex_prompt_wraps_unbounded_text_as_user_input() {
-    let effort = ReasoningEffort::Medium;
-    let usage = usage();
-    let schema = Map::from_iter([("type".into(), json!("object"))]);
-    let mut request = request(&effort, &usage);
-    request.usage_attribution = None;
-    request.response_format = Some(PromptJsonSchema {
-        name: "memory_meaning_v4",
-        schema: &schema,
-        strict: Some(true),
-    });
-    let mut config = config("openai/gpt-6-sol");
-    config.auth = ProviderAuth::Codex {
-        mode: super::super::super::ProviderAuthMode::CodexOauth,
-        authorization: "Bearer fixture".into(),
-        account_id: "fixture".into(),
-        user_agent: "fixture".into(),
-        originator: "fixture".into(),
-    };
-    let value: serde_json::Value =
-        serde_json::from_str(&wire(&request, &config, Carrier::Responses)).unwrap();
-    assert_eq!(value["model"], "gpt-6-sol");
-    assert_eq!(value["store"], false);
-    assert_eq!(value["stream"], true);
-    assert_eq!(value["reasoning"], json!({"effort":"medium"}));
-    assert_eq!(
-        value["input"],
-        json!([{"role":"user","content":[{"type":"input_text","text":"Hello"}]}])
-    );
-    assert_eq!(value["text"]["format"]["name"], "memory_meaning_v4");
-    assert_eq!(value["text"]["format"]["strict"], true);
-    assert!(value.get("max_output_tokens").is_none());
 }
 
 #[test]

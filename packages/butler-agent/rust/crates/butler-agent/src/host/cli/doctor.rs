@@ -6,20 +6,21 @@ use serde_json::json;
 
 mod checks;
 use checks::{
-    Check, check_value, data_check, digest_check, executable_check, owned_service_check,
-    resources_check, version_check,
+    Check, check_value, credentials_check, data_check, digest_check, executable_check,
+    owned_service_check, resources_check, version_check,
 };
 
 use crate::host::ResolvedInstallation;
 use crate::host::cli::settings as settings_cli;
 use crate::host::service::instance as service_instance;
 
-const CHECKS: [&str; 6] = [
+const CHECKS: [&str; 7] = [
     "executable",
     "resources",
     "version",
     "integrity",
     "data",
+    "credentials",
     "owned_service",
 ];
 
@@ -58,38 +59,7 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
         Ok(data) => data,
         Err(error) => return report_error(options.json, "unsafe_path", error.message(), 1),
     };
-    let mut checks = Vec::new();
-    let requested = options.check.as_deref();
-    if selected(requested, "executable")
-        || requested == Some("payload")
-        || requested == Some("installation")
-    {
-        checks.push(executable_check(installation));
-    }
-    if selected(requested, "resources")
-        || requested == Some("payload")
-        || requested == Some("installation")
-    {
-        checks.push(resources_check(installation));
-    }
-    if selected(requested, "version")
-        || requested == Some("payload")
-        || requested == Some("installation")
-    {
-        checks.push(version_check(installation));
-    }
-    if selected(requested, "integrity")
-        || requested == Some("payload")
-        || requested == Some("installation")
-    {
-        checks.push(digest_check(installation));
-    }
-    if selected(requested, "data") {
-        checks.push(data_check(&data));
-    }
-    if selected(requested, "owned_service") || requested == Some("service") {
-        checks.push(owned_service_check(&data, installation));
-    }
+    let checks = run_checks(options.check.as_deref(), installation, &data);
     let healthy = checks.iter().all(|check| check.status == "pass");
     let report = json!({
         "schema": "butler.native-doctor.v1",
@@ -137,6 +107,40 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
     } else {
         ExitCode::from(1)
     }
+}
+
+/// Runs the `requested` check (a check id, or the groups `payload`,
+/// `installation` and `service`), or every check.
+fn run_checks(
+    requested: Option<&str>,
+    installation: &ResolvedInstallation,
+    data: &std::path::Path,
+) -> Vec<Check> {
+    let installation_group = matches!(requested, Some("payload" | "installation"));
+    let wants = |id: &str| selected(requested, id);
+    let mut checks = Vec::new();
+    if wants("executable") || installation_group {
+        checks.push(executable_check(installation));
+    }
+    if wants("resources") || installation_group {
+        checks.push(resources_check(installation));
+    }
+    if wants("version") || installation_group {
+        checks.push(version_check(installation));
+    }
+    if wants("integrity") || installation_group {
+        checks.push(digest_check(installation));
+    }
+    if wants("data") {
+        checks.push(data_check(data));
+    }
+    if wants("credentials") {
+        checks.push(credentials_check(data));
+    }
+    if wants("owned_service") || requested == Some("service") {
+        checks.push(owned_service_check(data, installation));
+    }
+    checks
 }
 
 fn parse(args: &[OsString]) -> Result<Options, (&'static str, String)> {

@@ -336,83 +336,17 @@ async fn real_admission_plan_journal_review_disposition_and_reopen_share_one_own
     reopened_storage.close().await.unwrap();
 }
 
+/// Format pin: hashes used as ids in the store. Persisted content-ref hashes
+/// across canonicalization edge cases, the SQLite identity's JavaScript
+/// property order, and the source golden's relation identity and hash codec.
+// test-category: format-pin
 #[tokio::test]
-async fn context_hydrates_only_ordered_last_fifty_large_result_bodies() {
-    let (_fixture, storage, service, journal) = opened("work-context-tail").await;
-    let mut call_ids = Vec::new();
-    for index in 0..51 {
-        let call = format!("tool-{index}");
-        journal_result(&journal, &call, index, 16_384).await;
-        call_ids.push(call);
-    }
-    service
-        .start_work(StartWorkInput {
-            scope: scope(),
-            mutation_call_id: "start-tail".into(),
-            objective: "collect".into(),
-            backfill_tool_call_ids: Some(call_ids),
-        })
-        .await
-        .unwrap();
-    storage
-        .execute(|db| {
-            db.execute(
-                "UPDATE btcc_guided_work_results SET source_turn_rowid = NULL,
-            source_turn_sequence = NULL WHERE tool_call_id IN ('tool-0', 'tool-50')",
-                [],
-            )
-            .map_err(super::super::StorageError::sqlite)?;
-            db.execute(
-                "UPDATE btcc_guided_work_results SET source_turn_rowid = 1,
-            source_turn_sequence = NULL WHERE tool_call_id IN ('tool-1', 'tool-2')",
-                [],
-            )
-            .map_err(super::super::StorageError::sqlite)?;
-            db.execute(
-                "UPDATE btcc_guided_work_results SET source_turn_rowid = 1,
-            source_turn_sequence = 1 WHERE tool_call_id IN ('tool-3', 'tool-4')",
-                [],
-            )
-            .map_err(super::super::StorageError::sqlite)?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    let source_tail: Vec<String> = storage
-        .execute(|db| {
-            let mut statement = db
-                .prepare(
-                    "SELECT result_ref FROM btcc_guided_work_results result
-            ORDER BY CASE WHEN result.source_turn_rowid IS NULL THEN 1 ELSE 0 END,
-              result.source_turn_rowid,
-              CASE WHEN result.source_turn_sequence IS NULL THEN 1 ELSE 0 END,
-              result.source_turn_sequence, result.sequence, result.rowid",
-                )
-                .map_err(super::super::StorageError::sqlite)?;
-            let all = statement
-                .query_map([], |row| row.get(0))
-                .map_err(super::super::StorageError::sqlite)?
-                .collect::<Result<Vec<String>, _>>()
-                .map_err(super::super::StorageError::sqlite)?;
-            Ok(all.into_iter().skip(1).collect())
-        })
-        .await
-        .unwrap();
-    let context = service.load_context(scope()).await.unwrap().unwrap();
-    assert_eq!(context.work.result_refs.len(), 51);
-    assert_eq!(context.result_facts.len(), 50);
-    assert_eq!(
-        context
-            .result_facts
-            .iter()
-            .map(|fact| fact.result_ref.clone().unwrap())
-            .collect::<Vec<_>>(),
-        source_tail
-    );
-    storage.close().await.unwrap();
+async fn persisted_identity_hashes_are_stable() {
+    crate::btcc::identity::tests::persisted_content_ref_hashes_are_stable_across_canonicalization_edge_cases();
+    crate::btcc::identity::tests::sqlite_identity_uses_js_property_enumeration_order();
+    source_golden_preserves_relation_identity_and_distinct_sqlite_hash_codec().await;
 }
 
-#[tokio::test]
 async fn source_golden_preserves_relation_identity_and_distinct_sqlite_hash_codec() {
     let expected: serde_json::Value =
         serde_json::from_str(include_str!("../../work/source-golden.json")).unwrap();

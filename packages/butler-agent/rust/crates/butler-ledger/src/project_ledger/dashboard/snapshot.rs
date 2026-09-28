@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use butler_core::locale::LocaleCollation;
+use butler_platform::secure_fs;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -430,18 +431,16 @@ fn js_time(value: std::time::SystemTime) -> Value {
         })
 }
 
-#[cfg(unix)]
+/// The inode (0 on hosts without file ids) and the status change time in
+/// epoch milliseconds (or `null`).
 fn stat_identity(stat: &fs::Metadata) -> (u64, Value) {
-    use std::os::unix::fs::MetadataExt;
+    let identity = secure_fs::identity(stat);
     (
-        stat.ino(),
-        json!(stat.ctime() as f64 * 1000.0 + stat.ctime_nsec() as f64 / 1_000_000.0),
+        identity.id.map_or(0, |id| id.inode),
+        identity
+            .changed
+            .map_or(Value::Null, |changed| json!(changed.millis())),
     )
-}
-
-#[cfg(not(unix))]
-fn stat_identity(stat: &fs::Metadata) -> (u64, Value) {
-    (0, stat.created().ok().map(js_time).unwrap_or(Value::Null))
 }
 
 fn js_string(value: &Value) -> String {

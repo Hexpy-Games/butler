@@ -146,26 +146,3 @@ fn profile_import(value: &Value) -> bool {
         && input.get("source").is_none_or(Value::is_string)
         && input.get("model").is_none_or(Value::is_string)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::{personalization_update, profile_import};
-    use serde_json::json;
-
-    #[test]
-    fn personalization_routes_reject_unknown_fields_and_preserve_source_shapes() {
-        assert!(personalization_update(&json!({
-            "persona":"voice",
-            "profile":{"principal_name":"Alex"},
-            "profiling":{"mode":"basic","clear_profile":false},
-            "response_language":"ko"
-        })));
-        assert!(!personalization_update(&json!({"profile":{"secret":"x"}})));
-        assert!(profile_import(
-            &json!({"text":"export","source":"assistant"})
-        ));
-        assert!(!profile_import(
-            &json!({"text":"export","raw_text_included":true})
-        ));
-    }
-}

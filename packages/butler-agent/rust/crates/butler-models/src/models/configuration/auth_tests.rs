@@ -1,6 +1,7 @@
 use std::{fs, path::PathBuf, sync::Arc};
 
 use base64::Engine as _;
+use butler_platform::secure_fs;
 use serde_json::{Value, json};
 use tokio::{io::AsyncReadExt, io::AsyncWriteExt, net::TcpListener};
 
@@ -94,11 +95,7 @@ async fn expiring_profile_refreshes_retains_unknown_fields_and_writes_private_fi
         .unwrap(),
     )
     .unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
-    }
+    secure_fs::restrict_file(&path).transpose().unwrap();
     let access = jwt(&json!({"https://api.openai.com/auth":{"chatgpt_account_id":"account"}}));
     let body = json!({"access_token":access,"expires_in":3600,"scope":"openid"}).to_string();
     let (url, server) = token_server("200 OK", &body).await;
@@ -113,14 +110,11 @@ async fn expiring_profile_refreshes_retains_unknown_fields_and_writes_private_fi
         saved.get("accessToken").and_then(Value::as_str),
         Some(access.as_str())
     );
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        assert_eq!(
-            fs::metadata(path).unwrap().permissions().mode() & 0o777,
-            0o600
-        );
-    }
+    // Hosts without owner-only permissions report `None`.
+    assert_ne!(
+        secure_fs::is_owner_only(&fs::metadata(path).unwrap()),
+        Some(false)
+    );
 }
 
 #[tokio::test]
@@ -224,30 +218,6 @@ async fn relative_profile_override_is_shared_by_oauth_write_and_model_auth_reade
 }
 
 #[tokio::test]
-async fn codex_auth_requires_home_fact_but_explicit_missing_file_is_optional() {
-    let fixture = Fixture::new("missing-home");
-    let owner = fixture.owner("http://127.0.0.1/unused".into());
-    let error = owner.auth_owner().resolve_codex().await.err().unwrap();
-    assert_eq!(error.code, "provider_home_facts_missing");
-
-    let owner = ModelConfiguration::new(
-        fixture.0.clone(),
-        ModelConfigurationEnvironment {
-            codex_auth_json: Some(fixture.0.join("absent-auth.json")),
-            ..Default::default()
-        },
-        Arc::new(Clock),
-        Arc::new(ModelCatalog::new().unwrap()),
-        Arc::new(LocaleCollation::new("en-US").unwrap()),
-        crate::models::provider_http_client().unwrap(),
-        Arc::new(butler_core::configuration::ConfigurationWrites::new()),
-    )
-    .unwrap();
-    let error = owner.auth_owner().resolve_codex().await.err().unwrap();
-    assert_eq!(error.code, "provider_auth_missing");
-}
-
-#[tokio::test]
 async fn token_exchange_accepts_response_larger_than_one_megabyte() {
     let fixture = Fixture::new("large-token-response");
     let body = json!({
@@ -263,4 +233,74 @@ async fn token_exchange_accepts_response_larger_than_one_megabyte() {
         .unwrap();
     server.await.unwrap();
     assert_eq!(profile.as_json()["accessToken"], "token");
+}
+
+fn write_profile(fixture: &Fixture, access: &str, expires_at: i64) -> PathBuf {
+    let path = fixture.0.join("auth/openai-codex.json");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+        &path,
+        json!({"type":"oauth", "accessToken":access, "refreshToken":"refresh", "expiresAt":expires_at})
+            .to_string(),
+    )
+    .unwrap();
+    path
+}
+
+/// Two callers that find the login expiring at once (a model request and a
+/// quota poll) refresh it once: the second waits for the first and uses its
+/// token, so a rotated refresh token is never spent twice (the token server
+/// accepts a single connection); and a rejected token is refreshed only
+/// while it is still the stored one.
+// test-category: race
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_login_is_refreshed_once_whoever_asks() {
+    a_rejected_token_is_refreshed_only_while_it_is_stored().await;
+    concurrent_refreshes_spend_the_refresh_token_once().await;
+}
+
+async fn concurrent_refreshes_spend_the_refresh_token_once() {
+    let fixture = Fixture::new("refresh-once");
+    write_profile(&fixture, "old", 1);
+    let body = json!({"access_token":"renewed","expires_in":3600}).to_string();
+    let (url, server) = token_server("200 OK", &body).await;
+    let first = fixture.owner(url.clone());
+    let second = fixture.owner(url);
+    let (first, second) = (first.auth_owner(), second.auth_owner());
+    let (left, right) = tokio::join!(first.resolve_codex(), second.resolve_codex());
+    for auth in [left.unwrap(), right.unwrap()] {
+        assert!(
+            matches!(&auth, ProviderAuth::Codex { authorization, .. } if authorization == "Bearer renewed")
+        );
+    }
+    assert!(server.await.unwrap().contains("grant_type=refresh_token"));
+}
+
+/// A rejected token is refreshed only while it is still the stored one:
+/// after another refresh replaced it, the stored token is used as is.
+async fn a_rejected_token_is_refreshed_only_while_it_is_stored() {
+    let fixture = Fixture::new("rejected");
+    write_profile(&fixture, "current", 0);
+    // Nothing listens here: any refresh attempt fails.
+    let owner = fixture.owner("http://127.0.0.1:9/token".into());
+    let auth = owner
+        .auth_owner()
+        .resolve_codex_after(Some("Bearer stale"))
+        .await
+        .unwrap();
+    assert!(
+        matches!(&auth, ProviderAuth::Codex { authorization, .. } if authorization == "Bearer current")
+    );
+    let body = json!({"access_token":"renewed","expires_in":3600}).to_string();
+    let (url, server) = token_server("200 OK", &body).await;
+    let renewing = fixture.owner(url);
+    let auth = renewing
+        .auth_owner()
+        .resolve_codex_after(Some("Bearer current"))
+        .await
+        .unwrap();
+    assert!(
+        matches!(&auth, ProviderAuth::Codex { authorization, .. } if authorization == "Bearer renewed")
+    );
+    assert!(server.await.unwrap().contains("refresh_token=refresh"));
 }

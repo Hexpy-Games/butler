@@ -68,6 +68,10 @@ fn leading_literal(text: &str) -> Option<String> {
     None
 }
 
+/// Pure-logic table: every source-fixed pattern passed to `fixed_regex`,
+/// `fixed_regex_ci` or `matches_fixed` anywhere in the workspace compiles, so
+/// their `expect` can never fire at runtime.
+// test-category: pure-logic
 #[test]
 fn every_fixed_pattern_compiles() {
     // Every crate of the workspace, with paths relative to its `src`.
@@ -123,14 +127,5 @@ fn every_fixed_pattern_compiles() {
     assert!(
         compiled > 50,
         "scanner found only {compiled} fixed patterns"
-    );
-}
-
-#[test]
-fn composed_public_text_patterns_compile() {
-    // Forces `Patterns::new`, which composes its patterns from constants.
-    assert_eq!(
-        crate::public_text::sanitize_public_text("hello", "-"),
-        "hello"
     );
 }

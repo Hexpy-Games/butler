@@ -12,9 +12,9 @@
 
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
+use butler_platform::secure_fs;
 use serde::{Deserialize, Serialize};
 
 use super::InstanceRecord;
@@ -150,11 +150,7 @@ pub(crate) fn write_stop_intent(
 ) -> Result<(), StopIntentError> {
     let path = stop_intent_path(data_root);
     if let Some(parent) = path.parent() {
-        fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(parent)
-            .map_err(StopIntentError::Directory)?;
+        secure_fs::create_private_dir_all(parent).map_err(StopIntentError::Directory)?;
     }
     let mut bytes = serde_json::to_vec_pretty(intent).map_err(StopIntentError::Encode)?;
     bytes.push(b'\n');
@@ -206,11 +202,10 @@ pub(crate) fn stop_announced_for(data_root: &Path, pid: u32, nonce: &str) -> boo
 }
 
 fn write_new_file(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(path)?;
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    let _ = secure_fs::owner_only(&mut options);
+    let mut file = options.open(path)?;
     file.write_all(bytes)?;
     file.sync_all()
 }

@@ -83,6 +83,8 @@ export interface AppModelSummary {
   model_ref: string;
   display_name: string;
   status: "latest" | "recommended" | "available" | "deprecated";
+  /** #278: the model's place in its provider's lineup. */
+  tier?: "flagship" | "balanced" | "efficient";
   context_window_tokens?: number;
   max_output_tokens?: number;
   default_reasoning_effort: ReasoningEffort;
@@ -147,6 +149,8 @@ export interface ModelCatalogView {
     auth_methods?: ProviderAuthMethod[];
     default_api_base_url?: string;
     models: AppModelSummary[];
+    /** #230: the per-provider default first-run setup picks (model ref or id, effort). */
+    presets?: { routine?: { model: string; effort: ReasoningEffort } };
   }>;
   models: AppModelSummary[];
   registered_models?: AppModelSummary[];
@@ -547,16 +551,28 @@ export interface SettingsView {
   web_search: WebSearchSettingsView;
   model_fallback: ModelFallbackSettingsView;
   profile_label: string;
+  /** #230: onboarding state kept by the agent; absent on agents before #230. */
+  onboarding?: OnboardingSettingsView;
+  /** Local clients that send the admin credential only. */
   security?: SecuritySettingsView;
 }
 
-/** The `security` object of GET/PATCH /settings; sent to local clients only. */
+export interface OnboardingSettingsView {
+  consent_version?: number | null;
+  accepted_at?: string | null;
+  completed_at?: string | null;
+}
+
+/** The `security` object of GET/PATCH /settings. */
 export interface SecuritySettingsView {
   remote_access_enabled: boolean;
   allowed_hosts: string[];
 }
 
-/** GET /security: local clients only (403 `loopback_required` otherwise). */
+/**
+ * GET /security: local clients with the admin credential only (403
+ * `loopback_required` or `admin_credential_required` otherwise).
+ */
 export interface SecurityView {
   remote_access_enabled: boolean;
   /** Every listen address, loopback first. */
@@ -1321,7 +1337,9 @@ export type ProviderQuotaSourceKind =
   | "zai_usage_query"
   | "provider_quota";
 export type ProviderQuotaReasonCode =
-  | "provider_quota_surface_unavailable"
+  | "provider_quota_pending"
+  | "provider_quota_not_offered"
+  | "provider_quota_fetch_failed"
   | "provider_auth_not_applicable"
   | "provider_auth_required"
   | "provider_auth_surface_mismatch"

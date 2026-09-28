@@ -25,15 +25,19 @@ pub async fn read_context_tool(
         .await
 }
 
+pub use usage::UsageMonitorSources;
+
 pub fn read_usage_tool(data_root: &Path, session_id: &str, since_ts: Option<f64>) -> Value {
     let activity = health::read_transcript_activity(data_root);
-    usage::read_usage(data_root, since_ts, Some(session_id), &activity)
+    usage::read_usage(data_root, since_ts, Some(session_id), &activity, None)
 }
 
+/// The App usage monitor; `sources` fills catalog-price cost and provider quota.
 pub fn read_usage_monitor(
     data_root: &Path,
     session_id: Option<&str>,
     since_ts: Option<f64>,
+    sources: Option<&UsageMonitorSources<'_>>,
 ) -> Value {
     let activity = health::read_transcript_activity(data_root);
     usage::read_usage(
@@ -41,6 +45,7 @@ pub fn read_usage_monitor(
         since_ts,
         session_id.filter(|id| !id.trim().is_empty()),
         &activity,
+        sources,
     )
 }
 
@@ -80,7 +85,7 @@ pub async fn read_metrics_status(
     let operational = operational::read_summary(data_root, since_ts, enabled);
     let first_visible = operational::read_first_visible(data_root, since_ts);
     let transcript_activity = health::read_transcript_activity(data_root);
-    let usage = usage::read_usage(data_root, since_ts, None, &transcript_activity);
+    let usage = usage::read_usage(data_root, since_ts, None, &transcript_activity, None);
     let context = context::read_context_monitor(data_root, models).await;
     let context_estimate = context::render_context_estimate(resources, data_root, models).await;
     let health = health::read_health(data_root, &transcript_activity);

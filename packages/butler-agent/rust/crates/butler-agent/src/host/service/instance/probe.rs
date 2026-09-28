@@ -2,10 +2,7 @@
 
 use std::{fs, fs::OpenOptions, io, path::Path};
 
-use nix::{
-    errno::Errno,
-    fcntl::{Flock, FlockArg},
-};
+use butler_platform::instance::{InstanceLock, LockError};
 
 use super::instance_lock_path;
 
@@ -24,9 +21,9 @@ pub(crate) fn instance_lock_is_held_read_only(
     let file = OpenOptions::new().read(true).open(path).map_err(|source| {
         crate::host::HostError::new("service_lock_unavailable").with_source(source)
     })?;
-    match Flock::lock(file, FlockArg::LockSharedNonblock) {
+    match InstanceLock::try_shared(file) {
         Ok(_) => Ok(false),
-        Err((_, Errno::EAGAIN)) => Ok(true),
-        Err((_, error)) => Err(format!("service_lock_probe_failed: {error}").into()),
+        Err(LockError::Busy) => Ok(true),
+        Err(LockError::Failed(error)) => Err(format!("service_lock_probe_failed: {error}").into()),
     }
 }

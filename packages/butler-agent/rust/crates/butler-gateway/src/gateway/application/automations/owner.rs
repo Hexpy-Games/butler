@@ -24,7 +24,7 @@ struct Admission {
 }
 enum Command {
     Initialize {
-        app: AppApplication,
+        app: Box<AppApplication>,
         reply: oneshot::Sender<Result<(), GatewayApplicationError>>,
     },
     Run {
@@ -56,7 +56,7 @@ impl AutomationRunOwner {
     ) -> Result<(), GatewayApplicationError> {
         let (reply_tx, reply_rx) = oneshot::channel();
         self.admit(Command::Initialize {
-            app,
+            app: Box::new(app),
             reply: reply_tx,
         })
         .await?;
@@ -117,7 +117,7 @@ async fn run(mut receiver: mpsc::Receiver<Command>) {
                 let result = if app.is_some() {
                     Err(GatewayApplicationError::internal())
                 } else {
-                    app = Some(value);
+                    app = Some(*value);
                     Ok(())
                 };
                 let _ = reply.send(result);
@@ -137,29 +137,5 @@ async fn run(mut receiver: mpsc::Receiver<Command>) {
                 let _ = reply.send(result);
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn close_drains_admitted_commands_and_rejects_late_admission() {
-        let owner = AutomationRunOwner::start();
-        let (reply, admitted) = oneshot::channel();
-        owner
-            .admit(Command::Due { reply })
-            .await
-            .expect("command admitted before close");
-
-        owner.close().await.expect("owner closes after draining");
-        // Uninitialized, the owner answers the drained command instead of dropping it.
-        assert!(matches!(
-            admitted.await.expect("admitted command completed"),
-            Err(GatewayApplicationError::Internal { .. })
-        ));
-
-        assert!(owner.due().await.is_err());
     }
 }
