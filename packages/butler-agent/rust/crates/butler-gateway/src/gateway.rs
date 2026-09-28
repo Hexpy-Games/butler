@@ -61,18 +61,24 @@ pub use application::{
     AppRelocationBinding, AppRelocationBindingResult, AppRelocationBindingSeed,
     AppRelocationBindingUpdate, AppRelocationCanonicalUpdate, AppRelocationHost,
     AppRelocationSnapshot, AppRelocationTransportBinding, AppRelocationWorkspaceMarker,
-    AppRelocationWorkspacePlan, AppRelocationWorkspaceRequest, AppRuntimeInfoProvider,
-    AppSessionActionResult, AppSessionBranchQuery, AppSessionBranchResult, AppSessionControlUpdate,
-    AppSessionControlsView, AppSessionSummary, AppSessionUpdate, AppSessionViewPage,
-    AppSessionWorkProgress, AppSessionWorkspaceProvisioner, AppSessionWorkspaceSnapshot,
-    AppSettingsFacts, AppSettingsFactsProvider, AppSettingsMutationPort, AppSourceDocument,
-    AppSourceSnapshotRequest, AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin,
-    AppStartTopicConversationRequest, AppSubsessionPort, AppTurn, AppUsageMonitorQuery,
-    AppWorkOperationalNoticeFact, AppWorkProgress, AppWorkStatusConversationFact,
-    AppWorkStreamQuery, AppWorkStreamReader, AppWorkStreamTurnOutcome, AppWorkerActivityQuery,
-    AppWorkspaceMode, ArtifactFileCandidate, ArtifactMaterializationRequest, ClaimedNativeSnapshot,
-    EnqueueReceipt, MaterializedResponderFile, OperationOutputChunk, OperationOutputView,
-    ProjectSnapshot, ResolvedNativeAssets, TranscriptExport, VisualAdmissionRequest,
+    AppRelocationWorkspacePlan, AppRelocationWorkspaceRequest, AppRoutinePreset,
+    AppRuntimeInfoProvider, AppSessionActionResult, AppSessionBranchQuery, AppSessionBranchResult,
+    AppSessionControlUpdate, AppSessionControlsView, AppSessionSummary, AppSessionUpdate,
+    AppSessionViewPage, AppSessionWorkProgress, AppSessionWorkspaceProvisioner,
+    AppSessionWorkspaceSnapshot, AppSettingsFacts, AppSettingsFactsProvider,
+    AppSettingsMutationPort, AppSourceDocument, AppSourceSnapshotRequest, AppSpaceCommand,
+    AppSpaceMutationResult, AppSpaceOrigin, AppStartTopicConversationRequest, AppSubsessionPort,
+    AppTurn, AppUsageMonitorQuery, AppWorkOperationalNoticeFact, AppWorkProgress,
+    AppWorkStatusConversationFact, AppWorkStreamQuery, AppWorkStreamReader,
+    AppWorkStreamTurnOutcome, AppWorkerActivityQuery, AppWorkspaceMode, ArtifactFileCandidate,
+    ArtifactMaterializationRequest, ClaimedNativeSnapshot, EnqueueReceipt,
+    MaterializedResponderFile, OperationOutputChunk, OperationOutputView, ProjectSnapshot,
+    ResolvedNativeAssets, TranscriptExport, VisualAdmissionRequest,
+};
+pub use application::{
+    AppOauthStartInput, AppProviderKeyInput, AppSetupPort, LocalModelServersView, OauthFlowStatus,
+    OauthFlowView, ProviderKeyVerificationView, SETUP_READINESS_EVENT, SavedCredentialView,
+    SetupReadinessStatus, SetupReadinessStep, SetupReadinessView, SetupStepError, SetupStepStatus,
 };
 pub(crate) use application::{
     AutomationDetailView, AutomationListView, AutomationMutationResult, AutomationRunListView,
@@ -287,6 +293,14 @@ pub trait GatewayApplication:
     fn upload_message_file(&self, input: AppFileUpload) -> ApplicationFuture<MessageFileRef>;
     fn download_message_file(&self, id: String) -> ApplicationFuture<AppFileDownload>;
     fn runtime_readiness(&self) -> Result<RuntimeReadinessView, GatewayApplicationError>;
+    /// First-run setup (#230); an application without it answers 404.
+    fn setup(&self) -> Result<Arc<dyn AppSetupPort>, GatewayApplicationError> {
+        Err(GatewayApplicationError::public(
+            404,
+            "not_found",
+            "Route not found.",
+        ))
+    }
     fn read_settings(&self) -> ApplicationFuture<serde_json::Value>;
     fn update_settings(&self, input: serde_json::Value) -> ApplicationFuture<serde_json::Value> {
         let _ = input;

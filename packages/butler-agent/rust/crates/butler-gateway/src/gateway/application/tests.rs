@@ -61,6 +61,7 @@ async fn admission_persists_claimed_message_turn_and_signed_native_input() {
             subsessions: Arc::new(UnprovidedSessions),
             branch_conversations: Arc::new(UnprovidedBranchConversations),
             branch_summarizer: Arc::new(TestBranchSummarizer),
+            setup: crate::gateway::application::test_setup_port(),
         },
     )
     .await
@@ -134,6 +135,7 @@ async fn stable_client_replay_rejects_changed_input_without_second_enqueue() {
             subsessions: Arc::new(UnprovidedSessions),
             branch_conversations: Arc::new(UnprovidedBranchConversations),
             branch_summarizer: Arc::new(TestBranchSummarizer),
+            setup: crate::gateway::application::test_setup_port(),
         },
     )
     .await

@@ -19,6 +19,8 @@ use crate::host::ResolvedInstallation;
 use crate::host::service::configuration::AppServiceConfiguration;
 
 const LIVE_APPLY_TIMEOUT: Duration = Duration::from_secs(10);
+/// How long a service that is still starting is waited for, as `butler open` does.
+const STARTING_PATIENCE: Duration = Duration::from_secs(30);
 
 /// The list after adding `added` and removing `removed` (names are
 /// validated and compared lower case; entries already stored stay as
@@ -64,7 +66,7 @@ pub(super) async fn store(
     );
     super::patch_app_config(data_root, installation, patch).await?;
     let Some(endpoint) =
-        super::running_app_endpoint(data_root, installation, Duration::ZERO).await?
+        super::running_app_endpoint(data_root, installation, STARTING_PATIENCE).await?
     else {
         return Ok(false);
     };
