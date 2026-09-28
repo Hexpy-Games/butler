@@ -7,9 +7,6 @@ use super::{BtccStorage, StorageError, StorageResult};
 use crate::btcc::StorageCode;
 use crate::btcc::{ProgressDestination, RuntimeTurnEventInput};
 
-#[cfg(test)]
-mod operation_output_tests;
-
 /// A committed progress event awaiting publication.
 pub struct CommittedProgressEvent {
     pub event_id: String,

@@ -415,4 +415,4 @@ fn admission_lock_path(data_root: &Path) -> PathBuf {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

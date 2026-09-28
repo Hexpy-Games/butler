@@ -6,6 +6,11 @@ mod contracts;
 mod coverage_health;
 mod error;
 mod extraction;
+#[cfg(test)]
+pub(crate) use extraction::{
+    persisted_import_normalization_hash_and_id_are_stable,
+    persisted_window_coverage_key_and_evidence_ref_are_stable,
+};
 mod extractor_config;
 mod migration_prompt;
 mod naming;

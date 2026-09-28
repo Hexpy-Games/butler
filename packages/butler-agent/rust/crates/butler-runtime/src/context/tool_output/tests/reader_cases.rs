@@ -170,8 +170,7 @@ async fn early_return_retained_original_reopen_utf16_and_explicit_prune() {
 }
 
 #[cfg(unix)]
-#[tokio::test]
-async fn reader_enforces_scan_limit_and_realpath_boundary() {
+pub(crate) async fn reader_enforces_scan_limit_and_realpath_boundary() {
     use std::os::unix::fs::symlink;
     let fixture = Fixture::new();
     let retained = fixture

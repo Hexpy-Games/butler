@@ -16,8 +16,6 @@ use super::{ModelCatalogError, tokenizer::TokenizerOwner};
 pub use local::{
     LocalModelConfig, LocalModelPlatform, LocalModelSource, normalize_local_model_config,
 };
-#[cfg(any(test, feature = "test-support"))]
-pub(crate) use lookup::model_identity_key;
 pub use lookup::{default_hosted_provider_api_base_url, parse_model_ref};
 pub use registered::{
     ImageProbeEvidence, RegisteredHostedModelConfig, normalize_hosted_api_base_url,
@@ -254,10 +252,6 @@ impl ModelCatalogSnapshot {
     }
     pub fn view(&self) -> &ModelCatalogView {
         &self.view
-    }
-    #[cfg(any(test, feature = "test-support"))]
-    pub(crate) fn list_model_metadata(&self) -> Vec<ModelProviderMetadata> {
-        self.view.models.clone()
     }
     pub fn find_model_metadata(&self, model_ref: Option<&str>) -> Option<ModelProviderMetadata> {
         lookup::find_model_metadata(model_ref, &self.view.models)

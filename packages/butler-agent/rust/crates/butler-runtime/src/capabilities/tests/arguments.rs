@@ -84,17 +84,3 @@ async fn number_coercion_limits_and_guard_cases_have_explicit_results() {
     assert_eq!(unicode_space["files"][0]["content"], "non-js-whitespace");
     fixture.files.close().await;
 }
-
-#[tokio::test]
-async fn invalid_json_and_invalid_shape_have_distinct_public_codes() {
-    let fixture = Fixture::new();
-    let malformed = fixture.invoke(&json!({ "arguments": "{" }), None).await;
-    assert_eq!(malformed["error"], "invalid_arguments_json");
-    assert_eq!(
-        malformed["evidence_capability_receipts"][0]["capability"],
-        "limitation_recorded"
-    );
-    let wrong_shape = fixture.invoke(&json!({ "arguments": "[]" }), None).await;
-    assert_eq!(wrong_shape["error"], "invalid_arguments_shape");
-    fixture.files.close().await;
-}

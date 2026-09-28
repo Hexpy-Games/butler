@@ -270,8 +270,7 @@ fn disposition_command(work_id: &str) -> DispositionCommand {
     }
 }
 
-#[tokio::test]
-async fn project_work_keeps_its_records_and_projections() {
+pub(crate) async fn project_work_keeps_its_records_and_projections() {
     let mut h = Harness::new("work");
     h.init().await;
     let fixture = TestStorageFixture::activated();

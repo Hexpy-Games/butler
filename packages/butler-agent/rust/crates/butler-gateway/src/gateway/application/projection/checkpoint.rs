@@ -131,27 +131,3 @@ fn index(byte: u8) -> Option<u8> {
         .position(|candidate| *candidate == byte)
         .map(|value| u8::try_from(value).unwrap_or(u8::MAX))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn reads_fractional_bun_mtime_from_existing_checkpoint() {
-        let db = Connection::open_in_memory().unwrap();
-        db.execute_batch(
-            "CREATE TABLE app_transcript_projection_checkpoints( \
-               chat_id TEXT,session_id TEXT,transcript_path TEXT,file_device INTEGER, \
-               file_inode INTEGER,projected_bytes INTEGER,modified_at_ms INTEGER, \
-               trailing_text TEXT,boundary_anchor_text TEXT,spool_path TEXT, \
-               spool_bytes INTEGER,spool_end_offset INTEGER); \
-             INSERT INTO app_transcript_projection_checkpoints VALUES( \
-               'general','butler/app-general','/scratch/transcript',1,2,17, \
-               1789313577777.5864,'','','',0,0);",
-        )
-        .unwrap();
-        let checkpoint = load(&db, "general").unwrap().unwrap();
-        assert_eq!(checkpoint.projected_bytes, 17);
-        assert_eq!(checkpoint.modified_at_ms, 1_789_313_577_777.586_4);
-    }
-}

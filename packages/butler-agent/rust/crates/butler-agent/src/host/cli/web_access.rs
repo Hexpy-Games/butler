@@ -1,8 +1,5 @@
 //! One-shot public web diagnostics and page-read commands.
 
-#[cfg(test)]
-mod tests;
-
 use std::{env, ffi::OsString, path::PathBuf, process::ExitCode, sync::Arc};
 
 use serde_json::{Value, json};

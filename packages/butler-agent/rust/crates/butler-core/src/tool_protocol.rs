@@ -115,6 +115,3 @@ fn hex(byte: u8) -> Option<u8> {
         _ => None,
     }
 }
-
-#[cfg(test)]
-mod tests;

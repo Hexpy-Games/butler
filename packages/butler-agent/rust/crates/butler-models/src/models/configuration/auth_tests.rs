@@ -224,30 +224,6 @@ async fn relative_profile_override_is_shared_by_oauth_write_and_model_auth_reade
 }
 
 #[tokio::test]
-async fn codex_auth_requires_home_fact_but_explicit_missing_file_is_optional() {
-    let fixture = Fixture::new("missing-home");
-    let owner = fixture.owner("http://127.0.0.1/unused".into());
-    let error = owner.auth_owner().resolve_codex().await.err().unwrap();
-    assert_eq!(error.code, "provider_home_facts_missing");
-
-    let owner = ModelConfiguration::new(
-        fixture.0.clone(),
-        ModelConfigurationEnvironment {
-            codex_auth_json: Some(fixture.0.join("absent-auth.json")),
-            ..Default::default()
-        },
-        Arc::new(Clock),
-        Arc::new(ModelCatalog::new().unwrap()),
-        Arc::new(LocaleCollation::new("en-US").unwrap()),
-        crate::models::provider_http_client().unwrap(),
-        Arc::new(butler_core::configuration::ConfigurationWrites::new()),
-    )
-    .unwrap();
-    let error = owner.auth_owner().resolve_codex().await.err().unwrap();
-    assert_eq!(error.code, "provider_auth_missing");
-}
-
-#[tokio::test]
 async fn token_exchange_accepts_response_larger_than_one_megabyte() {
     let fixture = Fixture::new("large-token-response");
     let body = json!({

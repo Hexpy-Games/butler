@@ -274,20 +274,6 @@ pub fn default_hosted_provider_api_base_url(provider_id: &str) -> Option<&'stati
     }
 }
 
-#[cfg(any(test, feature = "test-support"))]
-pub(crate) fn model_provider_family_id(model: &ModelProviderMetadata) -> &str {
-    model
-        .provider_family_id
-        .as_deref()
-        .map(butler_core::public_text::trim_js_whitespace)
-        .filter(|value| !value.is_empty())
-        .unwrap_or(&model.provider_id)
-}
-#[cfg(any(test, feature = "test-support"))]
-pub(crate) fn model_identity_key(model: &ModelProviderMetadata) -> String {
-    format!("{}:{}", model_provider_family_id(model), model.model_id)
-}
-
 fn js_whitespace(ch: char) -> bool {
     matches!(ch, '\u{0009}'..='\u{000d}' | '\u{0020}' | '\u{00a0}' | '\u{1680}' |
         '\u{2000}'..='\u{200a}' | '\u{2028}' | '\u{2029}' | '\u{202f}' | '\u{205f}' |

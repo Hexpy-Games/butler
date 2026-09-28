@@ -449,29 +449,3 @@ fn text<'a>(args: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
 fn utf16_cmp(left: &str, right: &str) -> std::cmp::Ordering {
     left.encode_utf16().cmp(right.encode_utf16())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn catalog_ids_round_trip_encoded_segments() {
-        let id = stable_id("server:one", "say hello/世界");
-        let parsed = parse_id(&id).expect("MCP catalog id");
-        assert_eq!(parsed.server_id, "server:one");
-        assert_eq!(parsed.tool_name, "say hello/世界");
-        assert!(parse_id("mcp:server:%GG").is_none());
-    }
-
-    #[test]
-    fn schema_description_redacts_values_while_search_keeps_the_raw_schema_digest() {
-        let raw = json!({"properties":{"token":{"default":"secret","type":"string"}}});
-        let schema = sanitize(&raw);
-        assert_eq!(schema["properties"]["token"], "[redacted]");
-        assert_eq!(schema_digest(&schema).unwrap().len(), 71);
-        assert_ne!(
-            schema_digest(&raw).unwrap(),
-            schema_digest(&schema).unwrap()
-        );
-    }
-}

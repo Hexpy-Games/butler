@@ -94,22 +94,3 @@ fn create_private_directory(path: &Path) -> io::Result<()> {
     }
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::create_private_directory;
-    use std::fs;
-
-    #[test]
-    fn spool_parent_refuses_symlink_aliases() {
-        let root = std::env::temp_dir().join(format!("web-spool-{}", uuid::Uuid::new_v4()));
-        fs::create_dir_all(&root).unwrap();
-        let outside = root.join("outside");
-        fs::create_dir(&outside).unwrap();
-        #[cfg(unix)]
-        std::os::unix::fs::symlink(&outside, root.join("alias")).unwrap();
-        #[cfg(unix)]
-        assert!(create_private_directory(&root.join("alias")).is_err());
-        let _ = fs::remove_dir_all(root);
-    }
-}

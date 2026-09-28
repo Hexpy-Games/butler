@@ -42,7 +42,7 @@ mod test_execution;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use std::sync::Arc;
 use std::{future::Future, pin::Pin};

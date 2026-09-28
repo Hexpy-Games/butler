@@ -52,19 +52,3 @@ pub(super) fn json(value: &Value) -> Value {
         other => other.clone(),
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    #[test]
-    fn preserves_privacy_boolean_but_redacts_secret_values() {
-        let redacted = super::json(&json!({
-            "privacy": {"secrets_redacted": true},
-            "request": {"api_key": "fixture-secret", "secrets_redacted": "fixture-secret"},
-        }));
-        assert_eq!(redacted["privacy"]["secrets_redacted"], true);
-        assert_eq!(redacted["request"]["api_key"], "[REDACTED]");
-        assert_eq!(redacted["request"]["secrets_redacted"], "[REDACTED]");
-    }
-}

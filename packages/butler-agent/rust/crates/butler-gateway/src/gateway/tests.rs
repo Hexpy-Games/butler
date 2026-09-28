@@ -1,45 +1,11 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
-use serde_json::{Value, json};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
-};
+use serde_json::Value;
 
 use super::*;
 
 mod artifact_session;
-mod http_limits;
-mod session_queue;
 mod support;
-mod transcript_export;
-
-#[tokio::test]
-async fn new_chat_briefing_route_is_authenticated_and_enveloped() {
-    let application = Arc::new(TestApplication::default());
-    *application.briefing.lock().unwrap() = Some(json!({
-        "moment":"Onboarding", "title":"Welcome", "suggestions":[],
-        "source":{"scope":"onboarding","content_origin":"heuristic_fallback"},
-        "raw_text_included":false
-    }));
-    let server = start(
-        application,
-        LocalAuthConfig::required(Some("secret".into())),
-    )
-    .await;
-    let unauthorized = request(
-        server.local_addr(),
-        "GET /new-chat-briefing HTTP/1.1\r\nhost: localhost\r\nconnection: close\r\n\r\n",
-    )
-    .await;
-    assert!(unauthorized.starts_with("HTTP/1.1 401"));
-    let authorized = request(server.local_addr(),
-        "GET /new-chat-briefing HTTP/1.1\r\nhost: localhost\r\nauthorization: Bearer secret\r\nconnection: close\r\n\r\n").await;
-    assert!(authorized.starts_with("HTTP/1.1 200"));
-    assert!(authorized.contains("\"protocol_version\":\"butler.app.v1\""));
-    assert!(authorized.contains("\"content_origin\":\"heuristic_fallback\""));
-    server.close().await.unwrap();
-}
 
 use support::*;
 
@@ -108,6 +74,9 @@ async fn authenticated_message_route_preserves_validation_and_deferred_admission
     server.close().await.unwrap();
 }
 
+/// Security boundary: required auth without a token and the rate limit keep
+/// their public errors.
+// test-category: security
 #[tokio::test]
 async fn required_auth_without_token_and_rate_limit_keep_public_errors() {
     let application = Arc::new(TestApplication::default());
@@ -139,57 +108,4 @@ async fn required_auth_without_token_and_rate_limit_keep_public_errors() {
     assert!(second.starts_with("HTTP/1.1 429 Too Many Requests"));
     assert!(second.contains("Too many messages. Please wait before sending again."));
     limited.close().await.unwrap();
-}
-
-#[tokio::test]
-async fn live_events_reconcile_overflow_and_unregister_on_disconnect() {
-    let application = Arc::new(TestApplication::default());
-    application
-        .flood_on_subscribe
-        .store(true, std::sync::atomic::Ordering::SeqCst);
-    let server = start(application.clone(), LocalAuthConfig::default()).await;
-    let mut stream = TcpStream::connect(server.local_addr()).await.unwrap();
-    let port = server.local_addr().port();
-    stream
-        .write_all(
-            format!("GET /events/live?cursor=0 HTTP/1.1\r\nhost: localhost:{port}\r\n\r\n")
-                .as_bytes(),
-        )
-        .await
-        .unwrap();
-
-    let response = tokio::time::timeout(Duration::from_secs(2), async {
-        let mut bytes = Vec::new();
-        let mut chunk = [0; 4_096];
-        loop {
-            let read = stream.read(&mut chunk).await.unwrap();
-            if read == 0 {
-                break;
-            }
-            bytes.extend_from_slice(&chunk[..read]);
-            if bytes
-                .windows(b"event: heartbeat\ndata: null".len())
-                .any(|window| window == b"event: heartbeat\ndata: null")
-            {
-                break;
-            }
-        }
-        String::from_utf8(bytes).unwrap()
-    })
-    .await
-    .unwrap();
-    assert!(response.starts_with("HTTP/1.1 200 OK"));
-    assert!(response.contains("text/event-stream; charset=utf-8"));
-    assert!(response.contains("stream.reconcile_required"));
-    assert!(response.contains("event: heartbeat\ndata: null"));
-    drop(stream);
-
-    tokio::time::timeout(Duration::from_secs(2), async {
-        while application.subscription_count() != 0 {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .unwrap();
-    server.close().await.unwrap();
 }

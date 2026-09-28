@@ -182,11 +182,6 @@ impl TurnExecutionSupervisor {
             state.turns.remove(turn_id);
         }
     }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub(super) fn registration_count(&self) -> usize {
-        self.inner.lock().turns.len()
-    }
 }
 
 impl ExecutionPermit {
@@ -220,6 +215,3 @@ fn next_generation(state: &mut SupervisorState) -> u64 {
     state.next_generation = state.next_generation.wrapping_add(1).max(1);
     state.next_generation
 }
-
-#[cfg(test)]
-mod tests;

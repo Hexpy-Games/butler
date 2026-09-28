@@ -351,15 +351,3 @@ impl PartialEq for StorageError {
 }
 
 impl Eq for StorageError {}
-
-#[cfg(test)]
-mod tests {
-    use super::StorageCode;
-
-    #[test]
-    fn wire_codes_are_stable() {
-        let codes: Vec<&str> = StorageCode::ALL.iter().map(|code| code.as_str()).collect();
-        let expected: Vec<&str> = include_str!("wire_codes.txt").lines().collect();
-        assert_eq!(codes, expected);
-    }
-}

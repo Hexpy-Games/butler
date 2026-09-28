@@ -1,7 +1,6 @@
 use super::*;
 
-#[tokio::test]
-async fn stop_cancels_turn_claim_and_same_session_authority_atomically() {
+pub(crate) async fn stop_cancels_turn_claim_and_same_session_authority_atomically() {
     let fixture = Fixture::activated();
     let storage = BtccStorage::open(fixture.config("repository-stop"))
         .await

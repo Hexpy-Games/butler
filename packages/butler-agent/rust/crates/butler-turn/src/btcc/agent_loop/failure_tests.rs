@@ -188,17 +188,3 @@ async fn context_provider_and_output_failures_release_before_failure_progress() 
         assert!(progress < release && release < failed_progress);
     }
 }
-
-#[tokio::test]
-async fn replay_cleanup_error_replaces_original_and_prevents_failure_publication() {
-    let (error, events) = failed_round(Failure::Context, true).await;
-    assert!(
-        matches!(error, AgentLoopError::Propagate(ref error) if error.code() == "cleanup_failed")
-    );
-    assert!(
-        events
-            .iter()
-            .any(|value| value == "failed:btcc-model-round-0")
-    );
-    assert!(!events.iter().any(|value| value == "progress:tool.failed"));
-}

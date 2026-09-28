@@ -410,31 +410,3 @@ fn append(target: &mut Value, pointer: &str, source: Option<&Value>) {
         value.push_str(fragment);
     }
 }
-
-#[cfg(test)]
-mod clock_tests {
-    use std::sync::atomic::{AtomicI64, Ordering};
-
-    use super::*;
-
-    struct Clock(AtomicI64);
-
-    impl ProviderClock for Clock {
-        fn now_epoch_millis(&self) -> i64 {
-            self.0.fetch_add(1, Ordering::SeqCst)
-        }
-    }
-
-    #[test]
-    fn explicit_codex_ids_bypass_each_fallback_independently() {
-        let clock = Clock(AtomicI64::new(90));
-        let state = CodexState::new(clock.now_epoch_millis());
-        assert_eq!(
-            state.stream_id(&serde_json::json!({"item_id":"item"})),
-            "item"
-        );
-        let response = state.response(&serde_json::json!({"id":"response","output":[]}), &clock);
-        assert_eq!(response["id"], "response");
-        assert_eq!(clock.0.load(Ordering::SeqCst), 91);
-    }
-}

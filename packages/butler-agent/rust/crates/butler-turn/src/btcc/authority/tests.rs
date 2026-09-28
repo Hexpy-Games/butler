@@ -13,7 +13,6 @@ use crate::btcc::work::{
 use crate::btcc::{SuspensionReason, TurnStore, TurnTransition};
 use butler_core::locale::LocaleCollation;
 
-mod bun_oracle;
 mod policy_tests;
 
 fn clock() -> Arc<dyn Fn() -> String + Send + Sync> {

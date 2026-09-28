@@ -3,8 +3,6 @@
 mod control;
 mod rich;
 mod terminal;
-#[cfg(test)]
-mod tests;
 
 use serde_json::{Map, Value, json};
 

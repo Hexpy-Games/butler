@@ -51,11 +51,7 @@ pub(super) struct TestApplication {
     pub(super) flood_on_subscribe: std::sync::atomic::AtomicBool,
 }
 
-impl TestApplication {
-    pub(super) fn subscription_count(&self) -> usize {
-        self.subscribers.lock().unwrap().len()
-    }
-}
+impl TestApplication {}
 
 impl GatewayMutationCommands for TestApplication {
     fn relocate_session(
@@ -322,7 +318,16 @@ impl GatewayApplication for TestApplication {
         Box::pin(async { Ok(Vec::new()) })
     }
     fn export_transcript(&self, session_id: String) -> ApplicationFuture<TranscriptExport> {
-        super::transcript_export::empty_export(session_id)
+        Box::pin(async move {
+            let (_sender, chunks) = tokio::sync::mpsc::channel(1);
+            Ok(TranscriptExport {
+                session_id,
+                format: "markdown".into(),
+                filename: "session.md".into(),
+                generated_at: "2026-09-14T00:00:00.000Z".into(),
+                chunks,
+            })
+        })
     }
     fn list_session_queue(&self, session_id: String) -> ApplicationFuture<SessionQueueView> {
         Box::pin(async move {

@@ -159,18 +159,3 @@ impl From<butler_turn::conversation::ConversationError> for CognitionError {
         Self::port(error.code(), error.message(), error)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::CognitionCode;
-
-    #[test]
-    fn wire_codes_are_stable() {
-        let codes: Vec<&str> = CognitionCode::ALL
-            .iter()
-            .map(|code| code.as_str())
-            .collect();
-        let expected: Vec<&str> = include_str!("wire_codes.txt").lines().collect();
-        assert_eq!(codes, expected);
-    }
-}

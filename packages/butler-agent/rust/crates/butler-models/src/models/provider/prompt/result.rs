@@ -195,6 +195,3 @@ fn number(value: Option<&Value>) -> Option<f64> {
 fn number_value(value: &Value) -> Option<f64> {
     value.as_f64().filter(|value| value.is_finite())
 }
-
-#[cfg(test)]
-mod tests;

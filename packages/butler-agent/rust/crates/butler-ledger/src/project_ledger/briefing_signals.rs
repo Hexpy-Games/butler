@@ -363,6 +363,3 @@ fn unique_strings(values: Vec<String>, limit: usize) -> Vec<String> {
         .take(limit)
         .collect()
 }
-
-#[cfg(test)]
-mod tests;

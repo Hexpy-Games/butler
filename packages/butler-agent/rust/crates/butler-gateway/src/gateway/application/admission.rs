@@ -339,6 +339,3 @@ fn legacy_digest(
         Sha256::digest(stringify(&value)?.as_bytes())
     ))
 }
-
-#[cfg(test)]
-mod tests;

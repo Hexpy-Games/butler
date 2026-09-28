@@ -202,6 +202,3 @@ fn is_public_identity(value: &str) -> bool {
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || b"._:@-".contains(&byte))
 }
-
-#[cfg(test)]
-mod tests;

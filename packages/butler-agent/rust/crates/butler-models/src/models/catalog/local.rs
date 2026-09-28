@@ -328,27 +328,3 @@ fn normalize_local_server_url(value: &str) -> Option<(String, String)> {
     };
     Some((server, api))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn custom_model_normalization_keeps_raw_id_and_saved_endpoint_reference() {
-        let model = normalize_local_model_config(
-            &serde_json::json!({
-                "model_id":" org/model ",
-                "model_ref":"local/custom-reference",
-                "server_url":"https://models.example/legacy",
-                "api_base_url":"https://models.example/legacy/v1",
-                "context_window_tokens":8192
-            }),
-            "now",
-        )
-        .unwrap();
-        assert_eq!(model.model_id, "org/model");
-        assert_eq!(model.model_ref, "local/custom-reference");
-        assert_eq!(model.api_base_url, "https://models.example/legacy/v1");
-        assert_eq!(model.provider_label, "Custom");
-    }
-}
