@@ -3,6 +3,7 @@ import { motionEasing, type MotionEasingName } from "../../../lib/motion";
 import { cn } from "../../../lib/utils";
 import { easingPath } from "../easingPath";
 import { slotStyle } from "../heroSequence";
+import { HeroReadout } from "./HeroReadout";
 import s from "../FoundationHeroMotion.module.css";
 import v from "../heroVariants.module.css";
 
@@ -21,6 +22,7 @@ export function MotionHero() {
   const [paths, setPaths] = useState(easingPaths);
   useEffect(() => setPaths(easingPaths()), []);
   return (
+    <>
     <span className={v.plot}>
       {EASINGS.map((name, k) => (
         <span className={cn(s.slot, v.curve)} data-slots={5} data-poster={k === 0 ? "" : undefined} key={name}
@@ -36,5 +38,7 @@ export function MotionHero() {
         </span>
       ))}
     </span>
+    <HeroReadout slots={5} items={EASINGS.map((name) => `--motion-ease-${name}`)} />
+    </>
   );
 }

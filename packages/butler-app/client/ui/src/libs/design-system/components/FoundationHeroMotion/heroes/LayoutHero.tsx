@@ -1,4 +1,5 @@
 import { type CSSProperties } from "react";
+import { HeroReadout } from "./HeroReadout";
 import v from "../heroVariants.module.css";
 
 /** Reflow geometry in rem: tile, gap, frame padding, and the visible rows of every frame. */
@@ -27,6 +28,7 @@ function tileVars(index: number): Record<string, number> {
 export function LayoutHero() {
   const frame = Object.fromEntries(COLUMNS.map((columns, index) => [`--hero-w${index + 1}`, frameWidth(columns)]));
   return (
+    <>
     <span className={v.reflow} style={{ ...frame, "--hero-frame-h": `${FRAME_HEIGHT}rem`, "--hero-tile": `${TILE}rem` } as CSSProperties}>
       <span className={v.doorLeft} />
       <span className={v.doorMiddle} />
@@ -35,5 +37,8 @@ export function LayoutHero() {
         <span className={v.tile} data-lead={index === 0 ? "" : undefined} key={index} style={tileVars(index) as CSSProperties} />
       ))}
     </span>
+    {/* Steps walk desktop, tablet, phone, tablet; each step moves to the next. */}
+    <HeroReadout slots={4} poster={3} items={[2, 1, 2, 3].map((columns) => `repeat(${columns}, 1fr)`)} />
+    </>
   );
 }

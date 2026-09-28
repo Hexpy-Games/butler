@@ -45,6 +45,19 @@
   --hero-slot: calc(var(--hero-beat) * 10);
 }
 
+/* Step heroes: one readout slot per step of their loop. */
+.stage[data-hero-variant="color"] {
+  --hero-slot: calc(var(--hero-beat) * 7);
+}
+
+.stage[data-hero-variant="spacing"] {
+  --hero-slot: calc(var(--hero-beat) * 3);
+}
+
+.stage[data-hero-variant="layout"] {
+  --hero-slot: calc(var(--hero-beat) * 8);
+}
+
 /* Offscreen or in a hidden tab: every loop holds its frame, in step. */
 .stage[data-hero-state="paused"] * {
   animation-play-state: paused;
@@ -102,6 +115,159 @@
 
 .slot[data-slots="16"] {
   animation-name: hero-fade-16;
+}
+
+/* ---- Readout: the token the graphic shows now ---- */
+
+.readout {
+  position: absolute;
+  bottom: var(--space-md);
+  left: var(--space-lg);
+  display: grid;
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.readoutItem {
+  grid-area: 1 / 1;
+  opacity: 0;
+  animation-duration: calc(var(--hero-slot) * var(--hero-slots));
+  animation-timing-function: var(--motion-ease-linear);
+  animation-delay: calc(var(--hero-slot) * (var(--k) - var(--hero-slots)));
+  animation-iteration-count: infinite;
+}
+
+.readoutItem[data-poster] {
+  opacity: 1;
+}
+
+.readoutItem[data-slots="4"] {
+  animation-name: hero-readout-4;
+}
+
+.readoutItem[data-slots="5"] {
+  animation-name: hero-readout-5;
+}
+
+.readoutItem[data-slots="6"] {
+  animation-name: hero-readout-6;
+}
+
+.readoutItem[data-slots="9"] {
+  animation-name: hero-readout-9;
+}
+
+.readoutItem[data-slots="10"] {
+  animation-name: hero-readout-10;
+}
+
+.readoutItem[data-slots="14"] {
+  animation-name: hero-readout-14;
+}
+
+@keyframes hero-readout-4 {
+  0%,
+  2.49% {
+    opacity: 0;
+  }
+
+  2.5%,
+  27.49% {
+    opacity: 1;
+  }
+
+  27.5%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes hero-readout-5 {
+  0%,
+  1.99% {
+    opacity: 0;
+  }
+
+  2%,
+  21.99% {
+    opacity: 1;
+  }
+
+  22%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes hero-readout-6 {
+  0%,
+  1.657% {
+    opacity: 0;
+  }
+
+  1.667%,
+  18.323% {
+    opacity: 1;
+  }
+
+  18.333%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes hero-readout-9 {
+  0%,
+  1.101% {
+    opacity: 0;
+  }
+
+  1.111%,
+  12.212% {
+    opacity: 1;
+  }
+
+  12.222%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes hero-readout-10 {
+  0%,
+  0.99% {
+    opacity: 0;
+  }
+
+  1%,
+  10.99% {
+    opacity: 1;
+  }
+
+  11%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes hero-readout-14 {
+  0%,
+  0.704% {
+    opacity: 0;
+  }
+
+  0.714%,
+  7.847% {
+    opacity: 1;
+  }
+
+  7.857%,
+  100% {
+    opacity: 0;
+  }
 }
 
 @keyframes hero-fade-4 {

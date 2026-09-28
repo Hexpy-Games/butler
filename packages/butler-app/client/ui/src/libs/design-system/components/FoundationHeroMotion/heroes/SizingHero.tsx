@@ -3,6 +3,7 @@ import { cn } from "../../../lib/utils";
 import { flipScales, pingPong, slotStyle, useTokenPx } from "../heroSequence";
 import s from "../FoundationHeroMotion.module.css";
 import v from "../heroVariants.module.css";
+import { HeroReadout } from "./HeroReadout";
 
 const CONTROL_STEPS = ["xs", "sm", "md", "lg"] as const;
 const CONTROL_FALLBACK = { "--control-height-xs": 24, "--control-height-sm": 28, "--control-height-md": 30, "--control-height-lg": 34 };
@@ -14,6 +15,7 @@ export function SizingHero() {
   const px = useTokenPx(ref, CONTROL_FALLBACK);
   const flips = flipScales(CONTROL_STEPS.map((step) => px[`--control-height-${step}`]), CONTROL_ORDER);
   return (
+    <>
     <span className={cn(v.stack, v.sizingStage)} ref={ref}>
       {CONTROL_ORDER.map((step, k) => (
         <span className={cn(s.slot, v.controlRow)} data-slots={6} data-poster={k === 2 ? "" : undefined} key={k}
@@ -24,5 +26,8 @@ export function SizingHero() {
         </span>
       ))}
     </span>
+    <HeroReadout slots={6} poster={2}
+      items={CONTROL_ORDER.map((step) => `--control-height-${CONTROL_STEPS[step]} · ${px[`--control-height-${CONTROL_STEPS[step]}`]}`)} />
+    </>
   );
 }

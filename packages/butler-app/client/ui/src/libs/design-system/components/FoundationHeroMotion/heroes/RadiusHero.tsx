@@ -2,6 +2,7 @@ import { cn } from "../../../lib/utils";
 import { pingPong, slotStyle } from "../heroSequence";
 import s from "../FoundationHeroMotion.module.css";
 import v from "../heroVariants.module.css";
+import { HeroReadout } from "./HeroReadout";
 
 /** Radius role and the shadow that surface carries. */
 const SURFACES = [["control", "control"], ["panel", "card"], ["popover", "card"], ["composer", "window"]] as const;
@@ -11,6 +12,7 @@ const lift = (level: number) => `translateY(calc(var(--space-md) * ${-level}))`;
 /** 05 Radius and elevation: one surface lifts through the shadow levels as its corners grow. */
 export function RadiusHero() {
   return (
+    <>
     <span className={v.stack}>
       {SURFACE_ORDER.map((level, k) => {
         const previous = SURFACE_ORDER[(k - 1 + SURFACE_ORDER.length) % SURFACE_ORDER.length]!;
@@ -28,5 +30,7 @@ export function RadiusHero() {
         );
       })}
     </span>
+    <HeroReadout slots={6} poster={2} items={SURFACE_ORDER.map((level) => `--radius-${SURFACES[level]![0]} · --shadow-${SURFACES[level]![1]}`)} />
+    </>
   );
 }

@@ -1,5 +1,6 @@
 import { type CSSProperties } from "react";
 import { cn } from "../../../lib/utils";
+import { HeroReadout } from "./HeroReadout";
 import v from "../heroVariants.module.css";
 
 /** Neutral roles, the accent and the status colors, in reading order. */
@@ -20,8 +21,16 @@ export function ColorHero() {
   );
   return (
     <>
-      <span className={cn(v.colorPane, "theme-light")} data-pane="light"><span className={v.colorTrack}>{strip}</span></span>
-      <span className={cn(v.colorPane, "theme-dark")} data-pane="dark"><span className={v.colorTrack}>{strip}</span></span>
+      <span className={cn(v.colorPane, "theme-light")} data-pane="light">
+        <span className={v.colorTrack}>{strip}</span>
+        <span className={v.paneLabel}>.theme-light</span>
+        {/* Step k carries swatch 4 + k across the seam; the readout names that role. */}
+        <HeroReadout slots={9} items={COLOR_ROLES.map((_, k) => COLOR_ROLES[(4 + k) % COLOR_ROLES.length]!)} />
+      </span>
+      <span className={cn(v.colorPane, "theme-dark")} data-pane="dark">
+        <span className={v.colorTrack}>{strip}</span>
+        <span className={v.paneLabel}>.theme-dark</span>
+      </span>
     </>
   );
 }

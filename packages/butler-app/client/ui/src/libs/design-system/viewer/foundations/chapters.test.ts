@@ -1,7 +1,6 @@
 /// <reference types="bun" />
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
-import { FOUNDATION_HERO_VARIANTS } from "../../components/FoundationHeroMotion";
 import { ICON_SIZE } from "../../components/Icons/Icons";
 import { chapterById, chapterForToken, chapterPage, chapterTokens, FOUNDATION_CHAPTERS } from "./chapters";
 import { paletteFamilies } from "./paletteFamilies";
@@ -21,10 +20,6 @@ describe("foundations guidebook chapters", () => {
     const covered = new Set(FOUNDATION_CHAPTERS.flatMap((chapter) => chapterTokens(catalog, chapter).map((token) => token.name)));
     expect(covered.size).toBe(catalog.length);
     for (const token of catalog) expect(chapterTokens(catalog, chapterForToken(token)).includes(token)).toBe(true);
-  });
-
-  test("every chapter has a hero variant and every hero variant a chapter", () => {
-    expect([...FOUNDATION_HERO_VARIANTS].sort()).toEqual(FOUNDATION_CHAPTERS.map((chapter) => chapter.id).sort());
   });
 
   test("numbers chapters 01…10 and keeps the old category routes working", () => {

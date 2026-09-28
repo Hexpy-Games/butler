@@ -1,6 +1,6 @@
 import { useRef, type ComponentType } from "react";
 import { cn } from "../../lib/utils";
-import type { FoundationHeroMotionProps, FoundationHeroVariant } from "./FoundationHeroMotion";
+import type { FoundationHeroLang, FoundationHeroMotionProps, FoundationHeroVariant } from "./FoundationHeroMotion";
 import { useHeroPlayback } from "./heroPlayback";
 import { ColorHero } from "./heroes/ColorHero";
 import { FocusHero } from "./heroes/FocusHero";
@@ -14,7 +14,7 @@ import { SpacingHero } from "./heroes/SpacingHero";
 import { TypographyHero } from "./heroes/TypographyHero";
 import styles from "./FoundationHeroMotion.module.css";
 
-export const FOUNDATION_HERO_RENDERERS: Record<FoundationHeroVariant, ComponentType> = {
+export const FOUNDATION_HERO_RENDERERS: Record<FoundationHeroVariant, ComponentType<{ lang: FoundationHeroLang }>> = {
   color: ColorHero,
   typography: TypographyHero,
   spacing: SpacingHero,
@@ -31,7 +31,7 @@ export const FOUNDATION_HERO_RENDERERS: Record<FoundationHeroVariant, ComponentT
  * The hero itself, loaded on demand by FoundationHeroMotion so its graphics
  * and keyframes stay out of the app's eager bundle.
  */
-export default function FoundationHeroStage({ variant, still = false, className, ...props }: FoundationHeroMotionProps) {
+export default function FoundationHeroStage({ variant, still = false, lang = "en", className, ...props }: FoundationHeroMotionProps) {
   const ref = useRef<HTMLDivElement>(null);
   const playback = useHeroPlayback(ref, still);
   const Hero = FOUNDATION_HERO_RENDERERS[variant];
@@ -45,7 +45,7 @@ export default function FoundationHeroStage({ variant, still = false, className,
       data-hero-state={playback}
       aria-hidden="true"
     >
-      <Hero />
+      <Hero lang={lang} />
     </div>
   );
 }

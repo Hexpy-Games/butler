@@ -56,7 +56,8 @@
   .doorLeft,
   .doorMiddle,
   .doorRight,
-  .tile {
+  .tile,
+  .planeLabel {
     animation: none;
   }
 }
@@ -112,6 +113,19 @@
   inline-size: var(--hero-bar);
   border-radius: var(--radius-panel);
   background: var(--bar);
+}
+
+.paneLabel {
+  position: absolute;
+  top: var(--space-md);
+  left: var(--space-lg);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  color: var(--text-tertiary);
+}
+
+.colorPane[data-pane="dark"] .paneLabel {
+  left: calc(50% + var(--space-lg));
 }
 
 /* ---- 02 Typography: the weight axis, swept ---- */
@@ -366,10 +380,12 @@
   background: var(--accent);
 }
 
-.focusControl[data-kind="check"] {
-  inline-size: var(--space-lg);
-  block-size: var(--space-lg);
-  border-radius: calc(var(--radius-control) / 2);
+.focusControl[data-kind="icon"] {
+  --h: var(--control-height-md);
+
+  justify-content: center;
+  inline-size: var(--control-height-md);
+  block-size: var(--control-height-md);
 }
 
 .switchThumb {
@@ -545,6 +561,26 @@
   background: var(--accent);
 }
 
+/* Plane names: shown while the stack is exploded, hidden when it is flat. */
+.planeLabel {
+  position: absolute;
+  bottom: calc(100% + var(--space-xs));
+  left: 0;
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  animation-name: hero-layers-label;
+  animation-duration: calc(var(--hero-beat) * 30);
+  animation-timing-function: var(--motion-ease-standard);
+  animation-iteration-count: infinite;
+}
+
+.plane[data-plane="drawer"] .planeLabel {
+  bottom: auto;
+  top: calc(100% + var(--space-xs));
+}
+
 /* ---- 10 Layout and platform: a frame of sliding ends and tiles ---- */
 
 /* The frame is three pieces so its corners never scale: rounded ends that
@@ -695,6 +731,23 @@
   82%,
   100% {
     transform: rotateX(0deg) rotateZ(0deg) scale(1);
+  }
+}
+
+@keyframes hero-layers-label {
+  0%,
+  30% {
+    opacity: 0;
+  }
+
+  36%,
+  58% {
+    opacity: 1;
+  }
+
+  62%,
+  100% {
+    opacity: 0;
   }
 }
 

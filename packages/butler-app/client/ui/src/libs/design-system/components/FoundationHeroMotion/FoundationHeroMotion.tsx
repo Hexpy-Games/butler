@@ -8,8 +8,13 @@ export const FOUNDATION_HERO_VARIANTS = [
 
 export type FoundationHeroVariant = (typeof FOUNDATION_HERO_VARIANTS)[number];
 
-export interface FoundationHeroMotionProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "children"> {
+/** Language of the sample lines some heroes set (the type specimen). */
+export type FoundationHeroLang = "en" | "ko";
+
+export interface FoundationHeroMotionProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "children" | "lang"> {
   variant: FoundationHeroVariant;
+  /** Sample-copy language; default "en". Token names and numbers never translate. */
+  lang?: FoundationHeroLang;
   /** Shows the still poster frame whatever the motion setting (thumbnails, print). */
   still?: boolean;
 }

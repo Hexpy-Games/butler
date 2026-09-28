@@ -1,28 +1,21 @@
-import { cn } from "../../../lib/utils";
-import { pingPong, slotStyle } from "../heroSequence";
-import s from "../FoundationHeroMotion.module.css";
-import v from "../heroVariants.module.css";
+import type { FoundationHeroLang } from "../FoundationHeroMotion";
+import { CompositionScene } from "./typography/CompositionScene";
+import { ScaleScene } from "./typography/ScaleScene";
+import { TypefaceScene } from "./typography/TypefaceScene";
+import t from "./typography/TypographyHero.module.css";
 
-/** Stops along the Pretendard Variable weight axis (45–920). */
-const WEIGHTS = [45, 154, 264, 373, 483, 592, 701, 811, 920];
-const WEIGHT_ORDER = pingPong(WEIGHTS.length);
-
-/** 02 Typography: the specimen sweeps the variable weight axis and back; a thumb tracks it. */
-export function TypographyHero() {
+/**
+ * 02 Typography: how Butler's type works, in three scenes on one loop: the
+ * typeface and its weight axis, the role scale with live size/leading, and a
+ * paragraph resolving into hierarchy with its leading and tabular numerals.
+ * The still poster is the composed final frame of the last scene.
+ */
+export function TypographyHero({ lang }: { lang: FoundationHeroLang }) {
   return (
-    <span className={v.typeStage}>
-      <span className={v.typeGlyphs}>
-        {WEIGHT_ORDER.map((weight, k) => (
-          <span className={cn(s.slot, v.glyph)} data-slots={16} data-poster={k === 5 ? "" : undefined} key={k}
-            style={slotStyle(16, k, {}, { "--weight": WEIGHTS[weight]! })}>
-            Aa<span lang="ko">가</span>
-          </span>
-        ))}
-      </span>
-      <span className={v.axis}>
-        {WEIGHTS.map((weight) => <span className={v.tick} key={weight} />)}
-        <span className={v.thumb} />
-      </span>
-    </span>
+    <div className={t.board}>
+      <TypefaceScene />
+      <ScaleScene />
+      <CompositionScene lang={lang} />
+    </div>
   );
 }

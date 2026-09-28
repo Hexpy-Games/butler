@@ -12,7 +12,7 @@ export function TypographyChapter({ chapter, locale, anchor, onOpen }: ChapterPr
     ["measure", "Measure and leading"], ["truncation", "Truncation"], ["numerals", "Numerals"],
   ]);
   return (
-    <ChapterLayout anchor={anchor} chapter={chapter} onOpen={onOpen} sections={s.list}
+    <ChapterLayout anchor={anchor} chapter={chapter} locale={locale} onOpen={onOpen} sections={s.list}
       lead="One voice across Latin and Hangul: one font stack, a role scale instead of raw sizes, and four calm weights. Pick the role for the job; the role owns size, leading, weight and tracking."
       headerExtra={<Button size="xs" variant="borderless" text="Typo component" onClick={() => onOpen("components/Typo")} />}>
       <GuideSection spec={s.at("typeface")} lead="Shown from the current --font-body and --font-family-code stacks in tokens.css; the page follows them when they change.">
