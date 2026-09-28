@@ -1,93 +1,122 @@
-import { fit, focus, type Key, type Pose, type Track } from "../../heroTimeline";
+import { fit, focus, type Key, type Track } from "../../heroTimeline";
 import { TRANSITION } from "../shared/beats";
 import { introTracks } from "../shared/Intro";
 import { reveal, select } from "../shared/Reveal";
 import { rollerTracks } from "../shared/Roller";
 import type { SceneContext } from "../scene/types";
-import { DEVICE_H, MODES, WIDTHS, ZOOM, tokenValue, type LayoutCopy } from "./layoutCopy";
+import { DETENTS, MODES, WINDOW, ZOOM, tokenValue, type LayoutCopy } from "./layoutCopy";
 
 /**
  * 10 Layout and platform, "one shell, three modes", beat marks:
  *
- *   0–7.4     Title    a thin page frame around the word, guides down each side
- *   6.8–15.2  Frame    an empty page frame; titlebar, sidebar and gutter draw,
- *                      each measured on the frame's rim
- *   15.2–19.4 Fill     the real shell fills it; the measures dim
- *   19.4–29   Drag     a handle drags the frame 1280 → 1023 → 640 → 375,
- *                      holding at each detent while the shell relays out;
- *                      the camera re-centres the frame (x only on wide)
- *   29–35     Drawer   at 375 the sidebar is a drawer over a scrim; the
- *                      device's insets show top and bottom
+ *   0–7.4      Title    "Layout"; shell, modes, platform
+ *   6.8–10.8   Window   the camera moves on to Butler at 1280 in its window
+ *   10.8–16    Measures the titlebar's height, the sidebar's width and the
+ *                       conversation's column, each on its nearest edge
+ *   16.4–29.6  Drag     the handle drags the window to 1023, 640 and 375; the
+ *                       shell reflows live; at each breakpoint the next mode
+ *                       takes over (the sidebar becomes a drawer, compact
+ *                       tokens apply); width and mode read above the handle
+ *   34–38.8    Drawer   at 375 the sidebar opens as a full-width drawer,
+ *                       pushing the conversation out, and closes again
  */
-const AT = { frame: 6.8, parts: 11, fill: 15.2, drag: 19.4, drawer: 30, insets: 30.4, shut: 32.6, end: 35 } as const;
-/** Each drag to a width: [start, arrive] (the shell relays out on arrival). */
-const DRAGS: Array<[number, number]> = [[20.2, 22], [23.4, 25.2], [26.6, 28.4]];
-const PARTS = ["bar", "side", "gutter"] as const;
+const AT = { win: 6.8, bar: 10.8, side: 12.2, read: 13.6, handle: 15, zoom: 29.8, drawer: 34, shut: 37.4, end: 40 } as const;
+/** Each drag: [start, arrive]; the next mode takes over on arrival. */
+const DRAGS: Array<[number, number]> = [[16.4, 19.6], [21.6, 24.8], [26.8, 29.6]];
+/** How long a mode handover crossfades. */
+const HANDOVER = 0.4;
 
 const looped = (keys: Key[], close: number): Key[] => {
   const { at: _at, ease: _ease, ...first } = keys[0]!;
   return [...keys, { at: close - 0.01 }, { at: close, ...first }];
 };
 
+/** When each mode's layer holds the window: [from, to] in beats. */
+function modeSpan(k: number): [number, number] {
+  const into = [0, DRAGS[0]![1], DRAGS[1]![1]][k]!;
+  const out = [DRAGS[0]![1], DRAGS[1]![1], Infinity][k]!;
+  return [into, out];
+}
+
 export function layoutTracks(copy: LayoutCopy) {
   return ({ g, close, view }: SceneContext): { tracks: Track[]; camera: Key[] } => {
     const { layout, canvas } = g;
     const z = ZOOM[layout];
-    const stage = g.boxes.shell!;
-    const win = g.boxes.win ?? stage;
-    const frameAt = (px: number) => ({ x: win.x, y: stage.y, w: px * z, h: stage.h });
-    const wideZoom = fit(canvas, stage, 0.92, 1.6);
-    const at = (px: number): Pose => {
-      const box = frameAt(px);
-      return focus(canvas, box, layout === "tall" ? fit(canvas, { ...box, w: box.w + 40 }, 0.9, 3.2) : wideZoom);
-    };
+    const stage = g.boxes.stage!;
+    const win = g.boxes.win!;
+    const tall = layout === "tall";
+    // Wide: one framing holds the whole drag (the window stays centred). Tall: the far 1280 window, then the phone-width window up close.
+    const onStage = view("stage", tall ? win : stage, tall ? 0.94 : 0.9, 3.2);
+    const phone = { x: win.x + win.w / 2 - (DETENTS[3].px * z) / 2, y: win.y, w: DETENTS[3].px * z, h: win.h };
+    const near = tall ? focus(canvas, phone, fit(canvas, phone, 0.9, 3.2)) : onStage;
+    const intro = view("intro", g.boxes.intro!, 1, 1);
     const camera: Key[] = [
-      { at: 0, ...view("intro", g.boxes.intro!, 1, 1) }, { at: AT.frame, ...view("intro", g.boxes.intro!, 1, 1) }, { at: AT.frame + TRANSITION, ...view("shell", stage, 0.92, 1.6), ease: "standard" },
-      { at: DRAGS[0]![0], ...view("shell", stage, 0.92, 1.6) },
-      ...DRAGS.flatMap(([from, to], k): Key[] => [{ at: from + 0.01 }, { at: to + 0.6, ...at(WIDTHS[k + 1]!.px), ease: "standard" }]),
-      { at: AT.end, ...at(WIDTHS[3].px) },
+      { at: 0, ...intro }, { at: AT.win, ...intro }, { at: AT.win + TRANSITION, ...onStage, ease: "standard" },
+      ...(tall
+        // Tall: the camera closes in on the window as the last drag narrows it, so the phone-width shell is read up close.
+        ? [{ at: DRAGS[2]![0], ...onStage }, { at: DRAGS[2]![1], ...near, ease: "standard" } as Key]
+        : [{ at: AT.zoom, ...onStage }, { at: AT.zoom + TRANSITION, ...near, ease: "standard" } as Key]),
+      { at: AT.end, ...near },
     ];
-    const shown = (name: string, from: number, to = close - 0.4, o = 1): Track => ({
-      select: select(name), keys: [{ at: 0, o: 0 }, { at: from, o: 0 }, { at: from + 0.5, o, ease: "decelerate" }, { at: to, o }, { at: to + 0.4, o: 0 }],
+    /** Opacity steps: [beat, value] pairs, each eased over `beats`. */
+    const fades = (name: string, pairs: Array<[number, number]>, first = 0, beats = 0.5): Track => ({
+      select: select(name),
+      keys: looped([{ at: 0, o: first }, ...pairs.flatMap(([t, o], k): Key[] => [{ at: t, o: k === 0 ? first : pairs[k - 1]![1] }, { at: t + beats, o, ease: "standard" }])], close),
     });
-    const fades = (name: string, pairs: Array<[number, number]>, first = 0): Track => ({
-      select: select(name), keys: looped([{ at: 0, o: first }, ...pairs.flatMap(([t, o], k): Key[] => [{ at: t, o: k === 0 ? first : pairs[k - 1]![1] }, { at: t + 0.5, o, ease: "standard" }])], close),
-    });
-    const title: Track[] = [
-      { select: select("tf-r"), keys: looped([{ at: 0, dash: 100 }, { at: 1, dash: 100 }, { at: 2.6, dash: 0, ease: "decelerate" }], close) },
-      ...["tf-l", "tf-g"].map((name): Track => ({ select: select(name), keys: looped([{ at: 0, dash: 100 }, { at: 2.4, dash: 100 }, { at: 3.6, dash: 0, ease: "decelerate" }], close) })),
+    /** A measure: its line draws from its first tick, its tag reveals, both leave at `leave`. */
+    const measure = (part: string, at: number, leave: number, label: string, axis: "sx" | "sy"): Track[] => [
+      { select: select(`dm-${part}`), keys: looped([{ at: 0, [axis]: 0, o: 1 }, { at, [axis]: 0 }, { at: at + 0.8, [axis]: 1, ease: "decelerate" }, { at: leave, o: 1 }, { at: leave + 0.4, o: 0, ease: "accelerate" }], close) },
+      fades(`tg-${part}`, [[at + 0.3, 1], [leave, 0]], 0, 0.4),
+      ...reveal(`tl-${part}`, at + 0.4, label, close),
     ];
-    // The frame: each part's band and its measure on the rim; the shell fills in; the measures dim, then leave for the drag.
-    const frame: Track[] = PARTS.flatMap((part, k): Track[] => {
-      const t = AT.parts + k * 1.2;
-      const label = part === "bar" ? `--titlebar-height ${tokenValue("--titlebar-height")}` : part === "side" ? `--sidebar-width ${tokenValue("--sidebar-width")}` : "--page-container-gutter";
-      return [
-        fades(`l0-pb-${part}`, [[t, 1], [AT.fill, 0.3], [AT.drag, 0]]), fades(`dm-${part}`, [[t, 1], [AT.fill, 0.3], [AT.drag, 0]]),
-        ...reveal(`dl-${part}`, t + 0.3, label, close),
-      ];
+    const px = (d: number) => d * z;
+    const [d1, d2, d3] = DRAGS as [[number, number], [number, number], [number, number]];
+    const edge = (name: string): Track => ({
+      select: select(name),
+      keys: looped([{ at: 0, w: px(WINDOW.w), h: px(WINDOW.h) }, ...DRAGS.flatMap(([from, to], k): Key[] => [{ at: from, w: px(DETENTS[k]!.px) }, { at: to, w: px(DETENTS[k + 1]!.px), ease: "standard" }])], close),
     });
-    const fill: Track[] = ["l0-side", "l0-bar", "l0-c0", "l0-c1", "l0-c2"].map((name, k) => fades(name, [[AT.fill + k * 0.35, 1]]));
-    // The drag: the window's edge and the handle follow; on arrival the next layout crossfades in.
-    const w = (px: number) => px * z;
-    const drags: Track[] = [
-      { select: select("win"), keys: looped([{ at: 0, w: w(WIDTHS[0].px), h: DEVICE_H * z }, ...DRAGS.flatMap(([from, to], k): Key[] => [{ at: from, w: w(WIDTHS[k]!.px) }, { at: to, w: w(WIDTHS[k + 1]!.px), ease: "standard" }])], close) },
-      { select: select("handle"), keys: looped([{ at: 0, x: 0, o: 0 }, { at: AT.drag, o: 0 }, { at: AT.drag + 0.5, o: 1 }, ...DRAGS.flatMap(([from, to], k): Key[] => [{ at: from, x: w(WIDTHS[k]!.px - WIDTHS[0].px) }, { at: to, x: w(WIDTHS[k + 1]!.px - WIDTHS[0].px), ease: "standard" }]), { at: AT.drawer - 0.6, o: 1 }, { at: AT.drawer, o: 0 }], close) },
-      ...WIDTHS.map((_, k): Track => {
-        const on = k === 0 ? 0 : DRAGS[k - 1]![1] + 0.2;
-        const off = DRAGS[k]?.[1];
-        return fades(`l${k}`, [...(k > 0 ? [[on, 1] as [number, number]] : []), ...(off ? [[off + 0.2, 0] as [number, number]] : [])], k === 0 ? 1 : 0);
+    const value = (token: string) => `${token} · ${tokenValue(token).replace(/px$/u, "")}`;
+    const tracks: Track[] = [
+      ...introTracks(copy.title, copy.lead, close),
+      // The window's edge follows the handle; its content reflows at every width.
+      edge("win"), edge("rim"),
+      ...MODES.map((mode, k) => {
+        const [into, out] = modeSpan(k);
+        const pairs: Array<[number, number]> = [];
+        if (into > 0) pairs.push([into - HANDOVER / 2, 1]);
+        if (Number.isFinite(out)) pairs.push([out - HANDOVER / 2, 0]);
+        return fades(`ly-${mode}`, pairs, k === 0 ? 1 : 0, HANDOVER);
       }),
-      shown("ro", AT.drag - 0.4),
-      ...rollerTracks("rw", WIDTHS.map((width) => String(width.px)), 0, [[0, 0], ...DRAGS.map(([, to], k) => [to, k + 1] as [number, number])], g.lines.rw ?? 0, close, 1.2),
-      ...rollerTracks("rm", WIDTHS.map((width) => MODES[MODES.indexOf(width.mode)]!), 0, [[0, 0], ...DRAGS.map(([, to], k) => [to + 0.2, k + 1] as [number, number])], g.lines.rm ?? 0, close, 0.4),
+      // The measures, each on the edge it belongs to; each leaves before the drag makes it untrue.
+      ...measure("bar", AT.bar, d2[1] - HANDOVER / 2, value("--titlebar-height"), "sy"),
+      { select: select("ld-bar"), keys: looped([{ at: 0, sy: 0, o: 1 }, { at: AT.bar + 0.2, sy: 0 }, { at: AT.bar + 0.6, sy: 1, ease: "decelerate" }, { at: d3[0] - 0.8, o: 1 }, { at: d3[0] - 0.4, o: 0, ease: "accelerate" }], close) },
+      ...measure("side", AT.side, d1[0] - 0.6, value("--sidebar-width"), "sx"),
+      ...measure("read", AT.read, d1[1] - HANDOVER / 2, value("--page-max-width-reading"), "sx"),
+      // Medium keeps the 760 column (the sidebar is gone); it leaves as the next drag narrows it.
+      fades("dm-read-medium", [[d1[1] - HANDOVER / 2, 1], [d2[0] + 0.4, 0]], 0, HANDOVER),
+      fades("tg-read-medium", [[d1[1] - HANDOVER / 2, 1], [d2[0] + 0.4, 0]], 0, HANDOVER),
+      // Compact: the titlebar's 48 becomes 56 (compact tokens) as the mode takes over.
+      fades("dm-bar-compact", [[d2[1] - HANDOVER / 2, 1], [d3[0] - 0.8, 0]], 0, HANDOVER),
+      fades("tg-bar-compact", [[d2[1] - HANDOVER / 2, 1], [d3[0] - 0.8, 0]], 0, HANDOVER),
+      // The handle and the readout: width rolls through the drag, the mode cuts at each breakpoint.
+      { select: select("handle"), keys: looped([{ at: 0, sy: 0, o: 1 }, { at: AT.handle, sy: 0 }, { at: AT.handle + 0.6, sy: 1, ease: "decelerate" }, { at: AT.drawer - 0.6, o: 1 }, { at: AT.drawer, o: 0 }], close) },
+      ...["ro", "hu"].flatMap((id): Track[] => [
+        fades(id, [[AT.handle + 0.2, 1], [AT.end - 0.6, 0]], 0, 0.5),
+        ...rollerTracks(`${id}-w`, DETENTS.map((d) => String(d.px)), 0, [[0, 0], ...DRAGS.map(([, to], k) => [to, k + 1] as [number, number])], g.lines[`${id}-w`] ?? 0, close, DRAGS[0]![1] - DRAGS[0]![0]),
+        ...MODES.map((_, k) => {
+          const [into, out] = modeSpan(k);
+          const pairs: Array<[number, number]> = [];
+          if (into > 0) pairs.push([into - HANDOVER / 2, 1]);
+          if (Number.isFinite(out)) pairs.push([out - HANDOVER / 2, 0]);
+          return fades(`${id}-m${k}`, pairs, k === 0 ? 1 : 0, HANDOVER);
+        }),
+      ]),
+      // Compact at 375: the drawer slides in over the whole width, pushing the conversation out, and back.
+      { select: select("ly-drawer"), keys: looped([{ at: 0, xp: -100 }, { at: AT.drawer, xp: -100 }, { at: AT.drawer + 1.2, xp: 0, ease: "emphasized" }, { at: AT.shut, xp: 0 }, { at: AT.shut + 1.2, xp: -100, ease: "emphasized" }], close) },
+      { select: select("push-compact"), keys: looped([{ at: 0, xp: 0 }, { at: AT.drawer, xp: 0 }, { at: AT.drawer + 1.2, xp: 100, ease: "emphasized" }, { at: AT.shut, xp: 100 }, { at: AT.shut + 1.2, xp: 0, ease: "emphasized" }], close) },
+      ...measure("drawer", AT.drawer + 0.6, AT.shut, "--adaptive-drawer-width · 100vw", "sx"),
     ];
-    // The drawer: in over a scrim and out again; the device insets show top and bottom.
-    const drawer: Track[] = [
-      { select: select("l3-drawer"), keys: looped([{ at: 0, xp: -100 }, { at: AT.drawer, xp: -100 }, { at: AT.drawer + 0.9, xp: 0, ease: "decelerate" }, { at: AT.shut, xp: 0 }, { at: AT.shut + 0.8, xp: -100, ease: "accelerate" }], close) },
-      fades("l3-scrim", [[AT.drawer, 1], [AT.shut, 0]]),
-      fades("l3-it", [[AT.insets, 1]]), fades("l3-ib", [[AT.insets, 1]]), shown("il", AT.insets + 0.3),
-    ];
-    return { tracks: [...introTracks(copy.title, copy.lead, close), ...title, ...frame, ...fill, ...drags, ...drawer], camera };
+    return { tracks, camera };
   };
 }
 

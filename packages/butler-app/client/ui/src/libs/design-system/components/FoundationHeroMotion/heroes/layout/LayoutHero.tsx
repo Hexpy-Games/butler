@@ -4,39 +4,38 @@ import { SceneHero } from "../scene/SceneHero";
 import type { SceneSpec } from "../scene/types";
 import { Intro } from "../shared/Intro";
 import { LAYOUT_COPY, type LayoutCopy } from "./layoutCopy";
-import { ShellScene, TitleFrame } from "./LayoutScenes";
-import { ExpandedTile, MediumTile, ModesTile, PhoneTile } from "./layoutTiles";
+import { Hud, Ruler, ScreenTile, WindowScene } from "./LayoutScenes";
 import { LAYOUT_END, layoutTracks } from "./layoutTracks";
 
 function spec(copy: LayoutCopy): SceneSpec {
   return {
     code: "layout",
-    scenes: ["intro", "shell"],
+    scenes: ["intro", "stage"],
     regions: {
-      intro: <Intro decor={TitleFrame} lead={copy.lead} title={copy.title} />,
-      shell: <ShellScene copy={copy} />,
+      intro: <Intro lead={copy.lead} title={copy.title} />,
+      stage: <WindowScene copy={copy} />,
     },
     tiles: {
-      exp: <ExpandedTile copy={copy} />,
-      med: <MediumTile copy={copy} />,
-      phone: <PhoneTile copy={copy} />,
-      modes: <ModesTile />,
+      expanded: <ScreenTile copy={copy} mode="expanded" />,
+      compact: <ScreenTile copy={copy} mode="compact" open={false} />,
+      ruler: <Ruler />,
     },
     poster: {
-      wide: { columns: "1.7fr 0.55fr 0.75fr", rows: "1fr 1fr", areas: ["exp med med", "exp phone modes"] },
-      tall: { columns: "1fr 1fr", rows: "auto", areas: ["exp med", "phone phone"] },
+      wide: { columns: "3.1fr 1fr", rows: "1fr auto", areas: ["expanded compact", "ruler ruler"] },
+      tall: { columns: "1fr", rows: "150px 330px auto", areas: ["expanded", "compact", "ruler"] },
     },
-    posterZoom: { wide: 0.9, tall: 0.9 },
+    hud: <Hud />,
     end: () => LAYOUT_END,
     tracks: layoutTracks(copy),
   };
 }
 
 /**
- * 10 Layout and platform, "one shell, three modes": an empty page frame
- * measured on its rim; the real shell fills it; a handle drags it from 1280
- * to 375, the shell relaying out at each detent; at 375 the sidebar is a
- * drawer and the device supplies its insets.
+ * 10 Layout and platform, "one shell, three modes": Butler's real app shell
+ * in a window, its titlebar, sidebar and conversation column measured on the
+ * window's rim; a handle drags the window from 1280 to 375 while the shell
+ * reflows, each breakpoint of responsive.ts handing it to the next mode; at
+ * 375 the sidebar opens as a full-width drawer.
  */
 export function LayoutHero({ lang }: { lang: FoundationHeroLang }) {
   const chapter = useMemo(() => spec(LAYOUT_COPY[lang]), [lang]);

@@ -1,397 +1,345 @@
-/* 10 Layout and platform hero (v3 scenes). Canvas px (../shared/grid.ts);
-   the shell is laid out in device px and drawn at --z. */
-
-/* ---- Title: a thin page frame, guides down each side ---- */
-
-.titleFrame {
-  position: absolute;
-  inset: -0.08em auto -0.02em -0.12em;
-  inline-size: 3.3em;
-  block-size: calc(100% + 0.1em);
-  overflow: visible;
-}
-
-.titleFrame rect,
-.titleFrame line {
-  fill: none;
-  stroke-dasharray: 100;
-  vector-effect: non-scaling-stroke;
-}
-
-.titleFrame rect {
-  stroke: color-mix(in srgb, var(--text-tertiary) 70%, transparent);
-  stroke-width: 1;
-}
-
-.titleFrame line {
-  stroke: color-mix(in srgb, var(--accent) 70%, transparent);
-  stroke-width: 1.5;
-}
-
-/* ---- The stage: readout, the frame, its rim ---- */
+/* 10 Layout hero: Butler's real app shell in a window a handle resizes, its
+   measures on the window's rim, and the poster's screens. Canvas px (see
+   ../shared/grid.ts). The window's content is laid out in device px and
+   drawn at --s canvas px per device px (layoutCopy.ts ZOOM; keep in sync). */
 
 .stage {
-  --z: 0.6;
+  --s: 0.72;
+  --win-w: calc(1280px * var(--s));
+  --win-h: calc(640px * var(--s));
+  --rim: var(--space-4xl);
 
-  display: grid;
-  row-gap: var(--space-xl);
-  padding-block-end: calc(var(--space-4xl) * 1.6);
-  padding-inline: calc(var(--space-4xl) * 4.5) calc(var(--space-4xl) * 1.5);
+  position: relative;
+  inline-size: var(--win-w);
+  block-size: calc(var(--win-h) + var(--rim) * 2);
 }
 
 [data-layout="tall"] .stage {
-  --z: 0.26;
-
-  padding-inline: calc(var(--space-4xl) * 2.2) var(--space-xl);
+  --s: 0.3;
+  --rim: var(--space-xl);
 }
 
-.readout {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-md);
-  color: var(--text-primary);
+/* The window and its rim share one box: centred, its width animated (the
+   handle's drag) while its content reflows live at that width. */
+.win,
+.rim {
+  position: absolute;
+  top: var(--rim);
+  left: 50%;
+  inline-size: var(--win-w);
+  block-size: var(--win-h);
+  translate: -50% 0;
 }
 
-.readWidth {
-  font-size: var(--typo-h2-size);
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--font-weight-strong);
+.win {
+  overflow: hidden;
+  border-radius: calc(var(--radius-composer) * var(--s));
+  box-shadow: var(--shadow-window);
 }
 
-.readMode {
-  color: var(--accent);
-  font: var(--font-code);
-  font-size: var(--typo-h5-size);
+.rim {
+  container-type: inline-size;
+  pointer-events: none;
 }
 
-.source {
-  color: var(--text-tertiary);
-  font: var(--font-code);
-  font-size: var(--typo-caption-size);
-}
-
-.frameBox {
-  position: relative;
-  inline-size: calc(1280px * var(--z));
-  block-size: calc(720px * var(--z));
-}
-
-/* The window clips the shell; its width follows the handle (the timeline). */
-.window {
+/* The app, laid out at the window's size in device px and drawn at --s. */
+.device {
   position: absolute;
   top: 0;
   left: 0;
-  box-sizing: border-box;
-  inline-size: calc(1280px * var(--z));
-  block-size: calc(720px * var(--z));
-  overflow: hidden;
-  border: 1px solid var(--line-strong, var(--line));
-  border-radius: var(--radius-panel);
-  background: var(--color-surface-base);
+  inline-size: calc(100% / var(--s));
+  block-size: calc(100% / var(--s));
+  transform: scale(var(--s));
+  transform-origin: 0 0;
 }
 
+/* One layer per mode, stacked; the timeline shows the window's current one. */
 .layer {
   position: absolute;
+  inset: 0;
+}
+
+/* A device viewport (DeviceFrame.tsx): the app's own document, the frame's size. */
+.frame {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  border: 0;
+}
+
+/* The window's canvas, as a top-level window has (the app's body is transparent over it). */
+.deviceRoot {
+  background: Canvas;
+}
+
+.deviceBody {
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+/* ---- The rim: the window's measures, each on its nearest edge ---- */
+
+.dim {
+  position: absolute;
+  color: var(--accent);
+}
+
+/* A measure: a hairline with an end tick at each end. */
+.dim::before,
+.dim::after {
+  position: absolute;
+  background: currentcolor;
+  content: "";
+}
+
+.dim[data-axis="v"] {
+  inline-size: var(--space-sm);
+  border-inline-start: 1px solid currentcolor;
+  transform-origin: 50% 0;
+}
+
+.dim[data-axis="v"]::before,
+.dim[data-axis="v"]::after {
+  left: calc(var(--space-xs) * -1);
+  inline-size: var(--space-sm);
+  block-size: 1px;
+}
+
+.dim[data-axis="v"]::before {
   top: 0;
+}
+
+.dim[data-axis="v"]::after {
+  bottom: 0;
+}
+
+.dim[data-axis="h"] {
+  /* Widths sit just below the bottom edge. */
+  top: calc(100% + var(--space-md));
+  block-size: var(--space-sm);
+  border-block-start: 1px solid currentcolor;
+  transform-origin: 0 50%;
+}
+
+.dim[data-axis="h"]::before,
+.dim[data-axis="h"]::after {
+  top: calc(var(--space-xs) * -1);
+  inline-size: 1px;
+  block-size: var(--space-sm);
+}
+
+.dim[data-axis="h"]::before {
   left: 0;
 }
 
-.handle {
-  position: absolute;
-  top: calc(50% - var(--space-2xl));
-  left: calc(100% - var(--space-xs));
-  inline-size: var(--space-sm);
-  block-size: calc(var(--space-2xl) * 2);
-  border-radius: var(--radius-pill);
-  background: var(--accent);
+.dim[data-axis="h"]::after {
+  right: 0;
 }
 
-/* A measure on the frame's rim: the titlebar on the left edge, sidebar and gutter under the bottom edge. */
-.dim {
-  position: absolute;
-  box-sizing: border-box;
-  border-color: var(--accent);
-  border-style: solid;
-}
-
-.dim[data-part="bar"] {
+/* The titlebar's height, just outside the left edge. */
+.dim[data-part^="bar"] {
   top: 0;
-  right: calc(100% + var(--space-md));
-  inline-size: var(--space-sm);
-  block-size: calc(var(--titlebar-safe-area-top) * var(--z));
-  border-width: 1px 0;
+  right: calc(100% + var(--space-sm));
+  block-size: calc(48px * var(--s));
 }
 
-.dim[data-part="side"],
-.dim[data-part="gutter"] {
-  top: calc(100% + var(--space-md));
-  block-size: var(--space-sm);
-  border-width: 0 1px;
+.dim[data-part="bar-compact"] {
+  block-size: calc(56px * var(--s));
 }
 
 .dim[data-part="side"] {
   left: 0;
-  inline-size: calc(var(--sidebar-width) * var(--z));
+  inline-size: calc(304px * var(--s));
 }
 
-.dim[data-part="gutter"] {
-  left: calc(var(--sidebar-width) * var(--z));
-  inline-size: calc(
-    clamp(var(--space-lg), 1280px * 0.03, var(--space-4xl)) * var(--z)
-  );
+/* The conversation column: min(760px, 86% of the workspace), centred in it. */
+.dim[data-part^="read"] {
+  --side: calc(304px * var(--s));
+  --ws: calc(100cqw - var(--side));
+  --col: min(calc(760px * var(--s)), calc(var(--ws) * 0.86));
+
+  left: calc(var(--side) + (var(--ws) - var(--col)) / 2);
+  inline-size: var(--col);
 }
 
-.dim::before {
-  position: absolute;
-  background: var(--accent);
-  content: "";
+.dim[data-part="read-medium"] {
+  --side: 0px;
 }
 
-.dim[data-part="bar"]::before {
-  top: 0;
-  bottom: 0;
-  left: calc(50% - 0.5px);
-  inline-size: 1px;
-}
-
-.dim[data-part="side"]::before,
-.dim[data-part="gutter"]::before {
-  top: calc(50% - 0.5px);
-  right: 0;
+.dim[data-part="drawer"] {
   left: 0;
-  block-size: 1px;
+  inline-size: 100%;
 }
 
-.dimLabel {
+/* A measure's token, set on the rim beside it (a short straight leader). */
+.tag {
   position: absolute;
-  color: var(--accent);
-  font: var(--font-code);
-  font-size: var(--typo-caption-size);
   white-space: nowrap;
 }
 
-.dim[data-part="bar"] .dimLabel {
-  top: 50%;
-  right: calc(100% + var(--space-sm));
-  transform: translateY(-50%);
+/* Titlebar: above the top-left corner, over its measure. */
+.tag[data-part^="bar"] {
+  bottom: calc(100% + var(--space-md));
+  left: calc(var(--space-sm) * -1);
 }
 
-.dim[data-part="side"] .dimLabel {
-  top: calc(100% + var(--space-xs));
-  left: 0;
-}
-
-.dim[data-part="gutter"] .dimLabel {
+/* Widths: centred under their measure. */
+.tag[data-part="side"],
+.tag[data-part^="read"],
+.tag[data-part="drawer"] {
   top: calc(100% + var(--space-xl));
-  left: 0;
+  translate: -50% 0;
 }
 
-.insetLabel {
+.tag[data-part="side"] {
+  left: calc(152px * var(--s));
+}
+
+.tag[data-part^="read"] {
+  --side: calc(304px * var(--s));
+
+  left: calc(var(--side) + (100cqw - var(--side)) / 2);
+}
+
+.tag[data-part="read-medium"] {
+  --side: 0px;
+}
+
+.tag[data-part="drawer"] {
+  left: 50%;
+}
+
+/* The titlebar tag's leader: from under the tag down to the measure's top. */
+.leader {
   position: absolute;
-  top: 0;
-  left: calc(375px * var(--z) + var(--space-lg));
-  color: var(--accent);
-  font: var(--font-code);
-  font-size: var(--typo-caption-size);
-  white-space: nowrap;
+  bottom: 100%;
+  left: calc(var(--space-sm) * -1);
+  block-size: var(--space-md);
+  border-inline-start: 1px solid var(--accent);
+  transform-origin: 50% 100%;
 }
 
-[data-layout="tall"] .insetLabel {
-  top: calc(100% + var(--space-sm));
-  left: 0;
-}
-
-/* ---- The shell at one width (device px) ---- */
-
-.shell {
-  --page-container-gutter: clamp(
-    var(--space-lg),
-    var(--device) * 0.03,
-    var(--space-4xl)
-  );
-
-  position: relative;
-  display: grid;
-  grid-template-rows: var(--titlebar-safe-area-top) minmax(0, 1fr);
-  inline-size: var(--device);
-  block-size: 720px;
-  overflow: hidden;
-  background: var(--color-surface-base);
-  zoom: var(--z);
-}
-
-.bar {
-  position: relative;
-  border-block-end: 1px solid var(--line);
-}
-
-.body {
-  display: grid;
-  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-  min-block-size: 0;
-}
-
-.body[data-compact] {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.side {
-  padding: var(--space-sm);
-  border-inline-end: 1px solid var(--line);
-}
-
-.nav {
-  display: grid;
-  row-gap: var(--sidebar-row-spacing, var(--space-xs));
-}
-
-.main {
-  min-inline-size: 0;
-  padding: var(--page-container-gutter);
-}
-
-.cards {
-  display: grid;
-  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
-  gap: var(--space-lg);
-}
-
-.partBand {
+/* The handle on the right edge, and the width and mode above the top-right corner. */
+.handle {
   position: absolute;
-  box-sizing: border-box;
-  border: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  opacity: 0;
+  top: 50%;
+  left: calc(100% + var(--space-sm));
+  inline-size: var(--space-xs);
+  block-size: var(--space-4xl);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  translate: 0 -50%;
 }
 
-.partBand[data-part="bar"] {
-  top: 0;
-  right: 0;
-  left: 0;
-  block-size: var(--titlebar-safe-area-top);
-}
-
-.partBand[data-part="side"] {
-  top: var(--titlebar-safe-area-top);
-  bottom: 0;
-  left: 0;
-  inline-size: var(--sidebar-width);
-}
-
-.partBand[data-part="gutter"] {
-  top: var(--titlebar-safe-area-top);
-  bottom: 0;
-  left: var(--sidebar-width);
-  inline-size: var(--page-container-gutter);
-}
-
-.scrim {
-  position: absolute;
-  inset: 0;
-  background: var(--adaptive-scrim-bg);
-  opacity: 0;
-}
-
-.drawer {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  box-sizing: border-box;
-  inline-size: min(78%, 336px);
-  padding: calc(var(--titlebar-height) + var(--space-sm)) var(--space-sm);
-  border-inline-end: 1px solid var(--line);
-  background: var(--color-surface-base);
-}
-
-/* Device insets (a phone's status bar and home indicator), hatched. */
-.inset {
-  --hatch: color-mix(in srgb, var(--accent) 55%, transparent);
-
+.readout {
   position: absolute;
   right: 0;
-  left: 0;
-  background: repeating-linear-gradient(
-    45deg,
-    var(--hatch) 0 2px,
-    transparent 2px var(--space-md)
-  );
-  opacity: 0;
+  bottom: calc(100% + var(--space-md));
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
 }
 
-.inset[data-side="top"] {
-  top: 0;
-  block-size: var(--space-3xl);
+.modes {
+  display: inline-grid;
 }
 
-.inset[data-side="bottom"] {
-  bottom: 0;
-  block-size: var(--space-2xl);
+.modes > * {
+  grid-area: 1 / 1;
+  justify-self: end;
 }
 
-/* ---- Finale tiles ---- */
-
-.still {
-  --z: 0.36;
-
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
-}
-
-.still[data-k="1"] {
-  --z: 0.3;
-}
-
-.still[data-k="3"] {
-  --z: 0.34;
-}
-
-[data-layout="tall"] .still {
-  --z: 0.12;
-}
-
-.modeStrip {
-  display: grid;
-  row-gap: var(--space-md);
-}
-
-.modeCell {
-  display: grid;
-  row-gap: var(--space-xs);
-}
-
-.modeName {
-  color: var(--text-primary);
-  font-size: var(--typo-h5-size);
-  font-weight: var(--font-weight-strong);
-}
-
-.modeRange {
-  color: var(--accent);
-  font: var(--font-code);
-  font-size: var(--typo-caption-size);
-}
-
-/* Tall: the camera closes in on the narrowing frame, so the rim's type is set smaller and kept over the frame. */
-[data-layout="tall"] .readWidth {
-  font-size: calc(var(--typo-h2-size) * 0.45);
-}
-
-[data-layout="tall"] .readMode,
-[data-layout="tall"] .insetLabel {
-  font-size: calc(var(--typo-caption-size) * 0.5);
-}
-
-[data-layout="tall"] .source {
+/* Tall: the window starts far away, so its measures stay off; the width and
+   mode read in the frame's corner (the HUD) instead. */
+[data-layout="tall"] .rim .tag,
+[data-layout="tall"] .rim .dim,
+[data-layout="tall"] .rim .leader,
+[data-layout="tall"] .rim .readout {
   display: none;
 }
 
-[data-layout="tall"] .dim[data-part="bar"] .dimLabel {
-  inset: auto auto calc(100% + var(--space-xs)) 0;
-  transform: none;
+.hud {
+  position: absolute;
+  top: var(--space-xl);
+  right: var(--space-xl);
+  display: none;
+  align-items: center;
+  gap: var(--space-xs);
 }
 
-[data-layout="tall"] .still[data-k="3"] {
-  --z: 0.5;
+[data-layout="tall"] .hud {
+  display: flex;
+}
+
+/* ---- Poster ---- */
+
+/* The poster's screens sit on the page itself: no tile around them. */
+[data-tile]:has(> .fit),
+[data-tile]:has(> .ruler) {
+  overflow: visible;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+/* A screen drawn at the scale that fits its tile (set in LayoutScenes.tsx). */
+.fit {
+  display: grid;
+  place-items: center;
+  inline-size: 100%;
+  block-size: 100%;
+  min-block-size: 0;
+}
+
+.fitBox {
+  display: grid;
+  justify-items: center;
+  row-gap: var(--space-md);
+}
+
+.still {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-composer);
+  box-shadow: var(--shadow-window);
+}
+
+.still[data-mode="compact"] {
+  border-radius: var(--radius-composer);
+}
+
+/* The modes on a width ruler: compact up to 640, medium to 1023, expanded on;
+   a tick where each begins. */
+.ruler {
+  display: grid;
+  grid-template-columns: 640fr 383fr 257fr;
+  inline-size: 100%;
+  align-self: end;
+  border-block-start: 1px solid var(--line-strong);
+}
+
+.span {
+  position: relative;
+  display: grid;
+  row-gap: var(--space-xs);
+  padding: var(--space-md) var(--space-sm) 0;
+}
+
+.span::before {
+  position: absolute;
+  top: calc(var(--space-xs) * -1);
+  left: 0;
+  inline-size: 1px;
+  block-size: var(--space-sm);
+  background: var(--line-strong);
+  content: "";
+}
+
+.spanRange {
+  white-space: nowrap;
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
 }
