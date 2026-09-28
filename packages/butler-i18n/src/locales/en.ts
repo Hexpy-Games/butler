@@ -869,6 +869,15 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       title: "Schedule title",
       prompt: "Prompt body",
     },
+    accessHint: "With Ask first, runs wait for your approval while you're away.",
+    saveFailed: "Schedule save failed",
+    errors: {
+      title: "Enter a title.",
+      prompt: "Enter a prompt.",
+      interval: "Use 5 minutes to 24 hours.",
+      accessMode: "Choose a permission.",
+      invalid: "Check the fields.",
+    },
     runs: {
       empty: "No runs yet",
       queued: "Queued",

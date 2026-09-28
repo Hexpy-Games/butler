@@ -3,6 +3,13 @@ import { ShieldCheck, ShieldQuestion, Eye, type IconSize, type PermissionTone } 
 import { appCopy } from "@/app/copy.ts";
 import type { AccessMode } from "@/app/types.ts";
 
+/** Every access mode, in the order the access menus list them. */
+export const ACCESS_MODES = ["full_access", "ask_first", "read_only"] as const satisfies readonly AccessMode[];
+
+export function isAccessMode(value: unknown): value is AccessMode {
+  return (ACCESS_MODES as readonly unknown[]).includes(value);
+}
+
 /** The DS permission tone (label and icon colors) of an access mode. */
 export function accessPermissionTone(mode: AccessMode): PermissionTone {
   if (mode === "full_access") return "full";

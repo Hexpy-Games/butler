@@ -9,16 +9,14 @@ import {
   Typo,
 } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
-import type { AccessMode } from "@/app/types.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { appShellTheme } from "@/app/utils.ts";
 import { useComposerStore } from "./composerStore";
 import { ComposerControlButton } from "./ComposerControlButton";
+import { AccessModeOptions } from "./AccessModeOptions";
 import {
-  accessDescription,
   accessLabel,
   accessPermissionTone,
-  accessModeTone,
   accessModeIcon,
 } from "./accessModeUtils";
 
@@ -63,26 +61,13 @@ export function AccessModeMenu() {
         side="top"
         sideOffset={10}
       >
-        <OptionMenu title={appCopy.composer.permission}>
-          {(["full_access", "ask_first", "read_only"] satisfies AccessMode[]).map(
-            (item) => (
-              <OptionMenuItem
-                description={accessDescription(item)}
-                descriptionPlacement="block"
-                icon={accessModeIcon(item)}
-                key={item}
-                label={accessLabel(item)}
-                selected={item === accessMode}
-                permissionTone={accessPermissionTone(item)}
-                tone={accessModeTone(item)}
-                onClick={() => {
-                  handleAccessModeChange(item);
-                  setAccessMenuOpen(false);
-                }}
-              />
-            ),
-          )}
-        </OptionMenu>
+        <AccessModeOptions
+          value={accessMode}
+          onSelect={(item) => {
+            handleAccessModeChange(item);
+            setAccessMenuOpen(false);
+          }}
+        />
         {permissions.length ? <OptionMenu title={appCopy.interfaceDetails.allowedConversation}>
           {permissions.map((permission) => <OptionMenuItem
             key={permission.grant_ref}
