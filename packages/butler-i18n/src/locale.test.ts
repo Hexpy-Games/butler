@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { getAppCopy, getInterfaceProgressLabel } from "./index.ts";
 
 function shape(value: unknown): unknown {
@@ -11,7 +12,7 @@ test("English and Korean catalogs have complete recursive key and formatter pari
   expect(shape(getAppCopy("en-US"))).toEqual(shape(getAppCopy("ko-KR")));
   expect(getAppCopy("en-US").conversation.work.collapsedSummary("Read file", 2)).toBe("Read file and 1 more activities");
   expect(getAppCopy("ko-KR").space.general).toBe("일반");
-  expect(getAppCopy("en-US").briefing.general.suggestions[0].title).toBe("Worth a short look today");
+  expect(getAppCopy("en-US").briefing.general.suggestions[0].title).toBe("Summarize a document");
 });
 
 test("Korean catalog uses Korean for generic UI words", () => {
@@ -48,7 +49,7 @@ test("Korean copy keeps the Work, Task, Worker and Custom product terms consiste
   expect(ko.interfaceStatus.task).toBe("Task");
   expect(ko.inspector.tabs.workers).toBe("Worker");
   expect(ko.interfaceStatus.workerCall).toBe("Worker 호출");
-  expect(ko.projectSignpost.work).toBe("Work");
+  expect(ko.projectSignpost.work).toBe("작업");
   expect(ko.projectSignpost.parentWork).toBe("상위 Work");
   expect(ko.projectSignpost.tasks).toBe("하위 Task");
   expect(ko.projectStatistics.labels.work).toBe("Work 변경");
@@ -65,10 +66,10 @@ test("worked durations use locale units", () => {
 
 test("command palette kind labels are localized", () => {
   expect(getAppCopy("en-US").commandPalette.kindLabels).toEqual({
-    chat: "Chat", project: "Project", project_session: "Project chat", group: "Space", automation: "Automation", settings: "Settings",
+    chat: "Chat", project: "Project", project_session: "Project chat", group: "Space", automation: "Schedule", settings: "Settings",
   });
   expect(getAppCopy("ko-KR").commandPalette.kindLabels).toEqual({
-    chat: "대화", project: "프로젝트", project_session: "프로젝트 대화", group: "스페이스", automation: "자동화", settings: "설정",
+    chat: "대화", project: "프로젝트", project_session: "프로젝트 대화", group: "스페이스", automation: "예약 작업", settings: "설정",
   });
 });
 
@@ -94,6 +95,29 @@ test("Korean glossary: 시간대 not 타임존, 아카이브 not 보관함, 버�
   expect(getAppCopy("ko-KR").settings.fields.timezone).toBe("시간대");
   expect(getAppCopy("ko-KR").space.archives).toBe("아카이브");
   expect(getAppCopy("ko-KR").settings.sections.appearance).toBe("모양");
+});
+
+test("scheduled-run feature uses one term: 예약 작업 (never 자동화) and Schedule(s) (never Automation or Scheduled task)", () => {
+  const koSource = readFileSync(new URL("./locales/ko.ts", import.meta.url), "utf8");
+  expect(koSource.split("\n").filter((line) => line.includes("자동화"))).toEqual([]);
+  expect(strings(getAppCopy("ko-KR")).filter((text) => text.includes("자동화"))).toEqual([]);
+  const enSource = readFileSync(new URL("./locales/en.ts", import.meta.url), "utf8");
+  const enLiterals = enSource.match(/(["'`])(?:(?!\1)[^\\\n]|\\.)*\1/gu) ?? [];
+  const retiredEnglish = /\bautomations?\b|\bscheduled tasks?\b/iu;
+  expect(enLiterals.filter((literal) => retiredEnglish.test(literal))).toEqual([]);
+  expect(strings(getAppCopy("en-US")).filter((text) => retiredEnglish.test(text))).toEqual([]);
+  for (const [locale, term] of [["ko-KR", "예약 작업"], ["en-US", "Schedules"]] as const) {
+    const copy = getAppCopy(locale);
+    expect([copy.space.automations, copy.sidebar.automations, copy.automations.title, copy.inspector.tabs.automations]).toEqual([term, term, term, term]);
+  }
+});
+
+test("the schedule access hint names the Ask first mode with the composer's label", () => {
+  for (const locale of ["en-US", "ko-KR"] as const) {
+    const copy = getAppCopy(locale);
+    expect(copy.automations.accessHint).toContain(copy.permissions.askFirst);
+    expect(copy.automations.accessHint).not.toContain("\n");
+  }
 });
 
 test("settings titles never use the A / B style in either locale", () => {

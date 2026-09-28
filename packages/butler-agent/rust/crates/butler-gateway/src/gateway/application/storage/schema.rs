@@ -3,6 +3,7 @@
 mod core;
 mod migration;
 mod project_ledger_bindings;
+mod schedule_access;
 mod space;
 mod supporting;
 
@@ -11,6 +12,7 @@ use std::path::Path;
 use rusqlite::Connection;
 
 use super::AppStorageError;
+use crate::gateway::application::settings::record_default_access_mode;
 
 pub(super) fn migrate(
     connection: &mut Connection,
@@ -24,6 +26,10 @@ pub(super) fn migrate(
             .map_err(AppStorageError::sqlite)?;
     }
     supporting::create(connection)?;
+    // An App database from before ask-first (#236) keeps full access until
+    // the user saves a mode; a new one asks first. Before the schedule
+    // backfill, which resolves unsaved modes with it.
+    record_default_access_mode(connection, !turns_new)?;
     migration::add_current_columns(connection)?;
     // Existing App databases also need the actual-column index. Historical
     // payload turn ids can differ from events.turn_id, so the JSON indexes do
@@ -35,6 +41,7 @@ pub(super) fn migrate(
         )
         .map_err(AppStorageError::sqlite)?;
     migration::backfill_queue_identity(connection)?;
+    schedule_access::backfill(connection)?;
     migration::create_post_backfill_indexes(connection)?;
     project_ledger_bindings::initialize(connection, butler_data)?;
     space::migrate(connection)?;

@@ -9,6 +9,7 @@ import {
   ipcMain,
   nativeImage,
   nativeTheme,
+  protocol,
   shell,
 } from "electron";
 import { spawn, spawnSync } from "node:child_process";
@@ -107,6 +108,23 @@ import {
   readCacheBudgetArtifact,
 } from "./cache-budget-runtime.mjs";
 import { createSessionFolderLauncher } from "./session-folder-launch.mjs";
+import {
+  APP_RENDERER_ORIGIN,
+  APP_RENDERER_SCHEME,
+  APP_RENDERER_SCHEME_PRIVILEGES,
+  createAppRendererProtocolHandler,
+  findRendererDistRoot,
+  isAppRendererDocumentUrl,
+  rendererOriginForUrl,
+  selectRendererUrl,
+} from "./app-renderer-protocol.mjs";
+import {
+  READ_RENDERER_STORAGE_SCRIPT,
+  RENDERER_STORAGE_BLANK_PAGE_URL,
+  RENDERER_STORAGE_MIGRATION_MARKER,
+  migrateRendererStorageOrigin,
+  writeRendererStorageScript,
+} from "./app-renderer-storage-migration.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../../..");
@@ -188,10 +206,15 @@ let serverUrl = normalizeLocalHttpUrl(
   "Butler app server URL",
 );
 const explicitUiUrl = process.env.BUTLER_APP_UI_URL;
+// Production serves the built UI on app://butler; dev keeps the Vite URL.
+const staticRendererDistRoot = explicitUiUrl ? null : resolveStaticRendererDist();
 let rendererUrl = explicitUiUrl
   ? normalizeLocalHttpUrl(explicitUiUrl, "Butler app UI URL")
   : defaultRendererUrl();
-let rendererOrigin = new URL(rendererUrl).origin;
+let rendererOrigin = rendererOriginForUrl(rendererUrl);
+let appRendererProtocolReady = null;
+// Must run before the app is ready.
+protocol.registerSchemesAsPrivileged([APP_RENDERER_SCHEME_PRIVILEGES]);
 let serverHealthUrl = new URL("/health", serverUrl).toString();
 const isMac = process.platform === "darwin";
 const isLinux = process.platform === "linux";
@@ -292,6 +315,7 @@ const appAgentNativeServiceBridge = shouldUseAppAgentNativeServiceBridge()
       systemdUnit: appAgentSystemdUnit(),
       getPort: () => port,
       getAppVersion: () => appInfoView().version,
+      getDevOrigin: () => (explicitUiUrl ? rendererOrigin : null),
       resourcesPath: process.resourcesPath,
       execPath: process.execPath,
       menuBarHelper: appManagedMenuBarHelperRegistration(),
@@ -551,7 +575,7 @@ async function recoverUnexpectedForegroundExit() {
 
 // `butler stop` / `butler restart` (CLI or MCP) leave an intent that the
 // supervisor reads when the Agent exits; these keep App state in step with it.
-function handleIntentionalAgentExit({ reason }) {
+function handleIntentionalAgentExit({ reason, respawnBy }) {
   if (usesAppForegroundLifecycle && !isQuitting && foregroundInstance) {
     advanceForegroundInstance(
       reason === "stop" ? ["stopping", "stopped"] : ["degraded", "recovering"],
@@ -565,6 +589,20 @@ function handleIntentionalAgentExit({ reason }) {
     }
   }
   publishAgentState();
+  // `respawn_by: app`: the supervisor is starting the replacement now; join
+  // it so the foreground record reaches ready (no crash budget is spent).
+  if (reason === "restart" && respawnBy === "app") void finishAgentRespawn();
+}
+
+async function finishAgentRespawn() {
+  try {
+    await ensureServer();
+  } catch (error) {
+    console.error(error);
+    if (usesAppForegroundLifecycle && !isQuitting) advanceForegroundInstance(["failed"]);
+  } finally {
+    publishAgentState();
+  }
 }
 
 function handleExternalAgentAttach({ pid, port: attachedPort }) {
@@ -984,12 +1022,13 @@ function readLatestAppManagedRuntimeFailure() {
 }
 
 function defaultRendererUrl() {
-  return resolveStaticRendererUrl() ?? serverUrl;
+  // Without a built UI, the gateway serves it on its own origin.
+  return selectRendererUrl({ staticDistRoot: staticRendererDistRoot, serverUrl });
 }
 
-function resolveStaticRendererUrl() {
+function resolveStaticRendererDist() {
   const explicitRendererDist = process.env.BUTLER_APP_RENDERER_DIST;
-  const candidates = [
+  return findRendererDistRoot([
     explicitRendererDist,
     process.resourcesPath ? join(process.resourcesPath, "app-client") : null,
     process.resourcesPath ? join(process.resourcesPath, "dist") : null,
@@ -1006,13 +1045,58 @@ function resolveStaticRendererUrl() {
       : null,
     resolve(__dirname, "..", "ui", "dist"),
     resolve(repoRoot, "packages", "butler-app", "client", "ui", "dist"),
-  ];
-  for (const candidate of candidates) {
-    if (!candidate) continue;
-    const indexPath = resolve(candidate, "index.html");
-    if (existsSync(indexPath)) return pathToFileURL(indexPath).toString();
+  ]);
+}
+
+function prepareAppRendererProtocol() {
+  if (!staticRendererDistRoot || !isAppRendererDocumentUrl(rendererUrl)) {
+    return Promise.resolve();
   }
-  return null;
+  if (!appRendererProtocolReady) {
+    protocol.handle(
+      APP_RENDERER_SCHEME,
+      createAppRendererProtocolHandler({ distRoot: staticRendererDistRoot }),
+    );
+    appRendererProtocolReady = migrateRendererStorageToAppOrigin();
+  }
+  return appRendererProtocolReady;
+}
+
+async function migrateRendererStorageToAppOrigin() {
+  const result = await migrateRendererStorageOrigin({
+    markerPath: join(app.getPath("userData"), RENDERER_STORAGE_MIGRATION_MARKER),
+    readLegacyEntries: () => runRendererStorageScript(
+      `${pathToFileURL(__dirname).toString()}/`,
+      READ_RENDERER_STORAGE_SCRIPT,
+    ),
+    writeEntries: (entries) => runRendererStorageScript(
+      `${APP_RENDERER_ORIGIN}/`,
+      writeRendererStorageScript(entries),
+    ),
+  });
+  if (result.status === "failed") {
+    console.warn(`Renderer storage migration failed: ${result.code}`);
+  }
+}
+
+// Runs a script in a hidden blank page on the base URL's origin.
+async function runRendererStorageScript(originBaseUrl, script) {
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  const timer = setTimeout(() => {
+    if (!win.isDestroyed()) win.destroy();
+  }, 10_000);
+  try {
+    await win.loadURL(RENDERER_STORAGE_BLANK_PAGE_URL, {
+      baseURLForDataURL: originBaseUrl,
+    });
+    return await win.webContents.executeJavaScript(script);
+  } finally {
+    clearTimeout(timer);
+    if (!win.isDestroyed()) win.destroy();
+  }
 }
 
 async function installDevtools() {
@@ -1501,7 +1585,7 @@ async function confirmStopButlerAgentFromTray() {
     checkboxChecked: false,
     message: "Stop Butler Agent?",
     detail:
-      "Stopping Butler Agent will stop automations and any background sessions currently running.",
+      "Stopping Butler Agent will stop schedules and any background sessions currently running.",
   });
   if (result.response !== 0) return false;
   if (result.checkboxChecked === true) {
@@ -2027,6 +2111,7 @@ async function createWindow() {
     event.preventDefault();
     openExternalUrl(url);
   });
+  await prepareAppRendererProtocol();
   await win.loadURL(rendererUrl);
   if (usesAppForegroundLifecycle && app.isPackaged) {
     const migration = await ensureLegacyAppServiceMigration();
@@ -2542,7 +2627,9 @@ app.on("before-quit", (event) => {
   }).then((stopped) => {
     if (stopped === undefined && !isQuitting) return;
     finalQuitAllowed = true;
-    app.quit();
+    // Quit on a later tick: Electron drops an app.quit() made in the same
+    // tick as the before-quit it cancelled (the stopped-Agent path is sync).
+    setImmediate(() => app.quit());
   }).catch((error) => {
     isQuitting = false;
     console.error(error);
@@ -2551,6 +2638,13 @@ app.on("before-quit", (event) => {
 
 async function confirmForegroundQuitIfNeeded() {
   if (!usesAppForegroundLifecycle || !foregroundInstance) return true;
+  // After an honored `butler stop` no Agent runs, so no work can be lost and
+  // the unreadable active-work state must not ask for confirmation.
+  if (bundledAgentSupervisor.agentState().state === "stopped") {
+    preconfirmedE2eQuit = false;
+    foregroundQuitSnapshot = null;
+    return true;
+  }
   const snapshot = await readForegroundActiveWorkSnapshot();
   const preconfirmed = preconfirmedE2eQuit;
   preconfirmedE2eQuit = false;
@@ -2866,7 +2960,7 @@ function updateManagedServerPort(nextPort) {
   if (!explicitUiUrl) {
     rendererUrl = defaultRendererUrl();
   }
-  rendererOrigin = new URL(rendererUrl).origin;
+  rendererOrigin = rendererOriginForUrl(rendererUrl);
   serverHealthUrl = new URL("/health", serverUrl).toString();
   syncPreloadServerEnvironment();
 }
@@ -2901,12 +2995,10 @@ async function findAvailablePort(startPort) {
 }
 
 function isAppNavigationUrl(value) {
+  // Relative links must not replace the app document with a bundle file.
+  if (isAppRendererDocumentUrl(rendererUrl)) return isAppRendererDocumentUrl(value);
   try {
     const url = new URL(value);
-    const renderer = new URL(rendererUrl);
-    if (renderer.protocol === "file:") {
-      return url.protocol === "file:" && url.pathname === renderer.pathname;
-    }
     return (
       url.origin === rendererOrigin || url.origin === new URL(serverUrl).origin
     );

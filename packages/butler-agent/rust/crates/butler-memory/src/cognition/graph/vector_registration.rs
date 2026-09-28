@@ -4,8 +4,8 @@
 mod tests;
 mod units;
 
+use crate::cognition::graph::{StageState, StageStatus, StageWrite};
 use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::{Value, json};
 use std::path::Path;
 
 use super::db_error;
@@ -142,20 +142,22 @@ pub(super) fn mark_vector_registration_failure(
     let Some(current) = current else {
         return Ok(());
     };
-    let current: Value = serde_json::from_str(&current).map_err(json_error)?;
-    let current_state = current.get("state").and_then(Value::as_str);
-    if matches!(current_state, Some("complete" | "not_configured")) {
+    serde_json::from_str::<serde::de::IgnoredAny>(&current).map_err(json_error)?;
+    if matches!(
+        StageState::parse(&current).state,
+        Some(StageStatus::Complete | StageStatus::NotConfigured)
+    ) {
         return Ok(());
     }
     let next = if code == "memory_write_busy" {
-        json!({"state":"pending","blocked_by":code})
+        StageWrite::blocked(code)
     } else {
-        json!({"state":"failed","code":code,"retryable":false,"next_attempt_at":null})
+        StageWrite::failed(code)
     };
     connection
         .execute(
             &format!("UPDATE memory_projection_jobs SET {column}=?1 WHERE job_id=?2"),
-            params![stringify(&next)?, job_id],
+            params![next.json()?, job_id],
         )
         .map_err(db_error)?;
     Ok(())
@@ -198,29 +200,23 @@ fn integer_byte_offset(value: f64) -> CognitionResult<i64> {
     }
 }
 
-fn digest(values: Vec<Value>) -> CognitionResult<String> {
-    crate::cognition::sources::projection_hash_for_graph(values)
+fn digest(parts: &(impl serde::Serialize + ?Sized)) -> CognitionResult<String> {
+    crate::cognition::sources::projection_hash_for_graph(parts)
 }
 
 fn json_array(values: &[String]) -> CognitionResult<String> {
-    stringify(&Value::Array(
-        values.iter().cloned().map(Value::String).collect(),
-    ))
+    stringify(values)
 }
 
 fn json_string(value: Option<&str>) -> CognitionResult<String> {
-    stringify(&value.map_or(Value::Null, |value| Value::String(value.to_owned())))
+    stringify(&value)
 }
 
-fn stringify(value: &Value) -> CognitionResult<String> {
-    butler_core::json::stringify(value).map_err(|error| {
+fn stringify(value: &(impl serde::Serialize + ?Sized)) -> CognitionResult<String> {
+    crate::js_json::stringify(value).map_err(|error| {
         CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string())
             .with_source(error)
     })
-}
-
-fn option_value(value: Option<&str>) -> Value {
-    value.map_or(Value::Null, |value| Value::String(value.to_owned()))
 }
 
 fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {

@@ -14,9 +14,19 @@ use super::sandbox::copy_tree;
 
 pub const FIXTURE_TIME: &str = "2026-09-27T00:00:00Z";
 
+/// A third-party assistant export as an owner would paste it into profile
+/// import (PRO-02, MIG-03): input text, not a provider response. Synthetic.
+pub const PROFILE_EXPORT: &str = "## Identity\n[unknown] - Name: Sam Rivera; prefers to be called Sam.\n[unknown] - Lives in Lisbon.\n\n## Career\n[2024-03-01] - Works as a landscape architect.\n\n## Preferences\n[unknown] - Prefers short, direct answers.\n";
+
 /// `F1-ready`: onboarding complete, `model` as the default, language `en`.
 pub fn ready(data: &Path, model: &str) -> Result<(), HarnessError> {
     onboarding_complete(data)?;
+    first_conversation(data, model)
+}
+
+/// `F2-first-conversation`: `F1-ready` before the first-conversation
+/// onboarding (no onboarding record), so the first chat runs onboarding.
+pub fn first_conversation(data: &Path, model: &str) -> Result<(), HarnessError> {
     scheduler_ran_today(data)?;
     fs::write(
         data.join("butler.config.json"),

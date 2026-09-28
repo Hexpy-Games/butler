@@ -1,6 +1,6 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { type ReactNode } from "react";
-import { Field, FieldLabel, Grid, KeyValueRow, Section, Stack } from "@/butler-ds";
+import { Field, FieldError, FieldLabel, Grid, KeyValueRow, Section, Stack } from "@/butler-ds";
 import { Input } from "@/butler-ds";
 import { Textarea } from "@/butler-ds";
 import {
@@ -13,6 +13,8 @@ import {
 } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { useAutomationStore } from "@/stores/automationStore";
+import type { AutomationFormField } from "@/stores/automationForm.ts";
+import { AutomationAccessField } from "./AutomationAccessField";
 
 interface AutomationFormProps {
   children?: ReactNode;
@@ -26,6 +28,7 @@ export function AutomationForm({ children }: AutomationFormProps) {
   const intervalSeconds = useAutomationStore((state) => state.intervalSeconds);
   const sessionOptions = useAutomationStore((state) => state.sessionOptions);
   const state = useAutomationStore((state) => state.state);
+  const saveError = useAutomationStore((state) => state.saveError);
   const setTitle = useAutomationStore((state) => state.setTitle);
   const setPromptBody = useAutomationStore((state) => state.setPromptBody);
   const setTargetSessionId = useAutomationStore(
@@ -40,6 +43,8 @@ export function AutomationForm({ children }: AutomationFormProps) {
     ? String(intervalSeconds)
     : "custom";
   const copy = appCopy.automations;
+  const errorFor = (field: AutomationFormField) =>
+    saveError?.field === field ? saveError.message : undefined;
 
   return (
     <Grid columns="2" gap="xl">
@@ -50,7 +55,9 @@ export function AutomationForm({ children }: AutomationFormProps) {
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             placeholder={copy.placeholders.title}
+            aria-invalid={errorFor("title") ? true : undefined}
           />
+          <FieldError>{errorFor("title")}</FieldError>
         </Field>
         <Field>
           <FieldLabel>{copy.fields.prompt}</FieldLabel>
@@ -59,7 +66,9 @@ export function AutomationForm({ children }: AutomationFormProps) {
             onChange={(event) => setPromptBody(event.target.value)}
             placeholder={copy.placeholders.prompt}
             rows={14}
+            aria-invalid={errorFor("prompt") ? true : undefined}
           />
+          <FieldError>{errorFor("prompt")}</FieldError>
         </Field>
       </Stack>
       <Section title={copy.fields.details}>
@@ -80,6 +89,7 @@ export function AutomationForm({ children }: AutomationFormProps) {
             </SelectContent>
           </Select>
         </Field>
+        <AutomationAccessField />
         <Field>
           <FieldLabel>{copy.fields.interval}</FieldLabel>
           <Select
@@ -88,7 +98,7 @@ export function AutomationForm({ children }: AutomationFormProps) {
               setIntervalSeconds(value === "custom" ? 900 : Number(value))
             }
           >
-            <SelectTrigger>
+            <SelectTrigger aria-invalid={errorFor("interval") ? true : undefined}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -102,6 +112,7 @@ export function AutomationForm({ children }: AutomationFormProps) {
               </SelectGroup>
             </SelectContent>
           </Select>
+          <FieldError>{errorFor("interval")}</FieldError>
         </Field>
         {intervalSelectValue === "custom" && (
           <Field>
@@ -120,6 +131,7 @@ export function AutomationForm({ children }: AutomationFormProps) {
           </Field>
         )}
         <KeyValueRow label={copy.fields.state} value={state} />
+        <FieldError>{errorFor("form")}</FieldError>
         {children}
       </Section>
     </Grid>

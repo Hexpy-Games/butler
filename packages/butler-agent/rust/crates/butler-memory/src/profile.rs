@@ -14,6 +14,7 @@ mod presets;
 mod projection;
 mod service;
 mod storage;
+mod understanding;
 
 pub use contracts::{
     CanonicalProfileMessage, CanonicalProfilePart, CanonicalProfileScalar, CanonicalProfileScan,
@@ -23,16 +24,19 @@ pub use contracts::{
     ProfileThirdPartyImportOptions, ProfilingConsentSnapshot, ProfilingExtractorModelSnapshot,
     ProfilingMode, RuntimeProfileProjection,
 };
+pub use coverage_health::ProfileCoverageHealth;
 pub use error::ProfileCode;
 pub(crate) use extractor_config::read as read_profiling_extractor_model;
 pub use migration_prompt::third_party_migration_prompt;
 pub use presets::{PersonaLocale, PersonaPreset, PersonaPresets};
 pub use service::ProfileService;
 
+/// Whether first-chat onboarding is complete.
 pub fn first_chat_onboarding_complete(data_root: &std::path::Path, now: &str) -> bool {
     onboarding::read(data_root, now).status == "complete"
 }
 
+/// The id and text of the active persona, when one is set.
 pub fn active_briefing_persona(data_root: &std::path::Path) -> (Option<String>, Option<String>) {
     let text = std::fs::read_to_string(data_root.join("personas/active.md"))
         .ok()

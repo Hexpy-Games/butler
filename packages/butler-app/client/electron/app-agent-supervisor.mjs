@@ -9,10 +9,12 @@ import {
 import { dirname, join } from "node:path";
 import {
   AGENT_RESTART_RECONNECT_TIMEOUT_MS,
+  AGENT_STOP_KILL_TIMEOUT_MS,
   decideAgentExit,
   processIsAlive,
   readAgentStopIntent,
   readNativeServiceInstance,
+  retractAgentStopIntent,
   selectReplacementInstance,
   writeAgentStopIntent,
 } from "./app-agent-stop-intent.mjs";
@@ -119,13 +121,16 @@ export function createBundledAgentSupervisor({
   startupAttempts = 60,
   startupDelayMs = 150,
   startupTimeoutMs = null,
-  killTimeoutMs = 2000,
+  // SIGTERM → SIGKILL grace, the same as the CLI/MCP controllers: an Agent
+  // still draining an announced stop exits 0 by itself at 6 s (#244).
+  killTimeoutMs = AGENT_STOP_KILL_TIMEOUT_MS,
   probeTimeoutMs = 2000,
   stdio = "inherit",
   onUnexpectedExit = () => {},
   onGatewayStarting = () => {},
   readStopIntent = () => readAgentStopIntent(butlerData),
   writeStopIntent = (intent) => writeAgentStopIntent(butlerData, intent),
+  retractStopIntent = (target) => retractAgentStopIntent(butlerData, target),
   readInstanceRecord = () => readNativeServiceInstance(butlerData),
   isProcessAlive = (pid) => processIsAlive(pid),
   restartReconnectTimeoutMs = AGENT_RESTART_RECONNECT_TIMEOUT_MS,
@@ -147,8 +152,9 @@ export function createBundledAgentSupervisor({
   let localAuth = null;
   let activeGateway = null;
   let readyGateway = null;
-  // Identity of the spawned child once its native service record is ready.
-  let childInstanceId = null;
+  // Identity ({ instanceId, appSupervised }) of the spawned child, remembered
+  // as soon as its native service record shows the child's pid.
+  let childInstance = null;
   // A ready Agent this App did not spawn (external start/restart, or launch adoption).
   let attached = null;
   // An intentional external stop or a timed-out external restart. Only an
@@ -156,18 +162,35 @@ export function createBundledAgentSupervisor({
   let halt = null;
   let restartWait = null;
   let exitGeneration = 0;
+  // A CLI/MCP restart left the App's child to the App (`respawn_by: app`).
+  let respawning = false;
+  // Counts intentional restarts (respawn or wait) seen at an Agent exit.
+  let restartGeneration = 0;
   let lastExited = null;
   let pollTimer = null;
 
   async function ensureReady() {
-    if (startupPromise) return startupPromise;
-    const operation = ensureReadyOnce();
-    startupPromise = operation;
-    try {
-      await operation;
-    } finally {
-      if (startupPromise === operation) startupPromise = null;
+    for (;;) {
+      const generation = restartGeneration;
+      try {
+        await sharedStartup();
+        return;
+      } catch (error) {
+        // An intentional restart replaced the candidate mid-startup: hand the
+        // caller its replacement instead of the startup failure.
+        if (generation === restartGeneration || !(respawning || restartWait)) throw error;
+      }
     }
+  }
+
+  function sharedStartup() {
+    if (!startupPromise) {
+      const operation = ensureReadyOnce().finally(() => {
+        if (startupPromise === operation) startupPromise = null;
+      });
+      startupPromise = operation;
+    }
+    return startupPromise;
   }
 
   async function ensureReadyOnce() {
@@ -255,6 +278,7 @@ export function createBundledAgentSupervisor({
         child === candidate ? null : lastExit ?? { code: null, signal: null },
       );
       startupWindow.recordAttempt();
+      rememberChildInstance();
       const state = await checkGatewayReadiness();
       observedHealthy = observedHealthy || state.healthy;
       throwIfCandidateFailed(
@@ -262,6 +286,7 @@ export function createBundledAgentSupervisor({
         childSpawnError,
         child === candidate ? null : lastExit ?? { code: null, signal: null },
       );
+      rememberChildInstance();
       if (state.ready) {
         await acceptReadyCandidate(gateway, {
           commitActivation: readyGateway !== gateway,
@@ -283,6 +308,20 @@ export function createBundledAgentSupervisor({
       throw new Error(`Failed to start Butler app server: ${spawnError.message}`);
     }
     if (!exit) return;
+    if (halt?.reason === "stop") {
+      // A stop requested while the Agent was still starting (it exits 0).
+      const stopped = haltError();
+      rollbackGatewayActivation(gateway, stopped);
+      throw stopped;
+    }
+    if (respawning || restartWait) {
+      // A restart requested while the Agent was still starting; ensureReady
+      // hands its caller the replacement.
+      const restarting = new Error("Butler Agent is restarting.");
+      restarting.code = "agent_restarting";
+      rollbackGatewayActivation(gateway, restarting);
+      throw restarting;
+    }
     const error = new Error(
       `Butler app server exited before becoming healthy: code=${exit.code ?? "null"} signal=${exit.signal ?? "null"}.`,
     );
@@ -331,7 +370,8 @@ export function createBundledAgentSupervisor({
     readyGateway = gateway;
     lastErrorCode = null;
     lastErrorDetails = null;
-    if (child) childInstanceId = instanceIdForPid(child.pid);
+    respawning = false;
+    rememberChildInstance();
   }
 
   async function start(gateway = resolveGateway()) {
@@ -344,7 +384,7 @@ export function createBundledAgentSupervisor({
     lastErrorCode = null;
     lastExit = null;
     childSpawnError = null;
-    childInstanceId = null;
+    childInstance = null;
     attached = null;
     localAuth = localAuth ?? prepareAppLocalAuth({ butlerData });
     onGatewayStarting(gateway);
@@ -389,12 +429,18 @@ export function createBundledAgentSupervisor({
       const wasRunning = phase === "running";
       const appRequested = phase === "stopping";
       const pid = typeof spawned.pid === "number" ? spawned.pid : null;
-      const exited = { pid, instanceId: childInstanceId ?? instanceIdForPid(pid) };
+      const identity = (child === spawned ? childInstance : null) ?? instanceForPid(pid);
+      const exited = {
+        pid,
+        instanceId: identity?.instanceId ?? null,
+        appSupervised: identity?.appSupervised === true,
+        spawnedByApp: true,
+      };
       earlyExit = { code, signal };
       lastExit = earlyExit;
       clearShutdownTimer();
       child = null;
-      childInstanceId = null;
+      childInstance = null;
       if (phase !== "stopping") phase = "stopped";
       if (wasRunning) {
         invalidateGatewayRuntimeReceipt(gateway);
@@ -408,9 +454,11 @@ export function createBundledAgentSupervisor({
     const startupWindow = createStartupWindow();
     while (startupWindow.canAttempt()) {
       startupWindow.recordAttempt();
+      rememberChildInstance();
       const state = await checkGatewayReadiness();
       observedHealthy = observedHealthy || state.healthy;
       throwIfCandidateFailed(gateway, childSpawnError, earlyExit);
+      rememberChildInstance();
       if (state.ready) {
         await acceptReadyCandidate(gateway, { commitActivation: true });
         return;
@@ -449,6 +497,7 @@ export function createBundledAgentSupervisor({
   async function stop({ wait = false, reason = "stop" } = {}) {
     cancelRestartWait();
     cancelPollTick();
+    respawning = false;
     // An attached Agent was not spawned by this App. Its record pid alone is
     // not authority to signal it, so the App only detaches from it.
     attached = null;
@@ -463,10 +512,10 @@ export function createBundledAgentSupervisor({
     }
     phase = "stopping";
     const stopping = child;
-    recordAppStopIntent(stopping, reason);
+    const intent = recordAppStopIntent(stopping, reason);
     // TODO(#223): on Windows, child.kill() terminates the Agent without a clean
     // exit. Stop it with `butler-agent service stop --requested-by app` there.
-    stopping.kill("SIGTERM");
+    if (!deliverSignal(stopping, "SIGTERM") && intent) safeRetractStopIntent(intent);
     shutdownKillTimer = setKillTimer(() => {
       if (child === stopping) stopping.kill("SIGKILL");
     }, killTimeoutMs);
@@ -537,7 +586,7 @@ export function createBundledAgentSupervisor({
     let state;
     if (halt?.reason === "stop") state = "stopped";
     else if (halt?.reason === "restart_timeout") state = "restart_failed";
-    else if (restartWait) state = "restarting";
+    else if (restartWait || respawning) state = "restarting";
     else if (["running", "starting", "failed"].includes(phase)) state = phase;
     else state = "idle";
     return {
@@ -547,27 +596,48 @@ export function createBundledAgentSupervisor({
     };
   }
 
+  // Runs synchronously in the exit handler: the intent is read before any
+  // await, timer or respawn, so the next instance cannot clear it first.
   function handleAgentExit(exited, exit, { wasRunning }) {
     lastExited = exited;
     const decision = decideAgentExit({ intent: safeReadStopIntent(), exited });
+    if (decision.action === "recover") {
+      if (wasRunning) queueMicrotask(() => onUnexpectedExit(exit));
+      return;
+    }
+    const { requestedBy, respawnBy } = decision;
     if (decision.action === "stay_stopped") {
-      halt = { reason: "stop", requestedBy: decision.requestedBy };
+      halt = { reason: "stop", requestedBy };
       phase = "stopped";
       schedulePollTick();
-      queueMicrotask(() =>
-        onIntentionalExit({ reason: "stop", requestedBy: decision.requestedBy, exit }));
+      queueMicrotask(() => onIntentionalExit({ reason: "stop", requestedBy, respawnBy, exit }));
       return;
     }
-    if (decision.action === "await_restart") {
-      phase = "restarting";
-      const wait = awaitReplacement(exited, decision.requestedBy, ++exitGeneration);
-      restartWait = wait;
-      wait.catch(() => {});
-      queueMicrotask(() =>
-        onIntentionalExit({ reason: "restart", requestedBy: decision.requestedBy, exit }));
+    restartGeneration += 1;
+    if (decision.action === "respawn") {
+      // The controller waits for this App to start the replacement with its
+      // own environment and lease. No crash budget is spent.
+      respawning = true;
+      const generation = restartGeneration;
+      queueMicrotask(() => onIntentionalExit({ reason: "restart", requestedBy, respawnBy, exit }));
+      queueMicrotask(() => {
+        if (respawning && generation === restartGeneration) void respawnReplacement();
+      });
       return;
     }
-    if (wasRunning) queueMicrotask(() => onUnexpectedExit(exit));
+    phase = "restarting";
+    const wait = awaitReplacement(exited, requestedBy, ++exitGeneration);
+    restartWait = wait;
+    wait.catch(() => {});
+    queueMicrotask(() => onIntentionalExit({ reason: "restart", requestedBy, respawnBy, exit }));
+  }
+
+  async function respawnReplacement() {
+    try {
+      await ensureReady();
+    } catch {
+      // ensureReady recorded the failure; agentState() and diagnostics report it.
+    }
   }
 
   async function awaitReplacement(exited, requestedBy, generation) {
@@ -612,20 +682,30 @@ export function createBundledAgentSupervisor({
     markAttached(record);
   }
 
+  // An Agent this App did not spawn is supervised (watched, reconnected) but
+  // never owned: the App does not signal or respawn it. `appSupervised` says
+  // whether another App holds its lease and will replace it on a restart.
   function markAttached(record) {
-    attached = { pid: record.pid, instanceId: record.instanceId };
+    attached = {
+      pid: record.pid,
+      instanceId: record.instanceId,
+      appSupervised: record.appSupervised === true,
+    };
     halt = null;
+    respawning = false;
+    // The replacement arrived: the attach event already reports running.
+    restartWait = null;
     phase = "running";
     lastErrorCode = null;
     lastErrorDetails = null;
     schedulePollTick();
-    const event = { pid: record.pid, instanceId: record.instanceId, port: getPort() };
+    const event = { ...attached, port: getPort() };
     queueMicrotask(() => onExternalAttach(event));
   }
 
   function reconcileAttachedExit() {
     if (!attached || child || isProcessAlive(attached.pid)) return;
-    const exited = attached;
+    const exited = { ...attached, spawnedByApp: false };
     attached = null;
     phase = "stopped";
     handleAgentExit(exited, { code: null, signal: null }, { wasRunning: true });
@@ -666,22 +746,47 @@ export function createBundledAgentSupervisor({
     return error;
   }
 
+  // The App stops only its own child, so a restart it requests is one it
+  // respawns itself (`respawn_by: app`); a plain stop has no respawner.
   function recordAppStopIntent(target, reason) {
     const pid = typeof target?.pid === "number" ? target.pid : null;
-    const instanceId = childInstanceId ?? instanceIdForPid(pid);
+    const instanceId = (target === child ? childInstance : null)?.instanceId ??
+      instanceForPid(pid)?.instanceId;
     // Without a published instance id the Agent never became observable, so
     // no other supervisor can mistake this exit; skip the intent.
-    if (!pid || !instanceId) return;
+    if (!pid || !instanceId) return null;
     try {
-      writeStopIntent({ reason, pid, instanceId, requestedBy: "app" });
+      writeStopIntent({
+        reason,
+        pid,
+        instanceId,
+        requestedBy: "app",
+        respawnBy: reason === "restart" ? "app" : null,
+      });
+      return { pid, instanceId };
     } catch {
       // This supervisor already treats the exit as intentional (phase stopping).
+      return null;
     }
   }
 
-  function instanceIdForPid(pid) {
+  function safeRetractStopIntent(target) {
+    try {
+      retractStopIntent(target);
+    } catch {
+      // A stale intent names this instance only; the next ready instance clears it.
+    }
+  }
+
+  function rememberChildInstance() {
+    if (!child || childInstance) return;
+    childInstance = instanceForPid(child.pid);
+  }
+
+  function instanceForPid(pid) {
     const record = safeReadInstanceRecord();
-    return record && record.pid === pid ? record.instanceId : null;
+    if (!record || record.pid !== pid) return null;
+    return { instanceId: record.instanceId, appSupervised: record.appSupervised === true };
   }
 
   function safeReadStopIntent() {
@@ -729,6 +834,7 @@ export function createBundledAgentSupervisor({
     lastErrorCode = code;
     lastErrorDetails = details;
     phase = "failed";
+    respawning = false;
   }
 
   function createStartupWindow() {
@@ -827,6 +933,14 @@ export function createBundledAgentSupervisor({
     start,
     stop,
   };
+}
+
+function deliverSignal(target, signal) {
+  try {
+    return target.kill(signal) !== false;
+  } catch {
+    return false;
+  }
 }
 
 function defaultSchedulePoll(fn, ms) {

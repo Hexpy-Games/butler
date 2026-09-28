@@ -75,3 +75,15 @@
 .results small {
   color: var(--text-tertiary);
 }
+
+/* Phones: the palette is a top sheet (Dialog); results fill more of it and
+   rows meet the touch target. */
+@media (width <= 640px) {
+  .palette .results {
+    max-height: calc(var(--adaptive-viewport-block-size) * 0.6);
+  }
+
+  .results [role="option"] {
+    min-height: var(--touch-target);
+  }
+}

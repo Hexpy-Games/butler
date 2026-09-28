@@ -1,0 +1,64 @@
+butler-docs-writing: sources and notices
+========================================
+
+The skill's layout (core rules, reference lists of phrases and structures,
+before/after examples, a short self-score) follows stop-slop. The Korean
+AI-tell categories in korean-ai-tells.md were gathered from the Korean
+humanizer skills below and rewritten for a user manual. All wording in this
+skill is our own paraphrase; no text was copied verbatim from these sources,
+and nothing was taken from Wikipedia's "Signs of AI writing" (CC BY-SA).
+
+The before/after examples come from the Butler manual itself
+(packages/butler-site/src/content/docs/ko).
+
+Sources (all MIT License)
+-------------------------
+
+- hardikpandya/stop-slop — https://github.com/hardikpandya/stop-slop
+  Copyright (c) 2025 Hardik Pandya
+  Used for: skill layout, the idea of a scored self-check.
+
+- epoko77-ai/im-not-ai — https://github.com/epoko77-ai/im-not-ai
+  (skills/humanize-korean/references/ai-tell-taxonomy.md)
+  Copyright (c) 2026 epoko77-ai
+  Used for: the category split 번역투, 기계적 구조, AI 상투구, 형식명사,
+  중복 수식, 헤징, 접속사 남용.
+
+- DaleSeo/korean-skills (humanizer) — https://github.com/DaleSeo/korean-skills
+  Copyright (c) 2026 Dale Seo
+  Used for: translation-interference and vocabulary pattern ideas.
+
+- NomaDamas/k-skill (korean-humanizer) — https://github.com/NomaDamas/k-skill
+  Copyright (c) 2026 (LICENSE names no holder; repository owner NomaDamas)
+  Used for: typographic markers (dashes, emoji), closing cliches,
+  meaning-preservation stance.
+
+- amondnet/yoonmoon — https://github.com/amondnet/yoonmoon
+  Copyright (c) 2026 Minsu Lee
+  Used for: the "too much vs. too little" split (keep complete predicates;
+  noun-phrase endings are normal in headings, tables and lists).
+
+- blader/humanizer — https://github.com/blader/humanizer
+  Copyright (c) 2025 Siqi Chen
+  Used for: the pattern names "meta intro" and "chatbot leftovers" only.
+
+MIT License (applies to each source above, with its own copyright line)
+-----------------------------------------------------------------------
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

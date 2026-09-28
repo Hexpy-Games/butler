@@ -60,6 +60,17 @@ pub(crate) enum Salience {
     Unspecified,
 }
 
+impl Salience {
+    /// Reads a stored `salience` column; other values are unspecified.
+    pub(crate) fn from_stored(value: &str) -> Self {
+        match value {
+            "high" => Self::High,
+            "normal" => Self::Normal,
+            _ => Self::Unspecified,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum TimeBasis {
     Conversation,

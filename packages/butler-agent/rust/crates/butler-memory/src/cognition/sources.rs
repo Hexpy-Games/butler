@@ -17,7 +17,8 @@ pub(in crate::cognition) use inventory::{CanonicalInventory, read_canonical_inve
 pub(in crate::cognition) use planner::assert_conversation_source_current;
 pub use planner::prepare_conversation_source;
 pub(in crate::cognition) use recall::{
-    RecallSourceHydration, RecallSourceResolution, hydrate_recall_sources, identity_binding_current,
+    RecallSourceHydration, RecallSourceResolution, ResolvedRecallSource, hydrate_recall_sources,
+    identity_binding_current,
 };
 pub use typed::{
     ExplicitMemoryUpdateInput, ExplicitMemoryUpdateResult, TaskMemoryIngestionResult,
@@ -27,7 +28,7 @@ pub(in crate::cognition) use typed::{
     TypedMemoryLifecycle, TypedMemoryRecord, hydrate_typed_source, read_explicit_record,
     read_task_report, read_typed_memory_lifecycle, read_typed_record,
 };
-pub(in crate::cognition) use typed_plan::{TypedPlan, prepare as prepare_typed_source};
+pub(in crate::cognition) use typed_plan::{TypedPlan, TypedSpan, prepare as prepare_typed_source};
 pub use types::{
     CognitionSourcePlan, CognitionSourceRow, ConversationSourceNotice, PreparedConversationSource,
 };

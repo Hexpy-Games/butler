@@ -1,16 +1,27 @@
+//! Legacy recall requests, policies, candidates and responses.
+
 use serde::{Deserialize, Serialize};
 
+/// A legacy memory recall request.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 #[serde(rename_all = "camelCase")]
 pub struct LegacyRecallRequest {
+    /// What to recall.
     pub cue: String,
+    /// Project to recall within.
     pub project_id: Option<String>,
+    /// Conversation context that boosts related memories.
     pub context: Option<LegacyRecallContext>,
+    /// Evidence the answer must carry.
     pub evidence_policy: Option<LegacyRecallEvidencePolicy>,
+    /// Ranking policy; the evidence policy when absent.
     pub ranking_policy: Option<LegacyRecallEvidencePolicy>,
+    /// Items to return (1-10, default 5).
     pub limit: Option<f64>,
+    /// Now, in milliseconds since the epoch.
     pub now: Option<f64>,
+    /// Lowest score an item may have.
     pub min_score: Option<f64>,
 }
 

@@ -121,7 +121,7 @@
   padding: var(--space-xs) var(--space-sm);
   border-radius: var(--radius-control);
   background: var(--surface);
-  color: var(--accent);
+  color: var(--accent-text);
   pointer-events: none;
   transform: translateY(-50%);
   animation: fade-in var(--motion-fast) var(--motion-ease-decelerate);

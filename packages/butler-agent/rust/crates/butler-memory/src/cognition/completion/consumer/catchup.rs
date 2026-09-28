@@ -26,23 +26,37 @@ pub(super) struct CatchupReport {
 }
 
 pub(super) async fn run_if_due(input: &Input) -> CognitionResult<bool> {
-    Ok(run(input, false).await?.ingested > 0)
+    Ok(run(input, Schedule::IfDue).await?.ingested > 0)
 }
 
 pub(super) async fn run_once(input: &Input) -> CognitionResult<CatchupReport> {
-    run(input, true).await
+    run(input, Schedule::Now).await
 }
 
-async fn run(input: &Input, force: bool) -> CognitionResult<CatchupReport> {
-    if input.shutdown.is_cancelled() {
-        return Ok(CatchupReport::default());
+/// Whether a pass may be skipped because one ran within the last minute.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Schedule {
+    IfDue,
+    Now,
+}
+
+/// Claims the catch-up slot; `false` when a pass ran within the last
+/// minute and this one is only due-based.
+fn claim_slot(input: &Input, schedule: Schedule) -> bool {
+    if schedule == Schedule::Now {
+        return true;
     }
-    if !force {
-        let mut last = input.catchup_at.lock();
-        if last.is_some_and(|time| time.elapsed() < Duration::from_secs(60)) {
-            return Ok(CatchupReport::default());
-        }
-        *last = Some(Instant::now());
+    let mut last = input.catchup_at.lock();
+    if last.is_some_and(|time| time.elapsed() < Duration::from_secs(60)) {
+        return false;
+    }
+    *last = Some(Instant::now());
+    true
+}
+
+async fn run(input: &Input, schedule: Schedule) -> CognitionResult<CatchupReport> {
+    if input.shutdown.is_cancelled() || !claim_slot(input, schedule) {
+        return Ok(CatchupReport::default());
     }
     let handle = match resolve_input_generation(input) {
         Ok(handle) => handle,
@@ -52,7 +66,7 @@ async fn run(input: &Input, force: bool) -> CognitionResult<CatchupReport> {
         Err(error) => return Err(error),
     };
     let graph = GraphRepository::open(&handle.graph_path)?;
-    let mut cursors = graph.catchup_cursors()?;
+    let cursors = graph.catchup_cursors()?;
     graph.close()?;
     let canonical = match ConversationSourceReader::open(&canonical_path(&handle, &input.data_root))
     {
@@ -62,78 +76,134 @@ async fn run(input: &Input, force: bool) -> CognitionResult<CatchupReport> {
         }
         Err(error) => return Err(CognitionError::from(error)),
     };
-    let mut outcomes = canonical
-        .read_recall_outcome_page(cursors.outcome.as_deref(), Some(255))
-        .map_err(CognitionError::from)?;
-    let mut wrapped = false;
-    if outcomes.is_empty() && cursors.outcome.is_some() {
-        cursors.outcome = None;
-        wrapped = true;
-        outcomes = canonical
-            .read_recall_outcome_page(None, Some(255))
-            .map_err(CognitionError::from)?;
+    let mut pass = Pass {
+        cursors,
+        wrapped: false,
+        work: Vec::with_capacity(256),
+    };
+    pass.read_outcomes(&canonical)?;
+    pass.read_recovered_sources(&canonical)?;
+    canonical.close().map_err(CognitionError::from)?;
+    let scanned = pass.work.len();
+    let work = std::mem::take(&mut pass.work);
+    let registration = register(input, &handle, work).await?;
+    if !registration.interrupted {
+        save_cursors(input, &handle, &pass.cursors).await?;
     }
-    let remaining = 256 - outcomes.len();
-    let mut work = Vec::with_capacity(256);
-    for outcome in outcomes {
-        cursors.outcome = Some(outcome.id.clone());
-        work.push((
-            CognitionConversationSourceNotice::Turn {
-                session_id: outcome.session_id,
-                turn_id: outcome.turn_id,
-                outcome_generation: outcome.generation,
-                extraction_version: "memory-extract-v3".into(),
-            },
-            format!("catchup:outcome:{}", outcome.id),
-        ));
-    }
-    let mut scanned = 0;
-    while scanned < remaining {
-        // Limit simultaneous hydrated bodies; the source's total scan budget
-        // remains 256 and only compact notices survive to the awaits below.
-        let batch_size = (remaining - scanned).min(16);
-        let messages = canonical
-            .read_recovered_source_page(cursors.message.as_deref(), Some(batch_size))
+    Ok(CatchupReport {
+        available: true,
+        scanned,
+        ingested: registration.ingested,
+        wrapped: pass.wrapped,
+        outcome_cursor: pass.cursors.outcome,
+        recovered_message_cursor: pass.cursors.message,
+    })
+}
+
+/// One catch-up pass: the source notices to register, each with its
+/// observation id, and the cursors after them.
+struct Pass {
+    cursors: CatchupCursors,
+    /// A cursor wrapped around to the start this pass.
+    wrapped: bool,
+    work: Vec<(CognitionConversationSourceNotice, String)>,
+}
+
+impl Pass {
+    /// Reads up to 255 recall outcomes after the outcome cursor, wrapping
+    /// once when the cursor is at the end.
+    fn read_outcomes(&mut self, canonical: &ConversationSourceReader) -> CognitionResult<()> {
+        let mut outcomes = canonical
+            .read_recall_outcome_page(self.cursors.outcome.as_deref(), Some(255))
             .map_err(CognitionError::from)?;
-        if messages.is_empty() {
-            if scanned == 0 && cursors.message.is_some() && !wrapped {
-                cursors.message = None;
-                wrapped = true;
-                continue;
-            }
-            break;
+        if outcomes.is_empty() && self.cursors.outcome.is_some() {
+            self.cursors.outcome = None;
+            self.wrapped = true;
+            outcomes = canonical
+                .read_recall_outcome_page(None, Some(255))
+                .map_err(CognitionError::from)?;
         }
-        let count = messages.len();
-        for message in messages {
-            let hash = recovered_source_hash(&message.parts)?;
-            cursors.message = Some(message.message.id.clone());
-            work.push((
-                CognitionConversationSourceNotice::Standalone {
-                    session_id: message.message.session_id,
-                    message_id: message.message.id.clone(),
-                    source_hash: hash.clone(),
+        for outcome in outcomes {
+            self.cursors.outcome = Some(outcome.id.clone());
+            self.work.push((
+                CognitionConversationSourceNotice::Turn {
+                    session_id: outcome.session_id,
+                    turn_id: outcome.turn_id,
+                    outcome_generation: outcome.generation,
                     extraction_version: "memory-extract-v3".into(),
                 },
-                format!("catchup:message:{}:{hash}", message.message.id),
+                format!("catchup:outcome:{}", outcome.id),
             ));
         }
-        scanned += count;
-        if count < batch_size {
-            break;
-        }
+        Ok(())
     }
-    canonical.close().map_err(CognitionError::from)?;
-    let scanned_total = work.len();
+
+    /// Fills the rest of the 256-notice budget with recovered standalone
+    /// messages, wrapping the message cursor once when it is at the end.
+    fn read_recovered_sources(
+        &mut self,
+        canonical: &ConversationSourceReader,
+    ) -> CognitionResult<()> {
+        let remaining = 256 - self.work.len();
+        let mut scanned = 0;
+        while scanned < remaining {
+            // Limit simultaneous hydrated bodies; the source's total scan budget
+            // remains 256 and only compact notices survive to the awaits below.
+            let batch_size = (remaining - scanned).min(16);
+            let messages = canonical
+                .read_recovered_source_page(self.cursors.message.as_deref(), Some(batch_size))
+                .map_err(CognitionError::from)?;
+            if messages.is_empty() {
+                if scanned == 0 && self.cursors.message.is_some() && !self.wrapped {
+                    self.cursors.message = None;
+                    self.wrapped = true;
+                    continue;
+                }
+                break;
+            }
+            let count = messages.len();
+            for message in messages {
+                let hash = recovered_source_hash(&message.parts)?;
+                self.cursors.message = Some(message.message.id.clone());
+                self.work.push((
+                    CognitionConversationSourceNotice::Standalone {
+                        session_id: message.message.session_id,
+                        message_id: message.message.id.clone(),
+                        source_hash: hash.clone(),
+                        extraction_version: "memory-extract-v3".into(),
+                    },
+                    format!("catchup:message:{}:{hash}", message.message.id),
+                ));
+            }
+            scanned += count;
+            if count < batch_size {
+                break;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// How registering a pass's notices went.
+struct Registration {
+    ingested: usize,
+    /// Shutdown stopped the pass before every notice was registered.
+    interrupted: bool,
+}
+
+/// Registers each notice with the conversation registration; ineligible and
+/// not-yet-terminal sources are skipped.
+async fn register(
+    input: &Input,
+    handle: &crate::cognition::MemoryGenerationHandle,
+    work: Vec<(CognitionConversationSourceNotice, String)>,
+) -> CognitionResult<Registration> {
     let mut ingested = 0;
     for (notice, observation_id) in work {
         if input.shutdown.is_cancelled() {
-            return Ok(CatchupReport {
-                available: true,
-                scanned: scanned_total,
+            return Ok(Registration {
                 ingested,
-                wrapped,
-                outcome_cursor: cursors.outcome,
-                recovered_message_cursor: cursors.message,
+                interrupted: true,
             });
         }
         let outcome = input
@@ -167,14 +237,9 @@ async fn run(input: &Input, force: bool) -> CognitionResult<CatchupReport> {
             Err(error) => return Err(error),
         }
     }
-    save_cursors(input, &handle, &cursors).await?;
-    Ok(CatchupReport {
-        available: true,
-        scanned: scanned_total,
+    Ok(Registration {
         ingested,
-        wrapped,
-        outcome_cursor: cursors.outcome,
-        recovered_message_cursor: cursors.message,
+        interrupted: false,
     })
 }
 

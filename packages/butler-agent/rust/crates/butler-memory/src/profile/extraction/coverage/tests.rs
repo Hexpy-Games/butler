@@ -82,7 +82,7 @@ fn register_window(root: &Root, window: &SourceWindow) {
 }
 
 fn owner(root: &Root) -> (Option<f64>, Option<String>) {
-    storage::open(&root.0, false)
+    storage::open(&root.0, storage::Access::Read)
         .unwrap()
         .query_row(
             "SELECT owner_pid,owner_nonce FROM profile_source_coverage",
@@ -132,7 +132,7 @@ fn foreign_claim_recovery_requires_definite_death() {
     let root = Root::new();
     let window = window();
     register_window(&root, &window);
-    let db = storage::open(&root.0, true).unwrap();
+    let db = storage::open(&root.0, storage::Access::Write).unwrap();
     db.execute(
         "UPDATE profile_source_coverage SET owner_pid=999,owner_nonce='foreign'",
         [],

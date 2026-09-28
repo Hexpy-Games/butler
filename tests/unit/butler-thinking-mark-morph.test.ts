@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   CENTER,
+  HALFTONE_PRESETS,
   HS_R,
 } from "../../packages/butler-app/client/ui/src/libs/design-system/components/ButlerThinkingMark/thinking-mark/constants.ts";
 import { sdRibbon } from "../../packages/butler-app/client/ui/src/libs/design-system/components/ButlerThinkingMark/thinking-mark/ribbon-geometry.ts";
@@ -12,6 +13,7 @@ import {
   type HalftoneLayer,
 } from "../../packages/butler-app/client/ui/src/libs/design-system/components/ButlerThinkingMark/thinking-mark/halftone-model.ts";
 import {
+  CLIP_RELEASE,
   clipMargin,
   morphSd,
   OUTLINE_RAYS,
@@ -81,7 +83,6 @@ test("every channel moves together: no channel is pinned at an endpoint while an
   const shapeWaist = [extent(0, -Math.PI / 2), extent(1, -Math.PI / 2)];
   const keyInk = [inkTotal(key, 0, 0, true), inkTotal(key, 0, 1, true)];
   const blueInk = [inkTotal(blue, 1, 0), inkTotal(blue, 1, 1)];
-  const speed = [speedOf(0), speedOf(1)];
   // The endpoints differ, so "strictly between" is meaningful for every channel.
   expect(shapeLobe[0]).toBeGreaterThan(HS_R + 40);
   expect(shapeLobe[1]).toBeCloseTo(HS_R, -1);
@@ -92,7 +93,8 @@ test("every channel moves together: no channel is pinned at an endpoint while an
     strictlyBetween(extent(p, -Math.PI / 2), shapeWaist[0]!, shapeWaist[1]!); // the waist rounds out
     strictlyBetween(inkTotal(key, 0, p, true), keyInk[0]!, keyInk[1]!); // solid fill resolving into dots
     strictlyBetween(inkTotal(blue, 1, p), blueInk[0]!, blueInk[1]!); // riso colour
-    strictlyBetween(speedOf(p), speed[0]!, speed[1]!); // motion clock
+    // the motion clock runs with the morph from frame one (full speed early, see motion tests)
+    expect(speedOf(p)).toBeGreaterThan(0);
   }
 });
 
@@ -160,6 +162,44 @@ test("the outline clip follows the morphing shape: star-shaped, and every inside
   // At rest the traced outline is the logo's edge: lobe tip radius = RR + RHO.
   traceOutline(0, 1, outline);
   expect(outline[0]!).toBeCloseTo(329.43 + 34, 0);
+});
+
+test("releasing the clip at CLIP_RELEASE is pixel-identical: no ink reaches past the margin before it", () => {
+  const outline = new Float32Array(OUTLINE_RAYS);
+  const radiusAt = (angle: number) => {
+    const f = ((((angle / (Math.PI * 2)) % 1) + 1) % 1) * OUTLINE_RAYS;
+    const i = Math.floor(f) % OUTLINE_RAYS;
+    const t = f - Math.floor(f);
+    return outline[i]! * (1 - t) + outline[(i + 1) % OUTLINE_RAYS]! * t;
+  };
+  expect(Number.isFinite(clipMargin(CLIP_RELEASE, 25))).toBe(false);
+  for (const cls of [0, 1, 2] as const) {
+    const preset = HALFTONE_PRESETS[cls]!;
+    const screens = latticeFor(cls);
+    // The clip is already a no-op over the whole stretch before release (from ~0.45 at every size).
+    for (let g = CLIP_RELEASE - 0.1; g < CLIP_RELEASE; g += 0.02) {
+      const margin = clipMargin(g, preset.pitch);
+      for (let T = 0; T < 12; T += 0.7) {
+        const params = createFrameParams();
+        setFrameParams(params, g, T, cls);
+        traceOutline(params.M, params.br, outline);
+        const mis = (7 + 4 * Math.sin(T * 1.2)) * preset.mis * params.M;
+        const mis2 = (-5 + 3 * Math.cos(T * 0.95)) * preset.mis * params.M;
+        const offsets = [[0, 0], [mis, mis2], [-mis2, mis * 0.6]] as const;
+        screens.forEach((layer, ink) => {
+          for (let i = 0; i < layer.N; i += 1) {
+            const r = dotRadius(layer, i, ink, params);
+            if (r <= 0) continue;
+            const x = layer.X[i]! + offsets[ink]![0] - CENTER;
+            const y = layer.Y[i]! + offsets[ink]![1] - CENTER;
+            // radial overshoot of the dot's far edge bounds its distance past the outline
+            const overshoot = Math.hypot(x, y) + r - radiusAt(Math.atan2(y, x));
+            expect(overshoot).toBeLessThan(margin);
+          }
+        });
+      }
+    }
+  }
 });
 
 test("morph progress is monotonic on entry and on settle, and stays in [0, 1]", () => {

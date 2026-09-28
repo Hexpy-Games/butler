@@ -8,7 +8,7 @@ use serde_json::{Map, Value, json};
 use super::*;
 use crate::gateway::MessageContentPart;
 use crate::gateway::application::storage::AppStorageCode;
-use butler_turn::btcc::ExecutionControls;
+use butler_turn::btcc::{AccessMode, ExecutionControls};
 
 impl AppApplication {
     pub(super) async fn prepare_claimed_native(
@@ -17,9 +17,9 @@ impl AppApplication {
     ) -> Result<AppTurn, GatewayApplicationError> {
         let queued_id = claim.queued_message_id.clone();
         let claim_id = claim.claim_id.clone();
-        let snapshot = self
+        let (snapshot, conversation_access) = self
             .storage
-            .execute(move |db| claimed_snapshot(db, &queued_id, &claim_id))
+            .execute(move |db| claimed_input(db, &queued_id, &claim_id))
             .await
             .map_err(app_error)?;
         let controls: ExecutionControls =
@@ -82,8 +82,19 @@ impl AppApplication {
             .native_assets
             .resolve(snapshot.clone())
             .await?;
-        Ok(rebuilt_turn(snapshot, assets))
+        Ok(rebuilt_turn(snapshot, assets, &conversation_access))
     }
+}
+
+/// The claimed snapshot and its conversation's own access mode now.
+fn claimed_input(
+    db: &Connection,
+    queued_id: &str,
+    claim_id: &str,
+) -> Result<(ClaimedNativeSnapshot, AccessMode), AppStorageError> {
+    let snapshot = claimed_snapshot(db, queued_id, claim_id)?;
+    let access = settings::conversation_access_mode(db, &snapshot.chat_id)?;
+    Ok((snapshot, access))
 }
 
 fn claimed_snapshot(
@@ -207,7 +218,15 @@ fn claimed_snapshot(
     Ok(snapshot)
 }
 
-fn rebuilt_turn(snapshot: ClaimedNativeSnapshot, assets: ResolvedNativeAssets) -> AppTurn {
+/// The App turn of a claimed snapshot. Its context names the conversation's
+/// own access mode (`session.accessMode`) apart from the turn's controls, so
+/// a per-message override (a schedule's own access, #237) never becomes the
+/// mode the stored session binding keeps for turns without controls.
+fn rebuilt_turn(
+    snapshot: ClaimedNativeSnapshot,
+    assets: ResolvedNativeAssets,
+    conversation_access: &AccessMode,
+) -> AppTurn {
     let mut context = Map::new();
     context.insert("version".into(), Value::from(1));
     if let Some(seed) = snapshot.branch_seed.clone() {
@@ -220,7 +239,8 @@ fn rebuilt_turn(snapshot: ClaimedNativeSnapshot, assets: ResolvedNativeAssets) -
     context.insert("sessionReferences".into(), assets.session_references);
     context.insert(
         "session".into(),
-        json!({"id":snapshot.chat_id,"kind":if snapshot.session_kind=="project"{"project"}else{"chat"}}),
+        json!({"id":snapshot.chat_id,"kind":if snapshot.session_kind=="project"{"project"}else{"chat"},
+            "accessMode":settings::access_mode_name(conversation_access)}),
     );
     context.insert(
         "conversation".into(),

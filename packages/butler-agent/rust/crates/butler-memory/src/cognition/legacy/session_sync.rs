@@ -25,12 +25,14 @@ pub struct LegacySessionOffset {
     pub(crate) byte_offset: usize,
 }
 
+/// How far each legacy session transcript has been indexed.
 #[derive(Default)]
 pub struct LegacySessionOffsets {
     values: BTreeMap<String, LegacySessionOffset>,
 }
 
 impl LegacySessionOffsets {
+    /// The stored offsets.
     pub fn load(data_root: &Path, memory_root: &Path) -> CognitionResult<Self> {
         let path = offset_path(memory_root);
         ensure_data_authority(data_root, &[memory_root, &path])?;
@@ -74,13 +76,16 @@ impl LegacySessionOffsets {
         Ok(Self { values })
     }
 
+    /// The offset of the session with `key`.
     pub fn get(&self, key: &str) -> Option<&LegacySessionOffset> {
         self.values.get(key)
     }
+    /// Sets the offset of a session.
     pub fn insert(&mut self, key: String, value: LegacySessionOffset) {
         self.values.insert(key, value);
     }
 
+    /// Stores the offsets.
     pub fn save(&self, data_root: &Path, memory_root: &Path) -> CognitionResult<()> {
         let path = offset_path(memory_root);
         let parent = path
@@ -130,6 +135,7 @@ impl LegacySessionOffsets {
     }
 }
 
+/// The transcript lines after the session's stored offset, and the new offset.
 pub fn read_legacy_new_lines(
     data_root: &Path,
     path: &Path,
@@ -183,6 +189,7 @@ pub fn read_legacy_new_lines(
     ))
 }
 
+/// Parses transcript lines into indexing chunks; the message count and the chunks.
 pub fn prepare_legacy_transcript(
     lines: &[String],
     fallback: &str,
@@ -191,10 +198,12 @@ pub fn prepare_legacy_transcript(
     (parsed.message_count, parsed.chunks)
 }
 
+/// The first 8000 UTF-16 units of `text`, as the hot cache stores it.
 pub fn legacy_hot_prefix(text: &str) -> String {
     parser::prefix_utf16_8000(text)
 }
 
+/// Indexes transcript lines for exact queries; the rows written.
 pub fn index_legacy_transcript_query(
     data_root: &Path,
     transcript_file: &Path,
@@ -203,6 +212,7 @@ pub fn index_legacy_transcript_query(
     query::index(data_root, transcript_file, lines)
 }
 
+/// Records a session that could not be synced in the dead-letter queue.
 pub fn append_legacy_session_diagnostic(
     data_root: &Path,
     memory_root: &Path,

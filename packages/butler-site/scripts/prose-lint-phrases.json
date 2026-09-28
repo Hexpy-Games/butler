@@ -1,0 +1,125 @@
+{
+  "$comment": "Banned phrases for Korean docs prose. Single source of truth for scripts/lint-prose.ts and skills/butler-docs-writing/references/banned-phrases.md (a test keeps the two in sync). Each example must trigger its own id and no other phrase.",
+  "phrases": [
+    {
+      "id": "various",
+      "pattern": "다양(한|하게|합니다|하다)",
+      "message": "vague intensifier '다양한'; name the actual items or delete it",
+      "example": "다양한 모델을 지원합니다."
+    },
+    {
+      "id": "through",
+      "pattern": "(을|를)\\s*통(해|하여)",
+      "message": "translationese '~를 통해'; use '~로', '~에서' or a direct verb",
+      "example": "설정을 통해 바꿉니다."
+    },
+    {
+      "id": "effectively",
+      "pattern": "효과적(으로|인)",
+      "message": "empty adverb '효과적으로'; say what the reader does",
+      "example": "검색어로 효과적으로 찾습니다."
+    },
+    {
+      "id": "in-regard-to",
+      "pattern": "에\\s*있어서",
+      "message": "translationese '~에 있어서'; use '~에서', '~할 때' or restructure",
+      "example": "설정에 있어서 순서를 지킵니다."
+    },
+    {
+      "id": "smooth",
+      "pattern": "원활(한|하게|히)",
+      "message": "marketing adjective '원활한'; state the concrete behavior",
+      "example": "원활한 연결을 제공합니다."
+    },
+    {
+      "id": "easily",
+      "pattern": "손쉽|손쉬운",
+      "message": "marketing adverb '손쉽게'; delete it",
+      "example": "손쉽게 모델을 바꿉니다."
+    },
+    {
+      "id": "powerful",
+      "pattern": "강력(한|하게|합니다)",
+      "message": "marketing adjective '강력한'; state the concrete capability",
+      "example": "강력한 검색을 제공합니다."
+    },
+    {
+      "id": "conveniently",
+      "pattern": "간편(하게|한|히)",
+      "message": "marketing adverb '간편하게'; delete it",
+      "example": "간편하게 스킬을 추가합니다."
+    },
+    {
+      "id": "as-follows",
+      "pattern": "(다음|아래)(과|와)\\s*같(습니다|다)",
+      "message": "signpost '다음과 같습니다'; name what follows ('자주 보는 오류와 해결 방법입니다.') or state the verb ('다음 인자를 받습니다.')",
+      "example": "자주 보는 오류는 다음과 같습니다."
+    },
+    {
+      "id": "geot-ending",
+      "pattern": "것입니다",
+      "message": "nominal ending '~한 것입니다'; end on the verb ('멈췄습니다', '완료됩니다')",
+      "example": "여기에서 준비가 멈춘 것입니다."
+    },
+    {
+      "id": "gyeongu-ending",
+      "pattern": "경우입니다",
+      "message": "nominal ending '~한 경우입니다'; write a condition + action ('~하면 ~합니다') or '~했다는 뜻입니다'",
+      "example": "버전을 읽지 못한 경우입니다."
+    },
+    {
+      "id": "double-passive",
+      "pattern": "되어(지|져|집)",
+      "message": "double passive '되어지다'; use '됩니다'",
+      "example": "값이 저장되어집니다."
+    },
+    {
+      "id": "double-passive-eojida",
+      "pattern": "(보여|쓰여|놓여|쌓여|잊혀|닫혀|열려|불려|읽혀|믿겨|바뀌어|나뉘어|담겨|찍혀|짜여)(지|져|집)",
+      "message": "double passive '보여지다/쓰여지다'; use the plain passive ('보입니다', '쓰입니다')",
+      "example": "목록이 화면에 보여집니다."
+    },
+    {
+      "id": "stiff-verb",
+      "pattern": "대치(하|합|해|한|됩|되)",
+      "message": "stiff verb '대치합니다'; use '바꿉니다'",
+      "example": "기존 앱을 대치합니다."
+    },
+    {
+      "id": "automation",
+      "pattern": "자동화",
+      "message": "product term: the feature is '예약 작업', never '자동화'",
+      "example": "자동화 목록을 엽니다."
+    },
+    {
+      "id": "meta-intro",
+      "pattern": "정리했습니다|정리해 (두었|놓았)습니다|알아보겠습니다|살펴보겠습니다|소개합니다",
+      "message": "meta intro ('~을 정리했습니다'); delete it and start with the task",
+      "example": "자주 만나는 문제를 정리했습니다."
+    },
+    {
+      "id": "geot-opinion",
+      "pattern": "(것을|것이)\\s*(권장|좋습|바람직|중요합)",
+      "message": "opinion via '~하는 것이 좋습니다/것을 권장합니다'; give the instruction ('~하려면 ~합니다') or '~하기를 권장합니다'",
+      "example": "다른 모델을 두는 것이 좋습니다."
+    },
+    {
+      "id": "intensifier",
+      "pattern": "매우|정말|굉장히",
+      "message": "intensifier ('매우', '정말'); delete it or give the number",
+      "example": "검색이 매우 빠릅니다."
+    },
+    {
+      "id": "summary-closer",
+      "pattern": "결론적으로|요약하면|종합하면",
+      "message": "essay closer ('결론적으로'); manuals end on the last step",
+      "example": "결론적으로 설정을 바꿉니다."
+    },
+    {
+      "id": "chatbot-residue",
+      "pattern": "도움이 되(었|셨)?(으면|기를)|궁금한 (점|사항)|언제든(지)? (문의|물어)|좋은 질문",
+      "message": "chatbot leftover ('도움이 되었기를', '궁금한 점이 있으면'); delete it",
+      "example": "궁금한 점이 있으면 알려 주세요."
+    }
+  ]
+}

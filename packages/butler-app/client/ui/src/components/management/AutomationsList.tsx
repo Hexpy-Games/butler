@@ -12,6 +12,7 @@ import {
 } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { AutomationSummary } from "@/app/types.ts";
+import { accessLabel, accessModeIcon, isAccessMode } from "@/components/conversation/accessModeUtils";
 
 interface AutomationsListProps {
   automations: AutomationSummary[];
@@ -55,9 +56,14 @@ export function AutomationsList({
               stretch
             >
               <ListRow
+                icon={isAccessMode(automation.access_mode) ? accessModeIcon(automation.access_mode) : undefined}
                 title={automation.title}
                 description={automation.target_label}
-                meta={`${automation.state} / ${automation.interval_label}`}
+                meta={[
+                  automation.state,
+                  automation.interval_label,
+                  isAccessMode(automation.access_mode) ? accessLabel(automation.access_mode) : "",
+                ].filter(Boolean).join(" / ")}
               />
             </Clickable>
           ))

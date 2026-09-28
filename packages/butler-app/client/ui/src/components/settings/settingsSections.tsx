@@ -75,18 +75,12 @@ const SETTINGS_SECTION_GROUPS: SettingsSectionGroupDefinition[] = [
   {
     id: "general",
     label: "preferences",
-    sectionIds: ["general", "appearance", "personalization"],
-  },
-  {
-    id: "models-and-extensions",
-    label: "modelsAndExtensions",
-    sectionIds: ["models", "mcp", "skills"],
+    sectionIds: ["general", "appearance", "personalization", "models"],
   },
   {
     id: "app-and-system",
     label: "appAndSystem",
     sectionIds: [
-      "server",
       "updates",
       "usage",
       "logs",
@@ -96,6 +90,12 @@ const SETTINGS_SECTION_GROUPS: SettingsSectionGroupDefinition[] = [
       "archives",
       "about",
     ],
+  },
+  // Agent-level settings most people never need; always the last group.
+  {
+    id: "advanced",
+    label: "advanced",
+    sectionIds: ["mcp", "skills", "server"],
   },
 ];
 

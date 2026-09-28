@@ -1,3 +1,5 @@
+//! Persona presets read from the resources directory.
+
 use std::{collections::HashSet, fs, path::PathBuf};
 
 use serde::Serialize;
@@ -16,10 +18,13 @@ const PRESET_ORDER: [&str; 9] = [
     "dry-wit",
 ];
 
+/// Language of a persona preset.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PersonaLocale {
+    /// English.
     En,
+    /// Korean.
     Ko,
 }
 
@@ -32,13 +37,20 @@ impl PersonaLocale {
     }
 }
 
+/// A persona preset Butler can adopt.
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct PersonaPreset {
+    /// Preset id.
     pub name: String,
+    /// Display label.
     pub label: String,
+    /// What the persona is like.
     pub description: String,
+    /// A short sample of its voice.
     pub preview: String,
+    /// Language of the preset text.
     pub locale: PersonaLocale,
+    /// The persona instructions.
     pub content: String,
 }
 
@@ -49,6 +61,7 @@ pub struct PersonaPresets {
 }
 
 impl PersonaPresets {
+    /// Presets read from `resource_root`.
     pub fn new(resource_root: PathBuf) -> Self {
         Self { resource_root }
     }

@@ -20,7 +20,7 @@ export function DecisionGuidePage({ entries, onOpen }: { entries: ShowcaseEntry[
     <Stack gap="2xl" data-ds-decision-guide={rows.length}>
       <PageHeader eyebrow="Decision guide" title="I need X → use Y"
         lead="Describe the job, get the DS piece. Every row comes from a component's guidance (when to use it, and what to use instead), so the guide never drifts from the system.">
-        <Input aria-label="Filter needs" placeholder="Describe what you need, e.g. confirm, list of files, loading" type="search"
+        <Input aria-label="Filter needs" placeholder="A need, e.g. confirm or loading" type="search"
           value={query} onChange={(event) => setQuery(event.target.value)} />
       </PageHeader>
       {shown.length === 0 ? <EmptyLine message="No need matches. Try fewer words, or search with ⌘K." /> : (
@@ -28,7 +28,7 @@ export function DecisionGuidePage({ entries, onOpen }: { entries: ShowcaseEntry[
           {shown.map((row, index) => (
             <div className={styles.guideRow} key={`${row.need}-${row.use}-${index}`} data-ds-guide-row>
               <Typo.Body>{row.need}</Typo.Body>
-              <Stack align="row" cross="center" gap="sm">
+              <Stack align="row" cross="center" gap="sm" wrap>
                 {row.from ? <Typo.Caption tone="tertiary">{`instead of ${row.from}`}</Typo.Caption> : null}
                 <Button size="sm" variant="outline" iconEnd={<ChevronRight size="sm" />} text={row.use} onClick={() => onOpen(row.target)} />
               </Stack>

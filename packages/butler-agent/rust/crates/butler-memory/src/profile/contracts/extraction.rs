@@ -1,3 +1,5 @@
+//! Options and results of profile capture and third-party import.
+
 use serde::Serialize;
 use tokio_util::sync::CancellationToken;
 
@@ -9,12 +11,18 @@ pub struct ProfileTranscriptCaptureOptions {
     pub since: Option<String>,
 }
 
+/// Options of a model-backed transcript capture.
 #[derive(Clone, Debug)]
 pub struct ProfileModelTranscriptCaptureOptions {
+    /// Which messages to scan.
     pub scan: ProfileTranscriptCaptureOptions,
+    /// Extractor model, overriding the configured one.
     pub model: Option<String>,
+    /// Model requests at most (default 8, clamped to 1-120).
     pub max_model_batches: Option<f64>,
+    /// Prompt cache scope (default `profile-extractor`).
     pub cache_scope: Option<String>,
+    /// Stops the capture when cancelled.
     pub cancellation: CancellationToken,
 }
 
@@ -73,12 +81,18 @@ pub struct ProfileModelTranscriptCaptureResult {
     pub coverage_discovery_incomplete_count: Option<usize>,
 }
 
+/// Options of an import of another assistant's export.
 #[derive(Clone, Debug)]
 pub struct ProfileThirdPartyImportOptions {
+    /// Name of the assistant the export came from.
     pub source: Option<String>,
+    /// The exported text.
     pub text: String,
+    /// Extractor model, overriding the configured one.
     pub model: Option<String>,
+    /// Import time (milliseconds since the epoch), for reproducible ids.
     pub now_epoch_millis: Option<f64>,
+    /// Stops the import when cancelled.
     pub cancellation: CancellationToken,
 }
 

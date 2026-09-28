@@ -163,6 +163,41 @@ test("App Agent native service bridge installs launchd service with App-managed 
   }
 });
 
+test("App Agent native service bridge passes the dev renderer origin only when one is set", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-dev-origin-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    const install = async (platform: "darwin" | "linux", devOrigin: string | null) => {
+      const writes: Array<{ path: string; body: string }> = [];
+      const bridge = createAppAgentNativeServiceBridge({
+        butlerData,
+        platform,
+        homeDir: platform === "darwin" ? "/Users/alice" : "/home/alice",
+        getPort: () => 19123,
+        getDevOrigin: () => devOrigin,
+        prepareLocalAuth: () => ({
+          filePath: join(butlerData, "app", "runtime", "auth", "local-agent-auth.json"),
+        }),
+        writeFile: (path, body) => writes.push({ path, body }),
+        runCommand: () => ({ exitCode: 0 }),
+      });
+      await bridge.registration.install();
+      return writes[0]?.body ?? "";
+    };
+
+    const launchd = await install("darwin", "http://127.0.0.1:5173");
+    expect(launchd).toContain(
+      "<key>BUTLER_APP_DEV_ORIGIN</key>\n    <string>http://127.0.0.1:5173</string>",
+    );
+    const systemd = await install("linux", "http://127.0.0.1:5173");
+    expect(systemd).toContain('Environment=BUTLER_APP_DEV_ORIGIN="http://127.0.0.1:5173"');
+    expect(await install("darwin", null)).not.toContain("BUTLER_APP_DEV_ORIGIN");
+    expect(await install("linux", "  ")).not.toContain("BUTLER_APP_DEV_ORIGIN");
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("App Agent native service bridge can isolate launchd service label for tests", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-launchd-test-label-"));
   try {

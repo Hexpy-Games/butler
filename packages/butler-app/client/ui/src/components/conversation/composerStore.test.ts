@@ -9,6 +9,10 @@ beforeEach(() => {
   });
 });
 
+test("composer starts in ask_first before settings load", () => {
+  expect(useComposerStore.getInitialState().accessMode).toBe("ask_first");
+});
+
 test("composer store activates and restores independent session drafts", () => {
   const sessionARevision = useComposerStore
     .getState()

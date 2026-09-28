@@ -1,0 +1,30 @@
+---
+import { getEntry } from "astro:content";
+import { docHref } from "../../../site/nav";
+import { DEFAULT_LOCALE, type Locale } from "../../../site/sections";
+import { DocLinkCard } from "./DocLinkCard";
+
+interface Props {
+  /** A docs page (locale-relative slug); planned pages render disabled. */
+  slug?: string;
+  /** An outside destination, with its own title and description. */
+  href?: string;
+  title?: string;
+  description?: string;
+  locale?: Locale;
+}
+
+const { slug, href, title, description, locale = DEFAULT_LOCALE } = Astro.props;
+const entry = slug ? await getEntry("docs", `${locale}/${slug}`) : undefined;
+if (slug && !entry) throw new Error(`DocCard: no docs page "${locale}/${slug}"`);
+if (!slug && (!href || !title || !description)) throw new Error("DocCard: pass a slug, or href + title + description");
+const published = entry?.data.status === "published";
+const target = entry ? (published ? docHref(import.meta.env.BASE_URL, locale, slug!) : undefined) : href;
+---
+<DocLinkCard
+  description={description ?? entry?.data.description ?? ""}
+  external={!entry && /^https?:/u.test(href ?? "")}
+  href={target}
+  plannedLabel="준비 중"
+  title={title ?? entry?.data.title ?? ""}
+/>

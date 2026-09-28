@@ -716,12 +716,13 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   }
   if (method === "POST" && url.pathname === "/automations") {
     const body = parseBody(options.body);
-    return await callBridge<T>(bridge, "createAutomation", {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "createAutomation", {
       title: body.title,
       promptBody: body.prompt_body,
       targetSessionId: body.target_session_id,
       intervalSeconds: body.interval_seconds,
-    });
+      accessMode: body.access_mode,
+    }));
   }
   const automationMatch = url.pathname.match(/^\/automations\/([^/]+)$/);
   if (automationMatch && method === "GET") {
@@ -729,14 +730,15 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   }
   if (automationMatch && method === "PATCH") {
     const body = parseBody(options.body);
-    return await callBridge<T>(bridge, "updateAutomation", {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "updateAutomation", {
       automationId: decodeURIComponent(automationMatch[1]),
       title: body.title,
       promptBody: body.prompt_body,
       targetSessionId: body.target_session_id,
       intervalSeconds: body.interval_seconds,
       state: body.state,
-    });
+      accessMode: body.access_mode,
+    }));
   }
   if (automationMatch && method === "DELETE") {
     return await callBridge<T>(bridge, "deleteAutomation", { automationId: decodeURIComponent(automationMatch[1]) });

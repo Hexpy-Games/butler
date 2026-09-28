@@ -1,3 +1,5 @@
+//! Results of a profile capture.
+
 use super::super::contracts::*;
 use super::types::{CoverageCounts, SourceRead};
 

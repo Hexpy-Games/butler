@@ -1,4 +1,8 @@
-import type { AgentStopIntent, NativeServiceInstance } from "./app-agent-stop-intent.mjs";
+import type {
+  AgentStopIntent,
+  AgentStopIntentRespawner,
+  NativeServiceInstance,
+} from "./app-agent-stop-intent.mjs";
 
 export type AgentRuntimeState =
   | "running"
@@ -112,7 +116,9 @@ export function createBundledAgentSupervisor(input: {
     pid: number;
     instanceId: string;
     requestedBy: "app";
+    respawnBy: "app" | null;
   }) => unknown;
+  retractStopIntent?: (target: { pid: number; instanceId: string }) => unknown;
   readInstanceRecord?: () => NativeServiceInstance | null;
   isProcessAlive?: (pid: number) => boolean;
   restartReconnectTimeoutMs?: number;
@@ -122,9 +128,16 @@ export function createBundledAgentSupervisor(input: {
   onIntentionalExit?: (event: {
     reason: "stop" | "restart";
     requestedBy: "cli" | "app" | "mcp";
+    /** `app`: this App respawns the Agent itself; otherwise it waits and reconnects. */
+    respawnBy: AgentStopIntentRespawner | null;
     exit: { code: number | null; signal: string | null };
   }) => void;
-  onExternalAttach?: (event: { pid: number; instanceId: string; port: number }) => void;
+  onExternalAttach?: (event: {
+    pid: number;
+    instanceId: string;
+    port: number;
+    appSupervised: boolean;
+  }) => void;
   onRestartReconnectFailed?: () => void;
 }): {
   agentState(): {

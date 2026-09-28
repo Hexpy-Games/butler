@@ -13,13 +13,17 @@ import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { createNativeAppServer } from "../support/native-app-server.ts";
+import { createNativeAppServer, freePort } from "../support/native-app-server.ts";
 import { FIRST_RUN_STORAGE_KEY, firstRunCompleteState } from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
 
 const root = process.cwd();
 const dir = mkdtempSync(join(tmpdir(), "butler-drop-zones-"));
+// The Electron window loads the UI through a proxy on its own origin, which the
+// gateway must allow (BUTLER_APP_DEV_ORIGIN); reserve that port up front.
+const proxyPort = await freePort();
+const origin = `http://127.0.0.1:${proxyPort}`;
 const server = await createNativeAppServer({
-  butlerData: join(dir, "data"), uiRoot: resolve(root, "packages/butler-app/client/ui/dist"),
+  butlerData: join(dir, "data"), uiRoot: resolve(root, "packages/butler-app/client/ui/dist"), devOrigins: [origin],
 });
 await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en" }) });
 for (const title of ["Release notes", "Reading list", "Travel plan", "Weekly review", "Budget draft"]) {
@@ -27,18 +31,25 @@ for (const title of ["Release notes", "Reading list", "Travel plan", "Weekly rev
 }
 // Unpackaged Electron waits for the agent executor; the stub gateway is ready.
 const proxy = Bun.serve({
-  port: 0, hostname: "127.0.0.1", idleTimeout: 0,
+  port: proxyPort, hostname: "127.0.0.1", idleTimeout: 0,
   async fetch(request) {
     const url = new URL(request.url);
+    // Like Vite in `app:client:dev`, the renderer's own origin serves the page;
+    // the gateway answers API calls (Electron adds the bearer token) and assets.
+    if (request.method === "GET" && (url.pathname === "/" || request.headers.get("accept")?.includes("text/html"))) {
+      return new Response(Bun.file(resolve(root, "packages/butler-app/client/ui/dist/index.html")), { headers: { "content-type": "text/html; charset=utf-8" } });
+    }
     if (url.pathname === "/runtime-readiness") {
       return Response.json({ protocol_version: "butler.app.v1", data: { authenticated_gateway_ready: true, btcc_executor_ready: true, executor_pid: null, executor_ready_at: null, raw_text_included: false } });
     }
-    const init: RequestInit = { method: request.method, headers: request.headers, redirect: "manual" };
+    // The gateway answers only its own Host names; the renderer's Origin passes through.
+    const headers = new Headers(request.headers);
+    headers.delete("host");
+    const init: RequestInit = { method: request.method, headers, redirect: "manual" };
     if (request.method !== "GET" && request.method !== "HEAD") init.body = await request.arrayBuffer();
     return fetch(new URL(`${url.pathname}${url.search}`, server.url), init);
   },
 });
-const origin = `http://127.0.0.1:${proxy.port}`;
 const electronPath = createRequire(resolve(root, "packages/butler-app/client/electron/package.json"))("electron") as unknown as string;
 const debugPort = await new Promise<number>((done) => {
   const probe = createServer().listen(0, "127.0.0.1", () => {
@@ -51,10 +62,11 @@ const electron = spawn(electronPath, [`--remote-debugging-port=${debugPort}`, re
   stdio: "ignore",
   env: {
     ...process.env,
-    BUTLER_DATA: dir,
+    // Same data folder as the gateway: Electron reads its local auth token there.
+    BUTLER_DATA: server.butlerData,
     BUTLER_HOME: dir,
     BUTLER_APP_ELECTRON_USER_DATA_DIR: join(dir, "electron-profile"),
-    BUTLER_APP_UI_URL: `${origin}/`, BUTLER_APP_SERVER_URL: origin, BUTLER_APP_SERVER_PORT: String(proxy.port), BUTLER_APP_DEV_ORIGIN: `${origin}/`,
+    BUTLER_APP_UI_URL: `${origin}/`, BUTLER_APP_SERVER_URL: origin, BUTLER_APP_SERVER_PORT: String(proxy.port), BUTLER_APP_DEV_ORIGIN: origin,
   },
 });
 

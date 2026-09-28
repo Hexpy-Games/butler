@@ -19,10 +19,14 @@ use crate::{
     coordination::{CognitionWriteCoordinator, ConsolidationLockState},
 };
 
+/// What one poll of the memory sync queue did.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MemorySyncPoll {
+    /// Nothing was waiting.
     Idle,
+    /// One queue entry or projection step was processed.
     Processed,
+    /// Work is waiting but cannot run yet.
     Deferred,
 }
 
@@ -38,6 +42,8 @@ pub struct MemoryCatchupOutcome {
 
 type Clock = Arc<dyn Fn() -> String + Send + Sync>;
 
+/// Consumes the memory sync queue: registers completed turns and typed sources, projects them and
+/// embeds their vectors.
 pub struct MemorySyncConsumer {
     data_root: PathBuf,
     environment: CognitionPathEnvironment,
@@ -54,6 +60,7 @@ pub struct MemorySyncConsumer {
 }
 
 impl MemorySyncConsumer {
+    /// A consumer over `data_root`.
     pub fn new(
         data_root: PathBuf,
         environment: CognitionPathEnvironment,
@@ -77,11 +84,13 @@ impl MemorySyncConsumer {
         }
     }
 
+    /// Also embeds projected vector units with `embedding`.
     pub fn with_embedding(mut self, embedding: Arc<dyn CognitionEmbeddingPort>) -> Self {
         self.embedding = Some(embedding);
         self
     }
 
+    /// Consumes into a rebuild candidate instead of the active generation.
     pub fn with_rebuild_target(
         mut self,
         generation_id: String,
@@ -94,6 +103,7 @@ impl MemorySyncConsumer {
         self
     }
 
+    /// Processes the next queue entry or projection step.
     pub async fn poll_once(&self) -> CognitionResult<MemorySyncPoll> {
         let permit = self
             .admission
@@ -207,6 +217,7 @@ impl MemorySyncConsumer {
         })?
     }
 
+    /// Stops admitting polls and waits for running ones.
     pub async fn close(&self) {
         {
             let mut closing = self.closing.lock();

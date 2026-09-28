@@ -1,3 +1,4 @@
+use butler_turn::btcc::AccessMode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -7,6 +8,9 @@ pub struct CreateAutomationRequest {
     pub prompt_body: String,
     pub target_session_id: String,
     pub interval_seconds: i64,
+    /// The access the schedule's runs get; the target conversation's
+    /// current access mode when omitted.
+    pub access_mode: Option<AccessMode>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -16,6 +20,8 @@ pub struct UpdateAutomationRequest {
     pub target_session_id: Option<String>,
     pub interval_seconds: Option<i64>,
     pub state: Option<String>,
+    /// Replaces the access the schedule's runs get.
+    pub access_mode: Option<AccessMode>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -28,6 +34,8 @@ pub struct AutomationSummary {
     pub target_label: String,
     pub interval_seconds: i64,
     pub interval_label: String,
+    /// The access the schedule's runs get, whatever the target conversation's mode.
+    pub access_mode: AccessMode,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_run_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

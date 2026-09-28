@@ -37,12 +37,12 @@ pub(super) async fn process(
     let now = (input.clock)();
     let units = {
         let _lease = acquire(input, "memory-vector-claim").await?;
-        assert_generation_current(input, &generation, true)?;
+        assert_generation_current(input, &generation, Admission::Required)?;
         let mut graph = GraphRepository::open(&generation.graph_path)?;
         let units = graph.claim_vector_quantum(&now)?;
         graph.close()?;
         if !units.is_empty() {
-            assert_current(input, &generation, &units, true)?;
+            assert_current(input, &generation, &units, Admission::Required)?;
         }
         units
     };
@@ -54,7 +54,7 @@ pub(super) async fn process(
         // A cancelled admission leaves the durable running claim for recovery.
         // Failure bookkeeping must never cross the generation/source write gate.
         if let Ok(_lease) = acquire(input, "memory-vector-fail").await
-            && assert_current(input, &generation, &units, true).is_ok()
+            && assert_current(input, &generation, &units, Admission::Required).is_ok()
         {
             let mut graph = GraphRepository::open(&generation.graph_path)?;
             graph.fail_vector_quantum(&units, failure.code(), &(input.clock)())?;
@@ -70,38 +70,62 @@ async fn run_claimed(
     generation: &MemoryGenerationHandle,
     units: &[ClaimedVectorUnit],
 ) -> CognitionResult<()> {
-    let target = input
-        .target
-        .clone()
-        .unwrap_or(MemoryGenerationTarget::Active {
-            expected_generation: generation.generation_id.clone(),
-        });
-    let store = GenerationVectorStore::new(input.data_root.clone(), input.environment.clone());
-    if let Some(identity) = generation
-        .embedding
-        .as_ref()
-        .and_then(|value| value.native_identity())
-    {
-        let rows = units
-            .iter()
-            .map(|unit| row(unit, generation, identity.version.as_str(), Vec::new()))
-            .collect::<CognitionResult<Vec<_>>>()?;
-        if let Some(receipt) = persisted_receipt(&input.data_root, generation, &rows).await? {
-            let _lease = acquire(input, "memory-vector-receipt").await?;
-            assert_current(input, generation, units, true)?;
-            let mut graph = GraphRepository::open(&generation.graph_path)?;
-            graph.complete_vector_quantum(units, &receipt, &(input.clock)())?;
-            graph.close()?;
-            return Ok(());
-        }
+    if complete_from_receipt(input, generation, units).await? {
+        return Ok(());
     }
     {
         let _lease = acquire(input, "memory-vector-invocation").await?;
-        assert_current(input, generation, units, true)?;
+        assert_current(input, generation, units, Admission::Required)?;
         let mut graph = GraphRepository::open(&generation.graph_path)?;
         graph.mark_vector_invoked(units)?;
         graph.close()?;
     }
+    let embedded = embed(input, embedding, units).await?;
+    let observed = embedded.metadata;
+    let rows = units
+        .iter()
+        .zip(embedded.embeddings)
+        .map(|(unit, vector)| row(unit, generation, &observed.version, vector))
+        .collect::<CognitionResult<Vec<_>>>()?;
+    write_rows(input, generation, units, &observed, &rows).await
+}
+
+/// Completes the quantum from vectors an earlier attempt already stored;
+/// `false` when there are none.
+async fn complete_from_receipt(
+    input: &Input,
+    generation: &MemoryGenerationHandle,
+    units: &[ClaimedVectorUnit],
+) -> CognitionResult<bool> {
+    let Some(identity) = generation
+        .embedding
+        .as_ref()
+        .and_then(|value| value.native_identity())
+    else {
+        return Ok(false);
+    };
+    let rows = units
+        .iter()
+        .map(|unit| row(unit, generation, identity.version.as_str(), Vec::new()))
+        .collect::<CognitionResult<Vec<_>>>()?;
+    let Some(receipt) = persisted_receipt(&input.data_root, generation, &rows).await? else {
+        return Ok(false);
+    };
+    let _lease = acquire(input, "memory-vector-receipt").await?;
+    assert_current(input, generation, units, Admission::Required)?;
+    let mut graph = GraphRepository::open(&generation.graph_path)?;
+    graph.complete_vector_quantum(units, &receipt, &(input.clock)())?;
+    graph.close()?;
+    Ok(true)
+}
+
+/// Embeds every unit's projection text; the result must cover each text
+/// exactly and use CLS pooling.
+async fn embed(
+    input: &Input,
+    embedding: &dyn CognitionEmbeddingPort,
+    units: &[ClaimedVectorUnit],
+) -> CognitionResult<crate::cognition::EmbeddingResult> {
     let deadline = epoch_ms().saturating_add(30_000);
     let embedded = embedding
         .embed(
@@ -131,17 +155,30 @@ async fn run_claimed(
     {
         return Err(error(CognitionCode::MemoryVectorReceiptMismatch));
     }
-    let observed = embedded.metadata;
-    if observed.pooling != "cls" {
+    if embedded.metadata.pooling != "cls" {
         return Err(error(CognitionCode::MemoryEmbeddingVersionMismatch));
     }
-    let rows = units
-        .iter()
-        .zip(embedded.embeddings)
-        .map(|(unit, vector)| row(unit, generation, &observed.version, vector))
-        .collect::<CognitionResult<Vec<_>>>()?;
+    Ok(embedded)
+}
+
+/// Writes the vectors under the lock, pinning the generation's embedding
+/// identity on first use, and completes the quantum.
+async fn write_rows(
+    input: &Input,
+    generation: &MemoryGenerationHandle,
+    units: &[ClaimedVectorUnit],
+    observed: &crate::cognition::EmbeddingIdentity,
+    rows: &[GenerationVectorRow],
+) -> CognitionResult<()> {
+    let target = input
+        .target
+        .clone()
+        .unwrap_or(MemoryGenerationTarget::Active {
+            expected_generation: generation.generation_id.clone(),
+        });
+    let store = GenerationVectorStore::new(input.data_root.clone(), input.environment.clone());
     let lease = acquire(input, "memory-vector-write").await?;
-    assert_current(input, generation, units, true)?;
+    assert_current(input, generation, units, Admission::Required)?;
     {
         let mut graph = GraphRepository::open(&generation.graph_path)?;
         graph.mark_vector_received(units)?;
@@ -154,7 +191,7 @@ async fn run_claimed(
             &input.environment,
             &target,
             &current,
-            &observed,
+            observed,
             &lease,
         )?,
         Some(value)
@@ -170,8 +207,8 @@ async fn run_claimed(
         return Err(error(CognitionCode::MemoryEmbeddingVersionMismatch));
     }
     let current = resolve_generation(&input.data_root, &input.environment, &target)?;
-    let receipt = store.upsert(&lease, &target, &current, &rows).await?;
-    assert_current(input, &current, units, false)?;
+    let receipt = store.upsert(&lease, &target, &current, rows).await?;
+    assert_current(input, &current, units, Admission::Ignored)?;
     let final_generation = resolve_generation(&input.data_root, &input.environment, &target)?;
     if final_generation.generation_id != current.generation_id
         || final_generation
@@ -186,6 +223,13 @@ async fn run_claimed(
     graph.close()?;
     drop(lease);
     Ok(())
+}
+
+/// Whether a check also refuses once shutdown has begun.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Admission {
+    Required,
+    Ignored,
 }
 
 async fn acquire(
@@ -218,9 +262,9 @@ async fn acquire(
 fn assert_generation_current(
     input: &Input,
     generation: &MemoryGenerationHandle,
-    require_admission: bool,
+    admission: Admission,
 ) -> CognitionResult<()> {
-    if require_admission && input.shutdown.is_cancelled() {
+    if admission == Admission::Required && input.shutdown.is_cancelled() {
         return Err(error(CognitionCode::MemoryWriteAborted));
     }
     let target = input
@@ -248,9 +292,9 @@ fn assert_current(
     input: &Input,
     generation: &MemoryGenerationHandle,
     units: &[ClaimedVectorUnit],
-    require_admission: bool,
+    admission: Admission,
 ) -> CognitionResult<()> {
-    assert_generation_current(input, generation, require_admission)?;
+    assert_generation_current(input, generation, admission)?;
     let graph = GraphRepository::open(&generation.graph_path)?;
     graph.assert_vector_quantum_current(&generation.generation_id, units)?;
     graph.close()?;

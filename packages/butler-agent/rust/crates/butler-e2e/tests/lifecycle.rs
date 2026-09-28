@@ -87,17 +87,17 @@ async fn rec_04_restart_keeps_clients_working() -> Result<(), HarnessError> {
 #[tokio::test]
 async fn rec_04_restart_mid_turn_settles_the_turn() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    // Replays the REC-01 recording (same request); only REC-01 records it.
     let mut s = Setup::new("REC-04-TURN")?
         .cassette("REC-01")
+        .replay_only()
         .start()
         .await?;
-    if !s.recording() {
-        s.provider()?.set_pacing(butler_e2e::e2e::provider::Pacing {
-            scale: 1.0,
-            cap_ms: 300,
-            min_ms: 200,
-        });
-    }
+    s.provider()?.set_pacing(butler_e2e::e2e::provider::Pacing {
+        scale: 1.0,
+        cap_ms: 300,
+        min_ms: 200,
+    });
     let accepted = s
         .gw
         .say("general", "Write the numbers from one to twelve as English words, separated by single spaces, and nothing else.")

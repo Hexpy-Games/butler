@@ -1,15 +1,25 @@
+//! Source-revision invalidation of identity decisions: when a new revision
+//! supersedes sources an identity merge rested on, the merge is invalidated
+//! (restoring the prior redirect when that is still sound) and recorded.
+
 mod history;
 
+use crate::cognition::graph::StageWrite;
 use std::collections::HashSet;
 
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
-use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
 use super::db_error;
 use crate::cognition::CognitionCode;
+use crate::cognition::graph::identity_decision::DecisionOperation;
 use crate::cognition::{CognitionError, CognitionResult, CognitionSourceRow};
+use crate::lenient::{Arg, Obj};
 use butler_turn::conversation::ConversationSourceReader;
+use history::{
+    DecisionOrigin, DecisionPointer, DecisionReason, DecisionRecord, DecisionSource,
+    RecordedOutcome,
+};
 
 #[derive(Clone, Copy)]
 pub(super) struct InvalidationInput<'a> {
@@ -21,6 +31,8 @@ pub(super) struct InvalidationInput<'a> {
     pub canonical: &'a ConversationSourceReader,
 }
 
+/// Invalidates every identity decision resting on the superseded sources.
+/// Returns how many decisions changed.
 pub(super) fn superseded_sources(
     connection: &Connection,
     input: InvalidationInput<'_>,
@@ -62,81 +74,97 @@ pub(super) fn superseded_sources(
             continue;
         }
         for record in history::records_for_job(connection, old_job)? {
-            if !string_array(&record, "source_refs")
-                .iter()
-                .any(|reference| input.old_source_ids.contains(reference))
-            {
-                continue;
+            if invalidate(connection, &input, old_job, &record)? {
+                changed += 1;
             }
-            let loser = string(&record, "literal_loser").ok_or_else(|| {
-                CognitionError::new(
-                    CognitionCode::MemoryIdentityHistoryInvalid,
-                    "memory_identity_history_invalid",
-                )
-            })?;
-            let node = history::node(connection, loser)?;
-            if node.history_job.as_deref() != Some(old_job)
-                || node.history_ref.as_deref() != string(&record, "decision_ref")
-            {
-                continue;
-            }
-            let restored = if string(&record, "operation") == Some("apply")
-                && history::valid_preimage(connection, input.canonical, &record)?
-            {
-                string(&record, "previous_direct_redirect").map(str::to_owned)
-            } else {
-                None
-            };
-            let Some(replacement) =
-                first_source(connection, input.new_episode_id, input.new_revision)?
-            else {
-                continue;
-            };
-            let decision_ref = digest(
-                format!(
-                    "{}\0invalidate\0{}\0{}",
-                    input.new_job_id,
-                    string(&record, "decision_ref").unwrap_or(""),
-                    input.new_revision
-                )
-                .as_bytes(),
-            );
-            let invalidation = make_record(
-                connection,
-                RecordInput {
-                    record: &record,
-                    node: &node,
-                    replacement: &replacement,
-                    invalidation: &input,
-                    old_job,
-                    decision_ref: &decision_ref,
-                    restored: restored.as_deref(),
-                },
-            )?;
-            history::append_record(connection, input.new_job_id, &invalidation)?;
-            connection.execute("UPDATE memory_nodes SET canonical_node_id=?1,identity_history_job_id=?2,identity_history_ref=?3 WHERE id=?4",params![restored,input.new_job_id,decision_ref,node.id]).map_err(db_error)?;
-            add_locators(
-                connection,
-                input.new_episode_id,
-                input.new_job_id,
-                &node.id,
-                &string_array(&invalidation, "source_refs"),
-            )?;
-            mark_derivatives(
-                connection,
-                &node.id,
-                string(&record, "literal_canonical").unwrap_or(&node.id),
-            )?;
-            connection.execute("UPDATE memory_state SET value=CAST(value AS INTEGER)+1 WHERE key='graph_revision'",[]).map_err(db_error)?;
-            changed += 1;
         }
     }
     Ok(changed)
 }
 
+/// Invalidates one decision of `old_job` when it quoted a superseded source
+/// and is still the node's current decision.
+fn invalidate(
+    connection: &Connection,
+    input: &InvalidationInput<'_>,
+    old_job: &str,
+    record: &DecisionRecord,
+) -> CognitionResult<bool> {
+    if !record
+        .source_refs
+        .iter()
+        .any(|reference| input.old_source_ids.contains(reference))
+    {
+        return Ok(false);
+    }
+    let loser = record.literal_loser.valid().ok_or_else(|| {
+        CognitionError::new(
+            CognitionCode::MemoryIdentityHistoryInvalid,
+            "memory_identity_history_invalid",
+        )
+    })?;
+    let node = history::node(connection, loser)?;
+    if node.history_job.as_deref() != Some(old_job) || node.history_ref != record.decision_ref {
+        return Ok(false);
+    }
+    let restored = if record.operation == Some(DecisionOperation::Apply)
+        && history::valid_preimage(connection, input.canonical, record)?
+    {
+        record.previous_direct_redirect.clone()
+    } else {
+        None
+    };
+    let Some(replacement) = first_source(connection, input.new_episode_id, input.new_revision)?
+    else {
+        return Ok(false);
+    };
+    let decision_ref = digest(
+        format!(
+            "{}\0invalidate\0{}\0{}",
+            input.new_job_id,
+            record.decision_ref.as_deref().unwrap_or(""),
+            input.new_revision
+        )
+        .as_bytes(),
+    );
+    let invalidation = make_record(
+        connection,
+        RecordInput {
+            record,
+            node: &node,
+            replacement: &replacement,
+            invalidation: input,
+            old_job,
+            decision_ref: &decision_ref,
+            restored: restored.as_deref(),
+        },
+    )?;
+    history::append_record(connection, input.new_job_id, &invalidation)?;
+    connection.execute("UPDATE memory_nodes SET canonical_node_id=?1,identity_history_job_id=?2,identity_history_ref=?3 WHERE id=?4",params![restored,input.new_job_id,decision_ref,node.id]).map_err(db_error)?;
+    add_locators(
+        connection,
+        input.new_episode_id,
+        input.new_job_id,
+        &node.id,
+        &invalidation.source_refs,
+    )?;
+    mark_derivatives(
+        connection,
+        &node.id,
+        record.literal_canonical.valid().unwrap_or(&node.id),
+    )?;
+    connection
+        .execute(
+            "UPDATE memory_state SET value=CAST(value AS INTEGER)+1 WHERE key='graph_revision'",
+            [],
+        )
+        .map_err(db_error)?;
+    Ok(true)
+}
+
 #[derive(Clone, Copy)]
 struct RecordInput<'a> {
-    record: &'a Value,
+    record: &'a DecisionRecord,
     node: &'a history::Node,
     replacement: &'a CognitionSourceRow,
     invalidation: &'a InvalidationInput<'a>,
@@ -145,7 +173,9 @@ struct RecordInput<'a> {
     restored: Option<&'a str>,
 }
 
-fn make_record(connection: &Connection, input: RecordInput<'_>) -> CognitionResult<Value> {
+/// A copy of the invalidated decision that records the invalidation: the
+/// fields it owns are overwritten, every other field is kept as stored.
+fn make_record(connection: &Connection, input: RecordInput<'_>) -> CognitionResult<DecisionRecord> {
     let RecordInput {
         record,
         node,
@@ -155,76 +185,42 @@ fn make_record(connection: &Connection, input: RecordInput<'_>) -> CognitionResu
         decision_ref,
         restored,
     } = input;
-    let mut value = record.as_object().cloned().ok_or_else(|| {
-        CognitionError::new(
-            CognitionCode::MemoryIdentityHistoryInvalid,
-            "memory_identity_history_invalid",
-        )
-    })?;
-    let old_decision = string(record, "decision_ref").unwrap_or("");
-    let refs = unique_sorted(
-        std::iter::once(replacement.source_id.clone()).chain(input.old_source_ids.iter().cloned()),
-    );
-    put(&mut value, "decision_ref", decision_ref);
-    put(
-        &mut value,
-        "operation_id",
-        format!("invalidate:{old_decision}"),
-    );
-    put(
-        &mut value,
-        "payload_digest",
-        digest(input.new_revision.as_bytes()),
-    );
-    put(&mut value, "operation", "invalidate");
-    put(&mut value, "decision_origin", "source_revision");
-    put(&mut value, "reason", "source_revision");
-    value.insert(
-        "previous_head".into(),
-        json!({"job_ref":old_job,"decision_ref":old_decision}),
-    );
-    value.insert(
-        "previous_direct_redirect".into(),
-        node.canonical
-            .clone()
-            .map(Value::String)
-            .unwrap_or(Value::Null),
-    );
-    put(
-        &mut value,
-        "previous_owner",
-        resolve_current(connection, &node.id)?,
-    );
-    value.insert(
-        "resulting_direct_redirect".into(),
-        restored
-            .map(|v| Value::String(v.into()))
-            .unwrap_or(Value::Null),
-    );
-    put(
-        &mut value,
-        "resulting_owner",
-        match restored {
-            Some(id) => resolve_current(connection, id)?,
-            None => node.id.clone(),
-        },
-    );
-    value.insert("source_refs".into(), Value::from(refs));
-    put(&mut value, "source_revision", input.new_revision);
-    value.insert(
-        "decision_source".into(),
-        normalized_source(connection, replacement)?,
-    );
-    value.insert("loser_source".into(), Value::Null);
-    value.insert("canonical_source".into(), Value::Null);
-    value.insert(
-        "target_decision".into(),
-        json!({"job_ref":old_job,"decision_ref":old_decision}),
-    );
-    put(&mut value, "source_observed_at", &replacement.observed_at);
-    put(&mut value, "recorded_at", input.recorded_at);
-    put(&mut value, "recorded_outcome", "invalidated");
-    Ok(Value::Object(value))
+    let old_decision = record.decision_ref.clone().unwrap_or_default();
+    let pointer = DecisionPointer {
+        job_ref: Some(old_job.to_owned()),
+        decision_ref: Some(old_decision.clone()),
+    };
+    let previous_owner = resolve_current(connection, &node.id)?;
+    let resulting_owner = match restored {
+        Some(id) => resolve_current(connection, id)?,
+        None => node.id.clone(),
+    };
+    Ok(DecisionRecord {
+        decision_ref: Some(decision_ref.to_owned()),
+        operation_id: Some(format!("invalidate:{old_decision}")),
+        payload_digest: Some(digest(input.new_revision.as_bytes())),
+        operation: Some(DecisionOperation::Invalidate),
+        decision_origin: Some(DecisionOrigin::SourceRevision),
+        reason: Some(DecisionReason::SourceRevision),
+        previous_head: Some(pointer.clone()),
+        previous_direct_redirect: node.canonical.clone(),
+        previous_owner: Some(previous_owner),
+        resulting_direct_redirect: restored.map(str::to_owned),
+        resulting_owner: Some(resulting_owner),
+        source_refs: unique_sorted(
+            std::iter::once(replacement.source_id.clone())
+                .chain(input.old_source_ids.iter().cloned()),
+        ),
+        decision_source: Arg::Valid(Obj(normalized_source(connection, replacement)?)),
+        loser_source: Arg::Null,
+        canonical_source: Arg::Null,
+        target_decision: Some(pointer),
+        source_revision: Some(input.new_revision.to_owned()),
+        source_observed_at: Some(replacement.observed_at.clone()),
+        recorded_at: Some(input.recorded_at.to_owned()),
+        recorded_outcome: Some(RecordedOutcome::Invalidated),
+        ..record.clone()
+    })
 }
 
 pub(super) fn source(
@@ -259,8 +255,12 @@ fn source_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CognitionSourceRow> {
         basis: row.get(14)?,
     })
 }
-fn normalized_source(connection: &Connection, row: &CognitionSourceRow) -> CognitionResult<Value> {
-    let project = connection
+/// The source a decision rests on, as a decision records it.
+fn normalized_source(
+    connection: &Connection,
+    row: &CognitionSourceRow,
+) -> CognitionResult<DecisionSource> {
+    let project_id = connection
         .query_row(
             "SELECT project_id FROM memory_chunks WHERE memory_chunk_id=?1",
             [&row.episode_id],
@@ -274,9 +274,22 @@ fn normalized_source(connection: &Connection, row: &CognitionSourceRow) -> Cogni
                 "memory_identity_source_not_registered",
             )
         })?;
-    Ok(
-        json!({"source_ref":row.source_id,"episode_id":row.episode_id,"revision":row.revision,"content_hash":row.content_hash,"byte_start":row.byte_start,"byte_end":row.byte_end,"quote":"","quote_byte_start":row.byte_start,"quote_byte_end":row.byte_start,"project_id":project,"session_id":row.conversation_session_id,"origin_kind":row.origin_kind,"role":row.role,"observed_at":row.observed_at}),
-    )
+    Ok(DecisionSource {
+        source_ref: Some(row.source_id.clone()),
+        episode_id: Some(row.episode_id.clone()),
+        revision: Some(row.revision.clone()),
+        content_hash: Some(row.content_hash.clone()),
+        byte_start: Some(row.byte_start),
+        byte_end: Some(row.byte_end),
+        quote: Some(String::new()),
+        quote_byte_start: Some(row.byte_start),
+        quote_byte_end: Some(row.byte_start),
+        project_id,
+        session_id: row.conversation_session_id.clone(),
+        origin_kind: Some(row.origin_kind.clone()),
+        role: Some(row.role.clone()),
+        observed_at: Some(row.observed_at.clone()),
+    })
 }
 fn resolve_current(connection: &Connection, id: &str) -> CognitionResult<String> {
     Ok(redirect_chain(connection, id)?
@@ -335,25 +348,9 @@ fn mark_derivatives(connection: &Connection, node: &str, canonical: &str) -> Cog
     for id in unique_sorted([node.to_owned(), canonical.to_owned()]) {
         connection.execute("UPDATE memory_vector_units SET state='pending',error_code=NULL,next_attempt_at=NULL WHERE record_kind='node' AND owner_id=?1",[id]).map_err(db_error)?;
     }
-    let pending = r#"{"state":"pending","blocked_by":null}"#;
+    let pending = StageWrite::pending().json()?;
     connection.execute("UPDATE memory_projection_jobs SET hot_cache_state=?1 WHERE job_id IN (SELECT DISTINCT job_id FROM memory_vector_units WHERE owner_id IN (?2,?3))",params![pending,node,canonical]).map_err(db_error)?;
     Ok(())
-}
-fn put(map: &mut Map<String, Value>, key: &str, value: impl Into<String>) {
-    map.insert(key.into(), Value::String(value.into()));
-}
-fn string<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
-    value.get(key).and_then(Value::as_str)
-}
-fn string_array(value: &Value, key: &str) -> Vec<String> {
-    value
-        .get(key)
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .map(str::to_owned)
-        .collect()
 }
 fn digest(bytes: impl AsRef<[u8]>) -> String {
     format!("{:x}", Sha256::digest(bytes))

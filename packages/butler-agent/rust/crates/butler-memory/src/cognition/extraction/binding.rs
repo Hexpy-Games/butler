@@ -1,22 +1,100 @@
+//! Binding stage: after the meaning stage, each entity and each stated change
+//! is offered existing graph candidates, and the model decides which one (if
+//! any) the new fact is about, backed by current and historical evidence.
+//!
+//! [`prepare`] searches candidates and packs targets into prompt batches;
+//! [`apply`] checks the model's decisions and rewrites the output: an entity
+//! decision reuses a node, a change decision rewrites the chosen span of a past
+//! claim and records a correction.
+
 mod apply;
 mod prepare;
-pub(in crate::cognition) use apply::{apply, apply_repair};
+pub(in crate::cognition) use apply::{BindingWarning, apply, apply_repair};
 pub(in crate::cognition) use prepare::prepare;
 
 use super::{
     CandidateSearchInput, CognitionCandidateSearch, ExtractCandidate, ExtractInput, ExtractOutput,
-    Meaning, NodeResolution, Passage, QuoteRef,
+    Meaning, NodeResolution, Passage, QuoteRef, meaning::ChangeItem,
 };
 use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult};
+use serde::Serialize;
 use serde_json::{Map, Value, json};
 use std::collections::{HashMap, HashSet};
 
+/// Targets offered in one binding call (at most 4, within a 3 KiB prompt).
 pub(super) struct BindingBatch {
-    pub prompt: Value,
+    pub prompt: BindingPrompt,
     pub targets: Vec<Target>,
     pub quotes: HashMap<String, QuoteRef>,
 }
+
+/// The binding call input shown to the model.
+#[derive(Clone, Default, Serialize)]
+pub(super) struct BindingPrompt {
+    pub targets: Vec<PromptTarget>,
+    pub evidence: Vec<PromptEvidence>,
+}
+
+/// One target: what it means now, its current evidence refs and candidates.
+#[derive(Clone, Serialize)]
+pub(super) struct PromptTarget {
+    pub target: String,
+    pub meaning: TargetMeaning,
+    pub evidence: Vec<String>,
+    pub candidates: Vec<PromptCandidate>,
+}
+
+/// An entity target shows its name; a change target shows the change item.
+#[derive(Clone, Serialize)]
+#[serde(untagged)]
+pub(super) enum TargetMeaning {
+    Entity { name: String },
+    Item(TaggedItem),
+}
+
+/// A meaning item with its contract `kind` tag.
+#[derive(Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub(super) enum TaggedItem {
+    Change(ChangeItem),
+}
+
+/// Quoted evidence, current (`role: "current"`) or historical (the basis of
+/// the candidate's source).
+#[derive(Clone, Serialize)]
+pub(super) struct PromptEvidence {
+    #[serde(rename = "ref")]
+    pub reference: String,
+    pub text: String,
+    pub role: String,
+}
+
+/// An existing node offered for a target; change candidates list the spans
+/// of their statement that the change may replace.
+#[derive(Clone, Serialize)]
+pub(super) struct PromptCandidate {
+    #[serde(rename = "ref")]
+    pub reference: String,
+    #[serde(rename = "type")]
+    pub node_type: String,
+    pub label: String,
+    pub evidence: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spans: Option<Vec<PromptSpan>>,
+}
+
+/// An occurrence of the change's old value inside a candidate statement.
+#[derive(Clone, Serialize)]
+pub(super) struct PromptSpan {
+    #[serde(rename = "ref")]
+    pub reference: String,
+    pub before: String,
+    pub value: String,
+    pub after: String,
+}
+
+/// What `apply` needs to check one target's decision.
 pub(super) struct Target {
     pub local_ref: String,
     pub candidates: HashMap<String, ExtractCandidate>,
@@ -25,6 +103,7 @@ pub(super) struct Target {
     pub spans: HashMap<String, Span>,
     pub change: bool,
 }
+/// A replaceable span of a candidate statement and its new value.
 #[derive(Clone)]
 pub(super) struct Span {
     pub candidate: String,
@@ -33,6 +112,8 @@ pub(super) struct Span {
     pub value: String,
 }
 
+/// The first sentence of a candidate's evidence that names it (label or
+/// alias), with that evidence's basis.
 fn historical_quote(candidate: &ExtractCandidate) -> Option<(QuoteRef, String)> {
     for unit in &candidate.evidence {
         for sentence in butler_core::segmentation::sentence_segments(&unit.text) {
@@ -40,7 +121,10 @@ fn historical_quote(candidate: &ExtractCandidate) -> Option<(QuoteRef, String)> 
                 .chain(candidate.aliases.iter())
                 .any(|alias| !alias.is_empty() && sentence.text.contains(alias))
             {
-                let occurrence = unit.text[..sentence.start]
+                let occurrence = unit
+                    .text
+                    .get(..sentence.start)
+                    .unwrap_or_default()
                     .match_indices(sentence.text)
                     .count();
                 return Some((
@@ -56,38 +140,30 @@ fn historical_quote(candidate: &ExtractCandidate) -> Option<(QuoteRef, String)> 
     }
     None
 }
+
+/// The strict repair-call schema: the first call's schema with every ref
+/// narrowed to the refs this batch offered. Passthrough: a JSON Schema
+/// document sent to the provider as the structured-output contract.
 pub(super) fn repair_schema(batch: &BindingBatch) -> Map<String, Value> {
-    let offered = batch.prompt["targets"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default();
-    let target_refs = offered
-        .iter()
-        .map(|t| t["target"].clone())
-        .collect::<Vec<_>>();
+    let offered = &batch.prompt.targets;
+    let target_refs = offered.iter().map(|t| &t.target).collect::<Vec<_>>();
     let candidates = offered
         .iter()
-        .flat_map(|t| t["candidates"].as_array().cloned().unwrap_or_default())
+        .flat_map(|t| &t.candidates)
         .collect::<Vec<_>>();
-    let candidate_refs = candidates
-        .iter()
-        .map(|c| c["ref"].clone())
-        .collect::<Vec<_>>();
-    let span_refs = std::iter::once(Value::Null)
+    let candidate_refs = candidates.iter().map(|c| &c.reference).collect::<Vec<_>>();
+    let span_refs = std::iter::once(None)
         .chain(
             candidates
                 .iter()
-                .flat_map(|c| c["spans"].as_array().cloned().unwrap_or_default())
-                .map(|s| s["ref"].clone()),
+                .flat_map(|c| c.spans.iter().flatten())
+                .map(|s| Some(&s.reference)),
         )
         .collect::<Vec<_>>();
-    let current_refs = offered
-        .iter()
-        .flat_map(|t| t["evidence"].as_array().cloned().unwrap_or_default())
-        .collect::<Vec<_>>();
+    let current_refs = offered.iter().flat_map(|t| &t.evidence).collect::<Vec<_>>();
     let historical_refs = candidates
         .iter()
-        .flat_map(|c| c["evidence"].as_array().cloned().unwrap_or_default())
+        .flat_map(|c| &c.evidence)
         .collect::<Vec<_>>();
     let object = |properties: Value| json!({"type":"object","additionalProperties":false,"required":["target","candidate","span","current_support","selected_historical_support"],"properties":properties});
     let null_decision = object(

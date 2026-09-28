@@ -23,6 +23,13 @@ export const DISC_R = 392;
  * ~0.7s to half and ~1.9s to 95%: a calm, unhurried morph.
  */
 export const MORPH_SPRING = { k: 6, zeta: 1 } as const;
+/**
+ * Morph progress by which the motion clock reaches full speed. The motion starts
+ * with the morph (frame one) but must not crawl for the whole calm morph: at 0.3
+ * it is at full speed ~0.45s in (the pre-morph-rework pace), and the steady
+ * thinking loop then runs at exactly its intended rate while the shape finishes.
+ */
+export const MOTION_FULL_SPEED_AT = 0.3;
 
 export type SizeClass = 0 | 1 | 2;
 

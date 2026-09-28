@@ -63,6 +63,7 @@ pub struct MigrationMove {
     pub to: String,
 }
 
+/// Moves legacy memory files into the cognition namespace.
 pub struct CognitionNamespaceMigrationService {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
@@ -76,6 +77,7 @@ struct FileStats {
 }
 
 impl CognitionNamespaceMigrationService {
+    /// A migration service over `data_root`.
     pub fn new(
         data_root: PathBuf,
         paths: CognitionPathEnvironment,
@@ -88,6 +90,7 @@ impl CognitionNamespaceMigrationService {
         }
     }
 
+    /// The moves a migration would make.
     pub async fn plan(&self) -> CognitionResult<CognitionNamespaceMigrationPlan> {
         let data_root = self.data_root.clone();
         let paths = self.paths.clone();
@@ -98,6 +101,7 @@ impl CognitionNamespaceMigrationService {
             })?
     }
 
+    /// Makes the moves; the manifest of what moved.
     pub async fn apply(&self) -> CognitionResult<CognitionNamespaceMigrationManifest> {
         let data_root = self.data_root.clone();
         let paths = self.paths.clone();

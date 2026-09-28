@@ -4,7 +4,12 @@ use std::collections::BTreeMap;
 
 use quote::ToTokens;
 use syn::visit::{self, Visit};
-use syn::{Block, ImplItemFn, ItemFn, ItemImpl, ItemMod, ItemTrait, Signature, TraitItemFn, Type};
+use syn::{
+    Attribute, Block, ImplItemFn, ItemFn, ItemImpl, ItemMod, ItemTrait, Signature, TraitItemFn,
+    Type,
+};
+
+use crate::modules::{test_function, test_only};
 
 /// One function's qualified name inside its file and its line count, from the
 /// line holding `fn` through the line holding the body's closing brace.
@@ -14,8 +19,9 @@ pub(super) struct Function {
     pub lines: usize,
 }
 
-/// Every function with a body in `source`, in source order. Names are scoped
-/// by inline module, impl/trait and enclosing function; repeated names in one
+/// Every non-test function with a body in `source`, in source order: items
+/// under `#[cfg(test)]` and test functions are skipped. Names are scoped by
+/// inline module, impl/trait and enclosing function; repeated names in one
 /// file are numbered `#2`, `#3`, .. in source order.
 pub(super) fn functions(source: &str) -> Result<Vec<Function>, syn::Error> {
     let file = syn::parse_file(source)?;
@@ -59,6 +65,9 @@ impl Collector {
 
 impl<'ast> Visit<'ast> for Collector {
     fn visit_item_fn(&mut self, item: &'ast ItemFn) {
+        if test_code(&item.attrs) {
+            return;
+        }
         self.record(&item.sig, &item.block);
         self.scoped(item.sig.ident.to_string(), |this| {
             visit::visit_item_fn(this, item);
@@ -66,6 +75,9 @@ impl<'ast> Visit<'ast> for Collector {
     }
 
     fn visit_impl_item_fn(&mut self, item: &'ast ImplItemFn) {
+        if test_code(&item.attrs) {
+            return;
+        }
         self.record(&item.sig, &item.block);
         self.scoped(item.sig.ident.to_string(), |this| {
             visit::visit_impl_item_fn(this, item);
@@ -73,6 +85,9 @@ impl<'ast> Visit<'ast> for Collector {
     }
 
     fn visit_trait_item_fn(&mut self, item: &'ast TraitItemFn) {
+        if test_code(&item.attrs) {
+            return;
+        }
         if let Some(block) = &item.default {
             self.record(&item.sig, block);
         }
@@ -82,12 +97,18 @@ impl<'ast> Visit<'ast> for Collector {
     }
 
     fn visit_item_mod(&mut self, item: &'ast ItemMod) {
+        if test_only(&item.attrs) {
+            return;
+        }
         self.scoped(item.ident.to_string(), |this| {
             visit::visit_item_mod(this, item);
         });
     }
 
     fn visit_item_impl(&mut self, item: &'ast ItemImpl) {
+        if test_only(&item.attrs) {
+            return;
+        }
         let owner = type_name(&item.self_ty);
         let name = match &item.trait_ {
             Some((_, path, _)) => {
@@ -103,10 +124,18 @@ impl<'ast> Visit<'ast> for Collector {
     }
 
     fn visit_item_trait(&mut self, item: &'ast ItemTrait) {
+        if test_only(&item.attrs) {
+            return;
+        }
         self.scoped(item.ident.to_string(), |this| {
             visit::visit_item_trait(this, item);
         });
     }
+}
+
+/// Test functions and items compiled only under `cfg(test)`.
+fn test_code(attributes: &[Attribute]) -> bool {
+    test_only(attributes) || test_function(attributes)
 }
 
 /// The last path segment of a named type, or the whole type without spaces.
@@ -136,7 +165,7 @@ mod tests {
     }
 
     #[test]
-    fn counts_signature_through_closing_brace_and_scopes_names() {
+    fn counts_signature_through_closing_brace_and_skips_test_code() {
         let source = "\
 /// docs are not counted
 #[inline]
@@ -163,6 +192,22 @@ mod inner {
     }
 }
 fn free() {}
+#[cfg(test)]
+fn test_helper() {}
+#[cfg(all(test, unix))]
+mod tests {
+    fn inside() {}
+}
+#[test]
+fn unit() {}
+#[tokio::test]
+async fn scenario() {}
+#[cfg(test)]
+impl S {
+    fn fixture() {}
+}
+#[cfg(any(test, feature = \"test-support\"))]
+fn support() {}
 ";
         assert_eq!(
             measured(source),
@@ -173,6 +218,7 @@ fn free() {}
                 ("inner::<S as Clone>::clone::helper".to_owned(), 1),
                 ("inner::T::provided".to_owned(), 2),
                 ("free#2".to_owned(), 1),
+                ("support".to_owned(), 1),
             ]
         );
     }
