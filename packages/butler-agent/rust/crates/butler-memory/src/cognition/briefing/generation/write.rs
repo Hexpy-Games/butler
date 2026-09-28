@@ -1,7 +1,7 @@
 //! Writing briefing artifacts atomically with private permissions.
 
 use std::{
-    fs::{self, OpenOptions},
+    fs,
     io::Write,
     path::{Path, PathBuf},
 };
@@ -32,25 +32,13 @@ pub(super) fn write(path: &Path, artifact: &impl Serialize) -> Result<(), Briefi
     directory.recursive(true);
     butler_platform::secure_fs::owner_only_dirs(&mut directory);
     directory.create(parent).map_err(io_error)?;
-    let temporary = path.with_extension(format!("json.tmp-{}", uuid::Uuid::new_v4()));
-    let result = (|| {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        butler_platform::secure_fs::owner_only(&mut options);
-        let mut file = options.open(&temporary).map_err(io_error)?;
-        let mut bytes = serde_json::to_vec_pretty(artifact).map_err(io_error)?;
-        bytes.push(b'\n');
-        file.write_all(&bytes).map_err(io_error)?;
-        file.sync_all().map_err(io_error)?;
-        drop(file);
-        fs::rename(&temporary, path).map_err(io_error)?;
-        butler_platform::secure_fs::sync_directory(parent).map_err(io_error)?;
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&temporary);
-    }
-    result
+    let mut bytes = serde_json::to_vec_pretty(artifact).map_err(io_error)?;
+    bytes.push(b'\n');
+    butler_platform::secure_fs::replace_private(
+        path,
+        |file| file.write_all(&bytes).map_err(io_error),
+        io_error,
+    )
 }
 
 pub(super) fn safe_segment(value: &str) -> String {

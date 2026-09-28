@@ -8,6 +8,8 @@
 use crate::cognition::CognitionCode;
 use std::{fs, path::Path};
 
+use butler_platform::secure_fs::{self, FileId, FileTime};
+
 use lancedb::{Error as LanceError, Table};
 use rusqlite::{Connection, OpenFlags};
 use sha2::{Digest, Sha256};
@@ -22,16 +24,14 @@ use crate::cognition::{
 /// Largest hot cache a candidate may retain.
 const MAX_CACHE_BYTES: u64 = 20 * 1024;
 
-/// Inode-level identity of a file: any rewrite changes it.
+/// Inode-level identity of a file: any rewrite changes it. Hosts without
+/// file ids compare length and times only.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct FileIdentity {
-    dev: u64,
-    ino: u64,
+    id: Option<FileId>,
     bytes: u64,
-    mtime_sec: i64,
-    mtime_nsec: i64,
-    ctime_sec: i64,
-    ctime_nsec: i64,
+    modified: Option<FileTime>,
+    changed: Option<FileTime>,
 }
 
 /// Identities of one task's memory-relevant files.
@@ -367,17 +367,12 @@ async fn facts(
 fn identity(path: &Path) -> CognitionResult<Option<FileIdentity>> {
     match fs::metadata(path) {
         Ok(item) => {
-            let platform = butler_platform::secure_fs::identity(&item);
-            let modified = platform.modified.unwrap_or_default();
-            let changed = platform.changed.unwrap_or_default();
+            let platform = secure_fs::identity(&item);
             Ok(Some(FileIdentity {
-                dev: platform.device,
-                ino: platform.inode,
+                id: platform.id,
                 bytes: item.len(),
-                mtime_sec: modified.seconds,
-                mtime_nsec: modified.nanoseconds,
-                ctime_sec: changed.seconds,
-                ctime_nsec: changed.nanoseconds,
+                modified: platform.modified,
+                changed: platform.changed,
             }))
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),

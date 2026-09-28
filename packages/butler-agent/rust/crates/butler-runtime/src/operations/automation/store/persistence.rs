@@ -38,7 +38,8 @@ pub(super) fn write_record(path: &Path, record: &AutomationRecord) -> Result<(),
     bytes.push(b'\n');
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
-    secure_fs::no_follow(secure_fs::owner_only(&mut options));
+    let _ = secure_fs::owner_only(&mut options);
+    let _ = secure_fs::no_follow(&mut options);
     let mut file = options.open(&temporary).map_err(io_error)?;
     let result = (|| {
         use std::io::Write;

@@ -172,7 +172,9 @@ async fn lightpanda_fallback_runs_and_reaps_configured_child() {
         ),
     )
     .unwrap();
-    butler_platform::launcher::mark_executable(&binary).unwrap();
+    butler_platform::launcher::mark_executable(&binary)
+        .transpose()
+        .unwrap();
     let access = {
         super::configure_lightpanda(&root, &binary);
         super::access_with_pages(root.clone(), "http://127.0.0.1:9/search", &endpoint)

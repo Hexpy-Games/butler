@@ -4,7 +4,7 @@ use std::pin::Pin;
 use std::process::ExitStatus;
 use std::time::Duration;
 
-use butler_platform::process_control::{self, SignalError};
+use butler_platform::process_control::{self, ExitSignal, SignalError};
 use tokio::fs::File;
 use tokio::io::AsyncWrite;
 use tokio::process::{Child, Command};
@@ -60,11 +60,11 @@ impl ProcessHost for SystemProcesses {}
 pub(super) fn signal_pid(pid: u32, signal: GroupSignal) -> Result<(), CommandError> {
     match process_control::signal_group(pid, signal) {
         Ok(()) | Err(SignalError::Unsupported) => Ok(()),
-        Err(SignalError::OutOfRange(source)) => Err(CommandError::new(
+        Err(error @ SignalError::InvalidPid(_)) => Err(CommandError::new(
             CommandCode::CommandTerminationFailed,
             "The child process ID is outside the supported signal range",
         )
-        .with_source(source)),
+        .with_source(error)),
         Err(SignalError::Delivery { signal, detail }) => Err(CommandError::new(
             CommandCode::CommandTerminationFailed,
             format!("Failed to deliver {signal} while terminating the command: {detail}"),
@@ -99,12 +99,7 @@ pub(super) fn signal_command(
 
 /// The name of the signal that terminated the command, if one did.
 pub(super) fn signal_name(status: ExitStatus) -> Option<String> {
-    process_control::terminating_signal(status).map(|number| match number {
-        2 => "SIGINT".to_owned(),
-        9 => "SIGKILL".to_owned(),
-        15 => "SIGTERM".to_owned(),
-        _ => format!("SIG{number}"),
-    })
+    process_control::terminating_signal(status).map(ExitSignal::name)
 }
 
 pub(super) async fn terminate_and_reap(

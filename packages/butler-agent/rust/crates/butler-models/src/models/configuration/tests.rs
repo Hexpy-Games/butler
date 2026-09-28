@@ -20,7 +20,9 @@ impl Fixture {
         let root =
             std::env::temp_dir().join(format!("butler-native-config-{}", uuid::Uuid::new_v4()));
         fs::create_dir(&root).unwrap();
-        butler_platform::secure_fs::restrict_directory(&root).unwrap();
+        butler_platform::secure_fs::restrict_directory(&root)
+            .transpose()
+            .unwrap();
         Self(root)
     }
     fn write(&self, path: &str, value: &Value) {

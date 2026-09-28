@@ -23,11 +23,7 @@ use crate::web_access::{
 
 const MAX_RUNTIME: Duration = Duration::from_secs(20);
 const DEFAULT_WAIT_MS: u64 = 5_000;
-const LIGHTPANDA_PATHS: [&str; 3] = [
-    "/opt/homebrew/bin/lightpanda",
-    "/usr/local/bin/lightpanda",
-    "/usr/bin/lightpanda",
-];
+const LIGHTPANDA: &str = "lightpanda";
 
 pub(super) async fn render(
     access: &WebAccess,
@@ -106,14 +102,15 @@ fn resolve_binary(access: &WebAccess) -> Result<Option<PathBuf>, WebAccessError>
             return Ok(executable_path(&path).then_some(path));
         }
     }
-    Ok(LIGHTPANDA_PATHS
-        .iter()
-        .map(PathBuf::from)
+    Ok(butler_platform::launcher::system_program_dirs()
+        .into_iter()
+        .map(|directory| directory.join(LIGHTPANDA))
         .find(|path| executable_path(path)))
 }
 
 fn executable_path(path: &Path) -> bool {
-    fs::metadata(path).is_ok_and(|metadata| butler_platform::launcher::is_executable(&metadata))
+    fs::metadata(path)
+        .is_ok_and(|metadata| butler_platform::launcher::is_executable(path, &metadata))
 }
 
 async fn run_dump(

@@ -431,11 +431,12 @@ fn js_time(value: std::time::SystemTime) -> Value {
         })
 }
 
-/// The inode and the status change time in epoch milliseconds (or `null`).
+/// The inode (0 on hosts without file ids) and the status change time in
+/// epoch milliseconds (or `null`).
 fn stat_identity(stat: &fs::Metadata) -> (u64, Value) {
     let identity = secure_fs::identity(stat);
     (
-        identity.inode,
+        identity.id.map_or(0, |id| id.inode),
         identity
             .changed
             .map_or(Value::Null, |changed| json!(changed.millis())),

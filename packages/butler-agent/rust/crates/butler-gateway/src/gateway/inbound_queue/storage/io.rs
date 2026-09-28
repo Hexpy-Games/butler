@@ -41,7 +41,9 @@ pub(super) fn atomic_write(path: &Path, record: &QueuedInboundEvent) -> QueueRes
     ));
     let result = (|| {
         let file = File::create_new(&temp).map_err(io_error)?;
-        secure_fs::restrict_open_file(&file).map_err(io_error)?;
+        secure_fs::restrict_open_file(&file)
+            .transpose()
+            .map_err(io_error)?;
         let mut writer = BufWriter::new(file);
         serde_json::to_writer_pretty(&mut writer, record).map_err(|error| {
             InboundQueueError::new(

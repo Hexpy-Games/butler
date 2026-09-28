@@ -2,7 +2,7 @@
 //! atomic private writes.
 
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, File},
     io::Write,
     path::{Component, Path, PathBuf},
 };
@@ -143,32 +143,12 @@ pub(super) fn write(root: &Path, document: &KnowHowDocument) -> CognitionResult<
         error(CognitionCode::MemoryKnowhowEntryWriteFailed).with_source(source)
     })?;
     bytes.push(b'\n');
-    let temporary = directory.join(format!("{id}.json.tmp-{}", uuid::Uuid::new_v4()));
-    let result = (|| {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        butler_platform::secure_fs::owner_only(&mut options);
-        let mut file = options.open(&temporary).map_err(|source| {
-            error(CognitionCode::MemoryKnowhowEntryWriteFailed).with_source(source)
-        })?;
-        file.write_all(&bytes).map_err(|source| {
-            error(CognitionCode::MemoryKnowhowEntryWriteFailed).with_source(source)
-        })?;
-        file.sync_all().map_err(|source| {
-            error(CognitionCode::MemoryKnowhowEntryWriteFailed).with_source(source)
-        })?;
-        fs::rename(&temporary, &path).map_err(|source| {
-            error(CognitionCode::MemoryKnowhowEntryWriteFailed).with_source(source)
-        })?;
-        butler_platform::secure_fs::sync_directory(&directory).map_err(|source| {
-            error(CognitionCode::MemoryKnowhowEntryWriteFailed).with_source(source)
-        })?;
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(temporary);
-    }
-    result
+    butler_platform::secure_fs::replace_private(
+        &path,
+        |file| file.write_all(&bytes),
+        std::convert::identity,
+    )
+    .map_err(|source| error(CognitionCode::MemoryKnowhowEntryWriteFailed).with_source(source))
 }
 
 /// The fields that make an entry unusable: schema, a safe `kh_` id, a

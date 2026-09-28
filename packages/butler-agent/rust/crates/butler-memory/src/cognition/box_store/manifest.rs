@@ -2,7 +2,6 @@
 //! fields kept.
 
 use std::{
-    fs::{self, OpenOptions},
     io::{BufReader, Write},
     path::{Path, PathBuf},
 };
@@ -306,38 +305,10 @@ pub(super) fn write_manifest(path: &Path, manifest: &impl Serialize) -> Cognitio
     let mut bytes = serde_json::to_vec_pretty(manifest)
         .map_err(|source| error(CognitionCode::MemoryBoxManifestWriteFailed).with_source(source))?;
     bytes.push(b'\n');
-    let parent = path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or(Path::new("."));
-    let file_name = path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .ok_or_else(|| error(CognitionCode::MemoryBoxManifestWriteFailed))?;
-    let temporary = parent.join(format!("{file_name}.tmp-{}", uuid::Uuid::new_v4()));
-    let result = (|| {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        butler_platform::secure_fs::owner_only(&mut options);
-        let mut file = options.open(&temporary).map_err(|source| {
-            error(CognitionCode::MemoryBoxManifestWriteFailed).with_source(source)
-        })?;
-        file.write_all(&bytes).map_err(|source| {
-            error(CognitionCode::MemoryBoxManifestWriteFailed).with_source(source)
-        })?;
-        file.sync_all().map_err(|source| {
-            error(CognitionCode::MemoryBoxManifestWriteFailed).with_source(source)
-        })?;
-        fs::rename(&temporary, path).map_err(|source| {
-            error(CognitionCode::MemoryBoxManifestWriteFailed).with_source(source)
-        })?;
-        butler_platform::secure_fs::sync_directory(parent).map_err(|source| {
-            error(CognitionCode::MemoryBoxManifestWriteFailed).with_source(source)
-        })?;
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(temporary);
-    }
-    result
+    butler_platform::secure_fs::replace_private(
+        path,
+        |file| file.write_all(&bytes),
+        std::convert::identity,
+    )
+    .map_err(|source| error(CognitionCode::MemoryBoxManifestWriteFailed).with_source(source))
 }

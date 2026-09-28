@@ -8,11 +8,20 @@ use std::path::{Path, PathBuf};
 use nix::errno::Errno;
 use nix::unistd::{AccessFlags, access};
 
-use super::{ExchangeError, FileIdentity, FileTime, Writability};
+use super::{ExchangeError, FileId, FileIdentity, FileMode, FileTime, Writability};
+
+pub(super) const OWNER_ONLY: bool = true;
+pub(super) const PERMISSION_MODES: bool = true;
+pub(super) const NO_FOLLOW: bool = true;
+pub(super) const FILE_IDS: bool = true;
+pub(super) const DIRECTORY_SYNC: bool = true;
 
 const PRIVATE_DIRECTORY: u32 = 0o700;
-const PRIVATE_FILE: u32 = 0o600;
-const PERMISSION_BITS: u32 = 0o777;
+const PRIVATE_FILE: u32 = FileMode::OWNER_ONLY.0;
+/// Permission bits, without the file type.
+const PERMISSION_BITS: u32 = 0o7777;
+/// Read, write and execute bits of owner, group and others.
+const ACCESS_BITS: u32 = 0o777;
 
 pub(super) fn create_private_dir_all(path: &Path) -> io::Result<()> {
     let mut builder = fs::DirBuilder::new();
@@ -30,57 +39,69 @@ pub(super) fn create_private_dir(path: &Path) -> io::Result<()> {
     fs::DirBuilder::new().mode(PRIVATE_DIRECTORY).create(path)
 }
 
-pub(super) fn owner_only_dirs(builder: &mut DirBuilder) -> &mut DirBuilder {
-    builder.mode(PRIVATE_DIRECTORY)
+pub(super) fn owner_only_dirs(builder: &mut DirBuilder) -> Option<&mut DirBuilder> {
+    Some(builder.mode(PRIVATE_DIRECTORY))
 }
 
-pub(super) fn owner_only(options: &mut OpenOptions) -> &mut OpenOptions {
-    options.mode(PRIVATE_FILE)
+pub(super) fn owner_only(options: &mut OpenOptions) -> Option<&mut OpenOptions> {
+    Some(options.mode(PRIVATE_FILE))
 }
 
-pub(super) fn sync_directory(path: &Path) -> io::Result<()> {
-    File::open(path).and_then(|directory| directory.sync_all())
+pub(super) fn creation_mode(options: &mut OpenOptions, mode: FileMode) -> Option<&mut OpenOptions> {
+    Some(options.mode(mode.0))
 }
 
-pub(super) fn same_file(left: &Metadata, right: &Metadata) -> bool {
-    left.dev() == right.dev() && left.ino() == right.ino()
+pub(super) fn file_mode(metadata: &Metadata) -> Option<FileMode> {
+    Some(FileMode(metadata.permissions().mode() & PERMISSION_BITS))
 }
 
-pub(super) fn creation_mode(options: &mut OpenOptions, mode: u32) -> &mut OpenOptions {
-    options.mode(mode)
+pub(super) fn set_file_mode(path: &Path, mode: FileMode) -> Option<io::Result<()>> {
+    Some(fs::set_permissions(
+        path,
+        fs::Permissions::from_mode(mode.0),
+    ))
 }
 
-pub(super) fn file_mode(metadata: &Metadata) -> Option<u32> {
-    Some(metadata.permissions().mode())
+pub(super) fn restrict_file(path: &Path) -> Option<io::Result<()>> {
+    Some(fs::set_permissions(
+        path,
+        fs::Permissions::from_mode(PRIVATE_FILE),
+    ))
 }
 
-pub(super) fn restrict_file(path: &Path) -> io::Result<()> {
-    fs::set_permissions(path, fs::Permissions::from_mode(PRIVATE_FILE))
+pub(super) fn restrict_open_file(file: &File) -> Option<io::Result<()>> {
+    Some(file.set_permissions(fs::Permissions::from_mode(PRIVATE_FILE)))
 }
 
-pub(super) fn restrict_open_file(file: &File) -> io::Result<()> {
-    file.set_permissions(fs::Permissions::from_mode(PRIVATE_FILE))
+pub(super) fn restrict_directory(path: &Path) -> Option<io::Result<()>> {
+    Some(fs::set_permissions(
+        path,
+        fs::Permissions::from_mode(PRIVATE_DIRECTORY),
+    ))
 }
 
-pub(super) fn restrict_directory(path: &Path) -> io::Result<()> {
-    fs::set_permissions(path, fs::Permissions::from_mode(PRIVATE_DIRECTORY))
-}
-
-pub(super) fn is_owner_only(metadata: &Metadata) -> bool {
+pub(super) fn is_owner_only(metadata: &Metadata) -> Option<bool> {
     let private = if metadata.is_dir() {
         PRIVATE_DIRECTORY
     } else {
         PRIVATE_FILE
     };
-    metadata.permissions().mode() & PERMISSION_BITS == private
+    Some(metadata.permissions().mode() & ACCESS_BITS == private)
 }
 
-pub(super) fn no_follow(options: &mut OpenOptions) -> &mut OpenOptions {
-    options.custom_flags(nix::libc::O_NOFOLLOW)
+pub(super) fn no_follow(options: &mut OpenOptions) -> Option<&mut OpenOptions> {
+    Some(options.custom_flags(nix::libc::O_NOFOLLOW))
 }
 
 pub(super) fn open_read_no_follow(path: &Path) -> io::Result<File> {
-    no_follow(OpenOptions::new().read(true)).open(path)
+    OpenOptions::new()
+        .read(true)
+        .custom_flags(nix::libc::O_NOFOLLOW)
+        .open(path)
+}
+
+pub(super) fn sync_directory(path: &Path) -> Option<io::Result<()>> {
+    Some(File::open(path).and_then(|directory| directory.sync_all()))
 }
 
 pub(super) fn exchange_directories(left: &Path, right: &Path) -> Result<(), ExchangeError> {
@@ -101,8 +122,10 @@ pub(super) fn exchange_directories(left: &Path, right: &Path) -> Result<(), Exch
 
 pub(super) fn identity(metadata: &Metadata) -> FileIdentity {
     FileIdentity {
-        device: metadata.dev(),
-        inode: metadata.ino(),
+        id: Some(FileId {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+        }),
         modified: Some(FileTime {
             seconds: metadata.mtime(),
             nanoseconds: metadata.mtime_nsec(),

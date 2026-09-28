@@ -8,6 +8,7 @@
     reason = "contract helpers abort the test on setup failure; helper processes are reaped by the test or outlive it by design"
 )]
 
+mod command_sandbox;
 mod instance;
 mod process_control;
 mod secure_fs;

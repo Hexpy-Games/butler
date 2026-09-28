@@ -47,34 +47,12 @@ pub(super) fn write_report(path: &Path, report: &BoxIndexReport) -> CognitionRes
     let mut bytes = serde_json::to_vec_pretty(report)
         .map_err(|source| error(CognitionCode::MemoryBoxReportWriteFailed).with_source(source))?;
     bytes.push(b'\n');
-    let parent = path.parent().unwrap_or(Path::new("."));
-    let temporary = parent.join(format!("index-rebuild-report.tmp-{}", uuid::Uuid::new_v4()));
-    let result = (|| {
-        create_private_file(&temporary)?;
-        let mut file = OpenOptions::new()
-            .write(true)
-            .open(&temporary)
-            .map_err(|source| {
-                error(CognitionCode::MemoryBoxReportWriteFailed).with_source(source)
-            })?;
-        file.write_all(&bytes).map_err(|source| {
-            error(CognitionCode::MemoryBoxReportWriteFailed).with_source(source)
-        })?;
-        file.sync_all().map_err(|source| {
-            error(CognitionCode::MemoryBoxReportWriteFailed).with_source(source)
-        })?;
-        fs::rename(&temporary, path).map_err(|source| {
-            error(CognitionCode::MemoryBoxReportWriteFailed).with_source(source)
-        })?;
-        butler_platform::secure_fs::sync_directory(parent).map_err(|source| {
-            error(CognitionCode::MemoryBoxReportWriteFailed).with_source(source)
-        })?;
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(temporary);
-    }
-    result
+    butler_platform::secure_fs::replace_private(
+        path,
+        |file| file.write_all(&bytes),
+        std::convert::identity,
+    )
+    .map_err(|source| error(CognitionCode::MemoryBoxReportWriteFailed).with_source(source))
 }
 
 pub(super) fn now_iso() -> String {

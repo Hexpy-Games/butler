@@ -260,7 +260,9 @@ fn same_file(left: &Metadata, right: &Metadata) -> bool {
 }
 
 fn sync_directory(path: &Path) -> CognitionResult<()> {
-    butler_platform::secure_fs::sync_directory(path).map_err(io_error)
+    butler_platform::secure_fs::sync_directory(path)
+        .unwrap_or(Ok(()))
+        .map_err(io_error)
 }
 
 fn snapshot_changed() -> CognitionError {

@@ -29,7 +29,8 @@ impl ServiceReadiness {
         let result = (|| {
             let mut options = OpenOptions::new();
             options.write(true).create(true).truncate(true);
-            let mut file = secure_fs::owner_only(&mut options).open(&temporary)?;
+            let _ = secure_fs::owner_only(&mut options);
+            let mut file = options.open(&temporary)?;
             serde_json::to_writer_pretty(&mut file, &record)?;
             file.write_all(b"\n")?;
             drop(file);

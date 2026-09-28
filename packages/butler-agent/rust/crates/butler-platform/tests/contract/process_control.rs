@@ -1,8 +1,8 @@
 //! Process trees: group signals reach every descendant; liveness.
 
 use butler_platform::process_control::{
-    CONTAINS_PROCESS_TREES, GroupSignal, Liveness, SignalError, isolate_group, liveness,
-    signal_group, terminating_signal,
+    CONTAINS_PROCESS_TREES, ExitSignal, GroupSignal, Liveness, SignalError, isolate_group,
+    liveness, signal_group, terminating_signal,
 };
 
 use super::{REPORT, eventually, helper_command, read_report, scratch};
@@ -14,9 +14,11 @@ fn group_signals_stop_every_descendant_of_an_isolated_command() {
         let report = scratch("tree").join("report");
         let mut command = helper_command("tree");
         command.env(REPORT, &report);
-        isolate_group(&mut command);
+        let isolated = isolate_group(&mut command).is_some();
+        assert_eq!(isolated, CONTAINS_PROCESS_TREES);
         let mut leader = command.spawn().unwrap();
         let grandchild: u32 = read_report(&report).parse().unwrap();
+        assert_eq!(liveness(grandchild), Liveness::Running);
         if !CONTAINS_PROCESS_TREES {
             assert!(matches!(
                 signal_group(leader.id(), signal),
@@ -26,10 +28,13 @@ fn group_signals_stop_every_descendant_of_an_isolated_command() {
             leader.wait().unwrap();
             continue;
         }
-        assert_eq!(liveness(grandchild), Liveness::Running);
         signal_group(leader.id(), signal).unwrap();
         let status = leader.wait().unwrap();
-        let expected = if signal == GroupSignal::Kill { 9 } else { 15 };
+        let expected = if signal == GroupSignal::Kill {
+            ExitSignal::Kill
+        } else {
+            ExitSignal::Terminate
+        };
         assert_eq!(terminating_signal(status), Some(expected));
         // The orphaned grandchild is reaped by its new parent once stopped.
         eventually("the grandchild to be gone", || {
@@ -38,36 +43,59 @@ fn group_signals_stop_every_descendant_of_an_isolated_command() {
     }
 }
 
+/// `killpg(0)` would signal the caller's own group.
+#[test]
+fn pid_zero_is_never_signalled() {
+    for signal in [GroupSignal::Terminate, GroupSignal::Kill] {
+        let refused = signal_group(0, signal);
+        if CONTAINS_PROCESS_TREES {
+            assert!(matches!(refused, Err(SignalError::InvalidPid(0))));
+        } else {
+            assert!(matches!(refused, Err(SignalError::Unsupported)));
+        }
+    }
+    if CONTAINS_PROCESS_TREES {
+        assert!(matches!(
+            signal_group(u32::MAX, GroupSignal::Kill),
+            Err(SignalError::InvalidPid(u32::MAX))
+        ));
+    }
+}
+
 #[test]
 fn a_group_that_no_longer_exists_is_already_stopped() {
     let mut command = helper_command("exit");
-    isolate_group(&mut command);
+    let _ = isolate_group(&mut command);
     let mut leader = command.spawn().unwrap();
     let pid = leader.id();
     leader.wait().unwrap();
-    if cfg!(windows) {
+    if CONTAINS_PROCESS_TREES {
+        signal_group(pid, GroupSignal::Kill).unwrap();
+    } else {
         assert!(matches!(
             signal_group(pid, GroupSignal::Kill),
             Err(SignalError::Unsupported)
         ));
-        assert_eq!(liveness(pid), Liveness::Unknown);
-    } else {
-        signal_group(pid, GroupSignal::Kill).unwrap();
+    }
+    assert_eq!(liveness(pid), Liveness::Gone);
+}
+
+#[test]
+fn liveness_distinguishes_running_and_absent_processes() {
+    assert_eq!(liveness(std::process::id()), Liveness::Running);
+    // Ids that name no single process: 0 addresses a process group (or the
+    // idle process).
+    for pid in [0, u32::MAX] {
         assert_eq!(liveness(pid), Liveness::Gone);
     }
 }
 
 #[test]
-fn liveness_distinguishes_running_and_absent_processes() {
-    if cfg!(windows) {
-        assert_eq!(liveness(std::process::id()), Liveness::Unknown);
-        return;
-    }
-    assert_eq!(liveness(std::process::id()), Liveness::Running);
-    // Ids that name no single process: 0 addresses a process group.
-    for pid in [0, u32::MAX] {
-        assert_eq!(liveness(pid), Liveness::Gone);
-    }
+fn exit_signals_have_their_posix_names() {
+    assert_eq!(ExitSignal::Interrupt.name(), "SIGINT");
+    assert_eq!(ExitSignal::Kill.name(), "SIGKILL");
+    assert_eq!(ExitSignal::Terminate.name(), "SIGTERM");
+    assert_eq!(ExitSignal::Other(6).name(), "SIG6");
 }
 
 /// A group whose members all exited but are not reaped yet is stopped:
@@ -76,7 +104,7 @@ fn liveness_distinguishes_running_and_absent_processes() {
 #[test]
 fn a_group_of_only_zombies_is_already_stopped() {
     let mut command = helper_command("exit");
-    isolate_group(&mut command);
+    let _ = isolate_group(&mut command);
     let mut leader = command.spawn().unwrap();
     let pid = leader.id();
     // Not reaped: the exited leader stays a zombie of this process.

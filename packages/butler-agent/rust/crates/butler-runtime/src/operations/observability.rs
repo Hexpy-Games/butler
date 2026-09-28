@@ -4,6 +4,7 @@
 mod tests;
 
 use butler_core::public_text::fixed_regex;
+use butler_platform::secure_fs::FileId;
 use std::{
     collections::VecDeque,
     fs::{self, File},
@@ -72,7 +73,9 @@ pub struct LogFollower {
 struct FollowState {
     source: LogFile,
     file: File,
-    identity: (u64, u64),
+    /// The followed file; `None` on hosts without file ids, where a replaced
+    /// log is noticed only when it is shorter than the offset.
+    identity: Option<FileId>,
     offset: u64,
     pending: Vec<u8>,
 }
@@ -203,9 +206,8 @@ fn line_text(bytes: &[u8]) -> String {
     text
 }
 
-fn file_identity(metadata: &fs::Metadata) -> (u64, u64) {
-    let identity = butler_platform::secure_fs::identity(metadata);
-    (identity.device, identity.inode)
+fn file_identity(metadata: &fs::Metadata) -> Option<FileId> {
+    butler_platform::secure_fs::identity(metadata).id
 }
 
 pub fn redact_log_line(line: &str) -> String {

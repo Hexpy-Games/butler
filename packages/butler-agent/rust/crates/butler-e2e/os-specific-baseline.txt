@@ -1,7 +1,21 @@
-# Lines of OS-specific code outside crates/butler-platform, ratcheted by tools/source-check.
-# Move them behind butler-platform and regenerate: cargo run -p butler-source-check -- --bless .
-# Entries may only shrink or disappear; new entries need review.
-Cargo.toml	2
-src/e2e/agent/process.rs	3
-tests/lifecycle_intent.rs	5
-tests/onboarding.rs	6
+# OS-specific code outside crates/butler-platform, ratcheted by tools/source-check.
+# FILE<TAB>COUNT<TAB>CODE: how often each construct occurs in each file.
+# Move code behind butler-platform and lower the counts: cargo run -p butler-source-check -- --bless .
+# --bless never raises or adds an entry; new entries need review.
+Cargo.toml	1	[target.'cfg(unix)']
+Cargo.toml	1	dependency nix
+src/e2e/agent/process.rs	1	cfg(unix)
+src/e2e/agent/process.rs	1	nix::sys::signal::Signal::SIGTERM
+src/e2e/agent/process.rs	1	nix::sys::signal::kill
+src/e2e/agent/process.rs	1	nix::unistd::Pid::from_raw
+tests/lifecycle_intent.rs	1	0o600
+tests/lifecycle_intent.rs	1	0o777
+tests/lifecycle_intent.rs	1	nix::sys::signal::Signal::SIGTERM
+tests/lifecycle_intent.rs	1	nix::sys::signal::kill
+tests/lifecycle_intent.rs	1	nix::unistd::Pid::from_raw
+tests/lifecycle_intent.rs	1	os::unix::fs::PermissionsExt
+tests/lifecycle_intent.rs	1	os::unix::process::ExitStatusExt
+tests/onboarding.rs	1	0o500
+tests/onboarding.rs	1	0o700
+tests/onboarding.rs	2	cfg(unix)
+tests/onboarding.rs	2	os::unix::fs::PermissionsExt

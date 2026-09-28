@@ -71,9 +71,11 @@ async fn forgiving_import_writes_private_manifest_before_consolidation() {
     assert_eq!(manifest["raw_text_included"], false);
     assert!(manifest.get("text").is_none());
     assert_eq!(manifest["candidate_ids"].as_array().unwrap().len(), 1);
-    assert!(butler_platform::secure_fs::is_owner_only(
-        &std::fs::metadata(path).unwrap()
-    ));
+    // Hosts without owner-only permissions report `None`.
+    assert_ne!(
+        butler_platform::secure_fs::is_owner_only(&std::fs::metadata(path).unwrap()),
+        Some(false)
+    );
     service.close().await;
 }
 

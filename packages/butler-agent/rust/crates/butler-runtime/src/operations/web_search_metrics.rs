@@ -187,11 +187,14 @@ fn replace_json(
 ) -> io::Result<()> {
     let parent = path.parent().ok_or_else(unsafe_metrics_path)?;
     ensure_regular_file(data_root, parent, path)?;
-    let temporary = path.with_file_name(format!(".web-search-{}.tmp", uuid::Uuid::new_v4()));
-    secure_fs::replace_private(path, &temporary, |file| {
-        serde_json::to_writer_pretty(&mut *file, value).map_err(json_io_error)?;
-        file.write_all(b"\n")
-    })
+    secure_fs::replace_private(
+        path,
+        |file| {
+            serde_json::to_writer_pretty(&mut *file, value).map_err(json_io_error)?;
+            file.write_all(b"\n")
+        },
+        std::convert::identity,
+    )
 }
 
 fn unsafe_metrics_path() -> io::Error {

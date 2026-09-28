@@ -357,7 +357,8 @@ fn private_manifest_file(path: &Path) -> std::io::Result<fs::File> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => return Err(error),
     }
-    butler_platform::secure_fs::no_follow(butler_platform::secure_fs::owner_only(&mut options));
+    let _ = butler_platform::secure_fs::owner_only(&mut options);
+    let _ = butler_platform::secure_fs::no_follow(&mut options);
     options.open(path)
 }
 fn base(

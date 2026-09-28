@@ -264,9 +264,11 @@ async fn custom_model_credentials_are_endpoint_scoped_private_and_clearable() {
     let secret_path = fixture.0.join("auth/custom-model-credentials.json");
     let secrets: Value = serde_json::from_slice(&fs::read(&secret_path).unwrap()).unwrap();
     assert_eq!(secrets["local/org-model.gguf"], "private-key");
-    assert!(butler_platform::secure_fs::is_owner_only(
-        &fs::metadata(&secret_path).unwrap()
-    ));
+    // Hosts without owner-only permissions report `None`.
+    assert_ne!(
+        butler_platform::secure_fs::is_owner_only(&fs::metadata(&secret_path).unwrap()),
+        Some(false)
+    );
 
     let reuse = LocalModelMutation {
         api_key: None,

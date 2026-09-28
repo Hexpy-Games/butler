@@ -95,7 +95,7 @@ async fn expiring_profile_refreshes_retains_unknown_fields_and_writes_private_fi
         .unwrap(),
     )
     .unwrap();
-    secure_fs::restrict_file(&path).unwrap();
+    secure_fs::restrict_file(&path).transpose().unwrap();
     let access = jwt(&json!({"https://api.openai.com/auth":{"chatgpt_account_id":"account"}}));
     let body = json!({"access_token":access,"expires_in":3600,"scope":"openid"}).to_string();
     let (url, server) = token_server("200 OK", &body).await;
@@ -110,7 +110,11 @@ async fn expiring_profile_refreshes_retains_unknown_fields_and_writes_private_fi
         saved.get("accessToken").and_then(Value::as_str),
         Some(access.as_str())
     );
-    assert!(secure_fs::is_owner_only(&fs::metadata(path).unwrap()));
+    // Hosts without owner-only permissions report `None`.
+    assert_ne!(
+        secure_fs::is_owner_only(&fs::metadata(path).unwrap()),
+        Some(false)
+    );
 }
 
 #[tokio::test]

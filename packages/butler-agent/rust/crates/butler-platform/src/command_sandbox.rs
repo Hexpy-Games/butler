@@ -2,12 +2,11 @@
 //!
 //! macOS enforces read-only commands and write-protected roots with the
 //! seatbelt (`sandbox-exec`). Linux and Windows have no sandbox yet: they
-//! refuse read-only commands ([`SandboxError::ReadOnlyUnavailable`]) and run
-//! write-protected commands unprotected. Linux gets a Landlock wrapper in a
-//! later stage.
+//! refuse read-only commands ([`SandboxError::ReadOnlyUnavailable`]) and
+//! report write protection as [`Protection::Unavailable`]. Linux gets a
+//! Landlock wrapper in a later stage.
 
 use std::collections::HashMap;
-use std::io;
 use std::path::Path;
 
 #[cfg(target_os = "macos")]
@@ -27,6 +26,13 @@ use unix as shell;
 mod windows;
 #[cfg(windows)]
 use windows as shell;
+
+/// Whether this host runs [`ShellAccess::ReadOnly`] commands in a sandbox
+/// (otherwise [`login_shell`] refuses them).
+pub const READ_ONLY_SANDBOX: bool = sandbox::ENFORCED;
+
+/// Whether [`protect_writes`] enforces its root on this host.
+pub const WRITE_PROTECTION: bool = sandbox::ENFORCED;
 
 /// A program and its arguments.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -57,12 +63,18 @@ pub enum SandboxError {
 /// Why a write-protected invocation could not be built.
 #[derive(Debug, thiserror::Error)]
 pub enum ProtectError {
-    /// Resolving the protected root failed.
-    #[error(transparent)]
-    Io(io::Error),
     /// The protected root could not be quoted into the sandbox profile.
     #[error(transparent)]
     Profile(serde_json::Error),
+}
+
+/// An invocation after [`protect_writes`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Protection {
+    /// It runs in a sandbox that denies writes below the root.
+    Enforced(Invocation),
+    /// This host has no write protection; the invocation is unchanged.
+    Unavailable(Invocation),
 }
 
 /// The login-shell invocation of a user command with `access`: `/bin/sh -lc`
@@ -92,8 +104,8 @@ pub fn legacy_shell(
     shell::legacy_shell(command, pipefail, environment)
 }
 
-/// Wraps `invocation` so it cannot write below `root` (by its lexical and its
-/// real path). Hosts without write protection return it unchanged.
-pub fn protect_writes(invocation: Invocation, root: &Path) -> Result<Invocation, ProtectError> {
+/// Wraps `invocation` so it cannot write below `root`, by the given path and
+/// by its real path. `root` must be absolute and lexically normalized.
+pub fn protect_writes(invocation: Invocation, root: &Path) -> Result<Protection, ProtectError> {
     sandbox::protect_writes(invocation, root)
 }

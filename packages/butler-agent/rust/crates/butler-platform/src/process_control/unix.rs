@@ -7,19 +7,23 @@ use nix::errno::Errno;
 use nix::sys::signal::{Signal, kill, killpg};
 use nix::unistd::Pid;
 
-use super::{GroupSignal, Liveness, SignalError};
+use super::{ExitSignal, GroupSignal, Liveness, SignalError};
 
 pub(super) const CONTAINS_PROCESS_TREES: bool = true;
 
 pub(super) const BASELINE_ENVIRONMENT: &[&str] =
     &["HOME", "LOGNAME", "PATH", "SHELL", "TERM", "USER"];
 
-pub(super) fn isolate_group(command: &mut Command) {
-    command.process_group(0);
+pub(super) fn isolate_group(command: &mut Command) -> Option<&mut Command> {
+    Some(command.process_group(0))
 }
 
 pub(super) fn signal_group(pid: u32, signal: GroupSignal) -> Result<(), SignalError> {
-    let group = i32::try_from(pid).map_err(SignalError::OutOfRange)?;
+    // 0 addresses the caller's own group; negative ids are not groups.
+    let group = i32::try_from(pid)
+        .ok()
+        .filter(|group| *group > 0)
+        .ok_or(SignalError::InvalidPid(pid))?;
     let signal = match signal {
         GroupSignal::Kill => Signal::SIGKILL,
         GroupSignal::Terminate => Signal::SIGTERM,
@@ -70,8 +74,13 @@ fn group_has_only_zombies(_group: u32) -> bool {
     false
 }
 
-pub(super) fn terminating_signal(status: ExitStatus) -> Option<i32> {
-    status.signal()
+pub(super) fn terminating_signal(status: ExitStatus) -> Option<ExitSignal> {
+    status.signal().map(|number| match number {
+        nix::libc::SIGINT => ExitSignal::Interrupt,
+        nix::libc::SIGKILL => ExitSignal::Kill,
+        nix::libc::SIGTERM => ExitSignal::Terminate,
+        other => ExitSignal::Other(other),
+    })
 }
 
 pub(super) fn liveness(pid: u32) -> Liveness {

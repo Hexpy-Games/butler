@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
-use butler_platform::command_sandbox::{self, ProtectError};
+use butler_platform::command_sandbox::{self, ProtectError, Protection};
 
 use crate::workspace::CommandCode;
 use crate::workspace::commands::{CommandError, CommandStep, StructuredCommandInput};
+use crate::workspace::path_guard::lexical_absolute;
 
 pub(super) fn invocation_steps(
     input: &StructuredCommandInput,
@@ -20,7 +21,15 @@ pub(super) fn invocation_steps(
     }
     let shell = command_sandbox::legacy_shell(command, legacy.pipefail, &input.environment);
     let shell = match legacy.read_only_installation_root.as_deref() {
-        Some(root) => command_sandbox::protect_writes(shell, root).map_err(protect_failed)?,
+        Some(root) => {
+            let root = lexical_absolute(root).map_err(CommandError::io)?;
+            match command_sandbox::protect_writes(shell, &root).map_err(protect_failed)? {
+                Protection::Enforced(protected) => protected,
+                // Linux (until Landlock) and Windows run the program files
+                // unprotected, as they always did.
+                Protection::Unavailable(unprotected) => unprotected,
+            }
+        }
         None => shell,
     };
     Ok(vec![CommandStep {
@@ -31,7 +40,6 @@ pub(super) fn invocation_steps(
 
 fn protect_failed(error: ProtectError) -> CommandError {
     match error {
-        ProtectError::Io(error) => CommandError::io(error),
         ProtectError::Profile(error) => {
             CommandError::new(CommandCode::CommandJsonFailed, error.to_string()).with_source(error)
         }

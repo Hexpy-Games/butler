@@ -21,7 +21,9 @@ async fn admitted_git_child_is_drained_by_same_command_owner() {
         ),
     )
     .unwrap();
-    butler_platform::launcher::mark_executable(&fake_git).unwrap();
+    butler_platform::launcher::mark_executable(&fake_git)
+        .transpose()
+        .unwrap();
     let recovery = SessionWorkspaceRecovery::new(
         fixture.store.clone(),
         fixture.commands.clone(),

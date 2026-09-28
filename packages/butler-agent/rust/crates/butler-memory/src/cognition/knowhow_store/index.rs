@@ -215,8 +215,10 @@ fn create_private_file(path: &Path) -> CognitionResult<()> {
 }
 
 fn sync_directory(path: &Path) -> CognitionResult<()> {
-    butler_platform::secure_fs::sync_directory(path).map_err(|source| {
-        error(CognitionCode::MemoryKnowhowIndexWriteFailed).with_source(source)
-    })?;
+    butler_platform::secure_fs::sync_directory(path)
+        .unwrap_or(Ok(()))
+        .map_err(|source| {
+            error(CognitionCode::MemoryKnowhowIndexWriteFailed).with_source(source)
+        })?;
     Ok(())
 }

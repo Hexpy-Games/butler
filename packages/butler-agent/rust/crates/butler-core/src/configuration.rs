@@ -120,10 +120,13 @@ pub fn read_json_object(path: &Path) -> Result<serde_json::Value, ConfigError> {
 pub fn write_json_atomic(path: &Path, value: &serde_json::Value) -> Result<(), ConfigError> {
     let parent = path.parent().ok_or(ConfigError::InvalidPath)?;
     secure_fs::create_private_dir_all(parent).map_err(ConfigError::DirectoryUnavailable)?;
-    let temporary = parent.join(format!(".butler-config-{}.tmp", uuid::Uuid::new_v4()));
-    secure_fs::replace_private(path, &temporary, |file| {
-        serde_json::to_writer_pretty(&mut *file, value)?;
-        file.write_all(b"\n")
-    })
+    secure_fs::replace_private(
+        path,
+        |file| {
+            serde_json::to_writer_pretty(&mut *file, value)?;
+            file.write_all(b"\n")
+        },
+        std::convert::identity,
+    )
     .map_err(ConfigError::WriteFailed)
 }

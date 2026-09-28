@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use butler_platform::command_sandbox;
 use butler_platform::process_control::{Liveness, liveness};
 
 use super::{CommandStep, Commands, Fixture, GuidedAccess, ScriptedProcesses};
@@ -156,8 +157,8 @@ async fn structured_undefined_environment_entry_removes_inherited_value() {
     owner.close().await;
 }
 
-/// A read-only command cannot write: the host sandbox stops the write, or a
-/// host without a sandbox refuses the command.
+/// A read-only command cannot write. A host with a sandbox must run it
+/// there, where the write fails; a host without one must refuse it.
 #[tokio::test]
 async fn guided_read_only_uses_actual_sandbox_boundary() {
     let fixture = Fixture::new();
@@ -165,9 +166,13 @@ async fn guided_read_only_uses_actual_sandbox_boundary() {
     let target = fixture.0.join("must-not-write");
     let mut input = fixture.guided(&format!("printf x > '{}'", target.display()));
     input.access = GuidedAccess::ReadOnlyObservation;
-    match owner.submit_guided(input).unwrap().await.unwrap() {
-        Ok(output) => assert_ne!(output.summary.exit_code, Some(0)),
-        Err(error) => assert_eq!(error.code(), "command_observation_isolation_unavailable"),
+    let result = owner.submit_guided(input).unwrap().await.unwrap();
+    if command_sandbox::READ_ONLY_SANDBOX {
+        let output = result.expect("a host with a sandbox runs read-only commands");
+        assert_ne!(output.summary.exit_code, Some(0));
+    } else {
+        let error = result.expect_err("a host without a sandbox refuses read-only commands");
+        assert_eq!(error.code(), "command_observation_isolation_unavailable");
     }
     assert!(!target.exists());
     owner.close().await;

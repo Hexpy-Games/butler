@@ -1,8 +1,10 @@
 //! The macOS seatbelt: `sandbox-exec` with an inline profile.
 
-use std::path::{Component, Path, PathBuf};
+use std::path::Path;
 
-use super::{Invocation, ProtectError, SandboxError};
+use super::{Invocation, ProtectError, Protection, SandboxError};
+
+pub(super) const ENFORCED: bool = true;
 
 const SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
 
@@ -21,8 +23,8 @@ pub(super) fn read_only(invocation: Invocation) -> Result<Invocation, SandboxErr
 pub(super) fn protect_writes(
     invocation: Invocation,
     root: &Path,
-) -> Result<Invocation, ProtectError> {
-    let lexical = lexical_absolute(root).map_err(ProtectError::Io)?;
+) -> Result<Protection, ProtectError> {
+    let lexical = root.to_path_buf();
     let real = lexical.canonicalize().unwrap_or_else(|_| lexical.clone());
     let mut roots = vec![lexical];
     if roots.first() != Some(&real) {
@@ -38,7 +40,7 @@ pub(super) fn protect_writes(
         "(version 1)(allow default)(deny file-write* {})",
         clauses.join(" ")
     );
-    Ok(sandboxed(profile, invocation))
+    Ok(Protection::Enforced(sandboxed(profile, invocation)))
 }
 
 /// `invocation` run by `sandbox-exec` under `profile`.
@@ -49,25 +51,4 @@ fn sandboxed(profile: String, invocation: Invocation) -> Invocation {
         program: SANDBOX_EXEC.into(),
         arguments,
     }
-}
-
-/// `path` made absolute against the working directory, with `.` and `..`
-/// resolved lexically (symlinks are not followed).
-fn lexical_absolute(path: &Path) -> std::io::Result<PathBuf> {
-    let absolute = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir()?.join(path)
-    };
-    let mut clean = PathBuf::new();
-    for part in absolute.components() {
-        match part {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                clean.pop();
-            }
-            other => clean.push(other.as_os_str()),
-        }
-    }
-    Ok(clean)
 }

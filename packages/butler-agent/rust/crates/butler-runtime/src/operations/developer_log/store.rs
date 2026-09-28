@@ -173,7 +173,8 @@ fn reject_symlink(path: &Path) -> io::Result<()> {
 fn append_file(path: &Path) -> io::Result<fs::File> {
     let mut options = OpenOptions::new();
     options.create(true).append(true);
-    secure_fs::no_follow(secure_fs::owner_only(&mut options));
+    let _ = secure_fs::owner_only(&mut options);
+    let _ = secure_fs::no_follow(&mut options);
     options.open(path)
 }
 
@@ -208,7 +209,8 @@ fn temporary_path(path: &Path) -> PathBuf {
 fn open_private_temporary(path: &Path) -> io::Result<File> {
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
-    secure_fs::no_follow(secure_fs::owner_only(&mut options));
+    let _ = secure_fs::owner_only(&mut options);
+    let _ = secure_fs::no_follow(&mut options);
     options.open(path)
 }
 
@@ -238,10 +240,12 @@ impl Drop for TemporaryPath {
     }
 }
 
+/// Hosts without owner-only permissions keep the directory as it is.
 fn secure_directory_mode(path: &Path) -> io::Result<()> {
-    secure_fs::restrict_directory(path)
+    secure_fs::restrict_directory(path).unwrap_or(Ok(()))
 }
 
+/// Hosts without owner-only permissions keep the file as it is.
 fn secure_mode(path: &Path) -> io::Result<()> {
-    secure_fs::restrict_file(path)
+    secure_fs::restrict_file(path).unwrap_or(Ok(()))
 }

@@ -1,16 +1,13 @@
-//! The user's `butler` command in `DATA/bin`, and runnable files in general.
+//! Runnable programs: marking a file executable, recognizing one, and where
+//! this host keeps system-wide programs.
 //!
-//! On Unix the launcher is a `#!/bin/sh` script that execs the running
-//! installation. On Windows a script cannot be run by name, so it becomes a
-//! small `butler.exe` shim that reads `butler.launcher.json` next to it and
-//! starts the installation it names.
-//!
-//! The launcher itself is an interface only: the agent's launcher repair
-//! still writes the Unix script until the launcher moves here.
+//! Unix runs any file with an execute bit; Windows runs files by their
+//! extension and has no execute bit to set. The user's `butler` command
+//! launcher moves here in a later stage.
 
 use std::fs::Metadata;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[cfg(unix)]
 mod unix;
@@ -21,41 +18,36 @@ mod windows;
 #[cfg(windows)]
 use windows as sys;
 
-/// How the `butler` command is installed on this host.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LauncherKind {
-    /// A `#!/bin/sh` script marked executable.
-    ShellScript,
-    /// A copied shim executable plus its `butler.launcher.json`.
-    ExecutableShim,
-}
-
-/// This host's launcher.
-pub const KIND: LauncherKind = if cfg!(windows) {
-    LauncherKind::ExecutableShim
-} else {
-    LauncherKind::ShellScript
-};
-
-/// The launcher's file name in `DATA/bin`.
-pub const FILE_NAME: &str = if cfg!(windows) {
-    "butler.exe"
-} else {
-    "butler"
-};
-
-/// The file next to the Windows shim that names the installation it starts.
-pub const SHIM_CONFIGURATION: &str = "butler.launcher.json";
-
 /// Makes the file at `path` runnable by name: writable by its owner and
-/// executable by everyone (0755) on Unix. Windows runs files by their
-/// extension and changes nothing.
-pub fn mark_executable(path: &Path) -> io::Result<()> {
+/// executable by everyone (0755). `None` on hosts that run files by their
+/// extension (Windows).
+pub fn mark_executable(path: &Path) -> Option<io::Result<()>> {
     sys::mark_executable(path)
 }
 
-/// Whether the file `metadata` describes can be run by name: a file with an
-/// execute bit on Unix, any file on Windows.
-pub fn is_executable(metadata: &Metadata) -> bool {
-    sys::is_executable(metadata)
+/// Whether the file `metadata` describes (named `path`) can be run by name: a
+/// file with an execute bit on Unix; a `.exe`, `.com`, `.bat` or `.cmd` file
+/// on Windows.
+pub fn is_executable(path: &Path, metadata: &Metadata) -> bool {
+    sys::is_executable(path, metadata)
+}
+
+/// Where this host installs system-wide programs, most specific first
+/// (package managers before the system): `/opt/homebrew/bin`,
+/// `/usr/local/bin` and `/usr/bin` on Unix; none on Windows, where programs
+/// are found through `PATH`.
+pub fn system_program_dirs() -> Vec<PathBuf> {
+    sys::system_program_dirs()
+}
+
+/// The `<os>-<arch>` tag of the release artifacts that run on this host:
+/// `darwin-arm64`, `linux-x64`, `windows-x64`, ... (other architectures keep
+/// Rust's name).
+pub fn release_platform() -> String {
+    let arch = match std::env::consts::ARCH {
+        "aarch64" => "arm64",
+        "x86_64" => "x64",
+        other => other,
+    };
+    format!("{}-{arch}", sys::RELEASE_OS)
 }

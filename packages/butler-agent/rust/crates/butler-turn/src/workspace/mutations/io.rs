@@ -2,7 +2,7 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use butler_platform::secure_fs::{self, Writability};
+use butler_platform::secure_fs::{self, FileMode, Writability};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -14,7 +14,8 @@ pub(super) struct Snapshot {
     pub exists: bool,
     pub bytes: Vec<u8>,
     pub sha256: Option<String>,
-    pub mode: Option<u32>,
+    /// The file's permission mode, on hosts that have them.
+    pub mode: Option<FileMode>,
 }
 
 pub(super) struct Prepared {

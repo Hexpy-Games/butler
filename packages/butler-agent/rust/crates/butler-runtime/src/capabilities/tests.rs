@@ -23,7 +23,7 @@ impl Fixture {
     fn new() -> Self {
         let root = std::env::temp_dir().join(format!("butler-k1a-{}", Uuid::new_v4()));
         std::fs::create_dir(&root).unwrap();
-        secure_fs::restrict_directory(&root).unwrap();
+        secure_fs::restrict_directory(&root).transpose().unwrap();
         let files = Arc::new(WorkspaceFiles::new(2));
         let capabilities = Capabilities::new(
             Arc::clone(&files),

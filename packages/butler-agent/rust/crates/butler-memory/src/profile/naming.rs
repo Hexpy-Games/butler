@@ -156,7 +156,8 @@ pub(super) fn atomic_json<T: serde::Serialize>(
         use std::io::Write;
         let mut options = fs::OpenOptions::new();
         options.create(true).truncate(true).write(true);
-        let mut file = butler_platform::secure_fs::owner_only(&mut options).open(&temporary)?;
+        let _ = butler_platform::secure_fs::owner_only(&mut options);
+        let mut file = options.open(&temporary)?;
         file.write_all(&bytes)?;
         drop(file);
         fs::rename(&temporary, path)

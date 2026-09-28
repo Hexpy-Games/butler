@@ -246,6 +246,7 @@ fn write_private_environment(path: &Path, key: &str, value: &str) -> Result<(), 
     file.sync_all()
         .map_err(io("Private environment file could not be written."))?;
     secure_fs::restrict_file(path)
+        .transpose()
         .map_err(io("Private environment file permissions could not be set."))?;
     Ok(())
 }

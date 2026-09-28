@@ -164,8 +164,10 @@ fn event(value: &Value, inode: u64, offset: usize) -> Option<DashboardLedgerEven
     })
 }
 
+/// The inode number; 0 on hosts without file ids, where event ids and
+/// revisions then rely on offsets, sizes and times alone.
 fn path_identity(metadata: &Metadata) -> u64 {
-    secure_fs::identity(metadata).inode
+    secure_fs::identity(metadata).id.map_or(0, |id| id.inode)
 }
 
 fn file_revision(metadata: &Metadata) -> String {

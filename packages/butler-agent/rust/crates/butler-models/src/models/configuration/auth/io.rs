@@ -24,7 +24,8 @@ pub(super) async fn write_mode_600(path: &Path, bytes: &[u8]) -> Result<(), Auth
     tokio::task::spawn_blocking(move || {
         let mut options = std::fs::OpenOptions::new();
         options.write(true).create(true).truncate(true);
-        let mut file = secure_fs::owner_only(&mut options).open(path)?;
+        let _ = secure_fs::owner_only(&mut options);
+        let mut file = options.open(path)?;
         file.write_all(&bytes)
     })
     .await

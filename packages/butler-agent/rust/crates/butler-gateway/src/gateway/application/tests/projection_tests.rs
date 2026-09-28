@@ -93,7 +93,7 @@ async fn transcript_watcher_projects_delivered_turn_without_foreground_refresh()
 #[tokio::test]
 async fn recovered_delivered_final_requires_unchanged_original_claim() {
     let inode = |path: &std::path::Path| {
-        butler_platform::secure_fs::identity(&std::fs::metadata(path).unwrap()).inode
+        butler_platform::secure_fs::identity(&std::fs::metadata(path).unwrap()).id
     };
     for case in ["recovered", "edited", "new_claim", "cancelled"] {
         let root = projection_root(case);

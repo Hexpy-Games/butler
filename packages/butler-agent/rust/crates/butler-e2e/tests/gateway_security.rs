@@ -36,8 +36,15 @@ fn header<'a>(headers: &'a HeaderMap, name: &str) -> &'a str {
         .unwrap_or_default()
 }
 
+/// Whether the file is private to the user. A host without owner-only
+/// permissions (Windows, until the data-folder ACL) cannot restrict it, so
+/// there the check is that it at least exists.
 fn is_private(path: &std::path::Path) -> bool {
-    butler_platform::secure_fs::is_owner_only(&std::fs::metadata(path).unwrap())
+    let metadata = std::fs::metadata(path).unwrap();
+    match butler_platform::secure_fs::is_owner_only(&metadata) {
+        Some(private) => private,
+        None => !butler_platform::secure_fs::OWNER_ONLY && metadata.is_file(),
+    }
 }
 
 /// SEC-01 — an agent started without token variables (as `butler start`

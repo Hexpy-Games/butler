@@ -60,7 +60,7 @@ pub(super) fn write(
         return Err(write_failed(error));
     }
     drop(file);
-    if let Err(error) = secure_fs::restrict_file(&temp) {
+    if let Some(Err(error)) = secure_fs::restrict_file(&temp) {
         let _ = fs::remove_file(&temp);
         return Err(write_failed(error));
     }

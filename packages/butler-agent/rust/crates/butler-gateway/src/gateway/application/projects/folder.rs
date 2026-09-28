@@ -5,6 +5,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use butler_platform::secure_fs::{self, FileId};
+use butler_platform::user_dirs;
+
 use super::error;
 use crate::gateway::GatewayApplicationError;
 use butler_core::public_text::trim_js_whitespace;
@@ -14,13 +17,8 @@ const MAX_ATTEMPTS: usize = 10_000;
 #[derive(Clone)]
 pub(in crate::gateway::application) struct ScratchFolder {
     pub path: PathBuf,
-    identity: FolderIdentity,
-}
-
-#[derive(Clone, Copy, Eq, PartialEq)]
-struct FolderIdentity {
-    device: u64,
-    inode: u64,
+    /// The created folder; `None` on hosts without file ids.
+    identity: Option<FileId>,
 }
 
 pub(super) fn validate_name(value: Option<&str>) -> Result<String, GatewayApplicationError> {
@@ -197,8 +195,13 @@ pub(super) fn rollback(root: &Path, folder: &ScratchFolder) {
             return Ok(());
         }
         let metadata = fs::symlink_metadata(path)?;
+        // Without file ids nothing proves the folder is still the one this
+        // request created, so it is left in place.
+        let Some(created) = folder.identity else {
+            return Ok(());
+        };
         if !metadata.is_dir()
-            || identity(&metadata) != folder.identity
+            || identity(&metadata) != Some(created)
             || fs::read_dir(path)?.next().is_some()
         {
             return Ok(());
@@ -208,21 +211,9 @@ pub(super) fn rollback(root: &Path, folder: &ScratchFolder) {
 }
 
 fn sensitive(path: &Path) -> bool {
-    if path == Path::new("/") {
-        return true;
-    }
-    if butler_platform::user_dirs::home_dir().is_some_and(|home| path == home) {
-        return true;
-    }
-    ["/System", "/etc", "/private/etc", "/bin", "/sbin"]
-        .iter()
-        .any(|root| path.starts_with(root))
+    user_dirs::is_system_folder(path) || user_dirs::home_dir().is_some_and(|home| path == home)
 }
 
-fn identity(metadata: &fs::Metadata) -> FolderIdentity {
-    let identity = butler_platform::secure_fs::identity(metadata);
-    FolderIdentity {
-        device: identity.device,
-        inode: identity.inode,
-    }
+fn identity(metadata: &fs::Metadata) -> Option<FileId> {
+    secure_fs::identity(metadata).id
 }

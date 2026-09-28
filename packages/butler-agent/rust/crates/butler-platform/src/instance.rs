@@ -1,30 +1,24 @@
-//! One service instance per DATA folder: the exclusive instance lock, the host
-//! name and the operating-system identity of a process.
+//! One service instance per DATA folder: the exclusive instance lock and the
+//! facts that identify this host and a process start.
 //!
-//! The lock is the kernel's advisory file lock (`flock` on macOS and Linux,
-//! `LockFileEx` on Windows): it belongs to the open file and is released when
-//! the lock is dropped or its process dies. Process identity combines the
-//! start time and executable a pid had, so a recorded pid is never trusted
-//! after the operating system reused it: macOS reads them through libproc,
-//! Linux from `/proc` with the boot id. Windows identity is not implemented
-//! yet and reports [`IdentityError::Unsupported`].
+//! The lock is the host's whole-file lock on an open file: `flock` on macOS
+//! and Linux, which is advisory (only other `flock` callers are excluded),
+//! and `LockFileEx` over the whole file on Windows, which is mandatory (other
+//! handles cannot read or write the file while it is held).
+//!
+//! Compared with `nix::fcntl::Flock`, which the agent uses today:
+//! - On macOS and Linux both lock the open file description, so a
+//!   `try_clone` of [`InstanceLock::file`] (or a descriptor a child process
+//!   inherits) shares the lock, and a second `open` of the same path does
+//!   not.
+//! - Both unlock explicitly when dropped ([`InstanceLock`] calls
+//!   `File::unlock`), so a duplicated descriptor that outlives the lock does
+//!   not keep holding it.
+//! - A failed attempt consumes the file here; `Flock::lock` hands it back.
+//!   Callers reopen the path to retry.
 
 use std::fs::{File, TryLockError};
 use std::io;
-use std::num::TryFromIntError;
-
-#[cfg(target_os = "linux")]
-mod linux;
-#[cfg(target_os = "linux")]
-use linux as identity;
-#[cfg(target_os = "macos")]
-mod macos;
-#[cfg(target_os = "macos")]
-use macos as identity;
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
-mod unsupported;
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
-use unsupported as identity;
 
 #[cfg(unix)]
 mod unix;
@@ -35,7 +29,7 @@ mod windows;
 #[cfg(windows)]
 use windows as sys;
 
-/// An advisory lock on an open file, held until this value is dropped.
+/// A lock on an open file, held until this value is dropped.
 #[derive(Debug)]
 pub struct InstanceLock {
     file: File,
@@ -70,59 +64,20 @@ impl InstanceLock {
     }
 }
 
+impl Drop for InstanceLock {
+    fn drop(&mut self) {
+        // Closing the file releases the lock too; unlocking first also
+        // releases it while a duplicated descriptor stays open.
+        let _ = self.file.unlock();
+    }
+}
+
 fn locked(result: Result<(), TryLockError>, file: File) -> Result<InstanceLock, LockError> {
     match result {
         Ok(()) => Ok(InstanceLock { file }),
         Err(TryLockError::WouldBlock) => Err(LockError::Busy),
         Err(TryLockError::Error(error)) => Err(LockError::Failed(error)),
     }
-}
-
-/// Why the identity of a process could not be read.
-#[derive(Debug, thiserror::Error)]
-pub enum IdentityError {
-    /// The host did not report the identity of a running process.
-    #[error("the process identity is unavailable")]
-    Unavailable {
-        /// The failed read, when one failed.
-        #[source]
-        source: Option<io::Error>,
-    },
-    /// The process id cannot name a process on this host.
-    #[error("process id is outside the supported range")]
-    PidOutOfRange(#[source] TryFromIntError),
-    /// Probing whether the process exists failed; the value is the host's
-    /// description of the failure.
-    #[error("{0}")]
-    ProbeFailed(String),
-    /// This host cannot read process identities yet.
-    #[error("process identity is unsupported on this host")]
-    Unsupported,
-}
-
-impl IdentityError {
-    #[cfg_attr(
-        not(any(target_os = "linux", target_os = "macos")),
-        expect(
-            dead_code,
-            reason = "only the macOS and Linux identities read the host"
-        )
-    )]
-    fn unavailable() -> Self {
-        Self::Unavailable { source: None }
-    }
-}
-
-/// The start identity of process `pid` (`macos:<sec>:<usec>` or
-/// `linux:<boot id>:<start ticks>`), or `None` when no such process exists.
-pub fn process_start_identity(pid: u32) -> Result<Option<String>, IdentityError> {
-    identity::process_start_identity(pid)
-}
-
-/// The canonical executable path of process `pid`, or `None` when no such
-/// process exists.
-pub fn process_executable(pid: u32) -> Result<Option<String>, IdentityError> {
-    identity::process_executable(pid)
 }
 
 /// The host name, lossily decoded.

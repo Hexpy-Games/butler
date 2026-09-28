@@ -3,10 +3,10 @@
 //! Unix starts a contained command as the leader of its own process group and
 //! signals the whole group, so descendants a command leaves behind stop with
 //! it. Windows has no process-group containment yet (Job Objects replace it):
-//! [`CONTAINS_PROCESS_TREES`] is `false`, group signals report
-//! [`SignalError::Unsupported`] and callers stop only their direct child.
+//! [`CONTAINS_PROCESS_TREES`] is `false`, [`isolate_group`] returns `None`,
+//! group signals report [`SignalError::Unsupported`] and callers stop only
+//! their direct child.
 
-use std::num::TryFromIntError;
 use std::process::{Command, ExitStatus};
 
 #[cfg(unix)]
@@ -37,12 +37,38 @@ pub enum GroupSignal {
     Kill,
 }
 
+/// The signal that terminated a process.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExitSignal {
+    /// SIGINT.
+    Interrupt,
+    /// SIGKILL.
+    Kill,
+    /// SIGTERM.
+    Terminate,
+    /// Any other signal, by its number on this host.
+    Other(i32),
+}
+
+impl ExitSignal {
+    /// The signal's name: `SIGINT`, `SIGKILL`, `SIGTERM`, or `SIG<number>`.
+    pub fn name(self) -> String {
+        match self {
+            Self::Interrupt => "SIGINT".to_owned(),
+            Self::Kill => "SIGKILL".to_owned(),
+            Self::Terminate => "SIGTERM".to_owned(),
+            Self::Other(number) => format!("SIG{number}"),
+        }
+    }
+}
+
 /// Why a process group could not be signalled.
 #[derive(Debug, thiserror::Error)]
 pub enum SignalError {
-    /// The process id cannot name a process group on this host.
-    #[error("process id is outside the supported signal range")]
-    OutOfRange(#[source] TryFromIntError),
+    /// The id names no single process group: 0 (the caller's own group) or
+    /// an id outside the host's range.
+    #[error("process id {0} names no single process group")]
+    InvalidPid(u32),
     /// The host refused to deliver `signal`; `detail` is the host's reason.
     #[error("{signal}: {detail}")]
     Delivery {
@@ -56,37 +82,39 @@ pub enum SignalError {
     Unsupported,
 }
 
-/// What signal 0 reports about a process id.
+/// Whether a process id names a running process.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Liveness {
-    /// The process exists and this user may signal it.
+    /// The process exists (and, on Unix, this user may signal it).
     Running,
     /// The process exists but belongs to another user.
     OtherOwner,
     /// No process has this id (ids that name no single process included).
     Gone,
-    /// This host cannot tell.
+    /// The host could not tell.
     Unknown,
 }
 
 /// Makes `command` start as the leader of a new process group, so
-/// [`signal_group`] reaches everything it starts.
-pub fn isolate_group(command: &mut Command) {
-    sys::isolate_group(command);
+/// [`signal_group`] reaches everything it starts. `None` when this host
+/// cannot contain process trees and `command` is unchanged.
+pub fn isolate_group(command: &mut Command) -> Option<&mut Command> {
+    sys::isolate_group(command)
 }
 
 /// Signals the process group led by `pid`. A group that no longer exists, or
-/// whose remaining members are all zombies, is already stopped.
+/// whose remaining members are all zombies, is already stopped. Pid 0 (the
+/// caller's own group) and ids outside the host's range are refused.
 pub fn signal_group(pid: u32, signal: GroupSignal) -> Result<(), SignalError> {
     sys::signal_group(pid, signal)
 }
 
-/// The number of the signal that terminated the process, if a signal did.
-pub fn terminating_signal(status: ExitStatus) -> Option<i32> {
+/// The signal that terminated the process, if a signal did.
+pub fn terminating_signal(status: ExitStatus) -> Option<ExitSignal> {
     sys::terminating_signal(status)
 }
 
-/// Whether a process with id `pid` exists, as signal 0 reports it.
+/// Whether a process with id `pid` is running.
 pub fn liveness(pid: u32) -> Liveness {
     sys::liveness(pid)
 }

@@ -286,9 +286,14 @@ fn stable_identity(file: &File, path: &Path) -> CognitionResult<String> {
     Ok(handle_identity)
 }
 
-/// `device:inode:length:mtime s:ns:ctime s:ns`; unknown times are empty.
+/// `device:inode:length:mtime s:ns:ctime s:ns`. A host without file ids or a
+/// time leaves those fields empty, so the identity rests on what it has.
 fn metadata_identity(metadata: &fs::Metadata) -> String {
     let identity = butler_platform::secure_fs::identity(metadata);
+    let id = identity.id.map_or_else(
+        || ":".to_owned(),
+        |id| format!("{}:{}", id.device, id.inode),
+    );
     let time = |time: Option<butler_platform::secure_fs::FileTime>| {
         time.map_or_else(
             || ":".to_owned(),
@@ -296,9 +301,7 @@ fn metadata_identity(metadata: &fs::Metadata) -> String {
         )
     };
     format!(
-        "{}:{}:{}:{}:{}",
-        identity.device,
-        identity.inode,
+        "{id}:{}:{}:{}",
         metadata.len(),
         time(identity.modified),
         time(identity.changed)

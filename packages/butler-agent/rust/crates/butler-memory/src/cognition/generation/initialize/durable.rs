@@ -1,10 +1,6 @@
 //! Durable, atomic file writes for generation records.
 
-use std::{
-    fs::{self, File, OpenOptions},
-    io::Write,
-    path::Path,
-};
+use std::{io::Write, path::Path};
 
 use serde::Serialize;
 
@@ -31,27 +27,15 @@ pub(in crate::cognition::generation) fn write_json<T: Serialize + ?Sized>(
         )
     })?;
     create_dir(parent)?;
-    let temporary = path.with_extension(format!(
-        "{}.{}.tmp",
-        std::process::id(),
-        uuid::Uuid::new_v4()
-    ));
-    let result = (|| {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        butler_platform::secure_fs::owner_only(&mut options);
-        let mut file = options.open(&temporary).map_err(io_error)?;
-        file.write_all(text.as_bytes()).map_err(io_error)?;
-        file.write_all(b"\n").map_err(io_error)?;
-        file.sync_all().map_err(io_error)?;
-        drop(file);
-        fs::rename(&temporary, path).map_err(io_error)?;
-        File::open(parent)
-            .and_then(|dir| dir.sync_all())
-            .map_err(io_error)
-    })();
-    let _ = fs::remove_file(&temporary);
-    result
+    butler_platform::secure_fs::replace_private(
+        path,
+        |file| {
+            file.write_all(text.as_bytes())?;
+            file.write_all(b"\n")
+        },
+        std::convert::identity,
+    )
+    .map_err(io_error)
 }
 
 pub(in crate::cognition::generation) fn create_dir(path: &Path) -> CognitionResult<()> {

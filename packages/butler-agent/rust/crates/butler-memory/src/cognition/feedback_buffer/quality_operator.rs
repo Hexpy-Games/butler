@@ -4,7 +4,7 @@
 use crate::lenient::JsonField;
 use crate::lenient::set_field;
 use std::{
-    fs::{self, OpenOptions},
+    fs,
     io::Write,
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
@@ -189,43 +189,25 @@ fn append_operation(
         .parent()
         .ok_or_else(|| error(CognitionCode::MemoryQualityOperationWriteFailed))?;
     create_private_dir(parent)?;
-    let temporary = parent.join(format!(
-        "quality-operations.jsonl.tmp-{}",
-        uuid::Uuid::new_v4()
-    ));
-    let result = (|| {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        butler_platform::secure_fs::owner_only(&mut options);
-        let mut file = options.open(&temporary).map_err(|source| {
-            error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-        })?;
-        let operation = serde_json::to_value(operation).map_err(|source| {
-            error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-        })?;
-        for value in previous.iter().chain(std::iter::once(&operation)) {
-            serde_json::to_writer(&mut file, value).map_err(|source| {
-                error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-            })?;
-            file.write_all(b"\n").map_err(|source| {
-                error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-            })?;
-        }
-        file.sync_all().map_err(|source| {
-            error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-        })?;
-        fs::rename(&temporary, path).map_err(|source| {
-            error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-        })?;
-        butler_platform::secure_fs::sync_directory(parent).map_err(|source| {
-            error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-        })?;
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(temporary);
-    }
-    result
+    let operation = serde_json::to_value(operation).map_err(|source| {
+        error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
+    })?;
+    let failed = |source: std::io::Error| {
+        error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
+    };
+    butler_platform::secure_fs::replace_private(
+        path,
+        |file| {
+            for value in previous.iter().chain(std::iter::once(&operation)) {
+                serde_json::to_writer(&mut *file, value).map_err(|source| {
+                    error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
+                })?;
+                file.write_all(b"\n").map_err(failed)?;
+            }
+            Ok(())
+        },
+        failed,
+    )
 }
 
 /// Whether a stored operation describes the same exclusion.
