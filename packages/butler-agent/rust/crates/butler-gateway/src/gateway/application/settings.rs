@@ -7,7 +7,9 @@ use serde_json::{Value, json};
 
 mod access;
 mod controls;
+mod default_model;
 mod model;
+mod onboarding;
 mod persistence;
 mod plan_continuation;
 mod session;

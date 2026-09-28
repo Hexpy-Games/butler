@@ -26,6 +26,7 @@ const UPDATE_KEYS: &[&str] = &[
     "web_search",
     "model_fallback",
     "default_project_folder_selection_token",
+    "onboarding",
 ];
 
 pub(super) fn is_request(value: &Value) -> bool {
@@ -71,6 +72,9 @@ pub(super) fn is_request(value: &Value) -> bool {
         || input
             .get("model_fallback")
             .is_some_and(|value| !is_model_fallback(value))
+        || input
+            .get(super::onboarding::KEY)
+            .is_some_and(|value| !super::onboarding::is_patch(value))
     {
         return false;
     }

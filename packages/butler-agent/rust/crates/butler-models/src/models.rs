@@ -3,6 +3,7 @@
 mod catalog;
 mod configuration;
 mod diagnostics;
+mod local_servers;
 mod prompt;
 mod provider;
 mod request_admission;
@@ -22,6 +23,11 @@ pub use visual_admission::{
 pub use visual_manifest::VisualAttachmentManifest;
 
 pub use transport::provider_http_client;
+
+pub use local_servers::{
+    DetectedLocalModel, DetectedLocalServer, LocalServerKind, LocalServerProbe,
+    detect_local_servers,
+};
 
 // Prompt clients receive the same typed error as the provider round adapter.
 // Expose it with the prompt API so lifecycle callbacks need no BTCC imports.
@@ -50,8 +56,8 @@ pub use catalog::{
     CredentialView, HostedApiShape, ImageProbeEvidence, LocalModelConfig, LocalModelPlatform,
     LocalModelSource, ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelProviderMetadata,
     ParsedModelRef, ParsedModelRefSource, ProviderAuthMethod, ReasoningEffort,
-    RegisteredHostedModelConfig, TokenEstimate, TokenEstimateInput, TokenEstimatorKind,
-    default_hosted_provider_api_base_url, normalize_hosted_api_base_url,
+    RegisteredHostedModelConfig, RoutinePreset, TokenEstimate, TokenEstimateInput,
+    TokenEstimatorKind, default_hosted_provider_api_base_url, normalize_hosted_api_base_url,
     normalize_local_model_config, normalize_registered_hosted_model, parse_model_ref,
     registered_hosted_model_metadata,
 };
@@ -66,8 +72,8 @@ use tokenizer::TokenizerOwner;
 pub use configuration::{
     DiscoveredLocalModel, HostedModelMutation, LocalModelMutation, McpModelTarget,
     ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
-    ModelConfigurationRead, ProviderCredentialMutation, SettingsError, generate_pkce_verifier,
-    pkce_challenge,
+    ModelConfigurationRead, ProviderCredentialMutation, ProviderKeyCheck, ProviderKeyCheckError,
+    SettingsError, generate_pkce_verifier, pkce_challenge,
 };
 #[cfg(unix)]
 pub use status::{StatusModels, auth_status_with_environment, open_status_models};

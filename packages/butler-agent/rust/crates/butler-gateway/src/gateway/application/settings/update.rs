@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value, json};
 
-use super::{AppSettingsFacts, model, validation};
+use super::{AppSettingsFacts, model, onboarding, validation};
 use crate::gateway::GatewayApplicationError;
 use butler_core::public_text::trim_js_whitespace;
 
@@ -26,14 +26,15 @@ pub(super) fn prepare(
     if !validation::is_request(input) {
         return Err(invalid_settings());
     }
-    let patch = patch::sanitize(input, facts)?;
+    let mut patch = patch::sanitize(input, facts)?;
+    onboarding::merge_into_patch(&mut patch, input, current);
     let workspace_root = input
         .get("default_project_folder_selection_token")
         .and_then(Value::as_str)
         .filter(|value| !trim_js_whitespace(value).is_empty())
         .map(resolve_workspace)
         .transpose()?;
-    let projection = patch::project(
+    let projection = project_after_refresh(
         current,
         &patch,
         facts,
@@ -52,7 +53,9 @@ pub(super) fn project_after_refresh(
     facts: &AppSettingsFacts,
     workspace_root: &std::path::Path,
 ) -> Value {
-    patch::project(current, patch, facts, workspace_root)
+    let mut projection = patch::project(current, patch, facts, workspace_root);
+    onboarding::project(&mut projection, patch);
+    projection
 }
 
 pub(super) fn invalid_settings() -> GatewayApplicationError {
@@ -114,6 +117,7 @@ pub(super) fn event_payload(projection: &Value) -> Map<String, Value> {
         "web_search",
         "model_fallback",
         "default_project_workspace_label",
+        onboarding::KEY,
     ];
     let mut settings = Map::new();
     for field in fields {

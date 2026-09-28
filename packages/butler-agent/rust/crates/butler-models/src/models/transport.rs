@@ -118,16 +118,7 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
                             json(response, provider, api, tolerate_invalid).await
                         }
                         ResponseMode::HostedChatSse => {
-                            let is_sse = response
-                                .headers()
-                                .get("content-type")
-                                .and_then(|value| value.to_str().ok())
-                                .is_some_and(|value| value.to_ascii_lowercase().contains("text/event-stream"));
-                            if is_sse {
-                                sse::hosted_chat(response, provider, api, progress.clone()).await
-                            } else {
-                                json(response, provider, api, true).await
-                            }
+                            hosted_chat_or_json(response, provider, api, progress.clone(), stream_observer).await
                         }
                         ResponseMode::CodexSse => {
                             sse::codex(
@@ -200,6 +191,27 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
                 },
             ))))
         }
+    }
+}
+
+/// A chat completion answered as an event stream, or as one JSON body by a
+/// server that ignores `stream: true`.
+async fn hosted_chat_or_json(
+    response: Response,
+    provider: &str,
+    api: &str,
+    progress: super::request_guard::RequestProgress,
+    observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
+) -> Result<Value, Box<ProviderRequestError>> {
+    let is_sse = response
+        .headers()
+        .get("content-type")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.to_ascii_lowercase().contains("text/event-stream"));
+    if is_sse {
+        sse::hosted_chat(response, provider, api, progress, observer).await
+    } else {
+        json(response, provider, api, true).await
     }
 }
 

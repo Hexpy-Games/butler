@@ -2,6 +2,7 @@ mod generation;
 mod local;
 mod lookup;
 mod registered;
+mod routine_preset;
 mod static_data;
 
 use std::sync::Arc;
@@ -24,6 +25,7 @@ pub use registered::{
     normalize_registered_hosted_model, registered_hosted_model_metadata,
 };
 pub(super) use registered::{hosted_provider, safe_label as normalize_display_label};
+pub use routine_preset::RoutinePreset;
 pub(super) use static_data::StaticCatalog;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

@@ -9,4 +9,6 @@ pub(super) mod plan_decision;
 pub(super) mod runtime_ports;
 #[cfg(unix)]
 pub(super) mod server;
+#[cfg(unix)]
+pub(super) mod setup;
 pub(super) mod subsessions;
