@@ -1,76 +1,113 @@
+import { NavRow } from "../../../../blocks/NavRow";
+import { Box } from "../../../Box";
 import { Button } from "../../../Button";
+import { Folder, MessageSquare, Search } from "../../../Icons";
 import { Input } from "../../../Input";
 import { Kbd } from "../../../Kbd";
 import { SegmentedControl } from "../../../SegmentedControl";
 import { Switch } from "../../../Switch";
-import { Annotations } from "../shared/Annotations";
-import { openingItems } from "../shared/guides";
+import { Tabs, TabsList, TabsTrigger } from "../../../Tabs";
+import type { Box as Rect } from "../../heroTimeline";
 import { Mark } from "../shared/Mark";
-import { Reveal as R } from "../shared/Reveal";
-import type { Annot, Geometry } from "../shared/types";
-import { RING_TOKENS, type FocusCopy } from "./focusCopy";
+import type { SceneGeometry } from "../scene/types";
+import type { FocusCopy } from "./focusCopy";
+import { Composer, Turn } from "./focusTiles";
 import s from "./FocusHero.module.css";
 
-/** One ring per control of the tab order; the walk shows one at a time. */
-export const RINGS: Annot[] = [0, 1, 2, 3].map((k) => ({ kind: "ring", target: `c${k}` }));
-
-/**
- * The token field: a Tab key cap and its count, a row of real controls in
- * tab order that the one ring walks through (their rings are guides drawn
- * with the live --focus-ring), a width bracket for the close-up, and the
- * focus tokens. The poster rests with the ring on the first control.
- */
-export function FocusField({ g, copy }: { g: Geometry | null; copy: FocusCopy }) {
+/** The title's touch: a 2px ring around "Focus", then around "ring". */
+export function TitleWords({ copy }: { copy: FocusCopy }) {
   return (
-    <div className={s.field} data-m="field">
-      <div className={s.keyRow}>
-        <span className={s.stack}>
-          <span className={s.layer} data-t="key-tab"><Kbd keys={["Tab"]} /></span>
-          <span className={s.layer} data-t="key-back"><Kbd keys={["⇧", "Tab"]} /></span>
-        </span>
-        <span className={s.stack} data-kind="count">
-          {[1, 2, 3, 4].map((n) => <span className={s.layer} data-t={`cnt-${n}`} key={n}>{`${n}/4`}</span>)}
-        </span>
-      </div>
-      <div className={s.row} data-m="tabrow" data-mark-scope="tabrow">
-        <span className={s.probe}>
-          <Mark n="c0" part><Button text={<R name="c0-t">{copy.continue}</R>} /></Mark>
-          <span className={s.posterRing} data-t="pring" />
-        </span>
-        <Mark n="c1" part><Input aria-label={copy.name} readOnly value={copy.name} /></Mark>
-        <Mark n="c2" part><Switch aria-label={copy.sidebar} checked onCheckedChange={() => undefined} /></Mark>
-        <Mark n="c3" part>
-          <SegmentedControl ariaLabel={copy.week} onValueChange={() => undefined} value="week"
-            options={[{ value: "week", label: <R name="c3-a">{copy.week}</R> }, { value: "month", label: <R name="c3-b">{copy.month}</R> }]} />
+    <span className={s.titleWords}>
+      <span className={s.word}>{copy.title}<span className={s.wordRing} data-t="tr-0" /></span>
+      <span className={s.word}>{copy.title2}<span className={s.wordRing} data-t="tr-1" /></span>
+    </span>
+  );
+}
+
+/** A key cap stack: the key pressed now shows (cut in place). */
+function Keys({ prefix, keys }: { prefix: string; keys: Array<[id: string, caps: string[]]> }) {
+  return <span className={s.keys}>{keys.map(([id, caps]) => <span className={s.key} data-t={`${prefix}-${id}`} key={id}><Kbd keys={caps} /></span>)}</span>;
+}
+
+/** Scene 2: one ring: Tab walks a short row of real controls; the ring takes each one's corner. */
+export function RowScene({ copy }: { copy: FocusCopy }) {
+  return (
+    <div className={s.rowStage} data-m="row">
+      <div className={s.row} data-mark-scope="row">
+        <Mark n="c0"><Button text={copy.continue} /></Mark>
+        <Mark n="c1"><Input aria-label={copy.name} readOnly value={copy.name} /></Mark>
+        <Mark n="c2"><Switch aria-label={copy.autoSave} checked onCheckedChange={() => undefined} /></Mark>
+        <Mark n="c3">
+          <SegmentedControl ariaLabel={copy.week} onValueChange={() => undefined} value="week" options={[{ value: "week", label: copy.week }, { value: "month", label: copy.month }]} />
         </Mark>
-        {g ? <Annotations items={openingItems(RINGS, g.scopes.tabrow ?? {}, "r", g.layout)} /> : null}
+        <span className={s.ring} data-t="rr" />
       </div>
-      <div className={s.tokens}>
-        {RING_TOKENS.map(([token, value], k) => (
-          <div className={s.tokenRow} key={token}>
-            <span><R name={`ft-n${k}`}>{token}</R></span>
-            <span className={s.tokenValue}><R name={`ft-v${k}`}>{value}</R></span>
-          </div>
-        ))}
-      </div>
+      <Keys keys={[["tab", ["Tab"]]]} prefix="rk" />
     </div>
   );
 }
 
-/**
- * The close-up, in its own scene: the first control with its ring, the ring's
- * 2px width bracketed and its color named beside it.
- */
-export function FocusCloseUp({ copy }: { copy: FocusCopy }) {
+/** Scene 3: close on one ring: two pixels, the accent colour, the control's own corner. */
+export function CloseUp({ copy }: { copy: FocusCopy }) {
   return (
-    <div className={s.closeUp}>
-      <span className={s.probe} data-m="closeup">
-        <span className={s.closeButton} data-t="cu-b"><Button text={<R name="cu-t">{copy.continue}</R>} /></span>
-        <span className={s.closeRing} data-t="cu-r" />
-        <span className={s.bracket} data-t="wm" />
-        <span className={s.widthNote} data-t="wn"><R name="wn-t">--focus-ring-width 2</R></span>
-        <span className={s.colorNote} data-t="cn"><span className={s.swatch} /><R name="cn-t">--focus-ring-color</R></span>
+    <div className={s.closeStage}>
+      <span className={s.closeTarget} data-m="closeup">
+        <Button text={copy.continue} />
+        <span className={s.staticRing} />
+        <span className={s.note} data-place="top" data-t="cn-w">--focus-ring-width 2</span>
+        <span className={s.note} data-place="bottom" data-t="cn-c"><span className={s.swatch} />--focus-ring-color</span>
       </span>
+    </div>
+  );
+}
+
+/** The route's line between two marks of the shell: from one stop's right edge to the next stop's left edge. */
+function segment(from: Rect | undefined, to: Rect | undefined): string {
+  if (!from || !to) return "M0 0";
+  const a = { x: from.x + from.w / 2, y: from.y + from.h / 2 };
+  const b = { x: to.x + to.w / 2, y: to.y + to.h / 2 };
+  return `M${a.x} ${a.y}L${b.x} ${a.y}L${b.x} ${b.y}`;
+}
+
+/** Scene 4 (signature): the route through a real app shell; Tabs is one stop, crossfaded over it; Shift+Tab walks back. */
+export function RouteScene({ copy, g }: { copy: FocusCopy; g: SceneGeometry | null }) {
+  const marks = g?.scopes.route ?? {};
+  return (
+    <div className={s.routeStage} data-m="route" data-mark-scope="route">
+      <div className={s.shell} data-t="shell">
+        <div className={s.main}>
+          <span className={s.region} data-n="1">{`① ${copy.regions[0]}`}</span>
+          <Box border="hairline" padding="sm" radius="panel" surface="raised">
+            <div className={s.sidebar}>
+              {[[copy.chats, <MessageSquare key="i" size="sm" />], [copy.projects, <Folder key="i" size="sm" />], [copy.files, <Search key="i" size="sm" />]].map(([label, icon], k) => (
+                <Mark block key={k} n={`r${k}`}><NavRow active={k === 0} icon={icon} label={label} /></Mark>
+              ))}
+            </div>
+          </Box>
+        </div>
+        <div className={s.main}>
+          <span className={s.region} data-n="2">{`② ${copy.regions[1]}`}</span>
+          <Turn copy={copy} />
+          <span className={s.region} data-n="3">{`③ ${copy.regions[2]}`}</span>
+          <Composer copy={copy} live />
+        </div>
+      </div>
+      <svg className={s.route} aria-hidden="true" data-t="route-lines">
+        <path d={segment(marks.r2?.box, marks.field?.box)} data-t="seg-1" pathLength={100} />
+        <path d={segment(marks.field?.box, marks.send?.box)} data-t="seg-2" pathLength={100} />
+      </svg>
+      <div className={s.tabsLayer} data-t="tabs">
+        <Tabs defaultValue="summary">
+          <TabsList aria-label={copy.summary}>
+            {[copy.summary, copy.filesTab, copy.activity].map((label, k) => <Mark key={label} n={`t${k}`}><TabsTrigger value={k === 0 ? "summary" : `t${k}`}>{label}</TabsTrigger></Mark>)}
+          </TabsList>
+        </Tabs>
+        <Mark n="tp"><Button text={copy.open} variant="outline" /></Mark>
+        <span className={s.roving} data-t="rv-t">{copy.roving}</span>
+      </div>
+      <span className={s.indicator} data-t="ti" />
+      <span className={s.ring} data-t="sr" />
+      <Keys keys={[["tab", ["Tab"]], ["down", ["↓"]], ["right", ["→"]], ["back", ["⇧", "Tab"]]]} prefix="sk" />
     </div>
   );
 }

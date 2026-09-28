@@ -9,6 +9,9 @@ import type { SceneGeometry, SceneSpec } from "./types";
 import c from "../shared/ChapterHero.module.css";
 import s from "./SceneHero.module.css";
 
+/** The most a tile draws its component larger to fill it. */
+const TILE_ZOOM = 1.8;
+
 /** Fonts ready (layout depends on them). */
 function useFontsReady() {
   const [ready, setReady] = useState(false);
@@ -64,6 +67,19 @@ export function SceneHero({ spec, lang }: { spec: SceneSpec; lang: FoundationHer
   const ready = useFontsReady();
   const { layout } = frame;
   const g = useGeometry(root, layout, lang, ready);
+  // Wide poster: a small component is drawn larger to fill its tile (no tile mostly empty); tall tiles take their content's height.
+  useLayoutEffect(() => {
+    if (!g || layout !== "wide" || !root.current) return;
+    for (const tile of root.current.querySelectorAll<HTMLElement>("[data-tile]")) {
+      const child = tile.firstElementChild as HTMLElement | null;
+      if (!child) continue;
+      child.style.removeProperty("zoom");
+      const room = tile.getBoundingClientRect();
+      const own = child.getBoundingClientRect();
+      const fit = Math.min(TILE_ZOOM, (room.width * 0.86) / Math.max(1, own.width), (room.height * 0.8) / Math.max(1, own.height));
+      if (fit > 1.05) child.style.setProperty("zoom", String(Math.floor(fit * 100) / 100));
+    }
+  }, [g, layout]);
   const compiled = useMemo(() => (g ? sceneTracks(spec, g) : null), [g, spec]);
   const css = useMemo(() => (compiled ? compileTimeline(scope, compiled.beats, compiled.tracks) : ""), [compiled, scope]);
   const still = compiled?.still;
@@ -89,11 +105,12 @@ export function SceneHero({ spec, lang }: { spec: SceneSpec; lang: FoundationHer
           <div className={`${c.prelude} ${s.prelude}`} data-t="prelude">
             {spec.scenes.map((name) => {
               const region = spec.regions[name];
-              return <div className={`${c.cell} ${s.cell}`} data-cell={name} key={name}>{typeof region === "function" ? region(g) : region}</div>;
+              return <div className={`${c.cell} ${s.cell}`} data-cell={name} data-deep={spec.deep?.includes(name) ? "" : undefined} key={name}>{typeof region === "function" ? region(g) : region}</div>;
             })}
           </div>
           <div className={s.poster} data-layout={layout} data-t="poster" style={posterGrid}>
-            {Object.entries(spec.tiles).map(([id, tile]) => (
+            {/* A tile the canvas's grid leaves out is not drawn there (the phone poster drops some). */}
+            {Object.entries(spec.tiles).filter(([id]) => grid.areas.some((row) => row.split(/\s+/u).includes(id))).map(([id, tile]) => (
               <div className={s.tile} data-t={`tile-${id}`} data-tile={id} key={id} style={{ gridArea: id }}>{tile}</div>
             ))}
           </div>

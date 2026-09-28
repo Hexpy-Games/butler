@@ -67,6 +67,15 @@ export function sceneTracks(spec: SceneSpec, g0: SceneGeometry): { beats: number
   const regions: Track[] = spec.scenes.map((name) => {
     const [from = 0, to = finale] = spec.spans?.[name] ?? [];
     const shown = from > 0 ? 0 : 1;
+    if (spec.deep?.includes(name)) {
+      // Shown and hidden by a cut in scale: an opacity animation would flatten its 3D.
+      const on = { ...offset(name), s: 1 };
+      const off = { ...offset(name), s: 0.001 };
+      return {
+        select: `[data-cell="${name}"]`,
+        keys: [{ at: 0, ...(shown ? on : off) }, ...(from > 0 ? [{ at: from - 0.01, ...off }, { at: from, ...on }] : []), { at: to + 1.39, ...on }, { at: to + 1.4, ...off }, { at: loop + TRANSITION }, { at: loop + TRANSITION + 0.01, ...(shown ? on : off) }, { at: close }],
+      };
+    }
     return {
       select: `[data-cell="${name}"]`,
       keys: [

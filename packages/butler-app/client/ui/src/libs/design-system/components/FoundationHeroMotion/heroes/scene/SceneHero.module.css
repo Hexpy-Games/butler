@@ -11,6 +11,11 @@
   transform-style: preserve-3d;
 }
 
+/* A deep scene shows by scale (see sceneTimeline.ts), so it is opaque from the start. */
+.cell[data-deep] {
+  opacity: 1;
+}
+
 .poster {
   position: absolute;
   top: 0;

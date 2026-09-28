@@ -1,40 +1,46 @@
 import { useMemo } from "react";
 import type { FoundationHeroLang } from "../../FoundationHeroMotion";
-import { ChapterHero } from "../shared/ChapterHero";
+import { SceneHero } from "../scene/SceneHero";
+import type { SceneSpec } from "../scene/types";
 import { Intro } from "../shared/Intro";
-import type { ChapterSpec } from "../shared/types";
-import { focusBuilds } from "./focusBuilds";
 import { FOCUS_COPY, type FocusCopy } from "./focusCopy";
-import { focusPrelude } from "./focusPrelude";
-import { FocusCloseUp, FocusField } from "./FocusScenes";
-import s from "./FocusHero.module.css";
+import { CloseUp, RouteScene, RowScene, TitleWords } from "./FocusScenes";
+import { CloseTile, RowTile, ShellTile, TabsTile } from "./focusTiles";
+import { FOCUS_END, focusTracks } from "./focusTracks";
 
-/** The poster is laid out 1.2 times larger so the row and the four builds fill the frame. */
-const POSTER_ZOOM = 1.2;
-
-function spec(copy: FocusCopy): ChapterSpec {
+function spec(copy: FocusCopy): SceneSpec {
   return {
     code: "focus",
-    prelude: {
-      ...focusPrelude(copy),
-      cells: ["intro", "field", "closeup"],
-      regions: { intro: <Intro lead={copy.lead} title={copy.title} />, closeup: <FocusCloseUp copy={copy} /> },
+    scenes: ["intro", "row", "closeup", "route"],
+    regions: {
+      intro: <Intro lead={copy.lead} title={`${copy.title} ${copy.title2}`} titleNode={<TitleWords copy={copy} />} />,
+      row: <RowScene copy={copy} />,
+      closeup: <CloseUp copy={copy} />,
+      route: (g) => <RouteScene copy={copy} g={g} />,
     },
-    field: (g) => <FocusField copy={copy} g={g} />,
-    fieldColumns: 6,
-    posterZoom: POSTER_ZOOM,
-    product: s.product!,
-    builds: focusBuilds(copy),
+    tiles: {
+      shell: <ShellTile copy={copy} />,
+      tabs: <TabsTile copy={copy} />,
+      row: <RowTile copy={copy} />,
+      close: <CloseTile copy={copy} />,
+    },
+    poster: {
+      wide: { columns: "1.45fr 1fr", rows: "1fr 1fr 1fr", areas: ["shell tabs", "shell row", "shell close"] },
+      tall: { columns: "1fr", rows: "auto", areas: ["shell", "tabs", "row", "close"] },
+    },
+    posterZoom: { wide: 0.8, tall: 0.9 },
+    end: () => FOCUS_END,
+    tracks: focusTracks(copy),
   };
 }
 
 /**
- * 07 Focus ring, "one ring, moved by the keyboard": the intent; the Tab key
- * walks one accent ring through a row of real controls; a close-up names its
- * width and color; Shift+Tab walks it back; each component receives the ring
- * with its badge; the row and the focus tokens beside them.
+ * 07 Focus ring, "the route": one ring takes each control's corner; a close-up
+ * of its two pixels; then the ring travels a real app shell in reading order,
+ * Tab between regions and arrow keys inside one, Tabs as a single stop, and
+ * Shift+Tab walks the route back.
  */
 export function FocusHero({ lang }: { lang: FoundationHeroLang }) {
   const chapter = useMemo(() => spec(FOCUS_COPY[lang]), [lang]);
-  return <ChapterHero lang={lang} spec={chapter} />;
+  return <SceneHero lang={lang} spec={chapter} />;
 }

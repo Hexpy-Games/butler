@@ -1,40 +1,50 @@
-/* 07 Focus ring hero: the tab-order field (key cap, controls, width
-   close-up, tokens) and the product grid. Canvas px (see ../shared/grid.ts). */
+/* 07 Focus ring hero (v3 scenes). Canvas px (../shared/grid.ts). */
 
-.field {
-  display: grid;
-  align-content: center;
-  row-gap: var(--space-2xl);
-  padding: var(--space-2xl);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-popover);
-  background: var(--surface-raised);
+/* ---- Title: a ring around each word in turn ---- */
+
+.titleWords {
+  display: inline-flex;
+  gap: 0.28em;
 }
 
-.keyRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
+.word {
+  position: relative;
+  display: inline-block;
 }
 
-.stack {
+.wordRing {
+  position: absolute;
+  inset: 0.08em -0.12em 0.02em;
+  border-radius: var(--radius-pill);
+  box-shadow: var(--focus-ring);
+  opacity: 0;
+}
+
+/* ---- The ring: one overlay, sized and rounded per stop ---- */
+
+.ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-shadow: var(--focus-ring);
+  pointer-events: none;
+}
+
+.keys {
   display: inline-grid;
+  justify-self: center;
 }
 
-.stack[data-kind="count"] {
-  color: var(--text-tertiary);
-  font: var(--font-code);
-  font-size: var(--typo-caption-size);
-}
-
-.layer {
+.key {
   display: inline-grid;
   grid-area: 1 / 1;
+  justify-self: center;
 }
 
-/* The poster shows the first layer: the Tab key, 1/4. */
-.layer + .layer {
-  opacity: 0;
+.rowStage {
+  display: grid;
+  justify-items: center;
+  row-gap: var(--space-3xl);
 }
 
 .row {
@@ -42,116 +52,55 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-lg);
+  justify-content: center;
+  gap: var(--space-xl);
 }
 
-.probe {
-  position: relative;
-  display: inline-grid;
+[data-layout="tall"] .row {
+  max-inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
 }
 
-/* The poster's ring on the first control (the live ring token). */
-.posterRing {
-  position: absolute;
-  inset: 0;
-  border-radius: var(--radius-control);
-  box-shadow: var(--focus-ring);
-  pointer-events: none;
-}
+/* ---- Close-up ---- */
 
-/* The close-up scene: the first control, its ring, the ring's width bracketed. */
-.closeUp {
+.closeStage {
   display: grid;
   place-items: center;
 }
 
-.closeButton {
+.closeTarget {
+  position: relative;
   display: inline-grid;
 }
 
-.closeRing {
+.staticRing,
+.ringed::after {
   position: absolute;
   inset: 0;
   border-radius: var(--radius-control);
   box-shadow: var(--focus-ring);
   pointer-events: none;
-}
-.bracket {
-  position: absolute;
-  top: calc(50% - var(--space-xs));
-  right: 100%;
-  inline-size: var(--focus-ring-width);
-  block-size: var(--space-sm);
-  border-block: 1px solid var(--accent);
-  opacity: 0;
+  content: "";
 }
 
-.widthNote,
-.colorNote {
+.note {
   position: absolute;
-  right: calc(100% + var(--space-sm));
-  display: flex;
+  left: 50%;
+  display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
   color: var(--accent);
   font: var(--font-code);
-  font-size: var(--typo-caption-size);
-  opacity: 0;
+  font-size: var(--font-size-1);
+  translate: -50% 0;
   white-space: nowrap;
 }
 
-.widthNote {
-  top: calc(50% - var(--space-md));
+.note[data-place="top"] {
+  bottom: calc(100% + var(--space-md));
 }
 
-.colorNote {
-  top: calc(50% + var(--space-xs));
-}
-
-/* Tall: the notes stand far above and below the ring (the close-up fills
-   the portrait frame), the width bracket on the ring's top edge. */
-[data-layout="tall"] .bracket {
-  top: calc(var(--focus-ring-width) * -1);
-  right: auto;
-  left: calc(50% - var(--space-xs));
-  inline-size: var(--space-sm);
-  block-size: var(--focus-ring-width);
-  border-block: 0;
-  border-inline: 1px solid var(--accent);
-}
-
-[data-layout="tall"] .widthNote,
-[data-layout="tall"] .colorNote {
-  right: auto;
-  left: 50%;
-  translate: -50% 0;
-}
-
-[data-layout="tall"] .widthNote {
-  top: auto;
-  bottom: calc(100% + var(--space-4xl) * 2.5);
-}
-
-[data-layout="tall"] .colorNote {
-  top: calc(100% + var(--space-4xl) * 2.5);
-}
-
-/* Leaders from each note to the ring. */
-[data-layout="tall"] .widthNote::after,
-[data-layout="tall"] .colorNote::before {
-  position: absolute;
-  left: 50%;
-  block-size: calc(var(--space-4xl) * 2.5 - var(--space-sm));
-  border-left: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
-  content: "";
-}
-
-[data-layout="tall"] .widthNote::after {
-  top: calc(100% + var(--space-xs));
-}
-
-[data-layout="tall"] .colorNote::before {
-  bottom: calc(100% + var(--space-xs));
+.note[data-place="bottom"] {
+  top: calc(100% + var(--space-md));
 }
 
 .swatch {
@@ -161,47 +110,120 @@
   background: var(--focus-ring-color);
 }
 
-.tokens {
+/* ---- The route ---- */
+
+.routeStage {
+  position: relative;
+  display: grid;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: calc(var(--space-4xl) * 5.5) calc(
+      var(--space-4xl) * 10
+    );
+  align-items: start;
+  gap: var(--space-2xl);
+}
+
+[data-layout="tall"] .shell {
+  grid-template-columns: calc(var(--canvas-w) - var(--grid-margin) * 2);
+}
+
+.sidebar {
+  display: grid;
+  row-gap: var(--sidebar-row-spacing, var(--space-xs));
+}
+
+.main {
+  display: grid;
+  row-gap: var(--space-md);
+}
+
+.turn {
   display: grid;
   row-gap: var(--space-sm);
-  color: var(--text-secondary);
+}
+
+.region,
+.roving {
+  color: var(--text-tertiary);
   font: var(--font-code);
   font-size: var(--typo-caption-size);
 }
 
-.tokenRow {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-md);
+.typed {
+  position: absolute;
+  top: var(--space-md);
+  left: var(--space-md);
+  color: var(--text-primary);
 }
 
-.tokenValue {
-  color: var(--text-tertiary);
+.route {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: visible;
+  pointer-events: none;
 }
 
-.buildRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
+.route path {
+  fill: none;
+  stroke: var(--accent);
+  stroke-dasharray: 100;
+  stroke-width: 1.5;
 }
 
-.product {
-  grid-template-areas:
-    "button toggle"
-    "field field"
-    "tabs tabs";
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-content: space-between;
-  gap: var(--space-2xl) var(--grid-gutter);
+.tabsLayer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  row-gap: var(--space-xl);
+  translate: -50% -50%;
 }
 
-[data-layout="tall"] .product {
-  grid-template-areas:
-    "button"
-    "field"
-    "toggle"
-    "tabs";
-  grid-template-columns: minmax(0, 1fr);
-  align-content: start;
-  row-gap: var(--space-lg);
+.indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: var(--accent);
+}
+
+.keys:last-child {
+  margin-block-start: var(--space-2xl);
+}
+
+/* ---- Tiles ---- */
+
+.ringed {
+  position: relative;
+  display: inline-grid;
+}
+
+.ringed:has(> [data-slot="switch"])::after {
+  border-radius: var(--radius-pill);
+}
+
+.stop {
+  position: absolute;
+  top: calc(var(--space-sm) * -1);
+  right: calc(var(--space-sm) * -1);
+  display: grid;
+  place-items: center;
+  inline-size: var(--space-lg);
+  block-size: var(--space-lg);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--color-on-accent, var(--color-surface-base));
+  font: var(--font-code);
+  font-size: var(--font-size-1);
+}
+
+.tabsTile {
+  display: grid;
+  justify-items: center;
+  row-gap: var(--space-md);
 }

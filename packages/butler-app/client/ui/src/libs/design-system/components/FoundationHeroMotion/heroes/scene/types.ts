@@ -66,6 +66,11 @@ export interface SceneSpec {
    * next to a wide zoom-out stays hidden until the camera heads for it.
    */
   spans?: Partial<Record<string, [from: number, to?: number]>>;
+  /**
+   * Scenes that explode into depth (sheets on z): an opacity animation would
+   * flatten them, so they show and hide by a cut in scale instead of a fade.
+   */
+  deep?: string[];
   /** A layer fixed to the frame over the camera (a metronome along the bottom edge), kept through the finale. */
   hud?: ReactNode;
   /** Beat the last scene ends (the finale begins). */
