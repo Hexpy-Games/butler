@@ -64,10 +64,13 @@ fn dropping_the_lock_releases_it_despite_a_duplicated_file() {
 }
 
 /// A controller ends the lock holder only by its identity: its start (stable
-/// while it runs) and its executable. `terminate` refuses another start, as
-/// it would a reused id, and the holder's death releases the lock.
+/// while it runs) and its executable, compared as a file (see
+/// [`assert_executable_identity_is_the_file`]). `terminate` refuses another
+/// start, as it would a reused id, and the holder's death releases the lock.
+// test-category: security
 #[test]
 fn instance_lock_is_released_when_its_identified_holder_is_terminated() {
+    assert_executable_identity_is_the_file();
     let directory = scratch("lock-holder");
     let path = directory.join("instance.lock");
     let report = directory.join("report");
@@ -114,10 +117,8 @@ fn instance_lock_is_released_when_its_identified_holder_is_terminated() {
 
 /// macOS names a hard-linked executable by its most recent lookup, so the
 /// identity check compares files, not spellings: another link of the same
-/// file matches, a copy does not.
-// test-category: security
-#[test]
-fn executable_identity_is_the_file_not_its_name() {
+/// file matches, a copy or a missing file does not.
+fn assert_executable_identity_is_the_file() {
     let directory = scratch("executable-identity");
     let original = directory.join("butler-agent");
     let link = directory.join("butler-agent-link");
