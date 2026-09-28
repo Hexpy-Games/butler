@@ -191,24 +191,43 @@ fn supplied_registered_config_normalizes_without_secrets_or_io() {
 }
 
 #[test]
-fn refreshed_routine_preset_needs_a_servable_newer_model_and_falls_back_to_static() {
+fn refreshed_routine_preset_needs_a_cataloged_newer_model_and_falls_back_to_static() {
     let catalog = ModelCatalog::new().unwrap();
+    let newer_sol = ["gpt-6.1-sol".to_owned()];
+    let routine =
+        |snapshot: &ModelCatalogSnapshot, provider: &str, refreshed: Option<&[String]>| {
+            snapshot
+                .refreshed_routine_preset(provider, refreshed)
+                .unwrap()
+                .model
+        };
+    // Not cataloged yet: no provider is upgraded to a model Butler lacks.
     let snapshot = baseline(&catalog);
-    let routine = |provider: &str, refreshed: Option<&[String]>| {
-        snapshot
-            .refreshed_routine_preset(provider, refreshed)
-            .unwrap()
-            .model
-    };
-    // Not in the catalog, so Anthropic cannot serve it yet.
+    assert_eq!(
+        routine(&snapshot, "openai", Some(&newer_sol)),
+        "openai/gpt-6-sol"
+    );
     let newer_sonnet = ["claude-sonnet-5-1".to_owned()];
     assert_eq!(
-        routine("anthropic", Some(&newer_sonnet)),
+        routine(&snapshot, "anthropic", Some(&newer_sonnet)),
         "anthropic/claude-sonnet-5"
     );
-    let newer_sol = ["gpt-6.1-sol".to_owned()];
-    assert_eq!(routine("openai", Some(&newer_sol)), "openai/gpt-6.1-sol");
-    assert_eq!(routine("openai", None), "openai/gpt-6-sol");
+    // Cataloged (here as an extra model): the refresh upgrades to it.
+    let mut sol = snapshot
+        .find_model_metadata(Some("openai/gpt-6-sol"))
+        .unwrap();
+    sol.model_id = "gpt-6.1-sol".into();
+    sol.model_ref = "openai/gpt-6.1-sol".into();
+    let mut extended = input(Vec::new());
+    extended.extra_models = vec![sol];
+    let snapshot = catalog
+        .snapshot(extended, &LocaleCollation::new("en-US").unwrap())
+        .unwrap();
+    assert_eq!(
+        routine(&snapshot, "openai", Some(&newer_sol)),
+        "openai/gpt-6.1-sol"
+    );
+    assert_eq!(routine(&snapshot, "openai", None), "openai/gpt-6-sol");
     assert_eq!(
         catalog.routine_preset("google").unwrap().model,
         "google/gemini-3.8-flash"

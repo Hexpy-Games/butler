@@ -1,18 +1,20 @@
 //! Token totals and list-price cost estimates over the prompt-usage log.
 //!
 //! Each `metrics/prompt-cache-usage.jsonl` row is one provider request. A
-//! row is priced with its model's catalog price band for that request's prompt
-//! size; models without a published price are reported, not guessed.
+//! row is priced with its model's catalog price for that request's prompt
+//! size and day. If any request cannot be priced (no published price, an
+//! expired time-limited price, or cache tokens without a cache price) the
+//! estimate is unavailable rather than partial.
 
-use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+mod session_index;
+
+use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
-use butler_core::json_lines::visit_json_lines;
-use butler_models::models::{ModelPricing, UsageAuthMode};
+use butler_models::models::{ModelPricing, RequestTokens, UsageAuthMode};
 
-const USAGE_FILE: &str = "metrics/prompt-cache-usage.jsonl";
+pub use session_index::{SessionUsage, SessionUsageIndex, SessionUsageView};
 
 /// One prompt-usage row, as written by `PromptUsageMetrics`.
 #[derive(Clone, Debug, Deserialize)]
@@ -24,11 +26,17 @@ pub struct UsageEvent {
     pub model: String,
     /// Usage scope, `btcc-guided:<runtime session id>` for conversation turns.
     pub scope: String,
-    /// Prompt tokens, cached ones included.
+    /// Prompt tokens, cached and cache-written ones included.
     pub prompt_tokens: f64,
     /// Prompt tokens served from the provider cache.
     #[serde(default)]
     pub cached_tokens: f64,
+    /// Prompt tokens written to the provider cache, when reported.
+    #[serde(default)]
+    pub cache_write_tokens: Option<f64>,
+    /// The part of `cache_write_tokens` written to a 1-hour cache.
+    #[serde(default, rename = "cacheWrite1hTokens")]
+    pub cache_write_1h_tokens: Option<f64>,
     /// Prompt plus output tokens, when reported.
     #[serde(default)]
     pub total_tokens: Option<f64>,
@@ -41,16 +49,26 @@ pub struct UsageEvent {
 }
 
 impl UsageEvent {
-    fn input(&self) -> u64 {
-        whole(self.prompt_tokens)
+    /// The request's token counts.
+    pub fn tokens(&self) -> RequestTokens {
+        let input = whole(self.prompt_tokens);
+        RequestTokens {
+            input,
+            cached: whole(self.cached_tokens).min(input),
+            cache_write: self.cache_write_tokens.map_or(0, whole),
+            cache_write_1h: self.cache_write_1h_tokens.map_or(0, whole),
+            // Output (reasoning included): total minus prompt when reported.
+            output: self
+                .total_tokens
+                .map_or(0, |total| whole(total - self.prompt_tokens)),
+        }
     }
-    fn cached(&self) -> u64 {
-        whole(self.cached_tokens).min(self.input())
-    }
-    /// Output tokens (reasoning included): total minus prompt when reported.
-    fn output(&self) -> u64 {
-        self.total_tokens
-            .map_or(0, |total| whole(total - self.prompt_tokens))
+
+    /// The UTC day (`YYYY-MM-DD`) of the request.
+    fn day(&self) -> String {
+        chrono::DateTime::<chrono::Utc>::from_timestamp_millis(self.ts)
+            .map(|time| time.format("%Y-%m-%d").to_string())
+            .unwrap_or_default()
     }
 }
 
@@ -62,13 +80,13 @@ fn whole(value: f64) -> u64 {
     }
 }
 
-/// Why a cost estimate is partial or missing.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+/// Why no cost estimate is available.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CostReason {
-    /// Some models used have no published price; `usd` covers the priced ones.
-    PartialPricing,
-    /// None of the models used has a published price.
+    /// Cached or cache-written tokens of a model with no published cache price.
+    CachePriceUnknown,
+    /// A model with no published price, or whose time-limited price ended.
     PricingUnknown,
 }
 
@@ -76,7 +94,7 @@ impl CostReason {
     /// The serde (`snake_case`) name.
     pub fn code(self) -> &'static str {
         match self {
-            Self::PartialPricing => "partial_pricing",
+            Self::CachePriceUnknown => "cache_price_unknown",
             Self::PricingUnknown => "pricing_unknown",
         }
     }
@@ -85,13 +103,13 @@ impl CostReason {
 /// Estimated list-price cost of some usage.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct UsageCostView {
-    /// Whether `usd` holds an estimate.
+    /// Whether `usd` holds an estimate covering every request.
     pub available: bool,
-    /// Estimated USD at catalog list prices.
+    /// Estimated USD at catalog list prices; `None` when unavailable.
     pub usd: Option<f64>,
-    /// Models whose usage is included in `usd`.
+    /// Models whose every request was priced.
     pub priced_model_refs: Vec<String>,
-    /// Set when the estimate is partial or missing.
+    /// Why the estimate is unavailable.
     pub reason: Option<CostReason>,
     /// Latest price-page date among the priced models.
     #[serde(skip)]
@@ -99,14 +117,16 @@ pub struct UsageCostView {
 }
 
 /// Accumulates tokens and priced cost over usage rows.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct UsageTotals {
     /// Requests added.
     pub request_count: u64,
-    /// Prompt tokens, cached ones included.
+    /// Prompt tokens, cached and cache-written ones included.
     pub input_tokens: u64,
     /// Prompt tokens served from the provider cache.
     pub cached_input_tokens: u64,
+    /// Prompt tokens written to the provider cache.
+    pub cache_write_tokens: u64,
     /// Output tokens, reasoning included.
     pub output_tokens: u64,
     /// Reasoning tokens; `None` when no request reported them.
@@ -116,121 +136,61 @@ pub struct UsageTotals {
     usd: f64,
     priced: BTreeSet<String>,
     unpriced: BTreeSet<String>,
+    reason: Option<CostReason>,
     as_of: Option<String>,
 }
 
 impl UsageTotals {
     /// Adds one row, priced with `pricing` (the model's catalog price).
     pub fn add(&mut self, event: &UsageEvent, pricing: Option<&ModelPricing>) {
+        let tokens = event.tokens();
         self.request_count += 1;
-        self.input_tokens += event.input();
-        self.cached_input_tokens += event.cached();
-        self.output_tokens += event.output();
+        self.input_tokens += tokens.input;
+        self.cached_input_tokens += tokens.cached;
+        self.cache_write_tokens += tokens.cache_write;
+        self.output_tokens += tokens.output;
         if let Some(reasoning) = event.reasoning_tokens {
             *self.reasoning_tokens.get_or_insert(0) += whole(reasoning);
         }
         self.last_ts = self.last_ts.max(Some(event.ts));
-        match pricing.and_then(|pricing| Some((pricing.prices_for(event.input())?, pricing))) {
-            Some((prices, pricing)) => {
-                self.usd += prices.estimate_usd(event.input(), event.cached(), event.output());
+        match price(event, &tokens, pricing) {
+            Ok(usd) => {
+                self.usd += usd;
                 self.priced.insert(event.model.clone());
-                self.as_of = self.as_of.clone().max(pricing.as_of().map(str::to_owned));
+                let as_of = pricing.and_then(ModelPricing::as_of).map(str::to_owned);
+                self.as_of = self.as_of.clone().max(as_of);
             }
-            None => {
+            Err(reason) => {
                 self.unpriced.insert(event.model.clone());
+                self.reason = self.reason.max(Some(reason));
             }
         }
     }
 
     /// The cost estimate over everything added.
     pub fn cost(&self) -> UsageCostView {
-        let reason = if self.priced.is_empty() && !self.unpriced.is_empty() {
-            Some(CostReason::PricingUnknown)
-        } else if !self.unpriced.is_empty() {
-            Some(CostReason::PartialPricing)
-        } else {
-            None
-        };
-        let available = reason != Some(CostReason::PricingUnknown);
+        let available = self.reason.is_none();
         UsageCostView {
             available,
             usd: available.then_some(self.usd),
-            priced_model_refs: self.priced.iter().cloned().collect(),
-            reason,
+            priced_model_refs: self.priced.difference(&self.unpriced).cloned().collect(),
+            reason: self.reason,
             as_of: self.as_of.clone(),
         }
     }
 }
 
-/// `SessionView.usage`: one conversation's tokens and estimated cost.
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct SessionUsageView {
-    /// Prompt tokens, cached ones included.
-    pub input_tokens: u64,
-    /// Prompt tokens served from the provider cache.
-    pub cached_input_tokens: u64,
-    /// Output tokens, reasoning included.
-    pub output_tokens: u64,
-    /// `None` when no request of the session reported reasoning tokens.
-    pub reasoning_tokens: Option<u64>,
-    /// Provider requests counted.
-    pub request_count: u64,
-    /// List-price estimate of the tokens above.
-    pub cost: UsageCostView,
-    /// Time of the latest counted request, `None` before the first.
-    pub updated_at: Option<String>,
-}
-
-/// Session usage plus the billing mode of its latest request per model.
-pub struct SessionUsage {
-    /// `SessionView.usage`.
-    pub view: SessionUsageView,
-    /// Billing mode of the latest request per model ref.
-    pub auth_modes: BTreeMap<String, UsageAuthMode>,
-}
-
-/// Reads one runtime session's usage (its `btcc-guided:<id>` rows).
-pub fn read_session_usage(
-    data_root: &Path,
-    runtime_session_id: &str,
-    pricing: &dyn Fn(&str) -> Option<ModelPricing>,
-) -> SessionUsage {
-    let scope = format!("btcc-guided:{runtime_session_id}");
-    let mut totals = UsageTotals::default();
-    let mut prices = BTreeMap::<String, Option<ModelPricing>>::new();
-    let mut auth_modes = BTreeMap::new();
-    visit_json_lines(&data_root.join(USAGE_FILE), |value| {
-        let Ok(event) = UsageEvent::deserialize(value) else {
-            return;
-        };
-        if event.scope != scope {
-            return;
-        }
-        let price = prices
-            .entry(event.model.clone())
-            .or_insert_with(|| pricing(&event.model));
-        totals.add(&event, price.as_ref());
-        if let Some(mode) = event.auth_mode {
-            auth_modes.insert(event.model.clone(), mode);
-        }
-    });
-    SessionUsage {
-        view: SessionUsageView {
-            input_tokens: totals.input_tokens,
-            cached_input_tokens: totals.cached_input_tokens,
-            output_tokens: totals.output_tokens,
-            reasoning_tokens: totals.reasoning_tokens,
-            request_count: totals.request_count,
-            cost: totals.cost(),
-            updated_at: totals.last_ts.and_then(iso),
-        },
-        auth_modes,
-    }
-}
-
-fn iso(epoch_ms: i64) -> Option<String> {
-    chrono::DateTime::<chrono::Utc>::from_timestamp_millis(epoch_ms)
-        .map(|time| time.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
+fn price(
+    event: &UsageEvent,
+    tokens: &RequestTokens,
+    pricing: Option<&ModelPricing>,
+) -> Result<f64, CostReason> {
+    let prices = pricing
+        .and_then(|pricing| pricing.prices_at(tokens.input, &event.day()))
+        .ok_or(CostReason::PricingUnknown)?;
+    prices
+        .estimate_usd(tokens)
+        .ok_or(CostReason::CachePriceUnknown)
 }
 
 #[cfg(test)]

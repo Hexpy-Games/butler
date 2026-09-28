@@ -143,6 +143,8 @@ pub struct PromptUsageMetricInput<'a> {
     pub usage_attribution: Option<&'a PromptUsageAttribution<'a>>,
     /// Reasoning tokens the provider reported; a subset of the output tokens.
     pub reasoning_tokens: Option<f64>,
+    /// The part of `cache_write_tokens` written to a 1-hour cache (Anthropic).
+    pub cache_write_1h_tokens: Option<f64>,
     /// How the request was billed.
     pub auth_mode: Option<UsageAuthMode>,
 }

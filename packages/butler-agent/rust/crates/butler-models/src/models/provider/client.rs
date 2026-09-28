@@ -223,8 +223,7 @@ impl ModelProvider {
             observer.identity(identity);
         }
         if let Some(usage) = &result.usage {
-            let mode = config.auth.usage_mode(&config.metadata.provider_id);
-            super::round_usage::record(self.prompt_metrics.as_ref(), &request, usage, mode)?;
+            super::round_usage::record(self, &request, usage, &config)?;
         }
         self.observations
             .response(&config.metadata.provider_id, &config.metadata.model_ref);

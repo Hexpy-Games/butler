@@ -54,8 +54,8 @@ pub use update::{
     AgentArchiveUpdateService, AgentUpdateRequest, AppUpdateService, UpdateError, UpdateRequest,
 };
 pub use usage_cost::{
-    CostReason, SessionUsage, SessionUsageView, UsageCostView, UsageEvent, UsageTotals,
-    read_session_usage,
+    CostReason, SessionUsage, SessionUsageIndex, SessionUsageView, UsageCostView, UsageEvent,
+    UsageTotals,
 };
 pub use web_search_metrics::WebSearchMetrics;
 

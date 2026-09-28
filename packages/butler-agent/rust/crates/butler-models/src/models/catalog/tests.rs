@@ -28,11 +28,14 @@ fn every_static_model_has_a_tier_and_pricing() {
             Some(ModelPricing::Published {
                 base,
                 prompt_tiers,
+                valid_until,
                 source_url,
                 as_of,
+                ..
             }) => {
                 assert!(source_url.starts_with("https://"), "{}", model.model_ref);
                 assert_eq!(as_of.len(), 10, "{}", model.model_ref);
+                assert!(valid_until.as_ref().is_none_or(|day| day.len() == 10));
                 assert_prices(&model.model_ref, base);
                 let mut previous = 0;
                 for tier in prompt_tiers {
@@ -52,21 +55,78 @@ fn every_static_model_has_a_tier_and_pricing() {
     }
 }
 
+/// Positive prices, cache hits below and cache writes at or above the input
+/// price, each written with at most six decimals (no float noise).
 fn assert_prices(model_ref: &str, prices: &TokenPrices) {
     assert!(prices.input_per_mtok_usd > 0.0, "{model_ref}");
     assert!(prices.output_per_mtok_usd > 0.0, "{model_ref}");
     if let Some(cached) = prices.cached_input_per_mtok_usd {
         assert!(cached <= prices.input_per_mtok_usd, "{model_ref}");
     }
+    for write in [
+        prices.cache_write_per_mtok_usd,
+        prices.cache_write_1h_per_mtok_usd,
+    ]
+    .into_iter()
+    .flatten()
+    {
+        assert!(write >= prices.input_per_mtok_usd, "{model_ref}");
+    }
+    for price in [
+        Some(prices.input_per_mtok_usd),
+        prices.cached_input_per_mtok_usd,
+        prices.cache_write_per_mtok_usd,
+        Some(prices.output_per_mtok_usd),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        assert!(
+            price
+                .to_string()
+                .split('.')
+                .nth(1)
+                .is_none_or(|d| d.len() <= 6),
+            "{model_ref} {price}"
+        );
+    }
 }
 
 #[test]
-fn owner_confirmed_routine_presets_are_pinned() {
+fn subscription_plans_bill_api_keys_against_quota() {
+    let catalog = catalog();
+    for provider in setup_providers(&catalog) {
+        let expected = if matches!(provider.as_str(), "zai" | "opencode-go") {
+            ApiKeyBilling::Subscription
+        } else {
+            ApiKeyBilling::PerToken
+        };
+        assert_eq!(catalog.api_key_billing(&provider), expected, "{provider}");
+        if expected == ApiKeyBilling::Subscription {
+            for model in catalog
+                .models
+                .iter()
+                .filter(|model| model.provider_id == provider)
+            {
+                assert!(
+                    matches!(&model.pricing, Some(ModelPricing::Unknown { reason, .. }) if reason == "subscription_plan"),
+                    "{} shows a per-token price on a subscription plan",
+                    model.model_ref
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn confirmed_routine_presets_are_pinned() {
     let catalog = catalog();
     for (provider, model) in [
         ("openai", "openai/gpt-6-sol"),
         ("anthropic", "anthropic/claude-sonnet-5"),
         ("google", "google/gemini-3.8-flash"),
+        ("zai", "zai/glm-5"),
+        ("zai-api", "zai-api/glm-5"),
     ] {
         let preset = catalog.routine_preset(provider).unwrap();
         assert_eq!(preset.model, model);
@@ -146,35 +206,73 @@ fn supported_image_models_carry_a_complete_sourced_capability() {
 }
 
 #[test]
-fn pricing_picks_the_prompt_band_and_estimates_usd() {
-    let pricing = catalog().pricing("openai/gpt-6-sol").unwrap();
-    let short = pricing.prices_for(272_000).unwrap();
-    let long = pricing.prices_for(272_001).unwrap();
+fn pricing_picks_the_prompt_band_day_and_cache_rates() {
+    let catalog = catalog();
+    let sol = catalog.pricing("openai/gpt-6-sol").unwrap();
+    let short = sol.prices_at(272_000, "2026-09-28").unwrap();
+    let long = sol.prices_at(272_001, "2026-09-28").unwrap();
     assert_eq!(short.input_per_mtok_usd, 2.0);
+    assert_eq!(short.cache_write_per_mtok_usd, Some(2.5));
     assert_eq!(long.input_per_mtok_usd, 4.0);
-    // 1M prompt tokens of which 400k cached, 100k output.
-    let usd = short.estimate_usd(1_000_000, 400_000, 100_000);
-    assert!((usd - (0.6 * 2.0 + 0.4 * 0.2 + 0.1 * 10.0)).abs() < 1e-9);
+    assert_eq!(long.cache_write_per_mtok_usd, Some(5.0));
+    // 1M prompt tokens: 400k cached, 100k written to the cache; 100k output.
+    let tokens = RequestTokens {
+        input: 1_000_000,
+        cached: 400_000,
+        cache_write: 100_000,
+        cache_write_1h: 0,
+        output: 100_000,
+    };
+    let usd = short.estimate_usd(&tokens).unwrap();
+    assert!((usd - (0.5 * 2.0 + 0.4 * 0.2 + 0.1 * 2.5 + 0.1 * 10.0)).abs() < 1e-9);
+    let sonnet = catalog.pricing("anthropic/claude-sonnet-5").unwrap();
+    let sonnet = sonnet.prices_at(1, "2026-09-28").unwrap();
+    let hour = RequestTokens {
+        cache_write_1h: 100_000,
+        ..tokens
+    };
+    let usd = sonnet.estimate_usd(&hour).unwrap();
+    assert!((usd - (0.5 * 2.0 + 0.4 * 0.2 + 0.1 * 4.0 + 0.1 * 10.0)).abs() < 1e-9);
+    // Cache writes on a model with no published cache-write price.
+    let mini = catalog.pricing("openai/gpt-5.4-mini").unwrap();
     assert!(
-        catalog()
+        mini.prices_at(1, "2026-09-28")
+            .unwrap()
+            .estimate_usd(&tokens)
+            .is_none()
+    );
+    let flash = catalog.pricing("google/gemini-3.8-flash").unwrap();
+    assert_eq!(
+        flash.prices_at(1, "2026-12-31").unwrap().input_per_mtok_usd,
+        0.75
+    );
+    assert_eq!(
+        flash.prices_at(1, "2027-01-01").unwrap().input_per_mtok_usd,
+        1.5
+    );
+    let promo = catalog.pricing("openai/gpt-5.6-sol").unwrap();
+    assert!(promo.prices_at(1, "2026-11-21").is_some());
+    assert!(promo.prices_at(1, "2026-11-22").is_none());
+    assert!(
+        catalog
             .pricing("zai/glm-5.3")
             .unwrap()
-            .prices_for(1)
+            .prices_at(1, "2026-09-28")
             .is_none()
     );
 }
 
-/// Provider, static preset, refreshed ids, servable check, expected model.
+/// Provider, static preset, refreshed ids, "runs at effort" check, expected model.
 type Case<'a> = (
     &'a str,
     &'a ModelPreset,
     &'a [&'a str],
-    &'a dyn Fn(&str) -> bool,
+    &'a dyn Fn(&str, ReasoningEffort) -> bool,
     &'a str,
 );
 
 #[test]
-fn routine_preset_upgrades_only_to_a_newer_servable_same_tier_model() {
+fn routine_preset_upgrades_only_to_a_newer_same_tier_model_at_the_same_effort() {
     let sol = ModelPreset {
         model: "openai/gpt-6-sol".into(),
         effort: ReasoningEffort::Medium,
@@ -191,9 +289,10 @@ fn routine_preset_upgrades_only_to_a_newer_servable_same_tier_model() {
         model: "kimi/kimi-k2.7-code".into(),
         effort: ReasoningEffort::Medium,
     };
-    let all = |_: &str| true;
-    let none = |_: &str| false;
-    let cases: [Case<'_>; 8] = [
+    let all = |_: &str, _: ReasoningEffort| true;
+    let none = |_: &str, _: ReasoningEffort| false;
+    let no_medium = |_: &str, effort: ReasoningEffort| effort != ReasoningEffort::Medium;
+    let cases: [Case<'_>; 9] = [
         (
             "openai",
             &sol,
@@ -209,6 +308,13 @@ fn routine_preset_upgrades_only_to_a_newer_servable_same_tier_model() {
             "openai/gpt-6-sol",
         ),
         ("openai", &sol, &["gpt-6.1-sol"], &none, "openai/gpt-6-sol"),
+        (
+            "openai",
+            &sol,
+            &["gpt-6.1-sol"],
+            &no_medium,
+            "openai/gpt-6-sol",
+        ),
         (
             "anthropic",
             &sonnet,
@@ -239,12 +345,12 @@ fn routine_preset_upgrades_only_to_a_newer_servable_same_tier_model() {
         ),
         ("kimi", &kimi, &["kimi-k3.1"], &all, "kimi/kimi-k2.7-code"),
     ];
-    for (provider, preset, refreshed, servable, expected) in cases {
+    for (provider, preset, refreshed, runs, expected) in cases {
         let refreshed = refreshed
             .iter()
             .map(|id| (*id).to_owned())
             .collect::<Vec<_>>();
-        let upgraded = upgrade_routine_preset(provider, preset, &refreshed, servable);
+        let upgraded = upgrade_routine_preset(provider, preset, &refreshed, runs);
         assert_eq!(upgraded.model, expected, "{provider} {refreshed:?}");
         assert_eq!(upgraded.effort, ReasoningEffort::Medium);
     }

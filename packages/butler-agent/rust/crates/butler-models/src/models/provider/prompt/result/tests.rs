@@ -39,5 +39,6 @@ fn provider_usage_decoding_keeps_absent_totals_and_all_input_classes() {
         assert_eq!(usage.prompt_tokens, Some(7.0));
         assert_eq!(usage.cached_tokens, 2.0);
         assert_eq!(usage.total_tokens, Some(10.0));
+        assert_eq!(decoded.cache_write_tokens, Some(Some(1.0)));
     }
 }

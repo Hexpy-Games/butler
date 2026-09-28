@@ -34,6 +34,9 @@ pub(super) fn line(
         }),
         total_tokens: input.total_tokens,
         reasoning_tokens: input.reasoning_tokens.filter(|value| value.is_finite()),
+        cache_write_1h_tokens: input
+            .cache_write_1h_tokens
+            .filter(|value| value.is_finite()),
         auth_mode: input.auth_mode,
         prompt_cache_key: input.prompt_cache_key,
         prompt_cache_retention: input
@@ -74,6 +77,8 @@ struct Event<'a> {
     total_tokens: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_tokens: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_write_1h_tokens: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     auth_mode: Option<UsageAuthMode>,
     #[serde(skip_serializing_if = "Option::is_none")]

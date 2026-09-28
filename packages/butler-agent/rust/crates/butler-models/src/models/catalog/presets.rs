@@ -25,10 +25,21 @@ pub struct ProviderPresets {
     pub routine: ModelPreset,
 }
 
+/// How a provider bills requests made with an API key.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApiKeyBilling {
+    /// Per token, at the model's list price.
+    PerToken,
+    /// Against a subscription plan's quota (e.g. the GLM Coding Plan).
+    Subscription,
+}
+
 /// Static per-provider catalog entry.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct StaticProviderEntry {
     pub(crate) provider_id: String,
+    pub(crate) api_key_billing: ApiKeyBilling,
     pub(crate) presets: ProviderPresets,
 }
 
@@ -91,15 +102,15 @@ fn numeric_version(model: &str) -> Option<Vec<u64>> {
 
 /// The routine preset after a provider model-list refresh.
 ///
-/// `refreshed` lists the model ids (or refs) the provider returned; `servable`
-/// says whether Butler can run a model ref. A candidate replaces the static
-/// preset only when its tier matches the static model's, its version is
-/// higher, and it is servable. The effort stays the static one.
+/// `refreshed` lists the model ids (or refs) the provider returned. A
+/// candidate replaces the static preset only when its tier matches the static
+/// model's, its version is higher, and `runs(model_ref, effort)` confirms
+/// Butler can run it at the static preset's effort, which it keeps.
 pub fn upgrade_routine_preset(
     provider_id: &str,
     static_preset: &ModelPreset,
     refreshed: &[String],
-    servable: &dyn Fn(&str) -> bool,
+    runs: &dyn Fn(&str, ReasoningEffort) -> bool,
 ) -> ModelPreset {
     let current = parse_model_ref(&static_preset.model);
     let Some((tier, mut best_version)) = infer_tier_and_version(provider_id, &current.model_id)
@@ -116,7 +127,10 @@ pub fn upgrade_routine_preset(
             continue;
         };
         let model_ref = format!("{provider_id}/{model_id}");
-        if candidate_tier == tier && version > best_version && servable(&model_ref) {
+        if candidate_tier == tier
+            && version > best_version
+            && runs(&model_ref, static_preset.effort)
+        {
             best_version = version;
             best = Some(model_ref);
         }

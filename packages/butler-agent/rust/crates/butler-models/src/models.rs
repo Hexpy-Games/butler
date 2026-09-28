@@ -51,11 +51,12 @@ pub use provider::{
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use catalog::model_identity_key;
 pub use catalog::{
-    CredentialView, HostedApiShape, ImageLimitField, ImageLimitSources, ImageProbeEvidence,
-    LocalModelConfig, LocalModelPlatform, LocalModelSource, ModelCatalogSnapshot,
-    ModelCatalogSnapshotInput, ModelPreset, ModelPricing, ModelProviderMetadata, ModelTier,
-    ParsedModelRef, ParsedModelRefSource, PromptPriceTier, ProviderAuthMethod, ProviderPresets,
-    ReasoningEffort, RegisteredHostedModelConfig, TokenEstimate, TokenEstimateInput,
+    ApiKeyBilling, CredentialView, HostedApiShape, ImageLimitField, ImageLimitSources,
+    ImageProbeEvidence, LocalModelConfig, LocalModelPlatform, LocalModelSource,
+    ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelPreset, ModelPricing,
+    ModelProviderMetadata, ModelTier, NextPrices, ParsedModelRef, ParsedModelRefSource,
+    PromptPriceTier, ProviderAuthMethod, ProviderPresets, ReasoningEffort,
+    RegisteredHostedModelConfig, RequestTokens, TokenEstimate, TokenEstimateInput,
     TokenEstimatorKind, TokenPrices, default_hosted_provider_api_base_url,
     normalize_hosted_api_base_url, normalize_local_model_config, normalize_registered_hosted_model,
     parse_model_ref, registered_hosted_model_metadata, upgrade_routine_preset,
@@ -113,10 +114,29 @@ impl ModelCatalog {
         self.static_catalog.routine_preset(provider_id).cloned()
     }
 
-    /// The official list price of a static catalog model, `None` when the
-    /// model is not in the static catalog.
+    /// The official list price of a static catalog model ref or declared
+    /// alias, `None` when the model is not in the static catalog.
     pub fn pricing(&self, model_ref: &str) -> Option<ModelPricing> {
         self.static_catalog.pricing(model_ref)
+    }
+
+    /// How a request to `provider_id` with credential `auth` is billed:
+    /// Codex logins and subscription-plan API keys (GLM Coding Plan,
+    /// OpenCode Go) against plan quota, other API keys per token.
+    pub fn usage_auth_mode(&self, provider_id: &str, auth: ProviderAuthMode) -> UsageAuthMode {
+        if provider_id == "local" {
+            return UsageAuthMode::Local;
+        }
+        match auth {
+            ProviderAuthMode::CodexSubscription | ProviderAuthMode::CodexOauth => {
+                UsageAuthMode::Subscription
+            }
+            ProviderAuthMode::ApiKey => match self.static_catalog.api_key_billing(provider_id) {
+                ApiKeyBilling::PerToken => UsageAuthMode::ApiKey,
+                ApiKeyBilling::Subscription => UsageAuthMode::Subscription,
+            },
+            ProviderAuthMode::None => UsageAuthMode::Unknown,
+        }
     }
 
     pub fn snapshot(

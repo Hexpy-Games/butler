@@ -115,8 +115,7 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
                         diagnostics::network(provider, api, &error.to_string())
                     })?;
                     progress.record_progress();
-                    let response = checked(response, provider, api).await?;
-                    observe_quota(&response, provider, quota, clock);
+                    let response = checked(response, provider, api, (quota, clock)).await?;
                     match mode {
                         ResponseMode::Json { tolerate_invalid } => {
                             json(response, provider, api, tolerate_invalid).await
@@ -198,13 +197,14 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
     }
 }
 
-/// Reports the quota headers of a successful response, if it carried any.
-fn observe_quota(
-    response: &Response,
-    provider: &str,
-    quota: Option<&dyn super::ProviderQuotaSink>,
-    clock: &dyn ProviderClock,
-) {
+/// Where a response's quota headers go, and the clock that dates them.
+type QuotaObserver<'a> = (
+    Option<&'a dyn super::ProviderQuotaSink>,
+    &'a dyn ProviderClock,
+);
+
+/// Reports a response's quota headers, if it carried any.
+fn observe_quota(response: &Response, provider: &str, (quota, clock): QuotaObserver<'_>) {
     if let Some(sink) = quota
         && let Some(reading) =
             super::parse_quota_headers(provider, response.headers(), clock.now_epoch_millis())
@@ -265,11 +265,18 @@ async fn json(
     }
 }
 
+/// The response when successful, else its provider error. Quota headers are
+/// read from successful and rate-limited (429) replies, so an exhausted plan
+/// shows at once.
 async fn checked(
     response: Response,
     provider: &str,
     api: &str,
+    quota: QuotaObserver<'_>,
 ) -> Result<Response, Box<ProviderRequestError>> {
+    if response.status().is_success() || response.status().as_u16() == 429 {
+        observe_quota(&response, provider, quota);
+    }
     if response.status().is_success() {
         return Ok(response);
     }

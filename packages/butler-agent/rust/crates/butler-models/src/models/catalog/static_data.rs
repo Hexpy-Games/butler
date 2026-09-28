@@ -25,6 +25,16 @@ impl StaticCatalog {
             .map(|entry| &entry.presets.routine)
     }
 
+    /// How the provider bills API-key requests; per token when unlisted.
+    pub(crate) fn api_key_billing(&self, provider_id: &str) -> super::ApiKeyBilling {
+        self.providers
+            .iter()
+            .find(|entry| entry.provider_id == provider_id)
+            .map_or(super::ApiKeyBilling::PerToken, |entry| {
+                entry.api_key_billing
+            })
+    }
+
     /// The provider's presets, for the catalog view.
     pub(super) fn provider_presets(&self, provider_id: &str) -> Option<super::ProviderPresets> {
         self.providers

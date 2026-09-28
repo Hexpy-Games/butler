@@ -3,6 +3,7 @@ mod generation;
 mod local;
 mod lookup;
 mod presets;
+mod pricing;
 mod registered;
 mod static_data;
 
@@ -15,16 +16,15 @@ use butler_core::locale::LocaleCollation;
 
 use super::{ModelCatalogError, tokenizer::TokenizerOwner};
 
-pub use facts::{
-    ImageLimitField, ImageLimitSources, ModelPricing, ModelTier, PromptPriceTier, TokenPrices,
-};
+pub use facts::{ImageLimitField, ImageLimitSources, ModelTier};
 pub use local::{
     LocalModelConfig, LocalModelPlatform, LocalModelSource, normalize_local_model_config,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use lookup::model_identity_key;
 pub use lookup::{default_hosted_provider_api_base_url, parse_model_ref};
-pub use presets::{ModelPreset, ProviderPresets, upgrade_routine_preset};
+pub use presets::{ApiKeyBilling, ModelPreset, ProviderPresets, upgrade_routine_preset};
+pub use pricing::{ModelPricing, NextPrices, PromptPriceTier, RequestTokens, TokenPrices};
 pub use registered::{
     ImageProbeEvidence, RegisteredHostedModelConfig, normalize_hosted_api_base_url,
     normalize_registered_hosted_model, registered_hosted_model_metadata,
@@ -299,8 +299,8 @@ impl ModelCatalogSnapshot {
 
     /// The routine preset after a provider model-list refresh. `refreshed`
     /// holds the ids a successful refresh returned (`None` when the refresh
-    /// failed or did not run): a newer same-tier model this snapshot can
-    /// serve replaces the static preset.
+    /// failed or did not run): a newer same-tier model this snapshot has
+    /// cataloged and can run at the preset's effort replaces the static preset.
     pub fn refreshed_routine_preset(
         &self,
         provider_id: &str,
@@ -311,16 +311,16 @@ impl ModelCatalogSnapshot {
             return Some(preset.clone());
         };
         let lookup = self.lookup_models();
-        let servable = |model_ref: &str| {
-            provider_id == "openai"
-                || lookup::find_model_metadata(Some(model_ref), &lookup)
-                    .is_some_and(|model| model.runtime_supported)
+        let runs = |model_ref: &str, effort: ReasoningEffort| {
+            lookup::find_model_metadata(Some(model_ref), &lookup).is_some_and(|model| {
+                model.runtime_supported && model.reasoning_efforts.contains(&effort)
+            })
         };
         Some(upgrade_routine_preset(
             provider_id,
             preset,
             refreshed,
-            &servable,
+            &runs,
         ))
     }
 

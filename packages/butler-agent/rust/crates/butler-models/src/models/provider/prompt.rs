@@ -247,7 +247,12 @@ fn observe_usage(
             butler_data: request.butler_data,
             usage_attribution: openai_attribution.as_ref().or(request.usage_attribution),
             reasoning_tokens: decoded.reasoning_tokens,
-            auth_mode: Some(config.auth.usage_mode(&config.metadata.provider_id)),
+            cache_write_1h_tokens: decoded.cache_write_1h_tokens,
+            auth_mode: Some(
+                provider
+                    .catalog
+                    .usage_auth_mode(&config.metadata.provider_id, config.auth.mode()),
+            ),
         })
     };
     if config.metadata.provider_id == "openai" {
