@@ -1,103 +1,134 @@
-import type { CSSProperties, ReactNode } from "react";
-import { ListRow } from "../../../../blocks/ListRow";
-import { NavRow } from "../../../../blocks/NavRow";
-import { TitlebarShell } from "../../../../blocks/TitlebarShell";
-import tip from "../../../../shadcn/ui/tooltip.module.css";
-import { Box } from "../../../Box";
-import { FieldLabel } from "../../../Field";
-import { IconButton } from "../../../IconButton";
-import { FileText, Folder, MessageSquare, Search, Settings } from "../../../Icons";
-import { SelectButton } from "../../../Select";
-import { Stack } from "../../../Stack";
-import { tintedGlassSurfaceClassName } from "../../../TintedGlass";
+import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { KeyValueRow } from "../../../../blocks/KeyValueRow";
 import { Typo } from "../../../Typo";
-import { GAP, SHEETS, zValue, type LayersCopy, type Sheet } from "./layersCopy";
+import type { SceneGeometry } from "../scene/types";
+import { Reveal as R } from "../shared/Reveal";
+import { GLASS, LAYERS, SHEETS, zToken, zValue, type LayersCopy, type Sheet } from "./layersCopy";
+import { Overlay, Scrim, Sticky } from "./LayersOverlays";
+import { Page } from "./LayersPage";
+import { quarter, TURN } from "./layersView";
 import s from "./LayersHero.module.css";
 
 /** The title's touch: three offset copies of the word, merging into one. */
 export function TitleCopies({ title }: { title: string }) {
   return (
     <span className={s.titleStack}>
-      <span className={s.titleCopy} data-k="2" data-t="tc-2">{title}</span>
-      <span className={s.titleCopy} data-k="1" data-t="tc-1">{title}</span>
+      <span className={s.titleCopy} data-k="2" data-t="tc-2">
+        {title}
+      </span>
+      <span className={s.titleCopy} data-k="1" data-t="tc-1">
+        {title}
+      </span>
       <span>{title}</span>
     </span>
   );
 }
 
-const Card = ({ copy }: { copy: LayersCopy }) => (
-  <Box border="hairline" padding="md" radius="panel" surface="raised"><Typo.Label as="span">{copy.plan}</Typo.Label></Box>
-);
+/** The window's layout follows the hero's canvas: the phone canvas shows the compact app (no docked sidebar). */
+function useCompact(ref: RefObject<HTMLElement | null>) {
+  const [compact, setCompact] = useState(false);
+  useLayoutEffect(() => {
+    const board = ref.current?.parentElement?.closest<HTMLElement>("[data-layout]");
+    if (!board) return undefined;
+    const read = () => setCompact(board.dataset.layout === "tall");
+    read();
+    const observer = typeof MutationObserver === "function" ? new MutationObserver(read) : null;
+    observer?.observe(board, {
+      attributeFilter: ["data-layout"],
+      attributes: true,
+    });
+    return () => observer?.disconnect();
+  }, [ref]);
+  return compact;
+}
 
-/** What each sheet carries, placed where it sits on the screen. */
-function content(sheet: Sheet, copy: LayersCopy, live: boolean): ReactNode {
+function content(sheet: Sheet, copy: LayersCopy, compact: boolean): ReactNode {
   switch (sheet) {
-    case "page": return (
-      <div className={s.page}>
-        <div className={s.list}>{[copy.weekly, copy.notes, copy.inbox].map((title) => <ListRow icon={<FileText size="md" />} key={title} meta={copy.today} title={title} />)}</div>
-        <span className={s.pageCard} data-t={live ? "page-card" : undefined}><Card copy={copy} /></span>
-      </div>
-    );
-    case "sticky": return <div className={s.bar}><TitlebarShell title={copy.app} trailing={<IconButton label={copy.settings}><Settings size="md" /></IconButton>} /></div>;
-    case "drawer": return (
-      <div className={s.drawer}>
-        <NavRow active icon={<MessageSquare size="sm" />} label={copy.chats} />
-        <NavRow icon={<Folder size="sm" />} label={copy.projects} />
-        <NavRow icon={<Search size="sm" />} label={copy.files} />
-      </div>
-    );
-    case "overlay": return <span className={s.scrim} />;
-    case "dialog": return (
-      <div className={s.dialog}>
-        <Box border="hairline" padding="lg" radius="popover" surface="overlay">
-          <Stack gap="md">
-            <Typo.H5 as="span">{copy.dialogTitle}</Typo.H5>
-            <Stack gap="xs"><FieldLabel>{copy.project}</FieldLabel><SelectButton>{copy.pick}</SelectButton></Stack>
-          </Stack>
-        </Box>
-      </div>
-    );
-    case "popover": return (
-      <div className={s.menu}>
-        <Box border="hairline" padding="xs" radius="popover" surface="overlay">
-          {[copy.pick, copy.other].map((item, k) => <div className={s.option} data-on={k === 0 ? "" : undefined} key={item}><Typo.Body>{item}</Typo.Body></div>)}
-        </Box>
-      </div>
-    );
-    case "tooltip": return <span className={s.tip}><span className={`${tintedGlassSurfaceClassName} ${tip.tooltip}`}>{copy.tip}</span></span>;
-    case "drag": return <span className={s.dragCard} data-t={live ? "drag-card" : undefined}><Card copy={copy} /></span>;
+    case "page":
+      return <Page compact={compact} copy={copy} />;
+    case "sticky":
+      return <Sticky compact={compact} copy={copy} />;
+    case "overlay":
+      return <Scrim />;
+    default:
+      return <Overlay copy={copy} part={sheet} />;
   }
 }
 
-/**
- * The screen as a stack of sheets: each layer on its own full-size sheet
- * (content where it sits on the screen), a glass rim and its z token at its
- * left edge (shown once exploded). Flat, it is one screen; exploded along z
- * in a quarter view, the sheets read as the named layers. Live in the scene
- * (keyed by the timeline), exploded and still in the poster.
- */
-export function Screen({ copy, live, exploded = false }: { copy: LayersCopy; live: boolean; exploded?: boolean }) {
-  const t = (name: string) => (live ? name : undefined);
+/** A sheet's label, hung on its top right corner and turned back to face the frame: token and value, then what lives there. */
+function Pin({ copy, sheet, k }: { copy: LayersCopy; sheet: Sheet; k: number }) {
   return (
-    <div className={s.screen} data-exploded={exploded ? "" : undefined} data-m={live ? "screen" : undefined}>
+    <span className={s.pin} data-t={`pin-${k}`}>
+      <span className={s.tag}>
+        <span className={s.tagHead}>
+          <span className={s.tagToken}>
+            <R name={`lb-${k}-t`}>{zToken(sheet)}</R>
+          </span>
+          <span className={s.tagValue}>
+            <R name={`lb-${k}-v`}>{zValue(sheet)}</R>
+          </span>
+        </span>
+        <span className={s.tagLives}>
+          <R name={`lb-${k}-d`}>{copy.lives[sheet]}</R>
+        </span>
+      </span>
+    </span>
+  );
+}
+
+/**
+ * The Butler window as a stack of full-size sheets, one per open layer, low
+ * to high: each draws only what lives on it, where it sits in the window, so
+ * flat they are one screen. Live in the scene (the timeline lifts the
+ * sheets, draws their rims and hangs their labels), still in the poster.
+ */
+export function Screen({ copy, live, g = null }: { copy: LayersCopy; live: boolean; g?: SceneGeometry | null }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const compact = useCompact(ref);
+  const t = (name: string) => (live ? name : undefined);
+  const view = g?.boxes.screen ? { ...TURN[g.layout], s: quarter(g.canvas, g.boxes.screen, g.layout).s } : null;
+  const style = view
+    ? ({
+        "--q-rx": `${view.rx}deg`,
+        "--q-rz": `${view.rz}deg`,
+        "--q-s": view.s,
+      } as CSSProperties)
+    : undefined;
+  return (
+    <div className={s.screen} data-m={live ? "screen" : undefined} ref={ref} style={style}>
       {SHEETS.map((sheet, k) => (
-        <div className={s.sheet} data-sheet={sheet} data-t={t(`sh-${k}`)} key={sheet} style={{ "--z": `${k * GAP}px` } as CSSProperties}>
-          <span className={s.glass} data-t={t(`gl-${k}`)} />
-          {content(sheet, copy, live)}
-          <span className={s.label} data-t={t(`lb-${k}`)}>{sheet === "page" ? "page · 0" : `--z-${sheet} · ${zValue(sheet)}`}</span>
-          {sheet === "popover" ? <span className={s.flash} data-t={t("flash")} /> : null}
+        <div className={s.sheet} data-sheet={sheet} data-t={t(`sh-${k}`)} key={sheet}>
+          <div className={s.plane} data-t={t(`gp-${k}`)}>
+            {content(sheet, copy, compact)}
+          </div>
+          {live && GLASS.includes(sheet) ? (
+            <div className={`${s.plane} ${s.clear}`} data-t={`cp-${k}`}>
+              {content(sheet, copy, compact)}
+            </div>
+          ) : null}
+          {live && k > 0 ? <span className={s.rim} data-t={`rim-${k}`} /> : null}
+          {live ? <Pin copy={copy} k={k} sheet={sheet} /> : null}
         </div>
       ))}
     </div>
   );
 }
 
-/** Finale: the z ladder, low to high, like floor numbers. */
-export function Ladder() {
+/** The poster's window, drawn smaller to fit its tile. */
+export function PosterScreen({ copy }: { copy: LayersCopy }) {
+  return (
+    <div className={s.posterScreen}>
+      <Screen copy={copy} live={false} />
+    </div>
+  );
+}
+
+/** Finale: every z token, high to low, with its value and what lives there. */
+export function Ladder({ copy }: { copy: LayersCopy }) {
   return (
     <div className={s.ladder}>
-      {[...SHEETS].reverse().filter((sheet) => sheet !== "page").map((sheet) => (
-        <span className={s.rung} key={sheet}><span className={s.rungName}>{`--z-${sheet}`}</span><span className={s.rungValue}>{zValue(sheet)}</span></span>
+      {[...LAYERS].reverse().map((layer) => (
+        <KeyValueRow description={copy.lives[layer]} key={layer} label={<Typo.Code>{zToken(layer)}</Typo.Code>} value={zValue(layer)} />
       ))}
     </div>
   );
