@@ -1,4 +1,6 @@
-/* 08 Motion hero (v3 scenes). Canvas px (../shared/grid.ts). */
+/* 08 Motion hero ("the score"). Canvas px (../shared/grid.ts). Every surface
+   is a real DS component on the page background; this sheet only lays the
+   scenes out and draws the chart marks (lanes, notes, grid, metronome). */
 
 .letters {
   display: inline-flex;
@@ -6,6 +8,34 @@
 
 .letter {
   display: inline-block;
+}
+
+/* ---- Shared chart text ---- */
+
+.token,
+.rollToken,
+.exitValue,
+.exitHead,
+.twinHow,
+.springNote,
+.barNumber,
+.rollHeader {
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.token {
+  color: var(--text-primary);
+}
+
+.job,
+.rollLabel {
+  color: var(--text-secondary);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
 }
 
 /* ---- Onion-skin lanes ---- */
@@ -19,6 +49,8 @@
 
 [data-layout="tall"] .lanes {
   --track: 190px;
+
+  row-gap: var(--space-xl);
 }
 
 .lane {
@@ -43,17 +75,6 @@
 .laneName {
   display: grid;
   row-gap: var(--space-xs);
-}
-
-.token {
-  color: var(--text-primary);
-  font: var(--font-code);
-  font-size: var(--typo-caption-size);
-}
-
-.job {
-  color: var(--text-tertiary);
-  font-size: var(--typo-caption-size);
 }
 
 .track {
@@ -126,248 +147,354 @@
   stroke-width: 2;
 }
 
-/* ---- The metronome: a tick every beat along the bottom edge ---- */
+/* ---- The metronome: a tick every beat, a taller one every bar ---- */
 
 .metro {
   position: absolute;
   right: var(--grid-margin);
-  bottom: var(--space-md);
+  bottom: calc(var(--space-md) + var(--crop, 0px));
   left: var(--grid-margin);
-  block-size: var(--space-md);
-  opacity: 0.7;
-}
-
-.ticks {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-      to right,
-      var(--line-strong) 0 1px,
-      transparent 1px
-    )
-    0 0 / calc(100% / 24) 100%;
-}
-
-.beat {
-  position: absolute;
-  top: 0;
-  left: 0;
-  inline-size: calc(100% / 24);
-  block-size: 100%;
-  border-radius: var(--radius-control);
-  background: color-mix(in srgb, var(--accent) 70%, transparent);
-  animation: metronome calc(var(--hero-beat) * 24) steps(24) infinite;
-}
-
-@keyframes metronome {
-  to {
-    transform: translateX(2400%);
-  }
-}
-
-/* ---- In fast, out faster ---- */
-
-.menuRow {
   display: flex;
-  align-items: center;
-  min-block-size: var(--control-height-md);
-  padding-inline: var(--space-sm);
+  align-items: flex-end;
+  justify-content: space-between;
+  block-size: var(--space-lg);
 }
 
-.exits {
-  display: grid;
-  row-gap: var(--space-3xl);
+.tick {
+  inline-size: 1px;
+  block-size: var(--space-sm);
+  background: var(--line-strong);
 }
 
-.exitLane {
-  display: grid;
-  grid-template-columns:
-    calc(var(--space-4xl) * 6) calc(var(--space-4xl) * 4.5)
-    auto;
-  align-items: center;
-  column-gap: var(--space-2xl);
-}
-
-[data-layout="tall"] .exitLane {
-  grid-template-columns: auto;
-  row-gap: var(--space-sm);
-}
-
-.exitLabel,
-.noteValue,
-.realTag,
-.twinTitle,
-.rollName {
-  color: var(--text-tertiary);
-  font: var(--font-code);
-  font-size: var(--typo-caption-size);
-  white-space: nowrap;
-}
-
-.exitStage,
-.menuWrap {
-  display: grid;
-}
-
-.noteRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-}
-
-.note {
+.tick[data-down] {
   block-size: var(--space-md);
+  background: var(--text-tertiary);
+}
+
+.cursor {
+  position: absolute;
+  bottom: 0;
+  left: -1px;
+  inline-size: 3px;
+  block-size: var(--space-lg);
   border-radius: var(--radius-pill);
   background: var(--accent);
 }
 
-.realTag {
-  color: var(--accent);
+/* ---- Notes (the roll and the exit bars share them) ---- */
+
+.noteSlot {
+  position: absolute;
+  inset-block: var(--space-xs);
+  left: calc(var(--l) * 100%);
+  inline-size: calc(var(--w) * 100%);
+  min-inline-size: var(--space-sm);
+}
+
+.noteSlot[data-flat] {
+  inset-block: calc(50% - 1.5px);
+}
+
+.noteBase,
+.noteWindow {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+}
+
+.noteBase {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.noteFill {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+/* A loop (the working mark): one short note per beat. */
+.noteSlot[data-loop] .noteBase,
+.noteSlot[data-loop] .noteWindow {
+  border-radius: 0;
+}
+
+.noteSlot[data-loop] .noteBase {
+  background: linear-gradient(
+      to right,
+      color-mix(in srgb, var(--accent) 16%, transparent) 0 55%,
+      transparent 55%
+    )
+    0 0 / calc(100% / var(--reps)) 100% repeat-x;
+}
+
+.noteSlot[data-loop] .noteFill {
+  border-radius: 0;
+  background: linear-gradient(to right, var(--accent) 0 55%, transparent 55%) 0
+    0 / calc(100% / var(--reps)) 100% repeat-x;
+}
+
+/* ---- The piano roll ---- */
+
+.roll {
+  --roll-name: calc(var(--space-4xl) * 2.2);
+  --head: var(--space-lg);
+
+  position: relative;
+  display: grid;
+  row-gap: var(--space-sm);
+  inline-size: var(--roll-w, calc(var(--space-4xl) * 9));
+}
+
+.rollHead,
+.rollLane {
+  display: grid;
+  grid-template-columns: var(--roll-name) minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-md);
+}
+
+.rollHead {
+  block-size: var(--head);
+}
+
+.bars {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+}
+
+.barNumber {
+  padding-inline-start: var(--space-xs);
+  border-inline-start: 1px solid var(--line-strong);
+  line-height: var(--head);
+}
+
+.rollName {
+  display: grid;
+  min-width: 0;
+}
+
+.rollTrack {
+  position: relative;
+  block-size: var(--space-xl);
+  background:
+    linear-gradient(to right, var(--line-strong) 0 1px, transparent 1px) 0 0 /
+      calc(100% / var(--span) * 4) 100%,
+    linear-gradient(to right, var(--line) 0 1px, transparent 1px) 0 0 /
+      calc(100% / var(--span)) 100%;
+}
+
+.playRail {
+  position: absolute;
+  inset: calc(var(--head) + var(--space-sm)) 0 0
+    calc(var(--roll-name) + var(--space-md));
+  pointer-events: none;
+}
+
+.playhead {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  border-inline-start: 2px solid var(--text-primary);
+  opacity: 0;
+}
+
+/* ---- In fast, out faster ---- */
+
+.exits {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: end;
+  column-gap: calc(var(--space-4xl) * 1.5);
+}
+
+[data-layout="tall"] .exits {
+  grid-template-columns: auto;
+  row-gap: var(--space-3xl);
+}
+
+.exitStage {
+  display: grid;
+  justify-items: start;
+  row-gap: var(--space-sm);
+  inline-size: calc(var(--space-4xl) * 8.5);
+}
+
+.menuAnchor {
+  margin-inline-start: var(--space-sm);
+  transform-origin: left bottom;
+}
+
+.menuInset {
+  padding: var(--space-1);
+}
+
+.exitBars {
+  display: grid;
+  row-gap: var(--space-lg);
+  padding-block-end: var(--space-md);
+}
+
+.exitHead {
+  display: grid;
+}
+
+.exitHead > * {
+  grid-area: 1 / 1;
+}
+
+.exitRow {
+  display: grid;
+  grid-template-columns:
+    calc(var(--space-4xl) * 4.2) calc(var(--space-4xl) * 5)
+    calc(var(--space-4xl) * 1.5);
+  align-items: center;
+  column-gap: var(--space-lg);
+}
+
+[data-layout="tall"] .exitRow {
+  grid-template-areas:
+    "name name"
+    "track value";
+  grid-template-columns: calc(var(--space-4xl) * 5) auto;
+  row-gap: var(--space-xs);
+}
+
+[data-layout="tall"] .exitRow > .rollName {
+  grid-area: name;
+}
+
+.exitTrack {
+  position: relative;
+  block-size: var(--space-xl);
+}
+
+.exitValue {
+  text-align: end;
 }
 
 /* ---- The score ---- */
 
 .score {
+  --turn-w: calc(var(--space-4xl) * 10);
+
   display: grid;
-  grid-template-columns: calc(var(--space-4xl) * 11) calc(var(--space-4xl) * 11);
-  align-items: end;
+  grid-template-columns: var(--turn-w) auto;
+  align-items: center;
   column-gap: var(--space-4xl);
 }
 
 [data-layout="tall"] .score {
-  grid-template-columns: calc(var(--canvas-w) - var(--grid-margin) * 2);
+  --turn-w: calc(var(--canvas-w) - var(--grid-margin) * 2);
+  --roll-w: var(--turn-w);
+
+  grid-template-columns: var(--turn-w);
   row-gap: var(--space-2xl);
 }
 
 .turn {
   display: grid;
-  row-gap: var(--space-md);
+  row-gap: var(--space-sm);
+  inline-size: var(--turn-w);
 }
 
-.thinkRow {
-  display: flex;
-}
-
-.think {
-  display: inline-grid;
-}
-
-.replyLine {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.check,
-.send {
-  display: inline-grid;
-}
-
-.noticeSlot {
+.rows,
+.part,
+.layer {
   display: grid;
+  min-width: 0;
 }
 
-.roll {
+.slot,
+.composerSlot {
   position: relative;
   display: grid;
-  row-gap: var(--space-md);
 }
 
-.rollLane {
-  display: grid;
-  grid-template-columns: calc(var(--space-4xl) * 2.2) minmax(0, 1fr);
-  align-items: center;
-  column-gap: var(--space-md);
+.layer {
+  grid-area: 1 / 1;
 }
 
-.rollTrack {
-  position: relative;
-  block-size: var(--space-md);
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--line) 50%, transparent);
-}
-
-.bar {
+.activity {
   position: absolute;
   top: 0;
-  bottom: 0;
-  left: calc(var(--l) * 100%);
-  inline-size: calc(var(--w) * 100%);
-  border-radius: var(--radius-pill);
-  background: var(--accent);
+  right: 0;
+  left: 0;
 }
 
-.playhead {
+.draft {
   position: absolute;
-  inset: calc(var(--space-sm) * -1) 0 calc(var(--space-sm) * -1)
-    calc(var(--space-4xl) * 2.2 + var(--space-md));
-  border-left: 2px solid var(--text-primary);
+  right: 0;
+  bottom: 0;
+  left: 0;
 }
 
 /* ---- Twins ---- */
 
 .twins {
+  --twin-w: calc(var(--space-4xl) * 8);
+
   display: grid;
-  grid-template-columns: repeat(2, calc(var(--space-4xl) * 8.5));
-  column-gap: var(--space-4xl);
+  grid-template-columns: repeat(2, var(--twin-w));
+  column-gap: calc(var(--space-4xl) * 1.5);
 }
 
 [data-layout="tall"] .twins {
-  grid-template-columns: calc(var(--canvas-w) - var(--grid-margin) * 2);
-  row-gap: var(--space-2xl);
+  --twin-w: calc(var(--canvas-w) - var(--grid-margin) * 2);
+
+  grid-template-columns: var(--twin-w);
+  row-gap: var(--space-3xl);
+}
+
+/* Tall: Reduced stands under Full, in flow (the cell holds both), so the camera frames one twin at a time. */
+[data-layout="tall"] .twins:not([data-tile] > *) {
+  row-gap: calc(var(--space-4xl) * 4);
 }
 
 .twin {
+  --turn-w: var(--twin-w);
+  --roll-w: var(--twin-w);
+
   display: grid;
   align-content: start;
-  row-gap: var(--space-md);
+  row-gap: var(--space-lg);
 }
 
-.twinBars {
-  display: grid;
-  row-gap: var(--space-xs);
+.twin .roll {
+  --roll-name: calc(var(--space-4xl) * 1.6);
 }
 
-.twinBar {
-  block-size: var(--space-sm);
-  border-radius: var(--radius-pill);
-  background: var(--accent);
+.twinHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  padding-block-end: var(--space-xs);
+  border-block-end: 1px solid var(--line);
 }
 
-.twinBar[data-kind="travel"] {
-  inline-size: calc(var(--space-4xl) * 3);
-}
-
-.twinBar[data-kind="rise"] {
-  inline-size: calc(var(--space-4xl) * 2);
-}
-
-.twinBar[data-kind="pop"] {
-  inline-size: var(--space-4xl);
-}
-
-/* Reduced: the travel and the pop are gone; only the fade remains, flat. */
-.twin[data-reduced] .twinBar {
-  block-size: 2px;
-  opacity: 0.6;
+.twinTitle {
+  color: var(--text-primary);
+  font-size: var(--typo-label-size);
+  font-weight: var(--font-weight-semibold);
 }
 
 /* ---- Spring ---- */
 
 .spring {
-  display: flex;
-  align-items: center;
-  gap: calc(var(--space-4xl) * 2);
+  display: grid;
+  row-gap: var(--space-md);
+  inline-size: calc(var(--space-4xl) * 13);
+}
+
+[data-layout="tall"] .spring {
+  inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
 }
 
 .switchStack {
   display: inline-grid;
-  scale: 2;
-}
-
-[data-layout="tall"] .spring {
-  flex-direction: column;
-  gap: calc(var(--space-4xl) * 1.5);
 }
 
 .switchLayer {
@@ -375,27 +502,22 @@
   grid-area: 1 / 1;
 }
 
-.liftCard {
-  display: inline-grid;
+/* The finale's tiles are the specimens themselves on the page background (no tile fill). */
+[data-tile]:has(> .lanes, > .score, > .twins, > .spring) {
+  border: 0;
+  background: none;
+  place-items: start;
 }
 
-.liftCard[data-lifted] {
-  scale: 1.02;
-  box-shadow: var(--shadow-drag-lift);
+/* One scale for every tile (the poster's zoom), so no specimen is drawn larger than its neighbours. */
+[data-tile] > :is(.lanes, .score, .twins, .spring) {
+  zoom: 1 !important;
 }
 
-/* In the poster the twins and the score fill their tiles. */
-[data-tile] .twins {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+/* The phone poster: the score fills its tile. */
+[data-layout="tall"] [data-tile] > .score {
+  --turn-w: 100%;
+  --roll-w: 100%;
+
   inline-size: 100%;
-}
-
-[data-tile] .score {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
-  inline-size: 100%;
-}
-
-[data-layout="tall"] [data-tile] .twins,
-[data-layout="tall"] [data-tile] .score {
-  grid-template-columns: minmax(0, 1fr);
 }
