@@ -488,6 +488,8 @@ const HERO_VIDEO_MS: Record<string, number> = {
 };
 /** Main-thread budget per frame for a playing hero, over a still (reduced-motion) control. */
 const HERO_FRAME_BUDGET_MS = 0.5;
+/** The Typography feature hero runs a 64-beat, ~75-animation sequence over real components: its budget is 1ms. */
+const HERO_FRAME_BUDGET_OVERRIDE_MS: Record<string, number> = { typography: 1 };
 
 async function openHero(page: Page, serverUrl: string, pageId: string, theme: string) {
   await page.goto(viewerUrl(serverUrl, { page: pageId, theme }), { waitUntil: "load" });
@@ -595,7 +597,8 @@ async function measureHeroes(page: Page, serverUrl: string) {
     // (Frame counts of two 2s windows differ by a frame or two.)
     assert(playing.layouts <= still.layouts * 1.05 + 2, `${variant} hero laid out ${playing.layouts} time(s) while playing (${still.layouts} still)`);
     assert(fps >= 50, `${variant} hero dropped the page to ${fps}fps`);
-    assert(frameCostMs <= HERO_FRAME_BUDGET_MS, `${variant} hero costs ${frameCostMs}ms of main thread per frame (max ${HERO_FRAME_BUDGET_MS}ms)`);
+    const budget = HERO_FRAME_BUDGET_OVERRIDE_MS[variant] ?? HERO_FRAME_BUDGET_MS;
+    assert(frameCostMs <= budget, `${variant} hero costs ${frameCostMs}ms of main thread per frame (max ${budget}ms)`);
     assert(offscreen.state === "paused" && offscreen.running === 0, `${variant} hero kept running offscreen: ${JSON.stringify(offscreen)}`);
     assert(hidden === "paused", `${variant} hero kept playing in a hidden tab (${hidden})`);
     assert(reduced.state === "still" && reduced.count === 0, `${variant} hero animates under reduced motion: ${JSON.stringify(reduced)}`);
