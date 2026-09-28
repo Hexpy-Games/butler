@@ -2,6 +2,7 @@ import { useAppLocale } from "@/app/copy.ts";
 import {
   Button,
   ButtonContainer,
+  IconTile,
   Pencil,
   Stack,
   Trash2,
@@ -10,6 +11,7 @@ import {
 import { appCopy } from "@/app/copy.ts";
 import { modelDisplayName, tokenWindowLabel } from "@/app/utils.ts";
 import { ModelAuthTag } from "./ModelAuthTag";
+import { ProviderMark } from "./ProviderMark";
 import type { AppModelSummary } from "@/app/types.ts";
 
 interface RegisteredModelRowProps {
@@ -31,17 +33,20 @@ export function RegisteredModelRow({
 
   return (
       <Stack align="row" justify="between" cross="center" gap="md" wrap>
-        <div>
-          <Typo.PanelSectionTitle as="h3">
-            {model.provider_label} / {name}
-          </Typo.PanelSectionTitle>
-          <Stack gap="xs">
-            <Typo.Caption>
-              {tokenWindowLabel(model.context_window_tokens)}
-            </Typo.Caption>
-            <ModelAuthTag model={model} />
-          </Stack>
-        </div>
+        <Stack align="row" cross="start" gap="md">
+          <IconTile size="sm"><ProviderMark providerId={model.provider_id} platform={model.platform} /></IconTile>
+          <div>
+            <Typo.PanelSectionTitle as="h3">
+              {model.provider_label} / {name}
+            </Typo.PanelSectionTitle>
+            <Stack gap="xs">
+              <Typo.Caption>
+                {tokenWindowLabel(model.context_window_tokens)}
+              </Typo.Caption>
+              <ModelAuthTag model={model} />
+            </Stack>
+          </div>
+        </Stack>
         <ButtonContainer size="sm">
           <Button
             type="button"
