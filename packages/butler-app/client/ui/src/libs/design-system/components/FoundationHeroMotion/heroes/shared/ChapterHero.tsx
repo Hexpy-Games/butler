@@ -8,6 +8,7 @@ import { measureNatural, packPoster, type Pack } from "./pack";
 import { Sketch } from "./Sketch";
 import { buildFrames, chapterTracks, posterZoom } from "./timeline";
 import type { ChapterSpec, Geometry } from "./types";
+import { fitLabels } from "./fitLabels";
 import { useFrame } from "./useFrame";
 import c from "./ChapterHero.module.css";
 
@@ -32,6 +33,7 @@ function useGeometry(root: RefObject<HTMLElement | null>, layout: HeroLayout, sp
   useLayoutEffect(() => setGeometry(null), [lang, layout, ready]);
   useLayoutEffect(() => {
     if (geometry || !ready || !root.current) return;
+    fitLabels(root.current);
     setGeometry(measureChapter(root.current, layout, spec));
   }, [geometry, ready, root, layout, spec]);
   useEffect(() => {
@@ -61,20 +63,28 @@ function usePack(root: RefObject<HTMLElement | null>, layout: HeroLayout, spec: 
   const [pack, setPack] = useState<Pack | null>(null);
   useLayoutEffect(() => setPack(null), [lang, layout, ready, spec]);
   useLayoutEffect(() => {
-    if (layout !== "wide" || pack || !ready || !root.current) return;
+    if (!ready || !root.current) return;
+    fitLabels(root.current);
+    if (layout !== "wide" || pack) return;
     const items = measureNatural(root.current, spec);
-    if (items) setPack(packPoster(items));
+    if (items) setPack(packPoster(items, spec.finale?.columns));
   }, [pack, ready, root, layout, spec]);
   return pack;
 }
 
-/** A packed item's place: its tile, and its content held at its natural width (poster px at the packed zoom). */
-function tileStyle(pack: Pack | null, id: string, zoom: number, natural: number): CSSProperties | undefined {
-  const tile = pack?.tiles[id];
+/** Poster px added to a packed item's width (see slotStyle). */
+const SLACK = 2;
+
+/**
+ * A packed item's place (poster px at the packed zoom): laid out at the width
+ * it had in the chapter's poster, placed so what it paints sits on its slot.
+ */
+function slotStyle(pack: Pack | null, id: string, zoom: number, natural: number): CSSProperties | undefined {
+  const slot = pack?.slots[id];
   const own = pack?.natural[id];
-  if (!tile || !own) return undefined;
-  const px = (value: number) => `${value / zoom}px`;
-  return { left: px(tile.x), top: px(tile.y), inlineSize: px(tile.w), blockSize: px(tile.h), "--natural-w": `${own.w / natural}px` } as CSSProperties;
+  if (!slot || !own) return undefined;
+  // A hair wider than measured: text set at max-content must not wrap from rounding at the new zoom.
+  return { left: `${slot.x / zoom - own.dx / natural}px`, top: `${slot.y / zoom - own.dy / natural}px`, inlineSize: `${own.cw / natural + SLACK}px` };
 }
 
 /**
@@ -123,16 +133,14 @@ export function ChapterHero({ spec: base, lang }: { spec: ChapterSpec; lang: Fou
             {layout === "tall" && spec.fieldScene ? <div className={c.cell} data-cell="field">{typeof spec.fieldScene === "function" ? spec.fieldScene(g) : spec.fieldScene}</div> : null}
           </div>
           <div className={c.poster} data-packed={pack ? "" : undefined}>
-            <div className={c.field} data-t="field-mover" style={tileStyle(pack, "field", zoom, natural)}>
-              {pack ? <span className={c.tile} data-t="tile-field" /> : null}
+            <div className={c.field} data-t="field-mover" style={slotStyle(pack, "field", zoom, natural)}>
               {typeof spec.field === "function" ? spec.field(g) : spec.field}
             </div>
             <div className={`${c.product} ${spec.product}`} data-t="product">
               {spec.builds.map((build) => {
                 const entry = frames.find((item) => item.build.id === build.id);
                 return (
-                  <div className={c.panel} data-panel={build.id} data-t={`panel-${build.id}`} key={build.id} style={{ gridArea: build.id, ...tileStyle(pack, build.id, zoom, natural) }}>
-                    {pack ? <span className={c.tile} data-t={`tile-${build.id}`} /> : null}
+                  <div className={c.panel} data-panel={build.id} data-t={`panel-${build.id}`} key={build.id} style={{ gridArea: build.id, ...slotStyle(pack, build.id, zoom, natural) }}>
                     <div className={c.surface} data-t={`surface-${build.id}`}>{build.render}</div>
                     {g ? <Sketch boxes={g.sketches[build.id] ?? []} id={build.id} /> : null}
                     {entry ? <Annotations items={entry.items.flat()} /> : null}

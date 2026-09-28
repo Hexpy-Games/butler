@@ -3,12 +3,6 @@ import { Reveal as R } from "../shared/Reveal";
 import { SWATCHES } from "./colorCopy";
 import s from "./ColorHero.module.css";
 
-/** A token name that may break after its family prefix (--color-), so it fits under its sticker. */
-function breakable(token: string) {
-  const cut = token.startsWith("--color-") ? 8 : 0;
-  return cut ? <>{token.slice(0, cut)}<wbr />{token.slice(cut)}</> : token;
-}
-
 /** The theme the page is not in: the wipe turns the whole frame to it (and back). */
 function useOtherTheme(): "light" | "dark" {
   const read = (): "light" | "dark" => (typeof document !== "undefined" && document.body.classList.contains("theme-dark") ? "light" : "dark");
@@ -41,11 +35,12 @@ function Sticker({ k, token }: { k: number; token: string }) {
 /** The swatch stickers with their token names, straight on the page. */
 function SwatchGrid() {
   return (
-    <div className={s.grid}>
+    <div className={s.grid} data-fit="">
       {SWATCHES.map((token, k) => (
         <div className={s.cell} key={token}>
           <Sticker k={k} token={token} />
-          <span className={s.name}><R name={`sn-${k}`}>{breakable(token)}</R></span>
+          {/* A token name never breaks: one line, and the whole grid's names set smaller together if a cell is narrow. */}
+          <span className={s.name} data-fit-label=""><R name={`sn-${k}`}>{token}</R></span>
         </div>
       ))}
     </div>

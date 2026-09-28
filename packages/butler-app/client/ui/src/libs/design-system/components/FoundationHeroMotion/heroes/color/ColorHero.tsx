@@ -19,7 +19,11 @@ function spec(copy: ColorCopy): ChapterSpec {
     prelude: { ...colorPrelude(copy, (layout) => posterZoom({ posterZoom: POSTER_ZOOM } as ChapterSpec, layout)), cells: ["intro", "field"], regions: { intro: <Intro lead={copy.lead} title={copy.title} /> } },
     field: <ColorField />,
     fieldColumns: 6,
+    // The finale: the swatch field on the left, the four topics stacked on the right; portrait, the components.
+    finale: { columns: [["field"], ["contrast", "action", "status", "states"]], tall: "product" },
     posterZoom: POSTER_ZOOM,
+    // Portrait: a little smaller, so the swatch names fit beside their stickers.
+    tallPosterZoom: 1.2,
     product: s.product!,
     builds: colorBuilds(copy),
   };
@@ -27,12 +31,12 @@ function spec(copy: ColorCopy): ChapterSpec {
 
 /**
  * 01 Color. The owner's storyboard: "Color" and the color intent; the camera
- * turns to a quarter view where role stickers land diagonal by diagonal and
- * take their token names; back to the front, a line wipes the field into the
+ * glides on to the page, where role stickers land diagonal by diagonal and
+ * take their token names; a line wipes the field into the
  * dark theme; components are built topic by topic (contrast, action,
  * status, states), outlined first, then filled one color at a time with a
- * badge saying what each color is for; the finale packs the swatch field
- * beside the components.
+ * badge saying what each color is for; the finale sets the swatch field
+ * beside the components, straight on the page.
  */
 export function ColorHero({ lang }: { lang: FoundationHeroLang }) {
   const chapter = useMemo(() => spec(COLOR_COPY[lang]), [lang]);

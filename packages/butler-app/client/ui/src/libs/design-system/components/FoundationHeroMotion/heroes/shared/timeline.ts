@@ -3,7 +3,8 @@ import { annotTracks } from "./Annotations";
 import { HOLD, SETTLE, STEP, TRANSITION } from "./beats";
 import { reveal, revealBeats, select, sweep } from "./Reveal";
 import { buildFrames, posterZoom } from "./frames";
-import { gatherFlights, gatherKeys, tileTracks } from "./gather";
+import { gatherFlights, gatherKeys } from "./gather";
+import { introCamera } from "./Intro";
 import { buildViews, CELL, columnViews, fieldAway, finalePose, REST, scenePath, viewCell } from "./scene";
 import { sketchTracks } from "./Sketch";
 import type { ChapterSpec, Geometry, TimelineContext } from "./types";
@@ -58,8 +59,7 @@ export function chapterTracks(spec: ChapterSpec, g0: Geometry): { beats: number;
   // scene sits right above the first build (the field in its own poster place when it is that scene).
   const names = spec.prelude.cells;
   const tall = g0.layout === "tall";
-  // A tall field scene is a region of its own; the poster field stays home.
-  const clone = tall && Boolean(spec.fieldScene);
+  const clone = tall && Boolean(spec.fieldScene); // a tall field scene is a region of its own; the poster field stays home
   const canvasCenter = { x: canvas.w / 2, y: canvas.h / 2 };
   const column = columnViews(canvas, frames.map((entry) => entry.frame));
   const lastIsField = names.at(-1) === "field";
@@ -86,9 +86,9 @@ export function chapterTracks(spec: ChapterSpec, g0: Geometry): { beats: number;
   const buildAt = (k: number) => t.builds[spec.builds[k]!.id]!.at;
   const view = (cell: string, content: Box, fill?: number, cap?: number): Pose => viewCell(canvas, cells[cell] ?? center(content), content, fill, cap);
   const ctx: TimelineContext = { g, cells, view, beats: t.beats, close, first: t.first, builds: t.builds, finale: t.finale, loop: t.loop };
-  const prelude = spec.prelude.tracks(ctx);
+  const own = spec.prelude.tracks(ctx), prelude = { ...own, camera: introCamera(own.camera) }; // every intro leaves alike
   const start = prelude.camera[0] ?? { at: 0, ...REST };
-  const rest = finalePose(g0.layout, canvas, [g0.field, ...Object.values(g0.panels)]);
+  const rest = finalePose(g0.layout, canvas, [...(spec.finale?.tall === "product" ? [] : [g0.field]), ...Object.values(g0.panels)]);
   const world: Key[] = [
     ...prelude.camera,
     { at: t.first, ...stage[0]!, ease: "standard" },
@@ -155,6 +155,6 @@ export function chapterTracks(spec: ChapterSpec, g0: Geometry): { beats: number;
     still: rest,
     // Beat marks (each build done, the finale), for reviewing frames.
     marks: [...spec.builds.map((build) => Math.round(t.builds[build.id]!.done * 10) / 10), Math.round((t.finale + TRANSITION + 2) * 10) / 10],
-    tracks: [{ select: select("world"), keys: world }, ...regionTracks, ...prelude.tracks, ...fieldTracks, ...buildTracks, ...(tall ? [] : tileTracks(flights, t.loop)), ...(spec.extra?.(ctx) ?? [])],
+    tracks: [{ select: select("world"), keys: world }, ...regionTracks, ...prelude.tracks, ...fieldTracks, ...buildTracks, ...(spec.extra?.(ctx) ?? [])],
   };
 }

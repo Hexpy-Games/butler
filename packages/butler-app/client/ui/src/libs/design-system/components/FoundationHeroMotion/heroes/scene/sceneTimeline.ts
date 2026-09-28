@@ -1,6 +1,7 @@
 import { fit, focus, type Box, type Key, type Pose, type Track } from "../../heroTimeline";
 import { SETTLE, TRANSITION } from "../shared/beats";
 import { gatherFlights } from "../shared/gather";
+import { introCamera } from "../shared/Intro";
 import { select } from "../shared/Reveal";
 import { REST, scenePath, viewCell } from "../shared/scene";
 import type { SceneContext, SceneGeometry, SceneSpec } from "./types";
@@ -56,7 +57,9 @@ export function sceneTracks(spec: SceneSpec, g0: SceneGeometry): { beats: number
   };
   const view = (cell: string, content: Box, fill?: number, cap?: number): Pose => viewCell(canvas, cells[cell] ?? center(content), content, fill, cap);
   const ctx: SceneContext = { g, cells, view, offset, close, finale, loop, beats };
-  const own = spec.tracks(ctx);
+  const mine = spec.tracks(ctx);
+  // Every intro leaves the same way (Intro.tsx): a flat one-axis glide.
+  const own = { ...mine, camera: introCamera(mine.camera) };
   const start = own.camera[0] ?? { at: 0, ...REST };
   const last = own.camera.at(-1) ?? start;
   const world: Key[] = [

@@ -4,16 +4,20 @@
 
 /* ---- The swatch field: stickers straight on the page ---- */
 
+/* Wide: the field is as wide as its names need (the finale packs it by
+   that width), so no token name ever wraps. */
 .field {
   position: relative;
   display: grid;
+  justify-self: start;
   align-content: center;
+  inline-size: max-content;
 }
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(var(--swatch-columns, 5), minmax(0, 1fr));
-  gap: var(--space-3xl) var(--space-xl);
+  grid-template-columns: repeat(4, max-content);
+  gap: var(--space-2xl) var(--space-2xl);
   align-content: space-evenly;
 }
 
@@ -87,13 +91,17 @@
   opacity: 0;
 }
 
+/* A token name is one unbroken line; a narrow grid sets all its names
+   smaller together (--label-fit, shared/fitLabels.ts). */
 .name {
+  display: block;
   max-inline-size: 100%;
   color: var(--text-tertiary);
   font: var(--font-code);
-  font-size: var(--font-size-1);
+  font-size: calc(var(--font-size-1) * var(--label-fit, 1));
   line-height: var(--line-height-tight);
   text-align: center;
+  white-space: nowrap;
 }
 
 /* The whole frame in the other theme, through a window as large as any
@@ -164,18 +172,44 @@
   row-gap: var(--space-sm);
 }
 
+/* Wide: the four topics in one column as wide as its widest component
+   (the finale sets it right of the swatch field, pack.ts). */
 .product {
   grid-template-areas:
-    "contrast contrast"
-    "action states"
-    "status states";
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-content: space-between;
-  gap: var(--space-xl) var(--grid-gutter);
+    "contrast"
+    "action"
+    "status"
+    "states";
+  grid-template-columns: max-content;
+  align-content: start;
+  gap: var(--space-2xl);
+}
+
+/* Tall: the field fills the portrait column, two swatches to a row, each
+   sticker beside its name. */
+[data-layout="tall"] .field {
+  justify-self: stretch;
+  inline-size: auto;
 }
 
 [data-layout="tall"] .grid {
-  --swatch-columns: 4;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-xl) var(--space-md);
+}
+
+[data-layout="tall"] .cell {
+  grid-template-columns: auto minmax(0, 1fr);
+  place-items: center start;
+  column-gap: var(--space-sm);
+}
+
+[data-layout="tall"] .sticker {
+  inline-size: var(--space-2xl);
+  block-size: var(--space-2xl);
+}
+
+[data-layout="tall"] .name {
+  text-align: start;
 }
 
 [data-layout="tall"] .product {

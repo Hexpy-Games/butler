@@ -422,10 +422,11 @@
   min-width: 0;
 }
 
-/* ---- Packed poster (wide): a bento of tiles filling the frame (pack.ts) ---- */
+/* ---- Packed poster (wide): the items set straight on the page (pack.ts) ---- */
 
-/* Each item stands on its tile, centred at its natural width; the tiles fill
-   the frame edge to edge with one gap, so the finale has no holes. */
+/* Each item (the token field, each component) is placed at its slot, laid
+   out at the width it had in the poster, so nothing reflows or clips. No
+   tile, panel or fill is drawn behind it: the components fill the frame. */
 .poster[data-packed] {
   display: block;
 }
@@ -438,23 +439,8 @@
 .poster[data-packed] .panel {
   position: absolute;
   display: grid;
-  place-items: center;
+  align-content: start;
   min-height: 0;
-}
-
-.poster[data-packed] > .field > :not(.tile),
-.poster[data-packed] .panel > .surface {
-  position: relative;
-  inline-size: var(--natural-w);
-  max-inline-size: 100%;
-}
-
-.tile {
-  position: absolute;
-  inset: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-composer);
-  background: color-mix(in srgb, var(--surface-raised) 60%, transparent);
 }
 
 .topic {

@@ -1,6 +1,5 @@
-import type { Box, Key, Track } from "../../heroTimeline";
+import type { Box, Key } from "../../heroTimeline";
 import { TRANSITION } from "./beats";
-import { select } from "./Reveal";
 
 /** Canvas px an item starts beyond the frame's edge. */
 const BEYOND = 60;
@@ -53,12 +52,4 @@ export function gatherKeys(flight: Flight, before: { x: number; y: number }, fin
     { at: finale - 0.01, ...before }, { at: finale, ...from }, { at: flight.start, ...from },
     { at: flight.end, x: 0, y: 0, ease: "decelerate" },
   ];
-}
-
-/** The tiles fade in under each item as it lands, and out with the poster at the loop. */
-export function tileTracks(flights: Record<string, Flight>, loop: number): Track[] {
-  return Object.entries(flights).map(([id, flight]) => ({
-    select: select(`tile-${id}`),
-    keys: [{ at: 0, o: 0 }, { at: flight.end - 0.3, o: 0 }, { at: flight.end + 0.3, o: 1, ease: "decelerate" }, { at: loop, o: 1 }, { at: loop + TRANSITION / 2, o: 0, ease: "accelerate" }],
-  }));
 }

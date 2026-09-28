@@ -1,16 +1,15 @@
 import type { ReactNode } from "react";
 import type { Box, Key, Pose, Track } from "../../heroTimeline";
 import type { HeroLayout } from "./grid";
+import type { ChapterFinale } from "./pack";
 import type { SketchBox } from "./Sketch";
 
 /**
- * The chapter hero contract. Each chapter tells its own story in a prelude
- * (its own scenes, camera and tokens), then builds real DS components one at
- * a time, and ends on a finale that zooms out to the poster (the reduced-
- * motion still) where the chapter's token field and the components gather
- * onto the grid. The shared engine (ChapterHero.tsx) measures the poster and
- * compiles one cycle; the craft primitives (sketch, reveal, badges with
- * leaders, one transition length, the holds) are shared.
+ * The chapter hero contract. Each chapter tells its own story in a prelude,
+ * then builds real DS components one at a time, and ends on a finale that
+ * zooms out to the poster (the reduced-motion still) where the token field and
+ * the components gather straight on the page. The engine (ChapterHero.tsx)
+ * measures the poster and compiles one cycle; the craft primitives are shared.
  */
 
 /** What the engine reads from a marked element: its box, radius, padding and shadow, colors. */
@@ -130,6 +129,7 @@ export interface ChapterSpec {
   posterZoom?: number;
   /** The poster's zoom on the tall canvas (default 1.35); lower for components wider than the portrait column. */
   tallPosterZoom?: number;
+  finale?: ChapterFinale; // the finale's composition
   /** Chapter-specific motion on top of the shared cycle. */
   extra?: (ctx: TimelineContext) => Track[];
 }

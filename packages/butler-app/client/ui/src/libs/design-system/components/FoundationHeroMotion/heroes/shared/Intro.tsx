@@ -1,10 +1,37 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import type { Key, Track } from "../../heroTimeline";
+import { TRANSITION } from "./beats";
 import { Reveal as R, reveal, select } from "./Reveal";
 import s from "./Intro.module.css";
 
-/** Beat marks of an intro: the title reveals, the lead lines follow a beat apart, then everything pushes up and out. */
-export const INTRO = { title: 0.4, lead: 1.4, out: 6.4 } as const;
+/**
+ * Beat marks of an intro: the title reveals, the lead lines follow a beat
+ * apart, then everything pushes up and out (`out`) as the camera leaves
+ * (`exit`, one TRANSITION long).
+ */
+export const INTRO = { title: 0.4, lead: 1.4, out: 6.4, exit: 6.8 } as const;
+
+/**
+ * The one intro exit every chapter shares (the Typography behaviour): the
+ * camera holds on the intro until INTRO.exit, then glides in one
+ * TRANSITION, flat, to the pose the chapter set for its next scene (a
+ * neighbouring cell, so the glide runs on one axis). Rotation is stripped
+ * from that pose: no chapter turns, tilts or twists on the way out of its
+ * intro. Keys after the exit are the chapter's own.
+ */
+export function introCamera(camera: Key[]): Key[] {
+  const first = camera[0];
+  const arrive = INTRO.exit + TRANSITION;
+  const next = camera.find((key) => key.at >= arrive - 0.01);
+  if (!first || !next) return camera;
+  const { at: _at, ease: _ease, ...front } = first;
+  const { at: _next, ease: _nextEase, rx: _rx, ry: _ry, rz: _rz, ...to } = next;
+  const flat = { rx: 0, ry: 0, rz: 0 };
+  return [
+    { at: 0, ...front, ...flat }, { at: INTRO.exit, ...front, ...flat }, { at: arrive, ...to, ...flat, ease: "standard" },
+    ...camera.filter((key) => key.at > arrive + 0.01),
+  ];
+}
 
 export type IntroLead = Array<[key: string, text: string]>;
 

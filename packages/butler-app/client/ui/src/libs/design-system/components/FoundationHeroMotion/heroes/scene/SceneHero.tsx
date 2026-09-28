@@ -2,6 +2,7 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSP
 import type { FoundationHeroLang } from "../../FoundationHeroMotion";
 import { compileTimeline } from "../../heroTimeline";
 import { CANVAS, col, gridVars, type HeroLayout } from "../shared/grid";
+import { fitLabels } from "../shared/fitLabels";
 import { useFrame } from "../shared/useFrame";
 import { measureScene } from "./measureScene";
 import { sceneTracks } from "./sceneTimeline";
@@ -11,6 +12,8 @@ import s from "./SceneHero.module.css";
 
 /** The most a tile draws its component larger to fill it. */
 const TILE_ZOOM = 1.8;
+/** How much of its slot a component fills (room for focus rings and shadows, which layout boxes leave out). */
+const TILE_FILL = 0.94;
 
 /** Fonts ready (layout depends on them). */
 function useFontsReady() {
@@ -33,6 +36,7 @@ function useGeometry(root: RefObject<HTMLElement | null>, layout: HeroLayout, la
   useLayoutEffect(() => setGeometry(null), [lang, layout, ready]);
   useLayoutEffect(() => {
     if (geometry || !ready || !root.current) return;
+    fitLabels(root.current);
     setGeometry(measureScene(root.current, layout));
   }, [geometry, ready, root, layout]);
   useEffect(() => {
@@ -67,7 +71,8 @@ export function SceneHero({ spec, lang }: { spec: SceneSpec; lang: FoundationHer
   const ready = useFontsReady();
   const { layout } = frame;
   const g = useGeometry(root, layout, lang, ready);
-  // Wide poster: a small component is drawn larger to fill its tile (no tile mostly empty); tall tiles take their content's height.
+  // Wide poster: each component is sized from what it really lays out (overflow included) to fill its slot:
+  // a small one drawn larger (no hollow slot), a large one smaller (nothing clipped). Tall slots take their content's height.
   useLayoutEffect(() => {
     if (!g || layout !== "wide" || !root.current) return;
     for (const tile of root.current.querySelectorAll<HTMLElement>("[data-tile]")) {
@@ -76,8 +81,11 @@ export function SceneHero({ spec, lang }: { spec: SceneSpec; lang: FoundationHer
       child.style.removeProperty("zoom");
       const room = tile.getBoundingClientRect();
       const own = child.getBoundingClientRect();
-      const fit = Math.min(TILE_ZOOM, (room.width * 0.86) / Math.max(1, own.width), (room.height * 0.8) / Math.max(1, own.height));
-      if (fit > 1.05) child.style.setProperty("zoom", String(Math.floor(fit * 100) / 100));
+      const scale = own.width / Math.max(1, child.offsetWidth);
+      const w = Math.max(own.width, child.scrollWidth * scale);
+      const h = Math.max(own.height, child.scrollHeight * scale);
+      const fit = Math.min(TILE_ZOOM, (room.width * TILE_FILL) / Math.max(1, w), (room.height * TILE_FILL) / Math.max(1, h));
+      if (fit > 1.03 || fit < 0.995) child.style.setProperty("zoom", String(Math.floor(fit * 100) / 100));
     }
   }, [g, layout]);
   const compiled = useMemo(() => (g ? sceneTracks(spec, g) : null), [g, spec]);

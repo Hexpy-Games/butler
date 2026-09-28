@@ -41,7 +41,9 @@
   pointer-events: none;
 }
 
-/* A tile: a card filling its cell, its content centred and filling it. */
+/* A tile: a slot of the poster's grid. It draws nothing itself (no panel,
+   fill or border): the real component stands on the page, centred in its
+   slot and zoomed to fill it (SceneHero.tsx). */
 .tile {
   position: relative;
   display: grid;
@@ -49,11 +51,6 @@
   box-sizing: border-box;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
-  padding: var(--space-lg);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-composer);
-  background: color-mix(in srgb, var(--surface-raised) 60%, transparent);
 }
 
 .tile > * {

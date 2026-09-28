@@ -44,13 +44,17 @@ export const COLOR_COPY = {
 
 export type ColorCopy = (typeof COLOR_COPY)["en"];
 
-/** The swatch field: role tokens in rows (surfaces and lines, text, action and status, tints and states). */
+/**
+ * The swatch field, four to a row: surfaces, lines and the action colors, text,
+ * status (each above its tint, the blue text above the info tint).
+ */
 export const SWATCHES = [
-  "--color-surface-base", "--surface-raised", "--popover", "--line", "--line-strong",
-  "--text-primary", "--text-secondary", "--text-tertiary", "--color-text-disabled", "--color-accent-text",
-  "--accent", "--primary", "--color-success", "--color-warning", "--color-danger",
-  "--color-success-bg", "--color-warning-bg", "--color-danger-bg", "--color-info-bg", "--color-disabled-bg",
+  "--color-surface-base", "--surface-raised", "--popover", "--color-disabled-bg",
+  "--line", "--line-strong", "--primary", "--accent",
+  "--text-primary", "--text-secondary", "--text-tertiary", "--color-text-disabled",
+  "--color-success", "--color-warning", "--color-danger", "--color-accent-text",
+  "--color-success-bg", "--color-warning-bg", "--color-danger-bg", "--color-info-bg",
 ] as const;
 
-/** Columns of the swatch field. */
-export const SWATCH_COLUMNS = 5;
+/** Columns of the swatch field (wide; the portrait field sets two). */
+export const SWATCH_COLUMNS = 4;
