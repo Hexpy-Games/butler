@@ -205,6 +205,7 @@ async fn guided_absolute_path_is_rejected_and_utf8_cursor_respects_character_bou
 
 #[tokio::test]
 async fn cursor_decoder_accepts_integral_json_number_spellings() {
+    source_gaps::cursor_decoder_accepts_runtime_tolerated_base64url_spellings().await;
     use base64::Engine;
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     let fixture = Fixture::new();

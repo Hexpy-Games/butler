@@ -1,0 +1,28 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/oauth/token",
+    "key": {
+      "path": "/oauth/token",
+      "model": "",
+      "effort": null,
+      "user_request": "",
+      "round": []
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": [
+      [
+        "content-type",
+        "application/json"
+      ]
+    ],
+    "chunks": [
+      {
+        "delay_ms": 0,
+        "text": "{\"access_token\":\"{{TOKEN}}\",\"token_type\":\"Bearer\",\"expires_in\":864000,\"scope\":\"openid profile email offline_access\",\"id_token\":\"{{TOKEN}}\",\"earliest_refresh_at\":1791378100,\"refresh_token\":\"{{TOKEN}}\",\"oai_is\":\"ois1.{{JWT}}\"}"
+      }
+    ]
+  }
+}
