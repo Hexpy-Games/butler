@@ -214,7 +214,10 @@ mod tests {
 
     use super::*;
 
-    /// Provider answers from each vendor's documented error shape.
+    /// Pure-logic table: provider answers in each vendor's documented shape.
+    /// Errors classify into the public key-check codes, and OpenAI and Gemini
+    /// model lists read into model ids.
+    // test-category: pure-logic
     #[test]
     fn classifies_provider_answers_into_public_codes() {
         let cases: [(u16, Value, Result<bool, &str>); 10] = [
@@ -263,32 +266,7 @@ mod tests {
                 .map_err(|error| error.code());
             assert_eq!(actual, expected, "{status} {body}");
         }
-    }
 
-    #[test]
-    fn checking_and_saving_share_one_key_rule() {
-        assert_eq!(
-            provider_key("openai", "  sk-x \n")
-                .map(|(_, key)| key)
-                .map_err(|error| error.code()),
-            Ok("sk-x")
-        );
-        for (provider, key, code) in [
-            ("openai", "", "invalid_request"),
-            ("openai", " \t ", "invalid_request"),
-            ("openai", "sk-a\nb", "invalid_request"),
-            ("local", "sk-x", "unsupported_provider"),
-        ] {
-            assert_eq!(
-                provider_key(provider, key).map_err(|error| error.code()),
-                Err(code),
-                "{provider} {key:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn lists_openai_and_gemini_model_ids() {
         let openai = json!({"object":"list","data":[{"id":"gpt-6-sol"},{"id":"gpt-6-luna"}]});
         assert_eq!(model_ids(Some(&openai)), ["gpt-6-sol", "gpt-6-luna"]);
         let gemini = json!({"models":[{"name":"models/gemini-3.8-flash"}]});

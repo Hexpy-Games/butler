@@ -49,4 +49,4 @@ fn identity_error(error: butler_core::json::JsonError) -> BtccError {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

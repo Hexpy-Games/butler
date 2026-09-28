@@ -6,17 +6,10 @@ use std::sync::{
 
 use super::EffectService;
 use super::contracts::*;
-use super::testing::{clock, ready, scope};
+use super::testing::{clock, ready};
 use super::{identity, outcomes, recovery};
-use crate::btcc::TurnStore;
-use crate::btcc::storage::{
-    BtccRepositories, BtccStorage, SessionWorkRepository, StorageEffectJournal,
-    ToolJournalRepository, ToolJournalStart,
-};
-use crate::btcc::work::{
-    DurableWorkService, ExecutionMode, PlanAction, ReplacePlanInput, ReviewInput, ReviewSubject,
-    ReviewVerdict, StartWorkInput, WorkView,
-};
+use crate::btcc::storage::StorageEffectJournal;
+use crate::btcc::work::WorkView;
 use tokio_util::sync::CancellationToken;
 
 struct FixtureAdapter {

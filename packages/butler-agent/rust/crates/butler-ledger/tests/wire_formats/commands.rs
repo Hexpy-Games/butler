@@ -11,8 +11,7 @@ use butler_ledger::project_ledger::{
 use super::golden::assert_golden;
 use super::harness::{APP_PROJECT, Harness, LEDGER_PROJECT};
 
-#[tokio::test]
-async fn ledger_commands_keep_their_files_and_envelopes() {
+pub(crate) async fn ledger_commands_keep_their_files_and_envelopes() {
     let mut h = Harness::new("commands");
     h.command("status before init", C::Status, json!({})).await;
     h.command("query before init", C::Query, json!({"kind": " work "}))

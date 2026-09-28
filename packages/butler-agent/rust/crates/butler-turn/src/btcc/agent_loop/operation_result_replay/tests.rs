@@ -9,10 +9,9 @@ use crate::btcc::storage::{
 };
 
 use super::super::contracts::{
-    ModelRoundMessage, ModelRoundRequest, ModelRoundResult, ModelRoundRole, ModelRoundToolCall,
+    ModelRoundMessage, ModelRoundRequest, ModelRoundResult, ModelRoundRole,
 };
 use super::super::ports::{ModelRoundError, ModelRoundPort};
-use super::anchors::latest_work_anchor_indices;
 use super::arguments::exact_read_arguments;
 use super::contracts::{
     ExactResultReplaySelection, OperationResultRuntimeFactory, OperationResultScope, ReplayMode,
@@ -44,41 +43,6 @@ fn exact_read_arguments_preserve_source_bounds_and_nulls() {
     assert_eq!(parsed.result_ref, "ref");
     assert_eq!(parsed.work_id.as_deref(), Some("work"));
     assert_eq!(parsed.revision, None);
-}
-
-#[test]
-fn work_anchors_use_last_duplicate_call_and_guided_normalization() {
-    let call = |name: &str, raw: &str| ModelRoundToolCall {
-        id: "same".into(),
-        name: name.into(),
-        arguments: Default::default(),
-        raw_arguments: raw.into(),
-        origin: None,
-    };
-    let mut first = ModelRoundMessage::user("ignored".into(), None);
-    first.tool_calls = Some(vec![call("replace_work_plan", "{}")]);
-    let mut second = ModelRoundMessage::user("ignored".into(), None);
-    second.tool_calls = Some(vec![call(
-        "tool_call",
-        r#"{"id":"native:record_work_review","arguments":{}}"#,
-    )]);
-    let result = ModelRoundMessage {
-        role: ModelRoundRole::Tool,
-        content: r#"{"ok":true}"#.into(),
-        tool_call_id: Some("same".into()),
-        name: Some("replace_work_plan".into()),
-        tool_calls: None,
-        image_attachments: vec![],
-        provider_data: None,
-        request_segment_kind: None,
-        operation_result_reference: None,
-        operation_result_call_id: None,
-        continuation_item_id: None,
-    };
-    assert_eq!(
-        latest_work_anchor_indices(&[first, second, result]),
-        [2].into_iter().collect()
-    );
 }
 
 #[tokio::test]

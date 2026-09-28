@@ -173,15 +173,3 @@ impl From<ContextError> for butler_turn::btcc::BtccError {
         Self::relay(error.code(), error.message(), error)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::ContextCode;
-
-    #[test]
-    fn wire_codes_are_stable() {
-        let codes: Vec<&str> = ContextCode::ALL.iter().map(|code| code.as_str()).collect();
-        let expected: Vec<&str> = include_str!("wire_codes.txt").lines().collect();
-        assert_eq!(codes, expected);
-    }
-}

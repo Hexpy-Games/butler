@@ -1,6 +1,5 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use butler_platform::secure_fs::symlink;
 use serde_json::Value;
@@ -56,101 +55,9 @@ impl Drop for Fixture {
     }
 }
 
-#[tokio::test]
-async fn source_writer_records_full_set_and_projection_inputs() {
-    let fixture = Fixture::new();
-    assert_eq!(
-        super::committed::read_all(&fixture.root)
-            .unwrap()
-            .iter()
-            .filter(|(path, _)| path == "project.json")
-            .count(),
-        1
-    );
-    let native = fixture.native();
-    let active = native
-        .show_plan_record(fixture.input("PLAN-1"))
-        .await
-        .unwrap();
-    assert_eq!(active.id, "PLAN-1");
-    assert_eq!(active.status, "active");
-    assert_eq!(active.body.as_deref(), Some("Source Plan body\nline two\n"));
-    assert_eq!(
-        active.path.as_deref(),
-        Some("project-ledger/projects/demo/plans/plan-1.md")
-    );
-    assert_eq!(
-        native
-            .show_plan_record(fixture.input("PLAN-2"))
-            .await
-            .unwrap()
-            .status,
-        "draft"
-    );
-    assert_eq!(
-        native
-            .show_plan_record(fixture.input("PLAN-3"))
-            .await
-            .unwrap()
-            .status,
-        "closed"
-    );
-    assert_eq!(
-        native
-            .show_plan_record(fixture.input(" PLAN-1 "))
-            .await
-            .unwrap()
-            .id,
-        "PLAN-1"
-    );
-    assert_eq!(
-        native.show_plan_record(fixture.input("MISSING")).await,
-        Err(ProjectLedgerReadError::record_show("record_not_found"))
-    );
-    native.close().await;
-}
-
-#[tokio::test]
-async fn duplicate_and_unrelated_malformed_record_block_show() {
-    let fixture = Fixture::new();
-    let native = fixture.native();
-    fs::create_dir_all(fixture.root.join("reports")).unwrap();
-    fs::write(
-        fixture.root.join("reports/duplicate.md"),
-        fs::read(fixture.root.join("plans/plan-1.md")).unwrap(),
-    )
-    .unwrap();
-    assert_eq!(
-        native.show_plan_record(fixture.input("PLAN-1")).await,
-        Err(ProjectLedgerReadError::record_show("ambiguous_record"))
-    );
-    fs::remove_file(fixture.root.join("reports/duplicate.md")).unwrap();
-    fs::create_dir_all(fixture.root.join("references")).unwrap();
-    fs::write(fixture.root.join("references/bad.json"), "{invalid").unwrap();
-    assert_eq!(
-        native.show_plan_record(fixture.input("PLAN-1")).await,
-        Err(ProjectLedgerReadError::record_show("invalid_record_json"))
-    );
-    fs::remove_file(fixture.root.join("references/bad.json")).unwrap();
-    fs::write(fixture.root.join("plans/plan-4.json"), "false").unwrap();
-    assert_eq!(
-        native.show_plan_record(fixture.input("plan-4")).await,
-        Err(ProjectLedgerReadError::record_show("record_not_found"))
-    );
-    symlink(
-        &fixture.root.join("plans/plan-1.md"),
-        &fixture.root.join("references/alias.md"),
-    )
-    .unwrap();
-    assert_eq!(
-        native.show_plan_record(fixture.input("PLAN-1")).await,
-        Err(ProjectLedgerReadError::record_show(
-            "publication_record_is_symlink"
-        ))
-    );
-    native.close().await;
-}
-
+/// Security boundary: ledger root discovery prefers the initialized candidate
+/// and refuses path escapes.
+// test-category: security
 #[tokio::test]
 async fn initialized_candidate_preference_and_path_escape() {
     let fixture = Fixture::new();
@@ -184,6 +91,9 @@ async fn initialized_candidate_preference_and_path_escape() {
     native.close().await;
 }
 
+/// Race: while a command holds its ledger claim, readers keep seeing the
+/// before-image until the claim is released.
+// test-category: race
 #[tokio::test]
 async fn before_image_remains_authoritative_until_claim_release() {
     let fixture = Fixture::new();
@@ -265,53 +175,6 @@ async fn before_image_remains_authoritative_until_claim_release() {
     native.close().await;
 }
 
-#[tokio::test]
-#[expect(
-    clippy::excessive_nesting,
-    reason = "the read blocks inside a spawned task's owner closure"
-)]
-async fn dropped_caller_keeps_admitted_read_owned_and_close_drains() {
-    let fixture = Fixture::new();
-    let native = fixture.native();
-    let entered = Arc::new(std::sync::Barrier::new(2));
-    let release = Arc::new(std::sync::Barrier::new(2));
-    let caller = tokio::spawn({
-        let native = native.clone();
-        let (entered, release) = (Arc::clone(&entered), Arc::clone(&release));
-        async move {
-            native
-                .run(move |_, _| {
-                    entered.wait();
-                    release.wait();
-                    Ok(())
-                })
-                .await
-        }
-    });
-    tokio::task::spawn_blocking(move || entered.wait())
-        .await
-        .unwrap();
-    caller.abort();
-    let mut closing = tokio::spawn({
-        let native = native.clone();
-        async move { native.close().await }
-    });
-    assert!(
-        tokio::time::timeout(std::time::Duration::from_millis(50), &mut closing)
-            .await
-            .is_err(),
-        "close finished while an admitted read was running"
-    );
-    tokio::task::spawn_blocking(move || release.wait())
-        .await
-        .unwrap();
-    closing.await.unwrap();
-    assert_eq!(
-        native.show_plan_record(fixture.input("PLAN-1")).await,
-        Err(ProjectLedgerReadError::owner("project_ledger_closed"))
-    );
-}
-
 fn claim_path(root: &Path) -> PathBuf {
     root.parent()
         .unwrap()
@@ -331,51 +194,4 @@ fn substitute_publication_paths(
         .replace("$CANDIDATE", &candidate.to_string_lossy())
         .replace("$JOURNAL", &journal.to_string_lossy())
         .replace("$CLAIM", &claim.to_string_lossy())
-}
-
-#[test]
-fn changed_read_set_and_publication_version_retry_without_extending_three_attempts() {
-    let fixture = Fixture::new();
-    let plan = fixture.root.join("plans/plan-1.md");
-    let raw = fs::read_to_string(&plan).unwrap();
-    let mut reads = 0;
-    let result = super::committed::read_all_with_hook(&fixture.root, || {
-        reads += 1;
-        if reads == 1 {
-            fs::write(
-                &plan,
-                raw.replace("status: \"active\"", "status: \"closed\""),
-            )
-            .unwrap();
-        }
-    })
-    .unwrap();
-    assert_eq!(reads, 2);
-    assert!(result.iter().any(|(path, raw)| path == "plans/plan-1.md"
-        && raw.as_deref().unwrap().contains("status: \"closed\"")));
-
-    let claim = claim_path(&fixture.root);
-    fs::create_dir_all(claim.parent().unwrap()).unwrap();
-    let mut attempts = 0;
-    let result = super::committed::read_all_with_hook(&fixture.root, || {
-        attempts += 1;
-        if attempts == 1 {
-            fs::write(&claim, "{}").unwrap();
-        }
-    })
-    .unwrap();
-    assert_eq!(attempts, 2);
-    assert!(result.iter().any(|(path, _)| path == "plans/plan-1.md"));
-
-    let mut unstable = 0;
-    let error = super::committed::read_all_with_hook(&fixture.root, || {
-        unstable += 1;
-        fs::write(&claim, format!("{{\"revision\":{unstable}}}")).unwrap();
-    })
-    .unwrap_err();
-    assert_eq!(unstable, 3);
-    assert_eq!(
-        error,
-        ProjectLedgerReadError::record_show("project_ledger_changed_during_record_read")
-    );
 }

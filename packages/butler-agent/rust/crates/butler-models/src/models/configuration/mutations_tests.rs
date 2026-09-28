@@ -54,6 +54,9 @@ impl Fixture {
     }
 }
 
+/// Race: concurrent distinct model registrations share one full-file write
+/// sequence, so neither update is lost.
+// test-category: race
 #[tokio::test]
 async fn concurrent_distinct_registrations_share_the_full_file_write_sequence() {
     let fixture = Fixture::new();

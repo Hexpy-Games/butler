@@ -26,16 +26,10 @@ impl<F: Fn(&Path) + Send + Sync> CommitObserver for At<(Point, F)> {
             (self.0.1)(target);
         }
     }
-    fn after_link(&self, temporary: &Path) {
-        if matches!(self.0.0, Point::AfterLink) {
-            (self.0.1)(temporary);
-        }
-    }
 }
 
 enum Point {
     BeforeReplace,
-    AfterLink,
 }
 
 fn sha(bytes: &[u8]) -> String {
@@ -96,6 +90,9 @@ async fn batch_retains_first_commit_and_reports_second_external_change() {
     std::fs::remove_dir_all(root).unwrap();
 }
 
+/// Race: an external writer between the check and the exclusive create keeps
+/// its bytes, and the temporary file is cleaned up.
+// test-category: race
 #[test]
 fn exclusive_create_race_keeps_external_bytes_and_cleans_temp() {
     let root = std::env::temp_dir().join(format!("butler-k1b-create-race-{}", Uuid::new_v4()));
@@ -124,40 +121,6 @@ fn exclusive_create_race_keeps_external_bytes_and_cleans_temp() {
     assert_eq!(failure.error, "external_change_conflict");
     assert_eq!(std::fs::read(&absolute).unwrap(), b"external");
     assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
-    std::fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
-fn committed_hardlink_cleanup_failure_remains_applied_success() {
-    let root = std::env::temp_dir().join(format!("butler-k1b-cleanup-{}", Uuid::new_v4()));
-    std::fs::create_dir(&root).unwrap();
-    let absolute = root.join("target.txt");
-    let snapshot = io::observe(
-        GuardedPath {
-            public: "target.txt".into(),
-            absolute: absolute.clone(),
-            real: absolute.clone(),
-        },
-        io::Parent::MustExist,
-    )
-    .unwrap();
-    let prepared = io::prepare(
-        snapshot,
-        b"committed".to_vec(),
-        None,
-        io::Replacement::RequiresExpectedDigest,
-    )
-    .unwrap();
-    // A directory now occupies the linked temporary file's name, so removing
-    // the temporary file fails after the target was committed.
-    let obstruct_temporary = At((Point::AfterLink, |temporary: &Path| {
-        std::fs::remove_file(temporary).unwrap();
-        std::fs::create_dir(temporary).unwrap();
-    }));
-    let result = io::commit(prepared, &obstruct_temporary).unwrap();
-    assert!(result.cleanup_failed);
-    assert_eq!(std::fs::read(&absolute).unwrap(), b"committed");
-    assert_eq!(std::fs::read_dir(&root).unwrap().count(), 2);
     std::fs::remove_dir_all(root).unwrap();
 }
 

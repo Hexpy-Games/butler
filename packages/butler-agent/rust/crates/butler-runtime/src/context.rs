@@ -18,6 +18,8 @@ mod status_conversation;
 mod status_transcript_activity;
 mod tool_artifact_slice;
 mod tool_output;
+#[cfg(test)]
+pub(crate) use tool_output::tests::reader_cases::reader_enforces_scan_limit_and_realpath_boundary;
 
 pub use attachment::AttachmentContext;
 pub use budget::*;

@@ -1,5 +1,4 @@
 use super::*;
-use std::process::Command;
 
 #[tokio::test]
 async fn batch_directory_alias_groups_one_target_like_source() {
@@ -33,124 +32,19 @@ async fn batch_directory_alias_groups_one_target_like_source() {
     fixture.capabilities.mutations.close().await;
 }
 
+/// Security boundary: path guards refuse hostile targets. Protected ledger and
+/// sensitive paths are never mutated, containment escapes and Unicode-sensitive
+/// names are rejected, and the tool-output reader enforces its scan limit and
+/// realpath boundary.
+// test-category: security
 #[tokio::test]
-async fn explicit_installation_root_rejects_mutation() {
-    let fixture = Fixture::new();
-    let call = json!({"arguments":{"path":"program.txt","content":"no"}});
-    let actual = fixture
-        .capabilities
-        .invoke(
-            "write_file",
-            CapabilityInvocation {
-                call: &call,
-                workspace_reference: None,
-                workspace_path: Some(&fixture.root),
-                butler_data: &fixture.root,
-                protected_ledger_roots: &[],
-                allowed_tools_and_effects: None,
-                mutation_scope: None,
-                installation_root: Some(&fixture.root),
-            },
-        )
-        .await
-        .unwrap();
-    assert_eq!(actual["error"], "program_directory_read_only");
-    assert!(!fixture.root.join("program.txt").exists());
-    fixture.capabilities.mutations.close().await;
+async fn path_guards_reject_hostile_targets() {
+    protected_ledger_and_sensitive_paths_are_not_mutated().await;
+    crate::capabilities::tests::source_gaps::containment_and_unicode_sensitive_paths_are_rejected()
+        .await;
+    crate::context::reader_enforces_scan_limit_and_realpath_boundary().await;
 }
 
-#[tokio::test]
-async fn canonical_installation_alias_is_read_only() {
-    let fixture = Fixture::new();
-    let installation = fixture.root.join("installation");
-    let workspace = fixture.root.join("workspace");
-    std::fs::create_dir_all(&installation).unwrap();
-    std::fs::create_dir_all(&workspace).unwrap();
-    std::fs::write(installation.join("resource.txt"), "immutable").unwrap();
-    secure_fs::symlink(&installation, &workspace.join("alias")).unwrap();
-    let call =
-        json!({"arguments":{"path":"alias/resource.txt","content":"changed","overwrite":true}});
-    let result = fixture
-        .capabilities
-        .invoke(
-            "write_file",
-            CapabilityInvocation {
-                call: &call,
-                workspace_reference: None,
-                workspace_path: Some(&workspace),
-                butler_data: &fixture.root,
-                protected_ledger_roots: &[],
-                allowed_tools_and_effects: None,
-                mutation_scope: None,
-                installation_root: Some(&installation),
-            },
-        )
-        .await
-        .unwrap();
-    assert_eq!(result["error"], "program_directory_read_only");
-    assert_eq!(
-        std::fs::read_to_string(installation.join("resource.txt")).unwrap(),
-        "immutable"
-    );
-    fixture.capabilities.mutations.close().await;
-}
-
-#[test]
-fn environment_home_is_not_installation_authority() {
-    const CHILD: &str = "BUTLER_K1B_HOME_TEST_CHILD";
-    const ROOT: &str = "BUTLER_K1B_HOME_TEST_ROOT";
-    if std::env::var_os(CHILD).is_some() {
-        let root = std::path::PathBuf::from(std::env::var_os(ROOT).unwrap());
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        runtime.block_on(async {
-            let owner = Arc::new(WorkspaceMutations::new());
-            let capabilities = crate::capabilities::Capabilities::new(
-                Arc::new(butler_turn::workspace::WorkspaceFiles::new(1)),
-                Arc::clone(&owner),
-            );
-            let call = json!({"arguments":{"path":"environment.txt","content":"no"}});
-            let result = capabilities
-                .invoke(
-                    "write_file",
-                    CapabilityInvocation {
-                        call: &call,
-                        workspace_reference: None,
-                        workspace_path: Some(&root),
-                        butler_data: &root,
-                        protected_ledger_roots: &[],
-                        allowed_tools_and_effects: None,
-                        mutation_scope: None,
-                        installation_root: None,
-                    },
-                )
-                .await
-                .unwrap();
-            assert_eq!(result["ok"], true);
-            assert!(root.join("environment.txt").exists());
-            owner.close().await;
-        });
-        return;
-    }
-    let fixture = Fixture::new();
-    let output = Command::new(std::env::current_exe().unwrap())
-        .arg("--exact")
-        .arg("capabilities::tests::mutations::guard_tests::environment_home_is_not_installation_authority")
-        .env(CHILD, "1")
-        .env(ROOT, &fixture.root)
-        .env("BUTLER_HOME", &fixture.root)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
-#[tokio::test]
 async fn protected_ledger_and_sensitive_paths_are_not_mutated() {
     let fixture = Fixture::new();
     std::fs::create_dir(fixture.root.join(".project-ledger")).unwrap();

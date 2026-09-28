@@ -125,6 +125,3 @@ fn envelope(turn: AppTurn) -> Result<JsonDocument, GatewayApplicationError> {
     }
     JsonDocument::from_value(&value).map_err(GatewayApplicationError::internal_from)
 }
-
-#[cfg(test)]
-mod tests;

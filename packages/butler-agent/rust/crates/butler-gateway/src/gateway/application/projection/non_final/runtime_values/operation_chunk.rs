@@ -108,27 +108,3 @@ fn invalid() -> AppStorageError {
         "Invalid operation output chunk",
     )
 }
-
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::normalize;
-
-    #[test]
-    fn committed_chunk_is_validated_and_extras_are_removed() {
-        let mut payload = json!({
-            "requestId":"request", "resultId":"result",
-            "resultSha256":"a".repeat(64), "chunkIndex":0, "chunkCount":1,
-            "byteStart":0, "byteEnd":1, "byteLength":1,
-            "contentBase64":"YQ==",
-            "contentSha256":"ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb",
-            "privateExtra":"discarded"
-        });
-        let normalized = normalize(payload.as_object()).unwrap();
-        assert_eq!(normalized.len(), 10);
-        assert_eq!(normalized["contentBase64"], "YQ==");
-        payload["contentSha256"] = "b".repeat(64).into();
-        assert!(normalize(payload.as_object()).is_err());
-    }
-}

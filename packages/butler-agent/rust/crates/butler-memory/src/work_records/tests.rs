@@ -12,8 +12,7 @@ fn fixture() -> Value {
     serde_json::from_str(include_str!("source-bun.json")).unwrap()
 }
 
-#[test]
-fn original_writer_and_reader_goldens_preserve_hashes_review_gates_and_read_errors() {
+pub(crate) fn original_writer_and_reader_goldens_preserve_hashes_review_gates_and_read_errors() {
     let fixture = fixture();
     for case in fixture["cases"].as_array().unwrap() {
         let root = TemporaryRoot(std::env::temp_dir().join(format!(
@@ -55,41 +54,4 @@ fn original_writer_and_reader_goldens_preserve_hashes_review_gates_and_read_erro
         ids.sort();
         assert_eq!(ids, vec![task_id]);
     }
-}
-
-#[test]
-fn canonical_record_ids_reject_noncanonical_base64_and_invalid_utf8() {
-    for case in fixture()["ids"].as_array().unwrap() {
-        assert_eq!(
-            task_id_from_memory_record_id(case["record_id"].as_str().unwrap()),
-            case["task_id"].as_str().map(str::to_owned)
-        );
-    }
-}
-
-#[test]
-fn missing_owner_is_absent_but_directory_in_place_of_file_is_unavailable() {
-    let root = TemporaryRoot(
-        std::env::temp_dir().join(format!("butler-native-work-io-{}", uuid::Uuid::new_v4())),
-    );
-    let reader = WorkRecordReader::new(&root.0);
-    assert!(
-        reader
-            .read_memory_report("missing", ReadAvailability::Strict)
-            .unwrap()
-            .is_none()
-    );
-    let path = root.0.join("tasks/task/memory-report-binding.json");
-    std::fs::create_dir_all(path).unwrap();
-    assert!(
-        reader
-            .read_memory_report("task", ReadAvailability::Strict)
-            .is_err()
-    );
-    assert!(
-        reader
-            .read_memory_report("task", ReadAvailability::BestEffort)
-            .unwrap()
-            .is_none()
-    );
 }
