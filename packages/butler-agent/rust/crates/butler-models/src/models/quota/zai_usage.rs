@@ -163,4 +163,4 @@ fn used_percent(limit: &Limit) -> Option<f64> {
 }
 
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;

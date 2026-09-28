@@ -170,4 +170,4 @@ fn merge(windows: &mut Vec<ProviderQuotaWindow>, window: ProviderQuotaWindow) {
 }
 
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;

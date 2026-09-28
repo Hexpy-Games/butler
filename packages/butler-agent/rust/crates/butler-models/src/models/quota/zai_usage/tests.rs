@@ -19,9 +19,7 @@ fn ids(reading: &ProviderQuotaReading) -> Vec<&str> {
         .collect()
 }
 
-// test-category: format-pin
-#[test]
-fn token_and_tool_windows_parse_with_resets_and_the_level() {
+pub(crate) fn token_and_tool_windows_parse_with_resets_and_the_level() {
     let reading = parse(&json!({
         "code": 200, "msg": "Operation successful", "success": true,
         "data": {
@@ -54,9 +52,7 @@ fn token_and_tool_windows_parse_with_resets_and_the_level() {
     assert_eq!(reading.windows[2].window_minutes, None);
 }
 
-// test-category: format-pin
-#[test]
-fn credit_limits_count_as_model_quota_and_counts_give_the_percentage() {
+pub(crate) fn credit_limits_count_as_model_quota_and_counts_give_the_percentage() {
     let reading = parse(&json!({
         "success": true,
         "data": {
@@ -78,9 +74,7 @@ fn credit_limits_count_as_model_quota_and_counts_give_the_percentage() {
     assert_eq!(reading.windows[2].used_percent, 10.0);
 }
 
-// test-category: format-pin
-#[test]
-fn undocumented_windows_are_skipped_not_guessed() {
+pub(crate) fn undocumented_windows_are_skipped_not_guessed() {
     let reading = parse(&json!({
         "data": {
             "level": "lite",
@@ -98,9 +92,7 @@ fn undocumented_windows_are_skipped_not_guessed() {
     assert_eq!(reading.windows[0].resets_at_ms, Some(1_790_000_600_000));
 }
 
-// test-category: format-pin
-#[test]
-fn rejected_keys_refusals_and_foreign_bodies_are_errors() {
+pub(crate) fn rejected_keys_refusals_and_foreign_bodies_are_errors() {
     assert!(matches!(
         parse(&json!({"code": 401, "msg": "token expired", "success": false})),
         Err(QuotaFetchError::Unauthorized { status: 401 })
@@ -139,9 +131,7 @@ fn rejected_keys_refusals_and_foreign_bodies_are_errors() {
     assert_eq!(level.plan_name.as_deref(), Some("pro"));
 }
 
-// test-category: format-pin
-#[test]
-fn the_plan_name_is_sanitized() {
+pub(crate) fn the_plan_name_is_sanitized() {
     let reading = parse(&json!({
         "data": {
             "level": "<b>Pro</b>\u{202e}",
@@ -155,9 +145,7 @@ fn the_plan_name_is_sanitized() {
 /// The `CREDIT_LIMIT` shape, synthesized from the official client's
 /// documentation (not a recording: the live account returns
 /// `TOKENS_LIMIT`; see the fixture's `_provenance`).
-// test-category: format-pin
-#[test]
-fn the_credit_limit_example_parses_like_token_limits() {
+pub(crate) fn the_credit_limit_example_parses_like_token_limits() {
     let body = include_str!("credit-limit.example.json");
     let example: serde_json::Value = serde_json::from_str(body).unwrap();
     assert_eq!(

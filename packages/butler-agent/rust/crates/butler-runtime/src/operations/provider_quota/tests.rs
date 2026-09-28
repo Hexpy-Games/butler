@@ -65,9 +65,7 @@ fn code(view: &ProviderQuotaView) -> Option<&str> {
     view.reason.as_ref().map(|reason| reason.code.as_str())
 }
 
-// test-category: pure-logic
-#[test]
-fn without_a_reading_polled_providers_are_pending_and_api_ones_not_offered() {
+pub(crate) fn without_a_reading_polled_providers_are_pending_and_api_ones_not_offered() {
     let dir = Dir::new();
     let (store, _) = store(&dir);
     let openai = store.view("openai");
@@ -85,9 +83,7 @@ fn without_a_reading_polled_providers_are_pending_and_api_ones_not_offered() {
     assert_eq!(code(&store.view("zai")), Some("provider_quota_pending"));
 }
 
-// test-category: pure-logic
-#[test]
-fn poll_outcomes_without_a_reading_set_the_reason() {
+pub(crate) fn poll_outcomes_without_a_reading_set_the_reason() {
     let dir = Dir::new();
     let (store, _) = store(&dir);
     store.record_status("openai", QuotaPollStatus::NotOffered(QuotaPlanKind::Api));
@@ -109,9 +105,7 @@ fn poll_outcomes_without_a_reading_set_the_reason() {
     assert_eq!(code(&store.view("zai")), Some("provider_quota_pending"));
 }
 
-// test-category: pure-logic
-#[test]
-fn a_polled_reading_is_shown_with_its_plan_and_source() {
+pub(crate) fn a_polled_reading_is_shown_with_its_plan_and_source() {
     let dir = Dir::new();
     let (store, _) = store(&dir);
     let mut updates = store.subscribe();
@@ -128,9 +122,7 @@ fn a_polled_reading_is_shown_with_its_plan_and_source() {
     assert_eq!(store.view("openai").source_id, "openai-usage-endpoint");
 }
 
-// test-category: pure-logic
-#[test]
-fn a_failed_poll_keeps_the_reading_stale_with_the_fetch_failed_reason() {
+pub(crate) fn a_failed_poll_keeps_the_reading_stale_with_the_fetch_failed_reason() {
     let dir = Dir::new();
     let (store, clock) = store(&dir);
     store.record_polled(reading("openai", 40.0, ProviderQuotaSource::UsageEndpoint));
@@ -153,9 +145,7 @@ fn a_failed_poll_keeps_the_reading_stale_with_the_fetch_failed_reason() {
     assert!(!view.stale && view.reason.is_none(), "{view:?}");
 }
 
-// test-category: pure-logic
-#[test]
-fn header_readings_keep_the_polled_plan_name() {
+pub(crate) fn header_readings_keep_the_polled_plan_name() {
     let dir = Dir::new();
     let (store, _) = store(&dir);
     store.record_polled(reading("openai", 10.0, ProviderQuotaSource::UsageEndpoint));
@@ -170,9 +160,7 @@ fn header_readings_keep_the_polled_plan_name() {
     assert_eq!(view.windows[0].used_percent, Some(12.0));
 }
 
-// test-category: pure-logic
-#[test]
-fn readings_survive_a_restart_but_poll_outcomes_do_not() {
+pub(crate) fn readings_survive_a_restart_but_poll_outcomes_do_not() {
     let dir = Dir::new();
     let (store, _) = store(&dir);
     store.record_polled(reading("zai", 30.0, ProviderQuotaSource::UsageEndpoint));
@@ -182,4 +170,26 @@ fn readings_survive_a_restart_but_poll_outcomes_do_not() {
     assert!(view.available && !view.stale, "{view:?}");
     assert_eq!(view.plan_name.as_deref(), Some("plus"));
     assert_eq!(reopened.provider_ids(), ["zai"]);
+}
+
+/// Pure logic over a scripted fetcher and clock: when each trigger polls
+/// (spacing, backoff, the rate-limit and refresh caps, the auth block, the
+/// kill switch) and how each outcome shapes the view (pending, not offered,
+/// fetch failed, a dropped or kept reading, persistence).
+// test-category: pure-logic
+#[tokio::test]
+async fn quota_polls_follow_their_cadence_and_shape_the_view() {
+    use super::poller::tests as poller;
+    without_a_reading_polled_providers_are_pending_and_api_ones_not_offered();
+    poll_outcomes_without_a_reading_set_the_reason();
+    a_polled_reading_is_shown_with_its_plan_and_source();
+    a_failed_poll_keeps_the_reading_stale_with_the_fetch_failed_reason();
+    header_readings_keep_the_polled_plan_name();
+    readings_survive_a_restart_but_poll_outcomes_do_not();
+    poller::each_trigger_keeps_its_spacing().await;
+    poller::failures_and_rate_limits_back_off().await;
+    poller::rejected_tokens_refresh_rarely_and_block_background_polls().await;
+    poller::nothing_to_read_replaces_the_reading_with_its_reason().await;
+    poller::schema_mismatches_are_counted().await;
+    poller::the_kill_switch_stops_polls_and_shows_not_offered().await;
 }

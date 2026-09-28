@@ -110,27 +110,3 @@ pub(super) async fn poll_within(
     let task = tokio::spawn(async move { poller.poll(trigger, provider_id.as_deref()).await });
     let _ = tokio::time::timeout(wait, task).await;
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // test-category: pure-logic
-    #[test]
-    fn polling_is_on_unless_the_config_turns_it_off() {
-        let dir = std::env::temp_dir().join(format!("butler-quota-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("butler.config.json");
-        assert!(polling_configured(&path, "openai"));
-        std::fs::write(
-            &path,
-            r#"{"providerQuota": {"zai": {"polling": false}, "openai": {"polling": true}}}"#,
-        )
-        .unwrap();
-        assert!(!polling_configured(&path, "zai"));
-        assert!(polling_configured(&path, "openai"));
-        std::fs::write(&path, "not json").unwrap();
-        assert!(polling_configured(&path, "zai"));
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-}

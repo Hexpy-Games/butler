@@ -107,9 +107,7 @@ fn code(view: &crate::operations::ProviderQuotaView) -> Option<&str> {
 
 /// Scheduled polls wait 5 minutes after a success; Settings polls are
 /// spaced 30 s and explicit ones 20 s apart.
-// test-category: pure-logic
-#[tokio::test]
-async fn each_trigger_keeps_its_spacing() {
+pub(crate) async fn each_trigger_keeps_its_spacing() {
     let h = Harness::new();
     h.ok();
     h.poll(QuotaPollTrigger::Scheduled).await;
@@ -141,9 +139,7 @@ async fn each_trigger_keeps_its_spacing() {
 
 /// Failures back off 2 → 30 minutes; a rate limit blocks every trigger
 /// until its `Retry-After`, capped at an hour.
-// test-category: pure-logic
-#[tokio::test]
-async fn failures_and_rate_limits_back_off() {
+pub(crate) async fn failures_and_rate_limits_back_off() {
     let h = Harness::new();
     let mut now = 0;
     let mut delays = Vec::new();
@@ -182,9 +178,7 @@ async fn failures_and_rate_limits_back_off() {
 /// A token the endpoint rejects may be refreshed once per 10 minutes, and a
 /// standing rejection stops scheduled and Settings polls: only an explicit
 /// refresh polls again.
-// test-category: security
-#[tokio::test]
-async fn rejected_tokens_refresh_rarely_and_block_background_polls() {
+pub(crate) async fn rejected_tokens_refresh_rarely_and_block_background_polls() {
     let h = Harness::new();
     h.ok();
     h.poll(QuotaPollTrigger::Scheduled).await;
@@ -221,9 +215,7 @@ async fn rejected_tokens_refresh_rarely_and_block_background_polls() {
 
 /// Logging out or switching to an API key drops the previous reading and
 /// shows the new reason, without backing off.
-// test-category: pure-logic
-#[tokio::test]
-async fn nothing_to_read_replaces_the_reading_with_its_reason() {
+pub(crate) async fn nothing_to_read_replaces_the_reading_with_its_reason() {
     let h = Harness::new();
     h.ok();
     h.poll(QuotaPollTrigger::Scheduled).await;
@@ -244,9 +236,7 @@ async fn nothing_to_read_replaces_the_reading_with_its_reason() {
 }
 
 /// Schema mismatches are counted (and logged without bodies).
-// test-category: pure-logic
-#[tokio::test]
-async fn schema_mismatches_are_counted() {
+pub(crate) async fn schema_mismatches_are_counted() {
     let h = Harness::new();
     h.fetcher.push(Err(QuotaFetchError::Schema));
     h.poll(QuotaPollTrigger::Explicit).await;
@@ -259,9 +249,7 @@ async fn schema_mismatches_are_counted() {
 
 /// A kill-switched provider is never fetched and shows "not offered";
 /// lifting the switch makes it pending again.
-// test-category: pure-logic
-#[tokio::test]
-async fn the_kill_switch_stops_polls_and_shows_not_offered() {
+pub(crate) async fn the_kill_switch_stops_polls_and_shows_not_offered() {
     let h = Harness::new();
     h.fetcher.disabled.store(true, Ordering::SeqCst);
     h.poll(QuotaPollTrigger::Explicit).await;

@@ -342,8 +342,9 @@ async fn rejected_then_stale(s: Scenario, profile: &std::path::Path) -> Result<(
 }
 
 /// USE-06 — a fresh data folder: the polled providers have no data yet,
-/// API-billed ones offer no quota, and nothing is fetched; with polling
-/// switched off the polled providers are not offered either.
+/// API-billed ones offer no quota, and nothing is fetched. A provider
+/// switched off in the config (`providerQuota.<id>.polling: false`), or all
+/// of them by `BUTLER_PROVIDER_QUOTA_POLLING=0`, is not offered.
 #[tokio::test]
 async fn use_06_fresh_data_folder_reports_pending_and_not_offered() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -362,6 +363,17 @@ async fn use_06_fresh_data_folder_reports_pending_and_not_offered() -> Result<()
     }
     let local = quota(&s, "provider_id=local").await?;
     assert_reason(&local, "provider_quota_not_offered", "unknown");
+    let config_path = s.sandbox.data.join("butler.config.json");
+    let mut config: Value = fs::read(&config_path)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_else(|| json!({}));
+    config["providerQuota"] = json!({"zai": {"polling": false}});
+    fs::write(&config_path, serde_json::to_vec_pretty(&config)?)?;
+    let zai = quota(&s, "provider_id=zai&refresh=1").await?;
+    assert_reason(&zai, "provider_quota_not_offered", "unknown");
+    let openai = quota(&s, "provider_id=openai").await?;
+    assert_reason(&openai, "provider_quota_pending", "unknown");
     s.finish().await?;
 
     // The harness default: `BUTLER_PROVIDER_QUOTA_POLLING=0`.

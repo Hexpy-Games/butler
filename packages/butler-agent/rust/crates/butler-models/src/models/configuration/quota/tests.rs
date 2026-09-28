@@ -2,9 +2,7 @@
 
 use super::*;
 
-// test-category: security
-#[test]
-fn codex_usage_url_follows_the_configured_codex_base() {
+pub(crate) fn codex_usage_url_follows_the_configured_codex_base() {
     let url = |base: Option<&str>| codex_usage_url(base).map(|url| url.to_string());
     assert_eq!(
         url(None).as_deref(),
@@ -25,9 +23,7 @@ fn codex_usage_url_follows_the_configured_codex_base() {
     assert_eq!(url(Some("file:///tmp/x")), None);
 }
 
-// test-category: security
-#[test]
-fn zai_quota_url_comes_only_from_an_official_coding_plan_base() {
+pub(crate) fn zai_quota_url_comes_only_from_an_official_coding_plan_base() {
     let url = |base: &str, loopback: bool| zai_quota_url(base, loopback).map(|url| url.to_string());
     assert_eq!(
         url("https://api.z.ai/api/coding/paas/v4", false).as_deref(),
@@ -52,9 +48,7 @@ fn zai_quota_url_comes_only_from_an_official_coding_plan_base() {
     }
 }
 
-// test-category: security
-#[test]
-fn zai_quota_url_admits_loopback_only_from_the_environment() {
+pub(crate) fn zai_quota_url_admits_loopback_only_from_the_environment() {
     let base = "http://127.0.0.1:4321/api/coding/paas/v4";
     assert_eq!(zai_quota_url(base, false), None);
     assert_eq!(
@@ -69,9 +63,7 @@ fn zai_quota_url_admits_loopback_only_from_the_environment() {
     );
 }
 
-// test-category: pure-logic
-#[test]
-fn providers_without_a_quota_surface_are_not_offered() {
+pub(crate) fn providers_without_a_quota_surface_are_not_offered() {
     assert_eq!(provider_quota_support("openai"), QuotaSupport::Polled);
     assert_eq!(provider_quota_support("zai"), QuotaSupport::Polled);
     assert_eq!(
@@ -86,4 +78,15 @@ fn providers_without_a_quota_surface_are_not_offered() {
         provider_quota_support("local"),
         QuotaSupport::NotOffered(QuotaBilling::Unknown)
     );
+}
+
+/// Security boundary: a credential is sent only to its provider's own
+/// quota endpoint, never to a host a user or config supplied.
+// test-category: security
+#[test]
+fn quota_credentials_go_only_to_official_endpoints() {
+    codex_usage_url_follows_the_configured_codex_base();
+    zai_quota_url_comes_only_from_an_official_coding_plan_base();
+    zai_quota_url_admits_loopback_only_from_the_environment();
+    providers_without_a_quota_surface_are_not_offered();
 }

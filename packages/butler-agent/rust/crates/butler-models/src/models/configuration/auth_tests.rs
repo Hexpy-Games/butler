@@ -249,10 +249,16 @@ fn write_profile(fixture: &Fixture, access: &str, expires_at: i64) -> PathBuf {
 
 /// Two callers that find the login expiring at once (a model request and a
 /// quota poll) refresh it once: the second waits for the first and uses its
-/// token, so a rotated refresh token is never spent twice. The token server
-/// accepts a single connection.
+/// token, so a rotated refresh token is never spent twice (the token server
+/// accepts a single connection); and a rejected token is refreshed only
+/// while it is still the stored one.
 // test-category: race
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_login_is_refreshed_once_whoever_asks() {
+    a_rejected_token_is_refreshed_only_while_it_is_stored().await;
+    concurrent_refreshes_spend_the_refresh_token_once().await;
+}
+
 async fn concurrent_refreshes_spend_the_refresh_token_once() {
     let fixture = Fixture::new("refresh-once");
     write_profile(&fixture, "old", 1);
@@ -272,8 +278,6 @@ async fn concurrent_refreshes_spend_the_refresh_token_once() {
 
 /// A rejected token is refreshed only while it is still the stored one:
 /// after another refresh replaced it, the stored token is used as is.
-// test-category: security
-#[tokio::test]
 async fn a_rejected_token_is_refreshed_only_while_it_is_stored() {
     let fixture = Fixture::new("rejected");
     write_profile(&fixture, "current", 0);
