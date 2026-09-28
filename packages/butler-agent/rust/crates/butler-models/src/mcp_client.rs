@@ -9,6 +9,8 @@ mod management;
 mod registry;
 mod session;
 mod sse_transport;
+#[cfg(test)]
+pub(crate) use sse_transport::parser_tests::parses_fragmented_multiline_events;
 mod transport;
 
 pub use catalog::{

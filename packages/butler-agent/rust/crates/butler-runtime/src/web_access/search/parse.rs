@@ -178,7 +178,17 @@ pub(in crate::web_access) fn is_duckduckgo_challenge(html: &str) -> bool {
 mod tests {
     use super::{decode_result_url, parse_results};
 
+    /// Pure-logic table: third-party HTML parsing. DuckDuckGo results and
+    /// redirect links parse, allowed and blocked domain filters apply, and generic
+    /// article extraction matches the source semantics.
+    // test-category: pure-logic
     #[test]
+    fn web_html_parsing_and_domain_filters() {
+        parses_duckduckgo_result_and_redirect_link();
+        applies_allowed_and_blocked_domain_filters();
+        crate::web_access::html::article_extraction_matches_source_semantics_for_generic_content();
+    }
+
     fn parses_duckduckgo_result_and_redirect_link() {
         let html = r#"<div class="result results_links"><div class="result__body"><h2><a class="result__a" href="/l/?uddg=https%253A%252F%252Fexample.com%252Fnews">Example &amp; News</a></h2><a class="result__snippet">A <b>public</b> snippet.</a></div></div>"#;
         let results = parse_results(html, 5, &[], &[]);
@@ -192,7 +202,6 @@ mod tests {
         );
     }
 
-    #[test]
     fn applies_allowed_and_blocked_domain_filters() {
         let html = r#"<div class="result"><a class="result__a" href="https://news.example.com/a">A</a><div class="result__snippet">a</div></div><div class="result"><a class="result__a" href="https://other.test/b">B</a></div>"#;
         let results = parse_results(html, 5, &["example.com".into()], &[]);

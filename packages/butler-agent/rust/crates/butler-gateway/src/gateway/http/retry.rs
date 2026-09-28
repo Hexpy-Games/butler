@@ -1,4 +1,5 @@
-//! Distinct source retry actions for the existing Turn and current controls.
+//! Turn actions: distinct source retries (existing Turn, current controls)
+//! and cancel.
 
 use std::sync::Arc;
 
@@ -43,6 +44,34 @@ pub(super) async fn route(
     } else {
         state.application.retry_turn(turn_id).await?
     };
+    json(
+        StatusCode::ACCEPTED,
+        ApiEnvelope {
+            protocol_version: APP_PROTOCOL_VERSION,
+            data,
+        },
+    )
+    .map(Some)
+}
+
+/// `POST /turns/{turn_id}/cancel`; `None` for any other request.
+pub(super) async fn cancel(
+    state: &Arc<HttpState>,
+    method: &Method,
+    uri: &Uri,
+) -> Result<Option<Response>, HttpError> {
+    let Some(encoded_turn) = uri
+        .path()
+        .strip_prefix("/turns/")
+        .and_then(|value| value.strip_suffix("/cancel"))
+        .filter(|value| *method == Method::POST && !value.is_empty() && !value.contains('/'))
+    else {
+        return Ok(None);
+    };
+    let data = state
+        .application
+        .cancel_turn(super::subsessions::decode_component(encoded_turn)?)
+        .await?;
     json(
         StatusCode::ACCEPTED,
         ApiEnvelope {

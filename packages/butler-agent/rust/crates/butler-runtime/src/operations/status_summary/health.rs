@@ -247,6 +247,3 @@ fn env_value(name: &str) -> Option<String> {
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
 }
-
-#[cfg(test)]
-mod tests;

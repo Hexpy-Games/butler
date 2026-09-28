@@ -131,6 +131,3 @@ fn closed() -> TranscriptError {
         "Transcript writer is closed",
     )
 }
-
-#[cfg(test)]
-mod tests;

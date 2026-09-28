@@ -7,12 +7,13 @@ use std::sync::Arc;
 use serde_json::Value;
 
 use butler_gateway::gateway::{
-    AppModelFallbackFacts, AppModelMetadata, AppSettingsFacts, AppSettingsFactsProvider,
-    GatewayApplicationError,
+    AppModelFallbackFacts, AppModelMetadata, AppRoutinePreset, AppSettingsFacts,
+    AppSettingsFactsProvider, GatewayApplicationError,
 };
 use butler_memory::profile::ProfileService;
 use butler_models::models::{
-    ModelConfiguration, ModelProviderMetadata, ReasoningEffort as ModelReasoningEffort,
+    ModelCatalogSnapshot, ModelConfiguration, ModelProviderMetadata,
+    ReasoningEffort as ModelReasoningEffort,
 };
 use butler_turn::btcc::ReasoningEffort as BtccReasoningEffort;
 
@@ -165,18 +166,36 @@ async fn load(
         }
     });
     Ok(Arc::new(AppSettingsFacts {
-        registered_models: catalog
-            .registered_models
-            .iter()
-            .map(model)
-            .collect::<Vec<_>>()
-            .into(),
-        known_models: catalog.models.iter().map(model).collect::<Vec<_>>().into(),
+        registered_models: models(&catalog.registered_models),
+        known_models: models(&catalog.models),
         config_default_model,
         config_model_fallback,
         catalog_generation: catalog.generation.clone(),
         native_settings,
+        routine_presets: routine_presets(&read.catalog),
     }))
+}
+
+fn models(source: &[ModelProviderMetadata]) -> Arc<[AppModelMetadata]> {
+    source.iter().map(model).collect::<Vec<_>>().into()
+}
+
+/// The routine preset of every catalog provider that has one.
+fn routine_presets(catalog: &ModelCatalogSnapshot) -> Arc<[AppRoutinePreset]> {
+    catalog
+        .view()
+        .providers
+        .iter()
+        .filter_map(|provider| {
+            let preset = catalog.routine_preset(&provider.provider_id)?;
+            Some(AppRoutinePreset {
+                provider_id: provider.provider_id.clone(),
+                model_ref: preset.model,
+                reasoning_effort: reasoning_effort(preset.effort),
+            })
+        })
+        .collect::<Vec<_>>()
+        .into()
 }
 
 fn local_timezone() -> String {

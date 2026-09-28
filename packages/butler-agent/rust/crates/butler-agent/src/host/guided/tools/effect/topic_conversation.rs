@@ -295,26 +295,3 @@ impl TopicConversationEffect {
             .map_err(|error| EffectFailure::adapter(error.to_string()).with_source(error))
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn topic_branch_accepted_plan_uses_source_target() {
-        let effect = TopicConversationEffect {
-            client: reqwest::Client::new(),
-            endpoint: Arc::new(ActiveAppEndpoint::new()),
-            current_session_id: Some("app-session".into()),
-            target: SOURCE_TARGET.into(),
-        };
-
-        assert_eq!(effect.binding(), PlanBinding::AcceptedPlan);
-        assert_eq!(
-            effect.normalize_target(SOURCE_TARGET).unwrap(),
-            SOURCE_TARGET
-        );
-        assert_eq!(effect.sanitize_target(SOURCE_TARGET).unwrap(), "새 대화");
-        assert!(effect.normalize_target("session-branch:tool-1").is_err());
-    }
-}

@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 
 use super::{
     AppSettingsFacts, EventSubscribers, SETTINGS_KEY, global_settings, model,
+    onboarding::{KEY, view as onboarding_view},
     persistence::read_json,
 };
 mod normalize;
@@ -124,15 +125,12 @@ pub(super) fn read(
         .min(max_context)
         .max(1_000);
     let defaults = ui_defaults();
+    // The defaults hold every fixed value (gateway_profile, profile_label).
     let mut output = defaults.as_object().cloned().unwrap_or_default();
-    output.insert(
-        "bridge_mode".into(),
-        native
-            .get("bridge_mode")
-            .cloned()
-            .unwrap_or_else(|| json!("local")),
-    );
-    output.insert("gateway_profile".into(), json!("electron"));
+    if let Some(mode) = native.get("bridge_mode") {
+        output.insert("bridge_mode".into(), mode.clone());
+    }
+    output.insert(KEY.into(), onboarding_view(&stored));
     output.insert(
         "server_url".into(),
         stored
@@ -301,6 +299,5 @@ pub(super) fn read(
         "model_fallback".into(),
         json!({"enabled":model_fallback.enabled,"models":model_fallback.models}),
     );
-    output.insert("profile_label".into(), json!("Local Butler"));
     Ok(Value::Object(output))
 }

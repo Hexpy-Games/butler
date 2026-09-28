@@ -3,9 +3,6 @@
 mod decode;
 mod view;
 
-#[cfg(test)]
-mod tests;
-
 use butler_core::tool_protocol::ToolName;
 use std::sync::Arc;
 

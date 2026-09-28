@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import {
   AdaptivePanelResizeHandle,
@@ -51,26 +51,28 @@ import {
 import { useNarrowRightPanelAutoCollapse } from "@/hooks/useNarrowRightPanelAutoCollapse.ts";
 import { useBrowserChromeThemeColor } from "@/hooks/useBrowserChromeThemeColor.ts";
 import { FirstRunSetup } from "@/components/first-run/FirstRunSetup.tsx";
-import { readFirstRunState } from "@/app/firstRunSetup.ts";
+import { notifyStatus } from "@/app/notifications.ts";
+import { useOnboardingGate } from "@/hooks/useOnboardingGate.ts";
+import { useOnboardingStore } from "@/stores/onboardingStore.ts";
 
 export function AppShell() {
   useAppLocale();
-  const [firstRunState, setFirstRunState] = useState(() =>
-    readFirstRunState(
-      window.localStorage,
-      typeof navigator !== "undefined" ? navigator.languages : [],
-    ),
-  );
-  const openSettings = useButlerStore((state) => state.openSettings);
-  if (firstRunState.status !== "complete") {
+  const { gate, markComplete } = useOnboardingGate();
+  const rerunOpen = useOnboardingStore((state) => state.rerunOpen);
+  const closeRerun = useOnboardingStore((state) => state.closeRerun);
+  if (gate !== "workspace" || rerunOpen) {
+    const mode = rerunOpen ? "rerun" : gate === "consent" ? "consent" : "first-run";
     return (
       <>
         <FirstRunTheme />
         <FirstRunSetup
-          initialState={firstRunState}
-          onComplete={(mode, completedState) => {
-            setFirstRunState(completedState);
-            if (mode === "model-settings") openSettings("models");
+          key={mode}
+          mode={mode}
+          onCancel={closeRerun}
+          onComplete={(result) => {
+            if (result) useOnboardingStore.getState().setConnected(result.cardId);
+            markComplete();
+            closeRerun();
           }}
         />
         <AppToaster />
@@ -78,6 +80,20 @@ export function AppShell() {
     );
   }
   return <AppWorkspaceShell />;
+}
+
+/** After a first run, open a new chat and say which AI is connected (once). */
+function useFirstRunLanding() {
+  const connectedCardId = useOnboardingStore((state) => state.connectedCardId);
+  useEffect(() => {
+    if (!connectedCardId) return;
+    useOnboardingStore.getState().setConnected(null);
+    useButlerStore.getState().openNewChat();
+    notifyStatus(appCopy.firstRun.connectedToast(appCopy.firstRun.providerNames[connectedCardId]), {
+      id: "first-run-connected",
+      tone: "ok",
+    });
+  }, [connectedCardId]);
 }
 
 /** First-run renders outside the themed workspace, so theme the portal root. */
@@ -91,6 +107,7 @@ function FirstRunTheme() {
 
 function AppWorkspaceShell() {
   useAppBootstrap();
+  useFirstRunLanding();
   useAgentRuntimeState();
   useOrganizationNotice();
   const leftOpen = useButlerStore((state) => state.leftOpen);

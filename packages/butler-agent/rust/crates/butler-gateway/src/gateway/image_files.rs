@@ -5,6 +5,8 @@ mod errors;
 mod files;
 mod payload;
 
+#[cfg(test)]
+pub(crate) use errors::image_error;
 pub(crate) use errors::{ImageErrorCode, localize_image_error};
 
 use parking_lot::Mutex;

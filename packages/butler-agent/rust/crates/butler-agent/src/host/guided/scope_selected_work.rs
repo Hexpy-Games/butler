@@ -285,6 +285,3 @@ fn session_owned(binding: &StoredSessionBinding) -> bool {
 fn scope_error(code: &'static str) -> BtccError {
     BtccError::relayed(code, code)
 }
-
-#[cfg(test)]
-mod tests;

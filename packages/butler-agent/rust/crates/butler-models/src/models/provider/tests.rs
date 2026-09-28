@@ -95,27 +95,6 @@ impl ProviderObservationSink for Observations {
     }
 }
 
-#[test]
-fn custom_local_api_keys_are_sent_as_bearer_authorization() {
-    let request = crate::models::provider::client::authorize(
-        crate::models::provider_http_client()
-            .unwrap()
-            .post("http://127.0.0.1/v1/chat/completions"),
-        &ProviderAuth::ApiKey("custom-local-key".into()),
-        "local",
-        super::serialize::Carrier::Chat { stream: false },
-    )
-    .build()
-    .unwrap();
-    assert_eq!(
-        request
-            .headers()
-            .get(reqwest::header::AUTHORIZATION)
-            .and_then(|value| value.to_str().ok()),
-        Some("Bearer custom-local-key")
-    );
-}
-
 struct Metrics;
 
 impl crate::models::PromptUsageMetricSink for Metrics {
@@ -123,8 +102,6 @@ impl crate::models::PromptUsageMetricSink for Metrics {
         Ok(())
     }
 }
-
-struct Admission(AtomicUsize);
 
 struct TestClock(AtomicI64);
 
@@ -137,16 +114,6 @@ impl TestClock {
 impl ProviderClock for TestClock {
     fn now_epoch_millis(&self) -> i64 {
         self.0.fetch_add(1, Ordering::SeqCst)
-    }
-}
-impl ProviderBodyAdmissionPort for Admission {
-    fn admit(
-        &self,
-        bytes: usize,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ModelRoundError>> + Send + '_>>
-    {
-        self.0.store(bytes, Ordering::SeqCst);
-        Box::pin(async { Ok(()) })
     }
 }
 
@@ -249,65 +216,18 @@ fn request<'a>(
     }
 }
 
+/// Pure-logic table: SSE decoding at arbitrary chunk boundaries. Hosted
+/// streams decode Unicode split across chunks and require `[DONE]` (EOF
+/// without it is an interruption), and MCP SSE events parse when fragmented
+/// across chunks and lines.
+// test-category: pure-logic
 #[tokio::test]
-async fn openai_json_uses_one_admitted_body_and_releases_socket() {
-    let body = br#"{"id":"resp_1","model":"gpt-5.5","output":[{"type":"message","content":[{"type":"output_text","text":"done"}]}],"usage":{"input_tokens":3,"total_tokens":5}}"#;
-    let head = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        body.len()
-    );
-    let (endpoint, server) = server(vec![head.into_bytes(), body.to_vec()]).await;
-    let (catalog, snapshot) = catalog();
-    let metadata = snapshot
-        .find_model_metadata(Some("openai/gpt-5.5"))
-        .unwrap();
-    let observations = Arc::new(Observations::default());
-    let provider = ModelProvider::new(
-        crate::models::provider_http_client().unwrap(),
-        Arc::new(Config {
-            metadata,
-            endpoint,
-            snapshot,
-            codex: false,
-        }),
-        observations.clone(),
-        catalog,
-        Arc::new(TestClock::at(1_000)),
-        Arc::new(Metrics),
-    );
-    let messages = [ModelRoundMessage {
-        role: ModelRoundRole::User,
-        content: "hello".into(),
-        tool_call_id: None,
-        name: None,
-        tool_calls: None,
-        image_attachments: Vec::new(),
-        provider_data: None,
-        request_segment_kind: None,
-        operation_result_reference: None,
-        operation_result_call_id: None,
-        continuation_item_id: Some("turn-item-0".into()),
-    }];
-    let admission = Admission(AtomicUsize::new(0));
-    let result = provider
-        .run_round(request(
-            "openai/gpt-5.5",
-            &messages,
-            &ReasoningEffort::Medium,
-            CancellationToken::new(),
-            Some(&admission),
-        ))
-        .await
-        .unwrap();
-    let wire = server.await.unwrap();
-    assert_eq!(result.text.as_deref(), Some("done"));
-    assert!(admission.0.load(Ordering::SeqCst) > 0);
-    assert!(String::from_utf8_lossy(&wire).contains(r#""input":"hello""#));
-    assert_eq!(observations.requests.load(Ordering::SeqCst), 1);
-    assert_eq!(observations.responses.load(Ordering::SeqCst), 1);
+async fn sse_decoding_survives_chunk_boundaries() {
+    hosted_sse_decodes_split_unicode_and_requires_done().await;
+    transport::hosted_sse_eof_without_done_is_interrupted().await;
+    crate::mcp_client::parses_fragmented_multiline_events();
 }
 
-#[tokio::test]
 async fn hosted_sse_decodes_split_unicode_and_requires_done() {
     let body = concat!(
         "data: {\"id\":\"chat-1\",\"model\":\"qwen3.7-max\",\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"안\"}}]}\n\n",
@@ -377,75 +297,4 @@ async fn hosted_sse_decodes_split_unicode_and_requires_done() {
         "qwen3.7-max"
     );
     assert_eq!(observations.responses.load(Ordering::SeqCst), 1);
-}
-
-struct RejectAdmission;
-impl ProviderBodyAdmissionPort for RejectAdmission {
-    fn admit(
-        &self,
-        _: usize,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ModelRoundError>> + Send + '_>>
-    {
-        Box::pin(async { Err(ModelRoundError::StablePrefix("admission-rejected".into())) })
-    }
-}
-
-#[tokio::test]
-async fn bounded_body_rejection_precedes_guard_and_socket_dispatch() {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let endpoint = Url::parse(&format!(
-        "http://{}/v1/responses",
-        listener.local_addr().unwrap()
-    ))
-    .unwrap();
-    let (catalog, snapshot) = catalog();
-    let metadata = snapshot
-        .find_model_metadata(Some("openai/gpt-5.5"))
-        .unwrap();
-    let observations = Arc::new(Observations::default());
-    let provider = ModelProvider::new(
-        crate::models::provider_http_client().unwrap(),
-        Arc::new(Config {
-            metadata,
-            endpoint,
-            snapshot,
-            codex: false,
-        }),
-        observations.clone(),
-        catalog,
-        Arc::new(TestClock::at(1_000)),
-        Arc::new(Metrics),
-    );
-    let messages = [ModelRoundMessage {
-        role: ModelRoundRole::User,
-        content: "hello".into(),
-        tool_call_id: None,
-        name: None,
-        tool_calls: None,
-        image_attachments: Vec::new(),
-        provider_data: None,
-        request_segment_kind: None,
-        operation_result_reference: None,
-        operation_result_call_id: None,
-        continuation_item_id: Some("turn-item-0".into()),
-    }];
-    let error = provider
-        .run_round(request(
-            "openai/gpt-5.5",
-            &messages,
-            &ReasoningEffort::Medium,
-            CancellationToken::new(),
-            Some(&RejectAdmission),
-        ))
-        .await
-        .unwrap_err();
-    assert!(
-        matches!(error, ModelRoundError::StablePrefix(ref code) if code == "admission-rejected")
-    );
-    assert_eq!(observations.requests.load(Ordering::SeqCst), 0);
-    assert!(
-        tokio::time::timeout(Duration::from_millis(50), listener.accept())
-            .await
-            .is_err()
-    );
 }

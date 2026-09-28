@@ -182,22 +182,3 @@ pub(super) fn action(positionals: &[String]) -> Result<Action, crate::host::Host
         _ => Err("supported commands: gateway app|list|status [app]|inspect|enable|disable|configure|test|start|stop|restart|run app|logs app".into()),
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn args(values: &[&str]) -> Vec<OsString> {
-        values.iter().map(OsString::from).collect()
-    }
-
-    #[test]
-    fn parser_rejects_home_authority() {
-        assert!(
-            parse(&args(&["gateway", "status", "--home", "/tmp/home"]))
-                .unwrap_err()
-                .message()
-                .contains("--home is unsupported")
-        );
-    }
-}

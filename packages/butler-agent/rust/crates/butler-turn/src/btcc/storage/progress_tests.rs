@@ -8,6 +8,9 @@ use crate::btcc::{
     RuntimeTurnEventInput,
 };
 
+/// Race: a duplicate progress delivery racing the first destination claim
+/// keeps the sequence and the first claim.
+// test-category: race
 #[tokio::test]
 async fn duplicate_progress_keeps_sequence_and_first_destination_claim() {
     let fixture = Fixture::activated();

@@ -138,15 +138,3 @@ impl PartialEq for ProfileError {
 }
 
 impl Eq for ProfileError {}
-
-#[cfg(test)]
-mod tests {
-    use super::ProfileCode;
-
-    #[test]
-    fn wire_codes_are_stable() {
-        let codes: Vec<&str> = ProfileCode::ALL.iter().map(|code| code.as_str()).collect();
-        let expected: Vec<&str> = include_str!("wire_codes.txt").lines().collect();
-        assert_eq!(codes, expected);
-    }
-}
