@@ -105,6 +105,7 @@ pub(super) fn test_dependencies() -> AppApplicationDependencies {
         subsessions: Arc::new(TestSessions),
         branch_conversations: Arc::new(TestBranchConversations),
         branch_summarizer: Arc::new(TestBranchSummarizer),
+        setup: crate::gateway::application::test_setup_port(),
     }
 }
 
@@ -367,6 +368,7 @@ impl AppSettingsFactsProvider for TestSettings {
             config_model_fallback: Default::default(),
             catalog_generation: "test".into(),
             native_settings: serde_json::json!({}),
+            routine_presets: Arc::from([]),
         }))
     }
 }
