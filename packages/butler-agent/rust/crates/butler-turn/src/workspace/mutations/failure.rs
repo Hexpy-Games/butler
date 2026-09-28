@@ -44,7 +44,7 @@ pub(super) fn new(path: Option<String>, error: &'static str) -> MutationFailure 
             "Choose a writable workspace path or adjust its permissions.",
         ),
         "tool_not_admitted" => (
-            "The file mutation is not admitted for this Steward task.",
+            "The file mutation is not allowed for this task.",
             "Use only the exact mutation capability in the delegated packet.",
         ),
         "invalid_arguments" => (

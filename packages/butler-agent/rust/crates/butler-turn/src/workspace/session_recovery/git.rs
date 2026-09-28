@@ -216,7 +216,7 @@ fn command_failure_code(
     }
 }
 
-async fn git(
+pub(super) async fn git(
     commands: &Commands,
     host_environment: &Arc<HashMap<String, String>>,
     cwd: &str,

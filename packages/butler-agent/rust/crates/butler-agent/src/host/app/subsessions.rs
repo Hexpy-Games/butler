@@ -250,9 +250,9 @@ fn map_error(error: &butler_turn::btcc::BtccError) -> GatewayApplicationError {
         GatewayApplicationError::internal()
     } else {
         let message = match error.code() {
-            "steward_relation_not_active" => "Steward relation is not active.",
-            "steward_relation_not_recoverable" => "Steward relation is not recoverable.",
-            _ => "Active Steward relation was not found.",
+            "steward_relation_not_active" => "This subtask is not running.",
+            "steward_relation_not_recoverable" => "This subtask cannot be resumed.",
+            _ => "No running subtask was found.",
         };
         GatewayApplicationError::Public {
             status,

@@ -99,7 +99,8 @@ pub use projects::{
     AppProjectDashboardPreferencesUpdate, AppProjectDashboardRecordsQuery,
     AppProjectDashboardReview, AppProjectDashboardSnapshot, AppProjectDashboardSource,
     AppProjectDashboardSourceQuery, AppProjectDashboardStatisticsQuery, AppProjectDashboardWork,
-    AppProjectDashboardWorkHistoryEntry, AppProjectList, AppProjectSource, AppProjectUpdate,
+    AppProjectDashboardWorkHistoryEntry, AppProjectGit, AppProjectList, AppProjectSource,
+    AppProjectUpdate,
 };
 #[cfg(test)]
 pub(crate) use projects::{TestProjectDashboardBriefing, TestProjectDashboardLedger};

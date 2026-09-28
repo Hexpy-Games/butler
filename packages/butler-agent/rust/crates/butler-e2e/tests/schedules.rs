@@ -76,6 +76,28 @@ fn make_file(name: &str) -> String {
     format!("Create a file named {name} in your workspace containing exactly the text: scheduled")
 }
 
+/// ACC-06 (#235) — the pending request says what it would do as data the
+/// App phrases in the user's language: edit one file, in the workspace
+/// folder, medium risk.
+fn assert_file_edit_approval(request: &Value, file: &str) {
+    let approval = &request["approval"];
+    assert_eq!(approval["action_kind"], "edit_files", "{request}");
+    assert_eq!(approval["count"], 1, "{request}");
+    assert_eq!(approval["risk"], "medium", "{request}");
+    let targets = approval["targets"].as_array().unwrap();
+    assert_eq!(targets[0]["kind"], "folder", "{request}");
+    assert!(
+        targets
+            .iter()
+            .any(|target| target["kind"] == "file"
+                && target["path"].as_str().unwrap().ends_with(file)),
+        "{request}"
+    );
+    let examples = approval["examples"].as_array().unwrap();
+    assert_eq!(examples.len(), 1, "{request}");
+    assert!(examples[0].as_str().unwrap().ends_with(file), "{request}");
+}
+
 /// SCHED-01 — An ask-first schedule posting into a full-access conversation
 /// asks before its effect; a full-access schedule posting into an ask-first
 /// conversation runs without asking.
@@ -96,12 +118,11 @@ async fn sched_01_schedule_runs_with_its_own_access_mode() -> Result<(), Harness
     let (turn_id, turn) = run(&s, "general", &schedule).await?;
     assert_eq!(turn_state(&turn), "waiting_for_form", "{turn}");
     let requests = s.gw.approval_requests("general").await?;
-    assert!(
-        requests
-            .iter()
-            .any(|request| request["source_turn_id"] == turn_id.as_str()),
-        "no approval request for the ask-first schedule: {requests:?}"
-    );
+    let request = requests
+        .iter()
+        .find(|request| request["source_turn_id"] == turn_id.as_str())
+        .unwrap_or_else(|| panic!("no approval request for the ask-first schedule: {requests:?}"));
+    assert_file_edit_approval(request, &asked);
     assert!(
         !s.sandbox.data.join(&asked).exists(),
         "the ask-first schedule wrote before approval"
