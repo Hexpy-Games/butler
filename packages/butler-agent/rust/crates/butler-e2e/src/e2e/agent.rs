@@ -435,10 +435,34 @@ impl CliOutput {
     }
 }
 
+/// A port no listener holds, for a process that binds it later.
+///
+/// Drawn from below the ephemeral ranges (Linux 32768+, macOS 49152+), so a
+/// stub that binds port 0 in a parallel scenario cannot be handed the port
+/// between this check and the agent's own bind. Picking with `bind(0)` did
+/// exactly that on Linux, which reuses a just-freed ephemeral port: the stub
+/// took the agent's port and the agent never came up. Each test process
+/// starts at its own offset and walks the range, skipping held ports.
 pub fn free_port() -> Result<u16, HarnessError> {
-    Ok(std::net::TcpListener::bind("127.0.0.1:0")?
-        .local_addr()?
-        .port())
+    use std::sync::atomic::{AtomicU32, Ordering};
+    const FIRST: u32 = 20_000;
+    const SPAN: u32 = 12_000;
+    static NEXT: AtomicU32 = AtomicU32::new(u32::MAX);
+    let _ = NEXT.compare_exchange(
+        u32::MAX,
+        (std::process::id() % 60) * 200,
+        Ordering::Relaxed,
+        Ordering::Relaxed,
+    );
+    for _ in 0..SPAN {
+        let offset = NEXT.fetch_add(1, Ordering::Relaxed) % SPAN;
+        let port =
+            u16::try_from(FIRST + offset).map_err(|_| harness_error("free port out of range"))?;
+        if std::net::TcpListener::bind(("127.0.0.1", port)).is_ok() {
+            return Ok(port);
+        }
+    }
+    Err(harness_error("no free port below the ephemeral range"))
 }
 
 /// Every regular file under `dir`, concatenated (lossy UTF-8).

@@ -202,3 +202,122 @@ async fn retention_owner_snapshots_terminal_progress_and_joins_on_close() {
     app.close().await.unwrap();
     let _ = std::fs::remove_dir_all(root);
 }
+
+/// Race (REC-04): after a restart the runtime sends a turn's actions again.
+/// The projection skips a delivery it must not apply (here the first send
+/// carries no claim, so it is stale against the turn's dispatching claim) and
+/// retires its staged outbound with it. The re-send, which carries the
+/// current claim and so a different payload, then stages and projects; a
+/// leftover row would have turned it into an identity conflict that failed
+/// every later projection of the chat.
+// test-category: race
+#[tokio::test]
+async fn a_skipped_delivery_retires_its_staged_outbound_for_the_resend() {
+    let native = Arc::new(Native(Mutex::new(Vec::new())));
+    let root = projection_root("skipped-delivery");
+    std::fs::create_dir_all(root.join("transcripts")).unwrap();
+    let app = AppApplication::open(
+        AppApplicationConfig {
+            database_path: root.join("app.sqlite"),
+            butler_data: root.clone(),
+            project_workspace_root: root.clone(),
+            folder_selection_secret: None,
+        },
+        dependencies(native.clone(), 800),
+    )
+    .await
+    .unwrap();
+    app.start_dispatch().await.unwrap();
+    let turn = app
+        .send_message(command("resend-client", "question"))
+        .await
+        .unwrap()
+        .turn
+        .unwrap()
+        .id;
+    let claim = native.0.lock().unwrap()[0].app_queue_claim_id.clone();
+    assert!(claim.is_some(), "the dispatched turn carries a claim");
+    let transcript = root.join("transcripts/butler_app-general.jsonl");
+
+    append_send(&transcript, "outbound-claimless", &turn, None);
+    app.refresh_message_projection("general".into())
+        .await
+        .unwrap();
+    assert_eq!(staged_and_receipt(&app).await, (0, None));
+
+    append_send(&transcript, "outbound-resent", &turn, claim.as_deref());
+    app.refresh_message_projection("general".into())
+        .await
+        .unwrap();
+    assert_eq!(
+        staged_and_receipt(&app).await,
+        (0, Some("outbound-resent".to_owned()))
+    );
+    let page = app.list_messages("general".into(), 0.0, 200).await.unwrap();
+    let progress = page.turn_progress.unwrap().remove(&turn).unwrap();
+    assert_eq!(progress.safe_progress_rows.len(), 1);
+    assert_eq!(
+        progress.safe_progress_rows[0]["safe_label"],
+        "Reading source"
+    );
+    app.close().await.unwrap();
+    let _ = std::fs::remove_dir_all(root);
+}
+
+/// Appends one send of the progress action `action-resent`: its outbound
+/// record and its delivery, written together as the runtime writes them.
+fn append_send(transcript: &std::path::Path, event_id: &str, turn: &str, claim: Option<&str>) {
+    use std::io::Write;
+    let mut metadata = json!({
+        "kind":"tool_progress","turnId":turn,"activityKind":"used_tool","state":"running",
+        "safeLabel":"Reading source","toolName":"read_file","toolCallId":"call-1"
+    });
+    if let Some(claim) = claim {
+        metadata["appQueueClaimId"] = json!(claim);
+    }
+    let outbound = json!({
+        "eventId":event_id,"sessionId":"butler/app-general","kind":"outbound",
+        "timestamp":"2026-09-14T00:00:01.000Z","transport":"app",
+        "payload":{"actionId":"action-resent","message":{},"metadata":metadata},
+        "metadata":{"source":"transport/delivery-guard.ts","attempts":1}
+    });
+    let delivery = json!({
+        "eventId":format!("{event_id}-delivery"),"sessionId":"butler/app-general",
+        "kind":"delivery","timestamp":"2026-09-14T00:00:02.000Z","transport":"app",
+        "payload":{"actionId":"action-resent","ok":true}
+    });
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(transcript)
+        .unwrap();
+    write!(file, "{outbound}\n{delivery}\n").unwrap();
+}
+
+/// How many staged rows `action-resent` has, and the event its projection
+/// receipt names.
+async fn staged_and_receipt(app: &AppApplication) -> (i64, Option<String>) {
+    app.storage
+        .execute(|db| {
+            let staged = db
+                .query_row(
+                    "SELECT COUNT(*) FROM app_transport_projection_staged_outbounds \
+                     WHERE action_id='action-resent'",
+                    [],
+                    |row| row.get(0),
+                )
+                .map_err(AppStorageError::sqlite)?;
+            let receipt = db
+                .query_row(
+                    "SELECT event_id FROM app_transport_projection_receipts \
+                     WHERE action_id='action-resent'",
+                    [],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(AppStorageError::sqlite)?;
+            Ok((staged, receipt))
+        })
+        .await
+        .unwrap()
+}
