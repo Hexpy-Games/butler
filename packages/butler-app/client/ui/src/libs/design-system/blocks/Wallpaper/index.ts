@@ -6,7 +6,7 @@ export {
   useWallpaperUserModules,
   type WallpaperRegistryProviderProps,
 } from "./registryContext";
-export { checkWallpaperModule, trimWallpaperShaderLog, type WallpaperModuleCheck } from "./check";
+export { canCheckWallpaperModules, checkWallpaperModule, trimWallpaperShaderLog, type WallpaperModuleCheck } from "./check";
 export type {
   ResolvedWallpaperValue,
   ResolvedWallpaperValues,

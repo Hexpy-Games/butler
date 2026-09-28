@@ -9,11 +9,11 @@ use butler_core::json::saturating_u32;
 use image::buffer::ConvertBuffer;
 use image::codecs::jpeg::JpegEncoder;
 use image::codecs::png::{CompressionType, FilterType as PngFilter, PngEncoder};
-use image::imageops::{self, FilterType};
+use image::imageops;
 use image::metadata::Orientation;
 use image::{
-    DynamicImage, ExtendedColorType, ImageDecoder, ImageEncoder, ImageFormat, ImageReader,
-    RgbImage, RgbaImage,
+    DynamicImage, ExtendedColorType, ImageDecoder, ImageEncoder, ImageError, ImageFormat,
+    ImageReader, Limits, RgbImage, RgbaImage,
 };
 
 use crate::gateway::GatewayApplicationError;
@@ -21,9 +21,23 @@ use crate::gateway::GatewayApplicationError;
 pub(super) const MAX_INPUT_BYTES: usize = 25 * 1024 * 1024;
 const MAX_EDGE: u32 = 3840;
 const THUMBNAIL_EDGE: u32 = 480;
-const MAX_SOURCE_SIDE: u32 = 16_384;
-const MAX_SOURCE_PIXELS: u64 = 64_000_000;
+/// Longest side of a source image, read from its header before decoding.
+pub(crate) const MAX_SOURCE_SIDE: u32 = 16_384;
+/// Most pixels of a source image, read from its header before decoding.
+pub(crate) const MAX_SOURCE_PIXELS: u64 = 40_000_000;
+/// Most memory the decoder may allocate for one image (a 40 MP 8-bit RGBA
+/// image is 160 MB; 16-bit sources that large are refused).
+const MAX_DECODE_ALLOC: u64 = 256 * 1024 * 1024;
 const JPEG_QUALITY: u8 = 88;
+
+/// Whether `width` x `height` is within the source caps.
+pub(crate) fn within_source_limits(width: u32, height: u32) -> bool {
+    width > 0
+        && height > 0
+        && width <= MAX_SOURCE_SIDE
+        && height <= MAX_SOURCE_SIDE
+        && u64::from(width) * u64::from(height) <= MAX_SOURCE_PIXELS
+}
 
 pub(super) struct EncodedImage {
     pub(super) bytes: Vec<u8>,
@@ -59,12 +73,12 @@ pub(super) fn process(source: &[u8]) -> Result<ProcessedWallpaper, GatewayApplic
     })?;
     let decoded = decode(source, format)?;
     let (width, height) = fit(decoded.width(), decoded.height(), MAX_EDGE);
+    // Downscaling averages whole-pixel areas in the source's own sample type
+    // (no float copy of a large source); only the fitted result becomes RGBA8.
     let pixels = if (width, height) == (decoded.width(), decoded.height()) {
         decoded.into_rgba8()
     } else {
-        decoded
-            .resize_exact(width, height, FilterType::Lanczos3)
-            .into_rgba8()
+        decoded.thumbnail_exact(width, height).into_rgba8()
     };
     let (thumbnail_width, thumbnail_height) = fit(width, height, THUMBNAIL_EDGE);
     let thumbnail = if (thumbnail_width, thumbnail_height) == (width, height) {
@@ -94,30 +108,43 @@ fn sniff(source: &[u8]) -> Option<ImageFormat> {
     }
 }
 
-/// Decodes after checking the header dimensions, then applies EXIF orientation.
+/// Decodes under explicit limits after checking the header dimensions, then
+/// applies EXIF orientation.
 fn decode(source: &[u8], format: ImageFormat) -> Result<DynamicImage, GatewayApplicationError> {
-    let mut decoder = ImageReader::with_format(Cursor::new(source), format)
-        .into_decoder()
-        .map_err(|error| unreadable().with_source(error))?;
+    let mut reader = ImageReader::with_format(Cursor::new(source), format);
+    let mut limits = Limits::default();
+    limits.max_image_width = Some(MAX_SOURCE_SIDE);
+    limits.max_image_height = Some(MAX_SOURCE_SIDE);
+    limits.max_alloc = Some(MAX_DECODE_ALLOC);
+    reader.limits(limits);
+    let decoder = reader.into_decoder().map_err(decode_error)?;
     let (width, height) = decoder.dimensions();
-    if width == 0
-        || height == 0
-        || width > MAX_SOURCE_SIDE
-        || height > MAX_SOURCE_SIDE
-        || u64::from(width) * u64::from(height) > MAX_SOURCE_PIXELS
-    {
-        return Err(GatewayApplicationError::public(
-            400,
-            "wallpaper_dimensions_unsupported",
-            "Wallpaper image dimensions are not supported.",
-        ));
+    if !within_source_limits(width, height) {
+        return Err(unsupported_dimensions());
     }
+    let mut decoder = decoder;
     // Malformed EXIF must not reject an otherwise readable photo.
     let orientation = decoder.orientation().unwrap_or(Orientation::NoTransforms);
-    let mut image =
-        DynamicImage::from_decoder(decoder).map_err(|error| unreadable().with_source(error))?;
+    let mut image = DynamicImage::from_decoder(decoder).map_err(decode_error)?;
     image.apply_orientation(orientation);
     Ok(image)
+}
+
+/// A limit the decoder hit is the image's size; anything else is unreadable.
+fn decode_error(error: ImageError) -> GatewayApplicationError {
+    if matches!(error, ImageError::Limits(_)) {
+        unsupported_dimensions().with_source(error)
+    } else {
+        unreadable().with_source(error)
+    }
+}
+
+fn unsupported_dimensions() -> GatewayApplicationError {
+    GatewayApplicationError::public(
+        400,
+        "wallpaper_dimensions_unsupported",
+        "Wallpaper image dimensions are not supported.",
+    )
 }
 
 /// The size that fits `edge` on the long side, keeping the aspect ratio.

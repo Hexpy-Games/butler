@@ -3,11 +3,13 @@
 
 use std::{
     fmt::Write as _,
-    fs::{self, File},
-    io::{self, Read},
+    fs,
+    io::{self, Cursor, Read},
     path::Path,
 };
 
+use butler_platform::secure_fs;
+use image::ImageReader;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -15,7 +17,10 @@ use super::{
     MANIFEST, MAX_IMAGE_BYTES, MAX_MANIFEST_BYTES, MAX_OVERLAY_BYTES, MAX_SHADER_BYTES, OVERLAY,
     SHADER,
 };
-use crate::gateway::wallpaper_modules::is_image_file;
+use crate::gateway::{
+    wallpaper_modules::is_image_file,
+    wallpaper_store::{MAX_SOURCE_PIXELS, MAX_SOURCE_SIDE, within_source_limits},
+};
 
 pub(crate) const PNG_SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n";
 
@@ -141,21 +146,46 @@ pub(crate) fn image_type(bytes: &[u8]) -> Option<&'static str> {
     }
 }
 
-/// A regular file of at most `limit` bytes; links are not followed.
+/// A regular file of at most `limit` bytes. The open refuses a link, and
+/// the opened handle must be a regular file, so a file swapped for a link
+/// after a check is never followed.
 pub(crate) fn limited(path: &Path, limit: usize) -> io::Result<FileRead> {
-    let meta = match fs::symlink_metadata(path) {
-        Ok(meta) => meta,
+    let file = match secure_fs::open_read_no_follow(path) {
+        Ok(file) => file,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(FileRead::Missing),
-        Err(error) => return Err(error),
+        Err(error) => {
+            return match fs::symlink_metadata(path) {
+                Ok(meta) if !meta.is_file() => Ok(FileRead::NotFile),
+                Err(missing) if missing.kind() == io::ErrorKind::NotFound => Ok(FileRead::Missing),
+                _ => Err(error),
+            };
+        }
     };
-    if !meta.is_file() {
+    if !file.metadata()?.is_file() {
         return Ok(FileRead::NotFile);
     }
     let mut bytes = Vec::new();
-    File::open(path)?
-        .take(limit as u64 + 1)
-        .read_to_end(&mut bytes)?;
+    file.take(limit as u64 + 1).read_to_end(&mut bytes)?;
     Ok(FileRead::within(bytes, limit))
+}
+
+/// Why an image's header dimensions are refused, if they are: the renderer
+/// decodes a default image in full, so it gets the caps of an uploaded
+/// wallpaper, read from the header before anything is decoded.
+pub(crate) fn image_dimensions_rule(bytes: &[u8]) -> Option<String> {
+    let dimensions = ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()
+        .ok()
+        .and_then(|reader| reader.into_dimensions().ok());
+    match dimensions {
+        Some((width, height)) if within_source_limits(width, height) => None,
+        Some((width, height)) => Some(format!(
+            "is {width}x{height} pixels, over the limit of {MAX_SOURCE_SIDE} per side and \
+             {} megapixels",
+            MAX_SOURCE_PIXELS / 1_000_000
+        )),
+        None => Some("has an unreadable image header".to_owned()),
+    }
 }
 
 /// A byte limit as `N MB` for whole megabytes, else `N KB`.

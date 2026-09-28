@@ -4,6 +4,7 @@ import { createWallpaperResources, type WallpaperGpuResources } from "./glResour
 import { drawWallpaperScene } from "./glScene";
 import { wallpaperParamUniforms } from "./glsl";
 import { loadWallpaperImageBytes } from "./imageCache";
+import { resolveWallpaperValues } from "./values";
 import type { WallpaperImageScene, WallpaperScene } from "./registry";
 import type { WallpaperImageLoader, WallpaperModule } from "./types";
 
@@ -34,6 +35,9 @@ const STILL_IMAGE_EDGE = 960;
  * so a thumbnail shows the screen's composition rather than a crop of it.
  */
 const STILL_SCREEN_WIDTH = 1440;
+
+/** Side (px) of the one frame a module check draws. */
+const PROBE_SIZE = 32;
 
 const NO_LOADER: WallpaperImageLoader = () => Promise.reject(new Error("Stills draw module default images only"));
 
@@ -86,6 +90,31 @@ function linked({ resources }: StillGpu, module: WallpaperModule): WallpaperModu
 export function compileWallpaperStillProgram(module: WallpaperModule): WallpaperModuleProgramsResult | null {
   const context = gpu();
   return context ? linked(context, module) : null;
+}
+
+/** Whether the shared context exists (WebGL2 is available), creating it on first use. */
+export function hasWallpaperStillGpu(): boolean {
+  return gpu() !== null;
+}
+
+/**
+ * Draws one small frame of a module that links, at its defaults and without
+ * an image, and waits for the GPU to finish it: a shader that hangs the GPU
+ * does so here, inside the module's check, not first on the wallpaper.
+ */
+export function probeWallpaperStillDraw(module: WallpaperModule): void {
+  const context = gpu();
+  if (!context) return;
+  const result = linked(context, module);
+  if (!result.ok) return;
+  const { canvas, gl, resources } = context;
+  canvas.width = PROBE_SIZE;
+  canvas.height = PROBE_SIZE;
+  const uniforms = wallpaperParamUniforms(module.manifest, resolveWallpaperValues(module.manifest, {}, "light"));
+  revision += 1;
+  const drawn = { compiled: result.base, overlay: result.overlay, module, uniforms, dark: false, image: null, revision };
+  drawWallpaperScene(gl, resources, drawn, { width: PROBE_SIZE, height: PROBE_SIZE, ...STILL_FRAME, timeMs: 0 });
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
 }
 
 /** Uploads a scene's default image once (decoded small); stills keep it. */

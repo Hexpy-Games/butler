@@ -3,7 +3,9 @@
 //! keys, which stay readable and writable while clients move over.
 //!
 //! Shape (camelCase fields, as the renderer reads them):
-//! `{ source, motion: "auto" | "paused", pauseOnBattery: bool }`, where
+//! `{ source, motion: "auto" | "paused", pauseOnBattery: bool, origin:
+//! "legacy" | "chosen" }` (`origin` is set by the server, see [`project`]),
+//! where
 //! `source` is `{kind: "none"}`, `{kind: "live", module, params?, paramsDark?}`
 //! or `{kind: "image", asset, fit: "cover" | "contain", dim, blur, filter?}` and
 //! `filter` is `{module, params?, paramsDark?}`.
@@ -20,6 +22,12 @@ use super::view::legacy_source;
 use crate::gateway::GatewayApplicationError;
 
 pub(super) const KEY: &str = "wallpaper";
+/// Where the stored `source` came from: `"legacy"` (derived from the legacy
+/// keys, which may re-derive it) or `"chosen"` (written through `wallpaper`
+/// by the user or the agent, which a legacy patch never overwrites).
+const ORIGIN: &str = "origin";
+const LEGACY: &str = "legacy";
+const CHOSEN: &str = "chosen";
 
 const MODULE_RULE: &str = "must match ^[a-z0-9]+(\\.[a-z0-9-]+)+$ and be at most 64 characters";
 const ASSET_RULE: &str = "must match ^wp_[a-z0-9]{8,64}$";
@@ -38,9 +46,15 @@ type Checked = Result<(), Invalid>;
 /// Validates a PATCH value, which sets any non-empty subset of `source`,
 /// `motion` and `pauseOnBattery`. A rejection names the offending field and
 /// its rule so a model caller can correct the request.
+/// `origin` is the server's own marker: a PATCH that echoes it back has it
+/// dropped, never trusted.
 pub(super) fn sanitize(value: &Value) -> Result<Value, GatewayApplicationError> {
-    check_setting(value)
-        .map(|()| value.clone())
+    let mut value = value.clone();
+    if let Some(setting) = value.as_object_mut() {
+        setting.remove(ORIGIN);
+    }
+    check_setting(&value)
+        .map(|()| value)
         .map_err(|Invalid { path, rule }| rejected(&path, &rule))
 }
 
@@ -154,6 +168,7 @@ pub(super) fn from_legacy(theme: &str, preset: &str, colors: &[String]) -> Value
 pub(super) fn view(stored: Option<&Value>, legacy: Value) -> Value {
     let mut setting = Map::new();
     setting.insert("source".into(), legacy);
+    setting.insert(ORIGIN.into(), json!(LEGACY));
     setting.insert("motion".into(), json!("auto"));
     setting.insert("pauseOnBattery".into(), json!(false));
     if let Some(stored) = stored
@@ -166,10 +181,13 @@ pub(super) fn view(stored: Option<&Value>, legacy: Value) -> Value {
 }
 
 /// Resolves `wallpaper` in a settings projection. A PATCH that sets it is the
-/// source of truth; otherwise a change to the source the legacy keys describe
-/// re-derives `source` and keeps the motion preferences, but only while the
-/// current source is absent or still the one the legacy keys describe. A
-/// source chosen through `wallpaper` itself is never overwritten.
+/// source of truth, and one that sets `source` marks it `origin: "chosen"`.
+/// Otherwise a change to the source the legacy keys describe re-derives
+/// `source` (`origin: "legacy"`) and keeps the motion preferences, but only
+/// while the current source was derived from them. A chosen source is never
+/// overwritten, even when it equals what the legacy keys describe. A stored
+/// source from before the marker counts as derived only while it still
+/// equals the legacy keys' source.
 pub(super) fn project(current: &Value, patch: &Value, output: &mut Value) {
     let Some(output) = output.as_object_mut() else {
         return;
@@ -182,13 +200,21 @@ pub(super) fn project(current: &Value, patch: &Value, output: &mut Value) {
         .unwrap_or_default();
     if let Some(update) = patch.get(KEY).and_then(Value::as_object) {
         setting.extend(update.clone());
+        if update.contains_key("source") {
+            setting.insert(ORIGIN.into(), json!(CHOSEN));
+        }
     } else {
         let previous = current.as_object().map(legacy_source);
-        let follows_legacy = setting
-            .get("source")
-            .is_none_or(|source| Some(source) == previous.as_ref());
+        let follows_legacy = match setting.get(ORIGIN).and_then(Value::as_str) {
+            Some(CHOSEN) => false,
+            Some(_) => true,
+            None => setting
+                .get("source")
+                .is_none_or(|source| Some(source) == previous.as_ref()),
+        };
         if follows_legacy && previous.as_ref() != Some(&derived) {
             setting.insert("source".into(), derived.clone());
+            setting.insert(ORIGIN.into(), json!(LEGACY));
         }
     }
     let setting = view(Some(&Value::Object(setting)), derived);
@@ -205,11 +231,21 @@ fn check_setting(value: &Value) -> Checked {
                 "must be an object setting source, motion or pauseOnBattery",
             )
         })?;
-    check_fields(setting, KEY, &["source", "motion", "pauseOnBattery"], &[])?;
+    check_fields(
+        setting,
+        KEY,
+        &["source", "motion", "pauseOnBattery", ORIGIN],
+        &[],
+    )?;
     setting.iter().try_for_each(|(key, value)| {
         let path = format!("{KEY}.{key}");
         match key.as_str() {
             "source" => check_source(value, &path),
+            ORIGIN => require(
+                matches!(value.as_str(), Some(LEGACY | CHOSEN)),
+                &path,
+                "must be \"legacy\" or \"chosen\"",
+            ),
             "motion" => require(
                 matches!(value.as_str(), Some("auto" | "paused")),
                 &path,

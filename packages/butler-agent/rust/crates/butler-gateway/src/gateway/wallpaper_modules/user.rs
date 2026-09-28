@@ -1,7 +1,8 @@
 //! User modules: `<BUTLER_HOME>/wallpapers/<id>/` holding `wallpaper.json`,
 //! `shader.frag`, and optionally `overlay.frag` (with `"overlay": true`), the
 //! image the manifest's `defaultImage` names (JPEG, PNG or WebP, at most
-//! 1 MB) and `thumbnail.png`. Folders are read fresh on every use, so a
+//! 1 MB, with header dimensions the image pipeline would accept) and
+//! `thumbnail.png`. Folders are read fresh on every use, so a
 //! listing always shows the files as they are now.
 //!
 //! Every folder is listed under its name. One whose files break the contract
@@ -18,9 +19,9 @@ use std::{fs, io, path::Path};
 use serde_json::{Map, Value, json};
 
 pub(crate) use files::{
-    FileRead, ModuleFiles, ModuleImage, PNG_SIGNATURE, default_image_name, size,
+    FileRead, ModuleFiles, ModuleImage, PNG_SIGNATURE, default_image_name, limited, size,
 };
-use files::{image_type, limited};
+use files::{image_dimensions_rule, image_type};
 
 use super::{
     ENGINE_IMAGE_MODULE, WallpaperModules, is_image_file,
@@ -63,7 +64,8 @@ pub(crate) struct CheckedFiles {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ModuleStatus {
     pub(crate) revision: String,
-    /// `ok` or `error`.
+    /// `checking` (the App is about to compile and draw it), `ok` or
+    /// `error`.
     pub(crate) state: String,
     pub(crate) message: Option<String>,
     pub(crate) checked_at: String,
@@ -119,7 +121,8 @@ impl UserModule {
     }
 
     /// The listing entry: the manifest as authored (for a failing one, its
-    /// id and a name) with `source: "user"` and the status.
+    /// id and a name) with `source: "user"`, the revision of its files (what
+    /// a save that replaces it names) and the status.
     pub(crate) fn entry(&self, stored: Option<&ModuleStatus>) -> Value {
         let mut entry = match &self.module {
             Ok(module) => module.manifest.as_object().cloned().unwrap_or_default(),
@@ -132,6 +135,7 @@ impl UserModule {
             }
         };
         entry.insert("source".into(), json!("user"));
+        entry.insert("revision".into(), json!(self.revision));
         entry.insert("status".into(), self.status(stored));
         Value::Object(entry)
     }
@@ -274,13 +278,16 @@ fn default_image(
         .map_or(&FileRead::Missing, |(_, read)| read);
     let rule = match read {
         FileRead::Bytes(bytes) => match image_type(bytes) {
-            Some(mime_type) => {
-                return Some(ModuleImage {
-                    file: name.to_owned(),
-                    mime_type,
-                    bytes: bytes.clone(),
-                });
-            }
+            Some(mime_type) => match image_dimensions_rule(bytes) {
+                None => {
+                    return Some(ModuleImage {
+                        file: name.to_owned(),
+                        mime_type,
+                        bytes: bytes.clone(),
+                    });
+                }
+                Some(rule) => rule,
+            },
             None => "must be a JPEG, PNG or WebP image".to_owned(),
         },
         FileRead::Missing => "is not in the module folder".to_owned(),

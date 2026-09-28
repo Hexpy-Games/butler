@@ -1,8 +1,10 @@
 //! WALL. Wallpaper security boundaries: uploaded images are checked from
 //! their content and header before decoding, module archives and saves
-//! never write outside their module folder, a user module's linked file is
-//! never served, and Settings accept only wallpapers inside the contract
-//! (a legacy theme patch re-derives the wallpaper only until one is chosen).
+//! never write outside their module folder and never silently replace an
+//! installed module, a user module's linked file is never served, and
+//! Settings accept only wallpapers inside the contract (a legacy theme patch
+//! re-derives the wallpaper only until one is chosen). WALL-05..07
+//! (`wallpaper_writes.rs`) cover announcements and replacing modules.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -163,8 +165,9 @@ async fn wall_01_image_uploads_are_checked_before_decoding() -> Result<(), Harne
 
 /// WALL-02 — A module archive is unpacked only when every entry is one of
 /// the module's files in one folder: traversal, absolute paths, links,
-/// executables, stray files, reserved ids and oversize archives or files
-/// are refused by name and write nothing. A valid archive installs.
+/// executables, stray files and images, a thumbnail that is not a PNG, too
+/// many entries, reserved ids and oversize archives or files are refused by
+/// name and write nothing. A valid archive installs.
 #[tokio::test]
 async fn wall_02_module_archives_never_write_outside_their_folder() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -175,6 +178,11 @@ async fn wall_02_module_archives_never_write_outside_their_folder() -> Result<()
     let shader = FRAGMENT.as_bytes();
     let long = " ".repeat(64 * 1024 + 1);
     let invalid = "wallpaper_module_archive_invalid";
+    let names: Vec<String> = (0..65).map(|index| format!("f{index}.txt")).collect();
+    let crowded: Vec<Entry<'_>> = names
+        .iter()
+        .map(|name| Entry::File(name, b"x", ordinary))
+        .collect();
     let cases: Vec<(Vec<u8>, (u16, &str), &str)> = vec![
         (
             archive(&[
@@ -244,6 +252,25 @@ async fn wall_02_module_archives_never_write_outside_their_folder() -> Result<()
             ]),
             (400, "wallpaper_module_invalid"),
             "reserved",
+        ),
+        (archive(&crowded), (400, invalid), "at most 64 entries"),
+        (
+            archive(&[
+                Entry::File("wallpaper.json", body, ordinary),
+                Entry::File("shader.frag", shader, ordinary),
+                Entry::File("thumbnail.png", b"GIF89a", ordinary),
+            ]),
+            (400, invalid),
+            "thumbnail.png: must be a PNG image",
+        ),
+        (
+            archive(&[
+                Entry::File("wallpaper.json", body, ordinary),
+                Entry::File("shader.frag", shader, ordinary),
+                Entry::File("photo.jpg", b"\xFF\xD8\xFF", ordinary),
+            ]),
+            (400, invalid),
+            "photo.jpg",
         ),
     ];
     for (bytes, expected, named) in cases {
@@ -342,8 +369,10 @@ async fn wall_03_module_ids_and_files_stay_inside_the_module_folder() -> Result<
 
 /// WALL-04 — Settings refuse a wallpaper outside the contract, naming the
 /// offending field and changing nothing. A legacy theme patch re-derives
-/// the wallpaper until one is chosen through `wallpaper`; after that a
-/// legacy patch never overwrites it, across a restart too.
+/// the wallpaper until one is chosen through `wallpaper` (marked `origin:
+/// "chosen"`, which a client cannot set); after that a legacy patch never
+/// overwrites it, even when the choice equals what the legacy keys describe,
+/// and across a restart.
 #[tokio::test]
 async fn wall_04_settings_wallpaper_is_validated_and_legacy_patches_yield()
 -> Result<(), HarnessError> {
@@ -405,11 +434,29 @@ async fn wall_04_settings_wallpaper_is_validated_and_legacy_patches_yield()
         json!({"kind": "live", "module": "butler.bloom", "params": {"colors": custom}})
     );
 
+    assert_eq!(derived.data()["wallpaper"]["origin"], "legacy");
+
+    // Choosing exactly what the legacy keys describe still counts as a choice.
+    let same = derived.data()["wallpaper"]["source"].clone();
+    let echoed = json!({"source": same, "origin": "legacy"});
+    let picked =
+        s.gw.patch("/settings", json!({"wallpaper": echoed}))
+            .await?;
+    assert_eq!(picked.status, 200, "{}", picked.text);
+    assert_eq!(picked.data()["wallpaper"]["origin"], "chosen");
+    let legacy =
+        s.gw.patch("/settings", json!({"main_screen_theme": "silk"}))
+            .await?;
+    assert_eq!(legacy.status, 200, "{}", legacy.text);
+    assert_eq!(legacy.data()["wallpaper"]["source"], same);
+
     let chosen = json!({"source": {"kind": "none"}, "motion": "paused", "pauseOnBattery": true});
     let patched =
         s.gw.patch("/settings", json!({"wallpaper": chosen}))
             .await?;
     assert_eq!(patched.status, 200, "{}", patched.text);
+    let mut chosen = chosen;
+    chosen["origin"] = json!("chosen");
     assert_eq!(patched.data()["wallpaper"], chosen);
     let legacy =
         s.gw.patch(

@@ -1209,6 +1209,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       moduleTooLarge: "Modules up to 2 MB.",
       moduleInUse: "Module in use.",
       moduleDeleteFailed: "Module delete failed.",
+      moduleExists: "Module already installed.",
+      replaceModule: "Replace",
     },
     fields: {
       language: "Language",

@@ -8,15 +8,16 @@
 //! absolute paths, symbolic links), executables and any other file are
 //! refused by name; Finder metadata (`__MACOSX/`, `.DS_Store`) is skipped.
 //! Nothing is written until the whole archive passes the same checks as a
-//! module folder.
+//! module folder, and an installed module is replaced only when asked, with
+//! its previous copy kept (see [`install`]).
 
 use std::{
     fs,
-    io::{self, Cursor, Read},
+    io::{self, Cursor, Read, Write},
     path::{Component, Path},
 };
 
-use butler_platform::secure_fs::FileMode;
+use butler_platform::secure_fs::{self, FileMode};
 use zip::ZipArchive;
 
 use super::user::{
@@ -29,6 +30,8 @@ use crate::gateway::GatewayApplicationError;
 pub(crate) const MAX_ARCHIVE_BYTES: usize = 2 * 1024 * 1024;
 const MAX_ENTRIES: usize = 64;
 const MAX_THUMBNAIL_BYTES: usize = 512 * 1024;
+/// Where the last replaced copy of each module is kept: `<root>/.previous/<id>`.
+const PREVIOUS: &str = ".previous";
 const LAYOUT: &str = "only wallpaper.json, shader.frag, overlay.frag, thumbnail.png and the \
                       image named by defaultImage are allowed, at the top of the archive or \
                       inside one folder";
@@ -37,6 +40,31 @@ const LAYOUT: &str = "only wallpaper.json, shader.frag, overlay.frag, thumbnail.
 pub(crate) struct Unpacked {
     pub(crate) module: WallpaperModule,
     pub(crate) files: Vec<(String, Vec<u8>)>,
+}
+
+impl Unpacked {
+    /// The revision these files have once installed.
+    pub(crate) fn revision(&self) -> String {
+        let read = |name: &str| {
+            self.files
+                .iter()
+                .find(|(file, _)| file == name)
+                .map_or(FileRead::Missing, |(_, bytes)| {
+                    FileRead::Bytes(bytes.clone())
+                })
+        };
+        ModuleFiles {
+            manifest: read(MANIFEST),
+            shader: read(SHADER),
+            overlay: read(OVERLAY),
+            image: self
+                .module
+                .default_image
+                .as_ref()
+                .map(|name| (name.clone(), read(name))),
+        }
+        .revision()
+    }
 }
 
 /// Reads and checks a module archive.
@@ -164,26 +192,47 @@ fn checked(files: &[(String, Vec<u8>)]) -> Result<WallpaperModule, GatewayApplic
         })
 }
 
-/// Writes the module to `<root>/<id>/` through a `.import-<unique>` folder,
-/// replacing an older copy.
+/// Writes the module to `<root>/<id>/` through a `.import-<unique>` folder.
+/// An installed copy is replaced only with `replace` (409
+/// `wallpaper_module_exists` otherwise): its `thumbnail.png` carries over
+/// when the new files bring none, and the replaced folder is kept as
+/// `<root>/.previous/<id>/`, one copy per module, so it can be restored.
 pub(crate) fn install(
     root: &Path,
     unpacked: &Unpacked,
     unique: &str,
+    replace: bool,
 ) -> Result<(), GatewayApplicationError> {
+    let id = &unpacked.module.id;
+    let target = root.join(id);
+    let installed = match fs::symlink_metadata(&target) {
+        Ok(_) => true,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+        Err(error) => return Err(GatewayApplicationError::internal_from(error)),
+    };
+    if installed && !replace {
+        return Err(GatewayApplicationError::public(
+            409,
+            "wallpaper_module_exists",
+            format!(
+                "Wallpaper module {id} is already installed. Import it with replace to overwrite it."
+            ),
+        ));
+    }
     let staging = root.join(format!(".import-{unique}"));
-    let installed = fs::create_dir_all(&staging)
+    let written = secure_fs::create_private_dir_all(&staging)
         .and_then(|()| {
             unpacked
                 .files
                 .iter()
-                .try_for_each(|(name, bytes)| fs::write(staging.join(name), bytes))
+                .try_for_each(|(name, bytes)| write_private(&staging.join(name), bytes))
         })
-        .and_then(|()| replace(root, &unpacked.module.id, &staging, unique));
-    if installed.is_err() {
+        .and_then(|()| keep_thumbnail(&target, &staging, unpacked))
+        .and_then(|()| swap_in(root, id, &staging, unique));
+    if written.is_err() {
         let _ = fs::remove_dir_all(&staging);
     }
-    installed.map_err(GatewayApplicationError::internal_from)
+    written.map_err(GatewayApplicationError::internal_from)
 }
 
 /// Removes the module folder `id`; false when there is none.
@@ -201,26 +250,77 @@ pub(crate) fn remove(root: &Path, id: &str, unique: &str) -> Result<bool, Gatewa
     }
 }
 
-/// Moves `staging` to `<root>/<id>`, setting an existing copy aside first and
-/// restoring it if the move fails.
-fn replace(root: &Path, id: &str, staging: &Path, unique: &str) -> io::Result<()> {
+/// Deletes the `.import-*` and `.trash-*` folders an interrupted install or
+/// removal left under `root`. Best effort.
+pub(crate) fn sweep(root: &Path) {
+    let Ok(entries) = fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with(".import-") || name.starts_with(".trash-") {
+            let _ = discard(&entry.path());
+        }
+    }
+}
+
+/// `bytes` as a new file only the owner can read, where the host has modes.
+fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    let _ = secure_fs::owner_only(&mut options);
+    options.open(path)?.write_all(bytes)
+}
+
+/// Copies the installed module's `thumbnail.png` into `staging` when the new
+/// files bring none.
+fn keep_thumbnail(target: &Path, staging: &Path, unpacked: &Unpacked) -> io::Result<()> {
+    if unpacked.files.iter().any(|(name, _)| name == THUMBNAIL)
+        || !fs::symlink_metadata(target).is_ok_and(|meta| meta.is_dir())
+    {
+        return Ok(());
+    }
+    match user::limited(&target.join(THUMBNAIL), MAX_THUMBNAIL_BYTES)? {
+        FileRead::Bytes(bytes) if bytes.starts_with(PNG_SIGNATURE) => {
+            write_private(&staging.join(THUMBNAIL), &bytes)
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Moves `staging` to `<root>/<id>`, setting an existing copy aside first
+/// (restored if the move fails, else kept as `.previous/<id>`).
+fn swap_in(root: &Path, id: &str, staging: &Path, unique: &str) -> io::Result<()> {
     let target = root.join(id);
-    let trash = root.join(format!(".trash-{unique}"));
-    let replaced = match fs::rename(&target, &trash) {
+    let aside = root.join(format!(".trash-{unique}"));
+    let replaced = match fs::rename(&target, &aside) {
         Ok(()) => true,
         Err(error) if error.kind() == io::ErrorKind::NotFound => false,
         Err(error) => return Err(error),
     };
     if let Err(error) = fs::rename(staging, &target) {
         if replaced {
-            let _ = fs::rename(&trash, &target);
+            let _ = fs::rename(&aside, &target);
         }
         return Err(error);
     }
-    if replaced {
-        let _ = discard(&trash);
+    if replaced && keep_previous(root, id, &aside).is_err() {
+        let _ = discard(&aside);
     }
     Ok(())
+}
+
+/// Makes `aside` the one kept previous copy of module `id`.
+fn keep_previous(root: &Path, id: &str, aside: &Path) -> io::Result<()> {
+    let previous = root.join(PREVIOUS);
+    secure_fs::create_private_dir_all(&previous)?;
+    let kept = previous.join(id);
+    match discard(&kept) {
+        Err(error) if error.kind() != io::ErrorKind::NotFound => return Err(error),
+        _ => {}
+    }
+    fs::rename(aside, kept)
 }
 
 /// Deletes a folder, or the link or file in its place, without following it.

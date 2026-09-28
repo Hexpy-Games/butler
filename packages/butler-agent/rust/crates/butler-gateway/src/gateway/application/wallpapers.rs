@@ -273,9 +273,9 @@ impl GatewayWallpapers for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move { this.report_module_status(id, report).await })
     }
-    fn import_wallpaper_module(&self, archive: Bytes) -> ApplicationFuture<Value> {
+    fn import_wallpaper_module(&self, archive: Bytes, replace: bool) -> ApplicationFuture<Value> {
         let this = self.clone_handle();
-        Box::pin(async move { this.import_module(archive).await })
+        Box::pin(async move { this.import_module(archive, replace).await })
     }
     fn delete_wallpaper_module(&self, id: String) -> ApplicationFuture<()> {
         let this = self.clone_handle();

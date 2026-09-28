@@ -47,9 +47,13 @@ impl FileMode {
     pub const OWNER_ONLY: Self = Self(0o600);
     /// Read and write for the owner, read for the group (0640).
     pub const GROUP_READABLE: Self = Self(0o640);
-    /// An ordinary file: read and write for the owner, read for others (0644).
+    /// An ordinary file: read and write for the owner, read for others
+    /// (0644). Test fixtures only.
+    #[cfg(feature = "test-support")]
     pub const ORDINARY: Self = Self(0o644);
-    /// An executable file: an ordinary file everyone may run (0755).
+    /// An executable file: an ordinary file everyone may run (0755). Test
+    /// fixtures only.
+    #[cfg(feature = "test-support")]
     pub const EXECUTABLE: Self = Self(0o755);
 
     /// A mode from its raw bits, as an archive entry records them.
@@ -57,7 +61,9 @@ impl FileMode {
         Self(bits)
     }
 
-    /// The raw permission bits, as an archive entry records them.
+    /// The raw permission bits, as an archive entry records them. Test
+    /// fixtures only.
+    #[cfg(feature = "test-support")]
     pub const fn bits(self) -> u32 {
         self.0
     }

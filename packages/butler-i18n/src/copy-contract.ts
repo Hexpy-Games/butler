@@ -1031,6 +1031,10 @@ export interface AppCopy {
       /** Toast deleting a module a setting or project still draws with (409 `wallpaper_module_in_use`). */
       moduleInUse: string;
       moduleDeleteFailed: string;
+      /** Toast importing a module whose id is installed (409 `wallpaper_module_exists`); offers `replaceModule`. */
+      moduleExists: string;
+      /** That toast's action: import again, replacing the installed module. */
+      replaceModule: string;
     };
     fields: {
       language: string;

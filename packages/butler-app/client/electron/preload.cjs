@@ -982,16 +982,16 @@ const butlerApp = Object.freeze({
   readWallpaperModuleShader,
   readWallpaperModuleOverlay,
   readWallpaperModuleImage,
-  importWallpaperModule: ({ name, bytes } = {}) => {
+  importWallpaperModule: ({ name, bytes, replace } = {}) => {
     const form = new FormData();
     form.set("file", new Blob([bridgeBytes(bytes)], { type: "application/zip" }), name || "module.zip");
-    return requestBridgeResult("/wallpaper-modules/import", { method: "POST", body: form });
+    return requestBridgeResult(`/wallpaper-modules/import${replace === true ? "?replace=1" : ""}`, { method: "POST", body: form });
   },
   deleteWallpaperModule: ({ id } = {}) => requestBridgeResult(`/wallpaper-modules/${encodeURIComponent(String(id ?? ""))}`, { method: "DELETE" }),
   reportWallpaperModuleStatus: ({ id, state, message, revision } = {}) => requestBridgeResult(wallpaperModulePath(id, "status"), {
     method: "POST",
     body: JSON.stringify({
-      ...(state === "error" ? { state, message: String(message ?? "") } : { state: "ok" }),
+      ...(state === "error" ? { state, message: String(message ?? "") } : { state: state === "checking" ? "checking" : "ok" }),
       ...(typeof revision === "string" && revision ? { revision } : {}),
     }),
   }),

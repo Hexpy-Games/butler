@@ -1,5 +1,5 @@
 // Compile checks of wallpaper modules (e.g. user modules as they change), on the shared still context.
-import { compileWallpaperStillProgram } from "./stillGpu";
+import { compileWallpaperStillProgram, hasWallpaperStillGpu, probeWallpaperStillDraw } from "./stillGpu";
 import type { WallpaperModule } from "./types";
 
 /** Longest log a check returns (status messages and tooltips stay short). */
@@ -15,12 +15,25 @@ export function trimWallpaperShaderLog(log: string): string {
 
 /**
  * Compiles and links a module's passes once (per source) on the shared
- * offscreen context that also draws stills, so its thumbnails reuse them.
- * Returns the failing stage with the trimmed log; null when WebGL2 is
- * unavailable (nothing can be said about the module).
+ * offscreen context that also draws stills, so its thumbnails reuse them,
+ * then draws one small frame of a module that links (a GPU hang happens
+ * here, under the caller's `checking` mark). Returns the failing stage with
+ * the trimmed log; null when WebGL2 is unavailable (nothing can be said
+ * about the module).
  */
 export function checkWallpaperModule(module: WallpaperModule): WallpaperModuleCheck | null {
   const result = compileWallpaperStillProgram(module);
   if (!result) return null;
-  return result.ok ? { ok: true } : { ok: false, stage: result.stage, log: trimWallpaperShaderLog(result.log) };
+  if (!result.ok) return { ok: false, stage: result.stage, log: trimWallpaperShaderLog(result.log) };
+  try {
+    probeWallpaperStillDraw(module);
+  } catch {
+    // A draw that throws (not hangs) says nothing about the source; showing the module reports it.
+  }
+  return { ok: true };
+}
+
+/** Whether modules can be checked here (WebGL2 is available). */
+export function canCheckWallpaperModules(): boolean {
+  return hasWallpaperStillGpu();
 }

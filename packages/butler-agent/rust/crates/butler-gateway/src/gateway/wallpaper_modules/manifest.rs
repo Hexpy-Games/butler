@@ -3,6 +3,9 @@
 //! the same rules on both sides. Errors read like the UI's (`field: rule`).
 //! The optional drawing fields are checked in [`rendering`].
 
+// Spelled out so `build.rs`, which compiles this file to check the bundled
+// manifests, finds it too.
+#[path = "manifest/rendering.rs"]
 mod rendering;
 
 use serde_json::{Map, Value};

@@ -1,10 +1,14 @@
-//! Asset files: `<id>.<ext>` and `<id>.thumb.<ext>`, written through a
-//! `.partial` sibling and renamed so a reader never sees half a file.
+//! Asset files: `<id>.<ext>` and `<id>.thumb.<ext>`, owner-only, written
+//! through a temporary sibling and renamed so a reader never sees half a
+//! file.
 
 use std::{
-    fs, io,
+    fs,
+    io::{self, Write},
     path::{Path, PathBuf},
 };
+
+use butler_platform::secure_fs;
 
 use bytes::Bytes;
 
@@ -31,7 +35,7 @@ pub(super) fn write(
         processed.thumbnail.mime_type,
         AppWallpaperVariant::Thumbnail,
     )?;
-    fs::create_dir_all(root).map_err(GatewayApplicationError::internal_from)?;
+    secure_fs::create_private_dir_all(root).map_err(GatewayApplicationError::internal_from)?;
     let written = write_atomic(&image, &processed.image.bytes)
         .and_then(|()| write_atomic(&thumbnail, &processed.thumbnail.bytes));
     if written.is_err() {
@@ -81,15 +85,9 @@ pub(super) fn remove(
     Ok(())
 }
 
+/// Writes `bytes` to `path` through an owner-only temporary file.
 fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    let mut partial = path.as_os_str().to_os_string();
-    partial.push(".partial");
-    let partial = PathBuf::from(partial);
-    fs::write(&partial, bytes)
-        .and_then(|()| fs::rename(&partial, path))
-        .inspect_err(|_| {
-            let _ = fs::remove_file(&partial);
-        })
+    secure_fs::replace_private(path, |file| file.write_all(bytes), |error| error)
 }
 
 /// The file of `id`; an id outside the asset pattern names no file.

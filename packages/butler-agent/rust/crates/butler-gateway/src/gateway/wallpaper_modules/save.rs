@@ -2,7 +2,8 @@
 //! shader text and optional overlay text, checked by the same rules as a
 //! module folder and turned into the files an install writes. A save cannot
 //! add an image: a `defaultImage` must name one the module being replaced
-//! already holds, which the save keeps. Every broken rule is named as
+//! already holds, which the save keeps. Replacing an installed module needs
+//! its current revision ([`exists`] otherwise). Every broken rule is named as
 //! `field rule`, with `id` (the request's), `manifest`, `manifest.<path>`,
 //! `shader` or `overlay`.
 
@@ -101,6 +102,22 @@ fn rule(error: &str) -> String {
         .split_once(": ")
         .map_or(error, |(_, rule)| rule)
         .to_owned()
+}
+
+/// A save over installed module `id` without its current revision.
+pub(crate) fn exists(id: &str) -> AppWallpaperRejection {
+    let rule = format!(
+        "must be the current revision of user module {id}, which this save would replace: \
+         call list_wallpapers, make sure replacing {id} is what the user wants (otherwise \
+         save under a new id), then save again with replace_revision set to its revision"
+    );
+    AppWallpaperRejection::new(
+        409,
+        "wallpaper_module_exists",
+        "replace_revision",
+        &rule,
+        None,
+    )
 }
 
 /// The first field with its rule, then every other `field rule`.

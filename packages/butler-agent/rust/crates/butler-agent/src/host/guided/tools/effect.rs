@@ -8,6 +8,7 @@ mod mcp;
 mod restart;
 mod session_worktree;
 mod topic_conversation;
+mod wallpaper;
 
 pub(super) fn is_managed_project_ledger_effect(name: &str) -> bool {
     ledger_input::managed(name)
@@ -185,6 +186,8 @@ async fn prepare(
         topic_conversation::prepare(owner, call, occurrence)
     } else if call.name == ToolName::RequestServiceRestart {
         restart::prepare(owner, &call.arguments)
+    } else if wallpaper::supports(&call.name) {
+        wallpaper::prepare(owner, call)
     } else if call.name == ToolName::RunCommand {
         owner
             .command

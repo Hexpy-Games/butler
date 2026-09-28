@@ -9,9 +9,12 @@ import {
   wallpaperResponseError,
 } from "./wallpaperGateway.ts";
 
-export type WallpaperModuleState = "unknown" | "ok" | "error";
+export type WallpaperModuleState = "unknown" | "checking" | "ok" | "error";
 
-/** A module's check status as the gateway stores it (per module content; a change resets it to `unknown`). */
+/**
+ * A module's check status as the gateway stores it (per module content; a change resets it to `unknown`).
+ * `checking` is the client's mark before it compiles and first draws a revision.
+ */
 export interface WallpaperModuleStatus {
   state: WallpaperModuleState;
   message?: string;
@@ -26,14 +29,14 @@ export interface WallpaperModuleListing {
   manifest: Record<string, unknown>;
 }
 
-/** What the client reports after checking a user module. */
-export type WallpaperModuleReport = { state: "ok" } | { state: "error"; message: string };
+/** What the client reports about a user module: its mark before checking it, or the verdict. */
+export type WallpaperModuleReport = { state: "checking" } | { state: "ok" } | { state: "error"; message: string };
 
 type UnknownRecord = Record<string, unknown>;
 const isRecord = (value: unknown): value is UnknownRecord => typeof value === "object" && value !== null && !Array.isArray(value);
 
 function parseStatus(raw: unknown): WallpaperModuleStatus {
-  if (!isRecord(raw) || (raw.state !== "ok" && raw.state !== "error")) return { state: "unknown" };
+  if (!isRecord(raw) || (raw.state !== "ok" && raw.state !== "error" && raw.state !== "checking")) return { state: "unknown" };
   return {
     state: raw.state,
     ...(typeof raw.message === "string" ? { message: raw.message } : {}),
@@ -129,10 +132,10 @@ function importError(code: unknown, status: unknown, message: unknown): Error {
   });
 }
 
-async function importOverHttp(file: File): Promise<unknown> {
+async function importOverHttp(file: File, replace: boolean): Promise<unknown> {
   const form = new FormData();
   form.set("file", file, file.name);
-  const response = await fetch("/wallpaper-modules/import", { method: "POST", body: form });
+  const response = await fetch(`/wallpaper-modules/import${replace ? "?replace=1" : ""}`, { method: "POST", body: form });
   const body = (await response.json().catch(() => null)) as { data?: unknown; error?: { code?: unknown; message?: unknown } } | null;
   if (!response.ok) throw importError(body?.error?.code, response.status, body?.error?.message);
   return body?.data;
@@ -141,18 +144,25 @@ async function importOverHttp(file: File): Promise<unknown> {
 /**
  * Installs a user module from a `.zip` (at most 2 MB; the gateway validates
  * it, rejecting path traversal and symlinks) and returns it as a listing
- * entry. A failure keeps the gateway's own message — imports fail for many
- * specific reasons, unlike the small enumerable set of image-upload errors.
+ * entry. An installed id is refused (`wallpaper_module_exists`) unless
+ * `replace` is set. A failure keeps the gateway's own message — imports fail
+ * for many specific reasons, unlike the small enumerable set of image-upload
+ * errors.
  */
-export async function importWallpaperModule(file: File): Promise<WallpaperModuleListing> {
+export async function importWallpaperModule(file: File, { replace = false }: { replace?: boolean } = {}): Promise<WallpaperModuleListing> {
   if (file.size > WALLPAPER_MODULE_IMPORT_MAX_BYTES) throw importError("wallpaper_module_archive_too_large", 413, undefined);
   const method = wallpaperBridgeMethod("importWallpaperModule");
   const data = method
-    ? unwrapWallpaperBridge<unknown>(await method({ name: file.name, bytes: await file.arrayBuffer() }))
-    : await importOverHttp(file);
+    ? unwrapWallpaperBridge<unknown>(await method({ name: file.name, bytes: await file.arrayBuffer(), ...(replace ? { replace } : {}) }))
+    : await importOverHttp(file, replace);
   const [listing] = parseListing(data);
   if (!listing) throw importError(undefined, undefined, undefined);
   return listing;
+}
+
+/** The gateway's `wallpaper_module_exists` conflict importing a module whose id is installed. */
+export function wallpaperModuleExists(error: unknown): boolean {
+  return (error && typeof error === "object" ? (error as { code?: unknown }).code : undefined) === "wallpaper_module_exists";
 }
 
 /** Rejects with `wallpaper_module_in_use` (409) while a setting or project still draws with the module. */

@@ -12,6 +12,11 @@
 //! - `POST /internal/wallpaper` `{scope, project_id?, source}` → 200
 //!   `{scope, projectId?, previous, next, changed}`; a correctable request is
 //!   a 4xx `{error: {code, message, field, allowed?}}`.
+//!
+//! The `/internal/*` routes are for the local agent. They need the same
+//! bearer token as every other route, so any holder of that token can write
+//! a wallpaper whose `wallpaper.changed` says `origin: "agent"`; the origin
+//! labels the route, it is not an authentication of the caller.
 
 use std::sync::Arc;
 

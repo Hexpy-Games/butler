@@ -15,7 +15,7 @@ A wallpaper module is a manifest (`wallpaper.json`), a GLSL fragment shader (`sh
 
 ### 1. Save call and manifest
 
-`save_wallpaper_module` takes `{id, manifest, shader, overlay?}`: `manifest` is the `wallpaper.json` object, `shader` the `shader.frag` text, `overlay` the `overlay.frag` text. It checks the module, writes the files at once into the user's module folder (`userModuleDirectory` from `list_wallpapers`) and replaces a user module with the same id. Never write module files with other tools, and never change built-in modules.
+`save_wallpaper_module` takes `{id, manifest, shader, overlay?, replace_revision?}`: `manifest` is the `wallpaper.json` object, `shader` the `shader.frag` text, `overlay` the `overlay.frag` text. It checks the module and writes the files at once into the user's module folder (`userModuleDirectory` from `list_wallpapers`). Replacing an installed user module needs `replace_revision`, that module's `revision` from `list_wallpapers`; without it the save is refused with `wallpaper_module_exists`. Replace only a module the user wants changed; otherwise pick a new id. Never write module files with other tools, and never change built-in modules.
 
 - `manifest` at most 32 KB, `shader` and `overlay` at most 64 KB each once written.
 - `id` matches `^[a-z0-9]+(\.[a-z0-9-]+)+$`, at most 64 characters, e.g. `user.rainy-window`, and `manifest.id` equals it. `butler.*` ids are reserved for built-ins.
@@ -84,7 +84,7 @@ Parameters arrive as `p_<key>`: number and boolean → `float` (booleans 0/1), e
 
 ### 5. Workflow
 
-1. Call `list_wallpapers`: note the current wallpaper and the existing ids, and pick a new id (or the id of the user module to fix or tune).
+1. Call `list_wallpapers`: note the current wallpaper and the existing ids, and pick a new id (or the id and `revision` of the user module to fix or tune).
 2. Call `save_wallpaper_module` with `{id, manifest, shader}` (and `overlay` when the manifest sets `overlay: true`).
    - A refused save (`ok: false`) names the field and the rule it breaks: correct that and save again.
    - `status.state` `"error"`: `status.message` is the App's GLSL compile log (or the frame budget it missed). Fix the shader from the log and save again; after three failed attempts, simplify the shader instead of patching it.

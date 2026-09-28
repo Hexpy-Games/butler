@@ -40,6 +40,9 @@ unicode-normalization.workspace = true
 url.workspace = true
 zip.workspace = true
 
+[build-dependencies]
+serde_json.workspace = true
+
 [dev-dependencies]
 butler-models = { path = "../butler-models", features = ["test-support"] }
 butler-test-support = { path = "../butler-test-support" }

@@ -11,7 +11,7 @@ publish.workspace = true
 # `butler-agent` executable, driven through gateway HTTP, CLI and the data dir.
 # butler-platform is not product code: it is the OS boundary every crate uses.
 [dependencies]
-butler-platform = { path = "../butler-platform" }
+butler-platform = { path = "../butler-platform", features = ["test-support"] }
 axum.workspace = true
 bytes.workspace = true
 chrono.workspace = true

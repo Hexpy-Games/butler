@@ -1218,6 +1218,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       moduleTooLarge: "2MB 이하 모듈만 가능",
       moduleInUse: "사용 중인 모듈",
       moduleDeleteFailed: "모듈 삭제 실패",
+      moduleExists: "이미 설치된 모듈",
+      replaceModule: "교체",
     },
     fields: {
       language: "언어",

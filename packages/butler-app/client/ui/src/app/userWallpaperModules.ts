@@ -1,4 +1,4 @@
-import { checkWallpaperModule, wallpaperLabelText } from "@/butler-ds";
+import { canCheckWallpaperModules, checkWallpaperModule, wallpaperLabelText } from "@/butler-ds";
 import { appCopy, getAppLocale } from "./copy.ts";
 import { notifyStatus } from "./notifications.ts";
 import { createWallpaperModuleStore } from "./wallpaperModuleStore.ts";
@@ -21,7 +21,9 @@ export const userWallpaperModules = createWallpaperModuleStore({
   overlay: readWallpaperModuleOverlay,
   image: readWallpaperModuleImage,
   report: reportWallpaperModuleStatus,
+  markChecking: (id, revision) => reportWallpaperModuleStatus(id, { state: "checking" }, revision),
   check: checkWallpaperModule,
+  canCheck: canCheckWallpaperModules,
   notifyFailure: ({ id, name }) => {
     const label = name ? wallpaperLabelText(name, getAppLocale()) : id;
     notifyStatus(appCopy.settings.wallpaper.moduleFailed(label), { id: "wallpaper-module", tone: "error" });

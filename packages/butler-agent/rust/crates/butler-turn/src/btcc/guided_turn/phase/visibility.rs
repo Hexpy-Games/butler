@@ -58,10 +58,9 @@ const NON_FULL: &[&str] = &[
     "list_skills",
     "transform_public_data_table",
 ];
-/// Non-full tools that change something: offered when asking first, never to
-/// a read-only turn. `set_wallpaper` is a reversible preference write the
-/// user undoes from the App, and `save_wallpaper_module` writes only the
-/// user's wallpaper module folder, so neither needs approval.
+/// Non-full tools that change something: offered when asking first, where
+/// each asks for approval before it runs (the wallpaper writes are reviewed
+/// persistent effects there), and never to a read-only turn.
 const ASK_FIRST_WRITES: &[&str] = &["run_command", "set_wallpaper", "save_wallpaper_module"];
 const STEWARD_PARENT: &[&str] = &["delegate_to_steward", "steer_steward", "cancel_steward"];
 const WORKER_DELEGATION: &[&str] = &["delegate_to_worker", "steer_worker", "wait_for_worker"];

@@ -7,17 +7,22 @@
 //!   (404 `wallpaper_module_file_not_found` without `"overlay": true`)
 //! - `GET /wallpaper-modules/{id}/image` → its `defaultImage` bytes as
 //!   `image/jpeg`, `image/png` or `image/webp`, same `ETag` (404 without one)
-//! - `POST /wallpaper-modules/{id}/status` `{state: "ok" | "error", message?,
-//!   revision?}` → `{id, status}`; the App reports compile, link and frame
-//!   budget results; `revision` is the shader's `ETag` it checked
-//! - `POST /wallpaper-modules/import` multipart `file` (zip, at most 2 MB) →
-//!   201 module entry
+//! - `POST /wallpaper-modules/{id}/status` `{state: "checking" | "ok" |
+//!   "error", message?, revision?}` → `{id, status}`; the App marks a revision
+//!   `checking` before it compiles and first draws it, then reports compile,
+//!   link and frame budget results; `revision` is the shader's `ETag` it
+//!   checked
+//! - `POST /wallpaper-modules/import[?replace=1]` multipart `file` (zip, at
+//!   most 2 MB) → 201 module entry; 409 `wallpaper_module_exists` when the id
+//!   is installed and `replace` is not set
 //! - `DELETE /wallpaper-modules/{id}` → `{id, deleted: true}`, 409
 //!   `wallpaper_module_in_use` while the setting or a project draws with it
-//! - `POST /internal/wallpaper-modules` `{id, manifest, shader, overlay?}` → 200 `{id,
-//!   status}` once the App checked the written files (or `unknown` after a
-//!   short wait), for the agent's `save_wallpaper_module`; a module rule the
-//!   request breaks is a 400 `{error: {code, message, field}}`
+//! - `POST /internal/wallpaper-modules` `{id, manifest, shader, overlay?,
+//!   replace_revision?}` → 200 `{id, status}` once the App checked the
+//!   written files (or `unknown` after a short wait), for the agent's
+//!   `save_wallpaper_module`; a module rule the request breaks is a 400
+//!   `{error: {code, message, field}}`, and replacing an installed module
+//!   without its current revision a 409 `wallpaper_module_exists`
 
 use std::sync::Arc;
 
@@ -71,13 +76,19 @@ pub(super) async fn route(
             envelope(StatusCode::OK, json!({ "modules": modules }))
         }
         (Method::POST, ["import"]) => {
+            let replace = request
+                .uri()
+                .query()
+                .is_some_and(|query| query.split('&').any(|pair| pair == "replace=1"));
             let _upload = state
                 .uploads
                 .acquire()
                 .await
                 .map_err(|_| HttpError::Internal)?;
             let archive = read_upload(request, ARCHIVE_RETAIN_BYTES).await?;
-            let module = application.import_wallpaper_module(archive).await?;
+            let module = application
+                .import_wallpaper_module(archive, replace)
+                .await?;
             envelope(StatusCode::CREATED, module)
         }
         (Method::GET, [id, "shader"]) => text(
@@ -102,7 +113,8 @@ pub(super) async fn route(
                     HttpError::public(
                         400,
                         "wallpaper_module_status_invalid",
-                        "Status must be {state: \"ok\" | \"error\", message?, revision?}.",
+                        "Status must be {state: \"checking\" | \"ok\" | \"error\", message?, \
+                         revision?}.",
                     )
                 })?;
             let status = application
@@ -127,7 +139,7 @@ async fn save(state: &HttpState, request: Request<Body>) -> Result<Response, Htt
             400,
             "wallpaper_module_request_invalid",
             "Module save must be {id: string, manifest: object, shader: string, overlay?: \
-             string}.",
+             string, replace_revision?: string}.",
         )
     })?;
     match state.application.save_wallpaper_module(input).await? {

@@ -166,11 +166,12 @@ impl AppApplication {
         id: String,
         report: AppWallpaperModuleStatusReport,
     ) -> Result<Value, GatewayApplicationError> {
-        if !matches!(report.state.as_str(), "ok" | "error") {
+        if !matches!(report.state.as_str(), "checking" | "ok" | "error") {
             return Err(GatewayApplicationError::public(
                 400,
                 "wallpaper_module_status_invalid",
-                "Status must be {state: \"ok\" | \"error\", message?, revision?}.",
+                "Status must be {state: \"checking\" | \"ok\" | \"error\", message?, \
+                 revision?}.",
             ));
         }
         refuse_builtin(&id)?;
@@ -205,20 +206,29 @@ impl AppApplication {
         Ok(module.status(Some(&status)))
     }
 
+    /// Installs an archive; one whose id is installed already needs
+    /// `replace`, and the replaced files stay recoverable.
     pub(super) async fn import_module(
         &self,
         archive: Bytes,
+        replace: bool,
     ) -> Result<Value, GatewayApplicationError> {
         let _settings = self.settings_update_lock.lock().await;
         let unique = self.dependencies.identity_clock.new_uuid();
-        let module = self.wallpapers.install_module(archive, unique).await?;
+        let module = self
+            .wallpapers
+            .install_module(archive, unique, replace)
+            .await?;
         let statuses = self.storage.execute(|db| module_status::all(db)).await;
         Ok(module.entry(statuses.map_err(app_error)?.get(&module.id)))
     }
 
     /// Checks and writes an agent's module, then waits up to `wait` for the
     /// App's check of exactly the written files. A module that names a
-    /// default image keeps the one the replaced module holds.
+    /// default image keeps the one the replaced module holds. An installed
+    /// module is replaced only at the revision the request names (saving
+    /// exactly its current files again changes nothing); the replaced files
+    /// and thumbnail stay recoverable.
     pub(in crate::gateway::application) async fn save_module(
         &self,
         request: AppWallpaperModuleSaveRequest,
@@ -238,8 +248,19 @@ impl AppApplication {
                 Ok(unpacked) => unpacked,
                 Err(rejection) => return Ok(Err(rejection)),
             };
-            let unique = self.dependencies.identity_clock.new_uuid();
-            self.wallpapers.write_module(unpacked, unique).await?
+            let installed = self.wallpapers.user_module(request.id.clone()).await?;
+            match installed {
+                Some(current) if current.revision == unpacked.revision() => current,
+                Some(current)
+                    if request.replace_revision.as_deref() != Some(current.revision.as_str()) =>
+                {
+                    return Ok(Err(save::exists(&request.id)));
+                }
+                _ => {
+                    let unique = self.dependencies.identity_clock.new_uuid();
+                    self.wallpapers.write_module(unpacked, unique).await?
+                }
+            }
         };
         let status = self.module_check(&module, wait).await?;
         Ok(Ok(AppWallpaperModuleSaved {
@@ -263,7 +284,10 @@ impl AppApplication {
                 .execute(move |db| module_status::get(db, &id))
                 .await
                 .map_err(app_error)?;
-            if let Some(stored) = stored.filter(|stored| stored.revision == module.revision) {
+            // `checking` is the App's mark before its verdict, not a verdict.
+            if let Some(stored) = stored
+                .filter(|stored| stored.revision == module.revision && stored.state != "checking")
+            {
                 return Ok(module.status(Some(&stored)));
             }
             let now = tokio::time::Instant::now();

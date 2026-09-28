@@ -26,6 +26,13 @@ export interface WallpaperModuleStoreDeps {
   image?(id: string): Promise<Blob>;
   /** `revision`: the gateway's revision of the files checked (the shader's ETag), when known. */
   report(id: string, report: WallpaperModuleReport, revision?: string): Promise<void>;
+  /**
+   * Marks a revision `checking` on the gateway before `check` compiles and draws it, so a check that
+   * hangs the GPU (and takes the app down) is found on the next start instead of crash-looping.
+   */
+  markChecking?(id: string, revision: string): Promise<void>;
+  /** Whether `check` can run here (WebGL2); without it nothing is marked, since no verdict would follow. */
+  canCheck?(): boolean;
   /** Compile and link once (`checkWallpaperModule`); null without WebGL2. */
   check(module: WallpaperModule): WallpaperModuleCheck | null;
   /** A shown user module stopped working and the default shows instead: one brief notice. */
@@ -84,9 +91,12 @@ function publicEntry({ id, name, verdict }: Entry): WallpaperUserModule {
 
 const failed = (message: string): WallpaperModuleReport => ({ state: "error", message });
 
+/** A `checking` mark the gateway still holds when this app first sees the module: that check never finished. */
+export const HUNG_DURING_CHECK = "hung during check (the app stopped while compiling or drawing it)";
+
 /** The gateway already holds this verdict. */
 function holds(status: WallpaperModuleStatus, verdict: WallpaperModuleReport): boolean {
-  return status.state === verdict.state && (verdict.state === "ok" || status.message === verdict.message);
+  return status.state === verdict.state && (verdict.state !== "error" || status.message === verdict.message);
 }
 
 /** Built-ins plus user modules; the registry is rebuilt only when what it offers changes. */
@@ -164,10 +174,13 @@ export function createWallpaperModuleStore(deps: WallpaperModuleStoreDeps): Wall
     const revision = wallpaperModuleRevision(module);
     // Unchanged content keeps its verdict, including a failure when drawn.
     if (previous?.revision === revision) return { ...previous, ...base, files: files ?? previous.files, module: previous.module };
-    // First sight of a checked module: the gateway's verdict stands.
+    // First sight of a checked module: the gateway's verdict stands. A `checking` mark left from before
+    // this app started is a check that never finished (a GPU hang): the module is retired, never drawn.
+    if (!previous && status.state === "checking") return { ...base, files, revision, module, verdict: failed(HUNG_DURING_CHECK) };
     if (!previous && status.state !== "unknown") {
       return { ...base, files, revision, module, verdict: status.state === "ok" ? { state: "ok" } : failed(status.message ?? "error") };
     }
+    if (files && deps.markChecking && deps.canCheck?.() !== false) await deps.markChecking(id, files).catch(() => undefined);
     const check = deps.check(module);
     const verdict = check === null ? undefined : check.ok ? { state: "ok" as const } : failed(check.log);
     return { ...base, files, revision, module, ...(verdict ? { verdict } : {}) };

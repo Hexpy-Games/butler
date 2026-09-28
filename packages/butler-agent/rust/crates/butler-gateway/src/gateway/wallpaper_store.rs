@@ -7,6 +7,8 @@
 mod files;
 mod pipeline;
 
+pub(crate) use pipeline::{MAX_SOURCE_PIXELS, MAX_SOURCE_SIDE, within_source_limits};
+
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -45,6 +47,8 @@ struct Lane {
     root: PathBuf,
     modules: PathBuf,
     permits: Arc<Semaphore>,
+    /// One image decode at a time: each may hold a few hundred MB.
+    decodes: Arc<Semaphore>,
     jobs: TaskTracker,
     closing: Mutex<bool>,
     watcher: Mutex<Option<ModuleWatcher>>,
@@ -56,6 +60,7 @@ impl AppWallpaperFiles {
             root: data_root.join("app-server/wallpapers"),
             modules: data_root.join("wallpapers"),
             permits: Arc::new(Semaphore::new(2)),
+            decodes: Arc::new(Semaphore::new(1)),
             jobs: TaskTracker::new(),
             closing: Mutex::new(false),
             watcher: Mutex::new(None),
@@ -72,18 +77,21 @@ impl AppWallpaperFiles {
             let mut closing = self.0.closing.lock();
             *closing = true;
             self.0.permits.close();
+            self.0.decodes.close();
             self.0.jobs.close();
         }
         self.0.watcher.lock().take();
         self.0.jobs.wait().await;
     }
 
-    /// Reports module folder changes to `changed` until close. Best effort:
-    /// without a watcher, listings still read the folders as they are.
+    /// Reports module folder changes to `changed` until close, after sweeping
+    /// what an interrupted install left. Best effort: without a watcher,
+    /// listings still read the folders as they are.
     pub(crate) fn watch_modules(&self, changed: ModulesChanged) {
         let closing = self.0.closing.lock();
         let mut slot = self.0.watcher.lock();
         if !*closing && slot.is_none() {
+            import::sweep(&self.0.modules);
             *slot = watch::watch(&self.0.modules, changed).ok();
         }
     }
@@ -109,25 +117,28 @@ impl AppWallpaperFiles {
         })
     }
 
-    /// Checks a module archive and installs it, replacing an older copy.
+    /// Checks a module archive and installs it; an installed copy is
+    /// replaced only with `replace`.
     pub(crate) fn install_module(
         &self,
         archive: Bytes,
         unique: String,
+        replace: bool,
     ) -> ApplicationFuture<UserModule> {
         self.run_in(self.0.modules.clone(), move |root| {
-            installed(root, &import::unpack(&archive)?, &unique)
+            installed(root, &import::unpack(&archive)?, &unique, replace)
         })
     }
 
-    /// Installs checked module files at once, replacing an older copy.
+    /// Installs checked module files at once, replacing an older copy (the
+    /// caller checked that it may).
     pub(crate) fn write_module(
         &self,
         unpacked: Unpacked,
         unique: String,
     ) -> ApplicationFuture<UserModule> {
         self.run_in(self.0.modules.clone(), move |root| {
-            installed(root, &unpacked, &unique)
+            installed(root, &unpacked, &unique, true)
         })
     }
 
@@ -139,8 +150,10 @@ impl AppWallpaperFiles {
     }
 
     /// Validates, re-encodes and writes one asset's image and thumbnail.
+    /// Decodes run one at a time.
     pub(crate) fn store(&self, id: String, source: Bytes) -> ApplicationFuture<StoredWallpaper> {
-        self.run(move |root| {
+        let decodes = Arc::clone(&self.0.decodes);
+        let stored = self.run(move |root| {
             let processed = pipeline::process(&source)?;
             drop(source);
             files::write(root, &id, &processed)?;
@@ -153,6 +166,13 @@ impl AppWallpaperFiles {
                 luminance: processed.luminance,
                 color: processed.color,
             })
+        });
+        Box::pin(async move {
+            let _decode = decodes
+                .acquire_owned()
+                .await
+                .map_err(GatewayApplicationError::internal_from)?;
+            stored.await
         })
     }
 
@@ -225,8 +245,9 @@ fn installed(
     root: &Path,
     unpacked: &Unpacked,
     unique: &str,
+    replace: bool,
 ) -> Result<UserModule, GatewayApplicationError> {
-    import::install(root, unpacked, unique)?;
+    import::install(root, unpacked, unique, replace)?;
     user::read(root, &unpacked.module.id)
         .map_err(GatewayApplicationError::internal_from)?
         .ok_or_else(GatewayApplicationError::internal)

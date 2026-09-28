@@ -51,7 +51,7 @@ pub(super) async fn execute(
         return super::project_source::execute(owner, call).await;
     }
     if super::wallpaper::supports(&call.name) {
-        return super::wallpaper::execute(owner, call, invocation.cancellation).await;
+        return super::wallpaper::execute(owner, invocation, call, call_id).await;
     }
     if mcp::supports(&call.name) {
         return Box::pin(mcp::execute(owner, invocation, call)).await;

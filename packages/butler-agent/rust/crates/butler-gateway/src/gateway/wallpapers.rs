@@ -12,9 +12,12 @@
 //! `previous` and `next` are sources (a project's may be `"inherit"`).
 //!
 //! Modules are listed as `{...manifest, source: "builtin" | "user", status:
-//! {state: "unknown" | "ok" | "error", message?, checkedAt?}}`; a user module
-//! whose files break the contract is listed as `{id, name, source, status}`
-//! with the reason in `status.message`. Changes under the user module folder
+//! {state: "unknown" | "checking" | "ok" | "error", message?, checkedAt?}}`,
+//! user modules with the `revision` of their files; a user module whose files
+//! break the contract is listed as `{id, name, source, revision, status}`
+//! with the reason in `status.message`. `checking` is the App's mark before it
+//! compiles and first draws a revision: a mark the App finds again after a
+//! restart means that check hung, and the App reports it as an error. Changes under the user module folder
 //! append `wallpaper.modules.updated {ids}` once per burst. The agent writes
 //! user modules through [`GatewayWallpapers::save_wallpaper_module`], which
 //! answers with the App's check of the saved files.
@@ -148,7 +151,8 @@ pub struct AppWallpaperModuleShader {
 
 /// `POST /wallpaper-modules/{id}/status`: what the App found drawing a user
 /// module, `ok` or `error` with its message (compile or link log, frame
-/// budget). `revision`, when given, must still be the module's current one.
+/// budget), or `checking` just before it compiles and first draws one.
+/// `revision`, when given, must still be the module's current one.
 #[derive(Clone, Debug, Deserialize)]
 pub struct AppWallpaperModuleStatusReport {
     pub state: String,
@@ -160,7 +164,9 @@ pub struct AppWallpaperModuleStatusReport {
 
 /// `POST /internal/wallpaper-modules`: the agent writes a user module,
 /// `<id>/wallpaper.json` (the `manifest` object), `<id>/shader.frag` and, for
-/// a manifest with `"overlay": true`, `<id>/overlay.frag`.
+/// a manifest with `"overlay": true`, `<id>/overlay.frag`. Replacing an
+/// existing module needs `replace_revision`, its current revision as
+/// `list_wallpapers` shows it; the replaced files stay recoverable.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AppWallpaperModuleSaveRequest {
@@ -170,6 +176,8 @@ pub struct AppWallpaperModuleSaveRequest {
     pub shader: String,
     #[serde(default)]
     pub overlay: Option<String>,
+    #[serde(default)]
+    pub replace_revision: Option<String>,
 }
 
 /// A saved user module and the App's check of the saved files:
@@ -235,16 +243,18 @@ pub trait GatewayWallpapers: Send + Sync + 'static {
     ) -> ApplicationFuture<Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
-    /// Installs a module archive (a zip of at most 1 MB); returns its entry.
-    fn import_wallpaper_module(&self, _archive: Bytes) -> ApplicationFuture<Value> {
+    /// Installs a module archive (a zip of at most 2 MB); returns its entry.
+    /// An archive whose id is installed already is refused (409
+    /// `wallpaper_module_exists`) unless `replace` is set.
+    fn import_wallpaper_module(&self, _archive: Bytes, _replace: bool) -> ApplicationFuture<Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     /// Deletes a user module nothing draws with.
     fn delete_wallpaper_module(&self, _id: String) -> ApplicationFuture<()> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
-    /// Checks and writes an agent's user module (replacing one with that id),
-    /// then waits briefly for the App's check of the written files; a request
+    /// Checks and writes an agent's user module (replacing one with that id
+    /// only at its current revision), then waits briefly for the App's check of the written files; a request
     /// breaking a module rule is an `Ok(Err(rejection))` naming the field.
     fn save_wallpaper_module(
         &self,
