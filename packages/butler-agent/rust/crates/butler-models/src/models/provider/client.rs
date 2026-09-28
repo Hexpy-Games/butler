@@ -1,19 +1,23 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
-use reqwest::{Client, RequestBuilder};
+use reqwest::Client;
 
 use butler_turn::btcc::{ModelRoundError, ModelRoundPort, ModelRoundRequest, ModelRoundResult};
 
-use super::super::{
-    HostedApiShape, ModelCatalog, TokenEstimateInput, diagnostics, request_admission, transport,
-};
+use super::super::{ModelCatalog, TokenEstimateInput, diagnostics, request_admission, transport};
 use super::contracts::{
     ProviderAuth, ProviderAuthMode, ProviderClock, ProviderConfigRequest, ProviderObservation,
     ProviderObservationSink, ProviderRequestConfigPort, ProviderVisualCapabilityPort,
 };
+use super::local_stream::{self, LocalStreaming, StreamWatch};
 use super::result;
-use super::serialize::{self, Carrier};
+pub(super) use super::route::{authorize, carrier};
+use super::serialize;
+
+type RoundFuture<'a> = std::pin::Pin<
+    Box<dyn std::future::Future<Output = Result<ModelRoundResult, ModelRoundError>> + Send + 'a>,
+>;
 
 pub struct ModelProvider {
     pub(super) client: Client,
@@ -23,6 +27,7 @@ pub struct ModelProvider {
     pub(super) clock: Arc<dyn ProviderClock>,
     pub(super) prompt_metrics: Arc<dyn super::super::PromptUsageMetricSink>,
     visual_capability: Option<Arc<dyn ProviderVisualCapabilityPort>>,
+    local_streaming: LocalStreaming,
     pub(super) quota: Option<Arc<dyn crate::models::ProviderQuotaSink>>,
 }
 
@@ -43,6 +48,7 @@ impl ModelProvider {
             clock,
             prompt_metrics,
             visual_capability: None,
+            local_streaming: LocalStreaming::default(),
             quota: None,
         }
     }
@@ -61,38 +67,17 @@ impl ModelProvider {
         self
     }
 
+    /// One model round. `local_stream` lets a local round stream; it is false
+    /// only for the retry of a round the local server refused to stream.
     async fn run(
         &self,
         request: ModelRoundRequest<'_>,
+        local_stream: bool,
     ) -> Result<ModelRoundResult, ModelRoundError> {
-        if request.cancellation.is_cancelled() {
-            return Err(ModelRoundError::Cancelled);
-        }
-        let mut config = self
-            .config
-            .resolve(ProviderConfigRequest {
-                model_ref: request.model,
-                butler_data: None,
-            })
-            .await
-            .map_err(ModelRoundError::Provider)?;
-        if !request.image_manifests.is_empty() {
-            super::visual_capability::refresh_current_zai_capability(
-                &mut config.metadata,
-                self.visual_capability.as_deref(),
-                &request.cancellation,
-            )
-            .await?;
-        }
-        super::visual::validate(&request, &config.metadata)?;
-        if !config.metadata.runtime_supported && config.metadata.provider_id != "openai" {
-            return Err(ModelRoundError::Provider(Box::new(diagnostics::protocol(
-                &config.metadata.provider_id,
-                "configuration",
-                "provider_model_unavailable",
-            ))));
-        }
-        let (carrier, mode, api) = carrier(&config);
+        let config = self.round_config(&request).await?;
+        let (carrier, mode, api) =
+            self.local_streaming
+                .carrier(&config, carrier(&config), local_stream);
         let (mut body, continuation) =
             serialize::body_with_continuation(&request, &config, carrier)?;
         super::visual::apply(&mut body, &request, carrier).await?;
@@ -136,24 +121,13 @@ impl ModelProvider {
         )?;
         drop(body);
         let serialized_bytes = serialized.len();
+        let watch = StreamWatch::new(request.stream_observer);
         let observe_request = || {
             self.observations.request(ProviderObservation {
                 request_bytes: serialized_bytes,
             });
         };
-        let mut http = self
-            .client
-            .post(config.endpoint.clone())
-            .header("content-type", "application/json");
-        if matches!(mode, transport::ResponseMode::HostedChatSse) {
-            http = http.header("accept", "text/event-stream");
-        }
-        let http = authorize(
-            http.body(serialized),
-            &config.auth,
-            &config.metadata.provider_id,
-            carrier,
-        );
+        let http = self.round_request(&config, mode, carrier, serialized);
         let response = transport::execute(transport::RequestExecution {
             request: http,
             provider: &config.metadata.provider_id,
@@ -161,7 +135,7 @@ impl ModelProvider {
             policy: config.policy,
             external: request.cancellation.clone(),
             mode,
-            stream_observer: request.stream_observer,
+            stream_observer: Some(&watch),
             attempts: request
                 .provider_retry_attempts
                 .unwrap_or(config.retry_attempts),
@@ -177,9 +151,17 @@ impl ModelProvider {
             clock: self.clock.as_ref(),
             quota: self.quota.as_deref(),
         })
-        .await;
+        .await
+        .inspect_err(|error| watch.discard_after(error));
         let response = match response {
             Ok(value) => value,
+            Err(ModelRoundError::Provider(error))
+                if local_stream && local_stream::falls_back(carrier, &error, &watch) =>
+            {
+                return self
+                    .run_without_streaming(request, config.endpoint.clone())
+                    .await;
+            }
             Err(ModelRoundError::Provider(mut error)) => {
                 if config.metadata.provider_id == "local"
                     && let ProviderAuth::ApiKey(secret) = &config.auth
@@ -228,6 +210,81 @@ impl ModelProvider {
         self.observations
             .response(&config.metadata.provider_id, &config.metadata.model_ref);
         Ok(result)
+    }
+
+    /// The HTTP request of a round: its endpoint, body and auth headers.
+    fn round_request(
+        &self,
+        config: &super::contracts::ProviderRequestConfig,
+        mode: transport::ResponseMode,
+        carrier: super::serialize::Carrier,
+        body: Bytes,
+    ) -> reqwest::RequestBuilder {
+        let mut http = self
+            .client
+            .post(config.endpoint.clone())
+            .header("content-type", "application/json");
+        if matches!(mode, transport::ResponseMode::HostedChatSse) {
+            http = http.header("accept", "text/event-stream");
+        }
+        authorize(
+            http.body(body),
+            &config.auth,
+            &config.metadata.provider_id,
+            carrier,
+        )
+    }
+
+    /// The provider request configuration of a round, checked for its
+    /// images and for a runtime-supported model.
+    async fn round_config(
+        &self,
+        request: &ModelRoundRequest<'_>,
+    ) -> Result<super::contracts::ProviderRequestConfig, ModelRoundError> {
+        if request.cancellation.is_cancelled() {
+            return Err(ModelRoundError::Cancelled);
+        }
+        let mut config = self
+            .config
+            .resolve(ProviderConfigRequest {
+                model_ref: request.model,
+                butler_data: None,
+            })
+            .await
+            .map_err(ModelRoundError::Provider)?;
+        if !request.image_manifests.is_empty() {
+            super::visual_capability::refresh_current_zai_capability(
+                &mut config.metadata,
+                self.visual_capability.as_deref(),
+                &request.cancellation,
+            )
+            .await?;
+        }
+        super::visual::validate(request, &config.metadata)?;
+        if !config.metadata.runtime_supported && config.metadata.provider_id != "openai" {
+            return Err(ModelRoundError::Provider(Box::new(diagnostics::protocol(
+                &config.metadata.provider_id,
+                "configuration",
+                "provider_model_unavailable",
+            ))));
+        }
+        Ok(config)
+    }
+
+    /// Repeats a round the local server refused to stream, without
+    /// streaming; when that works the endpoint is not asked to stream again.
+    fn run_without_streaming<'a>(
+        &'a self,
+        request: ModelRoundRequest<'a>,
+        endpoint: url::Url,
+    ) -> RoundFuture<'a> {
+        Box::pin(async move {
+            let result = self.run(request, false).await;
+            if result.is_ok() {
+                self.local_streaming.refuse(&endpoint);
+            }
+            result
+        })
     }
 }
 
@@ -372,97 +429,6 @@ impl ModelRoundPort for ModelProvider {
             dyn std::future::Future<Output = Result<ModelRoundResult, ModelRoundError>> + Send + 'a,
         >,
     > {
-        Box::pin(self.run(request))
-    }
-}
-
-pub(super) fn carrier(
-    config: &super::contracts::ProviderRequestConfig,
-) -> (Carrier, transport::ResponseMode, &'static str) {
-    if config.metadata.provider_id == "openai" {
-        return if matches!(
-            config.auth.mode(),
-            ProviderAuthMode::CodexOauth | ProviderAuthMode::CodexSubscription
-        ) {
-            (
-                Carrier::Responses,
-                transport::ResponseMode::CodexSse,
-                "codex_responses",
-            )
-        } else {
-            (
-                Carrier::Responses,
-                transport::ResponseMode::Json {
-                    tolerate_invalid: false,
-                },
-                "responses",
-            )
-        };
-    }
-    match (config.metadata.provider_id.as_str(), config.api_shape) {
-        ("anthropic", _) | ("opencode-go", Some(HostedApiShape::AnthropicMessages)) => (
-            Carrier::Anthropic,
-            transport::ResponseMode::Json {
-                tolerate_invalid: true,
-            },
-            "messages",
-        ),
-        ("google", _) => (
-            Carrier::Gemini,
-            transport::ResponseMode::Json {
-                tolerate_invalid: true,
-            },
-            "generate_content",
-        ),
-        ("local", _) => (
-            Carrier::Chat { stream: false },
-            transport::ResponseMode::Json {
-                tolerate_invalid: true,
-            },
-            "chat_completions",
-        ),
-        (_, Some(HostedApiShape::OpenaiResponses)) => (
-            Carrier::Responses,
-            transport::ResponseMode::Json {
-                tolerate_invalid: false,
-            },
-            "responses",
-        ),
-        _ => (
-            Carrier::Chat { stream: true },
-            transport::ResponseMode::HostedChatSse,
-            "chat_completions",
-        ),
-    }
-}
-
-pub(super) fn authorize(
-    request: RequestBuilder,
-    auth: &ProviderAuth,
-    provider: &str,
-    carrier: Carrier,
-) -> RequestBuilder {
-    match auth {
-        ProviderAuth::None => request,
-        ProviderAuth::ApiKey(value) if matches!(carrier, Carrier::Anthropic) => request
-            .header("x-api-key", value)
-            .header("anthropic-version", "2023-06-01"),
-        ProviderAuth::ApiKey(value) if provider == "google" => {
-            request.header("x-goog-api-key", value)
-        }
-        ProviderAuth::ApiKey(value) => request.bearer_auth(value),
-        ProviderAuth::Codex {
-            authorization,
-            account_id,
-            user_agent,
-            originator,
-            ..
-        } => request
-            .header("authorization", authorization)
-            .header("accept", "text/event-stream")
-            .header("openai-beta", "responses=experimental")
-            .header("user-agent", user_agent)
-            .header("chatgpt-account-id", account_id)
-            .header("originator", originator),
+        Box::pin(self.run(request, true))
     }
 }

@@ -6,7 +6,7 @@ mod helpers;
 mod projection;
 mod result_delivery;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 mod worker;
 
 pub use control::{SubsessionCancelRequest, SubsessionDirectionRequest, SubsessionResumeRequest};

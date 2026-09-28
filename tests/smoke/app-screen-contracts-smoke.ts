@@ -5,9 +5,9 @@ import { chromium, type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { appCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import {
-  FIRST_RUN_STORAGE_KEY,
-  firstRunCompleteState,
-} from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
+  LEGACY_FIRST_RUN_STORAGE_KEY as FIRST_RUN_STORAGE_KEY,
+  legacyFirstRunCompleteRecord,
+} from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 
 // Focused smoke for the Phase 2 screen contracts in
 // SPEC-BUTLER-DEDICATED-CLIENT-DESIGN-SYSTEM.
@@ -22,7 +22,7 @@ function assert(condition: unknown, message: string): asserts condition {
 async function openApp(page: Page): Promise<void> {
   await page.addInitScript(
     ({ key, value }) => window.localStorage.setItem(key, value),
-    { key: FIRST_RUN_STORAGE_KEY, value: JSON.stringify(firstRunCompleteState("en")) },
+    { key: FIRST_RUN_STORAGE_KEY, value: JSON.stringify(legacyFirstRunCompleteRecord()) },
   );
   await page.goto(server.url, { waitUntil: "load" });
   await page.locator(testClass("composer-card")).waitFor({ state: "visible" });

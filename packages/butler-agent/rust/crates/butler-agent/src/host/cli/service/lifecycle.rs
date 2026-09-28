@@ -1,12 +1,11 @@
 //! Detached launch, identity-checked stop, and readiness for the native service.
 
 use std::fs::{self, OpenOptions};
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
-use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
+use butler_platform::{process_control, secure_fs, user_dirs};
 use serde_json::{Value, json};
 
 use super::Action;
@@ -308,13 +307,9 @@ fn spawn_service(
             crate::host::HostError::new("native_service_executable_unavailable").with_source(source)
         })?;
     let logs = data_root.join("logs");
-    fs::DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
-        .create(&logs)
-        .map_err(|source| {
-            crate::host::HostError::new("native_service_logs_unavailable").with_source(source)
-        })?;
+    secure_fs::create_private_dir_all(&logs).map_err(|source| {
+        crate::host::HostError::new("native_service_logs_unavailable").with_source(source)
+    })?;
     let stdout = log_file(&logs.join("butler-agent-service.stdout.log"), installation)?;
     let stderr = log_file(&logs.join("butler-agent-service.stderr.log"), installation)?;
     let mut command = Command::new(executable);
@@ -328,8 +323,8 @@ fn spawn_service(
         .arg("--detached")
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout))
-        .stderr(Stdio::from(stderr))
-        .process_group(0);
+        .stderr(Stdio::from(stderr));
+    process_control::detach(&mut command);
     command.spawn().map_err(|source| {
         crate::host::HostError::new("native_service_spawn_failed").with_source(source)
     })
@@ -350,14 +345,12 @@ fn log_file(
     installation.validate_data_root(path).map_err(|source| {
         crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
     })?;
-    OpenOptions::new()
-        .create(true)
-        .append(true)
-        .mode(0o600)
-        .open(path)
-        .map_err(|source| {
-            crate::host::HostError::new("native_service_logs_unavailable").with_source(source)
-        })
+    let mut options = OpenOptions::new();
+    options.create(true).append(true);
+    let _ = secure_fs::owner_only(&mut options);
+    options.open(path).map_err(|source| {
+        crate::host::HostError::new("native_service_logs_unavailable").with_source(source)
+    })
 }
 
 fn resolve_data_root(
@@ -393,9 +386,8 @@ fn service_configuration(
 }
 
 fn user_home() -> Result<PathBuf, crate::host::HostError> {
-    std::env::var_os("HOME")
-        .filter(|home| !home.is_empty())
-        .map(PathBuf::from)
+    user_dirs::home_dir()
+        .filter(|home| !home.as_os_str().is_empty())
         .ok_or_else(|| "native_home_unavailable".to_owned())
         .map_err(crate::host::HostError::from)
 }

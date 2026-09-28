@@ -185,18 +185,3 @@ impl From<super::FileOwnerError> for WorkspaceError {
         Self::port(error.code(), "Workspace file owner closed", error)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::WorkspaceCode;
-
-    #[test]
-    fn wire_codes_are_stable() {
-        let codes: Vec<&str> = WorkspaceCode::ALL
-            .iter()
-            .map(|code| code.as_str())
-            .collect();
-        let expected: Vec<&str> = include_str!("wire_codes.txt").lines().collect();
-        assert_eq!(codes, expected);
-    }
-}

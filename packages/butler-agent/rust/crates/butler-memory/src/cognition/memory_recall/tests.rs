@@ -73,24 +73,6 @@ fn cursor_keeps_metadata_only_and_ttl_is_from_creation() {
 }
 
 #[test]
-fn cursor_hash_excludes_turn_and_operation_but_binds_runtime_session() {
-    let original = request();
-    let expected = cursor::argument_hash(&original, &original.as_of).unwrap();
-    let mut updated = original.clone();
-    updated.runtime.turn_id = "another".into();
-    updated.runtime.native_operation_id = "another".into();
-    assert_eq!(
-        cursor::argument_hash(&updated, &updated.as_of).unwrap(),
-        expected
-    );
-    updated.runtime.session_id = "another".into();
-    assert_ne!(
-        cursor::argument_hash(&updated, &updated.as_of).unwrap(),
-        expected
-    );
-}
-
-#[test]
 fn raw_excerpt_and_v2_handles_match_unchanged_bun_source() {
     let fixture: serde_json::Value =
         serde_json::from_str(include_str!("fixtures/evidence-source-bun.json")).unwrap();

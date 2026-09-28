@@ -171,21 +171,3 @@ fn read_server_name(config_path: &std::path::Path) -> String {
         .filter(|name| !name.trim().is_empty())
         .unwrap_or_else(|| "butler-main".into())
 }
-
-#[cfg(test)]
-mod tests {
-    use std::ffi::OsString;
-
-    use super::parse;
-
-    #[test]
-    fn parser_keeps_data_explicit_and_rejects_home_alias() {
-        let args = ["--data", "~/fixture", "mcp", "serve"]
-            .map(OsString::from)
-            .to_vec();
-        let parsed = parse(&args).unwrap();
-        assert_eq!(parsed.data.as_deref(), Some("~/fixture"));
-        assert_eq!(parsed.positionals, ["mcp", "serve"]);
-        assert!(parse(&[OsString::from("--home"), OsString::from("/tmp")]).is_err());
-    }
-}

@@ -53,6 +53,39 @@ it the harness falls back to the read-only Codex CLI file and LIVE-10 is
 SKIPPED. Run the live tier with `--test-threads=1` so two refreshes of the
 one profile cannot race.
 
+## Quota polling
+
+The harness starts the agent with `BUTLER_PROVIDER_QUOTA_POLLING=0`, so a
+recording holds only the requests its scenario makes. The quota scenarios
+(`tests/quota.rs`) turn polling on with `Setup::quota_polling()`:
+
+```sh
+# USE-02: Codex wham/usage through the test profile (~/.butler-e2e-auth)
+BUTLER_E2E_TIER=live BUTLER_E2E_RECORD=1 cargo test -p butler-e2e --test quota use_02
+
+# USE-04: Z.AI Coding Plan quota/limit (quota endpoint only, no model calls);
+# the key is read from ZAI_API_KEY and never written to the cassette
+BUTLER_E2E_TIER=live BUTLER_E2E_RECORD=1 BUTLER_E2E_PROVIDER=zai \
+  cargo test -p butler-e2e --test quota use_04
+```
+
+For `zai` the recorder's upstream is the origin `https://api.z.ai` and the
+agent's `BUTLER_ZAI_BASE_URL` carries the Coding Plan path
+(`config::base_path`), from which the product derives its quota URL.
+
+USE-05 (`Setup::codex_login_refresh`) sends the Codex login refresh through
+the recorder (`/oauth/*` is forwarded to `https://auth.openai.com`). Recording
+it makes the test login expire, as LIVE-10 does, and the agent writes the
+refreshed login back to the same profile; replay runs with a refreshable
+placeholder login.
+
+Reset times in usage replies are recorded relative to the recording time and
+rounded to the hour (`{{EPOCH_MS+Δ}}`, `{{EPOCH_S+Δ}}`); replay turns them
+into times relative to the replay, so no cassette pins a subscription
+anniversary and none goes stale. After the sanitizer learns a rule, committed
+cassettes are re-sanitized without new traffic:
+`cargo run -p butler-e2e --bin e2e-resanitize -- <scenario>...`.
+
 ## Record / replay
 
 - Cassettes: `cassettes/<scenario>/<n>.json` + `meta.json` (provenance,
@@ -65,6 +98,8 @@ one profile cannot race.
   the scenario as `HARNESS_ERROR`.
 - Sanitization at record time: per-run values → `{{W}}`, `{{D}}`,
   `{{SANDBOX}}`, `{{NONCE}}`; secrets/personal data → fixed placeholders;
+  account identifiers in JSON bodies (`account_id`, `user_id`, `email`)
+  → `{{ACCOUNT}}` / `{{EMAIL}}` (the lint rejects any left);
   `response.instructions`/`response.tools` echoes and account identifiers
   redacted; headers reduced to `content-type`, `retry-after`; chunks cut at
   SSE event boundaries with their arrival delay.
@@ -76,6 +111,24 @@ one profile cannot race.
   stall after chunk k, and tool-call argument mutations. Argument mutations of
   the first call of one tool also apply while recording, so the model's real
   reaction to the resulting tool error is what the cassette holds.
+
+## Loopback stand-ins (first-run setup)
+
+The first-run setup scenarios (`tests/setup_*.rs`, SETUP-01..13, #230) need
+no cassette: the agent talks to loopback stand-ins in `src/e2e/fake_servers.rs`
+through the product's own address variables.
+
+| Stand-in | Reached through |
+|----------|-----------------|
+| Local model server (`/api/tags`, `/v1/models`, `/v1/chat/completions`: streamed, cut, without `[DONE]`, or refusing to stream) | `BUTLER_OLLAMA_BASE_URL`, `BUTLER_LM_STUDIO_BASE_URL`, a registered local model's server URL |
+| Provider model list that checks keys (OpenAI bearer, Anthropic `x-api-key`) | `OPENAI_BASE_URL`, `BUTLER_ANTHROPIC_BASE_URL` |
+| OAuth token endpoint (`id_token`, JWT access token with the ChatGPT claims) | `BUTLER_CODEX_OAUTH_TOKEN_URL` |
+
+The module doc cites the documented source (URL, pinned commit where the
+docs live in a repository) of every shape. Values no document shows are
+marked `synthetic` where they are defined. Nothing is recorded: no Ollama or
+LM Studio server was available on the build hosts. The browser of the
+sign-in flow is the test itself (`BUTLER_CODEX_OAUTH_PORT` picks a free port).
 
 ## Scenario decisions
 

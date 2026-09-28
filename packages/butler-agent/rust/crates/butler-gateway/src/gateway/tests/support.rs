@@ -126,6 +126,7 @@ impl GatewayApplication for TestApplication {
     fn get_provider_quota(
         &self,
         provider_id: String,
+        _refresh: bool,
     ) -> ApplicationFuture<butler_runtime::operations::ProviderQuotaView> {
         Box::pin(async move {
             Ok(butler_runtime::operations::unavailable_quota_view(
@@ -331,8 +332,8 @@ impl GatewayApplication for TestApplication {
     ) -> ApplicationFuture<Vec<SessionArtifactSummary>> {
         Box::pin(async { Ok(Vec::new()) })
     }
-    fn export_transcript(&self, session_id: String) -> ApplicationFuture<TranscriptExport> {
-        super::transcript_export::empty_export(session_id)
+    fn export_transcript(&self, _: String) -> ApplicationFuture<TranscriptExport> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn list_session_queue(&self, session_id: String) -> ApplicationFuture<SessionQueueView> {
         Box::pin(async move {

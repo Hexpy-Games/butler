@@ -351,6 +351,7 @@ impl AppSettingsFactsProvider for SettingsFacts {
             config_model_fallback: AppModelFallbackFacts::default(),
             catalog_generation: "catalog-1".into(),
             native_settings: serde_json::json!({}),
+            routine_presets: Arc::from([]),
         }))
     }
 }
@@ -423,6 +424,7 @@ pub(super) fn dependencies(native: Arc<Native>, clock: u64) -> AppApplicationDep
         subsessions: Arc::new(UnprovidedSessions),
         branch_conversations: Arc::new(UnprovidedBranchConversations),
         branch_summarizer: Arc::new(TestBranchSummarizer),
+        setup: crate::gateway::application::test_setup_port(),
     }
 }
 

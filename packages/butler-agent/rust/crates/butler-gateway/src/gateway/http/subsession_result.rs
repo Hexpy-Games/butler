@@ -79,5 +79,5 @@ pub(super) async fn post(
 }
 
 fn invalid_request() -> HttpError {
-    HttpError::public(400, "invalid_request", "Invalid internal Steward result.")
+    HttpError::public(400, "invalid_request", "Invalid internal subtask result.")
 }

@@ -43,6 +43,17 @@ struct TokenFile {
     token: String,
 }
 
+/// Where the agent keeps the local admin credential (Settings → Security).
+pub const DATA_FOLDER_ADMIN_FILE: &str = "app/runtime/auth/local-admin.json";
+/// The header that carries it.
+pub const ADMIN_HEADER: &str = "x-butler-admin";
+
+/// The field of the admin credential file the harness reads.
+#[derive(serde::Deserialize)]
+struct AdminFile {
+    secret: String,
+}
+
 impl Launch {
     pub fn new(sandbox: &Sandbox) -> Result<Self, HarnessError> {
         let token = format!("e2e-gateway-{}", uuid::Uuid::new_v4().simple());
@@ -69,6 +80,10 @@ impl Launch {
                     "BUTLER_APP_LOCAL_AUTH_FILE".into(),
                     auth_file.display().to_string(),
                 ),
+                // Quota polling off: recordings hold only the requests their
+                // scenario makes. Quota scenarios turn it on
+                // (`Setup::quota_polling`).
+                ("BUTLER_PROVIDER_QUOTA_POLLING".into(), "0".into()),
             ],
             app_supervisor: false,
         })
@@ -131,6 +146,15 @@ impl Launch {
             .map(|file| file.token)
     }
 
+    /// The local admin credential the agent keeps in its data folder (what
+    /// the App and the CLI send in `X-Butler-Admin`), once it exists.
+    pub fn admin_credential(&self) -> Option<String> {
+        let bytes = fs::read(self.data.join(DATA_FOLDER_ADMIN_FILE)).ok()?;
+        serde_json::from_slice::<AdminFile>(&bytes)
+            .ok()
+            .map(|file| file.secret)
+    }
+
     /// A command for the agent binary with the scenario's isolated environment.
     pub fn command(&self) -> Command {
         let mut command = Command::new(&self.binary);
@@ -150,7 +174,10 @@ impl Launch {
             .env("BUTLER_DATA", &self.data)
             .env("BUTLER_APP_SERVER_HOST", "127.0.0.1")
             .env("BUTLER_APP_SERVER_PORT", self.port.to_string())
-            .env("BUTLER_METRICS_ENABLED", "0");
+            .env("BUTLER_METRICS_ENABLED", "0")
+            // API keys go to the owner-only file in the data dir: a scenario
+            // never touches the machine's credential store (#217).
+            .env("BUTLER_SECRET_STORE", "file");
         for (key, value) in &self.env {
             command.env(key, value);
         }
@@ -411,10 +438,34 @@ impl CliOutput {
     }
 }
 
+/// A port no listener holds, for a process that binds it later.
+///
+/// Drawn from below the ephemeral ranges (Linux 32768+, macOS 49152+), so a
+/// stub that binds port 0 in a parallel scenario cannot be handed the port
+/// between this check and the agent's own bind. Picking with `bind(0)` did
+/// exactly that on Linux, which reuses a just-freed ephemeral port: the stub
+/// took the agent's port and the agent never came up. Each test process
+/// starts at its own offset and walks the range, skipping held ports.
 pub fn free_port() -> Result<u16, HarnessError> {
-    Ok(std::net::TcpListener::bind("127.0.0.1:0")?
-        .local_addr()?
-        .port())
+    use std::sync::atomic::{AtomicU32, Ordering};
+    const FIRST: u32 = 20_000;
+    const SPAN: u32 = 12_000;
+    static NEXT: AtomicU32 = AtomicU32::new(u32::MAX);
+    let _ = NEXT.compare_exchange(
+        u32::MAX,
+        (std::process::id() % 60) * 200,
+        Ordering::Relaxed,
+        Ordering::Relaxed,
+    );
+    for _ in 0..SPAN {
+        let offset = NEXT.fetch_add(1, Ordering::Relaxed) % SPAN;
+        let port =
+            u16::try_from(FIRST + offset).map_err(|_| harness_error("free port out of range"))?;
+        if std::net::TcpListener::bind(("127.0.0.1", port)).is_ok() {
+            return Ok(port);
+        }
+    }
+    Err(harness_error("no free port below the ephemeral range"))
 }
 
 /// Every regular file under `dir`, concatenated (lossy UTF-8).

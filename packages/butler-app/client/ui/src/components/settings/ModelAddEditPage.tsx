@@ -14,6 +14,7 @@ import {
   registeredModels,
 } from "./modelManagementUtils";
 import type { ProviderAuthMethod } from "@/app/types.ts";
+import { ProviderMark } from "./ProviderMark";
 
 interface ModelAddEditPageProps {
   allowedAuthMethods?: ProviderAuthMethod[];
@@ -37,13 +38,14 @@ export function ModelAddEditPage({
       hostedModelProviders(modelCatalog, allowedAuthMethods).map((provider) => ({
         value: provider.provider_id,
         label: provider.provider_label,
+        icon: <ProviderMark providerId={provider.provider_id} />,
       })),
     [allowedAuthMethods, modelCatalog],
   );
   const providerOptions = useMemo(
     () => [
       ...hostedProviderOptions,
-      { value: LOCAL_PROVIDER_ID, label: appCopy.settings.options.local },
+      { value: LOCAL_PROVIDER_ID, label: appCopy.settings.options.local, icon: <ProviderMark providerId={LOCAL_PROVIDER_ID} /> },
     ],
     [hostedProviderOptions],
   );

@@ -77,15 +77,3 @@ fn reads_only_active_app_projects_and_briefing_preferences() {
         vec!["Recent topic", "Older topic"]
     );
 }
-
-#[test]
-fn absent_database_is_not_created_for_ledger_fallback() {
-    let fixture = Fixture::new();
-    let database_path = fixture.0.join("app.sqlite");
-    assert_eq!(read_new_chat_briefing_settings(&database_path), json!({}));
-    assert_eq!(
-        read_new_chat_briefing_projects(&database_path).unwrap(),
-        None
-    );
-    assert!(!database_path.exists());
-}

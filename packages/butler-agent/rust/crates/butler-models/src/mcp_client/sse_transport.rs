@@ -271,11 +271,10 @@ impl SseParser {
 }
 
 #[cfg(test)]
-mod parser_tests {
+pub(crate) mod parser_tests {
     use super::SseParser;
 
-    #[test]
-    fn parses_fragmented_multiline_events() {
+    pub(crate) fn parses_fragmented_multiline_events() {
         let mut parser = SseParser::default();
         assert!(
             parser

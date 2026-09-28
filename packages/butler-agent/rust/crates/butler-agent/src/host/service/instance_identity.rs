@@ -1,125 +1,49 @@
-//! OS process identity used to validate service records before signaling.
+//! OS process identity used to validate service records before signaling,
+//! read through `butler_platform::instance` and reported with the service's
+//! error codes.
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-use std::fs;
-#[cfg(target_os = "linux")]
-use std::io;
-
-use nix::errno::Errno;
-use nix::sys::signal::kill;
-use nix::unistd::Pid;
+use butler_platform::instance::{self as platform, IdentityError};
+use butler_platform::process_control::{Liveness, liveness};
 
 /// Whether a process's executable as the OS reports it (`observed`) is the
-/// recorded one (`expected`). macOS reports a file with several hard links
-/// under whichever name was looked up last, so a different name matches when
-/// it is the same file (device and inode).
+/// recorded one (`expected`): the same file, whatever name the OS used.
 pub(crate) fn executable_matches(expected: &str, observed: &str) -> bool {
-    observed == expected || same_file(expected, observed)
+    platform::same_executable(expected, observed)
 }
 
-fn same_file(first: &str, second: &str) -> bool {
-    use std::os::unix::fs::MetadataExt;
-    match (std::fs::metadata(first), std::fs::metadata(second)) {
-        (Ok(first), Ok(second)) => first.dev() == second.dev() && first.ino() == second.ino(),
-        _ => false,
+/// Whether a process has `pid`, including one owned by another user.
+pub(crate) fn process_is_alive(pid: u32) -> Result<bool, crate::host::HostError> {
+    match liveness(pid) {
+        Liveness::Running | Liveness::OtherOwner => Ok(true),
+        Liveness::Gone => Ok(false),
+        Liveness::Unknown => {
+            Err("native_service_process_probe_failed: the process table could not be read".into())
+        }
     }
 }
 
-pub(crate) fn process_is_alive(pid: i32) -> Result<bool, crate::host::HostError> {
-    match kill(Pid::from_raw(pid), None) {
-        Err(Errno::ESRCH) => Ok(false),
-        Ok(()) | Err(Errno::EPERM) => Ok(true),
-        Err(error) => Err(format!("native_service_process_probe_failed: {error}").into()),
-    }
-}
-
-#[cfg(target_os = "linux")]
+/// When process `pid` started (see `butler_platform::instance::process_start`).
 pub(crate) fn process_start_identity(pid: u32) -> Result<Option<String>, crate::host::HostError> {
-    let stat = match fs::read_to_string(format!("/proc/{pid}/stat")) {
-        Ok(stat) => stat,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(_) => return Err("native_service_process_identity_unavailable".into()),
-    };
-    let tail = stat
-        .rfind(')')
-        .and_then(|index| stat.get(index + 1..))
-        .ok_or_else(|| "native_service_process_identity_unavailable".to_owned())?;
-    let start_ticks = tail
-        .split_whitespace()
-        .nth(19)
-        .ok_or_else(|| "native_service_process_identity_unavailable".to_owned())?;
-    let boot_id = fs::read_to_string("/proc/sys/kernel/random/boot_id").map_err(|source| {
-        crate::host::HostError::new("native_service_process_identity_unavailable")
-            .with_source(source)
-    })?;
-    Ok(Some(format!("linux:{}:{}", boot_id.trim(), start_ticks)))
+    platform::process_start(pid)
+        .map_err(|error| identity_error(error, "native_service_process_identity_unavailable"))
 }
 
-#[cfg(target_os = "linux")]
+/// The executable process `pid` runs.
 pub(crate) fn process_executable(pid: u32) -> Result<Option<String>, crate::host::HostError> {
-    match fs::read_link(format!("/proc/{pid}/exe")) {
-        Ok(path) => Ok(Some(path.to_string_lossy().into_owned())),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(_) => Err("native_service_process_executable_unavailable".into()),
-    }
+    platform::process_executable(pid)
+        .map_err(|error| identity_error(error, "native_service_process_executable_unavailable"))
 }
 
-#[cfg(target_os = "macos")]
-pub(crate) fn process_start_identity(pid: u32) -> Result<Option<String>, crate::host::HostError> {
-    use libproc::bsd_info::BSDInfo;
-    use libproc::proc_pid::pidinfo;
-
-    let pid = i32::try_from(pid).map_err(|source| {
-        crate::host::HostError::new("native_service_process_identity_unavailable")
-            .with_source(source)
-    })?;
-    let info = match pidinfo::<BSDInfo>(pid, 0) {
-        Ok(info) => info,
-        Err(_) if !process_is_alive(pid)? => return Ok(None),
-        Err(_) => return Err("native_service_process_identity_unavailable".into()),
+/// The service's error for an identity that could not be read; `unavailable`
+/// is the code of a process whose identity the host did not report.
+pub(crate) fn identity_error(
+    error: IdentityError,
+    unavailable: &'static str,
+) -> crate::host::HostError {
+    let message = match &error {
+        IdentityError::Unavailable(_) => unavailable.to_owned(),
+        IdentityError::Probe(detail) => format!("native_service_process_probe_failed: {detail}"),
+        IdentityError::Unsupported => "native_service_process_identity_unsupported".to_owned(),
     };
-    let expected_pid = u32::try_from(pid).map_err(|source| {
-        crate::host::HostError::new("native_service_process_identity_unavailable")
-            .with_source(source)
-    })?;
-    if info.pbi_pid != expected_pid {
-        return Err("native_service_process_identity_unavailable".into());
-    }
-    Ok(Some(format!(
-        "macos:{}:{}",
-        info.pbi_start_tvsec, info.pbi_start_tvusec
-    )))
+    crate::host::HostError::new(message).with_source(error)
 }
-
-#[cfg(target_os = "macos")]
-pub(crate) fn process_executable(pid: u32) -> Result<Option<String>, crate::host::HostError> {
-    use libproc::proc_pid::pidpath;
-
-    let pid = i32::try_from(pid).map_err(|source| {
-        crate::host::HostError::new("native_service_process_executable_unavailable")
-            .with_source(source)
-    })?;
-    match pidpath(pid) {
-        Ok(path) => fs::canonicalize(path)
-            .map(|path| Some(path.to_string_lossy().into_owned()))
-            .map_err(|source| {
-                crate::host::HostError::new("native_service_process_executable_unavailable")
-                    .with_source(source)
-            }),
-        Err(_) if !process_is_alive(pid)? => Ok(None),
-        Err(_) => Err("native_service_process_executable_unavailable".into()),
-    }
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
-pub(crate) fn process_start_identity(_pid: u32) -> Result<Option<String>, crate::host::HostError> {
-    Err("native_service_process_identity_unsupported".into())
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
-pub(crate) fn process_executable(_pid: u32) -> Result<Option<String>, crate::host::HostError> {
-    Err("native_service_process_identity_unsupported".into())
-}
-
-#[cfg(test)]
-mod tests;

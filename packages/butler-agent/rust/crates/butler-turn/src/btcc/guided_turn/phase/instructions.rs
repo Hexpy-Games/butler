@@ -12,8 +12,8 @@ pub(super) fn prefix(
     phase: GuidedPhase,
     policy: &GuidedExecutionPolicy,
 ) -> Result<String, GuidedPreparationError> {
-    // The bundled table is parsed by `tests::bundled_prefixes_parse`; were it
-    // malformed, every lookup below would report the prefix as unavailable.
+    // Every guided E2E turn parses the bundled table; were it malformed,
+    // every lookup below would report the prefix as unavailable.
     let prefixes = PREFIXES.get_or_init(|| {
         serde_json::from_str(include_str!("instruction-prefixes.json")).unwrap_or_default()
     });
@@ -56,16 +56,4 @@ pub(super) fn prefix(
         value = value.replace("__GUIDED_MUTATION_SCOPE__", &scope);
     }
     Ok(value)
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::HashMap;
-
-    #[test]
-    fn bundled_prefixes_parse() {
-        let prefixes: HashMap<String, String> =
-            serde_json::from_str(include_str!("instruction-prefixes.json")).unwrap();
-        assert!(!prefixes.is_empty());
-    }
 }

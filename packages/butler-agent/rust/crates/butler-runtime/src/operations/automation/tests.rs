@@ -115,15 +115,8 @@ async fn tool_claim_does_not_enqueue_and_scheduler_restart_does_not_duplicate() 
     std::fs::remove_dir_all(root).unwrap();
 }
 
-#[test]
-fn offline_store_list_does_not_initialize_data() {
-    let root =
-        std::env::temp_dir().join(format!("native-automation-read-{}", uuid::Uuid::new_v4()));
-    let store = super::store::AutomationStore::new(&root.clone());
-    assert!(store.list(false).unwrap().is_empty());
-    assert!(!root.join("automations").exists());
-}
-
+/// Race: an automation run racing its delete keeps any successful run count.
+// test-category: race
 #[test]
 fn concurrent_run_and_delete_preserve_any_successful_run_count() {
     use std::{sync::Barrier, thread};

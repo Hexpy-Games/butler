@@ -236,11 +236,17 @@ pub struct AuthorityRequestProjection {
     pub reason: String,
     pub executable: String,
     pub command_count: u32,
+    /// Display text of the permission "Allow for this conversation" would
+    /// grant. Kept for the App's approval card until it renders `approval`.
     pub scope: AuthorityScopeProjection,
     pub source_turn_id: String,
     pub source_session_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_call_id: Option<String>,
+    /// What the request would do, as data the App phrases in the user's
+    /// language (#235).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval: Option<super::approval::AuthorityApproval>,
 }
 
 /// The title and description of the permission a request would grant.

@@ -89,9 +89,40 @@ mod wire_tests {
     use std::sync::Arc;
 
     use super::CoordinationError;
+    use crate::cognition::{BriefingGenerationCode, CognitionCode};
+    use crate::profile::ProfileCode;
 
+    fn spelled<T: Copy>(all: &[T], as_str: fn(T) -> &'static str) -> Vec<&'static str> {
+        all.iter().map(|code| as_str(*code)).collect()
+    }
+
+    /// Format pin: every wire code table of memory (Cognition, the new-chat
+    /// briefing and the profile) keeps its pinned spelling and order, and each
+    /// write-coordination failure maps to its public code.
+    // test-category: format-pin
     #[test]
     fn wire_codes_are_stable() {
+        for (domain, codes, pinned) in [
+            (
+                "cognition",
+                spelled(CognitionCode::ALL, CognitionCode::as_str),
+                include_str!("../cognition/wire_codes.txt"),
+            ),
+            (
+                "briefing generation",
+                spelled(BriefingGenerationCode::ALL, BriefingGenerationCode::as_str),
+                include_str!("../cognition/briefing/generation/wire_codes.txt"),
+            ),
+            (
+                "profile",
+                spelled(ProfileCode::ALL, ProfileCode::as_str),
+                include_str!("../profile/wire_codes.txt"),
+            ),
+        ] {
+            let expected: Vec<&str> = pinned.lines().collect();
+            assert_eq!(codes, expected, "{domain}");
+        }
+
         let busy = rusqlite::Error::SqliteFailure(
             rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
             None,

@@ -80,13 +80,23 @@ pub trait AppMonitoringPort: Send + Sync + 'static {
     fn usage_monitor(&self, query: AppUsageMonitorQuery) -> ApplicationFuture<Value>;
     fn system_events(&self, page: AppMonitorPage) -> ApplicationFuture<Value>;
     fn developer_logs(&self, query: AppDeveloperLogsQuery) -> ApplicationFuture<Value>;
-    /// The provider's latest subscription quota; unavailable by default.
-    fn provider_quota(&self, provider_id: String) -> ApplicationFuture<ProviderQuotaView> {
+    /// The provider's latest subscription quota, polled first when
+    /// `refresh` is set; unavailable by default.
+    fn provider_quota(
+        &self,
+        provider_id: String,
+        _refresh: bool,
+    ) -> ApplicationFuture<ProviderQuotaView> {
         Box::pin(async move { Ok(unavailable_quota_view(&provider_id)) })
     }
     /// Changed provider quota, forwarded as `provider_quota_updated` events.
     fn provider_quota_updates(&self) -> Option<broadcast::Receiver<ProviderQuotaUpdate>> {
         None
+    }
+    /// The periodic quota poll, run while an App client is connected; a
+    /// no-op by default.
+    fn poll_provider_quota(&self) -> ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
     }
 }
 

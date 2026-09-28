@@ -124,6 +124,9 @@ async fn fitting_all_mandatory_pressure_returns_without_saved_identity() {
     assert_eq!(projected.messages.expect("saved projection"), messages);
 }
 
+/// Format pin: context-message writers keep the persisted digest's field
+/// order and omissions.
+// test-category: format-pin
 #[test]
 fn message_writers_keep_the_persisted_digest_field_order_and_omissions() {
     {

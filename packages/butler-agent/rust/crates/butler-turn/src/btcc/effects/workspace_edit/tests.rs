@@ -25,8 +25,7 @@ fn entry(path: &str, before: &str, after: &str) -> Value {
         "start_line":3,"before_sha256":before})
 }
 
-#[tokio::test]
-async fn edit_input_prepared_edit_and_receipt_are_byte_stable() {
+pub(crate) async fn edit_input_prepared_edit_and_receipt_are_byte_stable() {
     let root = std::env::temp_dir().join(format!("butler-edit-pin-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir(&root).unwrap();
     std::fs::write(root.join("a.txt"), "after").unwrap();

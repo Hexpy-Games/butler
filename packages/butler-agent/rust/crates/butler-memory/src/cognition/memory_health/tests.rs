@@ -1,6 +1,5 @@
 use std::{
     fs,
-    io::Write,
     path::PathBuf,
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
@@ -61,109 +60,6 @@ pub(super) fn temp_root() -> PathBuf {
         std::process::id(),
         uuid::Uuid::new_v4()
     ))
-}
-
-/// A queued sync row, one legacy chunk and one graph node, with no vector
-/// stats.
-fn seed_legacy_stores(root: &std::path::Path, memory: &std::path::Path) {
-    fs::create_dir_all(memory.join("db")).expect("create memory db dir");
-    fs::create_dir_all(memory.join("queue")).expect("create queue dir");
-    fs::create_dir_all(root.join("cognition/consolidation")).expect("create maintenance dir");
-    fs::write(memory.join("queue/sync.jsonl"), "{\"job_id\":\"queued\"}\n")
-        .expect("write queue row");
-
-    let metadata = Connection::open(memory.join("metadata.sqlite")).expect("metadata db");
-    metadata
-        .execute_batch(
-            "CREATE TABLE memory_chunks(memory_chunk_id TEXT); INSERT INTO memory_chunks VALUES('chunk-1');",
-        )
-        .expect("create metadata fixture");
-    drop(metadata);
-    let graph = Connection::open(memory.join("db/graph.sqlite")).expect("graph db");
-    graph
-        .execute_batch(
-            "CREATE TABLE memory_nodes(id TEXT); CREATE TABLE edges(id TEXT); CREATE TABLE memory_evidence(id TEXT); INSERT INTO memory_nodes VALUES('node-1');",
-        )
-        .expect("create graph fixture");
-    drop(graph);
-}
-
-#[tokio::test]
-async fn vector_snapshot_and_maintenance_status_drive_source_diagnostics() {
-    let root = temp_root();
-    let memory = root.join("cognition/memory");
-    let now = epoch_now();
-    seed_legacy_stores(&root, &memory);
-
-    let failed_summary = json!({
-        "phase": "summary",
-        "ts": butler_core::js_date::format_iso_millis(now).expect("timestamp"),
-        "status": "error",
-        "metrics": {"failed_phases": ["box_index", "source_quality"]}
-    });
-    fs::write(
-        root.join("cognition/consolidation/run-summary.jsonl"),
-        format!("{failed_summary}\n"),
-    )
-    .expect("write failed summary");
-
-    let service = MemoryHealthService::new(
-        root.clone(),
-        CognitionPathEnvironment::default(),
-        Arc::new(CognitionWriteCoordinator::new(Arc::new(TestHost)).expect("coordinator")),
-    );
-    let missing_vector = service
-        .read_at(now)
-        .await
-        .expect("read missing-vector health");
-    assert_eq!(missing_vector.memory_chunks_count, 1);
-    assert_eq!(missing_vector.vector_rows_count, None);
-    assert_eq!(missing_vector.maintenance_status.as_str(), "failed");
-    assert_eq!(missing_vector.metric_status, "error");
-    assert_eq!(missing_vector.diagnostics_count, 4);
-    let dimensions = missing_vector.metric_dimensions().unwrap();
-    assert_eq!(dimensions["queue_backlog_count"], 1);
-    assert_eq!(dimensions["maintenance_failed_phases_count"], 2);
-    assert_eq!(dimensions["serving_available"], false);
-
-    fs::create_dir_all(memory.join("hot")).expect("create hot dir");
-    fs::write(memory.join("hot/current.md"), "projection\n").expect("write hot cache file");
-    fs::write(
-        memory.join("db/vector-stats.json"),
-        serde_json::to_vec(&json!({
-            "row_count": 7,
-            "updated_at": butler_core::js_date::format_iso_millis(now + 1_000).expect("timestamp")
-        }))
-        .expect("serialize vector stats"),
-    )
-    .expect("write vector stats");
-    let repaired_summary = json!({
-        "phase": "summary",
-        "ts": butler_core::js_date::format_iso_millis(now + 1_000).expect("timestamp"),
-        "status": "ok",
-        "metrics": {"failed_phases": []}
-    });
-    fs::OpenOptions::new()
-        .append(true)
-        .open(root.join("cognition/consolidation/run-summary.jsonl"))
-        .expect("open maintenance summary")
-        .write_all(format!("{repaired_summary}\n").as_bytes())
-        .expect("append repaired summary");
-
-    let present_vector = service
-        .read_at(now + 1_000)
-        .await
-        .expect("read present-vector health");
-    assert_eq!(present_vector.vector_rows_count, Some(7.0));
-    assert_eq!(present_vector.maintenance_status.as_str(), "repaired");
-    assert_eq!(present_vector.metric_status, "ok");
-    assert_eq!(present_vector.diagnostics_count, 2);
-    assert_eq!(present_vector.metric_dimensions().unwrap()["stale"], false);
-    assert_eq!(
-        present_vector.metric_dimensions().unwrap()["maintenance_failed_phases_count"],
-        0
-    );
-    fs::remove_dir_all(root).expect("remove fixture");
 }
 
 #[tokio::test]

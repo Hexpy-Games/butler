@@ -67,6 +67,8 @@ export * from "./components/Icons";
 export * from "./components/IconButton";
 export * from "./components/Kbd";
 export * from "./components/IconSlot";
+export * from "./components/IconTile";
+export * from "./components/ProviderLogo";
 export * from "./components/AspectFrame";
 export * from "./components/GlyphToggle";
 
@@ -87,6 +89,7 @@ export * from "./blocks/MetricGrid";
 export * from "./blocks/CardList";
 export * from "./blocks/SortableCardList";
 export * from "./blocks/ListRow";
+export * from "./blocks/ChoiceCard";
 export * from "./blocks/EmptyLine";
 export * from "./blocks/Notice";
 export * from "./blocks/ConversationShell";

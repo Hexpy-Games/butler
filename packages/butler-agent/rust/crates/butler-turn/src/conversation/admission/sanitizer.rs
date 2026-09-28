@@ -343,25 +343,4 @@ mod tests {
         assert!(encoded.contains("public"));
         assert!(encoded.contains("result"));
     }
-
-    #[test]
-    fn evidence_limitations_preserve_the_source_unbounded_array_policy() {
-        let limitations = (0..9)
-            .map(|index| Value::String(format!("limitation-{index}")))
-            .collect::<Vec<_>>();
-        let payload = serde_json::json!({
-            "result": {
-                "schema_version": EVIDENCE_SCHEMA,
-                "evidence_limitations": limitations,
-            }
-        });
-        let safe = safe_tool_content(payload.as_object(), "tool_result.finalized");
-        assert_eq!(
-            safe["result"]["evidence_limitations"]
-                .as_array()
-                .unwrap()
-                .len(),
-            9
-        );
-    }
 }
