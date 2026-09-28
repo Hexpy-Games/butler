@@ -101,20 +101,38 @@ test("main exposes the token re-read to the preload", () => {
 
 type PreloadRun = {
   invokes: string[];
+  securityCalls: unknown[];
   requests: Array<{ path: string; method: string; body: string | null }>;
   results: unknown[];
   events: unknown[];
 };
 
-/** Loads the real preload with Electron and fetch stubbed, then runs `script` against the bridge. */
-function runPreload(responses: Record<string, { status: number; body: unknown }>, script: string): PreloadRun {
+/**
+ * Loads the real preload with Electron and fetch stubbed, then runs `script`
+ * against the bridge. `security` answers main's security IPC by route; a
+ * missing route rejects the invoke.
+ */
+function runPreload(
+  responses: Record<string, { status: number; body: unknown }>,
+  script: string,
+  security: Record<string, unknown> = {},
+): PreloadRun {
   const result = spawnSync("node", ["-e", `
     const Module = require("node:module"); const load = Module._load;
-    let bridge; const invokes = []; const requests = []; const results = []; const events = [];
+    let bridge; const invokes = []; const securityCalls = []; const requests = []; const results = []; const events = [];
+    const security = ${JSON.stringify(security)};
     Module._load = (request, parent, main) => request === "electron" ? {
       contextBridge: { exposeInMainWorld(name, value) { if (name === "butlerApp") bridge = value; } },
       ipcRenderer: {
-        invoke: async (channel) => { invokes.push(channel); return channel === "butler:get-local-auth-headers" ? {} : null; },
+        invoke: async (channel, input) => {
+          invokes.push(channel);
+          if (channel === "butler:security-request") {
+            securityCalls.push(input);
+            if (!(input.route in security)) throw new Error("main failed");
+            return security[input.route];
+          }
+          return channel === "butler:get-local-auth-headers" ? {} : null;
+        },
         on() {}, removeListener() {},
       },
     } : load(request, parent, main);
@@ -137,7 +155,7 @@ function runPreload(responses: Record<string, { status: number; body: unknown }>
     const wait = () => new Promise((resolve) => setTimeout(resolve, 20));
     (async () => {
       ${script}
-      process.stdout.write(JSON.stringify({ invokes, requests, results, events }));
+      process.stdout.write(JSON.stringify({ invokes, securityCalls, requests, results, events }));
     })().catch((error) => { console.error(error); process.exitCode = 1; });
   `], { encoding: "utf8" });
   expect(result.stderr).toBe("");
@@ -171,42 +189,49 @@ test("preload re-reads the token when the live stream is rejected with 401", () 
   expect(run.invokes).toContain("butler:reload-local-auth");
 });
 
-test("preload security routes return envelopes and rotation re-reads the token", () => {
+test("preload sends the security routes to main and never fetches them itself", () => {
   const view = { remote_access_enabled: false, bind_addresses: ["127.0.0.1:18765"], lan_urls: [],
     allowed_hosts: ["butler.example.com"], connection_code: { masked: "abcd…wxyz", created_at: "2026-09-28T00:00:00Z" } };
-  const run = runPreload({
-    "/security": { status: 200, body: envelope(view) },
-    "/security/connection-code/reveal": { status: 200, body: envelope({ code: "c".repeat(43) }) },
-    "/security/connection-code/rotate": { status: 200, body: envelope({ code: "d".repeat(43), created_at: "2026-09-29T00:00:00Z" }) },
-  }, `
+  const run = runPreload({ "/settings": { status: 200, body: envelope({ language: "en" }) } }, `
     results.push(await bridge.getSecurity());
     results.push(await bridge.revealConnectionCode());
-    const before = invokes.filter((channel) => channel === "butler:reload-local-auth").length;
     results.push(await bridge.rotateConnectionCode());
-    results.push(invokes.filter((channel) => channel === "butler:reload-local-auth").length - before);
-  `);
-  expect(run.requests.map(({ path, method }) => `${method} ${path}`)).toEqual([
-    "GET /security",
-    "POST /security/connection-code/reveal",
-    "POST /security/connection-code/rotate",
+    results.push(await bridge.updateSettings({ security: { allowed_hosts: [] } }));
+    results.push(await bridge.updateSettings({ language: "en" }));
+  `, {
+    getSecurity: { ok: true, data: view },
+    revealConnectionCode: { ok: true, data: { code: "c".repeat(43) } },
+    rotateConnectionCode: { ok: true, data: { code: "d".repeat(43), created_at: "2026-09-29T00:00:00Z" } },
+    updateSecuritySettings: { ok: true, data: {} },
+  });
+  expect(run.securityCalls).toEqual([
+    { route: "getSecurity" },
+    { route: "revealConnectionCode" },
+    { route: "rotateConnectionCode" },
+    { route: "updateSecuritySettings", body: { security: { allowed_hosts: [] } } },
   ]);
+  // Only the settings PATCH without `security` goes out from the preload.
+  expect(run.requests.map(({ path, method }) => `${method} ${path}`)).toEqual(["PATCH /settings"]);
   expect(run.results).toEqual([
     { ok: true, data: view },
     { ok: true, data: { code: "c".repeat(43) } },
     { ok: true, data: { code: "d".repeat(43), created_at: "2026-09-29T00:00:00Z" } },
-    1,
+    { ok: true, data: {} },
+    { ok: true, data: { language: "en" } },
   ]);
+  // Main re-reads the token after a rotation (app-security-admin.test.ts).
+  expect(run.invokes).not.toContain("butler:reload-local-auth");
 });
 
-test("preload keeps the 403 status of the loopback-only rule and skips the re-read", () => {
-  const run = runPreload({
-    "/security": forbidden,
-    "/security/connection-code/rotate": forbidden,
-  }, `
+test("preload passes main's loopback_required envelope through and turns an IPC failure into one", () => {
+  const failure = { ok: false, error: { schema: "butler.app.bridge-error.v1", code: "loopback_required", status: 403 } };
+  const run = runPreload({}, `
     results.push(await bridge.getSecurity());
     results.push(await bridge.rotateConnectionCode());
-  `);
-  const failure = { ok: false, error: { schema: "butler.app.bridge-error.v1", code: "loopback_required", status: 403 } };
-  expect(run.results).toEqual([failure, failure]);
-  expect(run.invokes).not.toContain("butler:reload-local-auth");
+  `, { getSecurity: failure });
+  expect(run.results).toEqual([
+    failure,
+    { ok: false, error: { schema: "butler.app.bridge-error.v1", code: "request_failed" } },
+  ]);
+  expect(run.requests).toEqual([]);
 });

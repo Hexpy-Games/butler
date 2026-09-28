@@ -1359,7 +1359,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     },
     security: {
       remoteAccess: "Allow access from other devices",
-      remoteAccessDescription: "Devices on your network connect with the connection code.",
+      remoteAccessDescription: "Devices on your network enter the connection code to connect.",
       addresses: "Addresses",
       noAddresses: "No network address",
       copyAddress: "Copy address",

@@ -64,6 +64,15 @@ function bridgeErrorEnvelope(error) {
   };
 }
 
+/** Settings -> Security calls: main sends them with its own credentials. */
+async function requestSecurity(route, body) {
+  try {
+    return await ipcRenderer.invoke("butler:security-request", body === undefined ? { route } : { route, body });
+  } catch (error) {
+    return { ok: false, error: bridgeErrorEnvelope(error) };
+  }
+}
+
 async function requestBridgeResult(path, options = {}) {
   try {
     return { ok: true, data: await requestJson(path, options) };
@@ -962,22 +971,18 @@ const butlerApp = Object.freeze({
   }),
   // Envelope, not a throw: the renderer needs the public error code
   // (e.g. settings_model_unavailable) to show localized, actionable copy.
-  updateSettings: (settings) => requestBridgeResult("/settings", {
-    method: "PATCH",
-    body: JSON.stringify(settings ?? {}),
-  }),
-  // Envelopes keep the 403 status of the gateway's loopback-only rule.
-  getSecurity: () => requestBridgeResult("/security"),
-  revealConnectionCode: () => requestBridgeResult("/security/connection-code/reveal", {
-    method: "POST",
-  }),
-  rotateConnectionCode: async () => {
-    const result = await requestBridgeResult("/security/connection-code/rotate", {
-      method: "POST",
-    });
-    if (result.ok) await reloadLocalAuth();
-    return result;
-  },
+  // A `security` change carries the admin credential, which only main holds.
+  updateSettings: (settings) => settings?.security !== undefined
+    ? requestSecurity("updateSecuritySettings", settings)
+    : requestBridgeResult("/settings", {
+      method: "PATCH",
+      body: JSON.stringify(settings ?? {}),
+    }),
+  // Envelopes keep the code and status of the gateway's local-only rule.
+  getSecurity: () => requestSecurity("getSecurity"),
+  revealConnectionCode: () => requestSecurity("revealConnectionCode"),
+  // Main re-reads the token after a rotation.
+  rotateConnectionCode: () => requestSecurity("rotateConnectionCode"),
   listArchives: ({ limit, offset } = {}) => {
     const params = new URLSearchParams();
     if (limit !== undefined) params.set("limit", String(limit));
