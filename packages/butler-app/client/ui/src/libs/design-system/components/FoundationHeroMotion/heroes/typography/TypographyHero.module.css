@@ -383,7 +383,7 @@
 }
 
 .notes[data-note="leading"] .note {
-  color: var(--accent);
+  color: var(--accent-text);
   animation-name: type-note-leading;
 }
 
