@@ -14,8 +14,8 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::scenario::{Scenario, Setup};
+use butler_e2e::e2e::{HarnessError, harness_error};
 use serde_json::{Value, json};
 
 /// Runs `git` in `folder` with a fixed identity; panics on failure.
@@ -89,6 +89,28 @@ async fn dashboard_git(s: &Scenario, id: &str) -> Result<Value, HarnessError> {
     Ok(reply.data()["project"]["git"].clone())
 }
 
+/// `project.git` of a repository whose status Git can read. The dashboard
+/// gives Git 3 seconds; a cold macOS `/usr/bin/git` shim on a loaded CI
+/// runner can take longer on its first calls in a fresh `TMPDIR`, so the
+/// dashboard is asked again (the answer is then complete) for up to 30 s.
+async fn dashboard_status(s: &Scenario, id: &str, repo: &Path) -> Result<Value, HarnessError> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        let git = dashboard_git(s, id).await?;
+        if !git["dirty"].is_null() {
+            return Ok(git);
+        }
+        if std::time::Instant::now() > deadline {
+            let config = std::fs::read_to_string(repo.join(".git/config")).unwrap_or_default();
+            return Err(harness_error(format!(
+                "the dashboard never read the status of {}: {git}\n.git/config:\n{config}",
+                repo.display()
+            )));
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+}
+
 /// The expected `git` object.
 fn state(
     is_repo: bool,
@@ -115,7 +137,7 @@ async fn prj_04_project_git_state_in_list_and_dashboard() -> Result<(), HarnessE
     let listed_main = state(true, Some("main"), None, None, None);
     assert_eq!(listed_git(&s, &repo_id).await?, listed_main);
     assert_eq!(
-        dashboard_git(&s, &repo_id).await?,
+        dashboard_status(&s, &repo_id, &repo).await?,
         state(true, Some("main"), Some(false), None, None)
     );
 
@@ -127,7 +149,7 @@ async fn prj_04_project_git_state_in_list_and_dashboard() -> Result<(), HarnessE
     git(&repo, &["commit", "-q", "--allow-empty", "-m", "second"]);
     std::fs::write(repo.join("draft.txt"), "not committed")?;
     assert_eq!(
-        dashboard_git(&s, &repo_id).await?,
+        dashboard_status(&s, &repo_id, &repo).await?,
         state(true, Some("main"), Some(true), Some(1), Some(0))
     );
     assert_eq!(
@@ -186,7 +208,7 @@ async fn prj_05_repository_config_never_runs_programs() -> Result<(), HarnessErr
     );
     std::fs::write(monitored.join("draft.txt"), "untracked")?;
     assert_eq!(
-        dashboard_git(&s, &monitored_id).await?,
+        dashboard_status(&s, &monitored_id, &monitored).await?,
         state(true, Some("main"), Some(true), None, None)
     );
     assert!(!fsmonitor_ran.exists(), "the fsmonitor hook ran");
