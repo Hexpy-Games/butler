@@ -227,30 +227,9 @@ fn stdio_hanging_call_fixture_child() {
     }
 }
 
-#[cfg(unix)]
 fn process_is_running(pid: u32) -> bool {
-    std::process::Command::new("/bin/kill")
-        .args(["-0", &pid.to_string()])
-        .status()
-        .is_ok_and(|status| status.success())
-}
-
-#[cfg(windows)]
-fn process_is_running(pid: u32) -> bool {
-    std::process::Command::new("tasklist")
-        .args(["/FI", &format!("PID eq {pid}"), "/NH"])
-        .output()
-        .ok()
-        .is_some_and(|output| {
-            String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .any(|line| line.split_whitespace().nth(1) == Some(pid.to_string().as_str()))
-        })
-}
-
-#[cfg(not(any(unix, windows)))]
-fn process_is_running(_: u32) -> bool {
-    false
+    use butler_platform::process_control::{Liveness, liveness};
+    liveness(pid) == Liveness::Running
 }
 
 fn response_for(request: &Value) -> Option<Value> {

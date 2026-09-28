@@ -129,17 +129,9 @@ pub fn scrub(text: &str) -> String {
 }
 
 fn host_name() -> Option<String> {
-    #[cfg(unix)]
-    {
-        nix::unistd::gethostname()
-            .ok()
-            .and_then(|name| name.into_string().ok())
-            .filter(|name| name.len() >= 4)
-    }
-    #[cfg(not(unix))]
-    {
-        None
-    }
+    butler_platform::instance::host_name()
+        .ok()
+        .filter(|name| name.len() >= 4)
 }
 
 /// Findings of the lint on one text (empty when clean).

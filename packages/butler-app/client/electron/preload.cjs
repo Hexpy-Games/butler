@@ -846,6 +846,14 @@ const butlerApp = Object.freeze({
     ipcRenderer.invoke("butler:set-native-shell-preferences", {
       trayEnabled,
     }),
+  getAgentState: () => ipcRenderer.invoke("butler:agent-state"),
+  startAgent: () => ipcRenderer.invoke("butler:agent-start"),
+  onAgentState: (handler) => {
+    if (typeof handler !== "function") return () => {};
+    const listener = (_event, state) => handler(state);
+    ipcRenderer.on("butler:agent-state", listener);
+    return () => ipcRenderer.removeListener("butler:agent-state", listener);
+  },
   onNativeNavigation: (handler) => {
     if (typeof handler !== "function") return () => {};
     const listener = (_event, request) => handler(request);

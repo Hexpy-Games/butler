@@ -33,17 +33,7 @@ pub(super) async fn load_artifact(
         .get("artifacts")
         .and_then(Value::as_array)
         .ok_or(UpdateCode::UpdateManifestArtifactsMissing)?;
-    let os = if std::env::consts::OS == "macos" {
-        "darwin"
-    } else {
-        std::env::consts::OS
-    };
-    let arch = match std::env::consts::ARCH {
-        "aarch64" => "arm64",
-        "x86_64" => "x64",
-        other => other,
-    };
-    let platform = format!("{os}-{arch}");
+    let platform = butler_platform::launcher::release_platform();
     let app: Vec<&Value> = array
         .iter()
         .filter(|value| value.get("component").and_then(Value::as_str) == Some("app"))

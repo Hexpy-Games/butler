@@ -278,7 +278,15 @@ export function writeAppForegroundMigration(butlerData, input, now = () => new D
   return record;
 }
 
-export function createRecoveryBudget({ maxAttempts = 3, windowMs = 60_000 } = {}) {
+// The App's Agent crash policy: at most this many automatic recoveries in a
+// sliding window. The native service unit mirrors it (see
+// app-agent-native-service-bridge.mjs).
+export const AGENT_RECOVERY_BUDGET = Object.freeze({ maxAttempts: 3, windowMs: 60_000 });
+
+export function createRecoveryBudget({
+  maxAttempts = AGENT_RECOVERY_BUDGET.maxAttempts,
+  windowMs = AGENT_RECOVERY_BUDGET.windowMs,
+} = {}) {
   const attempts = [];
   return {
     record(nowMs = Date.now()) {
