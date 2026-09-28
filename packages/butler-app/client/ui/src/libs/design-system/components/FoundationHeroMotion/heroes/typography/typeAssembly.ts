@@ -2,15 +2,14 @@ import type { Key, Pose, Track } from "../../heroTimeline";
 import { line, OUT } from "./typeLine";
 import type { SpecimenMetrics } from "./specimenMetrics";
 import { cameras } from "./typeCamera";
-import { BEATS, FINALE, FLIGHTS, LOOP, PANELS, select, specimenTracks, TRANSITION, type TypeGeometry } from "./typeChoreography";
+import { BEATS, BUILD, FINALE, FIRST_BUILD, FLIGHTS, LOOP, PANELS, select, specimenTracks, TRANSITION, type TypeGeometry } from "./typeChoreography";
 import { STRUCTURE } from "./typeLines";
 import { sketchTracks } from "./Sketch";
 import { sweep } from "./Reveal";
 import { revealAll, rowAt } from "./typeReveals";
 
 /** The list scene ends and the first build starts here; each build takes BUILD beats. */
-const FIRST = 40.4;
-const BUILD = 16.5;
+const FIRST = FIRST_BUILD;
 /** Beats the camera takes from one component to the next; the next one's blueprint draws during the travel. */
 const TRAVEL = TRANSITION;
 
@@ -34,7 +33,8 @@ function assembly(g: TypeGeometry): Track[] {
     ...FLIGHTS.slice(1).map((flight, j): Key => ({ at: rowAt(j + 1) + 1, ...cam.row(flight), ease: j === 0 ? "accelerate" : j === FLIGHTS.length - 2 ? "decelerate" : "linear" })),
     { at: FIRST - TRANSITION, ...cam.row("metric") }, { at: FIRST, ...cam.stage[0]! },
     ...PANELS.slice(1).flatMap((_, j): Key[] => [{ at: buildAt(j + 1) - TRAVEL, ...cam.stage[j]! }, { at: buildAt(j + 1), ...cam.stage[j + 1]!, ease: "standard" }]),
-    { at: FINALE, ...cam.stage[3]! }, { at: FINALE + TRANSITION, ...cam.rest }, { at: FINALE + 6, ...cam.rest }, { at: FINALE + 9, rx: -0.6, ry: 1.2 }, { at: LOOP - 1, ...cam.rest },
+    // The finale zooms out from the composer, flat, to the poster, which then holds still.
+    { at: FINALE, ...cam.stage[3]! }, { at: FINALE + TRANSITION, ...cam.rest },
   ];
   // Rungs only move (an opacity animation would flatten their 3D); their
   // parts fade on their own. For the finale they gather in from below-left.
@@ -44,7 +44,8 @@ function assembly(g: TypeGeometry): Track[] {
     const leave = LOOP + i * 0.18;
     const gather = FINALE + 0.3 + i * 0.2;
     const hidden: Pose = { x: 0, y: 40, z: -180 };
-    const away: Pose = { x: -80, y: 200, z: 0 };
+    // Off the canvas to the left while the components build; they gather back in for the finale.
+    const away: Pose = { x: -g.canvas.w, y: 120, z: 0 };
     const fade = (from: number, to: number): Key[] => [
       { at: 0, o: 0 }, { at: from, o: 0 }, { at: to, o: 1, ease: "decelerate" }, { at: leave, o: 1 }, { at: leave + 1, o: 0, ease: "accelerate" },
     ];
@@ -58,7 +59,7 @@ function assembly(g: TypeGeometry): Track[] {
         keys: [
           { at: 0, ...hidden }, { at: rise - 1.4, ...hidden }, { at: rise, x: 0, y: 0, z: 0, ease: "spring" },
           { at: 45, x: 0, y: 0 }, { at: 45.1, ...away }, { at: gather, ...away }, { at: gather + TRANSITION, x: 0, y: 0 },
-          { at: leave, z: 0 }, { at: leave + 1, z: -60, ease: "accelerate" }, { at: BEATS, ...hidden },
+          { at: leave + 1.2, z: 0 }, { at: BEATS, ...hidden },
         ],
       },
       { select: select(`chrome-${name}`), keys: fade(rise - 0.4, rise) },
@@ -84,7 +85,7 @@ function assembly(g: TypeGeometry): Track[] {
         select: select(`panel-${panel}`),
         keys: [
           { at: 0, ...shift }, { at: home, ...shift }, { at: home + TRANSITION, x: 0, y: 0 },
-          { at: LOOP + 0.3 * k, z: 0 }, { at: LOOP + TRANSITION / 2 + 0.3 * k, z: -200, ease: "accelerate" }, { at: BEATS, ...shift, z: 0 },
+          { at: LOOP + TRANSITION, x: 0, y: 0 }, { at: BEATS, ...shift },
         ],
       },
       {

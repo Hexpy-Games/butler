@@ -26,7 +26,18 @@ import { OUTLINE_EM } from "./TypeSpecimen";
  */
 /** One transition length for every scene and camera change (list→build, component→component, build→finale, finale→loop). */
 export const TRANSITION = 4;
-export const FINALE = 106.4;
+/**
+ * Holds (beats) every chapter reuses: after a completed component before the
+ * camera moves on (0.6 s), and on the last list row while its numerals roll
+ * (1.8 s, the roll plus 0.8 s).
+ */
+export const HOLD = { component: 1.9, lastRow: 5.7 } as const;
+/** The camera settles on the last list row at this beat (its row start plus one). */
+const LAST_ROW_AT = 33.2;
+/** Builds: the first starts after the last-row hold and one transition; each is its work (12.5), its hold and the travel on. */
+export const FIRST_BUILD = LAST_ROW_AT + HOLD.lastRow + TRANSITION;
+export const BUILD = 12.5 + HOLD.component + TRANSITION;
+export const FINALE = FIRST_BUILD + 4 * BUILD;
 export const LOOP = FINALE + TRANSITION + 9;
 export const BEATS = LOOP + TRANSITION + 1.5;
 

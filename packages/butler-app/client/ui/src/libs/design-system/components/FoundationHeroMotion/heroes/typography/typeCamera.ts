@@ -32,7 +32,10 @@ export function cameras(g: TypeGeometry) {
   const tall = g.layout === "tall";
   const cap = tall ? 1.6 : 2;
   const centers = stageCenters(g);
+  // The last component (the composer) is built in its own place in the poster, so the finale can
+  // zoom out from it while the others gather around it.
   const shift = Object.fromEntries(PANELS.map((panel, k) => {
+    if (k === PANELS.length - 1) return [panel, { x: 0, y: 0 }];
     const box = frameBox(g, panel);
     return [panel, { x: centers[k]!.x - (box.x + box.w / 2), y: centers[k]!.y - (box.y + box.h / 2) }];
   })) as Record<Panel, { x: number; y: number }>;

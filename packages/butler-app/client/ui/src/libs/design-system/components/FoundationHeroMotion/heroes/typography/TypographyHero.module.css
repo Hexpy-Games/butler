@@ -322,10 +322,13 @@
   min-width: 0;
 }
 
+/* The conversation is sized to its content (its card hugs the turn); the
+   composer sits on the bottom margin. */
 .column {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
   row-gap: var(--grid-gutter);
+  align-content: space-between;
   min-width: 0;
 }
 

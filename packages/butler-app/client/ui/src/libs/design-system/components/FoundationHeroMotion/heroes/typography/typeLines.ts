@@ -34,8 +34,8 @@ export const LINES: LineSpec[] = [
   { id: "ask", panel: "chat", token: "--typo-body", role: "body", select: own("ask"), draw: true },
   { id: "answer", panel: "chat", token: "--typo-body", role: "body", select: own("answer"), draw: false },
   { id: "command", panel: "chat", token: "--typo-code", role: "code", select: own("command"), draw: true },
-  { id: "worked", panel: "chat", token: "--typo-caption", role: "caption", select: own("worked"), draw: true, secondary: true },
-  { id: "meta", panel: "chat", token: "--typo-caption", role: "caption", select: own("meta"), draw: true },
+  { id: "worked", panel: "chat", token: "--font-size-2", role: "caption", select: own("worked"), draw: true, secondary: true },
+  { id: "meta", panel: "chat", token: "--font-size-2", role: "caption", select: own("meta"), draw: true },
   { id: "done", panel: "chat", token: "--typo-caption", role: "caption", select: own("done"), draw: true, secondary: true },
   { id: "dash", panel: "metric", token: "--typo-dashboard-title", role: "dashboard", select: own("dash"), draw: true },
   { id: "value", panel: "metric", token: "--typo-metric-value", role: "metric", select: firstMetric("metric-value"), draw: true },
@@ -57,7 +57,7 @@ export const BADGE_GUTTER = { wide: 320, tall: 190 } as const;
  */
 export const STRUCTURE: Record<Panel, Array<[part: string, line: string, offset: number]>> = {
   settings: [["switch", "field", 0.8], ["switch-2", "field2", 0.6]],
-  chat: [["chat-icons", "worked", 0], ["done-mark", "done", 0]],
+  chat: [["code-copy", "command", 0.6], ["chat-icons", "worked", 0], ["done-mark", "done", 0]],
   metric: [["metric-2", "value2", -0.4]],
   composer: [["more", "placeholder", 0], ["send", "placeholder", 1.6]],
 };
