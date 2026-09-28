@@ -1023,17 +1023,21 @@ const butlerApp = Object.freeze({
     return requestJson(query ? `/automations?${query}` : "/automations");
   },
   getAutomation: ({ automationId }) => requestJson(`/automations/${encodeURIComponent(automationId)}`),
-  createAutomation: ({ title, promptBody, targetSessionId, intervalSeconds }) => requestJson("/automations", {
+  // Schedule saves return the bridge envelope so a refused save keeps its
+  // code and status (the form shows 400s inline). An omitted accessMode lets
+  // the gateway use the target conversation's current mode.
+  createAutomation: ({ title, promptBody, targetSessionId, intervalSeconds, accessMode }) => requestBridgeResult("/automations", {
     method: "POST",
     body: JSON.stringify({
       title,
       prompt_body: promptBody,
       target_session_id: targetSessionId,
       interval_seconds: intervalSeconds,
+      access_mode: accessMode,
     }),
   }),
-  updateAutomation: ({ automationId, title, promptBody, targetSessionId, intervalSeconds, state }) =>
-    requestJson(`/automations/${encodeURIComponent(automationId)}`, {
+  updateAutomation: ({ automationId, title, promptBody, targetSessionId, intervalSeconds, state, accessMode }) =>
+    requestBridgeResult(`/automations/${encodeURIComponent(automationId)}`, {
       method: "PATCH",
       body: JSON.stringify({
         title,
@@ -1041,6 +1045,7 @@ const butlerApp = Object.freeze({
         target_session_id: targetSessionId,
         interval_seconds: intervalSeconds,
         state,
+        access_mode: accessMode,
       }),
     }),
   deleteAutomation: ({ automationId }) => requestJson(`/automations/${encodeURIComponent(automationId)}`, {

@@ -878,6 +878,15 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       title: "예약 작업 제목",
       prompt: "프롬프트 내용",
     },
+    accessHint: "먼저 확인이면 자리를 비운 동안 승인을 기다립니다.",
+    saveFailed: "예약 작업 저장 실패",
+    errors: {
+      title: "제목을 입력해 주세요.",
+      prompt: "프롬프트를 입력해 주세요.",
+      interval: "5분에서 24시간 사이로 정해 주세요.",
+      accessMode: "권한을 선택해 주세요.",
+      invalid: "입력값을 확인해 주세요.",
+    },
     runs: {
       empty: "아직 실행 기록이 없습니다",
       queued: "대기 중",

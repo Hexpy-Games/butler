@@ -9,6 +9,7 @@ import {
   ipcMain,
   nativeImage,
   nativeTheme,
+  protocol,
   shell,
 } from "electron";
 import { spawn, spawnSync } from "node:child_process";
@@ -107,6 +108,23 @@ import {
   readCacheBudgetArtifact,
 } from "./cache-budget-runtime.mjs";
 import { createSessionFolderLauncher } from "./session-folder-launch.mjs";
+import {
+  APP_RENDERER_ORIGIN,
+  APP_RENDERER_SCHEME,
+  APP_RENDERER_SCHEME_PRIVILEGES,
+  createAppRendererProtocolHandler,
+  findRendererDistRoot,
+  isAppRendererDocumentUrl,
+  rendererOriginForUrl,
+  selectRendererUrl,
+} from "./app-renderer-protocol.mjs";
+import {
+  READ_RENDERER_STORAGE_SCRIPT,
+  RENDERER_STORAGE_BLANK_PAGE_URL,
+  RENDERER_STORAGE_MIGRATION_MARKER,
+  migrateRendererStorageOrigin,
+  writeRendererStorageScript,
+} from "./app-renderer-storage-migration.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../../..");
@@ -188,10 +206,15 @@ let serverUrl = normalizeLocalHttpUrl(
   "Butler app server URL",
 );
 const explicitUiUrl = process.env.BUTLER_APP_UI_URL;
+// Production serves the built UI on app://butler; dev keeps the Vite URL.
+const staticRendererDistRoot = explicitUiUrl ? null : resolveStaticRendererDist();
 let rendererUrl = explicitUiUrl
   ? normalizeLocalHttpUrl(explicitUiUrl, "Butler app UI URL")
   : defaultRendererUrl();
-let rendererOrigin = new URL(rendererUrl).origin;
+let rendererOrigin = rendererOriginForUrl(rendererUrl);
+let appRendererProtocolReady = null;
+// Must run before the app is ready.
+protocol.registerSchemesAsPrivileged([APP_RENDERER_SCHEME_PRIVILEGES]);
 let serverHealthUrl = new URL("/health", serverUrl).toString();
 const isMac = process.platform === "darwin";
 const isLinux = process.platform === "linux";
@@ -292,6 +315,7 @@ const appAgentNativeServiceBridge = shouldUseAppAgentNativeServiceBridge()
       systemdUnit: appAgentSystemdUnit(),
       getPort: () => port,
       getAppVersion: () => appInfoView().version,
+      getDevOrigin: () => (explicitUiUrl ? rendererOrigin : null),
       resourcesPath: process.resourcesPath,
       execPath: process.execPath,
       menuBarHelper: appManagedMenuBarHelperRegistration(),
@@ -998,12 +1022,13 @@ function readLatestAppManagedRuntimeFailure() {
 }
 
 function defaultRendererUrl() {
-  return resolveStaticRendererUrl() ?? serverUrl;
+  // Without a built UI, the gateway serves it on its own origin.
+  return selectRendererUrl({ staticDistRoot: staticRendererDistRoot, serverUrl });
 }
 
-function resolveStaticRendererUrl() {
+function resolveStaticRendererDist() {
   const explicitRendererDist = process.env.BUTLER_APP_RENDERER_DIST;
-  const candidates = [
+  return findRendererDistRoot([
     explicitRendererDist,
     process.resourcesPath ? join(process.resourcesPath, "app-client") : null,
     process.resourcesPath ? join(process.resourcesPath, "dist") : null,
@@ -1020,13 +1045,58 @@ function resolveStaticRendererUrl() {
       : null,
     resolve(__dirname, "..", "ui", "dist"),
     resolve(repoRoot, "packages", "butler-app", "client", "ui", "dist"),
-  ];
-  for (const candidate of candidates) {
-    if (!candidate) continue;
-    const indexPath = resolve(candidate, "index.html");
-    if (existsSync(indexPath)) return pathToFileURL(indexPath).toString();
+  ]);
+}
+
+function prepareAppRendererProtocol() {
+  if (!staticRendererDistRoot || !isAppRendererDocumentUrl(rendererUrl)) {
+    return Promise.resolve();
   }
-  return null;
+  if (!appRendererProtocolReady) {
+    protocol.handle(
+      APP_RENDERER_SCHEME,
+      createAppRendererProtocolHandler({ distRoot: staticRendererDistRoot }),
+    );
+    appRendererProtocolReady = migrateRendererStorageToAppOrigin();
+  }
+  return appRendererProtocolReady;
+}
+
+async function migrateRendererStorageToAppOrigin() {
+  const result = await migrateRendererStorageOrigin({
+    markerPath: join(app.getPath("userData"), RENDERER_STORAGE_MIGRATION_MARKER),
+    readLegacyEntries: () => runRendererStorageScript(
+      `${pathToFileURL(__dirname).toString()}/`,
+      READ_RENDERER_STORAGE_SCRIPT,
+    ),
+    writeEntries: (entries) => runRendererStorageScript(
+      `${APP_RENDERER_ORIGIN}/`,
+      writeRendererStorageScript(entries),
+    ),
+  });
+  if (result.status === "failed") {
+    console.warn(`Renderer storage migration failed: ${result.code}`);
+  }
+}
+
+// Runs a script in a hidden blank page on the base URL's origin.
+async function runRendererStorageScript(originBaseUrl, script) {
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  const timer = setTimeout(() => {
+    if (!win.isDestroyed()) win.destroy();
+  }, 10_000);
+  try {
+    await win.loadURL(RENDERER_STORAGE_BLANK_PAGE_URL, {
+      baseURLForDataURL: originBaseUrl,
+    });
+    return await win.webContents.executeJavaScript(script);
+  } finally {
+    clearTimeout(timer);
+    if (!win.isDestroyed()) win.destroy();
+  }
 }
 
 async function installDevtools() {
@@ -2041,6 +2111,7 @@ async function createWindow() {
     event.preventDefault();
     openExternalUrl(url);
   });
+  await prepareAppRendererProtocol();
   await win.loadURL(rendererUrl);
   if (usesAppForegroundLifecycle && app.isPackaged) {
     const migration = await ensureLegacyAppServiceMigration();
@@ -2882,7 +2953,7 @@ function updateManagedServerPort(nextPort) {
   if (!explicitUiUrl) {
     rendererUrl = defaultRendererUrl();
   }
-  rendererOrigin = new URL(rendererUrl).origin;
+  rendererOrigin = rendererOriginForUrl(rendererUrl);
   serverHealthUrl = new URL("/health", serverUrl).toString();
   syncPreloadServerEnvironment();
 }
@@ -2917,12 +2988,10 @@ async function findAvailablePort(startPort) {
 }
 
 function isAppNavigationUrl(value) {
+  // Relative links must not replace the app document with a bundle file.
+  if (isAppRendererDocumentUrl(rendererUrl)) return isAppRendererDocumentUrl(value);
   try {
     const url = new URL(value);
-    const renderer = new URL(rendererUrl);
-    if (renderer.protocol === "file:") {
-      return url.protocol === "file:" && url.pathname === renderer.pathname;
-    }
     return (
       url.origin === rendererOrigin || url.origin === new URL(serverUrl).origin
     );
