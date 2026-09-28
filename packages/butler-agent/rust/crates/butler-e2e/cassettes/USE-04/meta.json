@@ -1,0 +1,31 @@
+{
+  "scenario": "USE-04",
+  "provider": "zai",
+  "model": "openai/gpt-6-luna",
+  "effort": "max",
+  "wire_shape": "openai_chat_completions",
+  "butler_git_sha": "dca444e4f987",
+  "recorded_at": "2026-09-28T11:32:19Z",
+  "recorder": "butler-e2e record proxy",
+  "sanitization": [
+    "per-run values -> {{W}}, {{D}}, {{SANDBOX}}, scenario nonces",
+    "JWT/sk-key/bearer/email/home path/host name -> fixed placeholders",
+    "response.instructions -> {{REDACTED_ECHO}}, response.tools -> []",
+    "response headers reduced to content-type, retry-after and numeric quota headers",
+    "chunks re-cut at SSE event boundaries (event bytes unchanged)",
+    "JSON account identifiers (account_id, user_id, email, ...) -> {{ACCOUNT}}/{{EMAIL}}",
+    "re-sanitized by e2e-resanitize: reset times -> relative placeholders"
+  ],
+  "files": [
+    {
+      "file": "000.json",
+      "sha256": "cb0239336efc675d6c9791e653b7a441f99edc25376f288bb49f81936c2798e2"
+    }
+  ],
+  "fingerprint": [
+    [
+      "status:200",
+      "json{code,data,msg,success}"
+    ]
+  ]
+}

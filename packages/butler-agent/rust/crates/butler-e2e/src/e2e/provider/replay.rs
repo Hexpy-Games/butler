@@ -140,6 +140,7 @@ pub(super) fn replay(
         }
         None => (recorded.clone(), usize::MAX, Ending::Clean),
     };
+    let now_ms = super::super::sanitize::now_ms();
     let chunks: Vec<(Duration, Bytes)> = response
         .chunks
         .iter()
@@ -149,7 +150,11 @@ pub(super) fn replay(
             let delay = scaled
                 .min(Duration::from_millis(pacing.cap_ms))
                 .max(Duration::from_millis(pacing.min_ms));
-            (delay, Bytes::from(placeholders.reveal(&chunk.text, true)))
+            let text = super::super::sanitize::expand_times(
+                &placeholders.reveal(&chunk.text, true),
+                now_ms,
+            );
+            (delay, Bytes::from(text))
         })
         .collect();
     let stream = paced_stream(chunks, ending);

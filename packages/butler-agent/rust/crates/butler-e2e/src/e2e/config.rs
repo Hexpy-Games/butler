@@ -134,8 +134,21 @@ impl LiveProvider {
             "openai-subscription" => Some("https://chatgpt.com/backend-api"),
             "openai" => Some("https://api.openai.com/v1"),
             "opencode-go" => Some("https://opencode.ai/zen/go/v1"),
+            // The origin: the Coding Plan's model and quota endpoints differ
+            // in path (see `base_path`).
+            "zai" => Some("https://api.z.ai"),
             _ => None,
         }
+    }
+}
+
+/// The path the product's base URL carries after the recorder's origin, for
+/// providers whose upstream default is an origin: the Z.AI Coding Plan's
+/// model base, from which the product derives its quota URL.
+pub fn base_path(provider: &str) -> &'static str {
+    match provider {
+        "zai" => "/api/coding/paas/v4",
+        _ => "",
     }
 }
 
