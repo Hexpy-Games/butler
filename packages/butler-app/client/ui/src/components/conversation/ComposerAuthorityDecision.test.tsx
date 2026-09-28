@@ -30,8 +30,9 @@ const renameCard: AuthorityApprovalCard = { requestRef: "request-rename", catego
   executable: "edit_file", commandCount: 1, reason: "Reviewed operation",
   scope: { title: "작업 폴더의 파일 편집", description: "Desktop 안의 파일 쓰기·수정" },
   approval: { actionKind: "edit_files", count: 24, risk: "medium",
-    targets: [{ kind: "folder", path: "/Users/mina/Desktop" }, { kind: "file", path: "a.png" }],
-    examples: ["Screenshot 10.02.14.png", "Screenshot 10.05.31.png", "Screenshot 10.09.02.png"] },
+    targets: [{ kind: "folder", label: "Desktop", path: "" }, { kind: "file", path: "Screenshot 10.02.14.png" }],
+    examples: ["Screenshot 10.02.14.png", "Screenshot 10.05.31.png",
+      "Screenshots/2026/September/holiday trip to the coast/Screenshot 10.09.02.png"] },
 };
 
 async function renderDecision(cards: AuthorityApprovalCard[] = legacyCards) {
@@ -146,35 +147,39 @@ function decisionButtons(container: HTMLElement) {
 
 test("a structured request reads as a plain question with examples, a risk badge, Deny and Allow once", async () => {
   const { container } = await renderDecision([renameCard]);
-  expect(container.textContent).toContain("데스크톱의 파일 24개를 수정할까요?");
+  expect(container.textContent).toContain("'Desktop'의 파일 24개를 수정할까요?");
   expect(container.textContent).not.toContain("작업 폴더의 파일 편집");
   const details = container.querySelector('[data-slot="composer-decision-details"]')!;
   expect([...details.children].map((line) => line.textContent)).toEqual([
-    "Screenshot 10.02.14.png", "Screenshot 10.05.31.png", "Screenshot 10.09.02.png", "외 21개",
+    "Screenshot 10.02.14.png", "Screenshot 10.05.31.png", "Screenshots/2026/…/Screenshot 10.09.02.png", "외 21개",
   ]);
   expect(container.querySelector('[data-test-class="approval-risk"][data-tone="warning"]')?.textContent).toBe("위험 보통");
   expect(decisionButtons(container)).toEqual(["거절", "이번만 허용", ""]);
-  expect(current?.conversationScope).toBe("데스크톱의 파일 수정");
+  expect(current?.conversationScope).toBe("'Desktop'의 파일 수정");
   // The pending attachment above a folded-away request says the same thing.
   await act(async () => { current!.onComposeMessage(); });
-  expect(container.textContent).toContain("데스크톱의 파일 24개를 수정할까요?");
+  expect(container.textContent).toContain("'Desktop'의 파일 24개를 수정할까요?");
 });
 
-test("the card follows the app language and the risk level", async () => {
+test("the card follows the app language and shows whatever risk the request carries", async () => {
   setAppCopyLanguage("en-US");
   try {
-    const high: AuthorityApprovalCard = { ...renameCard, approval: { ...renameCard.approval!, actionKind: "run_command",
-      count: 1, risk: "high", examples: ["rm -rf build"], targets: [{ kind: "folder", path: "/work/garden" }] } };
-    const { container, store } = await renderDecision([high]);
-    expect(container.textContent).toContain("Run a command in garden?");
-    expect(container.textContent).toContain("rm -rf build");
+    // Fixture-driven: the risk is the agent's, so the same command can arrive at every level.
+    const command = (risk: "low" | "high"): AuthorityApprovalCard => ({ ...renameCard, approval: { ...renameCard.approval!,
+      actionKind: "run_command", count: 1, risk, examples: ["npm run deploy"], targets: [{ kind: "folder", label: "garden", path: "" }] } });
+    const { container, store } = await renderDecision([command("high")]);
+    expect(container.textContent).toContain("Run a command in 'garden'?");
+    expect(container.textContent).toContain("npm run deploy");
     expect(container.querySelector('[data-test-class="approval-risk"][data-tone="danger"]')?.textContent).toBe("High risk");
     expect(decisionButtons(container)).toEqual(["Deny", "Allow once", ""]);
+    await act(async () => { store.setState({ authorityApprovals: { sessionId: "general", cards: [command("low")] } }); });
+    expect(container.textContent).toContain("npm run deploy");
+    expect(container.querySelector('[data-test-class="approval-risk"][data-tone="neutral"]')?.textContent).toBe("Low risk");
     await act(async () => { store.setState({ authorityApprovals: { sessionId: "general", cards: [
-      { ...high, approval: { ...high.approval!, actionKind: "update_project", risk: "low", examples: [], targets: [] } },
+      { ...renameCard, approval: { ...renameCard.approval!, actionKind: "update_project", risk: undefined, examples: [], targets: [] } },
     ] } }); });
     expect(container.textContent).toContain("Update the project records?");
-    expect(container.querySelector('[data-test-class="approval-risk"][data-tone="neutral"]')?.textContent).toBe("Low risk");
+    expect(container.querySelector('[data-test-class="approval-risk"]')).toBeNull();
   } finally {
     setAppCopyLanguage("ko-KR");
   }

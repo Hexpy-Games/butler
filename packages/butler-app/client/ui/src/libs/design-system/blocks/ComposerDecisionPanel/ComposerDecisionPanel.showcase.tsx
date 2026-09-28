@@ -21,8 +21,8 @@ const labels = {
     authority: "Allow writing files outside the workspace", later: "Compose a message first",
     deny: "Deny", once: "Allow once", scope: "Allow scope", conversation: "Always allow in this conversation",
     error: "Could not send the decision. Try again.",
-    rename: "Edit 24 files in your Desktop folder?", more: "+21 more", medium: "Medium risk",
-    command: "Run a command in garden?", high: "High risk",
+    rename: "Edit 24 files in 'Desktop'?", more: "+21 more", medium: "Medium risk",
+    command: "Run a command in 'garden'?", high: "High risk",
   },
   "ko-KR": {
     plan: "디자인 시스템 최종 정리 계획: 제품 CSS 모듈 제거와 픽셀 동등성 검증까지 한 번에 진행",
@@ -30,8 +30,8 @@ const labels = {
     authority: "워크스페이스 밖의 파일 쓰기 허용 요청", later: "먼저 메시지 작성",
     deny: "거절", once: "이번만 허용", scope: "허용 범위", conversation: "이 대화에서 계속 허용",
     error: "결정을 보내지 못했습니다. 다시 시도하세요.",
-    rename: "데스크톱의 파일 24개를 수정할까요?", more: "외 21개", medium: "위험 보통",
-    command: "garden에서 명령을 실행할까요?", high: "위험 높음",
+    rename: "'Desktop'의 파일 24개를 수정할까요?", more: "외 21개", medium: "위험 보통",
+    command: "'garden'에서 명령을 실행할까요?", high: "위험 높음",
   },
 } as const;
 

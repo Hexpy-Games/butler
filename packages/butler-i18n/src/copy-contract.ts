@@ -45,12 +45,12 @@ type CountFormatter = (count: number) => string;
 
 /**
  * An approval request as one plain question, per `approval.action_kind`
- * (#235). `folder` is a display name; `null` when the request has none.
+ * (#235). `workspace` is the workspace label; `null` reads as "this workspace".
  */
 export interface ApprovalRequestCopy {
-  editFiles: (count: number, folder: string | null) => string;
-  runCommand: (folder: string | null) => string;
-  networkCommand: (folder: string | null) => string;
+  editFiles: (count: number, workspace: string | null) => string;
+  runCommand: (workspace: string | null) => string;
+  networkCommand: (workspace: string | null) => string;
   useConnector: (tool: string | null, server: string | null) => string;
   manageSchedule: string;
   updateProject: string;
@@ -63,9 +63,7 @@ export interface ApprovalRequestCopy {
   more: CountFormatter;
   risk: { low: string; medium: string; high: string };
   /** What "Always allow in this conversation" covers. */
-  covers: { editFiles: (folder: string | null) => string; command: (folder: string | null) => string; other: string };
-  /** Home folders people know by name. */
-  homeFolders: { Desktop: string; Documents: string; Downloads: string };
+  covers: { editFiles: (workspace: string | null) => string; command: (workspace: string | null) => string; other: string };
 }
 
 export type AppLocale = "en-US" | "ko-KR";

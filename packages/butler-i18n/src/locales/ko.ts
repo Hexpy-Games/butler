@@ -1,5 +1,8 @@
 import type { AppCopy, BriefingFallbackCopy, NewChatBriefingSuggestion } from "../copy-contract.ts";
 
+/** 허용 요청이 작업할 곳: 따옴표로 감싼 작업 공간 이름, 없으면 이 작업 공간. */
+const workspaceName = (workspace: string | null) => workspace ? `'${workspace}'` : "이 작업 공간";
+
 const generalFallback: BriefingFallbackCopy = {
     title: "오늘의 일을 같이 펼쳐볼까요",
     description: "짧게 열어볼 만한 시작점 몇 가지가 있습니다.",
@@ -338,9 +341,9 @@ export const koKrCopy: AppCopy = {
     activityHistory: (live, label, count) => `${live ? "현재" : "활동"} · ${label} · ${count}개 기록`,
     pendingApprovals: count => `허용 대기 ${count}개`, allowedCount: count => `허용 ${count}개`, revoke: title => `${title} — 해제`,
     approvalRequest: {
-      editFiles: (count, folder) => `${folder ? `${folder}의 ` : ""}${count > 0 ? `파일 ${count}개를` : "파일을"} 수정할까요?`,
-      runCommand: folder => folder ? `${folder}에서 명령을 실행할까요?` : "명령을 실행할까요?",
-      networkCommand: folder => folder ? `${folder}에서 인터넷을 쓰는 명령을 실행할까요?` : "인터넷을 쓰는 명령을 실행할까요?",
+      editFiles: (count, workspace) => `${workspaceName(workspace)}의 ${count > 0 ? `파일 ${count}개를` : "파일을"} 수정할까요?`,
+      runCommand: workspace => `${workspaceName(workspace)}에서 명령을 실행할까요?`,
+      networkCommand: workspace => `${workspaceName(workspace)}에서 인터넷을 쓰는 명령을 실행할까요?`,
       useConnector: (tool, server) => tool && server ? `${server}의 ${tool} 도구를 사용할까요?` : tool ? `${tool} 도구를 사용할까요?` : "연결된 도구를 사용할까요?",
       manageSchedule: "예약 작업을 변경할까요?",
       updateProject: "프로젝트 기록을 업데이트할까요?",
@@ -351,11 +354,10 @@ export const koKrCopy: AppCopy = {
       more: count => `외 ${count}개`,
       risk: { low: "위험 낮음", medium: "위험 보통", high: "위험 높음" },
       covers: {
-        editFiles: folder => folder ? `${folder}의 파일 수정` : "파일 수정",
-        command: folder => folder ? `${folder}에서 이 명령 실행` : "이 명령 실행",
+        editFiles: workspace => `${workspaceName(workspace)}의 파일 수정`,
+        command: workspace => `${workspaceName(workspace)}에서 이 명령 실행`,
         other: "같은 작업",
       },
-      homeFolders: { Desktop: "데스크톱", Documents: "문서 폴더", Downloads: "다운로드 폴더" },
     },
     skillTitle: name => `${name}과 어떤 스킬을 만들어볼까요?`, reportPreparing: title => `${title} 작업에 대한 보고 준비 중`,
     progressDetails: (title, activity, progress) => `${title}, ${activity}${progress ? `, 진행도 ${progress}` : ""}, 진행 상세 보기`,

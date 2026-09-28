@@ -1,5 +1,8 @@
 import type { AppCopy, BriefingFallbackCopy, NewChatBriefingSuggestion } from "../copy-contract.ts";
 
+/** Where an approval request acts: the quoted workspace label, or this workspace. */
+const inWorkspace = (workspace: string | null) => workspace ? `in '${workspace}'` : "in this workspace";
+
 const generalFallback: BriefingFallbackCopy = {
     title: "What should we open today?",
     description: "A few simple starting points are ready.",
@@ -338,12 +341,10 @@ export const enUsCopy: AppCopy = {
     activityHistory: (live, label, count) => `${live ? "Current" : "Activity"} · ${label} · ${count} ${count === 1 ? "record" : "records"}`,
     pendingApprovals: count => `${count} pending ${count === 1 ? "approval" : "approvals"}`, allowedCount: count => `${count} allowed`, revoke: title => `${title} — Revoke`,
     approvalRequest: {
-      editFiles: (count, folder) => {
-        const files = count > 0 ? `${count} ${count === 1 ? "file" : "files"}` : "files";
-        return folder ? `Edit ${files} in ${folder}?` : `Edit ${files}?`;
-      },
-      runCommand: folder => folder ? `Run a command in ${folder}?` : "Run a command?",
-      networkCommand: folder => folder ? `Run a command that uses the internet in ${folder}?` : "Run a command that uses the internet?",
+      editFiles: (count, workspace) =>
+        `Edit ${count > 0 ? `${count} ${count === 1 ? "file" : "files"}` : "files"} ${inWorkspace(workspace)}?`,
+      runCommand: workspace => `Run a command ${inWorkspace(workspace)}?`,
+      networkCommand: workspace => `Run a command that uses the internet ${inWorkspace(workspace)}?`,
       useConnector: (tool, server) => tool && server ? `Use ${tool} from ${server}?` : tool ? `Use ${tool}?` : "Use a connected tool?",
       manageSchedule: "Change a schedule?",
       updateProject: "Update the project records?",
@@ -354,11 +355,10 @@ export const enUsCopy: AppCopy = {
       more: count => `+${count} more`,
       risk: { low: "Low risk", medium: "Medium risk", high: "High risk" },
       covers: {
-        editFiles: folder => folder ? `File edits in ${folder}` : "File edits",
-        command: folder => folder ? `This command in ${folder}` : "This command",
+        editFiles: workspace => `File edits ${inWorkspace(workspace)}`,
+        command: workspace => `This command ${inWorkspace(workspace)}`,
         other: "This same action",
       },
-      homeFolders: { Desktop: "your Desktop folder", Documents: "your Documents folder", Downloads: "your Downloads folder" },
     },
     skillTitle: name => `What skill shall we build with ${name}?`, reportPreparing: title => `Preparing report for ${title}`,
     progressDetails: (title, activity, progress) => `${title}, ${activity}${progress ? `, progress ${progress}` : ""}, view progress details`,

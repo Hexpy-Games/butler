@@ -1,4 +1,5 @@
 import type { AppCopy } from "./copy.ts";
+import { approvalTargetsFromTransport, isAbsolutePath } from "./approvalTargets.ts";
 import type { ApprovalRisk, ApprovalSummary, AuthorityApprovalCard } from "./types.ts";
 
 type ApprovalRequestCopy = AppCopy["interfaceTemplates"]["approvalRequest"];
@@ -9,6 +10,9 @@ export const APPROVAL_ACTION_KINDS = [
   "update_project", "start_conversation", "restart_service", "create_worktree", "other",
 ] as const;
 export type ApprovalActionKind = (typeof APPROVAL_ACTION_KINDS)[number];
+
+/** Kinds whose example is the command line, shown as sent. */
+const COMMAND_KINDS: ReadonlySet<string> = new Set(["run_command", "network_command"]);
 
 /** The approval card's content in the app language. */
 export interface ApprovalRequestView {
@@ -24,8 +28,9 @@ export interface ApprovalRequestView {
 }
 
 const MAX_EXAMPLES = 3;
+/** Longer example paths are cut in the middle, keeping the file name. */
+const MAX_PATH_CHARS = 44;
 const RISKS: readonly string[] = ["low", "medium", "high"];
-const HOME_FOLDER = /^(?:\/Users\/[^/]+|\/home\/[^/]+|[A-Za-z]:\\Users\\[^\\]+)[\\/](Desktop|Documents|Downloads)$/u;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -34,18 +39,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /**
  * Narrows a request's transport `approval`. Malformed targets and examples are
  * dropped; a missing kind or an invalid count drops the whole summary, so the
- * card falls back to the legacy text.
+ * card falls back to the legacy text. Target and example paths come out
+ * relative (see `approvalTargetsFromTransport`); command lines stay as sent.
  */
 export function normalizeApprovalSummary(value: unknown): ApprovalSummary | undefined {
   if (!isRecord(value)) return undefined;
   const { action_kind: actionKind, count = 1, risk } = value;
   if (typeof actionKind !== "string" || !actionKind.trim()) return undefined;
   if (typeof count !== "number" || !Number.isSafeInteger(count) || count < 0) return undefined;
-  const targets = (Array.isArray(value.targets) ? value.targets : []).flatMap((target) =>
-    isRecord(target) && typeof target.kind === "string" && typeof target.path === "string"
-      ? [{ kind: target.kind, path: target.path }] : []);
+  const { targets, relative } = approvalTargetsFromTransport(value.targets);
   const examples = (Array.isArray(value.examples) ? value.examples : [])
-    .filter((example): example is string => typeof example === "string" && example.trim() !== "");
+    .filter((example): example is string => typeof example === "string" && example.trim() !== "")
+    .map((example) => COMMAND_KINDS.has(actionKind) || !isAbsolutePath(example) ? example : relative(example))
+    .filter(Boolean);
   return {
     actionKind, targets, count, examples,
     ...(typeof risk === "string" && RISKS.includes(risk) ? { risk: risk as ApprovalRisk } : {}),
@@ -55,7 +61,8 @@ export function normalizeApprovalSummary(value: unknown): ApprovalSummary | unde
 /**
  * The card for a pending request: a sentence per action kind; the generic
  * sentence for a kind this App does not know; the legacy `scope` text (then
- * the reason) from an agent that sends no `approval`.
+ * the reason) from an agent that sends no `approval`. `risk` is shown as the
+ * agent sent it; the App never classifies.
  */
 export function approvalRequestView(
   card: Pick<AuthorityApprovalCard, "approval" | "scope" | "reason">,
@@ -72,23 +79,23 @@ export function approvalRequestView(
   }
   const actionKind = (APPROVAL_ACTION_KINDS as readonly string[]).includes(approval.actionKind)
     ? approval.actionKind as ApprovalActionKind : "other";
-  const folder = folderName(approval, copy);
+  const workspace = workspaceLabel(approval);
   return {
-    title: sentence(actionKind, approval, folder, copy),
+    title: sentence(actionKind, approval, workspace, copy),
     details: details(approval, copy),
     ...(approval.risk ? { risk: approval.risk } : {}),
-    conversationScope: actionKind === "edit_files" ? copy.covers.editFiles(folder)
-      : actionKind === "run_command" || actionKind === "network_command" ? copy.covers.command(folder)
+    conversationScope: actionKind === "edit_files" ? copy.covers.editFiles(workspace)
+      : COMMAND_KINDS.has(actionKind) ? copy.covers.command(workspace)
         : copy.covers.other,
     actionKind,
   };
 }
 
-function sentence(kind: ApprovalActionKind, approval: ApprovalSummary, folder: string | null, copy: ApprovalRequestCopy): string {
+function sentence(kind: ApprovalActionKind, approval: ApprovalSummary, workspace: string | null, copy: ApprovalRequestCopy): string {
   switch (kind) {
-    case "edit_files": return copy.editFiles(approval.count, folder);
-    case "run_command": return copy.runCommand(folder);
-    case "network_command": return copy.networkCommand(folder);
+    case "edit_files": return copy.editFiles(approval.count, workspace);
+    case "run_command": return copy.runCommand(workspace);
+    case "network_command": return copy.networkCommand(workspace);
     case "use_connector": {
       const path = approval.targets.find((target) => target.kind === "connector")?.path.trim() ?? "";
       const slash = path.indexOf("/");
@@ -104,18 +111,30 @@ function sentence(kind: ApprovalActionKind, approval: ApprovalSummary, folder: s
   }
 }
 
-/** The request's folder by name: a home folder as people know it, else its last path part. */
-function folderName(approval: ApprovalSummary, copy: ApprovalRequestCopy): string | null {
-  const path = approval.targets.find((target) => target.kind === "folder")?.path.trim().replace(/(?<=.)[\\/]+$/u, "");
-  if (!path) return null;
-  const home = HOME_FOLDER.exec(path)?.[1] as keyof ApprovalRequestCopy["homeFolders"] | undefined;
-  if (home) return copy.homeFolders[home];
-  return path.split(/[\\/]/u).filter(Boolean).at(-1) ?? null;
+/** The workspace's label: the folder's first, else another target's; `null` reads as "this workspace". */
+function workspaceLabel(approval: ApprovalSummary): string | null {
+  const label = (approval.targets.find((target) => target.kind === "folder" && target.label?.trim())
+    ?? approval.targets.find((target) => target.label?.trim()))?.label?.trim();
+  return label || null;
 }
 
 function details(approval: ApprovalSummary, copy: ApprovalRequestCopy): string[] {
-  const shown = approval.examples.slice(0, MAX_EXAMPLES);
+  const command = COMMAND_KINDS.has(approval.actionKind);
+  const shown = approval.examples.slice(0, MAX_EXAMPLES).map((example) => command ? example : truncateMiddle(example));
   // Without examples there is nothing to continue: a single call is not "+1 more".
   const rest = shown.length > 0 ? approval.count - shown.length : 0;
   return rest > 0 ? [...shown, copy.more(rest)] : shown;
+}
+
+/** Cuts a long path in the middle, at a folder boundary when it can, and keeps the file name whole when it fits. */
+export function truncateMiddle(path: string, max = MAX_PATH_CHARS): string {
+  if (path.length <= max) return path;
+  const name = path.slice(path.search(/[^\\/]*$/u));
+  if (name.length + 4 > max) {
+    const keep = max - 1;
+    return `${path.slice(0, Math.ceil(keep / 2))}…${path.slice(path.length - Math.floor(keep / 2))}`;
+  }
+  const head = path.slice(0, max - name.length - 3);
+  const cut = Math.max(head.lastIndexOf("/"), head.lastIndexOf("\\"));
+  return cut > 0 ? `${head.slice(0, cut)}/…/${name}` : `${path.slice(0, max - name.length - 2)}…/${name}`;
 }

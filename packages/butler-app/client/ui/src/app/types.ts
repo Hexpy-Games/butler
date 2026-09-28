@@ -1660,11 +1660,21 @@ export type ApprovalRisk = "low" | "medium" | "high";
 export interface ApprovalSummary {
   actionKind: string;
   /** The folder first where there is one, then files, a connector or a named target. */
-  targets: Array<{ kind: string; path: string }>;
+  targets: ApprovalTarget[];
   count: number;
-  /** Up to three concrete items: file paths or the command line. */
+  /** Up to three concrete items: relative file paths, or the command line as sent. */
   examples: string[];
+  /** As the agent classified it; the App never classifies. */
   risk?: ApprovalRisk;
+}
+
+/** One thing a request touches. Never an absolute path. */
+export interface ApprovalTarget {
+  kind: string;
+  /** Relative to the workspace (empty for the workspace itself), `server/tool` or a target name. */
+  path: string;
+  /** The workspace's display label, where the target has one. */
+  label?: string;
 }
 
 export interface ConversationPermissionView {

@@ -22,7 +22,7 @@ function PlanDecision() {
 // #region recipe: Approval request with examples and risk
 function ApprovalRequest() {
   return (
-    <ComposerDecisionPanel icon={<Folder aria-hidden="true" size="lg" />} title="Edit 24 files in your Desktop folder?" onOpen={() => undefined}
+    <ComposerDecisionPanel icon={<Folder aria-hidden="true" size="lg" />} title="Edit 24 files in 'Desktop'?" onOpen={() => undefined}
       details={["Screenshot 10.02.14.png", "Screenshot 10.05.31.png", "Screenshot 10.09.02.png", "+21 more"]}
       aside={<Tag tone="warning">Medium risk</Tag>}
       actions={<ButtonContainer size="sm" justify="end">
@@ -51,12 +51,13 @@ export const guidance: ShowcaseGuidance = {
     },
     {
       do: { caption: "Examples go in details: one truncated line each, aligned to the title.", render: () => <ApprovalRequest /> },
-      dont: { caption: "Packing examples into the title clamps them away.", render: () => <ComposerDecisionPanel icon={<Folder aria-hidden="true" size="lg" />} title="Edit 24 files in your Desktop folder? Screenshot 10.02.14.png, Screenshot 10.05.31.png, Screenshot 10.09.02.png and 21 more" onOpen={() => undefined} actions={<Button size="sm">Allow once</Button>} /> },
+      dont: { caption: "Packing examples into the title clamps them away.", render: () => <ComposerDecisionPanel icon={<Folder aria-hidden="true" size="lg" />} title="Edit 24 files in 'Desktop'? Screenshot 10.02.14.png, Screenshot 10.05.31.png, Screenshot 10.09.02.png and 21 more" onOpen={() => undefined} actions={<Button size="sm">Allow once</Button>} /> },
     },
   ],
   content: [
-    "The title names the plan, or asks what the request will do: what, where and how many (Edit 24 files in your Desktop folder?).",
+    "The title names the plan, or asks what the request will do: what, where and how many (Edit 24 files in 'Desktop'?).",
     "Details are short concrete items (file names, the command line), at most three, then \"+N more\".",
+    "Paths in details are relative to the workspace, never absolute; cut long ones in the middle so the file name stays.",
     "Buttons are verbs (Accept plan, Deny, Allow once).",
   ],
   accessibility: ["The icon is decorative (aria-hidden); the title is a button that opens the source; details are plain text; errors are announced with role=\"alert\"."],

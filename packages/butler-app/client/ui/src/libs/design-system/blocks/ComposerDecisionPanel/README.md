@@ -37,7 +37,7 @@ button radius live in the DS instead of a product CSS module.
 <ComposerDecisionPanel icon={<ListChecks aria-hidden="true" size="lg" />} title={plan.title} onOpen={openPlan}
   actions={<ButtonContainer size="sm" justify="end">…</ButtonContainer>} />
 
-<ComposerDecisionPanel icon={<Folder aria-hidden="true" size="lg" />} title="Edit 24 files in your Desktop folder?"
+<ComposerDecisionPanel icon={<Folder aria-hidden="true" size="lg" />} title="Edit 24 files in 'Desktop'?"
   onOpen={openSource} details={["a.png", "b.png", "c.png", "+21 more"]}
   aside={<Tag tone="warning">Medium risk</Tag>}
   actions={<ButtonContainer size="sm" justify="end">…</ButtonContainer>} />
