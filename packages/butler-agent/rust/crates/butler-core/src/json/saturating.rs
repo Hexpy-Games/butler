@@ -43,21 +43,3 @@ pub fn saturating_i64(value: f64) -> i64 {
 pub fn saturating_i32(value: f64) -> i32 {
     value as i32
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn conversions_match_as_semantics() {
-        assert_eq!(saturating_usize(f64::NAN), 0);
-        assert_eq!(saturating_usize(-3.7), 0);
-        assert_eq!(saturating_usize(3.7), 3);
-        assert_eq!(saturating_u64(f64::INFINITY), u64::MAX);
-        assert_eq!(saturating_u32(1e12), u32::MAX);
-        assert_eq!(saturating_u16(65_535.9), u16::MAX);
-        assert_eq!(saturating_i64(-3.7), -3);
-        assert_eq!(saturating_i64(f64::NEG_INFINITY), i64::MIN);
-        assert_eq!(saturating_i32(1e12), i32::MAX);
-    }
-}

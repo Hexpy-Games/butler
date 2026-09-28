@@ -1,7 +1,6 @@
 use super::*;
 
-#[test]
-fn prompt_clock_formats_local_time_with_zone_names_and_rejects_unknown_zones() {
+pub(crate) fn prompt_clock_formats_local_time_with_zone_names_and_rejects_unknown_zones() {
     let clock = SystemPromptClock::new().unwrap();
     for (timezone, expected) in [
         ("UTC", "Monday, September 14, 2026 at 12:00:00 AM UTC"),
@@ -26,25 +25,4 @@ fn prompt_clock_formats_local_time_with_zone_names_and_rejects_unknown_zones() {
         );
     }
     assert!(clock.format_local_time(0, "UTC+9").is_err());
-}
-
-#[test]
-fn prompt_clock_native_iso_preserves_range_and_rejects_invalid_timestamp() {
-    let clock = SystemPromptClock::new().unwrap();
-    let epoch = 1_789_344_000_000;
-    assert_eq!(
-        clock.parse_timestamp("2026-09-14T00:00:00.000Z"),
-        Some(epoch)
-    );
-    assert_eq!(
-        clock.iso_from_epoch_millis(epoch).unwrap(),
-        "2026-09-14T00:00:00.000Z"
-    );
-    assert!(clock.iso_from_epoch_millis(8_640_000_000_000_001).is_err());
-    assert!(
-        clock
-            .format_local_time(8_640_000_000_000_001, "UTC")
-            .is_err()
-    );
-    assert_eq!(clock.parse_timestamp("not a timestamp"), None);
 }

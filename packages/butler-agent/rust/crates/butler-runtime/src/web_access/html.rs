@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
 mod extraction;
+#[cfg(test)]
+pub(crate) use extraction::tests::article_extraction_matches_source_semantics_for_generic_content;
 
 pub(super) use extraction::extract_readable_html;
 

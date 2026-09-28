@@ -72,11 +72,43 @@ impl From<UpdateCode> for UpdateError {
 #[cfg(test)]
 mod tests {
     use super::UpdateCode;
+    use crate::context::ContextCode;
+    use crate::operations::automation::AutomationCode;
+    use crate::web_access::WebAccessCode;
 
+    fn spelled<T: Copy>(all: &[T], as_str: fn(T) -> &'static str) -> Vec<&'static str> {
+        all.iter().map(|code| as_str(*code)).collect()
+    }
+
+    /// Format pin: every wire code table of the runtime (context, automation,
+    /// update and web access) keeps its pinned spelling and order.
+    // test-category: format-pin
     #[test]
     fn wire_codes_are_stable() {
-        let codes: Vec<&str> = UpdateCode::ALL.iter().map(|code| code.as_str()).collect();
-        let expected: Vec<&str> = include_str!("wire_codes.txt").lines().collect();
-        assert_eq!(codes, expected);
+        for (domain, codes, pinned) in [
+            (
+                "update",
+                spelled(UpdateCode::ALL, UpdateCode::as_str),
+                include_str!("wire_codes.txt"),
+            ),
+            (
+                "automation",
+                spelled(AutomationCode::ALL, AutomationCode::as_str),
+                include_str!("../automation/wire_codes.txt"),
+            ),
+            (
+                "context",
+                spelled(ContextCode::ALL, ContextCode::as_str),
+                include_str!("../../context/wire_codes.txt"),
+            ),
+            (
+                "web access",
+                spelled(WebAccessCode::ALL, WebAccessCode::as_str),
+                include_str!("../../web_access/wire_codes.txt"),
+            ),
+        ] {
+            let expected: Vec<&str> = pinned.lines().collect();
+            assert_eq!(codes, expected, "{domain}");
+        }
     }
 }

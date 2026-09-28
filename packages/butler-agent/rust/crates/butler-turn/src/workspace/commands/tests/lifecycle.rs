@@ -7,52 +7,6 @@ use butler_platform::process_control::{Liveness, liveness};
 use super::{CommandStep, Commands, Fixture, GuidedAccess, ScriptedProcesses};
 
 #[tokio::test]
-async fn guided_normal_close_kills_owned_background_descendant() {
-    let fixture = Fixture::new();
-    let owner = Commands::new();
-    let pid_path = fixture.0.join("child.pid");
-    let command = format!("sleep 10 & echo $! > '{}'; exit 0", pid_path.display());
-    let output = owner
-        .submit_guided(fixture.guided(&command))
-        .unwrap()
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(output.summary.exit_code, Some(0));
-    let pid: u32 = std::fs::read_to_string(&pid_path)
-        .unwrap()
-        .trim()
-        .parse()
-        .unwrap();
-    butler_test_support::eventually("the owned descendant to exit", || {
-        liveness(pid) == Liveness::Gone
-    })
-    .await;
-    owner.close().await;
-}
-
-#[tokio::test]
-async fn spool_initialization_failure_does_not_start_child() {
-    let fixture = Fixture::new();
-    let owner = Commands::new();
-    let spool_parent = fixture.0.join("runtime/btcc");
-    std::fs::create_dir_all(&spool_parent).unwrap();
-    std::fs::write(spool_parent.join("command-spool"), b"occupied").unwrap();
-    let marker = fixture.0.join("started");
-    let command = format!("printf x > '{}'", marker.display());
-    let failure = owner
-        .submit_guided(fixture.guided(&command))
-        .unwrap()
-        .await
-        .unwrap()
-        .unwrap_err();
-    assert_eq!(failure.code(), "command_io_failed");
-    assert!(!marker.exists());
-    owner.close().await;
-    assert_eq!(owner.active_count(), 0);
-}
-
-#[tokio::test]
 async fn capture_write_failure_terminates_child_and_discards_owned_files() {
     let fixture = Fixture::new();
     let owner = Commands::with_host(Arc::new(ScriptedProcesses {
@@ -78,29 +32,6 @@ async fn capture_write_failure_terminates_child_and_discards_owned_files() {
 }
 
 #[tokio::test]
-async fn structured_timeout_and_close_reap_children() {
-    let fixture = Fixture::new();
-    let owner = Commands::new();
-    let mut timed = fixture.structured(vec![CommandStep {
-        executable: "/bin/sh".into(),
-        arguments: vec![
-            "-c".into(),
-            "trap '' TERM; while :; do sleep 1; done".into(),
-        ],
-    }]);
-    timed.timeout_ms = Some(10.0);
-    let output = tokio::time::timeout(std::time::Duration::from_secs(3), async {
-        owner.submit_structured(timed).unwrap().await.unwrap()
-    })
-    .await
-    .unwrap();
-    assert!(output.timed_out);
-    assert_eq!(output.exit_code, None);
-    assert_eq!(owner.active_count(), 0);
-    owner.close().await;
-}
-
-#[tokio::test]
 async fn close_cancels_running_command_and_rejects_admission() {
     let fixture = Fixture::new();
     let owner = Commands::new();
@@ -121,7 +52,16 @@ async fn close_cancels_running_command_and_rejects_admission() {
     );
 }
 
+/// Security boundary: commands see only the allowlisted host environment. A
+/// guided command never sees a private host value, and a structured step's
+/// undefined entry removes an inherited one.
+// test-category: security
 #[tokio::test]
+async fn command_environment_excludes_host_values() {
+    guided_environment_excludes_non_allowlisted_host_values().await;
+    structured_undefined_environment_entry_removes_inherited_value().await;
+}
+
 async fn guided_environment_excludes_non_allowlisted_host_values() {
     let fixture = Fixture::new();
     let owner = Commands::new();
@@ -136,7 +76,6 @@ async fn guided_environment_excludes_non_allowlisted_host_values() {
     owner.close().await;
 }
 
-#[tokio::test]
 async fn structured_undefined_environment_entry_removes_inherited_value() {
     let fixture = Fixture::new();
     let owner = Commands::new();

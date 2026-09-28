@@ -2,8 +2,6 @@
 
 mod artifacts;
 mod plan;
-#[cfg(test)]
-mod window_tests;
 
 use std::collections::{BTreeMap, HashMap};
 

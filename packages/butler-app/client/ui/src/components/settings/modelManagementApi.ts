@@ -12,6 +12,8 @@ import type {
 export interface OpenAIOAuthLoginResult {
   auth_url?: string;
   error?: string;
+  /** Id of the sign-in flow (#279 agent flow, or the desktop helper's session). */
+  flow_id?: string;
   label?: string;
   redirect_uri?: string;
   status:
@@ -48,6 +50,11 @@ export async function getOpenAIOAuthLoginStatus(): Promise<OpenAIOAuthLoginResul
   return await callOpenAIOAuthBridge("getOpenAIOAuthLoginStatus");
 }
 
+/** Desktop helper fallback for agents without the #279 sign-in routes. */
+export async function cancelOpenAIOAuthLogin(flowId?: string): Promise<OpenAIOAuthLoginResult> {
+  return await callOpenAIOAuthBridge("cancelOpenAIOAuthLogin", { flowId });
+}
+
 export async function submitOpenAIOAuthCallback(
   callbackUrl: string,
 ): Promise<OpenAIOAuthLoginResult> {
@@ -58,6 +65,7 @@ export async function submitOpenAIOAuthCallback(
 
 async function callOpenAIOAuthBridge(
   method:
+    | "cancelOpenAIOAuthLogin"
     | "getOpenAIOAuthLoginStatus"
     | "restartOpenAIOAuthLogin"
     | "startOpenAIOAuthLogin"

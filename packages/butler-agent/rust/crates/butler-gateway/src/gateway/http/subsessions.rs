@@ -285,6 +285,9 @@ fn resync() -> HttpError {
 mod tests {
     use super::*;
 
+    /// Security boundary: session cursors are signed and bound to their session;
+    /// tampered or cross-session cursors are refused.
+    // test-category: security
     #[test]
     fn session_cursor_is_signed_and_bound_to_session() {
         let Ok(token) = encode_cursor("session-a", 42, "secret") else {

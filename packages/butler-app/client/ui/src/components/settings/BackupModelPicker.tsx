@@ -13,6 +13,7 @@ import { modelDisplayName, tokenWindowLabel } from "@/app/utils.ts";
 import type { AppModelSummary, SettingsView } from "@/app/types.ts";
 import type { SettingsUpdate } from "./settingsTypes";
 import { addBackupModel, MAX_BACKUP_MODELS } from "./backupModelsUtils";
+import { ProviderMark } from "./ProviderMark";
 
 export function BackupModelPicker({
   models,
@@ -60,6 +61,7 @@ export function BackupModelPicker({
           id: model.model_ref,
           label: modelDisplayName(model),
           description: `${model.provider_label} · ${tokenWindowLabel(model.context_window_tokens)}`,
+          icon: <ProviderMark providerId={model.provider_id} platform={model.platform} />,
           onSelect: () => {
             const nextFallback = addBackupModel(fallback, model.model_ref);
             if (nextFallback === fallback) return;

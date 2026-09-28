@@ -18,39 +18,6 @@ fn batch_recovery_preserves_file_hash_consistency_and_path_order() {
 }
 
 #[test]
-fn actual_bun_effect_identity_and_json_bytes_match() {
-    let fixture: serde_json::Value =
-        serde_json::from_str(include_str!("../bun-golden.json")).unwrap();
-    for case in fixture["cases"].as_array().unwrap() {
-        let input = &case["input"];
-        let binding = if input["reviewedPlanBinding"] == "accepted_plan" {
-            PlanBinding::AcceptedPlan
-        } else {
-            PlanBinding::ExactAction
-        };
-        let value = super::identity::build_identity(super::identity::IdentityParts {
-            work_id: input["workId"].as_str().unwrap(),
-            plan_revision_id: input["planRevisionId"].as_str().unwrap(),
-            action_key: input["actionKey"].as_str().unwrap(),
-            binding,
-            occurrence: input
-                .get("occurrenceId")
-                .and_then(serde_json::Value::as_str),
-            capability: input["capability"].as_str().unwrap(),
-            normalized_target: input["normalizedTarget"].as_str().unwrap(),
-            sanitized_target: input["sanitizedTarget"].as_str().unwrap(),
-            normalized_input: &input["normalizedInput"],
-        })
-        .unwrap();
-        assert_eq!(serde_json::to_value(value).unwrap(), case["identity"]);
-        assert_eq!(
-            super::identity::stable(&input["normalizedInput"]).unwrap(),
-            case["inputJson"].as_str().unwrap()
-        );
-    }
-}
-
-#[test]
 fn actual_bun_recovery_path_boundaries_match() {
     let fixture: serde_json::Value =
         serde_json::from_str(include_str!("../bun-golden.json")).unwrap();

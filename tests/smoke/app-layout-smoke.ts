@@ -10,9 +10,9 @@ import {
 } from "../../packages/butler-app/client/ui/src/app/utils.ts";
 import { appCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import {
-  FIRST_RUN_STORAGE_KEY,
-  firstRunCompleteState,
-} from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
+  LEGACY_FIRST_RUN_STORAGE_KEY as FIRST_RUN_STORAGE_KEY,
+  legacyFirstRunCompleteRecord,
+} from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 import type { ProjectSummary, SessionSummaryView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 
 const root = process.cwd();
@@ -315,8 +315,8 @@ assert(
 const server = await createNativeAppServer({
   butlerData: join(tempDir, "data"),
   uiRoot,
-  // The smoke asserts English copy (firstRunCompleteState("en")); keep the
-  // gateway's saved language in step so Settings does not switch locale.
+  // The smoke asserts English copy; keep the gateway's saved language in step
+  // so Settings does not switch locale.
   config: { user: { name: "Smoke", language: "en" } },
   stubReply: async (request) => {
     await smokeResponderProgressGate;
@@ -363,7 +363,7 @@ const page = await browser.newPage({
   deviceScaleFactor: 1,
 });
 await server.signIn(page);
-const firstRunStateJson = JSON.stringify(firstRunCompleteState("en"));
+const firstRunStateJson = JSON.stringify(legacyFirstRunCompleteRecord());
 await page.addInitScript(
   ({ key, value }) => {
     window.localStorage.setItem(key, value);

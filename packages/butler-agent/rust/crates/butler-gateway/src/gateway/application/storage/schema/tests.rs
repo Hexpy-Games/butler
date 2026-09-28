@@ -6,7 +6,18 @@ use crate::gateway::application::settings::{
 };
 use butler_turn::btcc::AccessMode;
 
+/// Format pin: the App database schema. A fresh database has full support and
+/// a working message FTS, deployed events gain their actual turn index
+/// without rewriting payloads, and deployed schemas gain columns without
+/// losing unknown data.
+// test-category: format-pin
 #[test]
+fn app_schema_migrations_keep_existing_data() {
+    fresh_schema_has_full_support_and_functional_message_fts();
+    deployed_events_gain_actual_turn_index_without_rewriting_payloads();
+    deployed_schema_adds_columns_without_removing_unknown_data();
+}
+
 fn fresh_schema_has_full_support_and_functional_message_fts() {
     let mut connection = Connection::open_in_memory().unwrap();
     migrate(&mut connection, None).unwrap();
@@ -52,7 +63,6 @@ fn fresh_schema_has_full_support_and_functional_message_fts() {
     assert!(table_exists(&connection, "app_space_nodes"));
 }
 
-#[test]
 fn deployed_events_gain_actual_turn_index_without_rewriting_payloads() {
     let mut connection = Connection::open_in_memory().unwrap();
     migrate(&mut connection, None).unwrap();
@@ -86,7 +96,6 @@ fn deployed_events_gain_actual_turn_index_without_rewriting_payloads() {
     assert_eq!(actual, 1);
 }
 
-#[test]
 fn deployed_schema_adds_columns_without_removing_unknown_data() {
     let mut connection = Connection::open_in_memory().unwrap();
     connection

@@ -170,9 +170,10 @@ After: `설정이 닫히고 스킬을 만드는 새 대화가 열립니다.`
 
 ## A justified exception
 
-`getting-started/first-run.mdx` lists the onboarding safety notice exactly as
-the app shows it, and one app sentence ends in `~하세요.`. Rewriting it would
-misquote the app, so the line carries a disable with a reason:
+An earlier `getting-started/first-run.mdx` listed the onboarding safety notice
+exactly as the app showed it, and one app sentence ended in `~하세요.`.
+Rewriting it would have misquoted the app, so the line carried a disable with a
+reason:
 
 ```mdx
 - 민감한 경로나 토큰이 포함된 요청은 실행 전에 한 번 더 확인하세요. {/* prose-lint-disable-line sentence-ending -- quotes the onboarding safety notice (ko.ts safetyItems) verbatim */}

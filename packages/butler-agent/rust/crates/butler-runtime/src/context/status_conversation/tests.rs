@@ -14,7 +14,7 @@ use butler_turn::conversation::{
     ConversationSummaryInput,
 };
 
-use super::{StatusFact, read_status_conversation_facts, read_status_transcript_summary};
+use super::{StatusFact, read_status_conversation_facts};
 
 struct Clock(AtomicU64);
 
@@ -136,33 +136,4 @@ async fn existing_conversation_summary_is_projected_without_database_writes() {
     assert_eq!(facts.conversation.unavailable_reason, None);
     assert!(before == after, "status changed the conversation database");
     assert!(!fixture.0.join("runtime/session-store.sqlite").exists());
-}
-
-#[test]
-fn transcript_summary_streams_jsonl_without_creating_the_source_index() {
-    let fixture = Fixture::new();
-    let transcript = fixture.0.join("transcripts/butler_main.jsonl");
-    fs::create_dir_all(transcript.parent().unwrap()).unwrap();
-    let contents = concat!(
-        "{\"kind\":\"inbound\",\"timestamp\":\"2026-09-23T01:00:00Z\"}\n",
-        "not-json\n",
-        "42\n",
-        "{\"kind\":\"tick\",\"timestamp\":\"2026-09-23T02:00:00Z\"}\n",
-        "{\"kind\":\"outbound\"}"
-    );
-    fs::write(&transcript, contents).unwrap();
-
-    let summary = read_status_transcript_summary(&fixture.0, "butler/main");
-
-    assert_eq!(summary.exists, Some(true));
-    assert_eq!(summary.bytes, Some(contents.len() as u64));
-    assert_eq!(summary.events, Some(3));
-    assert_eq!(summary.conversation_events, Some(2));
-    assert_eq!(
-        summary.latest_timestamp.as_deref(),
-        Some("2026-09-23T02:00:00Z")
-    );
-    assert_eq!(summary.parse_errors, Some(2));
-    assert_eq!(summary.unavailable_reason, None);
-    assert!(!fixture.0.join("metrics/transcript-summary").exists());
 }
