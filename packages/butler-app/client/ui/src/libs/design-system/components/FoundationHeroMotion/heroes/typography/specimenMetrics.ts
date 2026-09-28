@@ -73,6 +73,24 @@ export function em(value: number): string {
   return `${Math.round(value * 1000) / 1000}em`;
 }
 
+/** Graphemes of a line (a Hangul syllable is one), for revealing it glyph by glyph. */
+export function graphemes(text: string): string[] {
+  const Segmenter = (Intl as unknown as { Segmenter?: new (locale?: string, options?: { granularity: string }) => { segment: (text: string) => Iterable<{ segment: string }> } }).Segmenter;
+  return Segmenter ? [...new Segmenter(undefined, { granularity: "grapheme" }).segment(text)].map((part) => part.segment) : [...text];
+}
+
+/** Right edge (px) of each grapheme of `text` set in a CSS `font`: where a left-to-right reveal pauses. */
+export function graphemeEdges(font: string, text: string): number[] {
+  const context = typeof document === "undefined" ? null : document.createElement("canvas").getContext("2d");
+  if (!context) return [];
+  context.font = font;
+  let prefix = "";
+  return graphemes(text).map((part) => {
+    prefix += part;
+    return context.measureText(prefix).width;
+  });
+}
+
 /** Font ascent and descent (px) of `text` set in a CSS `font`, for placing a baseline; null without canvas metrics. */
 export function fontBox(font: string, text: string): { ascent: number; descent: number } | null {
   const context = typeof document === "undefined" ? null : document.createElement("canvas").getContext("2d");

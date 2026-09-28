@@ -4,11 +4,6 @@ import type { TypeCopy } from "./typeCopy";
 import type { LineInfo } from "./typeLines";
 import t from "./TypographyHero.module.css";
 
-/** Dash length that covers a line's outlines: generous per character, more for Hangul. */
-export function lineDash(line: LineInfo): number {
-  return [...line.text].reduce((sum, char) => sum + (/[ㄱ-힝]/u.test(char) ? 7 : 4), 0) * line.font.size;
-}
-
 /** The tag's steps: the token, then its size, its line height, its tracking as each is applied. */
 export function tagSteps(line: LineInfo, copy: TypeCopy, compact: boolean): string[] {
   const token = compact ? line.token : `${copy.roles[line.role]} · ${line.token}`;
@@ -17,14 +12,38 @@ export function tagSteps(line: LineInfo, copy: TypeCopy, compact: boolean): stri
   return [token, `${line.token} · ${size}`, `${line.token} · ${leading}`, `${line.token} · ${leading} · ${line.font.tracking}`];
 }
 
+/** Width a line's reveal window covers (the ink may overhang the last advance a little). */
+export function wipeWidth(line: LineInfo): number {
+  return Math.ceil(Math.max(line.box.w, line.edges.at(-1) ?? 0) + line.font.size * 0.2);
+}
+
+/**
+ * One layer of a line (outline or fill), shown through a window that opens
+ * left to right glyph by glyph: the window (`w…-o`) and its content
+ * (`w…-i`) move in opposite directions, so only the window's edge travels.
+ */
+function Layer({ line, name, fill }: { line: LineInfo; name: string; fill: boolean }) {
+  return (
+    <span className={t.wipe} data-t={`${name}-o-${line.id}`} style={{ "--wipe-w": `${wipeWidth(line)}px` } as CSSProperties}>
+      <span className={t.wipeIn} data-t={`${name}-i-${line.id}`}>
+        <svg className={t.lineSvg} height={line.box.h} width={wipeWidth(line)}>
+          <text className={fill ? t.lineFill : t.lineOutline} x={0} y={line.baseline}
+            fontFamily={line.font.family} fontSize={line.font.size} fontWeight={line.font.weight} fill={fill ? line.font.color : "none"} stroke={fill ? "none" : line.font.color}>
+            {line.text}
+          </text>
+        </svg>
+      </span>
+    </span>
+  );
+}
+
 /**
  * The build layer of one component, a pure overlay (absolute, no layout): for
  * each text line, a token tag far out in the frame gutter joined to the line
- * by a thin leader; the line's own outline (same font, size and weight as the
- * real text) drawn along its contours at a neutral size, then set to its role
- * size; its line box shown as a leading band with a baseline-to-baseline
- * measure; the tag counting the values in as they apply; then the real text
- * fills in and the guides recede.
+ * by a thin leader; the line's outline revealed glyph by glyph at a neutral
+ * size, then set to its role size; its line box shown as a leading band with
+ * a measure; the tag counting size, line height and tracking in; the glyphs
+ * filled left to right; then the real text takes over and the guides recede.
  */
 export function LineOverlay({ lines, copy, compact }: { lines: LineInfo[]; copy: TypeCopy; /** Token name only (tall canvas). */ compact: boolean }) {
   return (
@@ -39,12 +58,10 @@ export function LineOverlay({ lines, copy, compact }: { lines: LineInfo[]; copy:
           <span className={t.lineBand} data-t={`lband-${line.id}`} />
           <span className={t.lineMeasure} data-t={`lm-${line.id}`} />
           {line.draw ? (
-            <svg className={t.lineSvg} data-t={`ls-${line.id}`} height={line.box.h} width={line.box.w}>
-              <text className={t.lineOutline} data-t={`lo-${line.id}`} x={0} y={line.baseline} style={{ "--dash": `${lineDash(line)}px` } as CSSProperties}
-                fontFamily={line.font.family} fontSize={line.font.size} fontWeight={line.font.weight} stroke={line.font.color}>
-                {line.text}
-              </text>
-            </svg>
+            <span className={t.lineScale} data-t={`ls-${line.id}`}>
+              <Layer fill={false} line={line} name="wo" />
+              <Layer fill line={line} name="wf" />
+            </span>
           ) : null}
         </span>
       ))}

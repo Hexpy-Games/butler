@@ -1,5 +1,5 @@
 import { cut, type Key, type Pose, type Track } from "../../heroTimeline";
-import { lineDash } from "./LineOverlay";
+import { wipeWidth } from "./LineOverlay";
 import type { SpecimenMetrics } from "./specimenMetrics";
 import { cameras } from "./typeCamera";
 import { BEATS, FINALE, FLIGHTS, LOOP, PANELS, select, specimenTracks, type TypeGeometry } from "./typeChoreography";
@@ -7,7 +7,7 @@ import { STRUCTURE, type LineInfo } from "./typeLines";
 
 /** The list scene ends and the first build starts here; each build takes BUILD beats. */
 const FIRST = 31.4;
-const BUILD = 12.5;
+const BUILD = 14;
 /** Built text leaves at the loop from here. */
 const OUT = LOOP + 1.3;
 
@@ -21,32 +21,70 @@ function part(name: string, at: number): Track {
   };
 }
 
+/** Beats per glyph of a left-to-right reveal (calm), capped so long lines stay within their moment. */
+const glyphBeats = (count: number) => Math.min(0.16, 2 / Math.max(1, count));
+
+/**
+ * A window opening left to right glyph by glyph: the window moves right as
+ * its content moves back left, pausing at each grapheme's right edge (a
+ * decelerating step per glyph). Returns the window and content keys and the
+ * beat it is fully open.
+ */
+function reveal(width: number, edges: number[], start: number): { outer: Key[]; inner: Key[]; end: number } {
+  const step = glyphBeats(edges.length);
+  const marks = edges.map((edge, k) => ({ at: start + (k + 1) * step, open: Math.min(width, edge) }));
+  const end = start + (edges.length + 1) * step;
+  const keys = (sign: number): Key[] => [
+    { at: 0, x: sign * width }, { at: start, x: sign * width },
+    ...marks.map(({ at, open }): Key => ({ at, x: sign * (width - open), ease: "decelerate" })),
+    { at: end, x: 0, ease: "decelerate" }, { at: OUT + 0.4, x: 0 }, { at: BEATS - 0.1, x: sign * width },
+  ];
+  return { outer: keys(-1), inner: keys(1), end };
+}
+
 /**
  * One text line, step by step: its tag appears far out in the gutter with a
- * leader to the line; the outline is drawn along its contours at a neutral
- * size; the role size is applied; the line box shows as a leading band with
- * its measure; the tag counts size, line height and tracking in as each
- * applies; the real text fills in and the guides recede. Pure overlay: the
- * component never reflows.
+ * leader to the line; the outline appears glyph by glyph left to right at a
+ * neutral size; the role size is applied; the line box shows as a leading
+ * band with its measure; the tag counts size, line height and tracking in;
+ * the glyphs fill left to right; the real text takes over and the guides
+ * recede. Pure overlay: the component never reflows.
  */
 function line(info: LineInfo, a: number, leave: number): Track[] {
   const id = info.id;
   const recede = (from: number, keys: Key[]): Key[] => [...keys, { at: from, o: 1 }, { at: from + 0.6, o: 0, ease: "accelerate" }];
-  const steps = [0, a + 2.8, a + 3.8, a + 4.6, BEATS];
+  const edges = info.draw ? info.edges : Array.from({ length: 10 }, (_, k) => ((k + 1) / 10) * info.box.w);
+  const width = info.draw ? wipeWidth(info) : info.box.w;
+  const outline = reveal(width, edges, a + 0.4);
+  const sized = outline.end + 0.8;
+  const fillFrom = sized + 1.4;
+  const fill = reveal(width, edges, info.draw ? fillFrom : a + 0.6);
+  const done = fill.end;
+  const guidesOff = Math.max(done, sized + 1.2) + 0.6;
+  const steps = [0, outline.end, sized + 0.2, sized + 0.8, BEATS];
   const tracks: Track[] = [
     { select: select(`lb-${id}`), keys: recede(leave, [{ at: 0, x: 8, o: 0 }, { at: a, o: 0 }, { at: a + 0.6, x: 0, o: 1, ease: "decelerate" }]) },
     ...[0, 1, 2, 3].map((k): Track => ({ select: select(`lb-${id}-${k}`), keys: cut(steps[k]!, steps[k + 1]!, BEATS) })),
-    { select: select(`ll-${id}`), keys: recede(leave, [{ at: 0, sx: 0, o: 0 }, { at: a + 0.3, sx: 0, o: 1 }, { at: a + 1.1, sx: 1, ease: "decelerate" }]) },
-    { select: select(`lband-${id}`), keys: recede(a + 5.4, [{ at: 0, sx: 0, o: 0 }, { at: a + 3.6, sx: 0, o: 0 }, { at: a + 4.4, sx: 1, o: 1, ease: "emphasized" }]) },
-    { select: select(`lm-${id}`), keys: recede(a + 5.4, [{ at: 0, sy: 0, o: 0 }, { at: a + 3.8, sy: 0, o: 0 }, { at: a + 4.4, sy: 1, o: 1, ease: "decelerate" }]) },
-    { select: info.select, keys: [{ at: 0, o: 0 }, { at: a + (info.draw ? 4.8 : 2.4), o: 0 }, { at: a + (info.draw ? 5.4 : 3.2), o: 1, ease: "decelerate" }, { at: OUT, o: 1 }, { at: OUT + 0.2, o: 0 }] },
+    { select: select(`ll-${id}`), keys: recede(leave, [{ at: 0, sx: 0, o: 0 }, { at: a + 0.2, sx: 0, o: 1 }, { at: a + 1, sx: 1, ease: "decelerate" }]) },
+    { select: select(`lband-${id}`), keys: recede(guidesOff, [{ at: 0, sx: 0, o: 0 }, { at: sized, sx: 0, o: 0 }, { at: sized + 0.8, sx: 1, o: 1, ease: "emphasized" }]) },
+    { select: select(`lm-${id}`), keys: recede(guidesOff, [{ at: 0, sy: 0, o: 0 }, { at: sized + 0.2, sy: 0, o: 0 }, { at: sized + 0.8, sy: 1, o: 1, ease: "decelerate" }]) },
   ];
-  if (!info.draw) return tracks;
-  const dash = lineDash(info);
+  if (!info.draw) {
+    // The paragraph reveals its own rows left to right.
+    return [...tracks,
+      { select: info.select, keys: [{ at: 0, o: 0 }, { at: a + 0.6, o: 1 }, { at: OUT, o: 1 }, { at: OUT + 0.2, o: 0 }, ...fill.outer] },
+      { select: select("wa-i"), keys: fill.inner },
+    ];
+  }
+  const visible = (from: number, off: number): Key[] => [{ at: 0, o: 0 }, { at: from, o: 1 }, { at: off, o: 1 }, { at: off + 0.6, o: 0, ease: "accelerate" }];
   return [
     ...tracks,
-    { select: select(`ls-${id}`), keys: [{ at: 0, s: 0.72 }, { at: a + 2.6, s: 0.72 }, { at: a + 3.4, s: 1, ease: "emphasized" }, { at: BEATS - 0.1, s: 0.72 }] },
-    { select: select(`lo-${id}`), keys: [{ at: 0, dash, o: 0 }, { at: a + 0.6, o: 1 }, { at: a + 2.4, dash: 0 }, { at: a + 5, o: 1 }, { at: a + 5.6, o: 0, ease: "accelerate" }, { at: BEATS - 0.1, dash }] },
+    { select: select(`ls-${id}`), keys: [{ at: 0, s: 0.72 }, { at: outline.end, s: 0.72 }, { at: sized, s: 1, ease: "emphasized" }, { at: BEATS - 0.1, s: 0.72 }] },
+    { select: select(`wo-o-${id}`), keys: [...visible(a + 0.4, done), ...outline.outer] },
+    { select: select(`wo-i-${id}`), keys: outline.inner },
+    { select: select(`wf-o-${id}`), keys: [...visible(fillFrom, done + 0.5), ...fill.outer] },
+    { select: select(`wf-i-${id}`), keys: fill.inner },
+    { select: info.select, keys: [{ at: 0, o: 0 }, { at: done, o: 0 }, { at: done + 0.4, o: 1, ease: "decelerate" }, { at: OUT, o: 1 }, { at: OUT + 0.2, o: 0 }] },
   ];
 }
 
@@ -105,7 +143,7 @@ function assembly(g: TypeGeometry): Track[] {
         ],
       },
       ...STRUCTURE[panel].map((name, j) => part(name, at + 0.8 + j * 0.2)),
-      ...lines.flatMap((info, j) => line(info, at + 1.4 + j * 1.3, at + BUILD - 1.6)),
+      ...lines.flatMap((info, j) => line(info, at + 1.4 + j * 1.3, at + BUILD - 1)),
     ];
   });
   const tnumAt: Pose = { x: g.fly.metric.x - g.tnum.x, y: g.fly.metric.y + g.fly.metric.h + 4 - g.tnum.y };

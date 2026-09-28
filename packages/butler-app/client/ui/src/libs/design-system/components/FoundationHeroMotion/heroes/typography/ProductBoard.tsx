@@ -68,7 +68,7 @@ export function ProductBoard({ copy, layout, lines }: { copy: TypeCopy; layout: 
         <Card padding="md">
           <MessageRow role="user"><Typo.Body><Line id="ask">{copy.ask}</Line></Typo.Body></MessageRow>
           <MessageRow role="assistant" footer={<MessageFooter><Typo.Caption tone="tertiary" numeric="tabular"><Line id="meta">{copy.meta}</Line></Typo.Caption></MessageFooter>}>
-            <Line id="answer" block><Typo.Body>{copy.answer}</Typo.Body></Line>
+            <Line id="answer" block><div data-t="wa-i"><Typo.Body>{copy.answer}</Typo.Body></div></Line>
             <Typo.Code as="div"><Line id="command">{copy.command}</Line></Typo.Code>
           </MessageRow>
         </Card>

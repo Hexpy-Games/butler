@@ -5,7 +5,7 @@ import { col, onBaseline, SPECIMEN, type TypeLayout } from "./typeGrid";
 import { OUTLINE_EM } from "./TypeSpecimen";
 
 /**
- * 02 Typography hero, "from token to product": one 98.4-beat cycle (31.5 s at
+ * 02 Typography hero, "from token to product": one 104.4-beat cycle (33.4 s at
  * --motion-deliberate 320 ms). Beat marks:
  *
  *   0–7    Construction  metric guides draw in; the real Pretendard outlines of
@@ -15,22 +15,22 @@ import { OUTLINE_EM } from "./TypeSpecimen";
  *   18–20  Match cut     the specimen shrinks onto the H2 rung: "Appearance"
  *   20–31  Type list     the role list rises, flat and frame-filling; the camera
  *                        closes in and travels down it into the empty space below
- *   31–81  Build         four real components, one at a time, each in its own
+ *   31–87  Build         four real components, one at a time, each in its own
  *                        empty area: surface, structure, then its text lines
  *                        drawn like the specimen (guide, outline, fill) with
  *                        the typography token of each line on a badge
- *   81–86  Finale        everything pushes up and gathers onto the grid
- *   86–94  Settle        the composed poster: tokens beside the product
- *   94–98  Loop          the product recedes, the specimen grows back and its
+ *   87–92  Finale        everything pushes up and gathers onto the grid
+ *   92–100 Settle        the composed poster: tokens beside the product
+ *   100–104 Loop          the product recedes, the specimen grows back and its
  *                        fill clears to the blueprint of beat 0
  *
  * Every placement comes from the grid (typeGrid.ts) or from measuring the
  * poster, so it holds for both canvases, themes, languages and fonts. The
  * components gather into the poster from FINALE; the loop starts at LOOP.
  */
-export const FINALE = 81.4;
-export const LOOP = 94.4;
-export const BEATS = 98.4;
+export const FINALE = 87.4;
+export const LOOP = 100.4;
+export const BEATS = 104.4;
 
 export const FLIGHTS = ["title", "dash", "field", "ask", "command", "meta", "metric"] as const;
 export type Flight = (typeof FLIGHTS)[number];
@@ -110,8 +110,9 @@ export function specimenTracks(g: TypeGeometry, m: SpecimenMetrics): Track[] {
     select: select(name),
     keys: [{ at: 0, dash, o: 1, x }, { at: from, dash }, { at: from + 3.8, dash: 0 }, { at: 5.6, o: 1 }, { at: 6.6, o: 0, ease: "accelerate" }, { at: LOOP + 3.9, dash, o: 0 }, { at: BEATS, o: 1 }],
   });
-  const fillKeys = (x: (w: 300 | 800 | 620) => number): Key[] => [
-    { at: 0, o: 0, wght: 300, x: x(300) }, { at: 5, o: 0 }, { at: 6.4, o: 1, ease: "decelerate" },
+  // Fills in left to right: A, then 가.
+  const fillKeys = (x: (w: 300 | 800 | 620) => number, delay: number): Key[] => [
+    { at: 0, o: 0, wght: 300, x: x(300) }, { at: 5 + delay, o: 0 }, { at: 6 + delay, o: 1, ease: "decelerate" },
     ...byWeight((w) => ({ wght: w, x: x(w) })), { at: LOOP + 3, o: 1 }, { at: LOOP + 3.9, o: 0, ease: "accelerate" }, { at: LOOP + 3.95, wght: 300, x: x(300) },
   ];
   return [
@@ -134,8 +135,8 @@ export function specimenTracks(g: TypeGeometry, m: SpecimenMetrics): Track[] {
     { select: select("size-label"), keys: show(2.2, 3) },
     outline("outline-a", OUTLINE_EM.a * size, 0.5, 0),
     outline("outline-g", OUTLINE_EM.g * size, 1, shiftG(300)),
-    { select: select("fill-a"), keys: fillKeys(() => 0) },
-    { select: select("fill-g"), keys: fillKeys(shiftG) },
+    { select: select("fill-a"), keys: fillKeys(() => 0, 0) },
+    { select: select("fill-g"), keys: fillKeys(shiftG, 0.5) },
     {
       select: select("control"),
       keys: [{ at: 0, ...control, x: control.x + 16, o: 0 }, { at: BACK[0], o: 0 }, { at: BACK[1], x: control.x, o: 1, ease: "decelerate" }, { at: AWAY[0], o: 1 }, { at: AWAY[1], o: 0, ease: "accelerate" }],

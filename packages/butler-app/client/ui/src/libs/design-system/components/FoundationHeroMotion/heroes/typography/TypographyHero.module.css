@@ -394,7 +394,7 @@
 .lineBand,
 .lineMeasure,
 .lineTagStep,
-.lineOutline {
+.wipe {
   opacity: 0;
 }
 
@@ -449,19 +449,43 @@
   transform-origin: 50% 0;
 }
 
+/* The line's glyphs: set at a neutral size, then scaled to the role size from
+   the baseline's start. Each layer shows through a window that opens left to
+   right (the window and its content move in opposite directions). */
+.lineScale {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 100%;
+}
+
+.wipe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  inline-size: var(--wipe-w);
+  block-size: 100%;
+}
+
+.wipeIn {
+  position: absolute;
+  inset: 0;
+}
+
 .lineSvg {
   position: absolute;
   inset: 0;
   overflow: visible;
-  transform-origin: 0 100%;
 }
 
 .lineOutline {
-  fill: none;
-  stroke-dasharray: var(--dash) var(--dash);
-  stroke-dashoffset: 0;
   stroke-linejoin: round;
   stroke-width: 0.75px;
+}
+
+/* The paragraph (answer) reveals its rows left to right the same way. */
+.line[data-line="answer"] {
+  overflow: hidden;
 }
 
 /* ---- Motion-only overlays ---- */

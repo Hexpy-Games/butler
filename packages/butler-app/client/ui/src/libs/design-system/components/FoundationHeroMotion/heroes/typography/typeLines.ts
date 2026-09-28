@@ -1,5 +1,5 @@
 import type { Box } from "../../heroTimeline";
-import { fontBox } from "./specimenMetrics";
+import { fontBox, graphemeEdges } from "./specimenMetrics";
 import type { Panel } from "./typeChoreography";
 
 /** Role words on the badges (translated); the token names never translate. */
@@ -49,6 +49,8 @@ export interface LineInfo extends LineSpec {
   font: { family: string; size: number; weight: string; color: string; lineHeight: number; tracking: string };
   /** Baseline from the top of the line box. */
   baseline: number;
+  /** Right edge of each grapheme (px from the line start), for the left-to-right reveal. */
+  edges: number[];
 }
 
 /** Measures every line inside its panel (canvas px); null if a line is missing. */
@@ -69,6 +71,7 @@ export function measureLines(root: HTMLElement, ratio: number): LineInfo[] | nul
       ...spec, box, text: (node.textContent ?? "").trim(),
       font: { family: style.fontFamily, size, weight: style.fontWeight, color: style.color, lineHeight: line, tracking: style.letterSpacing === "normal" ? "0em" : style.letterSpacing },
       baseline: spec.draw ? (Math.min(line, box.h) - (ascent + descent)) / 2 + ascent : 0,
+      edges: spec.draw ? graphemeEdges(`${style.fontWeight} ${size}px ${style.fontFamily}`, (node.textContent ?? "").trim()) : [],
     });
   }
   return out;
