@@ -32,6 +32,28 @@ pub enum Fixture {
     Ready,
     /// `F3-legacy` (synthetic previous-generation data dir).
     Legacy,
+    /// `F2-first-conversation`: like `F1-ready` with the first-conversation
+    /// onboarding not done yet.
+    FirstConversation,
+}
+
+/// The global access mode a scenario starts with (`PATCH /settings`).
+/// Every scenario recorded before ask-first became the default assumes full
+/// access, so that stays the harness default.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Access {
+    FullAccess,
+    AskFirst,
+}
+
+impl Access {
+    /// The settings value.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::FullAccess => "full_access",
+            Self::AskFirst => "ask_first",
+        }
+    }
 }
 
 enum Source {
@@ -40,17 +62,30 @@ enum Source {
     Live(LiveProvider),
 }
 
+/// How the harness starts the agent and where its gateway token lives.
+#[derive(Clone, Copy)]
+enum LaunchMode {
+    /// The harness's token file, named by the local-auth variables.
+    Harness,
+    /// As the Butler App starts and supervises it ([`Setup::app_supervisor`]).
+    AppSupervisor,
+    /// As `butler start` does: the token in the data folder
+    /// ([`Setup::data_folder_token`]).
+    DataFolderToken,
+}
+
 pub struct Setup {
     pub id: String,
     pub sandbox: Sandbox,
     pub placeholders: Placeholders,
     fixture: Fixture,
+    access: Access,
     source: Source,
     env: Vec<(String, String)>,
     model: Option<ModelChoice>,
     stub_credential: bool,
     record_into: Option<std::path::PathBuf>,
-    data_folder_token: bool,
+    launch_mode: LaunchMode,
     replay_only: bool,
     extends: Option<String>,
 }
@@ -77,12 +112,13 @@ impl Setup {
             sandbox,
             placeholders,
             fixture: Fixture::Ready,
+            access: Access::FullAccess,
             source: Source::None,
             env: Vec::new(),
             model: None,
             stub_credential: true,
             record_into: None,
-            data_folder_token: false,
+            launch_mode: LaunchMode::Harness,
             replay_only: false,
             extends: None,
         })
@@ -102,6 +138,12 @@ impl Setup {
 
     pub fn fixture(mut self, fixture: Fixture) -> Self {
         self.fixture = fixture;
+        self
+    }
+
+    /// The global access mode set with the model (not for `F0-empty`).
+    pub fn access(mut self, access: Access) -> Self {
+        self.access = access;
         self
     }
 
@@ -125,7 +167,7 @@ impl Setup {
     /// Starts the agent without token variables, as `butler start` does:
     /// the agent owns the token in its data folder.
     pub fn data_folder_token(mut self) -> Self {
-        self.data_folder_token = true;
+        self.launch_mode = LaunchMode::DataFolderToken;
         self
     }
 
@@ -151,6 +193,15 @@ impl Setup {
         self
     }
 
+    /// Starts and supervises the agent as the Butler App does: gateway token
+    /// in the data dir's App local-auth file, foreground lease, App gateway
+    /// forced on, and a restart the intent hands to the App carried out by
+    /// the harness ([`Launch::use_app_supervisor`]).
+    pub fn app_supervisor(mut self) -> Self {
+        self.launch_mode = LaunchMode::AppSupervisor;
+        self
+    }
+
     pub fn placeholder(mut self, name: &str, value: impl Into<String>) -> Self {
         self.placeholders.add(name, value);
         self
@@ -162,18 +213,21 @@ impl Setup {
             sandbox,
             placeholders,
             fixture,
+            access,
             source,
             env,
             model,
             stub_credential,
             record_into,
-            data_folder_token,
+            launch_mode,
             replay_only,
             extends,
         } = self;
         let mut launch = Launch::new(&sandbox)?;
-        if data_folder_token {
-            launch.use_data_folder_token();
+        match launch_mode {
+            LaunchMode::Harness => {}
+            LaunchMode::AppSupervisor => launch.use_app_supervisor()?,
+            LaunchMode::DataFolderToken => launch.use_data_folder_token(),
         }
         let default_model = ModelChoice {
             model: "openai/gpt-6-sol".into(),
@@ -209,6 +263,9 @@ impl Setup {
         match fixture {
             Fixture::Ready => fixtures::ready(&sandbox.data, &choice.model)?,
             Fixture::Legacy => fixtures::legacy(&sandbox.data, &choice.model)?,
+            Fixture::FirstConversation => {
+                fixtures::first_conversation(&sandbox.data, &choice.model)?;
+            }
             Fixture::Empty => {}
         }
         let (agent, gw) = Agent::start(launch).await?;
@@ -226,7 +283,11 @@ impl Setup {
             scenario.register_api_key(provider_name, env_var).await?;
         }
         if fixture != Fixture::Empty {
-            scenario.select_model(&scenario.model.clone()).await?;
+            let mut settings = model_settings(&scenario.model);
+            settings["access_mode"] = access.as_str().into();
+            scenario
+                .patch_settings(settings, &scenario.model.label())
+                .await?;
         }
         Ok(scenario)
     }
@@ -242,17 +303,17 @@ pub const SANITIZATION: &[&str] = &[
 
 impl Scenario {
     pub async fn select_model(&self, choice: &ModelChoice) -> Result<Reply, HarnessError> {
-        let mut body = json!({"model": choice.model});
-        if let Some(effort) = &choice.effort {
-            body["reasoning_effort"] = Value::String(effort.clone());
-        }
+        self.patch_settings(model_settings(choice), &choice.label())
+            .await
+    }
+
+    /// `PATCH /settings` with `body`; `what` names it in the error.
+    pub async fn patch_settings(&self, body: Value, what: &str) -> Result<Reply, HarnessError> {
         let reply = self.gw.patch("/settings", body).await?;
         if reply.status != 200 {
             return Err(harness_error(format!(
-                "fixture: PATCH /settings {} failed: {} {}",
-                choice.label(),
-                reply.status,
-                reply.text
+                "fixture: PATCH /settings {what} failed: {} {}",
+                reply.status, reply.text
             )));
         }
         Ok(reply)
@@ -311,11 +372,19 @@ impl Scenario {
     /// Acts as the App's process supervisor: when the agent has exited on its
     /// own (the service exits after an interrupted turn so the supervisor can
     /// replace the process), start it again. Returns true when it restarted.
+    /// That exit must be non-zero: launchd and systemd restart only an Agent
+    /// that exits non-zero.
     pub async fn supervise(&mut self) -> Result<bool, HarnessError> {
         if self.agent.is_running() {
             return Ok(false);
         }
-        self.agent.reap();
+        if let Some(status) = self.agent.reap()
+            && status.success()
+        {
+            return Err(harness_error(format!(
+                "the agent exited on its own with {status}; an exit that needs a replacement must be non-zero"
+            )));
+        }
         self.gw = self.agent.start_again().await?;
         Ok(true)
     }
@@ -364,6 +433,15 @@ impl Scenario {
             .await?;
         Ok((turn_id, turn))
     }
+}
+
+/// The settings that select `choice` (model and reasoning effort).
+fn model_settings(choice: &ModelChoice) -> Value {
+    let mut body = json!({"model": choice.model});
+    if let Some(effort) = &choice.effort {
+        body["reasoning_effort"] = Value::String(effort.clone());
+    }
+    body
 }
 
 pub fn accepted_turn_id(accepted: &Value) -> Result<String, HarnessError> {

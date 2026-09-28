@@ -165,6 +165,15 @@ impl Gateway {
             .find(|turn| turn_id_of(turn) == Some(turn_id)))
     }
 
+    /// The approval requests waiting in `chat_id` (the App's approval cards).
+    pub async fn approval_requests(&self, chat_id: &str) -> Result<Vec<Value>, HarnessError> {
+        let reply = self
+            .get(&format!("/authority-requests?session_id={chat_id}"))
+            .await?;
+        expect_status(&reply, 200, "GET /authority-requests")?;
+        Ok(list(reply.data(), "requests"))
+    }
+
     pub async fn messages(&self, chat_id: &str) -> Result<Vec<Value>, HarnessError> {
         let reply = self.get(&format!("/messages?chat_id={chat_id}")).await?;
         expect_status(&reply, 200, "GET /messages")?;

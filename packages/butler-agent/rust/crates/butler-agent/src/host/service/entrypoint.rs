@@ -2,11 +2,8 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 
 use serde_json::json;
-use tokio::signal::unix::{Signal, SignalKind, signal};
-use tokio::{sync::oneshot, task::JoinSet, time::MissedTickBehavior};
 
 use butler_gateway::gateway::TranscriptWriter;
 use butler_models::models::ModelConfigurationClock;
@@ -20,21 +17,26 @@ use crate::host::service::foreground_lease::ForegroundLease;
 use crate::host::service::ingress::IngressDispatcher;
 use crate::host::service::restart_handoff::RestartHandoff;
 mod maintenance;
+mod poll;
+mod stop_signal;
 mod support;
 use crate::host::service::delivery::AppDelivery;
 use crate::host::{
     AgentRuntime, ProcessEnvironment, ProgressPublisher, ResolvedInstallation, RuntimePaths,
     ServiceConfiguration, SystemIdentity, require_model_ref,
 };
-use maintenance::{maintenance_join_result, run_service_maintenance, unexpected_maintenance_exit};
-use support::{close_runtime, failure, io, process_locale};
-
-const INBOUND_QUEUE_FALLBACK_POLL: Duration = Duration::from_millis(500);
+use poll::{PollOwners, PollShutdown, poll_service};
+use stop_signal::{START_CANCELLED, StopSignal};
+use support::{close_runtime, failure, holds_foreground_lease, io, process_locale};
 
 /// The product binary's sole entrypoint; domains remain crate-private.
+///
+/// Returns the bound session once the service stops on request (`None` when
+/// the stop ended startup first). An exit nobody asked for is an error, so the
+/// process exits non-zero and its supervisor replaces it.
 pub(crate) async fn run_native_service(
     installation: ResolvedInstallation,
-) -> Result<String, crate::host::HostError> {
+) -> Result<Option<String>, crate::host::HostError> {
     run(installation, None, None, ServiceLogMode::desktop())
         .await
         .map_err(|error| format!("{}: {}", error.code(), error.message()))
@@ -46,7 +48,7 @@ pub(crate) async fn run_native_service_with_options(
     explicit_data: Option<String>,
     detached: bool,
     quiet: bool,
-) -> Result<String, crate::host::HostError> {
+) -> Result<Option<String>, crate::host::HostError> {
     let foreground_lease = if detached { Some(false) } else { None };
     run(
         installation,
@@ -101,6 +103,22 @@ async fn run(
     explicit_data: Option<&str>,
     foreground_lease: Option<bool>,
     logs: ServiceLogMode,
+) -> Result<Option<String>, BtccError> {
+    // Before the instance record exists: a stop can only target this process
+    // once the record is published, and it must never find the signal's
+    // default action (death by SIGTERM) in place.
+    let stop = StopSignal::listen().map_err(io)?;
+    let result =
+        run_until_stopped(installation, explicit_data, foreground_lease, logs, &stop).await;
+    stop.settle(result, |line| logs.problem(line))
+}
+
+async fn run_until_stopped(
+    installation: ResolvedInstallation,
+    explicit_data: Option<&str>,
+    foreground_lease: Option<bool>,
+    logs: ServiceLogMode,
+    stop: &StopSignal,
 ) -> Result<String, BtccError> {
     let user_home = std::env::var_os("HOME")
         .filter(|home| !home.is_empty())
@@ -113,10 +131,12 @@ async fn run(
         &config.data_root,
         &executable,
         &config.installation,
+        holds_foreground_lease(foreground_lease),
     )
     .map_err(|message| {
         failure("native_service_instance_unavailable", message.to_string()).with_source(message)
     })?;
+    stop.attach(config.data_root.clone(), instance.nonce());
     repair_cli_launcher(&config, logs);
     let os = nix::sys::utsname::uname().map_err(io)?;
     let environment = ProcessEnvironment::capture(
@@ -160,12 +180,20 @@ async fn run(
         &config,
         writer.clone(),
         &mut instance,
-        foreground_lease,
         logs,
+        stop,
     )
     .await;
-    // Admission and dispatcher tasks have ended before BTCC closes its services.
-    // The transcript lane outlives all producers and is joined last.
+    close_after_serve(runtime, &writer, result).await
+}
+
+/// Admission and dispatcher tasks have ended before BTCC closes its services.
+/// The transcript lane outlives all producers and is joined last.
+async fn close_after_serve(
+    runtime: Arc<AgentRuntime>,
+    writer: &TranscriptWriter,
+    result: Result<String, BtccError>,
+) -> Result<String, BtccError> {
     let runtime_close = close_runtime(runtime).await;
     let transcript_close = writer
         .close()
@@ -212,8 +240,8 @@ async fn serve(
     config: &ServiceConfiguration,
     writer: Arc<TranscriptWriter>,
     instance: &mut crate::host::service::instance::InstanceGuard,
-    foreground_lease_override: Option<bool>,
     logs: ServiceLogMode,
+    stop: &StopSignal,
 ) -> Result<String, BtccError> {
     let bootstrap = config
         .bootstrap_butler_session(&runtime.bindings, &runtime.collation)
@@ -259,15 +287,11 @@ async fn serve(
         runtime.subsessions.clone(),
         restart_handoff,
     );
-    let interrupt = signal(SignalKind::interrupt()).map_err(io)?;
-    let terminate = signal(SignalKind::terminate()).map_err(io)?;
     let parent_client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(io)?;
-    let use_foreground_lease = foreground_lease_override
-        .unwrap_or_else(|| std::env::var("BUTLER_APP_FOREGROUND_LEASE").as_deref() == Ok("1"));
-    let foreground_lease = if use_foreground_lease {
+    let foreground_lease = if instance.app_supervised() {
         Some(ForegroundLease::capture().map_err(io)?)
     } else {
         None
@@ -324,24 +348,7 @@ async fn serve(
     let startup = async {
         runtime.context_maintenance.start();
         runtime.subsessions.recover_dispatches().await?;
-        let active = app_endpoint.snapshot();
-        instance
-            .mark_ready(
-                active.is_some(),
-                active.as_ref().map(|active| active.base_url.clone()),
-                active
-                    .as_ref()
-                    .is_some_and(|active| active.local_auth.required),
-                SystemIdentity.now_iso(),
-            )
-            .map_err(|message| {
-                failure(
-                    "native_service_instance_state_unavailable",
-                    message.to_string(),
-                )
-                .with_source(message)
-            })?;
-        Ok::<_, BtccError>(())
+        mark_ready(instance, &app_endpoint, stop)
     }
     .await;
     match startup {
@@ -367,8 +374,7 @@ async fn serve(
             logs,
         },
         PollShutdown {
-            interrupt,
-            terminate,
+            stop,
             foreground_lease,
         },
     )
@@ -393,99 +399,34 @@ async fn serve(
         .map(|()| binding.session_id)
 }
 
-struct PollOwners<'a> {
-    dispatcher: &'a IngressDispatcher,
-    queue: Arc<butler_gateway::gateway::InboundQueue>,
-    progress: Arc<ProgressPublisher>,
-    config: &'a ServiceConfiguration,
-    subsessions: &'a butler_turn::btcc::SqliteSubsessionRepository,
-    parent_client: &'a reqwest::Client,
-    app_endpoint: &'a ActiveAppEndpoint,
-    logs: ServiceLogMode,
-}
-
-struct PollShutdown {
-    interrupt: Signal,
-    terminate: Signal,
-    foreground_lease: Option<ForegroundLease>,
-}
-
-async fn poll_service(owners: PollOwners<'_>, shutdown: PollShutdown) -> Result<(), BtccError> {
-    let PollOwners {
-        dispatcher,
-        queue,
-        progress,
-        config,
-        subsessions,
-        parent_client,
-        app_endpoint,
-        logs,
-    } = owners;
-    let PollShutdown {
-        mut interrupt,
-        mut terminate,
-        foreground_lease,
-    } = shutdown;
-    let shutdown_flag = config.data_root.join("locks/butler-shutdown");
-    let (stop_maintenance, maintenance_stop) = oneshot::channel();
-    let mut maintenance = JoinSet::new();
-    maintenance.spawn(run_service_maintenance(
-        progress,
-        parent_client.clone(),
-        subsessions.clone(),
-        app_endpoint.clone(),
-        maintenance_stop,
-    ));
-    let mut fallback_poll = tokio::time::interval_at(
-        tokio::time::Instant::now() + INBOUND_QUEUE_FALLBACK_POLL,
-        INBOUND_QUEUE_FALLBACK_POLL,
-    );
-    fallback_poll.set_missed_tick_behavior(MissedTickBehavior::Skip);
-    let result = loop {
-        if shutdown_flag.exists() {
-            break Ok(());
-        }
-        let summary = match dispatcher.poll().await {
-            Ok(summary) => summary,
-            Err(error) => break Err(failure(error.code, error.message)),
-        };
-        if summary.claimed + summary.handled + summary.failed + summary.interrupted > 0 {
-            logs.write(&format!(
-                "[inbound-queue] claimed={} handled={} delivered={} failed={} interrupted={}",
-                summary.claimed,
-                summary.handled,
-                summary.delivered,
-                summary.failed,
-                summary.interrupted
-            ));
-        }
-        if summary.interrupted > 0 {
-            break Ok(());
-        }
-        tokio::select! {
-            _ = interrupt.recv() => break Ok(()),
-            _ = terminate.recv() => break Ok(()),
-            lease = wait_for_foreground_close(foreground_lease.as_ref()), if foreground_lease.is_some() => {
-                break lease.map_err(io);
-            },
-            joined = maintenance.join_next() => break unexpected_maintenance_exit(joined),
-            () = queue.wait_for_enqueue() => {},
-            _ = fallback_poll.tick() => {},
-        }
-    };
-    let _ = stop_maintenance.send(());
-    let maintenance_result = match maintenance.join_next().await {
-        Some(joined) => maintenance_join_result(joined),
-        None => Ok(()),
-    };
-    result.and(maintenance_result)
-}
-
-async fn wait_for_foreground_close(
-    lease: Option<&ForegroundLease>,
-) -> Result<(), crate::host::HostError> {
-    match lease {
-        Some(lease) => lease.closed().await,
-        None => std::future::pending().await,
+/// Publishes the ready record, unless a stop was requested during startup:
+/// a process asked to stop never becomes ready (and never clears the stop
+/// intent the next instance clears).
+fn mark_ready(
+    instance: &mut crate::host::service::instance::InstanceGuard,
+    app_endpoint: &ActiveAppEndpoint,
+    stop: &StopSignal,
+) -> Result<(), BtccError> {
+    if stop.requested() {
+        return Err(StopSignal::cancelled_startup());
     }
+    let active = app_endpoint.snapshot();
+    instance
+        .mark_ready(
+            active.is_some(),
+            active.as_ref().map(|active| active.base_url.clone()),
+            active
+                .as_ref()
+                .is_some_and(|active| active.local_auth.required),
+            SystemIdentity.now_iso(),
+        )
+        .map_err(|message| {
+            // A controller marked the record `stopping` first.
+            let code = if message.message() == START_CANCELLED {
+                START_CANCELLED
+            } else {
+                "native_service_instance_state_unavailable"
+            };
+            failure(code, message.to_string()).with_source(message)
+        })
 }

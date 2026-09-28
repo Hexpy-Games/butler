@@ -191,10 +191,14 @@ async function renderViewport(
   useViewportSubdir: boolean,
   { locale, fullPage }: Pick<RenderOptions, "locale" | "fullPage">,
 ): Promise<string[]> {
-  const newPage = () => browser.newPage({
-    viewport: viewportPresets[viewportName],
-    deviceScaleFactor: 1,
-  });
+  const newPage = async () => {
+    const created = await browser.newPage({
+      viewport: viewportPresets[viewportName],
+      deviceScaleFactor: 1,
+    });
+    await server.signIn(created);
+    return created;
+  };
   let page = await newPage();
   const outputDir = useViewportSubdir
     ? join(outputRoot, viewportName)

@@ -176,27 +176,27 @@ pub(super) const ROUTES: &[Entry] = &[
         "operator"
     ),
     route!(
-        "automation.list",
-        "butler automation list",
-        "List configured automations.",
+        "schedule.list",
+        "butler schedule list",
+        "List configured schedules.",
         "operator"
     ),
     route!(
-        "automation.show",
-        "butler automation show ID",
-        "Inspect an automation.",
+        "schedule.show",
+        "butler schedule show ID",
+        "Inspect a schedule.",
         "operator"
     ),
     route!(
-        "automation.run",
-        "butler automation run ID",
-        "Run an automation.",
+        "schedule.run",
+        "butler schedule run ID",
+        "Run a schedule.",
         "operator"
     ),
     route!(
-        "automation.delete",
-        "butler automation delete ID",
-        "Delete an automation.",
+        "schedule.delete",
+        "butler schedule delete ID",
+        "Delete a schedule.",
         "operator"
     ),
 ];

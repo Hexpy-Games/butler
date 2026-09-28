@@ -21,6 +21,12 @@ pub const PROFILE_EXPORT: &str = "## Identity\n[unknown] - Name: Sam Rivera; pre
 /// `F1-ready`: onboarding complete, `model` as the default, language `en`.
 pub fn ready(data: &Path, model: &str) -> Result<(), HarnessError> {
     onboarding_complete(data)?;
+    first_conversation(data, model)
+}
+
+/// `F2-first-conversation`: `F1-ready` before the first-conversation
+/// onboarding (no onboarding record), so the first chat runs onboarding.
+pub fn first_conversation(data: &Path, model: &str) -> Result<(), HarnessError> {
     scheduler_ran_today(data)?;
     fs::write(
         data.join("butler.config.json"),

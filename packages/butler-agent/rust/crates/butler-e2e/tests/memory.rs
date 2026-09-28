@@ -100,7 +100,6 @@ async fn recall(s: &Scenario, cue: &str) -> Result<Value, HarnessError> {
 /// `cognition box forget`, `box rebuild-index` — follows once a memory can be
 /// written from a chat at all.)
 #[tokio::test]
-#[ignore = "product gap: MEM-01-WRITE — in an App chat the explicit memory tool is outside the session's tool surface: tool_search lists update_explicit_memory with enabled:false (`outside the current session's scoped progressive surface`; only a session binding that already carries the memory-write profile gets it), so asking Butler to remember a fact writes nothing and recall returns no result. The MEM-01 cassette is that real exchange (the model answers that the memory tool is unavailable); re-record it once fixed"]
 async fn mem_01_remember_and_recall() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let code = nonce();

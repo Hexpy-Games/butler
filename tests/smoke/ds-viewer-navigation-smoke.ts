@@ -235,6 +235,7 @@ async function assertHeroTheme(browser: Awaited<ReturnType<typeof chromium.launc
     for (const theme of ["system", "light", "dark", "side-by-side"] as const) {
       const label = `hero system=${colorScheme} viewer=${theme}`;
       const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, colorScheme });
+      await server.signIn(page);
       await page.goto(viewerUrl(baseUrl, { page: "overview", motion: "reduced", ...(theme === "system" ? {} : { theme }) }), { waitUntil: "networkidle" });
       await page.locator("[data-ds-hero] canvas").waitFor({ state: "attached" });
       await assertHero(page, label);
@@ -261,6 +262,7 @@ try {
     { label: "mobile-375", width: 375, height: 812 },
   ]) {
     const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height } });
+    await server.signIn(page);
     await assertDeepLinks(page, server.url, viewport.label);
     await assertSearch(page, server.url, viewport.label);
     await page.close();

@@ -6,7 +6,7 @@ use std::{ffi::OsString, path::Path};
 use serde_json::json;
 
 use crate::host::ResolvedInstallation;
-use crate::host::service::instance::RestartIdentity;
+use crate::host::service::instance::{RestartIdentity, StopRequester};
 
 mod lifecycle;
 
@@ -21,7 +21,18 @@ struct Options {
     quiet: bool,
     dry_run: bool,
     detached: bool,
+    /// `--requested-by`: the controller recorded in the stop intent.
+    requested_by: Option<StopRequester>,
     positionals: Vec<String>,
+}
+
+impl Options {
+    fn control(&self) -> lifecycle::ControlOptions {
+        lifecycle::ControlOptions {
+            dry_run: self.dry_run,
+            requested_by: self.requested_by.unwrap_or_default(),
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -51,7 +62,7 @@ pub(crate) fn recognizes(args: &[OsString]) -> bool {
     while index < args.len() {
         let value = args[index].to_string_lossy();
         match value.as_ref() {
-            "--data" | "--home" => {
+            "--data" | "--home" | "--requested-by" => {
                 saw_option = true;
                 index += 2;
             }
@@ -131,7 +142,7 @@ pub(crate) async fn run_native_service_cli(
                         "{}",
                         json!({"ok":true,"command":"service run","data":{"sessionId":session}})
                     );
-                } else if !options.quiet {
+                } else if let Some(session) = session.filter(|_| !options.quiet) {
                     println!("{session}");
                 }
                 ExitCode::SUCCESS
@@ -139,7 +150,7 @@ pub(crate) async fn run_native_service_cli(
             Err(message) => report_error("service run", options.json, message.message()),
         };
     }
-    let result = lifecycle::execute(action, installation, data.as_deref(), options.dry_run).await;
+    let result = lifecycle::execute(action, installation, data.as_deref(), options.control()).await;
     match result {
         Ok(value) => {
             if options.json {
@@ -170,7 +181,7 @@ fn parse(args: &[OsString]) -> Result<(Options, Action), crate::host::HostError>
     let mut index = 0;
     while index < args.len() {
         let value = args[index].to_string_lossy();
-        let consumes_value = value == "--data";
+        let consumes_value = value == "--data" || value == "--requested-by";
         match value.as_ref() {
             "--data" => {
                 let path = args
@@ -178,6 +189,14 @@ fn parse(args: &[OsString]) -> Result<(Options, Action), crate::host::HostError>
                     .filter(|value| !value.to_string_lossy().starts_with('-'))
                     .ok_or_else(|| "--data requires a path".to_owned())?;
                 options.data = Some(path.to_string_lossy().into_owned());
+                index += 2;
+            }
+            "--requested-by" => {
+                let requester = args
+                    .get(index + 1)
+                    .and_then(|value| StopRequester::parse(&value.to_string_lossy()))
+                    .ok_or_else(|| "--requested-by requires cli, app or mcp".to_owned())?;
+                options.requested_by = Some(requester);
                 index += 2;
             }
             "--home" => return Err("--home is unsupported; use --data for writable state".into()),
@@ -211,6 +230,9 @@ fn parse(args: &[OsString]) -> Result<(Options, Action), crate::host::HostError>
     };
     if matches!(action, Action::RestartHandoff) && options.data.is_none() {
         return Err("service restart-handoff requires --data".into());
+    }
+    if options.requested_by.is_some() && !matches!(action, Action::Stop | Action::Restart) {
+        return Err("--requested-by is only valid for stop and restart".into());
     }
     Ok((options, action))
 }
