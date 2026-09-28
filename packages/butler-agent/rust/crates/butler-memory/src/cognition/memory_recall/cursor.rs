@@ -216,11 +216,7 @@ impl CursorStore {
         })
     }
 
-    pub(super) fn update(
-        &self,
-        key: &str,
-        response: &crate::cognition::recall::RecallResponse,
-    ) -> CognitionResult<()> {
+    pub(super) fn update(&self, key: &str, response: &crate::cognition::recall::RecallResponse) {
         let mut state = self.0.lock();
         if let Some(entry) = state.entries.get_mut(key) {
             entry.status = Some(response.status);
@@ -230,12 +226,10 @@ impl CursorStore {
         if response.next_cursor.is_none() {
             state.remove(key);
         }
-        Ok(())
     }
 
-    pub(super) fn remove(&self, key: &str) -> CognitionResult<()> {
+    pub(super) fn remove(&self, key: &str) {
         self.0.lock().remove(key);
-        Ok(())
     }
 }
 

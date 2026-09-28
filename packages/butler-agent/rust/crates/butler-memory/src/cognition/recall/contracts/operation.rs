@@ -2,20 +2,50 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Which conversations a recall reads.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum RecallScope {
+    /// Only the caller's session.
     CurrentSession,
+    /// Sessions of the caller's project.
     CurrentProject,
+    /// Every session of the user.
     AllUserSessions,
 }
 
+impl RecallScope {
+    /// The wire name.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::CurrentSession => "current_session",
+            Self::CurrentProject => "current_project",
+            Self::AllUserSessions => "all_user_sessions",
+        }
+    }
+}
+
+/// Which projects' sessions a recall admits.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum RecallProjectFilter {
+    /// Sessions of any project, or none.
     Any,
+    /// Only sessions without a project.
     Unassigned,
+    /// Only sessions of the listed projects.
     Selected,
+}
+
+impl RecallProjectFilter {
+    /// The wire name.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Any => "any",
+            Self::Unassigned => "unassigned",
+            Self::Selected => "selected",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]

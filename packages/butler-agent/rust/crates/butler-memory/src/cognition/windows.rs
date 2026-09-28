@@ -1,3 +1,5 @@
+//! Splitting source text into extraction windows.
+
 mod spans;
 
 pub(crate) use spans::{grapheme_byte_boundaries, split_historical_source_spans};

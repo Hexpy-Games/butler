@@ -1,3 +1,5 @@
+//! Generation vector rows and the LanceDB store they are written to.
+
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -55,22 +57,28 @@ impl GenerationVectorRow {
         text: &str,
         version: &str,
     ) -> (String, String) {
-        let chunk = digest(&json!(["embedding-chunk", revision, 0, text]));
-        let key = digest(&json!([
-            "memory-vector",
-            generation,
-            kind,
-            owner,
-            revision,
-            chunk,
-            version
-        ]));
+        let chunk = digest(&json!(["embedding-chunk", revision, 0, text]).to_string());
+        let key = digest(
+            &json!([
+                "memory-vector",
+                generation,
+                kind,
+                owner,
+                revision,
+                chunk,
+                version
+            ])
+            .to_string(),
+        );
         (chunk, key)
     }
 }
 
-fn digest(value: &serde_json::Value) -> String {
-    format!("{:x}", Sha256::digest(value.to_string().as_bytes()))
+/// SHA-256 of an identity's compact JSON array. The array is encoded with
+/// `Value`'s `Display`, which cannot fail, so the hash always covers every
+/// part.
+fn digest(json: &str) -> String {
+    format!("{:x}", Sha256::digest(json.as_bytes()))
 }
 
 pub(crate) struct GenerationVectorStore {
@@ -97,16 +105,7 @@ impl GenerationVectorStore {
             .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
         async move {
             lease_check?;
-            if rows.is_empty()
-                || rows.len() > 4
-                || rows.iter().any(|row| {
-                    row.generation != generation.generation_id
-                        || row.vector.len() != DIMENSION
-                        || row.vector.iter().any(|value| !value.is_finite())
-                        || row.vector_key.len() != 64
-                        || row.embedding_chunk_id.len() != 64
-                })
-            {
+            if !valid_rows(rows, generation) {
                 return Err(error(CognitionCode::MemoryVectorRowsInvalid));
             }
             assert_mutation_authority(&self.data_root, &self.paths, target, generation)?;
@@ -165,6 +164,19 @@ impl GenerationVectorStore {
             Ok(receipt)
         }
     }
+}
+
+/// One to four rows of this generation, each with a finite vector of the
+/// model dimension and full-length keys.
+fn valid_rows(rows: &[GenerationVectorRow], generation: &MemoryGenerationHandle) -> bool {
+    (1..=4).contains(&rows.len())
+        && rows.iter().all(|row| {
+            row.generation == generation.generation_id
+                && row.vector.len() == DIMENSION
+                && row.vector.iter().all(|value| value.is_finite())
+                && row.vector_key.len() == 64
+                && row.embedding_chunk_id.len() == 64
+        })
 }
 
 pub(crate) async fn persisted_receipt(
@@ -255,7 +267,9 @@ async fn persisted_receipt_in_table(
         return Ok(None);
     }
     seen.sort();
-    let version = &rows[0].embedding_version;
+    let Some(version) = rows.first().map(|row| &row.embedding_version) else {
+        return Ok(None);
+    };
     if rows.iter().any(|row| row.embedding_version != *version) {
         return Ok(None);
     }

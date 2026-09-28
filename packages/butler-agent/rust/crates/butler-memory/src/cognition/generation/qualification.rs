@@ -1,3 +1,5 @@
+//! Qualification of a rebuild candidate: acceptance evidence recorded before cutover.
+
 mod case;
 mod io;
 mod performance;

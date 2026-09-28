@@ -134,7 +134,13 @@ fn install(scratch: &Path, models: SocketAddr) -> (PathBuf, PathBuf, PathBuf) {
     (binary, resources, data)
 }
 
-async fn start(scratch: &Path, models: SocketAddr) -> (Agent, String) {
+/// The gateway base URL and the token the agent keeps in its data folder.
+struct Gateway {
+    base: String,
+    token: String,
+}
+
+async fn start(scratch: &Path, models: SocketAddr) -> (Agent, Gateway) {
     let (binary, resources, data) = install(scratch, models);
     let port = free_port();
     let child = Command::new(&binary)
@@ -160,14 +166,21 @@ async fn start(scratch: &Path, models: SocketAddr) -> (Agent, String) {
     let base = format!("http://127.0.0.1:{port}");
     let client = reqwest::Client::new();
     let deadline = Instant::now() + Duration::from_secs(60);
+    let auth_file = data.join("app/runtime/auth/local-agent-auth.json");
     loop {
-        if client
-            .get(format!("{base}/health"))
-            .send()
-            .await
-            .is_ok_and(|response| response.status().is_success())
+        let token = std::fs::read(&auth_file)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+            .and_then(|value| value["token"].as_str().map(str::to_owned));
+        if let Some(token) = token
+            && client
+                .get(format!("{base}/health"))
+                .bearer_auth(&token)
+                .send()
+                .await
+                .is_ok_and(|response| response.status().is_success())
         {
-            break;
+            return (agent, Gateway { base, token });
         }
         assert!(
             agent.0.try_wait().unwrap().is_none(),
@@ -176,12 +189,12 @@ async fn start(scratch: &Path, models: SocketAddr) -> (Agent, String) {
         assert!(Instant::now() < deadline, "gateway not ready in 60s");
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    (agent, base)
 }
 
-async fn patch(base: &str, body: Value) -> (u16, Value) {
+async fn patch(gateway: &Gateway, body: Value) -> (u16, Value) {
     let response = reqwest::Client::new()
-        .patch(format!("{base}/settings"))
+        .patch(format!("{}/settings", gateway.base))
+        .bearer_auth(&gateway.token)
         .header("content-type", "application/json")
         .body(body.to_string())
         .send()
@@ -191,8 +204,11 @@ async fn patch(base: &str, body: Value) -> (u16, Value) {
     (status, response.json().await.unwrap())
 }
 
-async fn current_model(base: &str) -> Value {
-    let settings: Value = reqwest::get(format!("{base}/settings"))
+async fn current_model(gateway: &Gateway) -> Value {
+    let settings: Value = reqwest::Client::new()
+        .get(format!("{}/settings", gateway.base))
+        .bearer_auth(&gateway.token)
+        .send()
         .await
         .unwrap()
         .json()
@@ -207,25 +223,25 @@ async fn patch_settings_switches_to_a_registered_custom_model() {
         std::env::temp_dir().join(format!("butler-settings-model-{}", uuid::Uuid::new_v4())),
     );
     let models = stub_models().await;
-    let (_agent, base) = start(&scratch.0, models).await;
-    assert_eq!(current_model(&base).await, "local/stub");
+    let (_agent, gateway) = start(&scratch.0, models).await;
+    assert_eq!(current_model(&gateway).await, "local/stub");
 
     // The App's primary-model select sends this payload on change.
     let (status, body) = patch(
-        &base,
+        &gateway,
         json!({"model":"local/stub-2","reasoning_effort":"none","context_window_tokens":128_000}),
     )
     .await;
     assert_eq!(status, 200, "{body}");
     assert_eq!(body["data"]["model"], "local/stub-2");
-    assert_eq!(current_model(&base).await, "local/stub-2");
+    assert_eq!(current_model(&gateway).await, "local/stub-2");
 
     // A model that is not available is rejected with a code, not dropped.
-    let (status, body) = patch(&base, json!({"model":"local/missing"})).await;
+    let (status, body) = patch(&gateway, json!({"model":"local/missing"})).await;
     assert_eq!(status, 400, "{body}");
     assert_eq!(
         body["error"]["code"], "settings_model_unavailable",
         "{body}"
     );
-    assert_eq!(current_model(&base).await, "local/stub-2");
+    assert_eq!(current_model(&gateway).await, "local/stub-2");
 }

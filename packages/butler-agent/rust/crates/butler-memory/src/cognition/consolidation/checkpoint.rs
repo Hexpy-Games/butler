@@ -1,3 +1,5 @@
+//! Consolidation checkpoints: the durable per-run record of completed phases and errors.
+
 use std::{
     fs::{self, File, OpenOptions},
     io::{Read, Write},

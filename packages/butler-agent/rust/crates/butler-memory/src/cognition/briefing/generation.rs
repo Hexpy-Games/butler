@@ -1,3 +1,7 @@
+//! New-chat briefings: after consolidation, a short model-written opener
+//! for a new chat (general and per active project), written under the
+//! consolidation lock when its inputs did not change meanwhile.
+
 mod artifact;
 mod contracts;
 mod error;
@@ -10,6 +14,7 @@ mod write;
 use std::{path::PathBuf, sync::Arc};
 
 use chrono::{DateTime, Utc};
+use serde::Serialize;
 use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
 
@@ -25,6 +30,7 @@ pub use contracts::{
 use contracts::{error, prepared_fingerprint};
 use usage::Usage;
 
+#[derive(Clone, Copy)]
 struct BriefingRunContext<'a> {
     input: &'a BriefingInputSnapshot,
     project: Option<&'a BriefingProjectSignal>,
@@ -36,19 +42,55 @@ struct BriefingRunContext<'a> {
     cancellation: &'a CancellationToken,
 }
 
+/// The metrics a generation run reports, in the reported key order.
+#[derive(Serialize)]
 struct BriefingMetrics {
     outcome: &'static str,
-    reason: Option<&'static str>,
+    skip_reason: Option<&'static str>,
+    generated_count: u64,
+    failed_count: u64,
+    skipped_project_count: u64,
+    general_artifact_path: Option<String>,
+    project_artifact_paths: Vec<String>,
+    model_ref: Option<String>,
+    reasoning_effort: Option<ReasoningEffort>,
+    model_usage: usage::UsageSummary,
+    raw_text_included: bool,
+}
+
+/// What the briefings of one run produced so far.
+#[derive(Default)]
+struct Tally {
     generated: u64,
     failed: u64,
     skipped: u64,
     general: Option<String>,
     projects: Vec<String>,
-    model: Option<String>,
-    reasoning: Option<ReasoningEffort>,
     usage: Usage,
 }
 
+impl Tally {
+    /// Counts one briefing; its artifact path when it was written.
+    /// Cancellation ends the run.
+    fn count(
+        &mut self,
+        outcome: Result<String, BriefingGenerationError>,
+    ) -> Result<Option<String>, BriefingGenerationError> {
+        match outcome {
+            Ok(path) => {
+                self.generated += 1;
+                Ok(Some(path))
+            }
+            Err(error) if error.code() == "new_chat_briefing_cancelled" => Err(error),
+            Err(_) => {
+                self.failed += 1;
+                Ok(None)
+            }
+        }
+    }
+}
+
+/// Writes the new-chat briefings after consolidation.
 pub struct BriefingGenerationService {
     data_root: PathBuf,
     coordinator: Arc<CognitionWriteCoordinator>,
@@ -57,6 +99,7 @@ pub struct BriefingGenerationService {
 }
 
 impl BriefingGenerationService {
+    /// A briefing service over `data_root`.
     pub fn new(
         data_root: PathBuf,
         coordinator: Arc<CognitionWriteCoordinator>,
@@ -71,6 +114,8 @@ impl BriefingGenerationService {
         }
     }
 
+    /// Writes the general briefing and one per project with recent
+    /// activity; the run metrics.
     pub async fn generate(
         &self,
         run_id: &str,
@@ -86,97 +131,93 @@ impl BriefingGenerationService {
                 ..
             } => (model.clone(), *reasoning_effort),
             BriefingSettings::Unavailable { reason, .. } => {
-                return Ok(metrics(&BriefingMetrics {
+                return Ok(metrics(BriefingMetrics {
                     outcome: "configuration_unavailable",
-                    reason: Some(reason),
-                    generated: 0,
-                    failed: 0,
-                    skipped: 0,
-                    general: None,
-                    projects: vec![],
-                    model: None,
-                    reasoning: None,
-                    usage: Usage::default(),
+                    skip_reason: Some(reason),
+                    generated_count: 0,
+                    failed_count: 0,
+                    skipped_project_count: 0,
+                    general_artifact_path: None,
+                    project_artifact_paths: vec![],
+                    model_ref: None,
+                    reasoning_effort: None,
+                    model_usage: Usage::default().summary(),
+                    raw_text_included: false,
                 }));
             }
         };
         let local_minute = self.source.local_minute(now.timestamp_millis())?;
-        let mut usage = Usage::default();
-        let mut generated = 0;
-        let mut failed = 0;
-        let mut skipped = 0;
-        let mut general = None;
-        let mut project_paths = Vec::new();
-        match self
-            .run_one(
-                BriefingRunContext {
-                    input: &input,
-                    project: None,
-                    run_id,
-                    now,
-                    local_minute,
-                    model: &model,
-                    reasoning,
-                    cancellation,
-                },
-                &mut usage,
-            )
-            .await
-        {
-            Ok(path) => {
-                general = Some(path);
-                generated += 1;
-            }
-            Err(error) if error.code() == "new_chat_briefing_cancelled" => return Err(error),
-            Err(_) => failed += 1,
-        }
+        let context = |project| BriefingRunContext {
+            input: &input,
+            project,
+            run_id,
+            now,
+            local_minute,
+            model: &model,
+            reasoning,
+            cancellation,
+        };
+        let mut tally = Tally::default();
+        let general = self.run_one(context(None), &mut tally.usage).await;
+        tally.general = tally.count(general)?;
         for project in &input.projects {
             ensure_active(cancellation)?;
             if project.recent_session_titles.is_empty() && project.ledger_event_summary.is_empty() {
-                skipped += 1;
+                tally.skipped += 1;
                 continue;
             }
-            match self
-                .run_one(
-                    BriefingRunContext {
-                        input: &input,
-                        project: Some(project),
-                        run_id,
-                        now,
-                        local_minute,
-                        model: &model,
-                        reasoning,
-                        cancellation,
-                    },
-                    &mut usage,
-                )
-                .await
-            {
-                Ok(path) => {
-                    project_paths.push(path);
-                    generated += 1;
-                }
-                Err(error) if error.code() == "new_chat_briefing_cancelled" => return Err(error),
-                Err(_) => failed += 1,
+            let written = self.run_one(context(Some(project)), &mut tally.usage).await;
+            if let Some(path) = tally.count(written)? {
+                tally.projects.push(path);
             }
         }
-        Ok(metrics(&BriefingMetrics {
+        Ok(metrics(BriefingMetrics {
             outcome: "completed",
-            reason: None,
-            generated,
-            failed,
-            skipped,
-            general,
-            projects: project_paths,
-            model: Some(model),
-            reasoning: Some(reasoning),
-            usage,
+            skip_reason: None,
+            generated_count: tally.generated,
+            failed_count: tally.failed,
+            skipped_project_count: tally.skipped,
+            general_artifact_path: tally.general,
+            project_artifact_paths: tally.projects,
+            model_ref: Some(model.clone()),
+            reasoning_effort: Some(reasoning),
+            model_usage: tally.usage.summary(),
+            raw_text_included: false,
         }))
     }
 
     async fn run_one(
         &self,
         context: BriefingRunContext<'_>,
+        usage: &mut Usage,
+    ) -> Result<String, BriefingGenerationError> {
+        ensure_active(context.cancellation)?;
+        let reply = self.ask_model(&context, usage).await?;
+        let artifact = artifact::from_model(
+            &reply,
+            artifact::BriefingArtifactContext {
+                input: context.input,
+                project: context.project,
+                now: context.now,
+                local_minute: context.local_minute,
+                run_id: context.run_id,
+                model: context.model,
+                reasoning: context.reasoning.as_str(),
+            },
+        )?;
+        let path = write::artifact_path(
+            &self.data_root,
+            &context.now.format("%Y-%m-%d").to_string(),
+            context.project.map(|project| project.id.as_str()),
+        );
+        self.commit(&context, &path, &artifact).await?;
+        Ok(path.to_string_lossy().into_owned())
+    }
+
+    /// Asks the briefing model for this briefing; the raw reply.
+    async fn ask_model(
+        &self,
+        context: &BriefingRunContext<'_>,
         usage: &mut Usage,
     ) -> Result<String, BriefingGenerationError> {
         let BriefingRunContext {
@@ -188,8 +229,7 @@ impl BriefingGenerationService {
             model,
             reasoning,
             cancellation,
-        } = context;
-        ensure_active(cancellation)?;
+        } = *context;
         let prompt = prompt::prompt(input, project, now, local_minute, run_id);
         let instructions = prompt::instructions(
             prompt::locale(input),
@@ -248,84 +288,64 @@ impl BriefingGenerationService {
             },
             response.usage.as_ref(),
         );
-        let artifact = artifact::from_model(
-            &response.text,
-            artifact::BriefingArtifactContext {
-                input,
-                project,
-                now,
-                local_minute,
-                run_id,
-                model,
-                reasoning: reasoning.as_str(),
-            },
-        )?;
-        let path = write::artifact_path(
-            &self.data_root,
-            &now.format("%Y-%m-%d").to_string(),
-            project.map(|project| project.id.as_str()),
-        );
+        Ok(response.text)
+    }
+
+    /// Writes the artifact under the consolidation lock, provided the
+    /// briefing inputs did not change while the model ran.
+    async fn commit(
+        &self,
+        context: &BriefingRunContext<'_>,
+        path: &std::path::Path,
+        artifact: &artifact::BriefingArtifact<'_>,
+    ) -> Result<(), BriefingGenerationError> {
+        let write_failed = |failure: crate::coordination::CoordinationError| {
+            error(
+                BriefingGenerationCode::NewChatBriefingWriteFailed,
+                failure.message(),
+            )
+            .with_source(failure)
+        };
         let lock = self
             .data_root
             .join("cognition/consolidation/locks/consolidation.lock");
         let mut request = CognitionWriteAcquire::immediate(lock.clone(), "consolidation");
-        request.cancellation = Some(cancellation.clone());
+        request.cancellation = Some(context.cancellation.clone());
         let lease = self
             .coordinator
             .acquire(request, CognitionWaitClass::Background)
             .await
-            .map_err(|failure| {
-                error(
-                    BriefingGenerationCode::NewChatBriefingWriteFailed,
-                    failure.message(),
-                )
-                .with_source(failure)
-            })?
+            .map_err(write_failed)?
             .ok_or_else(|| {
                 error(
                     BriefingGenerationCode::MemoryWriteBusy,
                     "Memory writer is busy",
                 )
             })?;
-        lease.assert_for_path(&lock).map_err(|failure| {
-            error(
-                BriefingGenerationCode::NewChatBriefingWriteFailed,
-                failure.message(),
-            )
-            .with_source(failure)
-        })?;
+        lease.assert_for_path(&lock).map_err(write_failed)?;
         let current = self.source.snapshot().await?;
-        ensure_active(cancellation)?;
-        if prepared_fingerprint(input, project.map(|project| project.id.as_str()))
-            != prepared_fingerprint(&current, project.map(|project| project.id.as_str()))
+        ensure_active(context.cancellation)?;
+        let project_id = context.project.map(|project| project.id.as_str());
+        if prepared_fingerprint(context.input, project_id)
+            != prepared_fingerprint(&current, project_id)
         {
             return Err(error(
                 BriefingGenerationCode::MemorySourceChanged,
                 "Briefing inputs changed before commit",
             ));
         }
-        let result = write::write(&path, &artifact);
-        let release = lease.release(result.is_ok()).map_err(|failure| {
-            error(
-                BriefingGenerationCode::NewChatBriefingWriteFailed,
-                failure.message(),
-            )
-            .with_source(failure)
-        });
+        let result = write::write(path, artifact);
+        let release = lease.release(result.is_ok()).map_err(write_failed);
         release?;
-        result?;
-        Ok(path.to_string_lossy().into_owned())
+        result
     }
 }
 
-fn metrics(input: &BriefingMetrics) -> Map<String, Value> {
-    butler_core::json::json_object!({
-        "outcome":input.outcome, "skip_reason":input.reason, "generated_count":input.generated,
-        "failed_count":input.failed, "skipped_project_count":input.skipped,
-        "general_artifact_path":input.general, "project_artifact_paths":input.projects,
-        "model_ref":input.model, "reasoning_effort":input.reasoning,
-        "model_usage":input.usage.value(), "raw_text_included":false,
-    })
+fn metrics(metrics: BriefingMetrics) -> Map<String, Value> {
+    match serde_json::to_value(metrics) {
+        Ok(Value::Object(map)) => map,
+        _ => Map::new(),
+    }
 }
 
 fn ensure_active(cancellation: &CancellationToken) -> Result<(), BriefingGenerationError> {

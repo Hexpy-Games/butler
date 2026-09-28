@@ -9,6 +9,7 @@ use std::{
 use super::{CognitionError, CognitionResult};
 use crate::cognition::CognitionCode;
 
+/// Checks that each path resolves inside `data_root` without following links out of it.
 pub fn ensure_data_authority(data_root: &Path, descendants: &[&Path]) -> CognitionResult<()> {
     let canonical_data = canonicalize_nearest_existing(data_root)?;
     for descendant in descendants {

@@ -1,3 +1,5 @@
+//! Migrating older graph schemas in place.
+
 use rusqlite::{Connection, OptionalExtension};
 
 use super::super::db_error;

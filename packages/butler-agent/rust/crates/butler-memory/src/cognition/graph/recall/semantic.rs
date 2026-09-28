@@ -10,7 +10,7 @@ mod vectors;
 use rusqlite::Connection;
 
 use crate::cognition::recall::{
-    RecallRequest, RecallVectorMatch, SemanticSelection, select_semantic_seeds,
+    RecallRequest, RecallVectorMatch, SeedOptions, SemanticSelection, select_semantic_seeds,
 };
 use crate::cognition::{CognitionCode, CognitionResult};
 
@@ -47,9 +47,14 @@ pub(super) fn select(
     }
     Ok(select_semantic_seeds(
         channels,
-        lexical_partial,
-        16,
-        input.time.is_some(),
-        admitted.graph || admitted.lexical || admitted.vector || admitted.explicit,
+        SeedOptions {
+            max_seeds: 16,
+            time_bounded: input.time.is_some(),
+            context_only: !(admitted.graph
+                || admitted.lexical
+                || admitted.vector
+                || admitted.explicit),
+            lexical_partial,
+        },
     ))
 }

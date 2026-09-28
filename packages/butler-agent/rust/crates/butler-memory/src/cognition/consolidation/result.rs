@@ -1,3 +1,5 @@
+//! Consolidation cycle results: phase outcomes, merged model usage and the run summary.
+
 use std::path::Path;
 
 use serde_json::{Map, Value};

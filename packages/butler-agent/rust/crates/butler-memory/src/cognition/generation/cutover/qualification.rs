@@ -2,15 +2,23 @@
 
 use std::path::{Path, PathBuf};
 
-use serde_json::Value;
-
-use super::{error, field};
+use super::{error, required};
 use crate::cognition::CognitionCode;
+use crate::cognition::generation::manifest::{GenerationManifest, GenerationReadiness};
 use crate::cognition::generation::qualification::{
     ValidatedEvidence, assert_evidence_current, assert_evidence_file_facts_current,
     validate_evidence,
 };
 use crate::cognition::{CognitionResult, ensure_data_authority};
+
+/// The qualified generation whose stored evidence a cutover reuses.
+pub(super) struct QualifiedTarget<'a> {
+    pub(super) generation_root: &'a Path,
+    pub(super) generation_id: &'a str,
+    pub(super) manifest: &'a GenerationManifest,
+    /// Freshly computed readiness the binding must still name.
+    pub(super) readiness: &'a GenerationReadiness,
+}
 
 pub(super) struct StoredQualification {
     pub(super) evidence: ValidatedEvidence,
@@ -19,35 +27,41 @@ pub(super) struct StoredQualification {
 }
 
 impl StoredQualification {
+    /// Revalidates the stored evidence bundle; a binding that no longer names
+    /// the target, its readiness, or `verified_commit` fails with `error_code`.
     pub(super) fn open(
         data_root: &Path,
-        generation_root: &Path,
-        generation_id: &str,
-        manifest: &Value,
-        readiness: &Value,
+        target: &QualifiedTarget<'_>,
         error_code: CognitionCode,
         verified_commit: Option<&str>,
     ) -> CognitionResult<Self> {
+        let manifest = target.manifest;
         let binding = manifest
-            .get("acceptance_binding")
-            .filter(|item| item.is_object())
+            .acceptance_binding
+            .as_ref()
             .ok_or_else(|| error(error_code))?;
-        let qualification_ref = safe_ref(field(binding, "qualification_ref")?)?;
-        let root_ref = safe_ref(field(binding, "verification_root_ref")?)?;
-        let acceptance = generation_root.join(qualification_ref);
-        let evidence_root = generation_root.join(root_ref);
-        ensure_data_authority(data_root, &[generation_root, &acceptance, &evidence_root])?;
+        let acceptance = target
+            .generation_root
+            .join(safe_ref(&binding.qualification_ref)?);
+        let evidence_root = target
+            .generation_root
+            .join(safe_ref(&binding.verification_root_ref)?);
+        ensure_data_authority(
+            data_root,
+            &[target.generation_root, &acceptance, &evidence_root],
+        )?;
         let commit =
             verified_commit.ok_or_else(|| error(CognitionCode::MemoryAcceptanceVersionMismatch))?;
-        let extraction = field(manifest, "extraction_version")?;
-        let embedding = manifest["embedding"]["version"]
-            .as_str()
+        let extraction = required(manifest.extraction_version.as_deref())?;
+        let embedding = manifest
+            .embedding_version()
             .ok_or_else(|| error(CognitionCode::MemoryAcceptanceVersionMismatch))?;
-        if binding["target_generation_id"] != generation_id
-            || binding["target_source_inventory_hash"] != manifest["source_inventory_hash"]
-            || binding["target_readiness_sha256"] != readiness["sha256"]
-            || binding["target_evidence_sha256"] != readiness["evidence_sha256"]
-            || binding["implementation_commit"] != commit
+        if binding.target_generation_id != target.generation_id
+            || manifest.source_inventory_hash.as_deref()
+                != Some(binding.target_source_inventory_hash.as_str())
+            || target.readiness.sha256.as_deref() != Some(binding.target_readiness_sha256.as_str())
+            || binding.target_evidence_sha256 != target.readiness.evidence_sha256
+            || binding.implementation_commit != commit
         {
             return Err(error(error_code));
         }
@@ -58,7 +72,7 @@ impl StoredQualification {
             extraction,
             embedding,
         )?;
-        if binding["qualification_sha256"] != evidence.acceptance_sha256
+        if binding.qualification_sha256 != evidence.acceptance_sha256
             || evidence.implementation_commit != commit
         {
             return Err(error(error_code));

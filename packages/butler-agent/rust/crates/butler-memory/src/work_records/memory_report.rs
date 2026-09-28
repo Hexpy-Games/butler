@@ -1,10 +1,21 @@
+//! The reviewed public report of a planned task, as outcome memory reads it.
+//!
+//! [`read`] accepts a `memory-report-binding.json` only when it still binds
+//! the current report, result, review and plan (by hash), the latest
+//! attempt, a review that verified its memory source and covers every
+//! acceptance criterion with evidence, and a matching disposition.
+
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{Number, Value};
 use sha2::{Digest, Sha256};
 
-use super::read::{self, ReadAvailability, WorkRecordReadError};
+use super::read::{
+    self, CriterionReview, PlanRecord, ReadAvailability, ReviewRecord, Snapshot,
+    WorkRecordReadError,
+};
+use crate::lenient::{Arg, Obj};
 use butler_core::public_text::trim_js_whitespace as trim;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -25,24 +36,101 @@ pub(crate) struct PlannedTaskMemoryReport {
     pub text: String,
 }
 
+/// The fields of `memory-report-binding.json` the checks read, each as
+/// sent (their raw values are hashed into the source revision).
+#[derive(Default, Deserialize)]
+struct ReportBinding {
+    #[serde(default)]
+    schema: Arg<String>,
+    #[serde(default)]
+    task_id: Arg<String>,
+    #[serde(default)]
+    record_id: Arg<String>,
+    #[serde(default)]
+    attempt: Arg<Number>,
+    #[serde(default)]
+    result_hash: Arg<String>,
+    #[serde(default)]
+    review_hash: Arg<String>,
+    #[serde(default)]
+    plan_hash: Arg<String>,
+    #[serde(default)]
+    report_hash: Arg<String>,
+    #[serde(default)]
+    source_revision: Arg<String>,
+    #[serde(default)]
+    disposition: Arg<String>,
+}
+
+impl ReportBinding {
+    fn attempt(&self) -> Option<f64> {
+        self.attempt.valid().and_then(Number::as_f64)
+    }
+
+    fn text(field: &Arg<String>) -> Option<&str> {
+        field.valid().map(String::as_str)
+    }
+}
+
+/// The files a binding hashes.
+struct BoundFiles {
+    report: String,
+    result: String,
+    review: String,
+    plan: String,
+}
+
 pub(super) fn read(
     directory: &Path,
     availability: ReadAvailability,
 ) -> Result<Option<PlannedTaskMemoryReport>, WorkRecordReadError> {
-    let Some(binding) = read::json(&directory.join("memory-report-binding.json"), availability)?
+    let Some(document) = read::json(&directory.join("memory-report-binding.json"), availability)?
     else {
         return Ok(None);
     };
-    if binding.get("schema").and_then(Value::as_str) != Some("butler.planned-task-memory-report.v1")
+    let binding: ReportBinding = crate::lenient::view(&document);
+    if ReportBinding::text(&binding.schema) != Some("butler.planned-task-memory-report.v1") {
+        return Ok(None);
+    }
+    let files = bound_files(directory, &binding, availability)?;
+    let current = read::snapshot(directory, availability)?;
+    // Source computes disposition before the rejection chain. Invalid review
+    // shapes therefore remain errors rather than healthy missing reports.
+    let disposition = current
+        .as_ref()
+        .and_then(|current| current.review.as_ref())
+        .and_then(read::ReviewFile::document)
+        .map(current_disposition)
+        .transpose()?;
+    let (Some(files), Some(current)) = (files, current) else {
+        return Ok(None);
+    };
+    if !hashes_match(&binding, &files)
+        || !latest_attempt_matches(&binding, &current)
+        || !record_matches(&binding)?
+        || !review_accepted(&binding, &current)?
+        || !disposition_matches(&binding, &current, disposition)
+        || !revision_matches(&binding)?
     {
         return Ok(None);
     }
+    let mut output: PlannedTaskMemoryReport = serde_json::from_value(document)?;
+    output.text = files.report;
+    Ok(Some(output))
+}
+
+/// The public report, the bound attempt's result, and the review and plan
+/// texts; `None` when any is missing.
+fn bound_files(
+    directory: &Path,
+    binding: &ReportBinding,
+    availability: ReadAvailability,
+) -> Result<Option<BoundFiles>, WorkRecordReadError> {
     let report = read::text(&directory.join("public-report.md"), availability)?;
-    let attempt = binding.get("attempt").and_then(Value::as_f64);
-    let attempt_name = binding
-        .get("attempt")
-        .map(js_string)
-        .unwrap_or_else(|| "undefined".into());
+    let attempt_name = match &binding.attempt {
+        Arg::Missing => "undefined".into(),
+        attempt => js_string(&serde_json::to_value(attempt)?),
+    };
     let attempt_name = format!("{attempt_name:0>3}");
     let result = read::text(
         &directory
@@ -53,125 +141,166 @@ pub(super) fn read(
     )?;
     let review = read::text(&directory.join("review.json"), availability)?;
     let plan = read::text(&directory.join("plan.json"), availability)?;
-    let current = read::snapshot(directory, availability)?;
-    // Source computes disposition before the rejection chain. Invalid review
-    // shapes therefore remain errors rather than healthy missing reports.
-    let disposition = current
-        .as_ref()
-        .and_then(|current| current.review.as_ref())
-        .filter(|review| !review.is_null())
-        .map(current_disposition)
-        .transpose()?;
-    let (Some(report), Some(result), Some(review), Some(plan), Some(current)) =
-        (report, result, review, plan, current)
-    else {
-        return Ok(None);
-    };
-    for (text, key) in [
-        (&report, "report_hash"),
-        (&result, "result_hash"),
-        (&review, "review_hash"),
-        (&plan, "plan_hash"),
-    ] {
-        if binding.get(key).and_then(Value::as_str) != Some(hash(text).as_str()) {
-            return Ok(None);
-        }
-    }
+    Ok(match (report, result, review, plan) {
+        (Some(report), Some(result), Some(review), Some(plan)) => Some(BoundFiles {
+            report,
+            result,
+            review,
+            plan,
+        }),
+        _ => None,
+    })
+}
+
+fn hashes_match(binding: &ReportBinding, files: &BoundFiles) -> bool {
+    [
+        (&files.report, &binding.report_hash),
+        (&files.result, &binding.result_hash),
+        (&files.review, &binding.review_hash),
+        (&files.plan, &binding.plan_hash),
+    ]
+    .into_iter()
+    .all(|(text, bound)| ReportBinding::text(bound) == Some(hash(text).as_str()))
+}
+
+/// The binding's attempt is the task's latest (whole-numbered) attempt.
+fn latest_attempt_matches(binding: &ReportBinding, current: &Snapshot) -> bool {
     let latest = current
         .latest_attempt
         .as_deref()
         .map(butler_core::json::number_from_string)
         .unwrap_or(f64::NAN);
-    if !latest.is_finite() || latest.fract() != 0.0 || Some(latest) != attempt {
-        return Ok(None);
-    }
-    let task_id = string(&binding, "task_id")?;
-    if binding.get("record_id").and_then(Value::as_str)
-        != Some(super::task_memory_record_id(task_id).as_str())
-    {
-        return Ok(None);
-    }
-    let Some(review) = current.review.as_ref().filter(|review| !review.is_null()) else {
-        return Ok(None);
+    latest.is_finite() && latest.fract() == 0.0 && Some(latest) == binding.attempt()
+}
+
+/// The binding names the task's memory record.
+fn record_matches(binding: &ReportBinding) -> Result<bool, WorkRecordReadError> {
+    let task_id = ReportBinding::text(&binding.task_id).ok_or(WorkRecordReadError::Malformed)?;
+    Ok(ReportBinding::text(&binding.record_id)
+        == Some(super::task_memory_record_id(task_id).as_str()))
+}
+
+/// A non-null review of the bound attempt that verified its memory source,
+/// reviewed the plan's goal, lists no missing evidence, covers every
+/// acceptance criterion, and gives evidence for every passed criterion.
+fn review_accepted(
+    binding: &ReportBinding,
+    current: &Snapshot,
+) -> Result<bool, WorkRecordReadError> {
+    let Some(review) = current.review.as_ref().and_then(read::ReviewFile::document) else {
+        return Ok(false);
     };
-    if review.get("attempt").and_then(Value::as_f64) != attempt
-        || review.get("memory_source_verified") != Some(&Value::Bool(true))
+    if review.attempt.valid().copied() != binding.attempt()
+        || review.memory_source_verified != Arg::Valid(true)
     {
-        return Ok(None);
+        return Ok(false);
     }
-    let goal_review = review
-        .get("goal_review")
+    let goal_review = match &review.goal_review {
+        Arg::Missing | Arg::Null | Arg::Invalid(_) => return Err(WorkRecordReadError::Malformed),
+        Arg::Valid(Obj(goal_review)) => goal_review,
+    };
+    if trim(required(&goal_review.goal)?) != plan_goal(&current.plan)? {
+        return Ok(false);
+    }
+    let missing_evidence = review
+        .missing_evidence
+        .valid()
         .ok_or(WorkRecordReadError::Malformed)?;
-    let internal_goal = match current.plan.get("internal_goal") {
-        None | Some(Value::Null) => "",
-        Some(value) => trim(value.as_str().ok_or(WorkRecordReadError::Malformed)?),
-    };
-    let internal_goal = if internal_goal.is_empty() {
-        trim(string(&current.plan, "goal")?)
-    } else {
-        internal_goal
-    };
-    if trim(string(goal_review, "goal")?) != internal_goal {
-        return Ok(None);
+    if !missing_evidence.is_empty() {
+        return Ok(false);
     }
-    if !array(review, "missing_evidence")?.is_empty() {
-        return Ok(None);
+    let criteria = criteria(review)?;
+    if missing_criteria(&current.plan, &criteria)? {
+        return Ok(false);
     }
-    let criteria = array(review, "criteria")?;
-    if missing_criteria(&current.plan, criteria)? {
-        return Ok(None);
-    }
-    for criterion in criteria {
-        if criterion.get("verdict").and_then(Value::as_str) == Some("PASS")
-            && trim(string(criterion, "evidence")?).is_empty()
+    for criterion in &criteria {
+        if criterion
+            .and_then(|c| c.verdict.valid())
+            .map(String::as_str)
+            == Some("PASS")
+            && trim(required(criterion.map_or(&Arg::Missing, |c| &c.evidence))?).is_empty()
         {
-            return Ok(None);
+            return Ok(false);
         }
     }
+    Ok(true)
+}
+
+/// The plan's internal goal, or its goal when that is empty.
+fn plan_goal(plan: &PlanRecord) -> Result<&str, WorkRecordReadError> {
+    let internal_goal = match &plan.internal_goal {
+        Arg::Missing | Arg::Null => "",
+        Arg::Valid(goal) => trim(goal),
+        Arg::Invalid(_) => return Err(WorkRecordReadError::Malformed),
+    };
+    if internal_goal.is_empty() {
+        Ok(trim(required(&plan.goal)?))
+    } else {
+        Ok(internal_goal)
+    }
+}
+
+/// The review's criteria; an item that is not an object reads as `None`.
+fn criteria(review: &ReviewRecord) -> Result<Vec<Option<&CriterionReview>>, WorkRecordReadError> {
+    Ok(review
+        .criteria
+        .valid()
+        .ok_or(WorkRecordReadError::Malformed)?
+        .iter()
+        .map(|item| item.valid().map(|Obj(criterion)| criterion))
+        .collect())
+}
+
+/// The task's state and the bound disposition agree with the review.
+fn disposition_matches(
+    binding: &ReportBinding,
+    current: &Snapshot,
+    disposition: Option<&str>,
+) -> bool {
     if !matches!(
         current.status.as_str(),
         "PUBLIC_REPORT_READY" | "FAILED_PUBLIC_REPORT_READY" | "REPORTED"
     ) {
-        return Ok(None);
+        return false;
     }
-    let binding_disposition = binding.get("disposition").and_then(Value::as_str);
-    if disposition != binding_disposition
-        || (current.status == "PUBLIC_REPORT_READY" && binding_disposition != Some("succeeded"))
-        || (current.status == "FAILED_PUBLIC_REPORT_READY"
-            && binding_disposition == Some("succeeded"))
-    {
-        return Ok(None);
-    }
-    let revision = json!([
-        "planned-task-memory-report",
-        binding["task_id"],
-        binding["attempt"],
-        binding["result_hash"],
-        binding["review_hash"],
-        binding["plan_hash"],
-        binding["report_hash"],
-        binding["disposition"]
-    ]);
-    let revision = butler_core::json::stringify(&revision)?;
-    if binding.get("source_revision").and_then(Value::as_str) != Some(hash(&revision).as_str()) {
-        return Ok(None);
-    }
-    let mut output: PlannedTaskMemoryReport = serde_json::from_value(binding)?;
-    output.text = report;
-    Ok(Some(output))
+    let bound = ReportBinding::text(&binding.disposition);
+    disposition == bound
+        && !(current.status == "PUBLIC_REPORT_READY" && bound != Some("succeeded"))
+        && !(current.status == "FAILED_PUBLIC_REPORT_READY" && bound == Some("succeeded"))
 }
 
-fn current_disposition(review: &Value) -> Result<&'static str, WorkRecordReadError> {
-    let verdict = review.get("verdict").and_then(Value::as_str);
+/// The binding's source revision hashes its own identity fields.
+fn revision_matches(binding: &ReportBinding) -> Result<bool, WorkRecordReadError> {
+    let revision = crate::js_json::stringify(&(
+        "planned-task-memory-report",
+        &binding.task_id,
+        &binding.attempt,
+        &binding.result_hash,
+        &binding.review_hash,
+        &binding.plan_hash,
+        &binding.report_hash,
+        &binding.disposition,
+    ))?;
+    Ok(ReportBinding::text(&binding.source_revision) == Some(hash(&revision).as_str()))
+}
+
+/// `succeeded` when the review, its goal review and every criterion passed;
+/// `failed` for a failed review; `partial` otherwise.
+fn current_disposition(review: &ReviewRecord) -> Result<&'static str, WorkRecordReadError> {
+    let verdict = review.verdict.valid().map(String::as_str);
     if verdict == Some("PASS") {
-        let goal = review
-            .get("goal_review")
-            .filter(|value| !value.is_null())
-            .ok_or(WorkRecordReadError::Malformed)?;
-        if goal.get("verdict").and_then(Value::as_str) == Some("PASS")
-            && array(review, "criteria")?
-                .iter()
-                .all(|criterion| criterion.get("verdict").and_then(Value::as_str) == Some("PASS"))
+        let goal_verdict = match &review.goal_review {
+            Arg::Missing | Arg::Null => return Err(WorkRecordReadError::Malformed),
+            Arg::Valid(Obj(goal)) => goal.verdict.valid().map(String::as_str),
+            Arg::Invalid(_) => None,
+        };
+        if goal_verdict == Some("PASS")
+            && criteria(review)?.iter().all(|criterion| {
+                criterion
+                    .and_then(|c| c.verdict.valid())
+                    .map(String::as_str)
+                    == Some("PASS")
+            })
         {
             return Ok("succeeded");
         }
@@ -183,19 +312,29 @@ fn current_disposition(review: &Value) -> Result<&'static str, WorkRecordReadErr
     })
 }
 
-fn missing_criteria(plan: &Value, reviews: &[Value]) -> Result<bool, WorkRecordReadError> {
-    let acceptance = array(plan, "acceptance_criteria")?;
+/// Whether a non-blank acceptance criterion has no review (by index or by
+/// case-insensitive text).
+fn missing_criteria(
+    plan: &PlanRecord,
+    reviews: &[Option<&CriterionReview>],
+) -> Result<bool, WorkRecordReadError> {
+    let acceptance = plan
+        .acceptance_criteria
+        .valid()
+        .ok_or(WorkRecordReadError::Malformed)?;
     let reviewed = reviews
         .iter()
-        .map(|review| Ok(trim(string(review, "criterion")?).to_lowercase()))
+        .map(|review| {
+            Ok(trim(required(review.map_or(&Arg::Missing, |r| &r.criterion))?).to_lowercase())
+        })
         .collect::<Result<std::collections::HashSet<_>, WorkRecordReadError>>()?;
     for (index, criterion) in acceptance.iter().enumerate() {
-        let criterion = trim(criterion.as_str().ok_or(WorkRecordReadError::Malformed)?);
+        let criterion = trim(required(criterion)?);
         if criterion.is_empty() {
             continue;
         }
         let by_index = reviews.iter().any(|review| {
-            review.get("criterion_index").and_then(Value::as_f64) == Some((index + 1) as f64)
+            review.and_then(|r| r.criterion_index.valid()).copied() == Some((index + 1) as f64)
         });
         if !by_index && !reviewed.contains(&criterion.to_lowercase()) {
             return Ok(true);
@@ -204,21 +343,18 @@ fn missing_criteria(plan: &Value, reviews: &[Value]) -> Result<bool, WorkRecordR
     Ok(false)
 }
 
-fn string<'a>(value: &'a Value, key: &str) -> Result<&'a str, WorkRecordReadError> {
+/// A string field the record must have.
+fn required(value: &Arg<String>) -> Result<&str, WorkRecordReadError> {
     value
-        .get(key)
-        .and_then(Value::as_str)
-        .ok_or(WorkRecordReadError::Malformed)
-}
-fn array<'a>(value: &'a Value, key: &str) -> Result<&'a Vec<Value>, WorkRecordReadError> {
-    value
-        .get(key)
-        .and_then(Value::as_array)
+        .valid()
+        .map(String::as_str)
         .ok_or(WorkRecordReadError::Malformed)
 }
 fn hash(text: &str) -> String {
     format!("{:x}", Sha256::digest(text.as_bytes()))
 }
+/// JavaScript `String(value)` of the binding's attempt, used as the attempt
+/// directory name. Passthrough: `value` is whatever the binding holds.
 fn js_string(value: &Value) -> String {
     match value {
         Value::String(value) => value.clone(),

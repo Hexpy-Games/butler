@@ -4,7 +4,7 @@ use serde_json::json;
 
 use super::{
     io::{safe_ref, valid_git_commit, valid_sha},
-    source::memory_inventory_hash,
+    source::EvidenceInventory,
     validate_evidence,
 };
 
@@ -20,9 +20,32 @@ fn memory_inventory_hash_matches_source_ecmascript_projection() {
         "history": []
     });
     assert_eq!(
-        memory_inventory_hash(&inventory).unwrap(),
+        serde_json::from_str::<EvidenceInventory>(&inventory.to_string())
+            .unwrap()
+            .hash()
+            .unwrap(),
         "f476671143536ff9272e0a756593a9da40e89532328016b3f51ce5e0e690715e"
     );
+}
+
+/// Inventories with populated, missing, `null` and odd-shaped fields hash as
+/// the pre-typing `Value` projection did (hashes generated from merge-base
+/// e1d5f72b1 into `fixtures/inventory-hash.json`).
+#[test]
+fn memory_inventory_hash_matches_pre_typing_hashes() {
+    let cases: Vec<serde_json::Value> =
+        serde_json::from_str(include_str!("fixtures/inventory-hash.json")).unwrap();
+    assert!(cases.len() >= 5);
+    for case in cases {
+        let inventory =
+            serde_json::from_str::<EvidenceInventory>(&case["inventory"].to_string()).unwrap();
+        assert_eq!(
+            inventory.hash().unwrap(),
+            case["hash"].as_str().unwrap(),
+            "{}",
+            case["inventory"]
+        );
+    }
 }
 
 #[test]

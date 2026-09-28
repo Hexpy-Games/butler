@@ -1,21 +1,25 @@
 //! Source-compatible recovery for failed graph projection work.
 
 use crate::cognition::CognitionCode;
+use crate::cognition::graph::StageWrite;
 use std::collections::HashSet;
 
 use rusqlite::{Connection, OptionalExtension, params};
-use serde::Deserialize;
-use serde_json::{Value, json};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::db_error;
 use crate::cognition::{CognitionError, CognitionResult, generation_vectors::GenerationVectorRow};
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(in crate::cognition) struct RetryFailedCounts {
-    pub(in crate::cognition) semantic_windows: usize,
-    pub(in crate::cognition) vector_units: usize,
-    pub(in crate::cognition) cache_jobs: usize,
+/// Failed work items reset for retry.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct RetryFailedCounts {
+    /// Semantic projection windows.
+    pub semantic_windows: usize,
+    /// Vector units.
+    pub vector_units: usize,
+    /// Hot-cache jobs.
+    pub cache_jobs: usize,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -33,8 +37,8 @@ pub(in crate::cognition) struct VectorRepairUnitRequest {
 }
 
 impl VectorRepairRequest {
-    pub(in crate::cognition) fn parse(value: Value) -> CognitionResult<Self> {
-        let request: Self = serde_json::from_value(value).map_err(|source| {
+    pub(in crate::cognition) fn parse(bytes: &[u8]) -> CognitionResult<Self> {
+        let request: Self = serde_json::from_slice(bytes).map_err(|source| {
             error(CognitionCode::MemoryVectorRepairInvalidRequest).with_source(source)
         })?;
         if request.generation_id.is_empty()
@@ -83,10 +87,7 @@ pub(super) fn retry_failed(
     now: &str,
 ) -> CognitionResult<RetryFailedCounts> {
     let recovery_revision = recovery_revision(generation_id, now)?;
-    let cache_state = stringify(&json!({
-        "state": "pending",
-        "blocked_by": "memory_retry_requested"
-    }))?;
+    let cache_state = StageWrite::blocked("memory_retry_requested").json()?;
 
     let tx = connection.transaction().map_err(db_error)?;
     let semantic_windows = tx
@@ -131,40 +132,7 @@ pub(super) fn repair_selected_invalid_vectors(
     embedding_version: &str,
     request: &VectorRepairRequest,
 ) -> CognitionResult<usize> {
-    if current_generation.is_empty()
-        || embedding_version.is_empty()
-        || request.generation_id != current_generation
-        || request.units.is_empty()
-    {
-        return Err(error(CognitionCode::MemoryVectorRepairPreimageChanged));
-    }
-
-    let mut snapshots = Vec::with_capacity(request.units.len());
-    for requested in &request.units {
-        let snapshot = read_repair_unit(connection, requested, current_generation)?
-            .ok_or_else(|| error(CognitionCode::MemoryVectorRepairPreimageChanged))?;
-        if snapshot.state != "complete"
-            || snapshot.owner_revision != requested.owner_revision
-            || snapshot.source_revision != requested.source_revision
-            || snapshot.receipt_json.as_deref() != Some(requested.receipt_json.as_str())
-            || snapshot.source_membership_invalid != 0
-            || snapshot.source_kind.as_deref().is_none_or(str::is_empty)
-            || snapshot
-                .source_observed_at
-                .as_deref()
-                .is_none_or(str::is_empty)
-            || !completed_receipt_lacks_expected_identity(
-                &snapshot,
-                current_generation,
-                embedding_version,
-                &requested.receipt_json,
-            )
-        {
-            return Err(error(CognitionCode::MemoryVectorRepairPreimageChanged));
-        }
-        snapshots.push(snapshot);
-    }
-
+    let snapshots = checked_snapshots(connection, current_generation, embedding_version, request)?;
     let tx = connection.transaction().map_err(db_error)?;
     for (requested, snapshot) in request.units.iter().zip(&snapshots) {
         let changed = tx
@@ -203,10 +171,7 @@ pub(super) fn repair_selected_invalid_vectors(
                 "UPDATE memory_projection_jobs SET {column}=?1 WHERE job_id=?2 AND generation=?3"
             ),
             params![
-                stringify(&json!({
-                    "state": "pending",
-                    "blocked_by": "memory_vector_repair_requested"
-                }))?,
+                StageWrite::blocked("memory_vector_repair_requested").json()?,
                 snapshot.job_id,
                 current_generation,
             ],
@@ -215,6 +180,50 @@ pub(super) fn repair_selected_invalid_vectors(
     }
     tx.commit().map_err(db_error)?;
     Ok(snapshots.len())
+}
+
+/// The stored preimage of every requested unit, each still complete and
+/// matching the request, with a receipt that lacks the expected identity.
+fn checked_snapshots(
+    connection: &Connection,
+    current_generation: &str,
+    embedding_version: &str,
+    request: &VectorRepairRequest,
+) -> CognitionResult<Vec<RepairUnitSnapshot>> {
+    if current_generation.is_empty()
+        || embedding_version.is_empty()
+        || request.generation_id != current_generation
+        || request.units.is_empty()
+    {
+        return Err(error(CognitionCode::MemoryVectorRepairPreimageChanged));
+    }
+
+    let mut snapshots = Vec::with_capacity(request.units.len());
+    for requested in &request.units {
+        let snapshot = read_repair_unit(connection, requested, current_generation)?
+            .ok_or_else(|| error(CognitionCode::MemoryVectorRepairPreimageChanged))?;
+        if snapshot.state != "complete"
+            || snapshot.owner_revision != requested.owner_revision
+            || snapshot.source_revision != requested.source_revision
+            || snapshot.receipt_json.as_deref() != Some(requested.receipt_json.as_str())
+            || snapshot.source_membership_invalid != 0
+            || snapshot.source_kind.as_deref().is_none_or(str::is_empty)
+            || snapshot
+                .source_observed_at
+                .as_deref()
+                .is_none_or(str::is_empty)
+            || !completed_receipt_lacks_expected_identity(
+                &snapshot,
+                current_generation,
+                embedding_version,
+                &requested.receipt_json,
+            )
+        {
+            return Err(error(CognitionCode::MemoryVectorRepairPreimageChanged));
+        }
+        snapshots.push(snapshot);
+    }
+    Ok(snapshots)
 }
 
 fn read_repair_unit(
@@ -276,31 +285,44 @@ fn read_repair_unit(
         .map_err(db_error)
 }
 
+/// The identity fields of a completed vector receipt; a field of another
+/// type reads as absent.
+#[derive(Deserialize)]
+struct CompletedReceipt {
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    generation: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    embedding_version: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    vector_keys: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    row_count: Option<f64>,
+}
+
+/// A readable receipt of this generation and embedding whose keys are
+/// consistent yet miss the unit's expected vector key.
 fn completed_receipt_lacks_expected_identity(
     unit: &RepairUnitSnapshot,
     generation: &str,
     embedding_version: &str,
     receipt_json: &str,
 ) -> bool {
-    let Ok(receipt) = serde_json::from_str::<Value>(receipt_json) else {
+    let Ok(receipt) = serde_json::from_str::<CompletedReceipt>(receipt_json) else {
         return false;
     };
-    if receipt.get("generation").and_then(Value::as_str) != Some(generation)
-        || receipt.get("embedding_version").and_then(Value::as_str) != Some(embedding_version)
+    if receipt.generation.as_deref() != Some(generation)
+        || receipt.embedding_version.as_deref() != Some(embedding_version)
     {
         return false;
     }
-    let Some(keys) = receipt.get("vector_keys").and_then(Value::as_array) else {
+    let Some(keys) = &receipt.vector_keys else {
         return false;
     };
-    let mut unique_keys = HashSet::with_capacity(keys.len());
-    for key in keys {
-        let Some(key) = key.as_str().filter(|key| !key.is_empty()) else {
-            return false;
-        };
-        unique_keys.insert(key);
+    if keys.iter().any(String::is_empty) {
+        return false;
     }
-    let Some(row_count) = receipt.get("row_count").and_then(Value::as_f64) else {
+    let unique_keys = keys.iter().map(String::as_str).collect::<HashSet<_>>();
+    let Some(row_count) = receipt.row_count else {
         return false;
     };
     if !row_count.is_finite() || row_count.fract() != 0.0 || row_count != unique_keys.len() as f64 {
@@ -319,13 +341,9 @@ fn completed_receipt_lacks_expected_identity(
 }
 
 fn recovery_revision(generation_id: &str, now: &str) -> CognitionResult<String> {
-    let source = stringify(&json!(["memory-retry-failed", generation_id, now]))?;
+    let source = crate::js_json::stringify(&("memory-retry-failed", generation_id, now))
+        .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))?;
     Ok(format!("{:x}", Sha256::digest(source.as_bytes())))
-}
-
-fn stringify(value: &Value) -> CognitionResult<String> {
-    butler_core::json::stringify(value)
-        .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))
 }
 
 fn error(code: CognitionCode) -> CognitionError {

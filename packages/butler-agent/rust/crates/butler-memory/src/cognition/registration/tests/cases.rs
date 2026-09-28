@@ -171,12 +171,7 @@ async fn claimed_window_meaning_and_bound_apply_are_durable() {
         )
         .unwrap();
     graph
-        .pin_projection_input(
-            &claim.window_ref,
-            &claim.owner_nonce,
-            &serde_json::to_value(&input).unwrap(),
-            None,
-        )
+        .pin_projection_input(&claim.window_ref, &claim.owner_nonce, &input, None)
         .unwrap();
     let output = ExtractOutput {
         schema: "butler.memory-extract-output.v3".into(),
@@ -223,8 +218,8 @@ async fn claimed_window_meaning_and_bound_apply_are_durable() {
             &claim.job_id,
             &claim.window_ref,
             &claim.owner_nonce,
-            &serde_json::to_value(&output).unwrap(),
-            &serde_json::to_value(&plan).unwrap(),
+            &output,
+            &plan,
         )
         .unwrap();
     graph
@@ -272,7 +267,7 @@ async fn actual_canonical_writer_registers_and_replays_exact_durable_projection(
     else {
         panic!("first call must register")
     };
-    assert_eq!(first.outcome, "partial");
+    assert_eq!(first.outcome, crate::cognition::JobOutcome::Partial);
     assert_eq!(first.observed_completion_job_ids, ["z"]);
 
     let db = Connection::open(fixture.graph_path()).unwrap();

@@ -1,0 +1,784 @@
+{
+  "captured": {
+    "candidates": [
+      {
+        "id": "pc_070468dd155f5248",
+        "category": "values",
+        "payload_json": "{\"layer\":\"stable_disposition\",\"facet\":\"explicit_values\",\"summary\":\"Values careful verification\",\"applies_when\":[],\"butler_should\":[],\"butler_should_not\":[],\"temporal_scope\":\"durable\",\"decay_policy\":\"never_without_consent\",\"contradiction_refs\":[],\"sensitivity\":\"sensitive\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\"},\"evidence_count\":1}",
+        "source_type": "inference",
+        "confidence": "low",
+        "sensitive_domain": 1,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T20:00:00.000Z",
+        "expires_or_decay": "expires",
+        "status": "candidate",
+        "promoted_at": null
+      },
+      {
+        "id": "pc_30961fa77d714e31",
+        "category": "communication",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"tone_preference\",\"summary\":\"Prefers concise answers\",\"applies_when\":[\"answering\"],\"butler_should\":[\"Keep answers short\",\"Prefers concise answers\"],\"butler_should_not\":[],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\"},\"evidence_count\":1}",
+        "source_type": "explicit",
+        "confidence": "high",
+        "sensitive_domain": 0,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T20:00:00.000Z",
+        "expires_or_decay": "decay",
+        "status": "candidate",
+        "promoted_at": null
+      },
+      {
+        "id": "pc_7c7d79357b92c10d",
+        "category": "cares",
+        "payload_json": "{\"layer\":\"current_attention\",\"facet\":\"current_interests\",\"summary\":\"Rust migration of Butler\",\"applies_when\":[\"topic_relevance\"],\"butler_should\":[\"use this as current context only when relevant\"],\"butler_should_not\":[\"overfit unrelated answers to this interest\"],\"temporal_scope\":\"active\",\"decay_policy\":\"days_30\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\"},\"evidence_count\":1}",
+        "source_type": "explicit",
+        "confidence": "medium",
+        "sensitive_domain": 0,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T20:00:00.000Z",
+        "expires_or_decay": "decay",
+        "status": "candidate",
+        "promoted_at": null
+      },
+      {
+        "id": "pc_96f156e89318da3e",
+        "category": "boundaries",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"privacy_rules\",\"summary\":\"Do not share private notes\",\"applies_when\":[\"all_interactions\"],\"butler_should\":[\"respect this boundary before optimizing for convenience\"],\"butler_should_not\":[\"share notes\",\"expose private internals without explicit request\"],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\"},\"evidence_count\":1}",
+        "source_type": "repeated_observation",
+        "confidence": "medium",
+        "sensitive_domain": 0,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T20:00:00.000Z",
+        "expires_or_decay": "decay",
+        "status": "candidate",
+        "promoted_at": null
+      }
+    ],
+    "stable": [],
+    "projection": []
+  },
+  "first_consolidation": {
+    "candidates": [
+      {
+        "id": "pc_070468dd155f5248",
+        "category": "values",
+        "payload_json": "{\"layer\":\"stable_disposition\",\"facet\":\"explicit_values\",\"summary\":\"Values careful verification\",\"applies_when\":[],\"butler_should\":[],\"butler_should_not\":[],\"temporal_scope\":\"durable\",\"decay_policy\":\"never_without_consent\",\"contradiction_refs\":[],\"sensitivity\":\"sensitive\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\"},\"evidence_count\":1}",
+        "source_type": "inference",
+        "confidence": "low",
+        "sensitive_domain": 1,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T20:00:00.000Z",
+        "expires_or_decay": "expires",
+        "status": "candidate",
+        "promoted_at": null
+      },
+      {
+        "id": "pc_30961fa77d714e31",
+        "category": "communication",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"tone_preference\",\"summary\":\"Prefers concise answers\",\"applies_when\":[\"answering\"],\"butler_should\":[\"Keep answers short\",\"Prefers concise answers\"],\"butler_should_not\":[],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\"},\"evidence_count\":1}",
+        "source_type": "explicit",
+        "confidence": "high",
+        "sensitive_domain": 0,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T20:00:00.000Z",
+        "expires_or_decay": "decay",
+        "status": "promoted",
+        "promoted_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "pc_7c7d79357b92c10d",
+        "category": "cares",
+        "payload_json": "{\"layer\":\"current_attention\",\"facet\":\"current_interests\",\"summary\":\"Rust migration of Butler\",\"applies_when\":[\"topic_relevance\"],\"butler_should\":[\"use this as current context only when relevant\"],\"butler_should_not\":[\"overfit unrelated answers to this interest\"],\"temporal_scope\":\"active\",\"decay_policy\":\"days_30\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\"},\"evidence_count\":1}",
+        "source_type": "explicit",
+        "confidence": "medium",
+        "sensitive_domain": 0,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T20:00:00.000Z",
+        "expires_or_decay": "decay",
+        "status": "promoted",
+        "promoted_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "pc_96f156e89318da3e",
+        "category": "boundaries",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"privacy_rules\",\"summary\":\"Do not share private notes\",\"applies_when\":[\"all_interactions\"],\"butler_should\":[\"respect this boundary before optimizing for convenience\"],\"butler_should_not\":[\"share notes\",\"expose private internals without explicit request\"],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\"},\"evidence_count\":1}",
+        "source_type": "repeated_observation",
+        "confidence": "medium",
+        "sensitive_domain": 0,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T20:00:00.000Z",
+        "expires_or_decay": "decay",
+        "status": "candidate",
+        "promoted_at": null
+      }
+    ],
+    "stable": [
+      {
+        "id": "sp_30961fa77d714e31",
+        "category": "communication",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"tone_preference\",\"summary\":\"Prefers concise answers\",\"applies_when\":[\"answering\"],\"butler_should\":[\"Keep answers short\",\"Prefers concise answers\"],\"butler_should_not\":[],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\"},\"evidence_count\":1,\"sensitive_domain\":false}",
+        "confidence": "high",
+        "source_type": "explicit",
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "sp_7c7d79357b92c10d",
+        "category": "cares",
+        "payload_json": "{\"layer\":\"current_attention\",\"facet\":\"current_interests\",\"summary\":\"Rust migration of Butler\",\"applies_when\":[\"topic_relevance\"],\"butler_should\":[\"use this as current context only when relevant\"],\"butler_should_not\":[\"overfit unrelated answers to this interest\"],\"temporal_scope\":\"active\",\"decay_policy\":\"days_30\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\"},\"evidence_count\":1,\"sensitive_domain\":false}",
+        "confidence": "medium",
+        "source_type": "explicit",
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      }
+    ],
+    "projection": [
+      {
+        "id": "active",
+        "version": 1700000000029,
+        "mode": "deep",
+        "payload_json": "{\"version\":1700000000029.0,\"mode\":\"deep\",\"updated_at\":\"2023-11-14T22:13:20.000Z\",\"how_to_answer\":[\"Keep answers short\",\"Prefers concise answers\"],\"how_to_collaborate\":[],\"response_hints\":[\"Keep answers short\",\"Prefers concise answers\"],\"current_attention\":[\"Rust migration of Butler\"],\"active_boundaries\":[],\"likely_failure_modes\":[],\"ask_before\":[],\"caution_hints\":[],\"writer_kind\":\"generated\",\"source_entry_ids\":[\"sp_30961fa77d714e31\",\"sp_7c7d79357b92c10d\"]}",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      }
+    ]
+  },
+  "second_consolidation": {
+    "candidates": [
+      {
+        "id": "pc_070468dd155f5248",
+        "category": "values",
+        "payload_json": "{\"layer\":\"stable_disposition\",\"facet\":\"explicit_values\",\"summary\":\"Values careful verification\",\"applies_when\":[],\"butler_should\":[],\"butler_should_not\":[],\"temporal_scope\":\"durable\",\"decay_policy\":\"never_without_consent\",\"contradiction_refs\":[],\"sensitivity\":\"sensitive\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\"},\"evidence_count\":1}",
+        "source_type": "inference",
+        "confidence": "low",
+        "sensitive_domain": 1,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T20:00:00.000Z",
+        "expires_or_decay": "expires",
+        "status": "candidate",
+        "promoted_at": null
+      },
+      {
+        "id": "pc_30961fa77d714e31",
+        "category": "communication",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"tone_preference\",\"summary\":\"Prefers concise answers\",\"applies_when\":[\"answering\"],\"butler_should\":[\"Keep answers short\",\"Prefers concise answers\"],\"butler_should_not\":[],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\"},\"evidence_count\":1}",
+        "source_type": "explicit",
+        "confidence": "high",
+        "sensitive_domain": 0,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T20:00:00.000Z",
+        "expires_or_decay": "decay",
+        "status": "promoted",
+        "promoted_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "pc_7c7d79357b92c10d",
+        "category": "cares",
+        "payload_json": "{\"layer\":\"current_attention\",\"facet\":\"current_interests\",\"summary\":\"Rust migration of Butler\",\"applies_when\":[\"topic_relevance\"],\"butler_should\":[\"use this as current context only when relevant\",\"Mention Rust tradeoffs\"],\"butler_should_not\":[\"overfit unrelated answers to this interest\"],\"temporal_scope\":\"active\",\"decay_policy\":\"days_30\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\",\"profile_window:26c8a85da56b562562864383\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\",\"profile_window:26c8a85da56b562562864383\":\"2023-11-14T21:00:00.000Z\"},\"evidence_count\":2}",
+        "source_type": "explicit",
+        "confidence": "high",
+        "sensitive_domain": 0,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T21:00:00.000Z",
+        "expires_or_decay": "decay",
+        "status": "promoted",
+        "promoted_at": null
+      },
+      {
+        "id": "pc_96f156e89318da3e",
+        "category": "boundaries",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"privacy_rules\",\"summary\":\"Do not share private notes\",\"applies_when\":[\"all_interactions\"],\"butler_should\":[\"respect this boundary before optimizing for convenience\"],\"butler_should_not\":[\"share notes\",\"expose private internals without explicit request\"],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\",\"profile_window:26c8a85da56b562562864383\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\",\"profile_window:26c8a85da56b562562864383\":\"2023-11-14T21:00:00.000Z\"},\"evidence_count\":2}",
+        "source_type": "repeated_observation",
+        "confidence": "medium",
+        "sensitive_domain": 0,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T21:00:00.000Z",
+        "expires_or_decay": "decay",
+        "status": "promoted",
+        "promoted_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "pc_ade3c548ddee3bda",
+        "category": "communication",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"tone_preference\",\"summary\":\"Detailed answers when explanations are requested\",\"applies_when\":[\"answering\"],\"butler_should\":[\"Detailed answers when explanations are requested\"],\"butler_should_not\":[],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[\"sp_30961fa77d714e31\"],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:26c8a85da56b562562864383\"],\"evidence_observed_at\":{\"profile_window:26c8a85da56b562562864383\":\"2023-11-14T21:00:00.000Z\"},\"evidence_count\":1}",
+        "source_type": "explicit",
+        "confidence": "high",
+        "sensitive_domain": 0,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T21:00:00.000Z",
+        "expires_or_decay": "decay",
+        "status": "promoted",
+        "promoted_at": "2023-11-14T22:13:20.000Z"
+      }
+    ],
+    "stable": [
+      {
+        "id": "sp_30961fa77d714e31",
+        "category": "communication",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"tone_preference\",\"summary\":\"Prefers concise answers\",\"applies_when\":[\"answering\"],\"butler_should\":[\"Keep answers short\",\"Prefers concise answers\"],\"butler_should_not\":[],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\"},\"evidence_count\":1,\"sensitive_domain\":false}",
+        "confidence": "high",
+        "source_type": "explicit",
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "sp_7c7d79357b92c10d",
+        "category": "cares",
+        "payload_json": "{\"layer\":\"current_attention\",\"facet\":\"current_interests\",\"summary\":\"Rust migration of Butler\",\"applies_when\":[\"topic_relevance\"],\"butler_should\":[\"use this as current context only when relevant\",\"Mention Rust tradeoffs\"],\"butler_should_not\":[\"overfit unrelated answers to this interest\"],\"temporal_scope\":\"active\",\"decay_policy\":\"days_30\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\",\"profile_window:26c8a85da56b562562864383\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\",\"profile_window:26c8a85da56b562562864383\":\"2023-11-14T21:00:00.000Z\"},\"evidence_count\":2,\"sensitive_domain\":false}",
+        "confidence": "high",
+        "source_type": "explicit",
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "sp_96f156e89318da3e",
+        "category": "boundaries",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"privacy_rules\",\"summary\":\"Do not share private notes\",\"applies_when\":[\"all_interactions\"],\"butler_should\":[\"respect this boundary before optimizing for convenience\"],\"butler_should_not\":[\"share notes\",\"expose private internals without explicit request\"],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\",\"profile_window:26c8a85da56b562562864383\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\",\"profile_window:26c8a85da56b562562864383\":\"2023-11-14T21:00:00.000Z\"},\"evidence_count\":2,\"sensitive_domain\":false}",
+        "confidence": "medium",
+        "source_type": "repeated_observation",
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "sp_ade3c548ddee3bda",
+        "category": "communication",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"tone_preference\",\"summary\":\"Detailed answers when explanations are requested\",\"applies_when\":[\"answering\"],\"butler_should\":[\"Detailed answers when explanations are requested\"],\"butler_should_not\":[],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[\"sp_30961fa77d714e31\"],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:26c8a85da56b562562864383\"],\"evidence_observed_at\":{\"profile_window:26c8a85da56b562562864383\":\"2023-11-14T21:00:00.000Z\"},\"evidence_count\":1,\"sensitive_domain\":false}",
+        "confidence": "high",
+        "source_type": "explicit",
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      }
+    ],
+    "projection": [
+      {
+        "id": "active",
+        "version": 1700000000062,
+        "mode": "deep",
+        "payload_json": "{\"version\":1700000000062.0,\"mode\":\"deep\",\"updated_at\":\"2023-11-14T22:13:20.000Z\",\"how_to_answer\":[\"Detailed answers when explanations are requested\"],\"how_to_collaborate\":[],\"response_hints\":[\"Detailed answers when explanations are requested\"],\"current_attention\":[\"Rust migration of Butler\"],\"active_boundaries\":[\"Do not share private notes\",\"share notes\",\"expose private internals without explicit request\"],\"likely_failure_modes\":[],\"ask_before\":[],\"caution_hints\":[\"Do not share private notes\",\"share notes\",\"expose private internals without explicit request\"],\"writer_kind\":\"generated\",\"source_entry_ids\":[\"sp_7c7d79357b92c10d\",\"sp_96f156e89318da3e\",\"sp_ade3c548ddee3bda\"]}",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      }
+    ]
+  },
+  "stale_record": "{\"id\":\"pc_6370c18daf417296\",\"layer\":\"stable_disposition\",\"category\":\"affective_landscape\",\"facet\":\"frustrations\",\"summary\":\"Gets frustrated by vague status\",\"applies_when\":[],\"butler_should\":[],\"butler_should_not\":[],\"temporal_scope\":\"durable\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"legacy:1\"],\"evidence_observed_at\":{\"legacy:1\":\"2023-01-01T00:00:00.000Z\"},\"evidence_count\":1,\"source_type\":\"inference\",\"confidence\":\"low\",\"sensitive_domain\":false,\"status\":\"candidate\",\"created_at\":\"2023-01-01T00:00:00.000Z\",\"updated_at\":\"2023-01-01T00:00:00.000Z\",\"last_seen_at\":\"2023-01-01T00:00:00.000Z\",\"expires_or_decay\":\"decay\",\"promoted_at\":null}",
+  "confirmed_record": "{\"id\":\"pc_b4a7cf68505927fc\",\"layer\":\"stable_disposition\",\"category\":\"relationships\",\"facet\":null,\"summary\":\"Works with a design partner\",\"applies_when\":[\"planning\"],\"butler_should\":[\"Mention partner reviews\"],\"butler_should_not\":[],\"temporal_scope\":\"durable\",\"decay_policy\":\"never_without_consent\",\"contradiction_refs\":[],\"sensitivity\":\"sensitive\",\"evidence_refs\":[],\"evidence_observed_at\":{},\"evidence_count\":0,\"source_type\":\"user_confirmed\",\"confidence\":\"medium\",\"sensitive_domain\":true,\"status\":\"candidate\",\"created_at\":\"2023-11-14T22:13:20.000Z\",\"updated_at\":\"2023-11-14T22:13:20.000Z\",\"last_seen_at\":\"2023-11-14T22:13:20.000Z\",\"expires_or_decay\":null,\"promoted_at\":null}",
+  "merged_record": "{\"id\":\"pc_f4035c5789f62b9e\",\"layer\":\"narrative_meaning\",\"category\":\"agency\",\"facet\":\"goals\",\"summary\":\"Ship the Rust port\",\"applies_when\":[\"release\",\"shipping\"],\"butler_should\":[\"Track milestones\"],\"butler_should_not\":[\"Nag\"],\"temporal_scope\":\"durable\",\"decay_policy\":\"days_7\",\"contradiction_refs\":[\"sp_zzz\"],\"sensitivity\":\"normal\",\"evidence_refs\":[\"legacy:x\",\"legacy:y\"],\"evidence_observed_at\":{\"legacy:x\":null,\"legacy:y\":null},\"evidence_count\":4,\"source_type\":\"explicit\",\"confidence\":\"high\",\"sensitive_domain\":false,\"status\":\"candidate\",\"created_at\":\"2023-10-01T00:00:00.000Z\",\"updated_at\":\"2023-11-14T22:13:20.000Z\",\"last_seen_at\":\"2023-12-03T00:00:00.000Z\",\"expires_or_decay\":\"expires\",\"promoted_at\":null}",
+  "third_consolidation": {
+    "candidates": [
+      {
+        "id": "pc_070468dd155f5248",
+        "category": "values",
+        "payload_json": "{\"layer\":\"stable_disposition\",\"facet\":\"explicit_values\",\"summary\":\"Values careful verification\",\"applies_when\":[],\"butler_should\":[],\"butler_should_not\":[],\"temporal_scope\":\"durable\",\"decay_policy\":\"never_without_consent\",\"contradiction_refs\":[],\"sensitivity\":\"sensitive\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\"},\"evidence_count\":1}",
+        "source_type": "inference",
+        "confidence": "low",
+        "sensitive_domain": 1,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T20:00:00.000Z",
+        "expires_or_decay": "expires",
+        "status": "candidate",
+        "promoted_at": null
+      },
+      {
+        "id": "pc_30961fa77d714e31",
+        "category": "communication",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"tone_preference\",\"summary\":\"Prefers concise answers\",\"applies_when\":[\"answering\"],\"butler_should\":[\"Keep answers short\",\"Prefers concise answers\"],\"butler_should_not\":[],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\"},\"evidence_count\":1}",
+        "source_type": "explicit",
+        "confidence": "high",
+        "sensitive_domain": 0,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T20:00:00.000Z",
+        "expires_or_decay": "decay",
+        "status": "promoted",
+        "promoted_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "pc_6370c18daf417296",
+        "category": "affective_landscape",
+        "payload_json": "{\"layer\":\"stable_disposition\",\"facet\":\"frustrations\",\"summary\":\"Gets frustrated by vague status\",\"applies_when\":[],\"butler_should\":[],\"butler_should_not\":[],\"temporal_scope\":\"durable\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"legacy:1\"],\"evidence_observed_at\":{\"legacy:1\":\"2023-01-01T00:00:00.000Z\"},\"evidence_count\":1}",
+        "source_type": "inference",
+        "confidence": "low",
+        "sensitive_domain": 0,
+        "created_at": "2023-01-01T00:00:00.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-01-01T00:00:00.000Z",
+        "expires_or_decay": "decay",
+        "status": "expired",
+        "promoted_at": null
+      },
+      {
+        "id": "pc_7c7d79357b92c10d",
+        "category": "cares",
+        "payload_json": "{\"layer\":\"current_attention\",\"facet\":\"current_interests\",\"summary\":\"Rust migration of Butler\",\"applies_when\":[\"topic_relevance\"],\"butler_should\":[\"use this as current context only when relevant\",\"Mention Rust tradeoffs\"],\"butler_should_not\":[\"overfit unrelated answers to this interest\"],\"temporal_scope\":\"active\",\"decay_policy\":\"days_30\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\",\"profile_window:26c8a85da56b562562864383\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\",\"profile_window:26c8a85da56b562562864383\":\"2023-11-14T21:00:00.000Z\"},\"evidence_count\":2}",
+        "source_type": "explicit",
+        "confidence": "high",
+        "sensitive_domain": 0,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T21:00:00.000Z",
+        "expires_or_decay": "decay",
+        "status": "promoted",
+        "promoted_at": null
+      },
+      {
+        "id": "pc_96f156e89318da3e",
+        "category": "boundaries",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"privacy_rules\",\"summary\":\"Do not share private notes\",\"applies_when\":[\"all_interactions\"],\"butler_should\":[\"respect this boundary before optimizing for convenience\"],\"butler_should_not\":[\"share notes\",\"expose private internals without explicit request\"],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\",\"profile_window:26c8a85da56b562562864383\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\",\"profile_window:26c8a85da56b562562864383\":\"2023-11-14T21:00:00.000Z\"},\"evidence_count\":2}",
+        "source_type": "repeated_observation",
+        "confidence": "medium",
+        "sensitive_domain": 0,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T21:00:00.000Z",
+        "expires_or_decay": "decay",
+        "status": "promoted",
+        "promoted_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "pc_ade3c548ddee3bda",
+        "category": "communication",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"tone_preference\",\"summary\":\"Detailed answers when explanations are requested\",\"applies_when\":[\"answering\"],\"butler_should\":[\"Detailed answers when explanations are requested\"],\"butler_should_not\":[],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[\"sp_30961fa77d714e31\"],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:26c8a85da56b562562864383\"],\"evidence_observed_at\":{\"profile_window:26c8a85da56b562562864383\":\"2023-11-14T21:00:00.000Z\"},\"evidence_count\":1}",
+        "source_type": "explicit",
+        "confidence": "high",
+        "sensitive_domain": 0,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T21:00:00.000Z",
+        "expires_or_decay": "decay",
+        "status": "promoted",
+        "promoted_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "pc_b4a7cf68505927fc",
+        "category": "relationships",
+        "payload_json": "{\"layer\":\"stable_disposition\",\"facet\":null,\"summary\":\"Works with a design partner\",\"applies_when\":[\"planning\"],\"butler_should\":[\"Mention partner reviews\"],\"butler_should_not\":[],\"temporal_scope\":\"durable\",\"decay_policy\":\"never_without_consent\",\"contradiction_refs\":[],\"sensitivity\":\"sensitive\",\"evidence_refs\":[],\"evidence_observed_at\":{},\"evidence_count\":0}",
+        "source_type": "user_confirmed",
+        "confidence": "medium",
+        "sensitive_domain": 1,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T22:13:20.000Z",
+        "expires_or_decay": null,
+        "status": "promoted",
+        "promoted_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "pc_f4035c5789f62b9e",
+        "category": "agency",
+        "payload_json": "{\"layer\":\"narrative_meaning\",\"facet\":\"goals\",\"summary\":\"Ship the Rust port\",\"applies_when\":[\"release\",\"shipping\"],\"butler_should\":[\"Track milestones\"],\"butler_should_not\":[\"Nag\"],\"temporal_scope\":\"durable\",\"decay_policy\":\"days_7\",\"contradiction_refs\":[\"sp_zzz\"],\"sensitivity\":\"normal\",\"evidence_refs\":[\"legacy:x\",\"legacy:y\"],\"evidence_observed_at\":{\"legacy:x\":null,\"legacy:y\":null},\"evidence_count\":4}",
+        "source_type": "explicit",
+        "confidence": "high",
+        "sensitive_domain": 0,
+        "created_at": "2023-10-01T00:00:00.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-12-03T00:00:00.000Z",
+        "expires_or_decay": "expires",
+        "status": "promoted",
+        "promoted_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "pc_legacy",
+        "category": "communication",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":null,\"summary\":\"Explain tradeoffs\",\"applies_when\":[\"x\"],\"butler_should\":[\"Explain tradeoffs\"],\"butler_should_not\":[],\"temporal_scope\":\"active\",\"decay_policy\":\"never_without_consent\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"legacy:a\"],\"evidence_observed_at\":{\"legacy:a\":\"2023-10-31T22:00:00.000Z\",\"legacy:b\":null},\"evidence_count\":2.5}",
+        "source_type": "user_confirmed",
+        "confidence": "low",
+        "sensitive_domain": 0,
+        "created_at": "2023-11-01T00:00:00.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-03T00:00:00.000Z",
+        "expires_or_decay": null,
+        "status": "promoted",
+        "promoted_at": "2023-11-14T22:13:20.000Z"
+      }
+    ],
+    "stable": [
+      {
+        "id": "sp_30961fa77d714e31",
+        "category": "communication",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"tone_preference\",\"summary\":\"Prefers concise answers\",\"applies_when\":[\"answering\"],\"butler_should\":[\"Keep answers short\",\"Prefers concise answers\"],\"butler_should_not\":[],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\"},\"evidence_count\":1,\"sensitive_domain\":false}",
+        "confidence": "high",
+        "source_type": "explicit",
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "sp_7c7d79357b92c10d",
+        "category": "cares",
+        "payload_json": "{\"layer\":\"current_attention\",\"facet\":\"current_interests\",\"summary\":\"Rust migration of Butler\",\"applies_when\":[\"topic_relevance\"],\"butler_should\":[\"use this as current context only when relevant\",\"Mention Rust tradeoffs\"],\"butler_should_not\":[\"overfit unrelated answers to this interest\"],\"temporal_scope\":\"active\",\"decay_policy\":\"days_30\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\",\"profile_window:26c8a85da56b562562864383\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\",\"profile_window:26c8a85da56b562562864383\":\"2023-11-14T21:00:00.000Z\"},\"evidence_count\":2,\"sensitive_domain\":false}",
+        "confidence": "high",
+        "source_type": "explicit",
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "sp_96f156e89318da3e",
+        "category": "boundaries",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"privacy_rules\",\"summary\":\"Do not share private notes\",\"applies_when\":[\"all_interactions\"],\"butler_should\":[\"respect this boundary before optimizing for convenience\"],\"butler_should_not\":[\"share notes\",\"expose private internals without explicit request\"],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\",\"profile_window:26c8a85da56b562562864383\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\",\"profile_window:26c8a85da56b562562864383\":\"2023-11-14T21:00:00.000Z\"},\"evidence_count\":2,\"sensitive_domain\":false}",
+        "confidence": "medium",
+        "source_type": "repeated_observation",
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "sp_ade3c548ddee3bda",
+        "category": "communication",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"tone_preference\",\"summary\":\"Detailed answers when explanations are requested\",\"applies_when\":[\"answering\"],\"butler_should\":[\"Detailed answers when explanations are requested\"],\"butler_should_not\":[],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[\"sp_30961fa77d714e31\"],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:26c8a85da56b562562864383\"],\"evidence_observed_at\":{\"profile_window:26c8a85da56b562562864383\":\"2023-11-14T21:00:00.000Z\"},\"evidence_count\":1,\"sensitive_domain\":false}",
+        "confidence": "high",
+        "source_type": "explicit",
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "sp_b4a7cf68505927fc",
+        "category": "relationships",
+        "payload_json": "{\"layer\":\"stable_disposition\",\"facet\":null,\"summary\":\"Works with a design partner\",\"applies_when\":[\"planning\"],\"butler_should\":[\"Mention partner reviews\"],\"butler_should_not\":[],\"temporal_scope\":\"durable\",\"decay_policy\":\"never_without_consent\",\"contradiction_refs\":[],\"sensitivity\":\"sensitive\",\"evidence_refs\":[],\"evidence_observed_at\":{},\"evidence_count\":0,\"sensitive_domain\":true}",
+        "confidence": "medium",
+        "source_type": "user_confirmed",
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "sp_bb378b4df75ee74b",
+        "category": "communication",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":null,\"summary\":\"Explain tradeoffs\",\"applies_when\":[\"legacy\",\"x\"],\"butler_should\":[\"Keep it\",\"Explain tradeoffs\"],\"butler_should_not\":[],\"temporal_scope\":\"active\",\"decay_policy\":\"never_without_consent\",\"contradiction_refs\":[],\"sensitivity\":\"restricted\",\"evidence_refs\":[\"old:1\",\"legacy:a\"],\"evidence_observed_at\":{\"old:1\":123,\"legacy:a\":\"2023-10-31T22:00:00.000Z\",\"legacy:b\":null},\"evidence_count\":7,\"sensitive_domain\":false}",
+        "confidence": "high",
+        "source_type": "user_confirmed",
+        "created_at": "2020-01-01T00:00:00.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "sp_f4035c5789f62b9e",
+        "category": "agency",
+        "payload_json": "{\"layer\":\"narrative_meaning\",\"facet\":\"goals\",\"summary\":\"Ship the Rust port\",\"applies_when\":[\"release\",\"shipping\"],\"butler_should\":[\"Track milestones\"],\"butler_should_not\":[\"Nag\"],\"temporal_scope\":\"durable\",\"decay_policy\":\"days_7\",\"contradiction_refs\":[\"sp_zzz\"],\"sensitivity\":\"normal\",\"evidence_refs\":[\"legacy:x\",\"legacy:y\"],\"evidence_observed_at\":{\"legacy:x\":null,\"legacy:y\":null},\"evidence_count\":4,\"sensitive_domain\":false}",
+        "confidence": "high",
+        "source_type": "explicit",
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      }
+    ],
+    "projection": [
+      {
+        "id": "active",
+        "version": 1700000000068,
+        "mode": "deep",
+        "payload_json": "{\"version\":1700000000068.0,\"mode\":\"deep\",\"updated_at\":\"2023-11-14T22:13:20.000Z\",\"how_to_answer\":[\"Detailed answers when explanations are requested\"],\"how_to_collaborate\":[],\"response_hints\":[\"Detailed answers when explanations are requested\"],\"current_attention\":[\"Rust migration of Butler\"],\"active_boundaries\":[\"Do not share private notes\",\"share notes\",\"expose private internals without explicit request\"],\"likely_failure_modes\":[],\"ask_before\":[],\"caution_hints\":[\"Do not share private notes\",\"share notes\",\"expose private internals without explicit request\"],\"writer_kind\":\"generated\",\"source_entry_ids\":[\"sp_7c7d79357b92c10d\",\"sp_96f156e89318da3e\",\"sp_ade3c548ddee3bda\"]}",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      }
+    ]
+  },
+  "imported": {
+    "candidates": [
+      {
+        "id": "pc_070468dd155f5248",
+        "category": "values",
+        "payload_json": "{\"layer\":\"stable_disposition\",\"facet\":\"explicit_values\",\"summary\":\"Values careful verification\",\"applies_when\":[],\"butler_should\":[],\"butler_should_not\":[],\"temporal_scope\":\"durable\",\"decay_policy\":\"never_without_consent\",\"contradiction_refs\":[],\"sensitivity\":\"sensitive\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\"},\"evidence_count\":1}",
+        "source_type": "inference",
+        "confidence": "low",
+        "sensitive_domain": 1,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T20:00:00.000Z",
+        "expires_or_decay": "expires",
+        "status": "candidate",
+        "promoted_at": null
+      },
+      {
+        "id": "pc_30961fa77d714e31",
+        "category": "communication",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"tone_preference\",\"summary\":\"Prefers concise answers\",\"applies_when\":[\"answering\"],\"butler_should\":[\"Keep answers short\",\"Prefers concise answers\"],\"butler_should_not\":[],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\"},\"evidence_count\":1}",
+        "source_type": "explicit",
+        "confidence": "high",
+        "sensitive_domain": 0,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T20:00:00.000Z",
+        "expires_or_decay": "decay",
+        "status": "promoted",
+        "promoted_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "pc_6370c18daf417296",
+        "category": "affective_landscape",
+        "payload_json": "{\"layer\":\"stable_disposition\",\"facet\":\"frustrations\",\"summary\":\"Gets frustrated by vague status\",\"applies_when\":[],\"butler_should\":[],\"butler_should_not\":[],\"temporal_scope\":\"durable\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"legacy:1\"],\"evidence_observed_at\":{\"legacy:1\":\"2023-01-01T00:00:00.000Z\"},\"evidence_count\":1}",
+        "source_type": "inference",
+        "confidence": "low",
+        "sensitive_domain": 0,
+        "created_at": "2023-01-01T00:00:00.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-01-01T00:00:00.000Z",
+        "expires_or_decay": "decay",
+        "status": "expired",
+        "promoted_at": null
+      },
+      {
+        "id": "pc_744be57a37205e97",
+        "category": "identity",
+        "payload_json": "{\"layer\":\"narrative_meaning\",\"facet\":\"roles\",\"summary\":\"Leads a small studio\",\"applies_when\":[],\"butler_should\":[],\"butler_should_not\":[],\"temporal_scope\":\"durable\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"third_party_profile_import:other-assistant:1bd17d81a6167b32\"],\"evidence_observed_at\":{\"third_party_profile_import:other-assistant:1bd17d81a6167b32\":null},\"evidence_count\":1}",
+        "source_type": "inference",
+        "confidence": "low",
+        "sensitive_domain": 0,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T22:13:20.000Z",
+        "expires_or_decay": "decay",
+        "status": "candidate",
+        "promoted_at": null
+      },
+      {
+        "id": "pc_7c7d79357b92c10d",
+        "category": "cares",
+        "payload_json": "{\"layer\":\"current_attention\",\"facet\":\"current_interests\",\"summary\":\"Rust migration of Butler\",\"applies_when\":[\"topic_relevance\"],\"butler_should\":[\"use this as current context only when relevant\",\"Mention Rust tradeoffs\"],\"butler_should_not\":[\"overfit unrelated answers to this interest\"],\"temporal_scope\":\"active\",\"decay_policy\":\"days_30\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\",\"profile_window:26c8a85da56b562562864383\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\",\"profile_window:26c8a85da56b562562864383\":\"2023-11-14T21:00:00.000Z\"},\"evidence_count\":2}",
+        "source_type": "explicit",
+        "confidence": "high",
+        "sensitive_domain": 0,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T21:00:00.000Z",
+        "expires_or_decay": "decay",
+        "status": "promoted",
+        "promoted_at": null
+      },
+      {
+        "id": "pc_96f156e89318da3e",
+        "category": "boundaries",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"privacy_rules\",\"summary\":\"Do not share private notes\",\"applies_when\":[\"all_interactions\"],\"butler_should\":[\"respect this boundary before optimizing for convenience\"],\"butler_should_not\":[\"share notes\",\"expose private internals without explicit request\"],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\",\"profile_window:26c8a85da56b562562864383\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\",\"profile_window:26c8a85da56b562562864383\":\"2023-11-14T21:00:00.000Z\"},\"evidence_count\":2}",
+        "source_type": "repeated_observation",
+        "confidence": "medium",
+        "sensitive_domain": 0,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T21:00:00.000Z",
+        "expires_or_decay": "decay",
+        "status": "promoted",
+        "promoted_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "pc_ade3c548ddee3bda",
+        "category": "communication",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"tone_preference\",\"summary\":\"Detailed answers when explanations are requested\",\"applies_when\":[\"answering\"],\"butler_should\":[\"Detailed answers when explanations are requested\"],\"butler_should_not\":[],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[\"sp_30961fa77d714e31\"],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:26c8a85da56b562562864383\"],\"evidence_observed_at\":{\"profile_window:26c8a85da56b562562864383\":\"2023-11-14T21:00:00.000Z\"},\"evidence_count\":1}",
+        "source_type": "explicit",
+        "confidence": "high",
+        "sensitive_domain": 0,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T21:00:00.000Z",
+        "expires_or_decay": "decay",
+        "status": "promoted",
+        "promoted_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "pc_b4a7cf68505927fc",
+        "category": "relationships",
+        "payload_json": "{\"layer\":\"stable_disposition\",\"facet\":null,\"summary\":\"Works with a design partner\",\"applies_when\":[\"planning\"],\"butler_should\":[\"Mention partner reviews\"],\"butler_should_not\":[],\"temporal_scope\":\"durable\",\"decay_policy\":\"never_without_consent\",\"contradiction_refs\":[],\"sensitivity\":\"sensitive\",\"evidence_refs\":[],\"evidence_observed_at\":{},\"evidence_count\":0}",
+        "source_type": "user_confirmed",
+        "confidence": "medium",
+        "sensitive_domain": 1,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T22:13:20.000Z",
+        "expires_or_decay": null,
+        "status": "promoted",
+        "promoted_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "pc_f4035c5789f62b9e",
+        "category": "agency",
+        "payload_json": "{\"layer\":\"narrative_meaning\",\"facet\":\"goals\",\"summary\":\"Ship the Rust port\",\"applies_when\":[\"release\",\"shipping\"],\"butler_should\":[\"Track milestones\"],\"butler_should_not\":[\"Nag\"],\"temporal_scope\":\"durable\",\"decay_policy\":\"days_7\",\"contradiction_refs\":[\"sp_zzz\"],\"sensitivity\":\"normal\",\"evidence_refs\":[\"legacy:x\",\"legacy:y\"],\"evidence_observed_at\":{\"legacy:x\":null,\"legacy:y\":null},\"evidence_count\":4}",
+        "source_type": "explicit",
+        "confidence": "high",
+        "sensitive_domain": 0,
+        "created_at": "2023-10-01T00:00:00.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-12-03T00:00:00.000Z",
+        "expires_or_decay": "expires",
+        "status": "promoted",
+        "promoted_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "pc_f5ce1d65e23d601d",
+        "category": "aesthetics",
+        "payload_json": "{\"layer\":\"stable_disposition\",\"facet\":\"quality_sense\",\"summary\":\"Values polished UI\",\"applies_when\":[\"design_review\",\"product_recommendation\"],\"butler_should\":[\"reflect this quality bar in visual or product judgments\"],\"butler_should_not\":[],\"temporal_scope\":\"durable\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"third_party_profile_import:other-assistant:1bd17d81a6167b32\"],\"evidence_observed_at\":{\"third_party_profile_import:other-assistant:1bd17d81a6167b32\":null},\"evidence_count\":1}",
+        "source_type": "explicit",
+        "confidence": "medium",
+        "sensitive_domain": 0,
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-14T22:13:20.000Z",
+        "expires_or_decay": "decay",
+        "status": "promoted",
+        "promoted_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "pc_legacy",
+        "category": "communication",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":null,\"summary\":\"Explain tradeoffs\",\"applies_when\":[\"x\"],\"butler_should\":[\"Explain tradeoffs\"],\"butler_should_not\":[],\"temporal_scope\":\"active\",\"decay_policy\":\"never_without_consent\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"legacy:a\"],\"evidence_observed_at\":{\"legacy:a\":\"2023-10-31T22:00:00.000Z\",\"legacy:b\":null},\"evidence_count\":2.5}",
+        "source_type": "user_confirmed",
+        "confidence": "low",
+        "sensitive_domain": 0,
+        "created_at": "2023-11-01T00:00:00.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z",
+        "last_seen_at": "2023-11-03T00:00:00.000Z",
+        "expires_or_decay": null,
+        "status": "promoted",
+        "promoted_at": "2023-11-14T22:13:20.000Z"
+      }
+    ],
+    "stable": [
+      {
+        "id": "sp_30961fa77d714e31",
+        "category": "communication",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"tone_preference\",\"summary\":\"Prefers concise answers\",\"applies_when\":[\"answering\"],\"butler_should\":[\"Keep answers short\",\"Prefers concise answers\"],\"butler_should_not\":[],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\"},\"evidence_count\":1,\"sensitive_domain\":false}",
+        "confidence": "high",
+        "source_type": "explicit",
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "sp_7c7d79357b92c10d",
+        "category": "cares",
+        "payload_json": "{\"layer\":\"current_attention\",\"facet\":\"current_interests\",\"summary\":\"Rust migration of Butler\",\"applies_when\":[\"topic_relevance\"],\"butler_should\":[\"use this as current context only when relevant\",\"Mention Rust tradeoffs\"],\"butler_should_not\":[\"overfit unrelated answers to this interest\"],\"temporal_scope\":\"active\",\"decay_policy\":\"days_30\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\",\"profile_window:26c8a85da56b562562864383\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\",\"profile_window:26c8a85da56b562562864383\":\"2023-11-14T21:00:00.000Z\"},\"evidence_count\":2,\"sensitive_domain\":false}",
+        "confidence": "high",
+        "source_type": "explicit",
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "sp_96f156e89318da3e",
+        "category": "boundaries",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"privacy_rules\",\"summary\":\"Do not share private notes\",\"applies_when\":[\"all_interactions\"],\"butler_should\":[\"respect this boundary before optimizing for convenience\"],\"butler_should_not\":[\"share notes\",\"expose private internals without explicit request\"],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:2431cf54033d248a7569474d\",\"profile_window:26c8a85da56b562562864383\"],\"evidence_observed_at\":{\"profile_window:2431cf54033d248a7569474d\":\"2023-11-14T20:00:00.000Z\",\"profile_window:26c8a85da56b562562864383\":\"2023-11-14T21:00:00.000Z\"},\"evidence_count\":2,\"sensitive_domain\":false}",
+        "confidence": "medium",
+        "source_type": "repeated_observation",
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "sp_ade3c548ddee3bda",
+        "category": "communication",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":\"tone_preference\",\"summary\":\"Detailed answers when explanations are requested\",\"applies_when\":[\"answering\"],\"butler_should\":[\"Detailed answers when explanations are requested\"],\"butler_should_not\":[],\"temporal_scope\":\"active\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[\"sp_30961fa77d714e31\"],\"sensitivity\":\"normal\",\"evidence_refs\":[\"profile_window:26c8a85da56b562562864383\"],\"evidence_observed_at\":{\"profile_window:26c8a85da56b562562864383\":\"2023-11-14T21:00:00.000Z\"},\"evidence_count\":1,\"sensitive_domain\":false}",
+        "confidence": "high",
+        "source_type": "explicit",
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "sp_b4a7cf68505927fc",
+        "category": "relationships",
+        "payload_json": "{\"layer\":\"stable_disposition\",\"facet\":null,\"summary\":\"Works with a design partner\",\"applies_when\":[\"planning\"],\"butler_should\":[\"Mention partner reviews\"],\"butler_should_not\":[],\"temporal_scope\":\"durable\",\"decay_policy\":\"never_without_consent\",\"contradiction_refs\":[],\"sensitivity\":\"sensitive\",\"evidence_refs\":[],\"evidence_observed_at\":{},\"evidence_count\":0,\"sensitive_domain\":true}",
+        "confidence": "medium",
+        "source_type": "user_confirmed",
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "sp_bb378b4df75ee74b",
+        "category": "communication",
+        "payload_json": "{\"layer\":\"contextual_adaptation\",\"facet\":null,\"summary\":\"Explain tradeoffs\",\"applies_when\":[\"legacy\",\"x\"],\"butler_should\":[\"Keep it\",\"Explain tradeoffs\"],\"butler_should_not\":[],\"temporal_scope\":\"active\",\"decay_policy\":\"never_without_consent\",\"contradiction_refs\":[],\"sensitivity\":\"restricted\",\"evidence_refs\":[\"old:1\",\"legacy:a\"],\"evidence_observed_at\":{\"old:1\":123,\"legacy:a\":\"2023-10-31T22:00:00.000Z\",\"legacy:b\":null},\"evidence_count\":7,\"sensitive_domain\":false}",
+        "confidence": "high",
+        "source_type": "user_confirmed",
+        "created_at": "2020-01-01T00:00:00.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "sp_f4035c5789f62b9e",
+        "category": "agency",
+        "payload_json": "{\"layer\":\"narrative_meaning\",\"facet\":\"goals\",\"summary\":\"Ship the Rust port\",\"applies_when\":[\"release\",\"shipping\"],\"butler_should\":[\"Track milestones\"],\"butler_should_not\":[\"Nag\"],\"temporal_scope\":\"durable\",\"decay_policy\":\"days_7\",\"contradiction_refs\":[\"sp_zzz\"],\"sensitivity\":\"normal\",\"evidence_refs\":[\"legacy:x\",\"legacy:y\"],\"evidence_observed_at\":{\"legacy:x\":null,\"legacy:y\":null},\"evidence_count\":4,\"sensitive_domain\":false}",
+        "confidence": "high",
+        "source_type": "explicit",
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      },
+      {
+        "id": "sp_f5ce1d65e23d601d",
+        "category": "aesthetics",
+        "payload_json": "{\"layer\":\"stable_disposition\",\"facet\":\"quality_sense\",\"summary\":\"Values polished UI\",\"applies_when\":[\"design_review\",\"product_recommendation\"],\"butler_should\":[\"reflect this quality bar in visual or product judgments\"],\"butler_should_not\":[],\"temporal_scope\":\"durable\",\"decay_policy\":\"reinforce_or_decay\",\"contradiction_refs\":[],\"sensitivity\":\"normal\",\"evidence_refs\":[\"third_party_profile_import:other-assistant:1bd17d81a6167b32\"],\"evidence_observed_at\":{\"third_party_profile_import:other-assistant:1bd17d81a6167b32\":null},\"evidence_count\":1,\"sensitive_domain\":false}",
+        "confidence": "medium",
+        "source_type": "explicit",
+        "created_at": "2023-11-14T22:13:20.000Z",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      }
+    ],
+    "projection": [
+      {
+        "id": "active",
+        "version": 1700000000074,
+        "mode": "deep",
+        "payload_json": "{\"version\":1700000000074.0,\"mode\":\"deep\",\"updated_at\":\"2023-11-14T22:13:20.000Z\",\"how_to_answer\":[\"Detailed answers when explanations are requested\"],\"how_to_collaborate\":[\"Values polished UI\"],\"response_hints\":[\"Detailed answers when explanations are requested\"],\"current_attention\":[\"Rust migration of Butler\"],\"active_boundaries\":[\"Do not share private notes\",\"share notes\",\"expose private internals without explicit request\"],\"likely_failure_modes\":[],\"ask_before\":[],\"caution_hints\":[\"Do not share private notes\",\"share notes\",\"expose private internals without explicit request\"],\"writer_kind\":\"generated\",\"source_entry_ids\":[\"sp_7c7d79357b92c10d\",\"sp_96f156e89318da3e\",\"sp_ade3c548ddee3bda\",\"sp_f5ce1d65e23d601d\"]}",
+        "updated_at": "2023-11-14T22:13:20.000Z"
+      }
+    ]
+  },
+  "manifests": [
+    "{\n  \"import_id\": \"third_party_profile_import:other-assistant:1bd17d81a6167b32\",\n  \"source\": \"other-assistant\",\n  \"imported_at\": \"2023-11-14T22:13:20.000Z\",\n  \"text_sha256\": \"1bd17d81a6167b32\",\n  \"input_chars\": 30,\n  \"candidate_ids\": [\n    \"pc_744be57a37205e97\",\n    \"pc_f5ce1d65e23d601d\"\n  ],\n  \"raw_text_included\": false\n}\n"
+  ],
+  "prompts": [
+    "{\"task\":\"extract_profile_candidates\",\"mode\":\"deep\",\"rules\":[\"Evidence refs must be non-empty and come only from delivered observations.\",\"For an explicit correction, contradiction_refs may contain only a delivered correction target_ref and must preserve its category, facet, and applies_when exactly.\"],\"correction_targets\":[],\"observations\":[{\"ref\":\"profile_window:2431cf54033d248a7569474d\",\"observed_at\":\"2023-11-14T20:00:00.000Z\",\"text\":\"I prefer concise answers. I am migrating Butler to Rust.\"}]}",
+    "{\"task\":\"extract_profile_candidates\",\"mode\":\"deep\",\"rules\":[\"Evidence refs must be non-empty and come only from delivered observations.\",\"For an explicit correction, contradiction_refs may contain only a delivered correction target_ref and must preserve its category, facet, and applies_when exactly.\"],\"correction_targets\":[{\"target_ref\":\"profile_target:439005fb654f4205:0\",\"instruction\":\"Keep answers short\",\"category\":\"communication\",\"facet\":\"tone_preference\",\"applies_when\":[\"answering\"]},{\"target_ref\":\"profile_target:81dd9cfdc4d197c2:1\",\"instruction\":\"use this as current context only when relevant\",\"category\":\"cares\",\"facet\":\"current_interests\",\"applies_when\":[\"topic_relevance\"]}],\"observations\":[{\"ref\":\"profile_window:26c8a85da56b562562864383\",\"observed_at\":\"2023-11-14T21:00:00.000Z\",\"text\":\"Actually, give detailed answers when I ask for explanations.\"}]}",
+    "Profiling mode: deep\nImport source: other-assistant\nImport ref: third_party_profile_import:other-assistant:1bd17d81a6167b32\nImported at: 2023-11-14T22:13:20.000Z\n\nAnalyze this third-party assistant export and return profile candidates as JSON.\nEvery evidence_refs item must be exactly the Import ref above.\nDo not preserve or quote raw import text.\n\nImported export:\n\"durable preference from export\""
+  ],
+  "reflective": {
+    "ok": true,
+    "profiling_enabled": true,
+    "mode": "deep",
+    "entry_count": 8,
+    "summary": "This is Butler's careful current understanding from explicit feedback and repeated observations. It is a working interpretation, not a fixed judgment.",
+    "bullets": [
+      "cares/current_interests: Rust migration of Butler",
+      "communication/tone_preference: Prefers concise answers",
+      "communication/tone_preference: Detailed answers when explanations are requested",
+      "communication: Explain tradeoffs",
+      "aesthetics/quality_sense: Values polished UI",
+      "boundaries/privacy_rules: Do not share private notes",
+      "agency/goals: Ship the Rust port",
+      "relationships: Works with a design partner"
+    ],
+    "raw_profile_included": false
+  },
+  "projection": {
+    "version": 1700000000074.0,
+    "mode": "deep",
+    "updated_at": "2023-11-14T22:13:20.000Z",
+    "how_to_answer": [
+      "Detailed answers when explanations are requested"
+    ],
+    "how_to_collaborate": [
+      "Values polished UI"
+    ],
+    "response_hints": [
+      "Detailed answers when explanations are requested"
+    ],
+    "current_attention": [
+      "Rust migration of Butler"
+    ],
+    "active_boundaries": [
+      "Do not share private notes",
+      "share notes",
+      "expose private internals without explicit request"
+    ],
+    "likely_failure_modes": [],
+    "ask_before": [],
+    "caution_hints": [
+      "Do not share private notes",
+      "share notes",
+      "expose private internals without explicit request"
+    ],
+    "writer_kind": "generated",
+    "source_entry_ids": [
+      "sp_7c7d79357b92c10d",
+      "sp_96f156e89318da3e",
+      "sp_ade3c548ddee3bda",
+      "sp_f5ce1d65e23d601d"
+    ]
+  }
+}

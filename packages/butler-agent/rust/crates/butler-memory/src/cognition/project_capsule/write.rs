@@ -1,3 +1,5 @@
+//! Writing project capsules under a per-project lock, with failure records.
+
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,

@@ -1,3 +1,6 @@
+//! The memory sync queue: idempotent appends, reads and removal of processed entries.
+
+use crate::lenient::JsonField;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
@@ -210,7 +213,7 @@ fn queued(path: &Path, id: &str) -> CognitionResult<bool> {
             CognitionError::new(CognitionCode::MemoryQueueInvalidJson, error.to_string())
                 .with_source(error)
         })?;
-        if entry["job_id"] == id {
+        if entry.field("job_id") == id {
             return Ok(true);
         }
     }
@@ -281,7 +284,7 @@ fn rewrite_without(path: &Path, expected: &str) -> CognitionResult<bool> {
                 CognitionError::new(CognitionCode::MemoryQueueInvalidJson, e.to_string())
                     .with_source(e)
             })?;
-            if !removed && value["job_id"] == expected {
+            if !removed && value.field("job_id") == expected {
                 removed = true;
                 continue;
             }

@@ -1,3 +1,5 @@
+//! Recent tasks of a project.
+
 use std::{fs, path::Path};
 
 use tokio_util::sync::CancellationToken;
