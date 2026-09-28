@@ -4,8 +4,8 @@
   "model": "openai/gpt-6-luna",
   "effort": "max",
   "wire_shape": "openai_responses",
-  "butler_git_sha": "270ec6cd7b1b",
-  "recorded_at": "2026-09-27T11:28:47Z",
+  "butler_git_sha": "29e68beab996",
+  "recorded_at": "2026-09-27T23:04:25Z",
   "recorder": "butler-e2e record proxy",
   "sanitization": [
     "per-run values -> {{W}}, {{D}}, {{SANDBOX}}, scenario nonces",
@@ -17,11 +17,11 @@
   "files": [
     {
       "file": "000.json",
-      "sha256": "071814a8b279f3adab59e0f114f4e6df0aa7cda8928cca340be17caedfdf534c"
+      "sha256": "74dfe28186d3bbca07a665e7711056aeb5832c268522ab7bc26ed957402b2470"
     },
     {
       "file": "001.json",
-      "sha256": "3c1dbcda91c516d8d82dc4a593ec444a454176fd4e8695fc770ed9d353f0e3eb"
+      "sha256": "c3f6a20dbbc6006e1a82475cac1080aad1707ecd0ea0b3b09474442cc17d1be9"
     }
   ],
   "fingerprint": [
@@ -41,8 +41,6 @@
       "status:200",
       "response.created{response,sequence_number,type}",
       "response.in_progress{response,sequence_number,type}",
-      "response.output_item.added{item,output_index,sequence_number,type}",
-      "response.output_item.done{item,output_index,sequence_number,type}",
       "response.output_item.added{item,output_index,sequence_number,type}",
       "response.content_part.added{content_index,item_id,output_index,part,sequence_number,type}",
       "response.output_text.delta{content_index,delta,item_id,logprobs,obfuscation,output_index,sequence_number,type}",

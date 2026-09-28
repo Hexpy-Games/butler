@@ -279,7 +279,7 @@ mod tests {
             ("preview.localhost:3000", true),
             ("localhost.attacker.example:18765", false),
             ("butler.lan:18765", false),
-            ("192.168.1.10:18765", false),
+            ("192.0.2.10:18765", false),
             ("[fe80::1]:18765", false),
         ];
         for (host, loopback) in cases {

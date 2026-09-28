@@ -18,6 +18,7 @@ const target = (await server.api<{ session: SessionSummary }>("/sessions", { met
 const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 1200, height: 700 } });
+  await server.signIn(page);
   await page.addInitScript(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), {
     key: FIRST_RUN_STORAGE_KEY, value: firstRunCompleteState("ko"),
   });

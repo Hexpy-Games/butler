@@ -241,6 +241,7 @@ const CORE_SCHEMA: &str = r"
       target_kind TEXT NOT NULL,
       target_session_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
       interval_seconds INTEGER NOT NULL,
+      access_mode TEXT,
       state TEXT NOT NULL,
       next_run_at TEXT,
       last_run_at TEXT,

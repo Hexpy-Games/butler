@@ -16,6 +16,7 @@ use butler_turn::workspace::StoredSessionBinding;
 use local_credentials::CredentialFiles;
 
 pub(crate) use app::{AppCapturedDependencies, AppServiceConfiguration};
+pub(crate) use local_credentials::data_folder_token;
 
 pub(crate) struct ServiceBootstrap {
     pub(crate) binding: StoredSessionBinding,

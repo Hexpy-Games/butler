@@ -65,6 +65,13 @@ pub(super) fn process_locale() -> String {
     }
 }
 
+/// Whether this process holds the App's foreground lease on stdin: `service
+/// run` decides by its `--detached` flag (`requested`), a start without a
+/// command by the App's `BUTLER_APP_FOREGROUND_LEASE`.
+pub(super) fn holds_foreground_lease(requested: Option<bool>) -> bool {
+    requested.unwrap_or_else(|| std::env::var("BUTLER_APP_FOREGROUND_LEASE").as_deref() == Ok("1"))
+}
+
 pub(super) fn io(error: impl std::fmt::Display) -> BtccError {
     failure("native_service_io_failed", error.to_string())
 }

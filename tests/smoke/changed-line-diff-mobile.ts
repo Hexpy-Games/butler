@@ -13,6 +13,7 @@ const browser = await webkit.launch({ headless: true });
 try {
   for (const width of [375, 430]) {
     const page = await browser.newPage({ ...devices["iPhone 13"], viewport: { width, height: 844 } });
+    await server.signIn(page);
     try {
       await page.goto(`${server.url}?visual=design-system&page=blocks/ChangedLineDiff`, { waitUntil: "networkidle" });
       await page.locator('[data-ds-detail="ChangedLineDiff"]').waitFor({ state: "visible" });

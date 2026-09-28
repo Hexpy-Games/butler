@@ -4,12 +4,15 @@
 
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
 
 use super::gateway::Gateway;
 use super::sandbox::Sandbox;
 use super::{HarnessError, harness_error};
+
+mod app_supervisor;
+mod process;
 
 /// Environment and layout needed to (re)start the agent.
 #[derive(Clone)]
@@ -26,6 +29,9 @@ pub struct Launch {
     /// agent owns it (see [`Launch::use_data_folder_token`]).
     pub token: String,
     pub env: Vec<(String, String)>,
+    /// The harness starts and supervises the agent as the Butler App does
+    /// (see [`Launch::use_app_supervisor`]).
+    pub app_supervisor: bool,
 }
 
 /// Where the agent keeps its gateway token when no override names a file.
@@ -64,6 +70,7 @@ impl Launch {
                     auth_file.display().to_string(),
                 ),
             ],
+            app_supervisor: false,
         })
     }
 
@@ -74,6 +81,37 @@ impl Launch {
 
     pub fn remove_env(&mut self, key: &str) {
         self.env.retain(|(existing, _)| existing != key);
+    }
+
+    /// Keeps the gateway token where the Butler App keeps it: in the data
+    /// dir's App local-auth file, which the agent is pointed at. A CLI run
+    /// without the local-auth variables then has only that file to go by.
+    pub fn use_app_local_auth_file(&mut self) -> Result<PathBuf, HarnessError> {
+        let path = self.data.join(DATA_FOLDER_TOKEN_FILE);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let file = serde_json::json!({
+            "schema": "butler.app-local-agent-auth.v1",
+            "product": "butler-app",
+            "purpose": "bundled-agent-local-auth",
+            "token": self.token,
+            "created_at": "2026-09-28T00:00:00.000Z",
+            "raw_text_included": false,
+        });
+        fs::write(&path, file.to_string())?;
+        self.set_env("BUTLER_APP_LOCAL_AUTH_FILE", path.display().to_string());
+        Ok(path)
+    }
+
+    /// A command without the local-auth variables, as a user's terminal runs
+    /// `butler` next to an App-started agent.
+    pub fn command_without_local_auth(&self) -> Command {
+        let mut command = self.command();
+        command
+            .env_remove("BUTLER_APP_LOCAL_AUTH_REQUIRED")
+            .env_remove("BUTLER_APP_LOCAL_AUTH_FILE");
+        command
     }
 
     /// Starts the agent as the CLI does: no token variables, so the agent
@@ -125,6 +163,10 @@ pub struct Agent {
     pub launch: Launch,
     child: Option<Child>,
     starts: u32,
+    /// The instance-record nonce of the running child, once it is published.
+    instance_nonce: Option<String>,
+    /// PID and exit status of every child the harness reaped, oldest first.
+    exits: Vec<(u32, ExitStatus)>,
 }
 
 impl Agent {
@@ -133,24 +175,32 @@ impl Agent {
             launch,
             child: None,
             starts: 0,
+            instance_nonce: None,
+            exits: Vec::new(),
         };
         let gateway = agent.spawn().await?;
         Ok((agent, gateway))
     }
 
-    async fn spawn(&mut self) -> Result<Gateway, HarnessError> {
+    /// Starts the service process and returns its log file.
+    fn launch_child(&mut self) -> Result<PathBuf, HarnessError> {
         self.starts += 1;
+        self.instance_nonce = None;
         let log = self.launch.logs.join(format!("agent-{}.log", self.starts));
         let stdout = File::create(&log)?;
         let stderr = stdout.try_clone()?;
         let child = self
             .launch
-            .command()
-            .stdin(Stdio::null())
+            .service_command()
             .stdout(stdout)
             .stderr(stderr)
             .spawn()?;
         self.child = Some(child);
+        Ok(log)
+    }
+
+    async fn spawn(&mut self) -> Result<Gateway, HarnessError> {
+        let log = self.launch_child()?;
         let deadline = Instant::now() + Duration::from_secs(90);
         loop {
             if self.launch.token.is_empty()
@@ -163,6 +213,7 @@ impl Agent {
                 self.launch.token.clone(),
             );
             if !self.launch.token.is_empty() && gateway.healthy().await {
+                self.remember_instance();
                 return Ok(gateway);
             }
             if let Some(status) = self
@@ -194,39 +245,6 @@ impl Agent {
         self.child.as_ref().map(Child::id)
     }
 
-    /// SIGKILL: no drain, no shutdown hooks.
-    pub fn kill9(&mut self) -> Result<(), HarnessError> {
-        if let Some(mut child) = self.child.take() {
-            child.kill()?;
-            child.wait()?;
-        }
-        Ok(())
-    }
-
-    /// SIGTERM and wait for exit (bounded).
-    pub async fn terminate(&mut self) -> Result<(), HarnessError> {
-        let Some(mut child) = self.child.take() else {
-            return Ok(());
-        };
-        #[cfg(unix)]
-        {
-            let pid = nix::unistd::Pid::from_raw(i32::try_from(child.id()).unwrap_or(i32::MAX));
-            let _ = nix::sys::signal::kill(pid, nix::sys::signal::Signal::SIGTERM);
-        }
-        let deadline = Instant::now() + Duration::from_secs(30);
-        loop {
-            if child.try_wait()?.is_some() {
-                return Ok(());
-            }
-            if Instant::now() > deadline {
-                child.kill()?;
-                child.wait()?;
-                return Err(harness_error("agent did not exit within 30s of SIGTERM"));
-            }
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-    }
-
     pub async fn restart(&mut self) -> Result<Gateway, HarnessError> {
         self.terminate().await?;
         self.spawn().await
@@ -238,13 +256,6 @@ impl Agent {
             return Err(harness_error("start_again while the agent is running"));
         }
         self.spawn().await
-    }
-
-    /// Collects an exited process so the agent can be started again.
-    pub fn reap(&mut self) {
-        if let Some(mut child) = self.child.take() {
-            let _ = child.wait();
-        }
     }
 
     pub fn is_running(&mut self) -> bool {
@@ -264,27 +275,56 @@ impl Agent {
     /// read.
     pub async fn cli_reaping(&mut self, args: &[&str]) -> Result<CliOutput, HarnessError> {
         let mut command = self.launch.command();
-        command.args(args).stdin(Stdio::null());
-        let task = tokio::task::spawn_blocking(move || command.output());
+        command.args(args);
+        self.command_reaping(command, || {}).await
+    }
+
+    /// [`Agent::cli_reaping`] for a prepared command (for example one with a
+    /// changed environment); `observe` runs on every poll while it runs.
+    pub async fn command_reaping(
+        &mut self,
+        mut command: Command,
+        observe: impl FnMut(),
+    ) -> Result<CliOutput, HarnessError> {
+        command.stdin(Stdio::null());
+        let output = self
+            .while_reaping(move || command.output(), observe)
+            .await??;
+        Ok(CliOutput {
+            code: output.status.code(),
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        })
+    }
+
+    /// Runs blocking `work` to completion while reaping the service child
+    /// when it exits, as a supervisor would; `observe` runs about every 25 ms
+    /// while `work` runs. As the App's supervisor, the harness starts the
+    /// child again when the exit was an announced restart the App carries out.
+    pub async fn while_reaping<T: Send + 'static>(
+        &mut self,
+        work: impl FnOnce() -> T + Send + 'static,
+        mut observe: impl FnMut(),
+    ) -> Result<T, HarnessError> {
+        let task = tokio::task::spawn_blocking(work);
         loop {
+            observe();
             if let Some(child) = self.child.as_mut()
-                && matches!(child.try_wait(), Ok(Some(_)))
+                && let Ok(Some(status)) = child.try_wait()
             {
+                let pid = child.id();
                 self.child = None;
+                self.exits.push((pid, status));
+                if self.app_restart_requested(pid) {
+                    self.spawn().await?;
+                }
             }
             if task.is_finished() {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(25)).await;
         }
-        let output = task
-            .await
-            .map_err(|error| harness_error(error.to_string()))??;
-        Ok(CliOutput {
-            code: output.status.code(),
-            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        })
+        task.await.map_err(|error| harness_error(error.to_string()))
     }
 
     /// Like [`Agent::cli`], without blocking the test's runtime: use it for
