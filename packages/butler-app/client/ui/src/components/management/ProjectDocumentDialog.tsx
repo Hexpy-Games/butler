@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
+import { rememberSignedFileUrls } from "@/app/messageFileUrls.ts";
+import { readProjectDocumentPage } from "@/app/projectDocumentSource.ts";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +32,9 @@ export function ProjectDocumentDialog({
   const view = document ? projectDocumentReaderView(document) : null;
   const copy = appCopy.projectDocumentMetadata;
   const close = () => { setExpandedDocument(null); onClose(); };
+  const refreshFileUrls = useCallback(async () => {
+    if (document?.artifact) rememberSignedFileUrls(await readProjectDocumentPage(document));
+  }, [document]);
   return (
     <Dialog
       open={Boolean(document)}
@@ -55,7 +60,8 @@ export function ProjectDocumentDialog({
             )}</Stack>
           </DisclosureRow>}
         >
-          {document.artifact ? <ArtifactViewer artifact={document.artifact} onBack={close} embedded />
+          {document.artifact ? <ArtifactViewer artifact={document.artifact} onBack={close} embedded
+            refreshFileUrls={refreshFileUrls} />
             : <ProjectDocumentMarkdownContent markdown={view.body} />}
           {document.truncated && <Button variant="outline" onClick={onLoadMore} disabled={!onLoadMore}>
             {appCopy.projectSignpost.loadMore}

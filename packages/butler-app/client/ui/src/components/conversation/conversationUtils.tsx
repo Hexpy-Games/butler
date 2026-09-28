@@ -18,22 +18,11 @@ export const DEFAULT_COMPOSER_RESERVE = 170;
 export const COMPOSER_FLOAT_BOTTOM = 28;
 export const COMPOSER_CONTENT_GAP = 20;
 export const MESSAGE_LIST_TOP_PADDING = 32;
-export const MESSAGE_FILE_URL_PATTERN =
-  /^\/message-files\/file-[0-9a-f-]{36}$/iu;
 
 export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-export function messageFileUrl(attachment: { url: string }): string {
-  if (!MESSAGE_FILE_URL_PATTERN.test(attachment.url)) return "#";
-  const serverUrl =
-    typeof window !== "undefined" ? window.butlerApp?.serverUrl : undefined;
-  return serverUrl
-    ? new URL(attachment.url, serverUrl).toString()
-    : attachment.url;
 }
 
 export function resolveButlerMarkTheme(

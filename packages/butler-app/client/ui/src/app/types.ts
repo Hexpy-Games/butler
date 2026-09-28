@@ -750,6 +750,8 @@ export interface MessageFileRef {
   size_bytes: number;
   sha256: string;
   url: string;
+  /** Short-lived `url` with `?expires=..&signature=..` for token-less loads. */
+  signed_url?: string;
   created_at: string;
 }
 
@@ -1398,6 +1400,8 @@ export interface SessionArtifactSummary {
   kind: string;
   safe_path_label?: string;
   url?: string;
+  /** Short-lived `url` with `?expires=..&signature=..` for token-less loads. */
+  signed_url?: string;
   size_bytes?: number;
   created_at: string;
   open_action?: "route" | "unsupported" | string;

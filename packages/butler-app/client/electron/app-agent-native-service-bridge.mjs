@@ -41,6 +41,7 @@ export function createAppAgentNativeServiceBridge({
   systemdUnit = DEFAULT_SYSTEMD_UNIT,
   getPort = () => 18765,
   getAppVersion = () => null,
+  getDevOrigin = () => null,
   resourcesPath = process.resourcesPath,
   execPath = process.execPath,
   prepareLocalAuth = () => prepareAppLocalAuth({ butlerData }),
@@ -72,6 +73,7 @@ export function createAppAgentNativeServiceBridge({
           systemdUnit: resolvedSystemdUnit,
           getPort,
           getAppVersion,
+          getDevOrigin,
           resourcesPath,
           execPath,
           prepareLocalAuth,
@@ -98,6 +100,7 @@ export function createAppAgentNativeServiceBridge({
           systemdUnit: resolvedSystemdUnit,
           getPort,
           getAppVersion,
+          getDevOrigin,
           resourcesPath,
           execPath,
           prepareLocalAuth,
@@ -126,6 +129,7 @@ export function createAppAgentNativeServiceBridge({
           systemdUnit: resolvedSystemdUnit,
           getPort,
           getAppVersion,
+          getDevOrigin,
           resourcesPath,
           execPath,
           prepareLocalAuth,
@@ -183,6 +187,7 @@ function createRegistrationPlan({
   systemdUnit,
   getPort,
   getAppVersion,
+  getDevOrigin,
   resourcesPath,
   execPath,
   prepareLocalAuth,
@@ -204,6 +209,7 @@ function createRegistrationPlan({
     execPath,
     getPort,
     getAppVersion,
+    getDevOrigin,
     prepareLocalAuth,
   });
   if (platform === "darwin") {
@@ -227,6 +233,7 @@ function resolveAppManagedServiceRuntime({
   execPath,
   getPort,
   getAppVersion,
+  getDevOrigin = () => null,
   prepareLocalAuth,
 }) {
   const installation = resolveBundledNativeAgentInstallation({
@@ -248,6 +255,8 @@ function resolveAppManagedServiceRuntime({
   });
   const embedIdleRecycleMs = safeString(process.env.EMBED_IDLE_RECYCLE_MS);
   const appVersion = safeString(getAppVersion());
+  // A dev renderer (Vite) is a foreign origin to the gateway unless named.
+  const devOrigin = safeString(getDevOrigin());
   return {
     ...installation,
     butlerData,
@@ -261,6 +270,7 @@ function resolveAppManagedServiceRuntime({
       BUTLER_APP_GATEWAY_PID_FILE: "off",
       BUTLER_APP_SERVER_PORT: String(port),
       ...(appVersion ? { BUTLER_APP_VERSION: appVersion } : {}),
+      ...(devOrigin ? { BUTLER_APP_DEV_ORIGIN: devOrigin } : {}),
       EMBED_SOCKET: embedSocket,
       EMBED_HEALTH_PORT: String(embedHealthPort),
       ...(embedIdleRecycleMs ? { EMBED_IDLE_RECYCLE_MS: embedIdleRecycleMs } : {}),
