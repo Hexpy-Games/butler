@@ -7,6 +7,8 @@ mod read;
 mod write;
 
 #[cfg(test)]
+mod exact_tests;
+#[cfg(test)]
 mod tests;
 
 use std::sync::Arc;

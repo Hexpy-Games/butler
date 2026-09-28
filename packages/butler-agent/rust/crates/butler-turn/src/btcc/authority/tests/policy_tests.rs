@@ -117,6 +117,80 @@ fn decision(request_ref: &str, action: &str) -> AuthorityDecisionInput {
     }
 }
 
+#[tokio::test]
+async fn modify_precedence_same_decision_replay_and_optional_execution_identity() {
+    let ready = ready("authority-decision-policy").await;
+    let mut invalid = decision("missing", "modify");
+    invalid.alternative_input = Some(" \t".into());
+    assert_eq!(
+        ready.authority.decide(invalid).await.unwrap_err().code(),
+        "authority_modify_input_missing"
+    );
+    let allowed = ready
+        .authority
+        .decide(decision(&ready.request_ref, "allow"))
+        .await
+        .unwrap();
+    assert_eq!(
+        ready
+            .authority
+            .decide(decision(&ready.request_ref, "allow"))
+            .await
+            .unwrap(),
+        allowed
+    );
+    assert_eq!(
+        ready
+            .authority
+            .decide(decision(&ready.request_ref, "deny"))
+            .await
+            .unwrap_err()
+            .code(),
+        "authority_decision_conflict"
+    );
+    let base = AuthorityExecutionInput {
+        owner_session_id: "session".into(),
+        request_ref: ready.request_ref.clone(),
+        source_session_id: None,
+        client_message_id: None,
+        turn_id: "turn".into(),
+    };
+    assert_eq!(
+        ready
+            .authority
+            .execution(base.clone())
+            .await
+            .unwrap()
+            .decision,
+        crate::btcc::RequestDecision::Allowed
+    );
+    assert_eq!(
+        ready
+            .authority
+            .execution(AuthorityExecutionInput {
+                source_session_id: Some(String::new()),
+                ..base.clone()
+            })
+            .await
+            .unwrap_err()
+            .code(),
+        "authority_request_not_found"
+    );
+    assert_eq!(
+        ready
+            .authority
+            .execution(AuthorityExecutionInput {
+                client_message_id: Some(String::new()),
+                ..base
+            })
+            .await
+            .unwrap_err()
+            .code(),
+        "authority_request_not_found"
+    );
+    ready.storage.close().await.unwrap();
+}
+
 /// Race: authority decisions are compare-and-set at one generation. Grant
 /// precedence, revocation and operational close race on one request, and the
 /// terminal slot generation and close decisions keep the source order.

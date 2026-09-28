@@ -21,6 +21,53 @@ fn baseline(catalog: &ModelCatalog) -> ModelCatalogSnapshot {
 }
 
 #[test]
+fn local_metadata_and_provider_family_preserve_source_rules() {
+    let raw = json!({"model_id":"qwen3.8-local.gguf","display_name":"  Qwen Local  ","server_url":"localhost:8080/",
+        "context_window_tokens":32768,"max_output_tokens":4096,"reasoning_budget_ratio":0.25,"platform":"llama_cpp","source":"manual"});
+    let config = normalize_local_model_config(&raw, "2026-09-14T00:00:00.000Z").unwrap();
+    let metadata = ModelProviderMetadata::from(&config);
+    assert_eq!(metadata.model_ref, "local/qwen3.8-local.gguf");
+    assert_eq!(
+        metadata.reasoning_efforts,
+        vec![
+            ReasoningEffort::None,
+            ReasoningEffort::Low,
+            ReasoningEffort::Medium,
+            ReasoningEffort::Xhigh
+        ]
+    );
+    assert_eq!(metadata.local_reasoning_budget_ratio, None);
+    let unicode = json!({"model_id":"unicode","server_url":"https://bücher.example:443/a b/?x=1#z",
+        "context_window_tokens":16384});
+    let normalized = normalize_local_model_config(&unicode, "now").unwrap();
+    assert_eq!(normalized.server_url, "https://xn--bcher-kva.example/a%20b");
+    // An explicit API path is kept verbatim; only a bare host defaults to /v1.
+    assert_eq!(
+        normalized.api_base_url,
+        "https://xn--bcher-kva.example/a%20b"
+    );
+    let bare =
+        json!({"model_id":"bare","server_url":"localhost:8080/","context_window_tokens":16384});
+    assert_eq!(
+        normalize_local_model_config(&bare, "now")
+            .unwrap()
+            .api_base_url,
+        "http://localhost:8080/v1"
+    );
+    let credentialed = json!({"model_id":"bad","server_url":"https://u:p@example.com/v1",
+        "context_window_tokens":16384});
+    assert!(normalize_local_model_config(&credentialed, "now").is_none());
+
+    let catalog = ModelCatalog::new().unwrap();
+    let snapshot = baseline(&catalog);
+    let zai = snapshot.find_model_metadata(Some("zai/glm-5.2")).unwrap();
+    let api = snapshot
+        .find_model_metadata(Some("zai-api/glm-5.2"))
+        .unwrap();
+    assert_eq!(model_identity_key(&zai), model_identity_key(&api));
+}
+
+#[test]
 fn supplied_registered_config_normalizes_without_secrets_or_io() {
     let catalog = ModelCatalog::new().unwrap();
     let snapshot = baseline(&catalog);

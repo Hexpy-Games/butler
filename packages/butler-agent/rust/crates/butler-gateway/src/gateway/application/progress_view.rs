@@ -5,6 +5,8 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 
 mod rows;
+#[cfg(test)]
+mod rows_tests;
 
 use super::storage::AppStorageError;
 use crate::gateway::{DeliveryState, ProgressState, TurnProgressSnapshotView};

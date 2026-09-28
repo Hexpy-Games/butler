@@ -6,6 +6,9 @@ mod owner;
 mod read;
 mod write;
 
+#[cfg(test)]
+mod tests;
+
 pub use contracts::{
     AppChatKind, AppChatSummary, AppCreateSessionInput, AppCreateSessionRequest,
     AppCreateSessionResult, AppSessionBranchQuery, AppSessionSummary, AppSessionWorkProgress,

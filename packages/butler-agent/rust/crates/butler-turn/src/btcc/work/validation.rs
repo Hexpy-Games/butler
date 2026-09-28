@@ -277,3 +277,6 @@ fn action_status_name(status: ActionStatus) -> &'static str {
 fn error(message: impl Into<String>) -> BtccError {
     BtccError::detected(BtccCode::DurableWorkValidation, message)
 }
+
+#[cfg(test)]
+mod tests;

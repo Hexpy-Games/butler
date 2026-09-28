@@ -317,3 +317,30 @@ fn text(value: Option<&Value>) -> Option<String> {
         .filter(|v| !v.is_empty())
         .map(str::to_owned)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transcript_policy_redacts_exact_keys_and_keeps_word_nonmatches() {
+        let payload = serde_json::json!({
+            "toolCallId":"call-1",
+            "arguments": {
+                "schema_version": ARGUMENT_SCHEMA,
+                "safe_arguments": {
+                    "token": "secret",
+                    "tokenized": "public",
+                    "nested": [{"raw_stdout":"private", "result":"safe"}]
+                }
+            }
+        });
+        let safe = safe_tool_content(payload.as_object(), "tool_call.finalized");
+        let encoded = butler_core::json::stringify(&Value::Object(safe)).unwrap();
+        assert!(!encoded.contains("secret"));
+        assert!(!encoded.contains("private"));
+        assert!(encoded.contains("tokenized"));
+        assert!(encoded.contains("public"));
+        assert!(encoded.contains("result"));
+    }
+}

@@ -1,7 +1,55 @@
 use serde_json::json;
 
+use super::super::contracts::FailureDisposition;
+use super::super::failure;
 use super::super::support::rebase_continuation;
 use crate::btcc::agent_loop::ModelRoundError;
+
+#[test]
+fn outer_failure_reduction_matches_turn_runtime_diagnostics() {
+    let retry = failure::reduce(ModelRoundError::Recovered {
+        failure_code: "provider_network_error".into(),
+        disposition: "retry".into(),
+    });
+    assert!(matches!(
+        retry,
+        ModelRoundError::Operational(ref value)
+            if value.code == "provider_network_error" && value.retryable
+    ));
+    for error in [
+        ModelRoundError::RequestAdmission(Box::new(crate::btcc::ModelRequestAdmissionError {
+            code: crate::btcc::ModelRequestAdmissionCode::ContextCapacityExceeded,
+            message: "Serialized model request does not fit.".into(),
+            plan: None,
+        })),
+        ModelRoundError::InvocationFailure {
+            code: Some("EACCES".into()),
+            message: "Metric append failed.".into(),
+        },
+        ModelRoundError::StablePrefix("stable_provider_prefix_contract_invalid".into()),
+        ModelRoundError::ImageAdmission {
+            code: "image_model_unsupported".into(),
+            reason: "visual_fallback_disabled".into(),
+        },
+    ] {
+        assert_eq!(failure::classify(&error), FailureDisposition::Surface);
+        assert_eq!(failure::code(&error), "provider_unknown_error");
+        assert!(matches!(
+            failure::reduce(error),
+            ModelRoundError::Operational(ref value)
+                if value.code == "gateway_failed" && value.retryable
+        ));
+    }
+    assert_eq!(
+        failure::code(&ModelRoundError::DispatchLimit),
+        "model_route_dispatch_limit_exceeded"
+    );
+    assert!(matches!(
+        failure::reduce(ModelRoundError::DispatchLimit),
+        ModelRoundError::Operational(ref value)
+            if value.code == "gateway_failed" && value.retryable
+    ));
+}
 
 #[test]
 fn continuation_rebase_validates_only_accepted_identity_and_compares_json_bytes() {

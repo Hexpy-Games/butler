@@ -269,3 +269,6 @@ fn invalid() -> BtccError {
         "turn_execution_controls_invalid",
     )
 }
+
+#[cfg(test)]
+mod tests;

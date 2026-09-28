@@ -167,6 +167,46 @@ async fn source_edge_reads_preserve_physical_bytes_and_stale_cursor() {
 }
 
 #[tokio::test]
+async fn guided_absolute_path_is_rejected_and_utf8_cursor_respects_character_boundaries() {
+    let fixture = Fixture::new();
+    fixture.write("e\u{301}.txt", "A😀B".as_bytes());
+    let absolute = fixture.root.join("e\u{301}.txt");
+    let call = json!({ "arguments": { "requests": [{ "path": absolute.to_string_lossy(), "max_bytes": 1 }] } });
+    for relative_only in [false, true] {
+        let rust = fixture
+            .capabilities
+            .invoke(
+                "read_file",
+                CapabilityInvocation {
+                    call: &call,
+                    workspace_reference: None,
+                    workspace_path: Some(&fixture.root),
+                    butler_data: &fixture.root,
+                    protected_ledger_roots: &[],
+                    allowed_tools_and_effects: relative_only.then_some(&[]),
+                    mutation_scope: None,
+                    installation_root: None,
+                },
+            )
+            .await
+            .unwrap();
+        if relative_only {
+            assert_eq!(rust["files"][0]["ok"], false);
+            assert_eq!(rust["files"][0]["path"], ".");
+        } else {
+            assert_eq!(rust["files"][0]["ok"], true);
+            assert_eq!(rust["files"][0]["content"], "A");
+        }
+    }
+    let unicode =
+        json!({ "arguments": { "requests": [{ "path": "e\u{301}.txt", "max_bytes": 1 }] } });
+    let first = fixture.invoke(&unicode, None).await;
+    assert_eq!(first["files"][0]["ok"], true);
+    assert_eq!(first["files"][0]["content"], "A");
+    fixture.files.close().await;
+}
+
+#[tokio::test]
 async fn cursor_decoder_accepts_integral_json_number_spellings() {
     use base64::Engine;
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;

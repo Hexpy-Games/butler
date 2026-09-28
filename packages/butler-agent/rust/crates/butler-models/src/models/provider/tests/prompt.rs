@@ -132,3 +132,52 @@ async fn anthropic_prompt_serializes_registered_default_output() {
     assert_eq!(result.text, "done");
     assert!(String::from_utf8_lossy(&request).contains(r#""max_tokens":4096"#));
 }
+
+#[tokio::test]
+async fn empty_openai_response_records_usage_before_returning_failure() {
+    let body = br#"{"output":[],"usage":{"input_tokens":3,"total_tokens":5}}"#;
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(),
+        String::from_utf8_lossy(body)
+    );
+    let (endpoint, server) = server(vec![response.into_bytes()]).await;
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let (catalog, snapshot) = catalog();
+    let metadata = snapshot
+        .find_model_metadata(Some("openai/gpt-5.5"))
+        .unwrap();
+    let provider = ModelProvider::new(
+        crate::models::provider_http_client().unwrap(),
+        Arc::new(PromptConfig {
+            metadata,
+            endpoint,
+            snapshot,
+            events: Arc::clone(&events),
+        }),
+        Arc::new(Observations::default()),
+        catalog,
+        Arc::new(TestClock::at(1_000)),
+        Arc::new(PromptMetrics(Arc::clone(&events))),
+    );
+    let usage = PromptUsageAttribution {
+        turn_id: None,
+        phase: None,
+        round_index: None,
+        reasoning_effort: None,
+        requested_output_tokens: None,
+        budget_state: None,
+        budget_state_source: None,
+        prompt_sections: None,
+    };
+    let error = provider
+        .run_prompt(
+            prompt_request("openai/gpt-5.5", CancellationToken::new(), Some(&usage)),
+            ProviderPromptLifecycle::none(),
+        )
+        .await
+        .unwrap_err();
+    server.await.unwrap();
+    assert!(matches!(error, ModelRoundError::Provider(_)));
+    assert!(events.lock().unwrap().ends_with(&["metric"]));
+}

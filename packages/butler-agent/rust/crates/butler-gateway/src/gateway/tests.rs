@@ -1,6 +1,10 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use serde_json::Value;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+};
 
 use super::*;
 
@@ -108,4 +112,57 @@ async fn required_auth_without_token_and_rate_limit_keep_public_errors() {
     assert!(second.starts_with("HTTP/1.1 429 Too Many Requests"));
     assert!(second.contains("Too many messages. Please wait before sending again."));
     limited.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn live_events_reconcile_overflow_and_unregister_on_disconnect() {
+    let application = Arc::new(TestApplication::default());
+    application
+        .flood_on_subscribe
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let server = start(application.clone(), LocalAuthConfig::default()).await;
+    let mut stream = TcpStream::connect(server.local_addr()).await.unwrap();
+    let port = server.local_addr().port();
+    stream
+        .write_all(
+            format!("GET /events/live?cursor=0 HTTP/1.1\r\nhost: localhost:{port}\r\n\r\n")
+                .as_bytes(),
+        )
+        .await
+        .unwrap();
+
+    let response = tokio::time::timeout(Duration::from_secs(2), async {
+        let mut bytes = Vec::new();
+        let mut chunk = [0; 4_096];
+        loop {
+            let read = stream.read(&mut chunk).await.unwrap();
+            if read == 0 {
+                break;
+            }
+            bytes.extend_from_slice(&chunk[..read]);
+            if bytes
+                .windows(b"event: heartbeat\ndata: null".len())
+                .any(|window| window == b"event: heartbeat\ndata: null")
+            {
+                break;
+            }
+        }
+        String::from_utf8(bytes).unwrap()
+    })
+    .await
+    .unwrap();
+    assert!(response.starts_with("HTTP/1.1 200 OK"));
+    assert!(response.contains("text/event-stream; charset=utf-8"));
+    assert!(response.contains("stream.reconcile_required"));
+    assert!(response.contains("event: heartbeat\ndata: null"));
+    drop(stream);
+
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while application.subscription_count() != 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    server.close().await.unwrap();
 }

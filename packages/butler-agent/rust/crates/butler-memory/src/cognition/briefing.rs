@@ -200,3 +200,6 @@ struct RunRecord {
     #[serde(default, deserialize_with = "lenient::option")]
     started_at: Option<String>,
 }
+
+#[cfg(test)]
+mod tests;

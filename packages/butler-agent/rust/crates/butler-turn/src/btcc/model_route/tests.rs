@@ -3,11 +3,78 @@ use std::sync::Arc;
 use serde_json::json;
 use tokio_util::sync::CancellationToken;
 
+use super::ContextSizingRequest;
 use super::test_support::*;
 use crate::btcc::ReasoningEffort;
 use crate::btcc::agent_loop::ModelRoundError;
 
 mod contract_tests;
+
+#[tokio::test]
+async fn accepted_replay_skips_provider_and_forwards_sizing() {
+    let store = Arc::new(Store::default());
+    store
+        .accepted
+        .lock()
+        .unwrap()
+        .push_back(Some(serde_json::to_value(result("cached")).unwrap()));
+    let base = Base::new([]);
+    let turn = turn(route(0, 2));
+    let claim = claim();
+    let progress = Progress::default();
+    let execution = make_execution(
+        store,
+        &base,
+        &turn,
+        &claim,
+        &progress,
+        CancellationToken::new(),
+    )
+    .await;
+    let messages = [message("hello")];
+    let reasoning = ReasoningEffort::High;
+    let result = execution
+        .routed()
+        .run_round(request(
+            "round-1",
+            &messages,
+            &reasoning,
+            CancellationToken::new(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(result.text.as_deref(), Some("cached"));
+    assert!(base.models.lock().unwrap().is_empty());
+    assert_eq!(
+        execution
+            .routed()
+            .initial_request_bytes("p", "i", None)
+            .unwrap(),
+        Some(11)
+    );
+    assert_eq!(
+        execution
+            .routed()
+            .stateless_message_bytes(&messages, None)
+            .unwrap(),
+        Some(5)
+    );
+    let sizing = execution
+        .routed()
+        .context_sizing(ContextSizingRequest {
+            model: "openai/a",
+            instructions: None,
+            tools: &[],
+            attachments: &[],
+            max_output_tokens: None,
+            butler_data: None,
+        })
+        .unwrap()
+        .unwrap();
+    assert_eq!((sizing.measure)(&messages).unwrap(), 3.5);
+    assert_eq!(sizing.max_output_tokens, Some(7.5));
+    assert_eq!(sizing.max_message_bytes, 99.25);
+}
 
 #[tokio::test]
 async fn fallback_cursor_is_execution_local_and_persists_across_rounds() {
@@ -116,6 +183,47 @@ async fn fallback_projection_waits_for_persisted_start_and_shares_source_revisio
     assert_eq!(
         events[1].payload.as_ref().unwrap()["requestId"],
         "projection"
+    );
+}
+
+#[tokio::test]
+async fn restart_abandons_open_slot_before_dispatch() {
+    let store = Arc::new(Store::default());
+    store
+        .histories
+        .lock()
+        .unwrap()
+        .push_back(crate::btcc::AttemptHistory {
+            started: vec![1],
+            ..Default::default()
+        });
+    let base = Base::new([Ok(result("recovered"))]);
+    let turn = turn(route(0, 2));
+    let claim = claim();
+    let progress = Progress::default();
+    let execution = make_execution(
+        store.clone(),
+        &base,
+        &turn,
+        &claim,
+        &progress,
+        CancellationToken::new(),
+    )
+    .await;
+    run(&*execution, "round-restart").await.unwrap();
+    let kinds = store
+        .events
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|v| v.kind.as_str().to_owned())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        &kinds[..2],
+        &[
+            "model.attempt.abandoned_after_restart",
+            "model.attempt.started"
+        ]
     );
 }
 

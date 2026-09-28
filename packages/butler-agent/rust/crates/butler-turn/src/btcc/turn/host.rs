@@ -192,6 +192,11 @@ impl Coordinator {
         close.wait().await
     }
 
+    #[cfg(any(test, feature = "test-support"))]
+    pub(super) fn active_stop_count(&self) -> usize {
+        self.state.lock().active_stops.len()
+    }
+
     fn remove_flight(&self, turn_id: &str, session_id: &str, flight: &Arc<Flight<TurnOutcome>>) {
         let mut state = self.state.lock();
         if state

@@ -3,6 +3,8 @@ mod contracts;
 mod conversation;
 mod failure;
 mod host;
+#[cfg(test)]
+mod host_tests;
 mod ports;
 mod preparation;
 mod progress;

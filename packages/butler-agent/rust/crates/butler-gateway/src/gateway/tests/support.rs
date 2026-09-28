@@ -51,7 +51,11 @@ pub(super) struct TestApplication {
     pub(super) flood_on_subscribe: std::sync::atomic::AtomicBool,
 }
 
-impl TestApplication {}
+impl TestApplication {
+    pub(super) fn subscription_count(&self) -> usize {
+        self.subscribers.lock().unwrap().len()
+    }
+}
 
 impl GatewayMutationCommands for TestApplication {
     fn relocate_session(

@@ -96,3 +96,22 @@ fn accepts_image_source_and_prompt(schema: &Value) -> bool {
         properties.contains_key(name) && required.iter().any(|value| value.as_str() == Some(name))
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::accepts_image_source_and_prompt;
+    use serde_json::json;
+
+    #[test]
+    fn image_tool_schema_requires_both_required_properties() {
+        assert!(accepts_image_source_and_prompt(&json!({
+            "type":"object",
+            "properties":{"image_source":{"type":"string"},"prompt":{"type":"string"}},
+            "required":["image_source","prompt"]
+        })));
+        assert!(!accepts_image_source_and_prompt(&json!({
+            "properties":{"image_source":{},"prompt":{}},
+            "required":["image_source"]
+        })));
+    }
+}

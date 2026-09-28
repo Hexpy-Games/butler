@@ -375,3 +375,94 @@ fn is_memory_rebuild_command(args: &[OsString]) -> bool {
             )
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsString;
+
+    use super::Command;
+
+    #[test]
+    fn command_families_claim_their_commands_after_common_options() {
+        for (args, expected) in [
+            (&["schedule", "list"][..], Command::Schedule),
+            (
+                &[
+                    "--data", "/tmp/d", "schedule", "list", "--status", "active", "--json",
+                ],
+                Command::Schedule,
+            ),
+            (&["automation", "future-command"], Command::Schedule),
+            (&["metrics", "tail"], Command::Observability),
+            (
+                &["--data", "/tmp/d", "metrics", "tail", "--lines"],
+                Command::Observability,
+            ),
+            (&["logs"], Command::Observability),
+            (&["ps"], Command::Observability),
+            (&["metrics", "status"], Command::Status),
+            (&["search", "status", "--json"], Command::WebAccess),
+            (
+                &["--data", "/tmp/d", "search", "test", "rust", "async"],
+                Command::WebAccess,
+            ),
+            (
+                &["web", "read", "https://example.com", "--data", "/tmp/d"],
+                Command::WebAccess,
+            ),
+            (&["personalization"], Command::Personalization),
+            (
+                &["--data", "/tmp/d", "personalization", "show"],
+                Command::Personalization,
+            ),
+            (
+                &["personalization", "migrate", "import", "--stdin"],
+                Command::Personalization,
+            ),
+            (&["start", "--dry-run"], Command::ServiceControl),
+            (&["--data", "/tmp/d", "--json"], Command::ServiceControl),
+            (
+                &["service", "run", "--data", "/tmp/d"],
+                Command::ServiceControl,
+            ),
+            (
+                &["service", "restart-handoff", "--data", "/tmp/d", "--quiet"],
+                Command::ServiceControl,
+            ),
+            (&["--data", "/tmp/d", "doctor", "--fix"], Command::Doctor),
+            (&["--data", "/tmp/d", "gateway", "status"], Command::Gateway),
+            (&["mcp", "list"], Command::Mcp),
+            (&["mcp", "serve"], Command::Mcp),
+            (&["mcp", "--data", "/tmp/d", "serve"], Command::Mcp),
+            (&["--data", "/tmp/d", "mcp", "serve"], Command::Mcp),
+            (&["--data", "mcp", "status"], Command::Status),
+            (&["model", "list"], Command::Settings),
+            (&["--data", "model", "model", "list"], Command::Settings),
+            (
+                &["--data", "/tmp/d", "model", "set", "openai/gpt-6-astra"],
+                Command::Settings,
+            ),
+            (&["model", "status"], Command::Status),
+            (&["--data", "/tmp/d", "work", "list"], Command::Work),
+            (&["skills", "list"], Command::Skills),
+            (
+                &["cognition", "memory", "maintain"],
+                Command::MemoryMaintain,
+            ),
+            (
+                &["cognition", "memory", "rebuild", "initialize-empty"],
+                Command::MemoryInitialize,
+            ),
+            (
+                &["cognition", "memory", "rebuild", "build"],
+                Command::MemoryRebuild,
+            ),
+            (&["oauth-login"], Command::OauthLogin),
+            (&[], Command::RunService),
+            (&["nonsense"], Command::Unexpected),
+        ] {
+            let args: Vec<OsString> = args.iter().map(OsString::from).collect();
+            assert_eq!(Command::classify(&args), expected, "{args:?}");
+        }
+    }
+}

@@ -16,6 +16,8 @@ use super::{ModelCatalogError, tokenizer::TokenizerOwner};
 pub use local::{
     LocalModelConfig, LocalModelPlatform, LocalModelSource, normalize_local_model_config,
 };
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) use lookup::model_identity_key;
 pub use lookup::{default_hosted_provider_api_base_url, parse_model_ref};
 pub use registered::{
     ImageProbeEvidence, RegisteredHostedModelConfig, normalize_hosted_api_base_url,

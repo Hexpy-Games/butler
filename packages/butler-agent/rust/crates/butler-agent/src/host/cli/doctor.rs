@@ -228,3 +228,21 @@ fn report_error(json_output: bool, code: &str, message: &str, exit: u8) -> ExitC
     }
     ExitCode::from(exit)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsString;
+
+    use super::parse;
+
+    #[test]
+    fn doctor_rejects_repair_flags_and_home_option() {
+        for args in [
+            &["--data", "/tmp/butler-data", "doctor", "--fix"][..],
+            &["doctor", "--home", "/source"],
+        ] {
+            let args: Vec<OsString> = args.iter().map(OsString::from).collect();
+            assert_eq!(parse(&args).unwrap_err().0, "unsupported_logical_operation");
+        }
+    }
+}

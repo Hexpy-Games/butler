@@ -44,6 +44,8 @@ pub use provider::{
     ProviderRoundPolicy, ProviderVisualCapabilityFuture, ProviderVisualCapabilityPort,
 };
 
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) use catalog::model_identity_key;
 pub use catalog::{
     CredentialView, HostedApiShape, ImageProbeEvidence, LocalModelConfig, LocalModelPlatform,
     LocalModelSource, ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelProviderMetadata,

@@ -134,6 +134,19 @@ fn view_for_page(
     })
 }
 
+#[cfg(test)]
+fn read(
+    db: &Connection,
+    query: OperationOutputQuery,
+) -> Result<Option<OperationOutputView>, AppStorageError> {
+    match read_app_output(db, &query)? {
+        AppOutputRead::Complete(page) => {
+            view_for_page(query.turn_id, query.request_id, query.result_id, page).map(Some)
+        }
+        AppOutputRead::Invalid | AppOutputRead::NoRows => Ok(None),
+    }
+}
+
 fn linked_progress_row(
     db: &Connection,
     query: &OperationOutputQuery,

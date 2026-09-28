@@ -74,3 +74,20 @@ async fn protected_ledger_and_sensitive_paths_are_not_mutated() {
     assert!(!fixture.root.join(".env.local").exists());
     fixture.capabilities.mutations.close().await;
 }
+
+#[tokio::test]
+async fn number_coercion_selects_hinted_occurrence() {
+    for hint in [json!("0x2"), json!([2]), json!("2e0")] {
+        let fixture = Fixture::new();
+        fixture.write("repeat.txt", b"x\nx\n");
+        let call = json!({"arguments":{"path":"repeat.txt","old_text":"x",
+            "new_text":"y","start_line":hint}});
+        let actual = rust(&fixture, "edit_file", &call, None, None).await;
+        assert_eq!(actual["ok"], true, "hint {hint}");
+        assert_eq!(
+            std::fs::read(fixture.root.join("repeat.txt")).unwrap(),
+            b"x\ny\n"
+        );
+        fixture.capabilities.mutations.close().await;
+    }
+}

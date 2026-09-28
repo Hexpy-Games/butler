@@ -1,3 +1,4 @@
+use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
 use super::*;
@@ -42,4 +43,23 @@ fn text_attachment_matches_bun_context_and_normalizes_crlf_nul() {
         "Hello\n\n## Attachments\n- note.txt (document, text/plain, 14 bytes, id: local-note)\n\n### Attachment Content: note.txt\nAttachment ID: local-note\n````text\nline 1\nline 2\n````"
     );
     std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn image_attachment_requires_the_admitted_payload_boundary() {
+    let attachment = AttachmentRef {
+        id: "image".into(),
+        kind: AttachmentKind::Image,
+        mime_type: Some("image/png".into()),
+        file_name: None,
+        size_bytes: None,
+        url: None,
+        local_path: None,
+        visual_manifest: Some(Value::Null),
+    };
+    assert!(matches!(
+        prompt(&request(&attachment)),
+        Err(ModelRoundError::InvocationFailure { code: Some(code), .. })
+            if code == "verified_image_payload_port_required"
+    ));
 }

@@ -5,6 +5,17 @@ use serde_json::json;
 use super::config;
 
 #[test]
+fn config_paths_and_values_preserve_operator_rules() {
+    assert!(config::SAFE_CONFIG_PATHS.contains(&"system.defaultModel"));
+    assert!(!config::SAFE_CONFIG_PATHS.contains(&"system.apiKey"));
+    assert!(config::is_secret_path("provider.api-key"));
+    assert!(config::is_secret_path("provider.refreshToken"));
+    assert_eq!(config::parse_value("true"), json!(true));
+    assert_eq!(config::parse_value("-4.25"), json!(-4.25));
+    assert_eq!(config::parse_value(" 1e2 "), json!(" 1e2 "));
+}
+
+#[test]
 fn config_update_keeps_unrelated_values_and_validation_checks_whole_object() {
     let mut value = json!({
         "unknown": { "retained": true },
@@ -24,6 +35,15 @@ fn config_update_keeps_unrelated_values_and_validation_checks_whole_object() {
         config::validate(&value).errors,
         ["webSearch.provider is not supported"]
     );
+}
+
+#[test]
+fn config_safe_projection_redacts_nested_values_in_human_arrays() {
+    let value = json!([{"refreshToken": "do-not-print"}, "visible"]);
+    let projected = config::safe_value(Some(&value));
+    let human = config::human_value(Some(&projected));
+    assert!(!human.contains("do-not-print"));
+    assert!(human.contains("[redacted]"));
 }
 
 #[test]

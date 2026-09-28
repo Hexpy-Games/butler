@@ -3,6 +3,32 @@ use serde_json::json;
 use super::*;
 
 #[test]
+fn environment_selection_is_opt_in_and_rejects_invalid_limits() {
+    let read = |key: &str| match key {
+        "BUTLER_CONTINUATION_MAX_MODEL_REQUESTS" => Some("3".to_owned()),
+        _ => None,
+    };
+    assert!(select_turn_continuation_budget(read).unwrap().is_none());
+
+    let selected = select_turn_continuation_budget(|key| match key {
+        "BUTLER_BOUNDED_STATELESS_CONTEXT" => Some("true".to_owned()),
+        "BUTLER_CONTINUATION_MAX_MODEL_REQUESTS" => Some("3".to_owned()),
+        _ => None,
+    })
+    .unwrap()
+    .expect("explicitly enabled");
+    assert_eq!(selected.max_model_requests, 3);
+
+    let error = select_turn_continuation_budget(|key| match key {
+        "BUTLER_BOUNDED_STATELESS_CONTEXT" => Some("true".to_owned()),
+        "BUTLER_CONTINUATION_MAX_MODEL_REQUESTS" => Some("invalid".to_owned()),
+        _ => None,
+    })
+    .expect_err("invalid configured limit must fail");
+    assert_eq!(error.code(), "invalid_turn_continuation_limit");
+}
+
+#[test]
 fn rounds_are_accounted_without_becoming_terminal_limits() {
     let limits = TurnContinuationBudgetLimits {
         max_model_requests: 1,

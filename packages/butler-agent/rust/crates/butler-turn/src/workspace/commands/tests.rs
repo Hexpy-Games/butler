@@ -34,6 +34,16 @@ impl ScriptedProcesses {
             .as_ref()
             .is_none_or(|reaping| *reaping.borrow())
     }
+
+    fn reaped_on_release() -> (Self, watch::Sender<bool>) {
+        let (release, reaping) = watch::channel(false);
+        let host = Self {
+            ignore_term: true,
+            reaping: Some(reaping),
+            ..Self::default()
+        };
+        (host, release)
+    }
 }
 
 impl ProcessHost for ScriptedProcesses {

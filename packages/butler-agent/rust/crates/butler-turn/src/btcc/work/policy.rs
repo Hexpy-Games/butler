@@ -373,3 +373,6 @@ fn work_status_name(status: WorkStatus) -> &'static str {
 fn error(message: impl Into<String>) -> BtccError {
     BtccError::detected(BtccCode::DurableWorkPolicy, message)
 }
+
+#[cfg(test)]
+mod tests;

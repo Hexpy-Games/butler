@@ -128,3 +128,6 @@ fn unique_titles(values: Vec<String>) -> Vec<String> {
         .take(8)
         .collect()
 }
+
+#[cfg(test)]
+mod tests;

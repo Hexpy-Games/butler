@@ -28,6 +28,27 @@ async fn capture_write_failure_terminates_child_and_discards_owned_files() {
     assert_eq!(std::fs::read_dir(spool).unwrap().count(), 0);
 }
 
+#[tokio::test]
+async fn close_cancels_running_command_and_rejects_admission() {
+    let fixture = Fixture::new();
+    let owner = Commands::new();
+    let receiver = owner.submit_guided(fixture.guided("sleep 10")).unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(3), owner.close())
+        .await
+        .unwrap();
+    let result = receiver.await.unwrap().unwrap_err();
+    assert_eq!(result.code(), "command_cancelled");
+    assert_eq!(owner.active_count(), 0);
+    assert_eq!(
+        owner
+            .submit_guided(fixture.guided("true"))
+            .err()
+            .unwrap()
+            .code(),
+        "command_owner_closed"
+    );
+}
+
 /// Security boundary: commands see only the allowlisted host environment. A
 /// guided command never sees a private host value, and a structured step's
 /// undefined entry removes an inherited one.
@@ -86,6 +107,24 @@ async fn guided_read_only_uses_actual_sandbox_boundary() {
     owner.close().await;
 }
 
+#[tokio::test]
+async fn guided_forced_public_settlement_precedes_owned_reap() {
+    let fixture = Fixture::new();
+    let (host, release) = ScriptedProcesses::reaped_on_release();
+    let owner = Commands::with_host(Arc::new(host));
+    let mut input = fixture.guided("while :; do sleep 1; done");
+    input.timeout_ms = Some(10.0);
+    let receiver = owner.submit_guided(input).unwrap();
+    let output = tokio::time::timeout(Duration::from_secs(10), receiver)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert!(output.summary.timed_out);
+    assert_eq!(owner.active_count(), 1);
+    assert_close_waits_for_reap(&owner, release).await;
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn partial_pipeline_spawn_failure_reaps_term_ignoring_descendant() {
@@ -140,4 +179,42 @@ async fn partial_pipeline_spawn_failure_reaps_term_ignoring_descendant() {
     .await;
     owner.close().await;
     assert_eq!(owner.active_count(), 0);
+}
+
+/// The public result is already settled; closing the owner must still wait
+/// until the killed child is reaped.
+async fn assert_close_waits_for_reap(owner: &Commands, release: tokio::sync::watch::Sender<bool>) {
+    let mut closing = tokio::spawn({
+        let owner = owner.clone();
+        async move { owner.close().await }
+    });
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), &mut closing)
+            .await
+            .is_err(),
+        "close finished before the owned child was reaped"
+    );
+    release.send(true).unwrap();
+    closing.await.unwrap();
+    assert_eq!(owner.active_count(), 0);
+}
+
+#[tokio::test]
+async fn structured_forced_public_settlement_precedes_owned_reap() {
+    let fixture = Fixture::new();
+    let (host, release) = ScriptedProcesses::reaped_on_release();
+    let owner = Commands::with_host(Arc::new(host));
+    let mut input = fixture.structured(vec![CommandStep {
+        executable: "/bin/sh".into(),
+        arguments: vec!["-c".into(), "while :; do sleep 1; done".into()],
+    }]);
+    input.timeout_ms = Some(10.0);
+    let receiver = owner.submit_structured(input).unwrap();
+    let output = tokio::time::timeout(Duration::from_secs(10), receiver)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(output.timed_out);
+    assert_eq!(owner.active_count(), 1);
+    assert_close_waits_for_reap(&owner, release).await;
 }
