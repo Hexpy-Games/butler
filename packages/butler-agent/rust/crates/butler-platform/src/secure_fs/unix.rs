@@ -1,6 +1,6 @@
 //! Permission bits, `renameat2`/`renamex_np` exchange and inode identity.
 
-use std::fs::{self, File, Metadata, OpenOptions};
+use std::fs::{self, DirBuilder, File, Metadata, OpenOptions};
 use std::io;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
@@ -30,8 +30,20 @@ pub(super) fn create_private_dir(path: &Path) -> io::Result<()> {
     fs::DirBuilder::new().mode(PRIVATE_DIRECTORY).create(path)
 }
 
+pub(super) fn owner_only_dirs(builder: &mut DirBuilder) -> &mut DirBuilder {
+    builder.mode(PRIVATE_DIRECTORY)
+}
+
 pub(super) fn owner_only(options: &mut OpenOptions) -> &mut OpenOptions {
     options.mode(PRIVATE_FILE)
+}
+
+pub(super) fn sync_directory(path: &Path) -> io::Result<()> {
+    File::open(path).and_then(|directory| directory.sync_all())
+}
+
+pub(super) fn same_file(left: &Metadata, right: &Metadata) -> bool {
+    left.dev() == right.dev() && left.ino() == right.ino()
 }
 
 pub(super) fn creation_mode(options: &mut OpenOptions, mode: u32) -> &mut OpenOptions {
@@ -91,6 +103,10 @@ pub(super) fn identity(metadata: &Metadata) -> FileIdentity {
     FileIdentity {
         device: metadata.dev(),
         inode: metadata.ino(),
+        modified: Some(FileTime {
+            seconds: metadata.mtime(),
+            nanoseconds: metadata.mtime_nsec(),
+        }),
         changed: Some(FileTime {
             seconds: metadata.ctime(),
             nanoseconds: metadata.ctime_nsec(),

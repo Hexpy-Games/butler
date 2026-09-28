@@ -7,9 +7,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-#[cfg(unix)]
-use std::fs::File;
-
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
@@ -321,11 +318,7 @@ pub(super) fn write_manifest(path: &Path, manifest: &impl Serialize) -> Cognitio
     let result = (|| {
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options.open(&temporary).map_err(|source| {
             error(CognitionCode::MemoryBoxManifestWriteFailed).with_source(source)
         })?;
@@ -338,12 +331,9 @@ pub(super) fn write_manifest(path: &Path, manifest: &impl Serialize) -> Cognitio
         fs::rename(&temporary, path).map_err(|source| {
             error(CognitionCode::MemoryBoxManifestWriteFailed).with_source(source)
         })?;
-        #[cfg(unix)]
-        File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|source| {
-                error(CognitionCode::MemoryBoxManifestWriteFailed).with_source(source)
-            })?;
+        butler_platform::secure_fs::sync_directory(parent).map_err(|source| {
+            error(CognitionCode::MemoryBoxManifestWriteFailed).with_source(source)
+        })?;
         Ok(())
     })();
     if result.is_err() {

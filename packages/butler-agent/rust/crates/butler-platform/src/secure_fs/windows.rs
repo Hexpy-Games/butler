@@ -1,7 +1,7 @@
 //! Windows: files inherit the data folder's ACL (an owner-only ACL comes in
 //! the Windows stage), there is no directory exchange and no inode.
 
-use std::fs::{self, File, Metadata, OpenOptions};
+use std::fs::{self, DirBuilder, File, Metadata, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -16,8 +16,21 @@ pub(super) fn create_private_dir(path: &Path) -> io::Result<()> {
     fs::create_dir(path)
 }
 
+pub(super) fn owner_only_dirs(builder: &mut DirBuilder) -> &mut DirBuilder {
+    builder
+}
+
 pub(super) fn owner_only(options: &mut OpenOptions) -> &mut OpenOptions {
     options
+}
+
+/// Directories cannot be opened (and synced) like files here.
+pub(super) fn sync_directory(_path: &Path) -> io::Result<()> {
+    Ok(())
+}
+
+pub(super) fn same_file(left: &Metadata, right: &Metadata) -> bool {
+    left.len() == right.len() && left.modified().ok() == right.modified().ok()
 }
 
 pub(super) fn creation_mode(options: &mut OpenOptions, _mode: u32) -> &mut OpenOptions {
@@ -65,6 +78,7 @@ pub(super) fn identity(metadata: &Metadata) -> FileIdentity {
     FileIdentity {
         device: 0,
         inode: 0,
+        modified: metadata.modified().ok().and_then(epoch_time),
         changed: metadata.created().ok().and_then(epoch_time),
     }
 }

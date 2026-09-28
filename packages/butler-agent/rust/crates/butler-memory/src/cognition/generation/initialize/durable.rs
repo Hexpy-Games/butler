@@ -39,11 +39,7 @@ pub(in crate::cognition::generation) fn write_json<T: Serialize + ?Sized>(
     let result = (|| {
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options.open(&temporary).map_err(io_error)?;
         file.write_all(text.as_bytes()).map_err(io_error)?;
         file.write_all(b"\n").map_err(io_error)?;
@@ -59,19 +55,7 @@ pub(in crate::cognition::generation) fn write_json<T: Serialize + ?Sized>(
 }
 
 pub(in crate::cognition::generation) fn create_dir(path: &Path) -> CognitionResult<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(path)
-            .map_err(io_error)
-    }
-    #[cfg(not(unix))]
-    {
-        fs::create_dir_all(path).map_err(io_error)
-    }
+    butler_platform::secure_fs::create_private_dir_all(path).map_err(io_error)
 }
 
 pub(super) fn io_error(error: std::io::Error) -> CognitionError {

@@ -242,11 +242,7 @@ fn write_entries(path: &Path, entries: &[FeedbackEntry]) -> CognitionResult<()> 
     let result = (|| {
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        butler_platform::secure_fs::owner_only(&mut options);
         let mut output = options.open(&temporary).map_err(|source| {
             operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
         })?;
@@ -269,12 +265,9 @@ fn write_entries(path: &Path, entries: &[FeedbackEntry]) -> CognitionResult<()> 
         fs::rename(&temporary, path).map_err(|source| {
             operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
         })?;
-        #[cfg(unix)]
-        File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|source| {
-                operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
-            })?;
+        butler_platform::secure_fs::sync_directory(parent).map_err(|source| {
+            operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
+        })?;
         Ok(())
     })();
     if result.is_err() {
@@ -286,11 +279,7 @@ fn write_entries(path: &Path, entries: &[FeedbackEntry]) -> CognitionResult<()> 
 fn create_private_dir(path: &Path) -> CognitionResult<()> {
     let mut builder = fs::DirBuilder::new();
     builder.recursive(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        builder.mode(0o700);
-    }
+    butler_platform::secure_fs::owner_only_dirs(&mut builder);
     builder
         .create(path)
         .or_else(|error| {

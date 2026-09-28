@@ -286,30 +286,23 @@ fn stable_identity(file: &File, path: &Path) -> CognitionResult<String> {
     Ok(handle_identity)
 }
 
-#[cfg(unix)]
+/// `device:inode:length:mtime s:ns:ctime s:ns`; unknown times are empty.
 fn metadata_identity(metadata: &fs::Metadata) -> String {
-    use std::os::unix::fs::MetadataExt;
+    let identity = butler_platform::secure_fs::identity(metadata);
+    let time = |time: Option<butler_platform::secure_fs::FileTime>| {
+        time.map_or_else(
+            || ":".to_owned(),
+            |time| format!("{}:{}", time.seconds, time.nanoseconds),
+        )
+    };
     format!(
-        "{}:{}:{}:{}:{}:{}:{}",
-        metadata.dev(),
-        metadata.ino(),
+        "{}:{}:{}:{}:{}",
+        identity.device,
+        identity.inode,
         metadata.len(),
-        metadata.mtime(),
-        metadata.mtime_nsec(),
-        metadata.ctime(),
-        metadata.ctime_nsec()
+        time(identity.modified),
+        time(identity.changed)
     )
-}
-
-#[cfg(not(unix))]
-fn metadata_identity(metadata: &fs::Metadata) -> String {
-    let modified = metadata
-        .modified()
-        .ok()
-        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|time| format!("{}:{}", time.as_secs(), time.subsec_nanos()))
-        .unwrap_or_default();
-    format!("{}:{modified}", metadata.len())
 }
 
 pub(super) fn safe_ref(value: &str) -> bool {

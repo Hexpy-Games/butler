@@ -199,17 +199,7 @@ fn write_atomic(path: &Path, value: &impl Serialize) -> CognitionResult<()> {
     let parent = path
         .parent()
         .ok_or_else(|| error(CognitionCode::CompletionObservationPathInvalid))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(parent)
-            .map_err(io_error)?;
-    }
-    #[cfg(not(unix))]
-    fs::create_dir_all(parent).map_err(io_error)?;
+    butler_platform::secure_fs::create_private_dir_all(parent).map_err(io_error)?;
     let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|source| {
@@ -220,11 +210,7 @@ fn write_atomic(path: &Path, value: &impl Serialize) -> CognitionResult<()> {
     let result = (|| {
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options.open(&temp).map_err(io_error)?;
         file.write_all(canonical(value)?.as_bytes())
             .map_err(io_error)?;

@@ -71,14 +71,9 @@ async fn forgiving_import_writes_private_manifest_before_consolidation() {
     assert_eq!(manifest["raw_text_included"], false);
     assert!(manifest.get("text").is_none());
     assert_eq!(manifest["candidate_ids"].as_array().unwrap().len(), 1);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        assert_eq!(
-            std::fs::metadata(path).unwrap().permissions().mode() & 0o777,
-            0o600
-        );
-    }
+    assert!(butler_platform::secure_fs::is_owner_only(
+        &std::fs::metadata(path).unwrap()
+    ));
     service.close().await;
 }
 

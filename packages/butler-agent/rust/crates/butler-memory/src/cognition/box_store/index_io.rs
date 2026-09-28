@@ -7,59 +7,36 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-#[cfg(unix)]
-use std::fs::File;
-
 use crate::cognition::CognitionResult;
 
 use super::{error, index::BoxIndexReport};
 use crate::cognition::CognitionCode;
 
 pub(super) fn create_private_dir(path: &Path) -> CognitionResult<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        match fs::symlink_metadata(path) {
-            Ok(metadata) if metadata.file_type().is_dir() => return Ok(()),
-            Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {}
-            _ => return Err(error(CognitionCode::MemoryBoxIndexWriteFailed)),
-        }
-        let mut builder = fs::DirBuilder::new();
-        builder.recursive(true).mode(0o700);
-        match builder.create(path) {
-            Ok(()) => Ok(()),
-            Err(io_error) if io_error.kind() == std::io::ErrorKind::AlreadyExists => {
-                fs::symlink_metadata(path)
-                    .ok()
-                    .filter(|metadata| metadata.file_type().is_dir())
-                    .map(|_| ())
-                    .ok_or_else(|| error(CognitionCode::MemoryBoxIndexWriteFailed))
-            }
-            Err(_) => Err(error(CognitionCode::MemoryBoxIndexWriteFailed)),
-        }
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_dir() => return Ok(()),
+        Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {}
+        _ => return Err(error(CognitionCode::MemoryBoxIndexWriteFailed)),
     }
-    #[cfg(not(unix))]
-    {
-        match fs::symlink_metadata(path) {
-            Ok(metadata) if metadata.file_type().is_dir() => Ok(()),
-            Ok(_) => Err(error("memory_box_index_write_failed")),
-            Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {
-                fs::create_dir_all(path)
-                    .map_err(|source| error("memory_box_index_write_failed").with_source(source))
-            }
-            Err(_) => Err(error("memory_box_index_write_failed")),
+    let mut builder = fs::DirBuilder::new();
+    butler_platform::secure_fs::owner_only_dirs(builder.recursive(true));
+    match builder.create(path) {
+        Ok(()) => Ok(()),
+        Err(io_error) if io_error.kind() == std::io::ErrorKind::AlreadyExists => {
+            fs::symlink_metadata(path)
+                .ok()
+                .filter(|metadata| metadata.file_type().is_dir())
+                .map(|_| ())
+                .ok_or_else(|| error(CognitionCode::MemoryBoxIndexWriteFailed))
         }
+        Err(_) => Err(error(CognitionCode::MemoryBoxIndexWriteFailed)),
     }
 }
 
 pub(super) fn create_private_file(path: &Path) -> CognitionResult<()> {
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    butler_platform::secure_fs::owner_only(&mut options);
     options
         .open(path)
         .map_err(|source| error(CognitionCode::MemoryBoxIndexWriteFailed).with_source(source))?;
@@ -89,12 +66,9 @@ pub(super) fn write_report(path: &Path, report: &BoxIndexReport) -> CognitionRes
         fs::rename(&temporary, path).map_err(|source| {
             error(CognitionCode::MemoryBoxReportWriteFailed).with_source(source)
         })?;
-        #[cfg(unix)]
-        File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|source| {
-                error(CognitionCode::MemoryBoxReportWriteFailed).with_source(source)
-            })?;
+        butler_platform::secure_fs::sync_directory(parent).map_err(|source| {
+            error(CognitionCode::MemoryBoxReportWriteFailed).with_source(source)
+        })?;
         Ok(())
     })();
     if result.is_err() {

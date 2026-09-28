@@ -172,14 +172,13 @@ async fn changed_selected_source_blocks_capsule_replacement_and_releases_project
     let _ = fs::remove_dir_all(root);
 }
 
-#[cfg(unix)]
 #[tokio::test]
 async fn escaped_cognition_root_is_rejected_before_any_lock_file() {
     let root = temp_root();
     let outside = temp_root();
     seed_project(&root);
     fs::create_dir_all(&outside).unwrap();
-    std::os::unix::fs::symlink(&outside, root.join("cognition")).unwrap();
+    butler_platform::secure_fs::symlink(&outside, &root.join("cognition")).unwrap();
 
     let cancellation = CancellationToken::new();
     let deadline = TestHost.now_epoch_millis() + 120_000;

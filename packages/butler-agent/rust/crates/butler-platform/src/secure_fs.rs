@@ -6,7 +6,7 @@
 //! Windows inherits the data folder's ACL for now (an owner-only ACL comes in
 //! the Windows stage), has no directory exchange and follows links.
 
-use std::fs::{self, File, Metadata, OpenOptions};
+use std::fs::{self, DirBuilder, File, Metadata, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -31,9 +31,26 @@ pub fn create_private_dir(path: &Path) -> io::Result<()> {
     sys::create_private_dir(path)
 }
 
+/// Makes `builder` create directories only the owner may use.
+pub fn owner_only_dirs(builder: &mut DirBuilder) -> &mut DirBuilder {
+    sys::owner_only_dirs(builder)
+}
+
 /// Makes `options` create files only the owner may read and write.
 pub fn owner_only(options: &mut OpenOptions) -> &mut OpenOptions {
     sys::owner_only(options)
+}
+
+/// Flushes the directory entry changes of `path` (a rename or a new file in
+/// it) to storage. Hosts that cannot open a directory skip it.
+pub fn sync_directory(path: &Path) -> io::Result<()> {
+    sys::sync_directory(path)
+}
+
+/// Whether two metadata describe the same file: the same device and inode on
+/// Unix; the same length and modification time where there are no inodes.
+pub fn same_file(left: &Metadata, right: &Metadata) -> bool {
+    sys::same_file(left, right)
 }
 
 /// Makes `options` create files with the permission `mode` another file had
@@ -132,6 +149,9 @@ pub struct FileIdentity {
     pub device: u64,
     /// The inode number, or 0 on hosts without inodes.
     pub inode: u64,
+    /// When the file's content last changed, when known and (off Unix) not
+    /// before the epoch.
+    pub modified: Option<FileTime>,
     /// When the file's status last changed (Unix `ctime`; the creation time
     /// elsewhere, when it is known and not before the epoch).
     pub changed: Option<FileTime>,
@@ -139,7 +159,7 @@ pub struct FileIdentity {
 
 /// A file timestamp as the host reports it: seconds and nanoseconds since the
 /// Unix epoch.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FileTime {
     /// Whole seconds since the epoch.
     pub seconds: i64,

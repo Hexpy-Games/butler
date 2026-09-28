@@ -143,17 +143,7 @@ pub(super) fn write(
     let parent = path
         .parent()
         .ok_or_else(|| error(CognitionCode::ContinuityRecoveryManifestPathInvalid))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(parent)
-            .map_err(io_error)?;
-    }
-    #[cfg(not(unix))]
-    fs::create_dir_all(parent).map_err(io_error)?;
+    butler_platform::secure_fs::create_private_dir_all(parent).map_err(io_error)?;
     ensure_data_authority(data_root, &[parent, &path])?;
     let filename = path
         .file_name()
@@ -164,11 +154,7 @@ pub(super) fn write(
     let result = (|| {
         let mut options = fs::OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options.open(&temp).map_err(io_error)?;
         created_temp = true;
         serde_json::to_writer_pretty(&mut file, manifest).map_err(|failure| {

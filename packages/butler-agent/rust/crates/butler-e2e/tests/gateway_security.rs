@@ -11,7 +11,6 @@
 )]
 
 use std::fs::File;
-use std::os::unix::fs::PermissionsExt;
 use std::process::{Child, Stdio};
 use std::time::{Duration, Instant};
 
@@ -37,8 +36,8 @@ fn header<'a>(headers: &'a HeaderMap, name: &str) -> &'a str {
         .unwrap_or_default()
 }
 
-fn file_mode(path: &std::path::Path) -> u32 {
-    std::fs::metadata(path).unwrap().permissions().mode() & 0o777
+fn is_private(path: &std::path::Path) -> bool {
+    butler_platform::secure_fs::is_owner_only(&std::fs::metadata(path).unwrap())
 }
 
 /// SEC-01 — an agent started without token variables (as `butler start`
@@ -58,13 +57,13 @@ async fn sec_01_cli_started_agent_owns_and_enforces_its_token() -> Result<(), Ha
     let token = stored["token"].as_str().unwrap().to_owned();
     assert!(token.len() >= 32, "short token");
     assert_eq!(token, s.gw.token);
-    assert_eq!(file_mode(&token_file), 0o600, "token file not private");
+    assert!(is_private(&token_file), "token file not private");
     let secret = s
         .sandbox
         .data
         .join("state/app-gateway/project-folder-token-secret");
     assert!(!std::fs::read_to_string(&secret)?.trim().is_empty());
-    assert_eq!(file_mode(&secret), 0o600, "folder secret not private");
+    assert!(is_private(&secret), "folder secret not private");
 
     // An API path ending in an asset extension is not a public asset.
     for path in ["/settings", "/sessions/general.json"] {

@@ -297,11 +297,7 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> CognitionResult<()> {
     let result = (|| {
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options.open(&temporary).map_err(io_error)?;
         file.write_all(bytes).map_err(io_error)?;
         file.sync_all().map_err(io_error)?;
@@ -325,11 +321,7 @@ fn append_durable(path: &Path, bytes: &[u8]) -> CognitionResult<()> {
     let existed = path.exists();
     let mut options = OpenOptions::new();
     options.create(true).append(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    butler_platform::secure_fs::owner_only(&mut options);
     options
         .open(path)
         .and_then(|mut file| {

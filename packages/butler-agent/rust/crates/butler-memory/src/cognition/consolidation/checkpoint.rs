@@ -109,11 +109,7 @@ pub(crate) fn write_atomic<T: Serialize>(path: &Path, value: &T) -> CognitionRes
     let result = (|| {
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options.open(&temporary).map_err(|source| {
             error(CognitionCode::MemoryConsolidationStateWriteFailed).with_source(source)
         })?;
@@ -126,12 +122,9 @@ pub(crate) fn write_atomic<T: Serialize>(path: &Path, value: &T) -> CognitionRes
         fs::rename(&temporary, path).map_err(|source| {
             error(CognitionCode::MemoryConsolidationStateWriteFailed).with_source(source)
         })?;
-        #[cfg(unix)]
-        File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|source| {
-                error(CognitionCode::MemoryConsolidationStateWriteFailed).with_source(source)
-            })?;
+        butler_platform::secure_fs::sync_directory(parent).map_err(|source| {
+            error(CognitionCode::MemoryConsolidationStateWriteFailed).with_source(source)
+        })?;
         Ok(())
     })();
     if result.is_err() {
@@ -155,20 +148,11 @@ pub(crate) fn validate_run_id(run_id: &str) -> CognitionResult<()> {
 }
 
 fn create_private_directories(path: &Path) -> CognitionResult<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        let mut builder = fs::DirBuilder::new();
-        builder.recursive(true).mode(0o700);
-        builder.create(path).map_err(|source| {
-            error(CognitionCode::MemoryConsolidationStateWriteFailed).with_source(source)
-        })
-    }
-    #[cfg(not(unix))]
-    {
-        fs::create_dir_all(path)
-            .map_err(|source| error("memory_consolidation_state_write_failed").with_source(source))
-    }
+    let mut builder = fs::DirBuilder::new();
+    butler_platform::secure_fs::owner_only_dirs(builder.recursive(true));
+    builder.create(path).map_err(|source| {
+        error(CognitionCode::MemoryConsolidationStateWriteFailed).with_source(source)
+    })
 }
 
 fn error(code: CognitionCode) -> CognitionError {

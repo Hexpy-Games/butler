@@ -3,5 +3,4 @@
 # Entries may only shrink or disappear; new entries need review.
 Cargo.toml	2
 src/e2e/agent.rs	3
-tests/gateway_security.rs	4
 tests/onboarding.rs	6

@@ -6,7 +6,7 @@
 //! recorded has changed since `open`.
 
 use crate::cognition::CognitionCode;
-use std::{fs, os::unix::fs::MetadataExt, path::Path};
+use std::{fs, path::Path};
 
 use lancedb::{Error as LanceError, Table};
 use rusqlite::{Connection, OpenFlags};
@@ -366,15 +366,20 @@ async fn facts(
 
 fn identity(path: &Path) -> CognitionResult<Option<FileIdentity>> {
     match fs::metadata(path) {
-        Ok(item) => Ok(Some(FileIdentity {
-            dev: item.dev(),
-            ino: item.ino(),
-            bytes: item.len(),
-            mtime_sec: item.mtime(),
-            mtime_nsec: item.mtime_nsec(),
-            ctime_sec: item.ctime(),
-            ctime_nsec: item.ctime_nsec(),
-        })),
+        Ok(item) => {
+            let platform = butler_platform::secure_fs::identity(&item);
+            let modified = platform.modified.unwrap_or_default();
+            let changed = platform.changed.unwrap_or_default();
+            Ok(Some(FileIdentity {
+                dev: platform.device,
+                ino: platform.inode,
+                bytes: item.len(),
+                mtime_sec: modified.seconds,
+                mtime_nsec: modified.nanoseconds,
+                ctime_sec: changed.seconds,
+                ctime_nsec: changed.nanoseconds,
+            }))
+        }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(_) => Err(error(CognitionCode::MemoryGenerationChanged)),
     }

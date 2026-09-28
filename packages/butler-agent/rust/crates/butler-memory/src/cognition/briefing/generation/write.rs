@@ -1,7 +1,7 @@
 //! Writing briefing artifacts atomically with private permissions.
 
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
 };
@@ -30,21 +30,13 @@ pub(super) fn write(path: &Path, artifact: &impl Serialize) -> Result<(), Briefi
     })?;
     let mut directory = fs::DirBuilder::new();
     directory.recursive(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        directory.mode(0o700);
-    }
+    butler_platform::secure_fs::owner_only_dirs(&mut directory);
     directory.create(parent).map_err(io_error)?;
     let temporary = path.with_extension(format!("json.tmp-{}", uuid::Uuid::new_v4()));
     let result = (|| {
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options.open(&temporary).map_err(io_error)?;
         let mut bytes = serde_json::to_vec_pretty(artifact).map_err(io_error)?;
         bytes.push(b'\n');
@@ -52,10 +44,7 @@ pub(super) fn write(path: &Path, artifact: &impl Serialize) -> Result<(), Briefi
         file.sync_all().map_err(io_error)?;
         drop(file);
         fs::rename(&temporary, path).map_err(io_error)?;
-        #[cfg(unix)]
-        File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(io_error)?;
+        butler_platform::secure_fs::sync_directory(parent).map_err(io_error)?;
         Ok(())
     })();
     if result.is_err() {

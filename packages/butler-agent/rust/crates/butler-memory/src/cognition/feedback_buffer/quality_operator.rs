@@ -196,11 +196,7 @@ fn append_operation(
     let result = (|| {
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options.open(&temporary).map_err(|source| {
             error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
         })?;
@@ -221,12 +217,9 @@ fn append_operation(
         fs::rename(&temporary, path).map_err(|source| {
             error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
         })?;
-        #[cfg(unix)]
-        fs::File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|source| {
-                error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-            })?;
+        butler_platform::secure_fs::sync_directory(parent).map_err(|source| {
+            error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
+        })?;
         Ok(())
     })();
     if result.is_err() {
@@ -270,26 +263,17 @@ fn owner_revision(entry: &super::FeedbackEntry) -> String {
 }
 
 fn create_private_dir(path: &Path) -> CognitionResult<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        match fs::symlink_metadata(path) {
-            Ok(metadata) if metadata.file_type().is_dir() => return Ok(()),
-            Ok(_) => return Err(error(CognitionCode::MemoryQualityOperationPathUnsafe)),
-            Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(_) => return Err(error(CognitionCode::MemoryQualityOperationWriteFailed)),
-        }
-        let mut builder = fs::DirBuilder::new();
-        builder.recursive(true).mode(0o700);
-        builder.create(path).map_err(|source| {
-            error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-        })
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_dir() => return Ok(()),
+        Ok(_) => return Err(error(CognitionCode::MemoryQualityOperationPathUnsafe)),
+        Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return Err(error(CognitionCode::MemoryQualityOperationWriteFailed)),
     }
-    #[cfg(not(unix))]
-    {
-        fs::create_dir_all(path)
-            .map_err(|source| error("memory_quality_operation_write_failed").with_source(source))
-    }
+    let mut builder = fs::DirBuilder::new();
+    butler_platform::secure_fs::owner_only_dirs(builder.recursive(true));
+    builder.create(path).map_err(|source| {
+        error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
+    })
 }
 
 fn now_iso() -> String {
