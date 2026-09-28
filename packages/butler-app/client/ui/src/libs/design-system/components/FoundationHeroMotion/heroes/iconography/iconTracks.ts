@@ -12,6 +12,8 @@ import { GLYPH_PATHS, GRID_LENGTH } from "./iconParts";
 /** Beats between the label row's size steps. */
 const STEP = 2.2;
 const GLYPH_DASH = 80;
+/** Scene cells sit closer than the shared path's spacing (1.25 canvases): a canvas apart, so the camera crossing always has content in frame. */
+const GAP = 0.5;
 
 /** The scenes, in camera order. The grid (the poster) shares the sidebar's cell: the finale zooms in on its centre. */
 export const SCENES = ["intro", "glyph", "grow", "place", "grid"] as const;
@@ -49,7 +51,10 @@ export function iconTimeline(copy: IconCopy, g0: SceneGeometry): { beats: number
   const f = finaleBeats(layout);
   const { beats } = f;
   const close = beats - 0.05;
-  const path = scenePath(PATH.length, { x: canvas.w / 2, y: canvas.h / 2 }, canvas);
+  const path = scenePath(PATH.length, { x: canvas.w / 2, y: canvas.h / 2 }, canvas).map((cell) => ({
+    x: canvas.w / 2 + (cell.x - canvas.w / 2) * GAP,
+    y: canvas.h / 2 + (cell.y - canvas.h / 2) * GAP,
+  }));
   const cells = { ...Object.fromEntries(PATH.map((name, k) => [name, path[k]!])), grid: path.at(-1)! } as Record<Scene, { x: number; y: number }>;
   const offset = (cell: Scene) => ({ x: cells[cell].x - canvas.w / 2, y: cells[cell].y - canvas.h / 2 });
   const boxes: Record<string, Box> = Object.fromEntries(Object.entries(g0.boxes).map(([name, box]) => {
