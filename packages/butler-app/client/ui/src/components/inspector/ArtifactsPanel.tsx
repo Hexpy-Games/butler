@@ -43,9 +43,12 @@ export function ArtifactsPanel({
         : undefined))
     : undefined;
   const sessionId = selectedArtifact?.session_id || activeChatId;
+  const cursor = messages.find(
+    (message) => message.id === selectedArtifact?.message_id,
+  )?.cursor;
   const refreshFileUrls = useCallback(
-    () => refreshSessionFileUrls(sessionId),
-    [sessionId],
+    () => refreshSessionFileUrls(sessionId, { cursor }),
+    [cursor, sessionId],
   );
 
   return (

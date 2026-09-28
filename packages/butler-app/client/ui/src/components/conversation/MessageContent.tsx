@@ -45,8 +45,8 @@ function MessageContentComponent({
 }: MessageContentProps) {
   useAppLocale();
   const artifacts = message.artifacts ?? [];
-  const sessionId = message.chat_id ?? "";
-  const refreshFileUrls = useCallback(() => refreshSessionFileUrls(sessionId), [sessionId]);
+  const { chat_id: sessionId = "", cursor } = message;
+  const refreshFileUrls = useCallback(() => refreshSessionFileUrls(sessionId, { cursor }), [cursor, sessionId]);
   const failureNotice = isAssistantFailureNoticeMessage(message);
   return (
     <>
