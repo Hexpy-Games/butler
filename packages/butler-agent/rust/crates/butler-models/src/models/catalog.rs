@@ -276,10 +276,6 @@ impl ModelCatalogSnapshot {
     pub fn view(&self) -> &ModelCatalogView {
         &self.view
     }
-    #[cfg(any(test, feature = "test-support"))]
-    pub(crate) fn list_model_metadata(&self) -> Vec<ModelProviderMetadata> {
-        self.view.models.clone()
-    }
     pub fn find_model_metadata(&self, model_ref: Option<&str>) -> Option<ModelProviderMetadata> {
         lookup::find_model_metadata(model_ref, &self.view.models)
     }

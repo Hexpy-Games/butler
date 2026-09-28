@@ -251,6 +251,9 @@ mod tests {
 
     use super::*;
 
+    /// Security boundary: streamed tool-call indexes are bounded, so a hostile or
+    /// broken provider stream cannot make the agent allocate unbounded calls.
+    // test-category: security
     #[test]
     fn tool_call_indexes_are_bounded() {
         let mut calls = Vec::new();

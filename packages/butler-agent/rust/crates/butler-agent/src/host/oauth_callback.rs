@@ -192,6 +192,10 @@ mod tests {
             .collect()
     }
 
+    /// Security boundary: only a callback carrying this sign-in's state (and a
+    /// non-empty code or a denial) completes or declines it; every stray variant
+    /// is ignored.
+    // test-category: security
     #[test]
     fn only_this_sign_ins_state_can_complete_or_decline_it() {
         let state = "s1";

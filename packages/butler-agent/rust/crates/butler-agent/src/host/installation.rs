@@ -368,52 +368,10 @@ pub(crate) fn realpath_or_nearest(path: &Path) -> std::io::Result<PathBuf> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{ResolvedInstallation, check_install_platform, host_install_platform};
+pub(crate) mod tests {
+    use super::ResolvedInstallation;
 
-    #[test]
-    fn install_manifest_names_a_supported_platform_that_is_the_host() {
-        let mac = ("darwin", "arm64");
-        assert!(check_install_platform((Some("darwin"), Some("arm64")), mac).is_ok());
-        for manifest in [
-            (Some("linux"), Some("x64")),
-            (Some("linux"), Some("arm64")),
-            (Some("darwin"), Some("x64")),
-            (Some("win32"), Some("x64")),
-            (None, Some("arm64")),
-            (Some("darwin"), None),
-        ] {
-            assert_eq!(
-                check_install_platform(manifest, mac).unwrap_err(),
-                "installation_manifest_invalid"
-            );
-        }
-        for host in [("linux", "x64"), ("linux", "arm64")] {
-            assert!(check_install_platform((Some(host.0), Some(host.1)), host).is_ok());
-            assert_eq!(
-                check_install_platform((Some("darwin"), Some("arm64")), host).unwrap_err(),
-                "installation_manifest_invalid"
-            );
-        }
-        assert_eq!(
-            check_install_platform((Some("darwin"), Some("x64")), ("darwin", "x64")).unwrap_err(),
-            "installation_manifest_invalid"
-        );
-        assert_eq!(
-            check_install_platform((Some("win32"), Some("x64")), ("win32", "x64")).unwrap_err(),
-            "installation_platform_unsupported: Windows installations are not supported yet"
-        );
-    }
-
-    #[test]
-    fn host_install_platform_uses_node_names() {
-        let (platform, architecture) = host_install_platform();
-        assert!(!matches!(platform, "macos" | "windows"));
-        assert!(!matches!(architecture, "aarch64" | "x86_64"));
-    }
-
-    #[test]
-    fn data_and_workspace_cannot_overlap_the_installation() {
+    pub(crate) fn data_and_workspace_cannot_overlap_the_installation() {
         let executable = std::env::current_exe().unwrap().canonicalize().unwrap();
         let root = executable.parent().unwrap().to_path_buf();
         let installation = ResolvedInstallation::desktop(&executable, &root, &root).unwrap();

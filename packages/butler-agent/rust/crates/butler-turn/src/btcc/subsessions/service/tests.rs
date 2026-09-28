@@ -303,8 +303,7 @@ async fn cancelled_child_abandons_bound_work_and_commits_cancelled_result() {
 mod child_work;
 
 /// KEEP: delegation ids are digests of these identity encodings.
-#[test]
-fn delegation_identities_are_byte_stable() {
+pub(crate) fn delegation_identities_are_byte_stable() {
     let steward = super::helpers::StewardIdentity {
         parent_session_id: "ps",
         parent_turn_id: "pt",

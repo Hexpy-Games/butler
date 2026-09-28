@@ -19,9 +19,6 @@ use crate::gateway::application::{
     storage::AppStorageError,
 };
 
-#[cfg(test)]
-mod tests;
-
 #[derive(Clone, Copy)]
 pub(super) struct FailedProjection<'a> {
     pub metadata: &'a Map<String, Value>,

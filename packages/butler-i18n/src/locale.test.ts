@@ -112,6 +112,15 @@ test("scheduled-run feature uses one term: 예약 작업 (never 자동화) and S
   }
 });
 
+test("API key copy claims only local storage until the Keychain migration lands (#217)", () => {
+  expect(getAppCopy("en-US").firstRun.keyStored).toBe("Your key stays on this computer.");
+  expect(getAppCopy("ko-KR").firstRun.keyStored).toBe("키는 이 컴퓨터에만 저장됩니다.");
+  for (const locale of ["en-US", "ko-KR"] as const) {
+    const claims = strings(getAppCopy(locale)).filter((text) => /keychain|키체인|secure storage|encrypt|암호화/iu.test(text));
+    expect(claims, locale).toEqual([]);
+  }
+});
+
 test("the schedule access hint names the Ask first mode with the composer's label", () => {
   for (const locale of ["en-US", "ko-KR"] as const) {
     const copy = getAppCopy(locale);

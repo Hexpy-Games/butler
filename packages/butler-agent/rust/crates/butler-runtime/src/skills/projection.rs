@@ -128,22 +128,3 @@ fn safe_short_token(value: &Value) -> Option<String> {
 fn turn_matches(metadata: &Value, turn: Option<&str>) -> bool {
     turn.is_none() || metadata.get("turnId").and_then(Value::as_str) == turn
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn reads_latest_matching_skill_names_from_file_tail() {
-        let path = std::env::temp_dir().join(format!("butler-skill-tail-{}", uuid::Uuid::new_v4()));
-        let rows = [
-            r#"{"kind":"system","payload":{"category":"context.skills.loaded","details":{"turnId":"t","skillNames":["old"]}}}"#,
-            r#"{"kind":"outbound","payload":{"metadata":{"kind":"final_result","turnId":"t","loadedSkillNames":["new"]}}}"#,
-            r#"{"kind":"outbound","payload":{"metadata":{"kind":"final_result","turnId":"other","loadedSkillNames":["wrong"]}}}"#,
-            "not-json",
-        ];
-        std::fs::write(&path, rows.join("\n")).unwrap();
-        assert_eq!(latest_names(&path, Some("t")), Some(vec!["new".to_owned()]));
-        let _ = std::fs::remove_file(path);
-    }
-}

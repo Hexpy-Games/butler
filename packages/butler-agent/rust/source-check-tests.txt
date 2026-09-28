@@ -1,0 +1,16 @@
+# Non-E2E test functions per package, ratcheted by tools/source-check.
+# Cover behaviour with E2E scenarios (crates/butler-e2e) first. A test kept
+# outside them needs a `// test-category: race|security|pure-logic|format-pin`
+# marker. Counts may only shrink; after deleting tests regenerate with
+#   cargo run -p butler-source-check -- --bless .
+# package<TAB>tests<TAB>unmarked
+crates/butler-agent	46	41
+crates/butler-core	7	2
+crates/butler-gateway	46	40
+crates/butler-ledger	4	1
+crates/butler-memory	118	110
+crates/butler-models	66	58
+crates/butler-platform	19	19
+crates/butler-runtime	77	70
+crates/butler-turn	110	95
+tools/source-check	16	14

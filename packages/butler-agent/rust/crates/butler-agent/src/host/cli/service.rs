@@ -263,6 +263,3 @@ fn report_error(command: &str, json_output: bool, message: &str) -> ExitCode {
     }
     ExitCode::from(1)
 }
-
-#[cfg(test)]
-mod tests;

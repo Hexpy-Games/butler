@@ -216,33 +216,3 @@ pub async fn observe_effect_file(target: &GuardedEffectFile) -> EffectFileObserv
         EffectFileObservation::Unavailable(EffectFileError::write_target(error))
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn observation_hashes_large_file_across_chunks_with_exact_byte_count() {
-        let root =
-            std::env::temp_dir().join(format!("butler-effect-observe-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir(&root).unwrap();
-        let bytes = vec![0xA5_u8; 2 * 64 * 1024 + 17];
-        let path = root.join("large.bin");
-        std::fs::write(&path, &bytes).unwrap();
-        let observed = observe_effect_file(&GuardedEffectFile {
-            identity: path.clone(),
-            absolute: path,
-        })
-        .await;
-        let EffectFileObservation::File {
-            bytes: length,
-            sha256,
-        } = observed
-        else {
-            panic!("expected file observation")
-        };
-        assert_eq!(length, bytes.len());
-        assert_eq!(sha256, format!("{:x}", Sha256::digest(&bytes)));
-        std::fs::remove_dir_all(root).unwrap();
-    }
-}

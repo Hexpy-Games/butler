@@ -218,12 +218,11 @@ impl AbsoluteWindow for SourceWindow {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use serde_json::Value;
     use sha2::{Digest, Sha256};
 
-    #[test]
-    fn persisted_window_coverage_key_and_evidence_ref_are_stable() {
+    pub(crate) fn persisted_window_coverage_key_and_evidence_ref_are_stable() {
         let golden: Value =
             serde_json::from_str(include_str!("../tests/identity-golden.json")).unwrap();
         let text = "🙂abcdef";

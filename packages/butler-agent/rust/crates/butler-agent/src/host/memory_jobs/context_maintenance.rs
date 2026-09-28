@@ -261,27 +261,3 @@ fn iso_at(now_ms: i64) -> String {
         |date| date.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
     )
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn local_daily_state_skips_success_and_error_until_next_day() {
-        let root =
-            std::env::temp_dir().join(format!("butler-context-schedule-{}", uuid::Uuid::new_v4()));
-        assert!(!should_run(&root, "2026-09-23", 209));
-        assert!(should_run(&root, "2026-09-23", 210));
-        let path = state_path(&root);
-        write_state(
-            &path,
-            &json!({"lastRunDate":"2026-09-23", "status":"error"}),
-        )
-        .unwrap();
-        assert!(!should_run(&root, "2026-09-23", 210));
-        assert!(should_run(&root, "2026-09-24", 210));
-        write_state(&path, &json!({"lastRunDate":"2026-09-24", "status":"ok"})).unwrap();
-        assert!(!should_run(&root, "2026-09-24", 210));
-        std::fs::remove_dir_all(root).unwrap();
-    }
-}

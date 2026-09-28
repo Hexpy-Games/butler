@@ -28,15 +28,9 @@ src/host/cli/open.rs	1	cfg!(target_os="macos")
 src/host/cli/personalization/composition.rs	1	nix::sys::utsname::uname
 src/host/cli/personalization/composition.rs	1	var_os("HOME")
 src/host/cli/settings/path.rs	1	var_os("HOME")
-src/host/cli/settings/tests.rs	1	cfg(unix)
-src/host/cli/settings/tests.rs	1	os::unix::fs::symlink
 src/host/cli/skills.rs	1	var_os("HOME")
 src/host/cli/status.rs	1	nix::{errno::Errno,fcntl::{Flock,FlockArg},}
 src/host/cli/status.rs	2	var_os("HOME")
-src/host/cli/status/tests.rs	1	0o400
-src/host/cli/status/tests.rs	1	0o600
-src/host/cli/status/tests.rs	1	nix::fcntl::{Flock,FlockArg}
-src/host/cli/status/tests.rs	1	os::unix::fs::{OpenOptionsExt,PermissionsExt}
 src/host/cli/web_access.rs	1	nix::sys::utsname::uname
 src/host/cli/web_access.rs	1	var_os("HOME")
 src/host/cli/work/options.rs	1	var_os("HOME")
@@ -56,11 +50,6 @@ src/host/guided/tools/image.rs	1	0o700
 src/host/guided/tools/image.rs	2	cfg(unix)
 src/host/guided/tools/image.rs	1	os::unix::fs::DirBuilderExt
 src/host/guided/tools/image.rs	1	os::unix::fs::OpenOptionsExt
-src/host/guided/tools/image/tests.rs	1	0o600
-src/host/guided/tools/image/tests.rs	1	0o700
-src/host/guided/tools/image/tests.rs	2	0o777
-src/host/guided/tools/image/tests.rs	1	cfg(unix)
-src/host/guided/tools/image/tests.rs	1	os::unix::fs::PermissionsExt
 src/host/installation.rs	1	consts::OS
 src/host/mcp.rs	1	var_os("HOME")
 src/host/mcp/cleanup.rs	1	0o600
@@ -108,4 +97,3 @@ src/host/service/configuration/local_credentials.rs	1	os::unix::fs::{DirBuilderE
 src/lib.rs	1	cfg(unix)
 src/main.rs	1	cfg(not(unix))
 src/main.rs	1	cfg(unix)
-tests/settings_model.rs	1	cfg(unix)

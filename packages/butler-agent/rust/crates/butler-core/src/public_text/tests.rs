@@ -1,8 +1,12 @@
 use super::*;
 use serde_json::json;
 
+/// Security boundary: public text and deltas redact secrets in place and
+/// replace reasoning, internal identifiers and local paths with the fallback;
+/// deltas keep their whitespace exactly because fragments concatenate.
+// test-category: security
 #[test]
-fn public_projection_redacts_secrets_and_replaces_private_text_with_fallback() {
+fn public_text_redacts_secrets_and_private_text() {
     // (input, fallback, projected): secrets are redacted in place; reasoning tags
     // (also base64-encoded), internal identifiers and local paths fall back.
     for (value, fallback, expected) in [
@@ -30,10 +34,7 @@ fn public_projection_redacts_secrets_and_replaces_private_text_with_fallback() {
     assert_eq!(sanitize_public_value(&json!(null), "Working"), "Working");
     assert_eq!(sanitize_public_value(&json!(true), ""), "true");
     assert_eq!(sanitize_public_value(&json!(12), "Working"), "12");
-}
 
-#[test]
-fn public_delta_keeps_whitespace_and_still_redacts() {
     // (delta, projected): fragments concatenate, so whitespace is kept exactly;
     // other control characters go and secrets are still redacted.
     for (value, expected) in [

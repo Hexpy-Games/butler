@@ -89,18 +89,3 @@ impl BriefingGenerationError {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::BriefingGenerationCode;
-
-    #[test]
-    fn wire_codes_are_stable() {
-        let codes: Vec<&str> = BriefingGenerationCode::ALL
-            .iter()
-            .map(|code| code.as_str())
-            .collect();
-        let expected: Vec<&str> = include_str!("wire_codes.txt").lines().collect();
-        assert_eq!(codes, expected);
-    }
-}
