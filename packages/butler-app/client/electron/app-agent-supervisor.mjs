@@ -693,6 +693,8 @@ export function createBundledAgentSupervisor({
     };
     halt = null;
     respawning = false;
+    // The replacement arrived: the attach event already reports running.
+    restartWait = null;
     phase = "running";
     lastErrorCode = null;
     lastErrorDetails = null;

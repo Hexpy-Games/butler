@@ -160,6 +160,9 @@ test("a restart with respawn_by controller waits for the new instance and reconn
   expect(h.events.attached).toEqual([
     { pid: 7300, instanceId: "nonce-7300", port: 18801, appSupervised: false },
   ]);
+  // The attach event is what the App publishes to windows: it must already
+  // report running, or the Restarting notice would stay up.
+  expect(h.events.stateAtAttach).toEqual(["running"]);
   expect(h.port()).toBe(18801);
   expect(h.supervisor.agentState().state).toBe("running");
 });
@@ -615,6 +618,7 @@ function createHarness(options: {
       port: number;
       appSupervised: boolean;
     }>,
+    stateAtAttach: [] as string[],
   };
   const healthTokens = new Map<number, string[]>();
   const harness = {
@@ -769,6 +773,7 @@ function createHarness(options: {
     },
     onExternalAttach: ({ pid, instanceId, port: attachedPort, appSupervised }) => {
       events.attached.push({ pid, instanceId, port: attachedPort, appSupervised });
+      events.stateAtAttach.push(harness.supervisor.agentState().state);
     },
     onRestartReconnectFailed: () => {
       events.restartFailed += 1;

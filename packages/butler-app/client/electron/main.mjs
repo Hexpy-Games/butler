@@ -2549,7 +2549,9 @@ app.on("before-quit", (event) => {
   }).then((stopped) => {
     if (stopped === undefined && !isQuitting) return;
     finalQuitAllowed = true;
-    app.quit();
+    // Quit on a later tick: Electron drops an app.quit() made in the same
+    // tick as the before-quit it cancelled (the stopped-Agent path is sync).
+    setImmediate(() => app.quit());
   }).catch((error) => {
     isQuitting = false;
     console.error(error);
@@ -2558,6 +2560,13 @@ app.on("before-quit", (event) => {
 
 async function confirmForegroundQuitIfNeeded() {
   if (!usesAppForegroundLifecycle || !foregroundInstance) return true;
+  // After an honored `butler stop` no Agent runs, so no work can be lost and
+  // the unreadable active-work state must not ask for confirmation.
+  if (bundledAgentSupervisor.agentState().state === "stopped") {
+    preconfirmedE2eQuit = false;
+    foregroundQuitSnapshot = null;
+    return true;
+  }
   const snapshot = await readForegroundActiveWorkSnapshot();
   const preconfirmed = preconfirmedE2eQuit;
   preconfirmedE2eQuit = false;
