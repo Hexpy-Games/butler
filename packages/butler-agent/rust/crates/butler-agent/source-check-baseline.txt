@@ -12,7 +12,7 @@ src/host/app/runtime_ports/settings.rs	load	83
 src/host/app/runtime_ports/settings_mutation.rs	AppSettingsMutation::apply_inner	91
 src/host/app/runtime_ports/topic_branch.rs	<AppBranchConversations as AppBranchConversationReader>::context	88
 src/host/app/runtime_ports/topic_branch.rs	<AppBranchSummarizerAdapter as AppBranchSummarizer>::summarize	89
-src/host/app/server.rs	AppServer::open_with_artifacts	164
+src/host/app/server.rs	AppServer::open_with_artifacts	162
 src/host/cli/cognition.rs	run	177
 src/host/cli/cognition/box_cli.rs	run	112
 src/host/cli/cognition/feedback.rs	run	192
@@ -26,9 +26,9 @@ src/host/cli/consolidation.rs	run_native_consolidation_cli	218
 src/host/cli/context.rs	parse	113
 src/host/cli/context/status.rs	run	104
 src/host/cli/doctor.rs	run	90
-src/host/cli/gateway.rs	execute	136
+src/host/cli/gateway.rs	execute	117
 src/host/cli/gateway/control.rs	request	96
-src/host/cli/gateway/output.rs	render	131
+src/host/cli/gateway/output.rs	render	128
 src/host/cli/oauth_login.rs	run_native_oauth_login_with_data	130
 src/host/cli/observability/process.rs	run	91
 src/host/cli/personalization.rs	run	101

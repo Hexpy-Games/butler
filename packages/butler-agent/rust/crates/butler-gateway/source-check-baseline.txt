@@ -53,7 +53,7 @@ src/gateway/application/snapshot_input.rs	claimed_snapshot	120
 src/gateway/application/space/commands.rs	execute	125
 src/gateway/application/space/owner.rs	commit_relocation	102
 src/gateway/application/storage/schema/project_ledger_bindings.rs	initialize	109
-src/gateway/http.rs	route	166
+src/gateway/http.rs	route	164
 src/gateway/http/automations.rs	route	101
 src/gateway/http/dashboard.rs	route	244
 src/gateway/http/message_files/mime.rs	inferred_content_type	84

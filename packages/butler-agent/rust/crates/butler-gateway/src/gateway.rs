@@ -14,6 +14,7 @@ mod message_validation;
 mod mutations;
 mod protocol;
 mod rate_limit;
+mod security_settings;
 mod server;
 mod session_references;
 mod transcript;
@@ -100,6 +101,10 @@ pub use protocol::{
     QueuedMessageRecord, RuntimeReadinessView, SendMessageCommand, SessionArtifactSummary,
     SessionControlState, SessionQueueUpdateRequest, SessionQueueView, TurnListView,
     TurnProgressSnapshotView, TurnRecord, TurnState,
+};
+pub use security_settings::{
+    ADMIN_CREDENTIAL_HEADER, AllowedHostError, GatewayExposure, GatewaySecurityStore,
+    MAX_ALLOWED_HOSTS, RotatedConnectionCode, normalize_allowed_host,
 };
 pub use server::{GatewayConfig, GatewayServer, serve_gateway};
 mod error;
@@ -410,6 +415,15 @@ pub trait GatewayApplication:
         _relation_id: String,
     ) -> ApplicationFuture<serde_json::Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    /// Records and publishes a live event the gateway itself raises, such as
+    /// `security.connection_code_rotated`. Without an event log, a no-op.
+    fn publish_gateway_event(
+        &self,
+        _event_type: &'static str,
+        _payload: serde_json::Map<String, serde_json::Value>,
+    ) -> ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
     }
     fn latest_event_cursor(&self) -> ApplicationFuture<u64>;
     fn replay_events(

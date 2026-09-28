@@ -55,6 +55,11 @@ impl LiveEvents {
         Ok(Self { events, task })
     }
 
+    /// Whether the gateway ended the stream.
+    pub fn is_closed(&self) -> bool {
+        self.task.is_finished()
+    }
+
     pub fn snapshot(&self) -> Vec<Value> {
         self.events
             .lock()
