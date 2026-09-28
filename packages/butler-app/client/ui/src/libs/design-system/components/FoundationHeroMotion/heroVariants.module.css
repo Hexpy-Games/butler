@@ -56,8 +56,7 @@
   .doorLeft,
   .doorMiddle,
   .doorRight,
-  .tile,
-  .planeLabel {
+  .tile {
     animation: none;
   }
 }
@@ -272,8 +271,21 @@
 /* Real control heights are small next to the stage: show them larger where
    the stage has room (a static scale, rastered crisp). */
 @container (width >= 22rem) {
-  .sizingStage,
   .reflow {
+    scale: 1.35;
+  }
+}
+
+/* The control row is 8.1 heights wide at --control-height-lg: scale only as
+   far as the stage keeps it clear of the edges. */
+@container (width >= 24rem) {
+  .sizingStage {
+    scale: 1.15;
+  }
+}
+
+@container (width >= 30rem) {
+  .sizingStage {
     scale: 1.35;
   }
 }
@@ -561,26 +573,6 @@
   background: var(--accent);
 }
 
-/* Plane names: shown while the stack is exploded, hidden when it is flat. */
-.planeLabel {
-  position: absolute;
-  bottom: calc(100% + var(--space-xs));
-  left: 0;
-  font: var(--font-code);
-  font-size: var(--typo-caption-size);
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  animation-name: hero-layers-label;
-  animation-duration: calc(var(--hero-beat) * 30);
-  animation-timing-function: var(--motion-ease-standard);
-  animation-iteration-count: infinite;
-}
-
-.plane[data-plane="drawer"] .planeLabel {
-  bottom: auto;
-  top: calc(100% + var(--space-xs));
-}
-
 /* ---- 10 Layout and platform: a frame of sliding ends and tiles ---- */
 
 /* The frame is three pieces so its corners never scale: rounded ends that
@@ -731,23 +723,6 @@
   82%,
   100% {
     transform: rotateX(0deg) rotateZ(0deg) scale(1);
-  }
-}
-
-@keyframes hero-layers-label {
-  0%,
-  30% {
-    opacity: 0;
-  }
-
-  36%,
-  58% {
-    opacity: 1;
-  }
-
-  62%,
-  100% {
-    opacity: 0;
   }
 }
 
