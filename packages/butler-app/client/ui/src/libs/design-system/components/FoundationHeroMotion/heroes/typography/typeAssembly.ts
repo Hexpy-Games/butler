@@ -1,61 +1,67 @@
 import type { Key, Pose, Track } from "../../heroTimeline";
+import { lineDash } from "./LineOverlay";
 import type { SpecimenMetrics } from "./specimenMetrics";
 import { cameras } from "./typeCamera";
-import { BEATS, FLIGHTS, PANELS, select, specimenTracks, type Flight, type TypeGeometry } from "./typeChoreography";
+import { BEATS, FINALE, FLIGHTS, LOOP, PANELS, select, specimenTracks, type Panel, type TypeGeometry } from "./typeChoreography";
+import { BADGE_ROW, STRUCTURE, type LineInfo } from "./typeLines";
 
-/** When each role's text leaves its rung (beats); it lands 2.2 beats later, inside the example the camera holds. */
-const FLIGHT_AT: Record<Flight, number> = { title: 32.2, field: 33.2, ask: 37.8, command: 38.8, meta: 39.8, dash: 43.4, metric: 44.2 };
-const FLIGHT_BEATS = 2.2;
-/** Everything leaves at the loop from here. */
-const OUT = 73.3;
+/** The list scene ends and the first build starts here; each build takes BUILD beats. */
+const FIRST = 31.4;
+const BUILD = 7;
+/** Built text leaves at the loop from here. */
+const OUT = LOOP + 1.3;
 
-/** The text a flight lands on; the metric lands on the first MetricCard's own value. */
-export function landSelect(flight: Flight): string {
-  return flight === "metric" ? '[data-panel="metric"] [data-slot="metric-value"]:not([data-t="metric-2"] *)' : select(`land-${flight}`);
+const buildAt = (k: number) => FIRST + k * BUILD;
+
+
+
+/** While a component builds, a piece sits `drop` px lower (a badge row per text line above it), then settles into place. */
+function settle(drop: number, leave: number): Key[] {
+  return [{ at: 0, y: drop }, { at: leave, y: drop }, { at: leave + 1, y: 0, ease: "emphasized" }, { at: BEATS - 0.1, y: drop }];
 }
 
-/** A component part that fades and rises in at `at` and leaves with the product. */
-function part(selector: string, at: number, from: Pose = { y: 8 }): Track {
+/** A structural piece that pops in at `at`, makes room like the lines above it, and leaves with the product. */
+function part(name: string, at: number, drop: number, leave: number): Track {
   return {
-    select: selector,
-    keys: [{ at: 0, ...from, o: 0 }, { at, o: 0 }, { at: at + 0.9, x: 0, y: 0, s: 1, o: 1, ease: from.s ? "spring" : "decelerate" }, { at: OUT, o: 1 }, { at: OUT + 0.2, ...from, o: 0 }],
+    select: select(name),
+    keys: [{ at: 0, s: 0.8, o: 0 }, { at, o: 0 }, { at: at + 0.8, s: 1, o: 1, ease: "spring" }, { at: OUT, o: 1 }, { at: OUT + 0.2, o: 0 }, ...settle(drop, leave)],
   };
 }
 
-/** One role's text flying into its component: lift toward the camera, land, hand over, return to the poster. */
-function flight(g: TypeGeometry, name: Flight, i: number): Key[] {
-  const f = FLIGHT_AT[name];
-  const dx = g.land[name].x - g.fly[name].x;
-  const dy = g.land[name].y - g.fly[name].y;
+/** One text line: token badge, baseline rule drawn left to right, outline drawn along its contours, then the real text fills in. */
+function line(info: LineInfo, at: number, leave: number, drop: number): Track[] {
+  const badge: Track = { select: select(`lb-${info.id}`), keys: [{ at: 0, y: 6, o: 0 }, { at, o: 0 }, { at: at + 0.6, y: 0, o: 1, ease: "decelerate" }, { at: leave, o: 1 }, { at: leave + 0.6, o: 0, ease: "accelerate" }] };
+  // While it builds, the line sits `drop` px lower (room for its badge above it), then settles into place.
+  const fill = (from: number, to: number): Track => ({ select: info.select, keys: [{ at: 0, o: 0 }, { at: from, o: 0 }, { at: to, o: 1, ease: "decelerate" }, { at: OUT, o: 1 }, { at: OUT + 0.2, o: 0 }, ...settle(drop, leave)] });
+  const layer: Track = { select: select(`lx-${info.id}`), keys: settle(drop, leave) };
+  if (!info.draw) return [badge, layer, fill(at + 0.6, at + 1.6)];
+  const dash = lineDash(info);
   return [
-    { at: f, x: 0, y: 0, z: 0, s: 1, o: 1 },
-    { at: f + 1, x: dx * 0.45, y: dy * 0.45, z: 90, s: 1.04, ease: "accelerate" },
-    { at: f + 1.9, x: dx, y: dy, z: 0, s: 1, ease: "decelerate" },
-    { at: f + FLIGHT_BEATS, o: 0 },
-    { at: 54.4, x: 0, y: 0, o: 0 }, { at: 55 + i * 0.15, o: 0 }, { at: 56.4 + i * 0.15, o: 1, ease: "decelerate" },
+    badge,
+    layer,
+    { select: select(`lr-${info.id}`), keys: [{ at: 0, sx: 0, o: 0 }, { at: at + 0.2, sx: 0, o: 1 }, { at: at + 1.4, sx: 1, ease: "decelerate" }, { at: at + 2.4, o: 1 }, { at: at + 3, o: 0, ease: "accelerate" }] },
+    { select: select(`lo-${info.id}`), keys: [{ at: 0, dash, o: 0 }, { at: at + 0.3, o: 1 }, { at: at + 2.1, dash: 0 }, { at: at + 2.2, o: 1 }, { at: at + 2.8, o: 0, ease: "accelerate" }, { at: BEATS - 0.1, dash }] },
+    fill(at + 1.8, at + 2.4),
   ];
 }
 
-/** Acts II–IV on the measured poster: camera, ladder, numerals, panels, flights, settle and loop. */
+/** Acts II–IV: the type list, the four builds, the finale, the settle and the loop. */
 function assembly(g: TypeGeometry): Track[] {
   const cam = cameras(g);
   const world: Key[] = [
-    { at: 0, ...cam.rest }, { at: 18.2, ...cam.rest }, { at: 20.2, ...cam.rest }, { at: 22.4, ...cam.ladder, ease: "emphasized" },
-    { at: 26, ...cam.ladderDolly }, { at: 27.2, ...cam.metric, ease: "emphasized" }, { at: 29.8, ...cam.metric },
-    { at: 31.2, ...cam.wide, ease: "emphasized" }, { at: 31.8, ...cam.wide },
-    { at: 33, ...cam.settings, ease: "emphasized" }, { at: 37, ...cam.settings },
-    { at: 38.4, ...cam.chat, ease: "emphasized" }, { at: 42.8, ...cam.chat },
-    { at: 44.2, ...cam.metricPanel, ease: "emphasized" }, { at: 48.4, ...cam.metricPanel },
-    { at: 49.8, ...cam.composer, ease: "emphasized" }, { at: 53, ...cam.composer },
-    { at: 56, ...cam.rest, ease: "spring" }, { at: 63, rx: -0.8, ry: 1.4 }, { at: 70, ...cam.rest },
+    { at: 0, ...cam.rest }, { at: 18.2, ...cam.rest }, { at: 20.2, ...cam.rest }, { at: 22.2, ...cam.ladder, ease: "emphasized" },
+    { at: 23.4, ...cam.top, ease: "emphasized" }, { at: 28.6, ...cam.bottom, ease: "linear" }, { at: FIRST, ...cam.stage[0]!, ease: "decelerate" },
+    ...PANELS.slice(1).flatMap((_, j): Key[] => [{ at: buildAt(j + 1) - 1.4, ...cam.stage[j]! }, { at: buildAt(j + 1), ...cam.stage[j + 1]!, ease: "emphasized" }]),
+    { at: FINALE, ...cam.stage[3]! }, { at: FINALE + 3, ...cam.rest, ease: "emphasized" }, { at: FINALE + 6, ...cam.rest }, { at: 70, rx: -0.6, ry: 1.2 }, { at: LOOP - 1, ...cam.rest },
   ];
-  // Rungs only move: an opacity animation would flatten them and hide the
-  // flying text behind the panels, so each part of a rung fades on its own.
+  // Rungs only move (an opacity animation would flatten their 3D); their
+  // parts fade on their own. For the finale they gather in from below-left.
   const rungs = FLIGHTS.flatMap((name, i): Track[] => {
-    const depth = (3 - i) * 14;
     const rise = 20.6 + i * 0.4;
-    const leave = 72 + i * 0.18;
-    const hidden: Pose = { z: -180, rx: -24 };
+    const leave = LOOP + i * 0.18;
+    const gather = FINALE + 0.3 + i * 0.2;
+    const hidden: Pose = { x: 0, y: 0, z: -180, rx: -24 };
+    const away: Pose = { x: -80, y: 200, z: 0, rx: 0 };
     const fade = (from: number, to: number, start: Pose = {}, end: Pose = {}): Key[] => [
       { at: 0, o: 0, ...start }, { at: from, o: 0 }, { at: to, o: 1, ease: end.sx ? "emphasized" : "decelerate", ...end }, { at: leave, o: 1 }, { at: leave + 1, o: 0, ease: "accelerate" },
     ];
@@ -64,41 +70,44 @@ function assembly(g: TypeGeometry): Track[] {
       {
         select: select(`rung-${name}`),
         keys: [
-          { at: 0, ...hidden }, { at: rise - 1.4, ...hidden }, { at: rise, z: 0, rx: 0, ease: "spring" },
-          { at: 23 + i * 0.2, z: depth }, { at: 25.6, z: depth }, { at: 26.8, z: 0, ease: "emphasized" },
+          { at: 0, ...hidden }, { at: rise - 1.4, ...hidden }, { at: rise, x: 0, y: 0, z: 0, rx: 0, ease: "spring" },
+          { at: 40, x: 0, y: 0 }, { at: 40.1, ...away }, { at: gather, ...away }, { at: gather + 2.3, x: 0, y: 0, ease: "emphasized" },
           { at: leave, z: 0 }, { at: leave + 1, z: -60, ease: "accelerate" }, { at: BEATS, ...hidden },
         ],
       },
       { select: select(`chrome-${name}`), keys: fade(rise - 1, rise) },
-      { select: select(`band-${name}`), keys: fade(22.6 + i * 0.3, 23.8 + i * 0.3, { sx: 0 }, { sx: 1 }) },
-      { select: select(`fly-${name}`), keys: [...flyIn, ...flight(g, name, i), { at: leave, o: 1 }, { at: leave + 1, o: 0, ease: "accelerate" }] },
-      { select: landSelect(name), keys: [{ at: 0, o: 0 }, { at: FLIGHT_AT[name] + 1.9, o: 0 }, { at: FLIGHT_AT[name] + FLIGHT_BEATS, o: 1 }, { at: OUT, o: 1 }, { at: OUT + 0.2, o: 0 }] },
+      { select: select(`band-${name}`), keys: fade(22.4 + i * 0.3, 23.6 + i * 0.3, { sx: 0 }, { sx: 1 }) },
+      { select: select(`fly-${name}`), keys: [...flyIn, { at: leave, o: 1 }, { at: leave + 1, o: 0, ease: "accelerate" }] },
     ];
   });
   const digits = g.digits.map((d, k): Track => ({
     select: select(`digit-${k}`),
-    keys: [{ at: 0, y: d * g.digitLine }, { at: 27 + k * 0.3, y: d * g.digitLine }, { at: 29 + k * 0.3, y: 0, ease: "emphasized" }, { at: OUT, y: 0 }, { at: OUT + 0.4, y: d * g.digitLine }],
+    keys: [{ at: 0, y: d * g.digitLine }, { at: 26.6 + k * 0.3, y: d * g.digitLine }, { at: 28.4 + k * 0.3, y: 0, ease: "emphasized" }, { at: OUT, y: 0 }, { at: OUT + 0.4, y: d * g.digitLine }],
   }));
-  const panels = PANELS.map((panel, p): Track => {
-    const hidden: Pose = { z: -320, ry: 16, o: 0 };
-    return {
-      select: select(`panel-${panel}`),
-      keys: [
-        { at: 0, ...hidden }, { at: 29.8 + p * 0.4, ...hidden }, { at: 31.6 + p * 0.4, z: 0, ry: 0, o: 1, ease: "emphasized" },
-        { at: 71.6 + p * 0.3, o: 1 }, { at: 72.8 + p * 0.3, z: -200, o: 0, ease: "accelerate" }, { at: BEATS, ...hidden },
-      ],
-    };
+  const builds = PANELS.flatMap((panel, k): Track[] => {
+    const at = buildAt(k);
+    const shift = cam.shift[panel];
+    const home = FINALE + 0.4 * k;
+    const hidden: Pose = { ...shift, s: 0.96, o: 0 };
+    const lines = g.lines.filter((info) => info.panel === panel);
+    return [
+      {
+        select: select(`panel-${panel}`),
+        keys: [
+          { at: 0, ...hidden }, { at: at - 0.2, ...hidden }, { at: at + 1, s: 1, o: 1, ease: "emphasized" },
+          { at: home, ...shift }, { at: home + 2.6, x: 0, y: 0, ease: "emphasized" },
+          { at: LOOP - 0.4 + 0.3 * k, z: 0, o: 1 }, { at: LOOP + 0.8 + 0.3 * k, z: -200, o: 0, ease: "accelerate" }, { at: BEATS, ...hidden, z: 0 },
+        ],
+      },
+      ...STRUCTURE[panel].map((name, j) => part(name, at + 0.8 + j * 0.2, BADGE_ROW * lines.filter((info) => info.box.y < (g.parts[name] ?? 0)).length, at + BUILD - 2.2)),
+      ...lines.flatMap((info, j) => line(info, at + 1.2 + j * 0.4, at + BUILD - 2.2, j * BADGE_ROW)),
+    ];
   });
-  const words = Array.from({ length: g.words }, (_, k) => part(select(`word-${k}`), 49.8 + k * 0.28));
   const tnumAt: Pose = { x: g.fly.metric.x - g.tnum.x, y: g.fly.metric.y + g.fly.metric.h + 4 - g.tnum.y };
   return [
     { select: select("world"), keys: world },
-    { select: select("cap-tnum"), keys: [{ at: 0, ...tnumAt, y: tnumAt.y! + 6, o: 0 }, { at: 27.2, o: 0 }, { at: 28, y: tnumAt.y, o: 1, ease: "decelerate" }, { at: 29.8, o: 1 }, { at: 30.4, o: 0, ease: "accelerate" }] },
-    ...rungs, ...digits, ...panels, ...words,
-    part(select("settings-lead"), 34.6), part(select("field-hint"), 35.6), part(select("switch"), 35.8, { s: 0.6 }), part(select("field-2"), 36.1),
-    part(select("answer"), 40.6, { y: 10 }),
-    part('[data-panel="metric"] [data-slot="metric-label"]:not([data-t="metric-2"] *)', 46.5), part('[data-panel="metric"] [data-slot="metric-label"]:not([data-t="metric-2"] *) + *', 46.8), part(select("metric-2"), 47.1),
-    part(select("send"), 50.2 + g.words * 0.28, { s: 0.6 }),
+    { select: select("cap-tnum"), keys: [{ at: 0, ...tnumAt, y: tnumAt.y! + 6, o: 0 }, { at: 26.6, o: 0 }, { at: 27.4, y: tnumAt.y, o: 1, ease: "decelerate" }, { at: 29.4, o: 1 }, { at: 30, o: 0, ease: "accelerate" }] },
+    ...rungs, ...digits, ...builds,
   ];
 }
 

@@ -60,13 +60,13 @@ function useSpecimenMetrics(root: RefObject<HTMLElement | null>) {
 }
 
 /** The poster geometry the timeline is compiled against, measured again when copy, canvas or a component's size changes. */
-function useTypeMeasure(root: RefObject<HTMLElement | null>, layout: TypeLayout, lang: FoundationHeroLang, ready: boolean, words: number) {
+function useTypeMeasure(root: RefObject<HTMLElement | null>, layout: TypeLayout, lang: FoundationHeroLang, ready: boolean) {
   const [measure, setMeasure] = useState<TypeMeasure | null>(null);
   useLayoutEffect(() => setMeasure(null), [lang, layout, ready]);
   useLayoutEffect(() => {
     if (measure || !ready || !root.current) return;
-    setMeasure(measureType(root.current, layout, words));
-  }, [measure, ready, root, layout, words]);
+    setMeasure(measureType(root.current, layout));
+  }, [measure, ready, root, layout]);
   useEffect(() => {
     const parts = [select("ladder"), select("product")].map((selector) => root.current?.querySelector(selector)).filter(Boolean) as Element[];
     if (!measure || typeof ResizeObserver !== "function" || parts.length === 0) return undefined;
@@ -100,8 +100,7 @@ export function TypographyHero({ lang }: { lang: FoundationHeroLang }) {
   const scope = `th${useId().replace(/[^a-z0-9]/giu, "")}`;
   const frame = useFrame(root);
   const metrics = useSpecimenMetrics(root);
-  const words = copy.placeholder.split(" ").length;
-  const measure = useTypeMeasure(root, frame.layout, lang, Boolean(metrics), words);
+  const measure = useTypeMeasure(root, frame.layout, lang, Boolean(metrics));
   const css = useMemo(() => (measure && metrics ? compileTimeline(scope, BEATS, typeTracks(measure.geometry, metrics)) : ""), [measure, metrics, scope]);
   const { layout } = frame;
   const size = SPECIMEN[layout].size;
@@ -135,7 +134,7 @@ export function TypographyHero({ lang }: { lang: FoundationHeroLang }) {
               </div>
               <RoleLadder copy={copy} specs={measure?.specs ?? {}} />
             </div>
-            <ProductBoard copy={copy} layout={layout} />
+            <ProductBoard copy={copy} layout={layout} lines={measure?.geometry.lines ?? []} />
           </div>
           <WeightControl axisAt={axisAt} />
           <span className={t.overlay} data-t="cap-tnum"><span className={t.mono}>font-variant-numeric: tabular-nums</span></span>

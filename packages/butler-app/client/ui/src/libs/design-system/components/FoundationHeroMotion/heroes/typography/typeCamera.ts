@@ -1,27 +1,53 @@
 import { fit, focus, type Box, type Pose } from "../../heroTimeline";
-import type { Panel, TypeGeometry } from "./typeChoreography";
-import { col } from "./typeGrid";
+import { PANELS, type Panel, type TypeGeometry } from "./typeChoreography";
+import { BADGE_ROW } from "./typeLines";
 
-/** Camera poses: one subject at a time, framed on the grid. */
+/** Where each component is built: an empty area off the poster, reached by moving down or sideways. */
+function stageCenters(g: TypeGeometry): Array<{ x: number; y: number }> {
+  const { w, h } = g.canvas;
+  if (g.layout === "tall") return PANELS.map((_, k) => ({ x: w / 2, y: h * (1.7 + k * 1.1) }));
+  return [{ x: w * 0.28, y: h * 1.62 }, { x: w * 1.2, y: h * 1.62 }, { x: w * 1.2, y: h * 2.62 }, { x: w * 0.28, y: h * 2.62 }];
+}
+
+/** The part of a panel the camera frames while building it (the conversation card stretches, so its lines). */
+function frameBox(g: TypeGeometry, panel: Panel): Box {
+  const own = g.lines.filter((line) => line.panel === panel);
+  // Room for the first badge above and for the badge rows the lines open while building.
+  const grow = (box: Box): Box => ({ ...box, y: box.y - BADGE_ROW, h: box.h + BADGE_ROW * own.length });
+  const box = g.panels[panel];
+  if (panel !== "chat") return grow(box);
+  const lines = own.map((line) => ({ y: box.y + line.box.y, h: line.box.h }));
+  const top = Math.max(box.y, Math.min(...lines.map((line) => line.y)) - 32);
+  return grow({ x: box.x, y: top, w: box.w, h: Math.max(...lines.map((line) => line.y + line.h)) + 32 - top });
+}
+
+/**
+ * Build stages and camera poses. Each component is offset (`shift`) from its
+ * poster place to an empty stage, framed there one at a time as large as the
+ * frame allows, and later flies back into the poster for the finale.
+ */
 export function cameras(g: TypeGeometry) {
   const { canvas } = g;
   const tall = g.layout === "tall";
-  const frame = (box: Box, turn: Pose) => focus(canvas, box, fit(canvas, box, 0.84, tall ? 1.5 : 2), turn);
-  const panel = (p: Panel, turn: Pose) => frame(g.panels[p], turn);
-  // The conversation card stretches to its column; frame the turn itself.
-  const turn = [g.land.ask, g.land.command, g.land.meta];
-  const top = Math.max(g.panels.chat.y, Math.min(...turn.map((b) => b.y)) - 24);
-  const chat: Box = { x: g.panels.chat.x, y: top, w: g.panels.chat.w, h: Math.max(...turn.map((b) => b.y + b.h)) + 24 - top };
-  const product: Box = tall ? g.panels.chat : { x: col("wide", 6).x, y: 40, w: col("wide", 6, 7).w, h: canvas.h - 80 };
+  const cap = tall ? 1.6 : 2;
+  const centers = stageCenters(g);
+  const shift = Object.fromEntries(PANELS.map((panel, k) => {
+    const box = frameBox(g, panel);
+    return [panel, { x: centers[k]!.x - (box.x + box.w / 2), y: centers[k]!.y - (box.y + box.h / 2) }];
+  })) as Record<Panel, { x: number; y: number }>;
+  const stage = PANELS.map((panel) => {
+    const box = frameBox(g, panel);
+    const moved = { ...box, x: box.x + shift[panel].x, y: box.y + shift[panel].y };
+    return focus(canvas, moved, fit(canvas, moved, 0.8, cap));
+  });
+  const rung = g.rungs.title;
+  const close = Math.min(cap * 1.1, (canvas.w * 0.86) / g.ladder.w);
   return {
+    shift,
+    stage,
     rest: { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, s: 1 } as Pose,
-    ladder: focus(canvas, g.ladder, fit(canvas, g.ladder, 0.9, 1.6), { rx: 16, rz: -3 }),
-    ladderDolly: focus(canvas, g.ladder, fit(canvas, g.ladder, 0.9, 1.6) * 1.05, { rx: 8, rz: -1 }),
-    metric: focus(canvas, g.fly.metric, fit(canvas, g.fly.metric, 0.5, tall ? 1.4 : 2.2), { ry: -8 }),
-    wide: focus(canvas, product, fit(canvas, product, 0.94, 1.2), { rx: 6, ry: -10 }),
-    settings: panel("settings", { ry: -5 }),
-    chat: frame(chat, { ry: 5 }),
-    metricPanel: panel("metric", { ry: -5 }),
-    composer: panel("composer", { rx: 5 }),
+    ladder: focus(canvas, g.ladder, fit(canvas, g.ladder, 0.9, 1.4), { rx: 12, rz: -2 }),
+    top: focus(canvas, { x: g.ladder.x, y: rung.y, w: g.ladder.w, h: rung.h }, close),
+    bottom: focus(canvas, { x: g.ladder.x, y: g.rungs.metric.y, w: g.ladder.w, h: g.rungs.metric.h }, close),
   };
 }

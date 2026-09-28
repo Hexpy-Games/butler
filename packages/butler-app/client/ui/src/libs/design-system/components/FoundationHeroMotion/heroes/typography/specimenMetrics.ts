@@ -72,3 +72,12 @@ export function specimenLayout(metrics: SpecimenMetrics, size: number, weight: S
 export function em(value: number): string {
   return `${Math.round(value * 1000) / 1000}em`;
 }
+
+/** Font ascent and descent (px) of `text` set in a CSS `font`, for placing a baseline; null without canvas metrics. */
+export function fontBox(font: string, text: string): { ascent: number; descent: number } | null {
+  const context = typeof document === "undefined" ? null : document.createElement("canvas").getContext("2d");
+  if (!context) return null;
+  context.font = font;
+  const metrics = context.measureText(text);
+  return metrics.fontBoundingBoxAscent ? { ascent: metrics.fontBoundingBoxAscent, descent: metrics.fontBoundingBoxDescent } : null;
+}

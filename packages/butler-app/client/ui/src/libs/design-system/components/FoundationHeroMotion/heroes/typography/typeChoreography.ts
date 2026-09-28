@@ -1,35 +1,36 @@
 import type { Box, Key, Pose, Track } from "../../heroTimeline";
 import { specimenLayout, type SpecimenMetrics } from "./specimenMetrics";
+import type { LineInfo } from "./typeLines";
 import { col, onBaseline, SPECIMEN, type TypeLayout } from "./typeGrid";
 import { OUTLINE_EM } from "./TypeSpecimen";
 
 /**
- * 02 Typography hero, "from token to product": one 76-beat cycle (24.3 s at
+ * 02 Typography hero, "from token to product": one 80-beat cycle (25.6 s at
  * --motion-deliberate 320 ms). Beat marks:
  *
- *   0–7    Construction  metric guides draw in (baseline, cap, x-height,
- *                        ascender, descender); the real Pretendard outlines of
- *                        "A가" draw along their contours; advance and side
- *                        bearing guides rise; values attach to their guides
- *   5–9    Fill          the glyphs fill, outlines and guides clear: "A가"
- *   9–18   Weight        the weight control joins on the right; 300 → 800 →
- *                        620 on the variable axis while the advance, side
- *                        bearings, gap and readout move with it
+ *   0–7    Construction  metric guides draw in; the real Pretendard outlines of
+ *                        "A가" draw along their contours; values attach
+ *   5–9    Fill          the glyphs fill, outlines and guides clear
+ *   9–18   Weight        300 → 800 → 620 with the control, guides and readout
  *   18–20  Match cut     the specimen shrinks onto the H2 rung: "Appearance"
- *   20–30  Scale         the camera lays the page down; rungs rise in a spring
- *                        cascade, line boxes draw in; push-in on MetricValue,
- *                        tabular digits roll
- *   30–53  Assembly      real components rise; the camera takes one example
- *                        at a time (settings, conversation, metric, composer),
- *                        holds while its role text lands, then moves on
- *   53–72  Settle        spring back to the composed poster and hold
- *   72–76  Loop          the product recedes, the specimen grows back and its
+ *   20–31  Type list     the role list rises; the camera closes in and travels
+ *                        down it, role after role, into the empty space below
+ *   31–59  Build         four real components, one at a time, each in its own
+ *                        empty area: surface, structure, then its text lines
+ *                        drawn like the specimen (guide, outline, fill) with
+ *                        the typography token of each line on a badge
+ *   59–64  Finale        everything pushes up and gathers onto the grid
+ *   64–76  Settle        the composed poster: tokens beside the product
+ *   76–80  Loop          the product recedes, the specimen grows back and its
  *                        fill clears to the blueprint of beat 0
  *
  * Every placement comes from the grid (typeGrid.ts) or from measuring the
- * poster, so it holds for both canvases, themes, languages and fonts.
+ * poster, so it holds for both canvases, themes, languages and fonts. The
+ * components gather into the poster from FINALE; the loop starts at LOOP.
  */
-export const BEATS = 76;
+export const FINALE = 59.6;
+export const LOOP = 76;
+export const BEATS = 80;
 
 export const FLIGHTS = ["title", "dash", "field", "ask", "command", "meta", "metric"] as const;
 export type Flight = (typeof FLIGHTS)[number];
@@ -43,12 +44,13 @@ export interface TypeGeometry {
   layout: TypeLayout;
   canvas: { w: number; h: number };
   specimen: Box;
-  /** Poster scale of the specimen (laid out at its Act I size, drawn small). */
-  specimenScale: number;
+  /** Poster scale of the specimen (laid out at Act I size, drawn small). */ specimenScale: number;
   ladder: Box;
   rungs: Record<Flight, Box>;
   fly: Record<Flight, Box>;
-  land: Record<Flight, Box>;
+  /** Text lines each component builds, and the top of each structure part, measured in their panels. */
+  lines: LineInfo[];
+  parts: Record<string, number>;
   panels: Record<Panel, Box>;
   control: Box;
   tnum: Box;
@@ -56,7 +58,6 @@ export interface TypeGeometry {
   readoutLine: number;
   digitLine: number;
   digits: number[];
-  words: number;
 }
 
 export function select(name: string): string {
@@ -67,9 +68,7 @@ export function select(name: string): string {
 const WEIGHT: Array<[number, 300 | 800 | 620]> = [[9.8, 300], [12.8, 800], [13.6, 800], [15.8, 620]];
 const EASE_AT = { 12.8: "standard", 15.8: "decelerate" } as const;
 /** Guides and values leave for the fill, return for the weight, leave for the match cut. */
-const CLEAR = [6.4, 7.2] as const;
-const BACK = [8.8, 9.6] as const;
-const AWAY = [17.2, 18] as const;
+const [CLEAR, BACK, AWAY] = [[6.4, 7.2], [8.8, 9.6], [17.2, 18]] as const;
 
 function show(from: number, to: number, end: readonly [number, number] = CLEAR, extra: Pose = {}): Key[] {
   return [{ at: 0, o: 0, ...extra }, { at: from, o: 0 }, { at: to, o: 1, ease: "decelerate" }, { at: end[0], o: 1 }, { at: end[1], o: 0, ease: "accelerate" }];
@@ -110,11 +109,11 @@ export function specimenTracks(g: TypeGeometry, m: SpecimenMetrics): Track[] {
   ];
   const outline = (name: string, dash: number, from: number, x: number): Track => ({
     select: select(name),
-    keys: [{ at: 0, dash, o: 1, x }, { at: from, dash }, { at: from + 3.8, dash: 0 }, { at: 5.6, o: 1 }, { at: 6.6, o: 0, ease: "accelerate" }, { at: 75.9, dash, o: 0 }, { at: BEATS, o: 1 }],
+    keys: [{ at: 0, dash, o: 1, x }, { at: from, dash }, { at: from + 3.8, dash: 0 }, { at: 5.6, o: 1 }, { at: 6.6, o: 0, ease: "accelerate" }, { at: LOOP + 3.9, dash, o: 0 }, { at: BEATS, o: 1 }],
   });
   const fillKeys = (x: (w: 300 | 800 | 620) => number): Key[] => [
     { at: 0, o: 0, wght: 300, x: x(300) }, { at: 5, o: 0 }, { at: 6.4, o: 1, ease: "decelerate" },
-    ...byWeight((w) => ({ wght: w, x: x(w) })), { at: 75, o: 1 }, { at: 75.9, o: 0, ease: "accelerate" }, { at: 75.95, wght: 300, x: x(300) },
+    ...byWeight((w) => ({ wght: w, x: x(w) })), { at: LOOP + 3, o: 1 }, { at: LOOP + 3.9, o: 0, ease: "accelerate" }, { at: LOOP + 3.95, wght: 300, x: x(300) },
   ];
   return [
     ...hline("base", 0, true), ...hline("cap", 1, true), ...hline("xh", 2, false), ...hline("asc", 3, false), ...hline("desc", 4, false),
@@ -146,15 +145,15 @@ export function specimenTracks(g: TypeGeometry, m: SpecimenMetrics): Track[] {
     { select: select("read-100"), keys: byWeight((w) => ({ y: (6 - Math.round(w / 100)) * g.readoutLine })) },
     { select: select("read-10"), keys: byWeight((w) => ({ y: (62 - w / 10) * g.readoutLine })) },
     { select: select("token"), keys: [{ at: 0, o: 0 }, { at: 15.8, o: 0 }, { at: 16.4, o: 1, ease: "decelerate" }] },
-    { select: select("family"), keys: [{ at: 0, o: 0 }, { at: 55.6, o: 0 }, { at: 57, o: 1, ease: "decelerate" }, { at: 71.6, o: 1 }, { at: 72.2, o: 0, ease: "accelerate" }] },
+    { select: select("family"), keys: [{ at: 0, o: 0 }, { at: FINALE + 2.6, o: 0 }, { at: FINALE + 4, o: 1, ease: "decelerate" }, { at: LOOP - 0.4, o: 1 }, { at: LOOP + 0.2, o: 0, ease: "accelerate" }] },
     {
       select: select("specimen"),
       keys: [
         { at: 0, ...big }, { at: 18.2, ...big }, { at: 19.9, ...title, ease: "emphasized" },
-        { at: 54, x: 0, y: 0, s: 1 }, { at: 72, x: 0, y: 0, s: 1 }, { at: 74.5, ...big, ease: "emphasized" },
+        { at: FINALE, x: 0, y: 0, s: 1 }, { at: LOOP, x: 0, y: 0, s: 1 }, { at: LOOP + 2.5, ...big, ease: "emphasized" },
       ],
     },
     // Opacity on the specimen's slot, so the flight above stays one continuous move.
-    { select: select("slot"), keys: [{ at: 0, o: 1 }, { at: 19.4, o: 1 }, { at: 20, o: 0, ease: "accelerate" }, { at: 55.4, o: 0 }, { at: 56.8, o: 1, ease: "decelerate" }] },
+    { select: select("slot"), keys: [{ at: 0, o: 1 }, { at: 19.4, o: 1 }, { at: 20, o: 0, ease: "accelerate" }, { at: FINALE + 2, o: 0 }, { at: FINALE + 3.4, o: 1, ease: "decelerate" }] },
   ];
 }

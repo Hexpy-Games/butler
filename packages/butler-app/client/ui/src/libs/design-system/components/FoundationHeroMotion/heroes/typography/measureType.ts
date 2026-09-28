@@ -1,5 +1,5 @@
 import type { Box } from "../../heroTimeline";
-import { landSelect } from "./typeAssembly";
+import { measureLines, measureParts } from "./typeLines";
 import { FLIGHTS, METRIC_ROLL, PANELS, select, type Flight, type TypeGeometry } from "./typeChoreography";
 import { CANVAS, type TypeLayout } from "./typeGrid";
 
@@ -14,7 +14,7 @@ export interface TypeMeasure {
  * taken relative to the world and divided by the stage's fit scale, so they
  * hold at any stage size. Returns null until everything is laid out.
  */
-export function measureType(root: HTMLElement, layout: TypeLayout, words: number): TypeMeasure | null {
+export function measureType(root: HTMLElement, layout: TypeLayout): TypeMeasure | null {
   const world = root.querySelector<HTMLElement>(select("world"));
   if (!world || world.offsetWidth === 0) return null;
   const canvas = CANVAS[layout];
@@ -51,7 +51,8 @@ export function measureType(root: HTMLElement, layout: TypeLayout, words: number
     ladder: box(select("ladder")),
     rungs: per(FLIGHTS, (flight) => select(`rung-${flight}`)),
     fly: per(FLIGHTS, (flight) => select(`fly-${flight}`)),
-    land: per(FLIGHTS, landSelect),
+    lines: measureLines(root, ratio) ?? [],
+    parts: measureParts(root, ratio),
     panels: per(PANELS, (panel) => select(`panel-${panel}`)),
     control: box(select("control")),
     tnum: box(select("cap-tnum")),
@@ -59,7 +60,6 @@ export function measureType(root: HTMLElement, layout: TypeLayout, words: number
     readoutLine: readout ? Number.parseFloat(getComputedStyle(readout).lineHeight) || 0 : 0,
     digitLine: metric ? Number.parseFloat(getComputedStyle(metric).lineHeight) || 0 : 0,
     digits: [...METRIC_ROLL].filter((char) => /\d/u.test(char)).map(Number),
-    words,
   };
-  return missing ? null : { geometry, specs };
+  return missing || geometry.lines.length === 0 ? null : { geometry, specs };
 }

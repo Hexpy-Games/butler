@@ -349,6 +349,7 @@
 }
 
 .panel {
+  position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   row-gap: var(--space-sm);
@@ -360,13 +361,62 @@
   grid-template-rows: minmax(0, 1fr);
 }
 
-.land,
+.line,
 .part {
   display: inline-block;
 }
 
+.line[data-block],
 .part[data-block] {
   display: block;
+}
+
+/* ---- Build layer: badge, baseline rule and outline of each text line ---- */
+
+.lines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.lineFx {
+  position: absolute;
+}
+
+.lineBadge,
+.lineRule,
+.lineOutline {
+  opacity: 0;
+}
+
+.lineBadge {
+  position: absolute;
+  bottom: calc(100% + var(--space-xs));
+  left: 0;
+  white-space: nowrap;
+}
+
+.lineRule {
+  position: absolute;
+  left: 0;
+  inline-size: 100%;
+  block-size: 1px;
+  background: var(--accent);
+  transform-origin: 0 50%;
+}
+
+.lineSvg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.lineOutline {
+  fill: none;
+  stroke-dasharray: var(--dash) var(--dash);
+  stroke-dashoffset: 0;
+  stroke-linejoin: round;
+  stroke-width: 0.75px;
 }
 
 /* ---- Motion-only overlays ---- */
