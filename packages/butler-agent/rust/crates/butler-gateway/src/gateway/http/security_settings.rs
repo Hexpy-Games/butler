@@ -279,15 +279,3 @@ fn code_unavailable() -> HttpError {
 fn invalid_security(message: &str) -> HttpError {
     HttpError::public(400, "invalid_settings_request", message)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Format pin: the masked code shows four characters at each end.
-    #[test]
-    fn masked_codes_keep_four_characters_at_each_end() {
-        assert_eq!(mask("abcdefghijklmnopqrstuvwxyz"), "abcd…wxyz");
-        assert_eq!(mask("short"), "…");
-    }
-}

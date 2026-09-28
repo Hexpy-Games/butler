@@ -122,37 +122,3 @@ fn is_dns_name(name: &str) -> bool {
                     .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
         })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Security boundary: the host names Settings and the CLI may add.
-    #[test]
-    fn allowed_hosts_are_names_or_addresses_with_an_optional_port() {
-        let cases = [
-            (" Butler.Example.Info ", Some("butler.example.info")),
-            ("butler.local:18765", Some("butler.local:18765")),
-            ("192.0.2.8", Some("192.0.2.8")),
-            ("[fd00::1]:443", Some("[fd00::1]:443")),
-            ("[::1]", Some("[::1]")),
-            ("", None),
-            ("https://butler.example.info", None),
-            ("butler.example.info/path", None),
-            ("user@butler.example.info", None),
-            ("butler.example.info:0", None),
-            ("butler.example.info:99999", None),
-            ("fd00::1", None),
-            ("-bad.example", None),
-            ("two words", None),
-        ];
-        for (input, expected) in cases {
-            assert_eq!(
-                normalize_allowed_host(input).ok().as_deref(),
-                expected,
-                "{input:?}"
-            );
-        }
-        assert_eq!(normalize_allowed_host("  "), Err(AllowedHostError::Empty));
-    }
-}

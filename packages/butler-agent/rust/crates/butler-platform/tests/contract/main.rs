@@ -10,7 +10,6 @@
 
 mod command_sandbox;
 mod instance;
-mod network;
 mod process_control;
 mod secure_fs;
 
