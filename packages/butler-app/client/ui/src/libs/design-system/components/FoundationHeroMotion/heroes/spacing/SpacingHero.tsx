@@ -1,39 +1,47 @@
 import { useMemo } from "react";
 import type { FoundationHeroLang } from "../../FoundationHeroMotion";
-import { ChapterHero } from "../shared/ChapterHero";
+import { SceneHero } from "../scene/SceneHero";
+import type { SceneSpec } from "../scene/types";
 import { Intro } from "../shared/Intro";
-import type { ChapterSpec } from "../shared/types";
-import { spacingBuilds } from "./spacingBuilds";
 import { SPACING_COPY, type SpacingCopy } from "./spacingCopy";
-import { spacingPrelude } from "./spacingPrelude";
-import { SpacingField, SpacingWire } from "./SpacingScenes";
-import s from "./SpacingHero.module.css";
+import { DensityScene, ExplodeScene, RhythmScene, StairScene, TitleLetters } from "./SpacingScenes";
+import { CardTile, InlineTile, SectionTile, StairsTile } from "./spacingTiles";
+import { SPACING_END, spacingTracks } from "./spacingTracks";
 
-function spec(copy: SpacingCopy): ChapterSpec {
+function spec(copy: SpacingCopy): SceneSpec {
   return {
     code: "spacing",
-    prelude: {
-      ...spacingPrelude(copy),
-      cells: ["intro", "field", "wire"],
-      regions: { intro: <Intro lead={copy.lead} title={copy.title} />, wire: (g) => <SpacingWire copy={copy} g={g} /> },
+    scenes: ["intro", "stairs", "ex", "rh", "dn"],
+    regions: {
+      intro: <Intro lead={copy.lead} title={copy.title} titleNode={<TitleLetters title={copy.title} />} />,
+      stairs: <StairScene copy={copy} />,
+      ex: <ExplodeScene copy={copy} />,
+      rh: <RhythmScene copy={copy} />,
+      dn: <DensityScene copy={copy} />,
     },
-    field: <SpacingField />,
-    fieldScene: <SpacingField />,
-    fieldColumns: 4,
-    posterZoom: 1.2,
-    product: s.product!,
-    builds: spacingBuilds(copy),
+    tiles: {
+      stairs: <StairsTile />,
+      section: <SectionTile copy={copy} />,
+      inline: <InlineTile copy={copy} />,
+      card: <CardTile copy={copy} />,
+    },
+    poster: {
+      wide: { columns: "1fr 1.15fr 0.95fr", rows: "1fr 1fr", areas: ["stairs section inline", "stairs section card"] },
+      tall: { columns: "1fr", rows: "auto", areas: ["stairs", "section", "inline"] },
+    },
+    posterZoom: { wide: 0.9, tall: 0.9 },
+    end: () => SPACING_END,
+    tracks: spacingTracks(copy),
   };
 }
 
 /**
- * 03 Spacing, "rhythm on the 4px grid": the intent; the baseline grid draws
- * and the camera pushes into one cell; the named steps extrude as a
- * staircase; a settings wireframe is measured gap by gap and breathes
- * compact and back; components by topic (inset, stack, inline, section
- * rhythm) with their spaces hatched and named; the staircase beside them.
+ * 03 Spacing, "counted space": the title's letters drift apart on 4px
+ * blocks; one block becomes the named scale; a real settings section is
+ * pulled apart and every space in it counted in blocks, then snaps shut; the
+ * page's rhythm in blocks; comfortable beside compact.
  */
 export function SpacingHero({ lang }: { lang: FoundationHeroLang }) {
   const chapter = useMemo(() => spec(SPACING_COPY[lang]), [lang]);
-  return <ChapterHero lang={lang} spec={chapter} />;
+  return <SceneHero lang={lang} spec={chapter} />;
 }
