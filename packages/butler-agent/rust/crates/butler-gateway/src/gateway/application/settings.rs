@@ -52,7 +52,9 @@ pub(super) struct ResolvedControls {
     pub resolution: ControlResolution,
     pub persisted: Value,
 }
-pub(super) use access::{DEFAULT_ACCESS_MODE, access_mode_name, conversation_access_mode};
+pub(super) use access::{
+    access_mode_name, conversation_access_mode, default_access_mode, record_default_access_mode,
+};
 pub(super) use plan_continuation::{
     PlanContinuation, PlanInstruction, create_plan_continuation, create_plan_instruction,
 };

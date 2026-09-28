@@ -88,7 +88,10 @@ pub(in crate::gateway::application) fn update_session_controls(
     let mut controls = Controls {
         model: current.model,
         reasoning: parse_reasoning(&current.reasoning_effort).unwrap_or(ReasoningEffort::Medium),
-        access: parse_access(&current.access_mode).unwrap_or(super::DEFAULT_ACCESS_MODE),
+        access: match parse_access(&current.access_mode) {
+            Some(access) => access,
+            None => super::default_access_mode(db)?,
+        },
         plan_mode: current.plan_mode,
     };
     if let Some(model) = update.model.as_ref() {

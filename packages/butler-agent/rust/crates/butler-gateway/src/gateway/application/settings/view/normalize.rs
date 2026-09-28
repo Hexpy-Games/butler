@@ -65,13 +65,6 @@ pub(super) fn workspace_label(path: &std::path::Path) -> String {
         .unwrap_or("Project")
         .to_owned()
 }
-pub(super) fn access(value: Option<&Value>) -> &'static str {
-    match value.and_then(Value::as_str) {
-        Some("full_access") => "full_access",
-        Some("read_only") => "read_only",
-        _ => "ask_first",
-    }
-}
 pub(super) fn multiline(value: Option<&Value>) -> &'static str {
     match value.and_then(Value::as_str) {
         Some("enter_send_shift_enter_newline") => "enter_send_shift_enter_newline",

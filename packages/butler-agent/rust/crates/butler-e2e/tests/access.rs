@@ -10,6 +10,9 @@
 //! ask-first: `guided/catalog/tests.rs`; it runs in ask-first and never in
 //! read-only: `guided/tools/image/tests.rs`). ACC-03 is the native-vision
 //! smoke test next to them.
+//!
+//! Ask-first is the default of a new install; an install from before it
+//! that never saved an access mode keeps full access (ACC-05).
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -246,4 +249,99 @@ async fn acc_04_mcp_tool_asks_in_ask_first() -> Result<(), HarnessError> {
         "the MCP tool ran before approval: {outputs}"
     );
     s.finish().await
+}
+
+/// ACC-05 — Existing installs (owner decision #236: saved settings are not
+/// migrated). A new install asks first. An install from before ask-first
+/// that never saved an access mode keeps full access after the upgrade: in
+/// its settings, its conversations, the schedules the upgrade fills and new
+/// schedules. A mode the user then saves is what it runs with, across a
+/// restart.
+#[tokio::test]
+async fn acc_05_an_existing_install_keeps_full_access_until_it_saves_a_mode()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = Setup::new("ACC-05")?.fixture(Fixture::Empty);
+    fixtures::scheduler_ran_today(&setup.sandbox.data)?;
+    let mut s = setup.start().await?;
+    assert_eq!(
+        s.gw.settings().await?["access_mode"],
+        "ask_first",
+        "new install"
+    );
+    assert_eq!(chat_access(&s, "general").await?, "ask_first");
+    let stored = schedule(&s).await?;
+    assert_eq!(stored["access_mode"], "ask_first", "{stored}");
+    let stored = stored["id"].as_str().unwrap().to_owned();
+
+    // The data folder as the release before ask-first left it: no recorded
+    // default, a schedule without an access mode, and no saved access mode.
+    s.agent.terminate().await?;
+    {
+        let db = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))
+            .unwrap();
+        db.execute_batch(
+            "DELETE FROM app_settings WHERE key='default-access-mode';
+             UPDATE app_automations SET access_mode=NULL;",
+        )
+        .unwrap();
+        let saved: Option<String> = db
+            .query_row(
+                "SELECT json_extract(value_json,'$.access_mode') FROM app_settings \
+                 WHERE key='settings'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(None);
+        assert_eq!(saved, None, "the fixture saved an access mode");
+    }
+    s.gw = s.agent.start_again().await?;
+    assert_eq!(
+        s.gw.settings().await?["access_mode"],
+        "full_access",
+        "upgraded"
+    );
+    assert_eq!(chat_access(&s, "general").await?, "full_access");
+    let filled = s.gw.get(&format!("/automations/{stored}")).await?;
+    assert_eq!(
+        filled.data()["automation"]["access_mode"],
+        "full_access",
+        "{}",
+        filled.text
+    );
+    assert_eq!(schedule(&s).await?["access_mode"], "full_access");
+
+    s.patch_settings(json!({"access_mode": "ask_first"}), "access mode")
+        .await?;
+    s.restart().await?;
+    assert_eq!(s.gw.settings().await?["access_mode"], "ask_first", "saved");
+    assert_eq!(chat_access(&s, "general").await?, "ask_first");
+    assert_eq!(schedule(&s).await?["access_mode"], "ask_first");
+    let kept = s.gw.get(&format!("/automations/{stored}")).await?;
+    assert_eq!(
+        kept.data()["automation"]["access_mode"],
+        "full_access",
+        "a schedule keeps its own mode: {}",
+        kept.text
+    );
+    s.finish().await
+}
+
+/// The access mode conversation `chat` runs with.
+async fn chat_access(s: &Scenario, chat: &str) -> Result<String, HarnessError> {
+    let reply = s.gw.get(&format!("/sessions/{chat}/controls")).await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    Ok(reply.data()["controls"]["access_mode"]
+        .as_str()
+        .unwrap_or_else(|| panic!("no access mode: {}", reply.text))
+        .to_owned())
+}
+
+/// Creates an hourly schedule posting into `general`, without an access mode.
+async fn schedule(s: &Scenario) -> Result<Value, HarnessError> {
+    let body = json!({"title": "E2E schedule", "prompt_body": "Summarize my day.",
+        "target_session_id": "general", "interval_seconds": 3600});
+    let reply = s.gw.post("/automations", body).await?;
+    assert_eq!(reply.status, 201, "{}", reply.text);
+    Ok(reply.data()["automation"].clone())
 }

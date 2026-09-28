@@ -1,8 +1,9 @@
 //! Schedules (#237) carry their own access mode. A schedule stored before
 //! that ran with its target conversation's mode, so the migration copies the
-//! mode the conversation runs with now, by the rule conversations resolve
-//! with: an install that never saved a mode asks first (#236), for its
-//! conversations and its schedules alike.
+//! mode the conversation runs with, by the rule conversations resolve with.
+//! An install from before ask-first (#236) that never saved a mode keeps full
+//! access, in its conversations and its schedules alike, and every schedule
+//! keeps running as it did.
 
 use rusqlite::{Connection, params};
 
