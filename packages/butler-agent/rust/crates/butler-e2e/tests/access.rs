@@ -163,7 +163,8 @@ async fn acc_03_attached_image_reaches_native_vision_in_ask_first() -> Result<()
         .access(Access::AskFirst)
         .start()
         .await?;
-    let png = media::digits_png("4821", 32);
+    // No 8: in this pixel font it reads as a 3.
+    let png = media::digits_png("4721", 12);
     let upload =
         s.gw.upload("number.png", "image/png", &png, Some("general"))
             .await?;
@@ -191,7 +192,7 @@ async fn acc_03_attached_image_reaches_native_vision_in_ask_first() -> Result<()
         .map(|message| message["text"].as_str().unwrap_or_default().to_owned())
         .collect::<String>();
     let digits: String = answer.chars().filter(char::is_ascii_digit).collect();
-    assert_eq!(digits, "4821", "image not read: {answer}");
+    assert_eq!(digits, "4721", "image not read: {answer}");
     s.finish().await
 }
 

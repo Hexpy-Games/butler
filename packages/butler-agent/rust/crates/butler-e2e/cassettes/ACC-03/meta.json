@@ -4,8 +4,8 @@
   "model": "openai/gpt-6-luna",
   "effort": "max",
   "wire_shape": "openai_responses",
-  "butler_git_sha": "29e68beab996",
-  "recorded_at": "2026-09-27T23:00:24Z",
+  "butler_git_sha": "fff7865934b1",
+  "recorded_at": "2026-09-28T01:20:24Z",
   "recorder": "butler-e2e record proxy",
   "sanitization": [
     "per-run values -> {{W}}, {{D}}, {{SANDBOX}}, scenario nonces",
@@ -17,7 +17,7 @@
   "files": [
     {
       "file": "000.json",
-      "sha256": "2f2a8359111d34302f89d1f803bb51a4dc0efc0e780f45a1ac45528c97f0fe75"
+      "sha256": "4daddae76e75d8269206351dadf7f9da195f23a9b54e8f05d081be17ad22c05e"
     }
   ],
   "fingerprint": [
