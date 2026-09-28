@@ -212,6 +212,38 @@
 
 [data-layout="tall"] .labStage {
   grid-template-columns: auto;
-  row-gap: var(--space-2xl);
+  row-gap: var(--space-3xl);
   justify-items: center;
+}
+
+[data-layout="tall"] .keyNotes {
+  justify-items: center;
+  row-gap: var(--space-lg);
+  font-size: var(--typo-h5-size);
+}
+
+/* Tall: each size's token and value over its icon and word, so the ladder
+   fills the portrait frame and the words keep their full width. */
+[data-layout="tall"] .field {
+  row-gap: var(--space-lg);
+}
+
+[data-layout="tall"] .row {
+  grid-template-areas:
+    "token value"
+    "pair pair";
+  grid-template-columns: minmax(0, 1fr) auto;
+  row-gap: var(--space-xs);
+}
+
+[data-layout="tall"] .token {
+  grid-area: token;
+}
+
+[data-layout="tall"] .value {
+  grid-area: value;
+}
+
+[data-layout="tall"] .pair {
+  grid-area: pair;
 }

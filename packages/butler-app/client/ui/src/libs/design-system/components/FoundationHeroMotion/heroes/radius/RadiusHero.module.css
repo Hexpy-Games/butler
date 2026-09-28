@@ -224,3 +224,28 @@
   row-gap: var(--space-3xl);
   justify-items: center;
 }
+
+/* Tall: one radius or level per row, its token beside it (whole, never
+   broken), so the field fills the portrait frame. */
+[data-layout="tall"] .radii,
+[data-layout="tall"] .levels {
+  --n: 1;
+
+  row-gap: var(--space-md);
+}
+
+[data-layout="tall"] .cell {
+  grid-template-columns: 38% minmax(0, 1fr);
+  place-items: center start;
+  column-gap: var(--space-lg);
+}
+
+[data-layout="tall"] .radii .tile {
+  justify-self: center;
+}
+
+[data-layout="tall"] .name {
+  text-align: start;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}

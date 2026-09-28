@@ -1,4 +1,4 @@
-import type { Key, Track } from "../../heroTimeline";
+import { fit, focus, type Key, type Track } from "../../heroTimeline";
 import { annotTracks } from "../shared/Annotations";
 import { TRANSITION } from "../shared/beats";
 import { openingItems } from "../shared/guides";
@@ -34,8 +34,13 @@ export function radiusPrelude(copy: RadiusCopy): Pick<Prelude, "end" | "tracks">
       const room = g.layout === "wide" ? { ...labBox, x: labBox.x - 120, w: labBox.w + 160 } : labBox;
       const lab = view("lab", room, 0.92, 2);
       const field = view("field", g.boxes.field!, 0.88, 2.2);
+      // Tall: the morph fills the portrait frame first; the camera steps down to the whole lab as the nest builds.
+      const morphBox = g.boxes.morph;
+      const opening: Key[] = g.layout === "tall" && morphBox
+        ? [{ at: AT.lab + TRANSITION, ...focus(g.canvas, morphBox, fit(g.canvas, morphBox, 0.9, 2.4)), ease: "standard" }, { at: AT.nest - 0.6 }, { at: AT.nest + 0.8, ...lab, ease: "standard" }]
+        : [{ at: AT.lab + TRANSITION, ...lab, ease: "standard" }];
       const camera: Key[] = [
-        { at: 0, ...front }, { at: AT.lab, ...front }, { at: AT.lab + TRANSITION, ...lab, ease: "standard" },
+        { at: 0, ...front }, { at: AT.lab, ...front }, ...opening,
         { at: AT.field, ...lab }, { at: AT.field + TRANSITION, ...field, ease: "standard" }, { at: AT.end, ...field },
       ];
       const times = RADII.map((_, k): [number, number] => [AT.morph + k * MORPH_STEP, k]);

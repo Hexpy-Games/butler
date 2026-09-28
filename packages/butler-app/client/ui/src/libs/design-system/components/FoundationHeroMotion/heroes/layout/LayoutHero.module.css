@@ -504,6 +504,12 @@
   block-size: calc(var(--space-4xl) * 13);
 }
 
+/* Tall: a narrower main pane, so the shells build larger down the column. */
+[data-layout="tall"] .shellMain {
+  inline-size: calc(var(--space-4xl) * 3);
+}
+
 [data-layout="tall"] .page {
   inline-size: calc(var(--space-4xl) * 9);
+  block-size: calc(var(--space-4xl) * 9);
 }

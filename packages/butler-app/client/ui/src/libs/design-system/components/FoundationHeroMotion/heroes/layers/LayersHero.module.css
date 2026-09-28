@@ -341,7 +341,7 @@
 
 [data-layout="tall"] .sheets {
   --step-x: var(--space-md);
-  --step-y: var(--space-4xl);
+  --step-y: calc(var(--space-4xl) * 1.5);
   --sheet-w: calc(var(--space-4xl) * 4.5);
   --sheet-h: calc(var(--space-4xl) * 1.6);
 }

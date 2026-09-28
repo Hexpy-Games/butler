@@ -48,7 +48,7 @@ export function motionPrelude(copy: MotionCopy): Pick<Prelude, "end" | "tracks">
     tracks: ({ g, close, view }: TimelineContext) => {
       const front = view("intro", g.boxes.intro!, 1, 1);
       const field = view("field", g.boxes.field!, 0.9, 2.2);
-      const reduce = view("reduce", g.boxes.reduce!, 0.7, 2.4);
+      const reduce = view("reduce", g.boxes.reduce!, g.layout === "tall" ? 0.94 : 0.7, 2.4);
       const camera: Key[] = [
         { at: 0, ...front }, { at: AT.field, ...front }, { at: AT.field + TRANSITION, ...field, ease: "standard" },
         { at: AT.reduce, ...field }, { at: AT.reduce + TRANSITION, ...reduce, ease: "standard" }, { at: AT.end, ...reduce },

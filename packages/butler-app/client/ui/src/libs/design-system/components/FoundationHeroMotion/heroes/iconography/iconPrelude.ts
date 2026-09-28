@@ -27,7 +27,7 @@ export function iconPrelude(copy: IconCopy): Pick<Prelude, "end" | "tracks"> {
     end: () => AT.end,
     tracks: ({ g, close, view }: TimelineContext) => {
       const front = view("intro", g.boxes.intro!, 1, 1);
-      const lab = view("lab", g.boxes.lab!, 0.8, 2);
+      const lab = view("lab", g.boxes.lab!, g.layout === "tall" ? 0.94 : 0.8, 2);
       const field = view("field", g.boxes.field!, 0.9, 2.2);
       const camera: Key[] = [
         { at: 0, ...front }, { at: AT.lab, ...front }, { at: AT.lab + TRANSITION, ...lab, ease: "standard" },

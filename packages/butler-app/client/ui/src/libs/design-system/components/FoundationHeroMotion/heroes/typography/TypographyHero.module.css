@@ -229,6 +229,12 @@
   column-gap: var(--space-sm);
 }
 
+/* Tall: the rungs stand further apart, so the list's close-up fills the
+   portrait frame. */
+.board[data-layout="tall"] .ladder {
+  row-gap: var(--space-2xl);
+}
+
 /* Role tag and spec share one fading layer (a subgrid over the rung), so a
    rung costs one animation for its labels. */
 .chrome {

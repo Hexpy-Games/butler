@@ -21,7 +21,7 @@ function spec(copy: LayoutCopy): ChapterSpec {
     fieldColumns: 4,
     // Whole screens: the poster is laid out smaller so the shells fit beside the field (and down the portrait column).
     posterZoom: 0.75,
-    tallPosterZoom: 0.6,
+    tallPosterZoom: 0.72,
     product: s.product!,
     builds: layoutBuilds(copy),
   };

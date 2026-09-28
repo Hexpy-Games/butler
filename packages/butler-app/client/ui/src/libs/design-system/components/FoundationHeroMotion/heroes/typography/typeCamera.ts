@@ -72,7 +72,19 @@ export function cameras(g: TypeGeometry) {
     rest: { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, s: 1 } as Pose,
     /** The opening, flat, in its cell. */
     open: focus(canvas, moved({ x: 0, y: 0, w: canvas.w, h: canvas.h }), 1),
-    /** Close on one row of the list, flat, the list's type filling the frame. */
-    row: (flight: Flight) => focus(canvas, moved(rowBox(g, flight)), close),
+    /**
+     * Close on one row of the list, flat, the list's type filling the frame.
+     * On the tall canvas the frame starts at the list's top and only follows
+     * the row down once it nears the bottom, so the rows revealed so far fill
+     * the portrait frame.
+     */
+    row: (flight: Flight) => {
+      const box = rowBox(g, flight);
+      if (!tall) return focus(canvas, moved(box), close);
+      const view = canvas.h / close;
+      const top = Math.min(...Object.values(g.rungs).map((rung) => rung.y));
+      const y = Math.max(top + view * 0.44, box.y + box.h / 2 - view * 0.3);
+      return focus(canvas, moved({ ...box, y: y - box.h / 2 }), close);
+    },
   };
 }

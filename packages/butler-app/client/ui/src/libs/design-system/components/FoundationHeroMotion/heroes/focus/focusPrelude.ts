@@ -31,7 +31,7 @@ export function focusPrelude(copy: FocusCopy): Pick<Prelude, "end" | "tracks"> {
       const front = view("intro", g.boxes.intro!, 1, 1);
       const row = view("field", g.boxes.field!, 0.9, 2.2);
       const cu = g.boxes.closeup!;
-      const room = g.layout === "wide" ? { ...cu, x: cu.x - 280, w: cu.w + 300, y: cu.y - 30, h: cu.h + 60 } : { ...cu, x: cu.x - 150, w: cu.w + 160 };
+      const room = g.layout === "wide" ? { ...cu, x: cu.x - 280, w: cu.w + 300, y: cu.y - 30, h: cu.h + 60 } : { ...cu, x: cu.x + cu.w / 2 - 80, w: 160, y: cu.y - 118, h: cu.h + 236 };
       const closeUp = view("closeup", room, 0.92, 3);
       const camera: Key[] = [
         { at: 0, ...front }, { at: AT.row, ...front }, { at: AT.row + TRANSITION, ...row, ease: "standard" },

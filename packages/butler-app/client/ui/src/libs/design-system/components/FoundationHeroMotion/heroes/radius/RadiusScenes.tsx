@@ -43,7 +43,7 @@ export function RadiusLab({ g }: { g: Geometry | null }) {
   return (
     <div className={s.lab} data-t="lab">
       <div className={s.labStage} data-m="lab">
-        <div className={s.morph}>
+        <div className={s.morph} data-m="morph">
           <div className={s.shapeStack}>
             {RADII.map((r, k) => (
               <span className={s.shape} data-t={`mo-${k}`} key={r.token} style={{ "--r": `var(${r.token})` } as CSSProperties}><span className={s.cornerGuide} /></span>

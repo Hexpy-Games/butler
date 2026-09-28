@@ -37,6 +37,7 @@ export function layoutBuilds(copy: LayoutCopy): BuildSpec[] {
   return [
     {
       id: "shell",
+      side: "b",
       render: (
         <Topic id="t1" title={topics.shell}>
           <Mark block n="shell" sketch>
@@ -59,6 +60,7 @@ export function layoutBuilds(copy: LayoutCopy): BuildSpec[] {
     },
     {
       id: "grid",
+      side: "b",
       render: (
         <Topic id="t2" title={topics.grid}>
           <div className={s.cardGrid}>
@@ -83,6 +85,8 @@ export function layoutBuilds(copy: LayoutCopy): BuildSpec[] {
     },
     {
       id: "compact",
+      // Built in place at the poster's right edge: its badges stand in the free gutter right of it.
+      side: "r",
       render: (
         <Topic id="t3" title={topics.compact}>
           <Mark block n="phone" sketch>

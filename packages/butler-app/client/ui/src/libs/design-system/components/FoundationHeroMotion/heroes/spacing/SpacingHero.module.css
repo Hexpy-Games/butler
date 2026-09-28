@@ -225,3 +225,37 @@
 [data-layout="tall"] .wireStage {
   inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
 }
+
+/* Tall: each step's name and value over its block, so the staircase fills
+   the portrait frame. */
+[data-layout="tall"] .stairs {
+  row-gap: var(--space-md);
+}
+
+[data-layout="tall"] .step {
+  grid-template-areas:
+    "name value"
+    "block block";
+  grid-template-columns: minmax(0, 1fr) auto;
+  row-gap: var(--space-xs);
+}
+
+[data-layout="tall"] .stepName {
+  grid-area: name;
+}
+
+[data-layout="tall"] .stepValue {
+  grid-area: value;
+}
+
+[data-layout="tall"] .block {
+  grid-area: block;
+}
+
+.extra {
+  display: none;
+}
+
+[data-layout="tall"] .extra {
+  display: grid;
+}

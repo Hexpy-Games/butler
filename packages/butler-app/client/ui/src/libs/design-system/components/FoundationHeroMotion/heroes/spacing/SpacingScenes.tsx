@@ -42,6 +42,9 @@ export const WIRE_ANNOTS: Annot[] = [
   { kind: "gap", from: "w-b1", to: "w-b2", label: valueLabel(spaceToken, true) },
 ];
 
+/** Fields shown on the tall canvas only. */
+export const EXTRA = [3, 4, 5, 6] as const;
+
 /** A blueprint box of the wireframe, drawn in through a window (`wb-<n>`). */
 function Box({ n, kind }: { n: string; kind: "line" | "short" | "input" | "button" }) {
   return (
@@ -64,7 +67,13 @@ function Screen({ compact = false, scope }: { compact?: boolean; scope?: string 
   return (
     <div className={s.screen} data-compact={compact ? "" : undefined} data-mark-scope={scope} data-t={compact ? "wire-b" : "wire-a"}>
       <Box kind="line" n="w-head" />
-      <Mark block n="w-card"><div className={s.wCard}>{field(1)}{field(2)}</div></Mark>
+      <Mark block n="w-card">
+        <div className={s.wCard}>
+          {field(1)}{field(2)}
+          {/* More fields on the tall canvas, so the screen fills the portrait frame. */}
+          {EXTRA.map((k) => <div className={s.extra} key={k}>{field(k)}</div>)}
+        </div>
+      </Mark>
       <Mark block n="w-btns"><div className={s.wButtons}><Box kind="button" n="w-b1" /><Box kind="button" n="w-b2" /></div></Mark>
     </div>
   );

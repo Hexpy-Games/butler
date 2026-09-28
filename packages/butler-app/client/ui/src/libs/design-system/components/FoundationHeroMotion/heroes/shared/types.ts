@@ -68,8 +68,8 @@ export interface BuildSpec {
   steps: BuildStep[];
   /** DS-internal elements to measure as marks: name → selector inside the panel. */
   marks?: Record<string, string>;
-  /** Gutter the badges stand in (default left). */
-  side?: "l" | "r";
+  /** Gutter the badges stand in (default left); "b" stacks them below the component (always so on the tall canvas), for wide components that should fill the frame. */
+  side?: "l" | "r" | "b";
   /** The blueprint stays until the build is done (its outlines are the uncolored render the colors fill). */
   holdSketch?: boolean;
 }

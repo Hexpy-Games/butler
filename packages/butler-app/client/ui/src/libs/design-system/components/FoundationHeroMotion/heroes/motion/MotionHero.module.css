@@ -202,8 +202,44 @@
   grid-column: 1 / -1;
 }
 
+.screenPage {
+  display: none;
+}
+
+/* Tall: the toast on a phone-sized page that fills the portrait frame. */
 [data-layout="tall"] .reduce {
+  box-sizing: border-box;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  justify-items: stretch;
   inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
+  block-size: calc(var(--canvas-h) - var(--grid-margin) * 4);
+  padding: var(--space-xl);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-composer);
+  background: var(--color-surface-base);
+}
+
+[data-layout="tall"] .modeStack {
+  justify-self: center;
+  font-size: var(--typo-body-size);
+}
+
+[data-layout="tall"] .screenPage {
+  display: grid;
+  align-content: start;
+  row-gap: var(--space-lg);
+}
+
+.screenLine {
+  block-size: var(--space-4xl);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+}
+
+.screenLine:nth-child(3n + 1) {
+  inline-size: 70%;
+  block-size: var(--space-lg);
+  border-radius: var(--radius-pill);
 }
 
 [data-layout="tall"] .product {

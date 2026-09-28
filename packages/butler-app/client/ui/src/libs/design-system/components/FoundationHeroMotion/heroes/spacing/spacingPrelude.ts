@@ -6,7 +6,7 @@ import { introTracks } from "../shared/Intro";
 import { reveal, select, sweep } from "../shared/Reveal";
 import type { Prelude, TimelineContext } from "../shared/types";
 import { STEPS, type SpacingCopy } from "./spacingCopy";
-import { WIRE_ANNOTS } from "./SpacingScenes";
+import { EXTRA, WIRE_ANNOTS } from "./SpacingScenes";
 
 /**
  * 03 Spacing prelude, beat marks:
@@ -23,7 +23,7 @@ import { WIRE_ANNOTS } from "./SpacingScenes";
  *   24.6–27.4 Breathe    comfortable → compact → comfortable
  */
 const AT = { grid: 7.6, cell: 6.8, stairs: 11.6, wire: 16.4, boxes: 17.4, measure: 20.6, breathe: 24.6, end: 28.4 } as const;
-const BOXES = ["w-head", "w-card", "w-l1", "w-i1", "w-l2", "w-i2", "w-b1", "w-b2"];
+const BOXES = ["w-head", "w-card", "w-l1", "w-i1", "w-l2", "w-i2", ...EXTRA.flatMap((k) => [`w-l${k}`, `w-i${k}`]), "w-b1", "w-b2"];
 
 export function spacingPrelude(copy: SpacingCopy): Pick<Prelude, "end" | "tracks"> {
   return {

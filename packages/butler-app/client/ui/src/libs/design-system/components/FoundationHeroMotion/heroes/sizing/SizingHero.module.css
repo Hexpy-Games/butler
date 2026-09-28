@@ -216,6 +216,7 @@
 
 [data-layout="tall"] .frame {
   inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
+  block-size: calc(var(--canvas-h) - var(--grid-margin) * 4);
 }
 
 [data-layout="tall"] .frameBody {

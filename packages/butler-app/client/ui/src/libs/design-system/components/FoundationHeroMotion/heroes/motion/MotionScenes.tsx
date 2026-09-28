@@ -74,6 +74,8 @@ export function ReduceDemo({ copy }: { copy: MotionCopy }) {
       <span className={s.toastSlot}>
         <span className={s.toastMove} data-t="rt"><Notice tone="success" icon={<CheckCircle2 size="md" />} message={<R name="rt-t">{copy.saved}</R>} /></span>
       </span>
+      {/* The screen under the toast (the tall canvas shows the toast on a phone-sized page). */}
+      <span className={s.screenPage}>{[0, 1, 2, 3, 4, 5, 6, 7, 8].map((line) => <span className={s.screenLine} key={line} />)}</span>
     </div>
   );
 }

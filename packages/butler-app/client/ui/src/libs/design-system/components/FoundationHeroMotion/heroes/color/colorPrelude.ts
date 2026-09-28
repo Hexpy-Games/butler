@@ -36,7 +36,8 @@ export function colorPrelude(copy: ColorCopy, posterZoom: (layout: HeroLayout) =
       const intro = g.boxes.intro!;
       const field = g.boxes.field!;
       const front = view("intro", intro, 1, 1);
-      const quarter = focus(canvas, field, fit(canvas, field, 1.05, 2.2), QUARTER);
+      // The portrait frame fills with the grid's middle (its far corners crop).
+      const quarter = focus(canvas, field, fit(canvas, field, g.layout === "tall" ? 1.45 : 1.05, 2.2), QUARTER);
       const flat = view("field", field, 0.86, 2);
       const camera: Key[] = [
         { at: 0, ...front }, { at: AT.iso, ...front }, { at: AT.iso + TRANSITION, ...quarter, ease: "standard" },

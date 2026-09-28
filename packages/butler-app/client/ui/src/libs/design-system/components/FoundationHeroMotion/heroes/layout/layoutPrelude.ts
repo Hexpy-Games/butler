@@ -32,7 +32,7 @@ export function layoutPrelude(copy: LayoutCopy): Pick<Prelude, "end" | "tracks">
     tracks: ({ g, close, view }: TimelineContext) => {
       const front = view("intro", g.boxes.intro!, 1, 1);
       const field = view("field", g.boxes.field!, 0.86, 2);
-      const resize = view("resize", g.boxes.resize!, 0.9, 2);
+      const resize = view("resize", g.boxes.resize!, g.layout === "tall" ? 0.97 : 0.9, 2);
       const camera: Key[] = [
         { at: 0, ...front }, { at: AT.field, ...front }, { at: AT.field + TRANSITION, ...field, ease: "standard" },
         { at: AT.resize, ...field }, { at: AT.resize + TRANSITION, ...resize, ease: "standard" }, { at: AT.end, ...resize },

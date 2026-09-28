@@ -45,10 +45,14 @@
   line-height: var(--typo-h4-line-height);
 }
 
+/* Tall: the title at the top of the portrait frame and the intent filling
+   the rest, so the frame has no empty bands. */
 [data-layout="tall"] .intro {
+  grid-template-rows: auto minmax(0, 1fr);
   grid-template-columns: minmax(0, 1fr);
-  align-content: center;
-  row-gap: var(--space-2xl);
+  align-content: stretch;
+  row-gap: var(--space-3xl);
+  padding-block: calc(var(--grid-margin) * 2);
 }
 
 [data-layout="tall"] .introTitle,
@@ -57,9 +61,20 @@
 }
 
 [data-layout="tall"] .introTitle {
+  align-self: start;
   font-size: calc(var(--typo-h1-size) * 2.6);
 }
 
-[data-layout="tall"] .leadText {
+[data-layout="tall"] .introLead {
+  align-self: stretch;
+  align-content: space-evenly;
+}
+
+[data-layout="tall"] .leadKey {
   font-size: var(--typo-body-size);
+}
+
+[data-layout="tall"] .leadText {
+  font-size: var(--typo-h3-size);
+  line-height: var(--typo-h3-line-height);
 }

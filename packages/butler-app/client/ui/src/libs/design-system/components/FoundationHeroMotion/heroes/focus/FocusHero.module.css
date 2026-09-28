@@ -108,6 +108,52 @@
   top: calc(50% + var(--space-xs));
 }
 
+/* Tall: the notes stand far above and below the ring (the close-up fills
+   the portrait frame), the width bracket on the ring's top edge. */
+[data-layout="tall"] .bracket {
+  top: calc(var(--focus-ring-width) * -1);
+  right: auto;
+  left: calc(50% - var(--space-xs));
+  inline-size: var(--space-sm);
+  block-size: var(--focus-ring-width);
+  border-block: 0;
+  border-inline: 1px solid var(--accent);
+}
+
+[data-layout="tall"] .widthNote,
+[data-layout="tall"] .colorNote {
+  right: auto;
+  left: 50%;
+  translate: -50% 0;
+}
+
+[data-layout="tall"] .widthNote {
+  top: auto;
+  bottom: calc(100% + var(--space-4xl) * 2.5);
+}
+
+[data-layout="tall"] .colorNote {
+  top: calc(100% + var(--space-4xl) * 2.5);
+}
+
+/* Leaders from each note to the ring. */
+[data-layout="tall"] .widthNote::after,
+[data-layout="tall"] .colorNote::before {
+  position: absolute;
+  left: 50%;
+  block-size: calc(var(--space-4xl) * 2.5 - var(--space-sm));
+  border-left: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  content: "";
+}
+
+[data-layout="tall"] .widthNote::after {
+  top: calc(100% + var(--space-xs));
+}
+
+[data-layout="tall"] .colorNote::before {
+  bottom: calc(100% + var(--space-xs));
+}
+
 .swatch {
   inline-size: var(--space-sm);
   block-size: var(--space-sm);
