@@ -19,7 +19,7 @@ use crate::host::app::dashboard::AppDashboardLedger;
 use crate::host::app::dashboard_briefing::AppDashboardBriefing;
 use crate::host::app::plan_decision::AppPlanDecisionLedger;
 use crate::host::app::runtime_ports::AppRuntimeInfo;
-use crate::host::app::setup::{AppSetup, AppSetupParts};
+use crate::host::app::runtime_ports::{AppSetup, AppSetupParts};
 use crate::host::service::configuration::AppServiceConfiguration;
 use crate::host::{
     AgentRuntime, AppAdmission, AppApprovalClaimsAdapter, AppAssets, AppBranchConversations,
