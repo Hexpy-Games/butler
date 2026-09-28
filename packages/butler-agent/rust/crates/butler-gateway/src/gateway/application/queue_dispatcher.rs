@@ -58,7 +58,7 @@ struct CloseState {
     result: Option<Result<(), GatewayApplicationError>>,
 }
 enum Command {
-    Initialize(AppApplication),
+    Initialize(Box<AppApplication>),
     Wake(Option<String>),
     Drain {
         chat_id: String,
@@ -93,7 +93,7 @@ impl QueueDispatcher {
     ) -> Result<(), GatewayApplicationError> {
         self.inner
             .sender
-            .send(Command::Initialize(app))
+            .send(Command::Initialize(Box::new(app)))
             .await
             .map_err(GatewayApplicationError::internal_from)
     }
@@ -166,7 +166,7 @@ async fn run(
             () = cancellation.cancelled() => return Ok(()),
             command = receiver.recv() => match command {
                 Some(Command::Initialize(app)) => {
-                    let app = application.insert(app);
+                    let app = application.insert(*app);
                     if !cycle(&cancellation, app, None).await { return Ok(()); }
                     deadline = next_deadline(app).await.ok().flatten();
                 }
