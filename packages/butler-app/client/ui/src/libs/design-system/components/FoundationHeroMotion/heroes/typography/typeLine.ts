@@ -1,6 +1,7 @@
 import { cut, type Key, type Track } from "../../heroTimeline";
 import { tagSteps, wipeWidth } from "./LineOverlay";
 import { BEATS, LOOP, select } from "./typeChoreography";
+import { revealTracks } from "./Reveal";
 import { TYPE_COPY } from "./typeCopy";
 import type { LineInfo } from "./typeLines";
 
@@ -40,6 +41,7 @@ function reveal(width: number, edges: number[], start: number): { outer: Key[]; 
  */
 export function line(info: LineInfo, a: number, leave: number): Track[] {
   const id = info.id;
+  if (info.secondary) return secondary(info, a);
   const recede = (from: number, keys: Key[]): Key[] => [...keys, { at: from, o: 1 }, { at: from + 0.6, o: 0, ease: "accelerate" }];
   const edges = info.draw ? info.edges : Array.from({ length: 10 }, (_, k) => ((k + 1) / 10) * info.box.w);
   const width = info.draw ? wipeWidth(info) : info.box.w;
@@ -52,7 +54,8 @@ export function line(info: LineInfo, a: number, leave: number): Track[] {
   const stepCount = tagSteps(info, TAG_COPY, false).length;
   const steps = [0, first.end, sized + 0.2, sized + 0.8].slice(0, stepCount).concat(BEATS);
   const tracks: Track[] = [
-    { select: select(`lb-${id}`), keys: recede(leave, [{ at: 0, x: 8, o: 0 }, { at: a, o: 0 }, { at: a + 0.6, x: 0, o: 1, ease: "decelerate" }]) },
+    { select: select(`lb-${id}`), keys: recede(leave, [{ at: 0, o: 0 }, { at: a, o: 1 }]) },
+    ...revealTracks(`rv-lb-${id}`, a, tagSteps(info, TAG_COPY, false)[0]!),
     ...steps.slice(0, -1).map((from, k): Track => ({ select: select(`lb-${id}-${k}`), keys: cut(from, steps[k + 1]!, BEATS) })),
     { select: select(`ll-${id}`), keys: recede(leave, [{ at: 0, sx: 0, o: 0 }, { at: a + 0.2, sx: 0, o: 1 }, { at: a + 1, sx: 1, ease: "decelerate" }]) },
     { select: select(`lband-${id}`), keys: recede(guidesOff, [{ at: 0, sx: 0, o: 0 }, { at: sized, sx: 0, o: 0 }, { at: sized + 0.8, sx: 1, o: 1, ease: "emphasized" }]) },
@@ -77,5 +80,15 @@ export function line(info: LineInfo, a: number, leave: number): Track[] {
     { select: select(`wf-o-${id}`), keys: [...visible(second ? sized + 1.4 : a + 0.4, done + 0.5), ...fill.outer] },
     { select: select(`wf-i-${id}`), keys: fill.inner },
     { select: info.select, keys: [{ at: 0, o: 0 }, { at: done, o: 0 }, { at: done + 0.4, o: 1, ease: "decelerate" }, { at: OUT, o: 1 }, { at: OUT + 0.2, o: 0 }] },
+  ];
+}
+
+/** Secondary text (a second field, a value, a change): revealed filled, left to right, then the real text takes over. */
+function secondary(info: LineInfo, a: number): Track[] {
+  const fill = reveal(wipeWidth(info), info.edges, a);
+  return [
+    { select: select(`wf-o-${info.id}`), keys: [{ at: 0, o: 0 }, { at: a, o: 1 }, { at: fill.end + 0.5, o: 1 }, { at: fill.end + 1.1, o: 0, ease: "accelerate" }, ...fill.outer] },
+    { select: select(`wf-i-${info.id}`), keys: fill.inner },
+    { select: info.select, keys: [{ at: 0, o: 0 }, { at: fill.end, o: 0 }, { at: fill.end + 0.4, o: 1, ease: "decelerate" }, { at: OUT, o: 1 }, { at: OUT + 0.2, o: 0 }] },
   ];
 }

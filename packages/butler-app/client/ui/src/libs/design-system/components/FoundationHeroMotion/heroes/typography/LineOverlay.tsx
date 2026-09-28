@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import { Tag } from "../../../Tag";
 import type { TypeCopy } from "./typeCopy";
 import type { LineInfo } from "./typeLines";
+import { Reveal } from "./Reveal";
 import t from "./TypographyHero.module.css";
 
 /** The tag's steps: the token, then its size, its line height, its tracking as each is applied. */
@@ -53,12 +54,20 @@ export function LineOverlay({ lines, copy, compact }: { lines: LineInfo[]; copy:
       {lines.map((line) => (
         <span className={t.lineFx} key={line.id}
           style={{ left: `${line.box.x}px`, top: `${line.box.y}px`, inlineSize: `${line.box.w}px`, blockSize: `${line.box.h}px`, "--reach": `${line.box.x}px` } as CSSProperties}>
-          <span className={t.lineTag} data-t={`lb-${line.id}`}>
-            {tagSteps(line, copy, compact).map((text, k) => <span className={t.lineTagStep} data-t={`lb-${line.id}-${k}`} key={k}><Tag>{text}</Tag></span>)}
-          </span>
-          <span className={t.lineLeader} data-t={`ll-${line.id}`} />
-          <span className={t.lineBand} data-t={`lband-${line.id}`} />
-          <span className={t.lineMeasure} data-t={`lm-${line.id}`} />
+          {line.secondary ? null : (
+            <>
+              <span className={t.lineTag} data-t={`lb-${line.id}`}>
+                <Reveal name={`rv-lb-${line.id}`}>
+                  <span className={t.lineTagSteps}>
+                    {tagSteps(line, copy, compact).map((text, k) => <span className={t.lineTagStep} data-t={`lb-${line.id}-${k}`} key={k}><Tag>{text}</Tag></span>)}
+                  </span>
+                </Reveal>
+              </span>
+              <span className={t.lineLeader} data-t={`ll-${line.id}`} />
+              <span className={t.lineBand} data-t={`lband-${line.id}`} />
+              <span className={t.lineMeasure} data-t={`lm-${line.id}`} />
+            </>
+          )}
           {line.draw ? (
             <span className={t.lineScale} data-t={`ls-${line.id}`}>
               {line.outlined ? <Layer fill={false} line={line} name="wo" /> : null}

@@ -3,6 +3,7 @@ import { Label } from "../../../Label";
 import { Typo } from "../../../Typo";
 import type { TypeCopy } from "./typeCopy";
 import { FLIGHTS, METRIC_ROLL, type Flight } from "./typeChoreography";
+import { Reveal } from "./Reveal";
 import t from "./TypographyHero.module.css";
 
 /** Role tag of each rung: the Typo role (or component) the sample is set in. */
@@ -34,13 +35,13 @@ function Roller({ value }: { value: string }) {
 /** The sample of one rung, set in the same role (and component) as the text it flies into. */
 function sample(flight: Flight, copy: TypeCopy): ReactNode {
   switch (flight) {
-    case "title": return <Typo.H2 as="div">{copy.title}</Typo.H2>;
-    case "dash": return <Typo.DashboardTitle as="div">{copy.dash}</Typo.DashboardTitle>;
-    case "field": return <Label>{copy.field}</Label>;
-    case "ask": return <Typo.Body>{copy.ask}</Typo.Body>;
-    case "command": return <Typo.Code as="div">{copy.command}</Typo.Code>;
-    case "meta": return <Typo.Caption as="div" tone="tertiary" numeric="tabular">{copy.meta}</Typo.Caption>;
-    case "metric": return <Typo.MetricValue as="div" numeric="tabular"><Roller value={METRIC_ROLL} /></Typo.MetricValue>;
+    case "title": return <Typo.H2 as="div"><Reveal name="rf-title">{copy.title}</Reveal></Typo.H2>;
+    case "dash": return <Typo.DashboardTitle as="div"><Reveal name="rf-dash">{copy.dash}</Reveal></Typo.DashboardTitle>;
+    case "field": return <Label><Reveal name="rf-field">{copy.field}</Reveal></Label>;
+    case "ask": return <Typo.Body><Reveal name="rf-ask">{copy.ask}</Reveal></Typo.Body>;
+    case "command": return <Typo.Code as="div"><Reveal name="rf-command">{copy.command}</Reveal></Typo.Code>;
+    case "meta": return <Typo.Caption as="div" tone="tertiary" numeric="tabular"><Reveal name="rf-meta">{copy.meta}</Reveal></Typo.Caption>;
+    case "metric": return <Typo.MetricValue as="div" numeric="tabular"><Reveal name="rf-metric"><Roller value={METRIC_ROLL} /></Reveal></Typo.MetricValue>;
   }
 }
 
@@ -56,8 +57,8 @@ export function RoleLadder({ copy, specs }: { copy: TypeCopy; specs: Partial<Rec
       {FLIGHTS.map((flight) => (
         <div className={t.rung} data-t={`rung-${flight}`} key={flight}>
           <span className={t.chrome} data-t={`chrome-${flight}`}>
-            <span className={t.tag}>{ROLE[flight]}</span>
-            <span className={t.spec}>{specs[flight] ?? ""}</span>
+            <span className={t.tag}><Reveal name={`rt-${flight}`}>{ROLE[flight]}</Reveal></span>
+            <span className={t.spec}><Reveal name={`rs-${flight}`}>{specs[flight] ?? ""}</Reveal></span>
           </span>
           <span className={t.sampleCell}>
             <span className={t.band} data-t={`band-${flight}`} />

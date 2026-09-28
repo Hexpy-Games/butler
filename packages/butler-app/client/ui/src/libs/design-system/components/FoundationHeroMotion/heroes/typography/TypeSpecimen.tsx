@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { em, POSTER_WEIGHT, specimenLayout, type SpecimenMetrics } from "./specimenMetrics";
+import { Reveal } from "./Reveal";
 import t from "./TypographyHero.module.css";
 
 /** Weights whose values the changing labels cut between (drawn, pushed, settled). */
@@ -18,7 +19,7 @@ function Guide({ name, axis, at, length, label, children }: {
   return (
     <span className={axis === "h" ? t.hline : t.vline} data-t={name} style={style}>
       <span className={t.rule} data-t={`${name}-rule`} />
-      {label ? <span className={t.guideLabel} data-t={`${name}-label`}>{label}</span> : null}
+      {label ? <span className={t.guideLabel} data-t={`${name}-label`}><Reveal name={`rv-${name}`}>{label}</Reveal></span> : null}
       {children}
     </span>
   );
@@ -71,16 +72,16 @@ export function Specimen({ metrics, size, lineWidth, compact }: { metrics: Speci
       ))}
       <Guide axis="v" at={0} length={at.height} name="v-a0" />
       <Guide axis="v" at={at.originG} length={at.height} name="v-ag">
-        <span className={t.gapLabel} data-t="gap"><Values name="gap" values={LABEL_WEIGHTS.map(gapLabel)} /></span>
+        <span className={t.gapLabel} data-t="gap"><Reveal name="rv-gap"><Values name="gap" values={LABEL_WEIGHTS.map(gapLabel)} /></Reveal></span>
       </Guide>
       <Guide axis="v" at={at.width} length={at.height} name="v-g1" />
       {(["a", "g"] as const).map((glyph, k) => (
         <span className={t.advLabel} data-t={`adv-${glyph}`} key={glyph}
           style={{ left: px(k === 0 ? at.originG / 2 : (at.originG + at.width) / 2), top: px(at.height) } as CSSProperties}>
-          <Values name={`adv-${glyph}`} values={LABEL_WEIGHTS.map((weight) => `${compact ? "adv" : "advance"} ${em(metrics.byWeight[weight][k]!.advance)}`)} />
+          <Reveal name={`rv-adv-${glyph}`}><Values name={`adv-${glyph}`} values={LABEL_WEIGHTS.map((weight) => `${compact ? "adv" : "advance"} ${em(metrics.byWeight[weight][k]!.advance)}`)} /></Reveal>
         </span>
       ))}
-      <span className={t.sizeLabel} data-t="size-label">{`${compact ? "" : "Pretendard Variable · "}${size}px · wght 300`}</span>
+      <span className={t.sizeLabel} data-t="size-label"><Reveal name="rv-size">{`${compact ? "" : "Pretendard Variable · "}${size}px · wght 300`}</Reveal></span>
       <svg aria-hidden="true" className={t.glyphSvg} height={at.height} width={at.width}>
         {text("outline-a", "A", 0, true)}
         {text("outline-g", "가", at.originG, true)}
@@ -99,7 +100,7 @@ export function Specimen({ metrics, size, lineWidth, compact }: { metrics: Speci
 export function WeightControl({ axisAt }: { axisAt: (weight: number) => number }) {
   return (
     <div className={t.overlay} data-t="control">
-      <span className={t.mono}>font-weight</span>
+      <span className={t.mono}><Reveal name="rv-fw">font-weight</Reveal></span>
       <span className={t.readout}>
         <span className={t.digit}><span className={t.digitStrip} data-t="read-100" style={{ "--d": 6 } as CSSProperties}>
           {Array.from({ length: 10 }, (_, n) => <span key={n}>{n}</span>)}
@@ -113,8 +114,8 @@ export function WeightControl({ axisAt }: { axisAt: (weight: number) => number }
         {[400, 500, 560, 620].map((weight) => <span className={t.axisTick} key={weight} style={{ "--x": axisAt(weight) } as CSSProperties} />)}
         <span className={t.axisThumb} data-t="thumb" />
       </span>
-      <span className={t.controlScale}><span className={t.mono}>45</span><span className={t.mono}>920</span></span>
-      <span className={t.mono} data-t="token">--font-weight-strong</span>
+      <span className={t.controlScale}><span className={t.mono}><Reveal name="rv-45">45</Reveal></span><span className={t.mono}><Reveal name="rv-920">920</Reveal></span></span>
+      <span className={t.mono} data-t="token"><Reveal name="rv-token">--font-weight-strong</Reveal></span>
     </div>
   );
 }

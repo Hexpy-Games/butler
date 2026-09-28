@@ -3,6 +3,7 @@ import type { FoundationHeroLang } from "../FoundationHeroMotion";
 import { compileTimeline } from "../heroTimeline";
 import { measureType, type TypeMeasure } from "./typography/measureType";
 import { ProductBoard } from "./typography/ProductBoard";
+import { Reveal } from "./typography/Reveal";
 import { RoleLadder } from "./typography/RoleLadder";
 import { measureSpecimen, POSTER_WEIGHT, specimenLayout, type SpecimenMetrics } from "./typography/specimenMetrics";
 import { typeTracks } from "./typography/typeAssembly";
@@ -128,16 +129,16 @@ export function TypographyHero({ lang }: { lang: FoundationHeroLang }) {
                   {metrics ? <Specimen compact={layout === "tall"} lineWidth={col(layout, 1, SPECIMEN[layout].span).w} metrics={metrics} size={size} /> : null}
                 </div>
                 <span className={t.family} data-t="family" style={{ "--family-drop": `${box ? metrics!.descender * size * q : 0}px` } as CSSProperties}>
-                  <span>Pretendard Variable</span>
-                  <span className={t.mono}>{`${AXIS.min}–${AXIS.max}`}</span>
+                  <span><Reveal name="rv-family">Pretendard Variable</Reveal></span>
+                  <span className={t.mono}><Reveal name="rv-axis">{`${AXIS.min}–${AXIS.max}`}</Reveal></span>
                 </span>
               </div>
               <RoleLadder copy={copy} specs={measure?.specs ?? {}} />
             </div>
-            <ProductBoard copy={copy} layout={layout} lines={measure?.geometry.lines ?? []} />
+            <ProductBoard copy={copy} layout={layout} lines={measure?.geometry.lines ?? []} sketches={measure?.geometry.sketches ?? {}} />
           </div>
           <WeightControl axisAt={axisAt} />
-          <span className={t.overlay} data-t="cap-tnum"><span className={t.mono}>font-variant-numeric: tabular-nums</span></span>
+          <span className={t.overlay} data-t="cap-tnum"><span className={t.mono}><Reveal name="rv-tnum">font-variant-numeric: tabular-nums</Reveal></span></span>
         </div>
       </div>
     </div>

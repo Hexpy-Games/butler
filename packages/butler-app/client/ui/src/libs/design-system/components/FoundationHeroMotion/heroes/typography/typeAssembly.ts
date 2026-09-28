@@ -4,10 +4,14 @@ import type { SpecimenMetrics } from "./specimenMetrics";
 import { cameras } from "./typeCamera";
 import { BEATS, FINALE, FLIGHTS, LOOP, PANELS, select, specimenTracks, type TypeGeometry } from "./typeChoreography";
 import { STRUCTURE } from "./typeLines";
+import { sketchTracks } from "./Sketch";
+import { revealAll } from "./typeReveals";
 
 /** The list scene ends and the first build starts here; each build takes BUILD beats. */
 const FIRST = 34;
-const BUILD = 15.5;
+const BUILD = 16.5;
+/** Beats the camera takes from one component to the next; the next one's blueprint draws during the travel. */
+const TRAVEL = 3;
 
 const buildAt = (k: number) => FIRST + k * BUILD;
 
@@ -25,7 +29,7 @@ function assembly(g: TypeGeometry): Track[] {
   const world: Key[] = [
     { at: 0, ...cam.rest }, { at: 18.2, ...cam.rest }, { at: 20.2, ...cam.rest }, { at: 22.2, ...cam.ladder, ease: "emphasized" },
     { at: 23.4, ...cam.top, ease: "emphasized" }, { at: 28.2, ...cam.bottom, ease: "decelerate" }, { at: 31.6, ...cam.bottom }, { at: FIRST, ...cam.stage[0]!, ease: "emphasized" },
-    ...PANELS.slice(1).flatMap((_, j): Key[] => [{ at: buildAt(j + 1) - 1.4, ...cam.stage[j]! }, { at: buildAt(j + 1), ...cam.stage[j + 1]!, ease: "emphasized" }]),
+    ...PANELS.slice(1).flatMap((_, j): Key[] => [{ at: buildAt(j + 1) - TRAVEL, ...cam.stage[j]! }, { at: buildAt(j + 1), ...cam.stage[j + 1]!, ease: "standard" }]),
     { at: FINALE, ...cam.stage[3]! }, { at: FINALE + 3, ...cam.rest, ease: "emphasized" }, { at: FINALE + 6, ...cam.rest }, { at: FINALE + 9, rx: -0.6, ry: 1.2 }, { at: LOOP - 1, ...cam.rest },
   ];
   // Rungs only move (an opacity animation would flatten their 3D); their
@@ -62,19 +66,28 @@ function assembly(g: TypeGeometry): Track[] {
     const at = buildAt(k);
     const shift = cam.shift[panel];
     const home = FINALE + 0.4 * k;
-    const hidden: Pose = { ...shift, s: 0.96, o: 0 };
     const lines = g.lines.filter((info) => info.panel === panel);
+    // Lines follow one another: a main line gets its own moment, a secondary one a shorter step.
+    const starts = lines.reduce<number[]>((list, info, j) => [...list, j === 0 ? at + 2.4 : list[j - 1]! + (lines[j - 1]!.secondary ? 0.6 : 1.3)], []);
     return [
+      // The panel only moves (its stage, the gather, the loop); its surface fades in over the blueprint.
       {
         select: select(`panel-${panel}`),
         keys: [
-          { at: 0, ...hidden }, { at: at - 0.2, ...hidden }, { at: at + 1, s: 1, o: 1, ease: "emphasized" },
-          { at: home, ...shift }, { at: home + 2.6, x: 0, y: 0, ease: "emphasized" },
-          { at: LOOP - 0.4 + 0.3 * k, z: 0, o: 1 }, { at: LOOP + 0.8 + 0.3 * k, z: -200, o: 0, ease: "accelerate" }, { at: BEATS, ...hidden, z: 0 },
+          { at: 0, ...shift }, { at: home, ...shift }, { at: home + 2.6, x: 0, y: 0, ease: "emphasized" },
+          { at: LOOP - 0.4 + 0.3 * k, z: 0 }, { at: LOOP + 0.8 + 0.3 * k, z: -200, ease: "accelerate" }, { at: BEATS, ...shift, z: 0 },
         ],
       },
-      ...STRUCTURE[panel].map((name, j) => part(name, at + 0.8 + j * 0.2)),
-      ...lines.flatMap((info, j) => line(info, at + 1.4 + j * 1.3, at + BUILD - 1.6)),
+      {
+        select: select(`surface-${panel}`),
+        keys: [
+          { at: 0, s: 0.98, o: 0 }, { at: at + 0.6, s: 0.98, o: 0 }, { at: at + 1.6, s: 1, o: 1, ease: "decelerate" },
+          { at: LOOP - 0.4 + 0.3 * k, o: 1 }, { at: LOOP + 0.8 + 0.3 * k, o: 0, ease: "accelerate" },
+        ],
+      },
+      ...sketchTracks(panel, g.sketches[panel], at - TRAVEL + 0.8, at + 1.6),
+      ...STRUCTURE[panel].map((name, j) => part(name, at + 1.8 + j * 0.2)),
+      ...lines.flatMap((info, j) => line(info, starts[j]!, at + BUILD - TRAVEL - 0.4)),
     ];
   });
   const tnumAt: Pose = { x: g.fly.metric.x - g.tnum.x, y: g.fly.metric.y + g.fly.metric.h + 4 - g.tnum.y };
@@ -87,5 +100,5 @@ function assembly(g: TypeGeometry): Track[] {
 
 /** Every track of the cycle, for compileTimeline. */
 export function typeTracks(g: TypeGeometry, metrics: SpecimenMetrics): Track[] {
-  return [...specimenTracks(g, metrics), ...assembly(g)];
+  return [...specimenTracks(g, metrics), ...assembly(g), ...revealAll()];
 }

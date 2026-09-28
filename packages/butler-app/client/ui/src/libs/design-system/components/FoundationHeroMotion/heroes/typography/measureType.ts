@@ -1,6 +1,6 @@
 import type { Box } from "../../heroTimeline";
 import { measureLines } from "./typeLines";
-import { FLIGHTS, METRIC_ROLL, PANELS, select, type Flight, type TypeGeometry } from "./typeChoreography";
+import { FLIGHTS, METRIC_ROLL, PANELS, select, type Flight, type Panel, type TypeGeometry } from "./typeChoreography";
 import { CANVAS, type TypeLayout } from "./typeGrid";
 
 export interface TypeMeasure {
@@ -52,6 +52,13 @@ export function measureType(root: HTMLElement, layout: TypeLayout): TypeMeasure 
     rungs: per(FLIGHTS, (flight) => select(`rung-${flight}`)),
     fly: per(FLIGHTS, (flight) => select(`fly-${flight}`)),
     lines: measureLines(root, ratio) ?? [],
+    sketches: Object.fromEntries(PANELS.map((panel) => {
+      const node = find(`[data-panel="${panel}"]`);
+      if (!node) return [panel, []];
+      const base = node.getBoundingClientRect();
+      const rel = (rect: DOMRect): Box => ({ x: (rect.left - base.left) / ratio, y: (rect.top - base.top) / ratio, w: rect.width / ratio, h: rect.height / ratio });
+      return [panel, [rel(base), ...[...node.querySelectorAll<HTMLElement>("[data-sketch]")].map((box) => rel(box.getBoundingClientRect()))]];
+    })) as Record<Panel, Box[]>,
     panels: per(PANELS, (panel) => select(`panel-${panel}`)),
     control: box(select("control")),
     tnum: box(select("cap-tnum")),

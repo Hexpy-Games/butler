@@ -5,7 +5,7 @@ import { col, onBaseline, SPECIMEN, type TypeLayout } from "./typeGrid";
 import { OUTLINE_EM } from "./TypeSpecimen";
 
 /**
- * 02 Typography hero, "from token to product": one 113-beat cycle (36.2 s at
+ * 02 Typography hero, "from token to product": one 117-beat cycle (37.4 s at
  * --motion-deliberate 320 ms). Beat marks:
  *
  *   0–7    Construction  metric guides draw in; the real Pretendard outlines of
@@ -16,22 +16,18 @@ import { OUTLINE_EM } from "./TypeSpecimen";
  *   20–34  Type list     the role list rises, flat and frame-filling; the camera
  *                        closes in, travels down it, holds on the last role while
  *                        its tabular digits roll, then goes into the empty space
- *   34–96  Build         four real components, one at a time, each in its own
- *                        empty area: surface, structure, then its text lines
- *                        drawn like the specimen (guide, outline, fill) with
- *                        the typography token of each line on a badge
- *   96–101 Finale        everything pushes up and gathers onto the grid
- *   101–109 Settle       the composed poster: tokens beside the product
- *   109–113 Loop          the product recedes, the specimen grows back and its
- *                        fill clears to the blueprint of beat 0
+ *   34–100 Build         four real components, one at a time, the camera
+ *                        travelling on as the next one's blueprint draws: sketch,
+ *                        surface, structure, then text revealed glyph by glyph
+ *                        under a tag naming each line's typography token
+ *   100–113 Finale       everything gathers onto the grid; the poster holds
+ *   113–117 Loop          the product recedes, the specimen grows back
  *
- * Every placement comes from the grid (typeGrid.ts) or from measuring the
- * poster, so it holds for both canvases, themes, languages and fonts. The
- * components gather into the poster from FINALE; the loop starts at LOOP.
+ * Placement comes from the grid (typeGrid.ts) or from measuring the poster.
  */
-export const FINALE = 96;
-export const LOOP = 109;
-export const BEATS = 113;
+export const FINALE = 100;
+export const LOOP = 113;
+export const BEATS = 117;
 
 export const FLIGHTS = ["title", "dash", "field", "ask", "command", "meta", "metric"] as const;
 export type Flight = (typeof FLIGHTS)[number];
@@ -51,6 +47,8 @@ export interface TypeGeometry {
   fly: Record<Flight, Box>;
   /** Text lines each component builds, measured in their panels. */
   lines: LineInfo[];
+  /** Boxes the blueprint sketches in each panel (the panel first), relative to the panel. */
+  sketches: Record<Panel, Box[]>;
   panels: Record<Panel, Box>;
   control: Box;
   tnum: Box;

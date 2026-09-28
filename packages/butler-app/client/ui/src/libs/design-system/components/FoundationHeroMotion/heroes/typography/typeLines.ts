@@ -13,12 +13,15 @@ export interface LineSpec {
   role: LineRole;
   /** Where the real text is: our own wrapper, or a slot inside a DS block. */
   select: string;
-  /** Wrapped paragraphs fade in under their badge instead of drawing an outline. */
+  /** Wrapped paragraphs reveal their rows instead of drawing glyph by glyph. */
   draw: boolean;
+  /** Secondary text (values, second fields): revealed left to right, without a tag or guides. */
+  secondary?: boolean;
 }
 
 const own = (id: string) => `[data-line="${id}"]`;
 const firstMetric = (slot: string) => `[data-panel="metric"] [data-slot="${slot}"]:not([data-t="metric-2"] *)`;
+const secondMetric = (slot: string) => `[data-t="metric-2"] [data-slot="${slot}"]`;
 
 /** The text lines each component builds, in cascade order. */
 export const LINES: LineSpec[] = [
@@ -26,6 +29,8 @@ export const LINES: LineSpec[] = [
   { id: "lead", panel: "settings", token: "--typo-body", role: "body", select: own("lead"), draw: true },
   { id: "field", panel: "settings", token: "--typo-label", role: "label", select: own("field"), draw: true },
   { id: "hint", panel: "settings", token: "--typo-caption", role: "caption", select: own("hint"), draw: true },
+  { id: "field2", panel: "settings", token: "--typo-label", role: "label", select: own("field2"), draw: true, secondary: true },
+  { id: "hint2", panel: "settings", token: "--typo-caption", role: "caption", select: own("hint2"), draw: true, secondary: true },
   { id: "ask", panel: "chat", token: "--typo-body", role: "body", select: own("ask"), draw: true },
   { id: "answer", panel: "chat", token: "--typo-body", role: "body", select: own("answer"), draw: false },
   { id: "command", panel: "chat", token: "--typo-code", role: "code", select: own("command"), draw: true },
@@ -33,6 +38,10 @@ export const LINES: LineSpec[] = [
   { id: "dash", panel: "metric", token: "--typo-dashboard-title", role: "dashboard", select: own("dash"), draw: true },
   { id: "value", panel: "metric", token: "--typo-metric-value", role: "metric", select: firstMetric("metric-value"), draw: true },
   { id: "label", panel: "metric", token: "--typo-caption", role: "caption", select: firstMetric("metric-label"), draw: true },
+  { id: "change", panel: "metric", token: "--typo-caption", role: "caption", select: `${firstMetric("metric-label")} + *`, draw: true, secondary: true },
+  { id: "value2", panel: "metric", token: "--typo-metric-value", role: "metric", select: secondMetric("metric-value"), draw: true, secondary: true },
+  { id: "label2", panel: "metric", token: "--typo-caption", role: "caption", select: secondMetric("metric-label"), draw: true, secondary: true },
+  { id: "change2", panel: "metric", token: "--typo-caption", role: "caption", select: `${secondMetric("metric-label")} + *`, draw: true, secondary: true },
   { id: "placeholder", panel: "composer", token: "--typo-body", role: "body", select: own("placeholder"), draw: true },
 ];
 
@@ -40,7 +49,7 @@ export const LINES: LineSpec[] = [
 export const BADGE_GUTTER = { wide: 320, tall: 190 } as const;
 
 /** Non-text structure each component builds before its text. */
-export const STRUCTURE: Record<Panel, string[]> = { settings: ["switch", "field-2"], chat: [], metric: ["metric-2"], composer: ["send"] };
+export const STRUCTURE: Record<Panel, string[]> = { settings: ["switch", "switch-2"], chat: [], metric: ["metric-2"], composer: ["send"] };
 
 /** A line as measured on the poster: box relative to its panel, font and baseline. */
 export interface LineInfo extends LineSpec {
@@ -73,7 +82,7 @@ export function measureLines(root: HTMLElement, ratio: number): LineInfo[] | nul
       ...spec, box, text: (node.textContent ?? "").trim(),
       font: { family: style.fontFamily, size, weight: style.fontWeight, color: style.color, lineHeight: line, tracking: style.letterSpacing === "normal" ? "0em" : style.letterSpacing },
       baseline: spec.draw ? (Math.min(line, box.h) - (ascent + descent)) / 2 + ascent : 0,
-      outlined: spec.draw && Number.parseFloat(style.fontWeight) >= 500,
+      outlined: spec.draw && !spec.secondary && Number.parseFloat(style.fontWeight) >= 500,
       edges: spec.draw ? graphemeEdges(`${style.fontWeight} ${size}px ${style.fontFamily}`, (node.textContent ?? "").trim()) : [],
     });
   }

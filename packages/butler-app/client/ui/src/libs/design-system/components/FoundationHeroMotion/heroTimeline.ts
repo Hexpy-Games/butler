@@ -27,6 +27,8 @@ export interface Pose {
   dash?: number;
   /** font-weight on a variable font, interpolated along its axis (text layout of that element). */
   wght?: number;
+  /** Translate along x in % of the element's own width (a reveal window needs no measuring). */
+  xp?: number;
 }
 
 export interface Key extends Pose {
@@ -43,14 +45,14 @@ export interface Track {
 }
 
 const TRANSFORM_FIELDS = ["x", "y", "z", "rx", "ry", "rz", "s", "sx", "sy"] as const;
-const REST: Required<Pose> = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, s: 1, sx: 1, sy: 1, o: 1, dash: 0, wght: 400 };
+const REST: Required<Pose> = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, s: 1, sx: 1, sy: 1, o: 1, dash: 0, wght: 400, xp: 0 };
 
 function num(value: number): string {
   return String(Math.round(value * 1000) / 1000);
 }
 
-function transform(p: Required<Pose>): string {
-  return `translate3d(${num(p.x)}px, ${num(p.y)}px, ${num(p.z)}px) rotateX(${num(p.rx)}deg) rotateY(${num(p.ry)}deg) rotateZ(${num(p.rz)}deg) scale3d(${num(p.s * p.sx)}, ${num(p.s * p.sy)}, 1)`;
+function transform(p: Required<Pose>, percent: boolean): string {
+  return `${percent ? `translateX(${num(p.xp)}%) ` : ""}translate3d(${num(p.x)}px, ${num(p.y)}px, ${num(p.z)}px) rotateX(${num(p.rx)}deg) rotateY(${num(p.ry)}deg) rotateZ(${num(p.rz)}deg) scale3d(${num(p.s * p.sx)}, ${num(p.s * p.sy)}, 1)`;
 }
 
 /** Keys resolved to full poses, with holds added at 0 and at the end of the cycle. */
@@ -78,14 +80,15 @@ export function compileTimeline(scope: string, beats: number, tracks: Track[]): 
   return tracks.map((track, index) => {
     const name = `${scope}-${index}`;
     const keys = resolve(track.keys, beats);
-    const moves = track.keys.some((key) => TRANSFORM_FIELDS.some((field) => key[field] !== undefined));
+    const percent = track.keys.some((key) => key.xp !== undefined);
+    const moves = percent || track.keys.some((key) => TRANSFORM_FIELDS.some((field) => key[field] !== undefined));
     const fades = track.keys.some((key) => key.o !== undefined);
     const draws = track.keys.some((key) => key.dash !== undefined);
     const weighs = track.keys.some((key) => key.wght !== undefined);
     const frames = keys.map((key, k) => {
       const next = keys[k + 1];
       const body = [
-        moves ? `transform:${transform(key)}` : "",
+        moves ? `transform:${transform(key, percent)}` : "",
         fades ? `opacity:${num(key.o)}` : "",
         draws ? `stroke-dashoffset:${num(key.dash)}px` : "",
         weighs ? `font-weight:${num(key.wght)}` : "",
