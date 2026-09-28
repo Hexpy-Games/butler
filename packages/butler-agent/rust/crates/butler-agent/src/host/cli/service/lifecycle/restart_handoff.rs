@@ -1,16 +1,14 @@
 //! Detached one-shot restart handoff for a service-owned request.
 
 use std::{
-    fs,
     io::{Read, Write},
-    os::unix::fs::DirBuilderExt,
-    os::unix::process::CommandExt,
     path::Path,
     process::{Child, Command, Stdio},
     sync::mpsc,
     thread,
 };
 
+use butler_platform::{process_control, secure_fs};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -63,13 +61,9 @@ pub(in crate::host::cli::service) fn spawn_restart_handoff(
     }
 
     let logs = data_root.join("logs");
-    fs::DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
-        .create(&logs)
-        .map_err(|source| {
-            crate::host::HostError::new("native_service_logs_unavailable").with_source(source)
-        })?;
+    secure_fs::create_private_dir_all(&logs).map_err(|source| {
+        crate::host::HostError::new("native_service_logs_unavailable").with_source(source)
+    })?;
     let stdout = log_file(&logs.join("butler-agent-service.stdout.log"), installation)?;
     let stderr = log_file(&logs.join("butler-agent-service.stderr.log"), installation)?;
     let (reaper, receiver) = mpsc::sync_channel::<Child>(1);
@@ -96,8 +90,8 @@ pub(in crate::host::cli::service) fn spawn_restart_handoff(
         .arg(&data_root)
         .stdin(Stdio::piped())
         .stdout(Stdio::from(stdout))
-        .stderr(Stdio::from(stderr))
-        .process_group(0);
+        .stderr(Stdio::from(stderr));
+    process_control::detach(&mut command);
     command.arg("--quiet");
     let mut child = command.spawn().map_err(|source| {
         crate::host::HostError::new("native_service_restart_handoff_spawn_failed")

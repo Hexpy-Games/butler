@@ -93,6 +93,7 @@ pub(super) fn project_summary(
         workspace_label: project.workspace_label.clone(),
         safe_path_label: project.safe_path_label.clone(),
         sessions: Some(sessions),
+        git: None,
     }
 }
 

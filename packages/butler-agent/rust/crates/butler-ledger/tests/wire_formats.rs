@@ -17,3 +17,15 @@ mod golden;
 mod harness;
 #[path = "wire_formats/project_work.rs"]
 mod project_work;
+
+/// Format pin: every Project Ledger format another version reads, as golden
+/// files: commands with their record files and envelopes, record effects with
+/// their journal, lock shard and answers, and project work with its records
+/// and projections.
+// test-category: format-pin
+#[tokio::test]
+async fn ledger_formats_match_their_goldens() {
+    commands::ledger_commands_keep_their_files_and_envelopes().await;
+    effects::record_effects_keep_their_journal_lock_shard_and_answers().await;
+    project_work::project_work_keeps_its_records_and_projections().await;
+}

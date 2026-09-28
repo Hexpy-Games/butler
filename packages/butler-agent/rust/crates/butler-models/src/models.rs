@@ -3,6 +3,7 @@
 mod catalog;
 mod configuration;
 mod diagnostics;
+mod local_servers;
 mod prompt;
 mod provider;
 mod quota;
@@ -23,6 +24,11 @@ pub use visual_manifest::VisualAttachmentManifest;
 
 pub use transport::provider_http_client;
 
+pub use local_servers::{
+    DetectedLocalModel, DetectedLocalServer, LocalServerKind, LocalServerProbe,
+    detect_local_servers,
+};
+
 // Prompt clients receive the same typed error as the provider round adapter.
 // Expose it with the prompt API so lifecycle callbacks need no BTCC imports.
 pub use butler_turn::btcc::ModelRoundError as ProviderPromptError;
@@ -35,7 +41,9 @@ pub use prompt::{
 };
 pub use prompt::{PromptBudgetStateSource, PromptCacheBoundary, UsageAuthMode};
 pub use quota::{
-    ProviderQuotaReading, ProviderQuotaSink, ProviderQuotaWindow, parse_quota_headers,
+    ProviderQuotaReading, ProviderQuotaSink, ProviderQuotaSource, ProviderQuotaWindow,
+    QUOTA_POLLED_PROVIDERS, QuotaBilling, QuotaFetch, QuotaFetchError, QuotaHttp, QuotaSupport,
+    parse_quota_headers, provider_quota_support,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use visual_admission::ImageAdmissionError;
@@ -50,8 +58,8 @@ pub use provider::{
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use catalog::model_identity_key;
 pub use catalog::{
-    ApiKeyBilling, CredentialView, HostedApiShape, ImageLimitField, ImageLimitSources,
-    ImageProbeEvidence, LocalModelConfig, LocalModelPlatform, LocalModelSource,
+    ApiKeyBilling, CredentialStorage, CredentialView, HostedApiShape, ImageLimitField,
+    ImageLimitSources, ImageProbeEvidence, LocalModelConfig, LocalModelPlatform, LocalModelSource,
     ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelPreset, ModelPricing,
     ModelProviderMetadata, ModelTier, NextPrices, ParsedModelRef, ParsedModelRefSource,
     PromptPriceTier, ProviderAuthMethod, ProviderPresets, ReasoningEffort,
@@ -68,11 +76,21 @@ use butler_core::locale::LocaleCollation;
 use catalog::StaticCatalog;
 use tokenizer::TokenizerOwner;
 
+/// Secret input for key commands: echo off at a terminal (#217).
+pub use butler_platform::secrets::read_secret_input;
+pub use configuration::{
+    CredentialError, CredentialFileSummary, CredentialList, CredentialListItem,
+    CredentialMigrationFailure, CredentialMigrationReport, CredentialStoreError,
+    CredentialStorePolicy, CredentialStoreView, DeletedCredential, FileOverride, SecretBackend,
+    SecretStoreFacts, SecretStoreMode, StoreReason, credential_file_summary,
+    credential_store_policy,
+};
 pub use configuration::{
     DiscoveredLocalModel, HostedModelMutation, LocalModelMutation, McpModelTarget,
     ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
-    ModelConfigurationRead, ProviderCredentialMutation, SettingsError, generate_pkce_verifier,
-    pkce_challenge,
+    ModelConfigurationRead, OpenAiAuthProfile, ProviderCredentialMutation, ProviderKeyCheck,
+    ProviderKeyCheckError, ProviderKeySaveError, SavedProviderKey, SettingsError,
+    generate_pkce_verifier, pkce_challenge,
 };
 pub use status::{StatusModels, auth_status_with_environment, open_status_models};
 

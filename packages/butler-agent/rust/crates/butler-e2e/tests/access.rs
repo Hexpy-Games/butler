@@ -229,12 +229,20 @@ async fn acc_04_mcp_tool_asks_in_ask_first() -> Result<(), HarnessError> {
     let turn = settled(&s, "general", &turn_id).await?;
     assert_eq!(turn_state(&turn), "waiting_for_form", "{turn}");
     let requests = s.gw.approval_requests("general").await?;
-    assert!(
-        requests
-            .iter()
-            .any(|request| request["source_turn_id"] == turn_id.as_str()
-                && request["executable"] == "call_mcp_tool"),
-        "no approval request for the MCP call: {requests:?}"
+    let request = requests
+        .iter()
+        .find(|request| {
+            request["source_turn_id"] == turn_id.as_str()
+                && request["executable"] == "call_mcp_tool"
+        })
+        .unwrap_or_else(|| panic!("no approval request for the MCP call: {requests:?}"));
+    // ACC-06 (#235): what the request would do, as data for the App's
+    // localized sentence.
+    assert_eq!(
+        request["approval"],
+        json!({"action_kind": "use_connector", "count": 1, "examples": [], "risk": "high",
+               "targets": [{"kind": "connector", "path": "e2e/e2e_echo"}]}),
+        "{request}"
     );
     let mut outputs = String::new();
     for row in tool_rows(&s.gw.messages("general").await?, &turn_id) {

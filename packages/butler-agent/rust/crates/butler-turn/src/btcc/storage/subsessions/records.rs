@@ -346,7 +346,24 @@ mod tests {
         packet
     }
 
-    #[test]
+    /// Format pin: persisted BTCC records and receipts stay byte-stable across
+    /// versions: subsession packets, dispatch intents and outbox inputs,
+    /// delegation identities, stored authority continuations, write and edit
+    /// effect inputs and receipts, and transition payloads with changed files.
+    // test-category: format-pin
+    #[tokio::test]
+    async fn persisted_btcc_records_are_byte_stable() {
+        steward_packet_is_byte_stable();
+        worker_packet_is_byte_stable();
+        dispatch_intent_is_byte_stable();
+        outbox_inputs_are_byte_stable();
+        crate::btcc::subsessions::delegation_identities_are_byte_stable();
+        crate::btcc::agent_loop::tests::stored_authority_continuation_with_every_field_is_byte_stable();
+        crate::btcc::effects::workspace_file::tests::write_effect_normalized_input_is_byte_stable();
+        crate::btcc::effects::workspace_edit::tests::edit_input_prepared_edit_and_receipt_are_byte_stable().await;
+        crate::btcc::turn::payload_body_with_changed_files_is_byte_stable();
+    }
+
     fn steward_packet_is_byte_stable() {
         assert_eq!(
             serde_json::to_string(&steward()).unwrap(),
@@ -354,7 +371,6 @@ mod tests {
         );
     }
 
-    #[test]
     fn worker_packet_is_byte_stable() {
         let mut packet = steward();
         packet.child_role = ChildRole::Worker;
@@ -377,7 +393,6 @@ mod tests {
         );
     }
 
-    #[test]
     fn dispatch_intent_is_byte_stable() {
         let mut intent = DispatchIntent::fixture();
         intent.envelope.peer.parent_id = Some("parent".into());
@@ -387,7 +402,6 @@ mod tests {
         );
     }
 
-    #[test]
     fn outbox_inputs_are_byte_stable() {
         let worker = ParentResultInput::StewardQueue(WorkerResultInput {
             text: "t".into(),

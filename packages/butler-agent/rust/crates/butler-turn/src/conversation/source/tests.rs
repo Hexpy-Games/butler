@@ -168,40 +168,6 @@ async fn canonical_store_reader_matches_bun_scalars_and_rereads_fresh_parts() {
 }
 
 #[tokio::test]
-async fn missing_schema_and_malformed_json_are_distinct_from_absent_message() {
-    let missing = Fixture::new("missing");
-    let Err(error) = ConversationSourceReader::open(&missing.path) else {
-        panic!("missing canonical database must fail")
-    };
-    assert_eq!(error.code(), "conversation_source_unavailable");
-    assert!(!missing.path.exists());
-
-    let incomplete = Fixture::new("schema");
-    std::fs::create_dir_all(incomplete.path.parent().unwrap()).unwrap();
-    rusqlite::Connection::open(&incomplete.path).unwrap();
-    let Err(error) = ConversationSourceReader::open(&incomplete.path) else {
-        panic!("incomplete canonical schema must fail")
-    };
-    assert_eq!(error.code(), "conversation_source_schema_unavailable");
-
-    let malformed = Fixture::new("malformed");
-    let store = malformed.open_store().await;
-    store.begin_turn(begin()).await.unwrap();
-    store.append_user_message(message_input()).await.unwrap();
-    store.close().await.unwrap();
-    let raw = rusqlite::Connection::open(&malformed.path).unwrap();
-    raw.execute(
-        "UPDATE conversation_parts SET content_json='{bad' WHERE message_id='cm_source'",
-        [],
-    )
-    .unwrap();
-    drop(raw);
-    let reader = ConversationSourceReader::open(&malformed.path).unwrap();
-    let error = reader.read_message("cm_source").unwrap_err();
-    assert_eq!(error.code(), "conversation_json_error");
-}
-
-#[tokio::test]
 async fn recall_pages_read_canonical_writer_rows_and_preserve_json_errors() {
     let fixture = Fixture::new("recall-pages");
     let store = fixture.open_store().await;

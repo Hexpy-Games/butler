@@ -61,7 +61,7 @@ impl ProviderRequestConfigPort for Config {
                 wire_model: self.metadata.model_id.clone(),
                 endpoint: self.endpoint.clone(),
                 api_shape: self.metadata.hosted_api_shape,
-                auth: ProviderAuth::ApiKey("test-only".into()),
+                auth: ProviderAuth::ApiKey(String::from("test-only").into()),
                 // Failure bounds only; the local server answers at once, and
                 // tight budgets turned scheduler stalls into provider errors.
                 policy: ProviderRoundPolicy {

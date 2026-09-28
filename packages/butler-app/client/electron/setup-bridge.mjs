@@ -39,20 +39,16 @@ export function createFirstRunSetupBridge({
       runId = currentRunId;
       const startedAt = new Date().toISOString();
       const currentSession = createSession("checking", {
+        // Stable ids only: the renderer names each step in the reader's
+        // language (butler-i18n firstRun.prepSteps).
         checks: [
-          setupCheck(...agentControlCheck(serviceControl)),
-          setupCheck(
-            "managed_gateway",
-            "Butler Agent 연결",
-          ),
-          setupCheck("bundled_agent_version", "Agent 버전 확인"),
-          setupCheck("local_auth", "로컬 인증 확인"),
-          setupCheck("health", "상태 확인"),
-          setupCheck("protocol", "프로토콜 확인"),
-          setupCheck(
-            "gateway_profile",
-            "Electron 연결 확인",
-          ),
+          setupCheck(agentControlCheck(serviceControl)),
+          setupCheck("managed_gateway"),
+          setupCheck("bundled_agent_version"),
+          setupCheck("local_auth"),
+          setupCheck("health"),
+          setupCheck("protocol"),
+          setupCheck("gateway_profile"),
         ],
         startedAt,
       });
@@ -90,7 +86,7 @@ export function createFirstRunSetupBridge({
         }
         markCheck(
           currentSession,
-          agentControlCheck(serviceControl)[0],
+          agentControlCheck(serviceControl),
           "passed",
         );
         if (!gatewayReadyConfirmed) {
@@ -162,9 +158,7 @@ export function createFirstRunSetupBridge({
 }
 
 function agentControlCheck(serviceControl) {
-  return serviceControl
-    ? ["agent_service", "Butler Agent 서비스"]
-    : ["agent_runtime", "Butler Agent 실행"];
+  return serviceControl ? "agent_service" : "agent_runtime";
 }
 
 function createSession(phase, patch = {}) {
@@ -179,21 +173,14 @@ function createSession(phase, patch = {}) {
   };
 }
 
+// Views carry phases, ids and codes, never display text: the renderer
+// localizes them through butler-i18n.
 function statusView(session) {
   return {
     phase: session.phase,
-    status_label: statusLabel(session),
     diagnostics_available: true,
     ...(session.errorCode ? { error_code: session.errorCode } : {}),
   };
-}
-
-function statusLabel(session) {
-  if (session.phase === "ready") return "준비 완료";
-  if (session.phase === "failed") return "Butler Agent를 준비하지 못했습니다.";
-  if (session.phase === "cancelled") return "취소됨";
-  if (session.phase === "checking") return "상태 확인 중";
-  return "대기 중";
 }
 
 function diagnosticsView(session) {
@@ -202,21 +189,19 @@ function diagnosticsView(session) {
     phase: session.phase,
     checks: session.checks.map((check) => ({
       id: check.id,
-      label: check.label,
       status: check.status,
     })),
     errors: session.errorCode
       ? [{
         code: session.errorCode,
-        message: statusLabel(session),
         details: session.supportDetails ?? undefined,
       }]
       : [],
   };
 }
 
-function setupCheck(id, label) {
-  return { id, label, status: "pending" };
+function setupCheck(id) {
+  return { id, status: "pending" };
 }
 
 function markCheck(session, id, status) {

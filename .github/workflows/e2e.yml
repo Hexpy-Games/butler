@@ -2,6 +2,7 @@ name: E2E
 
 # Real-binary end-to-end scenarios (packages/butler-agent/rust/crates/butler-e2e).
 # - e2e-stub: every PR and push to main; replays committed provider cassettes.
+# - e2e-stub-linux: the same stub tier on Linux x64.
 # - e2e-live: nightly and on demand against a real provider; runs only when a
 #   credential secret is configured, otherwise the job reports SKIPPED.
 
@@ -12,11 +13,13 @@ on:
       - "packages/butler-agent/rust/**"
       - "packages/butler-agent/resources/**"
       - ".github/workflows/e2e.yml"
+      - ".github/actions/rust-agent-setup/**"
   pull_request:
     paths:
       - "packages/butler-agent/rust/**"
       - "packages/butler-agent/resources/**"
       - ".github/workflows/e2e.yml"
+      - ".github/actions/rust-agent-setup/**"
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
@@ -145,6 +148,77 @@ jobs:
         run: |
           {
             echo "### E2E stub tier"
+            grep -E "^test .* (ok|FAILED|ignored)" "$RUNNER_TEMP/e2e-stub.log" | sed 's/^/    /' || true
+            echo
+            echo "Live scenarios: SKIPPED (tier: stub)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # The same stub tier on Linux x64, so a Linux-only failure (process,
+  # socket, file-system or timing semantics) cannot land unnoticed. The
+  # static ONNX Runtime comes from the portable recipe (#261) through the
+  # shared setup action.
+  e2e-stub-linux:
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    name: E2E stub tier (Linux x64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    defaults:
+      run:
+        working-directory: packages/butler-agent/rust
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust and the static ONNX Runtime
+        uses: ./.github/actions/rust-agent-setup
+        with:
+          native-deps: ort
+          cache-key: e2e-linux-x64
+
+      - name: Build the agent binary under test
+        run: cargo build --locked -p butler-agent --bin butler-agent
+
+      # Same pinned model files and SHA-256 values as the macOS job.
+      - name: Restore embedding model cache
+        id: embedding-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/e2e-models/bge-m3
+          key: bge-m3-4de13258303883538bd53b696b452bf8099f0858
+
+      - name: Fetch embedding model
+        if: steps.embedding-cache.outputs.cache-hit != 'true'
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          base=https://huggingface.co/Xenova/bge-m3/resolve/4de13258303883538bd53b696b452bf8099f0858
+          dir=e2e-models/bge-m3
+          mkdir -p "$dir/onnx"
+          while read -r sha file; do
+            curl -fsSL --retry 3 -o "$dir/$file" "$base/$file"
+            echo "$sha  $dir/$file" | sha256sum -c -
+          done <<'LIST'
+          6710678b12670bc442b99edc952c4d996ae309a7020c1fa0096dd245c2faf790 tokenizer.json
+          7e4c1cc848840aeccdd763458c18dd525eb0f795c992e00ebe9c28554e7db2d4 tokenizer_config.json
+          734a79bf12d388c1467a4e3ab625f45de7f6906cffcfb93a1eca1787504bed95 config.json
+          0826f8c1ab9edf1801db86c61919d4d108e8bfc0b809ec823ad366882ff0b77d onnx/model_quantized.onnx
+          LIST
+
+      - name: Run the stub tier
+        env:
+          BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
+          BUTLER_E2E_TIER: stub
+          BUTLER_E2E_SKIP_BUILD: "1"
+          BUTLER_E2E_REPORT: ${{ runner.temp }}/e2e-report.txt
+        run: |
+          set -o pipefail
+          # --no-fail-fast: one run reports every failing scenario binary.
+          cargo test --locked --no-fail-fast -p butler-e2e 2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
+
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo "### E2E stub tier (Linux x64)"
             grep -E "^test .* (ok|FAILED|ignored)" "$RUNNER_TEMP/e2e-stub.log" | sed 's/^/    /' || true
             echo
             echo "Live scenarios: SKIPPED (tier: stub)."

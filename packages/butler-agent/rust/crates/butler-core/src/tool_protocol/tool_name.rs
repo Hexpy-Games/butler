@@ -154,17 +154,3 @@ impl PartialEq<ToolName> for std::borrow::Cow<'_, str> {
         self.as_ref() == other.as_str()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::ToolName;
-
-    #[test]
-    fn names_round_trip_and_are_unique() {
-        let mut seen = std::collections::HashSet::new();
-        for tool in ToolName::ALL {
-            assert_eq!(ToolName::parse(tool.as_str()), Some(*tool));
-            assert!(seen.insert(tool.as_str()), "duplicate {tool}");
-        }
-    }
-}

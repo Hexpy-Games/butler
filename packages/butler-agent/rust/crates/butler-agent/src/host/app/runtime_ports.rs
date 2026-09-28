@@ -13,6 +13,7 @@ mod session_progress;
 mod session_workspaces;
 mod settings;
 mod settings_mutation;
+mod setup;
 mod topic_branch;
 
 use std::sync::Arc;
@@ -33,6 +34,7 @@ pub(crate) use session_progress::AppSessionProgress;
 pub(crate) use session_workspaces::AppSessionWorkspaces;
 pub(crate) use settings::AppSettingsFactsAdapter;
 pub(crate) use settings_mutation::AppSettingsMutation;
+pub(crate) use setup::{AppSetup, AppSetupParts};
 pub(crate) use topic_branch::{AppBranchConversations, AppBranchSummarizerAdapter};
 
 pub(crate) struct AppApprovalClaimsAdapter {

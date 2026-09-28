@@ -82,6 +82,8 @@ export interface AppModelSummary {
   model_ref: string;
   display_name: string;
   status: "latest" | "recommended" | "available" | "deprecated";
+  /** #278: the model's place in its provider's lineup. */
+  tier?: "flagship" | "balanced" | "efficient";
   context_window_tokens?: number;
   max_output_tokens?: number;
   default_reasoning_effort: ReasoningEffort;
@@ -115,14 +117,47 @@ export interface AppModelSummary {
 
 export type ProviderAuthMethod = "api_key" | "codex_oauth";
 
+/** Where a saved API key is kept (#217). */
+export type CredentialStorage =
+  | "keychain"
+  | "secret_service"
+  | "credential_manager"
+  | "fallback_file"
+  | "legacy_plaintext";
+
 export interface ProviderCredentialView {
   id: string;
   provider_id: string;
   auth_type: ProviderAuthMethod;
   label: string;
   masked_value: string;
+  storage?: CredentialStorage;
   created_at: string;
   updated_at: string;
+}
+
+/** `GET /credentials`: a saved key and the registered models that use it. */
+export interface SavedCredentialView extends ProviderCredentialView {
+  model_refs: string[];
+}
+
+export interface CredentialListView {
+  credentials: SavedCredentialView[];
+  store: {
+    backend: CredentialStorage;
+    reason: "unsigned_build" | "signed_build" | "config" | "test_override";
+    fallback_reason?: string;
+    error?: string;
+    override_ignored: boolean;
+    legacy_plaintext: number;
+  };
+}
+
+/** `DELETE /credentials/{name}`. */
+export interface CredentialDeletionResult {
+  credential: ProviderCredentialView;
+  removed_model_refs: string[];
+  secret_removed: boolean;
 }
 
 export interface WorkerModelPreset {
@@ -146,6 +181,8 @@ export interface ModelCatalogView {
     auth_methods?: ProviderAuthMethod[];
     default_api_base_url?: string;
     models: AppModelSummary[];
+    /** #230: the per-provider default first-run setup picks (model ref or id, effort). */
+    presets?: { routine?: { model: string; effort: ReasoningEffort } };
   }>;
   models: AppModelSummary[];
   registered_models?: AppModelSummary[];
@@ -546,6 +583,14 @@ export interface SettingsView {
   web_search: WebSearchSettingsView;
   model_fallback: ModelFallbackSettingsView;
   profile_label: string;
+  /** #230: onboarding state kept by the agent; absent on agents before #230. */
+  onboarding?: OnboardingSettingsView;
+}
+
+export interface OnboardingSettingsView {
+  consent_version?: number | null;
+  accepted_at?: string | null;
+  completed_at?: string | null;
 }
 
 export interface ModelFallbackSettingsView {
@@ -1300,7 +1345,9 @@ export type ProviderQuotaSourceKind =
   | "zai_usage_query"
   | "provider_quota";
 export type ProviderQuotaReasonCode =
-  | "provider_quota_surface_unavailable"
+  | "provider_quota_pending"
+  | "provider_quota_not_offered"
+  | "provider_quota_fetch_failed"
   | "provider_auth_not_applicable"
   | "provider_auth_required"
   | "provider_auth_surface_mismatch"

@@ -106,6 +106,22 @@ impl ProcessModels {
     }
 }
 
+/// The service's models after saved API keys still in plain text moved into
+/// the credential store (#217); logs what happened (never a key). An entry
+/// that cannot move keeps its key where it was; the move is retried at the
+/// next start.
+pub(crate) async fn with_moved_credentials(models: ProcessModels) -> ProcessModels {
+    match models.configuration.migrate_provider_credentials().await {
+        Ok(report) => {
+            if let Some(line) = report.log_line() {
+                eprintln!("{line}");
+            }
+        }
+        Err(error) => eprintln!("[native-credentials] migration failed: {error}"),
+    }
+    models
+}
+
 /// Passive diagnostics retain counters only, never prompt text, auth or result bytes.
 #[derive(Default)]
 struct ProviderCounts {

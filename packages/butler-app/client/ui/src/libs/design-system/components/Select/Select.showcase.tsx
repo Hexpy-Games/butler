@@ -1,4 +1,5 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
+import { ProviderLogo } from "../ProviderLogo";
 import { Stack } from "../Stack";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./Select";
 
@@ -10,8 +11,8 @@ export const meta: ShowcaseMeta = {
 };
 
 const labels = {
-  "en-US": { choose: "Choose", one: "One", two: "Two", local: "Local", worktree: "Worktree" },
-  "ko-KR": { choose: "선택", one: "하나", two: "둘", local: "로컬", worktree: "워크트리" },
+  "en-US": { choose: "Choose", one: "One", two: "Two", local: "Local", worktree: "Worktree", provider: "Provider" },
+  "ko-KR": { choose: "선택", one: "하나", two: "둘", local: "로컬", worktree: "워크트리", provider: "제공자" },
 } as const;
 
 function SelectExample({ locale, value }: ShowcaseRenderContext & { value?: string }) {
@@ -24,6 +25,28 @@ function SelectExample({ locale, value }: ShowcaseRenderContext & { value?: stri
       <SelectContent>
         <SelectItem value="one">{text.one}</SelectItem>
         <SelectItem value="two">{text.two}</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
+const PROVIDERS = [
+  { value: "openai", label: "OpenAI", logo: "openai" },
+  { value: "anthropic", label: "Anthropic", logo: "claude" },
+  { value: "google", label: "Google", logo: "gemini" },
+] as const;
+
+function ProviderSelect({ locale }: ShowcaseRenderContext) {
+  const selected = PROVIDERS[1];
+  return (
+    <Select defaultValue={selected.value}>
+      <SelectTrigger aria-label={labels[locale].provider}>
+        <SelectValue icon={<ProviderLogo name={selected.logo} />}>{selected.label}</SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {PROVIDERS.map((provider) => (
+          <SelectItem key={provider.value} value={provider.value} icon={<ProviderLogo name={provider.logo} />}>{provider.label}</SelectItem>
+        ))}
       </SelectContent>
     </Select>
   );
@@ -52,6 +75,12 @@ export const stories: ShowcaseStory[] = [
         </SelectContent>
       </Select>
     ),
+  },
+  {
+    // Settings > Models: each service keeps its logo in the list and the trigger.
+    name: "With icons (service logos)",
+    widths: ["375", "app"],
+    render: (context) => <ProviderSelect {...context} />,
   },
   {
     name: "Disabled option",

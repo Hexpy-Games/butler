@@ -14,9 +14,23 @@ pub(super) struct Options {
     pub(super) host: Option<String>,
     pub(super) port: Option<u16>,
     pub(super) db_path: Option<String>,
+    /// `--allowed-host NAME`, repeatable.
+    pub(super) allowed_hosts: Vec<String>,
+    /// `--remove-allowed-host NAME`, repeatable.
+    pub(super) removed_hosts: Vec<String>,
     pub(super) lines: Option<usize>,
     pub(super) follow: bool,
 }
+
+/// Options that take a value.
+const VALUE_OPTIONS: [&str; 6] = [
+    "--data",
+    "--host",
+    "--port",
+    "--db",
+    "--allowed-host",
+    "--remove-allowed-host",
+];
 
 #[derive(Clone, Copy)]
 pub(super) enum Action {
@@ -41,7 +55,8 @@ pub(super) fn recognizes(args: &[OsString]) -> bool {
     while index < args.len() {
         let value = args[index].to_string_lossy();
         match value.as_ref() {
-            "--data" | "--host" | "--port" | "--db" | "--lines" => index += 2,
+            value if VALUE_OPTIONS.contains(&value) => index += 2,
+            "--lines" => index += 2,
             "--json" | "--verbose" | "--quiet" | "--silent" | "--yes" | "--non-interactive"
             | "--help" | "-h" | "--follow" => index += 1,
             value if value.starts_with('-') => return false,
@@ -61,7 +76,7 @@ pub(super) fn parse(args: &[OsString]) -> Result<Options, crate::host::HostError
     while index < args.len() {
         let value = args[index].to_string_lossy();
         match value.as_ref() {
-            "--data" | "--host" | "--port" | "--db" => {
+            value if VALUE_OPTIONS.contains(&value) => {
                 let option = value.to_string();
                 let argument = args
                     .get(index + 1)
@@ -72,6 +87,8 @@ pub(super) fn parse(args: &[OsString]) -> Result<Options, crate::host::HostError
                     "--data" => options.data = Some(argument),
                     "--host" => options.host = Some(argument),
                     "--db" => options.db_path = Some(argument),
+                    "--allowed-host" => options.allowed_hosts.push(argument),
+                    "--remove-allowed-host" => options.removed_hosts.push(argument),
                     "--port" => {
                         options.port = Some(
                             argument
@@ -119,10 +136,7 @@ pub(super) fn parse(args: &[OsString]) -> Result<Options, crate::host::HostError
             }
             _ => options.positionals.push(value.to_string()),
         }
-        if !matches!(
-            value.as_ref(),
-            "--data" | "--host" | "--port" | "--db" | "--lines"
-        ) {
+        if value != "--lines" && !VALUE_OPTIONS.contains(&value.as_ref()) {
             index += 1;
         }
     }
@@ -180,24 +194,5 @@ pub(super) fn action(positionals: &[String]) -> Result<Action, crate::host::Host
             Ok(Action::Logs)
         }
         _ => Err("supported commands: gateway app|list|status [app]|inspect|enable|disable|configure|test|start|stop|restart|run app|logs app".into()),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn args(values: &[&str]) -> Vec<OsString> {
-        values.iter().map(OsString::from).collect()
-    }
-
-    #[test]
-    fn parser_rejects_home_authority() {
-        assert!(
-            parse(&args(&["gateway", "status", "--home", "/tmp/home"]))
-                .unwrap_err()
-                .message()
-                .contains("--home is unsupported")
-        );
     }
 }

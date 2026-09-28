@@ -190,6 +190,7 @@ impl AppModelCatalog {
             "auth",
             "auth/model-provider-credentials.json",
             "auth/custom-model-credentials.json",
+            "auth/credential-store.json",
         ] {
             let target = self
                 .installation

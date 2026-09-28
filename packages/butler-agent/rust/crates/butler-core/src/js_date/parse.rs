@@ -122,6 +122,3 @@ fn legacy_zone(token: Token, scanner: &mut Scanner<'_>, zone: &mut Zone) -> Opti
     }
     Some(())
 }
-
-#[cfg(test)]
-mod tests;

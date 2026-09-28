@@ -11,15 +11,17 @@
 //! Each domain keeps one neutral facade with `unix` and `windows`
 //! implementations beside it:
 //!
-//! - [`process_control`]: process groups, group signals, exit signals and
-//!   liveness.
-//! - [`instance`]: the instance lock, the host name and `ps` start times.
+//! - [`process_control`]: process groups, group signals, exit signals,
+//!   liveness, detached processes and the stop requests a service receives.
+//! - [`instance`]: the instance lock, host facts, process identity and
+//!   stopping another instance.
 //! - [`command_sandbox`]: the shells commands run in and the sandbox that
 //!   enforces read-only and write-protected access.
 //! - [`secure_fs`]: owner-only files and directories, atomic replacement,
 //!   no-follow opens, directory exchange and file identity.
 //! - [`user_dirs`]: the user's home and the system's own folders.
 //! - [`launcher`]: runnable programs and the release platform tag.
+//! - [`network`]: the machine's own interface addresses.
 //!
 //! macOS and Linux implement the behavior Butler shipped with. Windows
 //! compiles; a capability it does not have yet has a flag (such as
@@ -34,6 +36,8 @@
 pub mod command_sandbox;
 pub mod instance;
 pub mod launcher;
+pub mod network;
 pub mod process_control;
+pub mod secrets;
 pub mod secure_fs;
 pub mod user_dirs;

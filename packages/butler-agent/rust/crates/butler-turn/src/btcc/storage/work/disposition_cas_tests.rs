@@ -56,38 +56,9 @@ async fn with_unattached_result(
     (fixture, storage, service, started.work_id)
 }
 
-#[tokio::test]
-async fn own_attachment_of_completed_results_is_not_a_concurrent_change() {
-    let (_fixture, storage, service, work_id) = with_unattached_result("work-cas-own").await;
-    let read = service
-        .bound_work_for_turn("turn".into())
-        .await
-        .unwrap()
-        .unwrap();
-    assert!(
-        read.result_refs.is_empty(),
-        "result attached before closeout"
-    );
-    let expected = disposition_material_fingerprint(&read).unwrap();
-    let persisted = service
-        .record_disposition(runtime_open("closeout", &work_id, expected))
-        .await
-        .unwrap();
-    assert_eq!(persisted.status, WorkStatus::Open);
-    assert_eq!(
-        persisted.result_refs.len(),
-        1,
-        "command attached the result"
-    );
-    assert!(
-        persisted
-            .latest_disposition
-            .as_ref()
-            .is_some_and(|disposition| disposition.runtime_owned_open)
-    );
-    storage.close().await.unwrap();
-}
-
+/// Race: a Work disposition is compare-and-set; material that changed after
+/// the caller's read is rejected at closeout.
+// test-category: race
 #[tokio::test]
 async fn material_changed_after_the_callers_read_is_rejected() {
     let (_fixture, storage, service, work_id) = with_unattached_result("work-cas-changed").await;

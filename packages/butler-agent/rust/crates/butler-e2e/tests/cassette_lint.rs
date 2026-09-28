@@ -62,3 +62,93 @@ fn cassettes_are_recorder_written_and_sanitized() {
         findings.join("\n")
     );
 }
+
+/// The lint rejects every shape an identifier or secret has taken in usage
+/// and token replies, raw or JSON-string-escaped inside a cassette.
+// test-category: security
+#[test]
+fn lint_rejects_identifiers_tokens_keys_and_reset_times() {
+    let body = |value: serde_json::Value| {
+        serde_json::json!({"response": {"chunks": [{"text": value.to_string()}]}}).to_string()
+    };
+    let rejected = [
+        (
+            "numeric account id",
+            body(serde_json::json!({"account_id": 12_345_678})),
+        ),
+        (
+            "chatgpt_account_id",
+            body(serde_json::json!({"chatgpt_account_id": "a1b2c3"})),
+        ),
+        ("orgId", body(serde_json::json!({"orgId": "org-abc"}))),
+        (
+            "organizationId",
+            body(serde_json::json!({"organizationId": "abc"})),
+        ),
+        (
+            "bare id, account",
+            body(serde_json::json!({"id": "user-abcdef"})),
+        ),
+        (
+            "bare id, number",
+            body(serde_json::json!({"id": 98_765_432})),
+        ),
+        (
+            "escaped value",
+            r#"{"text": "{\"account_id\":\"\\u0061bc\"}"}"#.to_owned(),
+        ),
+        (
+            "SSE data line",
+            serde_json::json!({"response": {"chunks": [{"text": "data: {\"user_id\":\"u1\"}\n\n"}]}})
+                .to_string(),
+        ),
+        (
+            "refresh token",
+            body(serde_json::json!({"refresh_token": "rt_abc"})),
+        ),
+        ("id token", body(serde_json::json!({"id_token": "opaque"}))),
+        (
+            "Z.AI key",
+            "key 0123456789abcdef0123456789abcdef.AbCdEfGh12345678".to_owned(),
+        ),
+        (
+            "bare Authorization",
+            r#"[["authorization", "0123456789abcdef.ghij"]]"#.to_owned(),
+        ),
+        (
+            "Authorization field",
+            body(serde_json::json!({"Authorization": "abc"})),
+        ),
+        (
+            "uuid",
+            "\"session\": \"3f2504e0-4f89-11d3-9a0c-0305e82c3301\"".to_owned(),
+        ),
+        (
+            "absolute reset",
+            body(serde_json::json!({"nextResetTime": 1_790_906_806_983_i64})),
+        ),
+        (
+            "absolute reset_at",
+            body(serde_json::json!({"reset_at": 1_791_095_754})),
+        ),
+    ];
+    for (case, text) in &rejected {
+        assert!(!sanitize::lint(text).is_empty(), "{case}: {text}");
+    }
+    let accepted = [
+        body(serde_json::json!({"account_id": "{{ACCOUNT}}", "email": "{{EMAIL}}"})),
+        body(serde_json::json!({"id": "resp_0168305ded1acae4", "refresh_token": "{{TOKEN}}"})),
+        body(
+            serde_json::json!({"nextResetTime": "{{EPOCH_MS+313200000}}", "reset_after_seconds": 3600}),
+        ),
+        r#"{"prompt_cache_key":"3f2504e0-4f89-11d3-9a0c-0305e82c3301"}"#.to_owned(),
+        r#"[["authorization", "Bearer {{TOKEN}}"]]"#.to_owned(),
+    ];
+    for text in &accepted {
+        assert!(
+            sanitize::lint(text).is_empty(),
+            "{text}: {:?}",
+            sanitize::lint(text)
+        );
+    }
+}

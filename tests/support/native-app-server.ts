@@ -19,6 +19,7 @@ import { createServer, type Server } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { onboardingCompletedPatch } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 
 export type StubModelRequest = { stream: boolean; messages: unknown[]; body: Record<string, unknown> };
 
@@ -32,6 +33,8 @@ export type NativeAppServerOptions = {
   readyTimeoutMs?: number;
   /** Exact renderer origins (`http://127.0.0.1:<port>`, no trailing slash) serving the UI from elsewhere. */
   devOrigins?: string[];
+  /** Extra agent environment (e.g. local sign-in and local-server probe addresses). */
+  env?: Record<string, string>;
 };
 
 /** A Playwright BrowserContext (or anything with its `addCookies`). */
@@ -226,6 +229,25 @@ export function writeOnboardingComplete(butlerData: string): void {
   }, null, 2)}\n`, { mode: 0o600 });
 }
 
+/**
+ * Marks the app's first run as done at the current consent version so smokes
+ * open the workspace. Agents before #230 have no `settings.onboarding`; for
+ * them the smokes' legacy renderer flag keeps doing that job.
+ */
+async function completeAppOnboarding(url: string, token: string): Promise<void> {
+  const headers = { "content-type": "application/json", authorization: `Bearer ${token}` };
+  const settings = await fetch(`${url}settings`, { headers }).then((response) => response.json()).catch(() => null) as
+    { data?: { onboarding?: Record<string, unknown> | null } } | null;
+  const onboarding = settings?.data?.onboarding;
+  if (!onboarding) return;
+  const now = new Date().toISOString();
+  await fetch(`${url}settings`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(onboardingCompletedPatch(onboarding, now, now)),
+  });
+}
+
 async function startStubModel(
   reply: NativeAppServerOptions["stubReply"],
   calls: StubModelRequest[],
@@ -314,6 +336,7 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
         BUTLER_APP_SERVER_PORT: String(port),
         BUTLER_METRICS_ENABLED: "0",
         ...(options.devOrigins?.length ? { BUTLER_APP_DEV_ORIGIN: options.devOrigins.join(",") } : {}),
+        ...options.env,
       },
     },
   );
@@ -346,6 +369,7 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
     }
     await new Promise((done) => setTimeout(done, 200));
   }
+  if (options.onboardingComplete !== false && token) await completeAppOnboarding(url, token);
 
   const authHeaders = { authorization: `Bearer ${token}` };
   const connectUrl = async (): Promise<string> => {

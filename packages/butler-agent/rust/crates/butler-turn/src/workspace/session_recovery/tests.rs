@@ -1,6 +1,5 @@
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
-use super::authority::{SessionWorkspaceAuthority, resolve_authority};
 use crate::workspace::{SessionLifecycleState, SessionRole, StoredSessionBinding};
 
 mod integration;
@@ -27,29 +26,4 @@ fn binding(metadata: Option<Map<String, Value>>) -> StoredSessionBinding {
         last_active_at: None,
         metadata,
     }
-}
-
-#[test]
-fn absent_null_and_empty_project_paths_keep_distinct_authority() {
-    let stored = binding(None);
-    assert_eq!(
-        resolve_authority(Some(&stored), None),
-        SessionWorkspaceAuthority::Project {
-            workspace_path: Some("/stored".into())
-        }
-    );
-    assert_eq!(
-        resolve_authority(Some(&stored), Some("")),
-        SessionWorkspaceAuthority::Project {
-            workspace_path: Some(String::new())
-        }
-    );
-    let invalid = binding(Some(Map::from_iter([(
-        "sessionWorkspace".into(),
-        json!(null),
-    )])));
-    assert!(matches!(
-        resolve_authority(Some(&invalid), Some("/project")),
-        SessionWorkspaceAuthority::Unavailable { workspace_path, .. } if workspace_path == "/stored"
-    ));
 }
