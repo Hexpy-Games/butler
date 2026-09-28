@@ -57,7 +57,7 @@ pub(super) async fn execute(
             return Ok(failure(
                 "tool_not_admitted",
                 "The edit is not allowed for this task.",
-                "Use only the exact mutation capability in the delegated packet.",
+                "Use only the changes this task allows.",
             ));
         }
         if edits
@@ -66,7 +66,7 @@ pub(super) async fn execute(
         {
             return Ok(failure(
                 "invalid_arguments",
-                "The requested path is outside the delegated mutation scope.",
+                "That file is outside the files this task may change.",
                 "Retry only within the files this task may change.",
             ));
         }
@@ -123,7 +123,7 @@ pub(super) fn no_change(message: impl Into<String>) -> Value {
 fn scope_failure(root: &std::path::Path, path: &str) -> Value {
     let mut value = failure(
         "invalid_arguments",
-        "The requested path is outside the delegated mutation scope.",
+        "That file is outside the files this task may change.",
         "Retry only within the files this task may change.",
     );
     if let Some(path) = safe_path(root, path) {
@@ -136,7 +136,7 @@ fn admission_failure(root: &std::path::Path, path: &str) -> Value {
     let mut value = failure(
         "tool_not_admitted",
         "The edit is not allowed for this task.",
-        "Use only the exact mutation capability in the delegated packet.",
+        "Use only the changes this task allows.",
     );
     if let Some(path) = safe_path(root, path) {
         value["path"] = json!(path);

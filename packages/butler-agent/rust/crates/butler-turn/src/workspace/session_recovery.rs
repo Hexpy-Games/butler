@@ -159,6 +159,7 @@ impl SessionWorkspaceRecovery {
     ) -> WorkspaceResult<Option<ProjectGitStatus>> {
         git_status::project_git_status(
             &self.commands,
+            &self.files,
             &self.host_environment,
             workspace_path,
             abort,

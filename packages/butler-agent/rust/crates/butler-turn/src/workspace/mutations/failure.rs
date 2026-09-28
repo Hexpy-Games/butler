@@ -45,7 +45,7 @@ pub(super) fn new(path: Option<String>, error: &'static str) -> MutationFailure 
         ),
         "tool_not_admitted" => (
             "The file mutation is not allowed for this task.",
-            "Use only the exact mutation capability in the delegated packet.",
+            "Use only the changes this task allows.",
         ),
         "invalid_arguments" => (
             "The file mutation arguments are invalid.",

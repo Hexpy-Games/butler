@@ -1,7 +1,9 @@
 //! PRJ-04 (#231) — a project's Git state in the API: the project list says
 //! whether the folder is a Git repository and its branch (read from HEAD,
 //! no process per project), and the project dashboard adds uncommitted
-//! changes and the commits ahead of and behind the upstream branch.
+//! changes and the commits ahead of and behind the upstream branch,
+//! without ever running a program the repository config names (PRJ-05),
+//! and in time when Git is missing or hangs (PRJ-06).
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -144,5 +146,113 @@ async fn prj_04_project_git_state_in_list_and_dashboard() -> Result<(), HarnessE
     if !plain_is_repo {
         assert_eq!(plain_git, state(false, None, None, None, None));
     }
+    s.finish().await
+}
+
+/// Initializes a repository with one commit of `tracked.txt` on `main`.
+fn init_repository(folder: &Path) -> Result<(), HarnessError> {
+    git(folder, &["init", "-q"]);
+    std::fs::write(folder.join("tracked.txt"), "first\n")?;
+    git(folder, &["add", "tracked.txt"]);
+    git(folder, &["commit", "-q", "-m", "first"]);
+    Ok(())
+}
+
+/// Writes an executable shell script: `lines`, one per line.
+fn script(path: &Path, lines: &[&str]) -> Result<(), HarnessError> {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::write(path, format!("#!/bin/sh\n{}\n", lines.join("\n")))?;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))?;
+    Ok(())
+}
+
+/// PRJ-05 — the dashboard never runs a program the repository's own config
+/// names: an fsmonitor hook in `.git/config` is not executed (the status
+/// is still read), and a repository with a content filter is not read at
+/// all (its status stays unknown; `is_repo` and `branch` come from HEAD).
+#[tokio::test]
+async fn prj_05_repository_config_never_runs_programs() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("PRJ-05")?.start().await?;
+    let (monitored_id, monitored) = project(&s, "Monitored").await?;
+    init_repository(&monitored)?;
+    let fsmonitor_ran = s.sandbox.root.join("fsmonitor-ran");
+    let hook = s.sandbox.root.join("fsmonitor-hook.sh");
+    let touch = format!("touch '{}'", fsmonitor_ran.display());
+    script(&hook, &[&touch, "exit 1"])?;
+    git(
+        &monitored,
+        &["config", "core.fsmonitor", hook.to_str().unwrap()],
+    );
+    std::fs::write(monitored.join("draft.txt"), "untracked")?;
+    assert_eq!(
+        dashboard_git(&s, &monitored_id).await?,
+        state(true, Some("main"), Some(true), None, None)
+    );
+    assert!(!fsmonitor_ran.exists(), "the fsmonitor hook ran");
+
+    let (filtered_id, filtered) = project(&s, "Filtered").await?;
+    init_repository(&filtered)?;
+    let filter_ran = s.sandbox.root.join("filter-ran");
+    let filter = s.sandbox.root.join("filter.sh");
+    let touch = format!("touch '{}'", filter_ran.display());
+    script(&filter, &[&touch, "cat"])?;
+    git(
+        &filtered,
+        &["config", "filter.evil.clean", filter.to_str().unwrap()],
+    );
+    std::fs::write(filtered.join(".gitattributes"), "* filter=evil\n")?;
+    std::fs::write(filtered.join("tracked.txt"), "changed\n")?;
+    assert_eq!(
+        dashboard_git(&s, &filtered_id).await?,
+        state(true, Some("main"), None, None, None)
+    );
+    assert!(!filter_ran.exists(), "the content filter ran");
+    s.finish().await
+}
+
+/// PRJ-06 — without Git, or with a Git that hangs, the dashboard still
+/// answers in time: `is_repo` and `branch` from HEAD, the rest unknown.
+#[tokio::test]
+async fn prj_06_missing_or_hanging_git_leaves_status_unknown() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let expected = state(true, Some("main"), None, None, None);
+
+    let setup = Setup::new("PRJ-06-MISSING")?;
+    let no_git = setup.sandbox.root.join("no-git-bin");
+    std::fs::create_dir_all(&no_git)?;
+    let s = setup
+        .env("PATH", no_git.display().to_string())
+        .start()
+        .await?;
+    let (id, folder) = project(&s, "No Git").await?;
+    init_repository(&folder)?;
+    assert_eq!(listed_git(&s, &id).await?, expected, "git missing: list");
+    assert_eq!(dashboard_git(&s, &id).await?, expected, "git missing");
+    s.finish().await?;
+
+    let setup = Setup::new("PRJ-06-HANG")?;
+    let bin = setup.sandbox.root.join("hanging-git-bin");
+    std::fs::create_dir_all(&bin)?;
+    script(
+        &bin.join("git"),
+        &[
+            "for argument in \"$@\"; do",
+            "  [ \"$argument\" = status ] && exec sleep 30",
+            "done",
+            "exec /usr/bin/git \"$@\"",
+        ],
+    )?;
+    let path = format!("{}:/usr/bin:/bin:/usr/sbin:/sbin", bin.display());
+    let s = setup.env("PATH", path).start().await?;
+    let (id, folder) = project(&s, "Hanging Git").await?;
+    init_repository(&folder)?;
+    let started = std::time::Instant::now();
+    assert_eq!(dashboard_git(&s, &id).await?, expected, "git hangs");
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(8),
+        "the dashboard waited {:?} for git",
+        started.elapsed()
+    );
     s.finish().await
 }

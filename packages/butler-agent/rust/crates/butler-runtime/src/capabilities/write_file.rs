@@ -49,7 +49,7 @@ pub(super) async fn execute(
             &requested,
             "tool_not_admitted",
             "The write is not allowed for this task.",
-            "Use only the exact mutation capability in the delegated packet.",
+            "Use only the changes this task allows.",
         ));
     }
     if !arguments::scope(&requested, input.mutation_scope) {
@@ -57,7 +57,7 @@ pub(super) async fn execute(
             &root,
             &requested,
             "invalid_arguments",
-            "The requested path is outside the delegated mutation scope.",
+            "That file is outside the files this task may change.",
             "Retry only within the files this task may change.",
         ));
     }
