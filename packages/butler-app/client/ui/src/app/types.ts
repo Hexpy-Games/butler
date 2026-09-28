@@ -1577,6 +1577,8 @@ export interface AutomationSummary {
   target_label: string;
   state: string;
   interval_label: string;
+  /** The access the schedule's runs get; it never changes the target conversation's mode. */
+  access_mode: AccessMode;
 }
 
 export interface AutomationRunSummary {
