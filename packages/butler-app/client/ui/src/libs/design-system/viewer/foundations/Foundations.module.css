@@ -14,6 +14,32 @@
 .chapterHead {
   display: grid;
   gap: var(--space-lg);
+  container-type: inline-size;
+}
+
+/* Chapter hero: beside the title block on wide pages, under it on narrow ones. */
+.chapterHeadGrid {
+  display: grid;
+  gap: var(--space-2xl);
+  min-width: 0;
+}
+
+.chapterHeadText {
+  display: grid;
+  align-content: start;
+  gap: var(--space-lg);
+  min-width: 0;
+}
+
+.chapterHero {
+  min-width: 0;
+}
+
+@container (width >= 52rem) {
+  .chapterHeadGrid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 24rem);
+    align-items: center;
+  }
 }
 
 .chapterKicker {

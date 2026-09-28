@@ -59,7 +59,7 @@ mod tests {
             assert!(is_loopback_endpoint(endpoint), "{endpoint}");
         }
         for endpoint in [
-            "http://192.168.0.10:18765",
+            "http://192.0.2.10:18765",
             "http://0.0.0.0:18765",
             "http://example.com:18765",
             "not a url",
