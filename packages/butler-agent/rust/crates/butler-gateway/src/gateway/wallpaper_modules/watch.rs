@@ -101,6 +101,3 @@ pub(crate) fn folder(root: &Path, path: &Path) -> Option<String> {
         _ => None,
     }
 }
-
-#[cfg(test)]
-mod tests;

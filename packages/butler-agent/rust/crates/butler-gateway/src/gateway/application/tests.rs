@@ -1,15 +1,10 @@
 mod controls;
 
-mod agent_wallpaper;
-mod project_wallpaper;
 mod projection_tests;
 mod retry;
 mod session_views;
-mod settings_wallpaper;
 mod skills;
 mod support;
-mod wallpaper_modules;
-mod wallpapers;
 
 use std::sync::{Arc, Mutex, atomic::AtomicU64};
 

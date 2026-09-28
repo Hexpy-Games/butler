@@ -46,26 +46,6 @@ pub(super) async fn artifact_request(address: std::net::SocketAddr) -> String {
     .await
 }
 
-/// An App over its own data directory whose message files are real.
-pub(crate) async fn open_app_with_files(
-    data: &Path,
-    files: Arc<dyn AppMessageFileStorage>,
-) -> AppApplication {
-    let mut dependencies = fakes::test_dependencies();
-    dependencies.message_files = files;
-    AppApplication::open(
-        AppApplicationConfig {
-            database_path: data.join("app.sqlite"),
-            butler_data: data.to_owned(),
-            project_workspace_root: data.to_owned(),
-            folder_selection_secret: None,
-        },
-        dependencies,
-    )
-    .await
-    .unwrap()
-}
-
 pub(crate) async fn open_app(path: &Path) -> AppApplication {
     AppApplication::open(
         AppApplicationConfig {

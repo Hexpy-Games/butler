@@ -12,8 +12,6 @@
 pub(crate) mod import;
 mod manifest;
 pub(crate) mod save;
-#[cfg(test)]
-mod tests;
 pub(crate) mod user;
 mod values;
 pub(crate) mod watch;

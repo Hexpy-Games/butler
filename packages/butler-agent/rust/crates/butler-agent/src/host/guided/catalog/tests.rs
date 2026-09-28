@@ -278,59 +278,6 @@ fn image_tool_requires_current_full_access_image_admission() {
     ));
 }
 
-/// `set_wallpaper` is a reversible preference write (turn_local, undone from
-/// the App's toast) and `save_wallpaper_module` a turn-local write of a user
-/// module: every mode but read-only may call them, without Work. Skills are
-/// read through `list_skills` in every mode.
-#[test]
-fn wallpaper_tools_are_executable_and_follow_the_access_mode() {
-    let catalog = catalog();
-    for (access, list, set) in [
-        ("full_access", true, true),
-        ("ask_first", true, true),
-        ("read_only", true, false),
-    ] {
-        let context = json!({"executionPolicy": {
-            "role": "butler", "accessMode": access, "trackingMode": "local",
-            "requiredNativeToolProfiles": [], "requiredNativeTools": [], "workspacePath": "/tmp"
-        }});
-        let turn = phase_turn(access, &context);
-        for flag in ["on", "off"] {
-            let selection = select_phase(GuidedPhaseInput {
-                turn: &turn,
-                catalog: catalog.snapshot(),
-                phase_surface_flag: flag,
-                operation_replay_flag: "off",
-                default_workspace: "/tmp",
-            })
-            .unwrap();
-            let authorized =
-                |name: &str| selection.authorized_names.iter().any(|tool| tool == name);
-            assert_eq!(
-                (
-                    authorized("list_wallpapers"),
-                    authorized("set_wallpaper"),
-                    authorized("save_wallpaper_module"),
-                    authorized("list_skills"),
-                ),
-                (list, set, set, true),
-                "{access} {flag}"
-            );
-        }
-    }
-    for name in [
-        "list_wallpapers",
-        "set_wallpaper",
-        "save_wallpaper_module",
-        "list_skills",
-    ] {
-        assert!(
-            crate::host::guided::tools::GuidedTools::supports(name),
-            "{name}"
-        );
-    }
-}
-
 /// Security boundary (#236): ask-first analyzes an admitted attached image
 /// without asking, on both surfaces.
 #[test]

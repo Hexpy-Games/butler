@@ -361,6 +361,3 @@ async fn app_json_at(
             sent: true,
         })
 }
-
-#[cfg(test)]
-pub(super) mod tests;

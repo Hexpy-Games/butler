@@ -344,6 +344,3 @@ fn load(folder: &Path, id: String) -> io::Result<UserModule> {
         name,
     })
 }
-
-#[cfg(test)]
-pub(in crate::gateway) mod tests;

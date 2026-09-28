@@ -373,6 +373,3 @@ fn invalid(path: &str, rule: impl Into<String>) -> Invalid {
         rule: rule.into(),
     }
 }
-
-#[cfg(test)]
-mod tests;

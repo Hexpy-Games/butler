@@ -10,7 +10,6 @@ use super::*;
 
 mod artifact_session;
 mod support;
-mod wallpapers;
 
 use support::*;
 

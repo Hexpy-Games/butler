@@ -40,18 +40,6 @@ impl ActiveAppEndpoint {
         *self.current.write() = Some(snapshot);
     }
 
-    /// Points at a test server.
-    #[cfg(test)]
-    pub(crate) fn publish_for_test(&self, base_url: String, local_auth: LocalAuthConfig) {
-        *self.current.write() = Some(ActiveAppEndpointSnapshot {
-            base_url,
-            local_auth,
-            configured_host: "127.0.0.1".into(),
-            configured_port: 0,
-            database_path: PathBuf::new(),
-        });
-    }
-
     pub(crate) fn clear(&self) {
         *self.current.write() = None;
     }

@@ -24,8 +24,6 @@ use crate::gateway::{
     AppWallpaperVariant, ApplicationFuture, GatewayApplicationError, GatewayWallpapers,
     wallpapers::{AppWallpaperModuleSaveRequest, AppWallpaperModuleSaved, is_asset_id, not_found},
 };
-#[cfg(test)]
-pub(super) use agent::default_dim_for;
 pub(super) use change::{EVENT as CHANGED, WallpaperOrigin, payload as change_payload};
 use rows::AssetRow;
 

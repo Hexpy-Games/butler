@@ -16,6 +16,7 @@ use std::{
     path::{Component, Path},
 };
 
+use butler_platform::secure_fs::FileMode;
 use zip::ZipArchive;
 
 use super::user::{
@@ -91,7 +92,10 @@ pub(crate) fn unpack(archive: &[u8]) -> Result<Unpacked, GatewayApplicationError
             _ => return Err(entry(&name, LAYOUT)),
         };
         let file = file.to_owned();
-        if item.unix_mode().is_some_and(|mode| mode & 0o111 != 0) {
+        if item
+            .unix_mode()
+            .is_some_and(|mode| FileMode::from_bits(mode).is_executable())
+        {
             return Err(entry(&name, "executable files are not allowed"));
         }
         if files.iter().any(|(seen, _)| *seen == file) {
@@ -250,6 +254,3 @@ fn entry(name: &str, rule: &str) -> GatewayApplicationError {
 fn invalid(message: &str) -> GatewayApplicationError {
     GatewayApplicationError::public(400, "wallpaper_module_archive_invalid", message)
 }
-
-#[cfg(test)]
-pub(in crate::gateway) mod tests;

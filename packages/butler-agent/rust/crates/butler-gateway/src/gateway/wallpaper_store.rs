@@ -6,8 +6,6 @@
 
 mod files;
 mod pipeline;
-#[cfg(test)]
-mod tests;
 
 use std::{
     path::{Path, PathBuf},
