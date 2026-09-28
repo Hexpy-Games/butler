@@ -3,7 +3,7 @@ import { annotTracks } from "./Annotations";
 import { HOLD, SETTLE, STEP, TRANSITION } from "./beats";
 import { reveal, revealBeats, select, sweep } from "./Reveal";
 import { buildFrames, posterZoom } from "./frames";
-import { gatherFlights, gatherKeys } from "./gather";
+import { gatherFlights, gatherKeys, visibleBox } from "./gather";
 import { introCamera } from "./Intro";
 import { buildViews, CELL, columnViews, fieldAway, finalePose, REST, scenePath, viewCell } from "./scene";
 import { sketchTracks } from "./Sketch";
@@ -104,7 +104,7 @@ export function chapterTracks(spec: ChapterSpec, g0: Geometry): { beats: number;
     keys: [{ at: 0, ...offset(name), o: 1 }, { at: leave + 0.2 }, { at: leave + 1, o: 0, ease: "accelerate" }, { at: t.loop + TRANSITION }, { at: t.loop + TRANSITION + 0.01, o: 1 }, { at: close }],
   }));
   // The field shows in its scene cell, waits away during the builds, and gathers with the components (gather.ts).
-  const flights = gatherFlights({ field: g0.field, ...g0.panels }, spec.builds.at(-1)!.id, t.finale);
+  const flights = gatherFlights({ field: g0.field, ...g0.panels }, spec.builds.at(-1)!.id, t.finale, visibleBox(canvas, rest));
   const scene = { x: offset("field").x / pz, y: offset("field").y / pz };
   const awayFrom = fieldAway(canvas);
   const away = { x: (awayFrom.x - center(g0.field).x + canvasCenter.x) / pz, y: (awayFrom.y - center(g0.field).y + canvasCenter.y) / pz };
