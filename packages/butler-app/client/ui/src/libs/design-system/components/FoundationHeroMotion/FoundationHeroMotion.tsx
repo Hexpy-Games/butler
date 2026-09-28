@@ -12,7 +12,7 @@ export type FoundationHeroVariant = (typeof FOUNDATION_HERO_VARIANTS)[number];
  * Feature heroes: full width of their column at 16:9 (up to 36rem tall),
  * portrait 19:32 under a 45rem column, built on the shared chapter engine.
  */
-export const FOUNDATION_FEATURE_HEROES: ReadonlySet<FoundationHeroVariant> = new Set<FoundationHeroVariant>(["color", "typography", "spacing", "sizing"]);
+export const FOUNDATION_FEATURE_HEROES: ReadonlySet<FoundationHeroVariant> = new Set<FoundationHeroVariant>(["color", "typography", "spacing", "sizing", "radius"]);
 
 /** Language of the sample lines some heroes set (the type specimen). */
 export type FoundationHeroLang = "en" | "ko";

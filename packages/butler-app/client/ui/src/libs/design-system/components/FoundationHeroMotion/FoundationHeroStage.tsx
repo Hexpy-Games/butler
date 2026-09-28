@@ -8,7 +8,7 @@ import { IconographyHero } from "./heroes/IconographyHero";
 import { LayersHero } from "./heroes/LayersHero";
 import { LayoutHero } from "./heroes/LayoutHero";
 import { MotionHero } from "./heroes/MotionHero";
-import { RadiusHero } from "./heroes/RadiusHero";
+import { RadiusHero } from "./heroes/radius/RadiusHero";
 import { SizingHero } from "./heroes/sizing/SizingHero";
 import { SpacingHero } from "./heroes/spacing/SpacingHero";
 import { TypographyHero } from "./heroes/TypographyHero";

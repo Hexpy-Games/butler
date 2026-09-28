@@ -99,7 +99,7 @@ export function shape(annot: Annot, marks: Marks): Shape | null {
       if (r < 1) return null;
       const [ox, oy] = [b.x + r, b.y + r];
       const d = `M${round(ox - r)} ${round(oy)}A${round(r)} ${round(r)} 0 1 0 ${round(ox + r)} ${round(oy)}A${round(r)} ${round(r)} 0 1 0 ${round(ox - r)} ${round(oy)}`;
-      return { guides: [{ t: "path", d, len: Math.ceil(2 * Math.PI * r) }], anchor: { x: ox - r * 0.71, y: oy - r * 0.71 }, note: { x: ox, y: b.y - 8, place: "above" } };
+      return { guides: [{ t: "path", d, len: Math.ceil(2 * Math.PI * r) }], anchor: { x: ox - r * 0.71, y: oy - r * 0.71 }, note: { x: b.x - 10, y: b.y + Math.min(r, 8), place: "left" } };
     }
     case "box": {
       const to = annot.inflateTo ? marks[annot.inflateTo] : undefined;

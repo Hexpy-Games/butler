@@ -1,0 +1,223 @@
+/* 05 Radius and elevation hero: the lab left of the poster (morphing
+   square, nested surfaces), the ladder field and the product grid. Canvas
+   px (see ../shared/grid.ts). */
+
+/* ---- The lab ---- */
+
+.lab {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  translate: -125% 0;
+}
+
+.labStage {
+  display: grid;
+  grid-template-columns: auto auto;
+  column-gap: var(--space-4xl);
+  align-items: center;
+}
+
+.morph {
+  display: grid;
+  justify-items: start;
+  row-gap: var(--space-lg);
+}
+
+.shapeStack {
+  display: grid;
+}
+
+/* The morphing square: one layer per radius, crossfaded; a circle rides the corner. */
+.shape {
+  position: relative;
+  grid-area: 1 / 1;
+  inline-size: calc(var(--space-4xl) * 4);
+  block-size: calc(var(--space-4xl) * 4);
+  border: 2px solid var(--accent);
+  border-radius: var(--r);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.shape + .shape {
+  opacity: 0;
+}
+
+.cornerGuide {
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  inline-size: min(calc(var(--r) * 2), calc(var(--space-4xl) * 4));
+  block-size: min(calc(var(--r) * 2), calc(var(--space-4xl) * 4));
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius-pill);
+}
+
+.morphRead {
+  display: grid;
+  row-gap: var(--space-xs);
+}
+
+.tokenStack {
+  display: inline-grid;
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+.tokenLayer {
+  grid-area: 1 / 1;
+}
+
+.tokenLayer + .tokenLayer {
+  opacity: 0;
+}
+
+.bigRead {
+  font-size: calc(var(--typo-metric-value-size) * 2);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--typo-metric-value-weight);
+  line-height: 1.2;
+}
+
+/* Nested surfaces: each pads the next, corners growing outward. */
+.nest {
+  position: relative;
+}
+
+.nBox {
+  position: relative;
+  display: grid;
+  padding: var(--space-2xl);
+}
+
+.nBox[data-level="window"] {
+  border-radius: var(--radius-composer);
+}
+
+.nBox[data-level="popover"] {
+  border-radius: var(--radius-popover);
+}
+
+.nBox[data-level="card"] {
+  border-radius: var(--radius-panel);
+}
+
+.nBox[data-level="button"] {
+  inline-size: calc(var(--control-height-md) * 3);
+  block-size: var(--control-height-md);
+  padding: 0;
+  border-radius: var(--radius-control);
+}
+
+.nOutline {
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid var(--accent);
+  border-radius: inherit;
+}
+
+/* ---- The field: corner tiles and lifting surfaces ---- */
+
+.field {
+  display: grid;
+  align-content: center;
+  row-gap: var(--space-3xl);
+}
+
+.radii,
+.levels {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--n, 5), minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+.levels {
+  --n: 3;
+}
+
+.cell {
+  display: grid;
+  justify-items: center;
+  row-gap: var(--space-sm);
+  min-width: 0;
+}
+
+.tile {
+  display: block;
+  inline-size: var(--space-4xl);
+  block-size: var(--space-4xl);
+  border: 1.5px solid var(--accent);
+  border-radius: var(--r);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.name {
+  max-inline-size: 100%;
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--font-size-1);
+  line-height: var(--line-height-tight);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.lift {
+  display: grid;
+  inline-size: 100%;
+}
+
+.lift > * {
+  grid-area: 1 / 1;
+}
+
+.flat,
+.lifted {
+  display: grid;
+}
+
+.levelLabel {
+  display: block;
+  padding-block: var(--space-md);
+  color: var(--text-secondary);
+  font-size: var(--typo-caption-size);
+  text-align: center;
+}
+
+/* ---- Components and poster ---- */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.menuRow {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--control-height-md);
+  padding-inline: var(--space-sm);
+}
+
+.product {
+  grid-template-areas:
+    "controls overlay"
+    "surface overlay"
+    "composer composer";
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: space-between;
+  gap: var(--space-2xl) var(--grid-gutter);
+}
+
+[data-layout="tall"] .product {
+  grid-template-areas:
+    "controls"
+    "surface"
+    "overlay"
+    "composer";
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  row-gap: var(--space-lg);
+}
