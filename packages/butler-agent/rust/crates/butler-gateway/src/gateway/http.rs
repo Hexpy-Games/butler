@@ -19,6 +19,7 @@ mod session_controls;
 mod session_queue;
 mod sessions;
 mod settings;
+mod setup;
 mod shell;
 mod skills;
 mod space_mutations;
@@ -255,37 +256,15 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
         }
         return Err(HttpError::public(404, "not_found", "Route not found."));
     }
-    if method == Method::POST
-        && let Some(turn_id) = uri
-            .path()
-            .strip_prefix("/turns/")
-            .and_then(|value| value.strip_suffix("/cancel"))
-            .filter(|value| !value.is_empty() && !value.contains('/'))
-    {
-        let result = state
-            .application
-            .cancel_turn(subsessions::decode_component(turn_id)?)
-            .await?;
-        return json(
-            StatusCode::ACCEPTED,
-            ApiEnvelope {
-                protocol_version: APP_PROTOCOL_VERSION,
-                data: result,
-            },
-        );
+    if let Some(response) = retry::cancel(&state, &method, &uri).await? {
+        return Ok(response);
+    }
+    if setup::handles(uri.path()) {
+        return setup::route(state, request, &uri).await;
     }
     match (method.clone(), uri.path()) {
-        (Method::GET, "/health") => json(
-            StatusCode::OK,
-            ApiEnvelope {
-                protocol_version: APP_PROTOCOL_VERSION,
-                data: HealthView {
-                    ok: true,
-                    service: "butler-app-server".to_owned(),
-                    protocol_version: APP_PROTOCOL_VERSION.to_owned(),
-                },
-            },
-        ),
+        (Method::GET, "/health") => health(),
+        (Method::GET, "/provider-quota") => monitors::provider_quota(state, &uri).await,
         (Method::GET, "/runtime-readiness") => {
             let mut readiness = state.application.runtime_readiness()?;
             readiness.authenticated_gateway_ready = true;
@@ -329,6 +308,20 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
         }
         _ => Err(HttpError::public(404, "not_found", "Route not found.")),
     }
+}
+
+fn health() -> Result<Response, HttpError> {
+    json(
+        StatusCode::OK,
+        ApiEnvelope {
+            protocol_version: APP_PROTOCOL_VERSION,
+            data: HealthView {
+                ok: true,
+                service: "butler-app-server".to_owned(),
+                protocol_version: APP_PROTOCOL_VERSION.to_owned(),
+            },
+        },
+    )
 }
 
 async fn post_message(

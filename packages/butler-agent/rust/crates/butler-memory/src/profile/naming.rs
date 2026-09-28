@@ -142,11 +142,7 @@ pub(super) fn atomic_json<T: serde::Serialize>(
 ) -> ProfileResult<()> {
     let parent = path.parent().ok_or_else(write_error)?;
     fs::create_dir_all(parent).map_err(|source| write_error().with_source(source))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
-    }
+    let _ = butler_platform::secure_fs::restrict_directory(parent);
     let temporary = PathBuf::from(format!("{}.{}.{}.tmp", path.display(), pid, now_ms));
     let mut bytes = serde_json::to_vec_pretty(value).map_err(|source| {
         ProfileError::new(
@@ -157,20 +153,13 @@ pub(super) fn atomic_json<T: serde::Serialize>(
     })?;
     bytes.push(b'\n');
     let result = (|| {
-        #[cfg(unix)]
-        {
-            use std::io::Write;
-            use std::os::unix::fs::OpenOptionsExt;
-            let mut file = fs::OpenOptions::new()
-                .create(true)
-                .truncate(true)
-                .write(true)
-                .mode(0o600)
-                .open(&temporary)?;
-            file.write_all(&bytes)?;
-        }
-        #[cfg(not(unix))]
-        fs::write(&temporary, &bytes)?;
+        use std::io::Write;
+        let mut options = fs::OpenOptions::new();
+        options.create(true).truncate(true).write(true);
+        let _ = butler_platform::secure_fs::owner_only(&mut options);
+        let mut file = options.open(&temporary)?;
+        file.write_all(&bytes)?;
+        drop(file);
         fs::rename(&temporary, path)
     })();
     if result.is_err() {

@@ -7,120 +7,8 @@ use butler_turn::btcc::ProviderRequestError;
 use super::super::provider::ProviderClock;
 use super::super::{diagnostics, request_guard::RequestProgress};
 
-const HOSTED_FRAME_LIMIT: usize = 8 * 1024 * 1024;
-
-pub(super) async fn hosted_chat(
-    response: Response,
-    provider: &str,
-    api: &str,
-    progress: RequestProgress,
-) -> Result<Value, Box<ProviderRequestError>> {
-    let mut text = String::new();
-    let mut id = String::new();
-    let mut model = None;
-    let mut usage = None;
-    let mut role = "assistant".to_owned();
-    let mut finish_reason = Value::Null;
-    let mut tool_calls = Vec::<Value>::new();
-    let mut done = false;
-    consume(response, provider, api, Some(HOSTED_FRAME_LIMIT), |frame| {
-        progress.record_progress();
-        if frame == "[DONE]" {
-            done = true;
-            return Ok(None);
-        }
-        let event = serde_json::from_str::<Value>(frame).map_err(|_| {
-            Box::new(diagnostics::protocol(
-                provider,
-                api,
-                "provider_stream_malformed_event",
-            ))
-        })?;
-        let object = event.as_object().ok_or_else(|| {
-            Box::new(diagnostics::protocol(
-                provider,
-                api,
-                "provider_stream_malformed_event",
-            ))
-        })?;
-        if let Some(error) = object
-            .get("error")
-            .or_else(|| event.pointer("/response/error"))
-            .filter(|value| value.is_object())
-        {
-            let status = error
-                .get("status")
-                .or_else(|| error.get("code"))
-                .and_then(Value::as_u64)
-                .and_then(|value| u16::try_from(value).ok())
-                .unwrap_or(400);
-            return Err(Box::new(diagnostics::http(
-                provider,
-                api,
-                status,
-                Some(&event),
-                None,
-            )));
-        }
-        if let Some(value) = event.get("id").and_then(Value::as_str) {
-            id = value.to_owned();
-        }
-        model = event.get("model").cloned().or(model.take());
-        usage = event.get("usage").cloned().or(usage.take());
-        if let Some(delta) = event.pointer("/choices/0/delta") {
-            if let Some(value) = delta.get("role").and_then(Value::as_str) {
-                role = value.to_owned();
-            }
-            if let Some(value) = delta.get("content").and_then(Value::as_str) {
-                text.push_str(value);
-            }
-            if let Some(calls) = delta.get("tool_calls").and_then(Value::as_array) {
-                merge_tool_calls(&mut tool_calls, calls);
-            }
-        }
-        if let Some(value) = event.pointer("/choices/0/finish_reason") {
-            finish_reason = value.clone();
-        }
-        Ok(None)
-    })
-    .await?;
-    if !done {
-        return Err(Box::new(diagnostics::protocol(
-            provider,
-            api,
-            "provider_stream_interrupted",
-        )));
-    }
-    let mut assistant = Map::new();
-    assistant.insert("role".into(), Value::String(role));
-    assistant.insert(
-        "content".into(),
-        if text.is_empty() {
-            Value::Null
-        } else {
-            Value::String(text)
-        },
-    );
-    if !tool_calls.is_empty() {
-        assistant.insert("tool_calls".into(), Value::Array(tool_calls));
-    }
-    let mut output = Map::new();
-    output.insert(
-        "choices".into(),
-        Value::Array(vec![
-            serde_json::json!({"index":0,"finish_reason":finish_reason,"message":assistant}),
-        ]),
-    );
-    output.insert("id".into(), Value::String(id));
-    output.insert(
-        "model".into(),
-        model.unwrap_or(Value::String(String::new())),
-    );
-    if let Some(usage) = usage {
-        output.insert("usage".into(), usage);
-    }
-    Ok(Value::Object(output))
-}
+mod chat;
+pub(super) use chat::hosted_chat;
 
 pub(super) async fn codex(
     response: Response,
@@ -282,7 +170,13 @@ impl CodexState {
             response.insert("output_text".into(), self.fallback_text.into());
         }
         if let Some(usage) = completed.get("usage") {
-            response.insert("usage".into(), serde_json::json!({"input_tokens":usage.get("input_tokens"),"prompt_tokens":usage.get("input_tokens"),"total_tokens":usage.get("total_tokens"),"prompt_tokens_details":{"cached_tokens":usage.pointer("/input_tokens_details/cached_tokens"),"cache_write_tokens":usage.pointer("/input_tokens_details/cache_write_tokens")}}));
+            let mut rebuilt = serde_json::json!({"input_tokens":usage.get("input_tokens"),"prompt_tokens":usage.get("input_tokens"),"total_tokens":usage.get("total_tokens"),"prompt_tokens_details":{"cached_tokens":usage.pointer("/input_tokens_details/cached_tokens"),"cache_write_tokens":usage.pointer("/input_tokens_details/cache_write_tokens")}});
+            // Reasoning tokens feed SessionView.usage; only the count is kept.
+            if let Some(reasoning) = usage.pointer("/output_tokens_details/reasoning_tokens") {
+                rebuilt["output_tokens_details"] =
+                    serde_json::json!({ "reasoning_tokens": reasoning });
+            }
+            response.insert("usage".into(), rebuilt);
         }
         Value::Object(response)
     }
@@ -382,33 +276,6 @@ fn data(frame: &str) -> Option<String> {
         .join("\n");
     let data = butler_core::public_text::trim_js_whitespace(&data);
     (!data.is_empty()).then(|| data.to_owned())
-}
-
-fn merge_tool_calls(output: &mut Vec<Value>, deltas: &[Value]) {
-    for delta in deltas {
-        let index = usize::try_from(delta.get("index").and_then(Value::as_u64).unwrap_or(0))
-            .unwrap_or(usize::MAX);
-        while output.len() <= index {
-            output.push(serde_json::json!({"id":"","type":"function","function":{"name":"","arguments":""}}));
-        }
-        let target = &mut output[index];
-        append(target, "/id", delta.get("id"));
-        append(target, "/function/name", delta.pointer("/function/name"));
-        append(
-            target,
-            "/function/arguments",
-            delta.pointer("/function/arguments"),
-        );
-    }
-}
-
-fn append(target: &mut Value, pointer: &str, source: Option<&Value>) {
-    let Some(fragment) = source.and_then(Value::as_str) else {
-        return;
-    };
-    if let Some(Value::String(value)) = target.pointer_mut(pointer) {
-        value.push_str(fragment);
-    }
 }
 
 #[cfg(test)]

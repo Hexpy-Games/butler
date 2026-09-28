@@ -178,7 +178,7 @@ fn data_root(explicit: Option<&str>) -> PathBuf {
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("BUTLER_DATA").map(PathBuf::from))
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".butler")))
+        .or_else(|| butler_platform::user_dirs::home_dir().map(|home| home.join(".butler")))
         .unwrap_or_else(|| PathBuf::from(".butler"))
 }
 

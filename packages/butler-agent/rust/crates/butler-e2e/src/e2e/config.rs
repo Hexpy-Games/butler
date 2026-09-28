@@ -157,7 +157,7 @@ pub fn base_url_env(provider: &str) -> Option<&'static str> {
 
 fn resolve_credential(provider: &str) -> Option<Credential> {
     if provider == "openai-subscription" {
-        let home = env::var_os("HOME").map(PathBuf::from);
+        let home = butler_platform::user_dirs::home_dir();
         if let Some(path) = nonempty("BUTLER_E2E_CODEX_PROFILE").map(PathBuf::from) {
             return existing(&path).map(Credential::CodexProfile);
         }

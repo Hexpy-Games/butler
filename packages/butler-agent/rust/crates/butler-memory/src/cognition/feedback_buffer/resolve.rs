@@ -1,7 +1,7 @@
 //! Source-compatible applied transition over the canonical feedback.md file.
 
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::File,
     future::Future,
     io::{BufReader, Write},
     path::Path,
@@ -84,21 +84,7 @@ fn rewrite_resolved(path: &Path, id: &str, now_ms: i64) -> CognitionResult<()> {
         error(CognitionCode::MemoryFeedbackBufferReadFailed).with_source(source)
     })?;
     let mut reader = BufReader::new(source);
-    let parent = path
-        .parent()
-        .ok_or_else(|| error(CognitionCode::MemoryFeedbackBufferWriteFailed))?;
-    let temporary = parent.join(format!("feedback.md.tmp-{}", uuid::Uuid::new_v4()));
-    let result = (|| {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut output = options.open(&temporary).map_err(|source| {
-            error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
-        })?;
+    let write = |output: &mut File| {
         let fallback_iso = butler_core::js_date::format_iso_millis(now_ms)
             .unwrap_or_else(|| "1970-01-01T00:00:00.000Z".into());
         let mut record = Vec::new();
@@ -107,7 +93,7 @@ fn rewrite_resolved(path: &Path, id: &str, now_ms: i64) -> CognitionResult<()> {
         while let Some(line) = read_line(&mut reader)? {
             if line.bytes.starts_with(b"## ") {
                 if started {
-                    write_record(&mut output, &record, id, &fallback_iso, &mut found)?;
+                    write_record(output, &record, id, &fallback_iso, &mut found)?;
                     record.clear();
                 }
                 started = true;
@@ -122,29 +108,16 @@ fn rewrite_resolved(path: &Path, id: &str, now_ms: i64) -> CognitionResult<()> {
             }
         }
         if started {
-            write_record(&mut output, &record, id, &fallback_iso, &mut found)?;
+            write_record(output, &record, id, &fallback_iso, &mut found)?;
         }
         if !found {
             return Err(error(CognitionCode::MemoryFeedbackEntryNotFound));
         }
-        output.sync_all().map_err(|source| {
-            error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
-        })?;
-        fs::rename(&temporary, path).map_err(|source| {
-            error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
-        })?;
-        #[cfg(unix)]
-        File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|source| {
-                error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
-            })?;
         Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(temporary);
-    }
-    result
+    };
+    butler_platform::secure_fs::replace_private(path, write, |source| {
+        error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
+    })
 }
 
 fn write_record(

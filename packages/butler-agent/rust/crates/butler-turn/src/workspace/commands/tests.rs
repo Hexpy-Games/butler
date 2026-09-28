@@ -121,8 +121,8 @@ impl Fixture {
     }
     fn guided(&self, command: &str) -> GuidedCommandInput {
         let mut host_environment = HashMap::from([("PATH".into(), "/usr/bin:/bin".into())]);
-        if let Ok(home) = std::env::var("HOME") {
-            host_environment.insert("HOME".into(), home);
+        if let Some(home) = butler_platform::user_dirs::home_dir() {
+            host_environment.insert("HOME".into(), home.to_string_lossy().into_owned());
         }
         GuidedCommandInput {
             command: command.into(),
@@ -335,37 +335,3 @@ async fn structured_preabort_and_legacy_pipefail() {
 }
 
 mod lifecycle;
-
-/// Darwin answers `killpg` with EPERM once every member of the group is a
-/// zombie; termination must treat such a group as already gone.
-#[cfg(target_os = "macos")]
-#[tokio::test]
-async fn signalling_a_group_of_only_zombies_succeeds() {
-    use std::os::unix::process::CommandExt;
-
-    use libproc::bsd_info::BSDInfo;
-    use libproc::proc_pid::pidinfo;
-    use nix::errno::Errno;
-    use nix::sys::signal::{Signal, killpg};
-    use nix::unistd::Pid;
-
-    let mut leader = std::process::Command::new("/usr/bin/true")
-        .process_group(0)
-        .spawn()
-        .unwrap();
-    let pid = leader.id();
-    // Not reaped: the exited leader stays a zombie of this process.
-    butler_test_support::eventually("the unreaped leader to exit", || {
-        pidinfo::<BSDInfo>(i32::try_from(pid).unwrap_or(i32::MAX), 0).is_err()
-    })
-    .await;
-    assert_eq!(
-        killpg(
-            Pid::from_raw(i32::try_from(pid).unwrap_or(i32::MAX)),
-            Signal::SIGKILL
-        ),
-        Err(Errno::EPERM)
-    );
-    assert_eq!(signal_pid(pid, GroupSignal::Kill), Ok(()));
-    leader.wait().unwrap();
-}

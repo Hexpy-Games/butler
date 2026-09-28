@@ -25,11 +25,7 @@ pub(super) fn append_snapshot(
     fs::create_dir_all(parent).map_err(snapshot_io_error)?;
     let mut options = OpenOptions::new();
     options.create(true).append(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    butler_platform::secure_fs::owner_only(&mut options);
     let mut file = options.open(path).map_err(snapshot_io_error)?;
     serde_json::to_writer(&mut file, snapshot).map_err(|error| {
         ContextError::new(

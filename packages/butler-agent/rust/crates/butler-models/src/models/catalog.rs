@@ -1,6 +1,9 @@
+mod facts;
 mod generation;
 mod local;
 mod lookup;
+mod presets;
+mod pricing;
 mod registered;
 mod static_data;
 
@@ -13,12 +16,15 @@ use butler_core::locale::LocaleCollation;
 
 use super::{ModelCatalogError, tokenizer::TokenizerOwner};
 
+pub use facts::{ImageLimitField, ImageLimitSources, ModelTier};
 pub use local::{
     LocalModelConfig, LocalModelPlatform, LocalModelSource, normalize_local_model_config,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use lookup::model_identity_key;
 pub use lookup::{default_hosted_provider_api_base_url, parse_model_ref};
+pub use presets::{ApiKeyBilling, ModelPreset, ProviderPresets, upgrade_routine_preset};
+pub use pricing::{ModelPricing, NextPrices, PromptPriceTier, RequestTokens, TokenPrices};
 pub use registered::{
     ImageProbeEvidence, RegisteredHostedModelConfig, normalize_hosted_api_base_url,
     normalize_registered_hosted_model, registered_hosted_model_metadata,
@@ -163,6 +169,18 @@ pub struct ModelProviderMetadata {
     pub image_tool_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub image_tool_capability_digest: Option<String>,
+    /// Maximum image patches (provider vision tokens) per image.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_max_patches: Option<f64>,
+    /// Which image limits the provider documents and which Butler imposes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_limit_sources: Option<ImageLimitSources>,
+    /// Position in the provider lineup; static catalog models only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tier: Option<ModelTier>,
+    /// Official list price; static catalog models only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pricing: Option<ModelPricing>,
     #[serde(flatten)]
     pub extensions: Map<String, Value>,
 }
@@ -206,6 +224,9 @@ pub struct ProviderView {
     pub auth_methods: Vec<ProviderAuthMethod>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_api_base_url: Option<String>,
+    /// Default model presets; present for every setup provider.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub presets: Option<ProviderPresets>,
     pub models: Vec<ModelProviderMetadata>,
 }
 
@@ -271,6 +292,38 @@ impl ModelCatalogSnapshot {
     pub fn resolve_model_metadata(&self, model_ref: Option<&str>) -> ModelProviderMetadata {
         lookup::resolve_model_metadata(model_ref, &self.lookup_models())
     }
+    /// The provider's static routine preset (`presets.routine`).
+    pub fn routine_preset(&self, provider_id: &str) -> Option<ModelPreset> {
+        self.static_catalog.routine_preset(provider_id).cloned()
+    }
+
+    /// The routine preset after a provider model-list refresh. `refreshed`
+    /// holds the ids a successful refresh returned (`None` when the refresh
+    /// failed or did not run): a newer same-tier model this snapshot has
+    /// cataloged and can run at the preset's effort replaces the static preset.
+    pub fn refreshed_routine_preset(
+        &self,
+        provider_id: &str,
+        refreshed: Option<&[String]>,
+    ) -> Option<ModelPreset> {
+        let preset = self.static_catalog.routine_preset(provider_id)?;
+        let Some(refreshed) = refreshed else {
+            return Some(preset.clone());
+        };
+        let lookup = self.lookup_models();
+        let runs = |model_ref: &str, effort: ReasoningEffort| {
+            lookup::find_model_metadata(Some(model_ref), &lookup).is_some_and(|model| {
+                model.runtime_supported && model.reasoning_efforts.contains(&effort)
+            })
+        };
+        Some(upgrade_routine_preset(
+            provider_id,
+            preset,
+            refreshed,
+            &runs,
+        ))
+    }
+
     fn lookup_models(&self) -> Vec<ModelProviderMetadata> {
         lookup::overwrite_by_ref(
             self.static_catalog
@@ -337,3 +390,6 @@ pub(super) fn estimate_tokens(
     };
     Ok(TokenEstimate { tokens, source })
 }
+
+#[cfg(test)]
+mod tests;

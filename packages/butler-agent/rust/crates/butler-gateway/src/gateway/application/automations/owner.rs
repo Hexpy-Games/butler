@@ -24,7 +24,7 @@ struct Admission {
 }
 enum Command {
     Initialize {
-        app: AppApplication,
+        app: Box<AppApplication>,
         reply: oneshot::Sender<Result<(), GatewayApplicationError>>,
     },
     Run {
@@ -56,7 +56,7 @@ impl AutomationRunOwner {
     ) -> Result<(), GatewayApplicationError> {
         let (reply_tx, reply_rx) = oneshot::channel();
         self.admit(Command::Initialize {
-            app,
+            app: Box::new(app),
             reply: reply_tx,
         })
         .await?;
@@ -117,7 +117,7 @@ async fn run(mut receiver: mpsc::Receiver<Command>) {
                 let result = if app.is_some() {
                     Err(GatewayApplicationError::internal())
                 } else {
-                    app = Some(value);
+                    app = Some(*value);
                     Ok(())
                 };
                 let _ = reply.send(result);

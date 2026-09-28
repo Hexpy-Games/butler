@@ -4,10 +4,9 @@
 
 use crate::cognition::CognitionCode;
 use crate::lenient::JsonField;
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::io::Write;
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Number, Value};
@@ -199,41 +198,17 @@ fn write_atomic(path: &Path, value: &impl Serialize) -> CognitionResult<()> {
     let parent = path
         .parent()
         .ok_or_else(|| error(CognitionCode::CompletionObservationPathInvalid))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(parent)
-            .map_err(io_error)?;
-    }
-    #[cfg(not(unix))]
-    fs::create_dir_all(parent).map_err(io_error)?;
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|source| {
-            error(CognitionCode::CompletionObservationClockInvalid).with_source(source)
-        })?
-        .as_millis();
-    let temp = path.with_extension(format!("json.{}.{millis}.tmp", std::process::id()));
-    let result = (|| {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut file = options.open(&temp).map_err(io_error)?;
-        file.write_all(canonical(value)?.as_bytes())
-            .map_err(io_error)?;
-        file.write_all(b"\n").map_err(io_error)?;
-        drop(file);
-        fs::rename(&temp, path).map_err(io_error)
-    })();
-    let _ = fs::remove_file(temp);
-    result
+    butler_platform::secure_fs::create_private_dir_all(parent).map_err(io_error)?;
+    let text = canonical(value)?;
+    butler_platform::secure_fs::replace_private(
+        path,
+        |file| {
+            file.write_all(text.as_bytes())?;
+            file.write_all(b"\n")
+        },
+        std::convert::identity,
+    )
+    .map_err(io_error)
 }
 
 fn io_error(error: std::io::Error) -> CognitionError {

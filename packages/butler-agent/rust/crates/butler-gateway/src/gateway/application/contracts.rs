@@ -276,6 +276,7 @@ pub struct AppApplicationDependencies {
     pub subsessions: Arc<dyn AppSubsessionPort>,
     pub branch_conversations: Arc<dyn AppBranchConversationReader>,
     pub branch_summarizer: Arc<dyn AppBranchSummarizer>,
+    pub setup: Arc<dyn super::AppSetupPort>,
 }
 
 #[derive(Clone, Debug)]
@@ -306,6 +307,10 @@ pub struct AppContextBudgetFacts {
 pub struct AppContextReadFacts {
     pub usage: Option<AppContextUsage>,
     pub compaction_summary: Option<String>,
+    /// The session's tokens and estimated cost (`SessionView.usage`).
+    pub session_usage: Option<butler_runtime::operations::SessionUsageView>,
+    /// How the session's model is billed (`ContextDetailsView.auth_mode`).
+    pub auth_mode: butler_models::models::UsageAuthMode,
     pub budget: AppContextBudgetFacts,
 }
 
@@ -345,6 +350,17 @@ pub struct AppSettingsFacts {
     pub catalog_generation: String,
     /// Non-secret configuration-backed Settings values projected by Host.
     pub native_settings: Value,
+    /// Each provider's routine preset: the default model and effort when
+    /// no model was chosen yet (#230).
+    pub routine_presets: Arc<[AppRoutinePreset]>,
+}
+
+/// The model and effort a first setup selects for a connected provider.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AppRoutinePreset {
+    pub provider_id: String,
+    pub model_ref: String,
+    pub reasoning_effort: ReasoningEffort,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

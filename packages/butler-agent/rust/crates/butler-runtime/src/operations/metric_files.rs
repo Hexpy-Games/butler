@@ -269,11 +269,7 @@ fn temporary_path(path: &Path) -> PathBuf {
 fn open_private_temporary(path: &Path) -> io::Result<File> {
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    butler_platform::secure_fs::owner_only(&mut options);
     options.open(path)
 }
 

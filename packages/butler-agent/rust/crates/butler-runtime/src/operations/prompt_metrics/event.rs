@@ -3,7 +3,7 @@ use serde::{Serialize, Serializer};
 
 use butler_models::models::{
     PromptCacheRetention, PromptUsageBudgetState, PromptUsageMetricInput,
-    PromptUsageSectionAttribution, ReasoningEffort,
+    PromptUsageSectionAttribution, ReasoningEffort, UsageAuthMode,
 };
 use butler_turn::btcc::ModelRoundError;
 
@@ -33,6 +33,11 @@ pub(super) fn line(
             }
         }),
         total_tokens: input.total_tokens,
+        reasoning_tokens: input.reasoning_tokens.filter(|value| value.is_finite()),
+        cache_write_1h_tokens: input
+            .cache_write_1h_tokens
+            .filter(|value| value.is_finite()),
+        auth_mode: input.auth_mode,
         prompt_cache_key: input.prompt_cache_key,
         prompt_cache_retention: input
             .prompt_cache_retention
@@ -70,6 +75,12 @@ struct Event<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     cache_write_tokens: Option<f64>,
     total_tokens: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_tokens: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_write_1h_tokens: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    auth_mode: Option<UsageAuthMode>,
     #[serde(skip_serializing_if = "Option::is_none")]
     prompt_cache_key: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]

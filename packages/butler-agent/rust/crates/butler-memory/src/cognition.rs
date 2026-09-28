@@ -27,7 +27,6 @@ mod knowhow_store;
 mod lance_store;
 mod legacy;
 mod lexical;
-#[cfg(unix)]
 mod mcp_graph;
 mod memory_health;
 mod memory_recall;
@@ -116,7 +115,6 @@ pub use graph::{
 pub use graph_consolidation::GraphConsolidationService;
 pub use hot_cache::{LegacyIndexService, extract_legacy_import_transcript};
 pub use knowhow_store::{FeedbackResolvePort, KnowHowService};
-#[cfg(unix)]
 pub use mcp_graph::read_mcp_legacy_graph;
 pub use memory_health::{MemoryHealthReport, MemoryHealthService};
 pub use memory_recall::{MemoryRecall, RecallVectorFuture, RecallVectorPort};

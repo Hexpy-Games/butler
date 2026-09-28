@@ -4,6 +4,12 @@ impl GatewayApplication for AppApplication {
     fn get_usage_monitor(&self, query: AppUsageMonitorQuery) -> ApplicationFuture<Value> {
         self.dependencies.monitoring.usage_monitor(query)
     }
+    fn get_provider_quota(
+        &self,
+        provider_id: String,
+    ) -> ApplicationFuture<butler_runtime::operations::ProviderQuotaView> {
+        self.dependencies.monitoring.provider_quota(provider_id)
+    }
     fn work_status(&self) -> ApplicationFuture<Vec<AppBoundWorkStatusFact>> {
         self.dependencies.monitoring.work_status()
     }
@@ -216,6 +222,9 @@ impl GatewayApplication for AppApplication {
     fn runtime_readiness(&self) -> Result<RuntimeReadinessView, GatewayApplicationError> {
         self.dependencies.executor_readiness.readiness()
     }
+    fn setup(&self) -> Result<Arc<dyn super::AppSetupPort>, GatewayApplicationError> {
+        Ok(self.dependencies.setup.clone())
+    }
     fn read_settings(&self) -> ApplicationFuture<serde_json::Value> {
         let this = self.clone_handle();
         Box::pin(async move { this.worker_profile_settings().await })
@@ -405,7 +414,7 @@ impl GatewayApplication for AppApplication {
     }
     fn context_details(&self, session_id: String) -> ApplicationFuture<Value> {
         let this = self.clone_handle();
-        Box::pin(async move { this.context_details_owned(session_id).await })
+        Box::pin(async move { Ok(this.context_details_owned(session_id).await?.view) })
     }
     fn cancel_subsession(
         &self,
