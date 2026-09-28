@@ -11,10 +11,16 @@ use butler_gateway::gateway::{
     AppContextBudgetFacts, AppContextReadFacts, AppContextReadPort, AppContextReadQuery,
     AppContextUsage, ApplicationFuture, GatewayApplicationError,
 };
+use butler_models::models::{
+    ModelCatalog, ModelCatalogSnapshot, ProviderAuthMethod, ProviderAuthMode, UsageAuthMode,
+    parse_model_ref,
+};
 use butler_runtime::context::{
     ContextBudgetOverrides, ContextBudgetOwner, WorkingContextBudgetInput,
 };
+use butler_runtime::operations::{SessionUsageIndex, SessionUsageView};
 use butler_turn::btcc::ContextCompactionRepository;
+use parking_lot::Mutex;
 
 const MAX_COMPACTION_SUMMARY_CHARS: usize = 32_000;
 use butler_core::json_lines::visit_json_lines;
@@ -23,6 +29,8 @@ pub(crate) struct AppContextRead {
     data_root: PathBuf,
     budget: Arc<ContextBudgetOwner>,
     compactions: ContextCompactionRepository,
+    /// Session usage folded incrementally from the prompt-usage log.
+    usage: Arc<Mutex<SessionUsageIndex>>,
 }
 
 impl AppContextRead {
@@ -35,6 +43,7 @@ impl AppContextRead {
             data_root,
             budget,
             compactions,
+            usage: Arc::default(),
         }
     }
 }
@@ -44,6 +53,7 @@ impl AppContextReadPort for AppContextRead {
         let root = self.data_root.clone();
         let budget = self.budget.clone();
         let compactions = self.compactions.clone();
+        let usage = self.usage.clone();
         Box::pin(async move {
             let snapshot = budget
                 .snapshot()
@@ -70,10 +80,14 @@ impl AppContextReadPort for AppContextRead {
                 .filter(|value| value.is_finite() && *value > 0.0)
                 .map(|value| butler_core::json::saturating_u64(value.trunc()));
             let telemetry_query = query.clone();
-            let telemetry =
-                tokio::task::spawn_blocking(move || read_usage(&root, &telemetry_query))
-                    .await
-                    .map_err(GatewayApplicationError::internal_from)?;
+            let catalog = budget.catalog().clone();
+            let configured = configured_auth_mode(&query.model_ref, &snapshot.models, &catalog);
+            let (telemetry, session) = tokio::task::spawn_blocking(move || {
+                let session = session_usage(&usage, &root, &telemetry_query, &catalog, configured);
+                (read_usage(&root, &telemetry_query), session)
+            })
+            .await
+            .map_err(GatewayApplicationError::internal_from)?;
             let native_summary = match query.turn_id.as_deref() {
                 Some(turn_id) => compactions
                     .load(turn_id)
@@ -87,6 +101,8 @@ impl AppContextReadPort for AppContextRead {
             Ok(AppContextReadFacts {
                 usage: telemetry.usage,
                 compaction_summary: summary,
+                session_usage: Some(session.0),
+                auth_mode: session.1,
                 budget: AppContextBudgetFacts {
                     context_window_tokens: butler_core::json::saturating_u64(
                         config.context_window_tokens.max(0.0).trunc(),
@@ -105,6 +121,47 @@ impl AppContextReadPort for AppContextRead {
             })
         })
     }
+}
+
+/// The session's usage view and how its current model is billed: as its
+/// latest request of that model reported, else as configured.
+fn session_usage(
+    index: &Mutex<SessionUsageIndex>,
+    root: &Path,
+    query: &AppContextReadQuery,
+    catalog: &ModelCatalog,
+    configured: UsageAuthMode,
+) -> (SessionUsageView, UsageAuthMode) {
+    let pricing = |model_ref: &str| catalog.pricing(model_ref);
+    let usage = index.lock().read(root, &query.runtime_session_id, &pricing);
+    let mode = usage
+        .auth_modes
+        .get(&query.model_ref)
+        .copied()
+        .unwrap_or(configured);
+    (usage.view, mode)
+}
+
+/// Billing mode from configuration when no request has reported one yet.
+fn configured_auth_mode(
+    model_ref: &str,
+    models: &ModelCatalogSnapshot,
+    catalog: &ModelCatalog,
+) -> UsageAuthMode {
+    let provider = parse_model_ref(model_ref).provider_id;
+    let registered = models
+        .view()
+        .registered_models
+        .iter()
+        .find(|model| model.model_ref == model_ref)
+        .and_then(|model| model.auth_type);
+    let auth = match registered {
+        _ if provider == "local" => ProviderAuthMode::None,
+        Some(ProviderAuthMethod::ApiKey) => ProviderAuthMode::ApiKey,
+        Some(ProviderAuthMethod::CodexOauth) => ProviderAuthMode::CodexOauth,
+        None => ProviderAuthMode::None,
+    };
+    catalog.usage_auth_mode(&provider, auth)
 }
 
 struct Telemetry {

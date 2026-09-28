@@ -35,7 +35,6 @@ src/context/tool_output/reader.rs	read	116
 src/operations/developer_log/capture/entry.rs	terminal_entry	147
 src/operations/status_summary/context.rs	read_context_for_session	87
 src/operations/status_summary/health.rs	read_health	94
-src/operations/status_summary/usage.rs	read_usage	135
 src/operations/update/agent.rs	AgentArchiveUpdateService::apply	89
 src/operations/update/agent.rs	AgentArchiveUpdateService::status	86
 src/operations/update/manifest.rs	load_artifact	136

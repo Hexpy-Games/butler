@@ -9,7 +9,7 @@ use super::{
     AppApplication, AppSessionBranchQuery, AppSessionViewPage, AppWorkStreamQuery,
     GatewayApplicationError, app_session_hint,
 };
-use crate::gateway::{TurnRecord, TurnState, protocol::APP_PROTOCOL_VERSION};
+use crate::gateway::{TurnRecord, protocol::APP_PROTOCOL_VERSION};
 use helpers::*;
 use turn_projection::{project, read_latest};
 
@@ -46,6 +46,7 @@ impl AppApplication {
         let latest_with_progress = read_latest(self, session_id.clone()).await?;
         let artifacts = self.artifact_page(session_id.clone()).await?;
         let context = self.context_details_owned(session_id.clone()).await?;
+        let usage = serde_json::to_value(&context.usage).map_err(json_error)?;
         let event_cursor = self.latest_event_cursor_owned().await?;
         let subsessions = self
             .dependencies
@@ -64,15 +65,7 @@ impl AppApplication {
             })
             .await?;
         let latest_message = messages.messages.last();
-        let suppress_progress_rows = latest.is_some_and(|turn| {
-            turn.user_message_id.is_none()
-                && matches!(&turn.state, &TurnState::Delivered)
-                && latest_message.is_some_and(|message| {
-                    matches!(&message.role, &crate::gateway::MessageRole::Assistant)
-                        && message.turn_id.is_none()
-                        && message.created_at.as_str() >= turn.created_at.as_str()
-                })
-        });
+        let suppress_progress_rows = superseded_by_reply(latest, latest_message);
         let latest_turn_view = latest_with_progress
             .as_ref()
             .map(|(turn, progress)| {
@@ -125,7 +118,8 @@ impl AppApplication {
             "artifacts".into(),
             serde_json::to_value(artifacts).map_err(json_error)?,
         );
-        view.insert("context".into(), context);
+        view.insert("context".into(), context.view);
+        view.insert("usage".into(), usage);
         view.insert("errors".into(), json!(safe_errors(&messages.messages)));
         view.insert(
             "cursors".into(),
@@ -174,7 +168,7 @@ impl AppApplication {
         let messages = self.message_page(session_id.clone(), 0.0, 200).await?;
         let latest = self.latest_session_turn(session_id.clone()).await?;
         let artifacts = self.artifact_page(session_id.clone()).await?;
-        let context_details = self.context_details_owned(session_id.clone()).await?;
+        let context_details = self.context_details_owned(session_id.clone()).await?.view;
         let subsessions = self
             .dependencies
             .subsessions
