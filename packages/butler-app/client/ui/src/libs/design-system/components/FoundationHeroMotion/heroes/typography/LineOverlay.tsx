@@ -64,7 +64,7 @@ export function LineOverlay({ lines, copy, compact }: { lines: LineInfo[]; copy:
                 </Reveal>
               </span>
               <span className={t.lineLeader} data-t={`ll-${line.id}`} />
-              <span className={t.lineBand} data-t={`lband-${line.id}`} />
+              <span className={t.lineBand} data-t={`lband-${line.id}`}><span className={t.bandIn} data-t={`lband-${line.id}-in`} /></span>
               <span className={t.lineMeasure} data-t={`lm-${line.id}`} />
             </>
           )}

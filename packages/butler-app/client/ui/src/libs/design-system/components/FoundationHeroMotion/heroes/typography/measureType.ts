@@ -1,7 +1,16 @@
 import type { Box } from "../../heroTimeline";
 import { measureLines } from "./typeLines";
-import { FLIGHTS, METRIC_ROLL, PANELS, select, type Flight, type Panel, type TypeGeometry } from "./typeChoreography";
+import { FLIGHTS, METRIC_ROLL, PANELS, select, type Flight, type Panel, type SketchBox, type TypeGeometry } from "./typeChoreography";
 import { CANVAS, type TypeLayout } from "./typeGrid";
+
+/** The first element down the first-child chain (at most four levels) that has a border radius, else the element. */
+function roundedWithin(element: HTMLElement): HTMLElement {
+  let node: Element | null = element;
+  for (let depth = 0; node && depth < 5; depth += 1, node = node.firstElementChild) {
+    if (node instanceof HTMLElement && Number.parseFloat(getComputedStyle(node).borderTopLeftRadius) > 0) return node;
+  }
+  return element;
+}
 
 export interface TypeMeasure {
   geometry: TypeGeometry;
@@ -56,9 +65,13 @@ export function measureType(root: HTMLElement, layout: TypeLayout): TypeMeasure 
       const node = find(`[data-panel="${panel}"]`);
       if (!node) return [panel, []];
       const base = node.getBoundingClientRect();
-      const rel = (rect: DOMRect): Box => ({ x: (rect.left - base.left) / ratio, y: (rect.top - base.top) / ratio, w: rect.width / ratio, h: rect.height / ratio });
-      return [panel, [rel(base), ...[...node.querySelectorAll<HTMLElement>("[data-sketch]")].map((box) => rel(box.getBoundingClientRect()))]];
-    })) as Record<Panel, Box[]>,
+      const rel = (rect: DOMRect, r = 0): SketchBox => ({ x: (rect.left - base.left) / ratio, y: (rect.top - base.top) / ratio, w: rect.width / ratio, h: rect.height / ratio, r });
+      return [panel, [rel(base), ...[...node.querySelectorAll<HTMLElement>("[data-sketch]")].map((mark) => {
+        // The rounded element itself (the card, input or button inside the mark), with its real radius token.
+        const target = roundedWithin(mark);
+        return rel(target.getBoundingClientRect(), Number.parseFloat(getComputedStyle(target).borderTopLeftRadius) || 0);
+      })]];
+    })) as Record<Panel, SketchBox[]>,
     panels: per(PANELS, (panel) => select(`panel-${panel}`)),
     control: box(select("control")),
     tnum: box(select("cap-tnum")),

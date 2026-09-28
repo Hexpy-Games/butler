@@ -61,7 +61,7 @@ export function RoleLadder({ copy, specs }: { copy: TypeCopy; specs: Partial<Rec
             <span className={t.spec}><Reveal name={`rs-${flight}`}>{specs[flight] ?? ""}</Reveal></span>
           </span>
           <span className={t.sampleCell}>
-            <span className={t.band} data-t={`band-${flight}`} />
+            <span className={t.band} data-t={`band-${flight}`}><span className={t.bandIn} data-t={`band-${flight}-in`} /></span>
             <span className={t.fly} data-fly={flight} data-t={`fly-${flight}`}>{sample(flight, copy)}</span>
           </span>
         </div>

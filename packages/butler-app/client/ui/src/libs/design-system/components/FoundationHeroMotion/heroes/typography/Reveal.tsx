@@ -17,6 +17,18 @@ export function Reveal({ name, children }: { name: string; children: ReactNode }
 }
 
 /**
+ * A window sweeping open left to right over `beats` (one decelerating move),
+ * for shapes such as a leading band: translating a window keeps the shape's
+ * corner radius, where scaling it would distort it.
+ */
+export function sweep(at: number, beats: number, close = BEATS - 0.05): { outer: Key[]; inner: Key[] } {
+  const keys = (sign: number): Key[] => [
+    { at: 0, xp: sign * 100 }, { at, xp: sign * 100 }, { at: at + beats, xp: 0, ease: "emphasized" }, { at: close - 0.01, xp: 0 }, { at: close, xp: sign * 100 },
+  ];
+  return { outer: keys(-1), inner: keys(1) };
+}
+
+/**
  * Keys that open a Reveal from `at`, one decelerating step per character
  * (capped), holding open until `close` (while it is hidden) and closing there
  * for the next cycle.

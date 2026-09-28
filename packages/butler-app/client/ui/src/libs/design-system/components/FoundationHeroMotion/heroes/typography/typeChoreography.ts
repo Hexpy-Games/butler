@@ -1,11 +1,10 @@
-import type { Box, Key, Pose, Track } from "../../heroTimeline";
+import type { Key, Pose, Track } from "../../heroTimeline";
 import { specimenLayout, type SpecimenMetrics } from "./specimenMetrics";
-import type { LineInfo } from "./typeLines";
-import { col, onBaseline, SPECIMEN, type TypeLayout } from "./typeGrid";
+import { col, onBaseline, SPECIMEN } from "./typeGrid";
 import { OUTLINE_EM } from "./TypeSpecimen";
 
 /**
- * 02 Typography hero, "from token to product": one 117-beat cycle (37.4 s at
+ * 02 Typography hero, "from token to product": one 121-beat cycle (38.8 s at
  * --motion-deliberate 320 ms). Beat marks:
  *
  *   0–7    Construction  metric guides draw in; the real Pretendard outlines of
@@ -25,9 +24,11 @@ import { OUTLINE_EM } from "./TypeSpecimen";
  *
  * Placement comes from the grid (typeGrid.ts) or from measuring the poster.
  */
-export const FINALE = 100;
-export const LOOP = 113;
-export const BEATS = 117;
+/** One transition length for every scene and camera change (list→build, component→component, build→finale, finale→loop). */
+export const TRANSITION = 4;
+export const FINALE = 106.4;
+export const LOOP = FINALE + TRANSITION + 9;
+export const BEATS = LOOP + TRANSITION + 1.5;
 
 export const FLIGHTS = ["title", "dash", "field", "ask", "command", "meta", "metric"] as const;
 export type Flight = (typeof FLIGHTS)[number];
@@ -36,27 +37,8 @@ export type Panel = (typeof PANELS)[number];
 export const METRIC_ROLL = "1,284";
 export const AXIS = { min: 45, max: 920 } as const;
 
-/** Boxes of the poster layout in canvas px, as measured on the live components. */
-export interface TypeGeometry {
-  layout: TypeLayout;
-  canvas: { w: number; h: number };
-  specimen: Box;
-  /** Poster scale of the specimen (laid out at Act I size, drawn small). */ specimenScale: number;
-  ladder: Box;
-  rungs: Record<Flight, Box>;
-  fly: Record<Flight, Box>;
-  /** Text lines each component builds, measured in their panels. */
-  lines: LineInfo[];
-  /** Boxes the blueprint sketches in each panel (the panel first), relative to the panel. */
-  sketches: Record<Panel, Box[]>;
-  panels: Record<Panel, Box>;
-  control: Box;
-  tnum: Box;
-  controlTrack: number;
-  readoutLine: number;
-  digitLine: number;
-  digits: number[];
-}
+export type { SketchBox, TypeGeometry } from "./typeGeometry";
+import type { TypeGeometry } from "./typeGeometry";
 
 export function select(name: string): string {
   return `[data-t="${name}"]`;
@@ -107,12 +89,12 @@ export function specimenTracks(g: TypeGeometry, m: SpecimenMetrics): Track[] {
   ];
   const outline = (name: string, dash: number, from: number, x: number): Track => ({
     select: select(name),
-    keys: [{ at: 0, dash, o: 1, x }, { at: from, dash }, { at: from + 3.8, dash: 0 }, { at: 5.6, o: 1 }, { at: 6.6, o: 0, ease: "accelerate" }, { at: LOOP + 3.9, dash, o: 0 }, { at: BEATS, o: 1 }],
+    keys: [{ at: 0, dash, o: 1, x }, { at: from, dash }, { at: from + 3.8, dash: 0 }, { at: 5.6, o: 1 }, { at: 6.6, o: 0, ease: "accelerate" }, { at: LOOP + TRANSITION + 1.4, dash, o: 0 }, { at: BEATS, o: 1 }],
   });
   // Fills in left to right: A, then 가.
   const fillKeys = (x: (w: 300 | 800 | 620) => number, delay: number): Key[] => [
     { at: 0, o: 0, wght: 300, x: x(300) }, { at: 5 + delay, o: 0 }, { at: 6 + delay, o: 1, ease: "decelerate" },
-    ...byWeight((w) => ({ wght: w, x: x(w) })), { at: LOOP + 3, o: 1 }, { at: LOOP + 3.9, o: 0, ease: "accelerate" }, { at: LOOP + 3.95, wght: 300, x: x(300) },
+    ...byWeight((w) => ({ wght: w, x: x(w) })), { at: LOOP + TRANSITION + 0.4, o: 1 }, { at: LOOP + TRANSITION + 1.3, o: 0, ease: "accelerate" }, { at: LOOP + TRANSITION + 1.35, wght: 300, x: x(300) },
   ];
   return [
     ...hline("base", 0, true), ...hline("cap", 1, true), ...hline("xh", 2, false), ...hline("asc", 3, false), ...hline("desc", 4, false),
@@ -149,7 +131,7 @@ export function specimenTracks(g: TypeGeometry, m: SpecimenMetrics): Track[] {
       select: select("specimen"),
       keys: [
         { at: 0, ...big }, { at: 18.2, ...big }, { at: 19.9, ...title, ease: "emphasized" },
-        { at: FINALE, x: 0, y: 0, s: 1 }, { at: LOOP, x: 0, y: 0, s: 1 }, { at: LOOP + 2.5, ...big, ease: "emphasized" },
+        { at: FINALE, x: 0, y: 0, s: 1 }, { at: LOOP, x: 0, y: 0, s: 1 }, { at: LOOP + TRANSITION, ...big, ease: "emphasized" },
       ],
     },
     // Opacity on the specimen's slot, so the flight above stays one continuous move.

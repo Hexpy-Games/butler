@@ -1,7 +1,7 @@
 import { cut, type Key, type Track } from "../../heroTimeline";
 import { tagSteps, wipeWidth } from "./LineOverlay";
 import { BEATS, LOOP, select } from "./typeChoreography";
-import { revealTracks } from "./Reveal";
+import { revealTracks, sweep } from "./Reveal";
 import { TYPE_COPY } from "./typeCopy";
 import type { LineInfo } from "./typeLines";
 
@@ -51,6 +51,7 @@ export function line(info: LineInfo, a: number, leave: number): Track[] {
   const second = info.outlined ? reveal(width, edges, sized + 1.4) : null;
   const done = second ? second.end : sized + 1.4;
   const guidesOff = done + 0.6;
+  const band = sweep(sized, 0.8);
   const stepCount = tagSteps(info, TAG_COPY, false).length;
   const steps = [0, first.end, sized + 0.2, sized + 0.8].slice(0, stepCount).concat(BEATS);
   const tracks: Track[] = [
@@ -58,7 +59,8 @@ export function line(info: LineInfo, a: number, leave: number): Track[] {
     ...revealTracks(`rv-lb-${id}`, a, tagSteps(info, TAG_COPY, false)[0]!),
     ...steps.slice(0, -1).map((from, k): Track => ({ select: select(`lb-${id}-${k}`), keys: cut(from, steps[k + 1]!, BEATS) })),
     { select: select(`ll-${id}`), keys: recede(leave, [{ at: 0, sx: 0, o: 0 }, { at: a + 0.2, sx: 0, o: 1 }, { at: a + 1, sx: 1, ease: "decelerate" }]) },
-    { select: select(`lband-${id}`), keys: recede(guidesOff, [{ at: 0, sx: 0, o: 0 }, { at: sized, sx: 0, o: 0 }, { at: sized + 0.8, sx: 1, o: 1, ease: "emphasized" }]) },
+    { select: select(`lband-${id}`), keys: [...recede(guidesOff, [{ at: 0, o: 0 }, { at: sized, o: 0 }, { at: sized + 0.1, o: 1 }]), ...band.outer] },
+    { select: select(`lband-${id}-in`), keys: band.inner },
     { select: select(`lm-${id}`), keys: recede(guidesOff, [{ at: 0, sy: 0, o: 0 }, { at: sized + 0.2, sy: 0, o: 0 }, { at: sized + 0.8, sy: 1, o: 1, ease: "decelerate" }]) },
   ];
   if (!info.draw) {

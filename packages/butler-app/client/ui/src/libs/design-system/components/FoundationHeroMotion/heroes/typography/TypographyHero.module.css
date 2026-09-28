@@ -259,10 +259,15 @@
 .band {
   position: absolute;
   inset: 0 calc(var(--space-xs) * -1);
-  transform-origin: 0 50%;
+  overflow: hidden;
 }
 
-.band::before {
+.bandIn {
+  position: absolute;
+  inset: 0;
+}
+
+.bandIn::before {
   position: absolute;
   inset: 0;
   border-radius: var(--radius-control);
@@ -276,6 +281,7 @@
   display: block;
   inline-size: max-content;
   white-space: nowrap;
+  transform-origin: 0 50%;
 }
 
 .spec {
@@ -386,6 +392,23 @@
   opacity: 0;
 }
 
+.sketchSvg {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: visible;
+}
+
+/* The element's real outline, its corner radius as measured, drawn along the edge. */
+.sketchOutline {
+  fill: none;
+  opacity: 0;
+  stroke: var(--accent);
+  stroke-dasharray: var(--dash) var(--dash);
+  stroke-width: 1px;
+}
+
 .sketchLine[data-side="t"],
 .sketchLine[data-side="b"] {
   block-size: 1px;
@@ -491,16 +514,7 @@
 .lineBand {
   position: absolute;
   inset: 0 calc(var(--space-xs) * -1);
-  transform-origin: 0 50%;
-}
-
-.lineBand::before {
-  position: absolute;
-  inset: 0;
-  border-radius: var(--radius-control);
-  background: var(--selection-strong);
-  content: "";
-  opacity: 0.6;
+  overflow: hidden;
 }
 
 .lineMeasure {

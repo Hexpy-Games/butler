@@ -1,9 +1,14 @@
 import type { Track } from "../../heroTimeline";
 import { revealTracks } from "./Reveal";
-import { FINALE, FLIGHTS } from "./typeChoreography";
+import { FINALE, FLIGHTS, TRANSITION } from "./typeChoreography";
 
-/** Beats the role list's rungs rise at (see typeAssembly.ts). */
-const riseAt = (i: number) => 20.6 + i * 0.4;
+/**
+ * When row `i` of the role list starts building: the H2 row lands by the
+ * match cut at 20.2; the camera closes in on it over one TRANSITION, then a
+ * row every ROW beats, each starting before the previous one has finished.
+ */
+export const ROW = 1.6;
+export const rowAt = (i: number) => (i === 0 ? 20.2 : 20.2 + TRANSITION + (i - 1) * ROW);
 
 /**
  * When every label outside the component builds reveals, left to right: the
@@ -23,12 +28,12 @@ export function revealAll(): Track[] {
     ...revealTracks("rv-920", 9.5, 3),
     ...revealTracks("rv-token", 16.2, 20),
     ...FLIGHTS.flatMap((flight, i) => [
-      ...revealTracks(`rt-${flight}`, riseAt(i) - 1, 8),
-      // The H2 sample arrives by the match cut from the specimen; the rest reveal.
-      ...(flight === "title" ? [] : revealTracks(`rf-${flight}`, riseAt(i) - 0.8, 16)),
-      ...revealTracks(`rs-${flight}`, riseAt(i) - 0.4, 11),
+      // Row by row: tag, then the text (the H2 arrives by the match cut), then its spec once the styles apply.
+      ...revealTracks(`rt-${flight}`, rowAt(i), 8),
+      ...(flight === "title" ? [] : revealTracks(`rf-${flight}`, rowAt(i) + 0.2, 16)),
+      ...revealTracks(`rs-${flight}`, rowAt(i) + 1.5, 11),
     ]),
-    ...revealTracks("rv-tnum", 29, 20),
+    ...revealTracks("rv-tnum", rowAt(6) + 1.8, 20),
     ...revealTracks("rv-family", FINALE + 2.8, 19),
     ...revealTracks("rv-axis", FINALE + 3.2, 6),
   ];

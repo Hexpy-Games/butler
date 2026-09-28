@@ -1,19 +1,20 @@
 import type { ReactNode } from "react";
 import { ComposerCard, ComposerCardEditable, ComposerCardEditor, ComposerCardExpandedBody, ComposerCardPlaceholder, ComposerCardToolbar, ComposerCardToolbarSpacer, ComposerSendButton } from "../../../../blocks/ComposerCard";
-import { MessageFooter, MessageRow } from "../../../../blocks/MessageRow";
+import { MarkdownContent } from "../../../../blocks/MarkdownContent";
+import { MessageFooter, MessageRow, MessageStatusLabel, MessageStatusRow } from "../../../../blocks/MessageRow";
 import { MetricCard } from "../../../../blocks/MetricCard";
 import { SettingsField } from "../../../../blocks/SettingsField";
 import { SettingsHeader } from "../../../../blocks/SettingsHeader";
 import { SettingsSection } from "../../../../blocks/SettingsSection";
 import { Card } from "../../../Card";
 import { IconButton } from "../../../IconButton";
-import { Plus } from "../../../Icons";
+import { CheckCircle2, MessageSquarePlus, Plus } from "../../../Icons";
+import { CopyButton } from "../../../CopyButton";
 import { Switch } from "../../../Switch";
 import { Typo } from "../../../Typo";
 import { LineOverlay } from "./LineOverlay";
 import { Sketch } from "./Sketch";
-import type { Box as Rect } from "../../heroTimeline";
-import type { Panel } from "./typeChoreography";
+import type { Panel, SketchBox } from "./typeChoreography";
 import type { TypeCopy } from "./typeCopy";
 import type { TypeLayout } from "./typeGrid";
 import type { LineInfo } from "./typeLines";
@@ -47,7 +48,7 @@ function Box({ children }: { children: ReactNode }) {
  * poster; settings and metric sit below it. Each panel is a surface (the real
  * component) with its blueprint sketch and text build layered over it.
  */
-export function ProductBoard({ copy, layout, lines, sketches }: { copy: TypeCopy; layout: TypeLayout; lines: LineInfo[]; sketches: Partial<Record<Panel, Rect[]>> }) {
+export function ProductBoard({ copy, layout, lines, sketches }: { copy: TypeCopy; layout: TypeLayout; lines: LineInfo[]; sketches: Partial<Record<Panel, SketchBox[]>> }) {
   const panel = (name: Panel, content: ReactNode) => (
     <div className={t.panel} data-panel={name} data-t={`panel-${name}`} key={name}>
       <div className={t.surface} data-t={`surface-${name}`}>{content}</div>
@@ -79,8 +80,29 @@ export function ProductBoard({ copy, layout, lines, sketches }: { copy: TypeCopy
         <Box>
           <Card padding="md">
             <MessageRow role="user"><Typo.Body><Line id="ask">{copy.ask}</Line></Typo.Body></MessageRow>
-            <MessageRow role="assistant" footer={<MessageFooter><Typo.Caption tone="tertiary" numeric="tabular"><Line id="meta">{copy.meta}</Line></Typo.Caption></MessageFooter>}>
-              <Line id="answer" block><div data-t="wa-i"><Typo.Body>{copy.answer}</Typo.Body></div></Line>
+            <MessageRow role="assistant" footer={(
+              <>
+                <MessageFooter>
+                  <Part name="chat-icons">
+                    <CopyButton label={copy.copy} copiedLabel={copy.copy} text={copy.answer} />
+                    <IconButton label={copy.branch}><MessageSquarePlus size="md" /></IconButton>
+                  </Part>
+                  <Line id="worked">{copy.worked}</Line>
+                  <Typo.Caption tone="tertiary" numeric="tabular"><Line id="meta">{copy.meta}</Line></Typo.Caption>
+                </MessageFooter>
+                <MessageStatusRow>
+                  <MessageStatusLabel mark={<Part name="done-mark"><CheckCircle2 size="sm" /></Part>}><Typo.Caption as="span"><Line id="done">{copy.done}</Line></Typo.Caption></MessageStatusLabel>
+                </MessageStatusRow>
+              </>
+            )}>
+              <Line id="answer" block>
+                <div data-t="wa-i">
+                  <MarkdownContent>
+                    <p>{copy.answer}</p>
+                    <ul>{copy.items.map(([text, code, rest], k) => <li key={k}>{text}{code ? <code>{code}</code> : null}{rest}</li>)}</ul>
+                  </MarkdownContent>
+                </div>
+              </Line>
               <Typo.Code as="div"><Line id="command">{copy.command}</Line></Typo.Code>
             </MessageRow>
           </Card>
@@ -96,7 +118,7 @@ export function ProductBoard({ copy, layout, lines, sketches }: { copy: TypeCopy
               </ComposerCardEditor>
             </ComposerCardExpandedBody>
             <ComposerCardToolbar>
-              <IconButton label={copy.more}><Plus size="md" /></IconButton>
+              <Part name="more"><IconButton label={copy.more}><Plus size="md" /></IconButton></Part>
               <ComposerCardToolbarSpacer />
               <Part name="send" sketch><ComposerSendButton aria-label={copy.send} mode="send" /></Part>
             </ComposerCardToolbar>

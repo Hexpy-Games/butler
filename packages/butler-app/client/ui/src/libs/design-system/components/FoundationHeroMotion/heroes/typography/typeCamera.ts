@@ -1,5 +1,5 @@
 import { fit, focus, type Box, type Pose } from "../../heroTimeline";
-import { PANELS, type Panel, type TypeGeometry } from "./typeChoreography";
+import { PANELS, type Flight, type Panel, type TypeGeometry } from "./typeChoreography";
 import { BADGE_GUTTER } from "./typeLines";
 
 /** Where each component is built: an empty area off the poster, reached by moving down or sideways. */
@@ -41,15 +41,13 @@ export function cameras(g: TypeGeometry) {
     const moved = { ...box, x: box.x + shift[panel].x, y: box.y + shift[panel].y };
     return focus(canvas, moved, fit(canvas, moved, tall ? 0.96 : 0.8, cap));
   });
-  const rung = g.rungs.title;
   // Close enough that the list's type fills the frame; cropping at the edges is fine.
   const close = Math.min(2.4, (canvas.w * 1.1) / g.ladder.w);
   return {
     shift,
     stage,
     rest: { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, s: 1 } as Pose,
-    ladder: focus(canvas, g.ladder, fit(canvas, g.ladder, 0.98, 2.2)),
-    top: focus(canvas, { x: g.ladder.x, y: rung.y, w: g.ladder.w, h: rung.h }, close),
-    bottom: focus(canvas, { x: g.ladder.x, y: g.rungs.metric.y, w: g.ladder.w, h: g.rungs.metric.h }, close),
+    /** Close on one row of the list, flat, the list's type filling the frame. */
+    row: (flight: Flight) => focus(canvas, { x: g.ladder.x, y: g.rungs[flight].y, w: g.ladder.w, h: g.rungs[flight].h }, close),
   };
 }
