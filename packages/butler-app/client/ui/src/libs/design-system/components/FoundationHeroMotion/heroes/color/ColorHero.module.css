@@ -1,0 +1,194 @@
+/* 01 Color hero: the intro above the poster, the swatch field (a light
+   plate with the dark field over it through a wipe window), the topic groups
+   and the poster's product grid. Canvas px (see ../shared/grid.ts). */
+
+/* ---- Intro: the title left, the color intent right (below when tall) ---- */
+
+.intro {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: var(--grid-gutter);
+  align-items: center;
+  padding: var(--grid-margin);
+  translate: 0 -125%;
+}
+
+.introTitle {
+  grid-column: 1 / span 6;
+  color: var(--text-primary);
+  font-size: calc(var(--typo-h1-size) * 4);
+  font-weight: var(--font-weight-strong);
+  letter-spacing: -0.02em;
+  line-height: var(--line-height-none);
+}
+
+.introLead {
+  display: grid;
+  grid-column: 7 / span 6;
+  row-gap: var(--space-xl);
+}
+
+.leadLine {
+  display: grid;
+  row-gap: var(--space-xs);
+  margin: 0;
+}
+
+.leadKey {
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+.leadText {
+  color: var(--text-secondary);
+  font-size: var(--typo-h4-size);
+  line-height: var(--typo-h4-line-height);
+}
+
+[data-layout="tall"] .intro {
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+  row-gap: var(--space-2xl);
+}
+
+[data-layout="tall"] .introTitle,
+[data-layout="tall"] .introLead {
+  grid-column: 1;
+}
+
+[data-layout="tall"] .introTitle {
+  font-size: calc(var(--typo-h1-size) * 2.6);
+}
+
+[data-layout="tall"] .leadText {
+  font-size: var(--typo-body-size);
+}
+
+/* ---- The swatch field ---- */
+
+.field {
+  position: relative;
+  display: grid;
+}
+
+.plate {
+  display: grid;
+  padding: var(--space-lg) var(--space-md);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-popover);
+  background: var(--color-surface-base);
+  color: var(--text-primary);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-lg) var(--space-xs);
+  align-content: space-evenly;
+}
+
+.cell {
+  display: grid;
+  justify-items: center;
+  row-gap: var(--space-xs);
+  min-width: 0;
+}
+
+.sticker {
+  display: block;
+  inline-size: var(--space-4xl);
+  block-size: var(--space-4xl);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--c);
+  box-shadow: var(--shadow-control);
+}
+
+.name {
+  max-inline-size: 100%;
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--font-size-1);
+  line-height: var(--line-height-tight);
+  text-align: center;
+}
+
+/* The dark field over the light one, through a window a line sweeps open.
+   The still poster rests on the split (half and half). */
+.wipe {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  transform: translateX(-50%);
+}
+
+.wipeIn {
+  position: absolute;
+  inset: 0;
+  transform: translateX(50%);
+}
+
+.wipeIn > .plate {
+  block-size: 100%;
+}
+
+.wipeLine {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  inline-size: 2px;
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 var(--space-md)
+    color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* ---- Topic groups ---- */
+
+.group {
+  display: grid;
+  align-content: start;
+  row-gap: var(--space-md);
+  min-width: 0;
+}
+
+.row,
+.switchRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.switchRow {
+  flex-wrap: nowrap;
+}
+
+.column {
+  display: grid;
+  row-gap: var(--space-sm);
+}
+
+.product {
+  grid-template-areas:
+    "contrast contrast"
+    "action states"
+    "status states";
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: space-between;
+  gap: var(--space-xl) var(--grid-gutter);
+}
+
+[data-layout="tall"] .product {
+  grid-template-areas:
+    "contrast"
+    "action"
+    "status"
+    "states";
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  row-gap: var(--space-lg);
+}

@@ -1,4 +1,5 @@
 import type { Key, Pose, Track } from "../../heroTimeline";
+import { HOLD, TRANSITION } from "../shared/beats";
 import { specimenLayout, type SpecimenMetrics } from "./specimenMetrics";
 import { col, onBaseline, SPECIMEN } from "./typeGrid";
 import { OUTLINE_EM } from "./TypeSpecimen";
@@ -24,14 +25,8 @@ import { OUTLINE_EM } from "./TypeSpecimen";
  *
  * Placement comes from the grid (typeGrid.ts) or from measuring the poster.
  */
-/** One transition length for every scene and camera change (list→build, component→component, build→finale, finale→loop). */
-export const TRANSITION = 4;
-/**
- * Holds (beats) every chapter reuses: after a completed component before the
- * camera moves on (0.6 s), and on the last list row while its numerals roll
- * (1.8 s, the roll plus 0.8 s).
- */
-export const HOLD = { component: 1.9, lastRow: 5.7 } as const;
+/** One transition length and the holds every chapter reuses (../shared/beats.ts). */
+export { HOLD, TRANSITION };
 /** The camera settles on the last list row at this beat (its row start plus one). */
 const LAST_ROW_AT = 33.2;
 /** Builds: the first starts after the last-row hold and one transition; each is its work (12.5), its hold and the travel on. */

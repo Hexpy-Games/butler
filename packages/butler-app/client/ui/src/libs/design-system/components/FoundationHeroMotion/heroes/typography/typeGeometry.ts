@@ -3,8 +3,9 @@ import type { Flight, Panel } from "./typeChoreography";
 import type { TypeLayout } from "./typeGrid";
 import type { LineInfo } from "./typeLines";
 
-/** A box the blueprint draws, with the corner radius of the real element (px). */
-export type SketchBox = Box & { r: number };
+import type { SketchBox } from "../shared/Sketch";
+
+export type { SketchBox };
 
 /** Boxes of the poster layout in canvas px, as measured on the live components. */
 export interface TypeGeometry {

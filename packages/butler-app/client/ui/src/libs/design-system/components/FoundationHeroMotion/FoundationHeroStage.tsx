@@ -1,8 +1,8 @@
 import { useRef, type ComponentType } from "react";
 import { cn } from "../../lib/utils";
-import type { FoundationHeroLang, FoundationHeroMotionProps, FoundationHeroVariant } from "./FoundationHeroMotion";
+import { FOUNDATION_FEATURE_HEROES, type FoundationHeroLang, type FoundationHeroMotionProps, type FoundationHeroVariant } from "./FoundationHeroMotion";
 import { useHeroPlayback } from "./heroPlayback";
-import { ColorHero } from "./heroes/ColorHero";
+import { ColorHero } from "./heroes/color/ColorHero";
 import { FocusHero } from "./heroes/FocusHero";
 import { IconographyHero } from "./heroes/IconographyHero";
 import { LayersHero } from "./heroes/LayersHero";
@@ -42,6 +42,7 @@ export default function FoundationHeroStage({ variant, still = false, lang = "en
       className={cn(styles.stage, className)}
       data-slot="foundation-hero"
       data-hero-variant={variant}
+      data-feature={FOUNDATION_FEATURE_HEROES.has(variant) ? "" : undefined}
       data-hero-state={playback}
       aria-hidden="true"
     >

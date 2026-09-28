@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { NavRow } from "../../blocks/NavRow";
 import { Button } from "../../components/Button";
 import { Collapsible } from "../../components/Collapsible";
-import { FoundationHeroMotion } from "../../components/FoundationHeroMotion";
+import { FOUNDATION_FEATURE_HEROES, FoundationHeroMotion } from "../../components/FoundationHeroMotion";
 import { Stack } from "../../components/Stack";
 import { Tag } from "../../components/Tag";
 import { Typo } from "../../components/Typo";
@@ -24,7 +24,7 @@ export function chapterSections(chapter: FoundationChapter, sections: Array<[str
 }
 
 /** Chapters whose hero is the centrepiece: full width under the title instead of a panel beside it. */
-const FEATURE_HEROES = new Set<string>(["typography"]);
+const FEATURE_HEROES: ReadonlySet<string> = FOUNDATION_FEATURE_HEROES;
 
 export function ChapterHeader({ chapter, lead, onOpen, locale, children }: {
   chapter: FoundationChapter;

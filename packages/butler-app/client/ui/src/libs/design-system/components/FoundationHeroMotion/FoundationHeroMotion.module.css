@@ -24,16 +24,16 @@
   user-select: none;
 }
 
-/* Typography is a feature hero: the full width of its column at 16:9 (up
-   to 36rem tall), portrait under a 45rem column so phones get a tall stage. */
-.stage[data-hero-variant="typography"] {
+/* Feature heroes: the full width of their column at 16:9 (up to 36rem
+   tall), portrait under a 45rem column so phones get a tall stage. */
+.stage[data-feature] {
   aspect-ratio: 16 / 9;
   max-block-size: 36rem;
   border-radius: var(--radius-composer);
 }
 
 @container (width < 45rem) {
-  .stage[data-hero-variant="typography"] {
+  .stage[data-feature] {
     aspect-ratio: 19 / 32;
     max-block-size: none;
   }

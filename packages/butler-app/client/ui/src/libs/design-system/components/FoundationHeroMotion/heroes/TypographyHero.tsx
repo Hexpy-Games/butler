@@ -1,4 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useFrame } from "./shared/useFrame";
 import type { FoundationHeroLang } from "../FoundationHeroMotion";
 import { compileTimeline } from "../heroTimeline";
 import { measureType, type TypeMeasure } from "./typography/measureType";
@@ -9,7 +10,7 @@ import { measureSpecimen, POSTER_WEIGHT, specimenLayout, type SpecimenMetrics } 
 import { typeTracks } from "./typography/typeAssembly";
 import { AXIS, BEATS, select } from "./typography/typeChoreography";
 import { TYPE_COPY } from "./typography/typeCopy";
-import { CANVAS, col, columnWidth, gridVars, SPECIMEN, TALL_BELOW, type TypeLayout } from "./typography/typeGrid";
+import { CANVAS, col, columnWidth, gridVars, SPECIMEN, type TypeLayout } from "./typography/typeGrid";
 import { Specimen, WeightControl } from "./typography/TypeSpecimen";
 import t from "./typography/TypographyHero.module.css";
 
@@ -17,27 +18,6 @@ import t from "./typography/TypographyHero.module.css";
 const POSTER_EM: Record<TypeLayout, number> = { wide: 72, tall: 56 };
 
 const axisAt = (weight: number) => (weight - AXIS.min) / (AXIS.max - AXIS.min);
-
-/** Layout and fit scale of the canvas in its stage. */
-function useFrame(root: RefObject<HTMLElement | null>) {
-  const [frame, setFrame] = useState<{ layout: TypeLayout; fit: number }>({ layout: "wide", fit: 1 });
-  useLayoutEffect(() => {
-    const stage = root.current?.parentElement;
-    if (!stage) return undefined;
-    const update = () => {
-      const layout: TypeLayout = stage.clientWidth < TALL_BELOW ? "tall" : "wide";
-      const canvas = CANVAS[layout];
-      const fit = Math.round(Math.min(stage.clientWidth / canvas.w, stage.clientHeight / canvas.h) * 1000) / 1000 || 1;
-      setFrame((current) => (current.layout === layout && current.fit === fit ? current : { layout, fit }));
-    };
-    update();
-    if (typeof ResizeObserver !== "function") return undefined;
-    const observer = new ResizeObserver(update);
-    observer.observe(stage);
-    return () => observer.disconnect();
-  }, [root]);
-  return frame;
-}
 
 /** Fonts ready, then the specimen's real metrics from the live font stack. */
 function useSpecimenMetrics(root: RefObject<HTMLElement | null>) {

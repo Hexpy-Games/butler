@@ -1,4 +1,5 @@
 import type { Track } from "../../heroTimeline";
+import { ROW } from "../shared/beats";
 import { revealTracks } from "./Reveal";
 import { FINALE, FLIGHTS, TRANSITION } from "./typeChoreography";
 
@@ -7,7 +8,7 @@ import { FINALE, FLIGHTS, TRANSITION } from "./typeChoreography";
  * match cut at 20.2; the camera closes in on it over one TRANSITION, then a
  * row every ROW beats, each starting before the previous one has finished.
  */
-export const ROW = 1.6;
+export { ROW };
 export const rowAt = (i: number) => (i === 0 ? 20.2 : 20.2 + TRANSITION + (i - 1) * ROW);
 
 /**

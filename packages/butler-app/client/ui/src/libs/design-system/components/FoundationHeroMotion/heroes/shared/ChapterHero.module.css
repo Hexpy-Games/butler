@@ -1,0 +1,416 @@
+/* The chapter hero engine (ChapterHero.tsx). The static layout below IS the
+   poster (reduced motion): the chapter's token field beside the assembled
+   components. Motion is compiled at runtime (timeline.ts, heroTimeline.ts)
+   and only moves, fades, draws and reveals these boxes. The board is a fixed canvas
+   (1040x585 wide, 380x640 tall) scaled to its stage by --fit, so every px
+   here is a canvas px on the grid of grid.ts (--grid-* set on the board). */
+
+/* Laid out at 2x (zoom) and drawn at half scale, so camera push-ins to 2x
+   stay sharp (see the Typography hero). */
+.board {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  zoom: 2;
+  translate: -50% -50%;
+  scale: calc(var(--fit) / 2);
+  color: var(--text-primary);
+}
+
+.camera {
+  position: absolute;
+  inset: 0;
+}
+
+.world {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 50%;
+}
+
+.mono,
+.note {
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---- Prelude: the chapter's own scenes, over the world (the chapter's
+   stylesheet places them; hidden in the poster) ---- */
+
+.prelude {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* ---- Live control (a chapter may use it in its prelude) ---- */
+
+.control {
+  display: grid;
+  row-gap: var(--space-md);
+  opacity: 0;
+}
+
+.readout {
+  font-size: calc(var(--typo-metric-value-size) * 2.2);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--typo-metric-value-weight);
+  line-height: 1.2;
+}
+
+.roller {
+  display: inline-flex;
+  white-space: pre;
+}
+
+.digit {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: top;
+}
+
+.digitStrip {
+  position: absolute;
+  inset: 0 0 auto;
+  display: grid;
+  translate: 0 calc(var(--d) * -1lh);
+}
+
+.digitSpace {
+  visibility: hidden;
+}
+
+.cutCell {
+  display: inline-grid;
+}
+
+.cutChar {
+  grid-area: 1 / 1;
+  justify-self: end;
+  opacity: 0;
+}
+
+.cutChar[data-last] {
+  opacity: 1;
+}
+
+.sliderBox {
+  display: grid;
+  row-gap: var(--space-sm);
+  padding-block-start: var(--space-sm);
+}
+
+.track {
+  position: relative;
+  display: block;
+  block-size: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+}
+
+.tick {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--x) * 100%);
+  inline-size: 1px;
+  block-size: var(--space-md);
+  background: var(--text-tertiary);
+  translate: -50% -50%;
+}
+
+.thumb {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  inline-size: var(--space-md);
+  block-size: var(--space-md);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  translate: -50% -50%;
+}
+
+.tickLabels {
+  position: relative;
+  display: block;
+  block-size: var(--space-lg);
+}
+
+.tickLabel {
+  position: absolute;
+  top: 0;
+  left: calc(var(--x) * 100%);
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  translate: -50% 0;
+  white-space: nowrap;
+}
+
+.switchRow,
+.pickerRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.pickerRow {
+  align-items: flex-start;
+  gap: var(--space-lg);
+}
+
+.switchCell {
+  display: inline-grid;
+}
+
+.switchLayer {
+  display: inline-grid;
+  grid-area: 1 / 1;
+}
+
+.keyCap {
+  display: inline-block;
+}
+
+.picker {
+  position: relative;
+  display: grid;
+}
+
+.pickerOption {
+  position: relative;
+  display: flex;
+  align-items: center;
+  block-size: var(--control-height-sm);
+  padding-inline: var(--space-sm);
+  color: var(--text-secondary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+}
+
+.pickerIndicator {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  block-size: var(--control-height-sm);
+  border-radius: var(--radius-control);
+  background: var(--selection-strong);
+}
+
+/* ---- Guides, values and badges: pure overlays ---- */
+
+.annots {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.annotSvg {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: visible;
+}
+
+.guidePath,
+.leader {
+  fill: none;
+  opacity: 0;
+  stroke-dasharray: var(--dash) var(--dash);
+  stroke-width: 1px;
+}
+
+.guidePath {
+  stroke: var(--accent);
+}
+
+.guidePath[data-dashed] {
+  stroke-dasharray: 3px 3px;
+}
+
+.leader {
+  stroke: var(--line-strong);
+}
+
+.hatch,
+.ring,
+.note,
+.badge {
+  position: absolute;
+  opacity: 0;
+}
+
+.hatch {
+  overflow: hidden;
+}
+
+.hatchIn {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--accent) 42%, transparent) 0 1px,
+    transparent 1px 5px
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 36%, transparent);
+}
+
+.ring {
+  box-shadow: var(--focus-ring);
+}
+
+.annots[data-shown] :is(.guidePath, .hatch, .ring, .note) {
+  opacity: 1;
+}
+
+.note {
+  color: var(--accent-text, var(--accent));
+}
+
+.note[data-place="above"] {
+  translate: -50% -100%;
+}
+
+.note[data-place="below"] {
+  translate: -50% 0;
+}
+
+.note[data-place="left"] {
+  translate: -100% -50%;
+}
+
+.note[data-place="right"] {
+  translate: 0 -50%;
+}
+
+.badge {
+  translate: -100% -50%;
+  white-space: nowrap;
+}
+
+.badge[data-side="r"] {
+  translate: 0 -50%;
+}
+
+.steps {
+  display: inline-grid;
+}
+
+.step {
+  grid-area: 1 / 1;
+  justify-self: end;
+  opacity: 0;
+}
+
+.note .step,
+.badge[data-side="r"] .step {
+  justify-self: start;
+}
+
+.step[data-last] {
+  opacity: 1;
+}
+
+/* ---- Poster: the token field beside the product, margin to margin ---- */
+
+/* Laid out --poster-zoom times larger (CSS zoom scales the px lengths set
+   here back to the canvas), so a chapter's sparse components fill it. */
+.poster {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  grid-template-columns: calc(var(--grid-tokens) / var(--poster-zoom)) minmax(
+      0,
+      1fr
+    );
+  column-gap: calc(var(--grid-gutter) / var(--poster-zoom));
+  inline-size: calc(var(--canvas-w) / var(--poster-zoom));
+  block-size: calc(var(--canvas-h) / var(--poster-zoom));
+  padding: calc(var(--grid-margin) / var(--poster-zoom));
+  zoom: var(--poster-zoom);
+}
+
+.board[data-field="right"] .poster {
+  grid-template-columns: minmax(0, 1fr) calc(
+      var(--grid-tokens) / var(--poster-zoom)
+    );
+}
+
+.board[data-field="right"] .field {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.board[data-layout="tall"] .poster {
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: var(--space-2xl);
+}
+
+.board[data-layout="tall"] .field {
+  grid-row: 1;
+  grid-column: 1;
+}
+
+.board[data-layout="tall"] .product {
+  grid-row: 2;
+}
+
+.field {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+}
+
+.product {
+  display: grid;
+  gap: var(--grid-gutter);
+  min-width: 0;
+  min-height: 0;
+}
+
+.panel {
+  position: relative;
+  display: grid;
+  min-width: 0;
+}
+
+.surface {
+  display: grid;
+  min-width: 0;
+}
+
+.mark {
+  display: inline-grid;
+}
+
+/* A part that opens left to right: a window a little larger than the part,
+   so its border, ring and shadow are not cut. */
+.markSweep {
+  display: inline-grid;
+  overflow: hidden;
+  margin: calc(var(--space-xs) * -1);
+  padding: var(--space-xs);
+}
+
+.markSweep[data-block] {
+  display: grid;
+  min-width: 0;
+}
+
+.markSweepIn {
+  display: grid;
+  min-width: 0;
+}
+
+.markBlock {
+  display: grid;
+  min-width: 0;
+}
