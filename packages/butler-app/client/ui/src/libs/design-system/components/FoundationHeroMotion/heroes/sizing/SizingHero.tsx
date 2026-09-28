@@ -1,37 +1,46 @@
 import { useMemo } from "react";
 import type { FoundationHeroLang } from "../../FoundationHeroMotion";
-import { ChapterHero } from "../shared/ChapterHero";
+import { SceneHero } from "../scene/SceneHero";
+import type { SceneSpec } from "../scene/types";
 import { Intro } from "../shared/Intro";
-import type { ChapterSpec } from "../shared/types";
-import { sizingBuilds } from "./sizingBuilds";
 import { SIZING_COPY, type SizingCopy } from "./sizingCopy";
-import { sizingPrelude } from "./sizingPrelude";
-import { SizingField, SizingFrame } from "./SizingScenes";
-import s from "./SizingHero.module.css";
+import { ChromeScene, StaffScene, TitleRails, TouchScene } from "./SizingScenes";
+import { FormTile, FrameTile, HaloTile, StaffTile } from "./sizingTiles";
+import { SIZING_END, sizingTracks } from "./sizingTracks";
 
-function spec(copy: SizingCopy): ChapterSpec {
+function spec(copy: SizingCopy): SceneSpec {
   return {
     code: "sizing",
-    prelude: {
-      ...sizingPrelude(copy),
-      cells: ["intro", "field", "frame"],
-      regions: { intro: <Intro lead={copy.lead} title={copy.title} />, frame: (g) => <SizingFrame g={g} /> },
+    scenes: ["intro", "staff", "touch", "chrome"],
+    regions: {
+      intro: <Intro decor={TitleRails} lead={copy.lead} title={copy.title} />,
+      staff: <StaffScene copy={copy} />,
+      touch: <TouchScene copy={copy} />,
+      chrome: <ChromeScene copy={copy} />,
     },
-    field: (g) => <SizingField copy={copy} g={g} />,
-    fieldColumns: 5,
-    posterZoom: 1.2,
-    product: s.product!,
-    builds: sizingBuilds(copy),
+    tiles: {
+      staff: <StaffTile copy={copy} />,
+      frame: <FrameTile copy={copy} />,
+      halo: <HaloTile copy={copy} />,
+      form: <FormTile copy={copy} />,
+    },
+    poster: {
+      wide: { columns: "1.15fr 1fr", rows: "1.2fr 1fr 1fr", areas: ["staff staff", "frame halo", "frame form"] },
+      tall: { columns: "1fr", rows: "auto", areas: ["staff", "halo", "frame"] },
+    },
+    posterZoom: { wide: 0.9, tall: 0.9 },
+    end: () => SIZING_END,
+    tracks: sizingTracks(copy),
   };
 }
 
 /**
- * 04 Sizing, "everything sits on the control-height scale": the intent;
- * four rails draw and real controls snap onto them; hit areas bloom and
- * grow for touch; the app frame's titlebar and sidebar rows are measured;
- * components by topic with height brackets; the rails beside them.
+ * 04 Sizing, "rails and targets": four rails under the title; real controls
+ * drop into lanes one control height tall and an off-rail size snaps onto
+ * one; the pointer's 30px target becomes touch's 44 on every button at once;
+ * the frame's fixed measures on its edge.
  */
 export function SizingHero({ lang }: { lang: FoundationHeroLang }) {
   const chapter = useMemo(() => spec(SIZING_COPY[lang]), [lang]);
-  return <ChapterHero lang={lang} spec={chapter} />;
+  return <SceneHero lang={lang} spec={chapter} />;
 }

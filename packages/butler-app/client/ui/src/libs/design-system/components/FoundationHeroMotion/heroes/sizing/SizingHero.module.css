@@ -1,224 +1,404 @@
-/* 04 Sizing hero: the rails field, the app frame (left of the poster) and
-   the poster's product grid. Canvas px (see ../shared/grid.ts). */
+/* 04 Sizing hero (v3 scenes). Canvas px (../shared/grid.ts). */
 
-/* ---- The field: four rails at the control heights ---- */
+/* ---- Title: four rails under the word, like a staff ---- */
 
-.field {
-  display: grid;
-  align-content: center;
-  row-gap: var(--space-lg);
-  padding: var(--space-xl);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-popover);
-  background: var(--surface-raised);
+.titleRails {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: visible;
 }
 
-.mode {
-  display: inline-grid;
-  color: var(--text-tertiary);
+.titleRails line {
+  stroke: color-mix(in srgb, var(--accent) 60%, transparent);
+  stroke-width: 1.5;
+  stroke-dasharray: 100;
+}
+
+/* ---- The staff: four lanes, each one control height tall ---- */
+
+/* The rails at the pointer: the phone's hit-target floor does not lift these controls off them. */
+.staff {
+  --control-hit-target: var(--space-none);
+
+  display: grid;
+  row-gap: var(--space-xl);
+  inline-size: calc(var(--space-4xl) * 18);
+}
+
+[data-layout="tall"] .staff {
+  inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
+}
+
+.lane {
+  display: grid;
+  grid-template-columns: calc(var(--space-4xl) * 1.5) minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-md);
+}
+
+.laneLabel {
+  color: var(--text-secondary);
   font: var(--font-code);
   font-size: var(--typo-caption-size);
+  white-space: nowrap;
 }
 
-.modeLayer {
-  grid-area: 1 / 1;
+.laneBody {
+  position: relative;
+  border-block: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
-/* The poster names the first mode only. */
-.modeLayer + .modeLayer {
+.lane[data-rail="xs"] .laneBody {
+  block-size: var(--control-height-xs);
+}
+
+.lane[data-rail="sm"] .laneBody {
+  block-size: var(--control-height-sm);
+}
+
+.lane[data-rail="md"] .laneBody {
+  block-size: var(--control-height-md);
+}
+
+.lane[data-rail="lg"] .laneBody {
+  block-size: var(--control-height-lg);
+}
+
+.laneFill {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  opacity: 0.35;
+}
+
+.note {
+  position: absolute;
+  top: 0;
+  display: inline-flex;
+}
+
+.note[data-k="0"] {
+  left: var(--space-4xl);
+}
+
+.note[data-k="1"] {
+  left: calc(var(--space-4xl) * 4.5);
+}
+
+.note[data-k="2"] {
+  left: calc(var(--space-4xl) * 8);
+}
+
+.note[data-k="3"] {
+  left: calc(var(--space-4xl) * 10.5);
+}
+
+[data-layout="tall"] .note {
+  left: var(--space-md);
+}
+
+.railInput {
+  display: inline-block;
+  inline-size: calc(var(--space-4xl) * 4.5);
+}
+
+/* The off-rail control: 32 tall, then 30 on md (sized by the timeline). */
+.ghost {
+  position: absolute;
+  top: 0;
+  left: calc(var(--space-4xl) * 11.5);
+  inline-size: calc(var(--space-4xl) * 2.4);
+  block-size: var(--control-height-md);
   opacity: 0;
 }
 
-.rails {
+[data-layout="tall"] .ghost {
+  left: calc(var(--space-4xl) * 3);
+}
+
+.ghostWrong,
+.ghostRight {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border-radius: var(--radius-control);
+}
+
+.ghostWrong {
+  border: 1.5px dashed var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.ghostRight {
+  border: 1.5px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  opacity: 0;
+}
+
+.ghostNote {
+  position: absolute;
+  bottom: calc(100% + var(--space-xs));
+  left: 0;
+  color: var(--danger);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+}
+
+/* ---- Pointer to touch ---- */
+
+.touchStage {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  column-gap: calc(var(--space-4xl) * 1.5);
+}
+
+[data-layout="tall"] .touchStage {
+  grid-template-columns: auto;
+  justify-items: center;
+  row-gap: var(--space-3xl);
+}
+
+/* A titlebar in a window-top of its own height; icon buttons keep their 24 (the targets are drawn). */
+.strip {
+  --control-hit-target: var(--control-height-xs);
+
   position: relative;
-  display: grid;
-  row-gap: var(--space-xl);
+  box-sizing: border-box;
+  overflow: hidden;
+  inline-size: calc(var(--space-4xl) * 11);
+  block-size: var(--titlebar-safe-area-top);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface-base);
 }
 
-.rail {
+[data-layout="tall"] .strip {
+  inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
+}
+
+.halos {
+  --control-hit-target: var(--control-height-xs);
+
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xl);
+}
+
+.target {
+  position: relative;
+  display: inline-grid;
+}
+
+.halo {
+  position: absolute;
+  top: calc(50% - var(--control-height-md) / 2);
+  left: calc(50% - var(--control-height-md) / 2);
+  box-sizing: border-box;
+  inline-size: var(--control-height-md);
+  block-size: var(--control-height-md);
+  border: 1.5px dashed var(--accent);
+  border-radius: var(--radius-control);
+  pointer-events: none;
+}
+
+.halo[data-touch] {
+  top: calc(50% - var(--touch-target) / 2);
+  left: calc(50% - var(--touch-target) / 2);
+  inline-size: var(--touch-target);
+  block-size: var(--touch-target);
+}
+
+.cursor {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  inline-size: var(--space-lg);
+  block-size: var(--space-xl);
+  overflow: visible;
+  fill: var(--text-primary);
+  stroke: var(--color-surface-base);
+  stroke-width: 1;
+}
+
+.finger {
+  position: absolute;
+  top: calc(50% - var(--touch-target) / 2);
+  left: calc(50% - var(--touch-target) / 2);
+  box-sizing: border-box;
+  inline-size: var(--touch-target);
+  block-size: var(--touch-target);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  opacity: 0;
+}
+
+.readout {
   display: grid;
+  justify-items: start;
   row-gap: var(--space-xs);
+  color: var(--text-primary);
 }
 
-.railName {
-  display: flex;
-  justify-content: space-between;
+[data-layout="tall"] .readout {
+  justify-items: center;
+}
+
+.bigValue {
+  font-size: calc(var(--typo-h1-size) * 2);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-strong);
+  line-height: var(--line-height-none);
+}
+
+.readToken {
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+}
+
+.modes {
+  display: inline-grid;
+}
+
+.mode {
+  grid-area: 1 / 1;
   color: var(--text-secondary);
   font: var(--font-code);
   font-size: var(--typo-caption-size);
 }
 
-.railValue {
-  color: var(--text-tertiary);
-}
-
-/* The rail: the height band between two edges drawn across; its controls sit on it. */
-/* Each rail shows the pointer heights: on phones controls otherwise grow to
-   the touch target (the touch scene shows that growth on the hit areas). */
-.band {
-  --control-hit-target: 0px;
-
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  block-size: var(--h);
-}
-
-.edge {
-  position: absolute;
-  right: calc(var(--space-sm) * -1);
-  left: calc(var(--space-sm) * -1);
-  block-size: 1px;
-  background: color-mix(in srgb, var(--accent) 60%, transparent);
-  transform-origin: 0 50%;
-}
-
-.edge[data-edge="t"] {
-  top: 0;
-}
-
-.edge[data-edge="b"] {
-  bottom: 0;
-}
-
-.slot {
-  display: inline-grid;
-}
-
-/* Invisible probes: their heights are the live hit and touch targets. */
-.probe {
-  position: absolute;
-  top: 0;
-  left: 0;
-  inline-size: 1px;
-  visibility: hidden;
-}
-
-.probe[data-kind="hit"] {
-  block-size: var(--control-hit-target);
-}
-
-.probe[data-kind="touch"] {
-  block-size: var(--touch-target);
-}
-
-/* ---- The app frame, left of the poster ---- */
-
-.frameRegion {
-  display: grid;
-  place-items: center;
-}
+/* ---- The frame's fixed measures ---- */
 
 .frame {
-  position: relative;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  inline-size: calc(var(--col) * 9);
-  block-size: calc(var(--canvas-h) * 0.62);
-  overflow: visible;
-}
-
-.frameBody {
-  display: grid;
-  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-}
-
-.sidebar {
-  display: grid;
-  align-content: start;
-  row-gap: var(--space-xs);
-  padding: var(--space-sm);
-}
-
-.win {
-  display: block;
-  overflow: hidden;
-}
-
-.frameBox {
-  display: block;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-control);
-}
-
-.frameBox[data-kind="title"] {
-  block-size: var(--titlebar-height);
-  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
-}
-
-.frameBox[data-kind="row"] {
-  block-size: var(--sidebar-row-height);
-}
-
-.frameBox[data-kind="content"] {
-  block-size: 100%;
-  border-style: dashed;
-  border-radius: 0;
-}
-
-.frameBody > :last-child {
-  display: grid;
-}
-
-/* ---- Components and poster ---- */
-
-.row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-/* The titlebar is absolute in the app's window: here it sits in a window-top of its own height. */
-.titlebarHost {
-  position: relative;
   box-sizing: border-box;
-  overflow: hidden;
-  inline-size: 100%;
-  block-size: var(--titlebar-safe-area-top);
+  inline-size: calc(var(--space-4xl) * 9);
+  margin-inline-start: calc(var(--space-4xl) * 5);
+  overflow: visible;
   border: 1px solid var(--line);
-  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+  border-radius: var(--radius-panel);
   background: var(--color-surface-base);
 }
 
-.nowrap {
+[data-layout="tall"] .frame {
+  inline-size: calc(var(--space-4xl) * 3.8);
+  margin-inline-start: calc(var(--space-4xl) * 4.6);
+}
+
+.frameBar {
+  position: relative;
+  box-sizing: border-box;
+  block-size: var(--titlebar-safe-area-top);
+  border-block-end: 1px solid var(--line);
+}
+
+.frameRows {
+  display: grid;
+  row-gap: var(--sidebar-row-spacing, var(--space-xs));
+  padding: var(--space-sm);
+}
+
+.frameRow {
+  position: relative;
+}
+
+/* A dimension line on the outer left edge, its label to the left of it. */
+.dim {
+  position: absolute;
+  top: 0;
+  right: calc(100% + var(--space-xl));
+  bottom: 0;
+  box-sizing: border-box;
+  inline-size: var(--space-sm);
+  border-block: 1px solid var(--accent);
+  transform-origin: 50% 0;
+}
+
+.frameRow .dim {
+  right: calc(100% + var(--space-sm) + var(--space-xl));
+}
+
+.dim::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 0.5px);
+  inline-size: 1px;
+  background: var(--accent);
+  content: "";
+}
+
+.dimLabel {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + var(--space-sm));
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+  transform: translateY(-50%);
+}
+
+/* ---- Form row on one rail ---- */
+
+.formRow {
+  --control-hit-target: var(--space-none);
+
+  position: relative;
   display: inline-flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+}
+
+.formRail {
+  position: absolute;
+  inset: 0 calc(-1 * var(--space-md));
+  border-block: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  pointer-events: none;
+}
+
+/* ---- Finale tiles ---- */
+
+.staffTile .staff {
+  inline-size: calc(var(--space-4xl) * 20);
+}
+
+[data-layout="tall"] .staffTile .staff {
+  inline-size: calc(var(--canvas-w) - var(--grid-margin) * 4);
+}
+
+.frameTile .frame {
+  inline-size: calc(var(--space-4xl) * 6);
+  margin-inline-start: calc(var(--space-4xl) * 4.5);
+}
+
+.captioned {
+  display: grid;
+  justify-items: center;
+  row-gap: var(--space-xl);
+}
+
+.caption {
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
   white-space: nowrap;
 }
 
-.sidebarStrip {
-  display: grid;
-  row-gap: var(--sidebar-row-spacing, var(--space-xs));
-  inline-size: var(--sidebar-width);
-  max-inline-size: 100%;
+[data-layout="tall"] .frameTile .frame {
+  inline-size: calc(var(--space-4xl) * 3.8);
+  margin-inline-start: calc(var(--space-4xl) * 4.6);
 }
 
-.product {
-  grid-template-areas:
-    "controls titlebar"
-    "form titlebar"
-    "form sidebar";
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-content: space-between;
-  gap: var(--space-2xl) var(--grid-gutter);
-}
-
-[data-layout="tall"] .product {
-  grid-template-areas:
-    "controls"
-    "titlebar"
-    "sidebar"
-    "form";
-  grid-template-columns: minmax(0, 1fr);
-  align-content: start;
-  row-gap: var(--space-lg);
-}
-
-[data-layout="tall"] .frame {
-  inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
-  block-size: calc(var(--canvas-h) - var(--grid-margin) * 4);
-}
-
-[data-layout="tall"] .frameBody {
-  grid-template-columns: 60% minmax(0, 1fr);
+/* Tall: a dimension label wraps within the frame left margin. */
+[data-layout="tall"] .dimLabel {
+  inline-size: calc(var(--space-4xl) * 3.2);
+  text-align: end;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }

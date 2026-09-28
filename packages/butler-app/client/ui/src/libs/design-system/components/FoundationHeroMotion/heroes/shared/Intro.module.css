@@ -17,6 +17,9 @@
   isolation: isolate;
   grid-column: 1 / span 6;
   min-width: 0;
+  /* Room for descenders inside the clip, without moving the title. */
+  margin-block-end: -0.16em;
+  padding-block-end: 0.16em;
   overflow: hidden;
   color: var(--text-primary);
   font-size: calc(var(--typo-h1-size) * 4 * var(--title-fit, 1));
