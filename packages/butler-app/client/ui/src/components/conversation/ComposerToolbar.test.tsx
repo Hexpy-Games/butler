@@ -90,6 +90,28 @@ test("reconnection overrides send and stop with a disabled busy control, then re
   }
 });
 
+test("a stopped agent disables send without the reconnecting spinner", async () => {
+  const appBefore = useButlerStore.getState();
+  const { appCopy } = await import("@/app/copy.ts");
+  try {
+    useButlerStore.setState({ agentNotice: "stopped", liveConnectionLost: true });
+    const html = await renderToolbarHtml({ canSend: true });
+    expect(html).not.toContain('aria-busy="true"');
+    expect(html).toMatch(/data-test-class="composer-send-button"[^>]*disabled=""/);
+    expect(html).toContain(`aria-label="${appCopy.feedback.agentStopped}"`);
+
+    useButlerStore.setState({ agentNotice: "restarting" });
+    const restarting = await renderToolbarHtml({ canSend: true });
+    expect(restarting).toContain('aria-busy="true"');
+    expect(restarting).toContain(`aria-label="${appCopy.feedback.agentRestarting}"`);
+  } finally {
+    useButlerStore.setState({
+      agentNotice: appBefore.agentNotice,
+      liveConnectionLost: appBefore.liveConnectionLost,
+    });
+  }
+});
+
 test("context ring renders only once context usage data exists", async () => {
   expect(await renderToolbarHtml({ context: null })).not.toContain(
     'data-test-class="context-donut-button"',

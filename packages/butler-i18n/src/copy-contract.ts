@@ -1370,6 +1370,11 @@ export interface AppCopy {
     attachmentSizeLimit: (names: string, limit: string) => string;
     reconnecting: string;
     reconnectingShort: string;
+    agentStopped: string;
+    agentRestarting: string;
+    agentRestartFailed: string;
+    agentStart: string;
+    agentStartFailed: string;
     dashboardLoading: string;
     dashboardFailed: string;
     dashboardRetry: string;
