@@ -1,522 +1,397 @@
-/* 10 Layout hero: the page-frame field, the resizing frame and the product
-   grid of whole screens. Canvas px (see ../shared/grid.ts); the poster is
-   laid out at 0.6, so poster sizes read larger here. */
+/* 10 Layout and platform hero (v3 scenes). Canvas px (../shared/grid.ts);
+   the shell is laid out in device px and drawn at --z. */
 
-/* ---- The field: the page frame as a blueprint, over its legend ---- */
+/* ---- Title: a thin page frame, guides down each side ---- */
 
-.field {
-  display: grid;
-  place-items: center;
-}
-
-.fieldBody {
-  display: grid;
-  justify-items: start;
-  row-gap: var(--space-2xl);
-}
-
-.page {
-  position: relative;
-  box-sizing: border-box;
-  inline-size: calc(var(--space-4xl) * 10);
-  block-size: calc(var(--space-4xl) * 6);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-panel);
-  background: var(--color-surface-base);
-}
-
-.hatch {
-  --hatch: color-mix(in srgb, var(--accent) 45%, transparent);
-
+.titleFrame {
   position: absolute;
-  background: repeating-linear-gradient(
-    45deg,
-    var(--hatch) 0 1px,
-    transparent 1px var(--space-sm)
-  );
+  inset: -0.08em auto -0.02em -0.12em;
+  inline-size: 3.3em;
+  block-size: calc(100% + 0.1em);
+  overflow: visible;
 }
 
-.hatch[data-side="t"] {
-  inset: 0 0 auto;
-  block-size: var(--space-xl);
+.titleFrame rect,
+.titleFrame line {
+  fill: none;
+  stroke-dasharray: 100;
+  vector-effect: non-scaling-stroke;
 }
 
-.hatch[data-side="b"] {
-  inset: auto 0 0;
-  block-size: var(--space-lg);
+.titleFrame rect {
+  stroke: color-mix(in srgb, var(--text-tertiary) 70%, transparent);
+  stroke-width: 1;
 }
 
-.hatch[data-side="l"] {
-  inset: 0 auto 0 0;
-  inline-size: var(--space-md);
+.titleFrame line {
+  stroke: color-mix(in srgb, var(--accent) 70%, transparent);
+  stroke-width: 1.5;
 }
 
-.hatch[data-side="r"] {
-  inset: 0 0 0 auto;
-  inline-size: var(--space-md);
-}
+/* ---- The stage: readout, the frame, its rim ---- */
 
-.titleBand {
-  position: absolute;
-  top: var(--space-xl);
-  right: var(--space-md);
-  left: var(--space-md);
-  block-size: var(--space-4xl);
-  border-bottom: 1px solid var(--line);
-  background: var(--selection);
-  transform-origin: 0 50%;
-}
+.stage {
+  --z: 0.6;
 
-.container {
-  position: absolute;
-  inset: calc(var(--space-xl) + var(--space-4xl) + var(--space-lg)) 15%
-    calc(var(--space-lg) * 2);
-}
-
-.guide {
-  position: absolute;
-  top: calc(var(--space-sm) * -1);
-  bottom: calc(var(--space-sm) * -1);
-  border-left: 1px dashed var(--accent);
-  transform-origin: 50% 0;
-}
-
-.guide[data-side="l"] {
-  left: 0;
-}
-
-.guide[data-side="r"] {
-  right: 0;
-}
-
-.columns {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: var(--space-lg);
-  block-size: 100%;
-  padding-inline: var(--space-lg);
+  row-gap: var(--space-xl);
+  padding-block-end: calc(var(--space-4xl) * 1.6);
+  padding-inline: calc(var(--space-4xl) * 4.5) calc(var(--space-4xl) * 1.5);
 }
 
-.column {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  transform-origin: 50% 0;
-}
+[data-layout="tall"] .stage {
+  --z: 0.26;
 
-.legend {
-  display: grid;
-  row-gap: var(--space-sm);
-}
-
-.legendRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  color: var(--text-secondary);
-  font: var(--font-code);
-  font-size: var(--typo-h5-size);
-  white-space: nowrap;
-}
-
-.legendValue {
-  color: var(--text-tertiary);
-}
-
-.glyph {
-  inline-size: var(--space-2xl);
-  block-size: var(--space-md);
-  border-radius: var(--radius-control);
-}
-
-.glyph[data-kind="title"] {
-  background: var(--selection);
-}
-
-.glyph[data-kind="guide"] {
-  border-inline: 1px dashed var(--accent);
-  border-radius: 0;
-}
-
-.glyph[data-kind="gutter"] {
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--accent) 16%, transparent) 35%,
-    transparent 35% 65%,
-    color-mix(in srgb, var(--accent) 16%, transparent) 65%
-  );
-}
-
-.glyph[data-kind="column"] {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-}
-
-.glyph[data-kind="hatch"] {
-  --hatch: color-mix(in srgb, var(--accent) 45%, transparent);
-
-  background: repeating-linear-gradient(
-    45deg,
-    var(--hatch) 0 1px,
-    transparent 1px var(--space-xs)
-  );
-}
-
-/* ---- The resizing frame ---- */
-
-.resizeRegion {
-  display: grid;
-  place-items: center;
-}
-
-.resizeStage {
-  display: grid;
-  row-gap: var(--space-lg);
-  inline-size: var(--frame-w);
+  padding-inline: calc(var(--space-4xl) * 2.2) var(--space-xl);
 }
 
 .readout {
   display: flex;
   align-items: baseline;
-  gap: var(--space-lg);
+  gap: var(--space-md);
   color: var(--text-primary);
-  font: var(--font-code);
-  font-size: var(--typo-body-size);
-  white-space: nowrap;
 }
 
 .readWidth {
-  display: inline-flex;
+  font-size: var(--typo-h2-size);
   font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-strong);
 }
 
-.modes {
-  display: inline-grid;
+.readMode {
   color: var(--accent);
-}
-
-.mode {
-  grid-area: 1 / 1;
-}
-
-.mode + .mode {
-  opacity: 0;
+  font: var(--font-code);
+  font-size: var(--typo-h5-size);
 }
 
 .source {
-  margin-inline-start: auto;
   color: var(--text-tertiary);
+  font: var(--font-code);
   font-size: var(--typo-caption-size);
 }
 
-.screen {
+.frameBox {
   position: relative;
-  block-size: calc(var(--space-4xl) * 7);
+  inline-size: calc(1280px * var(--z));
+  block-size: calc(720px * var(--z));
 }
 
+/* The window clips the shell; its width follows the handle (the timeline). */
 .window {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  inline-size: calc(1280px * var(--z));
+  block-size: calc(720px * var(--z));
   overflow: hidden;
-}
-
-.windowIn {
-  position: absolute;
-  inset: 0;
+  border: 1px solid var(--line-strong, var(--line));
+  border-radius: var(--radius-panel);
+  background: var(--color-surface-base);
 }
 
 .layer {
   position: absolute;
   top: 0;
-  bottom: 0;
   left: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  overflow: hidden;
-  inline-size: var(--w);
-  background: var(--color-surface-base);
-}
-
-.miniTitle {
-  display: flex;
-  align-items: center;
-  block-size: var(--space-xl);
-  padding-inline: var(--space-sm);
-  border-bottom: 1px solid var(--line);
-  background: var(--surface-raised);
-}
-
-.burger {
-  inline-size: var(--space-md);
-  block-size: var(--space-sm);
-  border-block: 2px solid var(--text-tertiary);
-}
-
-.miniBody {
-  display: flex;
-  min-block-size: 0;
-}
-
-.miniSide {
-  display: grid;
-  flex: none;
-  align-content: start;
-  row-gap: var(--space-sm);
-  box-sizing: border-box;
-  inline-size: calc(var(--sidebar-width) * 0.36);
-  padding: var(--space-sm);
-  border-right: 1px solid var(--line);
-  background: var(--surface-raised);
-}
-
-.miniRow {
-  display: block;
-  block-size: var(--space-sm);
-  border-radius: var(--radius-pill);
-  background: var(--selection-strong);
-}
-
-.miniTiles {
-  display: grid;
-  flex: 1;
-  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
-  grid-auto-rows: calc(var(--space-4xl) * 1.6);
-  gap: var(--space-sm);
-  align-content: start;
-  padding: var(--space-md);
-}
-
-.miniTile {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  background: var(--surface-raised);
-}
-
-.miniDim {
-  position: absolute;
-  inset: 0;
-  background: var(--dialog-overlay-bg);
-}
-
-.miniDrawer {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  display: grid;
-  align-content: start;
-  row-gap: var(--space-sm);
-  box-sizing: border-box;
-  inline-size: 80%;
-  padding: calc(var(--space-xl) + var(--space-sm)) var(--space-sm);
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-window);
-}
-
-.edgeLine {
-  position: absolute;
-  background: var(--line-strong);
-}
-
-.edgeLine[data-edge="t"],
-.edgeLine[data-edge="b"] {
-  left: 0;
-  inline-size: 100%;
-  block-size: 1px;
-  transform-origin: 0 50%;
-}
-
-.edgeLine[data-edge="t"] {
-  top: 0;
-}
-
-.edgeLine[data-edge="b"] {
-  bottom: 0;
-}
-
-.edgeLine[data-edge="l"],
-.edgeLine[data-edge="r"] {
-  top: 0;
-  bottom: 0;
-  inline-size: 1px;
-}
-
-.edgeLine[data-edge="l"] {
-  left: 0;
-}
-
-.edgeLine[data-edge="r"] {
-  right: 0;
 }
 
 .handle {
   position: absolute;
-  top: 50%;
-  right: calc(var(--space-xs) * -1);
+  top: calc(50% - var(--space-2xl));
+  left: calc(100% - var(--space-xs));
   inline-size: var(--space-sm);
-  block-size: var(--space-4xl);
+  block-size: calc(var(--space-2xl) * 2);
   border-radius: var(--radius-pill);
   background: var(--accent);
-  translate: 0 -50%;
 }
 
-/* ---- Components (whole screens) ---- */
-
-.shell {
-  display: grid;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
-  background: var(--color-surface-base);
-}
-
-.titlebarHost,
-.phoneBar {
-  position: relative;
+/* A measure on the frame's rim: the titlebar on the left edge, sidebar and gutter under the bottom edge. */
+.dim {
+  position: absolute;
   box-sizing: border-box;
-  overflow: hidden;
-  block-size: var(--titlebar-height);
-  border-bottom: 1px solid var(--line);
-  background: var(--color-surface-base);
+  border-color: var(--accent);
+  border-style: solid;
 }
 
-/* The titlebar keeps its own stacking inside its band (the compact
-   screen's drawer and dim lie over it). */
-.phoneBar {
-  z-index: 0;
+.dim[data-part="bar"] {
+  top: 0;
+  right: calc(100% + var(--space-md));
+  inline-size: var(--space-sm);
+  block-size: calc(var(--titlebar-safe-area-top) * var(--z));
+  border-width: 1px 0;
 }
 
-.shellBody {
-  display: flex;
+.dim[data-part="side"],
+.dim[data-part="gutter"] {
+  top: calc(100% + var(--space-md));
+  block-size: var(--space-sm);
+  border-width: 0 1px;
 }
 
-.shellSide {
-  display: grid;
-  align-content: start;
-  row-gap: var(--sidebar-row-spacing, var(--space-xs));
-  box-sizing: border-box;
-  inline-size: var(--sidebar-width);
-  padding: var(--space-sm);
-  border-right: 1px solid var(--line);
-  background: var(--surface-raised);
+.dim[data-part="side"] {
+  left: 0;
+  inline-size: calc(var(--sidebar-width) * var(--z));
 }
 
-.shellMain {
-  display: grid;
-  align-content: start;
-  row-gap: var(--space-md);
-  inline-size: calc(var(--space-4xl) * 5);
-  padding: var(--space-lg);
-}
-
-.cardGrid {
-  display: grid;
-  grid-template-columns: repeat(2, var(--layout-basis-sm));
-  gap: var(--space-lg);
-}
-
-.phone {
-  position: relative;
-  display: grid;
-  overflow: hidden;
-  inline-size: 375px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-panel);
-  background: var(--color-surface-base);
-}
-
-.safe {
-  --hatch: color-mix(in srgb, var(--accent) 45%, transparent);
-
-  display: block;
-  block-size: var(--space-xl);
-  background: repeating-linear-gradient(
-    45deg,
-    var(--hatch) 0 1px,
-    transparent 1px var(--space-sm)
+.dim[data-part="gutter"] {
+  left: calc(var(--sidebar-width) * var(--z));
+  inline-size: calc(
+    clamp(var(--space-lg), 1280px * 0.03, var(--space-4xl)) * var(--z)
   );
 }
 
-.safe[data-edge="b"] {
-  block-size: var(--space-lg);
+.dim::before {
+  position: absolute;
+  background: var(--accent);
+  content: "";
 }
 
-.phoneBody {
+.dim[data-part="bar"]::before {
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 0.5px);
+  inline-size: 1px;
+}
+
+.dim[data-part="side"]::before,
+.dim[data-part="gutter"]::before {
+  top: calc(50% - 0.5px);
+  right: 0;
+  left: 0;
+  block-size: 1px;
+}
+
+.dimLabel {
+  position: absolute;
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+}
+
+.dim[data-part="bar"] .dimLabel {
+  top: 50%;
+  right: calc(100% + var(--space-sm));
+  transform: translateY(-50%);
+}
+
+.dim[data-part="side"] .dimLabel {
+  top: calc(100% + var(--space-xs));
+  left: 0;
+}
+
+.dim[data-part="gutter"] .dimLabel {
+  top: calc(100% + var(--space-xl));
+  left: 0;
+}
+
+.insetLabel {
+  position: absolute;
+  top: 0;
+  left: calc(375px * var(--z) + var(--space-lg));
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+}
+
+[data-layout="tall"] .insetLabel {
+  top: calc(100% + var(--space-sm));
+  left: 0;
+}
+
+/* ---- The shell at one width (device px) ---- */
+
+.shell {
+  --page-container-gutter: clamp(
+    var(--space-lg),
+    var(--device) * 0.03,
+    var(--space-4xl)
+  );
+
+  position: relative;
   display: grid;
-  row-gap: var(--space-sm);
-  padding: var(--space-md);
+  grid-template-rows: var(--titlebar-safe-area-top) minmax(0, 1fr);
+  inline-size: var(--device);
+  block-size: 720px;
+  overflow: hidden;
+  background: var(--color-surface-base);
+  zoom: var(--z);
 }
 
-.dim {
-  position: absolute;
-  inset: 0;
-  background: var(--dialog-overlay-bg);
+.bar {
+  position: relative;
+  border-block-end: 1px solid var(--line);
 }
 
-.phone > [data-a="ph-dim"] {
-  position: absolute;
-  inset: 0;
-}
-
-.phone > [data-a="ph-drawer"] {
-  position: absolute;
-  inset: 0 auto 0 0;
-  inline-size: min(var(--sidebar-width), 85%);
-}
-
-.phoneDrawer {
+.body {
   display: grid;
-  align-content: start;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  min-block-size: 0;
+}
+
+.body[data-compact] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.side {
+  padding: var(--space-sm);
+  border-inline-end: 1px solid var(--line);
+}
+
+.nav {
+  display: grid;
   row-gap: var(--sidebar-row-spacing, var(--space-xs));
+}
+
+.main {
+  min-inline-size: 0;
+  padding: var(--page-container-gutter);
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  gap: var(--space-lg);
+}
+
+.partBand {
+  position: absolute;
   box-sizing: border-box;
-  block-size: 100%;
-  padding: calc(var(--space-xl) + var(--space-sm)) var(--space-sm);
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-window);
+  border: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  opacity: 0;
 }
 
-.product {
-  grid-template-areas:
-    "shell compact"
-    "grid compact";
-  grid-template-columns: auto auto;
-  place-content: start start;
-  gap: var(--space-3xl) var(--space-4xl);
+.partBand[data-part="bar"] {
+  top: 0;
+  right: 0;
+  left: 0;
+  block-size: var(--titlebar-safe-area-top);
 }
 
-[data-layout="tall"] .product {
-  grid-template-areas:
-    "shell"
-    "grid"
-    "compact";
-  grid-template-columns: auto;
-  row-gap: var(--space-3xl);
+.partBand[data-part="side"] {
+  top: var(--titlebar-safe-area-top);
+  bottom: 0;
+  left: 0;
+  inline-size: var(--sidebar-width);
 }
 
-/* The portrait frame is narrow: the source note takes its own line. */
-[data-layout="tall"] .readout {
-  flex-wrap: wrap;
+.partBand[data-part="gutter"] {
+  top: var(--titlebar-safe-area-top);
+  bottom: 0;
+  left: var(--sidebar-width);
+  inline-size: var(--page-container-gutter);
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--adaptive-scrim-bg);
+  opacity: 0;
+}
+
+.drawer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  box-sizing: border-box;
+  inline-size: min(78%, 336px);
+  padding: calc(var(--titlebar-height) + var(--space-sm)) var(--space-sm);
+  border-inline-end: 1px solid var(--line);
+  background: var(--color-surface-base);
+}
+
+/* Device insets (a phone's status bar and home indicator), hatched. */
+.inset {
+  --hatch: color-mix(in srgb, var(--accent) 55%, transparent);
+
+  position: absolute;
+  right: 0;
+  left: 0;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--hatch) 0 2px,
+    transparent 2px var(--space-md)
+  );
+  opacity: 0;
+}
+
+.inset[data-side="top"] {
+  top: 0;
+  block-size: var(--space-3xl);
+}
+
+.inset[data-side="bottom"] {
+  bottom: 0;
+  block-size: var(--space-2xl);
+}
+
+/* ---- Finale tiles ---- */
+
+.still {
+  --z: 0.36;
+
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+}
+
+.still[data-k="1"] {
+  --z: 0.3;
+}
+
+.still[data-k="3"] {
+  --z: 0.34;
+}
+
+[data-layout="tall"] .still {
+  --z: 0.12;
+}
+
+.modeStrip {
+  display: grid;
+  row-gap: var(--space-md);
+}
+
+.modeCell {
+  display: grid;
+  row-gap: var(--space-xs);
+}
+
+.modeName {
+  color: var(--text-primary);
+  font-size: var(--typo-h5-size);
+  font-weight: var(--font-weight-strong);
+}
+
+.modeRange {
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+/* Tall: the camera closes in on the narrowing frame, so the rim's type is set smaller and kept over the frame. */
+[data-layout="tall"] .readWidth {
+  font-size: calc(var(--typo-h2-size) * 0.45);
+}
+
+[data-layout="tall"] .readMode,
+[data-layout="tall"] .insetLabel {
+  font-size: calc(var(--typo-caption-size) * 0.5);
 }
 
 [data-layout="tall"] .source {
-  flex-basis: 100%;
-  margin-inline-start: 0;
+  display: none;
 }
 
-[data-layout="tall"] .screen {
-  block-size: calc(var(--space-4xl) * 13);
+[data-layout="tall"] .dim[data-part="bar"] .dimLabel {
+  inset: auto auto calc(100% + var(--space-xs)) 0;
+  transform: none;
 }
 
-/* Tall: a narrower main pane, so the shells build larger down the column. */
-[data-layout="tall"] .shellMain {
-  inline-size: calc(var(--space-4xl) * 3);
-}
-
-[data-layout="tall"] [data-cell] .page {
-  inline-size: calc(var(--space-4xl) * 9);
-  block-size: calc(var(--space-4xl) * 9);
-}
-
-/* Tall poster: a smaller page frame over the legend, so the field and the
-   screens fit the portrait frame together. */
-[data-layout="tall"] [data-t="field-mover"] .page {
-  inline-size: calc(var(--space-4xl) * 7);
-  block-size: calc(var(--space-4xl) * 4);
+[data-layout="tall"] .still[data-k="3"] {
+  --z: 0.5;
 }

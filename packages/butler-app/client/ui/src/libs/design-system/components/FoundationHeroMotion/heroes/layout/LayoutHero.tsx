@@ -1,40 +1,44 @@
 import { useMemo } from "react";
 import type { FoundationHeroLang } from "../../FoundationHeroMotion";
-import { ChapterHero } from "../shared/ChapterHero";
+import { SceneHero } from "../scene/SceneHero";
+import type { SceneSpec } from "../scene/types";
 import { Intro } from "../shared/Intro";
-import type { ChapterSpec } from "../shared/types";
-import { layoutBuilds } from "./layoutBuilds";
 import { LAYOUT_COPY, type LayoutCopy } from "./layoutCopy";
-import { layoutPrelude } from "./layoutPrelude";
-import { LayoutField, LayoutResize } from "./LayoutScenes";
-import s from "./LayoutHero.module.css";
+import { ShellScene, TitleFrame } from "./LayoutScenes";
+import { ExpandedTile, MediumTile, ModesTile, PhoneTile } from "./layoutTiles";
+import { LAYOUT_END, layoutTracks } from "./layoutTracks";
 
-function spec(copy: LayoutCopy): ChapterSpec {
+function spec(copy: LayoutCopy): SceneSpec {
   return {
     code: "layout",
-    prelude: {
-      ...layoutPrelude(copy),
-      cells: ["intro", "field", "resize"],
-      regions: { intro: <Intro lead={copy.lead} title={copy.title} />, resize: <LayoutResize copy={copy} /> },
+    scenes: ["intro", "shell"],
+    regions: {
+      intro: <Intro decor={TitleFrame} lead={copy.lead} title={copy.title} />,
+      shell: <ShellScene copy={copy} />,
     },
-    field: <LayoutField />,
-    fieldScene: <LayoutField />,
-    fieldColumns: 4,
-    // Whole screens: the poster is laid out smaller so the shells fit beside the field (and down the portrait column).
-    posterZoom: 0.75,
-    tallPosterZoom: 0.72,
-    product: s.product!,
-    builds: layoutBuilds(copy),
+    tiles: {
+      exp: <ExpandedTile copy={copy} />,
+      med: <MediumTile copy={copy} />,
+      phone: <PhoneTile copy={copy} />,
+      modes: <ModesTile />,
+    },
+    poster: {
+      wide: { columns: "1.7fr 0.55fr 0.75fr", rows: "1fr 1fr", areas: ["exp med med", "exp phone modes"] },
+      tall: { columns: "1fr 1fr", rows: "auto", areas: ["exp med", "phone phone"] },
+    },
+    posterZoom: { wide: 0.9, tall: 0.9 },
+    end: () => LAYOUT_END,
+    tracks: layoutTracks(copy),
   };
 }
 
 /**
- * 10 Layout and platform, "one shell, three modes": the intent; the page
- * frame draws (titlebar, max width, columns and gutter, safe areas); a
- * handle drags it from 1280 to 375 through the modes, the sidebar becoming
- * a drawer; whole screens build at a lower zoom; the frame beside them.
+ * 10 Layout and platform, "one shell, three modes": an empty page frame
+ * measured on its rim; the real shell fills it; a handle drags it from 1280
+ * to 375, the shell relaying out at each detent; at 375 the sidebar is a
+ * drawer and the device supplies its insets.
  */
 export function LayoutHero({ lang }: { lang: FoundationHeroLang }) {
   const chapter = useMemo(() => spec(LAYOUT_COPY[lang]), [lang]);
-  return <ChapterHero lang={lang} spec={chapter} />;
+  return <SceneHero lang={lang} spec={chapter} />;
 }

@@ -11,7 +11,7 @@ export const LAYOUT_COPY = {
       ["Platform", "Breakpoints are constants in responsive.ts; insets come from the device."],
     ] as IntroLead,
     source: "responsive.ts",
-    topics: { shell: "App shell", grid: "Card grid", compact: "Compact screen" },
+    menu: "Menu", device: "device insets",
     app: "Butler", chats: "Chats", projects: "Projects", files: "Files",
     cards: ["Weekly report", "Launch plan", "Meeting notes"],
     notes: ["Updated today", "3 tasks left", "Shared with 4"],
@@ -24,7 +24,7 @@ export const LAYOUT_COPY = {
       ["플랫폼", "중단점은 responsive.ts의 상수이고, 여백은 기기가 정합니다."],
     ] as IntroLead,
     source: "responsive.ts",
-    topics: { shell: "앱 셸", grid: "카드 그리드", compact: "좁은 화면" },
+    menu: "메뉴", device: "기기 여백",
     app: "Butler", chats: "대화", projects: "프로젝트", files: "파일",
     cards: ["주간 리포트", "출시 계획", "회의록"],
     notes: ["오늘 업데이트", "남은 작업 3개", "4명과 공유"],
@@ -43,17 +43,14 @@ export const WIDTHS = [
 
 export const MODES = ["expanded", "medium", "compact"] as const;
 
-/** The page frame's legend: each token, and whether its value is shown (clamps and device insets are not). */
-export const LEGEND = [
-  { token: "--titlebar-height", value: true },
-  { token: "--page-max-width-wide", value: true },
-  { token: "--page-container-gutter", value: false },
-  { token: "--layout-basis-sm", value: true },
-  { token: "--safe-area-*", value: false },
-] as const;
-
 /** A token's live value from tokens.css, read at render. */
 export function tokenValue(token: string): string {
   if (typeof document === "undefined") return "";
   return getComputedStyle(document.documentElement).getPropertyValue(token).trim();
 }
+
+/** The device height every width is shown at (px). */
+export const DEVICE_H = 720;
+
+/** Canvas px per device px of the resizing window, per canvas. */
+export const ZOOM = { wide: 0.6, tall: 0.26 } as const;
