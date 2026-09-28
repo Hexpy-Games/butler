@@ -53,6 +53,14 @@ blank lines, and inline tests. Files from 400 through 500 lines require a respon
 pass with a notice. Files over 500 lines fail. `.git` and `target` directories are excluded. Rust
 source symlinks and directory symlinks are rejected so they cannot bypass the scan.
 
+Behaviour is tested end to end in `crates/butler-e2e`. The checker counts every other test
+function (`#[test]`, `#[tokio::test]`) per package against `source-check-tests.txt`, and the
+counts may only shrink. A test kept outside the E2E harness carries a marker comment directly
+above it naming why it cannot be a scenario: `// test-category: race`, `security`, `pure-logic`
+or `format-pin`. Unmarked tests are waiting for E2E coverage; their count may only shrink too.
+After deleting tests, ratchet the baseline with `cargo run -p butler-source-check -- --bless .`,
+which never raises a count.
+
 When the scan root contains `agent/src/lib.rs`, the checker also reads the production module tree
 and enforces the reviewed domain dependency table, cross-domain facade access, and an acyclic
 dependency graph. Test-only modules are excluded from that graph; their physical files still count

@@ -1,6 +1,7 @@
 mod architecture;
 mod function_length;
 mod modules;
+mod test_count;
 
 use std::env;
 use std::ffi::OsStr;
@@ -72,6 +73,7 @@ fn scan(root: &Path, mode: Mode) -> Result<bool, String> {
 
     println!("SCANNED files={}", sources.len());
     has_violations |= function_length::check(root, &sources, mode)?;
+    has_violations |= test_count::check(root, &sources, mode)?;
     has_violations |= architecture::check(root)?;
     Ok(has_violations)
 }
