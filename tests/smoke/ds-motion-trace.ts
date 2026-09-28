@@ -481,9 +481,9 @@ const HERO_PAGES: Array<[string, string]> = [
   ["sizing", "foundations/sizing"], ["radius", "foundations/radius"], ["iconography", "foundations/iconography"],
   ["focus", "foundations/focus"], ["motion", "motion"], ["z-index", "foundations/z-index"], ["layout", "foundations/layout"],
 ];
-/** What one hero video records: a full loop at the default beat (--motion-deliberate 320ms), capped at 13s except the three-scene Typography loop. */
+/** What one hero video records: a full loop at the default beat (--motion-deliberate 320ms), capped at 13s except the 64-beat Typography sequence. */
 const HERO_VIDEO_MS: Record<string, number> = {
-  color: 13_000, typography: 19_400, spacing: 13_000, sizing: 9_800, radius: 11_700,
+  color: 13_000, typography: 20_600, spacing: 13_000, sizing: 9_800, radius: 11_700,
   iconography: 13_000, focus: 10_400, motion: 13_000, "z-index": 9_800, layout: 10_400,
 };
 /** Main-thread budget per frame for a playing hero, over a still (reduced-motion) control. */

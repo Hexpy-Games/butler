@@ -1,691 +1,357 @@
-/* 02 Typography hero: three scenes on one --type-cycle (60 beats). Marks
-   (percent of the cycle) match typeTimeline.ts:
-     0–30   typeface     weight sweep 4–16.4, readout and thumb cut with it
-     30–56  scale        rungs enter from 31 every 1.5
-     56–100 composition  resolve 61–65, role notes 65–72, leading guides
-                         72–81, digits roll 82–86, composed hold to 97
-   The still poster (no animation) is the composed final frame. */
+/* 02 Typography hero, "from token to product". The static layout below IS
+   the poster (reduced motion): the type tokens beside the assembled
+   components. Motion is compiled at runtime from typeChoreography.ts and
+   typeAssembly.ts into keyframes (heroTimeline.ts) that only move and fade
+   these boxes. The board is drawn on a fixed canvas (1040x585 wide, 380x640
+   tall) and scaled to its stage by --fit, so every px here is a canvas px. */
 
+/* Laid out at 2x (zoom) and drawn at half scale: the compositor rasterizes
+   moving layers at their layout scale, so the camera can push in to 2x and
+   the text stays sharp. Zoom scales every length inside alike (keyframes
+   included), so the canvas math is unchanged. */
 .board {
-  --type-cycle: calc(var(--hero-beat) * 60);
-  --type-axis: calc(11rem - var(--space-xs));
-
-  position: relative;
-  flex: none;
-  inline-size: 22rem;
-  block-size: 13.5rem;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  zoom: 2;
+  translate: -50% -50%;
+  scale: calc(var(--fit) / 2);
   color: var(--text-primary);
 }
 
-@container (width < 23.5rem) {
-  .board {
-    scale: 0.92;
-  }
-}
-
-@container (width < 21.5rem) or (height < 14rem) {
-  .board {
-    scale: 0.86;
-  }
-}
-
-.scene,
-.stop,
-.rung,
-.rungMeta,
-.line,
-.titleStrong,
-.titlePlain,
-.captionQuiet,
-.captionPlain,
-.guide,
-.note,
-.digitStrip {
-  animation-duration: var(--type-cycle);
-  animation-timing-function: var(--motion-ease-standard);
-  animation-iteration-count: infinite;
-  animation-fill-mode: backwards;
-}
-
-/* Moves ease on emphasized; the axis thumb scrubs linearly. */
-.rung,
-.line,
-.digitStrip,
-.guide {
-  animation-timing-function: var(--motion-ease-emphasized);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .scene,
-  .stop,
-  .rung,
-  .rungMeta,
-  .line,
-  .titleStrong,
-  .titlePlain,
-  .captionQuiet,
-  .captionPlain,
-  .guide,
-  .note,
-  .digitStrip {
-    animation: none;
-  }
-}
-
-.scene {
+.camera {
   position: absolute;
   inset: 0;
-  opacity: 0;
+  perspective: 112rem;
+  perspective-origin: 50% 50%;
 }
 
-.code {
-  font: var(--font-code);
-  font-size: var(--typo-caption-size);
-  color: var(--text-tertiary);
+.world,
+.tokens,
+.ladder,
+.rung,
+.sampleCell,
+.product {
+  transform-style: preserve-3d;
 }
 
-/* ---- Scene 1: typeface ---- */
-
-.scene[data-scene="typeface"] {
+.world {
+  position: absolute;
+  inset: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto auto;
-  place-items: center center;
-  row-gap: var(--space-sm);
-  padding-block: var(--space-md);
-  animation-name: type-scene-typeface;
+  grid-template-columns: 25rem minmax(0, 1fr);
+  gap: var(--space-4xl);
+  align-items: center;
+  padding: var(--space-4xl);
+  transform-origin: 50% 50%;
 }
 
-.specimen,
-.readout {
+.board[data-layout="tall"] .world {
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: var(--space-2xl);
+  padding: var(--space-xl);
+}
+
+/* ---- Tokens: specimen and role ladder ---- */
+
+.tokens {
   display: grid;
+  gap: var(--space-xl);
+  min-width: 0;
 }
 
-.specimen > .stop,
-.readout > .stop {
-  grid-area: 1 / 1;
+.specimenRow {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-lg);
+}
+
+/* The specimen is set at 8/3 of its poster size and drawn at 3/8, so it is
+   rasterized sharp when the timeline grows it; the hidden sizer holds its
+   poster box in the layout. */
+.glyphBox {
+  position: relative;
+  display: inline-grid;
+  font-size: calc(var(--typo-new-chat-title-size) * 1.5);
+  line-height: var(--line-height-none);
+}
+
+.board[data-layout="tall"] .glyphBox {
+  font-size: var(--typo-new-chat-title-size);
+}
+
+.glyphSizer {
+  font-weight: var(--font-weight-strong);
+  white-space: nowrap;
+  visibility: hidden;
+}
+
+.glyph {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-grid;
+  font-size: 266.667%;
+  scale: 0.375;
+  transform-origin: 0 0;
 }
 
 .stop {
-  opacity: 0;
-  animation-delay: calc(var(--type-cycle) * var(--at));
-}
-
-.stop[data-stop="step"] {
-  animation-name: type-stop;
-}
-
-.stop[data-stop="first"] {
-  opacity: 1;
-  animation-name: type-stop-first;
-  animation-delay: 0s;
-}
-
-.stop[data-stop="last"] {
-  animation-name: type-stop-last;
-  animation-delay: 0s;
-}
-
-.readout > .stop,
-.stop[data-thumb] {
-  animation-timing-function: var(--motion-ease-linear);
-}
-
-.readout > .stop[data-stop="step"],
-.stop[data-thumb][data-stop="step"] {
-  animation-name: type-readout;
-}
-
-.readout > .stop[data-stop="first"],
-.stop[data-thumb][data-stop="first"] {
-  animation-name: type-readout-first;
-}
-
-.readout > .stop[data-stop="last"],
-.stop[data-thumb][data-stop="last"] {
-  animation-name: type-readout-last;
-}
-
-.specimen > .stop {
-  font-size: calc(var(--typo-new-chat-title-size) * 1.85);
+  grid-area: 1 / 1;
   font-weight: var(--weight);
-  line-height: var(--line-height-none);
   white-space: nowrap;
+  opacity: 0;
 }
 
-.axisRow {
-  display: grid;
-  grid-template-columns: auto 11rem 3ch;
-  align-items: center;
-  column-gap: var(--space-md);
+.stop[data-poster] {
+  opacity: 1;
 }
 
-.axis {
-  position: relative;
-  block-size: var(--space-sm);
-}
-
-.tick {
-  position: absolute;
-  top: calc(50% - var(--space-xs) / 2);
-  left: calc(var(--x) * (100% - var(--space-xs)));
-  inline-size: var(--space-xs);
-  block-size: var(--space-xs);
-  border-radius: var(--radius-pill);
-  background: var(--line-strong);
-}
-
-.stop[data-thumb] {
-  position: absolute;
-  top: 0;
-  left: calc(var(--space-xs) / 2 - var(--space-sm) / 2);
-  inline-size: var(--space-sm);
-  block-size: var(--space-sm);
-  border-radius: var(--radius-pill);
-  background: var(--accent);
-  transform: translateX(calc(var(--type-axis) * var(--x)));
-}
-
-.readout {
-  justify-items: end;
-  /* Digits cut, never cross-fade: a readout shows one value at a time. */
-  font: var(--font-code);
-  font-size: var(--typo-caption-size);
-  font-variant-numeric: tabular-nums;
-  color: var(--text-secondary);
+.half {
+  display: inline-block;
 }
 
 .family {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-sm);
-  font-size: var(--typo-caption-size);
-  line-height: var(--typo-caption-line-height);
+  display: grid;
+  gap: var(--space-xs);
+  padding-block-end: var(--space-xs);
   color: var(--text-secondary);
+  font-size: var(--typo-caption-size);
 }
 
-/* ---- Scene 2: the role scale ---- */
-
-.scene[data-scene="scale"] {
-  display: grid;
-  place-items: center;
-  animation-name: type-scene-scale;
+.mono {
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
 }
 
 .ladder {
   display: grid;
-  inline-size: 20rem;
-  row-gap: var(--space-xs);
+  gap: var(--space-sm);
 }
 
 .rung {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
-  column-gap: var(--space-md);
-  opacity: 0;
-  animation-name: type-rung;
-  animation-delay: calc(var(--type-cycle) * var(--at));
+  grid-template-areas: "tag sample spec";
+  grid-template-columns: 4.5rem minmax(0, 1fr) 5.5rem;
+  gap: var(--space-sm);
+  align-items: center;
 }
 
-.rungSample {
-  font-size: var(--size);
-  font-weight: var(--weight);
-  line-height: var(--leading);
+/* Tall canvas: the spec sits under the role tag so samples keep the width. */
+.board[data-layout="tall"] .rung {
+  grid-template-areas: "tag sample" "spec sample";
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  row-gap: 0;
+}
+
+.board[data-layout="tall"] .spec {
+  text-align: start;
+}
+
+/* Role tag and spec share one fading layer (a subgrid over the rung), so a
+   rung costs one animation for its labels. */
+.chrome {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-template-columns: subgrid;
+  grid-row: 1 / -1;
+  grid-column: 1 / -1;
+  align-items: center;
+}
+
+.tag {
+  grid-area: tag;
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
   white-space: nowrap;
 }
 
-.rungMeta {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-sm);
-  opacity: 0;
-  animation-name: type-rung-meta;
-  animation-delay: calc(var(--type-cycle) * var(--at));
+.sampleCell {
+  position: relative;
+  grid-area: sample;
+  justify-self: start;
+  min-width: 0;
 }
 
-.numbers {
-  min-inline-size: 5ch;
+/* The sample's line box: leading drawn as a quiet band behind the text. */
+.band {
+  position: absolute;
+  inset: 0 calc(var(--space-xs) * -1);
+  transform-origin: 0 50%;
+}
+
+.band::before {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-control);
+  background: var(--selection-strong);
+  content: "";
+  opacity: 0.55;
+}
+
+.fly {
+  position: relative;
+  display: block;
+  inline-size: max-content;
+  white-space: nowrap;
+}
+
+.spec {
+  grid-area: spec;
+  color: var(--text-tertiary);
+  white-space: nowrap;
   font: var(--font-code);
   font-size: var(--typo-caption-size);
   font-variant-numeric: tabular-nums;
   text-align: end;
-  color: var(--text-secondary);
-}
-
-/* ---- Scene 3: composition ---- */
-
-.scene[data-scene="composition"] {
-  display: grid;
-  place-items: center;
-  opacity: 1;
-  animation-name: type-scene-composition;
-}
-
-.card {
-  position: relative;
-  display: grid;
-  row-gap: var(--space-sm);
-  inline-size: 15rem;
-  margin-inline-end: 3.5rem;
-  padding: var(--space-lg) var(--space-xl);
-  border-radius: var(--radius-panel);
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-card);
-}
-
-/* Each line rests resolved; --uniform (measured) sets it back into the
-   paragraph it resolves from. */
-.line {
-  transform-origin: left top;
-  animation-name: type-resolve;
-}
-
-.line[data-line="title"] {
-  position: relative;
-  font-size: var(--typo-h3-size);
-  line-height: var(--typo-h3-line-height);
-}
-
-.titleStrong {
-  font-weight: var(--typo-h3-weight);
-  animation-name: type-fade-in-at-resolve;
-}
-
-.titlePlain {
-  position: absolute;
-  inset: 0;
-  font-weight: var(--typo-body-weight);
-  opacity: 0;
-  animation-name: type-fade-out-at-resolve;
-}
-
-.line[data-line="body"] {
-  font-size: var(--typo-body-size);
-  font-weight: var(--typo-body-weight);
-  line-height: var(--typo-body-line-height);
-}
-
-.line[data-line="caption"] {
-  position: relative;
-  font-size: var(--typo-caption-size);
-  font-weight: var(--typo-caption-weight);
-  line-height: var(--typo-caption-line-height);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.captionQuiet {
-  color: var(--text-tertiary);
-  animation-name: type-fade-in-at-resolve;
-}
-
-.captionPlain {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  animation-name: type-fade-out-at-resolve;
 }
 
 .digit {
+  position: relative;
   display: inline-block;
-  block-size: 1lh;
   overflow: hidden;
   vertical-align: top;
 }
 
 .digitStrip {
-  display: flex;
-  flex-direction: column;
-  transform: translateY(calc(var(--to) * -1lh));
-  animation-name: type-digit;
-  animation-delay: calc(var(--type-cycle) * var(--at));
-}
-
-.digitStrip > span {
-  block-size: 1lh;
-}
-
-/* Leading guides: a hairline at every body line box, drawn in and receding. */
-.guide {
   position: absolute;
-  top: var(--y);
-  right: var(--space-xl);
-  left: var(--space-xl);
-  block-size: var(--border-hairline);
-  background: color-mix(in srgb, var(--accent) 55%, transparent);
-  transform: scaleX(0);
-  transform-origin: left;
-  animation-name: type-guide;
-  animation-delay: calc(var(--type-cycle) * var(--at));
+  inset: 0 0 auto;
+  display: grid;
+  translate: 0 calc(var(--d) * -1lh);
 }
 
-.notes {
-  position: absolute;
-  top: var(--space-lg);
-  left: calc(100% + var(--space-md));
-  inline-size: 3.5rem;
+.digitSpace {
+  visibility: hidden;
 }
 
-.note {
+/* ---- Product: real components ---- */
+
+.product {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-xl);
+  align-items: start;
+  min-width: 0;
+}
+
+.board[data-layout="tall"] .product {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.board[data-layout="tall"] .panel[data-panel="chat"] {
+  order: -1;
+}
+
+.panel {
+  display: grid;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.land,
+.part {
+  display: inline-block;
+}
+
+.part[data-block] {
+  display: block;
+}
+
+/* ---- Act I overlays (motion only) ---- */
+
+.overlay {
   position: absolute;
-  top: var(--y);
+  top: 0;
   left: 0;
-  font: var(--font-code);
-  font-size: var(--typo-caption-size);
-  font-variant-numeric: tabular-nums;
-  color: var(--text-tertiary);
   white-space: nowrap;
   opacity: 0;
 }
 
-.notes[data-note="roles"] .note {
-  animation-name: type-note-roles;
+.caption {
+  color: var(--text-secondary);
+  font-size: var(--typo-body-size);
 }
 
-.notes[data-note="leading"] .note {
-  color: var(--accent-text);
-  animation-name: type-note-leading;
+.overlay[data-t="axis"] {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-xl);
+  padding-block-start: var(--space-2xl);
 }
 
-.notes[data-note="numerals"] .note {
-  animation-name: type-note-numerals;
+.weights {
+  max-inline-size: 22rem;
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  text-align: center;
+  white-space: normal;
 }
 
-/* ---- Keyframes ---- */
-
-@keyframes type-scene-typeface {
-  0% {
-    opacity: 0;
-  }
-
-  2%,
-  28% {
-    opacity: 1;
-  }
-
-  30%,
-  100% {
-    opacity: 0;
-  }
+.board[data-layout="wide"] .weights {
+  max-inline-size: none;
 }
 
-@keyframes type-scene-scale {
-  0%,
-  30% {
-    opacity: 0;
-  }
-
-  30.5%,
-  54% {
-    opacity: 1;
-  }
-
-  56%,
-  100% {
-    opacity: 0;
-  }
+.axisTrack {
+  position: relative;
+  display: block;
+  inline-size: 36rem;
+  block-size: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
 }
 
-@keyframes type-scene-composition {
-  0%,
-  56% {
-    opacity: 0;
-  }
-
-  58%,
-  97% {
-    opacity: 1;
-  }
-
-  100% {
-    opacity: 0;
-  }
+.board[data-layout="tall"] .axisTrack {
+  inline-size: 13rem;
 }
 
-/* A sweep stop: in over 0.35%, held until the next stop is in, then out. */
-@keyframes type-stop {
-  0% {
-    opacity: 0;
-  }
-
-  0.35%,
-  1.15% {
-    opacity: 1;
-  }
-
-  1.5%,
-  100% {
-    opacity: 0;
-  }
+.axisTicks {
+  position: absolute;
+  inset: 0;
 }
 
-@keyframes type-stop-first {
-  0%,
-  4.35% {
-    opacity: 1;
-  }
-
-  4.7%,
-  100% {
-    opacity: 0;
-  }
+.axisTick {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--x) * 100%);
+  inline-size: 1px;
+  block-size: var(--space-md);
+  background: var(--text-tertiary);
+  translate: -50% -50%;
 }
 
-@keyframes type-stop-last {
-  0%,
-  16% {
-    opacity: 0;
-  }
-
-  16.35%,
-  40% {
-    opacity: 1;
-  }
-
-  40.5%,
-  100% {
-    opacity: 0;
-  }
+.axisTickLabel {
+  position: absolute;
+  bottom: calc(100% + var(--space-xs));
+  left: 50%;
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  translate: -50% 0;
 }
 
-@keyframes type-rung {
-  0% {
-    opacity: 0;
-    transform: translateY(var(--motion-distance-md));
-  }
-
-  2%,
-  25% {
-    opacity: 1;
-    transform: none;
-  }
-
-  26%,
-  100% {
-    opacity: 0;
-    transform: translateY(var(--motion-distance-md));
-  }
+.axisTick:nth-child(even) .axisTickLabel {
+  bottom: auto;
+  top: calc(100% + var(--space-xs));
 }
 
-@keyframes type-rung-meta {
-  0%,
-  0.8% {
-    opacity: 0;
-  }
-
-  2.4%,
-  25% {
-    opacity: 1;
-  }
-
-  26%,
-  100% {
-    opacity: 0;
-  }
+.axisThumb {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  inline-size: var(--space-md);
+  block-size: var(--space-md);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  translate: -50% -50%;
 }
 
-@keyframes type-resolve {
-  0%,
-  61% {
-    transform: var(--uniform);
-  }
-
-  65%,
-  100% {
-    transform: none;
-  }
-}
-
-@keyframes type-fade-in-at-resolve {
-  0%,
-  61.3% {
-    opacity: 0;
-  }
-
-  62.3%,
-  100% {
-    opacity: 1;
-  }
-}
-
-@keyframes type-fade-out-at-resolve {
-  0%,
-  61.3% {
-    opacity: 1;
-  }
-
-  62.3%,
-  100% {
-    opacity: 0;
-  }
-}
-
-@keyframes type-note-roles {
-  0%,
-  65% {
-    opacity: 0;
-  }
-
-  66.5%,
-  70.5% {
-    opacity: 1;
-  }
-
-  72%,
-  100% {
-    opacity: 0;
-  }
-}
-
-@keyframes type-guide {
-  0%,
-  72% {
-    opacity: 1;
-    transform: scaleX(0);
-  }
-
-  75%,
-  79% {
-    opacity: 1;
-    transform: scaleX(1);
-  }
-
-  81%,
-  100% {
-    opacity: 0;
-    transform: scaleX(1);
-  }
-}
-
-@keyframes type-note-leading {
-  0%,
-  74% {
-    opacity: 0;
-  }
-
-  75.5%,
-  79% {
-    opacity: 1;
-  }
-
-  81%,
-  100% {
-    opacity: 0;
-  }
-}
-
-@keyframes type-digit {
-  0%,
-  82% {
-    transform: translateY(calc(var(--from) * -1lh));
-  }
-
-  86%,
-  100% {
-    transform: translateY(calc(var(--to) * -1lh));
-  }
-}
-
-@keyframes type-note-numerals {
-  0%,
-  81% {
-    opacity: 0;
-  }
-
-  82.5%,
-  89% {
-    opacity: 1;
-  }
-
-  90.5%,
-  100% {
-    opacity: 0;
-  }
-}
-
-/* The readout cuts to each value as its stop becomes the one you see. */
-@keyframes type-readout {
-  0%,
-  0.2% {
-    opacity: 0;
-  }
-
-  0.21%,
-  1% {
-    opacity: 1;
-  }
-
-  1.01%,
-  100% {
-    opacity: 0;
-  }
-}
-
-@keyframes type-readout-first {
-  0%,
-  4.2% {
-    opacity: 1;
-  }
-
-  4.21%,
-  100% {
-    opacity: 0;
-  }
-}
-
-@keyframes type-readout-last {
-  0%,
-  16.2% {
-    opacity: 0;
-  }
-
-  16.21%,
-  40% {
-    opacity: 1;
-  }
-
-  40.01%,
-  100% {
-    opacity: 0;
-  }
+.axisRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
 }

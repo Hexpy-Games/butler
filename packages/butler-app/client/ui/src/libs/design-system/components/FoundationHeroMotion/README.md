@@ -17,12 +17,13 @@ import { FoundationHeroMotion } from "@/butler-ds";
 `variant` is a Foundations chapter id (`FOUNDATION_HERO_VARIANTS`); `still`
 shows the poster frame whatever the motion setting. The stage fills its
 column at 8:5, up to 17rem tall, and clamps its drawing to its own size
-(container units), so it fits from a 343px column up.
+(container units), so it fits from a 343px column up. `typography` is a
+feature hero: 16:9 up to 36rem tall, portrait (19:32) under a 45rem column.
 
 | Variant | Chapter | What moves |
 | --- | --- | --- |
 | `color` | 01 Color | Role swatches step from a light pane into a dark pane; the same strip is drawn in both theme scopes, so each role recolors exactly at the seam. |
-| `typography` | 02 Typography | "Aa가" sweeps the Pretendard Variable weight axis (45–920) and back; a thumb tracks the axis. |
+| `typography` | 02 Typography | From token to product (64 beats): "Aa가" sweeps the weight axis onto the four weight tokens and splits Latin/Hangul; it shrinks into the H2 rung of a role ladder the camera lays down in 3D (line boxes show leading, MetricValue digits roll on tabular numerals); each rung's text then flies into real DS components (SettingsHeader/SettingsField, MessageRow, MetricCard, ComposerCard) while the camera dollies panel to panel, and settles on the poster: tokens beside the assembled product. |
 | `spacing` | 03 Spacing | A 3x3 field breathes through `--space-xs` … `--space-4xl` and back. |
 | `sizing` | 04 Sizing | A field, icon button and primary button grow through `--control-height-xs/sm/md/lg` together. |
 | `radius` | 05 Radius and elevation | One surface lifts through the shadow levels while its corners grow control → panel → popover → composer. |
@@ -42,6 +43,13 @@ column at 8:5, up to 17rem tall, and clamps its drawing to its own size
   inside `@keyframes` is not honored for `animation-timing-function`.
 - Heroes that take turns (slot sequences) share one cycle per hero and are
   offset by `animation-delay`, so pausing keeps them in step.
+- Long sequences (Typography) are authored in `heroTimeline.ts`: tracks of
+  poses at beat marks, compiled once per layout into plain CSS `@keyframes`
+  with per-segment easing read from the `--motion-ease-*` tokens (which
+  `var()` cannot do inside keyframes). Positions come from measuring the
+  poster layout, so the same choreography fits the wide and tall canvases,
+  every theme and both languages. The canvas is laid out at 2x (`zoom`) and
+  drawn at half scale so camera push-ins stay sharp.
 - One shared `IntersectionObserver` and one `visibilitychange` listener serve
   every hero: offscreen or in a hidden tab the loops hold their frame
   (`data-hero-state="paused"`).
@@ -54,8 +62,10 @@ column at 8:5, up to 17rem tall, and clamps its drawing to its own size
 ## Where and why
 
 The DS Viewer's `ChapterHeader` renders it for every chapter: beside the
-title block when the header is at least 52rem wide, under it otherwise. It
-is decorative (`aria-hidden`); the chapter title and lead carry the meaning,
-and the graphics hold no translatable text.
+title block when the header is at least 52rem wide, under it otherwise;
+Typography's feature hero always spans the column under a compact title
+block. It is decorative (`aria-hidden`, and `inert` where it renders real
+controls); the chapter title and lead carry the meaning. Only the
+Typography hero sets text: sample copy in the viewer's language (`lang`).
 
 Tags: foundations, hero, motion, guidebook, tokens, illustration, loop
