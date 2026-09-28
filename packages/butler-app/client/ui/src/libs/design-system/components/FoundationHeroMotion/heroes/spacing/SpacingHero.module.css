@@ -478,9 +478,13 @@
 /* ---- Finale tiles ---- */
 
 .stairsTile .stairs {
-  --b: calc(var(--space-xs) * 4);
+  --b: calc(var(--space-xs) * 5);
 
-  gap: var(--space-md);
+  gap: var(--space-sm);
+}
+
+[data-layout="tall"] .stairsTile .stairs {
+  --b: calc(var(--space-xs) * 4);
 }
 
 .stairsTile,

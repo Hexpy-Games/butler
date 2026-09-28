@@ -26,7 +26,7 @@ function spec(copy: SpacingCopy): SceneSpec {
       card: <CardTile copy={copy} />,
     },
     poster: {
-      wide: { columns: "1fr 1.15fr 0.95fr", rows: "1fr 1fr", areas: ["stairs section inline", "stairs section card"] },
+      wide: { columns: "1.25fr 1fr 1fr", rows: "1.4fr 1fr", areas: ["stairs section section", "stairs inline card"] },
       tall: { columns: "1fr", rows: "auto", areas: ["stairs", "section", "inline"] },
     },
     posterZoom: { wide: 0.9, tall: 0.9 },
