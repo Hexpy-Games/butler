@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { NavRow } from "../../blocks/NavRow";
 import { Button } from "../../components/Button";
 import { Collapsible } from "../../components/Collapsible";
+import { FoundationHeroMotion } from "../../components/FoundationHeroMotion";
 import { Stack } from "../../components/Stack";
 import { Tag } from "../../components/Tag";
 import { Typo } from "../../components/Typo";
@@ -30,17 +31,24 @@ export function ChapterHeader({ chapter, lead, onOpen, children }: {
   const count = chapterTokens(tokenCatalog, chapter).length;
   return (
     <header className={f.chapterHead} data-ds-chapter-head={chapter.id}>
-      <div className={f.chapterKicker}>
-        <span className={f.chapterNumber} aria-hidden="true">{chapter.number}</span>
-        <Button size="xs" variant="borderless" text="Foundations" onClick={() => onOpen("foundations")} />
+      <div className={f.chapterHeadGrid}>
+        <div className={f.chapterHeadText}>
+          <div className={f.chapterKicker}>
+            <span className={f.chapterNumber} aria-hidden="true">{chapter.number}</span>
+            <Button size="xs" variant="borderless" text="Foundations" onClick={() => onOpen("foundations")} />
+          </div>
+          <h1 className={f.chapterTitle}>{chapter.title}</h1>
+          <p className={styles.lead}>{lead}</p>
+          <Stack align="row" cross="center" gap="sm" wrap>
+            <Tag>{`${count} tokens`}</Tag>
+            <Typo.Caption tone="tertiary">Generated from tokens.css · light and dark</Typo.Caption>
+            {children}
+          </Stack>
+        </div>
+        <div className={f.chapterHero} data-ds-chapter-hero={chapter.id}>
+          <FoundationHeroMotion variant={chapter.id} />
+        </div>
       </div>
-      <h1 className={f.chapterTitle}>{chapter.title}</h1>
-      <p className={styles.lead}>{lead}</p>
-      <Stack align="row" cross="center" gap="sm" wrap>
-        <Tag>{`${count} tokens`}</Tag>
-        <Typo.Caption tone="tertiary">Generated from tokens.css · light and dark</Typo.Caption>
-        {children}
-      </Stack>
     </header>
   );
 }

@@ -1,0 +1,281 @@
+/* FoundationHeroMotion: the stage, playback states and the shared slot
+   choreography. Every hero is CSS animation on transform and opacity only
+   (compositor work, no frame loop); timing is multiples of
+   --motion-deliberate and every move eases on a --motion-ease-* token. */
+
+.stage {
+  /* One beat; each hero's slot or step is a multiple of it. */
+  --hero-beat: var(--motion-deliberate);
+
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  isolation: isolate;
+  container-type: size;
+  inline-size: 100%;
+  min-inline-size: 0;
+  aspect-ratio: 8 / 5;
+  max-block-size: 17rem;
+  border-radius: var(--radius-popover);
+  background: var(--selection);
+  color: var(--text-primary);
+  pointer-events: none;
+  user-select: none;
+}
+
+.stage[data-hero-variant="typography"] {
+  --hero-slot: calc(var(--hero-beat) * 1.6);
+}
+
+.stage[data-hero-variant="sizing"] {
+  --hero-slot: calc(var(--hero-beat) * 5);
+}
+
+.stage[data-hero-variant="radius"] {
+  --hero-slot: calc(var(--hero-beat) * 6);
+}
+
+.stage[data-hero-variant="iconography"],
+.stage[data-hero-variant="focus"] {
+  --hero-slot: calc(var(--hero-beat) * 4);
+}
+
+.stage[data-hero-variant="motion"] {
+  --hero-slot: calc(var(--hero-beat) * 10);
+}
+
+/* Offscreen or in a hidden tab: every loop holds its frame, in step. */
+.stage[data-hero-state="paused"] * {
+  animation-play-state: paused;
+}
+
+/* Reduced motion: the poster frame, no animation at all. */
+.stage[data-hero-state="still"] * {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage * {
+    animation: none;
+  }
+}
+
+/* A slot element takes its turn in a sequence of --hero-slots: it enters
+   from --from, rests at --rest and leaves to --to while the next one enters.
+   animation-delay offsets the k-th element by k slots of one shared cycle. */
+.slot {
+  --from: none;
+  --rest: none;
+  --to: none;
+
+  opacity: 0;
+  transform: var(--rest);
+  animation-duration: calc(var(--hero-slot) * var(--hero-slots));
+  /* Element-level easing applies to every keyframe segment (var() inside
+     keyframes is not honored): fades on standard, moves on emphasized. */
+  animation-timing-function:
+    var(--motion-ease-standard), var(--motion-ease-emphasized);
+  animation-delay: calc(var(--hero-slot) * (var(--k) - var(--hero-slots)));
+  animation-iteration-count: infinite;
+}
+
+.slot[data-poster] {
+  opacity: 1;
+}
+
+.slot[data-slots="4"] {
+  animation-name: hero-fade-4, hero-move-4;
+}
+
+.slot[data-slots="5"] {
+  animation-name: hero-fade-5;
+}
+
+.slot[data-slots="6"] {
+  animation-name: hero-fade-6, hero-move-6;
+}
+
+.slot[data-slots="10"] {
+  animation-name: hero-fade-10, hero-move-10;
+}
+
+.slot[data-slots="16"] {
+  animation-name: hero-fade-16;
+}
+
+@keyframes hero-fade-4 {
+  0% {
+    opacity: 0;
+  }
+
+  3.75% {
+    opacity: 1;
+  }
+
+  28.75% {
+    opacity: 1;
+  }
+
+  32.5% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes hero-move-4 {
+  0% {
+    transform: var(--from);
+  }
+
+  7.5% {
+    transform: var(--rest);
+  }
+
+  25% {
+    transform: var(--rest);
+  }
+
+  32.5% {
+    transform: var(--to);
+  }
+
+  100% {
+    transform: var(--to);
+  }
+}
+
+@keyframes hero-fade-5 {
+  0% {
+    opacity: 0;
+  }
+
+  1.2% {
+    opacity: 1;
+  }
+
+  21.2% {
+    opacity: 1;
+  }
+
+  22.4% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes hero-fade-6 {
+  0% {
+    opacity: 0;
+  }
+
+  2.5% {
+    opacity: 1;
+  }
+
+  19.17% {
+    opacity: 1;
+  }
+
+  21.67% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes hero-move-6 {
+  0% {
+    transform: var(--from);
+  }
+
+  5% {
+    transform: var(--rest);
+  }
+
+  16.67% {
+    transform: var(--rest);
+  }
+
+  21.67% {
+    transform: var(--to);
+  }
+
+  100% {
+    transform: var(--to);
+  }
+}
+
+@keyframes hero-fade-10 {
+  0% {
+    opacity: 0;
+  }
+
+  1.7% {
+    opacity: 1;
+  }
+
+  11.7% {
+    opacity: 1;
+  }
+
+  13.4% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes hero-move-10 {
+  0% {
+    transform: var(--from);
+  }
+
+  3.4% {
+    transform: var(--rest);
+  }
+
+  10% {
+    transform: var(--rest);
+  }
+
+  13.4% {
+    transform: var(--to);
+  }
+
+  100% {
+    transform: var(--to);
+  }
+}
+
+@keyframes hero-fade-16 {
+  0% {
+    opacity: 0;
+  }
+
+  2.19% {
+    opacity: 1;
+  }
+
+  8.44% {
+    opacity: 1;
+  }
+
+  10.63% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}

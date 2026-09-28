@@ -1,0 +1,1176 @@
+/* The ten Foundations heroes. Geometry comes from the live tokens (control
+   heights, icon sizes, radii, shadows, spacing, focus ring, easings), so a
+   theme, density or type change shows up in the hero too. Sizes that must
+   fit the stage clamp to its container (cqi/cqb). */
+
+.stack {
+  display: grid;
+  place-items: center;
+}
+
+.stack > * {
+  grid-area: 1 / 1;
+}
+
+/* Every hero loop below repeats forever. Easing is set per element, where it
+   applies to each keyframe segment (holds are segments between equal values);
+   var() inside keyframes is not honored. Steps move on emphasized; the axis
+   thumb and the plot's time axis are linear; the plotted dot runs on the
+   easing token it draws. */
+.colorStrip,
+.thumb,
+.spaceBlock,
+.curveWindow,
+.curveInner,
+.dotX,
+.dotY,
+.planeStack,
+.plane,
+.doorLeft,
+.doorMiddle,
+.doorRight,
+.tile {
+  animation-timing-function: var(--motion-ease-emphasized);
+  animation-iteration-count: infinite;
+}
+
+.thumb,
+.curveWindow,
+.curveInner,
+.dotX {
+  animation-timing-function: var(--motion-ease-linear);
+}
+
+/* Reduced motion without JS: every hero shows its poster (the stage also
+   marks itself data-hero-state="still" for the OS setting and the DS scope). */
+@media (prefers-reduced-motion: reduce) {
+  .colorStrip,
+  .thumb,
+  .spaceBlock,
+  .curveWindow,
+  .curveInner,
+  .dotX,
+  .dotY,
+  .planeStack,
+  .plane,
+  .doorLeft,
+  .doorMiddle,
+  .doorRight,
+  .tile {
+    animation: none;
+  }
+}
+
+/* ---- 01 Color: one strip in two theme scopes, split at the seam ---- */
+
+.colorPane {
+  position: absolute;
+  inset: 0;
+  background: var(--color-surface-base);
+}
+
+.colorPane[data-pane="light"] {
+  clip-path: inset(0 50% 0 0);
+}
+
+.colorPane[data-pane="dark"] {
+  clip-path: inset(0 0 0 50%);
+}
+
+/* Static, so the strip slides under still edge fades (clipped content reads
+   as continuing, never as cut). */
+.colorTrack {
+  position: absolute;
+  inset: 0;
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    var(--text-primary) 14%,
+    var(--text-primary) 86%,
+    transparent
+  );
+}
+
+/* The strip steps right by one swatch per beat group; at rest a gap sits on
+   the seam, so only moving swatches are cut by it. */
+.colorStrip {
+  --hero-bar: min(2.75rem, 11cqi);
+  --hero-pitch: calc((var(--hero-bar) + var(--space-sm)) * -1);
+
+  position: absolute;
+  inset-block: 22%;
+  right: calc(50% + var(--space-sm) / 2 + var(--hero-pitch) * 4);
+  display: flex;
+  flex-direction: row-reverse;
+  gap: var(--space-sm);
+  animation-name: hero-color-drift;
+  animation-duration: calc(var(--hero-beat) * 63);
+}
+
+.colorBar {
+  flex: none;
+  inline-size: var(--hero-bar);
+  border-radius: var(--radius-panel);
+  background: var(--bar);
+}
+
+/* ---- 02 Typography: the weight axis, swept ---- */
+
+.typeStage {
+  --hero-axis: min(12rem, 58cqi);
+
+  display: grid;
+  justify-items: center;
+  gap: var(--space-xl);
+}
+
+.typeGlyphs {
+  display: grid;
+  place-items: center;
+}
+
+.glyph {
+  grid-area: 1 / 1;
+  font-size: min(calc(var(--typo-new-chat-title-size) * 1.9), 24cqi, 42cqb);
+  font-weight: var(--weight);
+  line-height: var(--line-height-none);
+  letter-spacing: var(--typo-new-chat-title-letter-spacing);
+  white-space: nowrap;
+}
+
+.axis {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  inline-size: var(--hero-axis);
+  block-size: var(--space-sm);
+}
+
+.tick {
+  inline-size: var(--space-xs);
+  block-size: var(--space-xs);
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+}
+
+/* Travels tick 0 to tick 8 and back with the glyph layers, lagging them by
+   the time a layer needs to become the one you see. */
+.thumb {
+  position: absolute;
+  top: 0;
+  left: calc(var(--space-xs) / 2 - var(--space-sm) / 2);
+  inline-size: var(--space-sm);
+  block-size: var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  transform: translateX(calc((var(--hero-axis) - var(--space-xs)) * 0.625));
+  animation-name: hero-axis;
+  animation-duration: calc(var(--hero-slot) * 16);
+  animation-delay: calc(var(--hero-slot) * -15.15);
+}
+
+/* ---- 03 Spacing: a 3x3 field breathing through the scale ---- */
+
+.spaceField {
+  --hero-block: min(1.75rem, 12cqb);
+
+  position: relative;
+  inline-size: 0;
+  block-size: 0;
+}
+
+.spaceBlock {
+  position: absolute;
+  top: calc(var(--hero-block) / -2);
+  left: calc(var(--hero-block) / -2);
+  inline-size: var(--hero-block);
+  block-size: var(--hero-block);
+  border-radius: var(--radius-control);
+  background: var(--line-strong);
+  transform: translate(
+    calc(var(--c) * (var(--hero-block) + var(--space-md))),
+    calc(var(--r) * (var(--hero-block) + var(--space-md)))
+  );
+  animation-name: hero-space-breathe;
+  animation-duration: calc(var(--hero-beat) * 42);
+}
+
+.spaceBlock[data-center] {
+  background: var(--accent);
+}
+
+/* ---- 04 Sizing: a control row at --h ---- */
+
+.controlRow {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.field,
+.iconButton,
+.primary {
+  display: grid;
+  flex: none;
+  place-items: center;
+  block-size: var(--h);
+  border-radius: var(--radius-control);
+  background: var(--control-bg);
+}
+
+.field {
+  justify-items: start;
+  inline-size: calc(var(--h) * 4.5);
+  padding-inline: calc(var(--h) * 0.35);
+}
+
+.iconButton {
+  inline-size: var(--h);
+}
+
+.primary {
+  inline-size: calc(var(--h) * 2.6);
+  background: var(--primary);
+}
+
+.fieldText,
+.primaryText {
+  inline-size: 55%;
+  block-size: calc(var(--h) * 0.18);
+  border-radius: var(--radius-pill);
+  background: var(--selection-strong);
+}
+
+.primaryText {
+  inline-size: 50%;
+  background: var(--primary-foreground);
+}
+
+.iconGlyph {
+  inline-size: calc(var(--h) * 0.36);
+  block-size: calc(var(--h) * 0.36);
+  border-radius: var(--radius-pill);
+  background: var(--text-tertiary);
+}
+
+/* Real control heights are small next to the stage: show them larger where
+   the stage has room (a static scale, rastered crisp). */
+@container (width >= 22rem) {
+  .sizingStage,
+  .reflow {
+    scale: 1.35;
+  }
+}
+
+/* ---- 05 Radius and elevation ---- */
+
+.surface {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  inline-size: min(12rem, 58cqi);
+  block-size: min(6.5rem, 40cqb);
+  padding: var(--space-lg);
+  border-radius: var(--surface-radius);
+  background: var(--surface-raised);
+  box-shadow: var(--surface-shadow);
+}
+
+.surfaceAvatar {
+  flex: none;
+  inline-size: var(--space-3xl);
+  block-size: var(--space-3xl);
+  border-radius: var(--radius-pill);
+  background: var(--selection-strong);
+}
+
+.surfaceLines {
+  display: grid;
+  flex: 1;
+  gap: var(--space-sm);
+  min-inline-size: 0;
+}
+
+.surfaceLines > span {
+  block-size: var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--selection-strong);
+}
+
+.surfaceLines > span:last-child {
+  inline-size: 60%;
+}
+
+/* ---- 06 Iconography: real glyphs at each --icon-size-*, shown 2x ---- */
+
+.iconStage {
+  scale: 2;
+}
+
+.iconRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  color: var(--text-primary);
+}
+
+.iconBox {
+  display: grid;
+  place-items: center;
+  inline-size: var(--icon-box);
+  block-size: var(--icon-box);
+  border-radius: calc(var(--icon-box) * 0.22);
+  background: var(--selection);
+}
+
+/* ---- 07 Focus ring: the tab order ---- */
+
+.focusRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xl);
+}
+
+.focusControl {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  border-radius: var(--radius-control);
+  background: var(--control-bg);
+}
+
+.focusControl[data-kind="field"] {
+  inline-size: min(7rem, 30cqi);
+  block-size: var(--control-height-md);
+  padding-inline: var(--space-sm);
+  --h: var(--control-height-md);
+}
+
+.focusControl[data-kind="button"] {
+  justify-content: center;
+  inline-size: 4rem;
+  block-size: var(--control-height-md);
+  background: var(--primary);
+  --h: var(--control-height-md);
+}
+
+.focusControl[data-kind="switch"] {
+  justify-content: flex-end;
+  inline-size: calc(var(--space-xl) * 1.8);
+  block-size: var(--space-xl);
+  padding: var(--border-width-strong);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+.focusControl[data-kind="check"] {
+  inline-size: var(--space-lg);
+  block-size: var(--space-lg);
+  border-radius: calc(var(--radius-control) / 2);
+}
+
+.switchThumb {
+  inline-size: calc(var(--space-xl) - 2 * var(--border-width-strong));
+  block-size: calc(var(--space-xl) - 2 * var(--border-width-strong));
+  border-radius: var(--radius-pill);
+  background: var(--switch-thumb);
+}
+
+.ring {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: var(--focus-ring);
+}
+
+/* ---- 08 Motion: each easing token plotted by the motion it makes ---- */
+
+.plot {
+  --plot-w: min(15rem, 64cqi);
+  --plot-h: min(8rem, 44cqb);
+
+  position: relative;
+  inline-size: var(--plot-w);
+  block-size: var(--plot-h);
+}
+
+.curve {
+  position: absolute;
+  inset: 0;
+}
+
+/* A window slides in from the left while its content slides the other way:
+   the curve stays put and is revealed exactly up to the dot. The window
+   reaches above and below the plot for the spring's overshoot. */
+.curveWindow,
+.curveInner,
+.dotX,
+.dotY {
+  animation-duration: calc(var(--hero-slot) * var(--hero-slots));
+  animation-delay: calc(var(--hero-slot) * (var(--k) - var(--hero-slots)));
+}
+
+.curveWindow {
+  position: absolute;
+  inset: calc(var(--plot-h) * -0.25) 0 calc(var(--plot-h) * -0.1);
+  overflow: hidden;
+  animation-name: hero-plot-window;
+}
+
+.curveInner {
+  position: absolute;
+  inset: 0;
+  animation-name: hero-plot-inner;
+}
+
+.curveSvg {
+  position: absolute;
+  top: calc(var(--plot-h) * 0.25);
+  left: 0;
+  inline-size: var(--plot-w);
+  block-size: var(--plot-h);
+  overflow: visible;
+  fill: none;
+  stroke: var(--text-tertiary);
+  stroke-width: var(--border-width-strong);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.dotX {
+  position: absolute;
+  top: var(--plot-h);
+  left: 0;
+  transform: translateX(var(--plot-w));
+  animation-name: hero-plot-x;
+}
+
+.dotY {
+  position: absolute;
+  top: calc(var(--space-md) / -2);
+  left: calc(var(--space-md) / -2);
+  inline-size: var(--space-md);
+  block-size: var(--space-md);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  transform: translateY(calc(var(--plot-h) * -1));
+  animation-name: hero-plot-y;
+  /* The dot runs on the very token its curve plots. */
+  animation-timing-function: var(--hero-ease);
+}
+
+/* ---- 09 Layers: the screen tilts into its z-layers ---- */
+
+.scene {
+  display: grid;
+  place-items: center;
+  perspective: 40rem;
+}
+
+.planeStack {
+  --hero-layer-gap: min(var(--space-3xl), 9cqb);
+
+  position: relative;
+  inline-size: min(13rem, 56cqi);
+  block-size: min(8rem, 46cqb);
+  transform-style: preserve-3d;
+  transform: rotateX(56deg) rotateZ(-38deg) scale(0.86);
+  animation-name: hero-layers-tilt;
+  animation-duration: calc(var(--hero-beat) * 30);
+}
+
+.plane {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-popover);
+  transform: translateZ(calc(var(--k) * var(--hero-layer-gap)));
+  animation-name: hero-layers-lift;
+  animation-duration: calc(var(--hero-beat) * 30);
+}
+
+.plane[data-plane="page"] {
+  display: grid;
+  align-content: start;
+  padding: var(--space-lg) var(--space-lg) var(--space-lg) 42%;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+
+.plane[data-plane="drawer"] {
+  right: 66%;
+  border-radius: var(--radius-popover) 0 0 var(--radius-popover);
+  background: var(--selection-strong);
+}
+
+.plane[data-plane="dialog"] {
+  display: grid;
+  place-items: center;
+  background: var(--dialog-overlay-bg);
+}
+
+.dialogCard {
+  display: grid;
+  align-content: center;
+  inline-size: 48%;
+  block-size: 46%;
+  padding: var(--space-md);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+
+.popoverCard {
+  position: absolute;
+  top: 10%;
+  right: 6%;
+  display: grid;
+  gap: var(--space-xs);
+  inline-size: 26%;
+  padding: var(--space-sm);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+
+.popoverCard > span {
+  block-size: var(--space-xs);
+  border-radius: var(--radius-pill);
+  background: var(--selection-strong);
+}
+
+.popoverCard > span:first-child {
+  background: var(--accent);
+}
+
+/* ---- 10 Layout and platform: a frame of sliding ends and tiles ---- */
+
+/* The frame is three pieces so its corners never scale: rounded ends that
+   slide, and a square middle that stretches between them. */
+.reflow {
+  --hero-door: 2rem;
+
+  position: relative;
+  inline-size: 0;
+  block-size: 0;
+}
+
+.doorLeft,
+.doorMiddle,
+.doorRight,
+.tile {
+  animation-duration: calc(var(--hero-beat) * 32);
+}
+
+.doorLeft,
+.doorMiddle,
+.doorRight {
+  position: absolute;
+  top: calc(var(--hero-frame-h) / -2);
+  left: 0;
+  block-size: var(--hero-frame-h);
+  background: var(--surface-raised);
+}
+
+.doorLeft {
+  inline-size: var(--hero-door);
+  border-radius: var(--radius-popover) 0 0 var(--radius-popover);
+  transform: translateX(calc(var(--hero-w1) * -0.5rem));
+  animation-name: hero-reflow-left;
+}
+
+.doorRight {
+  inline-size: var(--hero-door);
+  border-radius: 0 var(--radius-popover) var(--radius-popover) 0;
+  transform: translateX(calc(var(--hero-w1) * 0.5rem - var(--hero-door)));
+  animation-name: hero-reflow-right;
+}
+
+.doorMiddle {
+  left: -0.5rem;
+  inline-size: 1rem;
+  transform: scaleX(calc(var(--hero-w1) - 2));
+  animation-name: hero-reflow-middle;
+}
+
+.tile {
+  position: absolute;
+  top: 0;
+  left: 0;
+  inline-size: var(--hero-tile);
+  block-size: var(--hero-tile);
+  border-radius: var(--radius-control);
+  background: var(--selection-strong);
+  opacity: var(--o1);
+  transform: translate(calc(var(--x1) * 1rem), calc(var(--y1) * 1rem));
+  animation-name: hero-reflow-tile;
+}
+
+.tile[data-lead] {
+  background: var(--accent);
+}
+
+/* ---- Keyframes ---- */
+
+@keyframes hero-axis {
+  0% {
+    transform: translateX(0);
+  }
+
+  50% {
+    transform: translateX(calc(var(--hero-axis) - var(--space-xs)));
+  }
+
+  100% {
+    transform: translateX(0);
+  }
+}
+
+/* Motion plot, per 5-slot cycle: draw during 2%–14% of it, then hold. */
+@keyframes hero-plot-window {
+  0%,
+  2% {
+    transform: translateX(-100%);
+  }
+
+  14%,
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes hero-plot-inner {
+  0%,
+  2% {
+    transform: translateX(100%);
+  }
+
+  14%,
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes hero-plot-x {
+  0%,
+  2% {
+    transform: translateX(0);
+  }
+
+  14%,
+  100% {
+    transform: translateX(var(--plot-w));
+  }
+}
+
+@keyframes hero-plot-y {
+  0% {
+    transform: translateY(0);
+  }
+
+  2% {
+    transform: translateY(0);
+  }
+
+  14%,
+  100% {
+    transform: translateY(calc(var(--plot-h) * -1));
+  }
+}
+
+/* Layers: flat screen, tilt and separate, hold, settle back. */
+@keyframes hero-layers-tilt {
+  0%,
+  12% {
+    transform: rotateX(0deg) rotateZ(0deg) scale(1);
+  }
+
+  32%,
+  62% {
+    transform: rotateX(56deg) rotateZ(-38deg) scale(0.86);
+  }
+
+  82%,
+  100% {
+    transform: rotateX(0deg) rotateZ(0deg) scale(1);
+  }
+}
+
+@keyframes hero-layers-lift {
+  0%,
+  14% {
+    transform: translateZ(calc(var(--k) * var(--border-hairline)));
+  }
+
+  34%,
+  60% {
+    transform: translateZ(calc(var(--k) * var(--hero-layer-gap)));
+  }
+
+  80%,
+  100% {
+    transform: translateZ(calc(var(--k) * var(--border-hairline)));
+  }
+}
+
+@keyframes hero-color-drift {
+  0% {
+    transform: translateX(calc(var(--hero-pitch) * 0));
+  }
+
+  3.33% {
+    transform: translateX(calc(var(--hero-pitch) * -1));
+  }
+
+  11.11% {
+    transform: translateX(calc(var(--hero-pitch) * -1));
+  }
+
+  14.44% {
+    transform: translateX(calc(var(--hero-pitch) * -2));
+  }
+
+  22.22% {
+    transform: translateX(calc(var(--hero-pitch) * -2));
+  }
+
+  25.56% {
+    transform: translateX(calc(var(--hero-pitch) * -3));
+  }
+
+  33.33% {
+    transform: translateX(calc(var(--hero-pitch) * -3));
+  }
+
+  36.67% {
+    transform: translateX(calc(var(--hero-pitch) * -4));
+  }
+
+  44.44% {
+    transform: translateX(calc(var(--hero-pitch) * -4));
+  }
+
+  47.78% {
+    transform: translateX(calc(var(--hero-pitch) * -5));
+  }
+
+  55.56% {
+    transform: translateX(calc(var(--hero-pitch) * -5));
+  }
+
+  58.89% {
+    transform: translateX(calc(var(--hero-pitch) * -6));
+  }
+
+  66.67% {
+    transform: translateX(calc(var(--hero-pitch) * -6));
+  }
+
+  70% {
+    transform: translateX(calc(var(--hero-pitch) * -7));
+  }
+
+  77.78% {
+    transform: translateX(calc(var(--hero-pitch) * -7));
+  }
+
+  81.11% {
+    transform: translateX(calc(var(--hero-pitch) * -8));
+  }
+
+  88.89% {
+    transform: translateX(calc(var(--hero-pitch) * -8));
+  }
+
+  92.22% {
+    transform: translateX(calc(var(--hero-pitch) * -9));
+  }
+
+  100% {
+    transform: translateX(calc(var(--hero-pitch) * -9));
+  }
+}
+
+@keyframes hero-space-breathe {
+  0% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-xs))),
+      calc(var(--r) * (var(--hero-block) + var(--space-xs)))
+    );
+  }
+
+  2.57% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-sm))),
+      calc(var(--r) * (var(--hero-block) + var(--space-sm)))
+    );
+  }
+
+  7.14% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-sm))),
+      calc(var(--r) * (var(--hero-block) + var(--space-sm)))
+    );
+  }
+
+  9.71% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-md))),
+      calc(var(--r) * (var(--hero-block) + var(--space-md)))
+    );
+  }
+
+  14.29% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-md))),
+      calc(var(--r) * (var(--hero-block) + var(--space-md)))
+    );
+  }
+
+  16.86% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-lg))),
+      calc(var(--r) * (var(--hero-block) + var(--space-lg)))
+    );
+  }
+
+  21.43% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-lg))),
+      calc(var(--r) * (var(--hero-block) + var(--space-lg)))
+    );
+  }
+
+  24% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-xl))),
+      calc(var(--r) * (var(--hero-block) + var(--space-xl)))
+    );
+  }
+
+  28.57% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-xl))),
+      calc(var(--r) * (var(--hero-block) + var(--space-xl)))
+    );
+  }
+
+  31.14% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-2xl))),
+      calc(var(--r) * (var(--hero-block) + var(--space-2xl)))
+    );
+  }
+
+  35.71% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-2xl))),
+      calc(var(--r) * (var(--hero-block) + var(--space-2xl)))
+    );
+  }
+
+  38.29% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-3xl))),
+      calc(var(--r) * (var(--hero-block) + var(--space-3xl)))
+    );
+  }
+
+  42.86% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-3xl))),
+      calc(var(--r) * (var(--hero-block) + var(--space-3xl)))
+    );
+  }
+
+  45.43% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-4xl))),
+      calc(var(--r) * (var(--hero-block) + var(--space-4xl)))
+    );
+  }
+
+  50% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-4xl))),
+      calc(var(--r) * (var(--hero-block) + var(--space-4xl)))
+    );
+  }
+
+  52.57% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-3xl))),
+      calc(var(--r) * (var(--hero-block) + var(--space-3xl)))
+    );
+  }
+
+  57.14% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-3xl))),
+      calc(var(--r) * (var(--hero-block) + var(--space-3xl)))
+    );
+  }
+
+  59.71% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-2xl))),
+      calc(var(--r) * (var(--hero-block) + var(--space-2xl)))
+    );
+  }
+
+  64.29% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-2xl))),
+      calc(var(--r) * (var(--hero-block) + var(--space-2xl)))
+    );
+  }
+
+  66.86% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-xl))),
+      calc(var(--r) * (var(--hero-block) + var(--space-xl)))
+    );
+  }
+
+  71.43% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-xl))),
+      calc(var(--r) * (var(--hero-block) + var(--space-xl)))
+    );
+  }
+
+  74% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-lg))),
+      calc(var(--r) * (var(--hero-block) + var(--space-lg)))
+    );
+  }
+
+  78.57% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-lg))),
+      calc(var(--r) * (var(--hero-block) + var(--space-lg)))
+    );
+  }
+
+  81.14% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-md))),
+      calc(var(--r) * (var(--hero-block) + var(--space-md)))
+    );
+  }
+
+  85.71% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-md))),
+      calc(var(--r) * (var(--hero-block) + var(--space-md)))
+    );
+  }
+
+  88.29% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-sm))),
+      calc(var(--r) * (var(--hero-block) + var(--space-sm)))
+    );
+  }
+
+  92.86% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-sm))),
+      calc(var(--r) * (var(--hero-block) + var(--space-sm)))
+    );
+  }
+
+  95.43% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-xs))),
+      calc(var(--r) * (var(--hero-block) + var(--space-xs)))
+    );
+  }
+
+  100% {
+    transform: translate(
+      calc(var(--c) * (var(--hero-block) + var(--space-xs))),
+      calc(var(--r) * (var(--hero-block) + var(--space-xs)))
+    );
+  }
+}
+
+@keyframes hero-reflow-tile {
+  0% {
+    transform: translate(calc(var(--x1) * 1rem), calc(var(--y1) * 1rem));
+    opacity: var(--o1);
+  }
+
+  3% {
+    opacity: min(var(--o1), var(--o2));
+  }
+
+  7.5% {
+    transform: translate(calc(var(--x2) * 1rem), calc(var(--y2) * 1rem));
+    opacity: var(--o2);
+  }
+
+  25% {
+    transform: translate(calc(var(--x2) * 1rem), calc(var(--y2) * 1rem));
+    opacity: var(--o2);
+  }
+
+  28% {
+    opacity: min(var(--o2), var(--o3));
+  }
+
+  32.5% {
+    transform: translate(calc(var(--x3) * 1rem), calc(var(--y3) * 1rem));
+    opacity: var(--o3);
+  }
+
+  50% {
+    transform: translate(calc(var(--x3) * 1rem), calc(var(--y3) * 1rem));
+    opacity: var(--o3);
+  }
+
+  53% {
+    opacity: min(var(--o3), var(--o2));
+  }
+
+  57.5% {
+    transform: translate(calc(var(--x2) * 1rem), calc(var(--y2) * 1rem));
+    opacity: var(--o2);
+  }
+
+  75% {
+    transform: translate(calc(var(--x2) * 1rem), calc(var(--y2) * 1rem));
+    opacity: var(--o2);
+  }
+
+  78% {
+    opacity: min(var(--o2), var(--o1));
+  }
+
+  82.5% {
+    transform: translate(calc(var(--x1) * 1rem), calc(var(--y1) * 1rem));
+    opacity: var(--o1);
+  }
+
+  100% {
+    transform: translate(calc(var(--x1) * 1rem), calc(var(--y1) * 1rem));
+    opacity: var(--o1);
+  }
+}
+
+@keyframes hero-reflow-left {
+  0% {
+    transform: translateX(calc(var(--hero-w1) * -0.5rem));
+  }
+
+  7.5% {
+    transform: translateX(calc(var(--hero-w2) * -0.5rem));
+  }
+
+  25% {
+    transform: translateX(calc(var(--hero-w2) * -0.5rem));
+  }
+
+  32.5% {
+    transform: translateX(calc(var(--hero-w3) * -0.5rem));
+  }
+
+  50% {
+    transform: translateX(calc(var(--hero-w3) * -0.5rem));
+  }
+
+  57.5% {
+    transform: translateX(calc(var(--hero-w2) * -0.5rem));
+  }
+
+  75% {
+    transform: translateX(calc(var(--hero-w2) * -0.5rem));
+  }
+
+  82.5% {
+    transform: translateX(calc(var(--hero-w1) * -0.5rem));
+  }
+
+  100% {
+    transform: translateX(calc(var(--hero-w1) * -0.5rem));
+  }
+}
+
+@keyframes hero-reflow-right {
+  0% {
+    transform: translateX(calc(var(--hero-w1) * 0.5rem - var(--hero-door)));
+  }
+
+  7.5% {
+    transform: translateX(calc(var(--hero-w2) * 0.5rem - var(--hero-door)));
+  }
+
+  25% {
+    transform: translateX(calc(var(--hero-w2) * 0.5rem - var(--hero-door)));
+  }
+
+  32.5% {
+    transform: translateX(calc(var(--hero-w3) * 0.5rem - var(--hero-door)));
+  }
+
+  50% {
+    transform: translateX(calc(var(--hero-w3) * 0.5rem - var(--hero-door)));
+  }
+
+  57.5% {
+    transform: translateX(calc(var(--hero-w2) * 0.5rem - var(--hero-door)));
+  }
+
+  75% {
+    transform: translateX(calc(var(--hero-w2) * 0.5rem - var(--hero-door)));
+  }
+
+  82.5% {
+    transform: translateX(calc(var(--hero-w1) * 0.5rem - var(--hero-door)));
+  }
+
+  100% {
+    transform: translateX(calc(var(--hero-w1) * 0.5rem - var(--hero-door)));
+  }
+}
+
+@keyframes hero-reflow-middle {
+  0% {
+    transform: scaleX(calc(var(--hero-w1) - 2));
+  }
+
+  7.5% {
+    transform: scaleX(calc(var(--hero-w2) - 2));
+  }
+
+  25% {
+    transform: scaleX(calc(var(--hero-w2) - 2));
+  }
+
+  32.5% {
+    transform: scaleX(calc(var(--hero-w3) - 2));
+  }
+
+  50% {
+    transform: scaleX(calc(var(--hero-w3) - 2));
+  }
+
+  57.5% {
+    transform: scaleX(calc(var(--hero-w2) - 2));
+  }
+
+  75% {
+    transform: scaleX(calc(var(--hero-w2) - 2));
+  }
+
+  82.5% {
+    transform: scaleX(calc(var(--hero-w1) - 2));
+  }
+
+  100% {
+    transform: scaleX(calc(var(--hero-w1) - 2));
+  }
+}
