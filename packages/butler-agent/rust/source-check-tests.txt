@@ -6,7 +6,7 @@
 # package<TAB>tests<TAB>unmarked
 crates/butler-agent	46	41
 crates/butler-core	7	2
-crates/butler-gateway	46	40
+crates/butler-gateway	46	38
 crates/butler-ledger	4	1
 crates/butler-memory	118	110
 crates/butler-models	66	58

@@ -216,3 +216,6 @@ pub(super) fn claim_id_from_event(event: &TranscriptEvent) -> Option<String> {
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
 }
+
+#[cfg(test)]
+mod tests;

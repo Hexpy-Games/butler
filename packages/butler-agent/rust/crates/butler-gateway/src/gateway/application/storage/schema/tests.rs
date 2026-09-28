@@ -8,14 +8,16 @@ use butler_turn::btcc::AccessMode;
 
 /// Format pin: the App database schema. A fresh database has full support and
 /// a working message FTS, deployed events gain their actual turn index
-/// without rewriting payloads, and deployed schemas gain columns without
-/// losing unknown data.
+/// without rewriting payloads, deployed schemas gain columns without losing
+/// unknown data, and an unsaved access mode resolves by install age.
 // test-category: format-pin
 #[test]
 fn app_schema_migrations_keep_existing_data() {
     fresh_schema_has_full_support_and_functional_message_fts();
     deployed_events_gain_actual_turn_index_without_rewriting_payloads();
     deployed_schema_adds_columns_without_removing_unknown_data();
+    an_existing_install_keeps_full_access_until_it_saves_a_mode();
+    a_new_install_asks_first_until_it_saves_a_mode();
 }
 
 fn fresh_schema_has_full_support_and_functional_message_fts() {
@@ -160,11 +162,10 @@ fn deployed_schema_adds_columns_without_removing_unknown_data() {
     ));
 }
 
-/// Persisted-format pin (#236, #237): an App database from before ask-first
-/// resolves an unsaved access mode to full access, the default it ran with,
-/// in its conversations and in the schedules the migration fills alike. A
-/// saved mode is kept, and the recorded default is never rewritten.
-#[test]
+/// #236, #237: an App database from before ask-first resolves an unsaved
+/// access mode to full access, the default it ran with, in its conversations
+/// and in the schedules the migration fills alike. A saved mode is kept, and
+/// the recorded default is never rewritten.
 fn an_existing_install_keeps_full_access_until_it_saves_a_mode() {
     let mut connection = Connection::open_in_memory().unwrap();
     migrate(&mut connection, None).unwrap();
@@ -219,9 +220,8 @@ fn an_existing_install_keeps_full_access_until_it_saves_a_mode() {
     );
 }
 
-/// Persisted-format pin (#236): a new App database resolves an unsaved access
-/// mode to ask first, and a later start keeps that.
-#[test]
+/// #236: a new App database resolves an unsaved access mode to ask first, and
+/// a later start keeps that.
 fn a_new_install_asks_first_until_it_saves_a_mode() {
     let mut connection = Connection::open_in_memory().unwrap();
     migrate(&mut connection, None).unwrap();
