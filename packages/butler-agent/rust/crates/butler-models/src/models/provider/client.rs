@@ -119,19 +119,7 @@ impl ModelProvider {
                 request_bytes: serialized_bytes,
             });
         };
-        let mut http = self
-            .client
-            .post(config.endpoint.clone())
-            .header("content-type", "application/json");
-        if matches!(mode, transport::ResponseMode::HostedChatSse) {
-            http = http.header("accept", "text/event-stream");
-        }
-        let http = authorize(
-            http.body(serialized),
-            &config.auth,
-            &config.metadata.provider_id,
-            carrier,
-        );
+        let http = self.round_request(&config, mode, carrier, serialized);
         let response = transport::execute(transport::RequestExecution {
             request: http,
             provider: &config.metadata.provider_id,
@@ -154,7 +142,8 @@ impl ModelProvider {
             request_observer: &observe_request,
             clock: self.clock.as_ref(),
         })
-        .await;
+        .await
+        .inspect_err(|_| watch.discard_shown());
         let response = match response {
             Ok(value) => value,
             Err(ModelRoundError::Provider(error))
@@ -245,6 +234,29 @@ impl ModelProvider {
         self.observations
             .response(&config.metadata.provider_id, &config.metadata.model_ref);
         Ok(result)
+    }
+
+    /// The HTTP request of a round: its endpoint, body and auth headers.
+    fn round_request(
+        &self,
+        config: &super::contracts::ProviderRequestConfig,
+        mode: transport::ResponseMode,
+        carrier: super::serialize::Carrier,
+        body: Bytes,
+    ) -> reqwest::RequestBuilder {
+        let mut http = self
+            .client
+            .post(config.endpoint.clone())
+            .header("content-type", "application/json");
+        if matches!(mode, transport::ResponseMode::HostedChatSse) {
+            http = http.header("accept", "text/event-stream");
+        }
+        authorize(
+            http.body(body),
+            &config.auth,
+            &config.metadata.provider_id,
+            carrier,
+        )
     }
 
     /// The provider request configuration of a round, checked for its

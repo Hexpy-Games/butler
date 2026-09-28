@@ -139,17 +139,9 @@ fn streamed_texts(live: &LiveEvents, turn_id: &str) -> Vec<String> {
         .collect()
 }
 
-/// SETUP-04 — A local model's answer reaches the App while it arrives: the
-/// turn's message is updated with growing partial text before it is
-/// delivered, and the agent asked the server to stream.
-#[tokio::test]
-async fn setup_04_local_model_answers_stream_to_the_app() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let behavior = ChatBehavior::default();
-    let answer = behavior.answer.clone();
-    let server = FakeServer::local_models(behavior).await?;
-    let s = with_local_server("SETUP-04", &server).await?;
-    use_local_model(&s, &server.base_url).await?;
+/// One turn against `server` with a live listener: the delivered text and
+/// the streamed texts of that turn, in order.
+async fn streamed_turn(s: &Scenario) -> Result<(String, Vec<String>), HarnessError> {
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
     let accepted =
         s.gw.say("general", "Say something about local models.")
@@ -163,21 +155,43 @@ async fn setup_04_local_model_answers_stream_to_the_app() -> Result<(), HarnessE
         s.gw.messages("general").await?.into_iter().find(|message| {
             message["role"] == "assistant" && message["turn_id"] == turn_id.as_str()
         });
-    assert_eq!(delivered.unwrap()["text"], answer.as_str());
+    let text = delivered.unwrap()["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    Ok((text, streamed_texts(&live, &turn_id)))
+}
 
-    let streamed = streamed_texts(&live, &turn_id);
-    assert!(
-        streamed
-            .iter()
-            .any(|text| !text.is_empty() && text.len() < answer.len()),
-        "no partial answer was shown while streaming: {streamed:?}"
-    );
+/// Every streamed text is a prefix of `answer` (none shows text twice).
+fn assert_prefixes(streamed: &[String], answer: &str) {
     assert!(
         streamed
             .iter()
             .all(|text| answer.starts_with(text.as_str())),
         "streamed text is not a prefix of the answer: {streamed:?}"
     );
+}
+
+/// SETUP-04 — A local model's answer reaches the App while it arrives: the
+/// turn's message is updated with growing partial text before it is
+/// delivered, and the agent asked the server to stream.
+#[tokio::test]
+async fn setup_04_local_model_answers_stream_to_the_app() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let behavior = ChatBehavior::default();
+    let answer = behavior.answer.clone();
+    let server = FakeServer::local_models(behavior).await?;
+    let s = with_local_server("SETUP-04", &server).await?;
+    use_local_model(&s, &server.base_url).await?;
+    let (delivered, streamed) = streamed_turn(&s).await?;
+    assert_eq!(delivered, answer);
+    assert!(
+        streamed
+            .iter()
+            .any(|text| !text.is_empty() && text.len() < answer.len()),
+        "no partial answer was shown while streaming: {streamed:?}"
+    );
+    assert_prefixes(&streamed, &answer);
     // Turn rounds stream; one-shot prompts (titles, memory) may not.
     let requests = server.chat_requests();
     assert!(
@@ -187,6 +201,112 @@ async fn setup_04_local_model_answers_stream_to_the_app() -> Result<(), HarnessE
         "no turn round asked to stream: {:?}",
         requests.iter().map(|r| &r["stream"]).collect::<Vec<_>>()
     );
+    s.finish().await
+}
+
+/// SETUP-04 (retry) — A stream cut off after some text was shown is
+/// retried; the text of the cut attempt is dropped, so the App never shows
+/// the answer's words twice.
+#[tokio::test]
+async fn setup_04_retried_stream_does_not_repeat_text() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let behavior = ChatBehavior {
+        cut_first_stream: true,
+        ..ChatBehavior::default()
+    };
+    let answer = behavior.answer.clone();
+    let server = FakeServer::local_models(behavior).await?;
+    let s = with_local_server("SETUP-04-RETRY", &server).await?;
+    use_local_model(&s, &server.base_url).await?;
+    let (delivered, streamed) = streamed_turn(&s).await?;
+    assert_eq!(delivered, answer);
+    assert_prefixes(&streamed, &answer);
+    let streams = server
+        .chat_requests()
+        .iter()
+        .filter(|request| request["stream"] == true && request["tools"].is_array())
+        .count();
+    assert!(streams >= 2, "the cut stream was not retried ({streams})");
+    s.finish().await
+}
+
+/// SETUP-04 (retry, stop) — Text of a cut stream is dropped before the
+/// retry: a turn stopped while the retry is under way keeps no partial
+/// answer from the cut attempt.
+#[tokio::test]
+async fn setup_04_stop_during_a_stream_retry_keeps_no_cut_text() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let behavior = ChatBehavior {
+        cut_first_stream: true,
+        hold_later_streams: Duration::from_secs(20),
+        ..ChatBehavior::default()
+    };
+    let server = FakeServer::local_models(behavior).await?;
+    let s = with_local_server("SETUP-04-RETRY-STOP", &server).await?;
+    use_local_model(&s, &server.base_url).await?;
+    let accepted =
+        s.gw.say("general", "Say something about local models.")
+            .await?;
+    let turn_id = accepted_turn_id(&accepted)?;
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let retried = || {
+        server
+            .chat_requests()
+            .iter()
+            .filter(|request| request["stream"] == true && request["tools"].is_array())
+            .count()
+            >= 2
+    };
+    while !retried() {
+        assert!(Instant::now() < deadline, "the cut stream was not retried");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    // Let the discard reach the App before stopping.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let cancel =
+        s.gw.post(&format!("/turns/{turn_id}/cancel"), json!({}))
+            .await?;
+    assert_eq!(cancel.status, 202, "{}", cancel.text);
+    let turn =
+        s.gw.wait_terminal("general", &turn_id, Duration::from_secs(20))
+            .await?;
+    assert_eq!(turn_state(&turn), "cancelled", "{turn}");
+    let kept: Vec<_> = s
+        .gw
+        .messages("general")
+        .await?
+        .into_iter()
+        .filter(|message| message["role"] == "assistant" && message["turn_id"] == turn_id.as_str())
+        .filter(|message| !message["text"].as_str().unwrap_or_default().is_empty())
+        .collect();
+    assert!(kept.is_empty(), "the cut attempt's text was kept: {kept:?}");
+    s.finish().await
+}
+
+/// SETUP-04 (finish reason) — A stream that ends on its finish reason
+/// without `[DONE]` is a complete answer: delivered, streamed, and not
+/// asked again without streaming.
+#[tokio::test]
+async fn setup_04_stream_without_done_completes() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let behavior = ChatBehavior {
+        omit_done: true,
+        ..ChatBehavior::default()
+    };
+    let answer = behavior.answer.clone();
+    let server = FakeServer::local_models(behavior).await?;
+    let s = with_local_server("SETUP-04-NODONE", &server).await?;
+    use_local_model(&s, &server.base_url).await?;
+    let (delivered, streamed) = streamed_turn(&s).await?;
+    assert_eq!(delivered, answer);
+    assert_prefixes(&streamed, &answer);
+    let rounds: Vec<Value> = server
+        .chat_requests()
+        .iter()
+        .filter(|request| request["tools"].is_array())
+        .map(|request| request["stream"].clone())
+        .collect();
+    assert_eq!(rounds, [json!(true)], "{rounds:?}");
     s.finish().await
 }
 

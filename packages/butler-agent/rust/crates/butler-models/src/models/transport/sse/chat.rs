@@ -10,6 +10,8 @@ use super::super::super::{diagnostics, request_guard::RequestProgress};
 use super::consume;
 
 const HOSTED_FRAME_LIMIT: usize = 8 * 1024 * 1024;
+/// Most tool calls one streamed answer may carry.
+const MAX_TOOL_CALLS: usize = 128;
 
 /// Reads an OpenAI-compatible chat completion stream into the non-streamed
 /// response shape. Answer text is also relayed to `observer` as
@@ -27,7 +29,9 @@ pub(in crate::models::transport) async fn hosted_chat(
         state.frame(frame, observer, provider, api)
     })
     .await?;
-    if !state.done {
+    // Some servers end the stream after the finish reason without `[DONE]`:
+    // the answer is complete (their non-streamed answers always were).
+    if !state.done && state.finish_reason.is_null() {
         return Err(Box::new(diagnostics::protocol(
             provider,
             api,
@@ -110,15 +114,19 @@ impl ChatState {
                 None,
             )));
         }
-        self.absorb(&event, observer);
+        if !self.absorb(&event, observer) {
+            return Err(malformed());
+        }
         Ok(None)
     }
 
+    /// Takes one chunk in; false for a chunk no server sends (a tool call
+    /// index past [`MAX_TOOL_CALLS`]).
     fn absorb(
         &mut self,
         event: &Value,
         observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
-    ) {
+    ) -> bool {
         if let Some(value) = event.get("id").and_then(Value::as_str) {
             value.clone_into(&mut self.id);
         }
@@ -136,13 +144,16 @@ impl ChatState {
                 self.text.push_str(value);
                 self.emit_text(value, observer);
             }
-            if let Some(calls) = delta.get("tool_calls").and_then(Value::as_array) {
-                merge_tool_calls(&mut self.tool_calls, calls);
+            if let Some(calls) = delta.get("tool_calls").and_then(Value::as_array)
+                && !merge_tool_calls(&mut self.tool_calls, calls)
+            {
+                return false;
             }
         }
         if let Some(value) = event.pointer("/choices/0/finish_reason") {
             self.finish_reason = value.clone();
         }
+        true
     }
 
     fn emit_text(
@@ -198,10 +209,18 @@ impl ChatState {
     }
 }
 
-fn merge_tool_calls(output: &mut Vec<Value>, deltas: &[Value]) {
+/// Appends tool call deltas; false when one names an index at or past
+/// [`MAX_TOOL_CALLS`] (a local server's stream must not grow memory).
+fn merge_tool_calls(output: &mut Vec<Value>, deltas: &[Value]) -> bool {
     for delta in deltas {
-        let index = usize::try_from(delta.get("index").and_then(Value::as_u64).unwrap_or(0))
-            .unwrap_or(usize::MAX);
+        let index = delta
+            .get("index")
+            .and_then(Value::as_u64)
+            .and_then(|index| usize::try_from(index).ok())
+            .unwrap_or(0);
+        if index >= MAX_TOOL_CALLS {
+            return false;
+        }
         while output.len() <= index {
             output.push(serde_json::json!({"id":"","type":"function","function":{"name":"","arguments":""}}));
         }
@@ -214,6 +233,7 @@ fn merge_tool_calls(output: &mut Vec<Value>, deltas: &[Value]) {
             delta.pointer("/function/arguments"),
         );
     }
+    true
 }
 
 fn append(target: &mut Value, pointer: &str, source: Option<&Value>) {
@@ -222,5 +242,29 @@ fn append(target: &mut Value, pointer: &str, source: Option<&Value>) {
     };
     if let Some(Value::String(value)) = target.pointer_mut(pointer) {
         value.push_str(fragment);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn tool_call_indexes_are_bounded() {
+        let mut calls = Vec::new();
+        assert!(merge_tool_calls(
+            &mut calls,
+            &[json!({"index": 1, "id": "call_1", "function": {"name": "read", "arguments": "{}"}})]
+        ));
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[1]["function"]["name"], "read");
+        assert!(!merge_tool_calls(
+            &mut calls,
+            &[json!({"index": MAX_TOOL_CALLS})]
+        ));
+        assert!(!merge_tool_calls(&mut calls, &[json!({"index": u64::MAX})]));
+        assert_eq!(calls.len(), 2);
     }
 }

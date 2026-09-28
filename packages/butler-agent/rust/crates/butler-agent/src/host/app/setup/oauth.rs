@@ -1,37 +1,57 @@
 //! The ChatGPT (Codex subscription) sign-in flow the App starts during
-//! first-run setup (#230). Each flow owns a localhost callback listener and
-//! its PKCE verifier and state inside one task; cancelling the flow ends the
-//! task, which closes the listener and drops the PKCE state. A flow that
-//! gets no callback within [`FLOW_TIMEOUT`] fails with `oauth_timeout`.
+//! first-run setup (#230).
+//!
+//! Each flow owns a localhost callback listener and its PKCE verifier and
+//! state inside one task. Until the provider accepted the code, cancelling
+//! ends the task: the listener closes, the PKCE state is dropped and the
+//! flow reports `cancelled`. From then on the sign-in is saved whatever
+//! happens, so a cancel waits for it and reports its real outcome. A flow
+//! with no callback within [`FLOW_TIMEOUT`] (the App's own sign-in timeout)
+//! fails with `oauth_timeout`.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use tokio::{net::TcpListener, task::JoinHandle};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    task::{JoinHandle, JoinSet},
+};
 use tokio_util::sync::CancellationToken;
 
 use butler_gateway::gateway::{GatewayApplicationError, OauthFlowStatus, OauthFlowView};
-use butler_models::models::{ModelConfiguration, generate_pkce_verifier, pkce_challenge};
+use butler_models::models::{
+    ModelConfiguration, OpenAiAuthProfile, generate_pkce_verifier, pkce_challenge,
+};
 
-use crate::host::oauth_callback::{CallbackEndpoint, read_callback, respond};
+use crate::host::oauth_callback::{Callback, CallbackEndpoint, read_callback, respond};
 
-const FLOW_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+const FLOW_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 /// Finished flows kept readable by `GET /setup/oauth/{flow_id}`.
 const KEPT_FLOWS: usize = 8;
-/// How long cancel waits for the flow task to release its listener.
-const CANCEL_WAIT: Duration = Duration::from_secs(5);
+/// How long cancel waits for the flow task to release its listener, or
+/// for a sign-in past the point of no return to be saved.
+const CANCEL_WAIT: Duration = Duration::from_secs(10);
+/// Callback connections read at once; more are closed unread.
+const MAX_OPEN_CALLBACKS: usize = 16;
 
 struct Flow {
     view: OauthFlowView,
     stop: CancellationToken,
     task: Option<JoinHandle<()>>,
+    /// The provider accepted the code: the sign-in is being saved and can
+    /// no longer be cancelled.
+    completing: bool,
 }
+
+type FlowTable = Arc<Mutex<Vec<Flow>>>;
 
 /// The sign-in flows of this process, newest last.
 pub(super) struct OauthFlows {
     configuration: Arc<ModelConfiguration>,
-    flows: Arc<Mutex<Vec<Flow>>>,
+    flows: FlowTable,
+    /// One start at a time: two concurrent starts would race for the port.
+    starting: tokio::sync::Mutex<()>,
 }
 
 /// A started flow's secrets; they live only inside the flow task.
@@ -40,17 +60,27 @@ struct Pkce {
     state: String,
 }
 
+/// What a flow task needs besides its listener and secrets.
+struct FlowContext {
+    redirect_uri: String,
+    configuration: Arc<ModelConfiguration>,
+    flows: FlowTable,
+    flow_id: String,
+}
+
 impl OauthFlows {
     pub(super) fn new(configuration: Arc<ModelConfiguration>) -> Self {
         Self {
             configuration,
             flows: Arc::new(Mutex::new(Vec::new())),
+            starting: tokio::sync::Mutex::new(()),
         }
     }
 
     /// Starts a sign-in. Without `force`, a saved sign-in answers
     /// `profile_exists` and a pending flow is returned as it is.
     pub(super) async fn start(&self, force: bool) -> OauthFlowView {
+        let _serial = self.starting.lock().await;
         if force {
             self.cancel_open().await;
         } else {
@@ -76,8 +106,9 @@ impl OauthFlows {
             .ok_or_else(flow_not_found)
     }
 
-    /// Cancels an open flow (a finished one is returned unchanged) and waits
-    /// until its listener is closed.
+    /// Cancels a pending flow and waits until its listener is closed. A
+    /// flow past the point of no return, or already finished, is not
+    /// cancelled: its real outcome is returned.
     pub(super) async fn cancel(
         &self,
         flow_id: &str,
@@ -88,7 +119,7 @@ impl OauthFlows {
                 .iter_mut()
                 .find(|flow| flow.view.flow_id == flow_id)
                 .ok_or_else(flow_not_found)?;
-            if flow.view.status.is_open() {
+            if flow.view.status.is_open() && !flow.completing {
                 flow.view.status = OauthFlowStatus::Cancelled;
                 flow.stop.cancel();
             }
@@ -162,41 +193,48 @@ impl OauthFlows {
         view: OauthFlowView,
     ) -> OauthFlowView {
         let stop = CancellationToken::new();
-        let task = tokio::spawn(run_flow(
-            listener,
-            endpoint.redirect_uri,
-            pkce,
-            self.configuration.clone(),
-            self.flows.clone(),
-            view.flow_id.clone(),
-            stop.clone(),
-        ));
-        self.insert(Flow {
-            view: view.clone(),
-            stop,
-            task: Some(task),
-        });
+        let context = FlowContext {
+            redirect_uri: endpoint.redirect_uri,
+            configuration: self.configuration.clone(),
+            flows: self.flows.clone(),
+            flow_id: view.flow_id.clone(),
+        };
+        // Registered before the task runs, so the task always finds it.
+        let mut flows = self.flows.lock();
+        let task = tokio::spawn(run_flow(listener, pkce, context, stop.clone()));
+        insert(
+            &mut flows,
+            Flow {
+                view: view.clone(),
+                stop,
+                task: Some(task),
+                completing: false,
+            },
+        );
         view
     }
 
     fn record(&self, view: OauthFlowView) -> OauthFlowView {
-        self.insert(Flow {
-            view: view.clone(),
-            stop: CancellationToken::new(),
-            task: None,
-        });
+        insert(
+            &mut self.flows.lock(),
+            Flow {
+                view: view.clone(),
+                stop: CancellationToken::new(),
+                task: None,
+                completing: false,
+            },
+        );
         view
     }
+}
 
-    fn insert(&self, flow: Flow) {
-        let mut flows = self.flows.lock();
-        flows.push(flow);
-        while flows.len() > KEPT_FLOWS {
-            let Some(index) = flows.iter().position(|flow| !flow.view.status.is_open()) else {
-                break;
-            };
-            flows.remove(index);
-        }
+fn insert(flows: &mut Vec<Flow>, flow: Flow) {
+    flows.push(flow);
+    while flows.len() > KEPT_FLOWS {
+        let Some(index) = flows.iter().position(|flow| !flow.view.status.is_open()) else {
+            break;
+        };
+        flows.remove(index);
     }
 }
 
@@ -210,32 +248,84 @@ impl Drop for OauthFlows {
     }
 }
 
-/// Waits for the browser's callback, exchanges the code and saves the
-/// sign-in. Ends (dropping the listener and PKCE state) on completion,
-/// failure, timeout or `stop`.
+/// Waits for this sign-in's callback and exchanges its code (cancellable),
+/// then saves the sign-in (not cancellable) and records the outcome.
 async fn run_flow(
     listener: TcpListener,
-    redirect_uri: String,
     pkce: Pkce,
-    configuration: Arc<ModelConfiguration>,
-    flows: Arc<Mutex<Vec<Flow>>>,
-    flow_id: String,
+    context: FlowContext,
     stop: CancellationToken,
 ) {
-    let outcome = tokio::select! {
-        outcome = complete(&listener, &redirect_uri, &pkce, &configuration) => outcome,
+    let exchanged = tokio::select! {
+        exchanged = exchange(&listener, &pkce, &context) => exchanged,
         () = tokio::time::sleep(FLOW_TIMEOUT) => Err("oauth_timeout".to_owned()),
         () = stop.cancelled() => return,
     };
     drop(listener);
-    let mut flows = flows.lock();
+    drop(pkce);
+    let outcome = match exchanged {
+        Ok((profile, mut stream)) => {
+            if !mark_completing(&context) {
+                respond(&mut stream, 409, "This sign-in was cancelled in Butler.").await;
+                return;
+            }
+            save(&context, &profile, stream).await
+        }
+        Err(code) => Err(code),
+    };
+    settle(&context, outcome);
+}
+
+/// Moves the flow past the point of no return, unless it was cancelled.
+fn mark_completing(context: &FlowContext) -> bool {
+    let mut flows = context.flows.lock();
+    let flow = flows
+        .iter_mut()
+        .find(|flow| flow.view.flow_id == context.flow_id)
+        .filter(|flow| flow.view.status.is_open());
+    match flow {
+        Some(flow) => {
+            flow.completing = true;
+            true
+        }
+        None => false,
+    }
+}
+
+/// Saves the exchanged sign-in and answers the browser.
+async fn save(
+    context: &FlowContext,
+    profile: &OpenAiAuthProfile,
+    mut stream: TcpStream,
+) -> Result<String, String> {
+    match context
+        .configuration
+        .write_openai_auth_profile(profile)
+        .await
+    {
+        Ok(()) => {
+            let done = "Codex subscription login complete. You can close this tab.";
+            respond(&mut stream, 200, done).await;
+            Ok(account_label(&profile.as_json()))
+        }
+        Err(_) => {
+            respond(&mut stream, 500, "Codex subscription login failed.").await;
+            Err("oauth_profile_write_failed".to_owned())
+        }
+    }
+}
+
+/// Records a finished flow's outcome (a cancelled flow keeps `cancelled`).
+fn settle(context: &FlowContext, outcome: Result<String, String>) {
+    let mut flows = context.flows.lock();
     let Some(flow) = flows
         .iter_mut()
-        .find(|flow| flow.view.flow_id == flow_id)
+        .find(|flow| flow.view.flow_id == context.flow_id)
         .filter(|flow| flow.view.status.is_open())
     else {
         return;
     };
+    flow.completing = false;
     match outcome {
         Ok(label) => {
             flow.view.status = OauthFlowStatus::Completed;
@@ -248,49 +338,58 @@ async fn run_flow(
     }
 }
 
-/// Serves callback requests until one carries this flow's code.
-async fn complete(
+/// Waits for this sign-in's code and exchanges it with the provider.
+async fn exchange(
+    listener: &TcpListener,
+    pkce: &Pkce,
+    context: &FlowContext,
+) -> Result<(OpenAiAuthProfile, TcpStream), String> {
+    let (code, mut stream) = wait_for_code(listener, &context.redirect_uri, &pkce.state).await?;
+    match context
+        .configuration
+        .exchange_openai_oauth_code(&code, &context.redirect_uri, &pkce.verifier)
+        .await
+    {
+        Ok(profile) => Ok((profile, stream)),
+        Err(_) => {
+            respond(&mut stream, 500, "Codex subscription login failed.").await;
+            Err("oauth_exchange_failed".to_owned())
+        }
+    }
+}
+
+/// Reads callback connections side by side, so an idle or stray one never
+/// holds up the browser's; each read is bounded by the callback reader.
+async fn wait_for_code(
     listener: &TcpListener,
     redirect_uri: &str,
-    pkce: &Pkce,
-    configuration: &ModelConfiguration,
-) -> Result<String, String> {
+    state: &str,
+) -> Result<(String, TcpStream), String> {
+    let mut reads = JoinSet::new();
     loop {
-        let (mut stream, _) = listener
-            .accept()
-            .await
-            .map_err(|_| "oauth_callback_unavailable".to_owned())?;
-        let code = match read_callback(&mut stream, redirect_uri, &pkce.state).await {
-            Ok(Some(code)) => code,
-            Ok(None) => continue,
-            Err(error) => return Err(error.code().to_owned()),
-        };
-        let saved = match configuration
-            .exchange_openai_oauth_code(&code, redirect_uri, &pkce.verifier)
-            .await
-        {
-            Ok(profile) => configuration
-                .write_openai_auth_profile(&profile)
-                .await
-                .map(|()| profile),
-            Err(error) => Err(error),
-        };
-        return match saved {
-            Ok(profile) => {
-                respond(
-                    &mut stream,
-                    200,
-                    "Codex subscription login complete. You can close this tab.",
-                )
-                .await;
-                Ok(account_label(&profile.as_json()))
+        tokio::select! {
+            accepted = listener.accept() => {
+                let (stream, _) = accepted.map_err(|_| "oauth_callback_unavailable".to_owned())?;
+                if reads.len() < MAX_OPEN_CALLBACKS {
+                    reads.spawn(read_one(stream, redirect_uri.to_owned(), state.to_owned()));
+                }
             }
-            Err(_) => {
-                respond(&mut stream, 500, "Codex subscription login failed.").await;
-                Err("oauth_exchange_failed".to_owned())
-            }
-        };
+            Some(read) = reads.join_next() => match read {
+                Ok((Callback::Code(code), stream)) => return Ok((code, stream)),
+                Ok((Callback::Denied, _)) => return Err("oauth_denied".to_owned()),
+                Ok((Callback::Ignored, _)) | Err(_) => {}
+            },
+        }
     }
+}
+
+async fn read_one(
+    mut stream: TcpStream,
+    redirect_uri: String,
+    state: String,
+) -> (Callback, TcpStream) {
+    let callback = read_callback(&mut stream, &redirect_uri, &state).await;
+    (callback, stream)
 }
 
 fn account_label(profile: &serde_json::Value) -> String {

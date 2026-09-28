@@ -79,19 +79,21 @@ one profile cannot race.
 
 ## Loopback stand-ins (first-run setup)
 
-The first-run setup scenarios (`tests/setup_*.rs`, SETUP-01..12, #230) need
+The first-run setup scenarios (`tests/setup_*.rs`, SETUP-01..13, #230) need
 no cassette: the agent talks to loopback stand-ins in `src/e2e/fake_servers.rs`
 through the product's own address variables.
 
-| Stand-in | Reached through | Shapes from |
-|----------|-----------------|-------------|
-| Local model server (`/api/tags`, `/v1/models`, `/v1/chat/completions`, streamed or refusing to stream) | `BUTLER_OLLAMA_BASE_URL`, `BUTLER_LM_STUDIO_BASE_URL`, a registered local model's server URL | Ollama `docs/api.md` "List Local Models" (ollama/ollama@7af3931); LM Studio documents no `/v1/models` body (lmstudio-ai/docs@d712bc9) and mirrors the OpenAI list; OpenAI chat completion chunks |
-| Provider model list that checks keys | `OPENAI_BASE_URL`, `BUTLER_ANTHROPIC_BASE_URL` | OpenAI API reference (list, `invalid_api_key`, `insufficient_quota`) |
-| OAuth token endpoint | `BUTLER_CODEX_OAUTH_TOKEN_URL` | OAuth 2.0 token response |
+| Stand-in | Reached through |
+|----------|-----------------|
+| Local model server (`/api/tags`, `/v1/models`, `/v1/chat/completions`: streamed, cut, without `[DONE]`, or refusing to stream) | `BUTLER_OLLAMA_BASE_URL`, `BUTLER_LM_STUDIO_BASE_URL`, a registered local model's server URL |
+| Provider model list that checks keys (OpenAI bearer, Anthropic `x-api-key`) | `OPENAI_BASE_URL`, `BUTLER_ANTHROPIC_BASE_URL` |
+| OAuth token endpoint (`id_token`, JWT access token with the ChatGPT claims) | `BUTLER_CODEX_OAUTH_TOKEN_URL` |
 
-They are the vendors' documented examples, not recordings: no Ollama or LM
-Studio server was available on the build hosts. The browser of the sign-in
-flow is the test itself (`BUTLER_CODEX_OAUTH_PORT` picks a free port).
+The module doc cites the documented source (URL, pinned commit where the
+docs live in a repository) of every shape. Values no document shows are
+marked `synthetic` where they are defined. Nothing is recorded: no Ollama or
+LM Studio server was available on the build hosts. The browser of the
+sign-in flow is the test itself (`BUTLER_CODEX_OAUTH_PORT` picks a free port).
 
 ## Scenario decisions
 

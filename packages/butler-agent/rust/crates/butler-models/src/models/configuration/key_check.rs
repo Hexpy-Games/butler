@@ -69,12 +69,7 @@ impl ModelConfiguration {
         provider_id: &str,
         api_key: &str,
     ) -> Result<ProviderKeyCheck, ProviderKeyCheckError> {
-        let provider =
-            hosted_provider(provider_id).ok_or(ProviderKeyCheckError::UnsupportedProvider)?;
-        let key = butler_core::public_text::trim_js_whitespace(api_key);
-        if key.is_empty() || key.chars().any(char::is_control) {
-            return Err(ProviderKeyCheckError::MalformedKey);
-        }
+        let (provider, key) = provider_key(provider_id, api_key)?;
         let url = format!("{}/models", self.provider_api_base(&provider));
         let client = Client::builder()
             .redirect(Policy::none())
@@ -128,6 +123,22 @@ impl ModelConfiguration {
     }
 }
 
+/// The hosted provider and the key as it is sent and stored: surrounding
+/// whitespace removed, never empty, no control characters (a key is sent
+/// as a header value). Checking and saving a key share this rule.
+pub(super) fn provider_key<'a>(
+    provider_id: &str,
+    api_key: &'a str,
+) -> Result<(String, &'a str), ProviderKeyCheckError> {
+    let provider =
+        hosted_provider(provider_id).ok_or(ProviderKeyCheckError::UnsupportedProvider)?;
+    let key = butler_core::public_text::trim_js_whitespace(api_key);
+    if key.is_empty() || key.chars().any(char::is_control) {
+        return Err(ProviderKeyCheckError::MalformedKey);
+    }
+    Ok((provider, key))
+}
+
 fn authorize(request: RequestBuilder, provider: &str, key: &str) -> RequestBuilder {
     match provider {
         "anthropic" => request
@@ -157,9 +168,8 @@ pub(super) fn classify(
             Err(ProviderKeyCheckError::InvalidKey)
         }
         402 | 403 => Err(ProviderKeyCheckError::NoAccess),
-        429 if mentions(body, &["insufficient_quota", "quota"]) => {
-            Err(ProviderKeyCheckError::NoAccess)
-        }
+        // Only OpenAI's documented quota code: other 429s are rate limits.
+        429 if mentions(body, &["insufficient_quota"]) => Err(ProviderKeyCheckError::NoAccess),
         429 => Err(ProviderKeyCheckError::RateLimited),
         404 | 405 => Ok(ProviderKeyCheck {
             models: Vec::new(),
@@ -207,7 +217,7 @@ mod tests {
     /// Provider answers from each vendor's documented error shape.
     #[test]
     fn classifies_provider_answers_into_public_codes() {
-        let cases: [(u16, Value, Result<bool, &str>); 9] = [
+        let cases: [(u16, Value, Result<bool, &str>); 10] = [
             (200, json!({"data":[{"id":"gpt-6-sol"}]}), Ok(true)),
             (
                 401,
@@ -239,6 +249,11 @@ mod tests {
                 json!({"error":{"code":"rate_limit_exceeded"}}),
                 Err("rate_limited"),
             ),
+            (
+                429,
+                json!({"error":{"message":"Tokens per minute quota reached"}}),
+                Err("rate_limited"),
+            ),
             (404, json!({}), Ok(false)),
             (503, json!({}), Err("provider_unavailable")),
         ];
@@ -247,6 +262,28 @@ mod tests {
                 .map(|check| check.verified)
                 .map_err(|error| error.code());
             assert_eq!(actual, expected, "{status} {body}");
+        }
+    }
+
+    #[test]
+    fn checking_and_saving_share_one_key_rule() {
+        assert_eq!(
+            provider_key("openai", "  sk-x \n")
+                .map(|(_, key)| key)
+                .map_err(|error| error.code()),
+            Ok("sk-x")
+        );
+        for (provider, key, code) in [
+            ("openai", "", "invalid_request"),
+            ("openai", " \t ", "invalid_request"),
+            ("openai", "sk-a\nb", "invalid_request"),
+            ("local", "sk-x", "unsupported_provider"),
+        ] {
+            assert_eq!(
+                provider_key(provider, key).map_err(|error| error.code()),
+                Err(code),
+                "{provider} {key:?}"
+            );
         }
     }
 

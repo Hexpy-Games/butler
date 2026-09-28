@@ -134,7 +134,7 @@ impl AppSetupPort for AppSetup {
                 .installation
                 .validate_data_root(&this.data_root)
                 .map_err(|source| unsafe_model_path().with_source(source))?;
-            let saved = credentials::save(&this.configuration, input, &root).await?;
+            let saved = credentials::save(&this.configuration, &input, &root).await?;
             this.settings.refresh().await?;
             Ok(saved)
         })

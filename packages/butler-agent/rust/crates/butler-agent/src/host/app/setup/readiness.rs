@@ -1,7 +1,8 @@
 //! The agent's own background preparation (#230), reported by
 //! `GET /setup/readiness` and the live event `setup.readiness_changed`.
 //!
-//! Steps, in order; the first failure stops the run with its reason:
+//! Steps, in order; the first failure stops the run with its reason, and a
+//! step that does not finish in time fails with `<step>_timed_out`:
 //! - `data_folder`: the data folder takes a write (a probe file is written
 //!   and removed again).
 //! - `model_config`: the model configuration and saved keys can be read.
@@ -24,6 +25,8 @@ use butler_runtime::operations::ServiceReadiness;
 /// Written and removed by the `data_folder` step.
 const PROBE_FILE: &str = "state/setup-readiness.probe";
 const EXECUTOR_WAIT: Duration = Duration::from_secs(60);
+/// Longest a file or configuration step may take.
+const STEP_TIMEOUT: Duration = Duration::from_secs(15);
 const EXECUTOR_POLL: Duration = Duration::from_millis(100);
 
 #[derive(Clone, Copy)]
@@ -41,6 +44,23 @@ impl Step {
             Self::DataFolder => "data_folder",
             Self::ModelConfig => "model_config",
             Self::AgentRuntime => "agent_runtime",
+        }
+    }
+
+    /// The longest the step may take; the executor gets the most, since a
+    /// cold start opens the stores first.
+    fn timeout(self) -> Duration {
+        match self {
+            Self::DataFolder | Self::ModelConfig => STEP_TIMEOUT,
+            Self::AgentRuntime => EXECUTOR_WAIT + STEP_TIMEOUT,
+        }
+    }
+
+    /// The failure of a step that did not finish within its timeout.
+    fn timed_out(self) -> SetupStepError {
+        SetupStepError {
+            code: format!("{}_timed_out", self.id()),
+            detail: "The step did not finish in time.".to_owned(),
         }
     }
 }
@@ -75,11 +95,10 @@ impl Preparation {
         self.state.subscribe()
     }
 
-    /// Starts a new run unless one is still going; returns the view.
+    /// Starts a new run, replacing one that is still going (a stuck run
+    /// ends at its step timeout anyway); returns the view.
     pub(super) fn retry(&self) -> SetupReadinessView {
-        if self.state.borrow().status != SetupReadinessStatus::Preparing {
-            self.begin();
-        }
+        self.begin();
         self.state.borrow().clone()
     }
 
@@ -92,12 +111,16 @@ impl Preparation {
     }
 
     fn begin(&self) {
+        let mut run_slot = self.run.lock();
+        // The previous run stops before the view resets, so it can publish
+        // nothing into the new run's view.
+        if let Some((previous, _)) = run_slot.take() {
+            previous.cancel();
+        }
         self.state.send_replace(initial_view());
         let stop = CancellationToken::new();
         let task = tokio::spawn(run(self.checks.clone(), self.state.clone(), stop.clone()));
-        if let Some((previous, _)) = self.run.lock().replace((stop, task)) {
-            previous.cancel();
-        }
+        *run_slot = Some((stop, task));
     }
 }
 
@@ -130,12 +153,17 @@ async fn run(
     stop: CancellationToken,
 ) {
     for (index, step) in Step::ALL.into_iter().enumerate() {
-        state.send_modify(|view| view.steps[index].status = SetupStepStatus::Running);
+        publish(&state, &stop, |view| {
+            view.steps[index].status = SetupStepStatus::Running;
+        });
         let outcome = tokio::select! {
-            outcome = checks.check(step) => outcome,
+            outcome = tokio::time::timeout(step.timeout(), checks.check(step)) => {
+                outcome.unwrap_or_else(|_| Err(step.timed_out()))
+            }
             () = stop.cancelled() => return,
         };
-        state.send_modify(|view| {
+        let failed = outcome.is_err();
+        publish(&state, &stop, |view| {
             let entry = &mut view.steps[index];
             match outcome {
                 Ok(()) => entry.status = SetupStepStatus::Done,
@@ -146,11 +174,30 @@ async fn run(
                 }
             }
         });
-        if state.borrow().status == SetupReadinessStatus::Failed {
+        if failed || stop.is_cancelled() {
             return;
         }
     }
-    state.send_modify(|view| view.status = SetupReadinessStatus::Ready);
+    publish(&state, &stop, |view| {
+        view.status = SetupReadinessStatus::Ready;
+    });
+}
+
+/// Changes the view unless this run was replaced. The check runs under the
+/// view's own lock, after which a replacing run resets the view, so a
+/// replaced run can never write into its successor's view.
+fn publish(
+    state: &watch::Sender<SetupReadinessView>,
+    stop: &CancellationToken,
+    change: impl FnOnce(&mut SetupReadinessView),
+) {
+    state.send_if_modified(|view| {
+        if stop.is_cancelled() {
+            return false;
+        }
+        change(view);
+        true
+    });
 }
 
 impl ReadinessChecks {

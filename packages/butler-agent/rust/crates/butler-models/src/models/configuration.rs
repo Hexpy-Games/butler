@@ -15,7 +15,8 @@ mod read;
 mod settings;
 mod setup;
 
-pub(crate) use auth::{AuthError as ModelAuthError, OpenAiAuthProfile};
+pub(crate) use auth::AuthError as ModelAuthError;
+pub use auth::OpenAiAuthProfile;
 pub use auth::{generate_pkce_verifier, pkce_challenge};
 pub use discovery::DiscoveredLocalModel;
 pub(crate) use discovery::LocalModelDiscoveryResult;
@@ -23,6 +24,7 @@ pub use key_check::{ProviderKeyCheck, ProviderKeyCheckError};
 pub use mcp::McpModelTarget;
 pub use mutations::{HostedModelMutation, LocalModelMutation, ProviderCredentialMutation};
 pub use settings::SettingsError;
+pub use setup::{ProviderKeySaveError, SavedProviderKey};
 
 use std::{
     collections::HashMap,

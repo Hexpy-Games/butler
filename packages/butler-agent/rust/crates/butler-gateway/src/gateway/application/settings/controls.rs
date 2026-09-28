@@ -64,7 +64,8 @@ pub(super) fn global_settings(
             now,
         )?;
     }
-    let (metadata, reasoning) = super::default_model::resolve(&stored, facts);
+    let routine = super::default_model::uses_routine_preset(db)?;
+    let (metadata, reasoning) = super::default_model::resolve(&stored, facts, routine);
     if worker_profiles::canonicalize(&mut stored, facts, &metadata.model_ref, &reasoning) {
         write_json(db, SETTINGS_KEY, &Value::Object(stored.clone()), now)?;
     }

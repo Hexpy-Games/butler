@@ -8,12 +8,31 @@
 //!   checks the API key (OpenAI bearer or Anthropic `x-api-key`).
 //! - [`FakeServer::oauth_token`]: an OAuth token endpoint.
 //!
-//! Provenance of the shapes: Ollama `docs/api.md` "List Local Models"
-//! (github.com/ollama/ollama @ 7af3931); LM Studio documents no body for
-//! `/v1/models` (lmstudio-ai/docs @ d712bc9) and mirrors the OpenAI list
-//! format; chat completion chunks and error bodies follow the OpenAI API
-//! reference. They are the vendors' documented examples, not recordings:
-//! no local model server was available on the build hosts.
+//! Provenance. Every body is a vendor's documented example or follows the
+//! documented shape; values marked `synthetic` are made up for a case no
+//! document shows. Nothing here is a recording: no local model server was
+//! available on the build hosts.
+//!
+//! - Ollama `GET /api/tags`: "List Local Models",
+//!   <https://github.com/ollama/ollama/blob/7af393188defd52d370464de0d2064649cab9b41/docs/api.md#list-local-models>;
+//!   streaming on `/v1/chat/completions`:
+//!   <https://github.com/ollama/ollama/blob/c1737589973d5cefd676ef16eb43835663540035/docs/api/openai-compatibility.mdx>.
+//! - LM Studio `GET /v1/models` (no body example:
+//!   <https://github.com/lmstudio-ai/docs/blob/d712bc9064b372b7974d14a94a43ed0c3ae36ec9/1_developer/3_openai-compat/models.md>)
+//!   mirrors OpenAI's list: <https://platform.openai.com/docs/api-reference/models/list>.
+//! - Chat completions: the object
+//!   <https://platform.openai.com/docs/api-reference/chat/object> and its
+//!   streamed chunks <https://platform.openai.com/docs/api-reference/chat-streaming/streaming>.
+//! - OpenAI errors (`invalid_api_key`, `insufficient_quota`):
+//!   <https://platform.openai.com/docs/guides/error-codes>.
+//! - Anthropic `GET /v1/models` <https://docs.anthropic.com/en/api/models-list>
+//!   and errors <https://docs.anthropic.com/en/api/errors>.
+//! - OAuth token response: RFC 6749 section 5.1
+//!   <https://www.rfc-editor.org/rfc/rfc6749#section-5.1> with the OpenID
+//!   `id_token` <https://openid.net/specs/openid-connect-core-1_0.html#TokenResponse>;
+//!   the ChatGPT claims (`email`, `https://api.openai.com/auth`
+//!   `chatgpt_account_id`) as the Codex CLI reads them:
+//!   <https://github.com/openai/codex/blob/f326857cf405fb254cf6c8f38766daff074fca6e/codex-rs/login/src/token_data.rs>.
 
 use std::convert::Infallible;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -32,6 +51,11 @@ pub const LOCAL_MODEL: &str = "llama3.2:latest";
 /// Keys the provider stand-in accepts or refuses.
 pub const GOOD_KEY: &str = "sk-e2e-good-0001";
 pub const QUOTA_KEY: &str = "sk-e2e-quota-0002";
+/// The model Anthropic's documented list example names.
+pub const ANTHROPIC_MODEL: &str = "claude-3-7-sonnet-20250219";
+/// The account the OAuth stand-in signs in (synthetic).
+pub const OAUTH_EMAIL: &str = "e2e-user@example.com";
+pub const OAUTH_ACCOUNT_ID: &str = "e2e-account-0001";
 
 /// How the local server answers a chat completion.
 #[derive(Clone, Debug)]
@@ -41,6 +65,15 @@ pub struct ChatBehavior {
     pub refuse_stream: bool,
     /// Delay before each streamed chunk.
     pub chunk_delay: Duration,
+    /// End streams after the finish reason, without `[DONE]` (synthetic:
+    /// some OpenAI-compatible servers do).
+    pub omit_done: bool,
+    /// Cut the first streamed answer after its first words, with no finish
+    /// reason (synthetic: a dropped connection); later ones are whole.
+    pub cut_first_stream: bool,
+    /// Wait this long before answering a streamed request after the first
+    /// (a slow retry the test can stop the turn during).
+    pub hold_later_streams: Duration,
 }
 
 impl Default for ChatBehavior {
@@ -49,8 +82,19 @@ impl Default for ChatBehavior {
             answer: "Local models stream their answers word by word.".into(),
             refuse_stream: false,
             chunk_delay: Duration::from_millis(150),
+            omit_done: false,
+            cut_first_stream: false,
+            hold_later_streams: Duration::ZERO,
         }
     }
+}
+
+/// How one streamed answer ends.
+#[derive(Clone, Copy)]
+enum StreamEnd {
+    Done,
+    FinishOnly,
+    Cut,
 }
 
 #[derive(Clone, Copy)]
@@ -157,12 +201,20 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
         headers: parts.headers,
         body,
     };
-    lock(&state.seen).push(seen.clone());
+    let streams_before = {
+        let mut all = lock(&state.seen);
+        let count = all.iter().filter(|seen| is_stream_request(seen)).count();
+        all.push(seen.clone());
+        count
+    };
     match (state.kind, &parts.method, seen.path.as_str()) {
         (Kind::LocalModels, &Method::GET, "/api/tags") => json_response(200, &ollama_tags()),
         (Kind::LocalModels, &Method::GET, "/v1/models") => json_response(200, &lm_studio_models()),
         (Kind::LocalModels, &Method::POST, "/v1/chat/completions") => {
-            chat_completion(&state.chat, &seen.body)
+            if streams_before > 0 && is_stream_request(&seen) {
+                tokio::time::sleep(state.chat.hold_later_streams).await;
+            }
+            chat_completion(&state.chat, &seen.body, streams_before == 0)
         }
         (Kind::ProviderModels, &Method::GET, "/v1/models") => provider_models(&seen.headers),
         (Kind::OauthToken, &Method::POST, "/oauth/token") => json_response(200, &oauth_tokens()),
@@ -184,9 +236,10 @@ fn ollama_tags() -> Value {
          "digest": "0a8c266910232fd3291e71e5ba1e058cc5af9d411192cf88b6d30e92b6e73163",
          "details": {"parent_model": "", "format": "gguf", "family": "qwen2",
                      "families": ["qwen2"], "parameter_size": "7.6B", "quantization_level": "Q4_K_M"}},
+        // synthetic: an embedding model entry in the documented shape.
         {"name": "nomic-embed-text:latest", "model": "nomic-embed-text:latest",
          "modified_at": "2025-05-01T10:00:00.000000000-07:00", "size": 274_302_450,
-         "digest": "0a109f422b47e3a30ba2b10eca18548e944e8a23073ee3f3e947efcf3c45e59f",
+         "digest": "synthetic-digest-nomic-embed-text",
          "details": {"parent_model": "", "format": "gguf", "family": "nomic-bert",
                      "families": ["nomic-bert"], "parameter_size": "137M", "quantization_level": "F16"}}
     ]})
@@ -200,7 +253,13 @@ fn lm_studio_models() -> Value {
     ]})
 }
 
-fn chat_completion(chat: &ChatBehavior, body: &str) -> Response<Body> {
+fn is_stream_request(seen: &Seen) -> bool {
+    seen.path.ends_with("/chat/completions")
+        && serde_json::from_str::<Value>(&seen.body).is_ok_and(|body| body["stream"] == true)
+}
+
+/// `first_stream`: no streamed request came before this one.
+fn chat_completion(chat: &ChatBehavior, body: &str, first_stream: bool) -> Response<Body> {
     let request: Value = serde_json::from_str(body).unwrap_or(Value::Null);
     let model = request["model"].as_str().unwrap_or(LOCAL_MODEL).to_owned();
     if request["stream"] != true {
@@ -216,18 +275,26 @@ fn chat_completion(chat: &ChatBehavior, body: &str) -> Response<Body> {
         );
     }
     if chat.refuse_stream {
+        // synthetic: a server without streaming, answering in OpenAI's error shape.
         return json_response(
             400,
             &json!({"error": {
             "message": "stream is not supported", "type": "invalid_request_error"}}),
         );
     }
-    stream_response(&model, &chat.answer, chat.chunk_delay)
+    let end = if chat.cut_first_stream && first_stream {
+        StreamEnd::Cut
+    } else if chat.omit_done {
+        StreamEnd::FinishOnly
+    } else {
+        StreamEnd::Done
+    };
+    stream_response(&model, &chat.answer, chat.chunk_delay, end)
 }
 
 /// `text/event-stream` chunks: the role, one word at a time, the finish
-/// reason, then `[DONE]`; each after `delay`.
-fn stream_response(model: &str, answer: &str, delay: Duration) -> Response<Body> {
+/// reason, then `[DONE]` (as `end` says); each after `delay`.
+fn stream_response(model: &str, answer: &str, delay: Duration, end: StreamEnd) -> Response<Body> {
     let chunk = |delta: Value, finish: Value| {
         let event = json!({
             "id": "chatcmpl-e2e", "object": "chat.completion.chunk", "created": 1_759_000_000,
@@ -245,8 +312,14 @@ fn stream_response(model: &str, answer: &str, delay: Duration) -> Response<Body>
             .split_inclusive(' ')
             .map(|word| chunk(json!({"content": word}), Value::Null)),
     );
-    frames.push(chunk(json!({}), json!("stop")));
-    frames.push("data: [DONE]\n\n".to_owned());
+    match end {
+        StreamEnd::Cut => frames.truncate(3),
+        StreamEnd::FinishOnly => frames.push(chunk(json!({}), json!("stop"))),
+        StreamEnd::Done => {
+            frames.push(chunk(json!({}), json!("stop")));
+            frames.push("data: [DONE]\n\n".to_owned());
+        }
+    }
     let body = stream::unfold(frames.into_iter(), move |mut frames| async move {
         let frame = frames.next()?;
         tokio::time::sleep(delay).await;
@@ -260,24 +333,23 @@ fn stream_response(model: &str, answer: &str, delay: Duration) -> Response<Body>
         .unwrap_or_default()
 }
 
-/// OpenAI's documented answers: the model list for [`GOOD_KEY`],
-/// `insufficient_quota` for [`QUOTA_KEY`], `invalid_api_key` otherwise.
+/// The provider's documented answers: the model list for [`GOOD_KEY`],
+/// OpenAI's `insufficient_quota` for [`QUOTA_KEY`], an invalid-key error
+/// otherwise. A request with `x-api-key` gets Anthropic's shapes.
 fn provider_models(headers: &HeaderMap) -> Response<Body> {
-    let bearer = headers
-        .get("authorization")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer "));
-    let key = headers
-        .get("x-api-key")
-        .and_then(|value| value.to_str().ok())
-        .or(bearer)
+    let header = |name: &str| headers.get(name).and_then(|value| value.to_str().ok());
+    if let Some(key) = header("x-api-key") {
+        return anthropic_models(key);
+    }
+    let key = header("authorization")
+        .and_then(|value| value.strip_prefix("Bearer "))
         .unwrap_or_default();
     match key {
         GOOD_KEY => json_response(
             200,
             &json!({"object": "list", "data": [
-                {"id": "gpt-6-sol", "object": "model", "owned_by": "openai"},
-                {"id": "gpt-6-luna", "object": "model", "owned_by": "openai"}
+                {"id": "gpt-6-sol", "object": "model", "created": 1_686_935_002, "owned_by": "openai"},
+                {"id": "gpt-6-luna", "object": "model", "created": 1_686_935_002, "owned_by": "openai"}
             ]}),
         ),
         QUOTA_KEY => json_response(
@@ -295,9 +367,57 @@ fn provider_models(headers: &HeaderMap) -> Response<Body> {
     }
 }
 
+/// Anthropic's documented model list and `authentication_error`.
+fn anthropic_models(key: &str) -> Response<Body> {
+    if key == GOOD_KEY {
+        return json_response(
+            200,
+            &json!({
+                "data": [{"created_at": "2025-02-19T00:00:00Z", "display_name": "Claude Sonnet 3.7",
+                          "id": ANTHROPIC_MODEL, "type": "model"}],
+                "first_id": ANTHROPIC_MODEL, "has_more": false, "last_id": ANTHROPIC_MODEL
+            }),
+        );
+    }
+    json_response(
+        401,
+        &json!({"type": "error", "error": {
+        "type": "authentication_error", "message": "invalid x-api-key"}}),
+    )
+}
+
+/// A token response with an `id_token` and a JWT access token carrying the
+/// ChatGPT claims (unsigned: the agent reads claims, it does not verify
+/// the provider's signature on a token it just received over TLS).
 fn oauth_tokens() -> Value {
-    json!({"access_token": "e2e-access-token", "refresh_token": "e2e-refresh-token",
+    let claims = json!({
+        "email": OAUTH_EMAIL,
+        "https://api.openai.com/auth": {"chatgpt_account_id": OAUTH_ACCOUNT_ID},
+        "exp": 1_999_999_999_u64
+    });
+    let jwt = format!(
+        "{}.{}.{}",
+        base64url(br#"{"alg":"none","typ":"JWT"}"#),
+        base64url(claims.to_string().as_bytes()),
+        base64url(b"synthetic-signature")
+    );
+    json!({"id_token": jwt, "access_token": jwt, "refresh_token": "e2e-refresh-token",
            "expires_in": 3600, "token_type": "Bearer"})
+}
+
+/// Base64url without padding (RFC 4648 section 5), as JWTs and PKCE use.
+pub fn base64url(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut out = String::new();
+    for chunk in bytes.chunks(3) {
+        let at = |index: usize| u32::from(chunk.get(index).copied().unwrap_or(0));
+        let value = (at(0) << 16) | (at(1) << 8) | at(2);
+        for index in 0..=chunk.len() {
+            let sextet = (value >> (18 - 6 * index)) & 63;
+            out.push(char::from(ALPHABET[sextet as usize]));
+        }
+    }
+    out
 }
 
 fn json_response(status: u16, value: &Value) -> Response<Body> {

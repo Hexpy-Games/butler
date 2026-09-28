@@ -57,6 +57,7 @@ pub(super) struct ResolvedControls {
 pub(super) use access::{
     access_mode_name, conversation_access_mode, default_access_mode, record_default_access_mode,
 };
+pub(super) use default_model::record_default_model_policy;
 pub(super) use plan_continuation::{
     PlanContinuation, PlanInstruction, create_plan_continuation, create_plan_instruction,
 };

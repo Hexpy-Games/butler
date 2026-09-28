@@ -108,67 +108,46 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
                     diagnostics::protocol(provider, api, "provider_request_not_replayable")
                 })?;
                 let result = async {
-                    let response = current.send().await.map_err(|error| {
-                        diagnostics::network(provider, api, &error.to_string())
-                    })?;
+                    let response = current
+                        .send()
+                        .await
+                        .map_err(|error| diagnostics::network(provider, api, &error.to_string()))?;
                     progress.record_progress();
                     let response = checked(response, provider, api).await?;
-                    match mode {
-                        ResponseMode::Json { tolerate_invalid } => {
-                            json(response, provider, api, tolerate_invalid).await
-                        }
-                        ResponseMode::HostedChatSse => {
-                            hosted_chat_or_json(response, provider, api, progress.clone(), stream_observer).await
-                        }
-                        ResponseMode::CodexSse => {
-                            sse::codex(
-                                response,
-                                provider,
-                                api,
-                                progress.clone(),
-                                stream_observer,
-                                clock,
-                            )
-                            .await
-                        }
-                    }
+                    let reading = Reading {
+                        provider,
+                        api,
+                        progress: progress.clone(),
+                        stream_observer,
+                        clock,
+                    };
+                    reading.read(response, mode).await
                 }
                 .await
-                .map_err(|mut error| {
-                    if error.code != "provider_network_error"
-                        && let Some(receipt) = receipt
-                    {
-                        error.request_generation = Some(butler_core::json::saturating_u64(receipt.plan.generation));
-                        error.measured_input_tokens = Some(butler_core::json::saturating_u64(receipt.plan.compiled_input_tokens));
-                        error.registered_input_capacity = Some(butler_core::json::saturating_u64(receipt.plan.input_capacity_tokens));
-                        error.request_hash = Some(receipt.request_hash);
-                    }
-                    TransportError::Provider(error)
-                });
+                .map_err(|error| TransportError::Provider(with_receipt(error, receipt)));
                 match result {
                     Ok(value) => return Ok(value),
                     Err(TransportError::Provider(error))
                         if error.retryable && f64::from(attempt + 1) < attempts =>
                     {
-                        let delay = retry_delay_ms(policy.retry_base_ms, attempt);
-                        if delay > 0.0 {
-                            let cancellation = progress.cancellation();
-                            tokio::select! {
-                                () = cancellation.cancelled() => {
-                                    return Err(TransportError::Provider(Box::new(diagnostics::cancelled(provider, api))));
-                                }
-                                () = tokio::time::sleep(std::time::Duration::from_millis(butler_core::json::saturating_u64(delay.trunc()))) => {}
-                            }
+                        // Text the failed attempt showed is not the answer:
+                        // the retry streams its own.
+                        if let Some(observer) = stream_observer {
+                            observer.round_text_discarded();
                         }
+                        let delay = retry_delay_ms(policy.retry_base_ms, attempt);
+                        before_retry(&progress, delay, provider, api).await?;
                     }
                     Err(error) => return Err(error),
                 }
                 attempt = attempt.saturating_add(1);
             }
-            Err(TransportError::Admission(ModelRoundError::InvocationFailure {
-                code: None,
-                message: "undefined".into(),
-            }))
+            Err(TransportError::Admission(
+                ModelRoundError::InvocationFailure {
+                    code: None,
+                    message: "undefined".into(),
+                },
+            ))
         },
     )
     .await;
@@ -212,6 +191,85 @@ async fn hosted_chat_or_json(
         sse::hosted_chat(response, provider, api, progress, observer).await
     } else {
         json(response, provider, api, true).await
+    }
+}
+
+/// What reading a successful response needs.
+struct Reading<'a> {
+    provider: &'a str,
+    api: &'a str,
+    progress: super::request_guard::RequestProgress,
+    stream_observer: Option<&'a dyn butler_turn::btcc::ProviderStreamObserver>,
+    clock: &'a dyn ProviderClock,
+}
+
+impl Reading<'_> {
+    /// The response body as `mode` reads it.
+    async fn read(
+        self,
+        response: Response,
+        mode: ResponseMode,
+    ) -> Result<Value, Box<ProviderRequestError>> {
+        let Self {
+            provider,
+            api,
+            progress,
+            stream_observer,
+            clock,
+        } = self;
+        match mode {
+            ResponseMode::Json { tolerate_invalid } => {
+                json(response, provider, api, tolerate_invalid).await
+            }
+            ResponseMode::HostedChatSse => {
+                hosted_chat_or_json(response, provider, api, progress, stream_observer).await
+            }
+            ResponseMode::CodexSse => {
+                sse::codex(response, provider, api, progress, stream_observer, clock).await
+            }
+        }
+    }
+}
+
+/// Adds the admitted request's facts to a provider error (not to a
+/// network error: the provider never saw that request).
+fn with_receipt(
+    mut error: Box<ProviderRequestError>,
+    receipt: Option<super::request_admission::AdmissionReceipt>,
+) -> Box<ProviderRequestError> {
+    if error.code != "provider_network_error"
+        && let Some(receipt) = receipt
+    {
+        error.request_generation = Some(butler_core::json::saturating_u64(receipt.plan.generation));
+        error.measured_input_tokens = Some(butler_core::json::saturating_u64(
+            receipt.plan.compiled_input_tokens,
+        ));
+        error.registered_input_capacity = Some(butler_core::json::saturating_u64(
+            receipt.plan.input_capacity_tokens,
+        ));
+        error.request_hash = Some(receipt.request_hash);
+    }
+    error
+}
+
+/// Waits `delay_ms` before a retry, unless the request is cancelled.
+async fn before_retry(
+    progress: &super::request_guard::RequestProgress,
+    delay_ms: f64,
+    provider: &str,
+    api: &str,
+) -> Result<(), TransportError> {
+    if delay_ms <= 0.0 {
+        return Ok(());
+    }
+    let cancellation = progress.cancellation();
+    let delay =
+        std::time::Duration::from_millis(butler_core::json::saturating_u64(delay_ms.trunc()));
+    tokio::select! {
+        () = cancellation.cancelled() => {
+            Err(TransportError::Provider(Box::new(diagnostics::cancelled(provider, api))))
+        }
+        () = tokio::time::sleep(delay) => Ok(()),
     }
 }
 

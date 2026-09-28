@@ -9,7 +9,7 @@ use butler_core::locale::LocaleCollation;
 use butler_models::models::{ModelCatalog, ModelConfiguration, provider_http_client};
 
 use crate::host::installation::realpath_or_nearest;
-use crate::host::oauth_callback::{CallbackEndpoint, read_callback, respond};
+use crate::host::oauth_callback::{Callback, CallbackEndpoint, read_callback, respond};
 use crate::host::{ProcessEnvironment, ResolvedInstallation, SystemIdentity};
 
 pub(crate) async fn run_native_oauth_login(
@@ -128,10 +128,12 @@ async fn run_native_oauth_login_with_data(
                 .accept()
                 .await
                 .map_err(crate::host::HostError::from_error)?;
-            if let Some(code) = read_callback(&mut stream, &redirect_uri, &state)
-                .await
-                .map_err(crate::host::HostError::from_error)?
-            {
+            let code = match read_callback(&mut stream, &redirect_uri, &state).await {
+                Callback::Code(code) => Some(code),
+                Callback::Denied => return Err("OAuth authorization denied".into()),
+                Callback::Ignored => None,
+            };
+            if let Some(code) = code {
                 let result = models
                     .exchange_openai_oauth_code(&code, &redirect_uri, &verifier)
                     .await;
@@ -148,12 +150,10 @@ async fn run_native_oauth_login_with_data(
                         )
                         .await;
                         let raw = profile.as_json();
-                        let label = raw
-                            .get("email")
-                            .and_then(|value| value.as_str())
-                            .or_else(|| raw.get("accountId").and_then(|value| value.as_str()))
-                            .unwrap_or("OpenAI account");
-                        println!("Codex subscription auth profile saved for {label}.");
+                        println!(
+                            "Codex subscription auth profile saved for {}.",
+                            account_label(&raw)
+                        );
                         return Ok(());
                     }
                     Err(error) => {
@@ -168,6 +168,15 @@ async fn run_native_oauth_login_with_data(
         result = callback => result,
         () = cancellation() => Err("OAuth login cancelled".into()),
     }
+}
+
+/// The signed-in account: its email, else its account id.
+fn account_label(profile: &serde_json::Value) -> &str {
+    profile
+        .get("email")
+        .and_then(|value| value.as_str())
+        .or_else(|| profile.get("accountId").and_then(|value| value.as_str()))
+        .unwrap_or("OpenAI account")
 }
 
 async fn open_browser(url: &str) -> Result<bool, crate::host::HostError> {

@@ -120,7 +120,8 @@ pub struct OauthFlowView {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OauthFlowStatus {
-    Starting,
+    /// Waiting for the browser (the agent's flow starts pending: the
+    /// listener is bound before the answer).
     Pending,
     Completed,
     ProfileExists,
@@ -131,7 +132,7 @@ pub enum OauthFlowStatus {
 impl OauthFlowStatus {
     /// Whether the flow still holds a callback listener.
     pub fn is_open(self) -> bool {
-        matches!(self, Self::Starting | Self::Pending)
+        matches!(self, Self::Pending)
     }
 }
 

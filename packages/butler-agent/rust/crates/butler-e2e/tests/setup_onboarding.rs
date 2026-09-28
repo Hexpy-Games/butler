@@ -91,14 +91,27 @@ async fn setup_11_onboarding_state_lives_in_the_agent() -> Result<(), HarnessErr
     s.finish().await
 }
 
-/// The routine preset (`model`, `effort`) the catalog offers for `provider`.
+/// The routine preset (`model`, `effort`) the catalog offers for
+/// `provider`: `providers[].presets.routine`, else the worker preset's
+/// `routine_work` (a catalog without provider presets).
 fn routine_preset(catalog: &Value, provider: &str) -> (String, String) {
-    let preset = catalog["worker_model_presets"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|preset| preset["provider_id"] == provider)
-        .unwrap_or_else(|| panic!("no preset for {provider}"));
+    let find = |list: &str| {
+        catalog[list]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|entry| entry["provider_id"] == provider)
+            .cloned()
+    };
+    if let Some(routine) = find("providers").map(|entry| entry["presets"]["routine"].clone())
+        && routine.is_object()
+    {
+        return (
+            routine["model"].as_str().unwrap().to_owned(),
+            routine["effort"].as_str().unwrap().to_owned(),
+        );
+    }
+    let preset = find("worker_model_presets").unwrap_or_else(|| panic!("no preset for {provider}"));
     let routine = &preset["routine_work"];
     (
         routine["model"].as_str().unwrap().to_owned(),
@@ -144,5 +157,60 @@ async fn setup_12_default_model_is_the_connected_providers_routine_preset()
     let settings = s.gw.settings().await?;
     assert_eq!(settings["model"], claude_model.as_str(), "{settings}");
     assert_eq!(settings["reasoning_effort"], claude_effort.as_str());
+    s.finish().await
+}
+
+/// SETUP-13 — Owner decision (#279 review): the routine-preset default is
+/// for new installs only. An install from before it (its App database has
+/// no recorded default policy) that never chose a model keeps the default
+/// it has been running with; a model the user then saves is what it uses,
+/// across a restart.
+#[tokio::test]
+async fn setup_13_existing_install_keeps_its_default_model() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("SETUP-13")?
+        .fixture(Fixture::Empty)
+        .start()
+        .await?;
+    let catalog = s.gw.get("/model-catalog").await?.data().clone();
+    let (routine_model, _) = routine_preset(&catalog, "openai");
+    assert_eq!(s.gw.settings().await?["model"], routine_model.as_str());
+
+    // The App database as the release before #230 left it.
+    s.agent.terminate().await?;
+    {
+        let db = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))
+            .unwrap();
+        db.execute(
+            "DELETE FROM app_settings WHERE key='default-model-policy'",
+            [],
+        )
+        .unwrap();
+    }
+    s.gw = s.agent.start_again().await?;
+    let settings = s.gw.settings().await?;
+    assert_eq!(settings["model"], "openai/gpt-5.5", "{settings}");
+    let legacy = catalog["models"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|model| model["model_ref"] == "openai/gpt-5.5")
+        .unwrap();
+    assert_eq!(
+        settings["reasoning_effort"], legacy["default_reasoning_effort"],
+        "{settings}"
+    );
+
+    let chosen =
+        s.gw.patch(
+            "/settings",
+            json!({"model": "openai/gpt-6-luna", "reasoning_effort": "medium"}),
+        )
+        .await?;
+    assert_eq!(chosen.status, 200, "{}", chosen.text);
+    s.restart().await?;
+    let settings = s.gw.settings().await?;
+    assert_eq!(settings["model"], "openai/gpt-6-luna", "{settings}");
+    assert_eq!(settings["reasoning_effort"], "medium", "{settings}");
     s.finish().await
 }

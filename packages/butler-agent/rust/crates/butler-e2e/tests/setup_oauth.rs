@@ -15,7 +15,9 @@ use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::agent::free_port;
-use butler_e2e::e2e::fake_servers::{FakeServer, form_value};
+use butler_e2e::e2e::fake_servers::{
+    FakeServer, OAUTH_ACCOUNT_ID, OAUTH_EMAIL, base64url, form_value,
+};
 use butler_e2e::e2e::gateway::Gateway;
 use butler_e2e::e2e::scenario::{Fixture, Scenario, Setup};
 use serde_json::{Value, json};
@@ -135,46 +137,18 @@ async fn setup_08_cancel_closes_the_listener_and_drops_the_state() -> Result<(),
 
 /// RFC 7636 S256: base64url (no padding) of SHA-256 of the verifier.
 fn s256(verifier: &str) -> String {
-    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-    let digest = Sha256::digest(verifier.as_bytes());
-    let mut out = String::new();
-    for chunk in digest.chunks(3) {
-        let bytes = [
-            chunk[0],
-            *chunk.get(1).unwrap_or(&0),
-            *chunk.get(2).unwrap_or(&0),
-        ];
-        let value = (u32::from(bytes[0]) << 16) | (u32::from(bytes[1]) << 8) | u32::from(bytes[2]);
-        for index in 0..=chunk.len() {
-            out.push(char::from(
-                ALPHABET[((value >> (18 - 6 * index)) & 63) as usize],
-            ));
-        }
-    }
-    out
+    base64url(&Sha256::digest(verifier.as_bytes()))
 }
 
 /// SETUP-09 — A sign-in completes when the browser returns with this
 /// flow's state: the code is exchanged with the verifier whose S256 is the
-/// flow's challenge, the sign-in is saved, the listener closes, and a new
-/// start reports `profile_exists`. A callback with another state fails the
-/// flow without an exchange.
+/// flow's challenge, the sign-in is saved under the account the token
+/// names, the listener closes, and a new start reports `profile_exists`.
 #[tokio::test]
 async fn setup_09_sign_in_completes_with_the_flows_pkce() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let token = FakeServer::oauth_token().await?;
     let (s, port) = with_callback_port("SETUP-09", &token).await?;
-
-    let wrong = start(&s.gw, json!({})).await?;
-    let wrong_id = wrong["flow_id"].as_str().unwrap().to_owned();
-    let (status, _) = callback(port, "code=e2e-code&state=not-this-flow").await?;
-    assert_eq!(status, 500);
-    let failed = flow_until(&s.gw, &wrong_id, "failed").await?;
-    assert_eq!(failed["error"], "oauth_state_mismatch", "{failed}");
-    assert!(
-        token.seen().is_empty(),
-        "a mismatched state exchanged a code"
-    );
 
     let flow = start(&s.gw, json!({})).await?;
     let flow_id = flow["flow_id"].as_str().unwrap().to_owned();
@@ -184,12 +158,13 @@ async fn setup_09_sign_in_completes_with_the_flows_pkce() -> Result<(), HarnessE
     assert_eq!(status, 200, "{page}");
     let done = flow_until(&s.gw, &flow_id, "completed").await?;
     assert_eq!(done["status"], "completed", "{done}");
-    assert!(
-        done["label"]
-            .as_str()
-            .is_some_and(|label| !label.is_empty())
-    );
+    assert_eq!(done["label"], OAUTH_EMAIL, "{done}");
     assert!(!listening(port), "the listener outlived the sign-in");
+    // A cancel after completion reports the real outcome.
+    let late =
+        s.gw.post(&format!("/setup/oauth/{flow_id}/cancel"), json!({}))
+            .await?;
+    assert_eq!(late.data()["status"], "completed", "{}", late.text);
 
     let exchange = token.seen();
     assert_eq!(exchange.len(), 1, "{exchange:?}");
@@ -198,14 +173,80 @@ async fn setup_09_sign_in_completes_with_the_flows_pkce() -> Result<(), HarnessE
     assert_eq!(form_value(form, "code"), Some("e2e-code"));
     let verifier = form_value(form, "code_verifier").unwrap();
     assert_eq!(s256(verifier), challenge, "the verifier is not the flow's");
-    assert!(s.sandbox.data.join("auth/openai-codex.json").is_file());
+    let profile: Value = serde_json::from_slice(&std::fs::read(
+        s.sandbox.data.join("auth/openai-codex.json"),
+    )?)?;
+    assert_eq!(profile["email"], OAUTH_EMAIL, "{profile}");
+    assert_eq!(profile["accountId"], OAUTH_ACCOUNT_ID, "{profile}");
 
     let existing = start(&s.gw, json!({})).await?;
     assert_eq!(existing["status"], "profile_exists", "{existing}");
+    assert_eq!(existing["label"], OAUTH_EMAIL, "{existing}");
     let forced = start(&s.gw, json!({"force": true})).await?;
     assert_eq!(forced["status"], "pending", "{forced}");
     let forced_id = forced["flow_id"].as_str().unwrap();
     s.gw.post(&format!("/setup/oauth/{forced_id}/cancel"), json!({}))
         .await?;
+    s.finish().await
+}
+
+/// SETUP-10 — Anything else that reaches the callback listener leaves the
+/// sign-in pending: an idle connection does not hold up the browser, and a
+/// request with another state, no state or no code is answered and ignored
+/// (any local page can reach the port). Declining in the browser (this
+/// flow's state with `error`) ends it as `failed`/`oauth_denied`.
+#[tokio::test]
+async fn setup_10_stray_callbacks_are_ignored() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let token = FakeServer::oauth_token().await?;
+    let (s, port) = with_callback_port("SETUP-10", &token).await?;
+    let flow = start(&s.gw, json!({})).await?;
+    let flow_id = flow["flow_id"].as_str().unwrap().to_owned();
+    let state = auth_param(&flow, "state");
+
+    // An idle connection that never sends a request.
+    let idle = tokio::net::TcpStream::connect(("127.0.0.1", port)).await?;
+    for stray in [
+        "code=stray&state=not-this-flow".to_owned(),
+        "error=access_denied&state=not-this-flow".to_owned(),
+        "code=stray".to_owned(),
+        format!("state={state}"),
+    ] {
+        let (status, _) = callback(port, &stray).await?;
+        assert_eq!(status, 400, "{stray}");
+    }
+    assert_eq!(
+        s.gw.get(&format!("/setup/oauth/{flow_id}")).await?.data()["status"],
+        "pending"
+    );
+    assert!(token.seen().is_empty(), "a stray request exchanged a code");
+
+    // The browser's callback completes while the idle connection is open.
+    let started = Instant::now();
+    let (status, page) = callback(port, &format!("code=e2e-code&state={state}")).await?;
+    assert_eq!(status, 200, "{page}");
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "the idle connection held it up"
+    );
+    assert_eq!(
+        flow_until(&s.gw, &flow_id, "completed").await?["status"],
+        "completed"
+    );
+    drop(idle);
+
+    // Declining ends a (forced) new sign-in.
+    let declined = start(&s.gw, json!({"force": true})).await?;
+    let declined_id = declined["flow_id"].as_str().unwrap().to_owned();
+    let declined_state = auth_param(&declined, "state");
+    let (status, _) =
+        callback(port, &format!("error=access_denied&state={declined_state}")).await?;
+    assert_eq!(status, 400);
+    let failed = flow_until(&s.gw, &declined_id, "failed").await?;
+    assert_eq!(failed["error"], "oauth_denied", "{failed}");
+    assert!(
+        !listening(port),
+        "the listener outlived the declined sign-in"
+    );
     s.finish().await
 }

@@ -76,6 +76,7 @@ pub(super) fn falls_back(
 }
 
 /// Forwards stream events and records whether answer text was shown.
+/// Every provider round goes through one (not only local ones).
 pub(super) struct StreamWatch<'a> {
     inner: Option<&'a dyn ProviderStreamObserver>,
     streamed: AtomicBool,
@@ -89,8 +90,19 @@ impl<'a> StreamWatch<'a> {
         }
     }
 
+    /// Whether this round showed answer text (even text later discarded).
     pub(super) fn streamed(&self) -> bool {
         self.streamed.load(Ordering::Acquire)
+    }
+
+    /// The round failed: text it showed is not the answer. Whoever repeats
+    /// the round (the model route, or the non-streaming fallback) then
+    /// shows its own text instead of adding to it, and a turn stopped
+    /// meanwhile keeps none of it.
+    pub(super) fn discard_shown(&self) {
+        if self.streamed() {
+            self.round_text_discarded();
+        }
     }
 }
 

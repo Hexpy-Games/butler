@@ -3,6 +3,8 @@
 //! and answered. Shared by `butler auth login` and the App's first-run
 //! sign-in flow.
 
+use std::time::Duration;
+
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -10,6 +12,8 @@ use tokio::{
 
 /// Longest callback request head the listener reads.
 const MAX_REQUEST_HEAD: usize = 8192;
+/// How long one connection may take to send its request head.
+const READ_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Where the callback listens and what the provider redirects to.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -60,41 +64,30 @@ impl CallbackEndpoint {
     }
 }
 
-/// Why a callback request ended the sign-in. `Display` is the user text.
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum CallbackError {
-    #[error("OAuth authorization denied")]
+/// What one request to the callback listener was.
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) enum Callback {
+    /// The authorization code of this sign-in.
+    Code(String),
+    /// This sign-in's state with an `error`: the user declined.
     Denied,
-    #[error("OAuth state mismatch")]
-    StateMismatch,
-    #[error("OAuth callback did not include a code")]
-    MissingCode,
-    #[error("OAuth callback could not be read: {0}")]
-    Io(#[from] std::io::Error),
+    /// Anything else (another path or state, no code, not a `GET`, an
+    /// unreadable or idle connection); already answered or dropped. It
+    /// never ends the sign-in: any local page can reach the listener.
+    Ignored,
 }
 
-impl CallbackError {
-    /// Stable code for flow views.
-    pub(crate) fn code(&self) -> &'static str {
-        match self {
-            Self::Denied => "oauth_denied",
-            Self::StateMismatch => "oauth_state_mismatch",
-            Self::MissingCode => "oauth_code_missing",
-            Self::Io(_) => "oauth_callback_unreadable",
-        }
-    }
-}
-
-/// Reads one request. `Ok(Some(code))` is the authorization code of this
-/// sign-in; `Ok(None)` is an unrelated request (already answered);
-/// an error ends the sign-in (the browser is told it failed).
+/// Reads one request within [`READ_TIMEOUT`] and answers it unless it
+/// carries this sign-in's code (the caller answers that one).
 pub(crate) async fn read_callback(
     stream: &mut TcpStream,
     redirect_uri: &str,
     state: &str,
-) -> Result<Option<String>, CallbackError> {
-    let Some(target) = read_request_target(stream).await? else {
-        return Ok(None);
+) -> Callback {
+    let Ok(Ok(Some(target))) =
+        tokio::time::timeout(READ_TIMEOUT, read_request_target(stream)).await
+    else {
+        return Callback::Ignored;
     };
     let Some(current) = url::Url::parse(redirect_uri)
         .ok()
@@ -102,28 +95,35 @@ pub(crate) async fn read_callback(
         .filter(|url| url.path() == "/auth/callback")
     else {
         respond(stream, 404, "Not found").await;
-        return Ok(None);
+        return Callback::Ignored;
     };
     let params: std::collections::HashMap<_, _> = current.query_pairs().into_owned().collect();
-    let failure = if params.contains_key("error") {
-        Some(CallbackError::Denied)
-    } else if params.get("state").map(String::as_str) != Some(state) {
-        Some(CallbackError::StateMismatch)
-    } else if params.get("code").is_none_or(String::is_empty) {
-        Some(CallbackError::MissingCode)
-    } else {
-        None
-    };
-    if let Some(error) = failure {
-        respond(stream, 500, "Codex subscription login failed.").await;
-        return Err(error);
+    let callback = classify(&params, state);
+    match callback {
+        Callback::Code(_) => {}
+        Callback::Denied => respond(stream, 400, "Codex subscription login was declined.").await,
+        Callback::Ignored => respond(stream, 400, "This is not the pending sign-in.").await,
     }
-    Ok(params.get("code").cloned())
+    callback
+}
+
+/// The callback its query parameters make for the sign-in with `state`.
+fn classify(params: &std::collections::HashMap<String, String>, state: &str) -> Callback {
+    if params.get("state").map(String::as_str) != Some(state) {
+        return Callback::Ignored;
+    }
+    if params.contains_key("error") {
+        return Callback::Denied;
+    }
+    params
+        .get("code")
+        .filter(|code| !code.is_empty())
+        .map_or(Callback::Ignored, |code| Callback::Code(code.clone()))
 }
 
 /// The path and query of a `GET` request, or `None` (answered) for any
 /// other request.
-async fn read_request_target(stream: &mut TcpStream) -> Result<Option<String>, CallbackError> {
+async fn read_request_target(stream: &mut TcpStream) -> std::io::Result<Option<String>> {
     let mut request = vec![0_u8; MAX_REQUEST_HEAD];
     let mut length = 0;
     loop {
@@ -177,4 +177,43 @@ fn first_env(names: &[&str]) -> Option<String> {
     names
         .iter()
         .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::*;
+
+    fn params(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+        pairs
+            .iter()
+            .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+            .collect()
+    }
+
+    #[test]
+    fn only_this_sign_ins_state_can_complete_or_decline_it() {
+        let state = "s1";
+        assert_eq!(
+            classify(&params(&[("state", "s1"), ("code", "c")]), state),
+            Callback::Code("c".into())
+        );
+        assert_eq!(
+            classify(
+                &params(&[("state", "s1"), ("error", "access_denied")]),
+                state
+            ),
+            Callback::Denied
+        );
+        for stray in [
+            params(&[("state", "other"), ("code", "c")]),
+            params(&[("state", "other"), ("error", "access_denied")]),
+            params(&[("code", "c")]),
+            params(&[("state", "s1")]),
+            params(&[("state", "s1"), ("code", "")]),
+        ] {
+            assert_eq!(classify(&stray, state), Callback::Ignored, "{stray:?}");
+        }
+    }
 }

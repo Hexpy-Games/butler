@@ -13,7 +13,7 @@
 
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::agent::{free_port, read_all};
-use butler_e2e::e2e::fake_servers::{FakeServer, GOOD_KEY, QUOTA_KEY};
+use butler_e2e::e2e::fake_servers::{ANTHROPIC_MODEL, FakeServer, GOOD_KEY, QUOTA_KEY};
 use butler_e2e::e2e::scenario::{Fixture, Scenario, Setup};
 use serde_json::{Value, json};
 
@@ -85,6 +85,15 @@ async fn setup_06_verify_checks_the_key_and_stores_nothing() -> Result<(), Harne
     }
     let (status, body) = verify(&s, "anthropic", GOOD_KEY).await?;
     assert_eq!(status, 200, "{body}");
+    assert_eq!(body["data"]["models"], json!([ANTHROPIC_MODEL]), "{body}");
+    // Surrounding whitespace is not part of a key; an inner line break is invalid.
+    let (status, body) = verify(&s, "openai", &format!("  {GOOD_KEY}\n")).await?;
+    assert_eq!(status, 200, "{body}");
+    let (status, body) = verify(&s, "openai", "sk-e2e\ngood").await?;
+    assert_eq!(
+        (status, body["error"]["code"].clone()),
+        (400, json!("invalid_request"))
+    );
     let anthropic = provider
         .seen()
         .into_iter()
@@ -154,13 +163,51 @@ async fn setup_07_saved_keys_get_generated_names() -> Result<(), HarnessError> {
     assert_eq!(again.data()["created"], false);
     assert_eq!(again.data()["credential"]["id"], id.as_str());
 
-    let unknown =
+    // Saving treats whitespace as checking does: the same key is reused.
+    let padded =
         s.gw.post(
             "/credentials",
-            json!({"provider_id": "openai", "api_key": "k", "name": "x"}),
+            json!({"provider_id": "openai", "api_key": format!(" {GOOD_KEY}\n")}),
         )
         .await?;
-    assert_eq!(unknown.status, 400, "{}", unknown.text);
+    assert_eq!(padded.status, 200, "{}", padded.text);
+    assert_eq!(padded.data()["credential"]["id"], id.as_str());
+
+    for (body, code) in [
+        (
+            json!({"provider_id": "openai", "api_key": "k", "name": "x"}),
+            "invalid_request",
+        ),
+        (
+            json!({"provider_id": "local", "api_key": "k"}),
+            "unsupported_provider",
+        ),
+        (
+            json!({"provider_id": "openai", "api_key": "sk-a\nb"}),
+            "invalid_request",
+        ),
+    ] {
+        let reply = s.gw.post("/credentials", body.clone()).await?;
+        assert_eq!(reply.status, 400, "{body}: {}", reply.text);
+        assert_eq!(reply.error_code(), Some(code), "{body}: {}", reply.text);
+    }
+
+    // Concurrent saves: distinct keys get distinct names, one key one credential.
+    let distinct =
+        futures_util::future::join_all(["sk-e2e-c1", "sk-e2e-c2", "sk-e2e-c3"].map(&save)).await;
+    let mut names: Vec<String> = distinct
+        .iter()
+        .map(|reply| reply.as_ref().unwrap().data()["credential"]["label"].to_string())
+        .collect();
+    names.sort();
+    names.dedup();
+    assert_eq!(names.len(), 3, "{names:?}");
+    let same = futures_util::future::join_all(["sk-e2e-c4"; 3].map(&save)).await;
+    let ids: std::collections::HashSet<String> = same
+        .iter()
+        .map(|reply| reply.as_ref().unwrap().data()["credential"]["id"].to_string())
+        .collect();
+    assert_eq!(ids.len(), 1, "{ids:?}");
 
     let registered =
         s.gw.post(
@@ -174,7 +221,12 @@ async fn setup_07_saved_keys_get_generated_names() -> Result<(), HarnessError> {
     s.restart().await?;
     let saved = saved_credentials(&s).await?;
     let labels: Vec<_> = saved.iter().map(|c| c["label"].clone()).collect();
-    assert_eq!(labels, [json!("openai"), json!("openai-2")], "{saved:?}");
+    assert_eq!(labels.len(), 6, "{saved:?}");
+    assert_eq!(
+        labels[..2],
+        [json!("openai"), json!("openai-2")],
+        "{saved:?}"
+    );
     let listed = serde_json::to_string(&saved)?;
     assert!(!listed.contains(GOOD_KEY) && !listed.contains(OTHER_KEY));
     s.finish().await
