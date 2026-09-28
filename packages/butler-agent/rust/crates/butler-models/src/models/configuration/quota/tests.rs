@@ -2,6 +2,7 @@
 
 use super::*;
 
+// test-category: security
 #[test]
 fn codex_usage_url_follows_the_configured_codex_base() {
     let url = |base: Option<&str>| codex_usage_url(base).map(|url| url.to_string());
@@ -24,6 +25,7 @@ fn codex_usage_url_follows_the_configured_codex_base() {
     assert_eq!(url(Some("file:///tmp/x")), None);
 }
 
+// test-category: security
 #[test]
 fn zai_quota_url_comes_only_from_an_official_coding_plan_base() {
     let url = |base: &str, loopback: bool| zai_quota_url(base, loopback).map(|url| url.to_string());
@@ -50,6 +52,7 @@ fn zai_quota_url_comes_only_from_an_official_coding_plan_base() {
     }
 }
 
+// test-category: security
 #[test]
 fn zai_quota_url_admits_loopback_only_from_the_environment() {
     let base = "http://127.0.0.1:4321/api/coding/paas/v4";
@@ -66,6 +69,7 @@ fn zai_quota_url_admits_loopback_only_from_the_environment() {
     );
 }
 
+// test-category: pure-logic
 #[test]
 fn providers_without_a_quota_surface_are_not_offered() {
     assert_eq!(provider_quota_support("openai"), QuotaSupport::Polled);

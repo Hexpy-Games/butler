@@ -116,6 +116,8 @@ pub enum QuotaPollStatus {
     Pending,
     /// The latest poll failed at this time (epoch milliseconds).
     Failed(i64),
+    /// Polling is kill-switched for the provider.
+    Disabled,
 }
 
 #[derive(Default, Deserialize, Serialize)]
@@ -171,12 +173,52 @@ impl ProviderQuotaStore {
         self.updates.subscribe()
     }
 
+    /// The outcome of the provider's latest poll, if any.
+    pub fn status(&self, provider_id: &str) -> Option<QuotaPollStatus> {
+        self.statuses.lock().get(provider_id).copied()
+    }
+
     /// Records a poll that produced no reading; announces a changed view.
+    /// When the provider offers nothing to read any more (logged out, or
+    /// switched to an API key), its previous reading is dropped: it no
+    /// longer describes the account in use.
     pub fn record_status(&self, provider_id: &str, status: QuotaPollStatus) {
         let before = self.view(provider_id);
         self.statuses.lock().insert(provider_id.to_owned(), status);
+        if matches!(
+            status,
+            QuotaPollStatus::NotOffered(_) | QuotaPollStatus::Pending
+        ) {
+            self.drop_reading(provider_id);
+        }
+        self.announce_change(provider_id, &before);
+    }
+
+    /// Forgets the provider's poll outcome (its kill switch was lifted).
+    pub fn clear_status(&self, provider_id: &str) {
+        let before = self.view(provider_id);
+        self.statuses.lock().remove(provider_id);
+        self.announce_change(provider_id, &before);
+    }
+
+    fn drop_reading(&self, provider_id: &str) {
+        let snapshot = {
+            let mut readings = self.readings.lock();
+            readings
+                .remove(provider_id)
+                .is_some()
+                .then(|| readings.clone())
+        };
+        if let Some(readings) = snapshot {
+            self.persist(&readings);
+        }
+    }
+
+    /// Announces the provider's view when what the App shows changed.
+    fn announce_change(&self, provider_id: &str, before: &ProviderQuotaView) {
         let after = self.view(provider_id);
-        if before.stale != after.stale
+        if before.available != after.available
+            || before.stale != after.stale
             || before.reason != after.reason
             || before.plan_kind != after.plan_kind
         {

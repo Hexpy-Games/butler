@@ -57,6 +57,7 @@ pub(super) fn without_reading(
     let support = provider_quota_support(provider_id);
     let (code, plan_kind) = match (status, support) {
         (Some(QuotaPollStatus::NotOffered(kind)), _) => (NOT_OFFERED, kind),
+        (Some(QuotaPollStatus::Disabled), _) => (NOT_OFFERED, QuotaPlanKind::Unknown),
         (Some(QuotaPollStatus::Failed(_)), _) => (FETCH_FAILED, QuotaPlanKind::Subscription),
         (_, QuotaSupport::NotOffered(billing)) => (NOT_OFFERED, plan_kind(billing)),
         (_, QuotaSupport::Polled) => (PENDING, QuotaPlanKind::Unknown),

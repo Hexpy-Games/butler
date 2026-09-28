@@ -65,6 +65,7 @@ fn code(view: &ProviderQuotaView) -> Option<&str> {
     view.reason.as_ref().map(|reason| reason.code.as_str())
 }
 
+// test-category: pure-logic
 #[test]
 fn without_a_reading_polled_providers_are_pending_and_api_ones_not_offered() {
     let dir = Dir::new();
@@ -84,6 +85,7 @@ fn without_a_reading_polled_providers_are_pending_and_api_ones_not_offered() {
     assert_eq!(code(&store.view("zai")), Some("provider_quota_pending"));
 }
 
+// test-category: pure-logic
 #[test]
 fn poll_outcomes_without_a_reading_set_the_reason() {
     let dir = Dir::new();
@@ -99,8 +101,15 @@ fn poll_outcomes_without_a_reading_set_the_reason() {
     );
     store.record_status("zai", QuotaPollStatus::Pending);
     assert_eq!(code(&store.view("zai")), Some("provider_quota_pending"));
+    store.record_status("zai", QuotaPollStatus::Disabled);
+    let disabled = store.view("zai");
+    assert_eq!(code(&disabled), Some("provider_quota_not_offered"));
+    assert_eq!(disabled.plan_kind, QuotaPlanKind::Unknown);
+    store.clear_status("zai");
+    assert_eq!(code(&store.view("zai")), Some("provider_quota_pending"));
 }
 
+// test-category: pure-logic
 #[test]
 fn a_polled_reading_is_shown_with_its_plan_and_source() {
     let dir = Dir::new();
@@ -119,6 +128,7 @@ fn a_polled_reading_is_shown_with_its_plan_and_source() {
     assert_eq!(store.view("openai").source_id, "openai-usage-endpoint");
 }
 
+// test-category: pure-logic
 #[test]
 fn a_failed_poll_keeps_the_reading_stale_with_the_fetch_failed_reason() {
     let dir = Dir::new();
@@ -143,6 +153,7 @@ fn a_failed_poll_keeps_the_reading_stale_with_the_fetch_failed_reason() {
     assert!(!view.stale && view.reason.is_none(), "{view:?}");
 }
 
+// test-category: pure-logic
 #[test]
 fn header_readings_keep_the_polled_plan_name() {
     let dir = Dir::new();
@@ -159,6 +170,7 @@ fn header_readings_keep_the_polled_plan_name() {
     assert_eq!(view.windows[0].used_percent, Some(12.0));
 }
 
+// test-category: pure-logic
 #[test]
 fn readings_survive_a_restart_but_poll_outcomes_do_not() {
     let dir = Dir::new();

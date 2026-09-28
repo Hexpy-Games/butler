@@ -11,6 +11,8 @@ use reqwest::{Client, Response, Url, redirect::Policy};
 const TIMEOUT: Duration = Duration::from_secs(10);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_BODY_BYTES: usize = 64 * 1024;
+/// The longest `Retry-After` honoured.
+const MAX_RETRY_AFTER_SECONDS: i64 = 60 * 60;
 
 /// How a provider bills when it offers no quota to read.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -36,10 +38,15 @@ pub enum QuotaFetchError {
     /// The login could not be resolved or refreshed.
     #[error("the provider login could not be resolved")]
     AuthUnavailable,
-    /// The provider rejected the credential.
-    #[error("the provider rejected the credential (HTTP {status})")]
+    /// The model configuration could not be read.
+    #[error("the model configuration could not be read")]
+    Configuration,
+    /// The provider rejected the credential (HTTP 401, or the provider's
+    /// own code for an in-body rejection). A 403 is not a rejection: it is
+    /// often an edge block, and a login refresh would not help.
+    #[error("the provider rejected the credential (code {status})")]
     Unauthorized {
-        /// HTTP status, or the provider's own code for an in-body rejection.
+        /// 401, or the provider's own rejection code.
         status: u16,
     },
     /// The provider rate-limited the read.
@@ -72,6 +79,7 @@ impl QuotaFetchError {
             Self::NotOffered(_) => "not_offered",
             Self::NotConfigured => "not_configured",
             Self::AuthUnavailable => "auth_unavailable",
+            Self::Configuration => "configuration_unreadable",
             Self::Unauthorized { .. } => "unauthorized",
             Self::RateLimited { .. } => "rate_limited",
             Self::Http { .. } => "http_status",
@@ -79,6 +87,25 @@ impl QuotaFetchError {
             Self::Transport(error) if error.is_timeout() => "timeout",
             Self::Transport(_) => "transport",
             Self::Schema => "schema_mismatch",
+        }
+    }
+}
+
+/// One quota poll's result, and whether it refreshed the provider login
+/// (after a rejected token) on the way.
+#[derive(Debug)]
+pub struct QuotaFetch {
+    /// The reading, or why there is none.
+    pub result: Result<super::ProviderQuotaReading, QuotaFetchError>,
+    /// A login refresh was attempted after an HTTP 401.
+    pub refreshed_login: bool,
+}
+
+impl From<Result<super::ProviderQuotaReading, QuotaFetchError>> for QuotaFetch {
+    fn from(result: Result<super::ProviderQuotaReading, QuotaFetchError>) -> Self {
+        Self {
+            result,
+            refreshed_login: false,
         }
     }
 }
@@ -142,7 +169,7 @@ async fn body(mut response: Response) -> Result<Vec<u8>, QuotaFetchError> {
     let status = response.status().as_u16();
     match status {
         200..=299 => {}
-        401 | 403 => return Err(QuotaFetchError::Unauthorized { status }),
+        401 => return Err(QuotaFetchError::Unauthorized { status }),
         429 => {
             return Err(QuotaFetchError::RateLimited {
                 retry_after_ms: retry_after_ms(response.headers()),
@@ -160,7 +187,8 @@ async fn body(mut response: Response) -> Result<Vec<u8>, QuotaFetchError> {
     Ok(bytes)
 }
 
-/// `Retry-After` in whole seconds (the HTTP-date form is ignored).
+/// `Retry-After` in whole seconds, at most an hour (the HTTP-date form is
+/// ignored).
 fn retry_after_ms(headers: &HeaderMap) -> Option<i64> {
     let seconds = headers
         .get(RETRY_AFTER)?
@@ -169,5 +197,5 @@ fn retry_after_ms(headers: &HeaderMap) -> Option<i64> {
         .trim()
         .parse::<i64>()
         .ok()?;
-    (seconds >= 0).then(|| seconds.saturating_mul(1000))
+    (seconds >= 0).then(|| seconds.min(MAX_RETRY_AFTER_SECONDS).saturating_mul(1000))
 }

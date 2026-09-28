@@ -20,6 +20,7 @@ fn window(id: &str, used: f64, minutes: u64, resets_at_ms: i64) -> ProviderQuota
     }
 }
 
+// test-category: format-pin
 #[test]
 fn primary_and_secondary_windows_and_the_plan_parse() {
     let reading = parse(&json!({
@@ -52,6 +53,7 @@ fn primary_and_secondary_windows_and_the_plan_parse() {
     );
 }
 
+// test-category: format-pin
 #[test]
 fn camel_case_minutes_strings_and_resets_at_are_accepted() {
     let reading = parse(&json!({
@@ -73,6 +75,7 @@ fn camel_case_minutes_strings_and_resets_at_are_accepted() {
     );
 }
 
+// test-category: format-pin
 #[test]
 fn additional_limits_merge_and_a_disallowed_limit_is_fully_used() {
     let reading = parse(&json!({
@@ -109,6 +112,7 @@ fn additional_limits_merge_and_a_disallowed_limit_is_fully_used() {
     );
 }
 
+// test-category: format-pin
 #[test]
 fn a_zero_length_window_is_absent_and_values_are_clamped() {
     let reading = parse(&json!({
@@ -125,6 +129,7 @@ fn a_zero_length_window_is_absent_and_values_are_clamped() {
     );
 }
 
+// test-category: format-pin
 #[test]
 fn a_body_without_windows_or_plan_is_a_schema_mismatch() {
     for body in [

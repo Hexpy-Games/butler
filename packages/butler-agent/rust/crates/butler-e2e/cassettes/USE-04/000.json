@@ -21,7 +21,7 @@
     "chunks": [
       {
         "delay_ms": 0,
-        "text": "{\"code\":200,\"msg\":\"Operation successful\",\"data\":{\"limits\":[{\"type\":\"TIME_LIMIT\",\"unit\":5,\"number\":1,\"usage\":100,\"currentValue\":0,\"remaining\":100,\"percentage\":0,\"nextResetTime\":1792807606998,\"usageDetails\":[{\"modelCode\":\"search-prime\",\"usage\":0},{\"modelCode\":\"web-reader\",\"usage\":0},{\"modelCode\":\"zread\",\"usage\":0}]},{\"type\":\"TOKENS_LIMIT\",\"unit\":3,\"number\":5,\"percentage\":0},{\"type\":\"TOKENS_LIMIT\",\"unit\":6,\"number\":1,\"percentage\":5,\"nextResetTime\":1790906806983}],\"level\":\"lite\"},\"success\":true}"
+        "text": "{\"code\":200,\"msg\":\"Operation successful\",\"data\":{\"limits\":[{\"type\":\"TIME_LIMIT\",\"unit\":5,\"number\":1,\"usage\":100,\"currentValue\":0,\"remaining\":100,\"percentage\":0,\"nextResetTime\":\"{{EPOCH_MS+2214000000}}\",\"usageDetails\":[{\"modelCode\":\"search-prime\",\"usage\":0},{\"modelCode\":\"web-reader\",\"usage\":0},{\"modelCode\":\"zread\",\"usage\":0}]},{\"type\":\"TOKENS_LIMIT\",\"unit\":3,\"number\":5,\"percentage\":0},{\"type\":\"TOKENS_LIMIT\",\"unit\":6,\"number\":1,\"percentage\":5,\"nextResetTime\":\"{{EPOCH_MS+313200000}}\"}],\"level\":\"lite\"},\"success\":true}"
       }
     ]
   }

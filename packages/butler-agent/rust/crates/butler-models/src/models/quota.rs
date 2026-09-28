@@ -17,7 +17,7 @@ use reqwest::header::HeaderMap;
 use serde::{Deserialize, Serialize};
 
 pub(crate) use codex_usage::parse_codex_usage;
-pub use fetch::{QuotaBilling, QuotaFetchError, QuotaHttp};
+pub use fetch::{QuotaBilling, QuotaFetch, QuotaFetchError, QuotaHttp};
 pub(crate) use zai_usage::parse_zai_quota;
 
 /// One rolling quota window as the provider reported it.

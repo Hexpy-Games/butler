@@ -87,10 +87,15 @@ impl AppMonitoringPort for AppMonitoring {
         let quota = self.quota.clone();
         // The Settings usage page reads the whole-process monitor (no
         // session): opening it polls quota that is due.
-        let settings_poll = self.poller.clone().filter(|_| query.session_id.is_none());
+        let poller = self.poller.clone();
+        let settings = query.session_id.is_none();
         Box::pin(async move {
-            if let Some(poller) = settings_poll {
-                quota::poll_within(poller, QuotaPollTrigger::SettingsOpened, None).await;
+            match poller {
+                Some(poller) if settings => {
+                    quota::poll_within(poller, QuotaPollTrigger::SettingsOpened, None).await;
+                }
+                Some(poller) => poller.sync_switches(),
+                None => {}
             }
             let mut view = usage_monitor_view(&root, &query, &catalog, &quota);
             if let Some(object) = view.as_object_mut() {
@@ -117,15 +122,19 @@ impl AppMonitoringPort for AppMonitoring {
         refresh: bool,
     ) -> ApplicationFuture<ProviderQuotaView> {
         let quota = self.quota.clone();
-        let poller = self.poller.clone().filter(|_| refresh);
+        let poller = self.poller.clone();
         Box::pin(async move {
-            if let Some(poller) = poller {
-                quota::poll_within(
-                    poller,
-                    QuotaPollTrigger::Explicit,
-                    Some(provider_id.clone()),
-                )
-                .await;
+            match poller {
+                Some(poller) if refresh => {
+                    quota::poll_within(
+                        poller,
+                        QuotaPollTrigger::Explicit,
+                        Some(provider_id.clone()),
+                    )
+                    .await;
+                }
+                Some(poller) => poller.sync_switches(),
+                None => {}
             }
             Ok(quota.view(&provider_id))
         })

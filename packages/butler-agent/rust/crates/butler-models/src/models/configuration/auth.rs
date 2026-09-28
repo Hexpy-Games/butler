@@ -64,37 +64,39 @@ impl std::fmt::Debug for AuthError {
 
 impl AuthOwner<'_> {
     pub(super) async fn resolve_openai(&self) -> Result<ProviderAuth, AuthError> {
-        self.resolve_openai_with(false).await
+        self.resolve_openai_after(None).await
     }
 
-    /// Like [`Self::resolve_openai`]; `force_refresh` refreshes a Butler
-    /// Codex login even when it is not expiring (after the provider rejected
-    /// its token).
-    pub(super) async fn resolve_openai_with(
+    /// Like [`Self::resolve_openai`]. `rejected` is a bearer authorization
+    /// the provider just rejected (HTTP 401): the Butler login is refreshed
+    /// unless its stored token has changed since.
+    pub(super) async fn resolve_openai_after(
         &self,
-        force_refresh: bool,
+        rejected: Option<&str>,
     ) -> Result<ProviderAuth, AuthError> {
         if let Some(key) = trimmed(self.environment.openai_api_key.as_deref()) {
             return Ok(ProviderAuth::ApiKey(key.to_owned()));
         }
-        self.resolve_codex_with(force_refresh).await
+        self.resolve_codex_after(rejected).await
     }
 
     pub(super) async fn resolve_codex(&self) -> Result<ProviderAuth, AuthError> {
-        self.resolve_codex_with(false).await
+        self.resolve_codex_after(None).await
     }
 
-    /// Like [`Self::resolve_codex`], refreshing the Butler login first when
-    /// `force_refresh` is set.
-    pub(super) async fn resolve_codex_with(
+    /// Like [`Self::resolve_codex`], with `rejected` as for
+    /// [`Self::resolve_openai_after`].
+    pub(super) async fn resolve_codex_after(
         &self,
-        force_refresh: bool,
+        rejected: Option<&str>,
     ) -> Result<ProviderAuth, AuthError> {
         if let Some(mut profile) = self.read_butler_profile().await
             && !profile.access_token.is_empty()
         {
-            if force_refresh || self.is_expiring(&profile) {
-                profile = self.refresh(profile).await?;
+            let rejected_now =
+                rejected.is_some_and(|value| value == format!("Bearer {}", profile.access_token));
+            if rejected_now || self.is_expiring(&profile) {
+                profile = self.refresh_once(profile).await?;
             }
             let account_id =
                 account_id_from_access_token(&profile.access_token).unwrap_or_default();
@@ -173,6 +175,24 @@ impl AuthOwner<'_> {
             access_token,
             raw,
         })
+    }
+
+    /// Refreshes `profile` under the process-wide refresh lock, unless the
+    /// stored login changed while this call waited for it (another refresh,
+    /// from a model request or a quota poll, already renewed it). Refresh
+    /// tokens rotate, so two refreshes of one login must never overlap.
+    async fn refresh_once(
+        &self,
+        profile: OpenAiAuthProfile,
+    ) -> Result<OpenAiAuthProfile, AuthError> {
+        let _refreshing = refresh_lock().lock().await;
+        if let Some(current) = self.read_butler_profile().await
+            && !current.access_token.is_empty()
+            && current.access_token != profile.access_token
+        {
+            return Ok(current);
+        }
+        self.refresh(profile).await
     }
 
     fn is_expiring(&self, profile: &OpenAiAuthProfile) -> bool {
@@ -391,6 +411,12 @@ impl AuthOwner<'_> {
                 )
             })
     }
+}
+
+/// The one Codex login refresh allowed at a time in this process.
+fn refresh_lock() -> &'static tokio::sync::Mutex<()> {
+    static LOCK: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
+    LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
 }
 
 pub fn generate_pkce_verifier() -> String {

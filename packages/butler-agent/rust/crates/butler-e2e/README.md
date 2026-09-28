@@ -73,6 +73,19 @@ For `zai` the recorder's upstream is the origin `https://api.z.ai` and the
 agent's `BUTLER_ZAI_BASE_URL` carries the Coding Plan path
 (`config::base_path`), from which the product derives its quota URL.
 
+USE-05 (`Setup::codex_login_refresh`) sends the Codex login refresh through
+the recorder (`/oauth/*` is forwarded to `https://auth.openai.com`). Recording
+it makes the test login expire, as LIVE-10 does, and the agent writes the
+refreshed login back to the same profile; replay runs with a refreshable
+placeholder login.
+
+Reset times in usage replies are recorded relative to the recording time and
+rounded to the hour (`{{EPOCH_MS+Δ}}`, `{{EPOCH_S+Δ}}`); replay turns them
+into times relative to the replay, so no cassette pins a subscription
+anniversary and none goes stale. After the sanitizer learns a rule, committed
+cassettes are re-sanitized without new traffic:
+`cargo run -p butler-e2e --bin e2e-resanitize -- <scenario>...`.
+
 ## Record / replay
 
 - Cassettes: `cassettes/<scenario>/<n>.json` + `meta.json` (provenance,

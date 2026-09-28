@@ -21,8 +21,9 @@ use super::auth::AuthOwner;
 use super::{ModelConfiguration, ModelConfigurationRead, merge_private_auth_environment};
 use crate::models::quota::{parse_codex_usage, parse_zai_quota};
 use crate::models::{
-    ProviderAuth, ProviderAuthMethod, ProviderQuotaReading, QuotaBilling, QuotaFetchError,
-    QuotaHttp, QuotaSupport, default_hosted_provider_api_base_url, provider_quota_support,
+    ProviderAuth, ProviderAuthMethod, ProviderQuotaReading, QuotaBilling, QuotaFetch,
+    QuotaFetchError, QuotaHttp, QuotaSupport, default_hosted_provider_api_base_url,
+    provider_quota_support,
 };
 
 const DEFAULT_CODEX_BASE: &str = "https://chatgpt.com/backend-api";
@@ -50,30 +51,53 @@ impl ModelConfiguration {
         )
     }
 
-    /// Reads `provider_id`'s remaining quota from its usage endpoint.
-    /// `refresh_auth` refreshes a Codex login first (after a rejected token).
+    /// Reads `provider_id`'s remaining quota from its usage endpoint. With
+    /// `allow_refresh`, a Codex token the endpoint rejects (HTTP 401) is
+    /// refreshed once, unless the stored login already changed, and the
+    /// read retried with the renewed token.
     pub async fn fetch_provider_quota(
         &self,
         provider_id: &str,
         http: &QuotaHttp,
-        refresh_auth: bool,
-    ) -> Result<ProviderQuotaReading, QuotaFetchError> {
+        allow_refresh: bool,
+    ) -> QuotaFetch {
         match (provider_quota_support(provider_id), provider_id) {
-            (QuotaSupport::NotOffered(billing), _) => Err(QuotaFetchError::NotOffered(billing)),
-            (QuotaSupport::Polled, "openai") => self.fetch_codex_quota(http, refresh_auth).await,
-            (QuotaSupport::Polled, _) => self.fetch_zai_quota(http).await,
+            (QuotaSupport::NotOffered(billing), _) => {
+                Err(QuotaFetchError::NotOffered(billing)).into()
+            }
+            (QuotaSupport::Polled, "openai") => self.fetch_codex_quota(http, allow_refresh).await,
+            (QuotaSupport::Polled, _) => self.fetch_zai_quota(http).await.into(),
         }
     }
 
-    async fn fetch_codex_quota(
-        &self,
-        http: &QuotaHttp,
-        refresh_auth: bool,
-    ) -> Result<ProviderQuotaReading, QuotaFetchError> {
+    async fn fetch_codex_quota(&self, http: &QuotaHttp, allow_refresh: bool) -> QuotaFetch {
+        let login = match self.codex_login(None).await {
+            Ok(login) => login,
+            Err(error) => return Err(error).into(),
+        };
+        let result = get_codex_usage(self, http, &login).await;
+        if !allow_refresh || !matches!(result, Err(QuotaFetchError::Unauthorized { status: 401 })) {
+            return result.into();
+        }
+        let result = match self.codex_login(Some(&login.authorization)).await {
+            // The stored login could not be renewed: no second request.
+            Ok(renewed) if renewed.authorization == login.authorization => result,
+            Ok(renewed) => get_codex_usage(self, http, &renewed).await,
+            Err(error) => Err(error),
+        };
+        QuotaFetch {
+            result,
+            refreshed_login: true,
+        }
+    }
+
+    /// The Codex login the model requests use; `rejected` is an
+    /// authorization the usage endpoint just rejected.
+    async fn codex_login(&self, rejected: Option<&str>) -> Result<CodexLogin, QuotaFetchError> {
         let read = self
             .read()
             .await
-            .map_err(|_| QuotaFetchError::NotConfigured)?;
+            .map_err(|_| QuotaFetchError::Configuration)?;
         let private =
             butler_core::configuration::read_private_environment(&self.data_root.join(".env"))
                 .unwrap_or_default();
@@ -89,34 +113,29 @@ impl ModelConfiguration {
             config.provider_id == "openai" && config.auth_type == ProviderAuthMethod::CodexOauth
         });
         let auth = if codex_only {
-            owner.resolve_codex_with(refresh_auth).await
+            owner.resolve_codex_after(rejected).await
         } else {
-            owner.resolve_openai_with(refresh_auth).await
+            owner.resolve_openai_after(rejected).await
         };
-        let (authorization, account_id) = match auth {
+        let url = codex_usage_url(environment.codex_base_url.as_deref())
+            .ok_or(QuotaFetchError::NotOffered(QuotaBilling::Subscription));
+        match auth {
             Ok(ProviderAuth::Codex {
                 authorization,
                 account_id,
                 ..
-            }) => (authorization, account_id),
-            Ok(ProviderAuth::ApiKey(_)) => {
-                return Err(QuotaFetchError::NotOffered(QuotaBilling::Api));
-            }
-            Ok(ProviderAuth::None) => return Err(QuotaFetchError::NotConfigured),
+            }) => Ok(CodexLogin {
+                authorization,
+                account_id,
+                url: url?,
+            }),
+            Ok(ProviderAuth::ApiKey(_)) => Err(QuotaFetchError::NotOffered(QuotaBilling::Api)),
+            Ok(ProviderAuth::None) => Err(QuotaFetchError::NotConfigured),
             Err(error) if error.code == "provider_auth_missing" => {
-                return Err(QuotaFetchError::NotConfigured);
+                Err(QuotaFetchError::NotConfigured)
             }
-            Err(_) => return Err(QuotaFetchError::AuthUnavailable),
-        };
-        let url = codex_usage_url(environment.codex_base_url.as_deref())
-            .ok_or(QuotaFetchError::NotOffered(QuotaBilling::Subscription))?;
-        let mut headers = base_headers(http)?;
-        headers.insert(AUTHORIZATION, header(&authorization)?);
-        if !account_id.is_empty() {
-            headers.insert("chatgpt-account-id", header(&account_id)?);
+            Err(_) => Err(QuotaFetchError::AuthUnavailable),
         }
-        let body = http.get(&url, &headers).await?;
-        parse_codex_usage("openai", &body, self.clock.now_epoch_millis())
     }
 
     async fn fetch_zai_quota(
@@ -126,7 +145,7 @@ impl ModelConfiguration {
         let read = self
             .read()
             .await
-            .map_err(|_| QuotaFetchError::NotConfigured)?;
+            .map_err(|_| QuotaFetchError::Configuration)?;
         let environment_base = self
             .environment
             .hosted_provider_base_urls
@@ -139,6 +158,28 @@ impl ModelConfiguration {
         let body = http.get(&url, &headers).await?;
         parse_zai_quota("zai", &body, self.clock.now_epoch_millis())
     }
+}
+
+/// A resolved Codex login and the usage URL it reads.
+struct CodexLogin {
+    authorization: String,
+    account_id: String,
+    url: Url,
+}
+
+/// One `wham/usage` read with `login`.
+async fn get_codex_usage(
+    configuration: &ModelConfiguration,
+    http: &QuotaHttp,
+    login: &CodexLogin,
+) -> Result<ProviderQuotaReading, QuotaFetchError> {
+    let mut headers = base_headers(http)?;
+    headers.insert(AUTHORIZATION, header(&login.authorization)?);
+    if !login.account_id.is_empty() {
+        headers.insert("chatgpt-account-id", header(&login.account_id)?);
+    }
+    let body = http.get(&login.url, &headers).await?;
+    parse_codex_usage("openai", &body, configuration.clock.now_epoch_millis())
 }
 
 /// `<codex base>/wham/usage`; the base's `/codex[/responses]` suffix, which

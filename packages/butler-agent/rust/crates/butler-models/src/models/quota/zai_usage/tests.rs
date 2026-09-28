@@ -19,6 +19,7 @@ fn ids(reading: &ProviderQuotaReading) -> Vec<&str> {
         .collect()
 }
 
+// test-category: format-pin
 #[test]
 fn token_and_tool_windows_parse_with_resets_and_the_level() {
     let reading = parse(&json!({
@@ -53,6 +54,7 @@ fn token_and_tool_windows_parse_with_resets_and_the_level() {
     assert_eq!(reading.windows[2].window_minutes, None);
 }
 
+// test-category: format-pin
 #[test]
 fn credit_limits_count_as_model_quota_and_counts_give_the_percentage() {
     let reading = parse(&json!({
@@ -76,6 +78,7 @@ fn credit_limits_count_as_model_quota_and_counts_give_the_percentage() {
     assert_eq!(reading.windows[2].used_percent, 10.0);
 }
 
+// test-category: format-pin
 #[test]
 fn undocumented_windows_are_skipped_not_guessed() {
     let reading = parse(&json!({
@@ -95,6 +98,7 @@ fn undocumented_windows_are_skipped_not_guessed() {
     assert_eq!(reading.windows[0].resets_at_ms, Some(1_790_000_600_000));
 }
 
+// test-category: format-pin
 #[test]
 fn rejected_keys_refusals_and_foreign_bodies_are_errors() {
     assert!(matches!(
@@ -105,14 +109,18 @@ fn rejected_keys_refusals_and_foreign_bodies_are_errors() {
         parse(&json!({"code": 1001, "msg": "invalid", "success": false})),
         Err(QuotaFetchError::Unauthorized { status: 1001 })
     ));
+    // An auth code is a rejection even when `success` is not false.
+    assert!(matches!(
+        parse(&json!({"code": 1002, "msg": "invalid", "success": true, "data": {"limits": []}})),
+        Err(QuotaFetchError::Unauthorized { status: 1002 })
+    ));
     assert!(matches!(
         parse(&json!({"code": 500, "msg": "busy", "success": false})),
         Err(QuotaFetchError::Refused)
     ));
     for body in [
         json!({"success": true}),
-        json!({"data": {"level": "pro", "limits": []}}),
-        json!({"data": {"limits": [{"type": "TIME_LIMIT", "unit": 5, "number": 1, "percentage": 1}]}}),
+        json!({"data": {"limits": []}}),
         json!({"data": {"limits": [{"type": "TOKENS_LIMIT", "unit": 3, "number": 5}]}}),
     ] {
         assert!(
@@ -120,8 +128,18 @@ fn rejected_keys_refusals_and_foreign_bodies_are_errors() {
             "{body}"
         );
     }
+    // A tool-only or level-only reply is a reading, not a failure.
+    let tools = parse(&json!({"data": {"limits": [
+        {"type": "TIME_LIMIT", "unit": 5, "number": 1, "percentage": 1}
+    ]}}))
+    .unwrap();
+    assert_eq!(ids(&tools), ["mcp-month"]);
+    let level = parse(&json!({"data": {"level": "pro", "limits": []}})).unwrap();
+    assert!(level.windows.is_empty());
+    assert_eq!(level.plan_name.as_deref(), Some("pro"));
 }
 
+// test-category: format-pin
 #[test]
 fn the_plan_name_is_sanitized() {
     let reading = parse(&json!({
@@ -134,15 +152,17 @@ fn the_plan_name_is_sanitized() {
     assert_eq!(reading.plan_name.as_deref(), Some("bProb"));
 }
 
-/// The `CREDIT_LIMIT` shape, from an example (not a recording: the live
-/// account returns `TOKENS_LIMIT`; see the fixture's `_provenance`).
+/// The `CREDIT_LIMIT` shape, synthesized from the official client's
+/// documentation (not a recording: the live account returns
+/// `TOKENS_LIMIT`; see the fixture's `_provenance`).
+// test-category: format-pin
 #[test]
 fn the_credit_limit_example_parses_like_token_limits() {
     let body = include_str!("credit-limit.example.json");
     let example: serde_json::Value = serde_json::from_str(body).unwrap();
     assert_eq!(
         example["_provenance"]["source"],
-        "official-docs-example, unverified-live"
+        "synthesized-from-official-client (zai-org/ZCode), unverified-live"
     );
     let reading = parse_zai_quota("zai", body.as_bytes(), NOW).unwrap();
     assert_eq!(reading.plan_name.as_deref(), Some("lite"));

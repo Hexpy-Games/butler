@@ -71,31 +71,30 @@ pub(crate) fn parse_zai_quota(
     now_ms: i64,
 ) -> Result<ProviderQuotaReading, QuotaFetchError> {
     let envelope: Envelope = serde_json::from_slice(body).map_err(|_| QuotaFetchError::Schema)?;
+    let code = envelope
+        .code
+        .filter(|code| code.fract() == 0.0 && (0.0..=f64::from(u16::MAX)).contains(code))
+        .map(butler_core::json::saturating_u16);
+    // A rejected key is a rejection whatever `success` says.
+    if let Some(status) = code.filter(|code| AUTH_CODES.contains(code)) {
+        return Err(QuotaFetchError::Unauthorized { status });
+    }
     if envelope.success == Some(false) {
-        let code = envelope
-            .code
-            .filter(|code| code.fract() == 0.0 && (0.0..=f64::from(u16::MAX)).contains(code))
-            .map(butler_core::json::saturating_u16);
-        return Err(match code {
-            Some(status) if AUTH_CODES.contains(&status) => {
-                QuotaFetchError::Unauthorized { status }
-            }
-            _ => QuotaFetchError::Refused,
-        });
+        return Err(QuotaFetchError::Refused);
     }
     let data = envelope.data.ok_or(QuotaFetchError::Schema)?;
     let windows = windows(&data.limits);
-    if !windows
-        .iter()
-        .any(|window| window.id.starts_with("tokens-"))
-    {
+    let plan_name = lenient::plan_name(data.level.as_deref());
+    // A plan may report only its tool window (or only its level); that is a
+    // reading, not a schema change.
+    if windows.is_empty() && plan_name.is_none() {
         return Err(QuotaFetchError::Schema);
     }
     Ok(ProviderQuotaReading {
         provider_id: provider_id.to_owned(),
         windows,
         observed_at_ms: now_ms,
-        plan_name: lenient::plan_name(data.level.as_deref()),
+        plan_name,
         source: ProviderQuotaSource::UsageEndpoint,
     })
 }

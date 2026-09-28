@@ -49,14 +49,10 @@ impl ProviderQuotaFetcher for ModelQuotaFetcher {
         !self.disabled_by_environment && polling_configured(&self.config_path, provider_id)
     }
 
-    fn refreshes_auth(&self, provider_id: &str) -> bool {
-        provider_id == "openai"
-    }
-
-    fn fetch<'a>(&'a self, provider_id: &'a str, refresh_auth: bool) -> QuotaFetchFuture<'a> {
+    fn fetch<'a>(&'a self, provider_id: &'a str, allow_refresh: bool) -> QuotaFetchFuture<'a> {
         Box::pin(
             self.configuration
-                .fetch_provider_quota(provider_id, &self.http, refresh_auth),
+                .fetch_provider_quota(provider_id, &self.http, allow_refresh),
         )
     }
 }
@@ -119,6 +115,7 @@ pub(super) async fn poll_within(
 mod tests {
     use super::*;
 
+    // test-category: pure-logic
     #[test]
     fn polling_is_on_unless_the_config_turns_it_off() {
         let dir = std::env::temp_dir().join(format!("butler-quota-{}", uuid::Uuid::new_v4()));

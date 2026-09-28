@@ -1,5 +1,6 @@
-//! Poll cadence, backoff, the one-refresh rule for rejected tokens, the kill
-//! switch and the schema-mismatch counter, against a scripted fetcher.
+//! Poll cadence, spacing of on-demand polls, backoff, the refresh cap and
+//! auth block for rejected tokens, the kill switch and the schema-mismatch
+//! counter, against a scripted fetcher.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -13,14 +14,23 @@ const MINUTE: i64 = 60_000;
 
 #[derive(Default)]
 struct Scripted {
-    results: Mutex<VecDeque<Result<ProviderQuotaReading, QuotaFetchError>>>,
+    results: Mutex<VecDeque<QuotaFetch>>,
+    /// `allow_refresh` of every fetch.
     calls: Mutex<Vec<bool>>,
     disabled: AtomicBool,
 }
 
 impl Scripted {
     fn push(&self, result: Result<ProviderQuotaReading, QuotaFetchError>) {
-        self.results.lock().push_back(result);
+        self.results.lock().push_back(result.into());
+    }
+
+    /// A 401 that the fetch answered by refreshing the login (and failing).
+    fn push_rejected_after_refresh(&self) {
+        self.results.lock().push_back(QuotaFetch {
+            result: Err(QuotaFetchError::Unauthorized { status: 401 }),
+            refreshed_login: true,
+        });
     }
 
     fn calls(&self) -> Vec<bool> {
@@ -37,18 +47,14 @@ impl ProviderQuotaFetcher for Scripted {
         !self.disabled.load(Ordering::SeqCst)
     }
 
-    fn refreshes_auth(&self, provider_id: &str) -> bool {
-        provider_id == "openai"
-    }
-
-    fn fetch<'a>(&'a self, _provider_id: &'a str, refresh_auth: bool) -> QuotaFetchFuture<'a> {
-        self.calls.lock().push(refresh_auth);
-        let result = self
+    fn fetch<'a>(&'a self, _provider_id: &'a str, allow_refresh: bool) -> QuotaFetchFuture<'a> {
+        self.calls.lock().push(allow_refresh);
+        let fetch = self
             .results
             .lock()
             .pop_front()
-            .unwrap_or(Err(QuotaFetchError::Http { status: 500 }));
-        Box::pin(async move { result })
+            .unwrap_or_else(|| Err(QuotaFetchError::Http { status: 500 }).into());
+        Box::pin(async move { fetch })
     }
 }
 
@@ -99,8 +105,11 @@ fn code(view: &crate::operations::ProviderQuotaView) -> Option<&str> {
     view.reason.as_ref().map(|reason| reason.code.as_str())
 }
 
+/// Scheduled polls wait 5 minutes after a success; Settings polls are
+/// spaced 30 s and explicit ones 20 s apart.
+// test-category: pure-logic
 #[tokio::test]
-async fn a_success_is_polled_again_after_five_minutes_on_schedule() {
+async fn each_trigger_keeps_its_spacing() {
     let h = Harness::new();
     h.ok();
     h.poll(QuotaPollTrigger::Scheduled).await;
@@ -112,27 +121,29 @@ async fn a_success_is_polled_again_after_five_minutes_on_schedule() {
     h.ok();
     h.poll(QuotaPollTrigger::Scheduled).await;
     assert_eq!(h.fetcher.calls().len(), 2);
-}
-
-#[tokio::test]
-async fn settings_polls_are_debounced_and_explicit_ones_are_not() {
-    let h = Harness::new();
-    h.ok();
+    // Settings: 30 s after the last attempt.
+    h.at(5 * MINUTE + 29_000);
     h.poll(QuotaPollTrigger::SettingsOpened).await;
-    h.at(10_000);
-    h.poll(QuotaPollTrigger::SettingsOpened).await;
-    assert_eq!(h.fetcher.calls().len(), 1);
-    h.ok();
-    h.poll(QuotaPollTrigger::Explicit).await;
     assert_eq!(h.fetcher.calls().len(), 2);
-    h.at(45_000);
+    h.at(5 * MINUTE + 30_000);
     h.ok();
     h.poll(QuotaPollTrigger::SettingsOpened).await;
     assert_eq!(h.fetcher.calls().len(), 3);
+    // Explicit: 20 s after the last attempt.
+    h.at(5 * MINUTE + 49_000);
+    h.poll(QuotaPollTrigger::Explicit).await;
+    assert_eq!(h.fetcher.calls().len(), 3);
+    h.at(5 * MINUTE + 50_000);
+    h.ok();
+    h.poll(QuotaPollTrigger::Explicit).await;
+    assert_eq!(h.fetcher.calls().len(), 4);
 }
 
+/// Failures back off 2 → 30 minutes; a rate limit blocks every trigger
+/// until its `Retry-After`, capped at an hour.
+// test-category: pure-logic
 #[tokio::test]
-async fn failures_back_off_from_two_to_thirty_minutes() {
+async fn failures_and_rate_limits_back_off() {
     let h = Harness::new();
     let mut now = 0;
     let mut delays = Vec::new();
@@ -145,109 +156,121 @@ async fn failures_back_off_from_two_to_thirty_minutes() {
     }
     assert_eq!(delays, [2, 4, 8, 16, 30, 30]);
     assert_eq!(code(&h.view()), Some("provider_quota_fetch_failed"));
-    // Before the backoff ends a scheduled poll does nothing.
-    h.at(now - 1);
-    h.poll(QuotaPollTrigger::Scheduled).await;
-    assert_eq!(h.fetcher.calls().len(), 6);
-}
 
-#[tokio::test]
-async fn a_rate_limit_blocks_every_trigger_until_retry_after() {
     let h = Harness::new();
     h.ok();
     h.poll(QuotaPollTrigger::Explicit).await;
+    h.at(MINUTE);
     h.fetcher.push(Err(QuotaFetchError::RateLimited {
-        retry_after_ms: Some(10 * MINUTE),
+        retry_after_ms: Some(5 * 60 * MINUTE),
     }));
     h.poll(QuotaPollTrigger::Explicit).await;
     let view = h.view();
     assert!(view.available && view.stale, "{view:?}");
     assert_eq!(code(&view), Some("provider_quota_fetch_failed"));
-    h.at(9 * MINUTE);
+    h.at(60 * MINUTE);
     h.poll(QuotaPollTrigger::Explicit).await;
     h.poll(QuotaPollTrigger::SettingsOpened).await;
     assert_eq!(h.fetcher.calls().len(), 2);
-    h.at(10 * MINUTE);
+    h.at(61 * MINUTE);
     h.ok();
     h.poll(QuotaPollTrigger::Explicit).await;
     assert_eq!(h.fetcher.calls().len(), 3);
     assert!(!h.view().stale);
 }
 
+/// A token the endpoint rejects may be refreshed once per 10 minutes, and a
+/// standing rejection stops scheduled and Settings polls: only an explicit
+/// refresh polls again.
+// test-category: security
 #[tokio::test]
-async fn a_rejected_token_is_refreshed_once_then_polled_only_on_demand() {
+async fn rejected_tokens_refresh_rarely_and_block_background_polls() {
     let h = Harness::new();
     h.ok();
     h.poll(QuotaPollTrigger::Scheduled).await;
-    for _ in 0..2 {
-        h.fetcher
-            .push(Err(QuotaFetchError::Unauthorized { status: 401 }));
-    }
+    h.at(MINUTE);
+    h.fetcher.push_rejected_after_refresh();
     h.poll(QuotaPollTrigger::Explicit).await;
-    assert_eq!(h.fetcher.calls(), [false, false, true]);
+    assert_eq!(h.fetcher.calls(), [true, true]);
     let view = h.view();
     assert!(view.available && view.stale, "{view:?}");
     assert_eq!(code(&view), Some("provider_quota_fetch_failed"));
-    // Scheduled polls stop, even long after the backoff.
-    h.at(3 * 60 * MINUTE);
-    h.poll(QuotaPollTrigger::Scheduled).await;
-    assert_eq!(h.fetcher.calls().len(), 3);
-    // Opening Settings polls again; a success resumes the schedule.
-    h.ok();
+    // Background polls stop, even long after the backoff.
+    h.at(3 * MINUTE);
     h.poll(QuotaPollTrigger::SettingsOpened).await;
-    assert_eq!(h.fetcher.calls().len(), 4);
+    h.at(60 * MINUTE);
+    h.poll(QuotaPollTrigger::Scheduled).await;
+    assert_eq!(h.fetcher.calls().len(), 2);
+    // An explicit poll within 10 minutes of the refresh may not refresh.
+    h.at(2 * MINUTE);
+    h.fetcher
+        .push(Err(QuotaFetchError::Unauthorized { status: 401 }));
+    h.poll(QuotaPollTrigger::Explicit).await;
+    assert_eq!(h.fetcher.calls(), [true, true, false]);
+    // Ten minutes after the refresh, it may again; a success unblocks.
+    h.at(11 * MINUTE);
+    h.ok();
+    h.poll(QuotaPollTrigger::Explicit).await;
+    assert_eq!(h.fetcher.calls(), [true, true, false, true]);
     assert!(!h.view().stale);
-    h.at(3 * 60 * MINUTE + 5 * MINUTE);
+    h.at(16 * MINUTE);
     h.ok();
     h.poll(QuotaPollTrigger::Scheduled).await;
     assert_eq!(h.fetcher.calls().len(), 5);
 }
 
+/// Logging out or switching to an API key drops the previous reading and
+/// shows the new reason, without backing off.
+// test-category: pure-logic
 #[tokio::test]
-async fn a_refresh_that_succeeds_needs_no_on_demand_poll() {
+async fn nothing_to_read_replaces_the_reading_with_its_reason() {
     let h = Harness::new();
-    h.fetcher
-        .push(Err(QuotaFetchError::Unauthorized { status: 401 }));
     h.ok();
     h.poll(QuotaPollTrigger::Scheduled).await;
-    assert_eq!(h.fetcher.calls(), [false, true]);
-    assert!(h.view().available && !h.view().stale);
-}
-
-#[tokio::test]
-async fn nothing_to_read_sets_pending_or_not_offered_without_backoff() {
-    let h = Harness::new();
-    h.fetcher.push(Err(QuotaFetchError::NotConfigured));
-    h.poll(QuotaPollTrigger::Scheduled).await;
-    assert_eq!(code(&h.view()), Some("provider_quota_pending"));
+    assert!(h.view().available);
     h.at(5 * MINUTE);
     h.fetcher
         .push(Err(QuotaFetchError::NotOffered(QuotaBilling::Api)));
     h.poll(QuotaPollTrigger::Scheduled).await;
     let view = h.view();
+    assert!(!view.available && view.windows.is_empty(), "{view:?}");
     assert_eq!(code(&view), Some("provider_quota_not_offered"));
     assert_eq!(view.plan_kind, crate::operations::QuotaPlanKind::Api);
+    assert!(h.poller.store().provider_ids().is_empty());
+    h.at(10 * MINUTE);
+    h.fetcher.push(Err(QuotaFetchError::NotConfigured));
+    h.poll(QuotaPollTrigger::Scheduled).await;
+    assert_eq!(code(&h.view()), Some("provider_quota_pending"));
 }
 
+/// Schema mismatches are counted (and logged without bodies).
+// test-category: pure-logic
 #[tokio::test]
 async fn schema_mismatches_are_counted() {
     let h = Harness::new();
     h.fetcher.push(Err(QuotaFetchError::Schema));
     h.poll(QuotaPollTrigger::Explicit).await;
+    h.at(MINUTE);
     h.fetcher.push(Err(QuotaFetchError::Schema));
     h.poll(QuotaPollTrigger::Explicit).await;
     assert_eq!(h.poller.schema_mismatches(), 2);
     assert_eq!(code(&h.view()), Some("provider_quota_fetch_failed"));
 }
 
+/// A kill-switched provider is never fetched and shows "not offered";
+/// lifting the switch makes it pending again.
+// test-category: pure-logic
 #[tokio::test]
-async fn the_kill_switch_stops_every_trigger() {
+async fn the_kill_switch_stops_polls_and_shows_not_offered() {
     let h = Harness::new();
     h.fetcher.disabled.store(true, Ordering::SeqCst);
     h.poll(QuotaPollTrigger::Explicit).await;
     h.poll(QuotaPollTrigger::Scheduled).await;
     assert!(h.fetcher.calls().is_empty());
+    let view = h.view();
+    assert_eq!(code(&view), Some("provider_quota_not_offered"));
+    assert_eq!(view.plan_kind, crate::operations::QuotaPlanKind::Unknown);
+    h.fetcher.disabled.store(false, Ordering::SeqCst);
+    h.poller.sync_switches();
     assert_eq!(code(&h.view()), Some("provider_quota_pending"));
-    h.poller.poll(QuotaPollTrigger::Explicit, Some("zai")).await;
-    assert!(h.fetcher.calls().is_empty());
 }

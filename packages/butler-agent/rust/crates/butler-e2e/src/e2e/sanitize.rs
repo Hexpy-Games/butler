@@ -12,14 +12,16 @@
 //!    nothing the product reads back.
 //! 4. Response headers are reduced to an allowlist plus the numeric
 //!    subscription-quota headers the product parses (`keep_header`).
-//! 5. Account identifiers in JSON bodies (`account_id`, `user_id`,
-//!    `email`, … as usage endpoints return them) become `{{ACCOUNT}}` /
-//!    `{{EMAIL}}` (`redact_identifiers`).
+//! 5. JSON body fields (usage and token endpoints): account identifiers
+//!    become `{{ACCOUNT}}` / `{{EMAIL}}`, tokens `{{TOKEN}}`, and absolute
+//!    reset times relative placeholders rounded to the hour (`fields`).
 
 use std::sync::OnceLock;
 
 use regex::Regex;
 use serde_json::Value;
+
+mod fields;
 
 pub const HEADER_ALLOWLIST: &[&str] = &["content-type", "retry-after"];
 
@@ -108,6 +110,12 @@ fn patterns() -> &'static [(&'static str, Regex, &'static str)] {
                 "{{HOST_HOME}}",
             ),
             ("account id", r"\buser-[A-Za-z0-9]{16,}", "{{ACCOUNT}}"),
+            ("zai key", r"\b[0-9a-f]{32}\.[A-Za-z0-9]{16}\b", "{{KEY}}"),
+            (
+                "authorization",
+                r#"(?i)authorization\\?"?\s*[:,]\s*\\?"?\s*[A-Za-z0-9._~+/=-]{12,}"#,
+                "authorization: {{TOKEN}}",
+            ),
         ]
         .into_iter()
         .filter_map(|(label, pattern, replacement)| {
@@ -137,58 +145,40 @@ fn host_name() -> Option<String> {
         .filter(|name| name.len() >= 4)
 }
 
-/// JSON fields that identify an account; their values never reach a cassette.
-const IDENTIFIER_FIELDS: &[&str] = &[
-    "account_id",
-    "accountId",
-    "user_id",
-    "userId",
-    "workspace_id",
-    "workspaceId",
-    "org_id",
-    "organization_id",
-    "email",
-];
-
-/// An identifier field with a value that is not a placeholder, in raw or
-/// JSON-string-escaped form.
-fn identifier_field() -> Option<&'static Regex> {
-    static FIELD: OnceLock<Option<Regex>> = OnceLock::new();
-    FIELD
-        .get_or_init(|| {
-            let names = IDENTIFIER_FIELDS.join("|");
-            Regex::new(&format!(r#"\\?"(?:{names})\\?"\s*:\s*\\?"[^{{\\"]"#)).ok()
-        })
-        .as_ref()
+/// Replaces identifier, token and absolute reset-time values anywhere in a
+/// JSON value recorded now (see [`fields`]).
+pub fn redact_identifiers(value: &mut Value) -> bool {
+    fields::redact(value, now_ms())
 }
 
-/// Replaces identifier field values anywhere in a JSON value.
-pub fn redact_identifiers(value: &mut Value) -> bool {
-    match value {
-        Value::Object(object) => {
-            let mut changed = false;
-            for (key, field) in object.iter_mut() {
-                if IDENTIFIER_FIELDS.contains(&key.as_str())
-                    && field.as_str().is_some_and(|text| !text.starts_with("{{"))
-                {
-                    let placeholder = if key == "email" {
-                        "{{EMAIL}}"
-                    } else {
-                        "{{ACCOUNT}}"
-                    };
-                    *field = Value::String(placeholder.into());
-                    changed = true;
-                } else {
-                    changed |= redact_identifiers(field);
-                }
-            }
-            changed
-        }
-        Value::Array(items) => items
-            .iter_mut()
-            .fold(false, |changed, item| redact_identifiers(item) || changed),
-        _ => false,
-    }
+/// The current time in epoch milliseconds (recording and replay time).
+pub fn now_ms() -> i64 {
+    chrono::Utc::now().timestamp_millis()
+}
+
+/// Replay: relative reset-time placeholders → times relative to `now_ms`.
+pub fn expand_times(text: &str, now_ms: i64) -> String {
+    fields::expand_times(text, now_ms)
+}
+
+/// Whether a UUID at `start` in `text` is a prompt cache key (a per-install
+/// cache partition the request echoes, not an account identifier).
+fn prompt_cache_key(text: &str, start: usize) -> bool {
+    let before = &text[..start];
+    let window = &before[before.len().saturating_sub(24)..];
+    window.contains("prompt_cache_key")
+}
+
+fn uuid_finding(text: &str) -> Option<String> {
+    static UUID: OnceLock<Option<Regex>> = OnceLock::new();
+    let uuid = UUID
+        .get_or_init(|| {
+            Regex::new(r"(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b").ok()
+        })
+        .as_ref()?;
+    uuid.find_iter(text)
+        .find(|found| !prompt_cache_key(text, found.start()))
+        .map(|found| format!("uuid: {}…", &found.as_str()[..8]))
 }
 
 /// Findings of the lint on one text (empty when clean).
@@ -200,10 +190,8 @@ pub fn lint(text: &str) -> Vec<String> {
             findings.push(format!("{label}: {excerpt}…"));
         }
     }
-    if let Some(found) = identifier_field().and_then(|regex| regex.find(text)) {
-        let excerpt: String = found.as_str().chars().take(16).collect();
-        findings.push(format!("identifier field: {excerpt}…"));
-    }
+    findings.extend(fields::lint(text));
+    findings.extend(uuid_finding(text));
     for canary in ["e2e-canary-", "E2E_CANARY"] {
         if text.contains(canary) {
             findings.push(format!("canary {canary}"));
@@ -245,6 +233,13 @@ pub fn redact_echo(event: &mut Value) -> bool {
 
 /// Sanitizes a complete SSE or JSON body: echoes, placeholders, scrub.
 pub fn sanitize_body(body: &str, placeholders: &Placeholders) -> String {
+    sanitize_body_at(body, placeholders, now_ms())
+}
+
+/// [`sanitize_body`] for a body received at `recorded_ms` (re-sanitizing an
+/// older recording keeps its reset times relative to when it was recorded).
+pub fn sanitize_body_at(body: &str, placeholders: &Placeholders, recorded_ms: i64) -> String {
+    let redact = |value: &mut Value| redact_echo(value) | fields::redact(value, recorded_ms);
     let mut out = String::with_capacity(body.len());
     for line in body.split_inclusive('\n') {
         let (content, newline) = match line.strip_suffix('\n') {
@@ -253,7 +248,7 @@ pub fn sanitize_body(body: &str, placeholders: &Placeholders) -> String {
         };
         if let Some(data) = content.strip_prefix("data: ")
             && let Ok(mut value) = serde_json::from_str::<Value>(data)
-            && (redact_echo(&mut value) | redact_identifiers(&mut value))
+            && redact(&mut value)
         {
             out.push_str("data: ");
             out.push_str(&value.to_string());
@@ -263,7 +258,7 @@ pub fn sanitize_body(body: &str, placeholders: &Placeholders) -> String {
         out.push_str(line);
     }
     if let Ok(mut value) = serde_json::from_str::<Value>(&out)
-        && (redact_echo(&mut value) | redact_identifiers(&mut value))
+        && redact(&mut value)
     {
         out = value.to_string();
     }

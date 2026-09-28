@@ -1,18 +1,20 @@
 //! When Butler polls the providers' usage endpoints, and what a poll's
 //! outcome does to the store.
 //!
-//! Cadence:
-//! - `Scheduled` (every tick while an App client is connected): each provider
-//!   at most every 5 minutes after a success.
-//! - `SettingsOpened`: at most once per 30 seconds per provider.
-//! - `Explicit` (`GET /provider-quota?refresh=1`): always.
+//! Cadence, per provider:
+//! - `Scheduled` (every tick while an App client is connected): 5 minutes
+//!   after a success.
+//! - `SettingsOpened`: at most every 30 seconds.
+//! - `Explicit` (`GET /provider-quota?refresh=1`): at most every 20 seconds.
 //!
 //! Failures back off 2 minutes, doubling per consecutive failure up to 30
-//! minutes (at least the provider's `Retry-After`); no trigger polls a
-//! provider during a rate-limit backoff. A rejected token gets one login
-//! refresh and retry; if that is rejected too, only an on-demand trigger
-//! polls the provider again. The latest reading is kept through failures
-//! (shown stale). Errors are logged by code only: never bodies or tokens.
+//! minutes (at least the provider's `Retry-After`, itself capped at an
+//! hour); no trigger polls a provider during a rate-limit backoff. A token
+//! the endpoint rejects (HTTP 401) is refreshed at most once per 10 minutes;
+//! once a rejection stands, only `Explicit` polls the provider again. A
+//! kill-switched provider is not polled and shows "not offered" until it has
+//! a reading. The latest reading is kept through failures (shown stale).
+//! Errors are logged by code only: never bodies or tokens.
 
 use std::collections::BTreeMap;
 use std::future::Future;
@@ -22,18 +24,20 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use parking_lot::Mutex;
 
-use butler_models::models::{ProviderClock, ProviderQuotaReading, QuotaFetchError};
+use butler_models::models::{ProviderClock, ProviderQuotaReading, QuotaFetch, QuotaFetchError};
 
 use super::{ProviderQuotaStore, QuotaPollStatus, view};
 
 const SUCCESS_INTERVAL_MS: i64 = 5 * 60 * 1000;
-const SETTINGS_DEBOUNCE_MS: i64 = 30 * 1000;
+const SETTINGS_SPACING_MS: i64 = 30 * 1000;
+const EXPLICIT_SPACING_MS: i64 = 20 * 1000;
+const REFRESH_SPACING_MS: i64 = 10 * 60 * 1000;
 const FIRST_BACKOFF_MS: i64 = 2 * 60 * 1000;
 const MAX_BACKOFF_MS: i64 = 30 * 60 * 1000;
+const MAX_RETRY_AFTER_MS: i64 = 60 * 60 * 1000;
 
 /// One poll's result.
-pub type QuotaFetchFuture<'a> =
-    Pin<Box<dyn Future<Output = Result<ProviderQuotaReading, QuotaFetchError>> + Send + 'a>>;
+pub type QuotaFetchFuture<'a> = Pin<Box<dyn Future<Output = QuotaFetch> + Send + 'a>>;
 
 /// Reads providers' quota from their usage endpoints. The host implements it
 /// over the model configuration, so credentials stay behind it.
@@ -42,10 +46,8 @@ pub trait ProviderQuotaFetcher: Send + Sync {
     fn providers(&self) -> Vec<String>;
     /// Whether polling `provider_id` is enabled (the per-provider kill switch).
     fn enabled(&self, provider_id: &str) -> bool;
-    /// Whether a rejected token of `provider_id` can be refreshed and retried.
-    fn refreshes_auth(&self, provider_id: &str) -> bool;
-    /// One poll; `refresh_auth` refreshes the login first.
-    fn fetch<'a>(&'a self, provider_id: &'a str, refresh_auth: bool) -> QuotaFetchFuture<'a>;
+    /// One poll; `allow_refresh` lets a rejected token be refreshed once.
+    fn fetch<'a>(&'a self, provider_id: &'a str, allow_refresh: bool) -> QuotaFetchFuture<'a>;
 }
 
 /// What asked for a poll.
@@ -64,6 +66,7 @@ pub enum QuotaPollTrigger {
 struct Schedule {
     next_due_ms: i64,
     last_attempt_ms: Option<i64>,
+    last_refresh_ms: Option<i64>,
     failures: u32,
     rate_limited_until_ms: i64,
     auth_blocked: bool,
@@ -71,16 +74,20 @@ struct Schedule {
 
 impl Schedule {
     fn due(&self, trigger: QuotaPollTrigger, now_ms: i64) -> bool {
+        let spaced = |spacing: i64| self.last_attempt_ms.is_none_or(|at| now_ms - at >= spacing);
         if now_ms < self.rate_limited_until_ms {
             return false;
         }
         match trigger {
             QuotaPollTrigger::Scheduled => !self.auth_blocked && now_ms >= self.next_due_ms,
-            QuotaPollTrigger::SettingsOpened => self
-                .last_attempt_ms
-                .is_none_or(|at| now_ms - at >= SETTINGS_DEBOUNCE_MS),
-            QuotaPollTrigger::Explicit => true,
+            QuotaPollTrigger::SettingsOpened => !self.auth_blocked && spaced(SETTINGS_SPACING_MS),
+            QuotaPollTrigger::Explicit => spaced(EXPLICIT_SPACING_MS),
         }
+    }
+
+    fn refresh_allowed(&self, now_ms: i64) -> bool {
+        self.last_refresh_ms
+            .is_none_or(|at| now_ms - at >= REFRESH_SPACING_MS)
     }
 
     /// Backs off after a failure; returns the delay.
@@ -89,7 +96,7 @@ impl Schedule {
         let doublings = self.failures.saturating_sub(1).min(8);
         let delay = (FIRST_BACKOFF_MS << doublings)
             .min(MAX_BACKOFF_MS)
-            .max(at_least_ms);
+            .max(at_least_ms.min(MAX_RETRY_AFTER_MS));
         self.next_due_ms = now_ms.saturating_add(delay);
         delay
     }
@@ -128,24 +135,39 @@ impl ProviderQuotaPoller {
         &self.store
     }
 
+    /// Records which providers are kill-switched, so their views say so.
+    pub fn sync_switches(&self) {
+        for provider in self.fetcher.providers() {
+            let disabled = !self.fetcher.enabled(&provider);
+            let marked = self.store.status(&provider) == Some(QuotaPollStatus::Disabled);
+            if disabled && !marked {
+                self.store
+                    .record_status(&provider, QuotaPollStatus::Disabled);
+            } else if !disabled && marked {
+                self.store.clear_status(&provider);
+            }
+        }
+    }
+
     /// Polls every provider (or only `provider_id`) that `trigger` makes due.
     pub async fn poll(&self, trigger: QuotaPollTrigger, provider_id: Option<&str>) {
         let _polling = self.polling.lock().await;
+        self.sync_switches();
         for provider in self.fetcher.providers() {
             if provider_id.is_some_and(|only| only != provider) || !self.fetcher.enabled(&provider)
             {
                 continue;
             }
             let now = self.clock.now_epoch_millis();
-            let due = self
+            let schedule = self
                 .schedules
                 .lock()
                 .get(&provider)
                 .copied()
-                .unwrap_or_default()
-                .due(trigger, now);
-            if due {
-                self.poll_one(&provider, now).await;
+                .unwrap_or_default();
+            if schedule.due(trigger, now) {
+                self.poll_one(&provider, now, schedule.refresh_allowed(now))
+                    .await;
             }
         }
     }
@@ -155,34 +177,38 @@ impl ProviderQuotaPoller {
         self.schema_mismatches.load(Ordering::Relaxed)
     }
 
-    async fn poll_one(&self, provider: &str, now: i64) {
+    async fn poll_one(&self, provider: &str, now: i64, allow_refresh: bool) {
         self.schedules
             .lock()
             .entry(provider.to_owned())
             .or_default()
             .last_attempt_ms = Some(now);
-        let mut result = self.fetcher.fetch(provider, false).await;
-        if matches!(result, Err(QuotaFetchError::Unauthorized { .. }))
-            && self.fetcher.refreshes_auth(provider)
-        {
-            result = self.fetcher.fetch(provider, true).await;
-        }
+        let fetch = self.fetcher.fetch(provider, allow_refresh).await;
         let finished = self.clock.now_epoch_millis();
-        match result {
+        if fetch.refreshed_login {
+            self.schedules
+                .lock()
+                .entry(provider.to_owned())
+                .or_default()
+                .last_refresh_ms = Some(finished);
+        }
+        match fetch.result {
             Ok(reading) => self.succeeded(provider, reading, finished),
             Err(error) => self.failed(provider, &error, finished),
         }
     }
 
     fn succeeded(&self, provider: &str, reading: ProviderQuotaReading, now: i64) {
-        self.schedules.lock().insert(
-            provider.to_owned(),
-            Schedule {
+        {
+            let mut schedules = self.schedules.lock();
+            let schedule = schedules.entry(provider.to_owned()).or_default();
+            *schedule = Schedule {
                 next_due_ms: now.saturating_add(SUCCESS_INTERVAL_MS),
-                last_attempt_ms: Some(now),
+                last_attempt_ms: schedule.last_attempt_ms,
+                last_refresh_ms: schedule.last_refresh_ms,
                 ..Schedule::default()
-            },
-        );
+            };
+        }
         self.store.record_polled(reading);
     }
 
@@ -204,6 +230,7 @@ impl ProviderQuotaPoller {
                 *schedule = Schedule {
                     next_due_ms: now.saturating_add(SUCCESS_INTERVAL_MS),
                     last_attempt_ms: schedule.last_attempt_ms,
+                    last_refresh_ms: schedule.last_refresh_ms,
                     ..Schedule::default()
                 };
             }

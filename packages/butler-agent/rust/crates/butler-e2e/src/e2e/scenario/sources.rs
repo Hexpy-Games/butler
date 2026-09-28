@@ -163,3 +163,41 @@ fn now_utc() -> String {
         .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
         .unwrap_or_default()
 }
+
+/// The refresh token of the placeholder login [`route_login_refresh`] gives
+/// a replayed scenario.
+pub const STUB_REFRESH_TOKEN: &str = "e2e-replay-refresh";
+
+/// The agent refreshes its Codex login through the provider:
+/// `BUTLER_CODEX_OAUTH_TOKEN_URL` names `<provider>/oauth/token`, which the
+/// recorder forwards to `auth.openai.com`. A replayed scenario runs with a
+/// refreshable placeholder Butler login (`<sandbox>/codex-profile.json`, not
+/// expiring) instead of the read-only Codex CLI file; a recording uses the
+/// live credential, refreshed in place.
+pub(super) fn route_login_refresh(
+    launch: &mut Launch,
+    provider: &Provider,
+    sandbox: &super::super::sandbox::Sandbox,
+) -> Result<(), HarnessError> {
+    launch.set_env(
+        "BUTLER_CODEX_OAUTH_TOKEN_URL",
+        format!("{}/oauth/token", provider.base_url),
+    );
+    if provider.is_recording() {
+        return Ok(());
+    }
+    let profile = sandbox.root.join("codex-profile.json");
+    std::fs::write(
+        &profile,
+        serde_json::json!({
+            "provider": "openai-codex",
+            "type": "oauth",
+            "accessToken": "e2e-replay-placeholder",
+            "refreshToken": STUB_REFRESH_TOKEN,
+            "expiresAt": 0,
+        })
+        .to_string(),
+    )?;
+    launch.set_env("BUTLER_CODEX_AUTH_PROFILE", profile.display().to_string());
+    Ok(())
+}
