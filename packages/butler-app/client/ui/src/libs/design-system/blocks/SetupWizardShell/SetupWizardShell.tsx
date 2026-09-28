@@ -5,11 +5,14 @@ import { Stack } from "../../components/Stack";
 import { TintedGlass } from "../../components/TintedGlass";
 import { ScrollArea } from "../ScrollArea";
 import { SetupWizardProgress, type SetupWizardStep } from "./SetupWizardProgress";
-import { PromptFluidBackground } from "../PromptSuggestionList/PromptFluidBackground";
+import { Wallpaper, type WallpaperSource } from "../Wallpaper";
 import styles from "./SetupWizardShell.module.css";
 import { dsClass } from "../../lib/internal";
 
 export type { SetupWizardStep } from "./SetupWizardProgress";
+
+/** The first-run backdrop stays bloom, whatever the user's wallpaper. */
+const SETUP_WALLPAPER: WallpaperSource = { kind: "live", module: "butler.bloom" };
 
 interface SetupWizardShellProps
   extends Omit<DsBaseProps<HTMLAttributes<HTMLElement>>, "title"> {
@@ -19,7 +22,7 @@ interface SetupWizardShellProps
   title: ReactNode;
   progressLabel?: string;
   windowControls?: ReactNode;
-  /** Resolved appearance theme for the fluid backdrop. */
+  /** Resolved appearance theme for the wallpaper backdrop. */
   tone?: "light" | "dark";
   /** Contain the full-screen layers in the element (DS Viewer previews). */
   embedded?: boolean;
@@ -45,7 +48,7 @@ export function SetupWizardShell({
 
   return (
     <main className={styles.screen} data-tone={tone} data-embedded={embedded ? "true" : undefined} {...props}>
-      <PromptFluidBackground variant="bloom" tone={tone} />
+      <Wallpaper source={SETUP_WALLPAPER} tone={tone} />
       <div
         aria-hidden="true"
         className={`${styles.dragLane} drag-region`}

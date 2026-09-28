@@ -10,8 +10,35 @@
   app-region: no-drag;
 }
 
+/* The page background (e.g. a container-scope Wallpaper) fills the page
+   behind the scroll area, which follows it and paints above. */
+.background {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Calm treatment: a veil in the page tone lowers the background's contrast. */
+.background[data-treatment="calm"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--management-page-veil);
+}
+
 .scrollArea {
   height: 100%;
+}
+
+/* A content group over the background: a TintedGlass surface. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+  min-width: 0;
+  padding: var(--space-2xl);
 }
 .withFooter {
   display: flex;
@@ -54,5 +81,9 @@
 
   .pageContent {
     gap: var(--space-lg);
+  }
+
+  .panel {
+    padding: var(--space-lg);
   }
 }
