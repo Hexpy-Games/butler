@@ -8,7 +8,5 @@ pub(super) mod plan_decision;
 #[cfg(unix)]
 pub(super) mod runtime_ports;
 #[cfg(unix)]
-pub(super) mod security_store;
-#[cfg(unix)]
 pub(super) mod server;
 pub(super) mod subsessions;

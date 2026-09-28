@@ -17,54 +17,18 @@ pub(super) fn is_lan_address(ip: IpAddr) -> bool {
 }
 
 /// The LAN addresses of the interfaces that are up and not loopback,
-/// sorted and without duplicates.
-#[cfg(unix)]
+/// sorted and without duplicates (none where the host cannot list them).
 pub(in crate::gateway::http) fn lan_addresses() -> Vec<IpAddr> {
-    use nix::ifaddrs::getifaddrs;
-    use nix::net::if_::InterfaceFlags;
-
-    let Ok(interfaces) = getifaddrs() else {
-        return Vec::new();
-    };
-    let mut addresses: Vec<IpAddr> = interfaces
-        .filter(|interface| {
-            interface.flags.contains(InterfaceFlags::IFF_UP)
-                && !interface.flags.contains(InterfaceFlags::IFF_LOOPBACK)
-        })
-        .filter_map(|interface| {
-            let address = interface.address?;
-            address
-                .as_sockaddr_in()
-                .map(|address| IpAddr::V4(address.ip()))
-                .or_else(|| {
-                    address
-                        .as_sockaddr_in6()
-                        .map(|address| IpAddr::V6(address.ip()))
-                })
-        })
+    butler_platform::network::external_addresses()
+        .unwrap_or_default()
+        .into_iter()
         .filter(|ip| is_lan_address(*ip))
-        .collect();
-    addresses.sort_unstable();
-    addresses.dedup();
-    addresses
-}
-
-/// No interface enumeration off Unix: remote access binds nothing there.
-#[cfg(not(unix))]
-pub(in crate::gateway::http) fn lan_addresses() -> Vec<IpAddr> {
-    Vec::new()
+        .collect()
 }
 
 /// `<host>.local`, the name mDNS answers for this machine on the LAN.
-#[cfg(unix)]
 pub(in crate::gateway::http) fn mdns_name() -> Option<String> {
-    let host = nix::unistd::gethostname().ok()?;
-    mdns_name_of(host.to_str()?)
-}
-
-#[cfg(not(unix))]
-pub(in crate::gateway::http) fn mdns_name() -> Option<String> {
-    None
+    mdns_name_of(&butler_platform::instance::host_name().ok()?)
 }
 
 /// The first label of `host`, lower case, with `.local`.

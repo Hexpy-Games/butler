@@ -1,5 +1,7 @@
 //! One process-owned App HTTP listener and its App-only artifact file owner.
 
+mod security_store;
+
 use std::net::SocketAddr;
 use std::sync::{
     Arc,
@@ -20,7 +22,6 @@ use crate::host::app::dashboard::AppDashboardLedger;
 use crate::host::app::dashboard_briefing::AppDashboardBriefing;
 use crate::host::app::plan_decision::AppPlanDecisionLedger;
 use crate::host::app::runtime_ports::AppRuntimeInfo;
-use crate::host::app::security_store::AppSecurityStore;
 use crate::host::service::configuration::AppServiceConfiguration;
 use crate::host::{
     AgentRuntime, AppAdmission, AppApprovalClaimsAdapter, AppAssets, AppBranchConversations,
@@ -29,6 +30,7 @@ use crate::host::{
     AppSettingsFactsAdapter, AppSettingsMutation, AuthorityHandoff, ResolvedInstallation,
     SystemIdentity,
 };
+use security_store::AppSecurityStore;
 
 pub(crate) struct AppServer {
     listener: Option<GatewayServer>,

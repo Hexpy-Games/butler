@@ -11,10 +11,11 @@
 //! the first one). `BUTLER_APP_LOCAL_AUTH_FILE` (a token file elsewhere) and
 //! `BUTLER_PROJECT_FOLDER_TOKEN_SECRET` still win.
 
-use std::fs::{self, DirBuilder, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
+
+use butler_platform::secure_fs;
 
 use base64::Engine;
 use serde::{Deserialize, Serialize};
@@ -187,8 +188,8 @@ pub(crate) struct RotatedToken {
 }
 
 /// Replaces the token file at `path` with a new token: a private temporary
-/// file renamed over it, so readers see the old file or the new one, never
-/// a partial one.
+/// file synced and renamed over it (`secure_fs::replace_private`), so
+/// readers see the old file or the new one, never a partial one.
 pub(crate) fn rotate_token(path: &Path) -> Result<RotatedToken, LocalCredentialError> {
     let file = NewTokenFile::generate();
     let contents = serde_json::to_vec_pretty(&file).map_err(LocalCredentialError::Encode)?;
@@ -196,13 +197,11 @@ pub(crate) fn rotate_token(path: &Path) -> Result<RotatedToken, LocalCredentialE
         path: path.to_path_buf(),
         source,
     };
-    let parent = path.parent().unwrap_or(Path::new("."));
-    let temporary = parent.join(format!(".credential-{}.tmp", uuid::Uuid::new_v4()));
-    let result = write_private(&temporary, &contents).and_then(|()| fs::rename(&temporary, path));
-    if result.is_err() {
-        let _ = fs::remove_file(&temporary);
-    }
-    result.map_err(write_error)?;
+    secure_fs::replace_private(
+        path,
+        |handle| handle.write_all(&contents).map_err(write_error),
+        write_error,
+    )?;
     Ok(RotatedToken {
         token: file.token,
         created_at: file.created_at,
@@ -330,14 +329,12 @@ fn publish(
         source,
     };
     let parent = path.parent().unwrap_or(Path::new("."));
-    DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
-        .create(parent)
-        .map_err(|source| LocalCredentialError::Directory {
+    secure_fs::create_private_dir_all(parent).map_err(|source| {
+        LocalCredentialError::Directory {
             path: parent.to_path_buf(),
             source,
-        })?;
+        }
+    })?;
     let temporary = parent.join(format!(".credential-{}.tmp", uuid::Uuid::new_v4()));
     let result =
         write_private(&temporary, contents).and_then(|()| match fs::hard_link(&temporary, path) {
@@ -355,12 +352,13 @@ fn publish(
     result.map_err(write_error)
 }
 
+/// Creates `path` (which must not exist), only the owner's, with
+/// `contents`.
 fn write_private(path: &Path, contents: &[u8]) -> io::Result<()> {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(path)?;
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    let _ = secure_fs::owner_only(&mut options);
+    let mut file = options.open(path)?;
     file.write_all(contents)?;
     file.sync_all()
 }
