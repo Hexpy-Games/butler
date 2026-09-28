@@ -17,7 +17,7 @@ export default tseslint.config(
       "packages/butler-site/dist/**",
       "packages/butler-site/.astro/**",
       // Cargo output, including the static ONNX Runtime source/build cache that
-      // scripts/prepare-static-ort-macos-arm64.py keeps under target/native-deps.
+      // scripts/prepare-static-ort.py keeps under target/native-deps.
       "packages/butler-agent/rust/target/**",
       "bun.lock",
       "*.lockb",
