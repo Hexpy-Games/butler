@@ -24,6 +24,8 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  lstatSync,
+  lutimesSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -47,6 +49,9 @@ interface StagedApp {
   version: string;
   packagedDir: string;
   agentBinary: string;
+  appBinary: string;
+  /** SOURCE_DATE_EPOCH (seconds): the fixed mtime and the reproducible-build clock. */
+  epoch: number;
 }
 
 const ELECTRON_ROOT = join("packages", "butler-app", "client", "electron");
@@ -73,9 +78,11 @@ export function createLinuxAppPackages(input: {
     throw new Error("pacman App packages support linux-x64 only");
   }
   mkdirSync(outDir, { recursive: true });
+  const epoch = sourceDateEpoch(root);
+  process.env.SOURCE_DATE_EPOCH = String(epoch);
   const workDir = mkdtempSync(join(tmpdir(), "butler-linux-app-"));
   try {
-    const staged = packageElectronApp(root, workDir, input.platform);
+    const staged = packageElectronApp(root, workDir, input.platform, epoch);
     return input.formats.map((format) => {
       const artifactPath = join(outDir, artifactName(staged, format));
       if (format === "deb") createDeb(staged, workDir, artifactPath);
@@ -97,7 +104,7 @@ function artifactName(staged: StagedApp, format: LinuxPackageFormat): string {
 }
 
 /** Prepares the native agent payload and runs electron-packager with it. */
-function packageElectronApp(root: string, workDir: string, platform: LinuxAppPlatform): StagedApp {
+function packageElectronApp(root: string, workDir: string, platform: LinuxAppPlatform, epoch: number): StagedApp {
   const versions = readAppComponentVersions(root);
   const arch = platform === "linux-x64" ? "x64" : "arm64";
   const agentDir = join(workDir, "bundled-agent");
@@ -130,11 +137,11 @@ function packageElectronApp(root: string, workDir: string, platform: LinuxAppPla
   if (!existsSync(join(packagedDir, "Butler")) || !existsSync(agentBinary)) {
     throw new Error(`electron package is incomplete: ${packagedDir}`);
   }
-  return { root, platform, version: versions.app, packagedDir, agentBinary };
+  return { root, platform, version: versions.app, packagedDir, agentBinary, appBinary: join(packagedDir, "Butler"), epoch };
 }
 
 /** Lays out the file system every package format installs. */
-function stagePackageRoot(staged: StagedApp, packageRoot: string): string {
+function stagePackageRoot(staged: StagedApp, packageRoot: string, format: LinuxPackageFormat): string {
   const installDir = join(LINUX_INSTALL_ROOT, `Butler-${staged.platform}`);
   const target = join(packageRoot, installDir.slice(1));
   mkdirSync(join(target, ".."), { recursive: true });
@@ -145,13 +152,18 @@ function stagePackageRoot(staged: StagedApp, packageRoot: string): string {
   const binDir = join(packageRoot, "usr", "bin");
   const shareDir = join(packageRoot, "usr", "share");
   for (const dir of [binDir, join(shareDir, "applications"), join(shareDir, "icons", "hicolor", "512x512", "apps"),
-    join(shareDir, "licenses", PACKAGE_NAME)]) {
+    format === "deb" ? join(shareDir, "doc", PACKAGE_NAME) : join(shareDir, "licenses", PACKAGE_NAME)]) {
     mkdirSync(dir, { recursive: true });
   }
   writeExecutable(join(binDir, PACKAGE_NAME), launcherScript(installDir));
   copyFileSync(join(staged.root, ELECTRON_ROOT, "assets", "icon.png"), join(shareDir, "icons", "hicolor", "512x512", "apps", "butler.png"));
-  copyFileSync(join(staged.root, "LICENSE"), join(shareDir, "licenses", PACKAGE_NAME, "LICENSE"));
+  // Debian policy: the license text is /usr/share/doc/<package>/copyright.
+  const license = join(staged.root, "LICENSE");
+  if (format === "deb") copyFileSync(license, join(shareDir, "doc", PACKAGE_NAME, "copyright"));
+  else copyFileSync(license, join(shareDir, "licenses", PACKAGE_NAME, "LICENSE"));
   writeFileSync(join(shareDir, "applications", "butler.desktop"), desktopEntry(), "utf8");
+  // Reproducible packages: every staged entry carries the source date.
+  setTreeMtime(packageRoot, staged.epoch);
   return installDir;
 }
 
@@ -159,9 +171,10 @@ function createDeb(staged: StagedApp, workDir: string, artifactPath: string): vo
   const debRoot = join(workDir, "deb-root");
   const controlDir = join(debRoot, "DEBIAN");
   mkdirSync(controlDir, { recursive: true });
-  const installDir = stagePackageRoot(staged, debRoot);
+  const installDir = stagePackageRoot(staged, debRoot, "deb");
   writeFileSync(join(controlDir, "control"), debControl(staged), "utf8");
   writeExecutable(join(controlDir, "postinst"), postInstallScript(installDir));
+  setTreeMtime(controlDir, staged.epoch);
   rmSync(artifactPath, { force: true });
   run(process.env.BUTLER_APP_DPKG_DEB || "dpkg-deb", ["--build", "--root-owner-group", "-Zxz", debRoot, artifactPath]);
 }
@@ -169,9 +182,10 @@ function createDeb(staged: StagedApp, workDir: string, artifactPath: string): vo
 function createPacman(staged: StagedApp, workDir: string, artifactPath: string): void {
   const buildDir = join(workDir, "pacman");
   mkdirSync(buildDir, { recursive: true });
-  const installDir = stagePackageRoot(staged, join(buildDir, "pkgroot"));
+  const installDir = stagePackageRoot(staged, join(buildDir, "pkgroot"), "pacman");
   writeFileSync(join(buildDir, "PKGBUILD"), pkgbuild(staged, installDir), "utf8");
   writeFileSync(join(buildDir, `${PACKAGE_NAME}.install`), pacmanInstallHooks(installDir), "utf8");
+  setTreeMtime(buildDir, staged.epoch);
   run(process.env.BUTLER_APP_MAKEPKG || "makepkg", ["--force", "--nodeps"], {
     cwd: buildDir,
     env: { ...process.env, PKGEXT: ".pkg.tar.zst", PKGDEST: buildDir },
@@ -182,15 +196,34 @@ function createPacman(staged: StagedApp, workDir: string, artifactPath: string):
 }
 
 /**
- * The glibc floor of the bundled agent: the highest GLIBC_x.y symbol version
- * it needs, so a DEB never installs where the agent cannot start.
+ * The glibc floor of the package: the highest GLIBC_x.y symbol version needed
+ * by the bundled agent or the Butler (Electron) binary, so a DEB never installs
+ * where either cannot start.
  */
-function glibcFloor(binary: string): string {
-  const versions = run("readelf", ["--version-info", "--wide", binary])
-    .match(/GLIBC_\d+\.\d+(?:\.\d+)?/gu) ?? [];
-  const numbers = versions.map((name) => name.slice("GLIBC_".length).split(".").map(Number));
+function glibcFloor(...binaries: string[]): string {
+  const numbers = binaries.flatMap((binary) =>
+    (run("readelf", ["--version-info", "--wide", binary]).match(/GLIBC_\d+\.\d+(?:\.\d+)?/gu) ?? [])
+      .map((name) => name.slice("GLIBC_".length).split(".").map(Number)));
   numbers.sort((left, right) => compareVersions(right, left));
   return numbers[0]?.join(".") ?? "2.17";
+}
+
+/** SOURCE_DATE_EPOCH if set, otherwise the commit time of the checkout. */
+function sourceDateEpoch(root: string): number {
+  const configured = Number(process.env.SOURCE_DATE_EPOCH);
+  if (Number.isInteger(configured) && configured > 0) return configured;
+  const committed = Number(run("git", ["log", "-1", "--format=%ct"], { cwd: root }).trim());
+  if (!Number.isInteger(committed) || committed <= 0) {
+    throw new Error("cannot determine SOURCE_DATE_EPOCH; set it or build from a git checkout");
+  }
+  return committed;
+}
+
+/** Sets the modification time of a tree (symlinks included, not followed). */
+function setTreeMtime(path: string, epoch: number): void {
+  lutimesSync(path, epoch, epoch);
+  if (!lstatSync(path).isDirectory()) return;
+  for (const entry of readdirSync(path)) setTreeMtime(join(path, entry), epoch);
 }
 
 function compareVersions(left: number[], right: number[]): number {
@@ -209,7 +242,7 @@ Priority: optional
 Architecture: ${DEB_ARCHITECTURES[staged.platform]}
 Maintainer: Hexpy Games <support@hexpy.games>
 Homepage: https://github.com/Hexpy-Games/butler
-Depends: libc6 (>= ${glibcFloor(staged.agentBinary)}), libstdc++6, libgcc-s1, libgtk-3-0t64 | libgtk-3-0, libnss3, libxss1, libasound2t64 | libasound2, libgbm1, libnotify4, xdg-utils
+Depends: libc6 (>= ${glibcFloor(staged.agentBinary, staged.appBinary)}), libstdc++6, libgcc-s1, libgtk-3-0t64 | libgtk-3-0, libnss3, libxss1, libasound2t64 | libasound2, libgbm1, libnotify4, xdg-utils
 Description: Butler desktop app
  Butler desktop app with the bundled native Butler Agent. The agent runs
  while the app is open.

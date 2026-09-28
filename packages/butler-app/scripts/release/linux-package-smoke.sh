@@ -25,7 +25,7 @@ install_package() {
       apt-get install -y -qq --no-install-recommends "$package" curl ca-certificates >/dev/null
       ;;
     *.pkg.tar.zst)
-      pacman -Sy --noconfirm --needed curl >/dev/null
+      pacman -Syu --noconfirm --needed curl >/dev/null
       pacman -U --noconfirm "$package" >/dev/null
       ;;
     *) fail "unknown package format: $package" ;;
@@ -56,6 +56,18 @@ cd "$work"
 mkdir -p home data tmp
 export HOME="$work/home" TMPDIR="$work/tmp" BUTLER_DATA="$work/data" LANG=C.UTF-8 TZ=UTC
 export BUTLER_APP_SERVER_HOST=127.0.0.1 BUTLER_APP_SERVER_PORT=$port BUTLER_METRICS_ENABLED=0
+# Resolve the agent the way the App does: the packaged resolver module run by
+# the installed Electron binary in plain Node mode (no display needed).
+cat > resolve.mjs <<'JS'
+import { pathToFileURL } from "node:url";
+const [appDir, resourcesPath, execPath] = process.argv.slice(2);
+const { resolveBundledNativeAgentInstallation } = await import(pathToFileURL(appDir + "/bundled-native-agent.mjs").href);
+const installation = resolveBundledNativeAgentInstallation({ butlerData: "/tmp/butler-smoke-data", resourcesPath, execPath, platform: "linux" });
+console.log(JSON.stringify(installation));
+JS
+ELECTRON_RUN_AS_NODE=1 "$install_dir/Butler" resolve.mjs "$install_dir/resources/app" "$install_dir/resources" "$install_dir/Butler" > resolved.json || { cat resolved.json; exit 10; }
+grep -q '"command":"'"$agent"'"' resolved.json || { cat resolved.json; exit 10; }
+grep -q '"'"$install_dir"'"' resolved.json || { cat resolved.json; exit 10; }
 agent() { "$agent" --installation-root "$install_dir" --resource-root "$resources" "\$@"; }
 agent version --json > version.json
 grep -q '"ok": *true' version.json || { cat version.json; exit 11; }
