@@ -27,6 +27,20 @@ The build includes static ONNX Runtime and Lance dependencies. Follow the reposi
 prepares that dependency cache and builds the packaged executable. Do not use an old ad hoc
 ORT build directory as an undocumented prerequisite.
 
+**Windows preview (x64).** In an x64 Visual Studio developer shell, prepare the static ORT
+cache with `python scripts\prepare-static-ort.py` (a short `CARGO_TARGET_DIR`, see the recipe),
+set `ORT_LIB_PATH` and `PROTOC` from its output with `ORT_PREFER_DYNAMIC_LINK=0` and
+`ORT_SKIP_DOWNLOAD=1`, and run `cargo build --release --locked -p butler-agent`. Lay the binary
+out as `<install>\bin\butler-agent.exe` next to a copy of `packages/butler-agent/resources` in
+`<install>\resources`, and run it with `--installation-root <install> --resource-root
+<install>\resources` (no subcommand runs the service; `stop`, `status`, `doctor` as on Unix).
+`butler stop` stops a Windows service through its control endpoint's `service_stop` command
+(the DATA shutdown flag while it is still starting) and ends it through a held process handle
+after the grace period; the service has no SIGTERM there. Not yet on Windows: read-only
+commands (refused with `command_observation_isolation_unavailable`), write protection of
+program files, Task Scheduler registration, an owner-only access list on a DATA folder outside
+`%USERPROFILE%`, and the `butler.exe` command launcher (see `butler_platform::launcher`).
+
 The executable has passed an isolated source-queue smoke through a local mock provider,
 physical file read, canonical persistence, reply transcript, close, and restart. A further
 13-round mock-provider run queried a previous conversation, reopened its exact source, and

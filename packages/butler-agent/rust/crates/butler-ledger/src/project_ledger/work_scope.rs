@@ -33,10 +33,11 @@ impl ProjectLedger {
                 &data_root.join("project-ledger/projects"),
                 &scope.ledger_root,
             )?;
-            let ledger_root = std::fs::canonicalize(&scope.ledger_root).map_err(|source| {
-                ProjectLedgerReadError::resolution("active_project_ledger_unresolved")
-                    .with_source(source)
-            })?;
+            let ledger_root = butler_platform::secure_fs::canonicalize(&scope.ledger_root)
+                .map_err(|source| {
+                    ProjectLedgerReadError::resolution("active_project_ledger_unresolved")
+                        .with_source(source)
+                })?;
             Ok(ResolvedProjectWorkScope {
                 ledger_root,
                 ..scope

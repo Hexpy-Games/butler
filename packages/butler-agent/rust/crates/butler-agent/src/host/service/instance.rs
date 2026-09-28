@@ -1,5 +1,6 @@
 //! DATA-scoped native service ownership, process identity, and legacy fencing.
 
+use butler_platform::secure_fs::Canonical as _;
 use std::fs::{self, File, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -22,7 +23,9 @@ mod record;
 mod restart;
 mod stop_intent;
 mod stopping;
-pub(crate) use delivery::{force_stop, request_stop};
+pub(crate) use delivery::{
+    StopDelivery, force_stop, remove_shutdown_flag, request_stop, shutdown_flag_path,
+};
 pub(crate) use gateway_state::mark_gateway_state;
 pub(crate) use probe::instance_lock_is_held_read_only;
 use record::{
@@ -124,7 +127,7 @@ impl InstanceGuard {
             );
         }
 
-        let executable = executable.canonicalize().map_err(|source| {
+        let executable = executable.canonical().map_err(|source| {
             crate::host::HostError::new("native_service_executable_unavailable").with_source(source)
         })?;
         let pid = std::process::id();

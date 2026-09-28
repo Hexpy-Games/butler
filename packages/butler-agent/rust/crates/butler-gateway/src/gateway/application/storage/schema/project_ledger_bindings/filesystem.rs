@@ -1,3 +1,4 @@
+use butler_platform::secure_fs::Canonical as _;
 use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
 
@@ -56,8 +57,8 @@ pub(super) fn initialized_root(projects_root: &Path, candidate: &str) -> Option<
     if !root.join("project.json").exists() || !root.join("ledger.jsonl").exists() {
         return None;
     }
-    let physical_projects_root = projects_root.canonicalize().ok()?;
-    let physical_root = root.canonicalize().ok()?;
+    let physical_projects_root = projects_root.canonical().ok()?;
+    let physical_root = root.canonical().ok()?;
     physical_root
         .starts_with(physical_projects_root)
         .then_some(physical_root)

@@ -9,9 +9,11 @@
 pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
     Some(match domain {
         // butler-platform: the only OS-specific code. Independent facades; each
-        // keeps its per-OS implementations as private children.
-        "command_sandbox" | "instance" | "launcher" | "network" | "process_control"
-        | "secure_fs" | "user_dirs" => &[],
+        // keeps its per-OS implementations as private children. The private
+        // Windows process table serves instance identity and liveness.
+        "command_sandbox" | "desktop" | "launcher" | "network" | "process_table" | "secure_fs"
+        | "stdio" | "user_dirs" => &[],
+        "instance" | "process_control" => &["process_table"],
         // butler-core: leaf codecs and mirrors; JSON sanitizes public text.
         "configuration" | "js_date" | "json_lines" | "locale" | "public_text" | "segmentation"
         | "tool_protocol" => &[],

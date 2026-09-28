@@ -8,9 +8,10 @@ use super::readiness::wait_for_stop;
 use super::{FORCE_STOP_TIMEOUT, STOP_TIMEOUT, active_service};
 use crate::host::ResolvedInstallation;
 use crate::host::service::instance::{
-    AdmissionLock, InstanceRecord, RestartIdentity, StopIntent, StopRequest, StoppingFrom,
-    force_stop, instance_is_locked, mark_stopping, process_matches, refuse_live_legacy_process,
-    request_stop, revert_stopping, withdraw_stop_intent, write_stop_intent,
+    AdmissionLock, InstanceRecord, RestartIdentity, StopDelivery, StopIntent, StopRequest,
+    StoppingFrom, force_stop, instance_is_locked, mark_stopping, process_matches,
+    refuse_live_legacy_process, remove_shutdown_flag, request_stop, revert_stopping,
+    withdraw_stop_intent, write_stop_intent,
 };
 
 /// What a controlled stop found and did.
@@ -64,8 +65,9 @@ struct UndeliveredStopRevertFailed {
 
 /// Stops the instance that owns DATA while the caller holds admission:
 /// marks its record `stopping`, re-verifies its identity, announces the stop
-/// in the intent file, sends SIGTERM and waits, force-killing after
-/// [`STOP_TIMEOUT`]. A stop that is never delivered leaves the record as it was.
+/// in the intent file, requests the stop (SIGTERM, or `service_stop` on
+/// Windows) and waits, force-killing after [`STOP_TIMEOUT`]. A stop that is
+/// never delivered leaves the record as it was.
 pub(super) async fn stop_service_admitted(
     data_root: &Path,
     installation: &ResolvedInstallation,
@@ -81,16 +83,28 @@ pub(super) async fn stop_service_admitted(
         return Err("native_service_instance_changed".into());
     }
     let previous = mark_stopping(data_root, &record.nonce, installation)?;
-    if let Err(error) = deliver_stop(data_root, &record, expected, request) {
-        return Err(revert_undelivered_stop(
-            data_root,
-            installation,
-            &record,
-            previous,
-            error,
-        ));
+    let delivery = match deliver_stop(data_root, &record, expected, request).await {
+        Ok(delivery) => delivery,
+        Err(error) => {
+            return Err(revert_undelivered_stop(
+                data_root,
+                installation,
+                &record,
+                previous,
+                error,
+            ));
+        }
+    };
+    let forced = wait_or_force_stop(data_root, &record, expected).await;
+    if delivery == Some(StopDelivery::ShutdownFlag)
+        && let Err(error) = remove_shutdown_flag(data_root)
+    {
+        return Err(
+            crate::host::HostError::new("native_service_shutdown_flag_unavailable")
+                .with_source(error),
+        );
     }
-    let forced = wait_or_force_stop(data_root, &record, expected).await?;
+    let forced = forced?;
     let stopped = StoppedInstance {
         pid: record.pid,
         nonce: record.nonce,
@@ -112,13 +126,13 @@ fn same_instance(
 
 /// Re-verifies the instance [`mark_stopping`] marked (its record, the DATA
 /// lock and its OS identity) and signals it. An error means nothing was
-/// delivered.
-fn deliver_stop(
+/// delivered; `None` means the instance had exited already.
+async fn deliver_stop(
     data_root: &Path,
     record: &InstanceRecord,
     expected: Option<&RestartIdentity>,
     request: StopRequest,
-) -> Result<(), crate::host::HostError> {
+) -> Result<Option<StopDelivery>, crate::host::HostError> {
     let current =
         active_service(data_root)?.ok_or_else(|| "native_service_instance_changed".to_owned())?;
     if !same_instance(&current, record, expected) {
@@ -127,24 +141,25 @@ fn deliver_stop(
     if !instance_is_locked(data_root)? || !process_matches(&current)? {
         return Err("native_service_instance_ambiguous: refusing signal".into());
     }
-    signal_intended_stop(data_root, &current, request)
+    signal_intended_stop(data_root, &current, request).await
 }
 
 /// Announces the stop to supervisors, then asks the instance to stop
-/// (SIGTERM). The intent is written before the request so it is on disk when
-/// the process exits; a request that could not be delivered withdraws it
-/// again.
-fn signal_intended_stop(
+/// (SIGTERM or `service_stop`). The intent is written before the request so
+/// it is on disk when the process exits (and so the instance can check a
+/// `service_stop` against it); a request that could not be delivered
+/// withdraws it again.
+async fn signal_intended_stop(
     data_root: &Path,
     current: &InstanceRecord,
     request: StopRequest,
-) -> Result<(), crate::host::HostError> {
+) -> Result<Option<StopDelivery>, crate::host::HostError> {
     write_stop_intent(data_root, &StopIntent::new(request, current)).map_err(|source| {
         crate::host::HostError::new("native_service_stop_intent_unavailable").with_source(source)
     })?;
-    match request_stop(current) {
-        Ok(()) => Ok(()),
-        Err(error) if error.message() == "native_service_process_exited" => Ok(()),
+    match request_stop(data_root, current).await {
+        Ok(delivery) => Ok(Some(delivery)),
+        Err(error) if error.message() == "native_service_process_exited" => Ok(None),
         Err(error) => match withdraw_stop_intent(data_root, &current.nonce) {
             Ok(()) => Err(error),
             Err(withdraw) => Err(error.with_source(withdraw)),

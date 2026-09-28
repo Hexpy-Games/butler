@@ -1,5 +1,6 @@
 //! Detached launch, identity-checked stop, and readiness for the native service.
 
+use butler_platform::secure_fs::Canonical as _;
 use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -302,7 +303,7 @@ fn spawn_service(
         .map_err(|source| {
             crate::host::HostError::new("native_service_executable_unavailable").with_source(source)
         })?
-        .canonicalize()
+        .canonical()
         .map_err(|source| {
             crate::host::HostError::new("native_service_executable_unavailable").with_source(source)
         })?;

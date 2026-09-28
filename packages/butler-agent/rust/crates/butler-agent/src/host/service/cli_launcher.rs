@@ -12,8 +12,9 @@
 
 use std::fs;
 use std::io::Write;
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+
+use butler_platform::launcher::{self, LauncherTarget};
 
 use crate::host::ResolvedInstallation;
 
@@ -39,6 +40,8 @@ pub(crate) enum LauncherRepair {
     ReplacedStale,
     /// The file is neither ours nor the stale launcher: left alone.
     Foreign,
+    /// This host has no script launcher (Windows): left alone.
+    Unsupported,
 }
 
 /// What the file at `DATA/bin/butler` is.
@@ -82,8 +85,10 @@ pub(crate) fn repair(
     if !matches!(installation.payload_provenance(), Ok(Some(_))) {
         return Ok(LauncherRepair::NotInstalled);
     }
+    let Some(wanted) = script(data_root, installation) else {
+        return Ok(LauncherRepair::Unsupported);
+    };
     let existing = fs::read(&launcher)?;
-    let wanted = script(data_root, installation);
     if existing == wanted.as_bytes() && is_executable(&launcher) {
         return Ok(LauncherRepair::Current);
     }
@@ -114,32 +119,14 @@ fn keep_previous(launcher: &Path) -> std::io::Result<()> {
     }
 }
 
-fn script(data_root: &Path, installation: &ResolvedInstallation) -> String {
-    format!(
-        "#!/bin/sh\n{MARKER}\n# Managed by Butler: rewritten when the Butler service starts.\n\
-         BUTLER_DATA=\"${{BUTLER_DATA:-{data}}}\"\nexport BUTLER_DATA\n\
-         exec {binary} --installation-root {root} --resource-root {resources} \"$@\"\n",
-        data = double_quoted(data_root),
-        binary = single_quoted(installation.executable()),
-        root = single_quoted(installation.root()),
-        resources = single_quoted(installation.resources()),
-    )
-}
-
-fn single_quoted(path: &Path) -> String {
-    format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
-}
-
-/// Escapes a path for use inside `"..."` in a POSIX shell.
-fn double_quoted(path: &Path) -> String {
-    let mut out = String::new();
-    for character in path.to_string_lossy().chars() {
-        if matches!(character, '"' | '\\' | '$' | '`') {
-            out.push('\\');
-        }
-        out.push(character);
-    }
-    out
+fn script(data_root: &Path, installation: &ResolvedInstallation) -> Option<String> {
+    let target = LauncherTarget {
+        data_root,
+        executable: installation.executable(),
+        installation_root: installation.root(),
+        resource_root: installation.resources(),
+    };
+    launcher::cli_launcher_script(&target, MARKER)
 }
 
 fn previous_path(launcher: &Path) -> PathBuf {
@@ -147,7 +134,7 @@ fn previous_path(launcher: &Path) -> PathBuf {
 }
 
 fn is_executable(path: &Path) -> bool {
-    fs::metadata(path).is_ok_and(|metadata| metadata.permissions().mode() & 0o111 == 0o111)
+    fs::metadata(path).is_ok_and(|metadata| launcher::is_runnable_by_all(&metadata))
 }
 
 fn write_atomic(path: &Path, contents: &[u8]) -> std::io::Result<()> {
@@ -163,5 +150,5 @@ fn write_executable(path: &Path, contents: &[u8]) -> std::io::Result<()> {
     let mut file = fs::File::create(path)?;
     file.write_all(contents)?;
     file.sync_all()?;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o755))
+    launcher::mark_executable(path).unwrap_or(Ok(()))
 }

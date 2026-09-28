@@ -1,4 +1,4 @@
-//! Nonblocking stdio transport so runtime shutdown never waits on a stdin worker.
+//! Nonblocking duplicates of stdin and stdout on the Tokio reactor.
 
 use std::{
     fs::File,
@@ -10,12 +10,13 @@ use std::{
 use nix::fcntl::{FcntlArg, OFlag, fcntl};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, unix::AsyncFd};
 
-pub(super) struct NonblockingStdio {
+#[derive(Debug)]
+pub(super) struct ProcessStdio {
     input: AsyncFd<File>,
     output: AsyncFd<File>,
 }
 
-impl NonblockingStdio {
+impl ProcessStdio {
     pub(super) fn new() -> io::Result<Self> {
         Ok(Self {
             input: nonblocking_fd(std::io::stdin())?,
@@ -35,7 +36,7 @@ fn nonblocking_fd(fd: impl std::os::fd::AsFd) -> io::Result<AsyncFd<File>> {
     AsyncFd::new(file)
 }
 
-impl AsyncRead for NonblockingStdio {
+impl AsyncRead for ProcessStdio {
     fn poll_read(
         self: Pin<&mut Self>,
         context: &mut Context<'_>,
@@ -63,7 +64,7 @@ impl AsyncRead for NonblockingStdio {
     }
 }
 
-impl AsyncWrite for NonblockingStdio {
+impl AsyncWrite for ProcessStdio {
     fn poll_write(
         self: Pin<&mut Self>,
         context: &mut Context<'_>,

@@ -25,6 +25,8 @@ pub(crate) enum GatewayControlCommand {
     Stop,
     Restart,
     RestartHandoffResult,
+    /// Stop the whole service (Windows controllers; see the control server).
+    ServiceStop,
 }
 
 pub(crate) struct AppGatewayLifecycle {
@@ -126,6 +128,9 @@ impl AppGatewayLifecycle {
             }
             GatewayControlCommand::RestartHandoffResult => {
                 Err("gateway_command_requires_journal_owner".into())
+            }
+            GatewayControlCommand::ServiceStop => {
+                Err("gateway_command_requires_service_owner".into())
             }
         }
     }

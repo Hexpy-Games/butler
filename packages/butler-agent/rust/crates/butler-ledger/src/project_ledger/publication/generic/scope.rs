@@ -19,7 +19,8 @@ pub(super) fn resolve(project_root: &Path) -> Result<LedgerScope, LedgerEffectEr
     {
         return Err(LedgerEffectError::Uncertain { source: None });
     }
-    let root = fs::canonicalize(project_root).map_err(LedgerEffectError::uncertain)?;
+    let root = butler_platform::secure_fs::canonicalize(project_root)
+        .map_err(LedgerEffectError::uncertain)?;
     if fs::symlink_metadata(root.join("project.json"))
         .map_err(LedgerEffectError::uncertain)?
         .file_type()

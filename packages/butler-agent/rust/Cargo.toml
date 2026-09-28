@@ -59,6 +59,11 @@ zip = { version = "4", default-features = false, features = ["deflate"] }
 rustix = { version = "=1.1.5", features = ["fs"] }
 nix = { version = "=0.31.3", default-features = false, features = ["feature", "fs", "hostname", "net", "signal"] }
 libproc = "=0.14.11"
+# Windows process table, Job Objects and path normalization (butler-platform).
+sysinfo = { version = "=0.37.2", default-features = false, features = ["system"] }
+win32job = "=2.0.3"
+dunce = "=1.0.5"
+iana-time-zone = "=0.1.65"
 
 # Debug info is limited to line tables because full DWARF made macOS target
 # directories exceed 50 GB: macOS defaults to split-debuginfo = "unpacked",

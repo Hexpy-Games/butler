@@ -186,7 +186,7 @@ pub(super) fn commit(
                 .map_err(|_| std::io::Error::other("unsafe project capsule path"))?;
             fs::rename(&temporary, &prepared.path)
         })
-        .and_then(|()| File::open(parent)?.sync_all());
+        .and_then(|()| butler_platform::secure_fs::sync_path(parent));
     if write_result.is_err() {
         let _ = fs::remove_file(&temporary);
         return Err(error(CognitionCode::ProjectCapsuleWriteFailed));

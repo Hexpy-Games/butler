@@ -77,11 +77,7 @@ impl ProcessEnvironment {
                 "BUTLER_OPENAI_OAUTH_ORIGINATOR",
             ]),
             codex_user_agent: trimmed("BUTLER_CODEX_USER_AGENT"),
-            os_platform: Some(match env::consts::OS {
-                "macos" => "darwin".to_owned(),
-                "windows" => "win32".to_owned(),
-                other => other.to_owned(),
-            }),
+            os_platform: Some(butler_platform::launcher::node_platform().to_owned()),
             os_release: Some(os_release.to_owned()),
             os_arch: Some(match env::consts::ARCH {
                 "x86_64" => "x64".to_owned(),

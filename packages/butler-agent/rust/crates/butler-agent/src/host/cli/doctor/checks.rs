@@ -1,6 +1,8 @@
 //! Read-only individual installation, DATA, and owned-process checks.
 
-use std::{fs, os::unix::fs::PermissionsExt, path::Path};
+use std::{fs, path::Path};
+
+use butler_platform::launcher;
 
 use serde_json::{Value, json};
 
@@ -18,8 +20,7 @@ pub(super) struct Check {
 
 pub(super) fn executable_check(installation: &ResolvedInstallation) -> Check {
     let path = installation.executable();
-    let passed = fs::metadata(path)
-        .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0);
+    let passed = fs::metadata(path).is_ok_and(|metadata| launcher::is_executable(path, &metadata));
     Check {
         id: "executable",
         status: if passed { "pass" } else { "fail" },

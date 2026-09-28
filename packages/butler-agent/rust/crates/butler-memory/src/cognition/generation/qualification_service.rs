@@ -363,7 +363,7 @@ impl Commit<'_> {
             return Err(error(CognitionCode::MemoryQualificationIoError));
         }
         staged.0 = None;
-        if File::open(root).and_then(|dir| dir.sync_all()).is_err() {
+        if butler_platform::secure_fs::sync_path(root).is_err() {
             let _ = fs::rename(&qualification, &staged_path);
             staged.0 = Some(staged_path);
             if had_prior {
@@ -426,8 +426,7 @@ fn stage_bundle(
         durable::create_dir(parent)?;
         copy_checked(&source, &target, &expected.sha256)?;
     }
-    File::open(stage)
-        .and_then(|dir| dir.sync_all())
+    butler_platform::secure_fs::sync_path(stage)
         .map_err(|source| error(CognitionCode::MemoryQualificationIoError).with_source(source))?;
     Ok(())
 }

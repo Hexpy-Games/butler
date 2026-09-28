@@ -181,7 +181,7 @@ fn canonical_project_workspace(
             "continuity_project_workspace_unresolved",
         ));
     }
-    let workspace = fs::canonicalize(&workspace).map_err(|source| {
+    let workspace = butler_platform::secure_fs::canonicalize(&workspace).map_err(|source| {
         CliError::failed(
             "continuity_project_workspace_unresolved",
             "continuity_project_workspace_unresolved",
@@ -195,20 +195,21 @@ fn canonical_project_workspace(
         ));
     }
     let cache = workspace.join(".butler/hot-cache.md");
-    let install = fs::canonicalize(installation_root).map_err(|source| {
-        CliError::failed(
-            "installation_root_unavailable",
-            "installation_root_unavailable",
-        )
-        .with_source(source)
-    })?;
+    let install =
+        butler_platform::secure_fs::canonicalize(installation_root).map_err(|source| {
+            CliError::failed(
+                "installation_root_unavailable",
+                "installation_root_unavailable",
+            )
+            .with_source(source)
+        })?;
     if cache.starts_with(&install) {
         return Err(CliError::failed(
             "continuity_recovery_installation_blocked",
             "project hot-cache recovery may not mutate the native installation",
         ));
     }
-    if let Ok(parent) = fs::canonicalize(workspace.join(".butler"))
+    if let Ok(parent) = butler_platform::secure_fs::canonicalize(workspace.join(".butler"))
         && (!parent.starts_with(&workspace) || parent.starts_with(&install))
     {
         return Err(CliError::failed(

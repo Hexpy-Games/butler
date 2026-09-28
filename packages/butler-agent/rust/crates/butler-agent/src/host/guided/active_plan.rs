@@ -103,22 +103,18 @@ mod tests {
         assert!(read("MISSING").await.unwrap().is_none());
         assert!(read(" PLAN-1 ").await.unwrap().is_none());
         fs::write(workspace.join("project.json"), r#"{"id":"escape"}"#).unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::symlink;
-            fs::create_dir_all(data.join("outside")).unwrap();
-            symlink(
-                data.join("outside"),
-                data.join("project-ledger/projects/escape"),
-            )
-            .unwrap();
-            assert_eq!(
-                read("PLAN-1").await,
-                Err(ProjectLedgerReadError::resolution(
-                    "active_project_ledger_path_escape"
-                ))
-            );
-        }
+        fs::create_dir_all(data.join("outside")).unwrap();
+        butler_platform::secure_fs::symlink(
+            &data.join("outside"),
+            &data.join("project-ledger/projects/escape"),
+        )
+        .unwrap();
+        assert_eq!(
+            read("PLAN-1").await,
+            Err(ProjectLedgerReadError::resolution(
+                "active_project_ledger_path_escape"
+            ))
+        );
         producer.close().await;
         fs::remove_dir_all(data).unwrap();
     }

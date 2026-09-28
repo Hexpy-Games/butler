@@ -1,7 +1,14 @@
-//! Windows: no owner-only permissions, no-follow opens, file ids or
-//! directory syncs yet (the Windows stage adds an owner-only ACL on the data
-//! folder, reparse-point-safe opens and handle-based file ids). Each of these
-//! reports `None`; directories and files are still created.
+//! Windows: no owner-only permissions, no-follow opens, file ids, directory
+//! syncs or atomic directory exchange yet. Each of these reports `None` or
+//! `Unsupported`; directories and files are still created, and renames are
+//! retried while another process briefly holds a file.
+//!
+//! Files get the access list they inherit from their folder. The default
+//! DATA folder, `%USERPROFILE%\.butler`, inherits the user profile's list
+//! (the user, SYSTEM and Administrators), so other users cannot read it; a
+//! DATA folder elsewhere is not restricted. Setting an owner-only access
+//! list needs the Win32 security API, which no maintained crate offers
+//! without `unsafe` here, so [`OWNER_ONLY`] stays `false` until one does.
 
 use std::fs::{self, DirBuilder, File, Metadata, OpenOptions};
 use std::io;
@@ -15,6 +22,13 @@ pub(super) const PERMISSION_MODES: bool = false;
 pub(super) const NO_FOLLOW: bool = false;
 pub(super) const FILE_IDS: bool = false;
 pub(super) const DIRECTORY_SYNC: bool = false;
+pub(super) const ATOMIC_EXCHANGE: bool = false;
+
+/// `ERROR_SHARING_VIOLATION` and `ERROR_LOCK_VIOLATION`.
+const SHARING_ERRORS: [i32; 2] = [32, 33];
+/// How often, and how far apart, a refused rename is retried.
+const RENAME_ATTEMPTS: u32 = 20;
+const RENAME_BACKOFF: std::time::Duration = std::time::Duration::from_millis(50);
 
 pub(super) fn create_private_dir_all(path: &Path) -> io::Result<()> {
     fs::create_dir_all(path)
@@ -77,6 +91,39 @@ pub(super) fn open_read_no_follow(path: &Path) -> io::Result<File> {
 
 pub(super) fn sync_directory(_path: &Path) -> Option<io::Result<()>> {
     None
+}
+
+pub(super) fn sync_path(path: &Path) -> io::Result<()> {
+    if fs::metadata(path)?.is_dir() {
+        return Ok(());
+    }
+    OpenOptions::new().write(true).open(path)?.sync_all()
+}
+
+pub(super) fn canonicalize(path: &Path) -> io::Result<PathBuf> {
+    dunce::canonicalize(path)
+}
+
+pub(super) fn rename(from: &Path, to: &Path) -> io::Result<()> {
+    let mut attempt = 1;
+    loop {
+        match fs::rename(from, to) {
+            Err(error) if attempt < RENAME_ATTEMPTS && is_transient(&error) => {
+                attempt += 1;
+                std::thread::sleep(RENAME_BACKOFF);
+            }
+            result => return result,
+        }
+    }
+}
+
+/// Another process has the file open without sharing its deletion (access
+/// denied is also what a file pending deletion reports).
+fn is_transient(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::PermissionDenied
+        || error
+            .raw_os_error()
+            .is_some_and(|code| SHARING_ERRORS.contains(&code))
 }
 
 pub(super) fn exchange_directories(_left: &Path, _right: &Path) -> Result<(), ExchangeError> {

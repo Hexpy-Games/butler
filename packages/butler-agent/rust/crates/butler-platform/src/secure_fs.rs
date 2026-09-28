@@ -3,10 +3,11 @@
 //!
 //! Unix expresses "only the owner" with permission bits (0700 directories and
 //! 0600 files) and exchanges directories with `renameat2`/`renamex_np`.
-//! Windows has none of these yet (an owner-only ACL on the data folder,
-//! reparse-point-safe opens and file ids come in the Windows stage). Each
-//! missing capability has a flag here, and the operation reports it instead
-//! of pretending: an option or builder it cannot apply returns `None`.
+//! Windows has none of these yet (see `windows.rs` for what protects DATA
+//! there): each missing capability has a flag here, and the operation
+//! reports it instead of pretending: an option or builder it cannot apply
+//! returns `None`. Renames that replace a file retry on Windows while
+//! another process briefly holds it ([`rename`]).
 
 use std::fs::{self, DirBuilder, File, Metadata, OpenOptions};
 use std::io;
@@ -37,6 +38,11 @@ pub const FILE_IDS: bool = sys::FILE_IDS;
 
 /// Whether [`sync_directory`] can flush a directory.
 pub const DIRECTORY_SYNC: bool = sys::DIRECTORY_SYNC;
+
+/// Whether [`exchange_directories`] can swap two directories atomically.
+/// Without it (Windows), callers move one directory aside and the other into
+/// its place with two [`rename`]s, and journal the step between them.
+pub const ATOMIC_EXCHANGE: bool = sys::ATOMIC_EXCHANGE;
 
 /// A permission mode on hosts with [`PERMISSION_MODES`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -135,6 +141,15 @@ pub fn sync_directory(path: &Path) -> Option<io::Result<()>> {
     sys::sync_directory(path)
 }
 
+/// Flushes the file or directory at `path` to storage: an fsync of a
+/// descriptor opened for reading on Unix. Windows flushes only through a
+/// handle opened for writing, so a file is opened that way there; a
+/// directory is left alone, as [`sync_directory`] does without
+/// [`DIRECTORY_SYNC`] (NTFS journals the renames and creations in it).
+pub fn sync_path(path: impl AsRef<Path>) -> io::Result<()> {
+    sys::sync_path(path.as_ref())
+}
+
 /// Atomically replaces `path` with a new file, only the owner's where
 /// [`OWNER_ONLY`]: `write` fills a fresh temporary file next to `path`, which
 /// is synced, renamed over `path`, and the rename is synced where
@@ -159,13 +174,21 @@ pub fn replace_private<E>(
     let written = write(&mut file).and_then(|()| {
         file.sync_all().map_err(&io_error)?;
         drop(file);
-        fs::rename(&temporary, path).map_err(&io_error)
+        rename(&temporary, path).map_err(&io_error)
     });
     if let Err(error) = written {
         let _ = fs::remove_file(&temporary);
         return Err(error);
     }
     sync_directory(parent).unwrap_or(Ok(())).map_err(io_error)
+}
+
+/// Renames `from` to `to`, replacing a file at `to`, like [`fs::rename`].
+/// Windows refuses the rename while another process (a reader, an indexer,
+/// an antivirus scan) has either file open without sharing its deletion; it
+/// is retried for up to a second there before the error is returned.
+pub fn rename(from: &Path, to: &Path) -> io::Result<()> {
+    sys::rename(from, to)
 }
 
 /// `.<name>.<pid>.<sequence>.<nanos>.tmp` next to `path`, unique within this
@@ -197,7 +220,8 @@ pub enum ExchangeError {
     Unsupported,
 }
 
-/// Atomically swaps two directories on the same file system.
+/// Atomically swaps two directories on the same file system; unsupported
+/// without [`ATOMIC_EXCHANGE`].
 pub fn exchange_directories(left: &Path, right: &Path) -> Result<(), ExchangeError> {
     sys::exchange_directories(left, right)
 }
@@ -271,6 +295,29 @@ pub enum Writability {
 /// Whether this user may create entries in the directory at `path`.
 pub fn directory_writability(path: &Path) -> Writability {
     sys::directory_writability(path)
+}
+
+/// The absolute path of `path` with every link resolved, like
+/// [`fs::canonicalize`], but in the form the rest of the host understands:
+/// Windows returns resolved paths with the `\\?\` prefix, which `cmd.exe`
+/// rejects as a working directory and which never matches a path spelled
+/// without it, so the prefix is dropped wherever the path does not need it.
+/// Every canonical path Butler compares or hands to a program comes from
+/// here, so all of them share one form.
+pub fn canonicalize(path: impl AsRef<Path>) -> io::Result<PathBuf> {
+    sys::canonicalize(path.as_ref())
+}
+
+/// [`canonicalize`] as a method, in place of [`Path::canonicalize`].
+pub trait Canonical {
+    /// See [`canonicalize`].
+    fn canonical(&self) -> io::Result<PathBuf>;
+}
+
+impl<P: AsRef<Path> + ?Sized> Canonical for P {
+    fn canonical(&self) -> io::Result<PathBuf> {
+        canonicalize(self)
+    }
 }
 
 /// The form of `path` two paths are compared in: as is where the file system

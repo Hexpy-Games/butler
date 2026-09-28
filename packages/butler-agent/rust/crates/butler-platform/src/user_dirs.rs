@@ -15,6 +15,11 @@ pub fn home_dir() -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
+/// [`home_dir`], unless it is set but empty.
+pub fn non_empty_home_dir() -> Option<PathBuf> {
+    home_dir().filter(|home| !home.as_os_str().is_empty())
+}
+
 /// Whether `path` is a file-system root or lies in the operating system's
 /// own folders, which no user project may claim: `/` and `/System`, `/etc`,
 /// `/private/etc`, `/bin`, `/sbin` on Unix; a drive root and the

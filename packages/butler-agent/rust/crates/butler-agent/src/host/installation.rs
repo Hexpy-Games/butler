@@ -1,5 +1,6 @@
 //! Immutable files selected once by the process entrypoint.
 
+use butler_platform::secure_fs::Canonical as _;
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug)]
@@ -28,7 +29,7 @@ impl ResolvedInstallation {
         let executable = std::env::current_exe()
             .map_err(|error| format!("installation_executable_unavailable: {error}"))?;
         let executable = executable
-            .canonicalize()
+            .canonical()
             .map_err(|error| format!("installation_executable_unavailable: {error}"))?;
         let root = executable
             .parent()
@@ -99,7 +100,7 @@ impl ResolvedInstallation {
         {
             return None;
         }
-        let manifest = manifest.canonicalize().ok()?;
+        let manifest = manifest.canonical().ok()?;
         if !manifest.starts_with(&self.installation_root) {
             return None;
         }
@@ -126,7 +127,7 @@ impl ResolvedInstallation {
         if metadata.file_type().is_symlink() || !metadata.is_file() {
             return Err("installation_manifest_invalid".into());
         }
-        let manifest_path = manifest_path.canonicalize().map_err(|source| {
+        let manifest_path = manifest_path.canonical().map_err(|source| {
             crate::host::HostError::new("installation_manifest_unavailable").with_source(source)
         })?;
         if !manifest_path.starts_with(&self.installation_root) {
@@ -250,11 +251,7 @@ fn check_install_manifest(
 
 /// This host in install-manifest names.
 fn host_install_platform() -> (&'static str, &'static str) {
-    let platform = match std::env::consts::OS {
-        "macos" => "darwin",
-        "windows" => "win32",
-        other => other,
-    };
+    let platform = butler_platform::launcher::node_platform();
     let architecture = match std::env::consts::ARCH {
         "aarch64" => "arm64",
         "x86_64" => "x64",
@@ -301,7 +298,7 @@ fn safe_manifest_path(root: &Path, relative: &str) -> Result<PathBuf, crate::hos
     {
         return Err("installation_manifest_layout_invalid".into());
     }
-    let path = root.join(relative).canonicalize().map_err(|source| {
+    let path = root.join(relative).canonical().map_err(|source| {
         crate::host::HostError::new("installation_manifest_layout_invalid").with_source(source)
     })?;
     if !path.starts_with(root) {
@@ -318,7 +315,7 @@ fn launcher_is_expected(root: &Path) -> bool {
 
 fn canonical_file(path: &Path, code: &str) -> Result<PathBuf, crate::host::HostError> {
     let resolved = path
-        .canonicalize()
+        .canonical()
         .map_err(|error| format!("{code}: {error}"))?;
     if !resolved.is_file() {
         return Err(code.to_owned().into());
@@ -328,7 +325,7 @@ fn canonical_file(path: &Path, code: &str) -> Result<PathBuf, crate::host::HostE
 
 fn canonical_dir(path: &Path, code: &str) -> Result<PathBuf, crate::host::HostError> {
     let resolved = path
-        .canonicalize()
+        .canonical()
         .map_err(|error| format!("{code}: {error}"))?;
     if !resolved.is_dir() {
         return Err(code.to_owned().into());
@@ -345,7 +342,7 @@ pub(crate) fn realpath_or_nearest(path: &Path) -> std::io::Result<PathBuf> {
     let mut current = absolute;
     let mut suffix = Vec::new();
     loop {
-        match current.canonicalize() {
+        match current.canonical() {
             Ok(real) => {
                 return Ok(suffix
                     .into_iter()
@@ -370,9 +367,10 @@ pub(crate) fn realpath_or_nearest(path: &Path) -> std::io::Result<PathBuf> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::ResolvedInstallation;
+    use butler_platform::secure_fs::Canonical as _;
 
     pub(crate) fn data_and_workspace_cannot_overlap_the_installation() {
-        let executable = std::env::current_exe().unwrap().canonicalize().unwrap();
+        let executable = std::env::current_exe().unwrap().canonical().unwrap();
         let root = executable.parent().unwrap().to_path_buf();
         let installation = ResolvedInstallation::desktop(&executable, &root, &root).unwrap();
         assert_eq!(

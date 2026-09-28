@@ -175,6 +175,16 @@ impl Launch {
             .env("BUTLER_APP_SERVER_HOST", "127.0.0.1")
             .env("BUTLER_APP_SERVER_PORT", self.port.to_string())
             .env("BUTLER_METRICS_ENABLED", "0");
+        // What a program needs to start at all (none on Unix), and the
+        // Windows temporary folder.
+        for name in butler_platform::process_control::SYSTEM_ENVIRONMENT {
+            if let Some(value) = std::env::var_os(name) {
+                command.env(name, value);
+            }
+        }
+        if !butler_platform::process_control::SYSTEM_ENVIRONMENT.is_empty() {
+            command.env("TEMP", &self.tmp).env("TMP", &self.tmp);
+        }
         for (key, value) in &self.env {
             command.env(key, value);
         }

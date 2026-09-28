@@ -319,7 +319,8 @@ pub(super) fn with_lock<T>(
     id: &str,
     action: impl FnOnce() -> Result<T, ProjectWorkPublicationError>,
 ) -> Result<T, ProjectWorkPublicationError> {
-    let canonical_root = fs::canonicalize(root).map_err(|source| io().with_source(source))?;
+    let canonical_root = butler_platform::secure_fs::canonicalize(root)
+        .map_err(|source| io().with_source(source))?;
     let logical = canonical_root
         .join("runtime/btcc-project-ledger-effects-v2/admission-locks")
         .join(id);
@@ -370,7 +371,7 @@ fn open_shard(
         }
     }
     fs::create_dir_all(&directory).map_err(|source| io().with_source(source))?;
-    if !fs::canonicalize(&directory)
+    if !butler_platform::secure_fs::canonicalize(&directory)
         .map_err(|source| io().with_source(source))?
         .starts_with(canonical_root)
     {

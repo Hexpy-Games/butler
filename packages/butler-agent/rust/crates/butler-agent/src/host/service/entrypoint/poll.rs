@@ -58,7 +58,7 @@ pub(super) async fn poll_service(
         stop,
         foreground_lease,
     } = shutdown;
-    let shutdown_flag = config.data_root.join("locks/butler-shutdown");
+    let shutdown_flag = crate::host::service::instance::shutdown_flag_path(&config.data_root);
     let (stop_maintenance, maintenance_stop) = oneshot::channel();
     let mut maintenance = JoinSet::new();
     maintenance.spawn(run_service_maintenance(

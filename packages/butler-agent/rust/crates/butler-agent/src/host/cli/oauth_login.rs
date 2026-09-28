@@ -4,6 +4,8 @@ use std::{io::Write, path::PathBuf, sync::Arc};
 
 use tokio::net::TcpListener;
 
+use butler_platform::{desktop, process_control};
+
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
 use butler_models::models::{ModelCatalog, ModelConfiguration, provider_http_client};
@@ -15,10 +17,8 @@ use crate::host::{ProcessEnvironment, ResolvedInstallation, SystemIdentity};
 pub(crate) async fn run_native_oauth_login(
     installation: ResolvedInstallation,
 ) -> Result<(), crate::host::HostError> {
-    let user_home = std::env::var_os("HOME")
-        .filter(|home| !home.is_empty())
-        .map(PathBuf::from)
-        .ok_or("native_home_unavailable")?;
+    let user_home =
+        butler_platform::user_dirs::non_empty_home_dir().ok_or("native_home_unavailable")?;
     let requested_data = std::env::var_os("BUTLER_DATA")
         .filter(|path| !path.is_empty())
         .map(PathBuf::from)
@@ -31,10 +31,8 @@ pub(crate) async fn run_native_oauth_login_for_data(
     installation: ResolvedInstallation,
     requested_data: PathBuf,
 ) -> Result<(), crate::host::HostError> {
-    let user_home = std::env::var_os("HOME")
-        .filter(|home| !home.is_empty())
-        .map(PathBuf::from)
-        .ok_or("native_home_unavailable")?;
+    let user_home =
+        butler_platform::user_dirs::non_empty_home_dir().ok_or("native_home_unavailable")?;
     let data_root = installation.validate_data_root(&requested_data)?;
     run_native_oauth_login_with_data(user_home, data_root).await
 }
@@ -43,9 +41,8 @@ async fn run_native_oauth_login_with_data(
     user_home: PathBuf,
     data_root: PathBuf,
 ) -> Result<(), crate::host::HostError> {
-    let os = nix::sys::utsname::uname().map_err(crate::host::HostError::from_error)?;
-    let mut environment =
-        ProcessEnvironment::capture(&data_root, &user_home, &os.release().to_string_lossy()).model;
+    let os = butler_platform::instance::os_release().map_err(crate::host::HostError::from_error)?;
+    let mut environment = ProcessEnvironment::capture(&data_root, &user_home, &os).model;
     let requested_profile = environment
         .butler_codex_auth_profile
         .as_ref()
@@ -180,13 +177,7 @@ fn account_label(profile: &serde_json::Value) -> &str {
 }
 
 async fn open_browser(url: &str) -> Result<bool, crate::host::HostError> {
-    let command = if cfg!(target_os = "macos") {
-        "open"
-    } else {
-        "xdg-open"
-    };
-    let Ok(mut child) = tokio::process::Command::new(command)
-        .arg(url)
+    let Ok(mut child) = tokio::process::Command::from(desktop::open_url(url))
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -207,12 +198,6 @@ async fn open_browser(url: &str) -> Result<bool, crate::host::HostError> {
     result.unwrap_or(Ok(false))
 }
 
-fn first_env(names: &[&str]) -> Option<String> {
-    names
-        .iter()
-        .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))
-}
-
 fn should_open_browser() -> bool {
     if [
         "BUTLER_CODEX_OAUTH_NO_BROWSER",
@@ -223,23 +208,17 @@ fn should_open_browser() -> bool {
     {
         return false;
     }
-    !cfg!(target_os = "linux")
-        || first_env(&["DISPLAY", "WAYLAND_DISPLAY", "WSL_DISTRO_NAME"]).is_some()
+    desktop::has_display()
 }
 
+/// Resolves at the host's first stop request (SIGTERM or SIGINT on Unix,
+/// console control events on Windows). A listener that cannot be installed
+/// never cancels.
 async fn cancellation() {
-    use tokio::signal::unix::{SignalKind, signal};
-    // A signal whose listener cannot be installed simply never cancels.
-    let term = signal(SignalKind::terminate()).ok();
-    let interrupt = signal(SignalKind::interrupt()).ok();
-    tokio::select! { () = received(term) => {}, () = received(interrupt) => {} }
-}
-
-async fn received(listener: Option<tokio::signal::unix::Signal>) {
-    match listener {
-        Some(mut listener) => {
-            listener.recv().await;
+    match process_control::shutdown_requests() {
+        Ok(mut requests) => {
+            requests.recv().await;
         }
-        None => std::future::pending().await,
+        Err(_) => std::future::pending().await,
     }
 }
