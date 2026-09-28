@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium } from "playwright";
 import { createNativeAppServer, freePort } from "../support/native-app-server.ts";
-import { FIRST_RUN_STORAGE_KEY, firstRunCompleteState } from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
+import { LEGACY_FIRST_RUN_STORAGE_KEY as FIRST_RUN_STORAGE_KEY, legacyFirstRunCompleteRecord } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 
 type Send = <T>(method: string, params?: Record<string, unknown>) => Promise<T>;
 type FontLoad = { files: number; bytes: number; family: string; pretendardLoaded: number; check: boolean };
@@ -103,7 +103,7 @@ async function webMode(): Promise<void> {
       const page = await context.newPage();
       await page.addInitScript(
         ({ key, value }) => window.localStorage.setItem(key, value),
-        { key: FIRST_RUN_STORAGE_KEY, value: JSON.stringify(firstRunCompleteState(locale)) },
+        { key: FIRST_RUN_STORAGE_KEY, value: JSON.stringify(legacyFirstRunCompleteRecord()) },
       );
       await page.goto(server.url, { waitUntil: "load" });
       await page.locator('[data-test-class~="composer-card"]').waitFor({ state: "visible" });

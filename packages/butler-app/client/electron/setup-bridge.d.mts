@@ -1,6 +1,5 @@
 export interface FirstRunSetupStatusView {
   phase: "idle" | "checking" | "ready" | "failed" | "cancelled";
-  status_label: string;
   diagnostics_available: boolean;
   error_code?: string;
 }
@@ -10,12 +9,10 @@ export interface FirstRunSetupDiagnosticsView {
   phase: FirstRunSetupStatusView["phase"];
   checks: Array<{
     id: string;
-    label: string;
     status: "pending" | "passed" | "failed" | "cancelled";
   }>;
   errors: Array<{
     code: string;
-    message: string;
     details?: unknown;
   }>;
 }

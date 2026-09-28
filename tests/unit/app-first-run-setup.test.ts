@@ -1,181 +1,79 @@
 import { expect, test } from "bun:test";
+import { detectFirstRunLanguage } from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
 import {
-  createInitialFirstRunState,
-  detectFirstRunLanguage,
-  FIRST_RUN_STORAGE_KEY,
-  firstRunCompleteState,
-  nextFirstRunState,
-  parseFirstRunState,
-  readFirstRunState,
-  writeFirstRunState,
-  type FirstRunState,
-} from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
+  FIRST_RUN_CONSENT_VERSION,
+  LEGACY_FIRST_RUN_STORAGE_KEY,
+  consentAcceptedPatch,
+  consentIsCurrent,
+  legacyMigrationPatch,
+  onboardingCompletedPatch,
+  readLegacyFirstRunCompletedAt,
+  resolveOnboardingGate,
+} from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 
-class MemoryStorage implements Pick<Storage, "getItem" | "setItem"> {
-  private readonly values = new Map<string, string>();
+class MemoryStorage implements Pick<Storage, "getItem"> {
+  constructor(private readonly values: Record<string, string> = {}) {}
 
   getItem(key: string): string | null {
-    return this.values.get(key) ?? null;
-  }
-
-  setItem(key: string, value: string): void {
-    this.values.set(key, value);
+    return this.values[key] ?? null;
   }
 }
+
+const legacyComplete = JSON.stringify({
+  schema: "butler.app.first-run.v1",
+  status: "complete",
+  language: "ko",
+  step: "model",
+  completed_at: "2026-06-01T00:00:00.000Z",
+});
 
 test("first-run language detection preselects Korean from system languages", () => {
   expect(detectFirstRunLanguage(["ko-KR", "en-US"])).toBe("ko");
   expect(detectFirstRunLanguage(["en-US"])).toBe("en");
+  expect(detectFirstRunLanguage([])).toBe("en");
 });
 
-test("first-run state machine enforces language safety install model order", () => {
-  let state = createInitialFirstRunState("ko");
-  state = nextFirstRunState(state, { type: "install_ready" });
-  expect(state.step).toBe("language");
-
-  state = nextFirstRunState(state, { type: "continue_language" });
-  expect(state.step).toBe("safety");
-
-  state = nextFirstRunState(state, { type: "accept_safety" });
-  expect(state.step).toBe("install");
-  state = nextFirstRunState(state, { type: "install_ready" });
-  expect(state.step).toBe("model");
-  expect(state.status).toBe("pending");
-
-  const completed = firstRunCompleteState(state.language);
-  expect(completed.status).toBe("complete");
-  expect(completed.connection_mode).toBe("bundled-agent");
+test("the legacy renderer flag counts only for a completed first run", () => {
+  expect(readLegacyFirstRunCompletedAt(new MemoryStorage({ [LEGACY_FIRST_RUN_STORAGE_KEY]: legacyComplete })))
+    .toBe("2026-06-01T00:00:00.000Z");
+  const pending = JSON.stringify({ schema: "butler.app.first-run.v1", status: "pending", step: "safety" });
+  expect(readLegacyFirstRunCompletedAt(new MemoryStorage({ [LEGACY_FIRST_RUN_STORAGE_KEY]: pending }))).toBeNull();
+  expect(readLegacyFirstRunCompletedAt(new MemoryStorage({ [LEGACY_FIRST_RUN_STORAGE_KEY]: "{not json" }))).toBeNull();
+  expect(readLegacyFirstRunCompletedAt(new MemoryStorage())).toBeNull();
 });
 
-test("first-run install failure can retry without completing setup", () => {
-  let state = createInitialFirstRunState("en");
-  state = nextFirstRunState(state, { type: "continue_language" });
-  state = nextFirstRunState(state, { type: "accept_safety" });
-  state = nextFirstRunState(state, { type: "begin_install" });
-  expect(state.install_status).toBe("checking");
-
-  state = nextFirstRunState(state, {
-    type: "install_failed",
-    error: "health failed",
-  });
-  expect(state).toMatchObject({
-    status: "pending",
-    step: "install",
-    install_status: "failed",
-    error_message: "health failed",
-  });
-
-  state = nextFirstRunState(state, { type: "retry_install" });
-  expect(state).toMatchObject({
-    status: "pending",
-    step: "install",
-    install_status: "checking",
-  });
-  expect(state.error_message).toBeUndefined();
+test("before the agent answers, only a legacy completion skips first run", () => {
+  expect(resolveOnboardingGate({ onboarding: null, agentLoaded: false, legacyCompletedAt: null })).toBe("first-run");
+  expect(resolveOnboardingGate({ onboarding: null, agentLoaded: false, legacyCompletedAt: "2026-06-01" })).toBe("workspace");
 });
 
-test("first-run setup cancellation and resume never skip language", () => {
-  const cancelled = nextFirstRunState(createInitialFirstRunState("ko"), {
-    type: "cancel_setup",
-  });
-  expect(cancelled).toMatchObject({
-    status: "pending",
-    step: "language",
-    install_status: "cancelled",
-  });
-
-  const resumed = parseFirstRunState({
-    schema: "butler.app.first-run.v1",
-    status: "pending",
-    language: "ko",
-    step: "install",
-    language_confirmed: true,
-    safety_accepted: true,
-    install_status: "checking",
-  }) as FirstRunState;
-  expect(resumed.step).toBe("install");
-  expect(resumed.install_status).toBe("idle");
-
-  const corrupted = parseFirstRunState({
-    schema: "butler.app.first-run.v1",
-    status: "pending",
-    language: "ko",
-    step: "model",
-    install_status: "ready",
-  }) as FirstRunState;
-  expect(corrupted.step).toBe("language");
-  expect(corrupted.language_confirmed).toBe(false);
-
-  const notReadyForModel = parseFirstRunState({
-    schema: "butler.app.first-run.v1",
-    status: "pending",
-    language: "ko",
-    step: "model",
-    language_confirmed: true,
-    safety_accepted: true,
-    install_status: "failed",
-  }) as FirstRunState;
-  expect(notReadyForModel.step).toBe("install");
-  expect(notReadyForModel.install_status).toBe("failed");
-
-  const invalidLanguage = parseFirstRunState({
-    schema: "butler.app.first-run.v1",
-    status: "pending",
-    language: "ja",
-    step: "safety",
-    language_confirmed: true,
-  }) as FirstRunState;
-  expect(invalidLanguage.step).toBe("language");
-  expect(invalidLanguage.language).toBe("en");
-  expect(invalidLanguage.language_confirmed).toBe(false);
+test("the agent's completed_at skips first run; an older consent version re-shows only the consent step", () => {
+  const current = { consent_version: FIRST_RUN_CONSENT_VERSION, accepted_at: "a", completed_at: "c" };
+  expect(resolveOnboardingGate({ onboarding: current, agentLoaded: true, legacyCompletedAt: null })).toBe("workspace");
+  expect(resolveOnboardingGate({ onboarding: { completed_at: "c" }, agentLoaded: true, legacyCompletedAt: null })).toBe("consent");
+  expect(resolveOnboardingGate({ onboarding: current, agentLoaded: true, legacyCompletedAt: null, consentVersion: FIRST_RUN_CONSENT_VERSION + 1 }))
+    .toBe("consent");
+  expect(resolveOnboardingGate({ onboarding: {}, agentLoaded: true, legacyCompletedAt: null })).toBe("first-run");
+  expect(resolveOnboardingGate({ onboarding: undefined, agentLoaded: true, legacyCompletedAt: null })).toBe("first-run");
+  // A finished first run on an agent that already recorded consent is not asked again.
+  expect(consentIsCurrent(current)).toBe(true);
+  expect(consentIsCurrent({ consent_version: null })).toBe(false);
 });
 
-test("first-run complete state requires prerequisite proof fields", () => {
-  const corruptComplete = parseFirstRunState({
-    schema: "butler.app.first-run.v1",
-    status: "complete",
-    language: "ko",
-    step: "model",
-  }) as FirstRunState;
-  expect(corruptComplete).toMatchObject({
-    status: "pending",
-    language: "ko",
-    step: "language",
+test("an upgrade migrates the legacy completion once, then the agent decides", () => {
+  expect(resolveOnboardingGate({ onboarding: {}, agentLoaded: true, legacyCompletedAt: "2026-06-01" })).toBe("consent");
+  expect(legacyMigrationPatch({ consent_version: null }, "2026-06-01")).toEqual({
+    onboarding: { consent_version: null, completed_at: "2026-06-01" },
   });
-
-  const complete = parseFirstRunState({
-    schema: "butler.app.first-run.v1",
-    status: "complete",
-    language: "ko",
-    step: "model",
-    language_confirmed: true,
-    safety_accepted: true,
-    install_status: "ready",
-    completed_at: "2026-06-12T00:00:00.000Z",
-  }) as FirstRunState;
-  expect(complete).toMatchObject({
-    status: "complete",
-    language: "ko",
-    step: "model",
-    install_status: "ready",
-  });
+  expect(legacyMigrationPatch({ completed_at: "2026-07-01" }, "2026-06-01")).toBeNull();
+  expect(legacyMigrationPatch({}, null)).toBeNull();
 });
 
-test("first-run state persists and falls back cleanly", () => {
-  const storage = new MemoryStorage();
-  const state = nextFirstRunState(createInitialFirstRunState("ko"), {
-    type: "continue_language",
+test("consent and completion patches carry the current consent version", () => {
+  expect(consentAcceptedPatch({ completed_at: "c" }, "now")).toEqual({
+    onboarding: { completed_at: "c", consent_version: FIRST_RUN_CONSENT_VERSION, accepted_at: "now" },
   });
-  writeFirstRunState(storage, state);
-  expect(storage.getItem(FIRST_RUN_STORAGE_KEY)).toContain('"step":"safety"');
-  expect(readFirstRunState(storage, ["en-US"])).toMatchObject({
-    language: "ko",
-    step: "safety",
-  });
-
-  const empty = new MemoryStorage();
-  expect(readFirstRunState(empty, ["ko-KR"])).toMatchObject({
-    language: "ko",
-    step: "language",
+  expect(onboardingCompletedPatch(undefined, "accepted", "done")).toEqual({
+    onboarding: { consent_version: FIRST_RUN_CONSENT_VERSION, accepted_at: "accepted", completed_at: "done" },
   });
 });

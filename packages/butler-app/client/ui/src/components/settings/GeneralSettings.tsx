@@ -6,6 +6,7 @@ import type { SettingsView as SettingsData } from "@/app/types.ts";
 import { SettingsPage, SettingsSection, SettingsSelect, SettingsSwitch } from "./SettingsFormComponents";
 import { SettingsSearchableSelect } from "./SettingsSearchableSelect";
 import { NativeNotificationStatusPanel } from "./NativeNotificationStatusPanel";
+import { RerunSetupField } from "./RerunSetupField";
 import { SearchBehaviorFields, SearchProviderFields } from "./SearchSettings";
 
 export function GeneralSettings() {
@@ -117,6 +118,7 @@ export function GeneralSettings() {
           checked={draft.desktop_tray_enabled}
           onChange={(desktopTrayEnabled) => update({ desktop_tray_enabled: desktopTrayEnabled }, setSettings)}
         />
+        <RerunSetupField />
       </SettingsSection>
       <SettingsSection
         id="search-provider"

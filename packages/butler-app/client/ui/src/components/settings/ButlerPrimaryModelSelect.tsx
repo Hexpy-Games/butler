@@ -9,6 +9,7 @@ import type {
   SettingsView as SettingsData,
 } from "@/app/types.ts";
 import type { SettingsUpdate } from "./settingsTypes";
+import { ProviderMark } from "./ProviderMark";
 
 interface ButlerPrimaryModelSelectProps {
   models: AppModelSummary[];
@@ -76,6 +77,7 @@ export function ButlerPrimaryModelSelect({
       options={models.map((model) => ({
         value: model.model_ref,
         label: `${model.provider_label} / ${modelDisplayName(model)} (${tokenWindowLabel(model.context_window_tokens)})`,
+        icon: <ProviderMark providerId={model.provider_id} platform={model.platform} />,
       }))}
     />
   );
