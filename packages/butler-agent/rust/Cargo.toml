@@ -68,6 +68,12 @@ apple-native-keyring-store = { version = "=1.0.2", default-features = false, fea
 zbus-secret-service-keyring-store = { version = "=1.0.1", default-features = false, features = ["crypto-rust"] }
 windows-native-keyring-store = { version = "=1.1.0", default-features = false }
 zeroize = "1.8"
+# The Developer ID signature check that turns the system store on (macOS).
+security-framework = "3.7"
+# Secret input from a terminal with echo off (`butler auth keys replace`).
+rpassword = "7.4"
+# Key fingerprints (HMAC-SHA-256 with a data-folder secret) for duplicate checks.
+hmac = "0.12"
 
 # Debug info is limited to line tables because full DWARF made macOS target
 # directories exceed 50 GB: macOS defaults to split-debuginfo = "unpacked",

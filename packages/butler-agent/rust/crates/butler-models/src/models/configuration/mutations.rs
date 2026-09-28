@@ -8,7 +8,6 @@ use serde_json::{Value, json};
 
 use super::super::catalog::{hosted_provider, normalize_display_label};
 use super::credential_admin::{CredentialDraft, CredentialError};
-use super::credentials::{CREDENTIALS_FILE, CredentialsFile};
 use super::{ModelConfiguration, array, read_object_sync};
 use crate::models::{
     CredentialView, LocalModelPlatform, LocalModelSource, ModelCatalogError, ProviderAuthMethod,
@@ -159,7 +158,7 @@ impl ModelConfiguration {
         let provider_id =
             hosted_provider(&input.provider_id).ok_or_else(|| error("Unsupported provider."))?;
         let secret = clean(&input.api_key).ok_or_else(|| error("Provider API key is required."))?;
-        let mut file = CredentialsFile::load(&root.join(CREDENTIALS_FILE))?;
+        let (_lock, mut file) = self.open_credentials(root).await.map_err(catalog_error)?;
         let records = file.records(&self.registration_catalog, self.clock.as_ref());
         let previous = input
             .credential_id
@@ -211,7 +210,7 @@ impl ModelConfiguration {
         root: &Path,
         credential_id: Option<String>,
     ) -> Result<String, ModelCatalogError> {
-        let mut file = CredentialsFile::load(&root.join(CREDENTIALS_FILE))?;
+        let (_lock, mut file) = self.open_credentials(root).await.map_err(catalog_error)?;
         if let Some(id) = credential_id {
             let records = file.records(&self.registration_catalog, self.clock.as_ref());
             let valid = records

@@ -7,9 +7,10 @@ use serde_json::Value;
 
 use super::super::{CredentialView, ModelCatalogError};
 use super::credential_admin::CredentialDraft;
-use super::credentials::{CREDENTIALS_FILE, CredentialRecord, CredentialsFile};
+use super::credentials::{CredentialRecord, SecretHome};
 use super::key_check::{ProviderKeyCheckError, provider_key};
 use super::mutations::catalog_error;
+use super::secret_store;
 use super::{ModelConfiguration, auth};
 
 /// A key saved by first-run setup.
@@ -46,19 +47,28 @@ impl ModelConfiguration {
     ) -> Result<SavedProviderKey, ProviderKeySaveError> {
         let (provider, key) = provider_key(provider_id, api_key)?;
         let _write = self.configuration_writes.acquire().await;
-        let mut file = CredentialsFile::load(&root.join(CREDENTIALS_FILE)).map_err(save_error)?;
+        let (_lock, mut file) = self
+            .open_credentials(root)
+            .await
+            .map_err(|error| save_error(catalog_error(error)))?;
         let saved = file.records(&self.registration_catalog, self.clock.as_ref());
-        for record in saved.iter().filter(|record| record.provider_id == provider) {
-            let same = self
-                .credential_secret(root, record)
-                .await
-                .is_ok_and(|secret| secret.expose() == key);
-            if same {
-                return Ok(SavedProviderKey {
-                    credential: record.view(),
-                    created: false,
-                });
-            }
+        // Compared by fingerprint (or, before its move, the plain-text key):
+        // no store is read, so no store can ask the user for access.
+        let fingerprint = secret_store::fingerprint(root, &provider, key);
+        let existing = saved.iter().find(|record| {
+            record.provider_id == provider
+                && match &record.home {
+                    SecretHome::Plaintext(secret) => secret.expose() == key,
+                    SecretHome::Store(_) => {
+                        fingerprint.is_some() && record.fingerprint == fingerprint
+                    }
+                }
+        });
+        if let Some(existing) = existing {
+            return Ok(SavedProviderKey {
+                credential: existing.view(),
+                created: false,
+            });
         }
         let views: Vec<CredentialView> = saved.iter().map(CredentialRecord::view).collect();
         let draft = CredentialDraft {

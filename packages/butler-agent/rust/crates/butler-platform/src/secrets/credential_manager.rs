@@ -13,3 +13,9 @@ pub(super) fn open() -> Result<Arc<keyring_core::CredentialStore>, SecretError> 
         windows_native_keyring_store::Store::new().map_err(SecretError::Unavailable)?;
     Ok(store)
 }
+
+/// Windows has no Developer ID (Authenticode is not checked yet): the system
+/// store is turned on by configuration only.
+pub(super) fn developer_id_signed() -> bool {
+    false
+}

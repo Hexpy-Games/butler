@@ -24,6 +24,9 @@ serde.workspace = true
 serde_json.workspace = true
 ryu-js.workspace = true
 sha2.workspace = true
+# Key fingerprints and wiped key buffers (#217).
+hmac.workspace = true
+zeroize.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 thiserror.workspace = true

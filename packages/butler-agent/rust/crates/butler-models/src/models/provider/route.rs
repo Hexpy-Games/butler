@@ -76,12 +76,12 @@ pub(in crate::models::provider) fn authorize(
     match auth {
         ProviderAuth::None => request,
         ProviderAuth::ApiKey(value) if matches!(carrier, Carrier::Anthropic) => request
-            .header("x-api-key", value)
+            .header("x-api-key", value.as_str())
             .header("anthropic-version", "2023-06-01"),
         ProviderAuth::ApiKey(value) if provider == "google" => {
-            request.header("x-goog-api-key", value)
+            request.header("x-goog-api-key", value.as_str())
         }
-        ProviderAuth::ApiKey(value) => request.bearer_auth(value),
+        ProviderAuth::ApiKey(value) => request.bearer_auth(value.as_str()),
         ProviderAuth::Codex {
             authorization,
             account_id,

@@ -33,6 +33,9 @@ const STORE: &str = "auth/credential-store.json";
 const KIMI_KEY: &str = "sk-e2e-kimi-legacy-0005";
 const OPENAI_KEY: &str = "sk-e2e-openai-legacy-0006";
 const LATE_KEY: &str = "sk-e2e-late-legacy-0007";
+const SHADOWED_KEY: &str = "sk-e2e-shadowed-0012";
+/// The service keys are kept under in the owner-only file.
+const SERVICE: &str = "com.hexpy.butler.model-credential";
 
 fn read_json(data: &Path, relative: &str) -> Value {
     serde_json::from_slice(&fs::read(data.join(relative)).unwrap()).unwrap()
@@ -47,7 +50,7 @@ fn stored(data: &Path, account: &str) -> Option<String> {
     read_json(data, STORE)["secrets"]
         .as_array()?
         .iter()
-        .find(|entry| entry["service"] == "Butler" && entry["account"] == account)
+        .find(|entry| entry["service"] == SERVICE && entry["account"] == account)
         .and_then(|entry| entry["secret"].as_str().map(str::to_owned))
 }
 
@@ -86,9 +89,10 @@ async fn turn_authorization(s: &Scenario, chat: &FakeServer) -> Result<String, H
 /// store when the agent starts. A move that fails leaves every key in place
 /// (the file only its owner's), the keys keep working, and the next start
 /// moves them: each is written to the store and read back before the
-/// credentials file is rewritten without it. Entries this version cannot
-/// use are kept; running the move again changes nothing; `butler doctor`
-/// reports keys still in plain text.
+/// credentials file is rewritten without it. A later entry of the same id
+/// (never used) is dropped with its plain-text key; entries this version
+/// cannot use are kept; running the move again changes nothing; `butler
+/// doctor` reports keys still in plain text, the store and why.
 #[tokio::test]
 async fn cred_01_plaintext_keys_move_to_the_store_at_start() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -109,7 +113,9 @@ async fn cred_01_plaintext_keys_move_to_the_store_at_start() -> Result<(), Harne
              "created_at": "2026-01-01T00:00:00.000Z", "updated_at": "2026-01-01T00:00:00.000Z"},
             {"id": "cred_openai", "provider_id": "openai", "auth_type": "api_key",
              "label": "openai", "secret": OPENAI_KEY},
-            unusable
+            unusable,
+            {"id": "cred_kimi", "provider_id": "kimi", "auth_type": "api_key",
+             "label": "old kimi", "secret": SHADOWED_KEY}
         ]}))?,
     )?;
     // A directory where the store file goes: every write to the store fails.
@@ -120,6 +126,11 @@ async fn cred_01_plaintext_keys_move_to_the_store_at_start() -> Result<(), Harne
     assert_eq!(kept["credentials"][0]["secret"], KIMI_KEY, "{kept}");
     assert_eq!(kept["credentials"][1]["secret"], OPENAI_KEY, "{kept}");
     assert_eq!(owner_only(&data, CREDENTIALS), Some(true));
+    assert_eq!(kept["credentials"].as_array().unwrap().len(), 3, "{kept}");
+    assert!(
+        !read_all(&data).contains(SHADOWED_KEY),
+        "a shadowed key stayed"
+    );
     let list = listed(&s).await?;
     assert_eq!(list["store"]["legacy_plaintext"], 2, "{list}");
     assert_eq!(
@@ -127,11 +138,15 @@ async fn cred_01_plaintext_keys_move_to_the_store_at_start() -> Result<(), Harne
         "{list}"
     );
     let log = read_all(&s.sandbox.logs);
-    assert!(log.contains("[native-credentials] migration backend=fallback_file moved=0 failed=2"));
+    assert!(log.contains(
+        "[native-credentials] migration backend=fallback_file reason=test_override moved=0 failed=2 dropped_duplicates=1"
+    ));
     assert!(!log.contains(KIMI_KEY) && !log.contains(OPENAI_KEY));
     let check = doctor(&s)?;
     assert_eq!(check["status"], "warn", "{check}");
     assert_eq!(check["evidence"]["legacyPlaintext"], 2, "{check}");
+    assert_eq!(check["evidence"]["store"], "file", "{check}");
+    assert_eq!(check["evidence"]["reason"], "test_override", "{check}");
 
     let registered =
         s.gw.post(
@@ -179,7 +194,7 @@ async fn cred_01_plaintext_keys_move_to_the_store_at_start() -> Result<(), Harne
     assert_eq!(owner_only(&data, CREDENTIALS), Some(true));
     let list = listed(&s).await?;
     assert_eq!(list["store"]["backend"], "fallback_file", "{list}");
-    assert_eq!(list["store"]["requested"], "file", "{list}");
+    assert_eq!(list["store"]["reason"], "test_override", "{list}");
     assert_eq!(list["store"]["legacy_plaintext"], 0, "{list}");
     assert_eq!(list["credentials"][0]["storage"], "fallback_file", "{list}");
     assert_eq!(

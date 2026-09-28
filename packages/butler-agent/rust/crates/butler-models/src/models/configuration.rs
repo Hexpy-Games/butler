@@ -4,6 +4,7 @@ mod admission;
 mod auth;
 mod credential_admin;
 mod credential_migration;
+mod credential_vault;
 mod credentials;
 mod discovery;
 mod environment;
@@ -17,6 +18,7 @@ mod read;
 mod secret_store;
 mod settings;
 mod setup;
+mod store_policy;
 
 pub(crate) use auth::AuthError as ModelAuthError;
 pub use auth::OpenAiAuthProfile;
@@ -37,6 +39,9 @@ pub use mutations::{HostedModelMutation, LocalModelMutation, ProviderCredentialM
 pub use secret_store::CredentialStoreError;
 pub use settings::SettingsError;
 pub use setup::{ProviderKeySaveError, SavedProviderKey};
+pub use store_policy::{
+    CredentialStorePolicy, FileOverride, SecretStoreFacts, StoreReason, credential_store_policy,
+};
 
 use std::{
     collections::HashMap,
@@ -96,11 +101,12 @@ pub struct ModelConfigurationEnvironment {
     pub os_release: Option<String>,
     pub os_arch: Option<String>,
     pub hosted_provider_base_urls: HashMap<String, String>,
-    /// Where API keys are kept (`BUTLER_SECRET_STORE`). The host resolves it
-    /// from the environment (the system store unless `file`); the `Default`
-    /// here is the owner-only file, so a test never touches the user's
-    /// credential store.
-    pub secret_store: SecretStoreMode,
+    /// The host facts that pick where API keys are kept (see
+    /// `store_policy`): the production host captures them
+    /// ([`SecretStoreFacts::capture`]); the `Default` (unsigned, no
+    /// override) keeps keys in the owner-only file, so a test never touches
+    /// the user's credential store.
+    pub secret_store: SecretStoreFacts,
 }
 
 pub struct ModelConfiguration {

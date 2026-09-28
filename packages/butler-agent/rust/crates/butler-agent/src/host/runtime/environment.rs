@@ -8,7 +8,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 use butler_memory::cognition::CognitionPathEnvironment;
-use butler_models::models::{ModelConfigurationEnvironment, SecretStoreMode};
+use butler_models::models::{ModelConfigurationEnvironment, SecretStoreFacts};
 use butler_runtime::context::{ContextBudgetEnvironment, PromptEnvironment};
 
 pub(crate) struct ProcessEnvironment {
@@ -24,7 +24,7 @@ pub(crate) struct ProcessEnvironment {
 impl ProcessEnvironment {
     /// Capture once at process composition. Paths and OS release are host facts,
     /// supplied by the caller rather than rediscovered by each domain owner.
-    pub(crate) fn capture(_data_root: &Path, user_home: &Path, os_release: &str) -> Self {
+    pub(crate) fn capture(data_root: &Path, user_home: &Path, os_release: &str) -> Self {
         let model = ModelConfigurationEnvironment {
             openai_model: optional("BUTLER_OPENAI_MODEL"),
             openai_reasoning_effort: optional("BUTLER_OPENAI_REASONING_EFFORT"),
@@ -74,8 +74,8 @@ impl ProcessEnvironment {
                 other => other.to_owned(),
             }),
             hosted_provider_base_urls: hosted_provider_base_urls(),
-            // The system credential store unless BUTLER_SECRET_STORE=file.
-            secret_store: SecretStoreMode::from_environment(),
+            // Owner-only file unless Developer ID signed or configured (#217).
+            secret_store: SecretStoreFacts::capture(data_root, Some(&user_home.join(".butler"))),
         };
         let retry = model
             .provider_retry_base_delay_ms

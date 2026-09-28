@@ -1,20 +1,27 @@
-//! Secrets in the operating system's credential store (#217): the macOS
-//! Keychain, the Secret Service on Linux (over D-Bus), the Windows Credential
-//! Manager. Where the system store cannot be used (no D-Bus session or no
-//! Secret Service on a headless Linux, or `BUTLER_SECRET_STORE=file`), an
-//! owner-only file in the data folder holds the secrets instead
-//! ([`SecretBackend::FallbackFile`]); callers report that backend by name.
+//! Secrets in a credential store (#217): the operating system's (the macOS
+//! Keychain, the Secret Service on Linux over D-Bus, the Windows Credential
+//! Manager) or an owner-only file in the data folder
+//! ([`SecretBackend::FallbackFile`]). Which one a caller uses is its policy;
+//! this module supplies the stores, the facts that policy needs
+//! ([`developer_id_signed`]) and the pieces around them: a cross-process
+//! [`ChangeLock`] for read-modify-write cycles and [`read_secret_input`] for
+//! typing a secret without echo.
 //!
-//! A secret is addressed by a [`SecretKey`]: a service (`Butler`) and an
-//! account that names what the secret is for. Every operation is blocking;
-//! async callers run it on a blocking thread. Secrets come back as
-//! [`SecretText`], which is wiped from memory when dropped and never prints.
+//! A secret is addressed by a [`SecretKey`]: a service and an account. Every
+//! operation is blocking; async callers run it on a blocking thread. Secrets
+//! come back as [`SecretText`], which is wiped from memory when dropped and
+//! never prints.
 
 use std::fmt;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::fs::{File, OpenOptions, TryLockError};
+use std::io::{self, BufRead, IsTerminal};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
 
 use zeroize::Zeroizing;
+
+use crate::secure_fs;
 
 mod file;
 #[cfg(target_os = "macos")]
@@ -30,38 +37,35 @@ mod credential_manager;
 #[cfg(windows)]
 use credential_manager as sys;
 
-/// The environment variable that selects the store: `file` selects the
-/// owner-only file ([`SecretStoreMode::File`]); unset or anything else, the
-/// system store.
+/// The environment variable a test harness sets to `file` so a data folder
+/// other than the user's own never uses the system store.
 pub const STORE_VARIABLE: &str = "BUTLER_SECRET_STORE";
 
-/// The service every Butler secret is stored under.
-pub const SERVICE: &str = "Butler";
+/// The service of the lookup [`SecretStore::system`] probes the store with.
+const PROBE_SERVICE: &str = "com.hexpy.butler.store-probe";
 
-/// Which store a process asked for.
+/// The system store of this operating system.
+pub const SYSTEM_BACKEND: SecretBackend = sys::BACKEND;
+
+/// Which store a caller uses.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SecretStoreMode {
-    /// The operating system's credential store, else the owner-only file.
-    #[default]
+    /// The operating system's credential store.
     System,
-    /// The owner-only file only: tests and end-to-end runs, which must never
-    /// touch the user's credential store.
+    /// The owner-only file in the data folder. The default, so nothing
+    /// touches the user's credential store unless a policy turns it on.
+    #[default]
     File,
 }
 
 impl SecretStoreMode {
-    /// The mode a [`STORE_VARIABLE`] value selects: `file` selects
-    /// [`Self::File`], anything else [`Self::System`].
-    pub fn from_setting(value: Option<&str>) -> Self {
-        match value.map(str::trim) {
-            Some(value) if value.eq_ignore_ascii_case("file") => Self::File,
-            _ => Self::System,
+    /// `system` or `file` (either case, surrounding whitespace ignored).
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "system" => Some(Self::System),
+            "file" => Some(Self::File),
+            _ => None,
         }
-    }
-
-    /// The mode this process's [`STORE_VARIABLE`] selects.
-    pub fn from_environment() -> Self {
-        Self::from_setting(std::env::var(STORE_VARIABLE).ok().as_deref())
     }
 
     /// `system` or `file`.
@@ -116,6 +120,15 @@ impl SecretBackend {
     }
 }
 
+/// Whether the running program carries a valid Developer ID signature
+/// (macOS; always false elsewhere). Checked once per process. The system
+/// store trusts a program by its signature, so an unsigned or ad-hoc signed
+/// build would be asked for access again after every update.
+pub fn developer_id_signed() -> bool {
+    static SIGNED: OnceLock<bool> = OnceLock::new();
+    *SIGNED.get_or_init(sys::developer_id_signed)
+}
+
 /// What a secret is stored under: a service and an account, both non-empty
 /// and free of control characters.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -165,6 +178,11 @@ impl SecretText {
     pub fn expose(&self) -> &str {
         &self.0
     }
+
+    /// The secret, still wiped when its last owner drops it.
+    pub fn into_zeroizing(self) -> Zeroizing<String> {
+        self.0
+    }
 }
 
 impl fmt::Debug for SecretText {
@@ -191,7 +209,7 @@ pub enum SecretError {
     NotText,
     /// The owner-only secret file could not be read or written.
     #[error("the secret file could not be read or written")]
-    File(#[source] std::io::Error),
+    File(#[source] io::Error),
     /// The owner-only secret file is not JSON (the error names a position,
     /// never the text there).
     #[error("the secret file is not valid JSON")]
@@ -246,26 +264,24 @@ impl fmt::Debug for SecretStore {
 
 impl SecretStore {
     /// Opens this system's credential store and checks that it answers (a
-    /// lookup of a key that does not exist). May block, and on a desktop may
-    /// ask the user to unlock the store.
+    /// lookup of a key that does not exist). A store that cannot be reached
+    /// is [`SecretError::Unavailable`]; one that refuses the lookup keeps
+    /// its [`SecretError::AccessDenied`]. May block, and on a desktop may ask
+    /// the user to unlock the store.
     pub fn system() -> Result<Self, SecretError> {
         let store = sys::open()?;
         let opened = Self {
             backend: sys::BACKEND,
             inner: Inner::System(store),
         };
-        let probe = SecretKey::new(SERVICE, "availability-probe")?;
-        match opened.get(&probe) {
-            Ok(_) => Ok(opened),
-            Err(SecretError::AccessDenied(source) | SecretError::Store(source)) => {
-                Err(SecretError::Unavailable(source))
-            }
-            Err(error) => Err(error),
-        }
+        opened.get(&SecretKey::new(PROBE_SERVICE, "availability-probe")?)?;
+        Ok(opened)
     }
 
     /// The owner-only secret file at `path` (created on the first write,
-    /// with its missing parent directories owner-only too).
+    /// with its missing parent directories owner-only too). Changes hold a
+    /// [`ChangeLock`] on `<path>.lock`, so processes sharing the file never
+    /// drop each other's changes.
     pub fn file(path: PathBuf) -> Self {
         Self {
             backend: SecretBackend::FallbackFile,
@@ -332,4 +348,59 @@ fn store_error(error: keyring_core::Error) -> SecretError {
         }
         other => SecretError::Store(other),
     }
+}
+
+/// An exclusive advisory lock on a lock file, shared by every process that
+/// takes it: a read-modify-write cycle of a file holds it so a concurrent
+/// cycle (the service and a CLI command, say) cannot drop its change.
+/// Released when dropped.
+#[derive(Debug)]
+pub struct ChangeLock {
+    _file: File,
+}
+
+impl ChangeLock {
+    /// Waits up to `timeout` for the lock on `path`, creating the lock file
+    /// (and its missing parents) owner-only.
+    pub fn acquire(path: &Path, timeout: Duration) -> io::Result<Self> {
+        if let Some(parent) = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+        {
+            secure_fs::create_private_dir_all(parent)?;
+        }
+        let mut options = OpenOptions::new();
+        options.read(true).write(true).create(true).truncate(false);
+        let _ = secure_fs::owner_only(&mut options);
+        let file = options.open(path)?;
+        let deadline = Instant::now() + timeout;
+        loop {
+            match file.try_lock() {
+                Ok(()) => return Ok(Self { _file: file }),
+                Err(TryLockError::WouldBlock) if Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(TryLockError::WouldBlock) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        "another process holds the change lock",
+                    ));
+                }
+                Err(TryLockError::Error(error)) => return Err(error),
+            }
+        }
+    }
+}
+
+/// Reads one line of secret input: from the terminal with echo off (after
+/// writing `prompt` to it) when standard input is a terminal, else from
+/// standard input. The line ending is dropped.
+pub fn read_secret_input(prompt: &str) -> io::Result<SecretText> {
+    if io::stdin().is_terminal() {
+        return rpassword::prompt_password(prompt).map(SecretText::new);
+    }
+    let mut line = Zeroizing::new(String::new());
+    io::stdin().lock().read_line(&mut line)?;
+    let trimmed = line.trim_end_matches(['\r', '\n']);
+    Ok(SecretText::new(trimmed.to_owned()))
 }

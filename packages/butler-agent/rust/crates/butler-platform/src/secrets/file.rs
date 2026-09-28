@@ -1,25 +1,26 @@
 //! The owner-only secret file: `{"version":1,"secrets":[{"service","account",
 //! "secret"}]}`, replaced atomically on every change (see
 //! [`secure_fs::replace_private`]) and opened without following a symbolic
-//! link. It holds secrets where the system store cannot, so it is only as
-//! private as the data folder's owner-only permissions make it.
+//! link. Every change holds a [`ChangeLock`] on `<file>.lock`, so two
+//! processes (or threads) sharing the file never drop each other's change.
+//! It is only as private as the data folder's owner-only permissions make
+//! it.
 
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use std::sync::{Mutex, PoisonError};
+use std::time::Duration;
 
 use serde_json::{Value, json};
 use zeroize::Zeroizing;
 
-use super::{SecretError, SecretKey, SecretText};
+use super::{ChangeLock, SecretError, SecretKey, SecretText};
 use crate::secure_fs;
 
 /// The file format this module reads and writes.
 const VERSION: u64 = 1;
 
-/// Serializes the read-modify-write cycles of every secret file in this
-/// process, so two changes cannot drop each other.
-static CHANGES: Mutex<()> = Mutex::new(());
+/// How long a change waits for another process's change to finish.
+const CHANGE_WAIT: Duration = Duration::from_secs(10);
 
 pub(super) struct FileSecrets {
     path: PathBuf,
@@ -51,7 +52,7 @@ impl FileSecrets {
     }
 
     pub(super) fn set(&self, key: &SecretKey, secret: &str) -> Result<(), SecretError> {
-        let _change = CHANGES.lock().unwrap_or_else(PoisonError::into_inner);
+        let _change = self.lock()?;
         let mut entries = self.read()?;
         entries.retain(|entry| !entry.matches(key));
         entries.push(Entry {
@@ -63,7 +64,7 @@ impl FileSecrets {
     }
 
     pub(super) fn delete(&self, key: &SecretKey) -> Result<bool, SecretError> {
-        let _change = CHANGES.lock().unwrap_or_else(PoisonError::into_inner);
+        let _change = self.lock()?;
         let mut entries = self.read()?;
         let before = entries.len();
         entries.retain(|entry| !entry.matches(key));
@@ -72,6 +73,13 @@ impl FileSecrets {
         }
         self.write(&entries)?;
         Ok(true)
+    }
+
+    /// The change lock of this file.
+    fn lock(&self) -> Result<ChangeLock, SecretError> {
+        let mut name = self.path.clone().into_os_string();
+        name.push(".lock");
+        ChangeLock::acquire(&PathBuf::from(name), CHANGE_WAIT).map_err(SecretError::File)
     }
 
     /// Every entry; none when the file does not exist yet.

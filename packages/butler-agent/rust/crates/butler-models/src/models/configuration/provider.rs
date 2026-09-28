@@ -231,7 +231,7 @@ impl ModelConfiguration {
                             "The saved API key could not be read from the credential store.",
                         )
                     })?;
-                return Ok(ProviderAuth::ApiKey(secret.expose().to_owned()));
+                return Ok(ProviderAuth::ApiKey(secret.into_zeroizing()));
             }
             if config.provider_id != "openai" {
                 return Err(provider_error_for(
@@ -245,7 +245,7 @@ impl ModelConfiguration {
         if provider == "local" {
             return Ok(read
                 .local_credential_secret(model_ref)
-                .map(|secret| ProviderAuth::ApiKey(secret.to_owned()))
+                .map(|secret| ProviderAuth::ApiKey(zeroize::Zeroizing::new(secret.to_owned())))
                 .unwrap_or(ProviderAuth::None));
         }
         if provider != "openai" {

@@ -15,10 +15,11 @@ pub enum ProviderAuthMode {
     CodexOauth,
 }
 
-/// Request-local credential lease. It is neither serializable nor debuggable.
+/// Request-local credential lease. It is neither serializable nor debuggable;
+/// an API key is wiped from memory when the lease is dropped.
 pub enum ProviderAuth {
     None,
-    ApiKey(String),
+    ApiKey(zeroize::Zeroizing<String>),
     Codex {
         mode: ProviderAuthMode,
         authorization: String,

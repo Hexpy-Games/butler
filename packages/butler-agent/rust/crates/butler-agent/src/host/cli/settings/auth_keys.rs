@@ -3,8 +3,9 @@
 //! - `butler auth keys [list]`: the keys, masked, with their store and the
 //!   models that use them.
 //! - `butler auth keys replace <name> [--verify]`: replaces a key. The new
-//!   key is read from standard input, never from the command line (where
-//!   other processes could see it).
+//!   key is typed at the terminal without echo, or read as one line from
+//!   piped standard input; never from the command line (where other
+//!   processes could see it).
 //! - `butler auth keys delete <name> --yes [--force]`: deletes a key. A key
 //!   the default model uses is refused; `--force` also unregisters other
 //!   models that use it.
@@ -128,19 +129,17 @@ async fn replace(
     verify: bool,
     data_root: &Path,
 ) -> Result<(serde_json::Value, String), CliError> {
-    let key = tokio::task::spawn_blocking(|| {
-        let mut line = String::new();
-        std::io::stdin().read_line(&mut line).map(|_| line)
-    })
-    .await
-    .map_err(|error| {
-        CliError::failed("auth_keys_failed", "standard input was not read").with_source(error)
-    })?
-    .map_err(|error| {
-        CliError::failed("auth_keys_failed", "standard input was not read").with_source(error)
-    })?;
+    // From a terminal the key is typed without echo; piped, it is one line.
+    let key = tokio::task::spawn_blocking(|| models::read_secret_input("New API key: "))
+        .await
+        .map_err(|error| {
+            CliError::failed("auth_keys_failed", "the key was not read").with_source(error)
+        })?
+        .map_err(|error| {
+            CliError::failed("auth_keys_failed", "the key was not read").with_source(error)
+        })?;
     let credential = configuration
-        .replace_provider_credential(name, &key, verify, data_root)
+        .replace_provider_credential(name, key.expose(), verify, data_root)
         .await
         .map_err(key_error)?;
     let human = format!(

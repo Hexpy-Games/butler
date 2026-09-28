@@ -54,7 +54,7 @@ impl ProviderRequestConfigPort for Config {
                         originator: "butler".into(),
                     }
                 } else {
-                    ProviderAuth::ApiKey("test-only".into())
+                    ProviderAuth::ApiKey(String::from("test-only").into())
                 },
                 policy: ProviderRoundPolicy {
                     total: Duration::from_secs(2),
