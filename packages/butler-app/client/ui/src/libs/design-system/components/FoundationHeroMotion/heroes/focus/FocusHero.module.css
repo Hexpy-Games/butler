@@ -124,6 +124,22 @@
   top: calc(100% + var(--space-md));
 }
 
+.closeTile {
+  display: inline-grid;
+  justify-items: center;
+  row-gap: var(--space-md);
+}
+
+.noteFlow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--font-size-1);
+  white-space: nowrap;
+}
+
 .swatch {
   inline-size: var(--space-sm);
   block-size: var(--space-sm);

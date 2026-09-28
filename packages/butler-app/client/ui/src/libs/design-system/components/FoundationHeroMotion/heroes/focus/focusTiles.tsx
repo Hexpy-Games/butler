@@ -37,13 +37,13 @@ export function RowTile({ copy }: { copy: FocusCopy }) {
   );
 }
 
-/** Finale: the ring close-up. */
+/** Finale: the ring close-up (the notes in flow, so the tile's padding always holds them). */
 export function CloseTile({ copy }: { copy: FocusCopy }) {
   return (
-    <span className={s.closeTarget} data-still="">
+    <span className={s.closeTile} data-still="">
+      <span className={s.noteFlow}>--focus-ring-width 2</span>
       <span className={s.ringOn}><Button text={copy.continue} /></span>
-      <span className={s.note} data-place="top">--focus-ring-width 2</span>
-      <span className={s.note} data-place="bottom"><span className={s.swatch} />--focus-ring-color</span>
+      <span className={s.noteFlow}><span className={s.swatch} />--focus-ring-color</span>
     </span>
   );
 }
