@@ -938,7 +938,7 @@ export interface AppCopy {
     };
     sectionState: { loading: string; error: string; retry: string; empty: string };
     updateComponents: { app: string; service: string };
-    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview", string>;
+    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview", string>;
     pageSectionDescriptions: Record<"notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     modelsAdvanced: { title: string; contents: string };
@@ -1393,6 +1393,30 @@ export interface AppCopy {
         delete: string;
         oauthLogin: string;
       };
+    };
+    /** Settings > Models saved API keys (#217). */
+    savedKeys: {
+      empty: string;
+      /** Registered models that use the key; 0 reads as not in use. */
+      usedBy: (count: number) => string;
+      /** Where the key is kept: this computer's data folder, or the system store. */
+      storage: { local: string; keychain: string; secretService: string; credentialManager: string };
+      replace: string;
+      replaceLabel: (name: string) => string;
+      newKey: string;
+      save: string;
+      cancel: string;
+      checking: string;
+      replacedStatus: (name: string) => string;
+      delete: string;
+      deleteLabel: (name: string) => string;
+      /** Tooltip on Delete for the default model's key. */
+      deleteDefaultHint: string;
+      deleteConfirm: (name: string) => string;
+      /** Deleting also removes the models that use the key. */
+      deleteConfirmModels: (name: string, count: number) => string;
+      deletedStatus: (name: string) => string;
+      errors: { delete: string };
     };
   };
   titlebar: {
