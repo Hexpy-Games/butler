@@ -521,6 +521,18 @@ const butlerApp = Object.freeze({
     method: "POST",
     body: JSON.stringify(request ?? {}),
   }),
+  // #217 saved keys, with the same envelopes (invalid_key, credential_in_use, ...).
+  listCredentials: () => requestBridgeResult("/credentials"),
+  replaceCredential: ({ name, request } = {}) =>
+    requestBridgeResult(`/credentials/${encodeURIComponent(name ?? "")}`, {
+      method: "PATCH",
+      body: JSON.stringify(request ?? {}),
+    }),
+  deleteCredential: ({ name, force } = {}) =>
+    requestBridgeResult(
+      `/credentials/${encodeURIComponent(name ?? "")}${force === true ? "?force=true" : ""}`,
+      { method: "DELETE" },
+    ),
   cancelSetupOAuth: ({ flowId } = {}) =>
     requestBridgeResult(`/setup/oauth/${encodeURIComponent(flowId ?? "")}/cancel`, {
       method: "POST",
