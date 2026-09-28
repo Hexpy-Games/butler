@@ -25,3 +25,27 @@ libproc.workspace = true
 
 [lints]
 workspace = true
+
+# `secrets` (#217): the OS credential store through keyring-core, one store
+# per OS. Kept as sub-tables here so the per-OS dependency lists above stay
+# untouched.
+[dependencies.keyring-core]
+workspace = true
+
+[dependencies.zeroize]
+workspace = true
+
+[dependencies.rpassword]
+workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies.apple-native-keyring-store]
+workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies.security-framework]
+workspace = true
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies.zbus-secret-service-keyring-store]
+workspace = true
+
+[target.'cfg(windows)'.dependencies.windows-native-keyring-store]
+workspace = true

@@ -1,5 +1,6 @@
 //! One-shot settings commands; read paths do not initialize DATA or start runtime.
 
+mod auth_keys;
 mod auth_model;
 mod config;
 mod config_commands;
@@ -41,6 +42,7 @@ enum Command {
     AuthStatus,
     AuthLogin,
     AuthLogout,
+    AuthKeys,
     ModelList,
     ModelSet,
 }
@@ -59,6 +61,7 @@ impl Command {
                 "status" => Some(Self::AuthStatus),
                 "login" => Some(Self::AuthLogin),
                 "logout" => Some(Self::AuthLogout),
+                "keys" => Some(Self::AuthKeys),
                 _ => None,
             },
             [family, action, ..] if family == "model" => match action.as_str() {
@@ -79,6 +82,7 @@ impl Command {
             Self::AuthStatus => "butler auth status",
             Self::AuthLogin => "butler auth login",
             Self::AuthLogout => "butler auth logout",
+            Self::AuthKeys => "butler auth keys",
             Self::ModelList => "butler model list",
             Self::ModelSet => "butler model set",
         }
@@ -163,6 +167,7 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
         Command::AuthLogout => {
             auth_model::auth_logout(&options, command, &data_root, &installation).await
         }
+        Command::AuthKeys => auth_keys::run(&options, command, &data_root, &installation).await,
         Command::ModelList => auth_model::model_list(&options, command),
         Command::ModelSet => {
             auth_model::model_set(&options, command, &data_root, &installation).await

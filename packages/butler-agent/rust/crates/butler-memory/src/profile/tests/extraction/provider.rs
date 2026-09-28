@@ -30,7 +30,7 @@ impl ProviderRequestConfigPort for Config {
                 wire_model: self.metadata.model_id.clone(),
                 endpoint: self.endpoint.clone(),
                 api_shape: self.metadata.hosted_api_shape,
-                auth: ProviderAuth::ApiKey("test-only".into()),
+                auth: ProviderAuth::ApiKey(String::from("test-only").into()),
                 policy: ProviderRoundPolicy {
                     total: Duration::from_secs(2),
                     idle: Some(Duration::from_secs(1)),

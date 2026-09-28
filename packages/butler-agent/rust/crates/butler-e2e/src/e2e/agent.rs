@@ -174,7 +174,10 @@ impl Launch {
             .env("BUTLER_DATA", &self.data)
             .env("BUTLER_APP_SERVER_HOST", "127.0.0.1")
             .env("BUTLER_APP_SERVER_PORT", self.port.to_string())
-            .env("BUTLER_METRICS_ENABLED", "0");
+            .env("BUTLER_METRICS_ENABLED", "0")
+            // API keys go to the owner-only file in the data dir: a scenario
+            // never touches the machine's credential store (#217).
+            .env("BUTLER_SECRET_STORE", "file");
         for (key, value) in &self.env {
             command.env(key, value);
         }

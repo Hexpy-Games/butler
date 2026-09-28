@@ -58,8 +58,8 @@ pub use provider::{
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use catalog::model_identity_key;
 pub use catalog::{
-    ApiKeyBilling, CredentialView, HostedApiShape, ImageLimitField, ImageLimitSources,
-    ImageProbeEvidence, LocalModelConfig, LocalModelPlatform, LocalModelSource,
+    ApiKeyBilling, CredentialStorage, CredentialView, HostedApiShape, ImageLimitField,
+    ImageLimitSources, ImageProbeEvidence, LocalModelConfig, LocalModelPlatform, LocalModelSource,
     ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelPreset, ModelPricing,
     ModelProviderMetadata, ModelTier, NextPrices, ParsedModelRef, ParsedModelRefSource,
     PromptPriceTier, ProviderAuthMethod, ProviderPresets, ReasoningEffort,
@@ -76,6 +76,15 @@ use butler_core::locale::LocaleCollation;
 use catalog::StaticCatalog;
 use tokenizer::TokenizerOwner;
 
+/// Secret input for key commands: echo off at a terminal (#217).
+pub use butler_platform::secrets::read_secret_input;
+pub use configuration::{
+    CredentialError, CredentialFileSummary, CredentialList, CredentialListItem,
+    CredentialMigrationFailure, CredentialMigrationReport, CredentialStoreError,
+    CredentialStorePolicy, CredentialStoreView, DeletedCredential, FileOverride, SecretBackend,
+    SecretStoreFacts, SecretStoreMode, StoreReason, credential_file_summary,
+    credential_store_policy,
+};
 pub use configuration::{
     DiscoveredLocalModel, HostedModelMutation, LocalModelMutation, McpModelTarget,
     ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,

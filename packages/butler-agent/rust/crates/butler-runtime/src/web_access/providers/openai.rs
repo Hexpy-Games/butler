@@ -21,9 +21,9 @@ pub(super) struct OpenAIWebSearchProvider {
 }
 
 impl OpenAIWebSearchProvider {
-    pub(super) fn new(api_key: String, model: Option<String>, api_base: Option<String>) -> Self {
+    pub(super) fn new(api_key: &str, model: Option<String>, api_base: Option<String>) -> Self {
         Self {
-            api_key,
+            api_key: api_key.to_owned(),
             model,
             api_base,
         }

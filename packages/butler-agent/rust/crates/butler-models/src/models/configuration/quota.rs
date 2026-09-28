@@ -151,9 +151,14 @@ impl ModelConfiguration {
             .hosted_provider_base_urls
             .get("zai")
             .map(String::as_str);
-        let (key, url) = zai_target(&read, environment_base)?;
+        let (credential, url) = zai_target(&read, environment_base)?;
+        // Read from its store for this request only (#217).
+        let key = self
+            .credential_secret(&self.data_root, credential)
+            .await
+            .map_err(|_| QuotaFetchError::NotConfigured)?;
         let mut headers = base_headers(http)?;
-        headers.insert(AUTHORIZATION, header(key)?);
+        headers.insert(AUTHORIZATION, header(key.expose())?);
         headers.insert(ACCEPT_LANGUAGE, HeaderValue::from_static("en-US,en"));
         let body = http.get(&url, &headers).await?;
         parse_zai_quota("zai", &body, self.clock.now_epoch_millis())
@@ -198,19 +203,20 @@ fn codex_usage_url(configured: Option<&str>) -> Option<Url> {
     matches!(url.scheme(), "https" | "http").then_some(url)
 }
 
-/// The Coding Plan key and quota URL of the registered `zai` models. They
-/// must all use one API-key credential and one eligible endpoint.
+/// The Coding Plan key (its saved credential) and quota URL of the
+/// registered `zai` models. They must all use one API-key credential and one
+/// eligible endpoint.
 fn zai_target<'a>(
     read: &'a ModelConfigurationRead,
     environment_base: Option<&str>,
-) -> Result<(&'a str, Url), QuotaFetchError> {
+) -> Result<(&'a super::credentials::CredentialRecord, Url), QuotaFetchError> {
     let configs: Vec<_> = read
         .registered
         .iter()
         .filter(|config| config.provider_id == "zai")
         .collect();
     let first = configs.first().ok_or(QuotaFetchError::NotConfigured)?;
-    let mut target: Option<(&str, Url)> = None;
+    let mut target: Option<(&super::credentials::CredentialRecord, Url)> = None;
     for config in &configs {
         if config.auth_type != ProviderAuthMethod::ApiKey
             || config.credential_id != first.credential_id
@@ -233,7 +239,7 @@ fn zai_target<'a>(
         let key = config
             .credential_id
             .as_deref()
-            .and_then(|id| read.credential_secret(id, "zai"))
+            .and_then(|id| read.credential(id, "zai"))
             .ok_or(QuotaFetchError::NotConfigured)?;
         target = Some((key, url));
     }

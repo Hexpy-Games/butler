@@ -67,7 +67,7 @@ impl ProviderRequestConfigPort for Config {
                 api_shape: metadata.hosted_api_shape,
                 metadata,
                 endpoint: self.endpoint.clone(),
-                auth: ProviderAuth::ApiKey("loopback-only".into()),
+                auth: ProviderAuth::ApiKey(String::from("loopback-only").into()),
                 policy: ProviderRoundPolicy {
                     total: Duration::from_secs(3),
                     idle: Some(Duration::from_secs(2)),

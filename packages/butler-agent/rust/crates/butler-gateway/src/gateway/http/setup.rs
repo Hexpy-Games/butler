@@ -4,6 +4,8 @@
 //! - `GET /setup/local-model-servers`
 //! - `POST /setup/credentials/verify` (checks a key, stores nothing)
 //! - `POST /credentials` (stores a key under a generated name)
+//! - `GET /credentials`, `PATCH /credentials/{name}`,
+//!   `DELETE /credentials/{name}?force=true` (#217: list, replace, delete)
 //! - `POST /setup/oauth/start`, `GET /setup/oauth/{flow_id}`,
 //!   `POST /setup/oauth/{flow_id}/cancel`
 
@@ -18,14 +20,14 @@ use serde::{Serialize, de::DeserializeOwned};
 
 use super::{HttpError, HttpState, json, read_body_with_limit, subsessions::decode_component};
 use crate::gateway::{
-    AppOauthStartInput, AppProviderKeyInput,
+    AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput,
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
 };
 
 const MAX_SETUP_BODY: usize = 64 * 1024;
 
 pub(super) fn handles(path: &str) -> bool {
-    path.starts_with("/setup/") || path == "/credentials"
+    path.starts_with("/setup/") || path == "/credentials" || path.starts_with("/credentials/")
 }
 
 pub(super) async fn route(
@@ -60,12 +62,60 @@ pub(super) async fn route(
             };
             envelope(status, saved)
         }
+        (&Method::GET, "/credentials") => envelope(StatusCode::OK, setup.list_credentials().await?),
         (&Method::POST, "/setup/oauth/start") => {
             let input: AppOauthStartInput = optional_body(request).await?;
             envelope(StatusCode::OK, setup.start_oauth(input).await?)
         }
+        (_, path) if path.starts_with("/credentials/") => {
+            credential_route(&setup, request, uri).await
+        }
         _ => oauth_flow_route(&setup, &method, uri.path()).await,
     }
+}
+
+/// `PATCH /credentials/{name}` and `DELETE /credentials/{name}` (#217).
+async fn credential_route(
+    setup: &Arc<dyn crate::gateway::AppSetupPort>,
+    request: Request<Body>,
+    uri: &Uri,
+) -> Result<Response, HttpError> {
+    let encoded = uri
+        .path()
+        .strip_prefix("/credentials/")
+        .filter(|name| !name.is_empty() && !name.contains('/'))
+        .ok_or_else(not_found)?;
+    let name = decode_component(encoded)?;
+    match request.method().clone() {
+        Method::PATCH => {
+            let input: AppCredentialReplaceInput = body(request).await?;
+            envelope(StatusCode::OK, setup.replace_credential(name, input).await?)
+        }
+        Method::DELETE => {
+            let force = force(uri)?;
+            envelope(StatusCode::OK, setup.delete_credential(name, force).await?)
+        }
+        _ => Err(not_found()),
+    }
+}
+
+/// `?force=true` (or `1`); absent means false.
+fn force(uri: &Uri) -> Result<bool, HttpError> {
+    let mut force = false;
+    for (key, value) in url::form_urlencoded::parse(uri.query().unwrap_or_default().as_bytes()) {
+        force = match (key.as_ref(), value.as_ref()) {
+            ("force", "true" | "1") => true,
+            ("force", "false" | "0") => false,
+            _ => {
+                return Err(HttpError::public(
+                    400,
+                    "invalid_request",
+                    "The only query parameter is force=true or force=false.",
+                ));
+            }
+        };
+    }
+    Ok(force)
 }
 
 /// `GET /setup/oauth/{flow_id}` and `POST /setup/oauth/{flow_id}/cancel`.
