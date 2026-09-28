@@ -7,7 +7,7 @@ import { reveal, select } from "../shared/Reveal";
 import { rollerTracks } from "../shared/Roller";
 import type { Prelude, TimelineContext } from "../shared/types";
 import { LEVELS, RADII, type RadiusCopy } from "./radiusCopy";
-import { NEST, NEST_ANNOTS, SHADOW_ANNOTS } from "./RadiusScenes";
+import { NEST, nestItems, SHADOW_ANNOTS } from "./RadiusScenes";
 
 /**
  * 05 Radius and elevation prelude, beat marks:
@@ -60,7 +60,7 @@ export function radiusPrelude(copy: RadiusCopy): Pick<Prelude, "end" | "tracks">
         return [...keys, { at: close - 0.01 }, { at: close, o: 0 }];
       };
       const nestAt = (depth: number) => AT.nest + (NEST.length - 1 - depth) * 0.6;
-      const nestItems = openingItems(NEST_ANNOTS, g.scopes.nest ?? {}, "n", g.layout);
+      const nest = nestItems(g);
       const pop = (name: string, at: number): Track => ({
         select: select(name), keys: [{ at: 0, o: 0, s: 0.94 }, { at, o: 0, s: 0.94 }, { at: at + 0.8, o: 1, s: 1, ease: "emphasized" }, { at: close - 0.01 }, { at: close, o: 0, s: 0.94 }],
       });
@@ -71,7 +71,7 @@ export function radiusPrelude(copy: RadiusCopy): Pick<Prelude, "end" | "tracks">
         ...rollerTracks("mr", RADII.map((r) => r.value), 0, times, g.lines.mr ?? 0, close, 1),
         ...NEST.map((_, depth) => pop(`nb-${depth}`, nestAt(depth))),
         // The notes list the nest outermost first, as NEST_ANNOTS does; each draws with its box.
-        ...nestItems.flatMap((item, j) => annotTracks(item, nestAt(j) + 0.3, close)),
+        ...nest.flatMap((item, j) => annotTracks(item, nestAt(j) + 0.3, close)),
         { select: select("lab"), keys: [{ at: 0, o: 1 }, { at: AT.end + 0.6, o: 1 }, { at: AT.end + 1.6, o: 0, ease: "accelerate" }, { at: close - 0.01 }, { at: close, o: 1 }] },
         ...RADII.flatMap((r, k) => [pop(`lt-${k}`, AT.tiles + k * 0.3), ...reveal(`lt-n${k}`, AT.tiles + k * 0.3 + 0.3, r.token, close)]),
         ...LEVELS.flatMap((level, k): Track[] => {

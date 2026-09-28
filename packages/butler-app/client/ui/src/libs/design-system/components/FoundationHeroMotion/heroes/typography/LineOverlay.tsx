@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import { Tag } from "../../../Tag";
 import type { TypeCopy } from "./typeCopy";
-import type { LineInfo } from "./typeLines";
+import { TAG_GAP, TAG_ROW, type LineInfo } from "./typeLines";
 import { Reveal } from "./Reveal";
 import t from "./TypographyHero.module.css";
 
@@ -48,12 +48,19 @@ function Layer({ line, name, fill }: { line: LineInfo; name: string; fill: boole
  * a measure; the tag counting size, line height and tracking in; the glyphs
  * filled left to right; then the real text takes over and the guides recede.
  */
-export function LineOverlay({ lines, copy, compact }: { lines: LineInfo[]; copy: TypeCopy; /** Token name only (tall canvas). */ compact: boolean }) {
+export function LineOverlay({ lines, copy, compact, height }: {
+  lines: LineInfo[]; copy: TypeCopy; /** Token name only, tags stacked under the component (tall canvas). */ compact: boolean; /** The panel's height (px). */ height: number;
+}) {
+  const tagged = lines.filter((line) => !line.secondary);
   return (
     <span className={t.lines} aria-hidden="true">
       {lines.map((line) => (
         <span className={t.lineFx} key={line.id}
-          style={{ left: `${line.box.x}px`, top: `${line.box.y}px`, inlineSize: `${line.box.w}px`, blockSize: `${line.box.h}px`, "--reach": `${line.box.x}px` } as CSSProperties}>
+          style={{
+            left: `${line.box.x}px`, top: `${line.box.y}px`, inlineSize: `${line.box.w}px`, blockSize: `${line.box.h}px`, "--reach": `${line.box.x}px`,
+            // Tall: the tag's row under the component (px below this line's top).
+            "--tag-top": `${height - line.box.y + TAG_GAP + tagged.indexOf(line) * TAG_ROW}px`,
+          } as CSSProperties}>
           {line.secondary ? null : (
             <>
               <span className={t.lineTag} data-t={`lb-${line.id}`}>

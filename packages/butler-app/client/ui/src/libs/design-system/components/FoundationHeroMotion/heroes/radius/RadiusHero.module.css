@@ -9,10 +9,12 @@
   place-items: center;
 }
 
+/* The nest's notes stand in a column left of it: the gap leaves them room
+   clear of the morph. */
 .labStage {
   display: grid;
   grid-template-columns: auto auto;
-  column-gap: var(--space-4xl);
+  column-gap: calc(var(--space-4xl) * 4.5);
   align-items: center;
 }
 

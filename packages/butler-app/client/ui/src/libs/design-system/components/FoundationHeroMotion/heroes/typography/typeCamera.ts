@@ -1,11 +1,17 @@
 import { fit, focus, type Box, type Pose } from "../../heroTimeline";
 import { PANELS, type Flight, type Panel, type TypeGeometry } from "./typeChoreography";
-import { CELL } from "../shared/scene";
-import { BADGE_GUTTER } from "./typeLines";
+import { CELL, columnViews } from "../shared/scene";
+import { BADGE_GUTTER, tagBand } from "./typeLines";
 
 /** The part of a panel the camera frames while building it (the conversation card stretches, so its lines). */
 function frameBox(g: TypeGeometry, panel: Panel): Box {
   const own = g.lines.filter((line) => line.panel === panel);
+  const box0 = g.panels[panel];
+  // Tall: the component and its tags in rows under it.
+  if (g.layout === "tall") {
+    const tags = own.filter((line) => !line.secondary).length;
+    return { ...box0, h: box0.h + tagBand(tags) };
+  }
   // The badge gutter left of the component is part of the frame.
   const gutter = BADGE_GUTTER[g.layout];
   const grow = (box: Box): Box => ({ ...box, x: box.x - gutter, w: box.w + gutter });
@@ -22,6 +28,9 @@ export function posterFit(g: TypeGeometry): Pose {
   const all = { x: 0, y: 0, w: g.canvas.w, h: bottom };
   return focus(g.canvas, all, Math.min(1, fit(g.canvas, all, 0.97, 1)));
 }
+
+/** The tall column: each component's frame in its poster place, the camera stepping down them. */
+const column = (g: TypeGeometry) => columnViews(g.canvas, PANELS.map((panel) => frameBox(g, panel)));
 
 const center = (box: Box) => ({ x: box.x + box.w / 2, y: box.y + box.h / 2 });
 
@@ -40,6 +49,11 @@ function rowBox(g: TypeGeometry, flight: Flight): Box {
 export function startOffset(g: TypeGeometry): { x: number; y: number } {
   const end = center(frameBox(g, "composer"));
   const row = center(rowBox(g, "metric"));
+  // Tall: the opening and the list play one cell straight above the first build in the column.
+  if (g.layout === "tall") {
+    const first = column(g).centers[0]!;
+    return { x: first.x - row.x, y: first.y - CELL * g.canvas.h - row.y };
+  }
   return { x: end.x - 2 * CELL * g.canvas.w - row.x, y: end.y - 2 * CELL * g.canvas.h - row.y };
 }
 
@@ -60,14 +74,15 @@ export function cameras(g: TypeGeometry) {
   // The last component (the composer) is built in its own place in the poster, so the finale can
   // zoom out from it while the others gather around it.
   const shift = Object.fromEntries(PANELS.map((panel, k) => {
-    if (k === PANELS.length - 1) return [panel, { x: 0, y: 0 }];
+    if (tall || k === PANELS.length - 1) return [panel, { x: 0, y: 0 }];
     const box = frameBox(g, panel);
     return [panel, { x: centers[k]!.x - (box.x + box.w / 2), y: centers[k]!.y - (box.y + box.h / 2) }];
   })) as Record<Panel, { x: number; y: number }>;
-  const stage = PANELS.map((panel) => {
+  // Tall: every component is built in its place in the poster's column, the camera stepping down it.
+  const stage = tall ? column(g).stage : PANELS.map((panel) => {
     const box = frameBox(g, panel);
     const moved = { ...box, x: box.x + shift[panel].x, y: box.y + shift[panel].y };
-    return focus(canvas, moved, fit(canvas, moved, tall ? 0.9 : 0.8, cap));
+    return focus(canvas, moved, fit(canvas, moved, 0.8, cap));
   });
   // Close enough that the list's type fills the frame; cropping at the edges is fine.
   const close = Math.min(2.4, (canvas.w * 1.1) / g.ladder.w);

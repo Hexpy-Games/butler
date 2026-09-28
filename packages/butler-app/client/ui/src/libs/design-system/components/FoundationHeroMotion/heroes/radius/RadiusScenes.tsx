@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import { SurfacePanel } from "../../../../blocks/SurfacePanel";
 import { Annotations } from "../shared/Annotations";
 import { openingItems } from "../shared/guides";
+import type { AnnotItem } from "../shared/guideShapes";
 import { valueLabel } from "../shared/labels";
 import { Mark } from "../shared/Mark";
 import { Reveal as R } from "../shared/Reveal";
@@ -17,6 +18,20 @@ export const NEST = [
 ] as const;
 
 export const NEST_ANNOTS: Annot[] = NEST.map(({ n, token }) => ({ kind: "radius", target: n, label: valueLabel(token, true) }));
+
+/** Pitch between the nest's notes (px): they stand in one column left of the outermost box, never over each other or the boxes. */
+const NOTE_PITCH = 20;
+
+/** The nest's radius guides, their notes stacked in one column outside the outermost box. */
+export function nestItems(g: Geometry): AnnotItem[] {
+  const items = openingItems(NEST_ANNOTS, g.scopes.nest ?? {}, "n", g.layout);
+  const notes = items.flatMap((item) => (item.note ? [item.note] : []));
+  if (!notes.length) return items;
+  const x = Math.min(...notes.map((note) => note.x));
+  const y = Math.min(...notes.map((note) => note.y));
+  let row = 0;
+  return items.map((item) => (item.note ? { ...item, note: { ...item.note, x, y: y + NOTE_PITCH * row++ } } : item));
+}
 
 /** The shadows' offset and blur guides (the tiles' names already say which shadow). */
 export const SHADOW_ANNOTS: Annot[] = LEVELS.map((_, k) => ({ kind: "shadow", target: `sh-${k}` }));
@@ -56,7 +71,7 @@ export function RadiusLab({ g }: { g: Geometry | null }) {
         </div>
         <div className={s.nest} data-mark-scope="nest">
           {nested(0)}
-          {g ? <Annotations items={openingItems(NEST_ANNOTS, g.scopes.nest ?? {}, "n", g.layout)} shown /> : null}
+          {g ? <Annotations items={nestItems(g)} shown /> : null}
         </div>
       </div>
     </div>

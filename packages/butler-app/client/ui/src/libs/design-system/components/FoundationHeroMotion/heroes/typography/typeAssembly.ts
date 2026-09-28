@@ -50,7 +50,9 @@ function assembly(g: TypeGeometry): Track[] {
     const hidden: Pose = { x: o.x, y: o.y + 40, z: -180 };
     // Off the canvas to the left while the components build; they gather back in for the finale.
     // Well off the camera's path (up and right of the poster), so no build frame shows them.
-    const away: Pose = { x: 3 * CELL * g.canvas.w, y: -3 * CELL * g.canvas.h, z: 0 };
+    // Tall: they come home above the column instead (mid-way down to the first build), so it has the list above it.
+    const jump = g.layout === "tall" ? FIRST - TRANSITION / 2 : 45;
+    const away: Pose = g.layout === "tall" ? { x: 0, y: 0, z: 0 } : { x: 3 * CELL * g.canvas.w, y: -3 * CELL * g.canvas.h, z: 0 };
     const fade = (from: number, to: number): Key[] => [
       { at: 0, o: 0 }, { at: from, o: 0 }, { at: to, o: 1, ease: "decelerate" }, { at: leave, o: 1 }, { at: leave + 1, o: 0, ease: "accelerate" },
     ];
@@ -63,7 +65,7 @@ function assembly(g: TypeGeometry): Track[] {
         select: select(`rung-${name}`),
         keys: [
           { at: 0, ...hidden }, { at: rise - 1.4, ...hidden }, { at: rise, x: o.x, y: o.y, z: 0, ease: "spring" },
-          { at: 45, x: o.x, y: o.y }, { at: 45.1, ...away }, { at: gather, ...away }, { at: gather + TRANSITION, x: 0, y: 0 },
+          { at: jump, x: o.x, y: o.y }, { at: jump + 0.1, ...away }, { at: gather, ...away }, { at: gather + TRANSITION, x: 0, y: 0 },
           { at: leave + 1.2, z: 0 }, { at: BEATS, ...hidden },
         ],
       },

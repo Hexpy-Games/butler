@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { ComposerCard, ComposerCardEditable, ComposerCardEditor, ComposerCardExpandedBody, ComposerCardPlaceholder, ComposerCardToolbar, ComposerCardToolbarSpacer, ComposerSendButton } from "../../../../blocks/ComposerCard";
 import { MetricCard } from "../../../../blocks/MetricCard";
 import { SettingsField } from "../../../../blocks/SettingsField";
@@ -15,7 +15,7 @@ import { Sketch } from "./Sketch";
 import type { Panel, SketchBox } from "./typeChoreography";
 import type { TypeCopy } from "./typeCopy";
 import type { TypeLayout } from "./typeGrid";
-import type { LineInfo } from "./typeLines";
+import { LINES, tagBand, type LineInfo } from "./typeLines";
 import t from "./TypographyHero.module.css";
 
 /**
@@ -28,10 +28,11 @@ import t from "./TypographyHero.module.css";
  */
 export function ProductBoard({ copy, layout, lines, sketches }: { copy: TypeCopy; layout: TypeLayout; lines: LineInfo[]; sketches: Partial<Record<Panel, SketchBox[]>> }) {
   const panel = (name: Panel, content: ReactNode) => (
-    <div className={t.panel} data-panel={name} data-t={`panel-${name}`} key={name}>
+    <div className={t.panel} data-panel={name} data-t={`panel-${name}`} key={name}
+      style={{ "--tag-band": `${tagBand(LINES.filter((line) => line.panel === name && !line.secondary).length)}px` } as CSSProperties}>
       <div className={t.surface} data-t={`surface-${name}`}>{content}</div>
       <Sketch boxes={sketches[name] ?? []} panel={name} />
-      <LineOverlay compact={layout === "tall"} copy={copy} lines={lines.filter((line) => line.panel === name)} />
+      <LineOverlay compact={layout === "tall"} copy={copy} height={sketches[name]?.[0]?.h ?? 0} lines={lines.filter((line) => line.panel === name)} />
     </div>
   );
   const settings = panel("settings", <>
@@ -52,10 +53,8 @@ export function ProductBoard({ copy, layout, lines, sketches }: { copy: TypeCopy
       <Part name="metric-2" block sketch><MetricCard value={copy.metric2} label={copy.metric2Label} change={copy.change2} trend="up" /></Part>
     </div>
   </>);
-  const conversation = (
-    <div className={t.column} key="conversation">
-      {panel("chat", <ChatTurn copy={copy} />)}
-      {panel("composer", (
+  const chat = panel("chat", <ChatTurn copy={copy} />);
+  const composer = panel("composer", (
         <Box>
           <ComposerCard>
             <ComposerCardExpandedBody>
@@ -71,18 +70,15 @@ export function ProductBoard({ copy, layout, lines, sketches }: { copy: TypeCopy
             </ComposerCardToolbar>
           </ComposerCard>
         </Box>
-      ))}
-    </div>
-  );
+      ));
+  const conversation = <div className={t.column} key="conversation">{chat}{composer}</div>;
   return layout === "wide" ? (
     <div className={t.product} data-t="product">
       <div className={t.columnSpread}>{[settings, metric]}</div>
       {conversation}
     </div>
   ) : (
-    <>
-      <div className={t.product} data-t="product">{conversation}</div>
-      <div className={t.offstage}>{[settings, metric]}</div>
-    </>
+    // Tall: one column in build order, so the camera steps straight down it.
+    <div className={t.product} data-t="product">{[settings, chat, metric, composer]}</div>
   );
 }

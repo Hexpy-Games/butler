@@ -346,14 +346,16 @@
   grid-column: 2;
 }
 
+/* Tall: the components in one column, in build order, each with room under
+   it for its tags. */
 .board[data-layout="tall"] .product {
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: none;
   grid-template-columns: minmax(0, 1fr);
+  row-gap: var(--grid-gutter);
 }
 
-.board[data-layout="tall"] .product > .column:last-child {
-  grid-row: 1;
-  grid-column: 1;
+.board[data-layout="tall"] .product > .panel {
+  margin-block-end: var(--tag-band, 0);
 }
 
 /* Off the poster on the tall canvas: the camera pans down to these. */
@@ -434,6 +436,23 @@
   right: calc(100% + var(--reach) + var(--tag-far));
   translate: 0 -50%;
   white-space: nowrap;
+}
+
+/* Tall: the tags stand in rows under the component, never clipped at the
+   frame's edge; no leader. */
+.board[data-layout="tall"] .lineTag {
+  top: var(--tag-top);
+  right: auto;
+  left: calc(-1 * var(--reach));
+  translate: none;
+}
+
+.board[data-layout="tall"] .lineTagStep {
+  justify-self: start;
+}
+
+.board[data-layout="tall"] .lineLeader {
+  display: none;
 }
 
 .lineTagSteps {

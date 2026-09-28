@@ -47,6 +47,12 @@ export const LINES: LineSpec[] = [
   { id: "placeholder", panel: "composer", token: "--typo-body", role: "body", select: own("placeholder"), draw: true },
 ];
 
+/** Tall: tags stand in rows under the component, this far below it and apart (px). */
+export const TAG_GAP = 14;
+export const TAG_ROW = 22;
+/** The band under a component that holds its tags (px). */
+export const tagBand = (tags: number) => (tags ? TAG_GAP + tags * TAG_ROW : 0);
+
 /** Width of the badge gutter left of a component while it builds (badge column plus a grid gutter), in canvas px. */
 export const BADGE_GUTTER = { wide: 320, tall: 215 } as const;
 
