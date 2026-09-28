@@ -109,16 +109,7 @@ async fn run(
         &config.metadata.provider_id,
         carrier,
     );
-    let attempts = request
-        .provider_retry_attempts
-        .map(|value| {
-            if value.is_nan() {
-                value
-            } else {
-                value.trunc().max(1.0)
-            }
-        })
-        .unwrap_or(config.retry_attempts);
+    let attempts = retry_attempts(request.provider_retry_attempts, config.retry_attempts);
     let response = crate::models::transport::execute(crate::models::transport::RequestExecution {
         request: http,
         provider: &config.metadata.provider_id,
@@ -138,6 +129,7 @@ async fn run(
         },
         request_observer: &observe,
         clock: provider.clock.as_ref(),
+        quota: provider.quota.as_deref(),
     })
     .await;
     let response = match response {
@@ -185,6 +177,19 @@ async fn run(
             .then_some(decoded.usage)
             .flatten(),
     })
+}
+
+/// The request's own retry count (truncated, at least one), else the configured one.
+fn retry_attempts(requested: Option<f64>, configured: f64) -> f64 {
+    requested
+        .map(|value| {
+            if value.is_nan() {
+                value
+            } else {
+                value.trunc().max(1.0)
+            }
+        })
+        .unwrap_or(configured)
 }
 
 #[derive(Clone, Copy)]
@@ -241,6 +246,13 @@ fn observe_usage(
             prompt_cache_retention: observation.cache_retention,
             butler_data: request.butler_data,
             usage_attribution: openai_attribution.as_ref().or(request.usage_attribution),
+            reasoning_tokens: decoded.reasoning_tokens,
+            cache_write_1h_tokens: decoded.cache_write_1h_tokens,
+            auth_mode: Some(
+                provider
+                    .catalog
+                    .usage_auth_mode(&config.metadata.provider_id, config.auth.mode()),
+            ),
         })
     };
     if config.metadata.provider_id == "openai" {

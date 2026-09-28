@@ -22,6 +22,7 @@ mod ui_language;
 pub(crate) use mutations::GatewayMutationCommands;
 use std::{future::Future, pin::Pin, sync::Arc};
 
+use butler_runtime::operations::ProviderQuotaView;
 use tokio_util::sync::CancellationToken;
 
 pub use crate::gateway::inbound_queue::{
@@ -96,9 +97,9 @@ pub use protocol::{
     EventReplayView, HealthView, MessageContent, MessageContentPart, MessageFileKind,
     MessageFileRef, MessageListView, MessageRecord, MessageRole, MessageSendRequest,
     MessageSendResult, MessageStatus, ProgressState, ProjectSourceReference, QueueState,
-    QueuedMessageRecord, RuntimeReadinessView, SessionArtifactSummary, SessionControlState,
-    SessionQueueUpdateRequest, SessionQueueView, TurnListView, TurnProgressSnapshotView,
-    TurnRecord, TurnState,
+    QueuedMessageRecord, RuntimeReadinessView, SendMessageCommand, SessionArtifactSummary,
+    SessionControlState, SessionQueueUpdateRequest, SessionQueueView, TurnListView,
+    TurnProgressSnapshotView, TurnRecord, TurnState,
 };
 pub use server::{GatewayConfig, GatewayServer, serve_gateway};
 mod error;
@@ -108,11 +109,6 @@ pub use transcript::{TranscriptCode, TranscriptWriter};
 
 pub type ApplicationFuture<T> =
     Pin<Box<dyn Future<Output = Result<T, GatewayApplicationError>> + Send + 'static>>;
-
-pub struct SendMessageCommand {
-    pub request: MessageSendRequest,
-    pub chat_id: String,
-}
 
 /// Project dashboard HTTP operations, backed by the App and Project Ledger owners.
 pub trait GatewayProjectDashboard: Send + Sync {
@@ -243,6 +239,8 @@ pub trait GatewayApplication:
         &self,
         query: AppUsageMonitorQuery,
     ) -> ApplicationFuture<serde_json::Value>;
+    /// The provider's latest subscription quota (`GET /provider-quota`).
+    fn get_provider_quota(&self, provider_id: String) -> ApplicationFuture<ProviderQuotaView>;
     fn work_status(&self) -> ApplicationFuture<Vec<AppBoundWorkStatusFact>>;
     fn work_status_conversation(
         &self,

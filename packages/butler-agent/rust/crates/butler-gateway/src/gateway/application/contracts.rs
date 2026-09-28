@@ -307,6 +307,10 @@ pub struct AppContextBudgetFacts {
 pub struct AppContextReadFacts {
     pub usage: Option<AppContextUsage>,
     pub compaction_summary: Option<String>,
+    /// The session's tokens and estimated cost (`SessionView.usage`).
+    pub session_usage: Option<butler_runtime::operations::SessionUsageView>,
+    /// How the session's model is billed (`ContextDetailsView.auth_mode`).
+    pub auth_mode: butler_models::models::UsageAuthMode,
     pub budget: AppContextBudgetFacts,
 }
 

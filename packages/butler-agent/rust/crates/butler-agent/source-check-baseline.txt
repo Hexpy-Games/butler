@@ -12,7 +12,7 @@ src/host/app/runtime_ports/settings.rs	load	83
 src/host/app/runtime_ports/settings_mutation.rs	AppSettingsMutation::apply_inner	91
 src/host/app/runtime_ports/topic_branch.rs	<AppBranchConversations as AppBranchConversationReader>::context	88
 src/host/app/runtime_ports/topic_branch.rs	<AppBranchSummarizerAdapter as AppBranchSummarizer>::summarize	89
-src/host/app/server.rs	AppServer::open_with_artifacts	167
+src/host/app/server.rs	AppServer::open_with_artifacts	164
 src/host/cli/cognition.rs	run	177
 src/host/cli/cognition/box_cli.rs	run	112
 src/host/cli/cognition/feedback.rs	run	192

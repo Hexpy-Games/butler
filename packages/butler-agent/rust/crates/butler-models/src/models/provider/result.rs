@@ -23,6 +23,7 @@ pub(super) fn decode(
         Carrier::Gemini => gemini(&response, configured_model, round_index),
         Carrier::Chat { .. } => chat(&response, configured_model),
     };
+    let usage = usage.map(|usage| with_usage_details(usage, &response));
     let mut text_tool_call_names = Vec::new();
     if provider == "local" {
         (text, calls, text_tool_call_names) = local::decode(&response, request);
@@ -333,6 +334,45 @@ pub(super) fn nonempty(value: String) -> Option<String> {
         }
     }
     Some(value.to_owned())
+}
+
+/// Reasoning (thinking) tokens a response reported, a subset of its output
+/// tokens: Responses `output_tokens_details`, Chat `completion_tokens_details`,
+/// Gemini `thoughtsTokenCount`. Anthropic reports none separately.
+pub(super) fn reasoning_tokens(response: &Value) -> Option<f64> {
+    number(response.pointer("/usage/output_tokens_details/reasoning_tokens"))
+        .or_else(|| number(response.pointer("/usage/completion_tokens_details/reasoning_tokens")))
+        .or_else(|| number(response.pointer("/usageMetadata/thoughtsTokenCount")))
+}
+
+/// Prompt tokens a response wrote to the provider cache: Anthropic
+/// `cache_creation_input_tokens`, OpenAI `*_tokens_details.cache_write_tokens`.
+pub(super) fn cache_write_tokens(response: &Value) -> Option<f64> {
+    number(response.pointer("/usage/cache_creation_input_tokens"))
+        .or_else(|| number(response.pointer("/usage/input_tokens_details/cache_write_tokens")))
+        .or_else(|| number(response.pointer("/usage/prompt_tokens_details/cache_write_tokens")))
+}
+
+/// The part of the cache writes Anthropic stored with a 1-hour lifetime.
+pub(super) fn cache_write_1h_tokens(response: &Value) -> Option<f64> {
+    number(response.pointer("/usage/cache_creation/ephemeral_1h_input_tokens"))
+}
+
+/// Adds reasoning and cache-write counts to the round's usage report.
+fn with_usage_details(mut usage: Value, response: &Value) -> Value {
+    let Some(fields) = usage.as_object_mut() else {
+        return usage;
+    };
+    for (key, tokens) in [
+        ("reasoningTokens", reasoning_tokens(response)),
+        ("cacheWriteTokens", cache_write_tokens(response)),
+        ("cacheWrite1hTokens", cache_write_1h_tokens(response)),
+    ] {
+        if let Some(tokens) = tokens {
+            fields.insert(key.into(), tokens.into());
+        }
+    }
+    usage
 }
 
 fn number(value: Option<&Value>) -> Option<f64> {

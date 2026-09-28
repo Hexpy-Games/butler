@@ -82,6 +82,8 @@ pub(super) fn test_context_facts() -> AppContextReadFacts {
     AppContextReadFacts {
         usage: None,
         compaction_summary: None,
+        session_usage: None,
+        auth_mode: butler_models::models::UsageAuthMode::Unknown,
         budget: AppContextBudgetFacts {
             context_window_tokens: 200_000,
             reserved_output_tokens: 8_000,

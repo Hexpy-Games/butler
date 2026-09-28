@@ -29,6 +29,7 @@ mod projects;
 mod queue;
 mod queue_dispatcher;
 mod queue_view;
+mod quota_events;
 mod read_model;
 mod recovery;
 mod relocation_port;
@@ -171,6 +172,7 @@ pub struct AppApplication {
     settings_update_lock: Arc<tokio::sync::Mutex<()>>,
     plan_decision_locks: PlanDecisionLocks,
     setup_readiness: setup::ReadinessRelay,
+    quota_events: Arc<quota_events::QuotaEventForwarder>,
 }
 
 impl AppApplication {
@@ -186,12 +188,7 @@ impl AppApplication {
         )
         .await
         .map_err(app_error)?;
-        let queue_owner = format!(
-            "app-session-queue:{}:{}:{}",
-            std::process::id(),
-            dependencies.identity_clock.new_uuid(),
-            dependencies.identity_clock.new_uuid()
-        );
+        let queue_owner = queue_owner_id(dependencies.identity_clock.as_ref());
         let fallback_project_root = config.project_workspace_root.clone();
         let project_root = match storage
             .execute(move |db| projects::initial_root(db, &fallback_project_root))
@@ -258,6 +255,7 @@ impl AppApplication {
             settings_update_lock: Arc::new(tokio::sync::Mutex::new(())),
             plan_decision_locks: PlanDecisionLocks::default(),
             setup_readiness: setup::ReadinessRelay::default(),
+            quota_events: Arc::default(),
         };
         if let Err(error) = application.recover_session_relocation_owned().await {
             let _ = application.close().await;
@@ -290,6 +288,7 @@ impl AppApplication {
             self.subscribers.clone(),
             self.dependencies.identity_clock.clone(),
         );
+        self.quota_events.start(self.clone_handle());
         Ok(())
     }
 
@@ -300,6 +299,7 @@ impl AppApplication {
             None => Ok(()),
         };
         let automation_runs = self.automation_runs.close().await;
+        self.quota_events.close().await;
         let queue = match &self.queue_dispatcher {
             Some(dispatcher) => dispatcher.close().await,
             None => Ok(()),
@@ -383,6 +383,16 @@ async fn latest_event_cursor(storage: &AppStorage) -> Result<u64, GatewayApplica
             Err(app_error(error))
         }
     }
+}
+
+/// A process-unique owner id for the session queue claim.
+fn queue_owner_id(clock: &dyn AppIdentityClock) -> String {
+    format!(
+        "app-session-queue:{}:{}:{}",
+        std::process::id(),
+        clock.new_uuid(),
+        clock.new_uuid()
+    )
 }
 
 fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {

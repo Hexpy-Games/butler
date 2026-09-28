@@ -50,6 +50,8 @@ pub(super) struct RequestExecution<'a> {
     pub guard_start: GuardStart,
     pub request_observer: &'a (dyn Fn() + Sync),
     pub clock: &'a dyn ProviderClock,
+    /// Receives subscription quota parsed from a successful response.
+    pub quota: Option<&'a dyn super::ProviderQuotaSink>,
 }
 
 pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelRoundError> {
@@ -68,6 +70,7 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
         guard_start,
         request_observer,
         clock,
+        quota,
     } = input;
     let guarded = run_guarded(
         external,
@@ -113,7 +116,7 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
                         .await
                         .map_err(|error| diagnostics::network(provider, api, &error.to_string()))?;
                     progress.record_progress();
-                    let response = checked(response, provider, api).await?;
+                    let response = checked(response, provider, api, (quota, clock)).await?;
                     let reading = Reading {
                         provider,
                         api,
@@ -173,9 +176,24 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
     }
 }
 
-/// A chat completion answered as an event stream, or as one JSON body by a
-/// server that ignores `stream: true`.
-async fn hosted_chat_or_json(
+/// Where a response's quota headers go, and the clock that dates them.
+type QuotaObserver<'a> = (
+    Option<&'a dyn super::ProviderQuotaSink>,
+    &'a dyn ProviderClock,
+);
+
+/// Reports a response's quota headers, if it carried any.
+fn observe_quota(response: &Response, provider: &str, (quota, clock): QuotaObserver<'_>) {
+    if let Some(sink) = quota
+        && let Some(reading) =
+            super::parse_quota_headers(provider, response.headers(), clock.now_epoch_millis())
+    {
+        sink.observe(reading);
+    }
+}
+
+/// A hosted chat reply: an SSE stream when the provider streamed, else JSON.
+async fn hosted_chat(
     response: Response,
     provider: &str,
     api: &str,
@@ -222,7 +240,7 @@ impl Reading<'_> {
                 json(response, provider, api, tolerate_invalid).await
             }
             ResponseMode::HostedChatSse => {
-                hosted_chat_or_json(response, provider, api, progress, stream_observer).await
+                hosted_chat(response, provider, api, progress, stream_observer).await
             }
             ResponseMode::CodexSse => {
                 sse::codex(response, provider, api, progress, stream_observer, clock).await
@@ -306,11 +324,18 @@ async fn json(
     }
 }
 
+/// The response when successful, else its provider error. Quota headers are
+/// read from successful and rate-limited (429) replies, so an exhausted plan
+/// shows at once.
 async fn checked(
     response: Response,
     provider: &str,
     api: &str,
+    quota: QuotaObserver<'_>,
 ) -> Result<Response, Box<ProviderRequestError>> {
+    if response.status().is_success() || response.status().as_u16() == 429 {
+        observe_quota(&response, provider, quota);
+    }
     if response.status().is_success() {
         return Ok(response);
     }

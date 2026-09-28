@@ -1,9 +1,9 @@
 # Production functions over 80 lines, ratcheted by tools/source-check.
 # Split a function and regenerate: cargo run -p butler-source-check -- --bless .
 # Entries may only shrink or disappear; new entries need review.
-src/gateway/application.rs	AppApplication::open	91
+src/gateway/application.rs	AppApplication::open	87
 src/gateway/application/admission.rs	inspect_with_attachment_source	141
-src/gateway/application/context_details.rs	AppApplication::context_details_owned	236
+src/gateway/application/context_details.rs	AppApplication::context_details_owned	168
 src/gateway/application/message_projection/work_blocks.rs	project	101
 src/gateway/application/monitoring/conversation.rs	AppApplication::work_status_conversation_owned	117
 src/gateway/application/new_chat_briefing.rs	AppApplication::new_chat_briefing_view	85
@@ -44,7 +44,7 @@ src/gateway/application/session_queue_mutations.rs	AppApplication::update_sessio
 src/gateway/application/session_relocation.rs	AppApplication::perform_relocation	166
 src/gateway/application/session_relocation/records.rs	reserve	83
 src/gateway/application/session_views.rs	AppApplication::session_summary_owned	96
-src/gateway/application/session_views.rs	AppApplication::session_view_owned	132
+src/gateway/application/session_views.rs	AppApplication::session_view_owned	126
 src/gateway/application/settings/update/patch/project.rs	project	223
 src/gateway/application/settings/update/patch/sanitize.rs	sanitize	223
 src/gateway/application/settings/view.rs	read	265
@@ -53,7 +53,7 @@ src/gateway/application/snapshot_input.rs	claimed_snapshot	120
 src/gateway/application/space/commands.rs	execute	125
 src/gateway/application/space/owner.rs	commit_relocation	102
 src/gateway/application/storage/schema/project_ledger_bindings.rs	initialize	109
-src/gateway/http.rs	route	175
+src/gateway/http.rs	route	166
 src/gateway/http/automations.rs	route	101
 src/gateway/http/dashboard.rs	route	244
 src/gateway/http/message_files/mime.rs	inferred_content_type	84

@@ -4,20 +4,18 @@
 src/mcp_client/catalog.rs	search	122
 src/mcp_client/session.rs	run_session_inner	83
 src/mcp_client/transport.rs	McpClient::with_server_timeout	96
-src/models/catalog/local.rs	<ModelProviderMetadata as From>::from	83
 src/models/configuration/discovery.rs	discover	91
 src/models/configuration/environment.rs	merge_private_auth_environment	105
 src/models/configuration/provider.rs	ModelConfiguration::resolve_request	115
 src/models/configuration/provider/endpoint.rs	resolve	96
 src/models/diagnostics.rs	http	86
 src/models/provider/client.rs	<ModelProvider as ModelRoundPort>::context_sizing	86
-src/models/provider/client.rs	ModelProvider::run	174
-src/models/provider/prompt.rs	run	164
+src/models/provider/client.rs	ModelProvider::run	142
+src/models/provider/prompt.rs	run	156
 src/models/provider/prompt/serialize.rs	responses	115
 src/models/provider/prompt/serialize/compatible.rs	chat	95
 src/models/provider/serialize.rs	responses	120
 src/models/provider/serialize/stable.rs	identity	162
-src/models/provider/visual.rs	apply	92
 src/models/request_admission.rs	PreparedRequestAdmission::admit_with_snapshot	142
-src/models/transport.rs	execute	120
+src/models/transport.rs	execute	121
 src/models/visual_admission.rs	admit_visual_image_request	104

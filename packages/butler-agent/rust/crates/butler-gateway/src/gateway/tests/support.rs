@@ -123,6 +123,16 @@ impl GatewayApplication for TestApplication {
     fn retry_turn_with_current_controls(&self, _: String) -> ApplicationFuture<MessageSendResult> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
+    fn get_provider_quota(
+        &self,
+        provider_id: String,
+    ) -> ApplicationFuture<butler_runtime::operations::ProviderQuotaView> {
+        Box::pin(async move {
+            Ok(butler_runtime::operations::unavailable_quota_view(
+                &provider_id,
+            ))
+        })
+    }
     fn get_usage_monitor(&self, _: AppUsageMonitorQuery) -> ApplicationFuture<Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
