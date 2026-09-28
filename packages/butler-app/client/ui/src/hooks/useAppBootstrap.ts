@@ -27,7 +27,9 @@ import type {
   SessionView,
   SettingsView,
 } from "@/app/types.ts";
+import { userWallpaperModules } from "@/app/userWallpaperModules.ts";
 import { recoverBootstrapResource } from "./bootstrapResource.ts";
+import { noteSettingsSnapshotRequest } from "./live-session/liveSettingsSync.ts";
 import { useLiveSessionEvents } from "./live-session/useLiveSessionEvents.ts";
 
 export function useAppBootstrap() {
@@ -64,6 +66,11 @@ export function useAppBootstrap() {
   useEffect(() => {
     if (!rightAvailable) setRightOpen(false);
   }, [rightAvailable, setRightOpen]);
+
+  // User wallpaper modules; `wallpaper.modules.updated` refreshes them live.
+  useEffect(() => {
+    void userWallpaperModules.refresh();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -163,7 +170,11 @@ export function useAppBootstrap() {
   useEffect(() => {
     const abortController = new AbortController();
     void recoverBootstrapResource({
-      load: () => api<SettingsView>("/settings"),
+      load: () => {
+        // Replayed settings.updated events older than this snapshot are already in it.
+        noteSettingsSnapshotRequest();
+        return api<SettingsView>("/settings");
+      },
       onReady: setSettings,
       onUnavailable: () => setSettings(readCachedSettings()),
       isCancelled: () => abortController.signal.aborted,

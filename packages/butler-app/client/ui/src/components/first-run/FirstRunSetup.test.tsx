@@ -64,7 +64,7 @@ test("first-run setup renders the minimal Electron setup order", async () => {
   expect(rendered.container.textContent).toContain("언어 선택");
   expect(rendered.container.textContent).toContain("Butler");
   expect(
-    rendered.container.querySelector('[data-test-class="new-chat-fluid-gradient"]'),
+    rendered.container.querySelector('[data-test-class~="wallpaper"]'),
   ).not.toBeNull();
   expect(
     rendered.container.querySelector('[data-test-class="setup-wizard-drag-lane"]'),

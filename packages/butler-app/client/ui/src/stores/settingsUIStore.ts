@@ -12,6 +12,7 @@ import {
 } from "../app/notifications.ts";
 import { profileMigrationFeedbackFromResult } from "../app/profileMigrationFeedback.ts";
 import { useButlerStore } from "../app/store.ts";
+import { legacyWallpaperSetting } from "../app/wallpaperSetting.ts";
 import type {
   ModelCatalogView,
   PersonalizationProfileMigrationResultView,
@@ -37,6 +38,8 @@ export type SettingsModelRoute =
 interface SettingsUIStore {
   // Settings draft state (UI-only, not persisted in useButlerStore)
   draft: SettingsData | null;
+  /** The settings the draft was last synced to; draft fields that differ are unsaved edits. */
+  baseline: SettingsData | null;
   setDraft: (draft: SettingsData) => void;
 
   // Personalization state (separate from settings)
@@ -86,6 +89,7 @@ interface SettingsUIStore {
 export const useSettingsUIStore = create<SettingsUIStore>((set, get) => ({
   // Initial state
   draft: null,
+  baseline: null,
   personalization: null,
   personalizationDraft: {
     persona: "",
@@ -190,9 +194,13 @@ export const useSettingsUIStore = create<SettingsUIStore>((set, get) => ({
   setLocalMessage: (localMessage) => set({ localMessage }),
 
   // Initialize - loads settings and personalization
+  // Runs on open and on every app settings change (live events included):
+  // the draft follows the new settings but keeps its unsaved edits.
   initialize: async (settings, initialSection = "general") => {
-    set({
-      draft: settingsDraftFrom(settings),
+    const baseline = settingsDraftFrom(settings);
+    set((state) => ({
+      draft: rebaseSettingsDraft(state.draft, state.baseline, baseline),
+      baseline,
       activeSection: initialSection as SettingsSectionId,
       ...(initialSection === "models"
         ? {}
@@ -201,16 +209,21 @@ export const useSettingsUIStore = create<SettingsUIStore>((set, get) => ({
             modelRouteDirection: "back" as const,
             modelRouteLeaveGuard: null,
           }),
-    });
+    }));
 
     // Load personalization
     try {
       const personalization =
         await api<PersonalizationView>("/personalization");
-      set({
+      set((state) => ({
         personalization,
-        personalizationDraft: draftFromPersonalization(personalization),
-      });
+        personalizationDraft: personalizationDraftHasChanges(
+          state.personalization,
+          state.personalizationDraft,
+        )
+          ? state.personalizationDraft
+          : draftFromPersonalization(personalization),
+      }));
     } catch (error) {
       notifyError(error, appCopy.settings.errors.loadPersonalization, {
         id: "settings-personalization",
@@ -220,8 +233,7 @@ export const useSettingsUIStore = create<SettingsUIStore>((set, get) => ({
 
   // Update settings
   update: async (partial, onSettingsChange) => {
-    const { draft } = get();
-    if (!draft) return;
+    if (!get().draft) return;
 
     set({ saving: true, localMessage: null });
     try {
@@ -229,9 +241,13 @@ export const useSettingsUIStore = create<SettingsUIStore>((set, get) => ({
         method: "PATCH",
         body: JSON.stringify(partial),
       });
-      const nextSettings = settingsDraftFrom({ ...draft, ...result });
-      set({ draft: nextSettings });
-      onSettingsChange(nextSettings);
+      const { draft, baseline } = get();
+      const saved = settingsDraftFrom({ ...(baseline ?? draft), ...result } as SettingsData);
+      set({
+        draft: rebaseSettingsDraft(draft, baseline, saved, Object.keys(partial)),
+        baseline: saved,
+      });
+      onSettingsChange(saved);
       notifyStatus(appCopy.settings.saved, {
         id: "settings-update",
         tone: "ok",
@@ -497,6 +513,29 @@ function emptyProfileDraft(): PersonalizationDraft["profile"] {
   };
 }
 
+function sameSetting(left: unknown, right: unknown): boolean {
+  return left === right || JSON.stringify(left) === JSON.stringify(right);
+}
+
+/**
+ * `next` plus the draft's unsaved edits: fields that differ from the baseline
+ * the draft was synced to, except the `saved` ones, which take `next`.
+ */
+function rebaseSettingsDraft(
+  draft: SettingsData | null,
+  baseline: SettingsData | null,
+  next: SettingsData,
+  saved: readonly string[] = [],
+): SettingsData {
+  if (!draft || !baseline) return next;
+  const rebased: Record<string, unknown> = { ...next };
+  for (const [key, value] of Object.entries(draft)) {
+    if (saved.includes(key)) continue;
+    if (!sameSetting(value, baseline[key as keyof SettingsData])) rebased[key] = value;
+  }
+  return rebased as unknown as SettingsData;
+}
+
 function settingsDraftFrom(settings: SettingsData): SettingsData {
   return {
     ...settings,
@@ -514,6 +553,7 @@ function settingsDraftFrom(settings: SettingsData): SettingsData {
     main_screen_theme_custom_colors:
       settings.main_screen_theme_custom_colors ??
       EMPTY_SETTINGS.main_screen_theme_custom_colors,
+    wallpaper: settings.wallpaper ?? legacyWallpaperSetting(settings),
     web_search: {
       ...DEFAULT_WEB_SEARCH_SETTINGS,
       ...(settings.web_search ?? {}),

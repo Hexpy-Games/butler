@@ -17,6 +17,7 @@ import { useOrganizationNotice } from "@/components/space/hooks/useOrganizationN
 import { Titlebar } from "@/components/layout/Titlebar.tsx";
 import { LiveConnectionNotice } from "@/components/layout/LiveConnectionNotice.tsx";
 import { Conversation } from "@/components/conversation/Conversation.tsx";
+import { activeChatWallpaper } from "@/components/conversation/mainScreenTheme.ts";
 import { Inspector } from "@/components/inspector/Inspector.tsx";
 import { ProjectDashboardView } from "@/components/management/ProjectDashboardView.tsx";
 import { AutomationsView } from "@/components/management/AutomationsView.tsx";
@@ -42,6 +43,8 @@ import { useNativeAppearanceTheme } from "@/hooks/useNativeAppearanceTheme.ts";
 import { useNativeShellPreferences } from "@/hooks/useNativeShellPreferences.ts";
 import { usePortalThemeClasses } from "@/hooks/usePortalThemeClasses.ts";
 import { useSystemThemePreference } from "@/hooks/useSystemThemePreference.ts";
+import { useWallpaperAppearance } from "@/hooks/useWallpaperAppearance.ts";
+import { useAppearanceTheme } from "@/stores/appearanceStore.ts";
 import {
   LEFT_PANEL_MAX_WIDTH,
   LEFT_PANEL_MIN_WIDTH,
@@ -96,12 +99,17 @@ function AppWorkspaceShell() {
   const view = useButlerStore((state) => state.view);
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const settings = useButlerStore((state) => state.settings);
+  const navigation = useButlerStore((state) => state.navigation);
   const rightOpen = useButlerStore((state) => state.rightOpen);
   const setRightOpen = useButlerStore((state) => state.setRightOpen);
   const systemPrefersDark = useSystemThemePreference();
-  useNativeAppearanceTheme(settings.appearance_theme);
+  // A real-time wallpaper may set light/dark (its scene tone) over the setting.
+  useWallpaperAppearance();
+  const appearance = useAppearanceTheme();
+  const themeSettings = appearance === settings.appearance_theme ? settings : { ...settings, appearance_theme: appearance };
+  useNativeAppearanceTheme(appearance);
   useNativeShellPreferences(settings);
-  usePortalThemeClasses(settings, systemPrefersDark);
+  usePortalThemeClasses(themeSettings, systemPrefersDark);
   const commandOpen = useButlerStore((state) => state.commandOpen);
   useCommandPaletteHotkey();
   const renameProject = useButlerStore((state) => state.renameProject);
@@ -115,8 +123,7 @@ function AppWorkspaceShell() {
   const newChatActive =
     view.kind === "session" && isDraftChatId(activeChatId);
   const browserChromeDark =
-    settings.appearance_theme === "dark" ||
-    (settings.appearance_theme === "system" && systemPrefersDark);
+    appearance === "dark" || (appearance === "system" && systemPrefersDark);
   useBrowserChromeThemeColor({
     active: newChatActive,
     dark: browserChromeDark,
@@ -147,7 +154,7 @@ function AppWorkspaceShell() {
   return (
     <AdaptiveShell
       ref={shellRef}
-      theme={appShellTheme(settings, systemPrefersDark)}
+      theme={appShellTheme(themeSettings, systemPrefersDark)}
       chromeEnvironment={chromeEnvironment()}
       data-test-class="mac-window"
       leftOpen={leftOpen}
@@ -159,8 +166,7 @@ function AppWorkspaceShell() {
       UNSAFE_style={panelStyle}
       transparentWorkspace={
         newChatActive &&
-        (settings.main_screen_theme === "bloom" ||
-          settings.main_screen_theme === "silk")
+        activeChatWallpaper(settings, navigation, activeChatId).source.kind !== "none"
       }
     >
       {isSettingsView ? (

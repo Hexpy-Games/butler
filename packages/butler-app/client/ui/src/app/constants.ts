@@ -53,6 +53,16 @@ export const EMPTY_SETTINGS: SettingsView = {
     "#53708d",
     "#434d70",
   ],
+  // Matches the gateway default (the legacy defaults above, migrated).
+  wallpaper: {
+    source: {
+      kind: "live",
+      module: "butler.bloom",
+      params: { colors: "monochrome" },
+    },
+    motion: "auto",
+    pauseOnBattery: false,
+  },
   translucent_sidebar: true,
   smart_grouping_enabled: true,
   diagnostics_enabled: false,

@@ -2420,74 +2420,33 @@ try {
   await page
     .getByRole("button", { name: appCopy.settings.sections.appearance })
     .click();
-  await page
-    .locator(testClass("settings-main-screen-theme-select"))
-    .waitFor({ state: "visible" });
-  await page.locator(testClass("settings-main-screen-theme-select")).click();
-  await page
-    .getByRole("option", {
-      exact: true,
-      name: appCopy.settings.options.mainScreenThemeNone,
-    })
-    .waitFor({ state: "visible" });
-  await page
-    .getByRole("option", {
-      exact: true,
-      name: appCopy.settings.options.mainScreenThemeBloom,
-    })
-    .waitFor({ state: "visible" });
-  await page
-    .getByRole("option", {
-      exact: true,
-      name: appCopy.settings.options.mainScreenThemeSilk,
-    })
-    .waitFor({ state: "visible" });
-  await page
-    .getByRole("option", {
-      exact: true,
-      name: appCopy.settings.options.mainScreenThemeSilk,
-    })
-    .click();
-  await page
-    .locator(testClass("settings-main-screen-theme-preset-select"))
-    .waitFor({ state: "detached" });
+  const wallpaperPicker = page.locator(
+    testClass("settings-main-screen-wallpaper-picker"),
+  );
+  await wallpaperPicker.waitFor({ state: "visible" });
+  const wallpaperTile = (key: string) =>
+    wallpaperPicker.locator(`[data-option="${key}"] [role="radio"]`);
+  for (const key of ["none", "live:butler.bloom", "live:butler.silk"]) {
+    await wallpaperTile(key).waitFor({ state: "visible" });
+  }
+  await wallpaperPicker.locator('[data-option="upload"]').waitFor({ state: "visible" });
+  const bloomPalette = wallpaperPicker.locator('[role="radiogroup"][aria-label="Colors"]');
+  await wallpaperTile("live:butler.silk").click();
+  await bloomPalette.waitFor({ state: "detached" });
   await expectLocatorCount(
     page,
-    testClass("settings-main-screen-theme-preset-select"),
+    '[data-test-class~="settings-main-screen-wallpaper-picker"] [role="radiogroup"][aria-label="Colors"]',
     0,
-    "silk main screen theme should not show palette detail controls",
+    "silk wallpaper should not show bloom palette controls",
   );
-  await expectLocatorCount(
-    page,
-    testClass("settings-main-screen-theme-color"),
-    0,
-    "silk main screen theme should not show custom color controls",
-  );
-  await page.locator(testClass("settings-main-screen-theme-select")).click();
-  await page
-    .getByRole("option", {
-      exact: true,
-      name: appCopy.settings.options.mainScreenThemeBloom,
-    })
+  await wallpaperTile("live:butler.bloom").click();
+  await bloomPalette.waitFor({ state: "visible" });
+  await bloomPalette
+    .getByRole("radio", { exact: true, name: "Custom" })
     .click();
-  await page
-    .locator(testClass("settings-main-screen-theme-preset-select"))
-    .waitFor({ state: "visible" });
-  await page
-    .locator(testClass("settings-main-screen-theme-preset-select"))
-    .click();
-  await page
-    .getByRole("option", {
-      exact: true,
-      name: appCopy.settings.options.paletteCustom,
-    })
-    .click();
-  await page
-    .locator(testClass("settings-main-screen-theme-color"))
-    .first()
-    .waitFor({ state: "visible" });
-  const bloomColorState = await page
-    .locator(testClass("settings-main-screen-theme-color"))
+  const bloomSwatch = wallpaperPicker.locator('input[type="color"]');
+  await bloomSwatch.first().waitFor({ state: "visible" });
+  const bloomColorState = await bloomSwatch
     .first()
     .evaluate((element) => {
       const inputBox = element.getBoundingClientRect();
@@ -3075,7 +3034,7 @@ try {
             visibleCoverage: 0,
           };
         }
-        const webgl = fluid.getContext("webgl");
+        const webgl = fluid.getContext("webgl2") ?? fluid.getContext("webgl");
         const canvas2d = webgl ? null : fluid.getContext("2d");
         const width = webgl?.drawingBufferWidth ?? fluid.width;
         const height = webgl?.drawingBufferHeight ?? fluid.height;
@@ -3599,7 +3558,7 @@ try {
       if (!(canvas instanceof HTMLCanvasElement)) {
         return { changedCoverageMax: 0, spreadMax: 0 };
       }
-      const webgl = canvas.getContext("webgl");
+      const webgl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
       const width = webgl?.drawingBufferWidth ?? canvas.width;
       const height = webgl?.drawingBufferHeight ?? canvas.height;
       const samples: Array<{ changedCoverage: number; spread: number }> = [];

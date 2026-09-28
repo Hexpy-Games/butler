@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import { activeChatFromNavigation } from "@/app/utils.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
+import { useAppearanceTheme } from "@/stores/appearanceStore.ts";
 import { EmptyState } from "./EmptyState";
 import { MessageList } from "./MessageList";
 import { Composer } from "./Composer";
@@ -28,9 +29,7 @@ export function Conversation() {
   const messageLoadPending = useButlerStore(
     (state) => state.messageLoadPending,
   );
-  const appearanceTheme = useButlerStore(
-    (state) => state.settings.appearance_theme,
-  );
+  const appearanceTheme = useAppearanceTheme();
   const isSending = useButlerStore((state) => state.isSending);
   const sendingChatId = useButlerStore((state) => state.sendingChatId);
   const sendingOperations = useButlerStore((state) => state.sendingOperations);
