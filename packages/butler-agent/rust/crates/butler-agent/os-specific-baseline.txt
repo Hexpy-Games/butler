@@ -2,11 +2,9 @@
 # FILE<TAB>COUNT<TAB>CODE: how often each construct occurs in each file.
 # Move code behind butler-platform and lower the counts: cargo run -p butler-source-check -- --bless .
 # --bless never raises or adds an entry; new entries need review.
-Cargo.toml	1	[target.'cfg(target_os = "macos")']
 Cargo.toml	1	[target.'cfg(unix)']
-Cargo.toml	1	dependency libproc
 Cargo.toml	1	dependency nix
-src/host.rs	9	cfg(unix)
+src/host.rs	7	cfg(unix)
 src/host/app.rs	4	cfg(unix)
 src/host/app/runtime_ports/liveness.rs	1	nix::errno::Errno::ESRCH
 src/host/app/runtime_ports/liveness.rs	1	nix::sys::signal::kill
@@ -29,19 +27,6 @@ src/host/cli/observability/path.rs	1	var_os("HOME")
 src/host/cli/open.rs	1	cfg!(target_os="macos")
 src/host/cli/personalization/composition.rs	1	nix::sys::utsname::uname
 src/host/cli/personalization/composition.rs	1	var_os("HOME")
-src/host/cli/service.rs	1	var_os("HOME")
-src/host/cli/service/lifecycle.rs	1	0o600
-src/host/cli/service/lifecycle.rs	1	0o700
-src/host/cli/service/lifecycle.rs	1	os::unix::fs::{DirBuilderExt,OpenOptionsExt}
-src/host/cli/service/lifecycle.rs	1	os::unix::process::CommandExt
-src/host/cli/service/lifecycle.rs	1	var_os("HOME")
-src/host/cli/service/lifecycle/readiness.rs	1	nix::sys::signal::{Signal,kill}
-src/host/cli/service/lifecycle/readiness.rs	1	nix::unistd::Pid
-src/host/cli/service/lifecycle/restart_handoff.rs	1	0o700
-src/host/cli/service/lifecycle/restart_handoff.rs	1	os::unix::fs::DirBuilderExt
-src/host/cli/service/lifecycle/restart_handoff.rs	1	os::unix::process::CommandExt
-src/host/cli/service/lifecycle/stop.rs	1	nix::sys::signal::Signal
-src/host/cli/service/lifecycle/tests.rs	1	os::unix::fs::symlink
 src/host/cli/settings/path.rs	1	var_os("HOME")
 src/host/cli/skills.rs	1	var_os("HOME")
 src/host/cli/status.rs	1	nix::{errno::Errno,fcntl::{Flock,FlockArg},}
@@ -99,47 +84,13 @@ src/host/memory_jobs/sync.rs	6	cfg(unix)
 src/host/memory_jobs/transcript_sync/hot.rs	3	0o600
 src/host/memory_jobs/transcript_sync/hot.rs	3	cfg(unix)
 src/host/memory_jobs/transcript_sync/hot.rs	3	os::unix::fs::OpenOptionsExt
-src/host/runtime.rs	12	cfg(unix)
+src/host/runtime.rs	11	cfg(unix)
 src/host/runtime/environment.rs	1	consts::OS
 src/host/runtime/owners.rs	3	cfg(unix)
-src/host/runtime/process_probe.rs	1	nix::errno::Errno
-src/host/runtime/process_probe.rs	1	nix::sys::signal::kill
-src/host/runtime/process_probe.rs	1	nix::unistd::{Pid,gethostname}
 src/host/service.rs	6	cfg(unix)
 src/host/service/cli_launcher.rs	2	0o111
 src/host/service/cli_launcher.rs	1	0o755
 src/host/service/cli_launcher.rs	1	os::unix::fs::PermissionsExt
-src/host/service/entrypoint.rs	1	nix::sys::utsname::uname
-src/host/service/entrypoint.rs	1	var_os("HOME")
-src/host/service/foreground_lease.rs	1	nix::fcntl::{FcntlArg,OFlag,fcntl}
-src/host/service/foreground_lease.rs	1	nix::unistd::dup
-src/host/service/instance.rs	1	0o600
-src/host/service/instance.rs	1	0o700
-src/host/service/instance.rs	1	nix::errno::Errno
-src/host/service/instance.rs	1	nix::fcntl::{Flock,FlockArg}
-src/host/service/instance.rs	1	nix::sys::signal::{Signal,kill}
-src/host/service/instance.rs	1	nix::unistd::Pid
-src/host/service/instance.rs	1	os::unix::fs::{DirBuilderExt,OpenOptionsExt}
-src/host/service/instance/probe.rs	1	nix::{errno::Errno,fcntl::{Flock,FlockArg},}
-src/host/service/instance/record.rs	1	0o600
-src/host/service/instance/record.rs	1	0o700
-src/host/service/instance/record.rs	1	nix::fcntl::{Flock,FlockArg}
-src/host/service/instance/record.rs	1	os::unix::fs::{DirBuilderExt,OpenOptionsExt}
-src/host/service/instance/stop_intent.rs	1	0o600
-src/host/service/instance/stop_intent.rs	1	0o700
-src/host/service/instance/stop_intent.rs	1	os::unix::fs::{DirBuilderExt,OpenOptionsExt}
-src/host/service/instance/tests.rs	1	os::unix::fs::symlink
-src/host/service/instance_identity.rs	1	cfg(any(target_os="linux",target_os="macos"))
-src/host/service/instance_identity.rs	2	cfg(not(any(target_os="linux",target_os="macos")))
-src/host/service/instance_identity.rs	3	cfg(target_os="linux")
-src/host/service/instance_identity.rs	2	cfg(target_os="macos")
-src/host/service/instance_identity.rs	1	libproc::bsd_info::BSDInfo
-src/host/service/instance_identity.rs	1	libproc::proc_pid::pidinfo
-src/host/service/instance_identity.rs	1	libproc::proc_pid::pidpath
-src/host/service/instance_identity.rs	1	nix::errno::Errno
-src/host/service/instance_identity.rs	1	nix::sys::signal::kill
-src/host/service/instance_identity.rs	1	nix::unistd::Pid
-src/host/service/instance_identity.rs	1	os::unix::fs::MetadataExt
 src/lib.rs	1	cfg(unix)
 src/main.rs	1	cfg(not(unix))
 src/main.rs	1	cfg(unix)

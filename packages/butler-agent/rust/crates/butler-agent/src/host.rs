@@ -79,7 +79,6 @@ pub(crate) use crate::host::runtime::storage_bootstrap::prepare_btcc_storage;
 pub(crate) use crate::host::service::configuration::{ServiceConfiguration, require_model_ref};
 pub(crate) use crate::host::service::progress_publisher::ProgressPublisher;
 pub(crate) use crate::host::time::prompt_clock::SystemPromptClock;
-#[cfg(unix)]
 pub(crate) use error::HostError;
 pub(crate) use installation::ResolvedInstallation;
 pub(crate) use runtime::{AgentRuntime, RuntimePaths};
@@ -102,7 +101,6 @@ impl butler_models::models::ProviderClock for SystemIdentity {
     }
 }
 
-#[cfg(unix)]
 impl butler_memory::profile::ProfileHostFacts for SystemIdentity {
     fn process_id(&self) -> u32 {
         std::process::id()

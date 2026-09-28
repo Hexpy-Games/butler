@@ -7,7 +7,6 @@ mod mcp_owner;
 pub(super) mod models;
 mod monitoring;
 mod owners;
-#[cfg(unix)]
 pub(super) mod process_probe;
 mod skills_owner;
 pub(super) mod storage_bootstrap;
