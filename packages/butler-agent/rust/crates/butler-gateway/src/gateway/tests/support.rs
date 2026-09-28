@@ -332,8 +332,8 @@ impl GatewayApplication for TestApplication {
     ) -> ApplicationFuture<Vec<SessionArtifactSummary>> {
         Box::pin(async { Ok(Vec::new()) })
     }
-    fn export_transcript(&self, session_id: String) -> ApplicationFuture<TranscriptExport> {
-        super::transcript_export::empty_export(session_id)
+    fn export_transcript(&self, _: String) -> ApplicationFuture<TranscriptExport> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn list_session_queue(&self, session_id: String) -> ApplicationFuture<SessionQueueView> {
         Box::pin(async move {

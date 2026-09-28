@@ -20,6 +20,9 @@ impl Drop for Scratch {
     }
 }
 
+/// Security boundary: MCP registry CRUD redacts secret literals, and PATCH
+/// round trips keep the secret placeholders.
+// test-category: security
 #[tokio::test]
 async fn registry_crud_redacts_literals_and_patch_retains_secret_placeholders() {
     let scratch = Scratch::new();

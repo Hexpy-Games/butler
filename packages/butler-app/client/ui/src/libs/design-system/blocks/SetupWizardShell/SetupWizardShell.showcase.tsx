@@ -45,7 +45,27 @@ function Wizard({ context, tone }: { context: ShowcaseRenderContext; tone: "ligh
   );
 }
 
+const focusLabels = {
+  "en-US": { title: "Welcome to Butler", body: "Butler works for you on this Mac.", agree: "Agree and continue" },
+  "ko-KR": { title: "반갑습니다", body: "Butler는 이 Mac에서 일을 대신합니다.", agree: "동의하고 계속" },
+} as const;
+
+function Focus({ context, tone }: { context: ShowcaseRenderContext; tone: "light" | "dark" }) {
+  const copy = focusLabels[context.locale];
+  return (
+    <SetupWizardShell embedded title="Butler" tone={tone} variant="focus">
+      <SetupWizardContent>
+        <Typo.H3 as="h1" align="center">{copy.title}</Typo.H3>
+        <Typo.Body align="center">{copy.body}</Typo.Body>
+        <Button size="lg" stretch>{copy.agree}</Button>
+      </SetupWizardContent>
+    </SetupWizardShell>
+  );
+}
+
 export const stories: ShowcaseStory[] = [
   { name: "Step (light backdrop)", widths: ["375", "app", "wide"], render: (context) => <Wizard context={context} tone="light" /> },
   { name: "Step (dark backdrop)", widths: ["375", "app", "wide"], render: (context) => <Wizard context={context} tone="dark" /> },
+  { name: "Focus (one column, light)", widths: ["375", "app"], render: (context) => <Focus context={context} tone="light" /> },
+  { name: "Focus (one column, dark)", widths: ["375", "app"], render: (context) => <Focus context={context} tone="dark" /> },
 ];

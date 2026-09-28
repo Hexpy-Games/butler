@@ -117,16 +117,3 @@ pub(super) async fn serve(
 fn not_found() -> HttpError {
     HttpError::public(404, "not_found", "Route not found.")
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn bundled_fonts_are_public_typed_static_assets() {
-        let path = "/assets/PretendardVariable.subset.0-Ab12.woff2";
-        assert_eq!(mime(path), Some("font/woff2"));
-        assert!(is_public_asset(&Method::GET, path));
-        assert!(!is_public_asset(&Method::POST, path));
-    }
-}

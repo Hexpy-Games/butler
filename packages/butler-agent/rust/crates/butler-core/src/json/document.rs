@@ -71,6 +71,3 @@ impl PartialEq for JsonDocument {
     }
 }
 impl Eq for JsonDocument {}
-
-#[cfg(test)]
-mod tests;

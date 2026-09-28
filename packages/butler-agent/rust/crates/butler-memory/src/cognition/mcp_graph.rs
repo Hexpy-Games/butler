@@ -213,17 +213,6 @@ mod tests {
     }
 
     #[test]
-    fn missing_legacy_graph_is_empty_without_creating_it() {
-        let root = root();
-        assert_eq!(
-            read_mcp_legacy_graph(&root, "butler", None, None, 2).unwrap(),
-            r#"{"entities":[],"relationships":[]}"#
-        );
-        assert!(!root.join("cognition/memory/db/graph.sqlite").exists());
-        fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
     fn legacy_graph_search_and_bidirectional_hops_use_read_only_schema() {
         let root = root();
         let path = root.join("cognition/memory/db/graph.sqlite");

@@ -183,11 +183,10 @@ fn normalize_markdown(value: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::extract_readable_html;
 
-    #[test]
-    fn article_extraction_matches_source_semantics_for_generic_content() {
+    pub(crate) fn article_extraction_matches_source_semantics_for_generic_content() {
         let body = format!(
             "<html><head><title>Story title</title></head><body><nav>nav-only text must be removed</nav><div class=\"ad\">ad-only text must be removed</div><div><h1>Story title</h1><p>{}</p><p>See <a href=\"https://example.com/source\">primary source</a>.</p><pre><code>let answer = 42;\n</code></pre><table><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody><tr><td>answer</td><td>42</td></tr></tbody></table></div><footer>footer-only text must be removed</footer></body></html>",
             "A useful article sentence. ".repeat(24),

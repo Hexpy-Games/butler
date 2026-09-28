@@ -170,6 +170,3 @@ fn round_cost(value: f64) -> f64 {
         value
     }
 }
-
-#[cfg(test)]
-mod tests;

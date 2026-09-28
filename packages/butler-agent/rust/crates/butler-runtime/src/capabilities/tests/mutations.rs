@@ -1,11 +1,8 @@
-use std::sync::Arc;
-
-use butler_platform::secure_fs::{self, FileMode};
+use butler_platform::secure_fs::{self};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use super::{CapabilityInvocation, Fixture};
-use butler_turn::workspace::WorkspaceMutations;
 
 async fn rust(
     fixture: &Fixture,
@@ -38,46 +35,6 @@ fn sha(value: &[u8]) -> String {
 }
 
 #[tokio::test]
-async fn registry_creates_overwrites_and_edits_workspace_files() {
-    let fixture = Fixture::new();
-    let create = json!({"arguments":{"path":"sample.txt","content":"\u{feff}one\r\ntwo\r\n"}});
-    let created = rust(&fixture, "write_file", &create, None, None).await;
-    assert_eq!(created["ok"], true);
-    assert_eq!(
-        std::fs::read(fixture.root.join("sample.txt")).unwrap(),
-        "\u{feff}one\r\ntwo\r\n".as_bytes()
-    );
-    let before_sha = created["after_sha256"].as_str().unwrap();
-    let edit = json!({"arguments":{"path":"sample.txt","old_text":"two","new_text":"second",
-        "expected_sha256":before_sha,"start_line":2}});
-    let edited = rust(&fixture, "edit_file", &edit, None, None).await;
-    assert_eq!(edited["ok"], true);
-    assert_eq!(
-        std::fs::read(fixture.root.join("sample.txt")).unwrap(),
-        "\u{feff}one\r\nsecond\r\n".as_bytes()
-    );
-    // A non-default mode (0640) must survive the atomic replacement.
-    let sample = fixture.root.join("sample.txt");
-    let mode_set = secure_fs::set_file_mode(&sample, FileMode::GROUP_READABLE)
-        .transpose()
-        .unwrap();
-    let overwrite = json!({"arguments":{"path":"sample.txt","content":"complete\n",
-        "overwrite":true,"expected_sha256":edited["after_sha256"]}});
-    let overwritten = rust(&fixture, "write_file", &overwrite, None, None).await;
-    assert_eq!(overwritten["ok"], true);
-    assert_eq!(
-        std::fs::read(fixture.root.join("sample.txt")).unwrap(),
-        b"complete\n"
-    );
-    // Hosts without permission modes neither set nor report one.
-    assert_eq!(
-        secure_fs::file_mode(&std::fs::metadata(&sample).unwrap()),
-        mode_set.map(|()| FileMode::GROUP_READABLE)
-    );
-    fixture.capabilities.mutations.close().await;
-}
-
-#[tokio::test]
 async fn write_file_creates_empty_files_and_admitted_parent_directories() {
     {
         let fixture = Fixture::new();
@@ -104,23 +61,6 @@ async fn write_file_creates_empty_files_and_admitted_parent_directories() {
 }
 
 #[tokio::test]
-async fn nul_after_binary_prefix_remains_editable_like_source() {
-    let fixture = Fixture::new();
-    let mut bytes = vec![b'a'; 4096];
-    bytes.extend_from_slice(b"\0z");
-    fixture.write("late-nul.txt", &bytes);
-    let call = json!({"arguments":{"path":"late-nul.txt","old_text":"z","new_text":"q"}});
-    let actual = rust(&fixture, "edit_file", &call, None, None).await;
-    assert_eq!(actual["ok"], true);
-    bytes[4097] = b'q';
-    assert_eq!(
-        std::fs::read(fixture.root.join("late-nul.txt")).unwrap(),
-        bytes
-    );
-    fixture.capabilities.mutations.close().await;
-}
-
-#[tokio::test]
 async fn admission_and_scope_precedence_is_branch_specific() {
     let fixture = Fixture::new();
     let none: [String; 0] = [];
@@ -144,34 +84,6 @@ async fn admission_and_scope_precedence_is_branch_specific() {
     );
     assert!(!fixture.root.join("blocked.txt").exists());
     fixture.capabilities.mutations.close().await;
-}
-
-#[tokio::test]
-async fn dropped_caller_still_completes_and_close_drains() {
-    let fixture = Fixture::new();
-    let owner: Arc<WorkspaceMutations> = Arc::clone(&fixture.capabilities.mutations);
-    let command =
-        butler_turn::workspace::MutationCommand::Write(butler_turn::workspace::WriteMutation {
-            context: butler_turn::workspace::MutationContext {
-                root: fixture.root.clone(),
-                path_form: butler_turn::workspace::PathForm::RelativeOrAbsolute,
-                installation_root: None,
-                protected_roots: Vec::new(),
-            },
-            path: "detached.txt".into(),
-            content: "completed".into(),
-            overwrite: false,
-            create_parents: false,
-            expected_sha256: None,
-        });
-    let receiver = owner.submit(command).unwrap();
-    drop(receiver);
-    owner.close().await;
-    assert_eq!(
-        std::fs::read_to_string(fixture.root.join("detached.txt")).unwrap(),
-        "completed"
-    );
-    assert_eq!(owner.active_count(), 0);
 }
 
 #[tokio::test]

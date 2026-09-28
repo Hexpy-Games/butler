@@ -2,8 +2,7 @@ use super::*;
 
 /// Content references are persisted; canonicalization must keep producing
 /// the hashes recorded by the legacy writer.
-#[test]
-fn persisted_content_ref_hashes_are_stable_across_canonicalization_edge_cases() {
+pub(crate) fn persisted_content_ref_hashes_are_stable_across_canonicalization_edge_cases() {
     for (body, canonical, sha256) in [
         (
             r#"{"integerFloat":1.0,"negativeZero":-0.0,"small":1e-7,"threshold":0.000001,"large":1e21,"fixed":100000000000000000000}"#,
@@ -55,8 +54,7 @@ fn persisted_content_ref_hashes_are_stable_across_canonicalization_edge_cases() 
     );
 }
 
-#[test]
-fn sqlite_identity_uses_js_property_enumeration_order() {
+pub(crate) fn sqlite_identity_uses_js_property_enumeration_order() {
     let body: Value = serde_json::from_str(
             r#"{"10":"ten","2":"two","1":"one","01":"leading","4294967294":"index","4294967295":"ordinary","nested":{"12":true,"3":false}}"#,
         ).unwrap();

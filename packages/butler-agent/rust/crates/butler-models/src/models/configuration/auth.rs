@@ -14,7 +14,7 @@ mod profile;
 mod url;
 use io::{read_json_object, response_json, write_mode_600};
 use jwt::{account_id_from_access_token, codex_account_id, email_from_access_token};
-pub(crate) use profile::OpenAiAuthProfile;
+pub use profile::OpenAiAuthProfile;
 use profile::{copy_string, update_claim, update_number, update_string};
 
 use super::{ModelConfigurationClock, ModelConfigurationEnvironment};

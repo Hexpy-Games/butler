@@ -44,6 +44,7 @@ mod session_relocation;
 mod session_views;
 mod sessions;
 mod settings;
+mod setup;
 pub use settings::diagnostics_enabled_readonly;
 mod shell;
 mod space;
@@ -121,6 +122,13 @@ pub use sessions::{
     AppSessionWorkspaceSnapshot, AppWorkProgress, AppWorkStreamQuery, AppWorkStreamReader,
     AppWorkStreamTurnOutcome, AppWorkspaceMode,
 };
+#[cfg(test)]
+pub(crate) use setup::test_setup_port;
+pub use setup::{
+    AppOauthStartInput, AppProviderKeyInput, AppSetupPort, LocalModelServersView, OauthFlowStatus,
+    OauthFlowView, ProviderKeyVerificationView, SETUP_READINESS_EVENT, SavedCredentialView,
+    SetupReadinessStatus, SetupReadinessStep, SetupReadinessView, SetupStepError, SetupStepStatus,
+};
 pub use space::{AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin};
 use storage::{AppStorage, AppStorageError};
 type SkillImportResult = butler_runtime::skills::SkillImportResult;
@@ -163,6 +171,7 @@ pub struct AppApplication {
     butler_data: PathBuf,
     settings_update_lock: Arc<tokio::sync::Mutex<()>>,
     plan_decision_locks: PlanDecisionLocks,
+    setup_readiness: setup::ReadinessRelay,
     quota_events: Arc<quota_events::QuotaEventForwarder>,
 }
 
@@ -193,16 +202,7 @@ impl AppApplication {
         };
         let dependencies = Arc::new(dependencies);
         let subscribers = EventSubscribers::default();
-        let retention_cursor = match storage
-            .execute(|connection| events::latest(connection))
-            .await
-        {
-            Ok(cursor) => cursor,
-            Err(error) => {
-                let _ = storage.close().await;
-                return Err(app_error(error));
-            }
-        };
+        let retention_cursor = latest_event_cursor(&storage).await?;
         let (queue_dispatcher, queue_wake) = queue_dispatcher::QueueDispatcher::start();
         let automation_scheduler = automations::AutomationScheduler::start();
         let automation_runs = automations::AutomationRunOwner::start();
@@ -254,6 +254,7 @@ impl AppApplication {
             butler_data: config.butler_data,
             settings_update_lock: Arc::new(tokio::sync::Mutex::new(())),
             plan_decision_locks: PlanDecisionLocks::default(),
+            setup_readiness: setup::ReadinessRelay::default(),
             quota_events: Arc::default(),
         };
         if let Err(error) = application.recover_session_relocation_owned().await {
@@ -281,11 +282,18 @@ impl AppApplication {
         self.recover_turn_cancellations().await?;
         // Failed authority retries remain durable for the next startup.
         let _ = self.dependencies.authority_handoff.retry_decided().await;
+        self.setup_readiness.start(
+            self.dependencies.setup.readiness(),
+            self.storage.clone(),
+            self.subscribers.clone(),
+            self.dependencies.identity_clock.clone(),
+        );
         self.quota_events.start(self.clone_handle());
         Ok(())
     }
 
     pub async fn stop_dispatch(&self) -> Result<(), GatewayApplicationError> {
+        self.setup_readiness.close().await;
         let automations = match &self.automation_scheduler {
             Some(scheduler) => scheduler.close().await,
             None => Ok(()),
@@ -363,6 +371,20 @@ impl AppApplication {
     }
 }
 
+/// The newest durable event cursor; storage is closed when it cannot be read.
+async fn latest_event_cursor(storage: &AppStorage) -> Result<u64, GatewayApplicationError> {
+    match storage
+        .execute(|connection| events::latest(connection))
+        .await
+    {
+        Ok(cursor) => Ok(cursor),
+        Err(error) => {
+            let _ = storage.close().await;
+            Err(app_error(error))
+        }
+    }
+}
+
 /// A process-unique owner id for the session queue claim.
 fn queue_owner_id(clock: &dyn AppIdentityClock) -> String {
     format!(
@@ -433,9 +455,7 @@ fn app_error(error: AppStorageError) -> GatewayApplicationError {
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
-pub(crate) use test_support::{
-    seed_test_assistant_attachment, seed_test_authority_queue, seed_test_transcript_messages,
-};
+pub(crate) use test_support::seed_test_assistant_attachment;
 
 mod snapshot_input;
 #[cfg(test)]

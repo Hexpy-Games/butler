@@ -25,6 +25,22 @@ composer controls; see the ComposerControl showcase. `SelectPillTrigger` (a
 glass `PillButton` trigger) remains for floating selectors outside the
 composer toolbar.
 
+### Icons
+
+`SelectItem icon={…}` puts a decorative glyph (a `ProviderLogo`) before the
+option text, outside the item text so typeahead matches the label. To show it
+in the trigger, pass the same glyph as `SelectValue icon={…}` with the value
+text as `children`. Give every option an icon or none.
+
+```tsx
+<SelectTrigger aria-label="Provider">
+  <SelectValue icon={<ProviderLogo name="claude" />}>Anthropic</SelectValue>
+</SelectTrigger>
+<SelectContent>
+  <SelectItem value="anthropic" icon={<ProviderLogo name="claude" />}>Anthropic</SelectItem>
+</SelectContent>
+```
+
 Use `SelectButton` for a select-looking trigger that opens a custom popover,
 such as a searchable list inside `Popover`. It shares the `SelectTrigger` border,
 height, left-aligned value, and plain chevron.

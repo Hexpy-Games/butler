@@ -61,9 +61,8 @@ fn table() -> &'static [(u32, &'static str)] {
 }
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    fn bundled_case_fold_table_parses() {
+pub(super) mod tests {
+    pub(crate) fn bundled_case_fold_table_parses() {
         assert!(!super::table().is_empty());
     }
 }

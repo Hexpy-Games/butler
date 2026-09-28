@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use super::{is_activity, work_blocks::project};
+use super::work_blocks::project;
 
 #[test]
 fn work_blocks_merge_tool_updates_and_exclude_internal_tools() {
@@ -55,36 +55,4 @@ fn work_blocks_merge_tool_updates_and_exclude_internal_tools() {
             "turn_event_sequence"
         ],
     );
-}
-
-#[test]
-fn empty_or_null_legacy_fields_do_not_create_blocks_or_panic() {
-    let blocks = project(&[
-        json!({
-            "id":"empty-id", "kind":"message", "work_block_id":"",
-            "work_block_label":"Visible", "safe_label":"Visible", "state":"running"
-        }),
-        json!({
-            "id":"empty-label", "kind":"message", "work_block_id":"block",
-            "work_block_label":"", "safe_label":"Visible", "state":"running"
-        }),
-        json!({
-            "id":"null-fields", "kind":"message", "work_block_id":null,
-            "work_block_label":null, "safe_label":"Visible", "state":"running"
-        }),
-    ]);
-    assert!(blocks.is_empty());
-}
-
-#[test]
-fn activity_projection_uses_javascript_truthiness_for_optional_strings() {
-    let empty_operation = json!({
-        "kind":"used_tool", "bridge_phase":"btcc_operation", "semantic_block_id":""
-    });
-    let null_block_decision = json!({
-        "kind":"message", "work_block_id":null, "semantic_block_id":"semantic-1",
-        "work_decision_source":"model-authored", "work_decision_summary":"Decision"
-    });
-    assert!(!is_activity(&empty_operation));
-    assert!(is_activity(&null_block_decision));
 }

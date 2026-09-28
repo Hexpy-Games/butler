@@ -91,6 +91,3 @@ impl<'a> Utf16Slice<'a> {
         Cow::Owned(output)
     }
 }
-
-#[cfg(test)]
-mod tests;

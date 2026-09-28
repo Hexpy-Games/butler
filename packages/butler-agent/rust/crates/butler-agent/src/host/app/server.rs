@@ -19,6 +19,7 @@ use crate::host::app::dashboard::AppDashboardLedger;
 use crate::host::app::dashboard_briefing::AppDashboardBriefing;
 use crate::host::app::plan_decision::AppPlanDecisionLedger;
 use crate::host::app::runtime_ports::AppRuntimeInfo;
+use crate::host::app::runtime_ports::{AppSetup, AppSetupParts};
 use crate::host::service::configuration::AppServiceConfiguration;
 use crate::host::{
     AgentRuntime, AppAdmission, AppApprovalClaimsAdapter, AppAssets, AppBranchConversations,
@@ -35,6 +36,7 @@ pub(crate) struct AppServer {
     listener_ready: Arc<AtomicBool>,
     application: Arc<AppApplication>,
     artifacts: Arc<AppMessageFiles>,
+    setup: AppSetup,
 }
 
 impl AppServer {
@@ -78,17 +80,14 @@ impl AppServer {
     ) -> Result<Self, BtccError> {
         let listener_ready = Arc::new(AtomicBool::new(false));
         let identity_clock: Arc<dyn AppIdentityClock> = Arc::new(SystemIdentity);
-        let settings = Arc::new(
-            AppSettingsFactsAdapter::open(
-                runtime.models.configuration.clone(),
-                runtime.profile.clone(),
-                data_root.to_path_buf(),
-                format!("http://{}:{}", app_config.host, app_config.port),
-                "local".into(),
-            )
-            .await
-            .map_err(app_error)?,
-        );
+        let settings = Arc::new(open_settings(runtime, data_root, app_config).await?);
+        let setup = AppSetup::start(AppSetupParts {
+            configuration: runtime.models.configuration.clone(),
+            settings: settings.clone(),
+            installation: installation.clone(),
+            data_root: data_root.to_path_buf(),
+            executor: receipt.clone(),
+        });
         let session_workspaces = Arc::new(AppSessionWorkspaces::new(
             runtime.bindings.clone(),
             runtime.session_worktrees.clone(),
@@ -97,13 +96,8 @@ impl AppServer {
             runtime.conversations.clone(),
         ));
         let dependencies = AppApplicationDependencies {
-            updates: Arc::new(
-                crate::host::cli::update::open_app_update(data_root, installation).map_err(
-                    |code| {
-                        BtccError::relayed(code.to_string(), "App update service is unavailable")
-                    },
-                )?,
-            ),
+            updates: Arc::new(open_updates(data_root, installation)?),
+            setup: Arc::new(setup.clone()),
             skills: runtime.skills.clone(),
             mcp_client: runtime.mcp_client.clone(),
             native_ingress: Arc::new(AppIngress::new(queue.clone())),
@@ -236,6 +230,7 @@ impl AppServer {
             listener_ready,
             application,
             artifacts,
+            setup,
         })
     }
 
@@ -257,6 +252,7 @@ impl AppServer {
     /// Drain the App projection and its file jobs before native runtime owners.
     pub(crate) async fn close_application(&mut self) -> Result<(), BtccError> {
         let listener = self.stop_listener().await;
+        self.setup.close().await;
         let application = self.application.close().await.map_err(app_error);
         let artifacts = self.artifacts.close().await.map_err(app_error);
         listener.and(application).and(artifacts)
@@ -267,6 +263,30 @@ impl Drop for AppServer {
     fn drop(&mut self) {
         self.listener_ready.store(false, Ordering::Release);
     }
+}
+
+async fn open_settings(
+    runtime: &AgentRuntime,
+    data_root: &std::path::Path,
+    app_config: &AppServiceConfiguration,
+) -> Result<AppSettingsFactsAdapter, BtccError> {
+    AppSettingsFactsAdapter::open(
+        runtime.models.configuration.clone(),
+        runtime.profile.clone(),
+        data_root.to_path_buf(),
+        format!("http://{}:{}", app_config.host, app_config.port),
+        "local".into(),
+    )
+    .await
+    .map_err(app_error)
+}
+
+fn open_updates(
+    data_root: &std::path::Path,
+    installation: &ResolvedInstallation,
+) -> Result<butler_runtime::operations::AppUpdateService, BtccError> {
+    crate::host::cli::update::open_app_update(data_root, installation)
+        .map_err(|code| BtccError::relayed(code.to_string(), "App update service is unavailable"))
 }
 
 fn app_error(error: GatewayApplicationError) -> BtccError {

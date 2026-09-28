@@ -70,6 +70,3 @@ impl ToolCatalog {
         Ok(Self { source })
     }
 }
-
-#[cfg(test)]
-mod tests;

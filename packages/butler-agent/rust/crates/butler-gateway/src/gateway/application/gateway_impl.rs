@@ -225,6 +225,9 @@ impl GatewayApplication for AppApplication {
     fn runtime_readiness(&self) -> Result<RuntimeReadinessView, GatewayApplicationError> {
         self.dependencies.executor_readiness.readiness()
     }
+    fn setup(&self) -> Result<Arc<dyn super::AppSetupPort>, GatewayApplicationError> {
+        Ok(self.dependencies.setup.clone())
+    }
     fn read_settings(&self) -> ApplicationFuture<serde_json::Value> {
         let this = self.clone_handle();
         Box::pin(async move { this.worker_profile_settings().await })

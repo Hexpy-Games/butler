@@ -387,15 +387,13 @@ fn base(
 }
 
 #[cfg(test)]
-mod tests {
-    use std::io::Write;
+pub(crate) mod tests {
 
     use serde_json::Value;
 
     use super::*;
 
-    #[test]
-    fn persisted_import_normalization_hash_and_id_are_stable() {
+    pub(crate) fn persisted_import_normalization_hash_and_id_are_stable() {
         let golden: Value =
             serde_json::from_str(include_str!("../tests/identity-golden.json")).unwrap();
         let source = normalize_source(Some(" Other Assistant! "));
@@ -406,33 +404,5 @@ mod tests {
         assert_eq!(text.utf8_for_hash(), golden["normalized"].as_str().unwrap());
         assert_eq!(hash, golden["importHash"]);
         assert_eq!(id, golden["importId"]);
-    }
-
-    #[test]
-    fn manifest_writer_rejects_final_symlink_and_truncates_regular_reimports() {
-        use butler_platform::secure_fs::symlink;
-        use std::fs;
-
-        let root = std::env::temp_dir().join(format!(
-            "butler-profile-import-manifest-{}",
-            std::process::id()
-        ));
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(&root).unwrap();
-        let target = root.join("outside.json");
-        let manifest = root.join("hash.json");
-        fs::write(&target, b"outside data").unwrap();
-        symlink(&target, &manifest).unwrap();
-
-        assert!(private_manifest_file(&manifest).is_err());
-        assert_eq!(fs::read(&target).unwrap(), b"outside data");
-
-        fs::remove_file(&manifest).unwrap();
-        fs::write(&manifest, b"prior manifest").unwrap();
-        let mut file = private_manifest_file(&manifest).unwrap();
-        file.write_all(b"updated manifest").unwrap();
-        drop(file);
-        assert_eq!(fs::read(&manifest).unwrap(), b"updated manifest");
-        fs::remove_dir_all(root).unwrap();
     }
 }

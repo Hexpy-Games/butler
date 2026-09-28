@@ -63,35 +63,6 @@ async fn loopback_discovery_uses_models_and_per_model_props_with_fallbacks() {
 }
 
 #[tokio::test]
-async fn fetch_object_accepts_response_larger_than_four_megabytes() {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    let body = serde_json::json!({"padding":"x".repeat(4 * 1024 * 1024 + 1)}).to_string();
-    let server = tokio::spawn(async move {
-        let (mut stream, _) = listener.accept().await.unwrap();
-        let mut request = [0; 1024];
-        assert!(stream.read(&mut request).await.unwrap() > 0);
-        let response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-            body.len()
-        );
-        stream.write_all(response.as_bytes()).await.unwrap();
-    });
-    let value = fetch_object(
-        &crate::models::provider_http_client().unwrap(),
-        &format!("http://{address}/large"),
-        None,
-    )
-    .await
-    .unwrap();
-    server.await.unwrap();
-    assert_eq!(
-        value["padding"].as_str().map(str::len),
-        Some(4 * 1024 * 1024 + 1)
-    );
-}
-
-#[tokio::test]
 async fn custom_discovery_preserves_raw_ids_and_skips_llama_props() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();

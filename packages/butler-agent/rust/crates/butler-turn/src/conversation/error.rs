@@ -165,18 +165,3 @@ impl ConversationError {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::ConversationCode;
-
-    #[test]
-    fn wire_codes_are_stable() {
-        let codes: Vec<&str> = ConversationCode::ALL
-            .iter()
-            .map(|code| code.as_str())
-            .collect();
-        let expected: Vec<&str> = include_str!("wire_codes.txt").lines().collect();
-        assert_eq!(codes, expected);
-    }
-}

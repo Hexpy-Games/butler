@@ -3,6 +3,7 @@
 mod catalog;
 mod configuration;
 mod diagnostics;
+mod local_servers;
 mod prompt;
 mod provider;
 mod quota;
@@ -22,6 +23,11 @@ pub use visual_admission::{
 pub use visual_manifest::VisualAttachmentManifest;
 
 pub use transport::provider_http_client;
+
+pub use local_servers::{
+    DetectedLocalModel, DetectedLocalServer, LocalServerKind, LocalServerProbe,
+    detect_local_servers,
+};
 
 // Prompt clients receive the same typed error as the provider round adapter.
 // Expose it with the prompt API so lifecycle callbacks need no BTCC imports.
@@ -73,8 +79,9 @@ use tokenizer::TokenizerOwner;
 pub use configuration::{
     DiscoveredLocalModel, HostedModelMutation, LocalModelMutation, McpModelTarget,
     ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
-    ModelConfigurationRead, ProviderCredentialMutation, SettingsError, generate_pkce_verifier,
-    pkce_challenge,
+    ModelConfigurationRead, OpenAiAuthProfile, ProviderCredentialMutation, ProviderKeyCheck,
+    ProviderKeyCheckError, ProviderKeySaveError, SavedProviderKey, SettingsError,
+    generate_pkce_verifier, pkce_challenge,
 };
 pub use status::{StatusModels, auth_status_with_environment, open_status_models};
 

@@ -72,6 +72,9 @@ fn redact_value(value: Value, secret: &str) -> Value {
 mod tests {
     use super::*;
 
+    /// Security boundary: a local provider failure's projection removes the exact
+    /// bearer secret from the error text.
+    // test-category: security
     #[test]
     fn local_failure_projection_removes_the_exact_bearer_secret() {
         let mut error = ProviderRequestError {

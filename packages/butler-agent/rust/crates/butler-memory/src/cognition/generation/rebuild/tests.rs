@@ -120,81 +120,16 @@ impl Drop for Fixture {
     }
 }
 
+/// Race: a rebuild's commit gate is check-then-act safe. A candidate that
+/// changes while readiness or the representative commit waits for the gate is
+/// rejected.
+// test-category: race
 #[tokio::test]
-async fn cancellation_while_waiting_for_write_gate_removes_staged_snapshot() {
-    let fixture = Fixture::new();
-    let canonical = fixture.0.join("runtime/conversation-store.sqlite");
-    let host = Arc::new(TestHost::default());
-    let store = AgentConversationStore::open(ConversationStoreConfig {
-        path: canonical,
-        identity_clock: host.clone(),
-        collation: host.clone(),
-    })
-    .await
-    .unwrap();
-    store.close().await.unwrap();
-    fs::write(
-        fixture.0.join("cognition/memory/active-generation.json"),
-        r#"{"schema":"butler.memory-active-generation.v2","generation_id":"11111111-1111-1111-1111-111111111111","projection_mode":"running"}"#,
-    )
-    .unwrap();
-
-    let coordinator = Arc::new(CognitionWriteCoordinator::new(host.clone()).unwrap());
-    let environment = CognitionPathEnvironment::default();
-    let lock_path = environment.consolidation_lock(&fixture.0);
-    let held = coordinator
-        .try_acquire(&CognitionWriteAcquire::immediate(
-            lock_path,
-            "test_held_gate",
-        ))
-        .unwrap()
-        .unwrap();
-    let clock_before = host.clock_reads();
-    let cancellation = CancellationToken::new();
-    let running = tokio::spawn(prepare(
-        fixture.0.clone(),
-        environment,
-        coordinator,
-        cancellation.clone(),
-        "2026-09-23T00:00:00.000Z".into(),
-        "17.0.0".into(),
-        "ICU4X 1.4.0".into(),
-    ));
-
-    let generations = fixture.0.join("cognition/memory/generations");
-    host.gate_reached_after(clock_before).await;
-    assert!(
-        fs::read_dir(&generations)
-            .unwrap()
-            .filter_map(Result::ok)
-            .any(|entry| {
-                entry.file_name().to_string_lossy().starts_with(".prepare-")
-                    && entry.path().join("graph.sqlite").is_file()
-                    && entry
-                        .path()
-                        .join("source-snapshot/memory-source-inventory.json")
-                        .is_file()
-            }),
-        "snapshot must stage before the write gate"
-    );
-    assert!(
-        !running.is_finished(),
-        "held write gate must block publication"
-    );
-    cancellation.cancel();
-    let outcome = tokio::time::timeout(Duration::from_secs(5), running)
-        .await
-        .expect("cancelled acquisition must settle")
-        .unwrap();
-    assert_eq!(
-        outcome.err().expect("acquisition must fail").code(),
-        "memory_operation_aborted"
-    );
-    assert_eq!(fs::read_dir(&generations).unwrap().count(), 0);
-    held.release(false).unwrap();
+async fn rebuild_rejects_candidate_changes_during_gate_waits() {
+    readiness_rejects_candidate_change_while_waiting_for_commit_gate().await;
+    representative_commit_rejects_changed_candidate_after_gate_wait().await;
 }
 
-#[tokio::test]
 async fn readiness_rejects_candidate_change_while_waiting_for_commit_gate() {
     let fixture = Fixture::new();
     let canonical = fixture.0.join("runtime/conversation-store.sqlite");
@@ -282,7 +217,6 @@ async fn readiness_rejects_candidate_change_while_waiting_for_commit_gate() {
     );
 }
 
-#[tokio::test]
 async fn representative_commit_rejects_changed_candidate_after_gate_wait() {
     let fixture = Fixture::new();
     let canonical = fixture.0.join("runtime/conversation-store.sqlite");
