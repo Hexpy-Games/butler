@@ -10,6 +10,7 @@ mod mcp;
 mod mutations;
 mod probes;
 mod provider;
+mod quota;
 mod read;
 mod settings;
 

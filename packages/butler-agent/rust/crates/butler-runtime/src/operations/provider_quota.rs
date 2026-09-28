@@ -1,15 +1,19 @@
-//! Latest subscription quota per provider, parsed from successful responses.
+//! Latest subscription quota per provider, from response headers and polls.
 //!
-//! The provider client reports each response's quota headers here as parsed
-//! numbers. The store keeps the latest reading per provider, persists it to
+//! The provider client reports each response's quota headers here, and the
+//! [`ProviderQuotaPoller`] adds readings of the providers' usage endpoints.
+//! The store keeps the latest reading per provider, persists it to
 //! `metrics/provider-quota.json` so a restart still shows the last known
-//! values (marked stale), and announces changed values to subscribers.
+//! values (marked stale), keeps the outcome of the latest poll in memory, and
+//! announces changed views to subscribers.
+
+mod poller;
+mod view;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use chrono::{DateTime, SecondsFormat, Utc};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
@@ -18,9 +22,10 @@ use butler_models::models::{
     ProviderClock, ProviderQuotaReading, ProviderQuotaSink, ProviderQuotaWindow,
 };
 
+pub use poller::{ProviderQuotaFetcher, ProviderQuotaPoller, QuotaFetchFuture, QuotaPollTrigger};
+pub use view::unavailable_view;
+
 const FILE: &str = "metrics/provider-quota.json";
-/// A reading older than this is shown as stale.
-const STALE_AFTER_MS: i64 = 15 * 60 * 1000;
 const UPDATE_CAPACITY: usize = 64;
 
 /// Whether the quota belongs to a subscription plan or to API billing.
@@ -35,12 +40,14 @@ pub enum QuotaPlanKind {
     Unknown,
 }
 
-/// Why no quota is shown.
+/// Why no (fresh) quota is shown.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct QuotaUnavailableReason {
-    /// Stable code, e.g. `provider_quota_surface_unavailable`.
+    /// `provider_quota_pending` (supported, no data yet),
+    /// `provider_quota_not_offered` (no quota to read) or
+    /// `provider_quota_fetch_failed` (the latest poll failed).
     pub code: String,
-    /// Short English explanation.
+    /// Short English explanation; never a provider error text.
     pub message: String,
 }
 
@@ -48,7 +55,8 @@ pub struct QuotaUnavailableReason {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QuotaWindowView {
-    /// `tokens-5-hour`, `tokens-weekly`, or `tokens-primary`/`tokens-secondary`.
+    /// `tokens-5-hour`, `tokens-weekly`, `mcp-month`, or
+    /// `tokens-primary`/`tokens-secondary`.
     pub id: String,
     /// Share of the window used, 0–100.
     pub used_percent: Option<f64>,
@@ -58,7 +66,7 @@ pub struct QuotaWindowView {
     pub window_duration_mins: Option<u64>,
     /// When the window resets (RFC 3339).
     pub resets_at: Option<String>,
-    /// Always `None`: response headers carry no expiry.
+    /// Always `None`: no source reports an expiry.
     pub expires_at: Option<String>,
 }
 
@@ -68,21 +76,23 @@ pub struct QuotaWindowView {
 pub struct ProviderQuotaView {
     /// Whether a reading exists.
     pub available: bool,
-    /// The reading is older than 15 minutes or a window has reset since.
+    /// The reading is older than 15 minutes, a window has reset since, or
+    /// the latest poll failed after it.
     pub stale: bool,
-    /// Always `provider_quota`: parsed from response headers.
+    /// `zai_usage_query` for Z.AI polls, else `provider_quota`.
     pub source_kind: String,
-    /// `<provider>-response-headers`.
+    /// `<provider>-response-headers`, `<provider>-usage-endpoint` or
+    /// `zai-coding-plan-usage-query`.
     pub source_id: String,
     /// Plan kind of the reading.
     pub plan_kind: QuotaPlanKind,
-    /// Plan name; headers carry none.
+    /// Plan name the provider reported, when known.
     pub plan_name: Option<String>,
     /// Reported windows, primary first.
     pub windows: Vec<QuotaWindowView>,
     /// When the reading was received (RFC 3339).
     pub fetched_at: Option<String>,
-    /// Why no quota is shown, when unavailable.
+    /// Why no fresh quota is shown.
     pub reason: Option<QuotaUnavailableReason>,
 }
 
@@ -95,6 +105,19 @@ pub struct ProviderQuotaUpdate {
     pub remaining: ProviderQuotaView,
 }
 
+/// The outcome of the latest poll of one provider (kept in memory only).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum QuotaPollStatus {
+    /// The usage endpoint answered; its reading is the stored one.
+    Read,
+    /// The provider offers no quota to read.
+    NotOffered(QuotaPlanKind),
+    /// Supported, but nothing can be read yet (no credential).
+    Pending,
+    /// The latest poll failed at this time (epoch milliseconds).
+    Failed(i64),
+}
+
 #[derive(Default, Deserialize, Serialize)]
 struct PersistedQuota {
     providers: BTreeMap<String, ProviderQuotaReading>,
@@ -104,6 +127,7 @@ struct PersistedQuota {
 pub struct ProviderQuotaStore {
     path: PathBuf,
     readings: Mutex<BTreeMap<String, ProviderQuotaReading>>,
+    statuses: Mutex<BTreeMap<String, QuotaPollStatus>>,
     updates: broadcast::Sender<ProviderQuotaUpdate>,
     clock: Arc<dyn ProviderClock>,
 }
@@ -120,18 +144,20 @@ impl ProviderQuotaStore {
         Self {
             path,
             readings: Mutex::new(readings),
+            statuses: Mutex::new(BTreeMap::new()),
             updates: broadcast::channel(UPDATE_CAPACITY).0,
             clock,
         }
     }
 
-    /// The provider's quota view: its latest reading, or unavailable.
+    /// The provider's quota view: its latest reading, or why there is none.
     pub fn view(&self, provider_id: &str) -> ProviderQuotaView {
         let reading = self.readings.lock().get(provider_id).cloned();
+        let status = self.statuses.lock().get(provider_id).copied();
         let now = self.clock.now_epoch_millis();
         reading.map_or_else(
-            || unavailable_view(provider_id),
-            |reading| reading_view(&reading, now),
+            || view::without_reading(provider_id, status),
+            |reading| view::reading_view(&reading, status, now),
         )
     }
 
@@ -143,6 +169,59 @@ impl ProviderQuotaStore {
     /// Receives every changed quota.
     pub fn subscribe(&self) -> broadcast::Receiver<ProviderQuotaUpdate> {
         self.updates.subscribe()
+    }
+
+    /// Records a poll that produced no reading; announces a changed view.
+    pub fn record_status(&self, provider_id: &str, status: QuotaPollStatus) {
+        let before = self.view(provider_id);
+        self.statuses.lock().insert(provider_id.to_owned(), status);
+        let after = self.view(provider_id);
+        if before.stale != after.stale
+            || before.reason != after.reason
+            || before.plan_kind != after.plan_kind
+        {
+            self.announce(provider_id, after);
+        }
+    }
+
+    /// Records a polled reading (the poll succeeded).
+    pub fn record_polled(&self, reading: ProviderQuotaReading) {
+        let provider_id = reading.provider_id.clone();
+        let before = self.view(&provider_id);
+        self.statuses
+            .lock()
+            .insert(provider_id.clone(), QuotaPollStatus::Read);
+        self.store(reading, &before);
+    }
+
+    /// Stores `reading` (keeping a known plan name a header reading lacks);
+    /// persists and announces it when the view changed from `before`.
+    fn store(&self, mut reading: ProviderQuotaReading, before: &ProviderQuotaView) {
+        let provider_id = reading.provider_id.clone();
+        let snapshot = {
+            let mut readings = self.readings.lock();
+            let previous = readings.get(&provider_id);
+            if reading.plan_name.is_none() {
+                reading.plan_name = previous.and_then(|previous| previous.plan_name.clone());
+            }
+            let changed = previous.is_none_or(|previous| !same_values(previous, &reading));
+            readings.insert(provider_id.clone(), reading);
+            changed.then(|| readings.clone())
+        };
+        if let Some(readings) = &snapshot {
+            self.persist(readings);
+        }
+        let after = self.view(&provider_id);
+        if snapshot.is_some() || before.stale != after.stale || before.reason != after.reason {
+            self.announce(&provider_id, after);
+        }
+    }
+
+    fn announce(&self, provider_id: &str, remaining: ProviderQuotaView) {
+        let _ = self.updates.send(ProviderQuotaUpdate {
+            provider_id: provider_id.to_owned(),
+            remaining,
+        });
     }
 
     fn persist(&self, readings: &BTreeMap<String, ProviderQuotaReading>) {
@@ -158,28 +237,13 @@ impl ProviderQuotaStore {
 
 impl ProviderQuotaSink for ProviderQuotaStore {
     fn observe(&self, reading: ProviderQuotaReading) {
-        let provider_id = reading.provider_id.clone();
-        let snapshot = {
-            let mut readings = self.readings.lock();
-            let changed = readings
-                .get(&provider_id)
-                .is_none_or(|previous| !same_values(previous, &reading));
-            readings.insert(provider_id.clone(), reading.clone());
-            changed.then(|| readings.clone())
-        };
-        let Some(readings) = snapshot else {
-            return;
-        };
-        self.persist(&readings);
-        let remaining = reading_view(&reading, self.clock.now_epoch_millis());
-        let _ = self.updates.send(ProviderQuotaUpdate {
-            provider_id,
-            remaining,
-        });
+        let before = self.view(&reading.provider_id);
+        self.store(reading, &before);
     }
 }
 
-/// Values the App shows: used share, duration, and reset time to the minute.
+/// Values the App shows: plan, used share, duration, and reset time to the
+/// minute.
 fn same_values(left: &ProviderQuotaReading, right: &ProviderQuotaReading) -> bool {
     let key = |window: &ProviderQuotaWindow| {
         (
@@ -189,7 +253,9 @@ fn same_values(left: &ProviderQuotaReading, right: &ProviderQuotaReading) -> boo
             window.resets_at_ms.map(|ms| ms.div_euclid(60_000)),
         )
     };
-    left.windows.len() == right.windows.len()
+    left.plan_name == right.plan_name
+        && left.source == right.source
+        && left.windows.len() == right.windows.len()
         && left
             .windows
             .iter()
@@ -197,54 +263,5 @@ fn same_values(left: &ProviderQuotaReading, right: &ProviderQuotaReading) -> boo
             .eq(right.windows.iter().map(key))
 }
 
-fn reading_view(reading: &ProviderQuotaReading, now_ms: i64) -> ProviderQuotaView {
-    let reset_passed = reading
-        .windows
-        .iter()
-        .any(|window| window.resets_at_ms.is_some_and(|reset| reset <= now_ms));
-    ProviderQuotaView {
-        available: true,
-        stale: reset_passed || now_ms - reading.observed_at_ms > STALE_AFTER_MS,
-        source_kind: "provider_quota".into(),
-        source_id: format!("{}-response-headers", reading.provider_id),
-        plan_kind: QuotaPlanKind::Subscription,
-        plan_name: None,
-        windows: reading.windows.iter().map(window_view).collect(),
-        fetched_at: iso(reading.observed_at_ms),
-        reason: None,
-    }
-}
-
-fn window_view(window: &ProviderQuotaWindow) -> QuotaWindowView {
-    QuotaWindowView {
-        id: window.id.clone(),
-        used_percent: Some(window.used_percent),
-        remaining_percent: Some((100.0 - window.used_percent).clamp(0.0, 100.0)),
-        window_duration_mins: window.window_minutes,
-        resets_at: window.resets_at_ms.and_then(iso),
-        expires_at: None,
-    }
-}
-
-/// The view for a provider with no reading yet.
-pub fn unavailable_view(provider_id: &str) -> ProviderQuotaView {
-    ProviderQuotaView {
-        available: false,
-        stale: false,
-        source_kind: "provider_quota".into(),
-        source_id: format!("{provider_id}-response-headers"),
-        plan_kind: QuotaPlanKind::Unknown,
-        plan_name: None,
-        windows: Vec::new(),
-        fetched_at: None,
-        reason: Some(QuotaUnavailableReason {
-            code: "provider_quota_surface_unavailable".into(),
-            message: "The provider has not reported quota for this account yet.".into(),
-        }),
-    }
-}
-
-fn iso(epoch_ms: i64) -> Option<String> {
-    DateTime::<Utc>::from_timestamp_millis(epoch_ms)
-        .map(|time| time.to_rfc3339_opts(SecondsFormat::Millis, true))
-}
+#[cfg(test)]
+mod tests;

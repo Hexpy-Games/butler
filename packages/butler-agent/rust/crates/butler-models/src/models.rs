@@ -35,7 +35,9 @@ pub use prompt::{
 };
 pub use prompt::{PromptBudgetStateSource, PromptCacheBoundary, UsageAuthMode};
 pub use quota::{
-    ProviderQuotaReading, ProviderQuotaSink, ProviderQuotaWindow, parse_quota_headers,
+    ProviderQuotaReading, ProviderQuotaSink, ProviderQuotaSource, ProviderQuotaWindow,
+    QUOTA_POLLED_PROVIDERS, QuotaBilling, QuotaFetchError, QuotaHttp, QuotaSupport,
+    parse_quota_headers, provider_quota_support,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use visual_admission::ImageAdmissionError;

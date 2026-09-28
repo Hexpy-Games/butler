@@ -1300,7 +1300,9 @@ export type ProviderQuotaSourceKind =
   | "zai_usage_query"
   | "provider_quota";
 export type ProviderQuotaReasonCode =
-  | "provider_quota_surface_unavailable"
+  | "provider_quota_pending"
+  | "provider_quota_not_offered"
+  | "provider_quota_fetch_failed"
   | "provider_auth_not_applicable"
   | "provider_auth_required"
   | "provider_auth_surface_mismatch"

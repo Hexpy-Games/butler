@@ -1,0 +1,45 @@
+{
+  "_provenance": {
+    "source": "official-docs-example, unverified-live",
+    "url": "https://github.com/zai-org/ZCode/blob/29628c9acdb81b703bbd4080c207a0e7ce5e276e/packages/ui/src/lib/codingPlanQuotaPresentation.ts",
+    "note": "Not a recording. Z.AI publishes no response example for GET /api/monitor/usage/quota/limit; the official Z.AI client (zai-org/ZCode) documents that CREDIT_LIMIT carries the same unit/number semantics as TOKENS_LIMIT (unit 3 number 5 = 5 hours, unit 6 = weekly). The owner's live account returned TOKENS_LIMIT (cassette USE-04), whose envelope and fields this example keeps; the values are illustrative."
+  },
+  "code": 200,
+  "msg": "Operation successful",
+  "data": {
+    "limits": [
+      {
+        "type": "TIME_LIMIT",
+        "unit": 5,
+        "number": 1,
+        "usage": 100,
+        "currentValue": 3,
+        "remaining": 97,
+        "percentage": 3,
+        "nextResetTime": 1792807606998
+      },
+      {
+        "type": "CREDIT_LIMIT",
+        "unit": 3,
+        "number": 5,
+        "usage": 400,
+        "currentValue": 100,
+        "remaining": 300,
+        "percentage": 25,
+        "nextResetTime": 1790018000000
+      },
+      {
+        "type": "CREDIT_LIMIT",
+        "unit": 6,
+        "number": 1,
+        "usage": 2000,
+        "currentValue": 200,
+        "remaining": 1800,
+        "percentage": 10,
+        "nextResetTime": 1790906806983
+      }
+    ],
+    "level": "lite"
+  },
+  "success": true
+}

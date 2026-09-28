@@ -64,17 +64,36 @@ impl std::fmt::Debug for AuthError {
 
 impl AuthOwner<'_> {
     pub(super) async fn resolve_openai(&self) -> Result<ProviderAuth, AuthError> {
+        self.resolve_openai_with(false).await
+    }
+
+    /// Like [`Self::resolve_openai`]; `force_refresh` refreshes a Butler
+    /// Codex login even when it is not expiring (after the provider rejected
+    /// its token).
+    pub(super) async fn resolve_openai_with(
+        &self,
+        force_refresh: bool,
+    ) -> Result<ProviderAuth, AuthError> {
         if let Some(key) = trimmed(self.environment.openai_api_key.as_deref()) {
             return Ok(ProviderAuth::ApiKey(key.to_owned()));
         }
-        self.resolve_codex().await
+        self.resolve_codex_with(force_refresh).await
     }
 
     pub(super) async fn resolve_codex(&self) -> Result<ProviderAuth, AuthError> {
+        self.resolve_codex_with(false).await
+    }
+
+    /// Like [`Self::resolve_codex`], refreshing the Butler login first when
+    /// `force_refresh` is set.
+    pub(super) async fn resolve_codex_with(
+        &self,
+        force_refresh: bool,
+    ) -> Result<ProviderAuth, AuthError> {
         if let Some(mut profile) = self.read_butler_profile().await
             && !profile.access_token.is_empty()
         {
-            if self.is_expiring(&profile) {
+            if force_refresh || self.is_expiring(&profile) {
                 profile = self.refresh(profile).await?;
             }
             let account_id =

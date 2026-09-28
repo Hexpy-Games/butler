@@ -2,6 +2,7 @@
 
 mod events;
 mod logs;
+mod quota;
 mod work_status;
 
 use std::{
@@ -18,7 +19,8 @@ use butler_gateway::gateway::{
 };
 use butler_models::models::ModelCatalog;
 use butler_runtime::operations::{
-    ProviderQuotaStore, ProviderQuotaUpdate, ProviderQuotaView, UsageMonitorSources,
+    ProviderQuotaPoller, ProviderQuotaStore, ProviderQuotaUpdate, ProviderQuotaView,
+    QuotaPollTrigger, UsageMonitorSources,
 };
 use butler_turn::btcc::SessionWorkRepository;
 
@@ -29,16 +31,24 @@ pub(crate) struct AppMonitoring {
     session_work: Arc<SessionWorkRepository>,
     catalog: Arc<ModelCatalog>,
     quota: Arc<ProviderQuotaStore>,
+    /// Polls the providers' usage endpoints into `quota`.
+    poller: Option<Arc<ProviderQuotaPoller>>,
 }
 
 impl AppMonitoring {
     /// Monitoring over the runtime's work, catalog prices and provider quota.
     pub(crate) fn for_runtime(runtime: &AgentRuntime, data_root: &Path) -> Self {
+        let quota = runtime.models.quota.clone();
         Self {
             data_root: data_root.to_path_buf(),
             session_work: runtime.session_work.clone(),
             catalog: runtime.models.catalog.clone(),
-            quota: runtime.models.quota.clone(),
+            poller: quota::poller(
+                runtime.models.configuration.clone(),
+                quota.clone(),
+                data_root,
+            ),
+            quota,
         }
     }
 }
@@ -75,7 +85,13 @@ impl AppMonitoringPort for AppMonitoring {
         let root = self.data_root.clone();
         let catalog = self.catalog.clone();
         let quota = self.quota.clone();
+        // The Settings usage page reads the whole-process monitor (no
+        // session): opening it polls quota that is due.
+        let settings_poll = self.poller.clone().filter(|_| query.session_id.is_none());
         Box::pin(async move {
+            if let Some(poller) = settings_poll {
+                quota::poll_within(poller, QuotaPollTrigger::SettingsOpened, None).await;
+            }
             let mut view = usage_monitor_view(&root, &query, &catalog, &quota);
             if let Some(object) = view.as_object_mut() {
                 object.insert("generated_at".into(), json!(now_iso()));
@@ -95,13 +111,38 @@ impl AppMonitoringPort for AppMonitoring {
         Box::pin(async move { logs::read(&root, &query) })
     }
 
-    fn provider_quota(&self, provider_id: String) -> ApplicationFuture<ProviderQuotaView> {
-        let view = self.quota.view(&provider_id);
-        Box::pin(async move { Ok(view) })
+    fn provider_quota(
+        &self,
+        provider_id: String,
+        refresh: bool,
+    ) -> ApplicationFuture<ProviderQuotaView> {
+        let quota = self.quota.clone();
+        let poller = self.poller.clone().filter(|_| refresh);
+        Box::pin(async move {
+            if let Some(poller) = poller {
+                quota::poll_within(
+                    poller,
+                    QuotaPollTrigger::Explicit,
+                    Some(provider_id.clone()),
+                )
+                .await;
+            }
+            Ok(quota.view(&provider_id))
+        })
     }
 
     fn provider_quota_updates(&self) -> Option<broadcast::Receiver<ProviderQuotaUpdate>> {
         Some(self.quota.subscribe())
+    }
+
+    fn poll_provider_quota(&self) -> ApplicationFuture<()> {
+        let poller = self.poller.clone();
+        Box::pin(async move {
+            if let Some(poller) = poller {
+                poller.poll(QuotaPollTrigger::Scheduled, None).await;
+            }
+            Ok(())
+        })
     }
 }
 

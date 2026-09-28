@@ -7,8 +7,11 @@ impl GatewayApplication for AppApplication {
     fn get_provider_quota(
         &self,
         provider_id: String,
+        refresh: bool,
     ) -> ApplicationFuture<butler_runtime::operations::ProviderQuotaView> {
-        self.dependencies.monitoring.provider_quota(provider_id)
+        self.dependencies
+            .monitoring
+            .provider_quota(provider_id, refresh)
     }
     fn work_status(&self) -> ApplicationFuture<Vec<AppBoundWorkStatusFact>> {
         self.dependencies.monitoring.work_status()

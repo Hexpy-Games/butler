@@ -232,8 +232,9 @@ pub trait GatewayApplication:
         &self,
         query: AppUsageMonitorQuery,
     ) -> ApplicationFuture<serde_json::Value>;
-    /// The provider's latest subscription quota (`GET /provider-quota`).
-    fn get_provider_quota(&self, provider_id: String) -> ApplicationFuture<ProviderQuotaView>;
+    /// `GET /provider-quota`: the latest quota, polled first on `refresh`.
+    fn get_provider_quota(&self, id: String, refresh: bool)
+    -> ApplicationFuture<ProviderQuotaView>;
     fn work_status(&self) -> ApplicationFuture<Vec<AppBoundWorkStatusFact>>;
     fn work_status_conversation(
         &self,

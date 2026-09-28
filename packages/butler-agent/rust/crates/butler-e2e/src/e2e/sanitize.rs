@@ -12,6 +12,9 @@
 //!    nothing the product reads back.
 //! 4. Response headers are reduced to an allowlist plus the numeric
 //!    subscription-quota headers the product parses (`keep_header`).
+//! 5. Account identifiers in JSON bodies (`account_id`, `user_id`,
+//!    `email`, … as usage endpoints return them) become `{{ACCOUNT}}` /
+//!    `{{EMAIL}}` (`redact_identifiers`).
 
 use std::sync::OnceLock;
 
@@ -134,6 +137,60 @@ fn host_name() -> Option<String> {
         .filter(|name| name.len() >= 4)
 }
 
+/// JSON fields that identify an account; their values never reach a cassette.
+const IDENTIFIER_FIELDS: &[&str] = &[
+    "account_id",
+    "accountId",
+    "user_id",
+    "userId",
+    "workspace_id",
+    "workspaceId",
+    "org_id",
+    "organization_id",
+    "email",
+];
+
+/// An identifier field with a value that is not a placeholder, in raw or
+/// JSON-string-escaped form.
+fn identifier_field() -> Option<&'static Regex> {
+    static FIELD: OnceLock<Option<Regex>> = OnceLock::new();
+    FIELD
+        .get_or_init(|| {
+            let names = IDENTIFIER_FIELDS.join("|");
+            Regex::new(&format!(r#"\\?"(?:{names})\\?"\s*:\s*\\?"[^{{\\"]"#)).ok()
+        })
+        .as_ref()
+}
+
+/// Replaces identifier field values anywhere in a JSON value.
+pub fn redact_identifiers(value: &mut Value) -> bool {
+    match value {
+        Value::Object(object) => {
+            let mut changed = false;
+            for (key, field) in object.iter_mut() {
+                if IDENTIFIER_FIELDS.contains(&key.as_str())
+                    && field.as_str().is_some_and(|text| !text.starts_with("{{"))
+                {
+                    let placeholder = if key == "email" {
+                        "{{EMAIL}}"
+                    } else {
+                        "{{ACCOUNT}}"
+                    };
+                    *field = Value::String(placeholder.into());
+                    changed = true;
+                } else {
+                    changed |= redact_identifiers(field);
+                }
+            }
+            changed
+        }
+        Value::Array(items) => items
+            .iter_mut()
+            .fold(false, |changed, item| redact_identifiers(item) || changed),
+        _ => false,
+    }
+}
+
 /// Findings of the lint on one text (empty when clean).
 pub fn lint(text: &str) -> Vec<String> {
     let mut findings = Vec::new();
@@ -142,6 +199,10 @@ pub fn lint(text: &str) -> Vec<String> {
             let excerpt: String = found.as_str().chars().take(12).collect();
             findings.push(format!("{label}: {excerpt}…"));
         }
+    }
+    if let Some(found) = identifier_field().and_then(|regex| regex.find(text)) {
+        let excerpt: String = found.as_str().chars().take(16).collect();
+        findings.push(format!("identifier field: {excerpt}…"));
     }
     for canary in ["e2e-canary-", "E2E_CANARY"] {
         if text.contains(canary) {
@@ -192,7 +253,7 @@ pub fn sanitize_body(body: &str, placeholders: &Placeholders) -> String {
         };
         if let Some(data) = content.strip_prefix("data: ")
             && let Ok(mut value) = serde_json::from_str::<Value>(data)
-            && redact_echo(&mut value)
+            && (redact_echo(&mut value) | redact_identifiers(&mut value))
         {
             out.push_str("data: ");
             out.push_str(&value.to_string());
@@ -202,7 +263,7 @@ pub fn sanitize_body(body: &str, placeholders: &Placeholders) -> String {
         out.push_str(line);
     }
     if let Ok(mut value) = serde_json::from_str::<Value>(&out)
-        && redact_echo(&mut value)
+        && (redact_echo(&mut value) | redact_identifiers(&mut value))
     {
         out = value.to_string();
     }

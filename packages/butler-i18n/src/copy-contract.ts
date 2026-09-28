@@ -538,6 +538,9 @@ export interface AppCopy {
     quotaFailure: string;
     quotaTemporary: string;
     quotaUnsupported: string;
+    quotaPending: string;
+    quotaFetchFailed: string;
+    quotaApiPlan: string;
     quotaUnknown: string;
     partialOutput: string;
     noDetailSupport: string;

@@ -1,0 +1,30 @@
+{
+  "scenario": "USE-02",
+  "provider": "openai-subscription",
+  "model": "openai/gpt-6-luna",
+  "effort": "max",
+  "wire_shape": "openai_responses",
+  "butler_git_sha": "dca444e4f987",
+  "recorded_at": "2026-09-28T11:31:24Z",
+  "recorder": "butler-e2e record proxy",
+  "sanitization": [
+    "per-run values -> {{W}}, {{D}}, {{SANDBOX}}, scenario nonces",
+    "JWT/sk-key/bearer/email/home path/host name -> fixed placeholders",
+    "response.instructions -> {{REDACTED_ECHO}}, response.tools -> []",
+    "response headers reduced to content-type, retry-after and numeric quota headers",
+    "chunks re-cut at SSE event boundaries (event bytes unchanged)",
+    "JSON account identifiers (account_id, user_id, email, ...) -> {{ACCOUNT}}/{{EMAIL}}"
+  ],
+  "files": [
+    {
+      "file": "000.json",
+      "sha256": "7b2684dc18b07942fe058d474755ea205829bd11539550408f2685a7e42cdaa7"
+    }
+  ],
+  "fingerprint": [
+    [
+      "status:200",
+      "json{account_id,additional_rate_limits,code_review_rate_limit,credits,email,model_usage,plan_type,promo,rate_limit,rate_limit_reached_type,rate_limit_reset_credits,spend_control,user_id}"
+    ]
+  ]
+}

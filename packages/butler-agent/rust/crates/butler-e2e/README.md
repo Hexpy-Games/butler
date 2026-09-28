@@ -53,6 +53,26 @@ it the harness falls back to the read-only Codex CLI file and LIVE-10 is
 SKIPPED. Run the live tier with `--test-threads=1` so two refreshes of the
 one profile cannot race.
 
+## Quota polling
+
+The harness starts the agent with `BUTLER_PROVIDER_QUOTA_POLLING=0`, so a
+recording holds only the requests its scenario makes. The quota scenarios
+(`tests/quota.rs`) turn polling on with `Setup::quota_polling()`:
+
+```sh
+# USE-02: Codex wham/usage through the test profile (~/.butler-e2e-auth)
+BUTLER_E2E_TIER=live BUTLER_E2E_RECORD=1 cargo test -p butler-e2e --test quota use_02
+
+# USE-04: Z.AI Coding Plan quota/limit (quota endpoint only, no model calls);
+# the key is read from ZAI_API_KEY and never written to the cassette
+BUTLER_E2E_TIER=live BUTLER_E2E_RECORD=1 BUTLER_E2E_PROVIDER=zai \
+  cargo test -p butler-e2e --test quota use_04
+```
+
+For `zai` the recorder's upstream is the origin `https://api.z.ai` and the
+agent's `BUTLER_ZAI_BASE_URL` carries the Coding Plan path
+(`config::base_path`), from which the product derives its quota URL.
+
 ## Record / replay
 
 - Cassettes: `cassettes/<scenario>/<n>.json` + `meta.json` (provenance,
@@ -65,6 +85,8 @@ one profile cannot race.
   the scenario as `HARNESS_ERROR`.
 - Sanitization at record time: per-run values → `{{W}}`, `{{D}}`,
   `{{SANDBOX}}`, `{{NONCE}}`; secrets/personal data → fixed placeholders;
+  account identifiers in JSON bodies (`account_id`, `user_id`, `email`)
+  → `{{ACCOUNT}}` / `{{EMAIL}}` (the lint rejects any left);
   `response.instructions`/`response.tools` echoes and account identifiers
   redacted; headers reduced to `content-type`, `retry-after`; chunks cut at
   SSE event boundaries with their arrival delay.

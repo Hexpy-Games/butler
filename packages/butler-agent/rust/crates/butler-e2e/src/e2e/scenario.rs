@@ -187,6 +187,11 @@ impl Setup {
         self
     }
 
+    /// Lets the agent poll provider quota endpoints (off by default).
+    pub fn quota_polling(self) -> Self {
+        self.env("BUTLER_PROVIDER_QUOTA_POLLING", "1")
+    }
+
     /// Replay without the placeholder Codex credential (no provider auth).
     pub fn without_credential(mut self) -> Self {
         self.stub_credential = false;
@@ -254,8 +259,8 @@ impl Setup {
                 replay_source(&name, &placeholders, stub_codex_home, &mut launch).await?
             }
         };
-        if let Some((_, credential)) = &credential {
-            apply_credential(&mut launch, credential, &choice);
+        if let Some((provider_name, credential)) = &credential {
+            apply_credential(&mut launch, provider_name, credential, &choice);
         }
         for (key, value) in env {
             launch.set_env(&key, value);
@@ -299,6 +304,7 @@ pub const SANITIZATION: &[&str] = &[
     "response.instructions -> {{REDACTED_ECHO}}, response.tools -> []",
     "response headers reduced to content-type, retry-after and numeric quota headers",
     "chunks re-cut at SSE event boundaries (event bytes unchanged)",
+    "JSON account identifiers (account_id, user_id, email, ...) -> {{ACCOUNT}}/{{EMAIL}}",
 ];
 
 impl Scenario {
