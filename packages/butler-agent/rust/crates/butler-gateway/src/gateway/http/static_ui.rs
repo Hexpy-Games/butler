@@ -23,8 +23,21 @@ fn mime(path: &str) -> Option<&'static str> {
     }
 }
 
-pub(super) fn is_public_static_request(method: &Method, path: &str) -> bool {
-    *method == Method::GET && (path == "/" || mime(path).is_some())
+/// Scripts, styles, images and data files of the UI bundle (`/assets/..` or
+/// a root file) are public; its HTML documents are served only to an
+/// authenticated browser. API paths, which all have two or more segments
+/// outside `/assets/`, never become public by ending in an extension.
+pub(super) fn is_public_asset(method: &Method, path: &str) -> bool {
+    let bundle_path = path
+        .strip_prefix('/')
+        .is_some_and(|rest| rest.starts_with("assets/") || !rest.contains('/'));
+    *method == Method::GET
+        && bundle_path
+        && mime(path).is_some_and(|mime| !mime.starts_with("text/html"))
+}
+
+fn is_static_path(path: &str) -> bool {
+    path == "/" || mime(path).is_some()
 }
 
 pub(super) fn accepts_html(headers: &HeaderMap) -> bool {
@@ -68,7 +81,7 @@ pub(super) async fn serve(
     let candidate = root.join(&relative);
     let file = match tokio::fs::canonicalize(candidate).await {
         Ok(file) if file.starts_with(&root) && file.is_file() => file,
-        _ if accepts_html || is_public_static_request(&Method::GET, pathname) => {
+        _ if accepts_html || is_static_path(pathname) => {
             let index = root.join("index.html");
             match tokio::fs::canonicalize(index).await {
                 Ok(file) if file.starts_with(&root) && file.is_file() => file,
@@ -113,7 +126,7 @@ mod tests {
     fn bundled_fonts_are_public_typed_static_assets() {
         let path = "/assets/PretendardVariable.subset.0-Ab12.woff2";
         assert_eq!(mime(path), Some("font/woff2"));
-        assert!(is_public_static_request(&Method::GET, path));
-        assert!(!is_public_static_request(&Method::POST, path));
+        assert!(is_public_asset(&Method::GET, path));
+        assert!(!is_public_asset(&Method::POST, path));
     }
 }
