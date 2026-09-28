@@ -9,7 +9,7 @@ const TALL_POSTER_ZOOM = 1.35;
 
 /** The poster's zoom on each canvas. */
 export function posterZoom(spec: ChapterSpec, layout: HeroLayout): number {
-  return layout === "wide" ? spec.posterZoom ?? 1 : TALL_POSTER_ZOOM;
+  return layout === "wide" ? spec.posterZoom ?? 1 : spec.tallPosterZoom ?? TALL_POSTER_ZOOM;
 }
 
 /**

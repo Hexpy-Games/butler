@@ -6,7 +6,7 @@ import { ColorHero } from "./heroes/color/ColorHero";
 import { FocusHero } from "./heroes/focus/FocusHero";
 import { IconHero as IconographyHero } from "./heroes/iconography/IconHero";
 import { LayersHero } from "./heroes/layers/LayersHero";
-import { LayoutHero } from "./heroes/LayoutHero";
+import { LayoutHero } from "./heroes/layout/LayoutHero";
 import { MotionHero } from "./heroes/motion/MotionHero";
 import { RadiusHero } from "./heroes/radius/RadiusHero";
 import { SizingHero } from "./heroes/sizing/SizingHero";

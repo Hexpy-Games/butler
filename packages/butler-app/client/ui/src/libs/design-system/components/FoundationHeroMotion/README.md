@@ -15,23 +15,31 @@ import { FoundationHeroMotion } from "@/butler-ds";
 ```
 
 `variant` is a Foundations chapter id (`FOUNDATION_HERO_VARIANTS`); `still`
-shows the poster frame whatever the motion setting. The stage fills its
-column at 8:5, up to 17rem tall, and clamps its drawing to its own size
-(container units), so it fits from a 343px column up. `typography` is a
-feature hero: 16:9 up to 36rem tall, portrait (19:32) under a 45rem column.
+shows the poster frame whatever the motion setting. Every chapter hero is a
+feature hero: the full column at 16:9 (up to 36rem tall), portrait (19:32)
+under a 45rem column, drawn on a 1040x585 (or 380x640) canvas that covers
+the stage.
 
-| Variant | Chapter | What moves |
+Each chapter tells its own story in a prelude (its own scenes, one camera
+move at a time, down or right), then builds real DS components one at a
+time (blueprint, surface, content, badges with leaders naming their
+tokens), then zooms out to the poster: the chapter's token field beside the
+components. The shared engine is `heroes/shared/` (`ChapterHero`,
+`timeline.ts`, `scene.ts`); each chapter folder holds its copy (en/ko), its
+scenes, its prelude choreography and its builds.
+
+| Variant | Chapter | Story |
 | --- | --- | --- |
-| `color` | 01 Color | Role swatches step from a light pane into a dark pane; the same strip is drawn in both theme scopes, so each role recolors exactly at the seam. |
-| `typography` | 02 Typography | From token to product (80 beats): "A가" in a type designer's working view (metric guides and real Pretendard outlines drawing in, values on their guides), filled, then moved 300 → 800 → 620 with its guides and readout; it becomes the H2 of the role list, which the camera travels down in close-up into empty space, where four real DS components (settings, message turn, metric, composer) are built one at a time: surface, structure, then their text lines drawn the same way under badges naming each line's token; finally everything gathers onto the grid as the poster. |
-| `spacing` | 03 Spacing | A 3x3 field breathes through `--space-xs` … `--space-4xl` and back. |
-| `sizing` | 04 Sizing | A field, icon button and primary button grow through `--control-height-xs/sm/md/lg` together. |
-| `radius` | 05 Radius and elevation | One surface lifts through the shadow levels while its corners grow control → panel → popover → composer. |
-| `iconography` | 06 Iconography | Three glyphs snap through the six `--icon-size-*` steps on their size boxes (shown 2x). |
-| `focus` | 07 Focus ring | The one `--focus-ring` moves through the tab order: field, button, switch, checkbox. |
-| `motion` | 08 Motion | Each `--motion-ease-*` token plots itself: the dot runs on the token and a sliding window reveals the curve behind it. |
-| `z-index` | 09 Layers | The composed screen tilts into an exploded view of its layers (page, drawer, dialog, popover) and settles back. |
-| `layout` | 10 Layout and platform | Six tiles reflow as the frame narrows from three columns to one and back. |
+| `color` | 01 Color | Intent; circular stickers land on an isometric grid in a diagonal ripple and take their token names; a line wipes the whole frame into the other theme and back; components by topic, outlined then filled color by color. |
+| `typography` | 02 Typography | "A가" in a type designer's working view, moved through the weight axis; it becomes the H2 of the role list; four components are built line by line under badges naming each line's token. |
+| `spacing` | 03 Spacing | The space staircase on a 4px grid; a wireframe measured gap by gap; insets, stacks, inline rows and sections. |
+| `sizing` | 04 Sizing | Four rails at the control heights with real controls on them; hit areas bloom and grow for touch; the app frame's chrome measured. |
+| `radius` | 05 Radius and elevation | One shape morphs through the radii and nests; surfaces lift through the shadow levels; components with their corners and shadows. |
+| `iconography` | 06 Iconography | A glyph draws on its keyline grid; the size ladder in three tones; icons in real controls. |
+| `focus` | 07 Focus ring | The ring travels the tab order (tab, then shift-tab); a close-up measures it; one ring on every control. |
+| `motion` | 08 Motion | Each easing token plots itself; durations race; reduced motion swaps moves for fades; components replay their own motion. |
+| `z-index` | 09 Layers | The z tokens drop in as numbered sheets; a screen builds layer by layer and a slider spreads the layers apart, flat, and closes them; sticky header, drawer, dialog and tooltip with their z badges. |
+| `layout` | 10 Layout and platform | The page frame draws (titlebar, max width, columns and gutter, safe areas); a handle drags it 1280 → 1023 → 640 → 375 through expanded, medium and compact (responsive.ts), the sidebar becoming a drawer; whole screens build at a lower zoom. |
 
 ## Motion and performance
 
@@ -41,9 +49,7 @@ feature hero: 16:9 up to 36rem tall, portrait (19:32) under a 45rem column.
   Motion plot runs each easing token as its own timing function.
 - Easing is set per element (it applies to every keyframe segment); `var()`
   inside `@keyframes` is not honored for `animation-timing-function`.
-- Heroes that take turns (slot sequences) share one cycle per hero and are
-  offset by `animation-delay`, so pausing keeps them in step.
-- Long sequences (Typography) are authored in `heroTimeline.ts`: tracks of
+- Every hero is authored in `heroTimeline.ts`: tracks of
   poses at beat marks, compiled once per layout into plain CSS `@keyframes`
   with per-segment easing read from the `--motion-ease-*` tokens (which
   `var()` cannot do inside keyframes). Positions come from measuring the
@@ -63,9 +69,8 @@ feature hero: 16:9 up to 36rem tall, portrait (19:32) under a 45rem column.
 
 The DS Viewer's `ChapterHeader` renders it for every chapter: beside the
 title block when the header is at least 52rem wide, under it otherwise;
-Typography's feature hero always spans the column under a compact title
-block. It is decorative (`aria-hidden`, and `inert` where it renders real
-controls); the chapter title and lead carry the meaning. Only the
-Typography hero sets text: sample copy in the viewer's language (`lang`).
+Chapter heroes always span the column under a compact title block. It is decorative (`aria-hidden`, and `inert` where it renders real
+controls); the chapter title and lead carry the meaning. Sample
+copy follows the viewer's language (`lang`).
 
 Tags: foundations, hero, motion, guidebook, tokens, illustration, loop

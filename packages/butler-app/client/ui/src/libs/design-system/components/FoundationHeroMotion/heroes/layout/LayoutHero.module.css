@@ -1,0 +1,509 @@
+/* 10 Layout hero: the page-frame field, the resizing frame and the product
+   grid of whole screens. Canvas px (see ../shared/grid.ts); the poster is
+   laid out at 0.6, so poster sizes read larger here. */
+
+/* ---- The field: the page frame as a blueprint, over its legend ---- */
+
+.field {
+  display: grid;
+  place-items: center;
+}
+
+.fieldBody {
+  display: grid;
+  justify-items: start;
+  row-gap: var(--space-2xl);
+}
+
+.page {
+  position: relative;
+  box-sizing: border-box;
+  inline-size: calc(var(--space-4xl) * 10);
+  block-size: calc(var(--space-4xl) * 6);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface-base);
+}
+
+.hatch {
+  --hatch: color-mix(in srgb, var(--accent) 45%, transparent);
+
+  position: absolute;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--hatch) 0 1px,
+    transparent 1px var(--space-sm)
+  );
+}
+
+.hatch[data-side="t"] {
+  inset: 0 0 auto;
+  block-size: var(--space-xl);
+}
+
+.hatch[data-side="b"] {
+  inset: auto 0 0;
+  block-size: var(--space-lg);
+}
+
+.hatch[data-side="l"] {
+  inset: 0 auto 0 0;
+  inline-size: var(--space-md);
+}
+
+.hatch[data-side="r"] {
+  inset: 0 0 0 auto;
+  inline-size: var(--space-md);
+}
+
+.titleBand {
+  position: absolute;
+  top: var(--space-xl);
+  right: var(--space-md);
+  left: var(--space-md);
+  block-size: var(--space-4xl);
+  border-bottom: 1px solid var(--line);
+  background: var(--selection);
+  transform-origin: 0 50%;
+}
+
+.container {
+  position: absolute;
+  inset: calc(var(--space-xl) + var(--space-4xl) + var(--space-lg)) 15%
+    calc(var(--space-lg) * 2);
+}
+
+.guide {
+  position: absolute;
+  top: calc(var(--space-sm) * -1);
+  bottom: calc(var(--space-sm) * -1);
+  border-left: 1px dashed var(--accent);
+  transform-origin: 50% 0;
+}
+
+.guide[data-side="l"] {
+  left: 0;
+}
+
+.guide[data-side="r"] {
+  right: 0;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--space-lg);
+  block-size: 100%;
+  padding-inline: var(--space-lg);
+}
+
+.column {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  transform-origin: 50% 0;
+}
+
+.legend {
+  display: grid;
+  row-gap: var(--space-sm);
+}
+
+.legendRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  color: var(--text-secondary);
+  font: var(--font-code);
+  font-size: var(--typo-h5-size);
+  white-space: nowrap;
+}
+
+.legendValue {
+  color: var(--text-tertiary);
+}
+
+.glyph {
+  inline-size: var(--space-2xl);
+  block-size: var(--space-md);
+  border-radius: var(--radius-control);
+}
+
+.glyph[data-kind="title"] {
+  background: var(--selection);
+}
+
+.glyph[data-kind="guide"] {
+  border-inline: 1px dashed var(--accent);
+  border-radius: 0;
+}
+
+.glyph[data-kind="gutter"] {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 16%, transparent) 35%,
+    transparent 35% 65%,
+    color-mix(in srgb, var(--accent) 16%, transparent) 65%
+  );
+}
+
+.glyph[data-kind="column"] {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.glyph[data-kind="hatch"] {
+  --hatch: color-mix(in srgb, var(--accent) 45%, transparent);
+
+  background: repeating-linear-gradient(
+    45deg,
+    var(--hatch) 0 1px,
+    transparent 1px var(--space-xs)
+  );
+}
+
+/* ---- The resizing frame ---- */
+
+.resizeRegion {
+  display: grid;
+  place-items: center;
+}
+
+.resizeStage {
+  display: grid;
+  row-gap: var(--space-lg);
+  inline-size: var(--frame-w);
+}
+
+.readout {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-lg);
+  color: var(--text-primary);
+  font: var(--font-code);
+  font-size: var(--typo-body-size);
+  white-space: nowrap;
+}
+
+.readWidth {
+  display: inline-flex;
+  font-variant-numeric: tabular-nums;
+}
+
+.modes {
+  display: inline-grid;
+  color: var(--accent);
+}
+
+.mode {
+  grid-area: 1 / 1;
+}
+
+.mode + .mode {
+  opacity: 0;
+}
+
+.source {
+  margin-inline-start: auto;
+  color: var(--text-tertiary);
+  font-size: var(--typo-caption-size);
+}
+
+.screen {
+  position: relative;
+  block-size: calc(var(--space-4xl) * 7);
+}
+
+.window {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.windowIn {
+  position: absolute;
+  inset: 0;
+}
+
+.layer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  inline-size: var(--w);
+  background: var(--color-surface-base);
+}
+
+.miniTitle {
+  display: flex;
+  align-items: center;
+  block-size: var(--space-xl);
+  padding-inline: var(--space-sm);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-raised);
+}
+
+.burger {
+  inline-size: var(--space-md);
+  block-size: var(--space-sm);
+  border-block: 2px solid var(--text-tertiary);
+}
+
+.miniBody {
+  display: flex;
+  min-block-size: 0;
+}
+
+.miniSide {
+  display: grid;
+  flex: none;
+  align-content: start;
+  row-gap: var(--space-sm);
+  box-sizing: border-box;
+  inline-size: calc(var(--sidebar-width) * 0.36);
+  padding: var(--space-sm);
+  border-right: 1px solid var(--line);
+  background: var(--surface-raised);
+}
+
+.miniRow {
+  display: block;
+  block-size: var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--selection-strong);
+}
+
+.miniTiles {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  grid-auto-rows: calc(var(--space-4xl) * 1.6);
+  gap: var(--space-sm);
+  align-content: start;
+  padding: var(--space-md);
+}
+
+.miniTile {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+}
+
+.miniDim {
+  position: absolute;
+  inset: 0;
+  background: var(--dialog-overlay-bg);
+}
+
+.miniDrawer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  align-content: start;
+  row-gap: var(--space-sm);
+  box-sizing: border-box;
+  inline-size: 80%;
+  padding: calc(var(--space-xl) + var(--space-sm)) var(--space-sm);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-window);
+}
+
+.edgeLine {
+  position: absolute;
+  background: var(--line-strong);
+}
+
+.edgeLine[data-edge="t"],
+.edgeLine[data-edge="b"] {
+  left: 0;
+  inline-size: 100%;
+  block-size: 1px;
+  transform-origin: 0 50%;
+}
+
+.edgeLine[data-edge="t"] {
+  top: 0;
+}
+
+.edgeLine[data-edge="b"] {
+  bottom: 0;
+}
+
+.edgeLine[data-edge="l"],
+.edgeLine[data-edge="r"] {
+  top: 0;
+  bottom: 0;
+  inline-size: 1px;
+}
+
+.edgeLine[data-edge="l"] {
+  left: 0;
+}
+
+.edgeLine[data-edge="r"] {
+  right: 0;
+}
+
+.handle {
+  position: absolute;
+  top: 50%;
+  right: calc(var(--space-xs) * -1);
+  inline-size: var(--space-sm);
+  block-size: var(--space-4xl);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  translate: 0 -50%;
+}
+
+/* ---- Components (whole screens) ---- */
+
+.shell {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface-base);
+}
+
+.titlebarHost,
+.phoneBar {
+  position: relative;
+  box-sizing: border-box;
+  overflow: hidden;
+  block-size: var(--titlebar-height);
+  border-bottom: 1px solid var(--line);
+  background: var(--color-surface-base);
+}
+
+/* The titlebar keeps its own stacking inside its band (the compact
+   screen's drawer and dim lie over it). */
+.phoneBar {
+  z-index: 0;
+}
+
+.shellBody {
+  display: flex;
+}
+
+.shellSide {
+  display: grid;
+  align-content: start;
+  row-gap: var(--sidebar-row-spacing, var(--space-xs));
+  box-sizing: border-box;
+  inline-size: var(--sidebar-width);
+  padding: var(--space-sm);
+  border-right: 1px solid var(--line);
+  background: var(--surface-raised);
+}
+
+.shellMain {
+  display: grid;
+  align-content: start;
+  row-gap: var(--space-md);
+  inline-size: calc(var(--space-4xl) * 5);
+  padding: var(--space-lg);
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(2, var(--layout-basis-sm));
+  gap: var(--space-lg);
+}
+
+.phone {
+  position: relative;
+  display: grid;
+  overflow: hidden;
+  inline-size: 375px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface-base);
+}
+
+.safe {
+  --hatch: color-mix(in srgb, var(--accent) 45%, transparent);
+
+  display: block;
+  block-size: var(--space-xl);
+  background: repeating-linear-gradient(
+    45deg,
+    var(--hatch) 0 1px,
+    transparent 1px var(--space-sm)
+  );
+}
+
+.safe[data-edge="b"] {
+  block-size: var(--space-lg);
+}
+
+.phoneBody {
+  display: grid;
+  row-gap: var(--space-sm);
+  padding: var(--space-md);
+}
+
+.dim {
+  position: absolute;
+  inset: 0;
+  background: var(--dialog-overlay-bg);
+}
+
+.phone > [data-a="ph-dim"] {
+  position: absolute;
+  inset: 0;
+}
+
+.phone > [data-a="ph-drawer"] {
+  position: absolute;
+  inset: 0 auto 0 0;
+  inline-size: min(var(--sidebar-width), 85%);
+}
+
+.phoneDrawer {
+  display: grid;
+  align-content: start;
+  row-gap: var(--sidebar-row-spacing, var(--space-xs));
+  box-sizing: border-box;
+  block-size: 100%;
+  padding: calc(var(--space-xl) + var(--space-sm)) var(--space-sm);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-window);
+}
+
+.product {
+  grid-template-areas:
+    "shell compact"
+    "grid compact";
+  grid-template-columns: auto auto;
+  place-content: start start;
+  gap: var(--space-3xl) var(--space-4xl);
+}
+
+[data-layout="tall"] .product {
+  grid-template-areas:
+    "shell"
+    "grid"
+    "compact";
+  grid-template-columns: auto;
+  row-gap: var(--space-3xl);
+}
+
+/* The portrait frame is narrow: the source note takes its own line. */
+[data-layout="tall"] .readout {
+  flex-wrap: wrap;
+}
+
+[data-layout="tall"] .source {
+  flex-basis: 100%;
+  margin-inline-start: 0;
+}
+
+[data-layout="tall"] .screen {
+  block-size: calc(var(--space-4xl) * 13);
+}
+
+[data-layout="tall"] .page {
+  inline-size: calc(var(--space-4xl) * 9);
+}

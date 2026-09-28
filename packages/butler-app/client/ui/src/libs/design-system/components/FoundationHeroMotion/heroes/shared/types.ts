@@ -122,6 +122,8 @@ export interface ChapterSpec {
   product: string;
   /** The poster is laid out this much larger on the wide canvas (CSS zoom), so it fills the frame. */
   posterZoom?: number;
+  /** The poster's zoom on the tall canvas (default 1.35); lower for components wider than the portrait column. */
+  tallPosterZoom?: number;
   /** Chapter-specific motion on top of the shared cycle. */
   extra?: (ctx: TimelineContext) => Track[];
 }

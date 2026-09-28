@@ -173,7 +173,7 @@
 
 .plane[data-layer="tooltip"] {
   top: 12%;
-  left: 62%;
+  left: 52%;
   inline-size: 30%;
   block-size: auto;
   border-radius: var(--radius-control);
