@@ -9,6 +9,7 @@
 use butler_core::tool_protocol::ToolName;
 
 use super::AccessMode;
+use crate::workspace::StoredSessionBinding;
 
 /// An action that ask-first access lets proceed without an approval.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -57,6 +58,21 @@ impl AccessMode {
         ApprovalExemptAction::of_tool(name)
             .is_some_and(|action| self.allows_without_approval(action))
     }
+}
+
+/// The access mode a turn without execution controls (a schedule the model
+/// created, a control request) runs with on `binding`: the binding's runtime
+/// policy mode, else its metadata mode, else read-only. An App turn stores
+/// its conversation's own mode there, never a per-message override (#237).
+pub fn stored_binding_access_mode(binding: &StoredSessionBinding) -> AccessMode {
+    let metadata = binding.metadata.as_ref();
+    metadata
+        .and_then(|fields| fields.get("runtimePolicy"))
+        .and_then(|policy| policy.get("accessMode"))
+        .filter(|value| !value.is_null())
+        .or_else(|| metadata.and_then(|fields| fields.get("accessMode")))
+        .and_then(|value| serde_json::from_value(value.clone()).ok())
+        .unwrap_or(AccessMode::ReadOnly)
 }
 
 #[cfg(test)]

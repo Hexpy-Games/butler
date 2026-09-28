@@ -58,14 +58,9 @@ pub(super) async fn upsert_app_binding(
     .filter(|value| !value.is_empty())
     .map(str::to_owned)
     .unwrap_or_else(|| default_workspace.to_string_lossy().into_owned());
-    let access = envelope
-        .execution_controls
-        .as_ref()
-        .and_then(|value| value.as_json().get("access_mode"))
-        .and_then(Value::as_str)
-        .unwrap_or("read_only");
+    let access = BindingAccess::read(envelope, context);
     let has_project = project_id.is_some();
-    let profiles: &[&str] = if access == "full_access" {
+    let profiles: &[&str] = if access.turn == AccessMode::FullAccess {
         if has_project {
             &["workspace", "project", "project-lifecycle"]
         } else {
@@ -124,7 +119,7 @@ pub(super) async fn upsert_app_binding(
     }
     metadata.insert("source".into(), "native-butler-queued-app-context".into());
     metadata.insert("appSessionKind".into(), session_kind.into());
-    metadata.insert("accessMode".into(), access.into());
+    metadata.insert("accessMode".into(), json!(access.conversation));
     let Some(controls) = envelope.execution_controls.as_ref() else {
         return Err(IngressError::new(
             "session_binding_unavailable",
@@ -148,7 +143,7 @@ pub(super) async fn upsert_app_binding(
         metadata.insert("plan_id".into(), plan.clone());
     }
     let mut policy = json!({
-        "accessMode":access,
+        "accessMode":access.conversation,
         "trackingModeSource":source,"tracking_mode_source":source,
         "closeoutStrategy":if has_project{"ledger"}else{"session_ledger"},
         "closeout_strategy":if has_project{"ledger"}else{"session_ledger"},
@@ -156,7 +151,7 @@ pub(super) async fn upsert_app_binding(
         "requiredNativeTools":[],"required_tools":[],"requiredNativeToolProfiles":profiles,
     });
     let selected = approval_free_tools(
-        access,
+        &access.turn,
         &ApprovalFreeFacts {
             envelope,
             data_root,
@@ -234,6 +229,38 @@ pub(super) async fn upsert_app_binding(
         })
 }
 
+/// The access modes an App turn binds with.
+struct BindingAccess {
+    /// The access this turn runs with, from its execution controls; a
+    /// per-message override (a schedule's own access, #237) sets it. It picks
+    /// this turn's tool profiles and approval-free tools.
+    turn: AccessMode,
+    /// The conversation's own access mode, which the binding keeps for the
+    /// turns that carry no execution controls (a schedule the model created,
+    /// a control request). A per-message override never replaces it.
+    conversation: AccessMode,
+}
+
+impl BindingAccess {
+    /// The turn's controls mode (read-only when unreadable) and the
+    /// conversation mode the App context names; an envelope queued before the
+    /// App named it falls back to the turn's mode.
+    fn read(envelope: &Envelope, context: &Value) -> Self {
+        let parse = |value: &Value| serde_json::from_value::<AccessMode>(value.clone()).ok();
+        let turn = envelope
+            .execution_controls
+            .as_ref()
+            .and_then(|value| value.as_json().get("access_mode"))
+            .and_then(parse)
+            .unwrap_or(AccessMode::ReadOnly);
+        let conversation = context
+            .pointer("/session/accessMode")
+            .and_then(parse)
+            .unwrap_or_else(|| turn.clone());
+        Self { turn, conversation }
+    }
+}
+
 /// What decides which approval-free tools an App turn is offered.
 struct ApprovalFreeFacts<'a> {
     envelope: &'a Envelope,
@@ -248,9 +275,7 @@ struct ApprovalFreeFacts<'a> {
 /// first-conversation onboarding (or the selected memory-write profile, which
 /// includes it), memory save in a Butler session, and analysis of an admitted
 /// attached image. Full access and ask-first offer them; read-only does not.
-fn approval_free_tools(access: &str, facts: &ApprovalFreeFacts<'_>) -> Vec<&'static str> {
-    let mode = serde_json::from_value::<AccessMode>(Value::String(access.to_owned()))
-        .unwrap_or(AccessMode::ReadOnly);
+fn approval_free_tools(mode: &AccessMode, facts: &ApprovalFreeFacts<'_>) -> Vec<&'static str> {
     let onboarding = mode
         .allows_without_approval(ApprovalExemptAction::FirstConversationOnboarding)
         && (facts.selected_memory_write

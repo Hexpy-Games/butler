@@ -1,6 +1,7 @@
 use rusqlite::{Connection, OptionalExtension};
 
 use super::migrate;
+use crate::gateway::application::settings::{access_mode_name, conversation_access_mode};
 
 #[test]
 fn fresh_schema_has_full_support_and_functional_message_fts() {
@@ -147,10 +148,12 @@ fn deployed_schema_adds_columns_without_removing_unknown_data() {
     ));
 }
 
-/// Persisted-format pin (#237): a schedule stored before schedules had their
-/// own access mode gets the mode its conversation runs with (explicit session
-/// controls, else the stored global setting), and an unset one the default
-/// of that time, full access, so it keeps running as it did.
+/// Persisted-format pin (#236, #237): a schedule stored before schedules had
+/// their own access mode gets the mode its conversation runs with after the
+/// upgrade, by the one rule conversations resolve with: explicit session
+/// controls, else the saved global setting, else ask first. An install that
+/// never saved a mode asks first in its conversations and its schedules alike;
+/// a saved mode (full access included) is kept.
 #[test]
 fn stored_schedules_get_their_conversation_access_mode() {
     let mut connection = Connection::open_in_memory().unwrap();
@@ -185,18 +188,22 @@ fn stored_schedules_get_their_conversation_access_mode() {
         .unwrap();
     migrate(&mut connection, None).unwrap();
     assert_eq!(access(&connection, "explicit"), "read_only");
-    assert_eq!(access(&connection, "unset"), "full_access");
+    assert_eq!(access(&connection, "unset"), "ask_first");
+    for chat in ["explicit", "unset"] {
+        let conversation = conversation_access_mode(&connection, chat).unwrap();
+        assert_eq!(access(&connection, chat), access_mode_name(&conversation));
+    }
 
     schedule(&connection, "global");
     connection
         .execute(
-            "UPDATE app_settings SET value_json='{\"access_mode\":\"ask_first\"}' WHERE key='settings'",
+            "UPDATE app_settings SET value_json='{\"access_mode\":\"full_access\"}' WHERE key='settings'",
             [],
         )
         .unwrap();
     migrate(&mut connection, None).unwrap();
-    assert_eq!(access(&connection, "global"), "ask_first");
-    assert_eq!(access(&connection, "unset"), "full_access", "rewritten");
+    assert_eq!(access(&connection, "global"), "full_access");
+    assert_eq!(access(&connection, "unset"), "ask_first", "rewritten");
 }
 
 fn table_exists(connection: &Connection, table: &str) -> bool {

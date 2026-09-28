@@ -2,9 +2,13 @@ use std::{fs, path::PathBuf};
 
 use serde_json::{Map, Value, json};
 
-use super::{TempImageFile, admitted_image, frozen_carrier_valid, project_result, required_text};
+use super::{
+    TempImageFile, admitted_image, frozen_carrier_valid, project_result, require_analysis_access,
+    required_text,
+};
 use butler_core::public_text::trim_js_whitespace;
 use butler_runtime::context::ImageCarrierTuple;
+use butler_turn::btcc::{AccessMode, ToolExecutionError};
 
 struct Scratch(PathBuf);
 
@@ -17,6 +21,26 @@ impl Scratch {
 impl Drop for Scratch {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+/// Security boundary (#236): the image tool itself analyzes an attached
+/// image in full access and ask-first without asking, and never in read-only,
+/// whatever surface offered it.
+#[test]
+fn image_analysis_runs_in_full_access_and_ask_first_never_in_read_only() {
+    for (access, allowed) in [
+        (AccessMode::FullAccess, true),
+        (AccessMode::AskFirst, true),
+        (AccessMode::ReadOnly, false),
+    ] {
+        match require_analysis_access(&access) {
+            Ok(()) => assert!(allowed, "{access:?} analyzed an image"),
+            Err(ToolExecutionError::Integrity(error)) => {
+                assert!(!allowed, "{access:?} refused: {error}");
+                assert_eq!(error.code(), "image_analysis_requires_full_access");
+            }
+        }
     }
 }
 

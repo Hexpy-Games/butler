@@ -1,8 +1,15 @@
 //! Ask-first access (owner decision #236): ask-first is the default and asks
 //! before every effect except three actions, which proceed without an
 //! approval: first-conversation onboarding (ACC-01), memory save (ACC-02)
-//! and analysis of an image the user attached (ACC-03). An MCP tool still
-//! asks (ACC-04).
+//! and analysis of an image the user attached. An MCP tool still asks
+//! (ACC-04).
+//!
+//! The attached-image exemption covers the Z.AI image tool, which only a
+//! Z.AI model with its vision server is offered; no recording can come from
+//! one, so butler-agent unit tests pin that exemption (the tool is offered in
+//! ask-first: `guided/catalog/tests.rs`; it runs in ask-first and never in
+//! read-only: `guided/tools/image/tests.rs`). ACC-03 is the native-vision
+//! smoke test next to them.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -142,18 +149,18 @@ async fn acc_02_memory_save_proceeds_without_approval_in_ask_first() -> Result<(
     s.finish().await
 }
 
-/// ACC-03 — In ask-first, an image the user attached is analyzed without an
-/// approval: the turn answers with the digits the image shows.
+/// ACC-03 — Native-vision smoke test in ask-first: an image the user attached
+/// reaches a vision model with the message, without an approval, and the
+/// turn answers with the exact digits the image shows.
 #[tokio::test]
-async fn acc_03_attached_image_is_analyzed_without_approval_in_ask_first()
--> Result<(), HarnessError> {
+async fn acc_03_attached_image_reaches_native_vision_in_ask_first() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("ACC-03")?
         .cassette("ACC-03")
         .access(Access::AskFirst)
         .start()
         .await?;
-    let png = media::digits_png("4821", 12);
+    let png = media::digits_png("4821", 32);
     let upload =
         s.gw.upload("number.png", "image/png", &png, Some("general"))
             .await?;
@@ -180,22 +187,9 @@ async fn acc_03_attached_image_is_analyzed_without_approval_in_ask_first()
         .filter(|message| message["role"] == "assistant" && message["turn_id"] == turn_id.as_str())
         .map(|message| message["text"].as_str().unwrap_or_default().to_owned())
         .collect::<String>();
-    assert!(read_digits(&answer, "4821"), "image not read: {answer}");
+    let digits: String = answer.chars().filter(char::is_ascii_digit).collect();
+    assert_eq!(digits, "4821", "image not read: {answer}");
     s.finish().await
-}
-
-/// The answer names the four digits of the image, allowing one misread
-/// glyph (the recorded reply reads the pixel-font 8 as a 3).
-fn read_digits(answer: &str, digits: &str) -> bool {
-    let read: Vec<char> = answer.chars().filter(char::is_ascii_digit).collect();
-    read.len() == digits.len()
-        && read
-            .iter()
-            .zip(digits.chars())
-            .filter(|(a, b)| **a == *b)
-            .count()
-            + 1
-            >= digits.len()
 }
 
 /// ACC-04 — In ask-first, an MCP tool still asks: the turn waits for approval

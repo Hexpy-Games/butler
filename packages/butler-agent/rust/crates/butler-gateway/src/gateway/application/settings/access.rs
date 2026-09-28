@@ -10,20 +10,16 @@ use crate::gateway::application::storage::AppStorageError;
 use butler_turn::btcc::AccessMode;
 
 /// The access mode of a conversation with none stored, and of the global
-/// setting until the user picks one: ask first (#236).
+/// setting until the user picks one: ask first (#236). An install that never
+/// saved a mode gets it too; a saved mode is kept.
 pub(in crate::gateway::application) const DEFAULT_ACCESS_MODE: AccessMode = AccessMode::AskFirst;
 
-/// The default before ask-first replaced it. Migrations that must not change
-/// what existing data does resolve an unset mode to it.
-pub(in crate::gateway::application) const PRE_ASK_FIRST_ACCESS_MODE: AccessMode =
-    AccessMode::FullAccess;
-
 /// The access mode conversation `chat_id` runs with: its explicit session
-/// controls, else the stored global setting, else `default`.
-pub(in crate::gateway::application) fn stored_session_access(
+/// controls, else the stored global setting, else [`DEFAULT_ACCESS_MODE`].
+/// Message sends, new schedules and the schedule backfill share this rule.
+pub(in crate::gateway::application) fn conversation_access_mode(
     db: &Connection,
     chat_id: &str,
-    default: AccessMode,
 ) -> Result<AccessMode, AppStorageError> {
     let key = safe_local_session_id(chat_id);
     let explicit = read_json(db, &format!("session-controls-explicit:{key}"))?
@@ -44,7 +40,7 @@ pub(in crate::gateway::application) fn stored_session_access(
                 .and_then(Value::as_str)
                 .and_then(parse_access)
         })
-        .unwrap_or(default))
+        .unwrap_or(DEFAULT_ACCESS_MODE))
 }
 
 /// The stored and wire name of `mode`.

@@ -74,7 +74,7 @@ impl AppApplication {
             let (kind, _) = records::target(db, target)?;
             let access = match input.access_mode {
                 Some(mode) => mode,
-                None => settings::stored_session_access(db, target, settings::DEFAULT_ACCESS_MODE)?,
+                None => settings::conversation_access_mode(db, target)?,
             };
             db.execute(
                 "INSERT INTO app_automations(id,title,prompt_body,target_kind,target_session_id,interval_seconds,access_mode,state,next_run_at,last_run_at,last_run_state,last_safe_error_code,run_count,consecutive_failure_count,created_at,updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7,'enabled',?8,NULL,'never_run',NULL,0,0,?9,?9)",

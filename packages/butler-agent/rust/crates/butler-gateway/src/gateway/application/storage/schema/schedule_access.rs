@@ -1,14 +1,13 @@
 //! Schedules (#237) carry their own access mode. A schedule stored before
 //! that ran with its target conversation's mode, so the migration copies the
-//! mode the conversation has now, resolving an unset one to the default of
-//! that time (full access), and the schedule keeps behaving as it did.
+//! mode the conversation runs with now, by the rule conversations resolve
+//! with: an install that never saved a mode asks first (#236), for its
+//! conversations and its schedules alike.
 
 use rusqlite::{Connection, params};
 
 use super::super::AppStorageError;
-use crate::gateway::application::settings::{
-    PRE_ASK_FIRST_ACCESS_MODE, access_mode_name, stored_session_access,
-};
+use crate::gateway::application::settings::{access_mode_name, conversation_access_mode};
 
 /// Fills `access_mode` of every schedule stored without one.
 pub(super) fn backfill(connection: &Connection) -> Result<(), AppStorageError> {
@@ -24,7 +23,7 @@ pub(super) fn backfill(connection: &Connection) -> Result<(), AppStorageError> {
         .map_err(AppStorageError::sqlite)?;
     drop(statement);
     for (id, target) in schedules {
-        let mode = stored_session_access(connection, &target, PRE_ASK_FIRST_ACCESS_MODE)?;
+        let mode = conversation_access_mode(connection, &target)?;
         connection
             .execute(
                 "UPDATE app_automations SET access_mode=?1 WHERE id=?2 AND access_mode IS NULL",

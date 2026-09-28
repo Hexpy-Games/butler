@@ -24,7 +24,7 @@ mod work;
 
 use std::sync::Arc;
 
-pub use access::ApprovalExemptAction;
+pub use access::{ApprovalExemptAction, stored_binding_access_mode};
 pub use contracts::{
     AcceptedWorkResult, AcceptedWorkStatus, AccessMode, AdmissionKind, AlreadyDeliveredOutcome,
     ArtifactKind, AttachmentKind, AttachmentRef, ChangedFileLine, ChangedFileSummary,

@@ -15,7 +15,7 @@ use butler_runtime::context::{
     ImageCapabilityEvidence, ImageCarrierTuple, VisualAttachmentManifest,
 };
 use butler_turn::btcc::{
-    ApprovalExemptAction, GuidedInvocation, ModelRoundToolCall, ToolExecutionError,
+    AccessMode, ApprovalExemptAction, GuidedInvocation, ModelRoundToolCall, ToolExecutionError,
 };
 
 use super::GuidedTools;
@@ -31,12 +31,8 @@ pub(super) fn supports(name: &str) -> bool {
 
 /// Full access and ask-first analyze an attached image without asking;
 /// read-only never analyzes one.
-fn require_analysis_access(owner: &GuidedTools) -> Result<(), ToolExecutionError> {
-    if owner
-        .binding
-        .access_mode
-        .allows_without_approval(ApprovalExemptAction::AttachedImageAnalysis)
-    {
+fn require_analysis_access(access: &AccessMode) -> Result<(), ToolExecutionError> {
+    if access.allows_without_approval(ApprovalExemptAction::AttachedImageAnalysis) {
         Ok(())
     } else {
         Err(integrity(
@@ -51,7 +47,7 @@ pub(super) async fn execute(
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    require_analysis_access(owner)?;
+    require_analysis_access(&owner.binding.access_mode)?;
     let file_id = required_text(
         &call.arguments,
         "file_id",
