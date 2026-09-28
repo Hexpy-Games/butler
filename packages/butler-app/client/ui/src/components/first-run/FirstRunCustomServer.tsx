@@ -58,7 +58,7 @@ export function FirstRunCustomServer({ flow }: { flow: FirstRunFlow }) {
           value={serverUrl}
           onChange={(event) => setServerUrl(event.target.value)}
         />
-        {failed ? <FieldError>{copy.keyNetwork}</FieldError> : null}
+        {failed ? <FieldError>{copy.keyErrors.network}</FieldError> : null}
       </Field>
       <Field>
         <FieldLabel htmlFor="first-run-server-key">{copy.customKey}</FieldLabel>

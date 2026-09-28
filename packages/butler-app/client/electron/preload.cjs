@@ -499,9 +499,19 @@ const butlerApp = Object.freeze({
     ipcRenderer.invoke("butler:first-run-setup-cancel", request ?? {}),
   exportSetupDiagnostics: () =>
     ipcRenderer.invoke("butler:first-run-setup-diagnostics"),
-  // #230 first-run routes served by the agent. Envelopes keep the public
-  // error code (invalid_key, no_access, network) across contextBridge.
+  // #230 first-run routes served by the agent (#279). Envelopes keep the
+  // public error code (invalid_key, no_access, network, ...) across contextBridge.
   getSetupReadiness: () => requestBridgeResult("/setup/readiness"),
+  retrySetupReadiness: () => requestBridgeResult("/setup/readiness/retry", {
+    method: "POST",
+    body: JSON.stringify({}),
+  }),
+  startSetupOAuth: (request) => requestBridgeResult("/setup/oauth/start", {
+    method: "POST",
+    body: JSON.stringify(request ?? {}),
+  }),
+  getSetupOAuthFlow: ({ flowId } = {}) =>
+    requestBridgeResult(`/setup/oauth/${encodeURIComponent(flowId ?? "")}`),
   getLocalModelServers: () => requestJson("/setup/local-model-servers"),
   verifySetupCredential: (request) => requestBridgeResult("/setup/credentials/verify", {
     method: "POST",
@@ -512,7 +522,10 @@ const butlerApp = Object.freeze({
     body: JSON.stringify(request ?? {}),
   }),
   cancelSetupOAuth: ({ flowId } = {}) =>
-    ipcRenderer.invoke("butler:cancel-openai-oauth-login", { flowId }),
+    requestBridgeResult(`/setup/oauth/${encodeURIComponent(flowId ?? "")}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
   getAgentServiceStatus: () => ipcRenderer.invoke("butler:agent-service-status"),
   installAgentService: (request = {}) =>
     ipcRenderer.invoke("butler:agent-service-install", request ?? {}),
@@ -937,6 +950,9 @@ const butlerApp = Object.freeze({
     ipcRenderer.invoke("butler:restart-openai-oauth-login"),
   getOpenAIOAuthLoginStatus: () =>
     ipcRenderer.invoke("butler:get-openai-oauth-login-status"),
+  // Fallback for agents without the #279 sign-in routes.
+  cancelOpenAIOAuthLogin: ({ flowId } = {}) =>
+    ipcRenderer.invoke("butler:cancel-openai-oauth-login", { flowId }),
   submitOpenAIOAuthCallback: (request = {}) =>
     ipcRenderer.invoke("butler:submit-openai-oauth-callback", request ?? {}),
   deleteHostedModel: ({ modelRef } = {}) => requestJson(`/model-catalog/registered-models/${encodeURIComponent(modelRef ?? "")}`, {

@@ -862,10 +862,11 @@ async function submitOpenAIOAuthCallback(input = {}) {
   return await waitForOAuthCompletion();
 }
 
-// First-run Cancel (`POST /setup/oauth/{flow_id}/cancel`). Killing the helper
-// closes its localhost callback listener and drops the PKCE state.
-// #230 integration: when the agent owns the sign-in flow, forward this to the
-// agent route instead.
+// Cancel for the desktop sign-in helper. First run uses the agent's flow
+// (`POST /setup/oauth/start`, `GET /setup/oauth/{flow_id}`,
+// `POST /setup/oauth/{flow_id}/cancel`, #279) and falls back to this helper
+// only when the agent lacks those routes. Killing the helper closes its
+// localhost callback listener and drops the PKCE state.
 function cancelOpenAIOAuthLoginFlow(input = {}) {
   const flowId = safeString(input?.flowId);
   if (flowId && openAIOAuthLoginSession?.id !== flowId) {

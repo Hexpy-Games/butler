@@ -15,7 +15,8 @@ import {
 import { PROVIDER_CARDS, type FirstRunProviderCardId } from "@/app/setupProviders.ts";
 import { CardGlyph } from "./CardGlyph";
 import { FirstRunBack } from "./FirstRunBack";
-import { useKeyVerification, type KeyStatus } from "./useKeyVerification";
+import type { KeyCheckFailure } from "@/app/setupConnection.ts";
+import { RETRYABLE_KEY_FAILURES, useKeyVerification, type KeyStatus } from "./useKeyVerification";
 import type { FirstRunFlow } from "./useFirstRunFlow";
 
 /** One API key field, checked on paste; no name field and no Add button. */
@@ -27,7 +28,7 @@ export function FirstRunKeyForm({ cardId, flow }: { cardId: FirstRunProviderCard
     providerId: spec.providerId ?? cardId,
     onVerified: (credentialId) => flow.connectKey(cardId, credentialId),
   });
-  const bad = key.status === "invalid" || key.status === "noaccess" || key.status === "network";
+  const bad = isKeyFailure(key.status);
   return (
     <SetupWizardContent width="wide">
       <Inline>
@@ -50,7 +51,7 @@ export function FirstRunKeyForm({ cardId, flow }: { cardId: FirstRunProviderCard
           value={key.value}
           onChange={(event) => key.change(event.target.value)}
         />
-        <KeyStatusLine copy={copy} status={key.status} />
+        <KeyStatusLine copy={copy} status={key.status} onRetry={key.retry} />
       </Field>
       <Inline gap="md">
         {spec.keyUrl ? (
@@ -64,16 +65,29 @@ export function FirstRunKeyForm({ cardId, flow }: { cardId: FirstRunProviderCard
   );
 }
 
-function KeyStatusLine({ copy, status }: { copy: FirstRunFlow["copy"]; status: KeyStatus }) {
-  if (status === "invalid" || status === "noaccess" || status === "network") {
-    const message = status === "invalid" ? copy.keyInvalid : status === "noaccess" ? copy.keyNoAccess : copy.keyNetwork;
-    return <FieldError id="first-run-key-status" role="alert">{message}</FieldError>;
+function isKeyFailure(status: KeyStatus): status is KeyCheckFailure {
+  return status !== "idle" && status !== "checking" && status !== "valid" && status !== "saved";
+}
+
+function KeyStatusLine({ copy, status, onRetry }: { copy: FirstRunFlow["copy"]; status: KeyStatus; onRetry: () => void }) {
+  if (isKeyFailure(status)) {
+    return (
+      <Stack gap="xs">
+        <FieldError id="first-run-key-status" role="alert">{copy.keyErrors[status]}</FieldError>
+        {RETRYABLE_KEY_FAILURES.includes(status) ? (
+          <Inline>
+            <Button size="sm" type="button" variant="link" onClick={onRetry}>{copy.retry}</Button>
+          </Inline>
+        ) : null}
+      </Stack>
+    );
   }
+  const done = status === "valid" || status === "saved";
   return (
     <Stack align="row" cross="center" gap="xs" id="first-run-key-status" role="status">
-      {status === "checking" ? <Spinner size={14} /> : status === "valid" ? <CheckIcon size="sm" /> : null}
-      <Typo.Caption tone={status === "valid" ? "success" : "secondary"}>
-        {status === "checking" ? copy.checking : status === "valid" ? copy.keyValid : copy.keyHint}
+      {status === "checking" ? <Spinner size={14} /> : done ? <CheckIcon size="sm" /> : null}
+      <Typo.Caption tone={done ? "success" : "secondary"}>
+        {status === "checking" ? copy.checking : status === "valid" ? copy.keyValid : status === "saved" ? copy.keySaved : copy.keyHint}
       </Typo.Caption>
     </Stack>
   );

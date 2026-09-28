@@ -75,8 +75,9 @@ function FirstRunPrepFailure({ flow }: { flow: FirstRunFlow }) {
 
 async function copyReport(flow: FirstRunFlow): Promise<void> {
   try {
+    // Desktop preparation checks plus the agent's readiness steps (code and English detail).
     const diagnostics = localizeSetupDiagnostics(await exportFirstRunSetupDiagnostics(), flow.copy);
-    await navigator.clipboard.writeText(JSON.stringify(diagnostics, null, 2));
+    await navigator.clipboard.writeText(JSON.stringify({ ...diagnostics, readiness: flow.readiness }, null, 2));
     notifyStatus(flow.copy.reportCopied, { id: "first-run-report", tone: "ok" });
   } catch {
     notifyStatus(flow.copy.reportUnavailable, { id: "first-run-report", tone: "error" });

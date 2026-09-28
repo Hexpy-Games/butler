@@ -1,10 +1,11 @@
 /**
- * Agent readiness during first run (#230 contract).
+ * Agent readiness during first run (#230, agent side in #279).
  *
  * Two sources: the desktop app's local preparation (`POST /setup/start`:
  * install and start the agent service) and the agent's own preparation
- * (`GET /setup/readiness` plus the live event `setup.readiness_changed`,
- * implemented by the Rust agent in #230).
+ * (`GET /setup/readiness`, `POST /setup/readiness/retry` and the live event
+ * `setup.readiness_changed`). Agent steps: `data_folder`, `model_config`,
+ * `agent_runtime`.
  */
 export type SetupReadinessStatus = "preparing" | "ready" | "failed";
 export type SetupReadinessStepStatus = "pending" | "running" | "done" | "failed";
@@ -12,8 +13,8 @@ export type SetupReadinessStepStatus = "pending" | "running" | "done" | "failed"
 export interface SetupReadinessStep {
   id: string;
   status: SetupReadinessStepStatus;
-  /** Stable code for a failed step; the app maps it to a plain reason. */
-  error?: { code: string };
+  /** A failed step: a stable `code` the app maps to a plain reason, and an English `detail` for bug reports. */
+  error?: { code: string; detail?: string };
 }
 
 export interface SetupReadinessView {
@@ -37,11 +38,13 @@ function normalizeStep(value: unknown): SetupReadinessStep | null {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
   if (typeof record.id !== "string" || !STEP_STATUSES.includes(record.status as SetupReadinessStepStatus)) return null;
-  const code = (record.error as { code?: unknown } | null | undefined)?.code;
+  const error = record.error as { code?: unknown; detail?: unknown } | null | undefined;
   return {
     id: record.id,
     status: record.status as SetupReadinessStepStatus,
-    ...(typeof code === "string" ? { error: { code } } : {}),
+    ...(typeof error?.code === "string"
+      ? { error: { code: error.code, ...(typeof error.detail === "string" ? { detail: error.detail } : {}) } }
+      : {}),
   };
 }
 
@@ -54,11 +57,9 @@ export function normalizeReadiness(value: unknown): SetupReadinessView | null {
   return { status: record.status as SetupReadinessStatus, steps };
 }
 
-/** Readiness from a `setup.readiness_changed` event (payload or payload.readiness). */
+/** Readiness from a `setup.readiness_changed` event; its payload is the view. */
 export function readinessFromEvent(event: { type: string; payload?: unknown }): SetupReadinessView | null {
-  if (event.type !== SETUP_READINESS_EVENT) return null;
-  const payload = event.payload as { readiness?: unknown } | undefined;
-  return normalizeReadiness(payload?.readiness ?? payload);
+  return event.type === SETUP_READINESS_EVENT ? normalizeReadiness(event.payload) : null;
 }
 
 /**

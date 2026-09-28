@@ -7,7 +7,11 @@ export const KEY_VERIFY_DEBOUNCE_MS = 400;
 /** Shorter input is still being typed, not a key. */
 export const MIN_KEY_LENGTH = 8;
 
-export type KeyStatus = "idle" | "checking" | "valid" | KeyCheckFailure;
+/** `saved`: stored, but the service has no model list to check the key against. */
+export type KeyStatus = "idle" | "checking" | "valid" | "saved" | KeyCheckFailure;
+
+/** Failures a second try can fix without a new key. */
+export const RETRYABLE_KEY_FAILURES: readonly KeyStatus[] = ["network", "ratelimited", "unavailable"];
 
 /**
  * One API key field: checked with the service as soon as it is pasted
@@ -31,12 +35,13 @@ export function useKeyVerification({ providerId, onVerified }: {
   async function check(id: number, key: string): Promise<void> {
     setStatus("checking");
     try {
-      await verifyApiKey(providerId, key);
+      const check = await verifyApiKey(providerId, key);
       if (id !== sequence.current) return;
-      const credentialId = await saveApiKey(providerId, key);
+      // The same key again reuses the saved credential (`created: false`); its id works the same.
+      const credential = await saveApiKey(providerId, key);
       if (id !== sequence.current) return;
-      setStatus("valid");
-      verified.current(credentialId);
+      setStatus(check.verified ? "valid" : "saved");
+      verified.current(credential.id);
     } catch (error) {
       if (id === sequence.current) setStatus(keyCheckFailure(apiErrorCode(error)));
     }
@@ -54,5 +59,13 @@ export function useKeyVerification({ providerId, onVerified }: {
     timer.current = setTimeout(() => void check(id, key), KEY_VERIFY_DEBOUNCE_MS);
   }
 
-  return { value, status, change };
+  /** Checks the same key again (after a network, rate or service failure). */
+  function retry(): void {
+    const key = value.trim();
+    if (key.length < MIN_KEY_LENGTH) return;
+    clearTimeout(timer.current);
+    void check(++sequence.current, key);
+  }
+
+  return { value, status, change, retry };
 }

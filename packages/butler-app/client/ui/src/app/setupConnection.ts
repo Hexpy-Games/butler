@@ -12,7 +12,7 @@ import type {
   SettingsView,
 } from "./types.ts";
 
-// #230 endpoints. The Rust agent implements them; these are the app's only callers.
+// #230 endpoints, served by the Rust agent (#279); these are the app's only callers.
 
 /** Agent readiness, or `unsupported` when the agent predates #230. */
 export async function fetchSetupReadiness(): Promise<SetupReadinessView | "unsupported"> {
@@ -24,47 +24,69 @@ export async function fetchSetupReadiness(): Promise<SetupReadinessView | "unsup
   }
 }
 
+/** Runs the agent's preparation again after a failure; answers the new (preparing) view. */
+export async function retrySetupReadiness(): Promise<SetupReadinessView> {
+  const view = normalizeReadiness(await api<unknown>("/setup/readiness/retry", { method: "POST", body: JSON.stringify({}) }));
+  return view ?? { status: "preparing", steps: [] };
+}
+
 /** Probes Ollama (:11434) and LM Studio (:1234) with a short timeout. */
 export async function fetchLocalModelServers(): Promise<LocalModelServerView[]> {
   const result = await api<{ servers?: LocalModelServerView[] }>("/setup/local-model-servers");
   return Array.isArray(result?.servers) ? result.servers : [];
 }
 
-/** Checks a key with the service without saving it; throws with `error.code` on failure. */
-export async function verifyApiKey(providerId: string, apiKey: string): Promise<void> {
-  await api("/setup/credentials/verify", { method: "POST", body: JSON.stringify({ provider_id: providerId, api_key: apiKey }) });
-}
-
-/** Saves a key to the Keychain (#217); the agent names it. */
-export async function saveApiKey(providerId: string, apiKey: string): Promise<string> {
-  const result = await api<{ credential?: { id?: string }; id?: string }>("/credentials", {
+/**
+ * Checks a key with the service without saving it; throws with `error.code`
+ * on failure. `verified: false` means the service has no model list to check
+ * the key against (the key is still usable).
+ */
+export async function verifyApiKey(providerId: string, apiKey: string): Promise<{ verified: boolean }> {
+  const result = await api<{ valid?: boolean; verified?: boolean }>("/setup/credentials/verify", {
     method: "POST",
     body: JSON.stringify({ provider_id: providerId, api_key: apiKey }),
   });
-  const id = result?.credential?.id ?? result?.id;
+  return { verified: result?.verified !== false };
+}
+
+/**
+ * Saves a key (the agent names it `openai`, `openai-2`, ...). The same key
+ * again answers the existing credential with `created: false`; either way the
+ * id is what the model registers with.
+ */
+export async function saveApiKey(providerId: string, apiKey: string): Promise<{ id: string; created: boolean }> {
+  const result = await api<{ credential?: { id?: string }; created?: boolean }>("/credentials", {
+    method: "POST",
+    body: JSON.stringify({ provider_id: providerId, api_key: apiKey }),
+  });
+  const id = result?.credential?.id;
   if (!id) throw Object.assign(new Error("credential_missing"), { code: "credential_missing" });
-  return id;
+  return { id, created: result?.created !== false };
 }
 
-/** Stops a pending ChatGPT sign-in: closes the callback listener and drops its state. */
-export async function cancelSignInFlow(flowId: string): Promise<void> {
-  await api(`/setup/oauth/${encodeURIComponent(flowId)}/cancel`, { method: "POST", body: JSON.stringify({}) });
-}
-
-function isMissingRoute(error: unknown): boolean {
+/** A route an older agent does not serve (404 or a desktop bridge without the method). */
+export function isMissingRoute(error: unknown): boolean {
   const status = (error as { status?: unknown } | null)?.status;
   const code = apiErrorCode(error);
   return status === 404 || code === "not_found" || code === "route_not_found" ||
     (error instanceof Error && /bridge is missing|Unsupported Butler app API route/u.test(error.message));
 }
 
-export type KeyCheckFailure = "invalid" | "noaccess" | "network";
+export type KeyCheckFailure = "invalid" | "noaccess" | "network" | "ratelimited" | "unavailable" | "unsupported" | "badrequest";
 
-/** Contract assumption: `invalid_key`, `no_access`, `network`; anything else reads as a reach problem. */
+const KEY_CHECK_FAILURES: Record<string, KeyCheckFailure> = {
+  invalid_key: "invalid",
+  no_access: "noaccess",
+  network: "network",
+  rate_limited: "ratelimited",
+  provider_unavailable: "unavailable",
+  unsupported_provider: "unsupported",
+  invalid_request: "badrequest",
+};
+
+/** #279 key check codes; anything else (or no code) reads as "the service isn't responding". */
 export function keyCheckFailure(code: string | undefined): KeyCheckFailure {
-  if (code === "invalid_key" || code === "invalid_api_key" || code === "unauthorized") return "invalid";
-  if (code === "no_access" || code === "forbidden" || code === "insufficient_quota") return "noaccess";
-  return "network";
+  return (code && KEY_CHECK_FAILURES[code]) || "unavailable";
 }
 
 export interface RoutinePreset {
@@ -74,15 +96,28 @@ export interface RoutinePreset {
   effort: ReasoningEffort;
 }
 
-/** The provider's routine preset from the catalog (#230 `presets.routine`, then the worker preset). */
+const EVERYDAY_EFFORTS: readonly ReasoningEffort[] = ["medium", "low", "high", "none"];
+
+/**
+ * The provider's everyday default model. In order: the catalog's
+ * `presets.routine` (catalog #278), the worker `routine_work` preset (the
+ * catalog before #278), then the provider's recommended or latest model at
+ * medium effort (the lowest step above none when medium is missing), never
+ * xhigh or max.
+ */
 export function routinePreset(catalog: ModelCatalogView, providerId: string): RoutinePreset | null {
   const provider = catalog.providers.find((entry) => entry.provider_id === providerId);
   if (!provider) return null;
+  const findModel = (ref: string) => provider.models.find((entry) => entry.model_ref === ref || entry.model_id === ref);
   const worker = catalog.worker_model_presets.find((entry) => entry.provider_id === providerId)?.routine_work;
-  const preset = provider.presets?.routine ?? (worker ? { model: worker.model, effort: worker.reasoning_effort } : null);
-  if (!preset) return null;
-  const model = provider.models.find((entry) => entry.model_ref === preset.model || entry.model_id === preset.model);
-  return model ? { model, modelId: model.model_id, modelRef: model.model_ref, effort: preset.effort } : null;
+  for (const preset of [provider.presets?.routine, worker && { model: worker.model, effort: worker.reasoning_effort }]) {
+    const model = preset ? findModel(preset.model) : undefined;
+    if (preset && model) return { model, modelId: model.model_id, modelRef: model.model_ref, effort: preset.effort };
+  }
+  const model = provider.models.find((entry) => entry.status === "recommended") ?? findModel(provider.latest_model_ref) ?? provider.models[0];
+  if (!model) return null;
+  const effort = EVERYDAY_EFFORTS.find((candidate) => model.reasoning_efforts.includes(candidate)) ?? "medium";
+  return { model, modelId: model.model_id, modelRef: model.model_ref, effort };
 }
 
 type DefaultModelPatch = Pick<SettingsView, "model" | "reasoning_effort" | "context_window_tokens" | "worker_profiles">;

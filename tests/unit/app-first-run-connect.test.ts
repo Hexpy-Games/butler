@@ -47,13 +47,34 @@ test("local preparation gates agent readiness; a pre-#230 agent without the rout
 test("readiness payloads are validated, and failures resolve to a plain reason code", () => {
   expect(normalizeReadiness({ status: "ready", steps: [] })).toEqual({ status: "ready", steps: [] });
   expect(normalizeReadiness({ status: "bogus" })).toBeNull();
-  expect(normalizeReadiness({ status: "failed", steps: [{ id: "x", status: "failed", error: { code: "network" } }, { nope: 1 }] }))
-    .toEqual({ status: "failed", steps: [{ id: "x", status: "failed", error: { code: "network" } }] });
+  // #279 shape: steps data_folder, model_config, agent_runtime; a failed step carries code and detail.
+  const agentFailed = {
+    status: "failed",
+    steps: [
+      { id: "data_folder", status: "failed", error: { code: "data_folder_unwritable", detail: "probe write failed" } },
+      { id: "model_config", status: "pending" },
+      { id: "agent_runtime", status: "pending" },
+      { nope: 1 },
+    ],
+  };
+  expect(normalizeReadiness(agentFailed)).toEqual({
+    status: "failed",
+    steps: [
+      { id: "data_folder", status: "failed", error: { code: "data_folder_unwritable", detail: "probe write failed" } },
+      { id: "model_config", status: "pending" },
+      { id: "agent_runtime", status: "pending" },
+    ],
+  });
+  expect(readinessFailureCode(normalizeReadiness(agentFailed)!)).toBe("data_folder_unwritable");
+  const en = getAppCopy("en-US").firstRun;
+  for (const code of ["data_folder_unwritable", "model_config_unreadable", "agent_runtime_not_ready", "agent_runtime_unreadable"]) {
+    expect(en.prepReasons[code]).toBeTruthy();
+  }
+  for (const id of ["data_folder", "model_config", "agent_runtime"]) expect(en.prepSteps[id]).toBeTruthy();
   const failed = { status: "failed" as const, steps: [{ id: "agent_service", status: "failed" as const, error: { code: "agent_service_failed" } }] };
   expect(readinessFailureCode(failed)).toBe("agent_service_failed");
   expect(readinessFailureCode({ status: "failed", steps: [] })).toBe("default");
-  expect(readinessFromEvent({ type: "setup.readiness_changed", payload: { readiness: { status: "ready", steps: [] } } }))
-    .toEqual({ status: "ready", steps: [] });
+  // The live event's payload is the view itself.
   expect(readinessFromEvent({ type: "setup.readiness_changed", payload: { status: "preparing", steps: [] } }))
     .toEqual({ status: "preparing", steps: [] });
   expect(readinessFromEvent({ type: "message.created", payload: {} })).toBeNull();
@@ -124,17 +145,37 @@ test("the default model is the provider's routine preset from the backend, never
   const rule = { id: "routine_work", label: "Routine", condition: "", model: "openai/gpt-6-sol", reasoning_effort: "medium" as const, enabled: true };
   const workerPreset = { provider_id: "openai", provider_label: "OpenAI", runtime_supported: true, source_url: "", deep_work: rule, routine_work: rule };
   expect(routinePreset(catalogWith({}, [workerPreset]), "openai")).toMatchObject({ modelId: "gpt-6-sol", effort: "medium" });
-  expect(routinePreset(catalogWith({}), "openai")).toBeNull();
-  expect(routinePreset(catalogWith({ presets: { routine: { model: "openai/missing", effort: "medium" } } }), "openai")).toBeNull();
+  // Before catalog #278 some providers have no preset: the recommended (else latest) model at medium, never xhigh.
+  expect(routinePreset(catalogWith({}), "openai")).toMatchObject({ modelId: "gpt-6-astra", effort: "medium" });
+  const recommended = catalogWith({});
+  recommended.providers[0]!.models[1] = { ...recommended.providers[0]!.models[1]!, status: "recommended" };
+  expect(routinePreset(recommended, "openai")).toMatchObject({ modelId: "gpt-6-sol", effort: "medium" });
+  const noMedium = catalogWith({});
+  noMedium.providers[0]!.models[0] = { ...noMedium.providers[0]!.models[0]!, reasoning_efforts: ["low", "high", "xhigh"] };
+  expect(routinePreset(noMedium, "openai")).toMatchObject({ modelId: "gpt-6-astra", effort: "low" });
+  expect(routinePreset(catalogWith({ presets: { routine: { model: "openai/missing", effort: "medium" } } }), "openai"))
+    .toMatchObject({ modelId: "gpt-6-astra", effort: "medium" });
+  expect(routinePreset(catalogWith({ models: [] }), "openai")).toBeNull();
   expect(routinePreset(catalogWith({}), "anthropic")).toBeNull();
 });
 
-test("key check failures map error codes to invalid, no access or network", () => {
+test("key check failures map every #279 error code to its own plain message", () => {
   expect(keyCheckFailure("invalid_key")).toBe("invalid");
   expect(keyCheckFailure("no_access")).toBe("noaccess");
   expect(keyCheckFailure("network")).toBe("network");
-  expect(keyCheckFailure(undefined)).toBe("network");
-  expect(keyCheckFailure("request_failed")).toBe("network");
+  expect(keyCheckFailure("rate_limited")).toBe("ratelimited");
+  expect(keyCheckFailure("provider_unavailable")).toBe("unavailable");
+  expect(keyCheckFailure("unsupported_provider")).toBe("unsupported");
+  expect(keyCheckFailure("invalid_request")).toBe("badrequest");
+  // A dropped bridge or an unknown code reads as "the service isn't responding".
+  expect(keyCheckFailure(undefined)).toBe("unavailable");
+  expect(keyCheckFailure("request_failed")).toBe("unavailable");
+  const en = getAppCopy("en-US").firstRun;
+  const ko = getAppCopy("ko-KR").firstRun;
+  for (const failure of ["invalid", "noaccess", "network", "ratelimited", "unavailable", "unsupported", "badrequest"] as const) {
+    expect(en.keyErrors[failure]).toBeTruthy();
+    expect(ko.keyErrors[failure]).toBeTruthy();
+  }
 });
 
 test("the default model patch sets the chat model, effort and every worker profile", () => {

@@ -35,7 +35,7 @@ export function useLocalModelServers({ enabled, agentReady }: { enabled: boolean
     checking,
     options,
     reachable: servers.some((server) => server.reachable),
-    serverNames: servers.filter((server) => server.reachable).map((server) => server.label ?? server.id),
+    serverNames: servers.filter((server) => server.reachable).map((server) => server.label || server.id),
     rescan: () => setAttempt((current) => current + 1),
   };
 }

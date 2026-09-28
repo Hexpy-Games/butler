@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiErrorCode, subscribeLiveEvents } from "@/app/api.ts";
 import { startFirstRunSetup } from "@/app/firstRunSetup.ts";
-import { fetchSetupReadiness } from "@/app/setupConnection.ts";
+import { fetchSetupReadiness, retrySetupReadiness } from "@/app/setupConnection.ts";
 import {
   combineReadiness,
   readinessFromEvent,
@@ -21,7 +21,9 @@ export interface SetupReadinessController {
 /**
  * Agent preparation in the background of the first run: the desktop app's
  * local preparation first (`POST /setup/start`), then the agent's own
- * readiness (`GET /setup/readiness` and `setup.readiness_changed`).
+ * readiness (`GET /setup/readiness` and `setup.readiness_changed`). "Try
+ * again" re-runs whichever failed: the local preparation, or the agent's
+ * (`POST /setup/readiness/retry`).
  */
 export function useSetupReadiness(): SetupReadinessController {
   const [local, setLocal] = useState<LocalPreparation>({ phase: "checking" });
@@ -69,9 +71,18 @@ export function useSetupReadiness(): SetupReadinessController {
     };
   }, [local.phase, settled]);
 
+  function retry(): void {
+    if (local.phase === "failed" || agent === null || agent === "unsupported" || agent.status !== "failed") {
+      setAttempt({ mode: "check" });
+      return;
+    }
+    setAgent({ status: "preparing", steps: agent.steps });
+    retrySetupReadiness().then(setAgent).catch(() => setAttempt({ mode: "check" }));
+  }
+
   return {
     readiness: combineReadiness(local, agent),
-    retry: () => setAttempt({ mode: "check" }),
+    retry,
     repair: () => setAttempt({ mode: "repair" }),
   };
 }

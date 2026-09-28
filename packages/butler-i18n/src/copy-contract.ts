@@ -63,9 +63,10 @@ interface FirstRunCopy {
   keyLabel: string;
   keyHint: string;
   keyValid: string;
-  keyInvalid: string;
-  keyNetwork: string;
-  keyNoAccess: string;
+  /** Key check failures by #279 error code group. */
+  keyErrors: Record<"invalid" | "noaccess" | "network" | "ratelimited" | "unavailable" | "unsupported" | "badrequest", string>;
+  /** Saved, but the service has no model list to check it against. */
+  keySaved: string;
   keyFailedShort: string;
   getKey: string;
   keyStored: string;

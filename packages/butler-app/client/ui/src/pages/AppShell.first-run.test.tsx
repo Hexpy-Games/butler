@@ -239,10 +239,12 @@ afterEach(() => {
 
 const LEGACY_KEY = "butler:first-run-setup:v1";
 const legacyComplete = JSON.stringify({ schema: "butler.app.first-run.v1", status: "complete", completed_at: "2026-06-01T00:00:00.000Z" });
+// #279: a fresh install answers every onboarding field as null.
+const FRESH_ONBOARDING = { consent_version: null, accepted_at: null, completed_at: null };
 const currentOnboarding = { consent_version: FIRST_RUN_CONSENT_VERSION, accepted_at: "2026-09-01", completed_at: "2026-09-01" };
 
 test("a fresh install shows the welcome instead of the workspace", async () => {
-  const rendered = await renderAppShell({}, { onboarding: {} });
+  const rendered = await renderAppShell({}, { onboarding: FRESH_ONBOARDING });
   // The language comes from the system (jsdom: en-US); there is no language screen.
   await waitForText(rendered.container, "Welcome to Butler");
   expect(rendered.container.textContent).not.toContain("Workspace");
@@ -259,9 +261,9 @@ test("an agent with completed onboarding and current consent opens the workspace
 });
 
 test("an upgrade PATCHes the legacy completion once, then asks only for consent", async () => {
-  const rendered = await renderAppShell({ [LEGACY_KEY]: legacyComplete }, { onboarding: {} });
+  const rendered = await renderAppShell({ [LEGACY_KEY]: legacyComplete }, { onboarding: FRESH_ONBOARDING });
   await waitForText(rendered.container, "반갑습니다");
-  expect(rendered.patches).toEqual([{ onboarding: { completed_at: "2026-06-01T00:00:00.000Z" } }]);
+  expect(rendered.patches).toEqual([{ onboarding: { ...FRESH_ONBOARDING, completed_at: "2026-06-01T00:00:00.000Z" } }]);
   expect(rendered.storage.getItem(LEGACY_KEY)).toBeNull();
   await clickButton(rendered.container, "동의하고 계속");
   await waitForText(rendered.container, "Workspace");
@@ -300,7 +302,7 @@ test("Run setup again opens the setup over the workspace and Cancel changes noth
 
 test("first-run keeps the workspace chrome unmounted and gives the setup the resolved dark backdrop", async () => {
   systemPrefersDarkForTest = true;
-  const rendered = await renderAppShell({}, { onboarding: {} });
+  const rendered = await renderAppShell({}, { onboarding: FRESH_ONBOARDING });
   expect(rendered.container.textContent).not.toContain("Sidebar");
   expect(rendered.container.textContent).not.toContain("Titlebar");
   const setup = rendered.container.querySelector('[data-test-class="first-run-setup"]')!;

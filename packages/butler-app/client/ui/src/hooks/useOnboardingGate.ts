@@ -59,10 +59,14 @@ export function useOnboardingGate(): { gate: OnboardingGate; markComplete: () =>
         let onboarding = settings.onboarding;
         const migration = legacyMigrationPatch(onboarding, legacyCompletedAt);
         if (migration) {
-          await api("/settings", { method: "PATCH", body: JSON.stringify(migration) });
-          onboarding = migration.onboarding;
-          safeStorage()?.removeItem(LEGACY_FIRST_RUN_STORAGE_KEY);
-          if (!cancelled) setLegacyCompletedAt(null);
+          // A rejected migration (malformed legacy time) is not fatal: the
+          // legacy flag keeps counting this session and the next start tries again.
+          const migrated = await api("/settings", { method: "PATCH", body: JSON.stringify(migration) }).then(() => true, () => false);
+          if (migrated) {
+            onboarding = migration.onboarding;
+            safeStorage()?.removeItem(LEGACY_FIRST_RUN_STORAGE_KEY);
+            if (!cancelled) setLegacyCompletedAt(null);
+          }
         }
         if (!cancelled) setAgent({ loaded: true, onboarding });
       } catch {

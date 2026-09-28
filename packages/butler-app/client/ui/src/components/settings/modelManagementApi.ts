@@ -12,7 +12,7 @@ import type {
 export interface OpenAIOAuthLoginResult {
   auth_url?: string;
   error?: string;
-  /** #230: id of the pending sign-in; `POST /setup/oauth/{flow_id}/cancel` stops it. */
+  /** Id of the sign-in flow (#279 agent flow, or the desktop helper's session). */
   flow_id?: string;
   label?: string;
   redirect_uri?: string;
@@ -50,6 +50,11 @@ export async function getOpenAIOAuthLoginStatus(): Promise<OpenAIOAuthLoginResul
   return await callOpenAIOAuthBridge("getOpenAIOAuthLoginStatus");
 }
 
+/** Desktop helper fallback for agents without the #279 sign-in routes. */
+export async function cancelOpenAIOAuthLogin(flowId?: string): Promise<OpenAIOAuthLoginResult> {
+  return await callOpenAIOAuthBridge("cancelOpenAIOAuthLogin", { flowId });
+}
+
 export async function submitOpenAIOAuthCallback(
   callbackUrl: string,
 ): Promise<OpenAIOAuthLoginResult> {
@@ -60,6 +65,7 @@ export async function submitOpenAIOAuthCallback(
 
 async function callOpenAIOAuthBridge(
   method:
+    | "cancelOpenAIOAuthLogin"
     | "getOpenAIOAuthLoginStatus"
     | "restartOpenAIOAuthLogin"
     | "startOpenAIOAuthLogin"

@@ -33,9 +33,16 @@ interface HarnessOptions {
   setup?: Array<{ phase: string; error_code?: string } | Promise<{ phase: string }>>;
   /** Agent readiness answers, in order; the last one repeats. Omit for a pre-#230 bridge. */
   readiness?: unknown[];
+  /** `POST /setup/readiness/retry` answer. */
+  retryReadiness?: unknown;
   localServers?: unknown[];
   verify?: (apiKey: string) => Envelope;
-  oauth?: { start: Record<string, unknown>; statuses?: Array<Record<string, unknown>> };
+  /** `verified` of a successful key check (false: the service has no model list). */
+  verified?: boolean;
+  /** `created` of `POST /credentials` (false: the same key was already saved). */
+  created?: boolean;
+  /** ChatGPT sign-in: the agent's #279 routes, or the desktop helper for an older agent. */
+  oauth?: { backend?: "agent" | "desktop"; start: Record<string, unknown>; statuses?: Array<Record<string, unknown>> };
   settings?: Partial<SettingsView>;
   /** The catalog the workspace already loaded (Run setup again). */
   storeCatalog?: ModelCatalogView;
@@ -50,6 +57,7 @@ interface Harness {
   calls: Array<{ method: string; input?: unknown }>;
   results: FirstRunResult[];
   clipboard: string[];
+  opened: string[];
   emit: (event: { type: string; payload?: unknown }) => void;
   window: JSDOM["window"];
 }
@@ -104,10 +112,13 @@ async function renderFirstRun(options: HarnessOptions = {}): Promise<Harness> {
   const calls: Harness["calls"] = [];
   const results: FirstRunResult[] = [];
   const clipboard: string[] = [];
+  const opened: string[] = [];
+  Object.assign(dom.window, { open: (url: string) => void opened.push(url) });
   const listeners = new Set<(event: TimelineEvent) => void>();
   const setup = [...(options.setup ?? [{ phase: "ready" }])];
   const readiness = [...(options.readiness ?? [])];
   const statuses = [...(options.oauth?.statuses ?? [])];
+  const nextStatus = () => (statuses.length > 1 ? statuses.shift() : statuses[0] ?? options.oauth?.start);
   const record = (method: string, input?: unknown) => calls.push({ method, input });
   Object.defineProperty(dom.window.navigator, "clipboard", {
     configurable: true, value: { writeText: async (value: string) => void clipboard.push(value) },
@@ -133,19 +144,21 @@ async function renderFirstRun(options: HarnessOptions = {}): Promise<Harness> {
     },
     verifySetupCredential: async (input: { api_key: string }) => {
       record("verifySetupCredential", input);
-      return options.verify?.(input.api_key) ?? { ok: true, data: { ok: true } };
+      return options.verify?.(input.api_key) ?? { ok: true, data: { valid: true, verified: options.verified ?? true, models: ["claude-sonnet-5"] } };
     },
-    saveCredential: async (input: unknown) => {
+    saveCredential: async (input: { provider_id: string }) => {
       record("saveCredential", input);
-      return { ok: true, data: { credential: { id: "cred-new", label: "Claude" } } };
+      const credential = { id: "cred-new", label: input.provider_id, provider_id: input.provider_id, auth_type: "api_key", masked_value: "sk-...al" };
+      return { ok: true, data: { credential, created: options.created ?? true } };
     },
+    // Desktop sign-in helper (fallback).
     startOpenAIOAuthLogin: async () => {
       record("startOpenAIOAuthLogin");
       return options.oauth?.start ?? { status: "completed" };
     },
-    getOpenAIOAuthLoginStatus: async () => statuses.length > 1 ? statuses.shift() : statuses[0] ?? options.oauth?.start,
-    cancelSetupOAuth: async (input: unknown) => {
-      record("cancelSetupOAuth", input);
+    getOpenAIOAuthLoginStatus: async () => nextStatus(),
+    cancelOpenAIOAuthLogin: async (input: unknown) => {
+      record("cancelOpenAIOAuthLogin", input);
       return { status: "cancelled" };
     },
     getModelCatalog: async () => catalog(),
@@ -177,6 +190,28 @@ async function renderFirstRun(options: HarnessOptions = {}): Promise<Harness> {
       record("getSetupReadiness");
       return { ok: true, data: readiness.length > 1 ? readiness.shift() : readiness[0] };
     };
+    bridge.retrySetupReadiness = async () => {
+      record("retrySetupReadiness");
+      // The agent now reports the new run.
+      const view = options.retryReadiness ?? { status: "preparing", steps: [] };
+      readiness.splice(0, readiness.length, view);
+      return { ok: true, data: view };
+    };
+  }
+  if ((options.oauth?.backend ?? "agent") === "agent") {
+    // #279 agent routes.
+    bridge.startSetupOAuth = async (input: unknown) => {
+      record("startSetupOAuth", input);
+      return { ok: true, data: options.oauth?.start ?? { flow_id: "oauth_1", status: "profile_exists" } };
+    };
+    bridge.getSetupOAuthFlow = async (input: unknown) => {
+      record("getSetupOAuthFlow", input);
+      return { ok: true, data: nextStatus() };
+    };
+    bridge.cancelSetupOAuth = async (input: { flowId: string }) => {
+      record("cancelSetupOAuth", input);
+      return { ok: true, data: { flow_id: input.flowId, status: "cancelled" } };
+    };
   }
   Object.assign(dom.window, { butlerApp: bridge });
 
@@ -187,7 +222,7 @@ async function renderFirstRun(options: HarnessOptions = {}): Promise<Harness> {
     root.render(<FirstRunSetup mode={options.mode ?? "first-run"} onComplete={(result) => results.push(result)} />);
   });
   return {
-    container, root, calls, results, clipboard, window: dom.window,
+    container, root, calls, results, clipboard, opened, window: dom.window,
     emit: (event) => {
       for (const listener of listeners) listener(event as TimelineEvent);
     },
@@ -282,12 +317,36 @@ test("a failed preparation shows a plain reason inline, blocks consent and retri
 });
 
 test("agent readiness shows step progress and follows setup.readiness_changed", async () => {
-  const preparing = { status: "preparing", steps: [{ id: "a", status: "done" }, { id: "b", status: "running" }, { id: "c", status: "pending" }] };
+  const preparing = {
+    status: "preparing",
+    steps: [{ id: "data_folder", status: "done" }, { id: "model_config", status: "running" }, { id: "agent_runtime", status: "pending" }],
+  };
   const harness = await renderFirstRun({ readiness: [preparing] });
   await waitFor(() => text(harness).includes("1/3"), "progress");
   expect(methods(harness, "subscribeLiveEvents").length).toBeGreaterThan(0);
-  await act(async () => harness.emit({ type: "setup.readiness_changed", payload: { readiness: { status: "ready", steps: [] } } }));
+  await act(async () => harness.emit({ type: "setup.readiness_changed", payload: { status: "ready", steps: [] } }));
   await waitFor(() => text(harness).includes("준비됨"), "ready from event");
+  await unmount(harness);
+});
+
+test("an agent-side failure shows its plain reason; Try again re-runs the agent's preparation only", async () => {
+  const failed = {
+    status: "failed",
+    steps: [
+      { id: "data_folder", status: "failed", error: { code: "data_folder_unwritable", detail: "probe write failed: permission denied" } },
+      { id: "model_config", status: "pending" },
+      { id: "agent_runtime", status: "pending" },
+    ],
+  };
+  const harness = await renderFirstRun({ readiness: [failed], retryReadiness: { status: "preparing", steps: [] } });
+  await waitFor(() => Boolean(harness.container.querySelector('[data-test-class="first-run-prep-failed"]')), "failure notice");
+  expect(text(harness)).toContain("데이터 폴더(~/.butler)에 쓸 수 없습니다.");
+  expect(text(harness)).not.toContain("permission denied");
+  await click(harness, "다시 시도");
+  await waitFor(() => methods(harness, "retrySetupReadiness").length === 1, "retry route");
+  expect(methods(harness, "startSetup")).toHaveLength(1);
+  await act(async () => harness.emit({ type: "setup.readiness_changed", payload: { status: "ready", steps: [] } }));
+  await waitFor(() => text(harness).includes("준비됨"), "ready after retry");
   await unmount(harness);
 });
 
@@ -369,10 +428,26 @@ test("an API key is checked once after the paste debounce, saved, and connects t
   await unmount(harness);
 });
 
-test("key errors map to plain messages inline and keep the pasted key", async () => {
-  const codes: Record<string, string> = { "bad-key-000": "invalid_key", "no-access-00": "no_access", "offline-0000": "network" };
+test("a key the service cannot check is saved; a key saved before is reused (created: false)", async () => {
+  const harness = await renderFirstRun({ verified: false, created: false });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="claude"]')), "claude card");
+  await click(harness, card(harness, "claude"));
+  await type(harness, harness.container.querySelector<HTMLInputElement>("#first-run-api-key")!, "sk-ant-api03-again");
+  await waitFor(() => text(harness).includes("저장했습니다"), "saved line");
+  await waitFor(() => harness.results.length === 1, "completion");
+  expect(methods(harness, "registerHostedModel")[0]!.input).toMatchObject({ credential_id: "cred-new", auth_type: "api_key" });
+  await unmount(harness);
+});
+
+test("every #279 key error code maps to a plain message inline and keeps the pasted key", async () => {
+  const codes: Record<string, [string, number]> = {
+    "bad-key-000": ["invalid_key", 422], "no-access-00": ["no_access", 422], "offline-0000": ["network", 502],
+    "too-many-000": ["rate_limited", 429], "down-000000": ["provider_unavailable", 502],
+    "unsupported-0": ["unsupported_provider", 400], "malformed-00": ["invalid_request", 400],
+  };
   const harness = await renderFirstRun({
-    verify: (key) => ({ ok: false, error: { schema: "butler.app.bridge-error.v1", code: codes[key]!, status: 400 } }),
+    verify: (key) => ({ ok: false, error: { schema: "butler.app.bridge-error.v1", code: codes[key]![0], status: codes[key]![1] } }),
   });
   await agree(harness);
   await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="claude"]')), "claude card");
@@ -382,38 +457,73 @@ test("key errors map to plain messages inline and keep the pasted key", async ()
     ["bad-key-000", "이 키로 연결할 수 없습니다."],
     ["no-access-00", "이 키로는 모델을 쓸 수 없습니다."],
     ["offline-0000", "서비스에 연결할 수 없습니다."],
+    ["too-many-000", "요청이 너무 많습니다."],
+    ["down-000000", "서비스가 응답하지 않습니다."],
+    ["unsupported-0", "이 서비스의 키는 아직 확인할 수 없습니다."],
+    ["malformed-00", "키를 확인하지 못했습니다."],
   ];
+  const retryable = new Set(["offline-0000", "too-many-000", "down-000000"]);
   for (const [key, message] of expected) {
     await type(harness, input, key!);
     await waitFor(() => text(harness).includes(message!), message!);
     expect(input.value).toBe(key!);
     expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(Boolean(buttonByText(harness.container, "다시 시도"))).toBe(retryable.has(key!));
   }
+  // Try again checks the same key without a new paste.
+  const before = methods(harness, "verifySetupCredential").length;
+  await type(harness, input, "offline-0000");
+  await waitFor(() => Boolean(buttonByText(harness.container, "다시 시도")), "retry link");
+  const afterPaste = methods(harness, "verifySetupCredential").length;
+  await click(harness, "다시 시도");
+  await waitFor(() => methods(harness, "verifySetupCredential").length === afterPaste + 1, "retried check");
+  expect(afterPaste).toBe(before + 1);
   expect(methods(harness, "saveCredential")).toHaveLength(0);
   await unmount(harness);
 });
 
-test("ChatGPT sign-in waits for the browser, cancels by flow id, and can try again", async () => {
-  const pending = { status: "pending", flow_id: "flow-1", auth_url: "https://auth.openai.com/oauth/authorize?state=x" };
+test("ChatGPT sign-in runs on the agent: the app opens the browser, cancels by flow id, and can try again", async () => {
+  const pending = { flow_id: "oauth_1", status: "pending", auth_url: "https://auth.openai.com/oauth/authorize?state=x" };
   const harness = await renderFirstRun({ oauth: { start: pending, statuses: [pending] } });
   await agree(harness);
   await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="chatgpt"]')), "chatgpt card");
   await click(harness, card(harness, "chatgpt"));
   await waitFor(() => text(harness).includes("브라우저에서 로그인하세요"), "waiting");
-  expect(methods(harness, "startOpenAIOAuthLogin")).toHaveLength(1);
+  expect(methods(harness, "startSetupOAuth")).toHaveLength(1);
+  expect(methods(harness, "startOpenAIOAuthLogin")).toHaveLength(0);
+  expect(harness.opened).toEqual([pending.auth_url]);
+  await waitFor(() => methods(harness, "getSetupOAuthFlow").length > 0, "status poll", 3000);
+  expect(methods(harness, "getSetupOAuthFlow")[0]!.input).toEqual({ flowId: "oauth_1" });
+  expect(harness.opened).toHaveLength(1);
   await click(harness, "브라우저가 열리지 않았나요? 링크 복사");
   expect(harness.clipboard).toEqual([pending.auth_url]);
   await click(harness, "취소");
   await waitFor(() => text(harness).includes("로그인이 취소되었습니다"), "cancelled");
-  expect(methods(harness, "cancelSetupOAuth")[0]!.input).toEqual({ flowId: "flow-1" });
+  expect(methods(harness, "cancelSetupOAuth")[0]!.input).toEqual({ flowId: "oauth_1" });
   await click(harness, "다시 시도");
-  await waitFor(() => methods(harness, "startOpenAIOAuthLogin").length === 2, "restart");
+  await waitFor(() => methods(harness, "startSetupOAuth").length === 2, "restart");
+  await unmount(harness);
+});
+
+test("an agent without the sign-in routes falls back to the desktop helper", async () => {
+  const pending = { status: "pending", flow_id: "desktop-1", auth_url: "https://auth.openai.com/oauth/authorize?state=y" };
+  const harness = await renderFirstRun({ oauth: { backend: "desktop", start: pending, statuses: [pending] } });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="chatgpt"]')), "chatgpt card");
+  await click(harness, card(harness, "chatgpt"));
+  await waitFor(() => text(harness).includes("브라우저에서 로그인하세요"), "waiting");
+  expect(methods(harness, "startOpenAIOAuthLogin")).toHaveLength(1);
+  // The desktop helper opens the browser itself.
+  expect(harness.opened).toEqual([]);
+  await click(harness, "취소");
+  await waitFor(() => text(harness).includes("로그인이 취소되었습니다"), "cancelled");
+  expect(methods(harness, "cancelOpenAIOAuthLogin")[0]!.input).toEqual({ flowId: "desktop-1" });
   await unmount(harness);
 });
 
 test("a finished sign-in registers ChatGPT with its routine preset", async () => {
-  const pending = { status: "pending", flow_id: "flow-2", auth_url: "https://auth.openai.com/x" };
-  const harness = await renderFirstRun({ oauth: { start: pending, statuses: [pending, { status: "completed", flow_id: "flow-2" }] } });
+  const pending = { flow_id: "oauth_2", status: "pending", auth_url: "https://auth.openai.com/x" };
+  const harness = await renderFirstRun({ oauth: { start: pending, statuses: [pending, { flow_id: "oauth_2", status: "completed", label: "me@example.com" }] } });
   await agree(harness);
   await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="chatgpt"]')), "chatgpt card");
   await click(harness, card(harness, "chatgpt"));

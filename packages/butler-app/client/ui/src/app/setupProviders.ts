@@ -75,13 +75,17 @@ export function providerCardLayout({ localReachable }: { localReachable: boolean
     : { top: [...TOP_CARD_IDS], more: ["local" as const, ...MORE_CARD_IDS], localPlaceholder: true };
 }
 
-/** #230 `GET /setup/local-model-servers` entry (Ollama :11434, LM Studio :1234). */
+/**
+ * `GET /setup/local-model-servers` entry (#279; Ollama :11434, LM Studio
+ * :1234). `base_url` is the `server_url` a model registers with. The servers
+ * state no context window, so registration uses the 16k default.
+ */
 export interface LocalModelServerView {
-  id: string;
-  label?: string;
+  id: "ollama" | "lm_studio" | string;
+  label: string;
   base_url: string;
   reachable: boolean;
-  models: Array<{ id: string; size_bytes?: number; context_window_tokens?: number }>;
+  models: Array<{ id: string; size_bytes?: number }>;
 }
 
 export type LocalModelPlatform = "ollama" | "lm_studio" | "custom";
@@ -100,7 +104,7 @@ export interface LocalModelOption {
 
 function platformOf(serverId: string): { platform: LocalModelPlatform; logo?: ProviderCardLogo } {
   if (serverId === "ollama") return { platform: "ollama", logo: "ollama" };
-  if (serverId === "lm_studio" || serverId === "lmstudio") return { platform: "lm_studio", logo: "lmstudio" };
+  if (serverId === "lm_studio") return { platform: "lm_studio", logo: "lmstudio" };
   return { platform: "custom" };
 }
 
@@ -120,7 +124,6 @@ export function localModelOptions(servers: LocalModelServerView[]): LocalModelOp
       logo,
       serverUrl: server.base_url,
       sizeLabel: sizeLabel(model.size_bytes),
-      contextWindowTokens: model.context_window_tokens,
     }));
   });
 }
