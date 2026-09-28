@@ -143,7 +143,7 @@ impl ModelProvider {
             clock: self.clock.as_ref(),
         })
         .await
-        .inspect_err(|_| watch.discard_shown());
+        .inspect_err(|error| watch.discard_after(error));
         let response = match response {
             Ok(value) => value,
             Err(ModelRoundError::Provider(error))

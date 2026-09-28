@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use parking_lot::Mutex;
 use serde_json::Value;
 
-use butler_turn::btcc::{ProviderRequestError, ProviderStreamObserver};
+use butler_turn::btcc::{ModelRoundError, ProviderRequestError, ProviderStreamObserver};
 
 use super::super::transport::ResponseMode;
 use super::contracts::ProviderRequestConfig;
@@ -95,12 +95,18 @@ impl<'a> StreamWatch<'a> {
         self.streamed.load(Ordering::Acquire)
     }
 
-    /// The round failed: text it showed is not the answer. Whoever repeats
-    /// the round (the model route, or the non-streaming fallback) then
-    /// shows its own text instead of adding to it, and a turn stopped
-    /// meanwhile keeps none of it.
-    pub(super) fn discard_shown(&self) {
-        if self.streamed() {
+    /// The round failed with `error`: text it showed is not the answer.
+    /// Whoever repeats the round (the model route, or the non-streaming
+    /// fallback) then shows its own text instead of adding to it, and a
+    /// turn stopped meanwhile keeps none of it. A stop itself (the round was
+    /// cancelled) keeps the text: a stopped turn keeps its partial answer.
+    pub(super) fn discard_after(&self, error: &ModelRoundError) {
+        let stopped = match error {
+            ModelRoundError::Cancelled => true,
+            ModelRoundError::Provider(error) => error.code == "provider_cancelled",
+            _ => false,
+        };
+        if self.streamed() && !stopped {
             self.round_text_discarded();
         }
     }
