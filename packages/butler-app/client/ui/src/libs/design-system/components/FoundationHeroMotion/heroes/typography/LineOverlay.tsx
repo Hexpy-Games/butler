@@ -9,7 +9,9 @@ export function tagSteps(line: LineInfo, copy: TypeCopy, compact: boolean): stri
   const token = compact ? line.token : `${copy.roles[line.role]} · ${line.token}`;
   const size = `${Math.round(line.font.size)}px`;
   const leading = `${size}/${Math.round(line.font.lineHeight)}`;
-  return [token, `${line.token} · ${size}`, `${line.token} · ${leading}`, `${line.token} · ${leading} · ${line.font.tracking}`];
+  // Tracking only when the token sets any; zero or default values are not annotated.
+  const tracked = Number.parseFloat(line.font.tracking) !== 0 && !Number.isNaN(Number.parseFloat(line.font.tracking));
+  return [token, `${line.token} · ${size}`, `${line.token} · ${leading}`, ...(tracked ? [`${line.token} · ${leading} · ${line.font.tracking}`] : [])];
 }
 
 /** Width a line's reveal window covers (the ink may overhang the last advance a little). */
@@ -59,7 +61,7 @@ export function LineOverlay({ lines, copy, compact }: { lines: LineInfo[]; copy:
           <span className={t.lineMeasure} data-t={`lm-${line.id}`} />
           {line.draw ? (
             <span className={t.lineScale} data-t={`ls-${line.id}`}>
-              <Layer fill={false} line={line} name="wo" />
+              {line.outlined ? <Layer fill={false} line={line} name="wo" /> : null}
               <Layer fill line={line} name="wf" />
             </span>
           ) : null}

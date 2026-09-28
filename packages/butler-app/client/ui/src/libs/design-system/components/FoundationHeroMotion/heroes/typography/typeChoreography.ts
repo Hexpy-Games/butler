@@ -5,7 +5,7 @@ import { col, onBaseline, SPECIMEN, type TypeLayout } from "./typeGrid";
 import { OUTLINE_EM } from "./TypeSpecimen";
 
 /**
- * 02 Typography hero, "from token to product": one 104.4-beat cycle (33.4 s at
+ * 02 Typography hero, "from token to product": one 113-beat cycle (36.2 s at
  * --motion-deliberate 320 ms). Beat marks:
  *
  *   0–7    Construction  metric guides draw in; the real Pretendard outlines of
@@ -13,24 +13,25 @@ import { OUTLINE_EM } from "./TypeSpecimen";
  *   5–9    Fill          the glyphs fill, outlines and guides clear
  *   9–18   Weight        300 → 800 → 620 with the control, guides and readout
  *   18–20  Match cut     the specimen shrinks onto the H2 rung: "Appearance"
- *   20–31  Type list     the role list rises, flat and frame-filling; the camera
- *                        closes in and travels down it into the empty space below
- *   31–87  Build         four real components, one at a time, each in its own
+ *   20–34  Type list     the role list rises, flat and frame-filling; the camera
+ *                        closes in, travels down it, holds on the last role while
+ *                        its tabular digits roll, then goes into the empty space
+ *   34–96  Build         four real components, one at a time, each in its own
  *                        empty area: surface, structure, then its text lines
  *                        drawn like the specimen (guide, outline, fill) with
  *                        the typography token of each line on a badge
- *   87–92  Finale        everything pushes up and gathers onto the grid
- *   92–100 Settle        the composed poster: tokens beside the product
- *   100–104 Loop          the product recedes, the specimen grows back and its
+ *   96–101 Finale        everything pushes up and gathers onto the grid
+ *   101–109 Settle       the composed poster: tokens beside the product
+ *   109–113 Loop          the product recedes, the specimen grows back and its
  *                        fill clears to the blueprint of beat 0
  *
  * Every placement comes from the grid (typeGrid.ts) or from measuring the
  * poster, so it holds for both canvases, themes, languages and fonts. The
  * components gather into the poster from FINALE; the loop starts at LOOP.
  */
-export const FINALE = 87.4;
-export const LOOP = 100.4;
-export const BEATS = 104.4;
+export const FINALE = 96;
+export const LOOP = 109;
+export const BEATS = 113;
 
 export const FLIGHTS = ["title", "dash", "field", "ask", "command", "meta", "metric"] as const;
 export type Flight = (typeof FLIGHTS)[number];

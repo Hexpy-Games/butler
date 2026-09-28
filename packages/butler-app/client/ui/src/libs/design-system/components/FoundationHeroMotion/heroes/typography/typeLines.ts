@@ -51,6 +51,8 @@ export interface LineInfo extends LineSpec {
   baseline: number;
   /** Right edge of each grapheme (px from the line start), for the left-to-right reveal. */
   edges: number[];
+  /** Drawn as an outline first (weights of 500 and up; lighter strokes reveal filled). */
+  outlined: boolean;
 }
 
 /** Measures every line inside its panel (canvas px); null if a line is missing. */
@@ -71,6 +73,7 @@ export function measureLines(root: HTMLElement, ratio: number): LineInfo[] | nul
       ...spec, box, text: (node.textContent ?? "").trim(),
       font: { family: style.fontFamily, size, weight: style.fontWeight, color: style.color, lineHeight: line, tracking: style.letterSpacing === "normal" ? "0em" : style.letterSpacing },
       baseline: spec.draw ? (Math.min(line, box.h) - (ascent + descent)) / 2 + ascent : 0,
+      outlined: spec.draw && Number.parseFloat(style.fontWeight) >= 500,
       edges: spec.draw ? graphemeEdges(`${style.fontWeight} ${size}px ${style.fontFamily}`, (node.textContent ?? "").trim()) : [],
     });
   }
