@@ -1,135 +1,160 @@
-import { cut, fit, focus, type Box, type Key, type Pose, type Track } from "../../heroTimeline";
+import type { Box, Key, Pose, Track } from "../../heroTimeline";
+import { specimenLayout, type SpecimenMetrics } from "./specimenMetrics";
+import { col, onBaseline, SPECIMEN, type TypeLayout } from "./typeGrid";
+import { OUTLINE_EM } from "./TypeSpecimen";
 
 /**
- * 02 Typography hero, "from token to product": one 64-beat cycle (20.5 s at
+ * 02 Typography hero, "from token to product": one 76-beat cycle (24.3 s at
  * --motion-deliberate 320 ms). Beat marks:
  *
- *   0–11   Typeface   "Aa가" sweeps the weight axis 400 → 45 → 920 → 620 (cut
- *                     in place, the thumb scrubs), the four weight tokens tick
- *                     in, Latin and Hangul part and meet again (one stack)
- *   11–13  Match cut  the specimen shrinks into the H2 rung and becomes its text
- *   13–22  Scale      the camera lays the page down; role rungs rise in a
- *                     staggered cascade, their line boxes draw in (leading)
- *   22–26  Numerals   the camera pushes into MetricValue; tabular digits roll
- *   26–44  Assembly   real components rise from depth; each rung's text flies
- *                     into its place (title, label, message, code, meta,
- *                     dashboard title, metric) while the camera dollies panel
- *                     to panel and the rest of each component cascades in
- *   44–61  Settle     the camera springs back to the composed poster and holds
- *   61–64  Loop       the product recedes, the specimen grows back to centre
+ *   0–7    Construction  metric guides draw in (baseline, cap, x-height,
+ *                        ascender, descender); the real Pretendard outlines of
+ *                        "A가" draw along their contours; advance and side
+ *                        bearing guides rise; values attach to their guides
+ *   5–9    Fill          the glyphs fill, outlines and guides clear: "A가"
+ *   9–18   Weight        the weight control joins on the right; 300 → 800 →
+ *                        620 on the variable axis while the advance, side
+ *                        bearings, gap and readout move with it
+ *   18–20  Match cut     the specimen shrinks onto the H2 rung: "Appearance"
+ *   20–30  Scale         the camera lays the page down; rungs rise in a spring
+ *                        cascade, line boxes draw in; push-in on MetricValue,
+ *                        tabular digits roll
+ *   30–53  Assembly      real components rise; the camera takes one example
+ *                        at a time (settings, conversation, metric, composer),
+ *                        holds while its role text lands, then moves on
+ *   53–72  Settle        spring back to the composed poster and hold
+ *   72–76  Loop          the product recedes, the specimen grows back and its
+ *                        fill clears to the blueprint of beat 0
+ *
+ * Every placement comes from the grid (typeGrid.ts) or from measuring the
+ * poster, so it holds for both canvases, themes, languages and fonts.
  */
-export const BEATS = 64;
+export const BEATS = 76;
 
 export const FLIGHTS = ["title", "dash", "field", "ask", "command", "meta", "metric"] as const;
 export type Flight = (typeof FLIGHTS)[number];
 export const PANELS = ["settings", "chat", "metric", "composer"] as const;
 export type Panel = (typeof PANELS)[number];
 export const METRIC_ROLL = "1,284";
-
-/** The Pretendard Variable axis and the four weight tokens on it. */
 export const AXIS = { min: 45, max: 920 } as const;
-export const WEIGHT_TOKENS: Array<[string, number]> = [["regular", 400], ["medium", 500], ["semibold", 560], ["strong", 620]];
-/** Weight stops of the sweep and how long each holds (beats); the last one, the brand weight, is the poster. */
-export const SWEEP = [400, 260, 150, 45, 260, 500, 620, 920, 740, 620];
-const HOLD = [0.4, 0.34, 0.3, 1, 0.3, 0.28, 0.28, 1, 0.45];
-export const POSTER_WEIGHT = 620;
 
 /** Boxes of the poster layout in canvas px, as measured on the live components. */
 export interface TypeGeometry {
+  layout: TypeLayout;
   canvas: { w: number; h: number };
-  glyph: Box;
-  /** Poster scale of the glyph (it is set large and drawn small). */
-  glyphScale: number;
-  halves: { latin: Box; hangul: Box };
+  specimen: Box;
+  /** Poster scale of the specimen (laid out at its Act I size, drawn small). */
+  specimenScale: number;
   ladder: Box;
   rungs: Record<Flight, Box>;
   fly: Record<Flight, Box>;
   land: Record<Flight, Box>;
   panels: Record<Panel, Box>;
-  overlays: Record<"axis" | "cap-latin" | "cap-hangul" | "cap-stack" | "cap-tnum", Box>;
-  axisWidth: number;
+  control: Box;
+  tnum: Box;
+  controlTrack: number;
+  readoutLine: number;
   digitLine: number;
   digits: number[];
   words: number;
 }
 
-/** When each flight leaves its rung (beats); it lands 2.2 beats later. */
-export const FLIGHT_AT: Record<Flight, number> = { title: 29, field: 30, ask: 32.6, command: 33.6, meta: 34.6, dash: 36.6, metric: 37.4 };
-export const FLIGHT_BEATS = 2.2;
-export const center = (box: Box) => ({ x: box.x + box.w / 2, y: box.y + box.h / 2 });
-const sweepAt = (k: number) => 1 + HOLD.slice(0, k).reduce((sum, beat) => sum + beat, 0);
-
 export function select(name: string): string {
   return `[data-t="${name}"]`;
 }
 
-/** Act I: the specimen, its stops, the axis and the Latin/Hangul captions. */
-export function typeface(g: TypeGeometry): Track[] {
-  const { canvas, glyph } = g;
-  const tall = canvas.h > canvas.w;
-  const big = Math.min((canvas.w * (tall ? 0.62 : 0.5)) / glyph.w, (canvas.h * 0.34) / glyph.h);
-  const c = { x: canvas.w / 2, y: canvas.h * (tall ? 0.36 : 0.42) };
-  const at = center(glyph);
-  // The glyph is set large and drawn at 1/q in the poster (crisp when it grows), scaled from its top-left.
-  const q = g.glyphScale;
-  const glyphPose = (x: number, y: number, s: number): Pose => ({ x: (x - glyph.x - (s * glyph.w) / 2) / q, y: (y - glyph.y - (s * glyph.h) / 2) / q, s });
-  const bigPose = glyphPose(c.x, c.y, big);
-  const title = center(g.fly.title);
-  const shrink = g.fly.title.h / glyph.h;
-  const bottom = c.y + (glyph.h * big) / 2;
-  const place = (box: Box, x: number, y: number): Pose => ({ x: x - box.x - box.w / 2, y: y - box.y });
-  const part = glyph.w * (tall ? 0.11 : 0.16);
-  const halfX = (half: Box, sign: number) => c.x + (center(half).x - at.x + sign * part) * big;
-  const last = SWEEP.length - 1;
-  const lastStop: Key[] = [{ at: 0, o: 1 }, { at: sweepAt(0) - 0.01, o: 1 }, { at: sweepAt(0), o: 0 }, { at: sweepAt(last) - 0.01, o: 0 }, { at: sweepAt(last), o: 1 }];
-  const steps = (name: string) => SWEEP.map((_, k): Track => ({ select: select(`${name}-${k}`), keys: k === last ? lastStop : cut(sweepAt(k), sweepAt(k + 1), BEATS) }));
-  const thumb = SWEEP.map((weight, k): Key => ({ at: sweepAt(k), x: ((weight - AXIS.min) / (AXIS.max - AXIS.min)) * g.axisWidth, ease: "decelerate" }));
-  const axis = place(g.overlays.axis, c.x, bottom + 18);
-  const fadeIn = (from: number, pose: Pose, rise = 8): Key[] => [{ at: 0, ...pose, y: pose.y! + rise, o: 0 }, { at: from, o: 0 }, { at: from + 0.8, y: pose.y, o: 1, ease: "decelerate" }];
-  const capY = bottom + 14;
-  return [
-    ...steps("stop"),
-    { select: select("thumb"), keys: [{ at: 0, x: thumb.at(-1)!.x }, ...thumb] },
-    { select: select("axis"), keys: [...fadeIn(0.4, axis), { at: 7.4, o: 1 }, { at: 8.2, o: 0, y: axis.y! + 6, ease: "accelerate" }] },
-    { select: select("ticks"), keys: [{ at: 0, o: 0, y: 6 }, { at: 5, o: 0, y: 6 }, { at: 5.9, o: 1, y: 0, ease: "decelerate" }] },
-    { select: select("weights"), keys: [{ at: 0, o: 0, y: 6 }, { at: 5.6, o: 0, y: 6 }, { at: 6.6, o: 1, y: 0, ease: "decelerate" }] },
-    { select: select("latin"), keys: [{ at: 0, x: 0 }, { at: 7.6, x: 0 }, { at: 8.8, x: -part / q, ease: "emphasized" }, { at: 10.2, x: -part / q }, { at: 11.2, x: 0, ease: "emphasized" }] },
-    { select: select("hangul"), keys: [{ at: 0, x: 0 }, { at: 7.7, x: 0 }, { at: 8.9, x: part / q, ease: "emphasized" }, { at: 10.2, x: part / q }, { at: 11.2, x: 0, ease: "emphasized" }] },
-    ...([["cap-latin", g.halves.latin, -1, 8.6], ["cap-hangul", g.halves.hangul, 1, 8.8]] as const).map(([name, half, sign, from]): Track => ({
-      select: select(name), keys: [...fadeIn(from, place(g.overlays[name], halfX(half, sign), capY)), { at: 10, o: 1 }, { at: 10.6, o: 0, ease: "accelerate" }],
-    })),
-    { select: select("family"), keys: [{ at: 0, o: 0 }, { at: 45.6, o: 0 }, { at: 47, o: 1, ease: "decelerate" }, { at: 61, o: 1 }, { at: 61.6, o: 0, ease: "accelerate" }] },
-    { select: select("cap-stack"), keys: [...fadeIn(9.2, place(g.overlays["cap-stack"], c.x, capY + g.overlays["cap-latin"].h + 8)), { at: 10.1, o: 1 }, { at: 10.7, o: 0, ease: "accelerate" }] },
-    {
-      select: select("glyph"),
-      keys: [
-        { at: 0, ...bigPose }, { at: 10.4, ...bigPose }, { at: 11.4, ...glyphPose(c.x, c.y, big * 1.05), ease: "decelerate" },
-        { at: 13.2, ...glyphPose(title.x, title.y, shrink), ease: "emphasized" },
-        { at: 45, x: 0, y: 0, s: 1 }, { at: 61.4, x: 0, y: 0, s: 1 }, { at: BEATS, ...bigPose, ease: "emphasized" },
-      ],
-    },
-    // Opacity lives on the glyph's box so the flight above stays one continuous move.
-    { select: select("glyph-fade"), keys: [{ at: 0, o: 1 }, { at: 12.5, o: 1 }, { at: 13.2, o: 0, ease: "accelerate" }, { at: 45.6, o: 0 }, { at: 46.8, o: 1, ease: "decelerate" }] },
-  ];
+/** Weight of the filled specimen at its marks: drawn light, pushed heavy, settled on --font-weight-strong. */
+const WEIGHT: Array<[number, 300 | 800 | 620]> = [[9.8, 300], [12.8, 800], [13.6, 800], [15.8, 620]];
+const EASE_AT = { 12.8: "standard", 15.8: "decelerate" } as const;
+/** Guides and values leave for the fill, return for the weight, leave for the match cut. */
+const CLEAR = [6.4, 7.2] as const;
+const BACK = [8.8, 9.6] as const;
+const AWAY = [17.2, 18] as const;
+
+function show(from: number, to: number, end: readonly [number, number] = CLEAR, extra: Pose = {}): Key[] {
+  return [{ at: 0, o: 0, ...extra }, { at: from, o: 0 }, { at: to, o: 1, ease: "decelerate" }, { at: end[0], o: 1 }, { at: end[1], o: 0, ease: "accelerate" }];
 }
 
-/** Camera poses, shared by the acts. */
-export function cameras(g: TypeGeometry) {
-  const { canvas } = g;
-  const ladder = g.ladder;
-  const top: Box = { ...ladder, h: ladder.h / 2 };
-  const low: Box = { ...ladder, y: ladder.y + ladder.h / 2, h: ladder.h / 2 };
-  const onLadder = fit(canvas, ladder, 0.8, 1.7);
-  const panel = (p: Panel, turn: Pose) => focus(canvas, g.panels[p], fit(canvas, g.panels[p], 0.78, 1.6), turn);
-  return {
-    rest: { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, s: 1 } as Pose,
-    ladderTop: focus(canvas, top, onLadder * 1.1, { rx: 30, rz: -5 }),
-    ladderLow: focus(canvas, low, onLadder * 1.1, { rx: 18, rz: -2 }),
-    metric: focus(canvas, g.fly.metric, fit(canvas, g.fly.metric, 0.5, canvas.h > canvas.w ? 1.4 : 2.4), { ry: -10 }),
-    wide: focus(canvas, { x: 0, y: 0, ...canvas }, 0.9, { rx: 8, ry: -12 }),
-    settings: panel("settings", { ry: -7 }),
-    chat: panel("chat", { ry: 6 }),
-    metricPanel: panel("metric", { ry: -6 }),
-    composer: panel("composer", { rx: 6 }),
-  };
+/** Keys over the weight marks for any quantity that follows the weight. */
+function byWeight(value: (weight: 300 | 800 | 620) => Pose): Key[] {
+  return [{ at: 0, ...value(300) }, ...WEIGHT.map(([at, weight]): Key => ({ at, ...value(weight), ease: EASE_AT[at as keyof typeof EASE_AT] ?? "standard" }))];
+}
+
+/** Act I: the specimen in construction, filled, and moved along the weight axis. */
+export function specimenTracks(g: TypeGeometry, m: SpecimenMetrics): Track[] {
+  const { layout, canvas, specimen } = g;
+  const size = SPECIMEN[layout].size;
+  const q = g.specimenScale;
+  const at = (weight: 300 | 800 | 620) => specimenLayout(m, size, weight);
+  const rest = at(620);
+  const tall = layout === "tall";
+  const group = 24 + rest.height + 28 + (tall ? 24 + g.control.h : 0);
+  const top = onBaseline((canvas.h - group) / 2 + 24, layout);
+  const left = col(layout, 1).x;
+  const place = (x: number, y: number, visual: number): Pose => ({ x: (x - specimen.x) / q, y: (y - specimen.y) / q, s: visual / q });
+  const big = place(left, top, 1);
+  const title = place(g.fly.title.x, g.fly.title.y, g.fly.title.h / rest.height);
+  const control = tall ? { x: left, y: onBaseline(top + rest.height + 52, layout) } : { x: col(layout, 9).x, y: onBaseline(top + rest.height / 2 - g.control.h / 2, layout) };
+  const shiftG = (weight: 300 | 800 | 620) => at(weight).originG - rest.originG;
+  const band = (width: (w: 300 | 800 | 620) => number, x: (w: 300 | 800 | 620) => number) =>
+    byWeight((w) => ({ x: x(w), sx: Math.max(0.05, Math.abs(width(w))) / Math.max(1, Math.abs(width(620))) }));
+  const guides = (from: number, to: number): Key[] => [...show(from, to), { at: BACK[0], o: 0 }, { at: BACK[1], o: 1, ease: "decelerate" }, { at: AWAY[0], o: 1 }, { at: AWAY[1], o: 0, ease: "accelerate" }];
+  const cuts = (name: string): Track[] => [0, 1, 2].map((k) => ({
+    select: select(`${name}-${k}`),
+    keys: k === 0 ? [{ at: 0, o: 1 }, { at: 11.29, o: 1 }, { at: 11.3, o: 0 }] : k === 1 ? [{ at: 0, o: 0 }, { at: 11.29, o: 0 }, { at: 11.3, o: 1 }, { at: 14.69, o: 1 }, { at: 14.7, o: 0 }] : [{ at: 0, o: 0 }, { at: 14.69, o: 0 }, { at: 14.7, o: 1 }],
+  }));
+  const hline = (name: string, k: number, back: boolean): Track[] => [
+    { select: select(`h-${name}`), keys: back ? guides(0.3 + k * 0.25, 1.7 + k * 0.25) : show(0.3 + k * 0.25, 1.7 + k * 0.25) },
+    { select: select(`h-${name}-rule`), keys: [{ at: 0, sx: 0 }, { at: 0.3 + k * 0.25, sx: 0 }, { at: 1.7 + k * 0.25, sx: 1, ease: "decelerate" }] },
+    { select: select(`h-${name}-label`), keys: [{ at: 0, o: 0 }, { at: 2.4 + k * 0.3, o: 0 }, { at: 3.2 + k * 0.3, o: 1, ease: "decelerate" }] },
+  ];
+  const outline = (name: string, dash: number, from: number, x: number): Track => ({
+    select: select(name),
+    keys: [{ at: 0, dash, o: 1, x }, { at: from, dash }, { at: from + 3.8, dash: 0 }, { at: 5.6, o: 1 }, { at: 6.6, o: 0, ease: "accelerate" }, { at: 75.9, dash, o: 0 }, { at: BEATS, o: 1 }],
+  });
+  const fillKeys = (x: (w: 300 | 800 | 620) => number): Key[] => [
+    { at: 0, o: 0, wght: 300, x: x(300) }, { at: 5, o: 0 }, { at: 6.4, o: 1, ease: "decelerate" },
+    ...byWeight((w) => ({ wght: w, x: x(w) })), { at: 75, o: 1 }, { at: 75.9, o: 0, ease: "accelerate" }, { at: 75.95, wght: 300, x: x(300) },
+  ];
+  return [
+    ...hline("base", 0, true), ...hline("cap", 1, true), ...hline("xh", 2, false), ...hline("asc", 3, false), ...hline("desc", 4, false),
+    ...["v-a0", "v-ag", "v-g1"].map((name, k): Track => ({ select: select(`${name}-rule`), keys: [{ at: 0, sy: 0 }, { at: 1.6 + k * 0.25, sy: 0 }, { at: 2.8 + k * 0.25, sy: 1, ease: "decelerate" }] })),
+    ...["v-a0", "v-ag", "v-g1"].map((name, k): Track => ({
+      select: select(name),
+      keys: [...guides(1.6 + k * 0.25, 2.4 + k * 0.25), ...byWeight((w) => ({ x: name === "v-ag" ? shiftG(w) : name === "v-g1" ? at(w).width - rest.width : 0 }))],
+    })),
+    { select: select("sb-a-l"), keys: [...guides(2.4, 3.2), ...band((w) => at(w).a.lsb * size, () => 0)] },
+    { select: select("sb-a-r"), keys: [...guides(2.6, 3.4), ...band((w) => (at(w).a.advance - at(w).a.inkRight) * size, (w) => (at(w).a.inkRight - rest.a.inkRight) * size)] },
+    { select: select("sb-g-l"), keys: [...guides(2.8, 3.6), ...band((w) => at(w).g.lsb * size, shiftG)] },
+    { select: select("sb-g-r"), keys: [...guides(3, 3.8), ...band((w) => (at(w).g.advance - at(w).g.inkRight) * size, (w) => shiftG(w) + (at(w).g.inkRight - rest.g.inkRight) * size)] },
+    { select: select("gap"), keys: guides(3.6, 4.4) },
+    ...["adv-a", "adv-g"].map((name, k): Track => ({
+      select: select(name),
+      keys: [...guides(3.2 + k * 0.3, 4 + k * 0.3), ...byWeight((w) => ({ x: k === 0 ? shiftG(w) / 2 : shiftG(w) + (at(w).width - rest.width - shiftG(w)) / 2 }))],
+    })),
+    ...cuts("adv-a"), ...cuts("adv-g"), ...cuts("gap"),
+    { select: select("size-label"), keys: show(2.2, 3) },
+    outline("outline-a", OUTLINE_EM.a * size, 0.5, 0),
+    outline("outline-g", OUTLINE_EM.g * size, 1, shiftG(300)),
+    { select: select("fill-a"), keys: fillKeys(() => 0) },
+    { select: select("fill-g"), keys: fillKeys(shiftG) },
+    {
+      select: select("control"),
+      keys: [{ at: 0, ...control, x: control.x + 16, o: 0 }, { at: BACK[0], o: 0 }, { at: BACK[1], x: control.x, o: 1, ease: "decelerate" }, { at: AWAY[0], o: 1 }, { at: AWAY[1], o: 0, ease: "accelerate" }],
+    },
+    { select: select("thumb"), keys: byWeight((w) => ({ x: ((w - AXIS.min) / (AXIS.max - AXIS.min)) * g.controlTrack })) },
+    { select: select("read-100"), keys: byWeight((w) => ({ y: (6 - Math.round(w / 100)) * g.readoutLine })) },
+    { select: select("read-10"), keys: byWeight((w) => ({ y: (62 - w / 10) * g.readoutLine })) },
+    { select: select("token"), keys: [{ at: 0, o: 0 }, { at: 15.8, o: 0 }, { at: 16.4, o: 1, ease: "decelerate" }] },
+    { select: select("family"), keys: [{ at: 0, o: 0 }, { at: 55.6, o: 0 }, { at: 57, o: 1, ease: "decelerate" }, { at: 71.6, o: 1 }, { at: 72.2, o: 0, ease: "accelerate" }] },
+    {
+      select: select("specimen"),
+      keys: [
+        { at: 0, ...big }, { at: 18.2, ...big }, { at: 19.9, ...title, ease: "emphasized" },
+        { at: 54, x: 0, y: 0, s: 1 }, { at: 72, x: 0, y: 0, s: 1 }, { at: 74.5, ...big, ease: "emphasized" },
+      ],
+    },
+    // Opacity on the specimen's slot, so the flight above stays one continuous move.
+    { select: select("slot"), keys: [{ at: 0, o: 1 }, { at: 19.4, o: 1 }, { at: 20, o: 0, ease: "accelerate" }, { at: 55.4, o: 0 }, { at: 56.8, o: 1, ease: "decelerate" }] },
+  ];
 }

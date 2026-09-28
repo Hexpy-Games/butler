@@ -11,6 +11,7 @@ import { Plus } from "../../../Icons";
 import { Switch } from "../../../Switch";
 import { Typo } from "../../../Typo";
 import type { TypeCopy } from "./typeCopy";
+import type { TypeLayout } from "./typeGrid";
 import type { Flight } from "./typeChoreography";
 import t from "./TypographyHero.module.css";
 
@@ -26,19 +27,35 @@ function Part({ name, block = false, children }: { name: string; block?: boolean
 
 /**
  * The product the tokens assemble into: real DS blocks with live tokens, so
- * theme, locale and font changes show here as in the app. Four panels: a
- * settings section, a conversation turn, a dashboard metric and a composer.
+ * theme, locale and font changes show here as in the app. Wide: a settings
+ * section over a dashboard metric (column A) beside a conversation turn over
+ * the composer (column B), edges on the grid. Tall: the conversation holds the
+ * poster; settings and metric wait below it for the camera.
  */
-export function ProductBoard({ copy }: { copy: TypeCopy }) {
-  return (
-    <div className={t.product} data-t="product">
-      <div className={t.panel} data-panel="settings" data-t="panel-settings">
-        <SettingsHeader title={<Land at="title">{copy.title}</Land>} description={<Part name="settings-lead">{copy.titleLead}</Part>} />
-        <SettingsSection id="type-hero-appearance" kind="form">
-          <SettingsField label={<Land at="field">{copy.field}</Land>} description={<Part name="field-hint">{copy.fieldHint}</Part>}
-            control={<Part name="switch"><Switch aria-label={copy.field} checked onCheckedChange={() => undefined} /></Part>} />
-        </SettingsSection>
+export function ProductBoard({ copy, layout }: { copy: TypeCopy; layout: TypeLayout }) {
+  const settings = (
+    <div className={t.panel} data-panel="settings" data-t="panel-settings" key="settings">
+      <SettingsHeader title={<Land at="title">{copy.title}</Land>} description={<Part name="settings-lead">{copy.titleLead}</Part>} />
+      <SettingsSection id="type-hero-appearance" kind="form">
+        <SettingsField label={<Land at="field">{copy.field}</Land>} description={<Part name="field-hint">{copy.fieldHint}</Part>}
+          control={<Part name="switch"><Switch aria-label={copy.field} checked onCheckedChange={() => undefined} /></Part>} />
+        <Part name="field-2" block>
+          <SettingsField label={copy.field2} description={copy.field2Hint} control={<Switch aria-label={copy.field2} checked={false} onCheckedChange={() => undefined} />} />
+        </Part>
+      </SettingsSection>
+    </div>
+  );
+  const metric = (
+    <div className={t.panel} data-panel="metric" data-t="panel-metric" key="metric">
+      <Typo.DashboardTitle as="div"><Land at="dash">{copy.dash}</Land></Typo.DashboardTitle>
+      <div className={t.metrics}>
+        <MetricCard value={copy.metric} label={copy.metricLabel} change={copy.change} trend="up" />
+        <Part name="metric-2" block><MetricCard value={copy.metric2} label={copy.metric2Label} change={copy.change2} trend="up" /></Part>
       </div>
+    </div>
+  );
+  const conversation = (
+    <div className={t.column} key="conversation">
       <div className={t.panel} data-panel="chat" data-t="panel-chat">
         <Card padding="md">
           <MessageRow role="user"><Typo.Body><Land at="ask">{copy.ask}</Land></Typo.Body></MessageRow>
@@ -47,10 +64,6 @@ export function ProductBoard({ copy }: { copy: TypeCopy }) {
             <Typo.Code as="div"><Land at="command">{copy.command}</Land></Typo.Code>
           </MessageRow>
         </Card>
-      </div>
-      <div className={t.panel} data-panel="metric" data-t="panel-metric">
-        <Typo.DashboardTitle as="div"><Land at="dash">{copy.dash}</Land></Typo.DashboardTitle>
-        <MetricCard value={copy.metric} label={copy.metricLabel} change={copy.change} trend="up" />
       </div>
       <div className={t.panel} data-panel="composer" data-t="panel-composer">
         <ComposerCard>
@@ -70,5 +83,16 @@ export function ProductBoard({ copy }: { copy: TypeCopy }) {
         </ComposerCard>
       </div>
     </div>
+  );
+  return layout === "wide" ? (
+    <div className={t.product} data-t="product">
+      <div className={t.columnSpread}>{[settings, metric]}</div>
+      {conversation}
+    </div>
+  ) : (
+    <>
+      <div className={t.product} data-t="product">{conversation}</div>
+      <div className={t.offstage}>{[settings, metric]}</div>
+    </>
   );
 }

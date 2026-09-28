@@ -1,9 +1,10 @@
 /* 02 Typography hero, "from token to product". The static layout below IS
    the poster (reduced motion): the type tokens beside the assembled
-   components. Motion is compiled at runtime from typeChoreography.ts and
-   typeAssembly.ts into keyframes (heroTimeline.ts) that only move and fade
-   these boxes. The board is drawn on a fixed canvas (1040x585 wide, 380x640
-   tall) and scaled to its stage by --fit, so every px here is a canvas px. */
+   components. Motion is compiled at runtime (typeChoreography.ts,
+   typeAssembly.ts, heroTimeline.ts) and only moves, fades, draws and weighs
+   these boxes. The board is a fixed canvas (1040x585 wide, 380x640 tall)
+   scaled to its stage by --fit, so every px here is a canvas px, and every
+   box sits on the grid of typeGrid.ts (--grid-* set on the board). */
 
 /* Laid out at 2x (zoom) and drawn at half scale: the compositor rasterizes
    moving layers at their layout scale, so the camera can push in to 2x and
@@ -27,128 +28,205 @@
 }
 
 .world,
+.poster,
 .tokens,
 .ladder,
 .rung,
 .sampleCell,
-.product {
+.product,
+.column {
   transform-style: preserve-3d;
 }
 
 .world {
   position: absolute;
   inset: 0;
-  display: grid;
-  grid-template-columns: 25rem minmax(0, 1fr);
-  gap: var(--space-4xl);
-  align-items: center;
-  padding: var(--space-4xl);
   transform-origin: 50% 50%;
 }
 
-.board[data-layout="tall"] .world {
+/* The poster: tokens on columns 1-5, product on 6-12; both run margin to
+   margin, top to bottom. */
+.poster {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: var(--grid-tokens) minmax(0, 1fr);
+  column-gap: var(--grid-gutter);
+  padding: var(--grid-margin);
+}
+
+.board[data-layout="tall"] .poster {
+  grid-template-rows: auto minmax(0, 1fr);
   grid-template-columns: minmax(0, 1fr);
-  align-content: start;
-  gap: var(--space-2xl);
-  padding: var(--space-xl);
+  row-gap: var(--space-2xl);
 }
 
 /* ---- Tokens: specimen and role ladder ---- */
 
 .tokens {
   display: grid;
-  gap: var(--space-xl);
+  grid-template-rows: auto minmax(0, 1fr);
+  row-gap: var(--space-2xl);
   min-width: 0;
 }
 
 .specimenRow {
   display: flex;
   align-items: flex-end;
-  gap: var(--space-lg);
+  gap: var(--grid-gutter);
 }
 
-/* The specimen is set at 8/3 of its poster size and drawn at 3/8, so it is
-   rasterized sharp when the timeline grows it; the hidden sizer holds its
-   poster box in the layout. */
-.glyphBox {
+/* The specimen is laid out at its Act I size and drawn at --spec-q in the
+   poster; the slot holds the drawn size in the layout. */
+.specimenSlot {
   position: relative;
-  display: inline-grid;
-  font-size: calc(var(--typo-new-chat-title-size) * 1.5);
-  line-height: var(--line-height-none);
+  flex: none;
+  inline-size: var(--slot-w);
+  block-size: var(--slot-h);
 }
 
-.board[data-layout="tall"] .glyphBox {
-  font-size: var(--typo-new-chat-title-size);
-}
-
-.glyphSizer {
-  font-weight: var(--font-weight-strong);
-  white-space: nowrap;
-  visibility: hidden;
-}
-
-.glyph {
+.specimen {
   position: absolute;
   top: 0;
   left: 0;
-  display: inline-grid;
-  font-size: 266.667%;
-  scale: 0.375;
+  scale: var(--spec-q);
   transform-origin: 0 0;
 }
 
-.stop {
-  grid-area: 1 / 1;
-  font-weight: var(--weight);
-  white-space: nowrap;
+.glyphSvg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.outline,
+.fillText {
+  font-size: var(--spec-size);
+}
+
+.outline {
+  fill: none;
+  opacity: 0;
+  stroke: var(--text-primary);
+  stroke-dasharray: var(--dash) var(--dash);
+  stroke-dashoffset: 0;
+  stroke-linejoin: round;
+  stroke-width: 1.5px;
+}
+
+.fillText {
+  fill: var(--text-primary);
+  font-weight: var(--font-weight-strong);
+}
+
+/* Guides, labels and the weight control live only in motion. */
+.hline,
+.vline,
+.band2,
+.advLabel,
+.sizeLabel,
+.overlay {
+  position: absolute;
   opacity: 0;
 }
 
-.stop[data-poster] {
-  opacity: 1;
+.hline {
+  left: 0;
+  block-size: 1px;
 }
 
-.half {
-  display: inline-block;
+.vline {
+  top: 0;
+  inline-size: 1px;
+}
+
+.rule {
+  position: absolute;
+  inset: 0;
+  background: var(--line-strong);
+  transform-origin: 0 100%;
+}
+
+.band2 {
+  top: 0;
+  bottom: 0;
+  background: var(--selection-strong);
+  transform-origin: 0 50%;
+}
+
+.guideLabel,
+.sizeLabel,
+.advLabel,
+.gapLabel,
+.mono {
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.guideLabel {
+  position: absolute;
+  right: 0;
+  bottom: var(--space-xs);
+}
+
+.sizeLabel {
+  bottom: calc(100% + var(--space-md));
+  left: 0;
+}
+
+.advLabel {
+  translate: -50% var(--space-md);
+}
+
+/* One label row above the size label, so both clear the ascender line. */
+.gapLabel {
+  position: absolute;
+  bottom: calc(100% + var(--space-md) + var(--space-2xl));
+  left: 0;
+  translate: -50% 0;
+}
+
+.values {
+  display: inline-grid;
+}
+
+.value {
+  grid-area: 1 / 1;
+  justify-self: center;
+  opacity: 0;
+}
+
+.value[data-poster] {
+  opacity: 1;
 }
 
 .family {
   display: grid;
   gap: var(--space-xs);
-  padding-block-end: var(--space-xs);
+  padding-block-end: var(--family-drop);
   color: var(--text-secondary);
   font-size: var(--typo-caption-size);
 }
 
-.mono {
-  color: var(--text-tertiary);
-  font: var(--font-code);
-  font-size: var(--typo-caption-size);
-  white-space: nowrap;
-}
-
 .ladder {
   display: grid;
-  gap: var(--space-sm);
+  align-content: space-between;
+  row-gap: var(--space-sm);
 }
 
 .rung {
   display: grid;
   grid-template-areas: "tag sample spec";
-  grid-template-columns: 4.5rem minmax(0, 1fr) 5.5rem;
-  gap: var(--space-sm);
-  align-items: center;
+  grid-template-columns: var(--rung-tag) minmax(0, 1fr) var(--rung-spec);
+  column-gap: var(--grid-gutter);
+  align-items: baseline;
 }
 
-/* Tall canvas: the spec sits under the role tag so samples keep the width. */
 .board[data-layout="tall"] .rung {
-  grid-template-areas: "tag sample" "spec sample";
-  grid-template-columns: 6.5rem minmax(0, 1fr);
-  row-gap: 0;
-}
-
-.board[data-layout="tall"] .spec {
-  text-align: start;
+  column-gap: var(--space-sm);
 }
 
 /* Role tag and spec share one fading layer (a subgrid over the rung), so a
@@ -159,7 +237,7 @@
   grid-template-columns: subgrid;
   grid-row: 1 / -1;
   grid-column: 1 / -1;
-  align-items: center;
+  align-items: baseline;
 }
 
 .tag {
@@ -203,11 +281,11 @@
 .spec {
   grid-area: spec;
   color: var(--text-tertiary);
-  white-space: nowrap;
   font: var(--font-code);
   font-size: var(--typo-caption-size);
   font-variant-numeric: tabular-nums;
   text-align: end;
+  white-space: nowrap;
 }
 
 .digit {
@@ -228,28 +306,58 @@
   visibility: hidden;
 }
 
-/* ---- Product: real components ---- */
+/* ---- Product: real components, column edges on the grid ---- */
 
 .product {
   display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-xl);
-  align-items: start;
+  gap: var(--grid-gutter);
   min-width: 0;
 }
 
+.column {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  row-gap: var(--grid-gutter);
+  min-width: 0;
+}
+
+.product > .column:last-child {
+  grid-row: 1 / -1;
+  grid-column: 2;
+}
+
 .board[data-layout="tall"] .product {
+  grid-template-rows: minmax(0, 1fr);
   grid-template-columns: minmax(0, 1fr);
 }
 
-.board[data-layout="tall"] .panel[data-panel="chat"] {
-  order: -1;
+.board[data-layout="tall"] .product > .column:last-child {
+  grid-row: 1;
+  grid-column: 1;
+}
+
+/* Off the poster on the tall canvas: the camera pans down to these. */
+.offstage {
+  position: absolute;
+  top: 100%;
+  right: var(--grid-margin);
+  left: var(--grid-margin);
+  display: grid;
+  row-gap: var(--grid-gutter);
 }
 
 .panel {
   display: grid;
-  gap: var(--space-sm);
+  grid-template-rows: auto minmax(0, 1fr);
+  row-gap: var(--space-sm);
   min-width: 0;
+}
+
+.panel[data-panel="chat"],
+.panel[data-panel="composer"] {
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .land,
@@ -261,14 +369,12 @@
   display: block;
 }
 
-/* ---- Act I overlays (motion only) ---- */
+/* ---- Motion-only overlays ---- */
 
 .overlay {
-  position: absolute;
   top: 0;
   left: 0;
   white-space: nowrap;
-  opacity: 0;
 }
 
 .caption {
@@ -276,42 +382,31 @@
   font-size: var(--typo-body-size);
 }
 
-.overlay[data-t="axis"] {
+.overlay[data-t="control"] {
   display: grid;
-  justify-items: center;
-  gap: var(--space-xl);
-  padding-block-start: var(--space-2xl);
+  inline-size: var(--control-w);
+  row-gap: var(--space-md);
 }
 
-.weights {
-  max-inline-size: 22rem;
-  color: var(--text-tertiary);
-  font: var(--font-code);
-  font-size: var(--typo-caption-size);
-  text-align: center;
-  white-space: normal;
+.readout {
+  display: flex;
+  font-size: calc(var(--typo-metric-value-size) * 3);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--typo-metric-value-weight);
+  line-height: var(--line-height-none);
 }
 
-.board[data-layout="wide"] .weights {
-  max-inline-size: none;
-}
-
-.axisTrack {
+.controlTrack {
   position: relative;
   display: block;
-  inline-size: 36rem;
   block-size: 2px;
   border-radius: var(--radius-pill);
   background: var(--line-strong);
 }
 
-.board[data-layout="tall"] .axisTrack {
-  inline-size: 13rem;
-}
-
-.axisTicks {
-  position: absolute;
-  inset: 0;
+.controlScale {
+  display: flex;
+  justify-content: space-between;
 }
 
 .axisTick {
@@ -322,21 +417,6 @@
   block-size: var(--space-md);
   background: var(--text-tertiary);
   translate: -50% -50%;
-}
-
-.axisTickLabel {
-  position: absolute;
-  bottom: calc(100% + var(--space-xs));
-  left: 50%;
-  color: var(--text-tertiary);
-  font: var(--font-code);
-  font-size: var(--typo-caption-size);
-  translate: -50% 0;
-}
-
-.axisTick:nth-child(even) .axisTickLabel {
-  bottom: auto;
-  top: calc(100% + var(--space-xs));
 }
 
 .axisThumb {
@@ -350,8 +430,22 @@
   translate: -50% -50%;
 }
 
-.axisRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
+/* Column A of the wide product: settings at the top edge, metric at the
+   bottom edge, so both columns run margin to margin. */
+.columnSpread {
+  display: grid;
+  align-content: space-between;
+  row-gap: var(--grid-gutter);
+  min-width: 0;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+/* Tall poster: the conversation scrolls under the composer like the app. */
+.board[data-layout="tall"] .panel[data-panel="chat"] {
+  overflow: hidden;
 }

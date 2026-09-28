@@ -3,9 +3,10 @@ import { motionEasing, type MotionEasingName } from "../../lib/motion";
 /**
  * A small declarative timeline for long hero sequences: tracks of poses at
  * beat marks, compiled into one CSS @keyframes rule per track on a shared
- * cycle. The result is plain CSS animation (compositor transform and opacity),
- * so pausing, reduced motion and the motion trace treat it like any other
- * hero. Easing is per segment and read from the --motion-ease-* tokens, which
+ * cycle. The result is plain CSS animation (compositor transform and opacity,
+ * plus two paint-only fields for type specimens: an outline's dash offset and
+ * a variable font's weight), so pausing, reduced motion and the motion trace
+ * treat it like any other hero. Easing is per segment and read from the --motion-ease-* tokens, which
  * CSS cannot do itself (var() is not honored inside @keyframes).
  */
 
@@ -22,6 +23,10 @@ export interface Pose {
   sx?: number;
   sy?: number;
   o?: number;
+  /** stroke-dashoffset in px: an outline drawing along its contour (paint only). */
+  dash?: number;
+  /** font-weight on a variable font, interpolated along its axis (text layout of that element). */
+  wght?: number;
 }
 
 export interface Key extends Pose {
@@ -38,7 +43,7 @@ export interface Track {
 }
 
 const TRANSFORM_FIELDS = ["x", "y", "z", "rx", "ry", "rz", "s", "sx", "sy"] as const;
-const REST: Required<Pose> = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, s: 1, sx: 1, sy: 1, o: 1 };
+const REST: Required<Pose> = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, s: 1, sx: 1, sy: 1, o: 1, dash: 0, wght: 400 };
 
 function num(value: number): string {
   return String(Math.round(value * 1000) / 1000);
@@ -75,11 +80,15 @@ export function compileTimeline(scope: string, beats: number, tracks: Track[]): 
     const keys = resolve(track.keys, beats);
     const moves = track.keys.some((key) => TRANSFORM_FIELDS.some((field) => key[field] !== undefined));
     const fades = track.keys.some((key) => key.o !== undefined);
+    const draws = track.keys.some((key) => key.dash !== undefined);
+    const weighs = track.keys.some((key) => key.wght !== undefined);
     const frames = keys.map((key, k) => {
       const next = keys[k + 1];
       const body = [
         moves ? `transform:${transform(key)}` : "",
         fades ? `opacity:${num(key.o)}` : "",
+        draws ? `stroke-dashoffset:${num(key.dash)}px` : "",
+        weighs ? `font-weight:${num(key.wght)}` : "",
         next ? `animation-timing-function:${ease(next.ease)}` : "",
       ].filter(Boolean).join(";");
       return `${num((key.at / beats) * 100)}%{${body}}`;

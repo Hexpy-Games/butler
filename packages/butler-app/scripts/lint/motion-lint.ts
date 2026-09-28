@@ -273,6 +273,11 @@ export const CANVAS_MOTION_ENGINES: readonly CanvasMotionEngine[] = [
       FLUID_TIME_PERIOD_SECONDS: "Common period of the shader's time terms, used to wrap the uniform for mediump precision; not a duration.",
     },
   },
+  {
+    prefix: "libs/design-system/components/FoundationHeroMotion/heroes/typography/specimenMetrics.ts",
+    justification: "Typography hero: a 2D context used only for measureText (glyph ink bounds and advances of the live font); it never draws.",
+    constants: {},
+  },
 ];
 
 const CANVAS_CONTEXT = /\.getContext\(/u;
