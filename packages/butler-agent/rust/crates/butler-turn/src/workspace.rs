@@ -41,8 +41,8 @@ pub use mutations::{net_changed_file_detail, prepare_exact_text};
 pub use path_guard::{PathForm, safe_workspace_path};
 pub use reference::WorkspaceReference;
 pub use session_recovery::{
-    ProjectWorkspaceInspection, SessionWorkspaceAuthority, SessionWorkspaceRecovery,
-    SessionWorkspaceValidation,
+    ProjectGitStatus, ProjectWorkspaceInspection, SessionWorkspaceAuthority,
+    SessionWorkspaceRecovery, SessionWorkspaceValidation,
 };
 pub use session_worktree::{
     BindSessionWorktreeInput, BindSessionWorktreeResult, RelocationWorkspaceInput,
