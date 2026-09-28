@@ -387,6 +387,13 @@
   min-width: 0;
 }
 
+.topic {
+  display: grid;
+  align-content: start;
+  row-gap: var(--space-md);
+  min-width: 0;
+}
+
 .mark {
   display: inline-grid;
 }

@@ -84,9 +84,9 @@ export function ChapterHero({ spec, lang }: { spec: ChapterSpec; lang: Foundatio
       {css ? <style>{css}</style> : null}
       <div className={c.camera}>
         <div className={c.world} data-t="world">
-          <div className={c.prelude} data-t="prelude">{spec.prelude.render}</div>
+          <div className={c.prelude} data-t="prelude">{typeof spec.prelude.render === "function" ? spec.prelude.render(g) : spec.prelude.render}</div>
           <div className={c.poster}>
-            <div className={c.field} data-t="field-mover">{spec.field}</div>
+            <div className={c.field} data-t="field-mover">{typeof spec.field === "function" ? spec.field(g) : spec.field}</div>
             <div className={`${c.product} ${spec.product}`} data-t="product">
               {spec.builds.map((build) => {
                 const entry = frames.find((item) => item.build.id === build.id);

@@ -45,6 +45,10 @@ export function measureChapter(root: HTMLElement, layout: HeroLayout, spec: Chap
     layout,
     canvas,
     boxes: Object.fromEntries([...root.querySelectorAll<HTMLElement>("[data-m]")].map((node) => [node.dataset.m!, relBox(node.getBoundingClientRect(), origin, ratio)])),
+    // A scope inside the poster (the field) is measured in the poster's own px, like the panels.
+    scopes: Object.fromEntries([...root.querySelectorAll<HTMLElement>("[data-mark-scope]")].map((node) => [
+      node.dataset.markScope!, measureMarks(node, node.closest('[data-t="field-mover"]') ? local : ratio, root),
+    ])),
     lines: Object.fromEntries([...root.querySelectorAll<HTMLElement>("[data-roller]")].map((node) => [node.dataset.roller!, lineOf(node)])),
     field: relBox(field.getBoundingClientRect(), origin, ratio),
     panels,

@@ -1,0 +1,65 @@
+/* A chapter's intro, above the poster: the title large on the left, the
+   chapter's intent line by line on the right (below it when tall). */
+
+.intro {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: var(--grid-gutter);
+  align-items: center;
+  padding: var(--grid-margin);
+  translate: 0 -125%;
+}
+
+.introTitle {
+  grid-column: 1 / span 6;
+  color: var(--text-primary);
+  font-size: calc(var(--typo-h1-size) * 4);
+  font-weight: var(--font-weight-strong);
+  letter-spacing: -0.02em;
+  line-height: var(--line-height-none);
+}
+
+.introLead {
+  display: grid;
+  grid-column: 7 / span 6;
+  row-gap: var(--space-xl);
+}
+
+.leadLine {
+  display: grid;
+  row-gap: var(--space-xs);
+  margin: 0;
+}
+
+.leadKey {
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+.leadText {
+  color: var(--text-secondary);
+  font-size: var(--typo-h4-size);
+  line-height: var(--typo-h4-line-height);
+}
+
+[data-layout="tall"] .intro {
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+  row-gap: var(--space-2xl);
+}
+
+[data-layout="tall"] .introTitle,
+[data-layout="tall"] .introLead {
+  grid-column: 1;
+}
+
+[data-layout="tall"] .introTitle {
+  font-size: calc(var(--typo-h1-size) * 2.6);
+}
+
+[data-layout="tall"] .leadText {
+  font-size: var(--typo-body-size);
+}

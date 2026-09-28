@@ -1,0 +1,226 @@
+/* 03 Spacing hero: the staircase field on its 4px grid, the settings
+   wireframe (left of the poster) and the poster's product grid. Canvas px
+   (see ../shared/grid.ts). */
+
+/* ---- The field: a plate with the 4px baseline grid and the staircase ---- */
+
+.field {
+  position: relative;
+  display: grid;
+  align-content: center;
+  padding: var(--space-xl);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-popover);
+  background: var(--surface-raised);
+}
+
+.gridWin,
+.gridIn {
+  position: absolute;
+  inset: 0;
+}
+
+.gridWin {
+  overflow: hidden;
+}
+
+/* A line every 4px, a stronger one every 16px. */
+.gridIn {
+  background:
+    repeating-linear-gradient(
+      to right,
+      color-mix(in srgb, var(--accent) 22%, transparent) 0 1px,
+      transparent 1px var(--space-lg)
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--accent) 22%, transparent) 0 1px,
+      transparent 1px var(--space-lg)
+    ),
+    repeating-linear-gradient(
+      to right,
+      color-mix(in srgb, var(--line) 70%, transparent) 0 1px,
+      transparent 1px var(--space-xs)
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--line) 70%, transparent) 0 1px,
+      transparent 1px var(--space-xs)
+    );
+}
+
+.cell {
+  position: absolute;
+  top: 0;
+  left: 0;
+  inline-size: var(--space-lg);
+  block-size: var(--space-lg);
+}
+
+.stairs {
+  position: relative;
+  display: grid;
+  row-gap: var(--space-sm);
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 7em minmax(0, 1fr) 2em;
+  column-gap: var(--space-md);
+  align-items: center;
+}
+
+.stepName,
+.stepValue {
+  color: var(--text-secondary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+}
+
+.stepValue {
+  color: var(--text-tertiary);
+  text-align: end;
+}
+
+/* A measure block: the token's own height, three times as wide. */
+.block {
+  display: block;
+  inline-size: calc(var(--w) * 3);
+  block-size: var(--w);
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--accent) 55%, transparent) 0 1px,
+    color-mix(in srgb, var(--accent) 18%, transparent) 1px 4px
+  );
+  box-shadow: inset 0 0 0 1px var(--accent);
+  transform-origin: 0 50%;
+}
+
+/* ---- The wireframe, left of the poster ---- */
+
+.wire {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center end;
+  padding-inline-end: var(--grid-margin);
+  translate: -125% 0;
+}
+
+.wireStage {
+  display: grid;
+  row-gap: var(--space-md);
+  inline-size: calc(var(--col) * 7);
+}
+
+.mode {
+  display: inline-grid;
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+.modeLayer {
+  grid-area: 1 / 1;
+}
+
+/* The poster names the first mode only. */
+.modeLayer + .modeLayer {
+  opacity: 0;
+}
+
+.screens {
+  display: grid;
+}
+
+.screenA,
+.screens > .screen {
+  position: relative;
+  display: grid;
+  grid-area: 1 / 1;
+}
+
+.screen {
+  display: grid;
+  row-gap: var(--space-lg);
+}
+
+.screen[data-compact] {
+  --settings-section-padding: var(--space-md);
+  --settings-field-gap: var(--space-sm);
+
+  row-gap: var(--space-sm);
+}
+
+.wCard {
+  display: grid;
+  row-gap: var(--settings-field-gap);
+  padding: var(--settings-section-padding);
+  border: 1px dashed color-mix(in srgb, var(--accent) 60%, transparent);
+  border-radius: var(--radius-panel);
+}
+
+.wField {
+  display: grid;
+  row-gap: var(--space-sm);
+}
+
+.wButtons {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+.win {
+  display: block;
+  overflow: hidden;
+}
+
+.box {
+  display: block;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-control);
+}
+
+.box[data-kind="line"] {
+  inline-size: 40%;
+  block-size: var(--typo-h4-size);
+}
+
+.box[data-kind="short"] {
+  inline-size: 30%;
+  block-size: var(--typo-label-size);
+}
+
+.box[data-kind="input"] {
+  block-size: var(--control-height-md);
+}
+
+.box[data-kind="button"] {
+  inline-size: calc(var(--control-height-md) * 2.4);
+  block-size: var(--control-height-md);
+}
+
+/* ---- Poster ---- */
+
+.product {
+  grid-template-areas:
+    "inset inline"
+    "stack section";
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: space-between;
+  gap: var(--space-2xl) var(--grid-gutter);
+}
+
+[data-layout="tall"] .product {
+  grid-template-areas:
+    "inset"
+    "inline"
+    "stack"
+    "section";
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  row-gap: var(--space-lg);
+}

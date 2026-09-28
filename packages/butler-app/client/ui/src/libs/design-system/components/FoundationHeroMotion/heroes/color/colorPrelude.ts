@@ -1,5 +1,6 @@
 import { fit, focus, type Key, type Track } from "../../heroTimeline";
 import { TRANSITION } from "../shared/beats";
+import { introTracks } from "../shared/Intro";
 import { reveal, select } from "../shared/Reveal";
 import type { Prelude, TimelineContext } from "../shared/types";
 import { SWATCH_COLUMNS, SWATCHES, type ColorCopy } from "./colorCopy";
@@ -7,28 +8,30 @@ import { SWATCH_COLUMNS, SWATCHES, type ColorCopy } from "./colorCopy";
 /**
  * 01 Color prelude, beat marks:
  *
- *   0–6.4    Intro        "Color" large on the left; strategy, tone and manner,
- *                         intent reveal line by line on the right
- *   6.4–7.8  Out          the text pushes up and out
- *   6.8–10.8 Quarter view the camera glides into an isometric quarter view of
- *                         the empty field
- *   9.6–14   Stickers     role stickers land on the grid from the top left, one
- *                         diagonal at a time
- *   13.6–18  Names        grey token names attach under each sticker in turn
- *   18.4–22.4 Front       the camera returns to a flat front view
- *   21.8–24.8 Wipe        a thin line sweeps left to right; the field left of it
- *                         turns to the dark theme (before and after)
- *   24.8–26.2 Hold        then the components build, topic by topic
+ *   0–7.4     Intro        "Color" large on the left; strategy, tone and
+ *                          manner, intent reveal line by line on the right
+ *   6.8–10.8  Quarter view the text pushes up and out; the camera glides into
+ *                          an isometric quarter view of the empty page
+ *   10.6–12.4 Stickers     the role stickers come down from above, curled on
+ *                          one side, and press flat edge to edge, in a fast
+ *                          ripple along the diagonals from the top left
+ *   12.2–15.4 Names        grey token names attach under each sticker in turn
+ *   15.6–19.6 Front        the camera returns to a flat front view
+ *   19.8–23.3 Wipe         a line sweeps the whole frame into the other theme
+ *   24.4–27.9 Back         and sweeps once more, back to the page's theme
+ *   27.9–28.8 Hold         then the components build, topic by topic
  */
-const AT = { title: 0.4, lead: 1.4, out: 6.4, iso: 6.8, land: 9.6, names: 13.6, front: 18.4, wipe: 21.8, end: 26.2 } as const;
+const AT = { iso: 6.8, land: 10.6, names: 12.2, front: 15.6, wipe: 19.8, back: 24.4, end: 28.8 } as const;
+/** Beats the wipe line takes to cross the frame. */
+const WIPE = 3;
 /** The quarter view: the field plane turned a quarter and tilted back. */
 const QUARTER = { rx: 55, rz: -45 } as const;
 
-export function colorPrelude(copy: ColorCopy): Prelude {
+export function colorPrelude(copy: ColorCopy, posterZoom: number): Prelude {
   return {
     render: null,
     end: () => AT.end,
-    tracks: ({ g, close, finale }: TimelineContext) => {
+    tracks: ({ g, close }: TimelineContext) => {
       const { canvas } = g;
       const intro = g.boxes.intro!;
       const field = g.boxes.field!;
@@ -39,28 +42,35 @@ export function colorPrelude(copy: ColorCopy): Prelude {
         { at: 0, ...front }, { at: AT.iso, ...front }, { at: AT.iso + TRANSITION, ...quarter, ease: "standard" },
         { at: AT.front, ...quarter }, { at: AT.front + TRANSITION, ...flat, ease: "standard" }, { at: AT.end, ...flat },
       ];
-      const out = (name: string, delay: number): Track => ({
-        select: select(name),
-        keys: [{ at: 0, y: 0, o: 1 }, { at: AT.out + delay, y: 0, o: 1 }, { at: AT.out + delay + 1, y: -56, o: 0, ease: "accelerate" }, { at: close - 0.01, y: -56, o: 0 }, { at: close, y: 0, o: 1 }],
-      });
-      const land = (k: number) => AT.land + (Math.floor(k / SWATCH_COLUMNS) + (k % SWATCH_COLUMNS)) * 0.45;
-      // The window over the dark field: closed, swept open by the line, then settled on the split for the poster.
+      // A fast ripple along the diagonals, each sticker overlapping the next.
+      const land = (k: number) => AT.land + (Math.floor(k / SWATCH_COLUMNS) + (k % SWATCH_COLUMNS)) * 0.14 + (k % SWATCH_COLUMNS) * 0.02;
+      // The window over the other theme is several frames wide; key its edge where it crosses the visible frame, so the
+      // line crosses the frame in time: open left to right, then its trailing edge crosses again (the page's theme returns).
+      const zoom = flat.s ?? 1;
+      const span = field.w + 3 * canvas.w * (g.layout === "wide" ? posterZoom : 1);
+      const [enter, leave] = [0.5 - canvas.w / zoom / 2 / span - 0.01, 0.5 + canvas.w / zoom / 2 / span + 0.01];
       const wipe = (sign: number): Key[] => [
-        { at: 0, xp: -sign * 100 }, { at: AT.wipe, xp: -sign * 100 }, { at: AT.wipe + 3, xp: 0, ease: "standard" },
-        { at: finale + 0.3, xp: 0 }, { at: finale + 0.3 + TRANSITION, xp: -sign * 50, ease: "standard" }, { at: close - 0.01, xp: -sign * 50 }, { at: close, xp: -sign * 100 },
+        { at: 0, xp: -sign * 100 }, { at: AT.wipe - 0.01, xp: -sign * 100 }, { at: AT.wipe, xp: sign * (enter - 1) * 100 }, { at: AT.wipe + WIPE, xp: sign * (leave - 1) * 100, ease: "standard" },
+        { at: AT.wipe + WIPE + 0.01, xp: 0 }, { at: AT.back - 0.01, xp: 0 }, { at: AT.back, xp: sign * enter * 100 },
+        { at: AT.back + WIPE, xp: sign * leave * 100, ease: "standard" }, { at: AT.back + WIPE + 0.01, xp: -sign * 100 },
       ];
+      const line = (from: number): Key[] => [{ at: 0, o: 0 }, { at: from, o: 0 }, { at: from + 0.2, o: 1 }, { at: from + WIPE - 0.2, o: 1 }, { at: from + WIPE, o: 0 }];
       const tracks: Track[] = [
-        ...reveal("i-t", AT.title, copy.title, close),
-        ...copy.lead.flatMap(([key, text], n) => [...reveal(`i-k${n}`, AT.lead + n, key, close), ...reveal(`i-l${n}`, AT.lead + n + 0.3, text, close)]),
-        out("i-title", 0), ...copy.lead.map((_, n) => out(`i-p${n}`, 0.15 * (n + 1))),
-        ...SWATCHES.map((_, k): Track => ({
-          select: select(`st-${k}`),
-          keys: [{ at: 0, s: 1.8, o: 0 }, { at: land(k), s: 1.8, o: 0 }, { at: land(k) + 0.9, s: 1, o: 1, ease: "spring" }, { at: close - 0.01 }, { at: close, s: 1.8, o: 0 }],
-        })),
-        ...SWATCHES.flatMap((token, k) => reveal(`sn-${k}`, AT.names + k * 0.14, token, close)),
+        ...introTracks(copy.title, copy.lead, close),
+        ...SWATCHES.flatMap((_, k): Track[] => {
+          const at = land(k);
+          // Down from above the page (plane x = -y is screen up in the quarter view), curled; then pressed flat left to right.
+          return [
+            { select: select(`st-${k}`), keys: [{ at: 0, x: 170, y: -170, o: 0 }, { at, x: 170, y: -170, o: 0 }, { at: at + 0.1, o: 1 }, { at: at + 0.55, x: 0, y: 0, ease: "decelerate" }, { at: close - 0.01 }, { at: close, x: 170, y: -170, o: 0 }] },
+            { select: select(`st-${k}-r`), keys: [{ at: 0, ry: -80 }, { at: at + 0.4, ry: -80 }, { at: at + 1, ry: 0, ease: "decelerate" }, { at: close - 0.01 }, { at: close, ry: -80 }] },
+            { select: select(`st-${k}-c`), keys: [{ at: 0, o: 1 }, { at: at + 0.4, o: 1 }, { at: at + 1, o: 0, ease: "decelerate" }, { at: close - 0.01 }, { at: close, o: 1 }] },
+          ];
+        }),
+        ...SWATCHES.flatMap((token, k) => reveal(`sn-${k}`, AT.names + k * 0.1, token, close)),
         { select: select("wipe"), keys: wipe(1) },
         { select: select("wipe-in"), keys: wipe(-1) },
-        { select: select("wipe-line"), keys: [{ at: 0, o: 0 }, { at: AT.wipe - 0.2, o: 0 }, { at: AT.wipe + 0.2, o: 1 }, { at: AT.wipe + 3, o: 1 }, { at: AT.wipe + 3.6, o: 0 }, { at: finale + 0.6, o: 0 }, { at: finale + 1.6, o: 1 }, { at: close - 0.01 }, { at: close, o: 0 }] },
+        { select: select("wipe-line"), keys: line(AT.wipe) },
+        { select: select("wipe-back"), keys: line(AT.back) },
       ];
       return { tracks, camera };
     },

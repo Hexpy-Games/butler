@@ -1,20 +1,24 @@
 import { useMemo } from "react";
 import type { FoundationHeroLang } from "../../FoundationHeroMotion";
 import { ChapterHero } from "../shared/ChapterHero";
+import { Intro } from "../shared/Intro";
 import type { ChapterSpec } from "../shared/types";
 import { colorBuilds } from "./colorBuilds";
 import { COLOR_COPY, type ColorCopy } from "./colorCopy";
 import { colorPrelude } from "./colorPrelude";
-import { ColorField, ColorIntro } from "./ColorScenes";
+import { ColorField } from "./ColorScenes";
 import s from "./ColorHero.module.css";
+
+/** The poster is laid out 1.2 times larger so the field and the four topics fill the frame. */
+const POSTER_ZOOM = 1.2;
 
 function spec(copy: ColorCopy): ChapterSpec {
   return {
     code: "color",
-    prelude: { ...colorPrelude(copy), render: <ColorIntro copy={copy} /> },
+    prelude: { ...colorPrelude(copy, POSTER_ZOOM), render: <Intro lead={copy.lead} title={copy.title} /> },
     field: <ColorField />,
     fieldColumns: 6,
-    posterZoom: 1.2,
+    posterZoom: POSTER_ZOOM,
     product: s.product!,
     builds: colorBuilds(copy),
   };

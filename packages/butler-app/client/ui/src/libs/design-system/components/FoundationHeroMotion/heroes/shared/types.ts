@@ -88,8 +88,8 @@ export interface TimelineContext {
 
 /** A chapter's own opening scenes: its elements (world layer) and their motion up to `end`. */
 export interface Prelude {
-  /** Elements over the world (absolute; the chapter's stylesheet places them, `data-m` names measured boxes). */
-  render: ReactNode;
+  /** Elements over the world (absolute; the chapter's stylesheet places them, `data-m` names measured boxes); given the geometry once measured, for guides. */
+  render: ReactNode | ((g: Geometry | null) => ReactNode);
   /** The beat the prelude's last scene ends and the camera leaves for the first build. */
   end: (g: Geometry) => number;
   /** Tracks of the prelude's elements (and of the poster field's contents), and camera keys from 0 to `end` (its first key is also where the loop returns). */
@@ -100,8 +100,8 @@ export interface ChapterSpec {
   /** Short code for the hero's scope. */
   code: string;
   prelude: Prelude;
-  /** The chapter's token field in the poster (a swatch grid, a scale…), beside the product. */
-  field: ReactNode;
+  /** The chapter's token field in the poster (a swatch grid, a scale…), beside the product; given the geometry once measured, for guides. */
+  field: ReactNode | ((g: Geometry | null) => ReactNode);
   /** The field sits right of the product (wide canvas). */
   fieldRight?: boolean;
   /** Columns of the field on the wide canvas (default 4). */
@@ -121,6 +121,8 @@ export interface Geometry {
   canvas: { w: number; h: number };
   /** Boxes of every `data-m` element, relative to the world. */
   boxes: Record<string, Box>;
+  /** Marks inside each `data-mark-scope` element (prelude scenes, the field), relative to it. */
+  scopes: Record<string, Marks>;
   /** Line height of every `data-roller` readout. */
   lines: Record<string, number>;
   field: Box;

@@ -9,6 +9,7 @@ import { Switch } from "../../../Switch";
 import { Tag } from "../../../Tag";
 import { Typo } from "../../../Typo";
 import { Mark } from "../shared/Mark";
+import { Topic } from "../shared/Topic";
 import { contrast } from "../shared/measure";
 import { Reveal as R } from "../shared/Reveal";
 import type { BuildSpec, Label } from "../shared/types";
@@ -24,12 +25,7 @@ function why(token: string, meaning: string, ratio = false): Label {
 }
 
 function group(id: string, topic: string, children: ReactNode) {
-  return (
-    <div className={s.group}>
-      <Typo.SectionTitle><R name={`${id}-topic`}>{topic}</R></Typo.SectionTitle>
-      {children}
-    </div>
-  );
+  return <Topic id={id} title={topic}>{children}</Topic>;
 }
 
 /**

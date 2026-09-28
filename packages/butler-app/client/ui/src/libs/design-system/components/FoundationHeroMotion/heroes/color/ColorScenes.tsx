@@ -1,6 +1,6 @@
-import type { CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { Reveal as R } from "../shared/Reveal";
-import { SWATCHES, type ColorCopy } from "./colorCopy";
+import { SWATCHES } from "./colorCopy";
 import s from "./ColorHero.module.css";
 
 /** A token name that may break after its family prefix (--color-), so it fits under its sticker. */
@@ -9,34 +9,40 @@ function breakable(token: string) {
   return cut ? <>{token.slice(0, cut)}<wbr />{token.slice(cut)}</> : token;
 }
 
+/** The theme the page is not in: the wipe turns the whole frame to it (and back). */
+function useOtherTheme(): "light" | "dark" {
+  const read = (): "light" | "dark" => (typeof document !== "undefined" && document.body.classList.contains("theme-dark") ? "light" : "dark");
+  const [other, setOther] = useState(read);
+  useEffect(() => {
+    if (typeof MutationObserver !== "function") return undefined;
+    const observer = new MutationObserver(() => setOther(read()));
+    observer.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+  return other;
+}
+
 /**
- * Scene 1: the chapter title large on the left, the color strategy, tone and
- * manner, and intent on the right (below on the tall canvas), set above the
- * poster.
+ * A sticker: a disc in two halves. It comes down with its right half curled
+ * up (turned about the centre line, shaded at the fold) and presses flat from
+ * the left edge to the right (`st-<k>`, `st-<k>-r`, `st-<k>-c`).
  */
-export function ColorIntro({ copy }: { copy: ColorCopy }) {
+function Sticker({ k, token }: { k: number; token: string }) {
   return (
-    <div className={s.intro} data-m="intro">
-      <div className={s.introTitle} data-t="i-title"><R name="i-t">{copy.title}</R></div>
-      <div className={s.introLead}>
-        {copy.lead.map(([key, text], n) => (
-          <p className={s.leadLine} data-t={`i-p${n}`} key={key}>
-            <span className={s.leadKey}><R name={`i-k${n}`}>{key}</R></span>
-            <span className={s.leadText}><R name={`i-l${n}`}>{text}</R></span>
-          </p>
-        ))}
-      </div>
-    </div>
+    <span className={s.sticker} data-t={`st-${k}`} style={{ "--c": `var(${token})` } as CSSProperties}>
+      <span className={s.half} data-half="l"><span className={s.disc} /></span>
+      <span className={s.half} data-half="r" data-t={`st-${k}-r`}><span className={s.disc} /><span className={s.curl} data-t={`st-${k}-c`} /></span>
+    </span>
   );
 }
 
-/** The swatch stickers with their token names, in one theme scope. */
+/** The swatch stickers with their token names, straight on the page. */
 function SwatchGrid() {
   return (
     <div className={s.grid}>
       {SWATCHES.map((token, k) => (
         <div className={s.cell} key={token}>
-          <span className={s.sticker} data-t={`st-${k}`} style={{ "--c": `var(${token})` } as CSSProperties} />
+          <Sticker k={k} token={token} />
           <span className={s.name}><R name={`sn-${k}`}>{breakable(token)}</R></span>
         </div>
       ))}
@@ -45,17 +51,21 @@ function SwatchGrid() {
 }
 
 /**
- * The token field: the role stickers on a light plate, with the same field
- * in the dark theme over it, shown through a window that a thin line sweeps
- * left to right (before and after). The poster rests on the split.
+ * The token field: role stickers straight on the page. Over it, the whole
+ * frame in the other theme (page, stickers and names) waits behind a window
+ * that a thin line sweeps across and back: before, after, before.
  */
 export function ColorField() {
+  const other = useOtherTheme();
   return (
     <div className={s.field} data-m="field">
-      <div className={`${s.plate} theme-light`}><SwatchGrid /></div>
+      <SwatchGrid />
       <div className={s.wipe} data-t="wipe">
-        <div className={s.wipeIn} data-t="wipe-in"><div className={`${s.plate} theme-dark`}><SwatchGrid /></div></div>
-        <span className={s.wipeLine} data-t="wipe-line" />
+        <div className={s.wipeIn} data-t="wipe-in">
+          <div className={`${s.other} theme-${other}`}><div className={s.otherField}><SwatchGrid /></div></div>
+        </div>
+        <span className={s.wipeLine} data-edge="r" data-t="wipe-line" />
+        <span className={s.wipeLine} data-edge="l" data-t="wipe-back" />
       </div>
     </div>
   );

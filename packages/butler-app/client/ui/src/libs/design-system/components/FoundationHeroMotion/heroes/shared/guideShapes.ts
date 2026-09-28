@@ -54,8 +54,9 @@ export function shape(annot: Annot, marks: Marks): Shape | null {
       const [y1, y2] = [p.y + p.h, q.y];
       const [x1, x2] = [Math.max(p.x, q.x), Math.min(p.x + p.w, q.x + q.w)];
       if (y2 - y1 < 0.5) return null;
-      const x = x1 + Math.min(24, (x2 - x1) / 2);
-      return { guides: [{ t: "hatch", box: { x: x1, y: y1, w: Math.max(1, x2 - x1), h: y2 - y1 } }, { t: "path", ...beam(x, y1, x, y2) }], anchor: { x, y: (y1 + y2) / 2 }, note: { x: x + 8, y: (y1 + y2) / 2, place: "right" } };
+      // The bracket stands near the band's right end; its value sits just past the band.
+      const x = x2 - Math.min(16, (x2 - x1) / 2);
+      return { guides: [{ t: "hatch", box: { x: x1, y: y1, w: Math.max(1, x2 - x1), h: y2 - y1 } }, { t: "path", ...beam(x, y1, x, y2) }], anchor: { x, y: (y1 + y2) / 2 }, note: { x: x2 + 10, y: (y1 + y2) / 2, place: "right" } };
     }
     const [x1, x2] = [p.x + p.w, q.x];
     const [y1, y2] = [Math.max(p.y, q.y), Math.min(p.y + p.h, q.y + q.h)];
@@ -87,7 +88,7 @@ export function shape(annot: Annot, marks: Marks): Shape | null {
         l > 0 ? { x: b.x, y: b.y + t, w: l, h: b.h - t - bt } : null,
       ].filter((band): band is Box => Boolean(band) && band!.w > 0 && band!.h > 0);
       if (bands.length === 0) return null;
-      return { guides: bands.map((band) => ({ t: "hatch", box: band })), anchor: l > 0 ? { x: b.x + l / 2, y: cy } : { x: b.x, y: b.y + t / 2 }, note: { x: b.x, y: b.y - 6, place: "above" } };
+      return { guides: bands.map((band) => ({ t: "hatch", box: band })), anchor: l > 0 ? { x: b.x + l / 2, y: cy } : { x: b.x, y: b.y + t / 2 }, note: { x: b.x - 10, y: b.y + Math.max(t, 8) / 2, place: "left" } };
     }
     case "size":
       return annot.axis === "h"
@@ -103,7 +104,7 @@ export function shape(annot: Annot, marks: Marks): Shape | null {
     case "box": {
       const to = annot.inflateTo ? marks[annot.inflateTo] : undefined;
       const area = inflate(b, to ? Math.max(0, (to.box.h - b.h) / 2) : annot.inflate ?? 0);
-      return { guides: [{ t: "path", ...rect(area), dashed: true }], anchor: { x: area.x, y: cy }, note: { x: area.x + area.w / 2, y: area.y + area.h + 6, place: "below" } };
+      return { guides: [{ t: "path", ...rect(area), dashed: true }], anchor: { x: area.x, y: cy }, note: { x: area.x + area.w + 8, y: cy, place: "right" } };
     }
     case "ring":
       return { guides: [{ t: "ring", box: b, r: m.r }], anchor: { x: b.x - 4, y: cy }, note: { x: cx, y: b.y + b.h + 10, place: "below" } };
