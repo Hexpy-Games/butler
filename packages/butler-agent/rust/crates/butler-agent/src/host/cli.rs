@@ -21,6 +21,8 @@ pub(super) mod oauth_login;
 #[cfg(unix)]
 pub(super) mod observability;
 #[cfg(unix)]
+pub(super) mod open;
+#[cfg(unix)]
 pub(super) mod personalization;
 #[cfg(unix)]
 pub(super) mod public;

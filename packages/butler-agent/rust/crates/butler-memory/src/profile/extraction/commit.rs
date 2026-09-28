@@ -1,8 +1,12 @@
+//! Committing an extracted batch: re-validating what the batch was built
+//! from, storing its candidates, and completing its coverage.
+
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use rusqlite::{OptionalExtension, params};
-use serde_json::{Map, Value, json};
+use serde::Serialize;
+use serde_json::{Map, Value};
 
 use super::super::contracts::{
     CanonicalProfileSourceFactory, ProfileCandidateInput, ProfileError, ProfileHostFacts,
@@ -13,6 +17,7 @@ use super::discovery;
 use super::targets::{normalized_conditions, revision};
 use super::types::{CorrectionTarget, ExtractedCandidate, SourceWindow};
 use crate::profile::ProfileCode;
+use crate::profile::understanding::SourceType;
 use butler_models::models::PromptUsageReport;
 
 pub(super) struct CommitInput<'a> {
@@ -27,6 +32,9 @@ pub(super) struct CommitInput<'a> {
     pub(super) nonce: &'a str,
 }
 
+/// Commits one extracted batch in a single transaction: the consent, the
+/// batch's coverage claim, its source text and every correction target must
+/// be unchanged, then the candidates are stored and the coverage completed.
 pub(super) fn commit(input: CommitInput<'_>) -> ProfileResult<HashSet<String>> {
     let CommitInput {
         root,
@@ -39,7 +47,7 @@ pub(super) fn commit(input: CommitInput<'_>) -> ProfileResult<HashSet<String>> {
         offered_corrections: offered,
         nonce,
     } = input;
-    let mut db = storage::open(root, true)?;
+    let mut db = storage::open(root, storage::Access::Write)?;
     let tx = db.transaction().map_err(storage::db_error)?;
     let consent = consent_from_db(&tx)?;
     if consent.mode == ProfilingMode::Off
@@ -49,32 +57,7 @@ pub(super) fn commit(input: CommitInput<'_>) -> ProfileResult<HashSet<String>> {
         return Err(interruption("profiling consent changed"));
     }
     for window in windows {
-        let owner = tx
-            .query_row(
-                "SELECT owner_pid,owner_nonce FROM profile_source_coverage WHERE coverage_key=?1",
-                [&window.coverage_key],
-                |row| {
-                    Ok((
-                        row.get::<_, Option<f64>>(0)?,
-                        row.get::<_, Option<String>>(1)?,
-                    ))
-                },
-            )
-            .optional()
-            .map_err(storage::db_error)?;
-        if !owner.is_some_and(|(pid, value)| {
-            pid == Some(f64::from(host.process_id())) && value.as_deref() == Some(nonce)
-        }) {
-            return Err(interruption("memory_write_busy"));
-        }
-        let mut reader = sources.open()?;
-        let current = discovery::current_text(reader.as_mut(), window);
-        let close = reader.close();
-        close?;
-        let current = current?;
-        if current.as_deref() != Some(window.text.as_ref()) {
-            return Err(interruption("profile source changed"));
-        }
+        verify_claim(&tx, sources, host, window, nonce)?;
     }
     validate_targets(
         root,
@@ -85,6 +68,57 @@ pub(super) fn commit(input: CommitInput<'_>) -> ProfileResult<HashSet<String>> {
         &extracted,
         offered,
     )?;
+    let ids = store_candidates(&tx, host, windows, extracted)?;
+    complete_coverage(&tx, host, windows, usage, nonce)?;
+    tx.commit().map_err(storage::db_error)?;
+    Ok(ids)
+}
+
+/// The window must still be claimed by this batch and read the same text.
+fn verify_claim(
+    tx: &rusqlite::Transaction<'_>,
+    sources: &dyn CanonicalProfileSourceFactory,
+    host: &dyn ProfileHostFacts,
+    window: &SourceWindow,
+    nonce: &str,
+) -> ProfileResult<()> {
+    let owner = tx
+        .query_row(
+            "SELECT owner_pid,owner_nonce FROM profile_source_coverage WHERE coverage_key=?1",
+            [&window.coverage_key],
+            |row| {
+                Ok((
+                    row.get::<_, Option<f64>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(storage::db_error)?;
+    if !owner.is_some_and(|(pid, value)| {
+        pid == Some(f64::from(host.process_id())) && value.as_deref() == Some(nonce)
+    }) {
+        return Err(interruption("memory_write_busy"));
+    }
+    let mut reader = sources.open()?;
+    let current = discovery::current_text(reader.as_mut(), window);
+    let close = reader.close();
+    close?;
+    let current = current?;
+    if current.as_deref() != Some(window.text.as_ref()) {
+        return Err(interruption("profile source changed"));
+    }
+    Ok(())
+}
+
+/// Merges each candidate once per evidence ref, observed when its window
+/// was written; the ids of the stored candidates.
+fn store_candidates(
+    tx: &rusqlite::Transaction<'_>,
+    host: &dyn ProfileHostFacts,
+    windows: &[SourceWindow],
+    extracted: Vec<ExtractedCandidate>,
+) -> ProfileResult<HashSet<String>> {
     let observed = windows
         .iter()
         .map(|value| (value.evidence_ref.as_str(), value.timestamp.as_str()))
@@ -94,22 +128,33 @@ pub(super) fn commit(input: CommitInput<'_>) -> ProfileResult<HashSet<String>> {
         for evidence in &candidate.evidence_refs {
             let input = ProfileCandidateInput {
                 category: candidate.category.clone(),
-                payload: candidate.payload.clone(),
-                source_type: candidate.source_type.clone(),
-                confidence: candidate.confidence.clone(),
+                draft: candidate.draft.clone(),
+                source_type: candidate.source_type,
+                confidence: candidate.confidence,
                 sensitive_domain: candidate.sensitive_domain,
                 evidence_ref: Some(evidence.clone()),
                 evidence_observed_at: observed
                     .get(evidence.as_str())
                     .map(|value| (*value).to_owned()),
-                expires_or_decay: candidate.expires_or_decay.clone(),
+                expires_or_decay: candidate.expires_or_decay,
             };
-            if let Some(record) = candidates::upsert_in_db(&tx, &input, &host.now_iso())? {
+            if let Some(record) = candidates::upsert_in_db(tx, &input, &host.now_iso())? {
                 ids.insert(record.id);
             }
         }
     }
-    let usage_json = usage_value(usage).to_string();
+    Ok(ids)
+}
+
+/// Marks the batch's claimed coverage complete with the provider usage.
+fn complete_coverage(
+    tx: &rusqlite::Transaction<'_>,
+    host: &dyn ProfileHostFacts,
+    windows: &[SourceWindow],
+    usage: Option<&PromptUsageReport>,
+    nonce: &str,
+) -> ProfileResult<()> {
+    let usage_json = usage_json(usage)?;
     let now = host.now_iso();
     let mut complete=tx.prepare("UPDATE profile_source_coverage SET disposition='complete',failure_code=NULL,usage_json=?1,owner_pid=NULL,owner_nonce=NULL,claimed_at=NULL,updated_at=?2 WHERE coverage_key=?3 AND owner_pid=?4 AND owner_nonce=?5").map_err(storage::db_error)?;
     for window in windows {
@@ -123,9 +168,7 @@ pub(super) fn commit(input: CommitInput<'_>) -> ProfileResult<HashSet<String>> {
             ])
             .map_err(storage::db_error)?;
     }
-    drop(complete);
-    tx.commit().map_err(storage::db_error)?;
-    Ok(ids)
+    Ok(())
 }
 
 fn validate_targets(
@@ -143,36 +186,16 @@ fn validate_targets(
         .map(|entry| (entry.id.clone(), entry))
         .collect::<HashMap<_, _>>();
     for candidate in candidates {
-        let target_ids = candidate
-            .payload
-            .get("contradiction_refs")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str);
-        for id in target_ids {
-            let Some(target) = offered.values().find(|value| value.stable_id == id) else {
+        for id in &candidate.draft.contradiction_refs {
+            let Some(target) = offered.values().find(|value| value.stable_id == *id) else {
                 return Err(interruption("profile correction target changed"));
             };
-            let current = eligible.get(id);
-            let facet = candidate.payload.get("facet").and_then(Value::as_str);
-            let conditions = normalized_conditions(
-                candidate
-                    .payload
-                    .get("applies_when")
-                    .and_then(Value::as_array)
-                    .into_iter()
-                    .flatten()
-                    .filter_map(Value::as_str)
-                    .map(str::to_owned)
-                    .collect(),
-            );
-            if current
-                .as_ref()
-                .is_none_or(|value| revision(value) != target.revision)
-                || candidate.source_type != "explicit"
+            let current_revision = eligible.get(id).map(revision).transpose()?;
+            let conditions = normalized_conditions(candidate.draft.applies_when.clone());
+            if current_revision.is_none_or(|value| value != target.revision)
+                || candidate.source_type != SourceType::Explicit
                 || candidate.category != target.category
-                || facet != target.facet.as_deref()
+                || candidate.draft.facet != target.facet
                 || conditions != target.applies_when
             {
                 return Err(interruption("profile correction target changed"));
@@ -218,8 +241,24 @@ fn consent_from_db(db: &rusqlite::Connection) -> ProfileResult<ProfilingConsentS
     })
 }
 
-pub(super) fn usage_value(usage: Option<&PromptUsageReport>) -> Value {
-    usage.map(|value|json!({"model":value.model,"promptTokens":value.prompt_tokens,"cachedTokens":value.cached_tokens,"totalTokens":value.total_tokens})).unwrap_or(Value::Null)
+/// The provider usage stored with completed coverage rows (`usage_json`).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredUsage<'a> {
+    model: &'a str,
+    prompt_tokens: Option<f64>,
+    cached_tokens: f64,
+    total_tokens: Option<f64>,
+}
+
+pub(super) fn usage_json(usage: Option<&PromptUsageReport>) -> ProfileResult<String> {
+    let usage = usage.map(|value| StoredUsage {
+        model: &value.model,
+        prompt_tokens: value.prompt_tokens,
+        cached_tokens: value.cached_tokens,
+        total_tokens: value.total_tokens,
+    });
+    serde_json::to_string(&usage).map_err(storage::json_error)
 }
 fn interruption(message: &str) -> ProfileError {
     ProfileError::new(ProfileCode::ProfileCommitInterrupted, message)

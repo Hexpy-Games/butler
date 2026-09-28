@@ -1,3 +1,5 @@
+//! Hydrating a source row back to its current conversation text.
+
 use std::borrow::Cow;
 
 use sha2::{Digest, Sha256};
@@ -11,6 +13,7 @@ use butler_turn::conversation::{
 use super::types::{CognitionSourceError, CognitionSourceRow, HydratedConversationSource};
 use crate::cognition::CognitionCode;
 
+/// The source text of a row from its message, when the message still matches.
 pub fn hydrate_conversation_source<'a>(
     message: &'a ConversationMessageWithParts,
     row: &'a CognitionSourceRow,

@@ -1,3 +1,5 @@
+//! Indexing legacy transcript lines for exact queries.
+
 use std::{
     fs,
     path::Path,
@@ -64,6 +66,8 @@ struct IndexMessage {
     placeholder: bool,
 }
 
+/// Indexes the public messages of a legacy transcript for exact queries;
+/// how many were indexed.
 pub(super) fn index(
     data_root: &Path,
     transcript_file: &Path,
@@ -77,31 +81,7 @@ pub(super) fn index(
         return Ok(0);
     };
 
-    let query_dir = data_root.join("cognition/memory/query");
-    let database_path = query_dir.join("messages.sqlite");
-    let journal_path = query_dir.join("messages.sqlite-journal");
-    let wal_path = query_dir.join("messages.sqlite-wal");
-    let shm_path = query_dir.join("messages.sqlite-shm");
-    ensure_query_authority(
-        data_root,
-        &query_dir,
-        &database_path,
-        &journal_path,
-        &wal_path,
-        &shm_path,
-    )?;
-    fs::create_dir_all(&query_dir).map_err(|source| unavailable().with_source(source))?;
-    ensure_query_authority(
-        data_root,
-        &query_dir,
-        &database_path,
-        &journal_path,
-        &wal_path,
-        &shm_path,
-    )?;
-
-    let mut connection = Connection::open(&database_path).map_err(db_error)?;
-    connection.execute_batch(SCHEMA).map_err(db_error)?;
+    let mut connection = open_query_database(data_root)?;
     let updated_at = current_iso_timestamp()?;
     let transaction = connection.transaction().map_err(db_error)?;
     let indexed = {
@@ -148,6 +128,37 @@ pub(super) fn index(
     };
     transaction.commit().map_err(db_error)?;
     Ok(indexed)
+}
+
+/// The legacy query database, created with its schema inside the data
+/// root.
+fn open_query_database(data_root: &Path) -> CognitionResult<Connection> {
+    let query_dir = data_root.join("cognition/memory/query");
+    let database_path = query_dir.join("messages.sqlite");
+    let journal_path = query_dir.join("messages.sqlite-journal");
+    let wal_path = query_dir.join("messages.sqlite-wal");
+    let shm_path = query_dir.join("messages.sqlite-shm");
+    ensure_query_authority(
+        data_root,
+        &query_dir,
+        &database_path,
+        &journal_path,
+        &wal_path,
+        &shm_path,
+    )?;
+    fs::create_dir_all(&query_dir).map_err(|source| unavailable().with_source(source))?;
+    ensure_query_authority(
+        data_root,
+        &query_dir,
+        &database_path,
+        &journal_path,
+        &wal_path,
+        &shm_path,
+    )?;
+
+    let connection = Connection::open(&database_path).map_err(db_error)?;
+    connection.execute_batch(SCHEMA).map_err(db_error)?;
+    Ok(connection)
 }
 
 fn ensure_query_authority(

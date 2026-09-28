@@ -17,20 +17,31 @@ use crate::cognition::{
 use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator};
 use butler_turn::conversation::{ConversationSourceReader, conversation_store_path};
 
+/// A typed memory source (task report or explicit rule) to register.
 #[derive(Clone)]
 pub struct RegisterTypedSourceInput {
+    /// Butler data root.
     pub data_root: PathBuf,
+    /// Generation to register in.
     pub target: MemoryGenerationTarget,
+    /// `task_report` or `explicit_record`.
     pub source_kind: String,
+    /// Record id.
     pub record_id: String,
+    /// Record revision.
     pub revision: String,
+    /// Operation that wrote the record.
     pub operation_id: String,
+    /// Hash of the record text.
     pub content_hash: String,
+    /// Completion job that published the source.
     pub completion_id: String,
+    /// Stops the registration when cancelled.
     pub cancellation: CancellationToken,
 }
 
 impl CognitionRegistrationService {
+    /// Registers the typed source; its projection progress.
     pub async fn register_typed_source(
         &self,
         input: RegisterTypedSourceInput,
@@ -113,74 +124,16 @@ async fn run(
         () = input.cancellation.cancelled() => return Err(aborted()),
         acquired = acquisition => acquired.map_err(CognitionError::from)?.ok_or_else(aborted)?,
     };
+    let locked = LockedRegistration {
+        input,
+        environment,
+        clock,
+        shutdown,
+        prepared,
+        lock,
+    };
     tokio::task::spawn_blocking(move || {
-        let result = (|| {
-            lease.assert_for_path(&lock).map_err(CognitionError::from)?;
-            if shutdown.is_cancelled() || input.cancellation.is_cancelled() {
-                return Err(aborted());
-            }
-            let current = resolve_generation(&input.data_root, &environment, &input.target)?;
-            assert_mutation_authority(&input.data_root, &environment, &input.target, &current)?;
-            ensure_data_authority(
-                &input.data_root,
-                &[&current.root, &current.graph_path, &current.source_root],
-            )?;
-            if current.generation_id != prepared.handle.generation_id
-                || current.source_root != prepared.handle.source_root
-            {
-                return Err(source_changed());
-            }
-            let canonical = ConversationSourceReader::open(&prepared.canonical_path)
-                .map_err(|source| source_changed().with_source(source))?;
-            let mut graph = match GraphRepository::open(&current.graph_path) {
-                Ok(graph) => graph,
-                Err(error) => {
-                    return Err(canonical
-                        .close()
-                        .map_err(|source| source_changed().with_source(source))
-                        .err()
-                        .unwrap_or(error));
-                }
-            };
-            let now = clock();
-            let (cursor_key, snapshot_id) = match &input.target {
-                MemoryGenerationTarget::Rebuild {
-                    canonical_snapshot_id,
-                    ..
-                } => (
-                    Some(prepared.plan.source_key.as_str()),
-                    Some(canonical_snapshot_id.as_str()),
-                ),
-                MemoryGenerationTarget::Active { .. } => (None, None),
-            };
-            let registered = (|| {
-                graph.ensure_schema(&now)?;
-                let result = graph.register_typed(TypedRegistrationInput {
-                    generation_id: &current.generation_id,
-                    data_root: &current.source_root,
-                    memory_root: &current.source_root.join("cognition/memory"),
-                    plan: &prepared.plan,
-                    owner: &prepared.owner,
-                    canonical: &canonical,
-                    cursor_key,
-                    cursor_snapshot_id: snapshot_id,
-                    completion_id: Some(&input.completion_id),
-                    extraction_model: &prepared.extraction_model,
-                    reasoning_effort: &prepared.reasoning_effort,
-                    clock: clock.as_ref(),
-                })?;
-                graph.progress(&result.job_id)
-            })();
-            let graph_close = graph.close();
-            let canonical_close = canonical
-                .close()
-                .map_err(|source| source_changed().with_source(source));
-            registered.and_then(|progress| {
-                graph_close?;
-                canonical_close?;
-                Ok(progress)
-            })
-        })();
+        let result = locked.run(&lease);
         let released = lease.release(result.is_ok()).map_err(CognitionError::from);
         result.and_then(|progress| {
             released?;
@@ -189,6 +142,105 @@ async fn run(
     })
     .await
     .map_err(join_error)?
+}
+
+/// A prepared typed registration, run while holding the lease.
+struct LockedRegistration {
+    input: RegisterTypedSourceInput,
+    environment: CognitionPathEnvironment,
+    clock: Arc<dyn Fn() -> String + Send + Sync>,
+    shutdown: CancellationToken,
+    prepared: PreparedTypedSource,
+    lock: PathBuf,
+}
+
+impl LockedRegistration {
+    /// Checks the generation is still the prepared one and registers.
+    fn run(
+        &self,
+        lease: &crate::coordination::CognitionWriteLease,
+    ) -> CognitionResult<crate::cognition::GraphProgress> {
+        let input = &self.input;
+        lease
+            .assert_for_path(&self.lock)
+            .map_err(CognitionError::from)?;
+        if self.shutdown.is_cancelled() || input.cancellation.is_cancelled() {
+            return Err(aborted());
+        }
+        let current = resolve_generation(&input.data_root, &self.environment, &input.target)?;
+        assert_mutation_authority(&input.data_root, &self.environment, &input.target, &current)?;
+        ensure_data_authority(
+            &input.data_root,
+            &[&current.root, &current.graph_path, &current.source_root],
+        )?;
+        if current.generation_id != self.prepared.handle.generation_id
+            || current.source_root != self.prepared.handle.source_root
+        {
+            return Err(source_changed());
+        }
+        let canonical = ConversationSourceReader::open(&self.prepared.canonical_path)
+            .map_err(|source| source_changed().with_source(source))?;
+        let graph = match GraphRepository::open(&current.graph_path) {
+            Ok(graph) => graph,
+            Err(error) => {
+                return Err(canonical
+                    .close()
+                    .map_err(|source| source_changed().with_source(source))
+                    .err()
+                    .unwrap_or(error));
+            }
+        };
+        self.register(&current, graph, canonical)
+    }
+
+    /// Registers the typed source in the graph, then closes the graph and
+    /// the canonical reader.
+    fn register(
+        &self,
+        current: &crate::cognition::MemoryGenerationHandle,
+        mut graph: GraphRepository,
+        canonical: ConversationSourceReader,
+    ) -> CognitionResult<crate::cognition::GraphProgress> {
+        let prepared = &self.prepared;
+        let now = (self.clock)();
+        let (cursor_key, snapshot_id) = match &self.input.target {
+            MemoryGenerationTarget::Rebuild {
+                canonical_snapshot_id,
+                ..
+            } => (
+                Some(prepared.plan.source_key.as_str()),
+                Some(canonical_snapshot_id.as_str()),
+            ),
+            MemoryGenerationTarget::Active { .. } => (None, None),
+        };
+        let registered = (|| {
+            graph.ensure_schema(&now)?;
+            let result = graph.register_typed(TypedRegistrationInput {
+                generation_id: &current.generation_id,
+                data_root: &current.source_root,
+                memory_root: &current.source_root.join("cognition/memory"),
+                plan: &prepared.plan,
+                owner: &prepared.owner,
+                canonical: &canonical,
+                cursor_key,
+                cursor_snapshot_id: snapshot_id,
+                completion_id: Some(&self.input.completion_id),
+                extraction_model: &prepared.extraction_model,
+                reasoning_effort: &prepared.reasoning_effort,
+                clock: self.clock.as_ref(),
+            })?;
+            graph.progress(&result.job_id)
+        })();
+        let graph_close = graph.close();
+        let canonical_close = canonical
+            .close()
+            .map_err(|source| source_changed().with_source(source));
+        registered.and_then(|progress| {
+            graph_close?;
+            canonical_close?;
+            Ok(progress)
+        })
+    }
 }
 
 struct PreparedTypedSource {

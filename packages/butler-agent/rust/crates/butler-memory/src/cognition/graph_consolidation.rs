@@ -9,6 +9,7 @@ use super::{
 };
 use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator};
 
+/// Consolidates the active memory graph.
 pub struct GraphConsolidationService {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
@@ -16,6 +17,7 @@ pub struct GraphConsolidationService {
 }
 
 impl GraphConsolidationService {
+    /// A graph consolidation service over `data_root`.
     pub fn new(
         data_root: PathBuf,
         paths: CognitionPathEnvironment,
@@ -28,6 +30,7 @@ impl GraphConsolidationService {
         }
     }
 
+    /// Runs one consolidation pass; its metrics.
     pub async fn run(
         &self,
         expected_generation: &str,

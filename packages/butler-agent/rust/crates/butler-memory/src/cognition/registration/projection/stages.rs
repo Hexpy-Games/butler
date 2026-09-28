@@ -17,7 +17,7 @@ use crate::cognition::{
     CognitionError, CognitionResult, GraphProgress, MemoryGenerationTarget,
     extraction::{
         CandidateSearchFuture, CandidateSearchInput, CognitionCandidateSearch,
-        CognitionVectorSearch, ExtractInput, ExtractOutput, ExtractionRunInput,
+        CognitionVectorSearch, ExtractInput, ExtractOutput, ExtractionRun, ExtractionRunInput,
         ExtractionStagePort, StageFuture, run_extractor,
     },
     graph::{
@@ -147,6 +147,9 @@ impl ExtractionStagePort for Stages {
     }
 }
 
+/// Runs a claimed window to its final apply. A window with a saved output
+/// resumes from it (and its saved plan); otherwise the extractor runs and its
+/// output, evidence and plan are saved first.
 pub(super) async fn execute(
     operation: Operation,
     claim: Arc<ClaimedProjectionWindow>,
@@ -154,94 +157,12 @@ pub(super) async fn execute(
     deps: &ProjectionDependencies,
     adapter_entered: Arc<AtomicBool>,
 ) -> CognitionResult<GraphProgress> {
-    let stages = Stages {
-        operation: operation.clone(),
-        claim: claim.clone(),
-        adapter_entered,
-    };
-    let (output, plan) =
+    let (input, output, plan) =
         if claim.previous_state == PreviousWindowState::Planned || claim.output.is_some() {
-            let value = claim.output.clone().ok_or_else(|| {
-                CognitionError::new(
-                    CognitionCode::MemoryProjectionPlanMissing,
-                    "memory_projection_plan_missing",
-                )
-            })?;
-            let output: ExtractOutput = serde_json::from_value(value).map_err(json_error)?;
-            let plan = if let Some(saved) = &claim.plan {
-                serde_json::from_value(saved.clone()).map_err(json_error)?
-            } else {
-                validate_and_save(&operation, &claim, &input, &output, None).await?
-            };
-            (output, plan)
+            let (output, plan) = resume_saved(&operation, &claim, &input).await?;
+            (input, output, plan)
         } else {
-            let (source_root, embedding, generation, target) = operation
-                .read(|state| {
-                    Ok((
-                        state.handle.source_root.to_string_lossy().into_owned(),
-                        state.handle.embedding.clone(),
-                        state.handle.generation_id.clone(),
-                        state.input.target.clone(),
-                    ))
-                })
-                .await?;
-            let deadline = deps.host.now_epoch_millis().saturating_add(5_000);
-            let provider_cancel = operation.shutdown.child_token();
-            let caller = operation.cancellation.clone();
-            let signal = provider_cancel.clone();
-            let bridge = tokio::spawn(async move {
-                if let Some(caller) = caller {
-                    caller.cancelled().await;
-                    signal.cancel();
-                }
-            });
-            let candidates = Candidates {
-                operation: operation.clone(),
-                vector: deps.candidates.clone(),
-                input: input.clone(),
-            };
-            let timeout = if matches!(target, MemoryGenerationTarget::Rebuild { .. })
-                && matches!(claim.model.as_str(), "zai/glm-5.3" | "zai-api/glm-5.3")
-            {
-                600_000
-            } else {
-                180_000
-            };
-            let run = tokio::time::timeout(
-                Duration::from_millis(timeout),
-                run_extractor(ExtractionRunInput {
-                    provider: deps.provider.as_ref(),
-                    candidates: &candidates,
-                    input: input.clone(),
-                    model: &claim.model,
-                    effort: &claim.reasoning_effort,
-                    butler_data: &source_root,
-                    generation: &generation,
-                    embedding: embedding.as_ref(),
-                    stages: &stages,
-                    cancellation: provider_cancel.clone(),
-                    deadline,
-                }),
-            )
-            .await;
-            bridge.abort();
-            let run = match run {
-                Ok(Ok(result)) => result,
-                Ok(Err(_problem)) if provider_cancel.is_cancelled() => {
-                    return Err(CognitionError::new(
-                        CognitionCode::MemoryExtractCancelled,
-                        "memory_extract_cancelled",
-                    ));
-                }
-                Ok(Err(problem)) => return Err(problem),
-                Err(_) => {
-                    provider_cancel.cancel();
-                    return Err(CognitionError::new(
-                        CognitionCode::MemoryExtractTimeout,
-                        "memory_extract_timeout",
-                    ));
-                }
-            };
+            let run = run_window(&operation, &claim, input, deps, adapter_entered).await?;
             let plan = validate_and_save(
                 &operation,
                 &claim,
@@ -250,15 +171,7 @@ pub(super) async fn execute(
                 Some(run.evidence),
             )
             .await?;
-            return finish(
-                operation,
-                claim,
-                run.pinned_input,
-                run.output,
-                plan,
-                deps.host.now_epoch_millis().saturating_add(5_000),
-            )
-            .await;
+            (run.pinned_input, run.output, plan)
         };
     finish(
         operation,
@@ -269,4 +182,107 @@ pub(super) async fn execute(
         deps.host.now_epoch_millis().saturating_add(5_000),
     )
     .await
+}
+
+/// The saved output and plan of an interrupted window; a missing plan is
+/// validated and saved again.
+async fn resume_saved(
+    operation: &Operation,
+    claim: &ClaimedProjectionWindow,
+    input: &ExtractInput,
+) -> CognitionResult<(ExtractOutput, NormalizedPlan)> {
+    let saved = claim.output.as_deref().ok_or_else(|| {
+        CognitionError::new(
+            CognitionCode::MemoryProjectionPlanMissing,
+            "memory_projection_plan_missing",
+        )
+    })?;
+    let output: ExtractOutput = serde_json::from_str(saved).map_err(json_error)?;
+    let plan = if let Some(saved) = &claim.plan {
+        serde_json::from_str(saved).map_err(json_error)?
+    } else {
+        validate_and_save(operation, claim, input, &output, None).await?
+    };
+    Ok((output, plan))
+}
+
+/// Runs the extractor for the window under its timeout (10 minutes for a
+/// GLM rebuild, else 3), cancelled with the caller or at shutdown.
+async fn run_window(
+    operation: &Operation,
+    claim: &Arc<ClaimedProjectionWindow>,
+    input: ExtractInput,
+    deps: &ProjectionDependencies,
+    adapter_entered: Arc<AtomicBool>,
+) -> CognitionResult<ExtractionRun> {
+    let stages = Stages {
+        operation: operation.clone(),
+        claim: claim.clone(),
+        adapter_entered,
+    };
+    let (source_root, embedding, generation, target) = operation
+        .read(|state| {
+            Ok((
+                state.handle.source_root.to_string_lossy().into_owned(),
+                state.handle.embedding.clone(),
+                state.handle.generation_id.clone(),
+                state.input.target.clone(),
+            ))
+        })
+        .await?;
+    let deadline = deps.host.now_epoch_millis().saturating_add(5_000);
+    let provider_cancel = operation.shutdown.child_token();
+    let caller = operation.cancellation.clone();
+    let signal = provider_cancel.clone();
+    let bridge = tokio::spawn(async move {
+        if let Some(caller) = caller {
+            caller.cancelled().await;
+            signal.cancel();
+        }
+    });
+    let candidates = Candidates {
+        operation: operation.clone(),
+        vector: deps.candidates.clone(),
+        input: input.clone(),
+    };
+    let timeout = if matches!(target, MemoryGenerationTarget::Rebuild { .. })
+        && matches!(claim.model.as_str(), "zai/glm-5.3" | "zai-api/glm-5.3")
+    {
+        600_000
+    } else {
+        180_000
+    };
+    let run = tokio::time::timeout(
+        Duration::from_millis(timeout),
+        run_extractor(ExtractionRunInput {
+            provider: deps.provider.as_ref(),
+            candidates: &candidates,
+            input,
+            model: &claim.model,
+            effort: &claim.reasoning_effort,
+            butler_data: &source_root,
+            generation: &generation,
+            embedding: embedding.as_ref(),
+            stages: &stages,
+            cancellation: provider_cancel.clone(),
+            deadline,
+        }),
+    )
+    .await;
+    bridge.abort();
+    match run {
+        Ok(Ok(result)) => Ok(result),
+        Ok(Err(_problem)) if provider_cancel.is_cancelled() => Err(CognitionError::new(
+            CognitionCode::MemoryExtractCancelled,
+            "memory_extract_cancelled",
+        )),
+        Ok(Err(problem)) => Err(problem),
+        Err(_) => {
+            provider_cancel.cancel();
+            Err(CognitionError::new(
+                CognitionCode::MemoryExtractTimeout,
+                "memory_extract_timeout",
+            ))
+        }
+    }
 }

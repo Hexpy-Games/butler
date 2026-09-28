@@ -1,3 +1,5 @@
+//! Qualification file IO: stable file identities and the capture store.
+
 use std::{
     collections::BTreeMap,
     fs::{self, File},
@@ -140,7 +142,7 @@ impl CaptureStore {
             if count == 0 {
                 break;
             }
-            hasher.update(&buffer[..count]);
+            hasher.update(buffer.get(..count).unwrap_or_default());
         }
         let actual_sha256 = format!("{:x}", hasher.finalize());
         let after = stable_identity(&file, path)?;
@@ -212,7 +214,7 @@ pub(in crate::cognition::generation) fn assert_evidence_current(
             if count == 0 {
                 break;
             }
-            hasher.update(&buffer[..count]);
+            hasher.update(buffer.get(..count).unwrap_or_default());
         }
         let actual_sha256 = format!("{:x}", hasher.finalize());
         let after = stable_identity(&file, &path)?;
@@ -357,7 +359,7 @@ impl<R> HashingReader<R> {
 impl<R: Read> Read for HashingReader<R> {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
         let count = self.inner.read(buffer)?;
-        self.hasher.update(&buffer[..count]);
+        self.hasher.update(buffer.get(..count).unwrap_or_default());
         Ok(count)
     }
 }

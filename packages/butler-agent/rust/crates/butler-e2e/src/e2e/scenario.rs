@@ -73,6 +73,7 @@ pub struct Setup {
     model: Option<ModelChoice>,
     stub_credential: bool,
     record_into: Option<std::path::PathBuf>,
+    data_folder_token: bool,
     replay_only: bool,
     extends: Option<String>,
 }
@@ -105,6 +106,7 @@ impl Setup {
             model: None,
             stub_credential: true,
             record_into: None,
+            data_folder_token: false,
             replay_only: false,
             extends: None,
         })
@@ -150,6 +152,13 @@ impl Setup {
         self
     }
 
+    /// Starts the agent without token variables, as `butler start` does:
+    /// the agent owns the token in its data folder.
+    pub fn data_folder_token(mut self) -> Self {
+        self.data_folder_token = true;
+        self
+    }
+
     /// The cassette extends `base`: recording replays what `base` has a
     /// recording for (the scenario repeats that scenario's steps) and keeps
     /// only the new requests; replay serves both.
@@ -189,10 +198,14 @@ impl Setup {
             model,
             stub_credential,
             record_into,
+            data_folder_token,
             replay_only,
             extends,
         } = self;
         let mut launch = Launch::new(&sandbox)?;
+        if data_folder_token {
+            launch.use_data_folder_token();
+        }
         let default_model = ModelChoice {
             model: "openai/gpt-6-sol".into(),
             effort: Some("low".into()),

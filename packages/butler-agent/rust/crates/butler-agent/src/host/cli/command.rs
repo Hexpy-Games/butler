@@ -45,6 +45,8 @@ pub enum Command {
     Transport,
     /// `gateway ...`
     Gateway,
+    /// `open`: the running Butler in the local browser.
+    Open,
     /// `work ...`
     Work,
     /// `skills ...`
@@ -71,7 +73,7 @@ impl Command {
     /// Classifies command arguments (installation options already removed).
     pub fn classify(args: &[OsString]) -> Self {
         use crate::host::cli;
-        let families: [(Recognizer, Self); 16] = [
+        let families: [(Recognizer, Self); 17] = [
             (
                 cli::conversation_recovery::recognizes,
                 Self::ConversationRecovery,
@@ -90,6 +92,7 @@ impl Command {
             (cli::context::recognizes, Self::Context),
             (cli::transport::recognizes, Self::Transport),
             (cli::gateway::recognizes, Self::Gateway),
+            (cli::open::recognizes, Self::Open),
             (cli::work::recognizes, Self::Work),
         ];
         if let Some((_, command)) = families.iter().find(|(recognizes, _)| recognizes(args)) {
@@ -144,6 +147,7 @@ impl Command {
             Self::Context => cli::context::run(installation, args).await,
             Self::Transport => cli::transport::run(&installation, &args),
             Self::Gateway => cli::gateway::run(installation, args).await,
+            Self::Open => cli::open::run(&installation, &args).await,
             Self::Work => {
                 let result = cli::work::run(installation, args).await;
                 printed(&result.stdout, &result.stderr, result.exit_code)

@@ -38,6 +38,12 @@ pub(super) const ROUTES: &[Entry] = &[
         "core"
     ),
     route!(
+        "open",
+        "butler open [--no-browser] [--json] [--data PATH]",
+        "Open the running Butler in the local browser with a one-time link.",
+        "core"
+    ),
+    route!(
         "service.run",
         "butler service run [--data PATH]",
         "Run the native service in foreground.",

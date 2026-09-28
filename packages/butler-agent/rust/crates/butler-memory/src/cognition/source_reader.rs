@@ -9,11 +9,13 @@ use butler_runtime::context::{
     ResolvedMemorySource,
 };
 
+/// Resolves memory source references for context building.
 pub struct MemorySourceReader {
     source: MemorySourceReference,
 }
 
 impl MemorySourceReader {
+    /// A reader over `root`.
     pub fn new(root: PathBuf, environment: CognitionPathEnvironment) -> Self {
         Self {
             source: MemorySourceReference::new(root, environment),

@@ -1,4 +1,8 @@
 //! Read-only physical witness for complete rebuild vector units.
+//!
+//! Every complete vector unit must have a receipt naming its vector key and a
+//! Lance row whose metadata matches the unit exactly. Any Lance failure counts
+//! every unit as invalid.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -7,8 +11,11 @@ use std::{
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use futures_util::TryStreamExt;
-use lancedb::query::{ExecutableQuery, QueryBase, Select};
-use serde_json::Value;
+use lancedb::{
+    Table,
+    query::{ExecutableQuery, QueryBase, Select},
+};
+use serde::Deserialize;
 
 use super::rows::{COLUMNS, GenerationVectorRow, optional_text, text};
 use crate::cognition::{
@@ -17,12 +24,20 @@ use crate::cognition::{
 };
 
 const CHUNK: usize = 100;
+/// Metadata columns compared against a unit (every column but the vector).
+const METADATA_COLUMNS: usize = 15;
 
+/// The row a group of units expects, and the units that share it.
 struct Expected {
     row: GenerationVectorRow,
     units: Vec<usize>,
 }
 
+/// The metadata columns of one stored Lance row.
+type PhysicalRow = [Option<String>; METADATA_COLUMNS];
+
+/// Counts complete rebuild vector units whose receipt, sources, or stored
+/// Lance row no longer match.
 pub(crate) async fn invalid_persisted_rebuild_vectors(
     data_root: &Path,
     generation: &MemoryGenerationHandle,
@@ -44,6 +59,43 @@ pub(crate) async fn invalid_persisted_rebuild_vectors(
         data_root,
         &[&generation.root, &root, &root.join("butler_memory.lance")],
     )?;
+    let (mut invalid, groups) = expectations(generation, version, units, historical);
+    let Some(table) = open_table(&root).await else {
+        return Ok(units.len());
+    };
+    let keys = groups.keys().cloned().collect::<Vec<_>>();
+    for chunk in keys.chunks(CHUNK) {
+        let Some(seen) = physical_rows(&table, chunk).await? else {
+            return Ok(units.len());
+        };
+        for key in chunk {
+            let Some(expectations) = groups.get(key) else {
+                continue;
+            };
+            let matches = seen.get(key).is_some_and(|rows| match rows.as_slice() {
+                [row] => expectations
+                    .iter()
+                    .any(|expected| metadata_matches(row, &expected.row)),
+                _ => false,
+            });
+            if !matches {
+                for expected in expectations {
+                    invalid.extend(expected.units.iter().copied());
+                }
+            }
+        }
+    }
+    Ok(invalid.len())
+}
+
+/// The expected row of every unit, grouped by vector key, and the units
+/// already invalid from their graph facts alone.
+fn expectations(
+    generation: &MemoryGenerationHandle,
+    version: &str,
+    units: &[VectorReadinessRow],
+    historical: &HashSet<String>,
+) -> (HashSet<usize>, HashMap<String, Vec<Expected>>) {
     let mut invalid = HashSet::new();
     let mut groups: HashMap<String, Vec<Expected>> = HashMap::new();
     for (index, unit) in units.iter().enumerate() {
@@ -61,19 +113,15 @@ pub(crate) async fn invalid_persisted_rebuild_vectors(
         {
             invalid.insert(index);
         }
-        let Some(source_kind) = unit.source_kind.as_ref() else {
-            invalid.insert(index);
-            continue;
-        };
-        let Some(observed) = unit
+        let observed = unit
             .source_observed_at
             .as_ref()
-            .and_then(|raw| DateTime::parse_from_rfc3339(raw).ok())
-        else {
-            invalid.insert(index);
-            continue;
-        };
-        let Some(refs) = unit.source_ids_json.as_ref() else {
+            .and_then(|raw| DateTime::parse_from_rfc3339(raw).ok());
+        let (Some(source_kind), Some(observed), Some(refs)) = (
+            unit.source_kind.as_ref(),
+            observed,
+            unit.source_ids_json.as_ref(),
+        ) else {
             invalid.insert(index);
             continue;
         };
@@ -101,84 +149,83 @@ pub(crate) async fn invalid_persisted_rebuild_vectors(
             units: vec![index],
         });
     }
+    (invalid, groups)
+}
+
+async fn open_table(root: &Path) -> Option<Table> {
     if !root.exists() {
-        return Ok(units.len());
+        return None;
     }
-    let Ok(connection) = lance_store::connect(&root).await else {
-        return Ok(units.len());
+    let connection = lance_store::connect(root).await.ok()?;
+    lance_store::open(&connection, "butler_memory").await.ok()
+}
+
+/// The stored metadata rows for `keys`, or `None` when Lance cannot answer.
+async fn physical_rows(
+    table: &Table,
+    keys: &[String],
+) -> CognitionResult<Option<HashMap<String, Vec<PhysicalRow>>>> {
+    let predicate = format!(
+        "vector_key IN ({})",
+        keys.iter()
+            .map(|key| format!("'{key}'"))
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+    let columns = COLUMNS.get(..METADATA_COLUMNS).unwrap_or(&COLUMNS);
+    let Ok(stream) = table
+        .query()
+        .only_if(predicate)
+        .select(Select::columns(columns))
+        .limit(keys.len() + 1)
+        .execute()
+        .await
+    else {
+        return Ok(None);
     };
-    let Ok(table) = lance_store::open(&connection, "butler_memory").await else {
-        return Ok(units.len());
+    let Ok(batches) = stream.try_collect::<Vec<_>>().await else {
+        return Ok(None);
     };
-    let keys = groups.keys().cloned().collect::<Vec<_>>();
-    for chunk in keys.chunks(CHUNK) {
-        let predicate = format!(
-            "vector_key IN ({})",
-            chunk
-                .iter()
-                .map(|key| format!("'{key}'"))
-                .collect::<Vec<_>>()
-                .join(",")
-        );
-        let batches = match table
-            .query()
-            .only_if(predicate)
-            .select(Select::columns(&COLUMNS[..15]))
-            .limit(chunk.len() + 1)
-            .execute()
-            .await
-        {
-            Ok(stream) => match stream.try_collect::<Vec<_>>().await {
-                Ok(value) => value,
-                Err(_) => return Ok(units.len()),
-            },
-            Err(_) => return Ok(units.len()),
-        };
-        let mut seen: HashMap<String, Vec<[Option<String>; 15]>> = HashMap::new();
-        for batch in batches {
-            for index in 0..batch.num_rows() {
-                let key = text(&batch, 0, index)?;
-                let mut values: [Option<String>; 15] = std::array::from_fn(|_| None);
-                for (column, value) in values.iter_mut().enumerate() {
-                    *value = optional_text(&batch, column, index)?;
-                }
-                seen.entry(key).or_default().push(values);
+    let mut seen: HashMap<String, Vec<PhysicalRow>> = HashMap::new();
+    for batch in batches {
+        for index in 0..batch.num_rows() {
+            let key = text(&batch, 0, index)?;
+            let mut values: PhysicalRow = std::array::from_fn(|_| None);
+            for (column, value) in values.iter_mut().enumerate() {
+                *value = optional_text(&batch, column, index)?;
             }
-        }
-        for key in chunk {
-            let Some(expectations) = groups.get(key) else {
-                continue;
-            };
-            let physical = seen.get(key);
-            let matches = physical.is_some_and(|rows| {
-                rows.len() == 1
-                    && expectations
-                        .iter()
-                        .any(|expected| metadata_matches(&rows[0], &expected.row))
-            });
-            if !matches {
-                for expected in expectations {
-                    invalid.extend(expected.units.iter().copied());
-                }
-            }
+            seen.entry(key).or_default().push(values);
         }
     }
-    Ok(invalid.len())
+    Ok(Some(seen))
+}
+
+/// The receipt fields a vector unit's currentness depends on.
+#[derive(Deserialize)]
+struct VectorReceipt {
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    generation: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    embedding_version: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::strings")]
+    vector_keys: Option<Vec<String>>,
 }
 
 fn receipt_matches(unit: &VectorReadinessRow, generation: &str, version: &str, key: &str) -> bool {
-    let Some(raw) = unit.receipt_json.as_deref() else {
+    let Some(receipt) = unit
+        .receipt_json
+        .as_deref()
+        .and_then(crate::lenient::object::<VectorReceipt>)
+    else {
         return false;
     };
-    let Ok(value) = serde_json::from_str::<Value>(raw) else {
-        return false;
-    };
-    value["generation"] == generation
-        && value["embedding_version"] == version
-        && value["vector_keys"]
-            .as_array()
-            .is_some_and(|keys| keys.iter().any(|item| item.as_str() == Some(key)))
+    receipt.generation.as_deref() == Some(generation)
+        && receipt.embedding_version.as_deref() == Some(version)
+        && receipt
+            .vector_keys
+            .is_some_and(|keys| keys.iter().any(|item| item == key))
 }
+
 fn source_refs_current(unit: &VectorReadinessRow, historical: &HashSet<String>) -> bool {
     let Some(raw) = unit.source_ids_json.as_deref() else {
         return false;
@@ -187,26 +234,27 @@ fn source_refs_current(unit: &VectorReadinessRow, historical: &HashSet<String>) 
         .ok()
         .is_some_and(|refs| !refs.is_empty() && refs.iter().all(|id| historical.contains(id)))
 }
-fn metadata_matches(actual: &[Option<String>; 15], expected: &GenerationVectorRow) -> bool {
-    let values = [
-        &expected.vector_key,
-        &expected.generation,
-        &expected.record_kind,
-        &expected.owner_id,
-        &expected.owner_revision,
-        &expected.source_revision,
-        &expected.embedding_chunk_id,
-        &expected.embedding_version,
-        &expected.project_id,
-        &expected.origin_kind,
-        &expected.source_kind,
+
+fn metadata_matches(actual: &PhysicalRow, expected: &GenerationVectorRow) -> bool {
+    let wanted = [
+        Some(expected.vector_key.as_str()),
+        Some(expected.generation.as_str()),
+        Some(expected.record_kind.as_str()),
+        Some(expected.owner_id.as_str()),
+        Some(expected.owner_revision.as_str()),
+        Some(expected.source_revision.as_str()),
+        Some(expected.embedding_chunk_id.as_str()),
+        Some(expected.embedding_version.as_str()),
+        Some(expected.project_id.as_str()),
+        Some(expected.origin_kind.as_str()),
+        Some(expected.source_kind.as_str()),
+        expected.conversation_session_id.as_deref(),
+        Some(expected.source_observed_at.as_str()),
+        Some(expected.source_refs_json.as_str()),
+        Some(""),
     ];
-    values
+    actual
         .iter()
-        .enumerate()
-        .all(|(index, wanted)| actual[index].as_deref() == Some(wanted.as_str()))
-        && actual[11].as_deref() == expected.conversation_session_id.as_deref()
-        && actual[12].as_deref() == Some(expected.source_observed_at.as_str())
-        && actual[13].as_deref() == Some(expected.source_refs_json.as_str())
-        && actual[14].as_deref() == Some("")
+        .zip(wanted)
+        .all(|(actual, wanted)| actual.as_deref() == wanted)
 }
