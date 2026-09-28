@@ -186,7 +186,9 @@ impl Command {
             Self::RunService => {
                 match crate::host::service::entrypoint::run_native_service(installation).await {
                     Ok(session) => {
-                        println!("{session}");
+                        if let Some(session) = session {
+                            println!("{session}");
+                        }
                         ExitCode::SUCCESS
                     }
                     Err(error) => {

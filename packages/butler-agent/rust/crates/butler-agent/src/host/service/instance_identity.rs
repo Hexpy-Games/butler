@@ -9,8 +9,20 @@ use nix::errno::Errno;
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
 
+/// Whether a process's executable as the OS reports it (`observed`) is the
+/// recorded one (`expected`). macOS reports a file with several hard links
+/// under whichever name was looked up last, so a different name matches when
+/// it is the same file (device and inode).
 pub(crate) fn executable_matches(expected: &str, observed: &str) -> bool {
-    observed == expected
+    observed == expected || same_file(expected, observed)
+}
+
+fn same_file(first: &str, second: &str) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    match (std::fs::metadata(first), std::fs::metadata(second)) {
+        (Ok(first), Ok(second)) => first.dev() == second.dev() && first.ino() == second.ino(),
+        _ => false,
+    }
 }
 
 pub(crate) fn process_is_alive(pid: i32) -> Result<bool, crate::host::HostError> {
@@ -37,8 +49,7 @@ pub(crate) fn process_start_identity(pid: u32) -> Result<Option<String>, crate::
         .nth(19)
         .ok_or_else(|| "native_service_process_identity_unavailable".to_owned())?;
     let boot_id = fs::read_to_string("/proc/sys/kernel/random/boot_id").map_err(|source| {
-        "native_service_process_identity_unavailable"
-            .to_owned()
+        crate::host::HostError::new("native_service_process_identity_unavailable")
             .with_source(source)
     })?;
     Ok(Some(format!("linux:{}:{}", boot_id.trim(), start_ticks)))
