@@ -2,7 +2,7 @@ import type { Key, Pose, Track } from "../../heroTimeline";
 import { lineDash } from "./LineOverlay";
 import type { SpecimenMetrics } from "./specimenMetrics";
 import { cameras } from "./typeCamera";
-import { BEATS, FINALE, FLIGHTS, LOOP, PANELS, select, specimenTracks, type Panel, type TypeGeometry } from "./typeChoreography";
+import { BEATS, FINALE, FLIGHTS, LOOP, PANELS, select, specimenTracks, type TypeGeometry } from "./typeChoreography";
 import { BADGE_ROW, STRUCTURE, type LineInfo } from "./typeLines";
 
 /** The list scene ends and the first build starts here; each build takes BUILD beats. */
