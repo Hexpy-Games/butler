@@ -12,6 +12,9 @@ publish.workspace = true
 # Quotes paths inside macOS sandbox profiles.
 serde_json.workspace = true
 thiserror.workspace = true
+# Shutdown requests (host stop signals) and the stdin lease are awaited on the
+# service's runtime.
+tokio.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 nix.workspace = true

@@ -1,9 +1,9 @@
-//! Native Unix process probes for the shared Cognition writer coordinator.
-//! Signal zero checks existence/permission and never delivers a signal.
+//! Process probes for the shared Cognition writer coordinator, through
+//! `butler_platform`: a signal-zero style probe checks existence and
+//! permission and never delivers anything.
 
-use nix::errno::Errno;
-use nix::sys::signal::kill;
-use nix::unistd::{Pid, gethostname};
+use butler_platform::instance::host_name;
+use butler_platform::process_control::{Liveness, target_liveness};
 
 use butler_memory::coordination::{
     CognitionCoordinationHost, CognitionProcessStatus, CoordinationError, CoordinationResult,
@@ -17,9 +17,7 @@ impl CognitionCoordinationHost for SystemIdentity {
     }
 
     fn hostname(&self) -> CoordinationResult<String> {
-        gethostname()
-            .map(|name| name.to_string_lossy().into_owned())
-            .map_err(CoordinationError::gate_io)
+        host_name().map_err(CoordinationError::gate_io)
     }
 
     fn process_status(&self, pid: u64) -> CognitionProcessStatus {
@@ -31,7 +29,7 @@ impl CognitionCoordinationHost for SystemIdentity {
         if pid <= 0 {
             return CognitionProcessStatus::Uncertain;
         }
-        probe_result(kill(Pid::from_raw(pid), None))
+        probe_status(target_liveness(pid))
     }
 
     fn new_uuid(&self) -> String {
@@ -47,11 +45,13 @@ impl CognitionCoordinationHost for SystemIdentity {
     }
 }
 
-fn probe_result(result: Result<(), Errno>) -> CognitionProcessStatus {
-    match result {
-        Ok(()) => CognitionProcessStatus::Alive,
-        Err(Errno::ESRCH) => CognitionProcessStatus::DefinitelyDead,
-        Err(_) => CognitionProcessStatus::Uncertain,
+/// Only a process that is certainly gone is dead: one owned by another user,
+/// or a probe the host could not answer, stays uncertain.
+fn probe_status(liveness: Liveness) -> CognitionProcessStatus {
+    match liveness {
+        Liveness::Running => CognitionProcessStatus::Alive,
+        Liveness::Gone => CognitionProcessStatus::DefinitelyDead,
+        Liveness::OtherOwner | Liveness::Unknown => CognitionProcessStatus::Uncertain,
     }
 }
 
@@ -66,8 +66,5 @@ pub(in crate::host) fn profile_process_status(pid: f64) -> CognitionProcessStatu
     {
         return CognitionProcessStatus::Uncertain;
     }
-    probe_result(kill(
-        Pid::from_raw(butler_core::json::saturating_i32(pid)),
-        None,
-    ))
+    probe_status(target_liveness(butler_core::json::saturating_i32(pid)))
 }

@@ -55,6 +55,17 @@ impl Agent {
             .and_then(|record| record["nonce"].as_str().map(str::to_owned));
     }
 
+    /// Releases the App's foreground lease as the App does when it quits:
+    /// closes the write end of the child's stdin. False when no leased child
+    /// runs.
+    pub fn release_foreground_lease(&mut self) -> bool {
+        self.child
+            .as_mut()
+            .and_then(|child| child.stdin.take())
+            .map(drop)
+            .is_some()
+    }
+
     /// The App's exit handling for the child `pid`, run as soon as the exit is
     /// seen and before anything is awaited: true when the stop intent names
     /// that instance (both nonce and PID) and asks the App to start the

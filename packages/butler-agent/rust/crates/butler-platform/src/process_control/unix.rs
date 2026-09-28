@@ -1,15 +1,22 @@
-//! Process groups and POSIX signals.
+//! Process groups, POSIX signals and the stdin lease.
 
+use std::fs::File;
+use std::io::{self, Read};
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::{Command, ExitStatus};
 
 use nix::errno::Errno;
+use nix::fcntl::{FcntlArg, OFlag, fcntl};
 use nix::sys::signal::{Signal, kill, killpg};
 use nix::unistd::Pid;
+use tokio::io::unix::AsyncFd;
+use tokio::signal::unix::{SignalKind, signal};
 
-use super::{ExitSignal, GroupSignal, Liveness, SignalError};
+use super::{ExitSignal, GroupSignal, Liveness, ShutdownRequest, SignalError};
 
 pub(super) const CONTAINS_PROCESS_TREES: bool = true;
+
+pub(super) const SIGNALS: bool = true;
 
 pub(super) const BASELINE_ENVIRONMENT: &[&str] =
     &["HOME", "LOGNAME", "PATH", "SHELL", "TERM", "USER"];
@@ -89,10 +96,77 @@ pub(super) fn liveness(pid: u32) -> Liveness {
     let Some(pid) = i32::try_from(pid).ok().filter(|pid| *pid > 0) else {
         return Liveness::Gone;
     };
-    match kill(Pid::from_raw(pid), None) {
+    target_liveness(pid)
+}
+
+pub(super) fn target_liveness(target: i32) -> Liveness {
+    match kill(Pid::from_raw(target), None) {
         Ok(()) => Liveness::Running,
         Err(Errno::EPERM) => Liveness::OtherOwner,
         Err(Errno::ESRCH) => Liveness::Gone,
         Err(_) => Liveness::Unknown,
+    }
+}
+
+pub(super) fn detach(command: &mut Command) -> &mut Command {
+    command.process_group(0)
+}
+
+/// SIGINT and SIGTERM, in that order.
+#[derive(Debug)]
+pub(super) struct ShutdownRequests {
+    interrupt: tokio::signal::unix::Signal,
+    terminate: tokio::signal::unix::Signal,
+}
+
+pub(super) fn shutdown_requests() -> io::Result<ShutdownRequests> {
+    Ok(ShutdownRequests {
+        interrupt: signal(SignalKind::interrupt())?,
+        terminate: signal(SignalKind::terminate())?,
+    })
+}
+
+impl ShutdownRequests {
+    pub(super) async fn recv(&mut self) -> ShutdownRequest {
+        tokio::select! {
+            _ = self.interrupt.recv() => ShutdownRequest::Interrupt,
+            _ = self.terminate.recv() => ShutdownRequest::Terminate,
+        }
+    }
+}
+
+/// A non-blocking duplicate of stdin on the Tokio reactor, so waiting for
+/// its end never occupies a thread and never blocks the runtime's shutdown.
+#[derive(Debug)]
+pub(super) struct StdinLease {
+    input: AsyncFd<File>,
+}
+
+impl StdinLease {
+    pub(super) fn capture() -> io::Result<Self> {
+        let descriptor = nix::unistd::dup(std::io::stdin()).map_err(io::Error::from)?;
+        let file = File::from(descriptor);
+        let flags = fcntl(&file, FcntlArg::F_GETFL)
+            .map(OFlag::from_bits_truncate)
+            .map_err(io::Error::from)?;
+        fcntl(&file, FcntlArg::F_SETFL(flags | OFlag::O_NONBLOCK)).map_err(io::Error::from)?;
+        Ok(Self {
+            input: AsyncFd::new(file)?,
+        })
+    }
+
+    pub(super) async fn closed(&self) -> io::Result<()> {
+        let mut byte = [0_u8; 1];
+        loop {
+            let mut readable = self.input.readable().await?;
+            match readable.try_io(|input| {
+                let mut file = input.get_ref();
+                file.read(&mut byte)
+            }) {
+                Ok(Ok(0)) => return Ok(()),
+                Ok(Ok(_)) | Err(_) => {}
+                Ok(Err(error)) => return Err(error),
+            }
+        }
     }
 }
