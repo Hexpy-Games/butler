@@ -52,6 +52,36 @@ fn codex_windows_parse_used_percent_duration_and_reset() {
     );
 }
 
+/// The shape a Plus account's Codex reply carries (USE-01 cassette): a
+/// weekly primary window and a zero-minute secondary one it does not have.
+#[test]
+fn codex_zero_minute_window_is_absent_and_the_relative_reset_wins() {
+    let reading = parse_quota_headers(
+        "openai",
+        &headers(&[
+            ("x-codex-primary-used-percent", "1"),
+            ("x-codex-primary-window-minutes", "10080"),
+            ("x-codex-primary-reset-after-seconds", "532090"),
+            ("x-codex-primary-reset-at", "1791095753"),
+            ("x-codex-primary-over-secondary-limit-percent", "0"),
+            ("x-codex-secondary-used-percent", "0"),
+            ("x-codex-secondary-window-minutes", "0"),
+            ("x-codex-secondary-reset-after-seconds", "0"),
+        ]),
+        NOW,
+    )
+    .unwrap();
+    assert_eq!(
+        reading.windows,
+        vec![ProviderQuotaWindow {
+            id: "tokens-weekly".into(),
+            used_percent: 1.0,
+            window_minutes: Some(10_080),
+            resets_at_ms: Some(NOW + 532_090_000),
+        }]
+    );
+}
+
 #[test]
 fn anthropic_unified_utilization_is_a_fraction() {
     let reading = parse_quota_headers(

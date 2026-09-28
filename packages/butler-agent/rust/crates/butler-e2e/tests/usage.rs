@@ -33,8 +33,9 @@ fn number(value: &Value) -> f64 {
     value.as_f64().unwrap_or(f64::NAN)
 }
 
-/// The provider's quota view is available and each window's shares add up.
-fn assert_quota(remaining: &Value, primary_used: f64) {
+/// The provider's quota view is available and each window's shares add up;
+/// on replay the primary window matches the recorded header.
+fn assert_quota(remaining: &Value, primary_used: Option<f64>) {
     assert_eq!(remaining["available"], true, "{remaining}");
     assert_eq!(remaining["planKind"], "subscription", "{remaining}");
     assert_eq!(remaining["sourceKind"], "provider_quota", "{remaining}");
@@ -48,10 +49,12 @@ fn assert_quota(remaining: &Value, primary_used: f64) {
         assert!(number(&window["windowDurationMins"]) > 0.0, "{window}");
         assert!(window["resetsAt"].is_string(), "{window}");
     }
-    assert!(
-        (number(&windows[0]["usedPercent"]) - primary_used).abs() < 1e-9,
-        "primary window != recorded header: {remaining}"
-    );
+    if let Some(primary_used) = primary_used {
+        assert!(
+            (number(&windows[0]["usedPercent"]) - primary_used).abs() < 1e-9,
+            "primary window != recorded header: {remaining}"
+        );
+    }
 }
 
 /// The session's cost is the gpt-6-luna list price of its own tokens.
@@ -89,7 +92,12 @@ async fn use_01_subscription_turn_reports_quota_usage_and_cost() -> Result<(), H
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
     let (_, turn) = s.turn("general", PROMPT).await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
-    let primary_used = recorded_primary_used_percent("USE-01")?;
+    // While recording, the cassette is written only at the end.
+    let primary_used = if s.recording() {
+        None
+    } else {
+        Some(recorded_primary_used_percent("USE-01")?)
+    };
 
     let quota = s.gw.get("/provider-quota?provider_id=openai").await?;
     assert_eq!(quota.status, 200, "{}", quota.text);

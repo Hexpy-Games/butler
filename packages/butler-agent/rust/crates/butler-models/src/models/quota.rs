@@ -68,16 +68,19 @@ pub fn parse_quota_headers(
     })
 }
 
+/// A Codex window; a zero-minute window is a limit the plan does not have.
 fn codex_window(headers: &HeaderMap, slot: &str, now_ms: i64) -> Option<ProviderQuotaWindow> {
     let used = number(headers, &format!("x-codex-{slot}-used-percent"))?;
     let window_minutes = number(headers, &format!("x-codex-{slot}-window-minutes"))
-        .filter(|minutes| *minutes > 0.0)
         .map(|minutes| saturating_u64(minutes.round()));
-    let resets_at_ms = number(headers, &format!("x-codex-{slot}-reset-at"))
-        .map(|seconds| saturating_i64((seconds * 1000.0).round()))
+    if window_minutes == Some(0) {
+        return None;
+    }
+    let resets_at_ms = number(headers, &format!("x-codex-{slot}-reset-after-seconds"))
+        .map(|seconds| now_ms.saturating_add(saturating_i64((seconds * 1000.0).round())))
         .or_else(|| {
-            number(headers, &format!("x-codex-{slot}-reset-after-seconds"))
-                .map(|seconds| now_ms.saturating_add(saturating_i64((seconds * 1000.0).round())))
+            number(headers, &format!("x-codex-{slot}-reset-at"))
+                .map(|seconds| saturating_i64((seconds * 1000.0).round()))
         });
     Some(ProviderQuotaWindow {
         id: window_id(window_minutes, slot),
